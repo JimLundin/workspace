@@ -1,4 +1,10 @@
-# Runtime footprint proposal
+# Historical runtime footprint proposal
+
+**Superseded by project separation, 25 October 2026.** Toolkit retains its
+Windows Python/Qt implementation. The browser/native application is maintained
+in [Shared Workspace](https://github.com/JimLundin/shared-workspace). The migration
+target below is historical research, with its original measurements and open
+gates retained for reference.
 
 Recorded 2026-10-23. This records the requested investigation target. The current
 browser-card implementation continues while isolated probes evaluate it; this

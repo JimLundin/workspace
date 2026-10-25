@@ -1,5 +1,10 @@
 # Existing canvas UI in Windows WebView2
 
+Retained experiment. The 25 October 2026 project separation keeps Toolkit's
+Python/Qt runtime; [Shared Workspace](https://github.com/JimLundin/shared-workspace)
+owns the separate browser/native application. The migration discussion below
+records the investigation at the time of these trials.
+
 Research and execution evidence recorded **2026-10-23**. Sources below were
 accessed on that date. Microsoft Win32 reference pages resolved to SDK documentation
 `1.0.4258.31`; ABI details were also checked against the already downloaded

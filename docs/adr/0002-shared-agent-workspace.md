@@ -1,12 +1,17 @@
 ---
-status: proposed
+status: deprecated
 ---
 
-# One agent workspace, with replaceable runtime adapters
+# Historical proposal: one agent workspace, with replaceable runtime adapters
 
-The new distributed Windows/iPhone host uses the shared native core and shell
-selected in [ADR 0003](0003-distributed-native-workspaces.md). The work ownership,
-application isolation and migration requirements below remain relevant.
+**Superseded by project separation, 25 October 2026.** Toolkit retains its
+Windows Python/Qt implementation and existing keyboard, dictation, assistant
+and automation. The browser/native application is developed separately in
+[Shared Workspace](https://github.com/JimLundin/shared-workspace); its native
+host decision is [ADR 0003](https://github.com/JimLundin/shared-workspace/blob/main/docs/adr/0003-distributed-native-workspaces.md).
+
+The remainder records the earlier migration proposal and its uncompleted gates.
+It is retained as design history, not the current Toolkit implementation plan.
 
 The recommended product is an agent-managed workspace on Windows: a continuous
 conversation and a canvas showing the same resources, tasks and observed

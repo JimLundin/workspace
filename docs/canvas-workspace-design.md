@@ -346,13 +346,14 @@ Source anchors: [canvas model](../assistant/canvas_model.py),
 [meeting projection](../assistant/meeting_canvas.py), and
 [current guide](desktop-canvas.md).
 
-The proposed [shared-workspace ADR](adr/0002-shared-agent-workspace.md) and
-[runtime direction review](runtime-direction-review.md) own the implementation
-boundary. Use one `WorkspaceControl` observe/command interface, implemented by
-the existing Python owner first. The UI and agent address the same resources;
-the runtime continues to own tasks and effects. Changing Qt to WebView2 or
-Python to TypeScript is a separate implementation migration. This product
-model must work through either host.
+The historical [shared-workspace ADR](adr/0002-shared-agent-workspace.md) and
+[runtime direction review](runtime-direction-review.md) explored a common
+`WorkspaceControl` observe/command interface and a later runtime migration.
+The 25 October project separation keeps Toolkit's Python/Qt implementation;
+the browser/native application is maintained in
+[Shared Workspace](https://github.com/JimLundin/shared-workspace). The interface
+and product scenarios below remain proposals for addressing resources while
+the existing runtime owns tasks and effects.
 
 ## What to build and what would count as evidence
 

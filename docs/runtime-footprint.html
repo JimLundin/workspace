@@ -4,8 +4,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="dark">
-  <meta name="description" content="Explore Toolkit's current interfaces, the next shared workspace integration, and the proposed Pi Durable and WebView2 runtime.">
-  <title>Toolkit — shared work and runtime</title>
+  <meta name="description" content="Historical Toolkit runtime study. Toolkit retains Python and Qt; Shared Workspace is maintained as a separate browser/native application.">
+  <title>Toolkit — historical runtime study</title>
   <style>
     :root { --bg: #111519; --panel: #191f25; --raised: #20282f; --line: #35414b; --text: #edf2f5; --muted: #a4b2be; --blue: #98d6eb; --green: #abd5b9; --purple: #c5b7f0; --gold: #e4c191; }
     * { box-sizing: border-box; }
@@ -84,12 +84,13 @@
 </head>
 <body>
 <main>
-  <nav class="top" aria-label="Related architecture documents"><span class="brand">Toolkit / Runtime architecture</span><a href="agentic-pc.html">Automated PC sketch ↗</a></nav>
+  <nav class="top" aria-label="Related architecture documents"><span class="brand">Toolkit / Historical runtime study</span><a href="agentic-pc.html">Automated PC sketch ↗</a></nav>
+  <p class="proof"><strong>Superseded by project separation · 25 October 2026</strong><span>Toolkit retains its Windows Python/Qt implementation. <a href="https://github.com/JimLundin/shared-workspace">Shared Workspace</a> is maintained as a separate browser/native application. The integration and replacement runtime below are historical proposals; the original experiments and measurements remain available for reference.</span></p>
   <h1>One workspace. Replaceable runtime.</h1>
   <p class="intro">First connect the conversation and canvas through one workspace interface, using the existing Python owner. Then move that interface to TypeScript in WebView2 and a compiled Win32 host. Explore the current behavior, the next integration, and the proposed destination.</p>
   <div class="modes" role="group" aria-label="Architecture to explore">
-    <button type="button" data-mode="current" aria-pressed="false">Current runtime</button>
-    <button type="button" data-mode="next" aria-pressed="true">Next integration</button>
+    <button type="button" data-mode="current" aria-pressed="false">Baseline runtime</button>
+    <button type="button" data-mode="next" aria-pressed="true">Historical integration proposal</button>
     <button type="button" data-mode="target" aria-pressed="false">Proposed destination</button>
   </div>
   <div class="architecture">

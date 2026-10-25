@@ -1,4 +1,10 @@
-# Runtime direction review
+# Historical runtime direction review
+
+**Superseded by project separation, 25 October 2026.** Toolkit retains its
+Windows Python/Qt implementation. The browser/native application is maintained
+in [Shared Workspace](https://github.com/JimLundin/shared-workspace). The proposed
+runtime replacement below remains historical research; its evidence and limits
+are preserved.
 
 Reviewed **2026-10-24** against the current architecture notes, preserved native
 receipts and pinned Pi 1.4.0 source. This supports the proposed

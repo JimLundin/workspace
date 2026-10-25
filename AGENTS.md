@@ -1,3 +1,10 @@
+# Project scope
+
+Toolkit owns the Windows keyboard, dictation, assistant, canvas and automation.
+Preserve its Python/Qt runtime. The browser/native application is maintained in
+[Shared Workspace](https://github.com/JimLundin/shared-workspace). Runtime
+migration proposals retained under `docs/` are historical research.
+
 # Design
 
 - Model domain alternatives like Rust enums: use unions of frozen, slotted

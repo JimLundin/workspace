@@ -1,44 +1,4 @@
-# Shared Workspace
-
-A distributed workspace experiment. The intended entry point is a website:
-open it on a device, pair with another device, and keep working with locally
-retained data. Devices are equal peers; none is a permanent coordinator.
-
-The primary direction is a TypeScript browser interface with **actual Turso
-Database** in WebAssembly for local storage and **Iroh** in WebAssembly for
-encrypted peer connections. Browser peers use relay infrastructure for transport.
-Desktop automation is an optional capability supplied by a permitted local host;
-ordinary workspace access should not require a native installer or App Store app.
-
-The [browser host](browser/README.md) implements local workspaces and notes,
-selected-workspace invitations, encrypted synchronization, retained offline
-conflicts and explicit reconciliation. The [browser interface](browser/app/)
-provides voice command entry, editable transcripts, phone layouts and cached
-offline startup. This is a limited workspace prototype; desktop automation and
-native-host interoperability are separate integrations.
-
-The [product thesis and next proof](docs/work-continuity-thesis.md) focus on one
-durable piece of work that can continue across applications and devices. Shared
-state alone does not establish an agentic operating environment.
-
-[Browser acceptance](browser/checks/) exercises real Turso storage and Iroh
-connections across independent browser processes. The retained
-[storage](browser/storage-probe/README.md) and
-[transport](browser/iroh-probe/README.md) experiments explain the component
-choices. The user has confirmed iPhone joining and browser speech; provider
-dictation and full phone lifecycle behavior still need device validation. The
-pinned Turso wrapper starts with 250 MiB of logical WASM linear memory, which is
-not resident RAM. The [memory audit](browser/storage-probe/memory-audit-20261025/README.md)
-separates those measurements; phone memory still needs measurement.
-See the [browser architecture and delivery requirements](docs/browser-host-direction.md).
-
-The [native workspace experiment](native/README.md) contains the existing signed
-workspace model, conflict handling, selected-workspace pairing and independent
-peer tests. It remains available as an optional-host implementation and a source
-of shared domain behavior. The repository also retains the original Windows
-assistant and keyboard implementation documented below.
-
-## Existing Windows assistant and keyboard
+# Toolkit
 
 A personal toolkit for a Windows laptop: extract and run, with its own Python
 and no admin installation. It changes itself: ask its agent for a new feature or a fix,
@@ -54,6 +14,10 @@ It undoes the update by itself if it fails. Four main processes:
   instructions, and recovery independently of the conversation window;
 - **the keeper** (`keeper.py`): runs the other three, restarts them if they crash,
   and installs the agent's changes to them (see *Changing the toolkit*).
+
+The browser/native [Shared Workspace](https://github.com/JimLundin/shared-workspace)
+application is maintained separately. Toolkit retains its Windows Python/Qt
+implementation, including the keyboard, dictation, assistant and automation.
 
 The agent uses **OpenAI Agents SDK 0.24.0**. Every interface uses **Qt 6.12**:
 the desktop canvas, launcher, conversation bubbles, History, Work, prompts,
@@ -459,7 +423,7 @@ Optional environment settings:
 
 | Variable | Default |
 |---|---|
-| `TOOLKIT_GIT_REMOTE` | `https://github.com/JimLundin/shared-workspace.git` |
+| `TOOLKIT_GIT_REMOTE` | `https://github.com/JimLundin/toolkit.git` |
 | `TOOLKIT_GIT_BASE` | `main` |
 | `TOOLKIT_GIT_AUTHOR_NAME` | `Toolkit Agent` |
 | `TOOLKIT_GIT_AUTHOR_EMAIL` | `toolkit@localhost` |
@@ -590,7 +554,7 @@ lifecycle subclasses and Qt objects inherit their libraries' storage. Behaviour 
 
 ## Development
 
-The canonical source is the public repository `JimLundin/shared-workspace`. Clone it and
+The canonical source is [JimLundin/toolkit](https://github.com/JimLundin/toolkit). Clone it and
 run checks with Python 3.15 or later. Install source dependencies first:
 `python -m pip install -e .`. The prebuilt Windows bundle needs no pip step.
 Development tools are optional locally and required by CI.
