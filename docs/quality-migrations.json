@@ -3388,33 +3388,6 @@
     {
       "key": {
         "rule": "inline-import",
-        "path": "scripts/benchmark_keyboard.py",
-        "scope": "run",
-        "signature": "b7d33c5e200602f99940b5f337cef05f3f05d066fd1f7dab769527170467e9c8"
-      },
-      "reason": "Existing inline dependency declaration awaits migration to its module owner; use module-level lazy imports when deferred loading is required."
-    },
-    {
-      "key": {
-        "rule": "inline-import",
-        "path": "scripts/benchmark_keyboard.py",
-        "scope": "run",
-        "signature": "e2a96c5e90b70c043ee4161ae628e593a562bf8c82568d3bf31f71d4006d976a"
-      },
-      "reason": "Existing inline dependency declaration awaits migration to its module owner; use module-level lazy imports when deferred loading is required."
-    },
-    {
-      "key": {
-        "rule": "inline-import",
-        "path": "scripts/benchmark_keyboard.py",
-        "scope": "run",
-        "signature": "f30b90e27009c1a86850bb7936d019abba20f43a5f46493fef9a44962e246ed8"
-      },
-      "reason": "Existing inline dependency declaration awaits migration to its module owner; use module-level lazy imports when deferred loading is required."
-    },
-    {
-      "key": {
-        "rule": "inline-import",
         "path": "selfcheck.py",
         "scope": "check",
         "signature": "c0e5646f11d3bafc22d1798b833924d312f2b700f12d098c8e10818f3b0829d2"

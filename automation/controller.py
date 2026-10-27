@@ -55,7 +55,7 @@ class WorkExecution(Protocol):
     def run_work(self, claim: Claim, store: TaskStore, log: Log, stop: threading.Event) -> Outcome: ...
 
 
-@dataclass(slots=True)
+@dataclass(frozen=True, slots=True)
 class _Flight:
     claim: Claim
     stop: threading.Event

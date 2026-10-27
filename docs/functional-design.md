@@ -313,6 +313,31 @@ tuples, bytes, and other frozen dataclasses. External JSON and operating-system
 results are validated when they enter the domain. Threading events, native
 handles, SDK-owned histories, and mutable buffers retain a single explicit owner.
 
+## Executable ownership and immutability
+
+`scripts/architecture.py` owns recursive source inventory, import resolution and
+policy reports. Editing checks supply their Git-listed snapshot; the deployed
+full check can review the filesystem without Git. `scripts/check.py` uses the
+same import resolution for affected-test selection. `tests/test_slots.py` uses
+the inventory instead of immediate-package file lists. Application modules stay
+in their current locations while this enforcement is established.
+
+Immutable data is the repository default specified in `AGENTS.md`. All source
+dataclasses require frozen slots; concrete mutable collection fields also require
+an exact exception. Configuration records a rule, module, declaration, expression
+and reason. Exceptions match normalized expressions, not shifting line numbers;
+obsolete entries fail. A necessity is distinct from existing migration debt.
+The measured keyboard engine buffers and private SDK fragment accumulators have
+specific necessities. The remaining mailbox, overlay, Windows-key state, tool
+arguments, volatile history and schema entries are explicit migration work, not
+general permissions to introduce mutable data.
+
+Synchronization handles remain with their effect owners. Frozen records can hold
+those handles without mutable record fields. The task execution-flight and
+pending-meeting records, conversation holder, benchmark options and usage values
+now follow that pattern. Deeply immutable payloads still need review: an alias
+or opaque object can hide mutation beyond what the syntax check recognizes.
+
 ## Keyboard variants
 
 The keyboard uses the same data definitions. Layout actions are an `Action`

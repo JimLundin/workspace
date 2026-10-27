@@ -41,7 +41,7 @@ def record_counts(source: str, counts: Mapping[str, int], *, path: Path = USAGE_
         _append({"t": _now(), "source": source, "counts": dict(counts)}, path)
 
 
-@dataclass(slots=True)
+@dataclass(frozen=True, slots=True)
 class Use:
     uses: int = 0
     failures: int = 0
@@ -77,10 +77,9 @@ def summarize(lines: Iterable[str], since: datetime | None = None) -> dict[str, 
         if isinstance(counts, dict):
             found += [(n, c) for n, c in cast("dict[object, object]", counts).items() if isinstance(n, str) and isinstance(c, int)]
         for name, count in found:
-            use = summary.setdefault(f"{source}/{name}", Use())
-            use.uses += count
-            use.failures += 1 if entry.get("ok") is False else 0
-            use.last = max(use.last, t)
+            key = f"{source}/{name}"
+            use = summary.get(key, Use())
+            summary[key] = Use(use.uses + count, use.failures + (1 if entry.get("ok") is False else 0), max(use.last, t))
     return summary
 
 

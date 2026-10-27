@@ -8,6 +8,7 @@ separate desktop measurements; this measures Engine.on_key and tap-hold timers.
 import argparse
 import gc
 import hashlib
+import inspect
 import json
 import statistics
 import sys
@@ -18,8 +19,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from time import perf_counter_ns
 
+lazy from miryoku.engine import Engine, Indicator, Signal
+lazy from miryoku.layout import Key, Mod, Scancode
+lazy from protocol import Request
 
-@dataclass(slots=True)
+
+@dataclass(frozen=True, slots=True)
 class Options:
     root: Path = Path(__file__).resolve().parent.parent
     events: int = 100_000
@@ -33,8 +38,13 @@ def main() -> None:
     parser.add_argument("--events", type=int, default=100_000)
     parser.add_argument("--rounds", type=int, default=5)
     parser.add_argument("--output", type=Path)
-    options = Options()
-    parser.parse_args(namespace=options)
+    parsed = dict(inspect.getmembers(parser.parse_args()))
+    match parsed:
+        case {'root': Path() as source_root, 'events': int() as events, 'rounds': int() as repetitions,
+              'output': (Path() | None) as output}:
+            options = Options(source_root, events, repetitions, output)
+        case _:
+            parser.error('Invalid benchmark arguments.')
     root = options.root.resolve()
     count, rounds = options.events, options.rounds
     if count < 1000 or rounds < 1:
@@ -44,10 +54,7 @@ def main() -> None:
 
 
 def run(root: Path, count: int, rounds: int, output: Path | None) -> None:  # noqa: PLR0915 (keep instrumentation boundaries together)
-    # Import after choosing the source tree, including for a before/after comparison.
-    from miryoku.engine import Engine, Indicator, Signal  # noqa: PLC0415
-    from miryoku.layout import Key, Mod, Scancode  # noqa: PLC0415
-    from protocol import Request  # noqa: PLC0415
+    # Lazy dependencies first resolve after main selects the source tree.
 
     class Host:
         """No output log or OS calls whose allocations could obscure the engine."""

@@ -26,7 +26,7 @@ from .meeting_execution import MeetingWork
 from .workspace import Workspace
 
 
-@dataclass(slots=True)
+@dataclass(frozen=True, slots=True)
 class Conversation:
     history: list[Json]
     workspace: Workspace

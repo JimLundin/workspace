@@ -305,7 +305,7 @@ def enqueue(state: Outbox, epoch: str, payload: ipc.BridgeEvent) -> tuple[Outbox
     return Outbox(message.sequence, state.acknowledged, (*entries, Queued(message, size))), lost
 
 
-@dataclass(slots=True)
+@dataclass(frozen=True, slots=True)
 class PendingMeeting:
     run: RunRef
     client: str

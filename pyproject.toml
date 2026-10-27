@@ -97,14 +97,6 @@ kind = "migration"
 
 [[tool.workspace.architecture.exceptions]]
 rule = "immutable-data"
-module = "assistant.agent_execution"
-declaration = "Conversation"
-expression = "Conversation"
-reason = "Existing committed assistant.agent_execution.Conversation uses Conversation; migrate this exact declaration to the documented policy when changing its owner."
-kind = "migration"
-
-[[tool.workspace.architecture.exceptions]]
-rule = "immutable-data"
 module = "assistant.agent_input"
 declaration = "_Input"
 expression = "_Input"
@@ -289,22 +281,6 @@ kind = "necessity"
 
 [[tool.workspace.architecture.exceptions]]
 rule = "immutable-data"
-module = "automation.bridge"
-declaration = "PendingMeeting"
-expression = "PendingMeeting"
-reason = "Existing committed automation.bridge.PendingMeeting uses PendingMeeting; migrate this exact declaration to the documented policy when changing its owner."
-kind = "migration"
-
-[[tool.workspace.architecture.exceptions]]
-rule = "immutable-data"
-module = "automation.controller"
-declaration = "_Flight"
-expression = "_Flight"
-reason = "Existing committed automation.controller._Flight uses _Flight; migrate this exact declaration to the documented policy when changing its owner."
-kind = "migration"
-
-[[tool.workspace.architecture.exceptions]]
-rule = "immutable-data"
 module = "miryoku.engine"
 declaration = "Modifiers"
 expression = "Modifiers"
@@ -318,14 +294,6 @@ declaration = "Engine"
 expression = "Engine"
 reason = "The isolated keyboard path uses bounded mutable buffers and direct updates; docs/functional-design.md records latency, allocation and GC measurements."
 kind = "necessity"
-
-[[tool.workspace.architecture.exceptions]]
-rule = "immutable-data"
-module = "scripts.benchmark_keyboard"
-declaration = "Options"
-expression = "Options"
-reason = "Existing committed scripts.benchmark_keyboard.Options uses Options; migrate this exact declaration to the documented policy when changing its owner."
-kind = "migration"
 
 [[tool.workspace.architecture.exceptions]]
 rule = "explicit-attributes"
@@ -343,10 +311,11 @@ expression = "getattr(test, '__module__', None)"
 reason = "The protected runner inspects discovered test callables to verify their defining module."
 kind = "necessity"
 
+
 [[tool.workspace.architecture.exceptions]]
-rule = "immutable-data"
-module = "usage"
-declaration = "Use"
-expression = "Use"
-reason = "Existing committed usage.Use uses Use; migrate this exact declaration to the documented policy when changing its owner."
+rule = "mutable-field"
+module = "assistant.agent_execution"
+declaration = "Conversation.history"
+expression = "list[Json]"
+reason = "Existing volatile SDK history is shared by identity with Agent. Move its mutation behind the execution owner while preserving ADR-0001 recovery and privacy constraints."
 kind = "migration"
