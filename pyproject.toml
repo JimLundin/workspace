@@ -18,7 +18,11 @@ dependencies = [
     "win32more-Microsoft.Windows.SDK.Win32Metadata==0.8.71.0.26; sys_platform == 'win32'",
 ]
 
+[project.optional-dependencies]
+test = ["hypothesis==6.170.12"]
+
 [tool.mypy]
+mypy_path = "typings"
 python_version = "3.15"
 platform = "win32"  # the toolkit targets Windows; check it as Windows code
 strict = true
@@ -48,6 +52,7 @@ module = ["win32more", "win32more.*"]
 ignore_missing_imports = true
 
 [tool.pyright]
+stubPath = "typings"
 pythonVersion = "3.15"
 pythonPlatform = "Windows"
 typeCheckingMode = "strict"
@@ -74,3 +79,105 @@ include = ["assistant*", "automation*", "miryoku*", "winapi*"]
 
 [tool.setuptools.package-data]
 assistant = ["*.ps1", "canvas_assets/*", "canvas_assets/examples/*"]
+
+[tool.workspace.architecture]
+# Model ownership follows module moves; mutable effect owners are not models.
+models = [
+    "assistant.agent_session",
+    "assistant.communications",
+    "assistant.feed_triage",
+    "assistant.native_feed",
+    "assistant.recording_state",
+    "assistant.system_notices",
+    "automation.task",
+]
+
+[[tool.workspace.architecture.exceptions]]
+rule = "explicit-attributes"
+module = "assistant.meeting_followup_store"
+declaration = "FollowupStore._publish"
+expression = "getattr(error, 'winerror', None)"
+reason = "Read the optional native OSError code for bounded publication retry after Windows sharing/access errors."
+
+[[tool.workspace.architecture.exceptions]]
+rule = "explicit-attributes"
+module = "scripts.deploy_windows"
+declaration = "Release.__init__"
+expression = "getattr(library, name)"
+reason = "Resolve fixed reviewed ctypes function declarations before assigning their concrete native prototypes."
+
+[[tool.workspace.architecture.exceptions]]
+rule = "explicit-attributes"
+module = "selfcheck"
+declaration = "run_tests"
+expression = "getattr(test, '__module__', None)"
+reason = "The protected runner inspects discovered test callables to verify their defining module."
+
+[[tool.workspace.architecture.exceptions]]
+rule = "immutable-data"
+module = "miryoku.engine"
+declaration = "Engine"
+expression = "Engine"
+reason = "The isolated keyboard path uses bounded mutable buffers and direct updates; docs/functional-design.md records latency, allocation and GC measurements."
+
+[[tool.workspace.architecture.exceptions]]
+rule = "immutable-data"
+module = "miryoku.engine"
+declaration = "Modifiers"
+expression = "Modifiers"
+reason = "Modifier ownership counters are updated for every key event inside the measured keyboard path; copying them would add per-event allocation."
+
+[[tool.workspace.architecture.exceptions]]
+rule = "immutable-data"
+module = "assistant.sdk"
+declaration = "TextBuffer"
+expression = "TextBuffer"
+reason = "Private streaming accumulators update growing fragment maps and completion sets; persistent copies per fragment add substantial cumulative work. Published timeline values remain immutable."
+
+[[tool.workspace.architecture.exceptions]]
+rule = "immutable-data"
+module = "assistant.agent_input"
+declaration = "_Input"
+expression = "_Input"
+kind = "migration"
+reason = "Existing reply mailbox is shared by a waiting thread and its answer callback. Move mutable coordination into its effect owner before making the reply record immutable."
+
+[[tool.workspace.architecture.exceptions]]
+rule = "immutable-data"
+module = "assistant.overlay"
+declaration = "OverlayState"
+expression = "OverlayState"
+kind = "migration"
+reason = "Existing overlay callers expect in-place updates. Replace them with immutable transitions in a focused native-view change; no performance necessity is claimed."
+
+[[tool.workspace.architecture.exceptions]]
+rule = "immutable-data"
+module = "assistant.shell_state"
+declaration = "WindowsKeyTap"
+expression = "WindowsKeyTap"
+kind = "migration"
+reason = "Existing Windows-key hook mutates held-key state. Measure its native callback before replacing that state; the current shape has no specific before/after evidence."
+
+[[tool.workspace.architecture.exceptions]]
+rule = "mutable-field"
+module = "assistant.agent"
+declaration = "Args.values"
+expression = "dict[str, object]"
+kind = "migration"
+reason = "Existing tool arguments retain mutable parsed JSON. Freeze validated nested data at ingress while preserving the external encoding in its adapter."
+
+[[tool.workspace.architecture.exceptions]]
+rule = "mutable-field"
+module = "assistant.agent_execution"
+declaration = "Conversation.history"
+expression = "list[Json]"
+kind = "migration"
+reason = "Existing volatile SDK history is shared by identity with Agent. Move its mutation behind the execution owner while preserving ADR-0001 recovery and privacy constraints."
+
+[[tool.workspace.architecture.exceptions]]
+rule = "mutable-field"
+module = "assistant.llm"
+declaration = "ToolSpec.parameters"
+expression = "dict[str, Json]"
+kind = "migration"
+reason = "Existing tool schemas are mutable JSON dictionaries. Introduce immutable schemas together with explicit JSON conversion in the SDK and HTTP adapters."

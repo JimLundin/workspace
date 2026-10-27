@@ -2,6 +2,7 @@
 
 import argparse
 import hashlib
+import inspect
 import json
 import re
 import shutil
@@ -10,9 +11,11 @@ import sys
 import tempfile
 import zipfile
 from dataclasses import dataclass
+from http.client import HTTPResponse
 from pathlib import Path, PurePosixPath
-from typing import BinaryIO, cast
 from urllib.request import urlopen
+
+from pydantic import TypeAdapter
 
 ROOT = Path(__file__).resolve().parent.parent
 WEB_ENGINE_PROCESS = "PySide6/QtWebEngineProcess.exe"
@@ -34,28 +37,23 @@ class PythonRelease:
         return self.minor.replace(".", "")
 
 
+PYTHON_RELEASE = TypeAdapter[PythonRelease](PythonRelease)
+
+
 def release() -> PythonRelease:
-    raw: object = json.loads((ROOT / "requirements" / "python-win64.json").read_text(encoding="utf-8"))
-    if not isinstance(raw, dict):
-        raise ValueError("The Python pin must be an object.")
-    data = cast("dict[str, object]", raw)
-    version, url, digest, exclude = (data.get(key) for key in ("version", "url", "sha256", "exclude"))
-    if not isinstance(version, str) or re.fullmatch(r"\d+\.\d+\.\d+", version) is None:
+    data = PYTHON_RELEASE.validate_json((ROOT / "requirements" / "python-win64.json").read_bytes(), strict=True)
+    if re.fullmatch(r"\d+\.\d+\.\d+", data.version) is None:
         raise ValueError("The Python pin must specify a release version.")
-    if not isinstance(url, str) or not url.startswith("https://"):
+    if not data.url.startswith("https://"):
         raise ValueError("The Python archive URL must use HTTPS.")
-    if not isinstance(digest, str) or re.fullmatch(r"[0-9a-f]{64}", digest) is None:
+    if re.fullmatch(r"[0-9a-f]{64}", data.sha256) is None:
         raise ValueError("The Python archive must have a pinned SHA-256.")
-    if not isinstance(exclude, list):
-        raise ValueError("The Python pin must list excluded runtime paths.")
-    paths: list[str] = []
-    for value in cast("list[object]", exclude):
-        if (not isinstance(value, str) or not value or "\\" in value or ":" in value
+    for value in data.exclude:
+        if (not value or "\\" in value or ":" in value
                 or PurePosixPath(value).is_absolute() or ".." in PurePosixPath(value).parts
                 or PurePosixPath(value).as_posix() != value or value == "."):
             raise ValueError("Excluded runtime paths must be relative archive paths.")
-        paths.append(value)
-    return PythonRelease(version, url, digest, tuple(paths))
+    return data
 
 
 def download_python(python: PythonRelease, cache: Path) -> Path:
@@ -67,8 +65,13 @@ def download_python(python: PythonRelease, cache: Path) -> Path:
     with tempfile.NamedTemporaryFile(dir=cache, suffix=".zip", delete=False) as output:
         temporary = Path(output.name)
         try:
-            with cast(BinaryIO, urlopen(python.url, timeout=60)) as source:
-                shutil.copyfileobj(source, output)
+            response: object = urlopen(python.url, timeout=60)
+            match response:
+                case HTTPResponse():
+                    with response:
+                        shutil.copyfileobj(response, output)
+                case _:
+                    raise ValueError("The Python archive request did not return an HTTP response.")
         except BaseException:
             output.close()
             temporary.unlink(missing_ok=True)
@@ -111,7 +114,7 @@ def build(output: Path, cache: Path) -> None:
         )
         patterns = (
             ".git", ".venv", ".runtime", ".python", ".bundle-cache", "__pycache__", ".pytest_cache",
-            ".mypy_cache", ".ruff_cache", ".pyright", "dist",
+            ".mypy_cache", ".ruff_cache", ".pyright", ".hypothesis", "dist",
         )
 
         def ignored(folder: str, names: list[str]) -> set[str]:
@@ -146,8 +149,11 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("output", type=Path)
     parser.add_argument("--cache", type=Path, default=ROOT / "dist" / ".bundle-cache")
-    args = parser.parse_args()
-    build(cast(Path, args.output), cast(Path, args.cache))
+    match dict(inspect.getmembers(parser.parse_args())):
+        case {'output': Path() as output, 'cache': Path() as cache}:
+            build(output, cache)
+        case _:
+            parser.error('Invalid bundle arguments.')
 
 
 if __name__ == "__main__":

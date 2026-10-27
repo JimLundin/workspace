@@ -5,23 +5,21 @@ not instances of an application class."""
 
 import importlib
 import inspect
-import pkgutil
 import sys
+from collections.abc import Iterator
 from enum import Enum
 from pathlib import Path
 from types import ModuleType
 from typing import is_typeddict
 
+from scripts.architecture import module_name, python_sources
+
 ROOT = Path(__file__).resolve().parent.parent
-PACKAGES = ("miryoku", "assistant", "automation", "winapi")
-TOP_LEVEL = ("protocol", "config", "usage", "keeper", "selfcheck")
 
 
 def modules() -> list[ModuleType]:
-    """Every module of the toolkit. Off Windows, the ones that need Windows are skipped."""
-    names = [*TOP_LEVEL]
-    for package in PACKAGES:
-        names += [f"{package}.{m.name}" for m in pkgutil.iter_modules([str(ROOT / package)])]
+    """Every module of Workspace. Off Windows, the ones that need Windows are skipped."""
+    names = [module_name(name) for name in python_sources(ROOT) if name.endswith('.py') and not name.startswith('tests/')]
     found: list[ModuleType] = []
     for name in names:
         try:
@@ -45,13 +43,17 @@ def exempt(cls: type) -> bool:
     )
 
 
+def missing_classes(module: ModuleType) -> Iterator[str]:
+    for name, value in inspect.getmembers(module):
+        match value:
+            case type() if value.__module__ == module.__name__ and not exempt(value) and value.__dictoffset__ != 0:
+                yield f"{module.__name__}.{name}"
+            case _:
+                pass
+
+
 def test_every_class_uses_slots() -> None:
     # A class's instances have no __dict__ (so no undeclared attributes) exactly
     # when __dictoffset__ is 0, which needs __slots__ on it and all its bases.
-    missing = [
-        f"{module.__name__}.{name}"
-        for module in modules()
-        for name, cls in inspect.getmembers(module, inspect.isclass)
-        if cls.__module__ == module.__name__ and not exempt(cls) and cls.__dictoffset__ != 0
-    ]
+    missing = tuple(name for module in modules() for name in missing_classes(module))
     assert not missing, f"classes without __slots__: {missing}"
