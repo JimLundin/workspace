@@ -25,6 +25,10 @@ from pydantic import TypeAdapter, ValidationError
 from scripts.architecture import Report, dependencies, module_name, review
 from scripts.deploy_files import file_at, read, sha, source_map, write
 from scripts.development_paths import LIVE, PROFILE
+lazy import selfcheck
+lazy from runtime import activate
+lazy from scripts import quality
+lazy from scripts.check_native import execute_native
 
 ROOT = Path(__file__).resolve().parent.parent
 BROAD = frozenset({'keeper.py', 'selfcheck.py', 'runtime.py', 'workspace.pyw', 'config.py', 'protocol.py', 'pyproject.toml'})
@@ -118,9 +122,6 @@ def selected_tests(module: str, loaded: object, requested: str = '') -> Iterator
 
 def execute(selection: Selection, root: Path) -> tuple[int, int, tuple[str, ...], tuple[tuple[float, str], ...]]:
     # Same small test-function protocol as selfcheck, sequential on the shared desktop.
-    import selfcheck  # noqa: PLC0415 -- protected check boundary after CLI startup
-    from runtime import activate  # noqa: PLC0415 -- initialize only when executing tests
-
     activate()
     os.environ.pop('WORKSPACE_E2E', None)
     # This execution owner accumulates results locally: rebuilding tuples after
@@ -190,6 +191,12 @@ def check_architecture(root: Path, current: dict[str, str]) -> Report:
     return report
 
 
+def check_quality(root: Path, current: Mapping[str, str]) -> None:
+    report = quality.check(root, current)
+    if report.failures or report.stale:
+        raise SystemExit(1)
+
+
 def arguments(parser: argparse.ArgumentParser) -> Options:
     raw = dict(inspect.getmembers(parser.parse_args()))
     match raw:
@@ -219,6 +226,7 @@ def main() -> None:
     # Mandatory even for explicit --tests scopes; no application imports or
     # native effects before ownership and source policies have passed.
     architecture = check_architecture(ROOT, current)
+    check_quality(ROOT, current)
     cache = PROFILE / 'deployment' / 'source.json'
     baseline = args.baseline if args.baseline.is_file() else cache if args.baseline == LIVE and cache.is_file() else None
     if baseline is not None:
@@ -247,8 +255,6 @@ def main() -> None:
     scope: dict[str, str | int] = {'profile': selection.reason, 'test_modules': len(selection.tests), 'changed_files': len(selection.changed)}
     print(json.dumps(scope), flush=True)
     if args.native and os.name != 'nt':
-        from scripts.check_native import execute_native  # noqa: PLC0415 -- native checks only when requested
-
         passed, skipped, failures, timings = execute_native(ROOT, selection.tests, selection.changed, selection.reason)
     else:
         passed, skipped, failures, timings = execute(selection, ROOT)

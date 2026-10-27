@@ -12,6 +12,7 @@ from pathlib import Path, PureWindowsPath
 from typing import IO, Literal
 from unittest.mock import patch
 
+from scripts import deploy
 from scripts.deploy_archive import repack
 from scripts.deploy_files import file_at, files, member, names, sha, source_map, write, zip_files
 from scripts.deploy_processes import Process, role_for
@@ -36,7 +37,6 @@ def test_only_the_exact_development_editor_server_is_exempt_from_installed_proce
 def test_native_checkout_uses_one_coordinator_and_detects_changes_after_deployment(tmp_path: Path) -> None:
     if os.name != 'nt':
         return
-    from scripts import deploy  # noqa: PLC0415
     stage = tmp_path / 'workspace-source-test'
     stage.mkdir()
     original_cwd = Path.cwd()

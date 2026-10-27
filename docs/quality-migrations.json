@@ -1,0 +1,3506 @@
+{
+  "kind": "workspace-quality-migrations-v1",
+  "entries": [
+    {
+      "key": {
+        "rule": "FBT001",
+        "path": "assistant/agent.py",
+        "scope": "Machine.mouse_button.down",
+        "signature": "97539690c2e1def12788f7419609f0213bf6a4bd8e67a65f70032f1bc46e121c"
+      },
+      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
+    },
+    {
+      "key": {
+        "rule": "FBT001",
+        "path": "assistant/agent_toasts.py",
+        "scope": "AgentToasts.set_hover.inside",
+        "signature": "92cab3b5e62a1086b4006a2abe4870644f6e69be4ad436faea5177b82a9e26f5"
+      },
+      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
+    },
+    {
+      "key": {
+        "rule": "FBT001",
+        "path": "assistant/browser_surfaces.py",
+        "scope": "BrowserSurfaces._loaded.success",
+        "signature": "fd81fa726ac43c7d125ca3ead6c3dcdc67a3b8edc42a7c6ecbfc306b78628a3b"
+      },
+      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
+    },
+    {
+      "key": {
+        "rule": "FBT001",
+        "path": "assistant/browser_surfaces.py",
+        "scope": "_Page.acceptNavigationRequest._main",
+        "signature": "7ccb55be2614e909bb9a87f03801264aecc67e1d3380f0afdb156fb95e5e55eb"
+      },
+      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
+    },
+    {
+      "key": {
+        "rule": "FBT001",
+        "path": "assistant/browser_values.py",
+        "scope": "boolean.default",
+        "signature": "150cac38cefb7a3a8ad82a6df444a115c505d70bc0752f2ac15ddb252b08e4d4"
+      },
+      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
+    },
+    {
+      "key": {
+        "rule": "FBT001",
+        "path": "assistant/canvas_web.py",
+        "scope": "Page.acceptNavigationRequest._main",
+        "signature": "7ccb55be2614e909bb9a87f03801264aecc67e1d3380f0afdb156fb95e5e55eb"
+      },
+      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
+    },
+    {
+      "key": {
+        "rule": "FBT001",
+        "path": "assistant/features.py",
+        "scope": "Assistant.handle.down",
+        "signature": "992a51e4971347d1634e5e0c4216de14be3d2606e22cbfa6a432d9c7d379a97c"
+      },
+      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
+    },
+    {
+      "key": {
+        "rule": "FBT001",
+        "path": "assistant/features.py",
+        "scope": "Assistant.hold.down",
+        "signature": "735e176f99333da90922bd0cbd15b31a6cc5e88ad032403b6cae42717806260b"
+      },
+      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
+    },
+    {
+      "key": {
+        "rule": "FBT001",
+        "path": "assistant/llm.py",
+        "scope": "_chat_body.streaming",
+        "signature": "4326e818bdcecafeff4c33ac0ccc7231fea7394afef4c7e43c59da286d1b7f65"
+      },
+      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
+    },
+    {
+      "key": {
+        "rule": "FBT001",
+        "path": "assistant/machine.py",
+        "scope": "WinMachine.mouse_button.down",
+        "signature": "97539690c2e1def12788f7419609f0213bf6a4bd8e67a65f70032f1bc46e121c"
+      },
+      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
+    },
+    {
+      "key": {
+        "rule": "FBT001",
+        "path": "assistant/notifications.py",
+        "scope": "hover.inside",
+        "signature": "09ae5145e9babf6e207c8faf9be3e43d37432c04c9d5165870fd7b8952be8230"
+      },
+      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
+    },
+    {
+      "key": {
+        "rule": "FBT001",
+        "path": "assistant/notifications.py",
+        "scope": "reading_hold.reading",
+        "signature": "dc68593350710137597de7f1c69944d7297e5f98f19d3d03fdcf603ac16d94f1"
+      },
+      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
+    },
+    {
+      "key": {
+        "rule": "FBT001",
+        "path": "assistant/overlay.py",
+        "scope": "OverlayState.key.down",
+        "signature": "e24ac2aaad6790b3a7daf82d65de76f6cfa6cd1ac7253eaf9073b5ff18b93070"
+      },
+      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
+    },
+    {
+      "key": {
+        "rule": "FBT001",
+        "path": "assistant/overlay.py",
+        "scope": "OverlayState.set_layout.on",
+        "signature": "0ecd8c262d2ff9e5b885ecb6deb12af6b64eed3bb5ac1458bd3624260c5bdaab"
+      },
+      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
+    },
+    {
+      "key": {
+        "rule": "FBT001",
+        "path": "assistant/overlay.py",
+        "scope": "save_enabled.enabled",
+        "signature": "39cdb09971205afa58328bbec1a78ed60af91d565ae118a3300f2d9b4b183630"
+      },
+      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
+    },
+    {
+      "key": {
+        "rule": "FBT001",
+        "path": "assistant/qt_ui.py",
+        "scope": "EventLoop.watch.visible",
+        "signature": "6ed3d0b73769b674456e002fd5022fa251d464888f34898f6a3692f315a8ea88"
+      },
+      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
+    },
+    {
+      "key": {
+        "rule": "FBT001",
+        "path": "assistant/ui.py",
+        "scope": "ReviewWindow.finish.install",
+        "signature": "07fd6bd3652922462cbfb8a4e7a67a6c1091bab3352d39a72f6ef5ee8858d900"
+      },
+      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
+    },
+    {
+      "key": {
+        "rule": "FBT001",
+        "path": "automation/execution.py",
+        "scope": "WorkExecution.reconcile.applied",
+        "signature": "b156a90170de7d8e1c8a8089f819170d2ee68cce74961ef82049854386fcd112"
+      },
+      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
+    },
+    {
+      "key": {
+        "rule": "FBT001",
+        "path": "keeper.py",
+        "scope": "Keeper.persist.pending",
+        "signature": "d0844993137c3963b1fb239a94d53c96c79da49dd966be9c5b9e92398bb3bc4e"
+      },
+      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
+    },
+    {
+      "key": {
+        "rule": "FBT001",
+        "path": "keeper.py",
+        "scope": "Recovery.write.pending",
+        "signature": "bc1bff898b42d8cbd9319aeb852e399f8285d4d380de2e6b1260032723a44567"
+      },
+      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
+    },
+    {
+      "key": {
+        "rule": "FBT001",
+        "path": "miryoku/engine.py",
+        "scope": "Engine.key.down",
+        "signature": "0614e4e89f2040aacc059e8f231b31b3126feb7d1cf2662346c3135db9131823"
+      },
+      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
+    },
+    {
+      "key": {
+        "rule": "FBT001",
+        "path": "miryoku/engine.py",
+        "scope": "Engine.on_key.down",
+        "signature": "0614e4e89f2040aacc059e8f231b31b3126feb7d1cf2662346c3135db9131823"
+      },
+      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
+    },
+    {
+      "key": {
+        "rule": "FBT001",
+        "path": "miryoku/engine.py",
+        "scope": "Host.request.down",
+        "signature": "992a51e4971347d1634e5e0c4216de14be3d2606e22cbfa6a432d9c7d379a97c"
+      },
+      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
+    },
+    {
+      "key": {
+        "rule": "FBT001",
+        "path": "miryoku/engine.py",
+        "scope": "Host.send.down",
+        "signature": "5c6e8cb17ec813e17c2f1c65c1127a157cd61cc1a1d665821ec7f8a3cc083b7a"
+      },
+      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
+    },
+    {
+      "key": {
+        "rule": "FBT001",
+        "path": "miryoku/layout.py",
+        "scope": "character.shifted",
+        "signature": "00c59be191f19a88b7f04503eeeb7cadf32370eb505c0cc2760aa46b98004af8"
+      },
+      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
+    },
+    {
+      "key": {
+        "rule": "FBT001",
+        "path": "miryoku/win.py",
+        "scope": "Keyboard.show_key.down",
+        "signature": "e24ac2aaad6790b3a7daf82d65de76f6cfa6cd1ac7253eaf9073b5ff18b93070"
+      },
+      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
+    },
+    {
+      "key": {
+        "rule": "FBT001",
+        "path": "miryoku/win.py",
+        "scope": "Keyboard.swallow.down",
+        "signature": "9958bbb06154a7dc388044e72cdaa9813781816c854472d52b2def7b6f5c7c6a"
+      },
+      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
+    },
+    {
+      "key": {
+        "rule": "FBT001",
+        "path": "miryoku/win.py",
+        "scope": "WinHost.request.down",
+        "signature": "992a51e4971347d1634e5e0c4216de14be3d2606e22cbfa6a432d9c7d379a97c"
+      },
+      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
+    },
+    {
+      "key": {
+        "rule": "FBT001",
+        "path": "miryoku/win.py",
+        "scope": "WinHost.send.down",
+        "signature": "5c6e8cb17ec813e17c2f1c65c1127a157cd61cc1a1d665821ec7f8a3cc083b7a"
+      },
+      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
+    },
+    {
+      "key": {
+        "rule": "FBT001",
+        "path": "protocol.py",
+        "scope": "encode_indicator.caps_word",
+        "signature": "fe1d90cc71a9ef46eeb596bd6b4ea1a3669e567bbe76e50fc34d6b33dad635fa"
+      },
+      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
+    },
+    {
+      "key": {
+        "rule": "FBT001",
+        "path": "protocol.py",
+        "scope": "encode_indicator.locked",
+        "signature": "fe1d90cc71a9ef46eeb596bd6b4ea1a3669e567bbe76e50fc34d6b33dad635fa"
+      },
+      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
+    },
+    {
+      "key": {
+        "rule": "FBT001",
+        "path": "scripts/benchmark_keyboard.py",
+        "scope": "run.Host.request.down",
+        "signature": "992a51e4971347d1634e5e0c4216de14be3d2606e22cbfa6a432d9c7d379a97c"
+      },
+      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
+    },
+    {
+      "key": {
+        "rule": "FBT001",
+        "path": "scripts/benchmark_keyboard.py",
+        "scope": "run.Host.send.down",
+        "signature": "5c6e8cb17ec813e17c2f1c65c1127a157cd61cc1a1d665821ec7f8a3cc083b7a"
+      },
+      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
+    },
+    {
+      "key": {
+        "rule": "FBT001",
+        "path": "tests/test_agent.py",
+        "scope": "FakeMachine.mouse_button.down",
+        "signature": "97539690c2e1def12788f7419609f0213bf6a4bd8e67a65f70032f1bc46e121c"
+      },
+      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
+    },
+    {
+      "key": {
+        "rule": "FBT001",
+        "path": "tests/test_computer_tools.py",
+        "scope": "StoppingMouse.mouse_button.down",
+        "signature": "97539690c2e1def12788f7419609f0213bf6a4bd8e67a65f70032f1bc46e121c"
+      },
+      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
+    },
+    {
+      "key": {
+        "rule": "FBT001",
+        "path": "tests/test_engine.py",
+        "scope": "FakeHost.request.down",
+        "signature": "992a51e4971347d1634e5e0c4216de14be3d2606e22cbfa6a432d9c7d379a97c"
+      },
+      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
+    },
+    {
+      "key": {
+        "rule": "FBT001",
+        "path": "tests/test_engine.py",
+        "scope": "FakeHost.send.down",
+        "signature": "5c6e8cb17ec813e17c2f1c65c1127a157cd61cc1a1d665821ec7f8a3cc083b7a"
+      },
+      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
+    },
+    {
+      "key": {
+        "rule": "FBT001",
+        "path": "tests/test_engine.py",
+        "scope": "Harness.key.down",
+        "signature": "13c50bd2b5b411a99f3a1a2551161c66d9566f330fdf44db280efeba7c1674d6"
+      },
+      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
+    },
+    {
+      "key": {
+        "rule": "FBT001",
+        "path": "tests/test_textio.py",
+        "scope": "Clipboard.__init__.accept",
+        "signature": "457b275af3134e252d73e31340693652f4ad8c81c7beeec904c947e6e29e6678"
+      },
+      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
+    },
+    {
+      "key": {
+        "rule": "FBT001",
+        "path": "winapi/appearance.py",
+        "scope": "TimerResolution.update.active",
+        "signature": "74d74e52435bb9072b2cdae607b39106ffbdfe06ef6cdfbca0a34929ad4c64e8"
+      },
+      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
+    },
+    {
+      "key": {
+        "rule": "FBT001",
+        "path": "winapi/inputs.py",
+        "scope": "mouse_button.down",
+        "signature": "401e26b3c90db87c27f52050658c72f099eac895520b64af91bb48b170ccb825"
+      },
+      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
+    },
+    {
+      "key": {
+        "rule": "FBT001",
+        "path": "winapi/windows.py",
+        "scope": "allow_activation.allowed",
+        "signature": "688c785409612feea24d6ed099bcf4d5aaa79829b0872fc63de1657de01eb4f0"
+      },
+      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
+    },
+    {
+      "key": {
+        "rule": "FBT001",
+        "path": "winapi/windows.py",
+        "scope": "show_quietly.visible",
+        "signature": "a2d850d075365f3cc1b890136e8fafc56e1f5d61ebf171ad171c0f11f3912bed"
+      },
+      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
+    },
+    {
+      "key": {
+        "rule": "FBT002",
+        "path": "assistant/browser_values.py",
+        "scope": "boolean.default",
+        "signature": "150cac38cefb7a3a8ad82a6df444a115c505d70bc0752f2ac15ddb252b08e4d4"
+      },
+      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "assistant/activity.py",
+        "scope": "ActivityTracker.__init__",
+        "signature": "dd5bf52ff6bf1e68d1eb56ee2f7b9bc22374fada3270a34b6fab56ac14610e9d"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "assistant/activity.py",
+        "scope": "observed",
+        "signature": "9cac2bd8b001c296937089e482897fb161fbca5054b6186c020f251472d38009"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "assistant/agent.py",
+        "scope": "Agent.__init__",
+        "signature": "114f7b3bb8395b0fab43879eb03fe75b4d418df830fe23fcf69aaf255c328c88"
+      },
+      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "assistant/agent.py",
+        "scope": "Agent.effect",
+        "signature": "c21c848438871b8c031f306eea83a7b9a7517f9d8669a3307f7bba23bc5cea00"
+      },
+      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "assistant/agent.py",
+        "scope": "Args.bounded",
+        "signature": "8546e3d3e30e3bf68c01b61cc0f8c73c1520a8cceaccc7dc1eb1ad070e1a80f7"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "assistant/agent.py",
+        "scope": "Machine.click",
+        "signature": "e46675a3fa8d7c2003a0627dc80d6a899e20efffcfc3abb427f17c822fcd4c09"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "assistant/agent.py",
+        "scope": "Machine.run_powershell",
+        "signature": "0b6eb81687c17ada02fe4cc0e0ffea1581c3e6aa3889556423665dcdb81fcafe"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "assistant/agent.py",
+        "scope": "Machine.screenshot",
+        "signature": "7545a4b3932df79cbe6212d953ae6424246b13328321f15dc9a3dd7676d2afae"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "assistant/agent.py",
+        "scope": "Machine.scroll",
+        "signature": "79de4cafbf4c7fb5c1bd40ec9cb47f8b87777afd928d5787eafe4e0aebfc1f77"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "assistant/agent_execution.py",
+        "scope": "AgentExecution.__init__",
+        "signature": "2a28bddac66af7d7817644aadfcc8c1f7c707c40736b151e624227203393f150"
+      },
+      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "assistant/agent_execution.py",
+        "scope": "AgentExecution.run_work",
+        "signature": "42457f4da934b0f178e25c2aa8351e4286fb8040f5b63cd748640ada80bc30e8"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "assistant/agent_input.py",
+        "scope": "Inputs.ask",
+        "signature": "a6e2f8041d65ee8d3a9cf0c4067db418b7cb45c79ddb943b31f256de99551525"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "assistant/agent_panel.py",
+        "scope": "AgentPanel.__init__",
+        "signature": "882f4a95ac2c6f43582ddccdb6b6a563a45165bde418b724c098a4d536872a32"
+      },
+      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "assistant/agent_runner.py",
+        "scope": "AgentRunner.__init__",
+        "signature": "c6506e90c6cc76fda4c52a342873c8f7cebd16e5dd1fb940ec5380b56944895d"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "assistant/agent_runner.py",
+        "scope": "AgentRunner._panel",
+        "signature": "237d4f59db3b581300cd1cff6cd089d44a4a9c989b66ebb4c866ec40826582f1"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "assistant/agent_runner.py",
+        "scope": "AgentRunner._work",
+        "signature": "a560a0c766d3df9fde466dc608e219a9a1ce53091809c7df7acff19bea16f3cf"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "assistant/agent_toasts.py",
+        "scope": "AgentToasts.__init__",
+        "signature": "ab6aa38bcb595f84df546ac1d8feb42d85c2e6852ae888de7034405d156039be"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "assistant/agent_window.py",
+        "scope": "AgentWindow.__init__",
+        "signature": "5e8de1bcb9b042e6f08359a457f70cbb83b86b7e278f82fcd9f92e3b51f5e947"
+      },
+      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "assistant/agent_window.py",
+        "scope": "AgentWindow.input",
+        "signature": "a6e2f8041d65ee8d3a9cf0c4067db418b7cb45c79ddb943b31f256de99551525"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "assistant/app.py",
+        "scope": "AssistantApp.on_message",
+        "signature": "6b1c2637d86e2001144e8c96c9e112fc4668ab84bac3391b3c9b685cf66bf5bd"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "assistant/browser.py",
+        "scope": "Browser.__init__",
+        "signature": "c3ee12d98ebdb2a80e3d810d0ff884d9bb7dc7e5358079199fd646ef997bb3dd"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "assistant/browser.py",
+        "scope": "Browser._call",
+        "signature": "0b594bea2f8d5041e49e4ecf20794600c72d91f65ad1dac64129988e7950fed6"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "assistant/browser.py",
+        "scope": "Browser._evaluate",
+        "signature": "123773ea0b8e86281a041babf53d72bfcdb0eab925eec784f59cb6ace20229fd"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "assistant/browser_session.py",
+        "scope": "Cdp.call",
+        "signature": "0b594bea2f8d5041e49e4ecf20794600c72d91f65ad1dac64129988e7950fed6"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "assistant/browser_session.py",
+        "scope": "NativeSessions.__init__",
+        "signature": "5f8ed48c1bb2a7490a44b533565744f7f17a89418214a46fd8e2b78692071210"
+      },
+      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "assistant/browser_surface_control.py",
+        "scope": "AppBridge.browser_app",
+        "signature": "93549ebc0fcf0b72651af9c5ce6980eb256690ab0365e342716bf91d92557f3e"
+      },
+      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "assistant/browser_surface_operations.py",
+        "scope": "_text",
+        "signature": "dbfa0740a75137abf6c9d5b70c846176bbb1d8f7becbd73abaf1760f3f7b84be"
+      },
+      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "assistant/browser_surface_values.py",
+        "scope": "accepts_frame",
+        "signature": "e5f1088e41b3f55c28b09827899299b8d1bfd6af0b4ad66764532d5d2020dc82"
+      },
+      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "assistant/browser_tabs.py",
+        "scope": "Call.__call__",
+        "signature": "0b594bea2f8d5041e49e4ecf20794600c72d91f65ad1dac64129988e7950fed6"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "assistant/browser_tabs.py",
+        "scope": "TabStrip._evaluate",
+        "signature": "f7621814975fbfae8df6a9b0235909598a71f16579d78d29d1c64f697c6f6409"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "assistant/browser_tabs.py",
+        "scope": "TabStrip.open",
+        "signature": "d3d9a813dc6fddc2c79ff1562d3fe162ce457ed259501bf8ae990e8780d4a074"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "assistant/browser_values.py",
+        "scope": "number",
+        "signature": "a556fea38aa8f051cb943e3ed064d4caabf51cc5004a7b4a722a604a5ea54829"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "assistant/browser_values.py",
+        "scope": "strip_page",
+        "signature": "21ba81d9fd18a2a76a357f932b4c07e74ad05dbc18ff5929c4d3d12a60afc830"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "assistant/canvas_agent.py",
+        "scope": "WorkBackend.__init__",
+        "signature": "55a19e8f94440c5fb242147171e8527f78b6513dde4fa5943a9be1cf846dc95a"
+      },
+      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "assistant/canvas_agent.py",
+        "scope": "WorkBackend._waiting",
+        "signature": "6f7d7ef75119a3aeb740c4437413554ac71fe84f07e72df42b958014a92ca03d"
+      },
+      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "assistant/canvas_controller.py",
+        "scope": "CanvasController.voice",
+        "signature": "0a2da82f8af7e54b970378ef9a523e2ea3fa4daff872d6e36949e21726b94cf1"
+      },
+      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "assistant/canvas_drafts.py",
+        "scope": "CanvasDrafts.__init__",
+        "signature": "fcb5e80799f1f7892649323ae46111f5debaaab2aaaab91d54cec935847aca27"
+      },
+      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "assistant/canvas_drafts.py",
+        "scope": "capture",
+        "signature": "6a022bc6dfc76803f7e56378800d43e218d5871e9fcd732fe25583d94a9c28fe"
+      },
+      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "assistant/canvas_model.py",
+        "scope": "add",
+        "signature": "84e6575e3af36f90877aeaf3dd5fcdebb4363a1a67490eaf27df1c7a57ab7525"
+      },
+      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "assistant/canvas_model.py",
+        "scope": "bounded",
+        "signature": "61414cd3a8f38b4c1caae4715db745d5b252ac81d254557a9642f5103a2ee01e"
+      },
+      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "assistant/canvas_model.py",
+        "scope": "request",
+        "signature": "da58289b0626e78bde8619aea9416a6d4f10deb5f700c595920245346f12f5cc"
+      },
+      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "assistant/canvas_store.py",
+        "scope": "string",
+        "signature": "e3747141a02bdf987020a06073e665379aa626d096579ca632495ca439c901c5"
+      },
+      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "assistant/canvas_ui.py",
+        "scope": "DesktopWindow.__init__",
+        "signature": "2abc2ed194bee42361e211e61ddf984f7490941dff6fef429fd945500b5f1946"
+      },
+      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "assistant/canvas_ui.py",
+        "scope": "DesktopWindow._initialize",
+        "signature": "2abc2ed194bee42361e211e61ddf984f7490941dff6fef429fd945500b5f1946"
+      },
+      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "assistant/canvas_web.py",
+        "scope": "DesktopWindow.__init__",
+        "signature": "7e7b41b5e02ff4faa6b4211f694318a3601b1424d0242b3162114b0887e67ce4"
+      },
+      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "assistant/canvas_widgets.py",
+        "scope": "Card.__init__",
+        "signature": "f44f7fbc1daff6073cd5fe9d1ecb431ffbda69daa9e4601d41fc81a9a729d6a4"
+      },
+      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "assistant/canvas_widgets.py",
+        "scope": "button",
+        "signature": "99b44bc87de3b64925d42e62bdada33300962fab8ddd938985dd924e4e2ddc4a"
+      },
+      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "assistant/commands.py",
+        "scope": "powershell",
+        "signature": "bcc1d0227a370470ea0aa4abc7d26ba8ff284ea9a4819f4231891e40df77ecb2"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "assistant/commands.py",
+        "scope": "run",
+        "signature": "82551861461aa4b68781dca36ec991c0268f18f6638c4cbefc34dfe1f4f2f619"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "assistant/desktop.py",
+        "scope": "WinDesktop.__init__",
+        "signature": "0d850ebb1659c5b7aa95212c32b0572766263d4e0d23fb062d008459843a13d3"
+      },
+      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "assistant/features.py",
+        "scope": "Assistant.__init__",
+        "signature": "782f53f25c6669a1c8357bb06961f7c216f9925b7af3e3c5b52059bde1c5797f"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "assistant/features.py",
+        "scope": "Conversation.__init__",
+        "signature": "29bfe2c3c2e35ba39c8cb27a696631f040ceaabe36c52e4ad183c8eea2b85cf5"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "assistant/geometry.py",
+        "scope": "half",
+        "signature": "5b6febaa5129264ab8d93d6e9a9cf8cc43014d4430f5411b5a1946474ed6c517"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "assistant/graph_http.py",
+        "scope": "Http._request",
+        "signature": "3d840bc448f5668a2e2611b0a6a8c0ae53b67c81b4637115f9b2c013b183405f"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "assistant/graph_http.py",
+        "scope": "Http.request",
+        "signature": "3d840bc448f5668a2e2611b0a6a8c0ae53b67c81b4637115f9b2c013b183405f"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "assistant/llm.py",
+        "scope": "_chat_body",
+        "signature": "4326e818bdcecafeff4c33ac0ccc7231fea7394afef4c7e43c59da286d1b7f65"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "assistant/llm.py",
+        "scope": "_request",
+        "signature": "3c749ed1e42d8e6a0a0884312e38f256472db4a208848fa29a60fa0ce5f59890"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "assistant/llm.py",
+        "scope": "ask",
+        "signature": "2f4452a138642a4b470f86a9579abf5501ee9201711ad8a7105b6925bffbd1b3"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "assistant/llm.py",
+        "scope": "chat",
+        "signature": "272926d44b6391996f240677bc17b41db4cbe13b44c53e70d5fd80b3b794959c"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "assistant/llm.py",
+        "scope": "stream",
+        "signature": "c40257c84c292647d722f4d5c5b5412552aa323dc0a9e0e663378bfefd97f597"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "assistant/llm.py",
+        "scope": "transcribe",
+        "signature": "c98c149cb3ceedf8b0151da8d6d13b8bd5adc09b695aa1151dd6c6cdd09dfd74"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "assistant/machine.py",
+        "scope": "HumanInput.agent_input",
+        "signature": "7b6108f8b54e5499c69b3e97c26508d63f28ab83d721979d8a90eb226c84d506"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "assistant/machine.py",
+        "scope": "WinMachine.__init__",
+        "signature": "b457678a5564984e92ffaf203d88856c55a62e5dbe189b760237192aa68a1908"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "assistant/machine.py",
+        "scope": "WinMachine.click",
+        "signature": "e46675a3fa8d7c2003a0627dc80d6a899e20efffcfc3abb427f17c822fcd4c09"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "assistant/machine.py",
+        "scope": "WinMachine.run_powershell",
+        "signature": "0b6eb81687c17ada02fe4cc0e0ffea1581c3e6aa3889556423665dcdb81fcafe"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "assistant/machine.py",
+        "scope": "WinMachine.screenshot",
+        "signature": "7545a4b3932df79cbe6212d953ae6424246b13328321f15dc9a3dd7676d2afae"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "assistant/machine.py",
+        "scope": "WinMachine.scroll",
+        "signature": "79de4cafbf4c7fb5c1bd40ec9cb47f8b87777afd928d5787eafe4e0aebfc1f77"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "assistant/meeting_canvas.py",
+        "scope": "_item",
+        "signature": "f8774c452a22684352185061a7f283e15287ecc601ea72cd35c47fe6e07b1614"
+      },
+      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "assistant/meeting_canvas.py",
+        "scope": "_source_cards",
+        "signature": "14f3cc26d95105ff37a54f3021574150cbb37ecb518c7cf7b1fffbf541bdccc3"
+      },
+      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "assistant/meeting_events.py",
+        "scope": "TranscriptEvents.__init__",
+        "signature": "b3bb5389af2c8d1dc05ff8b7745492926ba894ddd37906673ee0278bcfeeb3ce"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "assistant/meeting_followup.py",
+        "scope": "_array",
+        "signature": "fa5284b676a4cf95b019900b4d5f8eb74936d97b69be1e30478717d2c0670740"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "assistant/meeting_followup.py",
+        "scope": "_header",
+        "signature": "284b35612693d54395864370cb78c67ae88a88491fa49aa7e810fdb376f13426"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "assistant/meeting_followup.py",
+        "scope": "_text",
+        "signature": "284b35612693d54395864370cb78c67ae88a88491fa49aa7e810fdb376f13426"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "assistant/meeting_followup.py",
+        "scope": "_tuple",
+        "signature": "408cbcbb295475babe65192f302fe18285735509b4280e2f0170e658f9cf255b"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "assistant/meeting_followup.py",
+        "scope": "resolve_citation",
+        "signature": "609aad0e1910944b3c360801812c12972f2992b079e51217eaf51c4f68493c97"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "assistant/meeting_followup_store.py",
+        "scope": "FollowupStore._edit",
+        "signature": "9f1e9e1b7f2179fd5c4a49d2ccdd70c465161de0a2b5b868e151b2a6ab45374b"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "assistant/meeting_followup_store.py",
+        "scope": "FollowupStore._edit_directory",
+        "signature": "11e4ebcc887975cd3f776d3efd7dca3fa5ba1b6d64ca06ad4b5d6b0b8a103d9d"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "assistant/meeting_followup_store.py",
+        "scope": "FollowupStore._save",
+        "signature": "b9d856ca31a63cd8d871300d43e2c39422942dfee66b6aabca37d19eba925c91"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "assistant/meeting_followup_store.py",
+        "scope": "FollowupStore.action_revision",
+        "signature": "4a4305263467fe4f0b530167de6493c2ab18ed4cc58046a4bb4ece8d17b75a72"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "assistant/meeting_followup_store.py",
+        "scope": "FollowupStore.draft_revision",
+        "signature": "826ffe61a03c884fcbd60daffb3438f12dbf1d46f18ffff80ebf8185366508a7"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "assistant/meeting_followup_store.py",
+        "scope": "FollowupStore.save_action",
+        "signature": "eec2562cfb558990f578c996485f6e65b58bdb523d57b4304b11c63f5040ebc9"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "assistant/meeting_followup_store.py",
+        "scope": "FollowupStore.save_draft",
+        "signature": "fd4ba0d663d7608ed92211b567a99497bbe8d3bb87736cd3b774ec2655fcf380"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "assistant/meeting_requests.py",
+        "scope": "MeetingRequests.prepare",
+        "signature": "d0ae77966c51daafdf6f73594d4a7e53529d21cc8fc596542e5e6a5a90ccb598"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "assistant/meeting_store.py",
+        "scope": "MeetingStore.create",
+        "signature": "e3047cdd06b79f73095407c1c2a22ee891b7b71fc04a36e9a302e6080ae1cc29"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "assistant/meeting_web.py",
+        "scope": "dispatch",
+        "signature": "0621151dd287734b5efe7a4f1a3aaf8d7bc80f856b9e2b9631a9257265f688ed"
+      },
+      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "assistant/meeting_workflow.py",
+        "scope": "MeetingWorkflow.__init__",
+        "signature": "eaa2bf81a866a5be8983d66f49c844177ec97a10c978ae8062b095c85b0f796e"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "assistant/meeting_workflow.py",
+        "scope": "work_observation",
+        "signature": "2c673b932ab3389f9b7d531b28d1d11d881b8f02a63e379e7e17e6250f45a484"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "assistant/meetings.py",
+        "scope": "Meetings.__init__",
+        "signature": "09174a952bcb3553d5d3bb4086707a4fc4b689de648d26bc4a414730863d4a34"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "assistant/notification_reading.py",
+        "scope": "advance",
+        "signature": "a3c41395c6632e26059055d07c3c2252fcb8e5f068f02c009bb8ec0de16cb8b2"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "assistant/notification_reading.py",
+        "scope": "displayed",
+        "signature": "378fb959a2489930a4598e2c00542178cfc8c74c39d916fce0e13e52237efe59"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "assistant/notifications.py",
+        "scope": "hover",
+        "signature": "09ae5145e9babf6e207c8faf9be3e43d37432c04c9d5165870fd7b8952be8230"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "assistant/notifications.py",
+        "scope": "reading_hold",
+        "signature": "dc68593350710137597de7f1c69944d7297e5f98f19d3d03fdcf603ac16d94f1"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "assistant/outlook.py",
+        "scope": "_text",
+        "signature": "3ecc38dcc213e22500d408ef43d331da904ec99967d6261a0f0f271691f78cf0"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "assistant/overlay.py",
+        "scope": "fit_position",
+        "signature": "deab981d04b16bf83ef37a0b6359b5cc655134c09a677443d9f615d4ad02f3aa"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "assistant/page_sources.py",
+        "scope": "PageSources._capture",
+        "signature": "676611a0d7c96aa341cdcde9d708f93ab3b49319a23b1c46c891b1e4fc6f4e80"
+      },
+      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "assistant/page_sources.py",
+        "scope": "PageSources._observed",
+        "signature": "06f964075d7566033005d05306eb47c3a847ddf84aea50318642758786f0ba25"
+      },
+      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "assistant/page_sources.py",
+        "scope": "PageSources._read",
+        "signature": "06f964075d7566033005d05306eb47c3a847ddf84aea50318642758786f0ba25"
+      },
+      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "assistant/panel.py",
+        "scope": "fit_panel",
+        "signature": "0623de819a13dcced2ec08ea6f7e5e979c4616b9609cd755ed5fb560516818a0"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "assistant/panel.py",
+        "scope": "snap_panel",
+        "signature": "72ab44586b38f8b37f61c4d93061c644d5e36793a43b77adbd55179acd84a616"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "assistant/publishing.py",
+        "scope": "publish_source",
+        "signature": "03d5da46404536343919318d9d607cc6cba23335d0109c6d092135a56c5c9ffa"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "assistant/recording_state.py",
+        "scope": "published",
+        "signature": "e32bd55ab3bd4a1eeb5060649b353fb2c73b5ef0c8bbe675b07d50e4cc949570"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "assistant/sdk.py",
+        "scope": "Hooks.on_llm_start",
+        "signature": "68160a16dc5dfb4772edfe5475a9eb145e71514594228424483da3d74342603a"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "assistant/sdk.py",
+        "scope": "Timeline.part",
+        "signature": "2ae1bcb4216440b596518b0ea45d11535ad605acb494ae74fa4228237df88914"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "assistant/sdk.py",
+        "scope": "run",
+        "signature": "70e1fb5106be73fba2e0599e72872c933dc2200fcfffda5ec82287a82e1ac54a"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "assistant/teams.py",
+        "scope": "Teams.__init__",
+        "signature": "797b3ea80cb24ad2c3df22666abbcb5485bc280ef038a5aa59ac01426a5ec168"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "assistant/teams.py",
+        "scope": "Teams._api",
+        "signature": "5f9c7bea7c8b0b151c93e47a82402ae8c29f9a2627142c79db1788f0f93e88d9"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "assistant/teams.py",
+        "scope": "Transport.request",
+        "signature": "3d840bc448f5668a2e2611b0a6a8c0ae53b67c81b4637115f9b2c013b183405f"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "assistant/teams.py",
+        "scope": "_integer",
+        "signature": "a55bf5b9189ac47e96e10eb1f88f3b02905901ce4ac7382093906445798458a3"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "assistant/teams.py",
+        "scope": "sign_in_action",
+        "signature": "2433f80d09808453b972a3b9a413cee2d02670738dd6f7d46df9719def448427"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "assistant/textio.py",
+        "scope": "paste_text",
+        "signature": "507442eaa0861dfee94994e582c314c2c0048f4362d2c83385c9b44a42d958af"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "assistant/toast_card.py",
+        "scope": "Card.render",
+        "signature": "6d3cca786f82fc27983e0eae60aa3c68a0ed0622e116f29b03c7f358e3235e24"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "assistant/toast_card.py",
+        "scope": "Card.target",
+        "signature": "f72e5bc61be5698324de31f1f38f23cdc89f98c2af169aa07fd48f633d041d9f"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "assistant/toast_card.py",
+        "scope": "Measure.fit_body",
+        "signature": "64274d51f14ec2fc4a576ce5bcb359f84fcd5b0806f18d7ce8afadb792087d88"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "assistant/toast_card.py",
+        "scope": "Measure.text_height",
+        "signature": "49f5f43c34e271775b100a8f1eb889f1ae6611b71c71a3119ad3f78c26bc7a9d"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "assistant/ui.py",
+        "scope": "AnswerWindow.__init__",
+        "signature": "7cd37fc1e83d1a37c7e999194adc6ffd685b98456fb376273031a1c8ee496c58"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "assistant/ui.py",
+        "scope": "KeymapOverlay.show",
+        "signature": "da56c5db9965405acb4c6e8084feb5570fc54e7a9202ae533397f5df9ab7c14f"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "assistant/ui.py",
+        "scope": "ReviewWindow.__init__",
+        "signature": "506f3e895406a3d2c9a28c0178a2ff76f87fed4f9c17b3d2fd7a8cb385e5b07a"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "assistant/ui.py",
+        "scope": "Ui.agent",
+        "signature": "f54b8741ad9554fb1fdea64863d4d29ca5ece2638f3f0ddb6ea909cad07de679"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "assistant/ui.py",
+        "scope": "Ui.agent_input",
+        "signature": "7b6108f8b54e5499c69b3e97c26508d63f28ab83d721979d8a90eb226c84d506"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "assistant/ui.py",
+        "scope": "Ui.desktop",
+        "signature": "870bed75a154a42e8f3c5329c1c52355501451941084e88c8b9aac60510d4a32"
+      },
+      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "assistant/ui.py",
+        "scope": "Ui.show_keyboard_overlay",
+        "signature": "da56c5db9965405acb4c6e8084feb5570fc54e7a9202ae533397f5df9ab7c14f"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "assistant/ui.py",
+        "scope": "Ui.work",
+        "signature": "ee3d2c64e7ec19a722e25517af2105aa56b3703f1f8996c0c094a7b2e00d18c7"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "assistant/widgets.py",
+        "scope": "GestureHandle.__init__",
+        "signature": "7e1b43aa4479aecb6c196ba2a2285b16763ee4fb0a893431cdec5c6b0c972d04"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "assistant/widgets.py",
+        "scope": "Window.__init__",
+        "signature": "8de0fae46999b094bf9a4745867e8cbe7b77f2011517ef4eb86a575947badd63"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "assistant/widgets.py",
+        "scope": "show_window",
+        "signature": "1511fe276d563219222e381e26ffe2d07a29e6ade880be9b8aeafc0b32c8af1b"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "assistant/work_agent.py",
+        "scope": "WorkAgent.__init__",
+        "signature": "cf4336b5f1258092b1dc4309861a7b1debba8254b0704ab564b19486724c7871"
+      },
+      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "assistant/work_service.py",
+        "scope": "WorkService.__init__",
+        "signature": "992eceb1d9a65c47a2379d4179778b2197e5d06e960b094751ebca97b4583d57"
+      },
+      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "assistant/work_service.py",
+        "scope": "WorkService._submission_problems",
+        "signature": "0197126b86f39247f83c9c3bfb1ea09459c877237c8c96fe551534649c460c15"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "assistant/work_service.py",
+        "scope": "WorkService._submit",
+        "signature": "45718c7e8893973a337283e0263794b81544e00c5c21304f7e92a1aebf14e27b"
+      },
+      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "assistant/work_window.py",
+        "scope": "WorkWindow.__init__",
+        "signature": "8a534caf730322c75daf4f0689adf1e293be68d5c1eacbcb58992db87c14e625"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "automation/actions.py",
+        "scope": "ActionJournal.begin_action",
+        "signature": "38a69067bbfb48fbc6d4f32bed18c3cce7ffdf117d0d60082e092731223ff3da"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "automation/actions.py",
+        "scope": "Actions.__init__",
+        "signature": "15ee7a6a9ca5f42bc239ff46a6a3bded3a2c8906678941c098cf62d6be5042ee"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "automation/actions.py",
+        "scope": "Actions.execute",
+        "signature": "1b1919df8d1d50ecace6e70af679e57e41989e27223c2d87fdf0d443e55983b7"
+      },
+      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "automation/app.py",
+        "scope": "DurableInput.agent_input",
+        "signature": "7b6108f8b54e5499c69b3e97c26508d63f28ab83d721979d8a90eb226c84d506"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "automation/app.py",
+        "scope": "NativeExecution.__init__",
+        "signature": "8a98d9853e798643d8d7c7b9917a906d7fede2fec40dc48b241fe9460f43a5a3"
+      },
+      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "automation/app.py",
+        "scope": "NativeExecution.run_work",
+        "signature": "a9d7cdc1dcd348a59e1e5cdcdbe0aa64c8201d757ae8aa36e53068d5db9da404"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "automation/app.py",
+        "scope": "_native_execution",
+        "signature": "07e250a4f5db9c67383b9531822353ff190e021ce7df5ba6a94014a32a47ff15"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "automation/app.py",
+        "scope": "run",
+        "signature": "9b6bb79812353180ef64549f891786abc93be6c817fb666c7fbe8584989bd106"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "automation/bridge.py",
+        "scope": "BridgeServer.__init__",
+        "signature": "2909d4f3397e3d95d85722b2a7f7d3501badf6d0666884aeeb8e1d74fcff9a50"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "automation/bridge.py",
+        "scope": "BridgeServer.browser_app",
+        "signature": "93549ebc0fcf0b72651af9c5ce6980eb256690ab0365e342716bf91d92557f3e"
+      },
+      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "automation/bridge.py",
+        "scope": "BridgeServer.meeting",
+        "signature": "09dfa6025eaff6216b5aba720d655ed8d65a57f288242539a9d09e43c379b5c1"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "automation/context.py",
+        "scope": "select_context",
+        "signature": "80288a70569fde8566ae5f772b7ba7a7fe5fbece5e6216e21da5365943a0e813"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "automation/controller.py",
+        "scope": "WorkController.__init__",
+        "signature": "25478ead5e0da500c5a772623c196e488e5e0e7c31de91c82ae53e61fcd87520"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "automation/controller.py",
+        "scope": "WorkExecution.run_work",
+        "signature": "a9d7cdc1dcd348a59e1e5cdcdbe0aa64c8201d757ae8aa36e53068d5db9da404"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "automation/execution.py",
+        "scope": "WorkExecution.__init__",
+        "signature": "ae68b1bbce90905d0dde12954edff97446fd0e003360ef2b5598b82009c0ff80"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "automation/execution.py",
+        "scope": "WorkExecution.observed",
+        "signature": "b59e04dc903cbfcf4ce941f304f12992d6edc914f3bfdc53d2851f35bdaee49c"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "automation/routines.py",
+        "scope": "RoutineStore._enqueue",
+        "signature": "b33effe275de07b701c91738c74fded2b807fedb60c47b8f5c569f4bfb36922a"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "automation/routines.py",
+        "scope": "RoutineStore.create",
+        "signature": "758960d54d09a8abbedc7d9fd21445495b04adac7b13a18ef6ba15548f5df42d"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "automation/routines.py",
+        "scope": "RoutineStore.update",
+        "signature": "ffe9c5b7225163ea94c1481e373c1e41c433ecb2388157274c9c07f13f33c0a0"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "automation/routines.py",
+        "scope": "transcript_ready",
+        "signature": "10e2a3b960cd9dbaa6ecabd8cc74f1724becdba9314ff840d1d285a09abfcf90"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "automation/store.py",
+        "scope": "TaskStore.answer",
+        "signature": "a587a313426fef037f6c7de5cdc281b7fa545b66ab2252de2e98fa97e90e75bd"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "automation/store.py",
+        "scope": "TaskStore.begin_action",
+        "signature": "38a69067bbfb48fbc6d4f32bed18c3cce7ffdf117d0d60082e092731223ff3da"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "automation/store.py",
+        "scope": "TaskStore.submit",
+        "signature": "02f800592eb563c53cd362715bf1f28029b4fbbfe2adcb48ed1d98b06dc210ca"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "automation/store.py",
+        "scope": "_strings",
+        "signature": "d9c139a41925efbd5e3267d20e1f6bfff1d79936cf6088271250162b0470bf4c"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "automation/task.py",
+        "scope": "answered",
+        "signature": "85593ed093a05911861f5a2ba000591d3cc5ef9836ced4d4baf2c397d38b76ed"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "automation/task.py",
+        "scope": "finished",
+        "signature": "b1af195feb51e5799ca12b2046a00bf7d5fee0c3ae8cf2183d079317be6e7cbd"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "automation/task.py",
+        "scope": "integer",
+        "signature": "f3a9008e16b803d817a42684b791c918e50305d210aa9c1174183a4fd2575a5b"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "automation/task.py",
+        "scope": "interrupted",
+        "signature": "4c8e43867bb13a208d0c1d17ec34079b9c88a8847246d33dc75531af82ffa295"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "automation/task.py",
+        "scope": "progressed",
+        "signature": "363de4e24a1aa6286d828da49adfd77fb3720a2799f3bc93be87ac606c070f85"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "automation/task.py",
+        "scope": "started",
+        "signature": "2e8c255980eb00b47612600a4ca2878cc154f5e1597be12e4fb39b1010705df5"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "automation/task.py",
+        "scope": "strings",
+        "signature": "acaf105df59d506a8a63b79affe241f9c743f684488ba4e07454c54d9726438c"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "automation/task.py",
+        "scope": "text",
+        "signature": "b877f7e349238fd8d6c7b7cec9f8bcb0f4081691050cc3fd435eb6d7e43d1f77"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "keeper.py",
+        "scope": "_Process.__init__",
+        "signature": "f2c7f52a52c4ce5784cb7c9ae5c251d84195e5c8dda0af199a11519b7ccc7759"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "keeper.py",
+        "scope": "_User32.PostMessageW",
+        "signature": "6b1c2637d86e2001144e8c96c9e112fc4668ab84bac3391b3c9b685cf66bf5bd"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "keeper.py",
+        "scope": "prepare_candidate",
+        "signature": "9bcf223b3dd5db50cacab5822cef29d42c052fd4d5bb4a9223ab45fb47f3deac"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "miryoku/engine.py",
+        "scope": "Engine.key",
+        "signature": "0614e4e89f2040aacc059e8f231b31b3126feb7d1cf2662346c3135db9131823"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "miryoku/engine.py",
+        "scope": "Engine.on_key",
+        "signature": "0614e4e89f2040aacc059e8f231b31b3126feb7d1cf2662346c3135db9131823"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "runtime.py",
+        "scope": "bootstrap_plan",
+        "signature": "b58ad2393be887710c8a40f2ef8c0b2cc816efdecbc82594cefbfe511b9e88be"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "runtime.py",
+        "scope": "validate_dependencies",
+        "signature": "77161eb3ee0456e0a3dba055fea7d773029d10ce8ce9b1efd416e3be58faafd3"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "scripts/architecture.py",
+        "scope": "_declarations",
+        "signature": "e6dc91def68600fe3621ad5570dec6d71c5fff16fd202e8361317c8e21299022"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "scripts/benchmark_keyboard.py",
+        "scope": "run",
+        "signature": "2fd68e6cee02fc927d2c802bce507eff4e4afb1d28556b9151bea1c1be6ff2c4"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "scripts/bundle.py",
+        "scope": "extract",
+        "signature": "7d9623b038856798b1f9618e1fe6e97d88d583b35f41207e4ef809e270c5eb30"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "scripts/check.py",
+        "scope": "select",
+        "signature": "b921a60a273f4b71771d87fc4d1d9186dd7770b2a91c769a2f516293b72c4669"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "scripts/check_native.py",
+        "scope": "execute_native",
+        "signature": "ada2f713ec75a997eef76d0466ffc52dde4f49d785aa3a344b164f1164c6485c"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "scripts/deploy_archive.py",
+        "scope": "repack",
+        "signature": "a50db121137dd56077c03092feea561986d900329d834eb9a4e6df483e12596c"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "scripts/deploy_files.py",
+        "scope": "files",
+        "signature": "e4c6cf3cbcbd0da7aa2aa53f70a9f5380f69c16c5c28d11c7c8b4c8fc9c583d2"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "scripts/deploy_windows.py",
+        "scope": "run",
+        "signature": "c3bc4d34329f365852dea535f254ed24f21b7e0f59250b8cce2c9a12519515d3"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "scripts/mutate.py",
+        "scope": "campaign",
+        "signature": "52db696371f22339ca9fac8613e039bf5712a7f06d48afd1d828fea5267e0a01"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "scripts/mutate.py",
+        "scope": "run",
+        "signature": "d3ae11f31c108c5c1467aca9d675de44e68bc5fa2e01d9d945abfad1f37df51f"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "selfcheck.py",
+        "scope": "run_tests",
+        "signature": "1ef13c1a58f37dff6915d441b04e83263784579b34f031bbe8a61f42ee24d153"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "tests/test_agent.py",
+        "scope": "FakeMachine.click",
+        "signature": "e46675a3fa8d7c2003a0627dc80d6a899e20efffcfc3abb427f17c822fcd4c09"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "tests/test_agent.py",
+        "scope": "FakeMachine.run_powershell",
+        "signature": "0b6eb81687c17ada02fe4cc0e0ffea1581c3e6aa3889556423665dcdb81fcafe"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "tests/test_agent.py",
+        "scope": "FakeMachine.screenshot",
+        "signature": "7545a4b3932df79cbe6212d953ae6424246b13328321f15dc9a3dd7676d2afae"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "tests/test_agent.py",
+        "scope": "FakeMachine.scroll",
+        "signature": "79de4cafbf4c7fb5c1bd40ec9cb47f8b87777afd928d5787eafe4e0aebfc1f77"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "tests/test_agent.py",
+        "scope": "Rig.run",
+        "signature": "b324d72b2d482ec9a53ba2b4bb91f2038a75b5268a52743d1f8d952aa8cbb3d6"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "tests/test_agent.py",
+        "scope": "ToolRig.__init__",
+        "signature": "8fc907e7736b6bc267370c953661ff09fca8cd16a2e7f7f3d1ad3e924c05f745"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "tests/test_agent_streaming.py",
+        "scope": "make_agent",
+        "signature": "bf34232acf45fd5684fc72b464526dbc7ab5600e2bb03558f2fb274b6de19c8a"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "tests/test_agent_window.py",
+        "scope": "RecordingWindow.__init__",
+        "signature": "4147ce21e98fb7d48191ba7f6fcfbde6ce722303086da058fe9d3cae09ccaf9f"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "tests/test_browser.py",
+        "scope": "connected_browser",
+        "signature": "125dc3e0b0244ab4ccd3d3d19da9e1993b3d96556bace3eec81e9b8c3fcc762a"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "tests/test_browser_surface_control.py",
+        "scope": "CompletedDuringCancellation.browser_app",
+        "signature": "93549ebc0fcf0b72651af9c5ce6980eb256690ab0365e342716bf91d92557f3e"
+      },
+      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "tests/test_browser_tabs.py",
+        "scope": "test_a_failed_group_change_is_not_replayed.call",
+        "signature": "ce30e828a2b59a96bfd5b6778d06164a78476989f0c27401bce6502840ad6b09"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "tests/test_browser_tabs.py",
+        "scope": "test_unavailable_native_apis_close_only_the_hidden_controller.call",
+        "signature": "ce30e828a2b59a96bfd5b6778d06164a78476989f0c27401bce6502840ad6b09"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "tests/test_canvas_work.py",
+        "scope": "task",
+        "signature": "dcc2efb9ec9f6dcabf682f9f2a0362e8b72536d0a1e5c2eebb32e61dcb8abc75"
+      },
+      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "tests/test_computer_tools.py",
+        "scope": "test_unavailable_screen_context_keeps_the_request_and_activity_usable.LockedDesktop.screenshot",
+        "signature": "7545a4b3932df79cbe6212d953ae6424246b13328321f15dc9a3dd7676d2afae"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "tests/test_deploy_pipeline.py",
+        "scope": "test_source_repack_preserves_compressed_runtime_without_opening_it.source_only",
+        "signature": "2a8baa82ba1389b1268c30c071240ded2e1f468c966d091dc752670601b3ebaa"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "tests/test_meeting_followup.py",
+        "scope": "CommittedReadGate.__init__",
+        "signature": "1e9273d3ee5d16c85dbe0f906b2741e35bdae422697245e4fd6ac7a64a1ebdcd"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "tests/test_meeting_followup.py",
+        "scope": "completed_meeting",
+        "signature": "548c45b134669f1ca01129942af578cb0e1ada77a84b698c1302571a480bf644"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "tests/test_meeting_workflow.py",
+        "scope": "WorkflowRig.__init__",
+        "signature": "df68aeaa673e11fd4db6908244120064eb09bb18200c5dd7cc4b3daa88a347e7"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "tests/test_page_sources.py",
+        "scope": "Documents.add",
+        "signature": "f2e84829e5ec9108dd6d13244295d634d3d8da72e48f223ac15d2792ee3ace31"
+      },
+      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "tests/test_teams.py",
+        "scope": "Http.request",
+        "signature": "3d840bc448f5668a2e2611b0a6a8c0ae53b67c81b4637115f9b2c013b183405f"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "tests/test_windows_agent_approvals.py",
+        "scope": "InlineUi.agent_input",
+        "signature": "7b6108f8b54e5499c69b3e97c26508d63f28ab83d721979d8a90eb226c84d506"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "tests/test_windows_agent_approvals.py",
+        "scope": "WaitingUi.agent_input",
+        "signature": "7b6108f8b54e5499c69b3e97c26508d63f28ab83d721979d8a90eb226c84d506"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "tests/test_windows_bindings.py",
+        "scope": "check_layout_toggle.post_message",
+        "signature": "97e6c0d1f2c2a233d961354e8a2cbcb8ea2105d890ddcedb2ab4154ea38d0d73"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "tests/test_windows_bindings.py",
+        "scope": "test_assistant_queries_a_layout_that_started_before_it.post_message",
+        "signature": "97e6c0d1f2c2a233d961354e8a2cbcb8ea2105d890ddcedb2ab4154ea38d0d73"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "tests/test_windows_bindings.py",
+        "scope": "test_layout_query_includes_the_current_locked_layer_for_a_new_overlay.post_message",
+        "signature": "97e6c0d1f2c2a233d961354e8a2cbcb8ea2105d890ddcedb2ab4154ea38d0d73"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "tests/test_windows_bindings.py",
+        "scope": "test_layout_replies_to_queries_and_tray_toggles_without_key_injection.post_message",
+        "signature": "97e6c0d1f2c2a233d961354e8a2cbcb8ea2105d890ddcedb2ab4154ea38d0d73"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "tests/test_windows_bindings.py",
+        "scope": "test_overlay_refuses_mouse_activation_but_still_delivers_other_messages.default_message",
+        "signature": "97e6c0d1f2c2a233d961354e8a2cbcb8ea2105d890ddcedb2ab4154ea38d0d73"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "tests/test_windows_browser.py",
+        "scope": "act",
+        "signature": "c7fd47f3df365ecff0886ce894c3c3ef190ee4dda5d975ca6cda8cc8bcd874ad"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "tests/test_windows_browser_surfaces.py",
+        "scope": "contains",
+        "signature": "762ef2d7251086df18d51cf03abfb2c6e8d19d2cf2893eeec0cd816ddcab80c1"
+      },
+      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "tests/test_windows_browser_surfaces.py",
+        "scope": "file_access_choice",
+        "signature": "3b1fd33414891c3ade337c92802f2ce34713873f1f9612502e0f7ff065fc014e"
+      },
+      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "tests/test_windows_canvas_web.py",
+        "scope": "drag_pointer",
+        "signature": "2c1ec2ae64e981373d0695a6c2b8ee723e996de4b3079ee44fb637218e0ccead"
+      },
+      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "tests/test_windows_computer.py",
+        "scope": "inspect",
+        "signature": "b00b85c9771b62b8d3b4ba95722393e9b1d62b75efa217c86f5b23072df8911d"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "tests/test_windows_machine.py",
+        "scope": "Human.agent_input",
+        "signature": "7b6108f8b54e5499c69b3e97c26508d63f28ab83d721979d8a90eb226c84d506"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "tests/test_windows_meeting_followup.py",
+        "scope": "test_native_access_and_lock_errors_retry_the_same_atomic_publication.install",
+        "signature": "3cf2b0ecb75ec889e951637aac56ec295e7a6a3e750f220a4cf618e766c635ba"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "tests/test_windows_meeting_followup.py",
+        "scope": "test_nonsharing_windows_install_errors_propagate_without_retry.install",
+        "signature": "4457627fc71067c847e2ffd34c1f7c7fb76abe5b81f87b8d903aee4cade8f377"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "tests/test_windows_self_change_e2e.py",
+        "scope": "change",
+        "signature": "c35fb3d3c0ca412860aa2c3585e45b11dfd3a54da5718e4c843832450f7dd1f4"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "tests/test_work_actions.py",
+        "scope": "StoppingStore.begin_action",
+        "signature": "38a69067bbfb48fbc6d4f32bed18c3cce7ffdf117d0d60082e092731223ff3da"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "tests/test_work_actions.py",
+        "scope": "test_message_reconciliation_requires_same_chat_new_matching_complete_text.inspect",
+        "signature": "e694bd035086d400ec9499ed066119cabe48d0bc2f7c6228efb59f461101441f"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "tests/test_work_agent.py",
+        "scope": "RecordingBridge.__init__",
+        "signature": "72584923d52acdff6f80598c80a2f12d2f53f81e6083b5e20e1b56d81ee39ad9"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "tests/test_work_agent.py",
+        "scope": "WorkRig.__init__",
+        "signature": "43e48d9931bffcd34eb1f81491be7f55b8893431519cd035e63ea89da395a2e8"
+      },
+      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "tests/test_work_controller.py",
+        "scope": "Execution.run_work",
+        "signature": "a9d7cdc1dcd348a59e1e5cdcdbe0aa64c8201d757ae8aa36e53068d5db9da404"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "tests/test_work_controller.py",
+        "scope": "Rig.__init__",
+        "signature": "56c1c5764a03d83e9e2f14cca82028d1835183065ae079b2cff96c4d5dd78dcc"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "tests/test_work_execution.py",
+        "scope": "request",
+        "signature": "7df2f72be747a2f7a31445a6d75c2dca63337741b8e7e0fa2166892907141acf"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "tests/test_work_reply_receipts.py",
+        "scope": "journal_outage",
+        "signature": "ce8ee7e34792c6e15c2cfc4f1cfd0fef75e0b1568533fc5ba906c46b7ba32b22"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "usage.py",
+        "scope": "record",
+        "signature": "7380ab4d1a38f1d98f0838577efaa400169aba4d7a20140a16db99477a16ae45"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "winapi/inputs.py",
+        "scope": "_key",
+        "signature": "bc4c1ec819ebda0b10536fc8a1b286c57dc2959ce1d2189d171b12db3f964fa0"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "winapi/inputs.py",
+        "scope": "_mouse",
+        "signature": "338bae382e1590cf1e85f3105974f24ebb31b2d54226a2bbc081d8b4764cd347"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "winapi/inputs.py",
+        "scope": "click",
+        "signature": "99e35c1da26f160104aba4f710d5a5ea861eccad9233241b91fa927f12fb52e6"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "winapi/inputs.py",
+        "scope": "move_mouse",
+        "signature": "21215100715d483c2f9acc5f0006963fa1d9af4883806920a14c794e7b0cc2ba"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "winapi/inputs.py",
+        "scope": "send_key",
+        "signature": "bc4c1ec819ebda0b10536fc8a1b286c57dc2959ce1d2189d171b12db3f964fa0"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "winapi/recording.py",
+        "scope": "MeetingAudio._capture",
+        "signature": "baa560ae810eacd2deb5f8f4479d8de7db99b232f91e4de2f760c8e7399deecf"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "winapi/shell.py",
+        "scope": "AppWindow.__init__.call",
+        "signature": "97e6c0d1f2c2a233d961354e8a2cbcb8ea2105d890ddcedb2ab4154ea38d0d73"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "winapi/shell.py",
+        "scope": "TrayIcon.__init__",
+        "signature": "5797115e9bf71fda916b55f4a741f52280d1a6792c33ee9b9995f6e40038eb16"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "winapi/system.py",
+        "scope": "post_message",
+        "signature": "97e6c0d1f2c2a233d961354e8a2cbcb8ea2105d890ddcedb2ab4154ea38d0d73"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "winapi/system.py",
+        "scope": "post_thread_message",
+        "signature": "67a96d3dac4402c042130946f3628d910f54acf3a3ad07e4b3e54b3f7af9768e"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "winapi/windows.py",
+        "scope": "overlay_message",
+        "signature": "930051080330bcfbbc1ad2e911eed00c3cb3ef2dc6fe3fff558c0cac482aacde"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "import-alias",
+        "path": "assistant/agent_toasts.py",
+        "scope": "<module>",
+        "signature": "39bb9479d0c6711682b572be22fd825d8d240cdf3f32bf76cee3574a05e7ac6f"
+      },
+      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
+    },
+    {
+      "key": {
+        "rule": "import-alias",
+        "path": "assistant/app.py",
+        "scope": "<module>",
+        "signature": "85a26cc792eee7415e4fbe31e777fdda761a72349508c89b55f72aa5642fb698"
+      },
+      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
+    },
+    {
+      "key": {
+        "rule": "import-alias",
+        "path": "assistant/browser.py",
+        "scope": "<module>",
+        "signature": "6dfd6e0fd4f03e675b14b10dd2d0fab5900e11f43663b6be41eda1bd1fc0896b"
+      },
+      "reason": "Existing import forwarding or alias; use the owning module or document a necessary boundary."
+    },
+    {
+      "key": {
+        "rule": "import-alias",
+        "path": "assistant/browser.py",
+        "scope": "<module>",
+        "signature": "a0459b3ddd9071af5b6bfbc3b1965768e5015e5c2528dce34f246e0fbd973015"
+      },
+      "reason": "Existing import forwarding or alias; use the owning module or document a necessary boundary."
+    },
+    {
+      "key": {
+        "rule": "import-alias",
+        "path": "assistant/browser.py",
+        "scope": "<module>",
+        "signature": "bb658b8625bc7468ed7615115c0f6d8752650366ca2e3c3d26bc386d0f5c9886"
+      },
+      "reason": "Existing import forwarding or alias; use the owning module or document a necessary boundary."
+    },
+    {
+      "key": {
+        "rule": "import-alias",
+        "path": "assistant/browser_surface_values.py",
+        "scope": "<module>",
+        "signature": "f67eaa43782800ef8607285b925b1c038b728ba9c9729d0f046eef5a5869c84b"
+      },
+      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
+    },
+    {
+      "key": {
+        "rule": "import-alias",
+        "path": "assistant/browser_surfaces.py",
+        "scope": "<module>",
+        "signature": "1b6b765abc38b4952317f98605a8c3906379b9100f36a3d90f35a69d16970d78"
+      },
+      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
+    },
+    {
+      "key": {
+        "rule": "import-alias",
+        "path": "assistant/browser_surfaces.py",
+        "scope": "<module>",
+        "signature": "5e8a799c9f00d83b300878653c5c4703087a3c1dffb70d2d440f66dae91399f1"
+      },
+      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
+    },
+    {
+      "key": {
+        "rule": "import-alias",
+        "path": "assistant/canvas_agent.py",
+        "scope": "<module>",
+        "signature": "01b4d8f99eecf02b91417ccc1ae789f061443c6f7a3d92d47f755c68e09207b1"
+      },
+      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
+    },
+    {
+      "key": {
+        "rule": "import-alias",
+        "path": "assistant/canvas_agent.py",
+        "scope": "<module>",
+        "signature": "f67eaa43782800ef8607285b925b1c038b728ba9c9729d0f046eef5a5869c84b"
+      },
+      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
+    },
+    {
+      "key": {
+        "rule": "import-alias",
+        "path": "assistant/canvas_controller.py",
+        "scope": "<module>",
+        "signature": "f67eaa43782800ef8607285b925b1c038b728ba9c9729d0f046eef5a5869c84b"
+      },
+      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
+    },
+    {
+      "key": {
+        "rule": "import-alias",
+        "path": "assistant/canvas_drafts.py",
+        "scope": "<module>",
+        "signature": "f67eaa43782800ef8607285b925b1c038b728ba9c9729d0f046eef5a5869c84b"
+      },
+      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
+    },
+    {
+      "key": {
+        "rule": "import-alias",
+        "path": "assistant/canvas_launcher.py",
+        "scope": "<module>",
+        "signature": "f67eaa43782800ef8607285b925b1c038b728ba9c9729d0f046eef5a5869c84b"
+      },
+      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
+    },
+    {
+      "key": {
+        "rule": "import-alias",
+        "path": "assistant/canvas_native.py",
+        "scope": "<module>",
+        "signature": "f67eaa43782800ef8607285b925b1c038b728ba9c9729d0f046eef5a5869c84b"
+      },
+      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
+    },
+    {
+      "key": {
+        "rule": "import-alias",
+        "path": "assistant/canvas_requests.py",
+        "scope": "<module>",
+        "signature": "f67eaa43782800ef8607285b925b1c038b728ba9c9729d0f046eef5a5869c84b"
+      },
+      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
+    },
+    {
+      "key": {
+        "rule": "import-alias",
+        "path": "assistant/canvas_store.py",
+        "scope": "<module>",
+        "signature": "f67eaa43782800ef8607285b925b1c038b728ba9c9729d0f046eef5a5869c84b"
+      },
+      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
+    },
+    {
+      "key": {
+        "rule": "import-alias",
+        "path": "assistant/canvas_ui.py",
+        "scope": "<module>",
+        "signature": "f67eaa43782800ef8607285b925b1c038b728ba9c9729d0f046eef5a5869c84b"
+      },
+      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
+    },
+    {
+      "key": {
+        "rule": "import-alias",
+        "path": "assistant/canvas_web.py",
+        "scope": "<module>",
+        "signature": "00ec11b2143eaf2e985639f59b1e52fda8922bf70057b7467be09979af44e953"
+      },
+      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
+    },
+    {
+      "key": {
+        "rule": "import-alias",
+        "path": "assistant/canvas_web.py",
+        "scope": "<module>",
+        "signature": "6337b256afcc40544c67fa3f48588e3c4ff642f3024e3c6efaf69f8dd52264fc"
+      },
+      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
+    },
+    {
+      "key": {
+        "rule": "import-alias",
+        "path": "assistant/canvas_web.py",
+        "scope": "<module>",
+        "signature": "931675ddacad12b4ca4db5576ac6e309c7b26581f5ac717bd691ab35d1dd1568"
+      },
+      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
+    },
+    {
+      "key": {
+        "rule": "import-alias",
+        "path": "assistant/canvas_web.py",
+        "scope": "<module>",
+        "signature": "e5ef5775875fcfcc9d1bcc7c5d0d57024cc56ba2bb5ac6639de7d8372d0345f6"
+      },
+      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
+    },
+    {
+      "key": {
+        "rule": "import-alias",
+        "path": "assistant/canvas_web.py",
+        "scope": "<module>",
+        "signature": "f67eaa43782800ef8607285b925b1c038b728ba9c9729d0f046eef5a5869c84b"
+      },
+      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
+    },
+    {
+      "key": {
+        "rule": "import-alias",
+        "path": "assistant/canvas_web_contract.py",
+        "scope": "<module>",
+        "signature": "e5ef5775875fcfcc9d1bcc7c5d0d57024cc56ba2bb5ac6639de7d8372d0345f6"
+      },
+      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
+    },
+    {
+      "key": {
+        "rule": "import-alias",
+        "path": "assistant/canvas_web_contract.py",
+        "scope": "<module>",
+        "signature": "f67eaa43782800ef8607285b925b1c038b728ba9c9729d0f046eef5a5869c84b"
+      },
+      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
+    },
+    {
+      "key": {
+        "rule": "import-alias",
+        "path": "assistant/canvas_widgets.py",
+        "scope": "<module>",
+        "signature": "f67eaa43782800ef8607285b925b1c038b728ba9c9729d0f046eef5a5869c84b"
+      },
+      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
+    },
+    {
+      "key": {
+        "rule": "import-alias",
+        "path": "assistant/canvas_work.py",
+        "scope": "<module>",
+        "signature": "01b4d8f99eecf02b91417ccc1ae789f061443c6f7a3d92d47f755c68e09207b1"
+      },
+      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
+    },
+    {
+      "key": {
+        "rule": "import-alias",
+        "path": "assistant/canvas_work.py",
+        "scope": "<module>",
+        "signature": "f67eaa43782800ef8607285b925b1c038b728ba9c9729d0f046eef5a5869c84b"
+      },
+      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
+    },
+    {
+      "key": {
+        "rule": "import-alias",
+        "path": "assistant/meeting_canvas.py",
+        "scope": "<module>",
+        "signature": "f67eaa43782800ef8607285b925b1c038b728ba9c9729d0f046eef5a5869c84b"
+      },
+      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
+    },
+    {
+      "key": {
+        "rule": "import-alias",
+        "path": "assistant/meeting_web.py",
+        "scope": "<module>",
+        "signature": "01b4d8f99eecf02b91417ccc1ae789f061443c6f7a3d92d47f755c68e09207b1"
+      },
+      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
+    },
+    {
+      "key": {
+        "rule": "import-alias",
+        "path": "assistant/meeting_web.py",
+        "scope": "<module>",
+        "signature": "bd9199864410acced0bede0eafd62f9e55fd0b80c00dcd15da4c433132ae7e21"
+      },
+      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
+    },
+    {
+      "key": {
+        "rule": "import-alias",
+        "path": "assistant/meeting_web.py",
+        "scope": "<module>",
+        "signature": "f67eaa43782800ef8607285b925b1c038b728ba9c9729d0f046eef5a5869c84b"
+      },
+      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
+    },
+    {
+      "key": {
+        "rule": "import-alias",
+        "path": "assistant/sdk.py",
+        "scope": "<module>",
+        "signature": "57a0ddc9dc5245fb3ad7a9b46a9c8f71a1a82263243383168b6aae01f98b0d6a"
+      },
+      "reason": "Existing import forwarding or alias; use the owning module or document a necessary boundary."
+    },
+    {
+      "key": {
+        "rule": "import-alias",
+        "path": "assistant/toast_card.py",
+        "scope": "<module>",
+        "signature": "39bb9479d0c6711682b572be22fd825d8d240cdf3f32bf76cee3574a05e7ac6f"
+      },
+      "reason": "Existing import forwarding or alias; use the owning module or document a necessary boundary."
+    },
+    {
+      "key": {
+        "rule": "import-alias",
+        "path": "assistant/ui.py",
+        "scope": "<module>",
+        "signature": "9b4b8b7c08eef05cc3f30468c38176e05d919c8c5d1fe94ffb3e0a700c733e34"
+      },
+      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
+    },
+    {
+      "key": {
+        "rule": "import-alias",
+        "path": "assistant/work_agent.py",
+        "scope": "<module>",
+        "signature": "9b4b8b7c08eef05cc3f30468c38176e05d919c8c5d1fe94ffb3e0a700c733e34"
+      },
+      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
+    },
+    {
+      "key": {
+        "rule": "import-alias",
+        "path": "assistant/work_agent.py",
+        "scope": "<module>",
+        "signature": "e932d38c23cdfd34ef26bfaa6c46380d3d0d9a6e40b8e55294550b113a3bca0d"
+      },
+      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
+    },
+    {
+      "key": {
+        "rule": "import-alias",
+        "path": "assistant/work_service.py",
+        "scope": "<module>",
+        "signature": "9b4b8b7c08eef05cc3f30468c38176e05d919c8c5d1fe94ffb3e0a700c733e34"
+      },
+      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
+    },
+    {
+      "key": {
+        "rule": "import-alias",
+        "path": "automation/ipc.py",
+        "scope": "<module>",
+        "signature": "44fdf9bc00a2cd5639e603339227b8f3bbab5deccdaf9407ce46c5623379e773"
+      },
+      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
+    },
+    {
+      "key": {
+        "rule": "import-alias",
+        "path": "automation/ipc.py",
+        "scope": "<module>",
+        "signature": "89ee0fdf48b1478b2c503c535d0ca9b3a4d6822c1e4b8e5dca35aabffe937f76"
+      },
+      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
+    },
+    {
+      "key": {
+        "rule": "import-alias",
+        "path": "automation/ipc.py",
+        "scope": "<module>",
+        "signature": "a6143a8acd98c559fcb222a9ead5987f7b02d9fcbbd11bd3ec070e20e8888f0e"
+      },
+      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
+    },
+    {
+      "key": {
+        "rule": "import-alias",
+        "path": "automation/ipc.py",
+        "scope": "<module>",
+        "signature": "d53933a875b178fc25a49732e4b107f778ca2c873a6c2451e4dfbbb4be87f014"
+      },
+      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
+    },
+    {
+      "key": {
+        "rule": "import-alias",
+        "path": "protocol.py",
+        "scope": "<module>",
+        "signature": "30c034b34367cce9697fd211061ae8b739d893d43e98fc732863d268b1f9ff63"
+      },
+      "reason": "Existing import forwarding or alias; use the owning module or document a necessary boundary."
+    },
+    {
+      "key": {
+        "rule": "import-alias",
+        "path": "protocol.py",
+        "scope": "<module>",
+        "signature": "9538fb16110e2892186ca8cba10f16652142a5adcc866a9657e19acc6f515f95"
+      },
+      "reason": "Existing import forwarding or alias; use the owning module or document a necessary boundary."
+    },
+    {
+      "key": {
+        "rule": "import-alias",
+        "path": "protocol.py",
+        "scope": "<module>",
+        "signature": "c0e2d878e84206e936451fbd0efb8f5183e2d077af5280caaae6d5663830ecb2"
+      },
+      "reason": "Existing import forwarding or alias; use the owning module or document a necessary boundary."
+    },
+    {
+      "key": {
+        "rule": "import-alias",
+        "path": "protocol.py",
+        "scope": "<module>",
+        "signature": "c5d04576722db96ca0cc7c1d706ac5f4dc6aaa46185854f0378db0079bd54efe"
+      },
+      "reason": "Existing import forwarding or alias; use the owning module or document a necessary boundary."
+    },
+    {
+      "key": {
+        "rule": "import-alias",
+        "path": "tests/properties/test_agent_session.py",
+        "scope": "<module>",
+        "signature": "108d6fd7c886577bc7b038c6535c6d7295dde5717140e29fce5f65ce52ed4599"
+      },
+      "reason": "Existing import forwarding or alias; use the owning module or document a necessary boundary."
+    },
+    {
+      "key": {
+        "rule": "import-alias",
+        "path": "tests/properties/test_pcm.py",
+        "scope": "<module>",
+        "signature": "108d6fd7c886577bc7b038c6535c6d7295dde5717140e29fce5f65ce52ed4599"
+      },
+      "reason": "Existing import forwarding or alias; use the owning module or document a necessary boundary."
+    },
+    {
+      "key": {
+        "rule": "import-alias",
+        "path": "tests/test_agent_runner.py",
+        "scope": "<module>",
+        "signature": "32b108f1e0e46a7f93b330c44128a2e119b3dbac4a723686620bc37d018865e8"
+      },
+      "reason": "Existing import forwarding or alias; use the owning module or document a necessary boundary."
+    },
+    {
+      "key": {
+        "rule": "import-alias",
+        "path": "tests/test_browser_app_delivery.py",
+        "scope": "<module>",
+        "signature": "796fa6158c229fecb84a0bee308e86420aee5e69420196ef3b0a72e3d76cf812"
+      },
+      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
+    },
+    {
+      "key": {
+        "rule": "import-alias",
+        "path": "tests/test_browser_surface_values.py",
+        "scope": "<module>",
+        "signature": "318f134ce291dddbb2d4e6da1888a6238c814280cc56a6bd9d59452b22b836ee"
+      },
+      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
+    },
+    {
+      "key": {
+        "rule": "import-alias",
+        "path": "tests/test_browser_surface_values.py",
+        "scope": "<module>",
+        "signature": "998c62a6dafcadb5a99d6309beb74ccd86283bcf65e487c0c6e1bd9711efba87"
+      },
+      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
+    },
+    {
+      "key": {
+        "rule": "import-alias",
+        "path": "tests/test_canvas.py",
+        "scope": "<module>",
+        "signature": "01b4d8f99eecf02b91417ccc1ae789f061443c6f7a3d92d47f755c68e09207b1"
+      },
+      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
+    },
+    {
+      "key": {
+        "rule": "import-alias",
+        "path": "tests/test_canvas.py",
+        "scope": "<module>",
+        "signature": "998c62a6dafcadb5a99d6309beb74ccd86283bcf65e487c0c6e1bd9711efba87"
+      },
+      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
+    },
+    {
+      "key": {
+        "rule": "import-alias",
+        "path": "tests/test_canvas_drafts.py",
+        "scope": "<module>",
+        "signature": "998c62a6dafcadb5a99d6309beb74ccd86283bcf65e487c0c6e1bd9711efba87"
+      },
+      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
+    },
+    {
+      "key": {
+        "rule": "import-alias",
+        "path": "tests/test_canvas_execution.py",
+        "scope": "<module>",
+        "signature": "998c62a6dafcadb5a99d6309beb74ccd86283bcf65e487c0c6e1bd9711efba87"
+      },
+      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
+    },
+    {
+      "key": {
+        "rule": "import-alias",
+        "path": "tests/test_canvas_origin.py",
+        "scope": "<module>",
+        "signature": "998c62a6dafcadb5a99d6309beb74ccd86283bcf65e487c0c6e1bd9711efba87"
+      },
+      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
+    },
+    {
+      "key": {
+        "rule": "import-alias",
+        "path": "tests/test_canvas_persistence.py",
+        "scope": "<module>",
+        "signature": "998c62a6dafcadb5a99d6309beb74ccd86283bcf65e487c0c6e1bd9711efba87"
+      },
+      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
+    },
+    {
+      "key": {
+        "rule": "import-alias",
+        "path": "tests/test_canvas_requests.py",
+        "scope": "<module>",
+        "signature": "998c62a6dafcadb5a99d6309beb74ccd86283bcf65e487c0c6e1bd9711efba87"
+      },
+      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
+    },
+    {
+      "key": {
+        "rule": "import-alias",
+        "path": "tests/test_canvas_web_apps.py",
+        "scope": "<module>",
+        "signature": "998c62a6dafcadb5a99d6309beb74ccd86283bcf65e487c0c6e1bd9711efba87"
+      },
+      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
+    },
+    {
+      "key": {
+        "rule": "import-alias",
+        "path": "tests/test_canvas_web_contract.py",
+        "scope": "<module>",
+        "signature": "7f14029f4be8c0ffa0df98ecab3c6e84d3abe1c365b4a718fe3a8727b016b300"
+      },
+      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
+    },
+    {
+      "key": {
+        "rule": "import-alias",
+        "path": "tests/test_canvas_web_contract.py",
+        "scope": "<module>",
+        "signature": "998c62a6dafcadb5a99d6309beb74ccd86283bcf65e487c0c6e1bd9711efba87"
+      },
+      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
+    },
+    {
+      "key": {
+        "rule": "import-alias",
+        "path": "tests/test_canvas_web_contract.py",
+        "scope": "<module>",
+        "signature": "bd0979bfbd1203e65ae14f0e809ef682c74fff5f42bde8dd0a7e05dfac16d2f5"
+      },
+      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
+    },
+    {
+      "key": {
+        "rule": "import-alias",
+        "path": "tests/test_canvas_work.py",
+        "scope": "<module>",
+        "signature": "01b4d8f99eecf02b91417ccc1ae789f061443c6f7a3d92d47f755c68e09207b1"
+      },
+      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
+    },
+    {
+      "key": {
+        "rule": "import-alias",
+        "path": "tests/test_canvas_work.py",
+        "scope": "<module>",
+        "signature": "998c62a6dafcadb5a99d6309beb74ccd86283bcf65e487c0c6e1bd9711efba87"
+      },
+      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
+    },
+    {
+      "key": {
+        "rule": "import-alias",
+        "path": "tests/test_llm.py",
+        "scope": "<module>",
+        "signature": "942953e43e775090d10beeea8299f91cd2035b601755a5dfa2dc75f7d9e0b9c2"
+      },
+      "reason": "Existing import forwarding or alias; use the owning module or document a necessary boundary."
+    },
+    {
+      "key": {
+        "rule": "import-alias",
+        "path": "tests/test_meeting_canvas.py",
+        "scope": "<module>",
+        "signature": "998c62a6dafcadb5a99d6309beb74ccd86283bcf65e487c0c6e1bd9711efba87"
+      },
+      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
+    },
+    {
+      "key": {
+        "rule": "import-alias",
+        "path": "tests/test_meeting_execution.py",
+        "scope": "<module>",
+        "signature": "c5daf14593eea8f9aed12af5f6f0207e1f17de7c7ebb5b2b1a12a8162f8bafba"
+      },
+      "reason": "Existing import forwarding or alias; use the owning module or document a necessary boundary."
+    },
+    {
+      "key": {
+        "rule": "import-alias",
+        "path": "tests/test_windows_browser_surfaces.py",
+        "scope": "<module>",
+        "signature": "0d3a58138bfe9d918364f5aa6dbab636630614c687463b180ad5eb7be10832f1"
+      },
+      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
+    },
+    {
+      "key": {
+        "rule": "import-alias",
+        "path": "tests/test_windows_browser_surfaces.py",
+        "scope": "<module>",
+        "signature": "318f134ce291dddbb2d4e6da1888a6238c814280cc56a6bd9d59452b22b836ee"
+      },
+      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
+    },
+    {
+      "key": {
+        "rule": "import-alias",
+        "path": "tests/test_windows_browser_surfaces.py",
+        "scope": "<module>",
+        "signature": "998c62a6dafcadb5a99d6309beb74ccd86283bcf65e487c0c6e1bd9711efba87"
+      },
+      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
+    },
+    {
+      "key": {
+        "rule": "import-alias",
+        "path": "tests/test_windows_canvas.py",
+        "scope": "<module>",
+        "signature": "998c62a6dafcadb5a99d6309beb74ccd86283bcf65e487c0c6e1bd9711efba87"
+      },
+      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
+    },
+    {
+      "key": {
+        "rule": "import-alias",
+        "path": "tests/test_windows_canvas_applications.py",
+        "scope": "<module>",
+        "signature": "0d3a58138bfe9d918364f5aa6dbab636630614c687463b180ad5eb7be10832f1"
+      },
+      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
+    },
+    {
+      "key": {
+        "rule": "import-alias",
+        "path": "tests/test_windows_canvas_applications.py",
+        "scope": "<module>",
+        "signature": "226e9d6c6da9b9dc762c11027ddb47bbdd12e94776a6477cd3b67ef4ab059333"
+      },
+      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
+    },
+    {
+      "key": {
+        "rule": "import-alias",
+        "path": "tests/test_windows_canvas_applications.py",
+        "scope": "<module>",
+        "signature": "998c62a6dafcadb5a99d6309beb74ccd86283bcf65e487c0c6e1bd9711efba87"
+      },
+      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
+    },
+    {
+      "key": {
+        "rule": "import-alias",
+        "path": "tests/test_windows_canvas_applications.py",
+        "scope": "<module>",
+        "signature": "bd0979bfbd1203e65ae14f0e809ef682c74fff5f42bde8dd0a7e05dfac16d2f5"
+      },
+      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
+    },
+    {
+      "key": {
+        "rule": "import-alias",
+        "path": "tests/test_windows_canvas_pages.py",
+        "scope": "<module>",
+        "signature": "998c62a6dafcadb5a99d6309beb74ccd86283bcf65e487c0c6e1bd9711efba87"
+      },
+      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
+    },
+    {
+      "key": {
+        "rule": "import-alias",
+        "path": "tests/test_windows_canvas_web.py",
+        "scope": "<module>",
+        "signature": "226e9d6c6da9b9dc762c11027ddb47bbdd12e94776a6477cd3b67ef4ab059333"
+      },
+      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
+    },
+    {
+      "key": {
+        "rule": "import-alias",
+        "path": "tests/test_windows_canvas_web.py",
+        "scope": "<module>",
+        "signature": "998c62a6dafcadb5a99d6309beb74ccd86283bcf65e487c0c6e1bd9711efba87"
+      },
+      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
+    },
+    {
+      "key": {
+        "rule": "import-alias",
+        "path": "tests/test_work_controller.py",
+        "scope": "<module>",
+        "signature": "c02a9b1ca7c2ca6b3501d9737c0e8191d1bc89738ec557939b976cf6f2a5dc5d"
+      },
+      "reason": "Existing import forwarding or alias; use the owning module or document a necessary boundary."
+    },
+    {
+      "key": {
+        "rule": "inline-import",
+        "path": "assistant/__main__.py",
+        "scope": "main",
+        "signature": "62410980c73861623416f41f4765dae5196857fee03000f78b79f59a4e1deac5"
+      },
+      "reason": "Existing inline dependency declaration awaits migration to its module owner; use module-level lazy imports when deferred loading is required."
+    },
+    {
+      "key": {
+        "rule": "inline-import",
+        "path": "assistant/agent.py",
+        "scope": "Agent.run",
+        "signature": "9c843693e67ddf209b6b1a78b79982e32233a640dc41273066c7ed39447a5c96"
+      },
+      "reason": "Existing inline dependency declaration awaits migration to its module owner; use module-level lazy imports when deferred loading is required."
+    },
+    {
+      "key": {
+        "rule": "inline-import",
+        "path": "assistant/browser_session.py",
+        "scope": "Cdp.call",
+        "signature": "22ed02215b7e0daa72afe0e23c635f0adb95b186431f17d39f0b76b70ea908b3"
+      },
+      "reason": "Existing inline dependency declaration awaits migration to its module owner; use module-level lazy imports when deferred loading is required."
+    },
+    {
+      "key": {
+        "rule": "inline-import",
+        "path": "assistant/browser_session.py",
+        "scope": "Cdp.connect",
+        "signature": "17a83bbdf0e23e941e6f0cc8f2f123e4091a22b8de883449dfc3e987c958bb81"
+      },
+      "reason": "Existing inline dependency declaration awaits migration to its module owner; use module-level lazy imports when deferred loading is required."
+    },
+    {
+      "key": {
+        "rule": "inline-import",
+        "path": "assistant/browser_session.py",
+        "scope": "Cdp.connect",
+        "signature": "22ed02215b7e0daa72afe0e23c635f0adb95b186431f17d39f0b76b70ea908b3"
+      },
+      "reason": "Existing inline dependency declaration awaits migration to its module owner; use module-level lazy imports when deferred loading is required."
+    },
+    {
+      "key": {
+        "rule": "inline-import",
+        "path": "assistant/browser_session.py",
+        "scope": "NativeSessions._launch",
+        "signature": "6e2ee275eb2ae421039df2aee7d8ad9df723ee378542d91923bebc42a99f32a9"
+      },
+      "reason": "Existing inline dependency declaration awaits migration to its module owner; use module-level lazy imports when deferred loading is required."
+    },
+    {
+      "key": {
+        "rule": "inline-import",
+        "path": "assistant/canvas_controller.py",
+        "scope": "default_store",
+        "signature": "40ebddec9e93daae43c4ec1eb2afcf4e97e0548039574bb0b8cead6ee0d26f33"
+      },
+      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
+    },
+    {
+      "key": {
+        "rule": "inline-import",
+        "path": "assistant/canvas_guard.py",
+        "scope": "main",
+        "signature": "e66dc17bb081e75972d6b1e21beab70ff78458d48862b988eb95997d0af4d5d0"
+      },
+      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
+    },
+    {
+      "key": {
+        "rule": "inline-import",
+        "path": "assistant/canvas_ui.py",
+        "scope": "DesktopWindow.open_setting",
+        "signature": "7d0f261415ed4a987738d124b1056d0440208ea1e4da9fd7a379f18604529620"
+      },
+      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
+    },
+    {
+      "key": {
+        "rule": "inline-import",
+        "path": "assistant/graph_http.py",
+        "scope": "Http._request",
+        "signature": "b2060bd2f32e2f7c2caacbaebde26a31942d5fffaa90961bb53d7c0588123554"
+      },
+      "reason": "Existing inline dependency declaration awaits migration to its module owner; use module-level lazy imports when deferred loading is required."
+    },
+    {
+      "key": {
+        "rule": "inline-import",
+        "path": "assistant/teams.py",
+        "scope": "_protect",
+        "signature": "1dbb91355c3a1e13ae4e3bb602b3e71a53ebf1bdad1054e209560c1db53a9a1f"
+      },
+      "reason": "Existing inline dependency declaration awaits migration to its module owner; use module-level lazy imports when deferred loading is required."
+    },
+    {
+      "key": {
+        "rule": "inline-import",
+        "path": "assistant/teams.py",
+        "scope": "_unprotect",
+        "signature": "225f9a708920adc244bbdb964386a32382665a6ce94b86db64a16e8b095d488c"
+      },
+      "reason": "Existing inline dependency declaration awaits migration to its module owner; use module-level lazy imports when deferred loading is required."
+    },
+    {
+      "key": {
+        "rule": "inline-import",
+        "path": "automation/__main__.py",
+        "scope": "main",
+        "signature": "0a07c754bf2b970c68511c642eb71964dcba5a35fc9c2fcef477dec9222ec2aa"
+      },
+      "reason": "Existing inline dependency declaration awaits migration to its module owner; use module-level lazy imports when deferred loading is required."
+    },
+    {
+      "key": {
+        "rule": "inline-import",
+        "path": "automation/__main__.py",
+        "scope": "main",
+        "signature": "a8af68136dafe3791fe6812aa0cd82561d4776f240161ebbca3461f6b243ec58"
+      },
+      "reason": "Existing inline dependency declaration awaits migration to its module owner; use module-level lazy imports when deferred loading is required."
+    },
+    {
+      "key": {
+        "rule": "inline-import",
+        "path": "keeper.py",
+        "scope": "main",
+        "signature": "028a967c4e81370dc9c27c71e4dd00b69ad56d06b836ec89bc368dfc403f7c5e"
+      },
+      "reason": "Existing inline dependency declaration awaits migration to its module owner; use module-level lazy imports when deferred loading is required."
+    },
+    {
+      "key": {
+        "rule": "inline-import",
+        "path": "keeper.py",
+        "scope": "main",
+        "signature": "20dbba336af9b114b78453237df89f5736920a248b0b729095cb73ea82628acd"
+      },
+      "reason": "Existing inline dependency declaration awaits migration to its module owner; use module-level lazy imports when deferred loading is required."
+    },
+    {
+      "key": {
+        "rule": "inline-import",
+        "path": "miryoku/__main__.py",
+        "scope": "main",
+        "signature": "c0ff765f35f1990e15c0cdf072b1a597204a234842251507f2eeb74f7acf3238"
+      },
+      "reason": "Existing inline dependency declaration awaits migration to its module owner; use module-level lazy imports when deferred loading is required."
+    },
+    {
+      "key": {
+        "rule": "inline-import",
+        "path": "scripts/benchmark_keyboard.py",
+        "scope": "run",
+        "signature": "b7d33c5e200602f99940b5f337cef05f3f05d066fd1f7dab769527170467e9c8"
+      },
+      "reason": "Existing inline dependency declaration awaits migration to its module owner; use module-level lazy imports when deferred loading is required."
+    },
+    {
+      "key": {
+        "rule": "inline-import",
+        "path": "scripts/benchmark_keyboard.py",
+        "scope": "run",
+        "signature": "e2a96c5e90b70c043ee4161ae628e593a562bf8c82568d3bf31f71d4006d976a"
+      },
+      "reason": "Existing inline dependency declaration awaits migration to its module owner; use module-level lazy imports when deferred loading is required."
+    },
+    {
+      "key": {
+        "rule": "inline-import",
+        "path": "scripts/benchmark_keyboard.py",
+        "scope": "run",
+        "signature": "f30b90e27009c1a86850bb7936d019abba20f43a5f46493fef9a44962e246ed8"
+      },
+      "reason": "Existing inline dependency declaration awaits migration to its module owner; use module-level lazy imports when deferred loading is required."
+    },
+    {
+      "key": {
+        "rule": "inline-import",
+        "path": "selfcheck.py",
+        "scope": "check",
+        "signature": "c0e5646f11d3bafc22d1798b833924d312f2b700f12d098c8e10818f3b0829d2"
+      },
+      "reason": "Existing inline dependency declaration awaits migration to its module owner; use module-level lazy imports when deferred loading is required."
+    },
+    {
+      "key": {
+        "rule": "inline-import",
+        "path": "tests/test_browser.py",
+        "scope": "test_browser_waits_for_the_root_after_job_termination_instead_of_killing_it_twice.ExitingProcess.wait",
+        "signature": "9ade592449f57d99e29e4838d8b6fa6346688f9e687a3cb41a2529e0c6d587e8"
+      },
+      "reason": "Existing inline dependency declaration awaits migration to its module owner; use module-level lazy imports when deferred loading is required."
+    },
+    {
+      "key": {
+        "rule": "inline-import",
+        "path": "tests/test_windows_canvas_web.py",
+        "scope": "test_web_meeting_cards_edit_the_existing_package_and_wait_for_receipts",
+        "signature": "7f8ae3d4a0a626ba5cc30e3d0a57d552c368d12b6d10e04f5c2cd667a24d5025"
+      },
+      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
+    },
+    {
+      "key": {
+        "rule": "inline-import",
+        "path": "tests/test_windows_canvas_web.py",
+        "scope": "test_web_meeting_cards_edit_the_existing_package_and_wait_for_receipts",
+        "signature": "dd3c22e9c7e11811bc91e8363d8e4999bbfeab7dce83e9069a2ea98eb539af14"
+      },
+      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
+    },
+    {
+      "key": {
+        "rule": "inline-import",
+        "path": "tests/test_windows_canvas_web.py",
+        "scope": "test_web_source_reselection_and_late_reads_preserve_revisions_and_workspace",
+        "signature": "30674311fc01e81ccfe2bc8611cbd25baa782338b715ef6a64fa27e3cfe9a7e9"
+      },
+      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
+    },
+    {
+      "key": {
+        "rule": "re-export",
+        "path": "assistant/browser.py",
+        "scope": "__all__",
+        "signature": "b7bc65a386cb45f98b44115bdbbde6efaf95489b157a7075fd9f6c1c72f1a0fe"
+      },
+      "reason": "Existing import forwarding or alias; use the owning module or document a necessary boundary."
+    },
+    {
+      "key": {
+        "rule": "re-export",
+        "path": "assistant/canvas_agent.py",
+        "scope": "__all__",
+        "signature": "3b44e07939e45a5b73cae48f9c0cce3d1eeae63a2163fc2c5a50507b474279fd"
+      },
+      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
+    },
+    {
+      "key": {
+        "rule": "re-export",
+        "path": "assistant/page_sources.py",
+        "scope": "__all__",
+        "signature": "a35bc01e4a720b66967a08b0989588b468e9a1197fbede51a0ee60006a7eee95"
+      },
+      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
+    },
+    {
+      "key": {
+        "rule": "re-export",
+        "path": "assistant/qt.py",
+        "scope": "__all__",
+        "signature": "703cd516579b6549d190bef71cb6a419c0f1ffbcf910ce1b6d80190ff1a5ff13"
+      },
+      "reason": "Existing import forwarding or alias; use the owning module or document a necessary boundary."
+    },
+    {
+      "key": {
+        "rule": "re-export",
+        "path": "assistant/ui.py",
+        "scope": "__all__",
+        "signature": "1e3aef670ade315fed262be50e61b0ed9d4edf26fb37e58dba4b7a7b32d81dcb"
+      },
+      "reason": "Existing import forwarding or alias; use the owning module or document a necessary boundary."
+    }
+  ]
+}

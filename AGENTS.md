@@ -22,10 +22,15 @@ affected tests while editing, and keep broad native checks for broad changes.
 
 Tests must exercise behavior or policy owned by Workspace. Do not test Python's
 language semantics, built-ins, standard library, or a dependency's own behavior.
+We trust Python and dependencies to test their own implementations. Do not add
+tests to demonstrate that features such as lazy imports, generators, pattern
+matching or dataclasses work. Record that trust as an assumption, not a test.
 Use those tools in tests of our decisions, validation, integration wiring and
 effect ownership. A test is justified by a plausible failure in our code; if it
 only calls an external implementation and asserts its documented behavior,
 remove it. Apply this rule when adding, reviewing or consolidating tests.
+Before writing a test, name the plausible defect in Workspace code it detects;
+if there is no such defect, omit the test.
 
 Before maintaining custom general-purpose functionality, check whether a focused
 dependency provides it. Assess its complete dependency footprint, supported
@@ -83,6 +88,28 @@ paths, environment variables, control-window identifiers and new artifacts.
   `Iterable`, `Sequence`, `Mapping` or a small protocol over concrete containers.
   Return the most specific truthful type, including exact immutable records and
   variants. External observations remain `object` until validated.
+- Boolean parameters on Workspace-owned interfaces must be keyword-only, and
+  callers must name them. Apply this to generated record constructors too.
+  Preserve required dependency/native signatures in their boundary adapters.
+- Three input parameters is the default function design target, excluding
+  `self`/`cls` and counting keyword-only parameters. A larger signature requires
+  a clear interface reason documented alongside it. Split responsibilities or
+  group a real domain concept; arbitrary options bags and variadic arguments
+  do not resolve the smell. New oversized signatures are review warnings.
+  When changing an existing signature or adding an interface exception, read
+  [docs/code-quality-policies.md](docs/code-quality-policies.md) for the exact migration
+  baseline and checker scope.
+- Import symbols from their owning module. Avoid forwarding re-exports,
+  self-alias imports and cosmetic prefixes such as `Request as ConsoleRequest`;
+  use module-qualified names to resolve collisions. A boundary facade must own
+  real validation, lifecycle or adaptation with an explicit contract. When
+  changing an import exception or introducing a facade, read
+  [docs/code-quality-policies.md](docs/code-quality-policies.md).
+- Declare imports at module level. Use Python 3.15's `lazy import` and
+  `lazy from` when loading must wait for first use; inline imports inside
+  functions or classes are forbidden. Keep required initialization order
+  explicit at the effect owner. Bootstrap modules that must parse on Python 3.12
+  use ordinary module-level imports.
 - Prefer generators and lazy pipelines when callers can consume values
   incrementally. Return `Iterator[T]` from generators. Materialize when the
   owner needs indexing, repeated traversal or an immutable snapshot; measure

@@ -2,6 +2,8 @@
 
 from typing import Literal, NotRequired, TypedDict
 
+from pydantic import TypeAdapter
+
 Role = Literal['keeper', 'assistant', 'automation', 'miryoku', 'runtime']
 
 
@@ -64,11 +66,20 @@ class Ready(TypedDict):
     markers: dict[str, int]
 
 
-class Reloaded(TypedDict):
-    was_running: bool
+class RunningReload(TypedDict):
+    was_running: Literal[True]
     keeper_pid: int
     started_at_ns: int
     core: dict[str, Identity]
+    verified_at_ns: int
+
+
+class StoppedReload(TypedDict):
+    was_running: Literal[False]
+    left_stopped: Literal[True]
+
+
+type Reloaded = RunningReload | StoppedReload
 
 
 class RuntimeAudit(TypedDict):
@@ -76,3 +87,10 @@ class RuntimeAudit(TypedDict):
     fingerprint: dict[str, list[int]]
     archive_sha256: str
     verified_stage: str
+
+
+CONFIG = TypeAdapter[Config](Config)
+PREPARED = TypeAdapter[Prepared](Prepared)
+STOPPED = TypeAdapter[Stopped](Stopped)
+RELOADED = TypeAdapter[Reloaded](Reloaded)
+RUNTIME_AUDIT = TypeAdapter[RuntimeAudit](RuntimeAudit)

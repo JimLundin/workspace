@@ -7,19 +7,30 @@ remain a separate command for runtime pin changes.
 
 import argparse
 import contextlib
+import inspect
 import os
 import shutil
 import subprocess
 import time
 import zipfile
+from dataclasses import dataclass
 from pathlib import Path
-from typing import cast
+from typing import Literal
 
 from scripts.deploy_files import HELPERS, PINS, read, sha, source_map, write, zip_files
-from scripts.deploy_values import Config
+from scripts.deploy_values import CONFIG, Config
 from scripts.development_paths import LIVE, PROFILE, TEMP
+lazy from scripts.check import source_files
+lazy from scripts.deploy_windows import run
 
 WORKSPACE = Path(__file__).resolve().parent.parent
+
+
+@dataclass(frozen=True, slots=True)
+class Options:
+    action: Literal['stage', 'verify', 'deploy']
+    stage: Path | None
+    check_receipt: Path | None
 
 
 def win(path: Path) -> str:
@@ -35,16 +46,17 @@ def win(path: Path) -> str:
 
 
 def workspace_files() -> dict[str, str]:
-    from scripts.check import source_files  # noqa: PLC0415 -- avoid loading test machinery in the native driver
-
     return source_map({'files': source_files(WORKSPACE)})
 
 
 def stage_source(receipt: Path, stage: Path | None = None) -> Path:
     checked = read(receipt)
     wanted = source_map(checked)
-    if checked.get('kind') != 'workspace-edit-check-v1' or not isinstance(checked.get('tests'), list):
-        raise ValueError('Supply a successful scripts.check source-bound receipt.')
+    match checked:
+        case {'kind': 'workspace-edit-check-v1', 'tests': list()}:
+            pass
+        case _:
+            raise ValueError('Supply a successful scripts.check source-bound receipt.')
     if workspace_files() != wanted:
         raise RuntimeError('The working tree differs from the checked source; rerun checks.')
     stage = stage or TEMP / f'workspace-source-{time.time_ns()}'
@@ -77,7 +89,7 @@ def stage_source(receipt: Path, stage: Path | None = None) -> Path:
 
 
 def checked_config(stage: Path) -> tuple[Config, dict[str, str]]:
-    config = cast("Config", read(stage / 'release.json'))
+    config = CONFIG.validate_json((stage / 'release.json').read_bytes(), strict=True)
     if (config.get('kind') != 'workspace-source-only-v2' or config.get('stage_id') != stage.name
             or not stage.name.startswith('workspace-source-') or set(config['helpers']) != set(HELPERS)):
         raise RuntimeError('Invalid source release stage.')
@@ -92,12 +104,26 @@ def checked_config(stage: Path) -> tuple[Config, dict[str, str]]:
     return config, wanted
 
 
+def arguments(parser: argparse.ArgumentParser) -> Options:
+    match dict(inspect.getmembers(parser.parse_args())):
+        case {'action': str() as action, 'stage': (Path() | None) as stage,
+              'check_receipt': (Path() | None) as receipt}:
+            match action:
+                case 'stage' | 'verify' | 'deploy':
+                    return Options(action, stage, receipt)
+                case _:
+                    pass
+        case _:
+            pass
+    return parser.error('Invalid deployment arguments.')
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('action', choices=('stage', 'verify', 'deploy'))
     parser.add_argument('--stage', type=Path)
     parser.add_argument('--check-receipt', type=Path)
-    args = parser.parse_args()
+    args = arguments(parser)
     stage = args.stage
     if stage is None:
         if args.check_receipt is None:
@@ -110,8 +136,6 @@ def main() -> None:
     if source_checkout and workspace_files() != wanted:
         raise RuntimeError('Source changed after staging; rerun checks.')
     if os.name == 'nt':
-        from scripts.deploy_windows import run  # noqa: PLC0415 -- Windows-only effects
-
         # The venv shares the installed interpreter. Keep one coordinator so
         # an installed Python parent is not mistaken for an unowned workload.
         with contextlib.chdir(stage):

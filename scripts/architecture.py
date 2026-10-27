@@ -12,10 +12,14 @@ import ast
 import os
 import tomllib
 from collections import deque
-from collections.abc import Iterable, Mapping
-from dataclasses import dataclass
+from collections.abc import Iterable, Iterator, Mapping
+from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Literal, cast
+from typing import Annotated, Literal
+
+from pydantic import StrictStr, StringConstraints, TypeAdapter
+
+type Text = Annotated[StrictStr, StringConstraints(strip_whitespace=True, min_length=1)]
 
 REFLECTION = frozenset({'getattr', 'hasattr', 'setattr', 'delattr'})
 MUTABLE_TYPES = frozenset({'list', 'dict', 'set', 'bytearray', 'collections.deque', 'typing.List', 'typing.Dict', 'typing.Set',
@@ -39,11 +43,11 @@ class Finding:
 
 @dataclass(frozen=True, slots=True)
 class ExceptionSpec:
-    rule: str
-    module: str
-    declaration: str
-    expression: str
-    reason: str
+    rule: Literal['explicit-attributes', 'immutable-data', 'mutable-field']
+    module: Text
+    declaration: Text
+    expression: Text
+    reason: Text
     kind: Literal['necessity', 'migration'] = 'necessity'
 
     def matches(self, finding: Finding) -> bool:
@@ -56,6 +60,15 @@ class Report:
     sources: tuple[str, ...]
     failures: tuple[Finding, ...]
     exceptions: tuple[ExceptionSpec, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class Configuration:
+    models: tuple[Text, ...]
+    exceptions: tuple[ExceptionSpec, ...] = ()
+
+
+CONFIGURATION = TypeAdapter[Configuration](Configuration)
 
 
 def python_sources(root: Path, names: Iterable[str] | None = None) -> tuple[str, ...]:
@@ -75,7 +88,7 @@ def module_name(name: str) -> str:
     return '.'.join(parts[:-1] if parts[-1] == '__init__' else parts)
 
 
-def _call_name(node: ast.expr, aliases: Mapping[str, str]) -> str:
+def _call_name(node: ast.AST, aliases: Mapping[str, str]) -> str:
     match node:
         case ast.Name(id=name):
             return aliases.get(name, name)
@@ -125,42 +138,21 @@ def dependencies(name: str, text: str) -> frozenset[str]:
     return _imports(name, ast.parse(text, filename=name))
 
 
-def _object(value: object) -> dict[str, object]:
-    if not isinstance(value, dict) or any(not isinstance(key, str) for key in cast('dict[object, object]', value)):
-        raise ValueError('Architecture configuration must contain named tables.')
-    return cast('dict[str, object]', value)
-
-
-def _strings(value: object) -> tuple[str, ...]:
-    if not isinstance(value, list) or any(not isinstance(item, str) or not item.strip() for item in cast('list[object]', value)):
-        raise ValueError('Architecture declarations must contain nonempty strings.')
-    return tuple(cast('list[str]', value))
-
-
 def _configuration(root: Path) -> tuple[tuple[str, ...], tuple[ExceptionSpec, ...]]:
-    document = _object(cast(object, tomllib.loads((root / 'pyproject.toml').read_text(encoding='utf-8'))))
-    workspace = _object(_object(document.get('tool')).get('workspace'))
-    configuration = _object(workspace.get('architecture'))
-    models = _strings(configuration.get('models'))
-    rows = configuration.get('exceptions', [])
-    if not isinstance(rows, list):
-        raise ValueError('Architecture exceptions must be a list of exact declarations.')
-    exceptions: list[ExceptionSpec] = []
-    for row in cast('list[object]', rows):
-        fields = _object(row)
-        values = _strings([fields.get(key) for key in ('rule', 'module', 'declaration', 'expression', 'reason')])
-        rule, module, declaration, expression, reason = values
-        if rule not in ('explicit-attributes', 'immutable-data', 'mutable-field') or any('*' in value for value in (module, declaration)):
+    match tomllib.loads((root / 'pyproject.toml').read_text(encoding='utf-8')):
+        case {'tool': {'workspace': {'architecture': object() as value}}}:
+            configuration = CONFIGURATION.validate_python(value)
+        case _:
+            raise ValueError('Architecture configuration must contain its named table.')
+    exceptions = tuple(replace(entry, expression=ast.unparse(ast.parse(entry.expression, mode='eval').body))
+                       for entry in configuration.exceptions)
+    keys = tuple((entry.rule, entry.module, entry.declaration, entry.expression) for entry in exceptions)
+    if len(frozenset(keys)) != len(keys):
+        raise ValueError('Duplicate architecture exception.')
+    for entry in exceptions:
+        if any('*' in value for value in (entry.module, entry.declaration)):
             raise ValueError('Architecture exceptions require a supported rule and an exact declaration.')
-        expression = ast.unparse(ast.parse(expression, mode='eval').body)
-        kind = fields.get('kind', 'necessity')
-        if kind not in ('necessity', 'migration'):
-            raise ValueError('An exception must describe a necessity or existing migration debt.')
-        exception = ExceptionSpec(rule, module, declaration, expression, reason, kind)
-        if any((item.rule, item.module, item.declaration, item.expression) == (rule, module, declaration, expression) for item in exceptions):
-            raise ValueError('Duplicate architecture exception.')
-        exceptions.append(exception)
-    return models, tuple(exceptions)
+    return configuration.models, exceptions
 
 
 def _scope_aliases(tree: ast.AST, inherited: Mapping[str, str]) -> dict[str, str]:
@@ -168,9 +160,9 @@ def _scope_aliases(tree: ast.AST, inherited: Mapping[str, str]) -> dict[str, str
     pending = list(ast.iter_child_nodes(tree))
     while pending:
         node = pending.pop()
-        if isinstance(node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
-            continue
         match node:
+            case ast.ClassDef() | ast.FunctionDef() | ast.AsyncFunctionDef():
+                continue
             case ast.Import(names=names):
                 local.update({alias.asname or alias.name.split('.')[0]: alias.name if alias.asname else alias.name.split('.')[0]
                               for alias in names})
@@ -187,38 +179,57 @@ def _scope_aliases(tree: ast.AST, inherited: Mapping[str, str]) -> dict[str, str
 
 
 def _declarations(tree: ast.AST, module: str, declaration: str = '',
-                  aliases: Mapping[str, str] | None = None) -> Iterable[Finding]:
+                  aliases: Mapping[str, str] | None = None) -> Iterator[Finding]:
     # Copy aliases once per lexical scope, not for every expression. Imports
     # inside conditional statements still belong to their enclosing scope.
     local = aliases or {}
-    if isinstance(tree, (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
-        local = _scope_aliases(tree, local)
-    if isinstance(tree, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
-        declaration = '.'.join(part for part in (declaration, tree.name) if part)
-    if isinstance(tree, ast.ClassDef):
-        for decorator in tree.decorator_list:
-            function = decorator.func if isinstance(decorator, ast.Call) else decorator
-            if _call_name(function, local) != 'dataclasses.dataclass':
-                continue
-            flags = {keyword.arg: keyword.value for keyword in decorator.keywords} if isinstance(decorator, ast.Call) else {}
-            if not all(isinstance(value := flags.get(flag), ast.Constant) and value.value is True for flag in ('frozen', 'slots')):
-                yield Finding('immutable-data', module, declaration, tree.name, tree.lineno,
-                              'Data records require frozen=True and slots=True, or an exact necessary-mutation exception.')
-            # A mutable owner has one exception for its state. Frozen records
-            # need a separate declaration for any concrete mutable field.
-            frozen = flags.get('frozen')
-            if isinstance(frozen, ast.Constant) and frozen.value is True:
-                for field in tree.body:
-                    if (isinstance(field, ast.AnnAssign) and isinstance(field.target, ast.Name)
-                            and any(isinstance(node, (ast.Name, ast.Attribute)) and _call_name(node, local) in MUTABLE_TYPES
-                                    for node in ast.walk(field.annotation))):
-                        yield Finding('mutable-field', module, declaration + '.' + field.target.id, ast.unparse(field.annotation), field.lineno,
-                                      'Frozen records must not contain concrete mutable collections without an exact necessity.')
-    if isinstance(tree, ast.Call):
-        call = _call_name(tree.func, local)
-        if call in REFLECTION or call in {'builtins.' + name for name in REFLECTION}:
+    match tree:
+        case ast.Module() | ast.ClassDef() | ast.FunctionDef() | ast.AsyncFunctionDef():
+            local = _scope_aliases(tree, local)
+        case _:
+            pass
+    match tree:
+        case ast.ClassDef(name=name) | ast.FunctionDef(name=name) | ast.AsyncFunctionDef(name=name):
+            declaration = '.'.join(part for part in (declaration, name) if part)
+        case _:
+            pass
+    match tree:
+        case ast.ClassDef(name=name, decorator_list=decorators, body=fields):
+            for decorator in decorators:
+                flags: dict[str | None, ast.expr] = {}
+                match decorator:
+                    case ast.Call(func=function, keywords=keywords):
+                        flags = {keyword.arg: keyword.value for keyword in keywords}
+                    case _:
+                        function = decorator
+                if _call_name(function, local) != 'dataclasses.dataclass':
+                    continue
+                match flags.get('frozen'), flags.get('slots'):
+                    case ast.Constant(value=True), ast.Constant(value=True):
+                        pass
+                    case _:
+                        yield Finding('immutable-data', module, declaration, name, tree.lineno,
+                                      'Data records require frozen=True and slots=True, or an exact necessary-mutation exception.')
+                # A mutable owner has one state exception. Frozen records need
+                # a separate declaration for each concrete mutable field.
+                match flags.get('frozen'):
+                    case ast.Constant(value=True):
+                        for field in fields:
+                            match field:
+                                case ast.AnnAssign(target=ast.Name(id=field_name), annotation=annotation):
+                                    if any(_call_name(node, local) in MUTABLE_TYPES for node in ast.walk(annotation)):
+                                        yield Finding('mutable-field', module, declaration + '.' + field_name,
+                                                      ast.unparse(annotation), field.lineno,
+                                                      'Frozen records must not contain concrete mutable collections without an exact necessity.')
+                                case _:
+                                    pass
+                    case _:
+                        pass
+        case ast.Call(func=function) if _call_name(function, local) in REFLECTION | {'builtins.' + name for name in REFLECTION}:
             yield Finding('explicit-attributes', module, declaration, ast.unparse(tree), tree.lineno,
                           'Use typed direct attributes, or declare an exact native/inspection exception.')
+        case _:
+            pass
     for child in ast.iter_child_nodes(tree):
         yield from _declarations(child, module, declaration, local)
 
@@ -246,12 +257,18 @@ def review(root: Path, names: Iterable[str] | None = None) -> Report:
             continue
         aliases = _aliases(trees[module])
         for node in ast.walk(trees[module]):
-            if (isinstance(node, ast.Call) and _call_name(node.func, aliases) in
-                    ('importlib.import_module', '__import__', 'builtins.__import__')
-                    and (not node.args or not isinstance(node.args[0], ast.Constant) or not isinstance(node.args[0].value, str)
-                         or node.args[0].value.startswith('.') or any(keyword.arg == 'level' for keyword in node.keywords))):
-                findings.append(Finding('keyboard-import', module, '', ast.unparse(node), node.lineno,
-                                        'Keyboard dependencies require statically resolvable absolute import targets.'))
+            match node:
+                case ast.Call(func=function, args=args, keywords=keywords) if _call_name(function, aliases) in (
+                        'importlib.import_module', '__import__', 'builtins.__import__'):
+                    match args:
+                        case [ast.Constant(value=str() as target), *_] if not target.startswith('.') and not any(
+                                keyword.arg == 'level' for keyword in keywords):
+                            pass
+                        case _:
+                            findings.append(Finding('keyboard-import', module, '', ast.unparse(node), node.lineno,
+                                                    'Keyboard dependencies require statically resolvable absolute import targets.'))
+                case _:
+                    pass
         pending.extend((*route, target) for target in sorted(graph[module]) if target not in visited)
     accepted = tuple(exception for exception in exceptions if any(exception.matches(finding) for finding in findings))
     failures = [finding for finding in findings if not any(exception.matches(finding) for exception in accepted)]

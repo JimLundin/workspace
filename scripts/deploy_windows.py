@@ -18,12 +18,12 @@ from collections.abc import Generator, Mapping
 from ctypes import wintypes
 from dataclasses import asdict
 from pathlib import Path, PurePosixPath
-from typing import cast
+lazy import msvcrt
 
 from scripts.deploy_archive import repack
 from scripts.deploy_files import PINS, RUNTIME, file_at, files, no_link, read, sha, write, zip_files
 from scripts.deploy_processes import Process, inventory
-from scripts.deploy_values import Config, Exit, Prepared, Ready, Reloaded, Role, RuntimeAudit, Stopped
+from scripts.deploy_values import PREPARED, RELOADED, RUNTIME_AUDIT, STOPPED, Config, Exit, Prepared, Ready, Role, Stopped
 
 CORE = frozenset({"keeper", "assistant", "automation", "miryoku"})
 FLAGS = ("ready-assistant", "ready-automation", "ready-layout")
@@ -154,7 +154,7 @@ class Release:
         # is done before close and after launch, rather than at every transition.
         if self._baseline is None:
             self.pins()
-            baseline = cast("Prepared", read(self.stage / "prepared.json"))
+            baseline = PREPARED.validate_json((self.stage / "prepared.json").read_bytes(), strict=True)
             if (baseline["stage_id"] != self.stage.name or baseline["manifest_sha256"] != sha(self.stage / "source.json")
                     or files(self.stage / "source") != self.wanted):
                 raise RuntimeError("The prepared source release changed.")
@@ -189,7 +189,7 @@ class Release:
         return result
 
     def shutdown_receipt(self) -> Stopped:
-        value = cast("Stopped", read(self.stage / "stopped.json"))
+        value = STOPPED.validate_json((self.stage / "stopped.json").read_bytes(), strict=True)
         if (value.get("stage_id") != self.stage.name or value.get("clean_exit") is not True
                 or type(value.get("was_running")) is not bool):
             raise RuntimeError("The release has no valid normal clean shutdown receipt.")
@@ -213,7 +213,7 @@ class Release:
         no_link(self.archive)
         old_archive_sha = sha(self.archive)
         cache_path = self.profile / "deployment" / "runtime-audit.json"
-        cache = cast("RuntimeAudit", read(cache_path)) if cache_path.exists() else None
+        cache = RUNTIME_AUDIT.validate_json(cache_path.read_bytes(), strict=True) if cache_path.exists() else None
         cached_runtime = cache["runtime"] if cache is not None else {}
         fingerprint = self.runtime_fingerprint(cached_runtime)
         cached = (cache is not None and cache["archive_sha256"] == old_archive_sha and bool(cached_runtime)
@@ -317,7 +317,7 @@ class Release:
                         code = self.exit_code(native)
                         if code is not None and pid not in seen:
                             seen.add(pid)
-                            record["exits"].append(cast("Exit", row.identity() | {"exit_code": code, "observed_at_ns": time.time_ns()}))
+                            record["exits"].append(Exit(**row.identity(), exit_code=code, observed_at_ns=time.time_ns()))
                             self.receipt("stop-progress.json", record)
                             if row.role in CORE and code != 0:
                                 raise RuntimeError("A core Workspace process did not exit cleanly; no source replacement is allowed.")
@@ -350,7 +350,6 @@ class Release:
 
     @contextlib.contextmanager
     def exclusive(self) -> Generator[None]:
-        import msvcrt  # noqa: PLC0415 -- Windows-only file-lock boundary
         with contextlib.ExitStack() as cleanup:
             for path in (self.state / "keeper.lock", self.profile / "work" / "worker.lock"):
                 path.parent.mkdir(parents=True, exist_ok=True)
@@ -527,8 +526,8 @@ class Release:
         baseline = self.prepared()
         self.publish_archive(baseline)
         self.verify_files(baseline)
-        reloaded, stopped = cast("Reloaded", read(self.stage / "reloaded.json")), self.shutdown_receipt()
-        if reloaded["was_running"]:
+        reloaded, stopped = RELOADED.validate_json((self.stage / "reloaded.json").read_bytes(), strict=True), self.shutdown_receipt()
+        if reloaded["was_running"] is True:
             ready = self.readiness(reloaded["keeper_pid"], reloaded["started_at_ns"], require_bar=stopped.get("bar_was_visible", False))
             if ready is None or ready[0]["core"] != reloaded["core"]:
                 raise RuntimeError("Reloaded core processes or readiness no longer match the verified launch.")
@@ -557,10 +556,15 @@ def drive(release: Release, action: str) -> None:
                 measurements[label] = round(time.perf_counter() - tick, 3)
                 release.announce(f"{label} complete in {measurements[label]:.3f}s")
             measurements["total"] = round(time.perf_counter() - started, 3)
-            stopped = cast("Stopped", read(stage / "stopped.json"))
+            stopped = STOPPED.validate_json((stage / "stopped.json").read_bytes(), strict=True)
             if stopped["was_running"]:
-                reloaded = read(stage / "reloaded.json")
-                measurements["outage"] = round((cast("int", reloaded["verified_at_ns"]) - stopped.get("requested_at_ns", 0)) / 1e9, 3)
+                reloaded = RELOADED.validate_json((stage / "reloaded.json").read_bytes(), strict=True)
+                match reloaded:
+                    case {'was_running': True, 'verified_at_ns': int() as verified}:
+                        pass
+                    case _:
+                        raise RuntimeError('The reloaded receipt has no verified readiness time.')
+                measurements["outage"] = round((verified - stopped.get("requested_at_ns", 0)) / 1e9, 3)
             release.receipt("timings.json", measurements)
             print(json.dumps(measurements), flush=True)
         elif action == "verify":

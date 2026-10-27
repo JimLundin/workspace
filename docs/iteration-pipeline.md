@@ -28,6 +28,11 @@ Every `Dev.cmd check` first runs the source architecture review, including when
 importing the application. It enforces transitive keyboard isolation, immutable
 dataclass defaults, concrete mutable-field and reflection restrictions, and exact
 explained exceptions declared in `pyproject.toml`. Existing migration exceptions
+are followed by the development Ruff signature gate: new Boolean positional
+declarations block checks, and new interfaces over three inputs produce review
+warnings. The gate also rejects new aliased imports, inline imports and direct forwarding exports.
+Read [code-quality-policies.md](code-quality-policies.md) when changing a
+signature or its exact migration entry. Architecture migration exceptions
 are printed as cleanup debt. A policy failure stops before tests or a receipt.
 The full protected selfcheck also exercises the review through its ordinary flat
 test discovery. Source discovery and the class-slots policy recurse into nested
@@ -59,6 +64,9 @@ checkers. The editing runner validates native result schemas, and the release
 file boundary validates record and hash schemas through the existing Pydantic
 dependency. Bundle pins are validated as a frozen release record. These changes
 replace casts in those boundaries; no custom type-assertion predicates are used.
+The architecture configuration and complete native release receipts are validated
+through consumed schemas too. Module-level lazy imports defer test machinery and
+Windows-only effects until use, preserving the staged coordinator's import order.
 The runner filters discovered test functions lazily and checks their origin and
 supported signature before invocation. Broader legacy typing escapes remain
 cleanup debt under the policy in `AGENTS.md`.
