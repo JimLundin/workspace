@@ -43,7 +43,7 @@ class Selection:
     reason: str
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, kw_only=True)
 class Options:
     full: bool
     native: bool
@@ -203,9 +203,10 @@ def arguments(parser: argparse.ArgumentParser) -> Options:
         case {'full': bool() as full, 'native': bool() as native, 'tests': requested,
               'receipt': (Path() | None) as receipt, 'baseline': Path() as baseline}:
             if requested is None:
-                return Options(full, native, (), receipt, baseline)
+                return Options(full=full, native=native, tests=(), receipt=receipt, baseline=baseline)
             try:
-                return Options(full, native, tuple(TEST_NAMES.validate_python(requested, strict=True)), receipt, baseline)
+                return Options(full=full, native=native, tests=tuple(TEST_NAMES.validate_python(requested, strict=True)),
+                               receipt=receipt, baseline=baseline)
             except ValidationError:
                 pass
         case _:
