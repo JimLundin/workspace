@@ -140,7 +140,11 @@ filesystem timestamps. Runtime folder identities are checked and never replaced.
 
 After preparation, the native watcher proves the installed keeper/child group,
 retains exact process handles, requests normal WM_CLOSE and checks clean exits.
-It preserves the separately owned Edge connection host. Windows venv launchers
+It preserves the separately owned Edge connection host and exact installed
+console-hook command. Normal inbox closure expires pending hook requests and
+restores the original console prompt without approving them; the external client
+finishes through that transport and does not belong to the keeper's process tree.
+Windows venv launchers
 can report their shared base interpreter's executable path. The native CLI runs
 one coordinator inside the verified staging cwd, with source checks before and
 after. Only the exact Workspace development venv's VS Code Black language-server

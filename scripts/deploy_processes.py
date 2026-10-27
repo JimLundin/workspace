@@ -13,6 +13,8 @@ from pathlib import Path, PureWindowsPath
 from scripts.deploy_values import Identity, Role
 from scripts.development_paths import USER
 
+INSTALLATION = PureWindowsPath(r'C:\Users\Jim.Lundin\Downloads\workspace-sdk\workspace')
+
 
 @dataclass(frozen=True, slots=True)
 class Process:
@@ -34,6 +36,16 @@ class Process:
 def role_for(arguments: tuple[str, ...], *, windowed: bool,
              editor: tuple[PureWindowsPath, PureWindowsPath] | None = None) -> Role | None:
     arguments = (arguments[0], *(value for value in arguments[1:] if value not in ('-B', '-u', '-s'))) if arguments else ()
+    # The external console owns this exact client. ConsoleInbox.close expires
+    # its pending request and restores the native prompt through the transport;
+    # it must not be mistaken for an unowned application workload before close.
+    match arguments:
+        case (interpreter, script) | (interpreter, script, '--codex' | '--claude') if not windowed:
+            if (PureWindowsPath(interpreter) == INSTALLATION / '.python' / 'python.exe'
+                    and PureWindowsPath(script) == INSTALLATION / 'scripts' / 'inbox_hook.py'):
+                return None
+        case _:
+            pass
     if editor is not None and len(arguments) == 2 and PureWindowsPath(arguments[0]) == editor[0]:
         script = PureWindowsPath(arguments[1])
         if script.is_relative_to(editor[1]):

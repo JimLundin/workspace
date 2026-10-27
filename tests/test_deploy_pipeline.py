@@ -34,6 +34,20 @@ def test_only_the_exact_development_editor_server_is_exempt_from_installed_proce
         assert role_for(arguments, windowed=False, editor=editor) == 'runtime'
 
 
+def test_only_the_exact_installed_console_hook_is_external_to_the_application_process_tree() -> None:
+    root = PureWindowsPath(r'C:\Users\Jim.Lundin\Downloads\workspace-sdk\workspace')
+    interpreter = str(root / '.python' / 'python.exe')
+    hook = str(root / 'scripts' / 'inbox_hook.py')
+    for provider in ((), ('--codex',), ('--claude',)):
+        assert role_for((interpreter, hook, *provider), windowed=False) is None
+    for command in ((interpreter, hook, '--other'), (interpreter, hook, '--codex', 'extra'),
+                    (interpreter, str(root / 'scripts' / 'unrelated.py'), '--codex'),
+                    (r'C:\elsewhere\python.exe', hook, '--codex'),
+                    (interpreter, '-c', hook)):
+        assert role_for(command, windowed=False) == 'runtime'
+    assert role_for((interpreter, hook), windowed=True) == 'runtime'
+
+
 def test_native_checkout_uses_one_coordinator_and_detects_changes_after_deployment(tmp_path: Path) -> None:
     if os.name != 'nt':
         return
