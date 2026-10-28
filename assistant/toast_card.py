@@ -13,6 +13,7 @@ lazy from PySide6.QtCore import QPoint, QRectF, Qt
 lazy from PySide6.QtGui import (
     QColor,
     QContextMenuEvent,
+    QEnterEvent,
     QFontMetricsF,
     QKeyEvent,
     QMouseEvent,
@@ -29,6 +30,7 @@ import assistant.feed_icons
 from assistant import notification_reading, notification_text, step_view
 from assistant.agent_session import StreamState
 from assistant.agent_window import log_view
+from assistant.control_feedback import paint_feedback
 from assistant.feed_items import WorkItem
 from assistant.feed_origin import App, Origin
 from assistant.feed_title import TITLE_SIZE, FeedTitle, heading_width
@@ -228,8 +230,9 @@ class IconButton(QAbstractButton):
     def paintEvent(self, event: QPaintEvent) -> None:  # noqa: N802
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        paint_feedback(self, painter, self.ink)
         painter.setPen(QPen(QColor(self.ink), 1.6, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
-        painter.setOpacity(.45 if not self.isEnabled() else .65 if self.isDown() else 1)
+        painter.setOpacity(.45 if not self.isEnabled() else 1)
         cx, cy = self.width() / 2, self.height() / 2
         path = QPainterPath()
         match self.kind:
@@ -246,9 +249,14 @@ class IconButton(QAbstractButton):
                 path.lineTo(cx, cy + direction * 2)
                 path.lineTo(cx + 3.5, cy - direction * 1.5)
         painter.drawPath(path)
-        if self.hasFocus():
-            painter.setPen(QPen(QColor(self.ink), 1, Qt.PenStyle.DotLine))
-            painter.drawRoundedRect(QRectF(self.rect()).adjusted(3, 3, -3, -3), 8, 8)
+
+    def enterEvent(self, event: QEnterEvent) -> None:  # noqa: N802 -- Qt native interface
+        super().enterEvent(event)
+        self.update()
+
+    def leaveEvent(self, event: QtCore.QEvent) -> None:  # noqa: N802 -- Qt native interface
+        super().leaveEvent(event)
+        self.update()
 
     def keyPressEvent(self, event: QKeyEvent) -> None:  # noqa: N802
         if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter, Qt.Key.Key_Space):

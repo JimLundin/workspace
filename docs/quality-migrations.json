@@ -1103,24 +1103,6 @@
       "key": {
         "rule": "PLR0913",
         "path": "assistant/ui.py",
-        "scope": "ReviewWindow.__init__",
-        "signature": "506f3e895406a3d2c9a28c0178a2ff76f87fed4f9c17b3d2fd7a8cb385e5b07a"
-      },
-      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
-    },
-    {
-      "key": {
-        "rule": "FBT001",
-        "path": "assistant/ui.py",
-        "scope": "ReviewWindow.finish.install",
-        "signature": "07fd6bd3652922462cbfb8a4e7a67a6c1091bab3352d39a72f6ef5ee8858d900"
-      },
-      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
-    },
-    {
-      "key": {
-        "rule": "PLR0913",
-        "path": "assistant/ui.py",
         "scope": "Ui.agent",
         "signature": "f54b8741ad9554fb1fdea64863d4d29ca5ece2638f3f0ddb6ea909cad07de679"
       },

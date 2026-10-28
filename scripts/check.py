@@ -168,6 +168,10 @@ class SourceRuntime(Protocol):
 class NativeSourceRuntime:
     def activate(self) -> None:
         activate()
+        if sys.platform == 'win32':
+            # Bootstrap the private test process before broad SDK/Qt imports.
+            # Mandatory policy gates have passed; protected gates stay intact.
+            importlib.import_module('tests')
 
     def compile(self, root: Path, failures: list[str]) -> None:
         selfcheck.compile_all(root, failures)
@@ -208,9 +212,9 @@ NATIVE_SOURCE_RUNTIME = NativeSourceRuntime()
 
 def execute(selection: Selection, root: Path, runtime: SourceRuntime = NATIVE_SOURCE_RUNTIME) -> Results:
     phases: list[tuple[float, str]] = []
+    os.environ.pop('WORKSPACE_E2E', None)
     with timed('phase:runtime activation', phases):
         runtime.activate()
-    os.environ.pop('WORKSPACE_E2E', None)
     failures: list[str] = []
     broad = selection.reason not in ('transitive Python import dependencies', 'explicit iteration scope')
     if broad:

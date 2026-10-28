@@ -17,8 +17,8 @@ if sys.platform != "win32":
     raise unittest.SkipTest("Windows native agent notifications")
 
 lazy import shiboken6
-lazy from PySide6.QtCore import QPoint, Qt
-lazy from PySide6.QtGui import QFont, QImage, QPainter, QRegion, QTextCursor
+lazy from PySide6.QtCore import QEvent, QPoint, QPointF, Qt
+lazy from PySide6.QtGui import QEnterEvent, QFont, QImage, QPainter, QRegion, QTextCursor
 lazy from PySide6.QtTest import QTest
 lazy from PySide6.QtWidgets import QWidget
 
@@ -352,22 +352,30 @@ def test_compact_header_and_native_stop_padding_are_clickable_without_activation
         assert windows.foreground() == foreground
 
 
-def test_stop_has_no_different_fill_in_normal_pressed_or_disabled_states() -> None:
+def test_bubble_icon_controls_share_hover_press_and_disabled_feedback() -> None:
+    # Defects: dismiss/disclosure skip the common feedback paint, hovering
+    # changes hit geometry, or a disabled action still looks interactive.
     with notifications() as panel:
         panel.agent.begin("Check the notes", panel.stop)
         panel.pump()
-        button = panel.view.cards[TurnKey(0)].stop
-        for enabled, down in ((True, False), (True, True), (False, False)):
-            button.setEnabled(enabled)
-            button.setDown(down)
-            image = QImage(button.size(), QImage.Format.Format_ARGB32_Premultiplied)
-            image.fill(Qt.GlobalColor.transparent)
-            painter = QPainter(image)
-            button.render(painter, QPoint(), QRegion(), QWidget.RenderFlag.DrawChildren)
-            painter.end()
-            # The background is supplied only by the parent bubble, even while
-            # pressed. The button paints its icon and optional focus outline.
-            assert image.pixelColor(1, 1).alpha() <= 1
+        card = panel.view.cards[TurnKey(0)]
+        for button in (card.stop, card.dismiss, card.disclosure):
+            geometry = button.geometry()
+            fills: list[int] = []
+            for enabled, hovered, down in ((True, False, False), (True, True, False), (True, True, True), (False, True, False)):
+                button.setEnabled(enabled)
+                point = QPointF(2, 2)
+                panel.root.sendEvent(button, QEnterEvent(point, point, point) if hovered else QEvent(QEvent.Type.Leave))
+                button.setDown(down)
+                image = QImage(button.size(), QImage.Format.Format_ARGB32_Premultiplied)
+                image.fill(Qt.GlobalColor.transparent)
+                painter = QPainter(image)
+                button.render(painter, QPoint(), QRegion(), QWidget.RenderFlag.DrawChildren)
+                painter.end()
+                fills.append(image.pixelColor(3, button.height() // 2).alpha())
+                assert button.geometry() == geometry
+            resting, hover, pressed, disabled = fills
+            assert resting == disabled == 0 and 0 < hover < pressed, fills
 
 
 def test_background_material_sampling_never_waits_for_desktop_pixels() -> None:

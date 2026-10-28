@@ -207,8 +207,13 @@ check results are tuples, including the validated native handoff.
 Retired standalone notification, manual-inbox/history and native canvas UI
 implementations, embedded canvas assets and their UI tests are removed. History uses the same floating
 feed; console answers and approvals are tested through that feed. Shared panel controls and vector icons have independent modules. Current
-work/meeting tools and their domain checks remain. GUI fixtures
-suppress unnecessary foreground activation and leave the user's application alone.
+work/meeting tools and their domain checks remain. Ordinary Windows tests attach
+to a private desktop before their fixtures import, so real Qt/WPF/browser windows
+do not flash on the user's screen. Native children share that desktop. The
+explicit desktop E2E opt-in retains its interactive behavior; selection and the
+protected full gate are unchanged. See the [UI ownership audit](native-ui-test-audit.md)
+for retained surfaces and the removed unused review dialog. Keep native checks
+sequential because other session resources are still shared.
 
 ## Mutation checks
 

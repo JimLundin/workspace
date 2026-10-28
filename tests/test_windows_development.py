@@ -130,7 +130,7 @@ def test_preview_uses_real_views_without_starting_native_services_and_closes_cle
         assert preview.bar.record.text() == '02:05' and preview.bar.status.text() == preview.bar.ambient.text
         preview.selector.setCurrentIndex(5)
         preview.root.processEvents()
-        assert preview.bar.status.text() == 'Transcribing' and preview.bar.status.processing
+        assert not preview.bar.status.text() and preview.bar.status.processing
         preview.selector.setCurrentIndex(2)
         preview.root.processEvents()
         assert preview.feed.cards and json.loads(files.state.read_text()) == {'scenario': 2}

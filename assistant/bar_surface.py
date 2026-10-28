@@ -8,6 +8,7 @@ lazy from PySide6.QtCore import Qt
 
 from assistant.agent_window import log_view
 from assistant.bar_geometry import SHOULDER, Segment, segment
+from assistant.control_feedback import paint_feedback
 from assistant.notifications import REVEAL_SECONDS, Tone, ease_out
 from assistant.qt_runtime import prepare
 from assistant.qt_ui import EventLoop
@@ -27,8 +28,9 @@ CONTROL_HEIGHT = 24
 class Control(QtWidgets.QToolButton):
     """Toolbar icons use square targets; captions earn their measured width."""
 
-    def __init__(self, parent: QtWidgets.QWidget) -> None:
+    def __init__(self, parent: Pill) -> None:
         super().__init__(parent)
+        self.surface: Pill = parent
         self.setFixedHeight(CONTROL_HEIGHT)
         self.setSizePolicy(QtWidgets.QSizePolicy.Policy.Fixed, QtWidgets.QSizePolicy.Policy.Fixed)
 
@@ -40,11 +42,33 @@ class Control(QtWidgets.QToolButton):
     def sizeHint(self) -> QtCore.QSize:  # noqa: N802 -- Qt native interface
         if not self.text():
             return QtCore.QSize(CONTROL_HEIGHT, CONTROL_HEIGHT)
-        measured = super().sizeHint()
-        return QtCore.QSize(max(CONTROL_HEIGHT, measured.width()), CONTROL_HEIGHT)
+        # Own the compact icon/caption spacing instead of inheriting platform
+        # button margins that leave a wide blank hover region after the count.
+        return QtCore.QSize(CONTROL_HEIGHT + 4 + self.fontMetrics().horizontalAdvance(self.text()), CONTROL_HEIGHT)
 
     def minimumSizeHint(self) -> QtCore.QSize:  # noqa: N802 -- Qt native interface
         return self.sizeHint()
+
+    def paintEvent(self, event: QtGui.QPaintEvent) -> None:  # noqa: N802 -- Qt native interface
+        painter = QtGui.QPainter(self)
+        painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
+        paint_feedback(self, painter, self.surface.ink.foreground)
+        painter.setOpacity(1 if self.isEnabled() else .45)
+        size = self.iconSize()
+        left = (CONTROL_HEIGHT - size.width()) // 2
+        self.icon().paint(painter, QtCore.QRect(left, (self.height() - size.height()) // 2, size.width(), size.height()))
+        if self.text():
+            painter.setPen(QtGui.QColor(self.surface.ink.foreground))
+            painter.drawText(QtCore.QRect(CONTROL_HEIGHT - left + 4, 0, max(1, self.width() - CONTROL_HEIGHT - 4), self.height()),
+                             Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, self.text())
+
+    def enterEvent(self, event: QtGui.QEnterEvent) -> None:  # noqa: N802 -- Qt native interface
+        super().enterEvent(event)
+        self.update()
+
+    def leaveEvent(self, event: QtCore.QEvent) -> None:  # noqa: N802 -- Qt native interface
+        super().leaveEvent(event)
+        self.update()
 
 
 def painter_path(contour: Contour) -> QtGui.QPainterPath:
@@ -93,7 +117,7 @@ class Pill(QtWidgets.QWidget):
         self.fade_from: float = 0.0
         self.fade_to: float = 0.0
         self.fade_started: float = 0.0
-        self.buttons: list[tuple[QtWidgets.QToolButton, str]] = []
+        self.buttons: list[tuple[Control, str]] = []
         self.setWindowTitle(title)
         self.setWindowFlags(Qt.WindowType.Tool | Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
@@ -124,7 +148,7 @@ class Pill(QtWidgets.QWidget):
             self.update()
             self.sync_glass()
 
-    def button(self, name: str, text: str, tip: str, action: Callable[[], None]) -> QtWidgets.QToolButton:
+    def button(self, name: str, text: str, tip: str, action: Callable[[], None]) -> Control:
         button = Control(self)
         button.setText(text)
         button.setToolTip(tip)
@@ -173,9 +197,6 @@ class Pill(QtWidgets.QWidget):
         self.setStyleSheet(f"""
 QToolButton {{ background: transparent; color: {self.ink.foreground}; border: 1px solid transparent;
  border-radius: 10px; padding: 0; font: 500 12px 'Segoe UI'; }}
-QToolButton:hover {{ background: rgba(150,145,180,28); }}
-QToolButton:pressed {{ background: rgba(150,145,180,54); }}
-QToolButton:focus {{ border-color: {self.colors.edge}; }}
 QToolTip {{ background: {self.colors.surface}; color: {self.ink.foreground}; border: 1px solid {self.colors.edge}; padding: 6px; }}
 """)
         for button, name in self.buttons:

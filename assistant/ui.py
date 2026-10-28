@@ -396,14 +396,6 @@ class Ui:
         """Shows a message in the indicator for a moment."""
         self.post(lambda root: self._overlay(root).flash(text, work, seconds))
 
-    def review(self, summary: str, diff: str) -> bool:
-        """Shows a change to Workspace; True if the user chooses Install."""
-
-        def build(root: QtWidgets.QApplication, done: Callable[[bool], None]) -> None:
-            ReviewWindow(root, summary, diff, done)
-
-        return self._ask(build)
-
     def agent(
         self, task: str | None, stop: Callable[[], None], *, on_problem: Callable[[str], None] | None = None,
         on_reset: Callable[[], bool] | None = None, on_submit: Callable[[str], None] | None = None,
@@ -1146,41 +1138,3 @@ class KeymapWindow:
     def close(self) -> None:
         self.window.hide()
         self.window.deleteLater()
-
-
-class ReviewWindow:
-    __slots__ = (
-        "__weakref__",
-        "done",
-        "finished",
-        "window",
-    )
-
-    def __init__(self, root: QtWidgets.QApplication, summary: str, diff: str, done: Callable[[bool], None]) -> None:
-        self.done, self.finished = done, False
-        self.window = Window("Change Workspace?", lambda: self.finish(False), width=900, height=640)
-        layout = column(self.window)
-        layout.setContentsMargins(20, 18, 20, 18)
-        layout.addWidget(label(summary, "title"))
-        note = label("Run this code and its tests with your Windows account, then install it if the checks pass.", "muted")
-        note.setWordWrap(True)
-        layout.addWidget(note)
-        text = Editor(readonly=True)
-        text.setLineWrapMode(QtWidgets.QPlainTextEdit.LineWrapMode.NoWrap)
-        text.setPlainText(diff)
-        text.setStyleSheet("font-family: Consolas; font-size: 12px;")
-        layout.addWidget(text, 1)
-        controls = row()
-        controls.addStretch()
-        controls.addWidget(button("Cancel", lambda: self.finish(False)))
-        controls.addWidget(button("Run checks and install", lambda: self.finish(True), name="primary"))
-        layout.addLayout(controls)
-        _near_pointer(self.window, 900, 640)
-        _bring_forward(self.window, text)
-
-    def finish(self, install: bool) -> None:
-        if not self.finished:
-            self.finished = True
-            self.window.hide()
-            self.window.deleteLater()
-            self.done(install)
