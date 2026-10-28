@@ -127,6 +127,25 @@ def test_explicit_test_scope_cannot_bypass_architecture_or_write_a_receipt(tmp_p
     assert 'must not execute' not in result.stdout and not receipt.exists()
 
 
+def test_mock_frameworks_and_replacement_fixtures_are_rejected_in_all_sources(tmp_path: Path) -> None:
+    cases = (
+        'from unittest.mock import patch as replace\nreplace("owner.effect")\n',
+        'import unittest.mock as replacement\nreplacement.Mock()\n',
+        'from unittest import mock\nmock.patch.object(owner, "effect")\n',
+        'from pytest import MonkeyPatch as Replacement\nReplacement()\n',
+        'def test_effect(monkeypatch):\n    monkeypatch.setattr(owner, "effect", lambda: None)\n',
+        'def test_effect(mocker):\n    mocker.patch("owner.effect")\n',
+        'import importlib\nimportlib.import_module("unittest.mock")\n',
+    )
+    for text in cases:
+        write_tree(tmp_path, {'owner.py': text, 'tests/test_owner.py': text})
+        failures = review(tmp_path).failures
+        assert {finding.module for finding in failures if finding.rule == 'testing-dependencies'} == {'owner', 'tests.test_owner'}
+    write_tree(tmp_path, {'owner.py': 'def observe(reader):\n    return reader()\n',
+                          'tests/test_owner.py': 'from owner import observe\ndef test_read():\n    assert observe(lambda: 7) == 7\n'})
+    assert not review(tmp_path).failures
+
+
 def test_current_working_tree_satisfies_declared_architecture() -> None:
     report = review(ROOT)
     assert not report.failures, '\n'.join(finding.describe() for finding in report.failures)

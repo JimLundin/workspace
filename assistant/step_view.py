@@ -7,27 +7,41 @@ deleted by this owner. Measurement uses the same text adapters as the children.
 
 import math
 from collections.abc import Callable, Iterable, Iterator
+from dataclasses import dataclass
 
-from . import notification_text, tool_call_view, tool_text
-from .notifications import Content
-from .qt import QPoint, Qt, QtWidgets, QWheelEvent, shiboken6
-from .qt_text import Document, TextView
-from .toast_style import Ink
+lazy import shiboken6
+lazy from PySide6 import QtGui, QtWidgets
+lazy from PySide6.QtCore import QPoint, Qt
+lazy from PySide6.QtGui import QWheelEvent
+
+from assistant import notification_text, tool_call_view, tool_text
+from assistant.notifications import Content
+from assistant.qt_runtime import prepare
+from assistant.qt_text import Document, TextView
+from assistant.toast_style import Ink
+
+prepare()
 
 GAP = 8
 
 
+@dataclass(frozen=True, slots=True)
+class Callbacks:
+    scroll: Callable[[int], None]
+    history: Callable[[], None]
+    copy: Callable[[str], None] = tool_call_view.copy_text
+
+
 class Measure:
-    __slots__ = ('history', 'tool')
+    __slots__ = ('history',)
 
     def __init__(self) -> None:
         self.history = Document()
-        self.tool = tool_call_view.Measure()
 
     def height(self, block: notification_text.Step, width: float) -> float:
         match block:
             case tool_text.Call():
-                return self.tool.size(block, width).height
+                return tool_call_view.ROW_HEIGHT
             case notification_text.HistoryStep(spans=values):
                 return self.history.load(values, width)
 
@@ -39,13 +53,12 @@ class Measure:
 
     def close(self) -> None:
         self.history.close()
-        self.tool.close()
 
 
 class HistoryView(QtWidgets.QWidget):
     __slots__ = ('callbacks', 'identity', 'text')
 
-    def __init__(self, parent: QtWidgets.QWidget, block: notification_text.HistoryStep, callbacks: tool_call_view.Callbacks) -> None:
+    def __init__(self, parent: QtWidgets.QWidget, block: notification_text.HistoryStep, callbacks: Callbacks) -> None:
         super().__init__(parent)
         self.callbacks, self.identity = callbacks, block.identity
         self.text = TextView(self, callbacks.scroll, self.menu)
@@ -77,7 +90,7 @@ class StepsView(QtWidgets.QScrollArea):
 
     def __init__(self, parent: QtWidgets.QWidget, scroll: Callable[[int], None], history: Callable[[], None]) -> None:
         super().__init__(parent)
-        self.callbacks = tool_call_view.Callbacks(scroll, history)
+        self.callbacks = Callbacks(scroll, history)
         self.ink = Ink()
         self.elements: tuple[Element, ...] = ()
         self.visible_blocks: tuple[notification_text.Step, ...] = ()
@@ -126,7 +139,7 @@ class StepsView(QtWidgets.QScrollArea):
             case notification_text.HistoryStep(), HistoryView():
                 return prior
             case tool_text.Call(), _:
-                return tool_call_view.ToolCall(self.canvas, block, self.callbacks)
+                return tool_call_view.ToolCall(self.canvas, block, self.callbacks.copy)
             case notification_text.HistoryStep(), _:
                 return HistoryView(self.canvas, block, self.callbacks)
 
@@ -175,10 +188,21 @@ class StepsView(QtWidgets.QScrollArea):
     def fit_width(self) -> None:
         self.place(max(1, self.viewport().width()))
 
+    def resizeEvent(self, event: QtGui.QResizeEvent) -> None:  # noqa: N802 -- Qt virtual method
+        # Qt resolves the scroll viewport after the card sets its bounds. Reflow
+        # retained rows at that boundary instead of keeping the initial 100px width.
+        super().resizeEvent(event)
+        self.fit_width()
+
     def recolor(self, ink: Ink) -> None:
         self.ink = ink
         for element in self.elements:
             element.recolor(ink)
+
+    def pulse(self, angle: float) -> None:
+        for element in self.tool_elements():
+            if not element.isHidden():
+                element.pulse(angle)
 
     def toPlainText(self) -> str:  # noqa: N802 -- the conversation exposes one text observation for accessibility
         visible = tuple(block.identity for block in self.visible_blocks)

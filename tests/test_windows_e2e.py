@@ -23,16 +23,17 @@ if sys.platform != "win32" or os.environ.get("WORKSPACE_E2E") != "1":
 
 import ctypes  # noqa: E402
 
-from assistant.qt import QtCore, QtWidgets  # noqa: E402
+lazy from PySide6 import QtCore, QtWidgets  # noqa: E402
+
+from assistant.qt_runtime import prepare  # noqa: E402
 from assistant.qt_ui import application  # noqa: E402
 from assistant.shell_controls import WindowsKeyObserver  # noqa: E402
-from protocol import (  # noqa: E402
-    LAYOUT_WINDOW,
-    MAGIC,
-    WM_QUIT_LAYOUT,
-)
+from keeper import LAYOUT_WINDOW, WM_QUIT_LAYOUT  # noqa: E402
+from protocol import MAGIC  # noqa: E402
 from winapi import inputs, shell, system, windows  # noqa: E402 (Windows only)
 from winapi._core import fn, kernel32  # noqa: E402
+
+prepare()
 
 _GetModuleHandle = fn(kernel32, 'GetModuleHandleW', ctypes.c_void_p, ctypes.c_wchar_p)
 _GetProcAddress = fn(kernel32, 'GetProcAddress', ctypes.c_void_p, ctypes.c_void_p, ctypes.c_char_p)

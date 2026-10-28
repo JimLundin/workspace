@@ -6,13 +6,16 @@ import unittest
 if sys.platform != "win32":
     raise unittest.SkipTest("Windows bubble resource ownership")
 
+lazy import shiboken6
+
 from assistant.agent_toasts import AgentToasts
 from assistant.notifications import Content, Frame, Toast
-from assistant.qt import shiboken6
+from assistant.qt_runtime import prepare
 from assistant.toast_card import Card
+from tests.test_windows_agent_toasts import notifications
 from winapi import appearance, windows
 
-from .test_windows_agent_toasts import notifications
+prepare()
 
 
 def test_expired_bubble_reuses_its_windows_without_retaining_content() -> None:

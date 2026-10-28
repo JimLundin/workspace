@@ -7,16 +7,46 @@ import time
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Literal, cast
+from typing import Literal, Protocol, cast
 from urllib.parse import quote, urlsplit
 
-from .browser import Browser, Product
-from .browser_session import Attached
-from .browser_values import BrowserError, InterruptedError, NavigationContextError, NavigationLoadingError
-from .communications import Conversation, Message, SourceDate, SourceDateHint, SourceDateStatus, SourceTime, TeamsActivity, Update, UpdateKind
-from .llm import Json
+from assistant.browser import Browser, BrowserResult
+from assistant.browser_session import Attached, BrowserConnection, Owner, Product
+from assistant.browser_values import BrowserError, InterruptedError, NavigationContextError, NavigationLoadingError
+from assistant.communications import (
+    Conversation,
+    Message,
+    SourceDate,
+    SourceDateHint,
+    SourceDateStatus,
+    SourceTime,
+    TeamsActivity,
+    Update,
+    UpdateKind,
+)
+from assistant.llm import Json
 
 HOSTS = frozenset({"teams.microsoft.com", "teams.cloud.microsoft"})
+
+
+class BrowserPort(Protocol):
+    """The connection and page effects owned by a Teams collector's browser."""
+
+    @property
+    def connection(self) -> BrowserConnection | None: ...
+
+    @property
+    def owner(self) -> Owner: ...
+
+    def connect(self, cancel: threading.Event, *, visible: bool = False) -> None: ...
+
+    def request(self, operation: str, args: dict[str, Json], cancel: threading.Event) -> BrowserResult: ...
+
+    def awake(self, target: str, cancel: threading.Event) -> contextlib.AbstractContextManager[None]: ...
+
+    def activate_page(self, target: str, cancel: threading.Event) -> None: ...
+
+    def close(self) -> None: ...
 
 
 class ChatUnavailableError(BrowserError):
@@ -213,8 +243,8 @@ class TeamsWeb:
 
     __slots__ = ("browser", "opening", "target")
 
-    def __init__(self, folder: Path) -> None:
-        self.browser = Browser(folder, source=Product.EDGE)
+    def __init__(self, folder: Path, *, browser: BrowserPort | None = None) -> None:
+        self.browser: BrowserPort = browser if browser is not None else Browser(folder, source=Product.EDGE)
         self.target = ""
         self.opening: dict[str, str] = {}
 

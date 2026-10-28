@@ -12,8 +12,8 @@ from enum import Enum, auto
 from pathlib import Path, PureWindowsPath
 from typing import Literal, Protocol, TypedDict, assert_never, cast
 
-from .store import TaskStore
-from .task import RoutineSource, Task, identifier, integer, text, timestamp
+from automation.store import TaskStore
+from automation.task import RoutineSource, Task, identifier, integer, text, timestamp
 
 MAX_ROUTINES = 100
 MAX_PENDING = 512

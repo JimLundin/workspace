@@ -9,22 +9,24 @@ import json
 import os
 import threading
 import time
+from collections.abc import Callable
+from dataclasses import dataclass
 from typing import Final, Protocol
 
 import keeper
 from protocol import MAGIC
 from usage import DIRECTORY
 from winapi.shapes import Rect, Window
+lazy from assistant import commands, uia
+lazy from assistant.browser import Browser, BrowserResult
+lazy from assistant.browser_session import Product
+lazy from assistant.geometry import Shot, fit, half
+lazy from assistant.llm import Json
+lazy from assistant.png import encode_png
+lazy from assistant.recording_state import AudioSource
+lazy from assistant.teams import Teams
+lazy from assistant.textio import paste_text
 lazy from winapi import clipboard, inputs, screen, system, windows
-
-lazy from . import commands, uia
-lazy from .browser import Browser, BrowserResult, Product
-lazy from .geometry import Shot, fit, half
-lazy from .llm import Json
-lazy from .png import encode_png
-lazy from .recording_state import AudioSource
-lazy from .teams import Teams
-lazy from .textio import paste_text
 
 _EXTENDED_VKS: Final = frozenset({0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27, 0x28, 0x2C, 0x2D, 0x2E, 0x5B, 0x5D, 0x90})
 _PASTE_WAIT_S: Final = 0.4
@@ -93,16 +95,49 @@ def rectangle_data(area: Rect) -> dict[str, Json]:
     return {"x": area.left, "y": area.top, "width": area.width, "height": area.height}
 
 
+@dataclass(frozen=True, slots=True)
+class CaptureSources:
+    """One physical-desktop observation for screenshot selection."""
+
+    foreground: Rect | None
+    desktop: Rect
+    monitors: tuple[Rect, ...]
+    window: Rect | None
+
+
+class CaptureObservation(Protocol):
+    def observe(self, handle: int) -> CaptureSources: ...
+
+
+class NativeCaptureObservation:
+    def observe(self, handle: int) -> CaptureSources:
+        foreground = windows.foreground()
+        if not foreground:
+            return CaptureSources(None, Rect(0, 0, 0, 0), (), None)
+        selected = windows.visible_rect(handle) if handle and windows.exists(handle) and not windows.is_minimized(handle) else None
+        return CaptureSources(screen.monitor_of(foreground).area, screen.virtual_screen(),
+                              tuple(monitor.area for monitor in screen.monitors()), selected)
+
+
+def open_file(target: str) -> None:
+    os.startfile(target)
+
+
 class WinMachine:
     """What the agent's tools act on, done with Windows calls."""
 
-    __slots__ = ("background_browser", "desktop", "meetings", "teams_client", "ui")
+    __slots__ = ("background_browser", "capture_sources", "desktop", "meetings", "open_target", "teams_client", "ui")
 
     def __init__(
         self, desktop: DesktopAccess, ui: HumanInput, *, browser: BrowserControl | None = None,
         teams: TeamsControl | None = None, meetings: MeetingControl | None = None,
+        capture_sources: CaptureObservation | None = None, open_target: Callable[[str], None] = open_file,
     ) -> None:
+        # Each optional capability has its own owner; worker composition selects
+        # transports independently of capture, meetings and human input.
         self.desktop = desktop
+        self.capture_sources: CaptureObservation = NativeCaptureObservation() if capture_sources is None else capture_sources
+        self.open_target = open_target
         self.ui = ui
         self.background_browser: BrowserControl = Browser(DIRECTORY / "browser-profile", source=Product.EDGE) if browser is None else browser
         self.teams_client: TeamsControl = Teams(DIRECTORY / "teams", environment=os.environ) if teams is None else teams
@@ -144,23 +179,23 @@ class WinMachine:
         return commands.powershell(command, cwd=cwd, timeout_s=timeout_s, cancel=cancel)
 
     def screenshot(self, *, area: Rect | None = None, handle: int = 0, monitor: int = -1, longest: int = 1280) -> tuple[bytes, Shot]:
-        if not windows.foreground():
+        sources = self.capture_sources.observe(handle)
+        if sources.foreground is None:
             raise OSError("The interactive desktop is unavailable or locked.")
         if area is None:
             if handle:
-                if not windows.exists(handle) or windows.is_minimized(handle):
+                if sources.window is None:
                     raise OSError("The requested window is closed or minimized; inspect or restore it first.")
-                area = windows.visible_rect(handle)
+                area = sources.window
             elif monitor == -2:
-                area = screen.virtual_screen()
+                area = sources.desktop
             elif monitor >= 0:
-                monitors = screen.monitors()
-                if monitor >= len(monitors):
+                if monitor >= len(sources.monitors):
                     raise OSError("That monitor is unavailable; call desktop_state for current monitor indexes.")
-                area = monitors[monitor].area
+                area = sources.monitors[monitor]
             else:
-                area = screen.monitor_of(windows.foreground()).area
-        desktop = screen.virtual_screen()
+                area = sources.foreground
+        desktop = sources.desktop
         area = Rect(max(area.left, desktop.left), max(area.top, desktop.top), min(area.right, desktop.right), min(area.bottom, desktop.bottom))
         if area.width <= 0 or area.height <= 0:
             raise OSError("The requested area is outside the desktop.")
@@ -209,7 +244,7 @@ class WinMachine:
         inputs.move_mouse(x, y, screen.virtual_screen(), MAGIC)
 
     def mouse_button(self, button: str, down: bool) -> None:
-        inputs.mouse_button(button, down, MAGIC)
+        inputs.mouse_button(button, MAGIC, down=down)
 
     def click(self, x: int, y: int, button: str, count: int) -> None:
         inputs.click(x, y, button, count, screen.virtual_screen(), MAGIC)
@@ -240,7 +275,7 @@ class WinMachine:
         clipboard.set_text(self.desktop.owner, text)
 
     def open(self, target: str) -> None:
-        os.startfile(target)
+        self.open_target(target)
 
     def ask_user(self, question: str, *, cancel: threading.Event | None = None) -> str | None:
         return self.ui.agent_input(question, question=True, cancel=cancel)

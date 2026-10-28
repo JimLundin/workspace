@@ -27,7 +27,7 @@ from enum import Enum, auto
 from pathlib import Path
 from typing import Protocol, assert_never, cast
 
-from . import commands
+from assistant import commands
 
 if sys.platform == "win32":
     import msvcrt

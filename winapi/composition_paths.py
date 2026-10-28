@@ -10,7 +10,7 @@ from win32more.Windows.Win32.Graphics.Direct2D import D2D1CreateFactory, ID2D1Fa
 from win32more.Windows.Win32.Graphics.Direct2D.Common import D2D1_BEZIER_SEGMENT, D2D_POINT_2F
 from win32more.Windows.Win32.System.WinRT.Graphics.Direct2D import IGeometrySource2DInterop
 
-from .contours import Contour, Curve, End, Line, Move
+from winapi.contours import Contour, Curve, End, Line, Move
 
 
 def check(result: object) -> None:

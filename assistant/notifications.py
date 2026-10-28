@@ -9,7 +9,8 @@ from dataclasses import dataclass, replace
 from enum import Enum, auto
 from typing import Final, assert_never
 
-from .agent_session import (
+import assistant.feed_items
+from assistant.agent_session import (
     Answer,
     Answered,
     Approval,
@@ -27,13 +28,10 @@ from .agent_session import (
     pending,
     presentation,
 )
-from .feed_items import DEFAULT_QUERY, SourceKey, WorkItem, WorkState, action_spans, proposal_index
-from .feed_items import heading as source_heading
-from .feed_items import observed as source_items
-from .feed_items import text as source_text
-from .feed_triage import Assessment
-from .inbox import Query, Source, matches, user_caption
-from .recording_state import RecordingState, duration, phase_label
+from assistant.feed_items import DEFAULT_QUERY, SourceKey, WorkItem, WorkState, action_spans, proposal_index
+from assistant.feed_triage import Assessment
+from assistant.inbox import Query, Source, matches, user_caption
+from assistant.recording_state import RecordingState, duration, phase_label
 
 MAX_VISIBLE: Final = 5
 MAX_WORK_VISIBLE: Final = 3
@@ -283,7 +281,7 @@ def observe(session: Snapshot, query: Query = DEFAULT_QUERY) -> tuple[Content, .
             case _:
                 assert_never(item)
     attached = {item.origin.key for item in selected if isinstance(item, Turn) and item.origin is not None}
-    return (*selected, *(item for item in source_items(session, query, proposals=proposals) if item.key not in attached))
+    return (*selected, *(item for item in assistant.feed_items.observed(session, query, proposals=proposals) if item.key not in attached))
 
 
 def settled(entries: tuple[Entry | Response, ...]) -> Settled:
@@ -535,7 +533,7 @@ def body(content: Content) -> str:
         case Recording(state):
             return state.detail or state.preview or state.title
         case WorkItem():
-            return source_text(content)
+            return assistant.feed_items.text(content)
         case _:
             assert_never(content)
 
@@ -567,7 +565,7 @@ def heading(content: Content) -> str:
         case Recording(state):
             return f"{phase_label(state.phase)} · {duration(state.seconds)}"
         case WorkItem():
-            return source_heading(content)
+            return assistant.feed_items.heading(content)
         case _:
             assert_never(content)
 

@@ -8,12 +8,12 @@ from dataclasses import dataclass, field, replace
 from enum import Enum, auto
 from typing import Literal, assert_never
 
-from . import action_text
-from .communications import Feed
-from .console_requests import Request as ConsoleRequest
-from .feed_origin import FeedRequest
-from .feed_triage import Board
-from .recording_state import RecordingState
+import assistant.console_requests
+from assistant import action_text
+from assistant.communications import Feed
+from assistant.feed_origin import FeedRequest
+from assistant.feed_triage import Board
+from assistant.recording_state import RecordingState
 
 type Decision = Literal["pending", "approved", "declined", "cancelled"]
 type Result = Literal["Ready", "Stopped", "Needs attention"]
@@ -236,7 +236,7 @@ class Session:
     status: str = "Ready"
     triage: Board = field(default_factory=Board)
     communications: Feed = field(default_factory=Feed)
-    console_requests: tuple[ConsoleRequest, ...] = ()
+    console_requests: tuple[assistant.console_requests.Request, ...] = ()
     communication_drafts: tuple[tuple[str, str], ...] = ()
     last_said: str = ""
     result: Result = "Ready"

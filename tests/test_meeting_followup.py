@@ -54,8 +54,7 @@ from assistant.meeting_store import MeetingArchive, MeetingStore
 from automation.actions import FileVerifier
 from automation.files import filesystem_path
 from automation.task import ActionVerified
-
-from .test_meetings import SPEECH
+from tests.test_meetings import SPEECH
 
 ASSIGNMENT = "Ada will send the release notes by Thursday."
 ADDRESS = "Ada can be reached at ada@example.test."

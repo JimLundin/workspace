@@ -1,7 +1,6 @@
 import threading
 from dataclasses import replace
 from pathlib import Path
-from unittest.mock import patch
 
 from assistant.browser_values import BrowserError, NavigationContextError
 from assistant.communications import (
@@ -23,6 +22,7 @@ from assistant.communications import (
 )
 from assistant.communications_browser import TeamsWeb, observation
 from assistant.llm import Json
+from tests.teams_fixture import Browser
 
 
 def test_message_identity_is_scoped_to_chat_and_reactions_do_not_realert() -> None:
@@ -61,11 +61,12 @@ def test_external_observation_rejects_missing_source_identity() -> None:
 
 
 def test_read_uses_a_fresh_observation_after_a_launcher_redirect_retires_its_context() -> None:
-    web = TeamsWeb(Path("unused"))
     value: Json = {"current": "19:one@thread.v2", "title": "Anna", "conversations": [], "messages": [], "editor_ready": True}
-    with patch.object(TeamsWeb, "evaluate", side_effect=(NavigationContextError("Cannot find context with specified id"), value)) as read:
-        assert web.read(threading.Event()).current == "19:one@thread.v2"
-    assert read.call_count == 2
+    browser = Browser()
+    browser.documents = (NavigationContextError("Cannot find context with specified id"), value)
+    web = TeamsWeb(Path("unused"), browser=browser)
+    assert web.read(threading.Event()).current == "19:one@thread.v2"
+    assert browser.reads == 2
 
 
 def test_inbox_groups_chat_backlog_and_handles_only_captured_revisions() -> None:

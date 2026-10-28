@@ -3,21 +3,20 @@
 import asyncio
 import sys
 import unittest
-from unittest.mock import patch
+from collections.abc import Awaitable, Callable
 
 if sys.platform != "win32":
     raise unittest.SkipTest("Native notification observer")
 
 from assistant.system_notices import Banners, Notice, NoticeKey, Observation, Observed, Unavailable
-from winapi.notification_banners import BannerPolicy, Coverage
+from winapi.notification_banners import Coverage
 from winapi.notifications import NotificationObserver
 
 
-class Lease(BannerPolicy):
+class Lease:
     __slots__ = ("closes", "syncs")
 
     def __init__(self) -> None:
-        super().__init__(settings_path="unused", backup_path="unused")
         self.closes = self.syncs = 0
 
     def sync(self) -> Coverage:
@@ -30,31 +29,50 @@ class Lease(BannerPolicy):
         self.closes += 1
 
 
+class Source:
+    """Own fixture poll callbacks and lifecycle counters across the real worker thread."""
+
+    __slots__ = ('closes', 'observe', 'opens')
+
+    def __init__(self, observe: Callable[[], Awaitable[Observation]]) -> None:
+        self.observe = observe
+        self.opens = self.closes = 0
+
+    def open(self) -> bool:
+        self.opens += 1
+        return True
+
+    async def read(self) -> Observation:
+        return await self.observe()
+
+    def dismiss(self, key: NoticeKey) -> None:
+        pass
+
+    def close(self) -> None:
+        self.closes += 1
+
+
 def test_banner_failure_keeps_notice_delivery_and_repeated_read_failures_release_suppression() -> None:
     notice = Notice(NoticeKey(1, 10), "Fixture", "Fixture", "Update", "Local test")
     calls = 0
-    results: list[Observation] = []
     async def read_fixture() -> Observation:
         nonlocal calls
         calls += 1
         if calls > 2:
             raise TimeoutError("Fixture notification read timed out")
         return Observed((notice,))
-    def publish(observer: NotificationObserver, result: Observation) -> None:
-        results.append(result)
-        if len(results) == 5:
-            observer.stopped.set()
-    with patch("winapi.notifications.threading.Thread.start"):
-        observer = NotificationObserver()
     lease = Lease()
-    observer.banner_policy = lease
-    with patch("winapi.notifications.read", read_fixture), patch.object(NotificationObserver, "publish", publish):
-        observer.thread.start()
-        observer.thread.join(timeout=8)
+    source = Source(read_fixture)
+    observer = NotificationObserver(source=source, banner_policy=lease)
+    try:
+        results = tuple(observer.results.get(timeout=2) for _ in range(5))
+    finally:
+        observer.close()
     assert not observer.thread.is_alive()
-    assert results[:2] == [Observed((notice,), Banners.PARTIAL), Observed((notice,), Banners.SUPPRESSED)]
+    assert results[:2] == (Observed((notice,), Banners.PARTIAL), Observed((notice,), Banners.SUPPRESSED))
     assert all(isinstance(result, Unavailable) for result in results[2:])
     assert lease.closes == 2  # Repeated failure recovery, followed by owner shutdown.
+    assert source.opens == source.closes == 1
 
 
 def test_notification_polls_share_one_event_loop_for_late_winrt_callbacks() -> None:
@@ -66,14 +84,11 @@ def test_notification_polls_share_one_event_loop_for_late_winrt_callbacks() -> N
         if len(loops) == 1:
             loop.call_later(.02, completed.append, True)
         return Observed(())
-    def publish(observer: NotificationObserver, _result: Observation) -> None:
-        if len(loops) == 2:
-            observer.stopped.set()
-    with patch('winapi.notifications.threading.Thread.start'):
-        observer = NotificationObserver()
-    observer.banner_policy = Lease()
-    with patch('winapi.notifications.read', observe), patch.object(NotificationObserver, 'publish', publish):
-        observer.thread.start()
-        observer.thread.join(timeout=4)
+    observer = NotificationObserver(source=Source(observe), banner_policy=Lease())
+    try:
+        for _ in range(2):
+            observer.results.get(timeout=2)
+    finally:
+        observer.close()
     assert not observer.thread.is_alive() and len(loops) == 2
     assert loops[0] is loops[1] and completed == [True]

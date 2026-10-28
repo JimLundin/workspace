@@ -33,8 +33,7 @@ from automation.task import (
     Until,
     Waiting,
 )
-
-from .work_fixture import seed_tasks, seed_verified_actions
+from tests.work_fixture import seed_tasks, seed_verified_actions
 
 
 def specification(operation: str = "write notes") -> ActionSpec:

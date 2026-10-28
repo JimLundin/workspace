@@ -1,19 +1,24 @@
-"""One keyboard-accessible capsule button, with ambient facts or a real audio trace."""
-# pyright: reportUnknownMemberType=false, reportUnknownArgumentType=false
+"""Read-only toolbar status and separators between independent functions."""
 
 import math
 from collections import deque
 
-from .ambient import Ambient, Battery, SystemStatus
-from .bar_surface import CONTROL_HEIGHT, Pill
-from .qt import Qt, QtCore, QtGui, QtWidgets
-from .vector_icons import icon
+lazy from PySide6 import QtCore, QtGui, QtWidgets
+lazy from PySide6.QtCore import Qt
+
+from assistant.ambient import Ambient, Battery, SystemStatus
+from assistant.bar_surface import CONTROL_HEIGHT, Pill
+from assistant.qt_runtime import prepare
+from assistant.vector_icons import icon
+
+prepare()
 
 
-class CapsuleButton(QtWidgets.QToolButton):
+class StatusView(QtWidgets.QLabel):
     def __init__(self, surface: Pill) -> None:
         super().__init__(surface)
         self.surface = surface
+        self.symbol: str = "clock"
         self.ambient: Ambient | None = None
         self.system = SystemStatus()
         self.listening = False
@@ -23,11 +28,14 @@ class CapsuleButton(QtWidgets.QToolButton):
         self.samples: deque[float] = deque([0.0] * 24, maxlen=24)
         self.meter_available = True
         self.setFixedHeight(CONTROL_HEIGHT)
-        self.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
-        self.setIconSize(QtCore.QSize(14, 14))
-        self.setToolTip("Open Workspace controls · Space: hold to dictate · B: toggle · N: agent")
-        self.setAccessibleName("Open Workspace controls")
+        # The painted icons need the full measured width; QLabel's native
+        # minimum hint only measures its text and would clip these observations.
+        self.setSizePolicy(QtWidgets.QSizePolicy.Policy.Fixed, QtWidgets.QSizePolicy.Policy.Fixed)
+        self.setCursor(Qt.CursorShape.ArrowCursor)
+        self.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self.setTextFormat(Qt.TextFormat.PlainText)
+        self.setStyleSheet("background: transparent; border: none; padding: 0; font: 500 12px 'Segoe UI';")
+        self.setToolTip("Clock, battery and local weather")
 
     def system_changed(self, system: SystemStatus) -> None:
         self.system = system
@@ -40,8 +48,8 @@ class CapsuleButton(QtWidgets.QToolButton):
         return self.ambient is not None and isinstance(self.ambient.power, Battery) and self.ambient.power.powered
 
     def accessible(self) -> None:
-        power = ". Charger connected" if self.plugged_in else ""
-        self.setAccessibleName(f"{self.text()}{power}. {self.system.description}. Open Workspace controls")
+        facts = (self.text(), "Charger connected" if self.plugged_in else "", self.system.description)
+        self.setAccessibleName(". ".join(value for value in facts if value))
 
     def facts(self, ambient: Ambient | None) -> None:
         self.ambient = ambient
@@ -70,8 +78,8 @@ class CapsuleButton(QtWidgets.QToolButton):
     def observe(self, level: float | None) -> None:
         self.meter_available = level is not None
         self.samples.append(min(1.0, math.log10(1 + max(0.0, level or 0.0) * 90) / math.log10(91)))
-        self.setToolTip("Live microphone signal · release Spacebar to transcribe" if self.meter_available
-                        else "Listening · microphone level is unavailable · release Spacebar to transcribe")
+        self.setToolTip("Listening · live microphone signal · use Stop to finish" if self.meter_available
+                        else "Listening · microphone level is unavailable · use Stop to finish")
         self.update()
 
     def sizeHint(self) -> QtCore.QSize:  # noqa: N802
@@ -89,10 +97,6 @@ class CapsuleButton(QtWidgets.QToolButton):
     def paintEvent(self, event: QtGui.QPaintEvent) -> None:  # noqa: N802
         painter = QtGui.QPainter(self)
         painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
-        option = QtWidgets.QStyleOptionToolButton()
-        self.initStyleOption(option)
-        option.text, option.icon = "", QtGui.QIcon()
-        self.style().drawComplexControl(QtWidgets.QStyle.ComplexControl.CC_ToolButton, option, painter, self)
         painter.setFont(self.font())
         painter.setPen(QtGui.QColor(self.surface.ink.foreground))
         x = 7
@@ -109,21 +113,12 @@ class CapsuleButton(QtWidgets.QToolButton):
             icon(name, self.surface.ink.foreground).paint(painter, QtCore.QRect(x, 5, 14, 14))
             x += 19
 
-        def divider() -> None:
-            nonlocal x
-            color = QtGui.QColor(self.surface.ink.foreground)
-            color.setAlpha(65)
-            painter.setPen(QtGui.QPen(color, 1))
-            painter.drawLine(x + 7, 7, x + 7, 17)
-            painter.setPen(QtGui.QColor(self.surface.ink.foreground))
-            x += 14
-
         if self.ambient is not None:
             text(self.ambient.clock)
-            divider()
+            x += 14
             x = self.paint_power(painter, x)
             if self.ambient.weather is not None:
-                divider()
+                x += 14
                 symbol(self.ambient.weather.icon)
                 text(self.ambient.weather.text)
         else:
@@ -132,7 +127,7 @@ class CapsuleButton(QtWidgets.QToolButton):
                                          Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
                 painter.drawArc(QtCore.QRectF(x + 1, 6, 12, 12), round(self.spin_angle * 16), 240 * 16)
             else:
-                self.icon().paint(painter, QtCore.QRect(x, 5, 14, 14))
+                icon(self.symbol, self.surface.ink.foreground).paint(painter, QtCore.QRect(x, 5, 14, 14))
             x += 19
             text(self.text())
             if self.listening:
@@ -164,6 +159,7 @@ class CapsuleButton(QtWidgets.QToolButton):
         width = self.fontMetrics().horizontalAdvance(self.ambient.battery_text)
         painter.drawText(QtCore.QRect(x, 0, width, self.height()), Qt.AlignmentFlag.AlignVCenter, self.ambient.battery_text)
         painter.restore()
+
         return x + width
 
     def paint_charger(self, painter: QtGui.QPainter, x: int) -> None:
@@ -173,3 +169,20 @@ class CapsuleButton(QtWidgets.QToolButton):
         painter.drawPolyline([QtCore.QPoint(x + 10, 5), QtCore.QPoint(x + 4, 12),
                               QtCore.QPoint(x + 9, 12), QtCore.QPoint(x + 4, 19)])
         painter.restore()
+
+
+class Divider(QtWidgets.QWidget):
+    """One visual boundary between functions, never inside a status/control group."""
+
+    def __init__(self, surface: Pill) -> None:
+        super().__init__(surface)
+        self.surface = surface
+        self.setFixedSize(9, 16)
+        self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+
+    def paintEvent(self, event: QtGui.QPaintEvent) -> None:  # noqa: N802 -- Qt virtual method
+        painter = QtGui.QPainter(self)
+        color = QtGui.QColor(self.surface.ink.foreground)
+        color.setAlpha(65)
+        painter.setPen(QtGui.QPen(color, 1))
+        painter.drawLine(4, 3, 4, 13)

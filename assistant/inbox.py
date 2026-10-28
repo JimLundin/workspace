@@ -4,10 +4,10 @@ import json
 from dataclasses import dataclass
 from enum import Enum, auto
 
-from .agent_session import Approval, ChatMessage, Question, pending
-from .agent_session import Message as AgentMessage
-from .communications import Feed, Message, Reply, Update, UpdateKind, WindowsNotice, chat_tickets
-from .console_requests import Request, State
+import assistant.agent_session
+from assistant.agent_session import Approval, ChatMessage, Question, pending
+from assistant.communications import Feed, Message, Reply, Update, UpdateKind, WindowsNotice, chat_tickets
+from assistant.console_requests import Request, State
 
 
 class Source(Enum):
@@ -34,7 +34,7 @@ class Query:
     history: bool = False
 
 
-type Item = AgentMessage | Message | Reply | Update | Request
+type Item = assistant.agent_session.Message | Message | Reply | Update | Request
 
 
 def source(item: Item) -> Source:

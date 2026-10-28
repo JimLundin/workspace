@@ -5,8 +5,7 @@ import ctypes
 from ctypes import wintypes
 
 from assistant.ambient import Speakers, Wifi
-
-from ._core import fn
+from winapi._core import fn
 
 _wlan = ctypes.WinDLL("wlanapi", use_last_error=True)
 _WlanOpenHandle = fn(_wlan, "WlanOpenHandle", wintypes.DWORD, wintypes.DWORD, ctypes.c_void_p,
@@ -80,5 +79,5 @@ def speakers() -> Speakers:
     except OSError:
         return Speakers.UNKNOWN
     finally:
-        volume = device = enumerator = None
+        del volume, device, enumerator
         CoUninitialize()

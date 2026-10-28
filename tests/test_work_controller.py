@@ -7,6 +7,7 @@ from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from pathlib import Path
 
+import automation.task
 from assistant.agent_session import LiveMessage
 from automation.controller import ControllerSnapshot, Fault, Idle, Stopping, WorkController
 from automation.execution import Log, Outcome
@@ -27,9 +28,6 @@ from automation.task import (
     TextAnswer,
     Until,
     Waiting,
-)
-from automation.task import (
-    Outcome as StoredOutcome,
 )
 
 
@@ -355,7 +353,7 @@ def test_wakeup_uses_supplied_time_and_an_until_wait_releases_other_work(tmp_pat
 
 
 class FailingFinishStore(TaskStore):
-    def finish(self, run: RunRef, outcome: StoredOutcome, *, at: float) -> Task | None:
+    def finish(self, run: RunRef, outcome: automation.task.Outcome, *, at: float) -> Task | None:
         raise OSError("The journal cannot commit the outcome.")
 
 

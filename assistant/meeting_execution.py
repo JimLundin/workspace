@@ -5,15 +5,14 @@ import threading
 from dataclasses import dataclass
 from typing import Protocol, assert_never, cast
 
+from assistant import outlook
+from assistant.llm import Json
+from assistant.meeting_followup import CaptureNotice, EmailAddress, NoCaptureNotice, draft_data, followup_data, parse_followup
+from assistant.meeting_followup_store import FollowupStore, Publication, PublishedFollowup
+from assistant.meeting_requests import MeetingRequests, PreparedFollowup, task_identity
 from automation.actions import ActionError
 from automation.execution import Outcome, WorkExecution
 from automation.task import ActionSpec, ActionUncertain, ActionVerified, Blocked, Completed, RequestSource, Task, Waiting, digest, identifier, integer
-
-from . import outlook
-from .llm import Json
-from .meeting_followup import CaptureNotice, EmailAddress, NoCaptureNotice, draft_data, followup_data, parse_followup
-from .meeting_followup_store import FollowupStore, Publication, PublishedFollowup
-from .meeting_requests import MeetingRequests, PreparedFollowup, task_identity
 
 SOURCE_PAGE = 32_000
 _MAIL_RESOURCE = "meeting-draft:"

@@ -2,13 +2,19 @@
 
 from functools import lru_cache
 
-from .qt import Qt, QtCore, QtGui, QtSvg
+lazy from PySide6 import QtCore, QtGui, QtSvg
+lazy from PySide6.QtCore import Qt
+
+from assistant.qt_runtime import prepare
+
+prepare()
 
 _PATHS = {'grid': '<rect x="3" y="3" width="7" height="7" rx="1.2"/><rect x="14" y="3" width="7" height="7" rx="1.2"/><rect x="3" '
          'y="14" width="7" height="7" rx="1.2"/><rect x="14" y="14" width="7" height="7" rx="1.2"/>',
  'canvas': '<rect x="2" y="3" width="8" height="11" rx="1.3"/><rect x="14" y="6" width="8" height="15" rx="1.3"/><path '
            'd="M2 19h8"/>',
  'close': '<path d="m6 6 12 12M6 18 18 6"/>',
+ 'menu': '<path d="M4 6h16M4 12h16M4 18h16"/>',
  'check': '<path d="m4 12 5 5L20 6"/>',
  'plus': '<path d="M12 4v16M4 12h16"/>',
  'minus': '<path d="M4 12h16"/>',

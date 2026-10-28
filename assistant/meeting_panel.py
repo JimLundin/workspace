@@ -10,7 +10,11 @@ from pathlib import Path
 from urllib.parse import quote
 from uuid import uuid4
 
-lazy from .meeting_followup import (
+lazy from PySide6 import QtCore, QtGui, QtWidgets
+lazy from PySide6.QtCore import Qt
+
+from assistant.qt_runtime import prepare
+lazy from assistant.meeting_followup import (
     ActionContent,
     ActionStatus,
     Addressee,
@@ -24,8 +28,8 @@ lazy from .meeting_followup import (
     TranscriptSource,
     Unspecified,
 )
-lazy from .meeting_followup_store import ActionRevision, DraftRevision
-lazy from .meeting_workflow import (
+lazy from assistant.meeting_followup_store import ActionRevision, DraftRevision
+lazy from assistant.meeting_workflow import (
     ActionChange,
     ActionSaveProblem,
     DraftChange,
@@ -39,11 +43,12 @@ lazy from .meeting_workflow import (
     package_values,
     previous_task,
 )
-lazy from .panel_controls import button, label
-lazy from .qt import Qt, QtCore, QtGui, QtWidgets
-lazy from .recording_state import duration
-lazy from .widgets import Browser, Editor, column, replace_text, row
-lazy from .work_window import task_label
+lazy from assistant.panel_controls import button, label
+lazy from assistant.recording_state import duration
+lazy from assistant.widgets import Browser, Editor, column, replace_text, row
+lazy from assistant.work_window import task_label
+
+prepare()
 
 
 @dataclass(frozen=True, slots=True)

@@ -9,10 +9,9 @@ import threading
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 
+from assistant import commands
 from keeper import LIVE, PROTECTED, WORKSPACE, copy_source, source_digest, source_files
 from selfcheck import compile_all
-
-from . import commands
 
 
 class SourceError(Exception):

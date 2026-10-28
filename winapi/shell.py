@@ -7,7 +7,7 @@ from ctypes import wintypes
 from dataclasses import dataclass
 from typing import Final
 
-from ._core import LRESULT, fn, gdi32, kernel32, last_error, shell32, user32
+from winapi._core import LRESULT, fn, gdi32, kernel32, last_error, shell32, user32
 
 WNDPROC = ctypes.WINFUNCTYPE(LRESULT, wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM)
 

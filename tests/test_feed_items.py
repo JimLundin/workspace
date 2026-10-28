@@ -2,6 +2,7 @@
 
 from dataclasses import replace
 
+import assistant.notification_text
 from assistant.agent_session import Begin, Said, Session, transition
 from assistant.communications import Feed, Update, WindowsNotice
 from assistant.console_requests import Provider, request
@@ -11,8 +12,7 @@ from assistant.feed_triage import Assessment, Board, collect
 from assistant.inbox import Query, Source
 from assistant.notifications import MAX_VISIBLE, Stack, Turn, advance, body, observe
 from assistant.system_notices import NoticeKey
-
-from .test_console_inbox import event
+from tests.test_console_inbox import event
 
 
 def test_notification_projection_shares_evidence_for_proposals_and_attached_turns() -> None:
@@ -39,7 +39,6 @@ def test_notification_projection_shares_evidence_for_proposals_and_attached_turn
 def test_expansion_shows_only_matching_source_revisions_and_labels_missing_originals() -> None:
     from assistant.communications import Feed  # noqa: PLC0415
     from assistant.feed_triage import Assessment, Board, collect  # noqa: PLC0415
-    from assistant.notification_text import spans as rendered_spans  # noqa: PLC0415
     update = Update(WindowsNotice(NoticeKey(80, 2), 'outlook'), 'Forecast', 'Original captured figures', 'Outlook', 3)
     feed = Feed(updates=(update,))
     source = collect(feed, ())[0]
@@ -47,7 +46,7 @@ def test_expansion_shows_only_matching_source_revisions_and_labels_missing_origi
                           'The figures need review.', 'Check the totals.', '', 1, 3)
     session = Session(communications=feed, triage=Board(enabled=True, items=(proposal,)))
     row = observed(session)[0]
-    assert ''.join(span.text for span in rendered_spans(row, expanded=False)) == proposal.title
+    assert ''.join(span.text for span in assistant.notification_text.spans(row, expanded=False)) == proposal.title
     assert update.text in ''.join(span.text for span in expanded_spans(row))
     newer = replace(session, communications=replace(feed, updates=(replace(update, text='Different, unreviewed figures'),)))
     detail = ''.join(span.text for span in expanded_spans(observed(newer)[0]))

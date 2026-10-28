@@ -4,7 +4,7 @@ import queue
 import threading
 from contextlib import suppress
 
-from .ambient import SystemStatus
+from assistant.ambient import SystemStatus
 
 
 class StatusObserver:

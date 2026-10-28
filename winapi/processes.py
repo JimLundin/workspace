@@ -5,7 +5,7 @@ import subprocess
 import time
 from ctypes import wintypes
 
-from ._core import fn, kernel32, last_error, shell32
+from winapi._core import fn, kernel32, last_error, shell32
 
 
 class _Limits(ctypes.Structure):

@@ -17,14 +17,17 @@ if sys.platform != "win32":
 
 import msvcrt
 
-from assistant.browser import MAX_OUTPUT, Browser, BrowserError, InterruptedError, Product, edge_path, read_endpoint
-from assistant.browser_session import NativeSessions
-from assistant.browser_values import Group, Tab, group_of, tab_of
-from assistant.llm import Json
-from assistant.qt import QImage
+lazy from PySide6.QtGui import QImage
 
-from .browser_fixture import fixture
-from .test_browser import decoded
+from assistant.browser import MAX_OUTPUT, Browser
+from assistant.browser_session import NativeSessions, Product, edge_path, read_endpoint
+from assistant.browser_values import BrowserError, Group, InterruptedError, Tab, group_of, tab_of
+from assistant.llm import Json
+from assistant.qt_runtime import prepare
+from tests.browser_fixture import fixture
+from tests.test_browser import decoded
+
+prepare()
 
 
 def request(browser: Browser, operation: str, **args: Json) -> dict[str, Json]:

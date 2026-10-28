@@ -15,9 +15,8 @@ from assistant.agent_toasts import AgentToasts
 from assistant.console_inbox import ConsoleInbox
 from assistant.console_requests import Answer, Provider, Request, State
 from assistant.feed_items import WorkItem, action_spans, body_spans
-
-from .test_console_inbox import event
-from .test_windows_agent_toasts import notifications
+from tests.test_console_inbox import event
+from tests.test_windows_agent_toasts import notifications
 
 
 def answer_request(view: AgentToasts, current: Request, approval: str) -> None:

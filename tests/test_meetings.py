@@ -9,15 +9,13 @@ from array import array
 from collections.abc import Callable
 from pathlib import Path
 from unittest import TestCase
-from unittest.mock import patch
 
 from assistant.llm import RATE, Failure
 from assistant.meeting_store import BacklogFullError, MeetingArchive, MeetingStore
 from assistant.meetings import Meetings
 from assistant.recording_state import AudioSource, RecordingState, RetryPolicy
-
-from .fake_endpoint import Received, Reply, fake_endpoint
-from .test_llm import settings
+from tests.fake_endpoint import Received, Reply, fake_endpoint
+from tests.test_llm import settings
 
 SPEECH = array("h", [1400] * RATE).tobytes()
 
@@ -83,7 +81,6 @@ def test_batch_reads_capture_completion_and_audio_from_one_snapshot(tmp_path: Pa
     store = MeetingStore.create(tmp_path, "microphone")
     store.append(SPEECH)
     tail = SPEECH[:RATE]
-    connect = sqlite3.connect
     attempted = appended = finished = False
     errors: list[str] = []
 
@@ -106,13 +103,13 @@ def test_batch_reads_capture_completion_and_audio_from_one_snapshot(tmp_path: Pa
                 if "locked" not in str(error):
                     errors.append(str(error))
 
-    def connection(database: Path, *, timeout: float, isolation_level: None) -> sqlite3.Connection:
-        native = connect(database, timeout=0, isolation_level=isolation_level)
+    def connection(database: Path) -> sqlite3.Connection:
+        native = sqlite3.connect(database, timeout=0, isolation_level=None)
         native.set_trace_callback(interleave)
         return native
 
-    with patch("assistant.meeting_store.sqlite3.connect", new=connection):
-        batch = store.batch()
+    reader = MeetingStore(store.folder, connect=connection)
+    batch = reader.batch()
     assert attempted and not errors
     assert batch is None or batch.pcm == SPEECH + tail, "A finished capture was paired with audio read before its final block."
     if not finished:

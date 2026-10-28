@@ -6,23 +6,24 @@ message loop. Win32 is reached only through the typed bindings in `winapi`.
 import contextlib
 import gc
 import traceback
+from collections.abc import Mapping
 from enum import Enum, auto
-from typing import Final
+from typing import Final, Protocol
 
 import keeper
 import usage
 from config import APPS
 from diagnostics import FailureInfo, failure_info
+from keeper import ASSISTANT_WINDOW, LAYOUT_WINDOW, WM_QUIT_LAYOUT
+from miryoku.engine import QUIET, Engine, Indicator, Signal, Verdict
+from miryoku.layout import ESCAPE, SLOTS, TAPPING_TERM_MS, VOICE_KEYS, Key, Mod, Scancode, Unmapped, native_control
 from protocol import (
-    ASSISTANT_WINDOW,
     LAYOUT_MAGIC,
-    LAYOUT_WINDOW,
     MAGIC,
     WM_INDICATOR,
     WM_KEY_STATE,
     WM_LAYOUT_STATE,
     WM_QUERY_LAYOUT_STATE,
-    WM_QUIT_LAYOUT,
     WM_REQUEST,
     WM_TOGGLE_LAYOUT,
     LayoutState,
@@ -30,10 +31,8 @@ from protocol import (
     encode,
     encode_indicator,
 )
+from usage import Detail
 from winapi import inputs, keyboard_language, system, windows
-
-from .engine import QUIET, Engine, Indicator, Signal, Verdict
-from .layout import ESCAPE, SLOTS, TAPPING_TERM_MS, VOICE_KEYS, Key, Mod, Scancode, Unmapped, native_control
 
 LOCK_NAME: Final = "Local\\miryoku"
 """Name of the lock that stops a second copy from running in this Windows session."""
@@ -41,12 +40,75 @@ USAGE_FLUSH_MS: Final = 10 * 60 * 1000
 """How often usage counts are written to the usage log."""
 
 
+class KeyboardSystem(Protocol):
+    """Native input, observation and delivery owned by the keyboard process."""
+
+    def send_key(self, key: Key | Mod, *, down: bool) -> None: ...
+    def cursor_position(self) -> tuple[int, int]: ...
+    def foreground(self) -> int: ...
+    def title(self, hwnd: int) -> str: ...
+    def read_key_event(self, lparam: int) -> inputs.KeyEvent: ...
+    def call_next_hook(self, code: int, wparam: int, lparam: int) -> int: ...
+    def find_assistant(self) -> int | None: ...
+    # HWND and its complete native message are one fixed delivery contract.
+    def post_message(self, hwnd: int, message: int, wparam: int, lparam: int) -> bool: ...
+    def set_timer(self, ms: int) -> int: ...
+    def kill_timer(self, timer: int) -> None: ...
+    def beep(self, sound: int) -> None: ...
+    def type_text(self, text: str) -> None: ...
+    def record_recovery(self, details: Mapping[str, Detail]) -> None: ...
+    def record_counts(self, counts: Mapping[str, int]) -> None: ...
+    def post_quit(self) -> None: ...
+
+
+class NativeKeyboardSystem:
+    """The live Windows adapter; constructing it starts no hook or timer."""
+
+    __slots__ = ()
+
+    def send_key(self, key: Key | Mod, *, down: bool) -> None:
+        flags = (0 if down else inputs.KEYEVENTF_KEYUP) | (inputs.KEYEVENTF_EXTENDEDKEY if key.extended else 0)
+        # Some programs consume the scancode, from Windows' own layout table.
+        inputs.send_key(key.vk, inputs.scancode_for(key.vk), flags, LAYOUT_MAGIC)
+
+    # Bind native observations directly: the hook avoids extra Python forwarding
+    # calls while callers still depend on KeyboardSystem, never module globals.
+    cursor_position = staticmethod(inputs.cursor_position)
+    foreground = staticmethod(windows.foreground)
+    title = staticmethod(windows.title)
+    read_key_event = staticmethod(inputs.read_key_event)
+    call_next_hook = staticmethod(inputs.call_next_hook)
+
+    def find_assistant(self) -> int | None:
+        return windows.find(ASSISTANT_WINDOW)
+
+    # Preserve HWND and the native message's three scalar fields at this adapter.
+    def post_message(self, hwnd: int, message: int, wparam: int, lparam: int) -> bool:
+        return system.post_message(hwnd, message, wparam, lparam)
+
+    set_timer = staticmethod(system.set_timer)
+    kill_timer = staticmethod(system.kill_timer)
+    beep = staticmethod(system.beep)
+
+    def type_text(self, text: str) -> None:
+        inputs.type_text(text, LAYOUT_MAGIC)
+
+    def record_recovery(self, details: Mapping[str, Detail]) -> None:
+        usage.record("layout", "input_recovery", details)
+
+    def record_counts(self, counts: Mapping[str, int]) -> None:
+        usage.record_counts("layout", counts)
+
+    post_quit = staticmethod(system.post_quit)
+
+
 class WinHost:
     """What the engine needs, done with Windows calls."""
 
-    __slots__ = ("assistant", "counts", "owned")
+    __slots__ = ("assistant", "counts", "owned", "platform")
 
-    def __init__(self) -> None:
+    def __init__(self, platform: KeyboardSystem | None = None) -> None:
+        self.platform: KeyboardSystem = platform if platform is not None else NativeKeyboardSystem()
         self.assistant: int | None = None
         """The assistant's window, once found."""
         self.counts: dict[str, int] = {}
@@ -57,9 +119,7 @@ class WinHost:
     def send(self, key: Key | Mod, down: bool) -> None:
         if down:
             self.owned.add(key)
-        flags = (0 if down else inputs.KEYEVENTF_KEYUP) | (inputs.KEYEVENTF_EXTENDEDKEY if key.extended else 0)
-        # The scancode, which some programs read, from Windows' own layout table.
-        inputs.send_key(key.vk, inputs.scancode_for(key.vk), flags, LAYOUT_MAGIC)
+        self.platform.send_key(key, down=down)
         if not down:
             self.owned.discard(key)
 
@@ -70,28 +130,28 @@ class WinHost:
                 self.send(key, False)
 
     def start_timer(self) -> int:
-        return system.set_timer(TAPPING_TERM_MS)
+        return self.platform.set_timer(TAPPING_TERM_MS)
 
     def stop_timer(self, timer: int) -> None:
-        system.kill_timer(timer)
+        self.platform.kill_timer(timer)
 
     def signal(self, signal: Signal) -> None:
         match signal:
             case Signal.ON:
-                system.beep(system.MB_OK)
+                self.platform.beep(system.MB_OK)
                 self.tell_assistant(WM_LAYOUT_STATE, LayoutState.ON.value, 0)
             case Signal.OFF:
-                system.beep(system.MB_ICONHAND)
+                self.platform.beep(system.MB_ICONHAND)
                 self.tell_assistant(WM_LAYOUT_STATE, LayoutState.OFF.value, 0)
             case Signal.CAPS_WORD:
-                system.beep(system.MB_ICONASTERISK)
+                self.platform.beep(system.MB_ICONASTERISK)
 
     def request(self, request: Request, down: bool) -> None:
         if not self.tell_assistant(WM_REQUEST, encode(request, APPS), int(down)):
             raise OSError("The assistant could not receive a tool request. Layout disabled; restart Workspace to restore tools.")
 
     def type_text(self, text: str) -> None:
-        inputs.type_text(text, LAYOUT_MAGIC)
+        self.platform.type_text(text)
 
     def used(self, feature: str) -> None:
         self.counts[feature] = self.counts.get(feature, 0) + 1
@@ -104,10 +164,10 @@ class WinHost:
         """Posts to the assistant's window; nothing happens if it isn't running."""
         for _ in range(2):  # a cached window may be gone (the assistant restarted): look again
             if self.assistant is None:
-                self.assistant = windows.find(ASSISTANT_WINDOW)
+                self.assistant = self.platform.find_assistant()
                 if self.assistant is None:
                     return False
-            if system.post_message(self.assistant, message, wparam, lparam):
+            if self.platform.post_message(self.assistant, message, wparam, lparam):
                 return True
             self.assistant = None
         return False
@@ -115,7 +175,7 @@ class WinHost:
     def flush_usage(self) -> None:
         counts, self.counts = self.counts, {}
         with contextlib.suppress(OSError):  # the log is a convenience: never let it stop the keyboard
-            usage.record_counts("layout", counts)
+            self.platform.record_counts(counts)
 
 
 class Exit(Enum):
@@ -131,15 +191,16 @@ class Keyboard:
 
     __slots__ = (
         "busy", "engine", "fault", "fault_phase", "foreground", "host", "native_releases",
-        "picker_active", "pointer", "pressed", "recovery_errors", "recovery_ticks",
+        "picker_active", "platform", "pointer", "pressed", "recovery_errors", "recovery_ticks",
     )
 
-    def __init__(self) -> None:
+    def __init__(self, platform: KeyboardSystem | None = None) -> None:
+        self.platform: KeyboardSystem = platform if platform is not None else NativeKeyboardSystem()
         self.engine = Engine()
-        self.host = WinHost()
+        self.host = WinHost(self.platform)
         self.foreground = 0
         self.picker_active = False
-        self.pointer = inputs.cursor_position()
+        self.pointer = self.platform.cursor_position()
         self.pressed: set[Scancode] = set()
         """Physical keys for the overlay, independent of delayed tap/hold decisions."""
         self.native_releases: set[int] = set()
@@ -219,7 +280,7 @@ class Keyboard:
         fault, self.fault = self.fault, None
         if fault is not None:
             with contextlib.suppress(Exception):
-                usage.record("layout", "input_recovery", {
+                self.platform.record_recovery({
                     **fault.details(), "phase": self.fault_phase, "ok": False, "layout_disabled": True,
                     "cleanup_failures": self.recovery_errors, "pending_releases": len(self.host.owned),
                 })
@@ -246,13 +307,13 @@ class Keyboard:
         if code == 0 and wparam in (system.WM_KEYDOWN, system.WM_SYSKEYDOWN, system.WM_KEYUP, system.WM_SYSKEYUP):
             down = wparam in (system.WM_KEYDOWN, system.WM_SYSKEYDOWN)
             try:
-                if self.swallow(inputs.read_key_event(lparam), down):
+                if self.swallow(self.platform.read_key_event(lparam), down):
                     return 1
             except Exception as error:
                 # A bug must never eat the keyboard: report it and let the key through.
                 with contextlib.suppress(Exception):
                     self.input_failed(error)
-        return inputs.call_next_hook(code, wparam, lparam)
+        return self.platform.call_next_hook(code, wparam, lparam)
 
     def desktop_direction(self, key: inputs.KeyEvent, down: bool) -> bool:
         self.busy = True
@@ -266,10 +327,10 @@ class Keyboard:
         # Workspace's generated output must reach applications unchanged.
         if self.busy or key.extra == LAYOUT_MAGIC:
             return False
-        foreground = windows.foreground()
+        foreground = self.platform.foreground()
         if foreground != self.foreground:
-            self.picker_active = windows.title(foreground) == "Workspace window switcher"
-        pointer = inputs.cursor_position()
+            self.picker_active = self.platform.title(foreground) == "Workspace window switcher"
+        pointer = self.platform.cursor_position()
         if foreground != self.foreground or pointer != self.pointer or key.flags & inputs.LLKHF_EXTENDED or key.extra == MAGIC:
             self.engine.typed = ""
         self.foreground = foreground
@@ -316,7 +377,7 @@ class Keyboard:
             case Verdict.SWALLOW:
                 return True
             case Verdict.QUIT:
-                system.post_quit()
+                self.platform.post_quit()
                 return True
 
 

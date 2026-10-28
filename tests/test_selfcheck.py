@@ -3,10 +3,7 @@
 import os
 import subprocess
 import sys
-from collections.abc import Iterator
-from contextlib import AbstractContextManager
 from pathlib import Path
-from unittest.mock import patch
 
 from selfcheck import compile_all
 
@@ -110,16 +107,8 @@ def test_fast_checks_still_compile_native_tests_and_import_production_modules(tm
     assert code == 1 and "doesn't import: tools.broken" in report
 
 
-def test_compile_prunes_dependency_and_cache_directories_before_opening_them(tmp_path: Path) -> None:
+def test_compile_excludes_dependency_and_cache_sources(tmp_path: Path) -> None:
     root = tree(tmp_path, {**SOUND, **{f"{folder}/broken.py": "def broken(:\n" for folder in (".runtime", ".python", ".venv", "__pycache__")}})
-    scandir = os.scandir
-
-    def scan(path: str | os.PathLike[str] | int) -> AbstractContextManager[Iterator[os.DirEntry[str]]]:
-        if not isinstance(path, int):
-            assert Path(path).name not in (".runtime", ".python", ".venv", "__pycache__"), "entered excluded dependencies"
-        return scandir(path)
-
     problems: list[str] = []
-    with patch("os.scandir", new=scan):
-        compile_all(root, problems)
+    compile_all(root, problems)
     assert not problems

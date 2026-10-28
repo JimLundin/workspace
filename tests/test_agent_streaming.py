@@ -9,10 +9,9 @@ from contextlib import contextmanager
 from assistant.agent import Agent
 from assistant.agent_session import Answer, LiveMessage, ReasoningSummary, StreamState, Succeeded, ToolActivity, ToolStatus
 from assistant.llm import Json, Settings
-
-from .fake_endpoint import FakeEndpoint, Received, fake_endpoint
-from .test_agent import FakeMachine, FakeWindow, calls, message, response, says
-from .test_agent_window import RecordingWindow
+from tests.fake_endpoint import FakeEndpoint, Received, fake_endpoint
+from tests.test_agent import FakeMachine, FakeWindow, calls, message, response, says
+from tests.test_agent_window import RecordingWindow
 
 
 def event(kind: str, **fields: Json) -> bytes:

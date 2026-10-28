@@ -14,9 +14,9 @@ from dataclasses import dataclass
 from enum import Enum, auto
 from typing import Protocol, assert_never
 
-from .execution import Log, Outcome
-from .store import MAX_PAGE, TaskStore
-from .task import Blocked, Claim, Completed, Failed, Interrupted, RunRef, Task, Waiting, identifier, integer, owns
+from automation.execution import Log, Outcome
+from automation.store import MAX_PAGE, TaskStore
+from automation.task import Blocked, Claim, Completed, Failed, Interrupted, RunRef, Task, Waiting, identifier, integer, owns
 
 
 class Idle(Enum):

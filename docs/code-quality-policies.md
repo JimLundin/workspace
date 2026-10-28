@@ -40,13 +40,24 @@ options object or `**kwargs` only hides the original interface problem.
 
 ## Import ownership
 
-Import from the owning module, using module-qualified names when names collide.
+Use absolute imports from the owning module, using module-qualified names when
+names collide. Ruff's TID252 rule enforces absolute imports during linting; the
+editing/CI gate observes relative imports directly in its AST import walk, so
+explicit test selections cannot bypass the policy. Relative imports have no
+migration exceptions.
+
 The same editing/CI gate rejects new aliased imports, imports inside function or
 class bodies, and direct `__all__` forwarding of imported names. These use Python's existing AST parser; Ruff has
 no rule that covers this complete project policy. Line-independent exact import
-structures join the same migration baseline. A facade is justified by real
-validation, lifecycle or adaptation, with its reason at the owner and a reviewed
-exact exception. Indirect forwarding and dynamic exports still require review.
+structures join the same migration baseline. Adapters own validation, lifecycle
+or adaptation with an explicit contract; they do not forward dependency
+symbols. Re-exports are forbidden as review policy, including indirect forwarding
+and dynamic exports that static checks cannot reliably detect. Dependency stubs
+describe upstream contracts and retain upstream exports.
+
+Qt consumers import directly from PySide6. `assistant/qt_runtime.py` owns the
+required Python executor initialization before lazy Qt imports first resolve;
+it exports no Qt symbols. Native startup coverage checks the SDK/Qt ordering.
 
 Declare dependencies at module level. Use Python 3.15's `lazy import` or
 `lazy from` to defer loading until first use. This preserves visible module

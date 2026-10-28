@@ -7,6 +7,7 @@ from dataclasses import dataclass, replace
 from datetime import datetime
 from typing import Protocol, assert_never
 
+from assistant.agent_window import log_view
 from automation.context import ContextRecord
 from automation.execution import ApprovalReview, review_matches
 from automation.routines import EventTrigger, Every, FileChanged, Once, RoutineSummary, Trigger
@@ -31,8 +32,6 @@ from automation.task import (
     phase,
     text,
 )
-
-from .agent_window import log_view
 
 
 @dataclass(frozen=True, slots=True)

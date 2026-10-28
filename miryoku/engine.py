@@ -9,9 +9,7 @@ from enum import Enum, auto
 from typing import Final, Protocol, assert_never
 
 from config import SNIPPETS
-from protocol import App, Request, Tool
-
-from .layout import (
+from miryoku.layout import (
     CELLS,
     ESCAPE,
     QUICK_TAP_MS,
@@ -36,6 +34,7 @@ from .layout import (
     is_left_hand,
     slot,
 )
+from protocol import App, Request, Tool
 
 
 class Host(Protocol):

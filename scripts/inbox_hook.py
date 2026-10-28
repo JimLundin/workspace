@@ -15,13 +15,18 @@ def main() -> None:
         raw = sys.stdin.buffer.read(64_001)
         if len(raw) > 64_000:
             return
-        event = json.loads(raw)
-        endpoint = json.loads(profile.read_text(encoding="utf-8"))
-        location = urlsplit(endpoint["url"])
+        event: object = json.loads(raw)
+        endpoint: object = json.loads(profile.read_text(encoding="utf-8"))
+        match endpoint:
+            case {"url": str() as url, "token": str() as token}:
+                pass
+            case _:
+                return
+        location = urlsplit(url)
         if location.scheme != "http" or location.hostname != "127.0.0.1" or location.path != "/request":
             return
         payload = json.dumps({"provider": provider, "event": event}).encode("utf-8")
-        request = Request(endpoint["url"], data=payload, headers={"Authorization": "Bearer " + endpoint["token"],
+        request = Request(url, data=payload, headers={"Authorization": "Bearer " + token,
                                                                "Content-Type": "application/json"})
         with urlopen(request, timeout=575) as response:
             output = response.read(128_001)

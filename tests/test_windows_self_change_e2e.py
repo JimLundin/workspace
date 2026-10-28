@@ -16,10 +16,9 @@ if sys.platform != "win32" or os.environ.get("WORKSPACE_E2E") != "1":
 
 from assistant.workspace import Workspace
 from keeper import ask, copy_source
+from tests.fake_endpoint import fake_endpoint
+from tests.test_windows_assistant_e2e import ROOT, both_ready, logs, wait_for, workspace
 from winapi import windows
-
-from .fake_endpoint import fake_endpoint
-from .test_windows_assistant_e2e import ROOT, both_ready, logs, wait_for, workspace
 
 
 def keeper_log(home: Path) -> str:

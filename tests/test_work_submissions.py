@@ -8,10 +8,9 @@ from unittest import TestCase
 
 from assistant import agent_session
 from automation.task import Completed, Question, RequestSource, RoutineSource, TaskStatus, TextAnswer, Waiting
-
-from .test_external_input import has_pending_input
-from .test_work_agent import RecordingBridge, WorkRig, invocation
-from .work_fixture import seed_tasks
+from tests.test_external_input import has_pending_input
+from tests.test_work_agent import RecordingBridge, WorkRig, invocation
+from tests.work_fixture import seed_tasks
 
 
 class PollHold:

@@ -7,7 +7,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Protocol, assert_never, cast
 
-from .task import (
+from automation.task import (
     Action,
     ActionNotApplied,
     ActionOutcome,

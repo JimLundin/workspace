@@ -278,13 +278,56 @@ def observation(source: Source, cache: Cache | None) -> Observation:
     return result
 
 
+FORBIDDEN_TEST_TOOLS = frozenset({'unittest.mock', 'mock', 'pytest_mock', 'mockito', 'pytest.MonkeyPatch'})
+
+
+def testing_dependencies(source: Source) -> Iterator[Finding]:
+    """Reject framework replacement seams in production and test source alike."""
+    tree = parse(source)
+    aliases = _aliases(tree)
+    for node in ast.walk(tree):
+        target = ''
+        match node:
+            case ast.Import(names=names):
+                target = next((item.name for item in names if any(item.name == name or item.name.startswith(name + '.')
+                              for name in FORBIDDEN_TEST_TOOLS)), '')
+            case ast.ImportFrom(module=str() as module, names=names):
+                imports = (module, *(module + '.' + item.name for item in names))
+                target = next((item for item in imports if any(item == name or item.startswith(name + '.')
+                              for name in FORBIDDEN_TEST_TOOLS)), '')
+            case ast.Call(func=function, args=args):
+                call = _call_name(function, aliases)
+                if call in ('importlib.import_module', '__import__', 'builtins.__import__'):
+                    match args:
+                        case [ast.Constant(value=str() as module), *_] if module in FORBIDDEN_TEST_TOOLS:
+                            target = module
+                        case _:
+                            pass
+                elif (any(call == name or call.startswith(name + '.') for name in FORBIDDEN_TEST_TOOLS)
+                      or call.split('.')[0] in ('monkeypatch', 'mocker')):
+                    target = call
+            case ast.arg(arg='monkeypatch' | 'mocker' as name):
+                target = name
+            case _:
+                pass
+        if target:
+            match node:
+                case ast.stmt(lineno=line) | ast.expr(lineno=line) | ast.arg(lineno=line):
+                    yield Finding('testing-dependencies', module_name(source.name), '', ast.unparse(node), line,
+                                  'Patches and mocks are disallowed; pass explicit dependencies or use real local resources: ' + target)
+                case _:
+                    pass
+
+
 def review(root: Path, names: Iterable[str] | None = None, *, cache: Cache | None = None) -> Report:
     sources = python_sources(root, names)
     models, exceptions = _configuration(root)
-    loaded = tuple(Source(name, (root / name).read_text(encoding='utf-8')) for name in sources if not name.startswith('tests/'))
+    all_source = tuple(Source(name, (root / name).read_text(encoding='utf-8')) for name in sources)
+    loaded = tuple(source for source in all_source if not source.name.startswith('tests/'))
     observations = {module_name(source.name): observation(source, cache) for source in loaded}
     graph = {module_name(source.name): dependencies(source.name, source.text, cache=cache) & observations.keys() for source in loaded}
     findings = [finding for observed in observations.values() for finding in observed.declarations]
+    findings.extend(finding for source in all_source for finding in testing_dependencies(source))
     findings.extend(Finding('model-coverage', module, '', '', 0, 'Declared model module is absent; update its ownership declaration.')
                     for module in models if module not in observations)
     pending: deque[tuple[str, ...]] = deque((module,) for module in sorted(graph) if module == 'miryoku' or module.startswith('miryoku.'))

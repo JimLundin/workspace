@@ -8,8 +8,7 @@ from collections.abc import Callable
 from assistant.agent_session import Answer, Snapshot, StreamState
 from assistant.agent_window import AgentWindow, View
 from assistant.recording_state import RecordingAction
-
-from .test_agent_session import asking
+from tests.test_agent_session import asking
 
 
 class RecordingView:

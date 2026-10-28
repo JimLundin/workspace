@@ -2,9 +2,7 @@ import threading
 from collections.abc import Callable
 from dataclasses import replace
 from pathlib import Path
-from unittest.mock import patch
 
-from assistant.browser import Browser
 from assistant.browser_values import NavigationLoadingError
 from assistant.communications import (
     Acknowledgement,
@@ -27,20 +25,32 @@ from assistant.communications import (
     fingerprint,
     update_fingerprint,
 )
-from assistant.communications_browser import ChatUnavailableError, Observation, TeamsWeb
+from assistant.communications_browser import ActivityObservation, ChatUnavailableError, Observation, TeamsWeb
 from assistant.communications_service import Communications, SavedState
+from assistant.llm import Json
 from assistant.system_notices import Notice, NoticeKey, Observed
+from tests.teams_fixture import Browser
 
 
-class Web(TeamsWeb):
-    __slots__ = ("after_send", "connects", "result", "sends")
+class Web:
+    """This test owner holds Teams observations, selected chats and sent replies.
+
+    Mutable effect receipts remain inside each fixture's lifetime. The collector
+    receives immutable observations through the same Teams interface as TeamsWeb.
+    """
 
     def __init__(self) -> None:
-        super().__init__(Path("unused-browser-profile"))
+        self.target = ""
         self.connects = 0
         self.sends: list[tuple[str, str]] = []
         self.after_send: Callable[[], None] = lambda: None
         self.result: tuple[Message, ...] = ()
+        self.current = Observation("19:one@thread.v2", "Anna", (Conversation("19:one@thread.v2", "Anna"),), (), True)
+        self.discovered: Observation | None = None
+        self.selected: Observation | None = None
+        self.unavailable: frozenset[str] = frozenset()
+        self.selections: tuple[str, ...] = ()
+        self.discoveries = 0
 
     def connect(self, saved_target: str, cancel: threading.Event) -> str:
         self.connects += 1
@@ -48,30 +58,46 @@ class Web(TeamsWeb):
         return self.target
 
     def read(self, cancel: threading.Event, *, target: str = "") -> Observation:
-        return Observation("19:one@thread.v2", "Anna", (Conversation("19:one@thread.v2", "Anna"),), (), True)
+        return self.current
 
     def available(self, cancel: threading.Event) -> bool:
         return True
 
     def discover(self, cancel: threading.Event) -> Observation:
-        return self.read(cancel)
+        self.discoveries += 1
+        return self.discovered if self.discovered is not None else self.current
 
     def select(self, identity: str, cancel: threading.Event, *, target: str = "") -> Observation:
-        return self.read(cancel)
+        self.selections += (identity,)
+        if identity in self.unavailable:
+            raise ChatUnavailableError("missing")
+        return self.selected if self.selected is not None else self.current
+
+    def activity(self, cancel: threading.Event) -> ActivityObservation:
+        return ActivityObservation((), ready=True)
+
+    def activity_read(self, identity: str, cancel: threading.Event) -> bool:
+        return False
+
+    def open_activity(self, identity: str, cancel: threading.Event) -> None:
+        pass
 
     def send(self, identity: str, text: str, cancel: threading.Event) -> tuple[Message, ...]:
         self.sends.append((identity, text))
         self.after_send()
         return self.result
 
+    def open(self, identity: str, cancel: threading.Event) -> None:
+        self.select(identity, cancel)
+
     def close(self) -> None:
         pass
 
 
-def service(path: Path) -> tuple[Communications, Web]:
+def service(path: Path, *, dismiss_notice: Callable[[NoticeKey], None] = lambda _: None) -> tuple[Communications, Web]:
     web = Web()
     store = SavedState(path, protect=lambda data: b"fixture:" + data[::-1], unprotect=lambda data: data[8:][::-1])
-    controller = Communications(web, store, lambda feed, drafts: None)
+    controller = Communications(web, store, lambda feed, drafts: None, dismiss_notice)
     controller.feed = Feed(status=Status.CONNECTED, conversations=(Conversation("19:one@thread.v2", "Anna"),),
                            followed=("19:one@thread.v2",))
     return controller, web
@@ -99,17 +125,16 @@ def test_handled_chat_revisions_survive_reload_without_saving_incoming_bodies(tm
 
 
 def test_windows_delivery_enters_the_same_inbox_and_dismissal_follows_saved_handling(tmp_path: Path) -> None:
-    controller, _web = service(tmp_path / "saved.bin")
+    dismissed: list[NoticeKey] = []
+    def dismiss(key: NoticeKey) -> None:
+        assert controller.store.read()["handled"]
+        dismissed.append(key)
+    controller, _web = service(tmp_path / "saved.bin", dismiss_notice=dismiss)
     notice = Notice(NoticeKey(7, 11_644_473_601_0000000), "Mail", "Mail", "Invitation", "Review this meeting")
     controller.submit(WindowsObserved(Observed((notice,))))
     controller.drain_drafts()
     assert len(controller.feed.updates) == 1
     update = controller.feed.updates[0]
-    dismissed: list[NoticeKey] = []
-    def dismiss(key: NoticeKey) -> None:
-        assert controller.store.read()["handled"]
-        dismissed.append(key)
-    controller.dismiss_notice = dismiss
     controller.command(Handle((Acknowledgement(update.key, update_fingerprint(update)),)))
     assert dismissed == [notice.key]
     assert not controller.feed.pending_update(update)
@@ -131,17 +156,15 @@ def test_failed_teams_read_confirmation_does_not_claim_native_acknowledgement(tm
     controller, _web = service(tmp_path / "saved.bin")
     update = Update(TeamsActivity("123"), "Reaction", "Someone reacted", "Teams", 1)
     controller.feed = replace(controller.feed, updates=(update,))
-    with patch.object(Web, "activity_read", return_value=False):
-        controller.command(Handle((Acknowledgement(update.key, update_fingerprint(update)),)))
+    controller.command(Handle((Acknowledgement(update.key, update_fingerprint(update)),)))
     assert not controller.feed.pending_update(update)
     assert "could not be confirmed" in controller.feed.activity_detail
 
 
 def test_dismissing_a_glass_card_before_the_inbox_paints_still_saves_handling(tmp_path: Path) -> None:
-    controller, _web = service(tmp_path / "saved.bin")
     notice = Notice(NoticeKey(8, 11_644_473_602_0000000), "Mail", "Mail", "New update", "Check it")
     dismissed: list[NoticeKey] = []
-    controller.dismiss_notice = dismissed.append
+    controller, _web = service(tmp_path / "saved.bin", dismiss_notice=dismissed.append)
     controller.command(HandleNotice(notice))
     assert dismissed == [notice.key]
     assert len(controller.feed.updates) == 1 and not controller.feed.pending_update(controller.feed.updates[0])
@@ -161,107 +184,98 @@ def test_only_a_verified_reply_handles_its_captured_ticket_and_never_a_new_arriv
 
 
 def test_one_unavailable_chat_does_not_drop_other_chats_observed_updates(tmp_path: Path) -> None:
-    controller, _web = service(tmp_path / "saved.bin")
+    controller, web = service(tmp_path / "saved.bin")
     controller.feed = replace(controller.feed, followed=("19:one@thread.v2", "19:missing@thread.v2"))
     message = Message("19:one@thread.v2", "old", "Anna", "Updated while another chat is unavailable", 1, 2)
     current = Observation("19:one@thread.v2", "Anna", (Conversation("19:one@thread.v2", "Anna"),), (message,), True)
-    with patch.object(Web, "read", return_value=current), patch.object(
-        Web, "select", side_effect=(current, ChatUnavailableError("missing")),
-    ):
-        controller.collect()
-        controller.collect()
+    web.current = current
+    web.unavailable = frozenset({"19:missing@thread.v2"})
+    controller.collect()
+    controller.collect()
     assert controller.feed.messages == (message,)
     assert controller.feed.status is Status.CONNECTED
     assert len(controller.feed.unavailable) == 1
     assert controller.feed.unavailable[0].conversation == "19:missing@thread.v2"
     assert "1 chat" in controller.feed.detail
-    with patch.object(Web, "select", return_value=current):
-        controller.cursor = 1
-        controller.collect()
+    web.unavailable = frozenset()
+    controller.cursor = 1
+    controller.collect()
     assert controller.feed.unavailable == ()
 
 
 def test_saved_followed_chat_recovers_when_no_conversation_pane_is_open(tmp_path: Path) -> None:
-    controller, _web = service(tmp_path / "saved.bin")
+    controller, web = service(tmp_path / "saved.bin")
     empty = Observation("", "", (), (), False)
     message = Message("19:one@thread.v2", "loaded", "Anna", "Back from Activity", 1, 2)
     current = Observation("19:one@thread.v2", "Anna", controller.feed.conversations, (message,), True)
-    with patch.object(Web, "read", return_value=empty), patch.object(Web, "select", return_value=current) as selected:
-        controller.collect()
-    selected.assert_called_once_with("19:one@thread.v2", controller.stop)
+    web.current, web.selected = empty, current
+    controller.collect()
+    assert web.selections == ("19:one@thread.v2",)
     assert controller.feed.messages == (message,)
     assert controller.feed.status is Status.CONNECTED
 
 
 def test_first_collection_discovers_chat_navigation_before_choosing_chats(tmp_path: Path) -> None:
-    controller, _web = service(tmp_path / "saved.bin")
+    controller, web = service(tmp_path / "saved.bin")
     controller.feed = Feed()
     empty = Observation("", "", (), (), False)
     current = Observation("19:one@thread.v2", "Anna", (Conversation("19:one@thread.v2", "Anna"),), (), True)
-    with patch.object(Web, "read", return_value=empty), patch.object(Web, "discover", return_value=current) as discovered:
-        controller.collect()
-    discovered.assert_called_once_with(controller.stop)
+    web.current, web.discovered = empty, current
+    controller.collect()
+    assert web.discoveries == 1
     assert controller.feed.followed == ("19:one@thread.v2",)
     assert controller.feed.status is Status.CONNECTED
 
 
 def test_first_collection_opens_a_discovered_chat_when_teams_has_no_current_chat(tmp_path: Path) -> None:
-    controller, _web = service(tmp_path / "saved.bin")
+    controller, web = service(tmp_path / "saved.bin")
     controller.feed = Feed()
     landing = Observation("", "", (Conversation("19:one@thread.v2", "Anna"),), (), False)
     current = Observation("19:one@thread.v2", "Anna", landing.conversations, (), True)
-    with patch.object(Web, "read", return_value=landing), patch.object(Web, "discover", return_value=landing), patch.object(
-        Web, "select", return_value=current,
-    ) as selected:
-        controller.collect()
-    selected.assert_called_once_with("19:one@thread.v2", controller.stop)
+    web.current, web.discovered, web.selected = landing, landing, current
+    controller.collect()
+    assert web.selections == ("19:one@thread.v2",)
     assert controller.feed.followed == ("19:one@thread.v2",)
     assert controller.feed.status is Status.CONNECTED
 
 
+def chat_document(identity: str) -> dict[str, Json]:
+    return {"current": identity, "title": "Anna", "conversations": [], "messages": [], "editor_ready": True}
+
+
 def test_rechecking_a_loading_exact_chat_does_not_restart_teams_navigation(tmp_path: Path) -> None:
-    controller, web = service(tmp_path / "saved.bin")
+    browser = Browser(({"id": "owned-page", "url": "https://teams.cloud.microsoft/v2/"},))
+    web = TeamsWeb(tmp_path, browser=browser)
     web.target = "owned-page"
     identity = "19:one@thread.v2"
-    page = {"id": web.target, "url": "https://teams.cloud.microsoft/v2/"}
     web.opening[web.target] = identity
-    current = Observation(identity, "Anna", controller.feed.conversations, (), True)
-    with patch.object(Web, "pages", return_value=(page,)), patch.object(Web, "read", return_value=current), patch.object(
-        Web, "evaluate", return_value=False,
-    ), patch.object(
-        Browser, "request",
-    ) as navigate:
-        assert web._reopen(identity, controller.stop).current == identity
-    navigate.assert_not_called()
+    browser.documents = (browser.document, chat_document(identity))
+    assert web.select(identity, threading.Event()).current == identity
+    assert browser.opens == ()
     assert web.opening == {}
 
 
 def test_pending_navigation_keeps_observing_the_same_exact_chat_without_reopening(tmp_path: Path) -> None:
-    controller, web = service(tmp_path / "saved.bin")
+    browser = Browser(({"id": "owned-page", "url": "https://teams.cloud.microsoft/v2/"},))
+    web = TeamsWeb(tmp_path, browser=browser)
     web.target = "owned-page"
     identity = "19:one@thread.v2"
-    page = {"id": web.target, "url": "https://teams.cloud.microsoft/v2/"}
-    current = Observation(identity, "Anna", controller.feed.conversations, (), True)
-    with patch.object(Web, "pages", return_value=(page,)), patch.object(Web, "read", return_value=current), patch.object(
-        Web, "evaluate", return_value=False,
-    ), patch.object(Browser, "request", side_effect=NavigationLoadingError("Navigation is still loading")) as navigate:
-        assert web._reopen(identity, controller.stop).current == identity
-    assert navigate.call_count == 1
+    browser.documents = (chat_document("19:previous@thread.v2"), chat_document(identity))
+    browser.navigation_failure = NavigationLoadingError("Navigation is still loading")
+    assert web.select(identity, threading.Event()).current == identity
+    assert len(browser.opens) == 1
     assert web.opening == {}
 
 
 def test_next_chat_waits_for_pending_navigation_instead_of_restarting_teams(tmp_path: Path) -> None:
-    controller, web = service(tmp_path / "saved.bin")
+    browser = Browser(({"id": "owned-page", "url": "https://teams.cloud.microsoft/v2/"},))
+    web = TeamsWeb(tmp_path, browser=browser)
     web.target = "owned-page"
     web.opening[web.target] = "19:loading@thread.v2"
-    empty = Observation("", "", (), (), False)
-    pending = Observation("19:loading@thread.v2", "Loading chat", (), (), True)
-    requested = Observation("19:one@thread.v2", "Anna", controller.feed.conversations, (), True)
-    with patch.object(Web, "read", side_effect=(empty, requested)), patch.object(Web, "evaluate", return_value=True), patch.object(
-        Web, "_reopen", return_value=pending,
-    ) as resume:
-        assert web._select(requested.current, controller.stop).current == requested.current
-    resume.assert_called_once_with("19:loading@thread.v2", controller.stop, target="")
+    browser.documents = (browser.document, chat_document("19:loading@thread.v2"), chat_document("19:one@thread.v2"))
+    browser.sidebar_click = True
+    assert web.select("19:one@thread.v2", threading.Event()).current == "19:one@thread.v2"
+    assert browser.opens == ()
     assert web.opening == {}
 
 

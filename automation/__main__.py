@@ -4,16 +4,14 @@ import os
 import sys
 
 from runtime import activate
+lazy from assistant.llm import settings_from
+lazy from automation.app import report, run
 
 
 def main() -> None:
     if sys.platform != "win32":
         sys.exit("the work process only runs on Windows")
     activate()
-    from assistant.llm import settings_from  # noqa: PLC0415
-
-    from .app import report, run  # noqa: PLC0415
-
     try:
         run(settings_from(os.environ))
     except Exception as error:

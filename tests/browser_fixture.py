@@ -1,9 +1,10 @@
 """A local web app for automation tests; no user accounts or external services."""
 
 import threading
-from collections.abc import Generator
+from collections.abc import Generator, Mapping
 from contextlib import contextmanager
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from urllib.parse import urlsplit
 
 PAGE = """<!doctype html><meta charset="utf-8"><title>Workspace browser fixture</title>
 <label>Name <input id="name"></label>
@@ -33,10 +34,15 @@ FRAME = """<!doctype html><title>Frame</title>
 
 
 @contextmanager
-def fixture() -> Generator[str]:
+def fixture(page: str = PAGE, *, pages: Mapping[str, str] | None = None) -> Generator[str]:
+    # Snapshot the scenario documents before the server thread starts; requests
+    # never observe changes to module globals or a caller's route catalog.
+    routes = frozendict(pages or {})
+
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self) -> None:
-            data = (FRAME if self.path == "/frame" else PAGE).encode("utf-8")
+            path = urlsplit(self.path).path
+            data = routes.get(path, FRAME if path == "/frame" else page).encode("utf-8")
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
             self.send_header("Content-Length", str(len(data)))

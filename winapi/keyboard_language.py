@@ -4,8 +4,9 @@ import ctypes
 import os
 import winreg
 from ctypes import wintypes
+from typing import Protocol
 
-from ._core import fn, user32
+from winapi._core import fn, user32
 
 _LoadKeyboardLayout = fn(user32, "LoadKeyboardLayoutW", wintypes.HANDLE, wintypes.LPCWSTR, wintypes.UINT)
 _ActivateKeyboardLayout = fn(user32, "ActivateKeyboardLayout", wintypes.HANDLE, wintypes.HANDLE, wintypes.UINT)
@@ -41,14 +42,48 @@ def colemak_layout() -> str:
     raise OSError("No configured Colemak keyboard was found. Set WORKSPACE_COLEMAK_LAYOUT to its installed Windows layout ID.")
 
 
+class LanguageDesktop(Protocol):
+    def load(self, identity: str) -> int: ...
+    def colemak(self) -> str: ...
+    def activate(self, layout: int) -> None: ...
+    def foreground(self) -> tuple[int, int]: ...
+    def request(self, hwnd: int, layout: int) -> None: ...
+
+
+class NativeLanguageDesktop:
+    """Adapt layout handles and foreground observations before language policy runs."""
+
+    __slots__ = ()
+
+    def load(self, identity: str) -> int:
+        return int(_LoadKeyboardLayout(identity, 0x82) or 0)
+
+    def colemak(self) -> str:
+        return colemak_layout()
+
+    def activate(self, layout: int) -> None:
+        if not _ActivateKeyboardLayout(layout, 0):
+            raise OSError("Windows refused to activate the requested input keyboard.")
+
+    def foreground(self) -> tuple[int, int]:
+        hwnd = int(_GetForegroundWindow() or 0)
+        current = int(_GetKeyboardLayout(_GetWindowThreadProcessId(hwnd, None)) or 0) if hwnd else 0
+        return hwnd, current
+
+    def request(self, hwnd: int, layout: int) -> None:
+        if not _PostMessage(hwnd, 0x0050, 0, layout):
+            raise OSError("The foreground application refused the keyboard-language request.")
+
+
 class KeyboardLanguages:
     """Run on the layout's message-loop timer, never in a keyboard-hook callback."""
 
-    __slots__ = ("colemak", "enabled", "english")
+    __slots__ = ("colemak", "desktop", "enabled", "english")
 
-    def __init__(self) -> None:
-        self.english = int(_LoadKeyboardLayout("00000409", 0x82) or 0)
-        self.colemak = int(_LoadKeyboardLayout(colemak_layout(), 0x82) or 0)
+    def __init__(self, desktop: LanguageDesktop | None = None) -> None:
+        self.desktop = desktop if desktop is not None else NativeLanguageDesktop()
+        self.english = self.desktop.load("00000409")
+        self.colemak = self.desktop.load(self.desktop.colemak())
         if not self.english or not self.colemak:
             raise OSError("Windows could not load the English and Colemak keyboards.")
         self.enabled: bool | None = None
@@ -56,14 +91,11 @@ class KeyboardLanguages:
     def enforce(self, enabled: bool) -> None:
         target = self.english if enabled else self.colemak
         if self.enabled != enabled:
-            if not _ActivateKeyboardLayout(target, 0):
-                raise OSError("Windows refused to activate the requested input keyboard.")
+            self.desktop.activate(target)
             self.enabled = enabled
-        hwnd = _GetForegroundWindow()
-        if hwnd:
-            thread = _GetWindowThreadProcessId(hwnd, None)
-            if int(_GetKeyboardLayout(thread) or 0) != target and not _PostMessage(hwnd, 0x0050, 0, target):
-                raise OSError("The foreground application refused the keyboard-language request.")
+        hwnd, current = self.desktop.foreground()
+        if hwnd and current != target:
+            self.desktop.request(hwnd, target)
 
     def close(self) -> None:
         self.enforce(False)

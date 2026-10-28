@@ -7,9 +7,8 @@ from collections.abc import Callable
 from dataclasses import dataclass, replace
 from typing import Literal, assert_never
 
+from assistant.llm import Json
 from winapi.shapes import Window
-
-from .llm import Json
 
 type ContextState = Literal["active", "workspace", "unavailable", "disabled"]
 type Observation = Window | Literal["workspace", "unavailable", "disabled"]

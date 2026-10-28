@@ -11,18 +11,15 @@ from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from pathlib import Path
 from typing import cast
-from unittest.mock import patch
 
 if sys.platform != "win32":
     raise unittest.SkipTest("Windows computer automation")
 
 from assistant import commands, uia
-from assistant.desktop import WinDesktop
 from assistant.geometry import Shot, fit
 from assistant.llm import Json
-from assistant.machine import WinMachine
-from assistant.ui import Ui
-from winapi.screen import Monitor
+from assistant.machine import CaptureSources, WinMachine
+from tests.test_windows_machine import Browser, Desktop, Human, Teams
 from winapi.shapes import Rect
 
 
@@ -64,7 +61,7 @@ def fixture(folder: Path) -> Generator[int]:
 
 def inspect(handle: int, *, query: str = "", limit: int = 100, offset: int = 0) -> dict[str, Json]:
     request: dict[str, Json] = {"operation": "inspect", "handle": handle, "query": query, "limit": limit, "offset": offset, "depth": 10}
-    code, text = WinMachine.__new__(WinMachine).inspect_ui(request, threading.Event())
+    code, text = WinMachine(Desktop(), Human(), browser=Browser(), teams=Teams()).inspect_ui(request, threading.Event())
     assert code == 0, text
     return decoded(text)
 
@@ -129,34 +126,30 @@ def test_screenshot_sources_use_physical_bounds_and_scale_only_the_image() -> No
     desktop = Rect(-1920, 0, 1920, 1080)
     left = Rect(-1920, 0, 0, 1080)
     work = Rect(-1700, 100, -900, 700)
-    monitors = [Monitor(left, left, False), Monitor(Rect(0, 0, 1920, 1080), desktop, True)]
-    machine = WinMachine(WinDesktop.__new__(WinDesktop), Ui.__new__(Ui))
+    class CaptureDesktop(Desktop):
+        def capture(self, area: Rect, longest: int) -> tuple[bytes, Shot]:
+            return b"fixture", Shot(area, *fit(area.width, area.height, longest))
 
-    def capture(area: Rect, longest: int) -> tuple[bytes, Shot]:
-        return b"fixture", Shot(area, *fit(area.width, area.height, longest))
+    class Sources:
+        # The fixture owns its current observation so availability can change
+        # between two calls without replacing application/module attributes.
+        def __init__(self) -> None:
+            self.current = CaptureSources(left, desktop, (left, Rect(0, 0, 1920, 1080)), work)
 
-    with (
-        patch("assistant.app.windows.foreground", return_value=7),
-        patch("assistant.app.windows.exists", return_value=True),
-        patch("assistant.app.windows.is_minimized", return_value=False),
-        patch("assistant.app.windows.visible_rect", return_value=work),
-        patch("assistant.app.screen.virtual_screen", return_value=desktop),
-        patch("assistant.app.screen.monitors", return_value=monitors),
-        patch.object(WinDesktop, "capture", side_effect=capture),
-    ):
-        _, shot = machine.screenshot(handle=7, longest=400)
-        assert shot.area == work and (shot.width, shot.height) == (400, 300)
-        assert shot.to_screen(200, 150) == (-1300, 400)
-        assert machine.screenshot(monitor=0)[1].area == left
-        assert machine.screenshot(monitor=-2)[1].area == desktop
-        assert machine.screenshot(area=Rect(-2000, -100, -1000, 500))[1].area == Rect(-1920, 0, -1000, 500)
-        with patch("assistant.app.windows.foreground", return_value=0):
-            try:
-                machine.screenshot()
-            except OSError as error:
-                assert "locked" in str(error)
-            else:
-                raise AssertionError("An unavailable desktop must not produce a screenshot.")
+        def observe(self, handle: int) -> CaptureSources:
+            return self.current
+
+    sources = Sources()
+    machine = WinMachine(CaptureDesktop(), Human(), browser=Browser(), teams=Teams(), capture_sources=sources)
+    _, shot = machine.screenshot(handle=7, longest=400)
+    assert shot.area == work and (shot.width, shot.height) == (400, 300)
+    assert shot.to_screen(200, 150) == (-1300, 400)
+    assert machine.screenshot(monitor=0)[1].area == left
+    assert machine.screenshot(monitor=-2)[1].area == desktop
+    assert machine.screenshot(area=Rect(-2000, -100, -1000, 500))[1].area == Rect(-1920, 0, -1000, 500)
+    sources.current = CaptureSources(None, desktop, (), None)
+    with unittest.TestCase().assertRaisesRegex(OSError, "locked"):
+        machine.screenshot()
 
 
 def test_uia_controls_are_inspected_and_operated_across_separate_processes(tmp_path: Path) -> None:

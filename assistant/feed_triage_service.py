@@ -14,10 +14,10 @@ from itertools import chain, islice
 from pathlib import Path
 from typing import Protocol, assert_never, cast
 
-from . import llm
-from .communications import Feed, SourceDate, SourceDateHint, SourceDateStatus
-from .console_requests import Answer, Command, Request, State, object_value, text
-from .feed_triage import (
+from assistant import llm
+from assistant.communications import Feed, SourceDate, SourceDateHint, SourceDateStatus
+from assistant.console_requests import Answer, Command, Request, State, object_value, text
+from assistant.feed_triage import (
     INSTRUCTIONS,
     Board,
     Candidate,
@@ -37,7 +37,7 @@ from .feed_triage import (
     timing_changes,
     unassessed,
 )
-from .llm import Json, Settings
+from assistant.llm import Json, Settings
 
 
 class RejectedError(ValueError):
@@ -66,8 +66,11 @@ def source_context(item: Candidate) -> dict[str, Json]:
             'created_at': created, 'date_hint': hint, 'date_hint_observed_on': observed_on}
 
 
-def classify(settings: Settings, batch: tuple[Candidate, ...], rules: tuple[str, ...]) -> str:
-    now = datetime.fromtimestamp(time.time(), UTC).astimezone()
+def classify(settings: Settings, batch: tuple[Candidate, ...], rules: tuple[str, ...], *,
+             clock: Callable[[], float] = time.time) -> str:
+    # The model request combines its settings, evidence and saved policy with a
+    # fresh clock observation; the request owner supplies that effect explicitly.
+    now = datetime.fromtimestamp(clock(), UTC).astimezone()
     payload = {'reviewed_at': now.isoformat(), 'candidates': [source_context(item) for item in batch]}
     instructions = INSTRUCTIONS + '\nSaved visibility preferences (JSON):\n' + json.dumps(list(rules), ensure_ascii=False)
     reply = llm.chat(settings, [llm.system_message(instructions), llm.user_message(json.dumps(payload, ensure_ascii=False))], timeout_s=45)
@@ -88,6 +91,7 @@ class Triage:
     __slots__ = (
         'board',
         'candidates',
+        'clock',
         'closed',
         'console',
         'endpoint',
@@ -112,12 +116,14 @@ class Triage:
                  model: Callable[[tuple[Candidate, ...], tuple[str, ...]], str], console: Callable[[Command], bool], *,
                  submit: Callable[[str, str], None] | None = None,
                  server_factory: Callable[[type[BaseHTTPRequestHandler]], ThreadingHTTPServer] = open_bridge,
-                 wait: Callable[[threading.Event, float], bool] = wait_for_stop) -> None:
+                 wait: Callable[[threading.Event, float], bool] = wait_for_stop,
+                 clock: Callable[[], float] = time.time) -> None:
         # Compose the real storage, model, voice and HTTP effects here. Server
         # construction and cancellable delays vary independently in native and
         # deterministic adapters, so each is an explicit dependency.
         self.endpoint, self.store, self.publish, self.model, self.console = endpoint, store, publish, model, console
         self.wait: Callable[[threading.Event, float], bool] = wait
+        self.clock: Callable[[], float] = clock
         self.submit = submit
         self.submitted: set[str] = set()
         self.lock = threading.RLock()
@@ -197,7 +203,7 @@ class Triage:
         with self.lock:
             actions = self.board.actions
             result = saved(replace(self.board, items=actions[:40]), suggestions=True)
-            result['reviewed_at'] = datetime.fromtimestamp(time.time(), UTC).astimezone().isoformat()
+            result['reviewed_at'] = datetime.fromtimestamp(self.clock(), UTC).astimezone().isoformat()
             decisions: list[Json] = [{'item': item.identity, 'title': item.title, 'reason': item.decision}
                                      for item in self.board.items if item.disposition is Disposition.REJECTED]
             result['decisions'] = decisions[-40:]
@@ -301,7 +307,7 @@ class Triage:
         while not self.closed.is_set():
             self.wake.wait(1)
             with self.lock:
-                today = datetime.fromtimestamp(time.time(), UTC).astimezone().date()
+                today = datetime.fromtimestamp(self.clock(), UTC).astimezone().date()
                 if not self.wake.is_set() and not unassessed(self.board, self.candidates, today=today):
                     continue
             self.wake.clear()
@@ -309,7 +315,7 @@ class Triage:
                 return
             with self.lock:
                 available = tuple(item for item in self.candidates if item.identity not in retry_without)
-                today = datetime.fromtimestamp(time.time(), UTC).astimezone().date()
+                today = datetime.fromtimestamp(self.clock(), UTC).astimezone().date()
                 batch = batch_for(self.board, available, today=today)
                 if not batch and retry_without:
                     retry_without = frozenset[str]()

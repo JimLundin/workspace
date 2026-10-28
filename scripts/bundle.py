@@ -40,8 +40,8 @@ class PythonRelease:
 PYTHON_RELEASE = TypeAdapter[PythonRelease](PythonRelease)
 
 
-def release() -> PythonRelease:
-    data = PYTHON_RELEASE.validate_json((ROOT / "requirements" / "python-win64.json").read_bytes(), strict=True)
+def release(root: Path = ROOT) -> PythonRelease:
+    data = PYTHON_RELEASE.validate_json((root / "requirements" / "python-win64.json").read_bytes(), strict=True)
     if re.fullmatch(r"\d+\.\d+\.\d+", data.version) is None:
         raise ValueError("The Python pin must specify a release version.")
     if not data.url.startswith("https://"):

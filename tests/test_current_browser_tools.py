@@ -6,10 +6,9 @@ from typing import cast
 
 from automation.actions import Resources
 from automation.execution import WorkExecution
-
-from .fake_endpoint import fake_endpoint
-from .test_agent import Rig, ToolRig, calls, says
-from .test_work_actions import claimed
+from tests.fake_endpoint import fake_endpoint
+from tests.test_agent import Rig, ToolRig, calls, says
+from tests.test_work_actions import claimed
 
 
 def test_retired_embedded_browser_tools_cannot_reach_the_machine_or_start_actions(tmp_path: Path) -> None:

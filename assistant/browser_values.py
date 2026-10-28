@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from enum import Enum, auto
 from typing import Literal, NotRequired, TypedDict, assert_never, cast
 
-from .llm import Json
+from assistant.llm import Json
 
 MAX_ID = 2**31 - 1
 type Color = Literal["grey", "blue", "red", "yellow", "green", "pink", "purple", "cyan", "orange"]

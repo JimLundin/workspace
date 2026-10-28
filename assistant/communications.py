@@ -6,8 +6,8 @@ from datetime import date
 from enum import Enum, auto
 from typing import Literal
 
-from .system_notices import Banners, Notice, NoticeKey
-from .system_notices import Observed as Notices
+import assistant.system_notices
+from assistant.system_notices import Banners, Notice, NoticeKey
 
 MAX_MESSAGES = 300
 MAX_FOLLOWED = 8
@@ -226,7 +226,7 @@ def update_order(update: Update) -> float:
     return update.created_at
 
 
-def notices_observed(feed: Feed, notices: Notices) -> Feed:
+def notices_observed(feed: Feed, notices: assistant.system_notices.Observed) -> Feed:
     # Windows retains delivery and dismissal ownership. An unavailable read never removes history.
     updated = updates_observed(feed, tuple(notice_update(item) for item in notices.notices))
     detail = {Banners.SUPPRESSED: "Windows banners are suppressed while Workspace receives notifications.",
@@ -329,7 +329,7 @@ class OpenUpdate:
 
 @dataclass(frozen=True, slots=True)
 class WindowsObserved:
-    observation: Notices
+    observation: assistant.system_notices.Observed
 
 
 @dataclass(frozen=True, slots=True)

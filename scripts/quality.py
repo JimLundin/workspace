@@ -20,7 +20,7 @@ from scripts.architecture import python_sources
 from scripts.source_analysis import Cache, Source, parse
 
 type LintRule = Literal['FBT001', 'FBT002', 'PLR0913']
-type Rule = LintRule | Literal['import-alias', 're-export', 'inline-import']
+type Rule = LintRule | Literal['import-alias', 're-export', 'inline-import', 'relative-import']
 type Text = Annotated[StrictStr, StringConstraints(strip_whitespace=True, min_length=1)]
 type Digest = Annotated[StrictStr, StringConstraints(pattern=r'^[0-9a-f]{64}$')]
 type _Definition = tuple[str, ast.FunctionDef | ast.AsyncFunctionDef]
@@ -162,6 +162,12 @@ def imports(path: str, tree: ast.Module) -> Iterator[Finding]:
                 scope = name if scope == '<module>' else scope + '.' + name
             case ast.Import(names=names) | ast.ImportFrom(names=names):
                 signature = hashlib.sha256(ast.dump(node, include_attributes=False).encode()).hexdigest()
+                match node:
+                    case ast.ImportFrom(level=level) if level:
+                        key = Key(rule='relative-import', path=path, scope=scope, signature=signature)
+                        yield Finding(key, node.lineno, 'Use an absolute import from the owning module.')
+                    case _:
+                        pass
                 if scope != '<module>':
                     key = Key(rule='inline-import', path=path, scope=scope, signature=signature)
                     yield Finding(key, node.lineno, 'Declare imports at module level; use lazy imports to defer loading.')
@@ -213,6 +219,8 @@ def load(path: Path) -> tuple[Entry, ...]:
     if len(frozenset(entry.key for entry in entries)) != len(entries):
         raise ValueError('Quality migrations must contain unique exact keys.')
     for entry in entries:
+        if entry.key.rule == 'relative-import':
+            raise ValueError('Absolute imports are required without migration exceptions.')
         source = Path(entry.key.path)
         if source.is_absolute() or '..' in source.parts or source.as_posix() != entry.key.path or '*' in entry.key.scope:
             raise ValueError('Quality migrations require exact relative paths and declarations.')

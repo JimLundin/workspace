@@ -13,9 +13,8 @@ from automation.actions import Resources, plan
 from automation.execution import ApprovalReview, WorkExecution
 from automation.task import ActionVerified, ApprovalDecision, Waiting
 from keeper import copy_source
-
-from .test_work_actions import claimed
-from .test_workspace import live_tree
+from tests.test_work_actions import claimed
+from tests.test_workspace import live_tree
 
 
 def repository(tmp_path: Path) -> tuple[Path, Path, Path]:

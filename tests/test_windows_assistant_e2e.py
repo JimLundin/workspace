@@ -18,18 +18,22 @@ from contextlib import contextmanager
 from pathlib import Path
 
 from assistant.llm import Json
-
-from .fake_endpoint import FakeEndpoint, Reply, fake_endpoint, sse
-from .test_agent import calls, says
+from tests.fake_endpoint import FakeEndpoint, Reply, fake_endpoint, sse
+from tests.test_agent import calls, says
 
 if sys.platform != "win32" or os.environ.get("WORKSPACE_E2E") != "1":
     raise unittest.SkipTest("end-to-end tests run on Windows, with WORKSPACE_E2E=1")
 
-from assistant.qt import QtCore, QtWidgets
+lazy from PySide6 import QtCore, QtWidgets
+
+from assistant.qt_runtime import prepare
 from assistant.qt_ui import application
-from protocol import ASSISTANT_WINDOW, MAGIC
+from keeper import ASSISTANT_WINDOW
+from protocol import MAGIC
 from winapi import clipboard, inputs, screen, system, windows
 from winapi.shapes import Rect
+
+prepare()
 
 ROOT = Path(__file__).resolve().parent.parent
 TAB, DELETE, SPACE = 0x2F, 0x34, 0x2E  # the Tools, Apps and Nav thumbs (physical V, . and C)
@@ -189,11 +193,11 @@ def screen_text(endpoint: FakeEndpoint, pump: Callable[[], None]) -> None:
     wait_for(lambda: False, pump, 1.5)
     area = screen.virtual_screen()
     inputs.move_mouse(100, 100, area, MAGIC)
-    inputs.mouse_button("left", True, MAGIC)
+    inputs.mouse_button("left", MAGIC, down=True)
     for step in range(1, 11):
         inputs.move_mouse(100 + step * 30, 100 + step * 20, area, MAGIC)
         time.sleep(0.03)
-    inputs.mouse_button("left", False, MAGIC)
+    inputs.mouse_button("left", MAGIC, down=False)
     hwnd = windows.create_hidden("e2e clipboard reader")
     assert wait_for(lambda: clipboard.get_text(hwnd) == "Text on screen", pump), clipboard.get_text(hwnd)
     assert b"data:image/png;base64," in endpoint.last.body

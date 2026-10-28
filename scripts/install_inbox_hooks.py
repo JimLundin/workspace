@@ -7,16 +7,52 @@ import os
 import shlex
 import subprocess
 import time
+from collections.abc import Iterable, Iterator
 from pathlib import Path
+from typing import Protocol, runtime_checkable
 
 MARKER = "Workspace inbox"
 
 
+@runtime_checkable
+class ObjectFields(Protocol):
+    def items(self) -> Iterable[tuple[object, object]]: ...
+
+
+@runtime_checkable
+class Elements(Protocol):
+    def __iter__(self) -> Iterator[object]: ...
+
+
+def configuration(value: object) -> dict[str, object]:
+    """Validate hook objects without importing the application's Python 3.15 runtime."""
+    match value, value:
+        case dict(), ObjectFields() as fields:
+            pass
+        case _:
+            raise ValueError("Console configuration must be an object.")
+    result: dict[str, object] = {}
+    for key, field in fields.items():
+        match key:
+            case str():
+                result[key] = field
+            case _:
+                raise ValueError("Console configuration keys must be strings.")
+    return result
+
+
+def entries(value: object) -> Iterable[object]:
+    """Validate the JSON array before consuming only its iteration interface."""
+    match value, value:
+        case list(), Elements() as elements:
+            return elements
+        case _:
+            raise ValueError("Existing console hook events and handlers must be lists.")
+
+
 def merged(original: dict[str, object], command: str, *, codex: bool) -> dict[str, object]:
     result = copy.deepcopy(original)
-    hooks = result.setdefault("hooks", {})
-    if not isinstance(hooks, dict):
-        raise ValueError("Existing console hooks must be an object.")
+    hooks = configuration(result.get("hooks", {}))
     events = [("PreToolUse", r"(?:^|\.)(?:request_user_input|request_user_input_async)$" if codex else "^AskUserQuestion$", 600),
               ("PermissionRequest", "", 600), ("Stop", "", 10), ("SessionEnd", "", 3)]
     if codex:
@@ -24,31 +60,30 @@ def merged(original: dict[str, object], command: str, *, codex: bool) -> dict[st
     else:
         events.append(("Notification", "agent_needs_input|permission_prompt|elicitation_dialog", 10))
     for event, matcher, timeout in events:
-        groups = hooks.setdefault(event, [])
-        if not isinstance(groups, list):
-            raise ValueError("Existing console hook events must be lists.")
-        retained = []
-        for group in groups:
-            if not isinstance(group, dict):
-                raise ValueError("Invalid existing console matcher group.")
-            handlers = group.get("hooks", [])
-            if not isinstance(handlers, list):
-                raise ValueError("Invalid existing console hook handlers.")
-            keep = [handler for handler in handlers if not isinstance(handler, dict) or handler.get("statusMessage") != MARKER]
+        retained: list[dict[str, object]] = []
+        for group in entries(hooks.get(event, [])):
+            matcher_group = configuration(group)
+            keep: list[object] = []
+            for handler in entries(matcher_group.get("hooks", [])):
+                match handler:
+                    case {"statusMessage": str() as marker} if marker == MARKER:
+                        pass
+                    case _:
+                        keep.append(handler)
             if keep:
-                retained.append({**group, "hooks": keep})
-        handler: dict[str, object] = {"type": "command", "command": command, "timeout": timeout, "statusMessage": MARKER}
+                retained.append({**matcher_group, "hooks": keep})
+        owned_handler: dict[str, object] = {"type": "command", "command": command, "timeout": timeout, "statusMessage": MARKER}
         if event in ("Stop", "Notification"):
-            handler["async"] = True
-        retained.append({"matcher": matcher, "hooks": [handler]})
+            owned_handler["async"] = True
+        retained.append({"matcher": matcher, "hooks": [owned_handler]})
         hooks[event] = retained
+    result["hooks"] = hooks
     return result
 
 
 def install(path: Path, command: str, *, codex: bool) -> bool:
-    current = json.loads(path.read_text()) if path.exists() else {}
-    if not isinstance(current, dict):
-        raise ValueError("Console configuration must be an object.")
+    loaded: object = json.loads(path.read_text()) if path.exists() else {}
+    current = configuration(loaded)
     updated = merged(current, command, codex=codex)
     if updated == current:
         return False

@@ -8,7 +8,7 @@ import threading
 from math import isfinite
 from typing import cast
 
-from .llm import Json
+from assistant.llm import Json
 
 
 class GraphError(OSError):

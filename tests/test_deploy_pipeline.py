@@ -5,12 +5,9 @@ import io
 import os
 import shutil
 import subprocess
-import sys
 import zipfile
 from collections.abc import Generator
 from pathlib import Path, PureWindowsPath
-from typing import IO, Literal
-from unittest.mock import patch
 
 from scripts import deploy
 from scripts.deploy_archive import repack
@@ -59,33 +56,37 @@ def test_only_the_exact_installed_console_hook_is_external_to_the_application_pr
     assert role_for((interpreter, hook), windowed=True) == 'runtime'
 
 
-def test_native_checkout_uses_one_coordinator_and_detects_changes_after_deployment(tmp_path: Path) -> None:
-    if os.name != 'nt':
-        return
+def test_native_coordinator_owns_stage_folder_and_detects_source_changes(tmp_path: Path) -> None:
     stage = tmp_path / 'workspace-source-test'
     stage.mkdir()
     original_cwd = Path.cwd()
     wanted = {'source.py': 'checked-hash'}
-    def in_stage(*_arguments: object) -> None:
-        assert Path.cwd() == stage
-    with (patch.object(sys, 'argv', ['deploy', 'deploy', '--stage', str(stage)]),
-          patch.object(deploy, 'checked_config', return_value=({}, wanted)),
-          patch.object(deploy, 'workspace_files', return_value=wanted),
-          patch('scripts.deploy_windows.run', side_effect=in_stage) as coordinator,
-          patch.object(subprocess, 'run', side_effect=AssertionError('A second installed Python must not be launched'))):
-        deploy.main()
-        coordinator.assert_called_once_with('deploy', stage, {}, wanted)
-        assert Path.cwd() == original_cwd
-    with (patch.object(sys, 'argv', ['deploy', 'deploy', '--stage', str(stage)]),
-          patch.object(deploy, 'checked_config', return_value=({}, wanted)),
-          patch.object(deploy, 'workspace_files', side_effect=[wanted, {'source.py': 'changed'}]),
-          patch('scripts.deploy_windows.run')):
-        try:
-            deploy.main()
-        except RuntimeError as error:
-            assert 'Source changed during deployment' in str(error)
-        else:
-            raise AssertionError('A modified development checkout was reported as successfully deployed')
+    visits: list[Path] = []
+
+    def coordinate() -> None:
+        visits.append(Path.cwd())
+
+    deploy.coordinate_native(stage, coordinate, lambda: wanted)
+    assert visits == [stage] and Path.cwd() == original_cwd
+    observations = iter((wanted, {'source.py': 'changed'}))
+    try:
+        deploy.coordinate_native(stage, coordinate, lambda: next(observations))
+    except RuntimeError as error:
+        assert 'Source changed during deployment' in str(error)
+    else:
+        raise AssertionError('Modified source was reported as successfully deployed')
+    assert visits == [stage, stage] and Path.cwd() == original_cwd
+
+    def failed() -> None:
+        raise OSError('Coordinator failed')
+
+    try:
+        deploy.coordinate_native(stage, failed, lambda: wanted)
+    except OSError:
+        pass
+    else:
+        raise AssertionError('The coordinator failure was lost')
+    assert Path.cwd() == original_cwd
 
 
 def test_release_paths_reject_windows_aliases_and_escapes(tmp_path: Path) -> None:
@@ -134,16 +135,15 @@ def test_source_repack_preserves_compressed_runtime_without_opening_it(tmp_path:
     with zipfile.ZipFile(prior, 'w', zipfile.ZIP_DEFLATED) as archive:
         archive.writestr('workspace/.python/runtime.bin', data)
         archive.writestr('workspace/removed.py', 'stale')
-    original_open = zipfile.ZipFile.open
-
-    def source_only(archive: zipfile.ZipFile, name: str | zipfile.ZipInfo, mode: Literal["r", "w"] = "r",
-                    pwd: bytes | None = None, *, force_zip64: bool = False) -> IO[bytes]:
-        label = name.filename if isinstance(name, zipfile.ZipInfo) else name
-        assert '/.python/' not in label, 'source deploy must never decompress/recompress runtime'
-        return original_open(archive, name, mode, pwd, force_zip64=force_zip64)
-
-    with patch.object(zipfile.ZipFile, 'open', source_only):
-        repack(prior, output, source, {'new.py': sha(source / 'new.py')})
+    with zipfile.ZipFile(prior) as archive:
+        info = archive.getinfo('workspace/.python/runtime.bin')
+        # Workspace promises to preserve complete compressed local records,
+        # including their original header, rather than regenerate runtime bytes.
+        preserved = prior.read_bytes()[info.header_offset:archive.getinfo('workspace/removed.py').header_offset]
+    repack(prior, output, source, {'new.py': sha(source / 'new.py')})
+    with zipfile.ZipFile(output) as archive:
+        start = archive.getinfo('workspace/.python/runtime.bin').header_offset
+        assert output.read_bytes()[start:start + len(preserved)] == preserved
     with zipfile.ZipFile(output) as archive:
         assert archive.read('workspace/.python/runtime.bin') == data
         assert archive.read('workspace/new.py') == b'answer = 42\n'

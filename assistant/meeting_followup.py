@@ -13,9 +13,8 @@ from enum import Enum, auto
 from pathlib import Path, PureWindowsPath
 from typing import Literal, assert_never, cast
 
+from assistant.llm import Json
 from automation.task import digest, identifier, integer, text, timestamp, variant
-
-from .llm import Json
 
 RECIPE_VERSION = 1
 MAX_TRANSCRIPT_BYTES = 1024 * 1024

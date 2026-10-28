@@ -6,52 +6,54 @@ No GUI objects cross the keyboard process. Domain work remains off the UI thread
 
 import queue
 import threading
-import time
 import traceback
 from collections.abc import Callable
 from dataclasses import dataclass, replace
 from functools import partial
 from pathlib import Path
-from typing import Final, cast
+from typing import Final, Protocol, cast
 
-from winapi import inputs, screen, windows
+lazy import shiboken6
+lazy from PySide6 import QtCore, QtGui, QtWidgets
+lazy from PySide6.QtCore import Qt
+
+import winapi.shapes
+from assistant.overlay import KeyHighlights, fit_position, nearest_work_area
+from assistant.qt_runtime import prepare
+from winapi import windows
 from winapi.shapes import Rect
-from winapi.shapes import Window as NativeWindow
+lazy import assistant.communications
+lazy import assistant.console_requests
+lazy import assistant.system_notices
+lazy from assistant.agent_session import Session, Snapshot
+lazy from assistant.agent_toasts import AgentToasts
+lazy from assistant.agent_window import AgentWindow
+lazy from assistant.communications import HandleNotice, WindowsObserved
+lazy from assistant.desktop_bar import BarActions, DesktopBar
+lazy from assistant.feed_triage import Board
+lazy from assistant.geometry import region
+lazy from assistant.icons import State
+lazy from assistant.inbox_attention import pending_count
+lazy from assistant.keymap import PHYSICAL_NAMES, Cap, Kind, keymap
+lazy from assistant.meeting_panel import MeetingPanel
+lazy from assistant.meeting_workflow import MeetingSnapshot, MeetingWorkflow
+lazy from assistant.native_feed import NativeFeed, acted, forward, observed, project
+lazy from assistant.overlay_desktop import NativeOverlayDesktop, OverlayDesktop
+lazy from assistant.panel_controls import STYLE, button, label
+lazy from assistant.qt_ui import application, cancel, later
+lazy from assistant.recording_state import RecordingAction, RecordingState
+lazy from assistant.system_notices import NoticeKey
+lazy from assistant.theme import ACCENT, BACKGROUND, FOREGROUND, MUTED
+lazy from assistant.vector_icons import icon
+lazy from assistant.widgets import Editor, Window, column, row, show_window
+lazy from assistant.window_switcher import WindowSwitcher
+lazy from assistant.work_panel import WorkPanel
+lazy from assistant.work_window import WorkCommand, WorkWindow
 lazy from miryoku.layout import Layer, Scancode
 lazy from protocol import Tool
 
-from .overlay import KeyHighlights, fit_position, load_position, nearest_work_area, save_position
-lazy from .agent_session import Session, Snapshot
-lazy from .agent_toasts import AgentToasts
-lazy from .agent_window import AgentWindow
-lazy from .communications import Command as CommunicationCommand
-lazy from .communications import Feed as CommunicationFeed
-lazy from .communications import HandleNotice, WindowsObserved
-lazy from .console_requests import Command as ConsoleCommand
-lazy from .console_requests import Request as ConsoleRequest
-lazy from .desktop_bar import BarActions, DesktopBar
-lazy from .feed_triage import Board
-lazy from .geometry import region
-lazy from .icons import State
-lazy from .inbox_attention import pending_count
-lazy from .keymap import PHYSICAL_NAMES, Cap, Kind, keymap
-lazy from .meeting_panel import MeetingPanel
-lazy from .meeting_workflow import MeetingSnapshot, MeetingWorkflow
-lazy from .native_feed import NativeFeed, acted, forward, observed, project
-lazy from .panel_controls import STYLE, button, label
-lazy from .qt import Qt, QtCore, QtGui, QtWidgets, shiboken6
-lazy from .qt_ui import application, cancel, later
-lazy from .recording_state import RecordingAction, RecordingState
-lazy from .system_notices import NoticeKey
-lazy from .system_notices import Observed as Notices
-lazy from .theme import ACCENT, BACKGROUND, FOREGROUND, MUTED
-lazy from .vector_icons import icon
-lazy from .widgets import Editor, Window, column, row, show_window
-lazy from .window_switcher import WindowSwitcher
-lazy from .work_panel import WorkPanel
-lazy from .work_window import WorkCommand, WorkWindow
+prepare()
 
-__all__ = ["AgentWindow", "Ui"]
 
 type Job = Callable[[QtWidgets.QApplication], None]
 
@@ -74,6 +76,37 @@ def _near_pointer(window: QtWidgets.QWidget, width: int, height: int) -> None:
                 max(area.top(), min(point.y() - height // 3, area.bottom() - height)))
 
 
+class Presentation(Protocol):
+    """Position and reveal native dialogs on their owning Qt thread."""
+
+    def position(self, window: QtWidgets.QWidget, width: int, height: int) -> None: ...
+
+    def reveal(self, window: QtWidgets.QWidget, focus: QtWidgets.QWidget) -> None: ...
+
+
+class NativePresentation:
+    __slots__ = ()
+
+    def position(self, window: QtWidgets.QWidget, width: int, height: int) -> None:
+        _near_pointer(window, width, height)
+
+    def reveal(self, window: QtWidgets.QWidget, focus: QtWidgets.QWidget) -> None:
+        _bring_forward(window, focus)
+
+
+class DesktopFactory(Protocol):
+    def __call__(self, actions: BarActions, *, audio_level: Callable[[], float | None] | None = None) -> DesktopBar: ...
+
+
+def _native_desktop(actions: BarActions, *, audio_level: Callable[[], float | None] | None = None) -> DesktopBar:
+    # Resolve the lazy native module only when Qt owns this view's construction.
+    return DesktopBar(actions, audio_level=audio_level)
+
+
+def _native_feed_view(root: QtWidgets.QApplication, agent: AgentWindow) -> AgentToasts:
+    return AgentToasts(root, agent)
+
+
 class Ui:
     __slots__ = (
         "_agent",
@@ -87,8 +120,10 @@ class Ui:
         "_console_action",
         "_console_requests",
         "_desktop",
+        "_desktop_factory",
         "_dialogs",
         "_dismiss_work",
+        "_feed_factory",
         "_indicator",
         "_input_lock",
         "_inputs_closed",
@@ -97,6 +132,7 @@ class Ui:
         "_keymap",
         "_meetings",
         "_native_feed",
+        "_notice_dismissal",
         "_pending_inputs",
         "_poll_timer",
         "_recording",
@@ -108,22 +144,32 @@ class Ui:
         "_work",
         "_work_lock",
         "_work_view",
+        "presentation",
     )
 
     def __init__(
         self, *, on_agent_waiting: Callable[[bool], None] | None = None, on_recording: Callable[[RecordingAction], None] | None = None,
+        presentation: Presentation | None = None, desktop_factory: DesktopFactory | None = None,
+        feed_factory: Callable[[QtWidgets.QApplication, AgentWindow], AgentToasts] | None = None,
+        dismiss_notice: Callable[[NoticeKey], None] | None = None,
     ) -> None:
+        # Ui owns independent dialog, toolbar and feed lifetimes; their concrete
+        # factories and native effects enter here before any view is created.
+        self.presentation: Presentation = NativePresentation() if presentation is None else presentation
+        self._desktop_factory: DesktopFactory = _native_desktop if desktop_factory is None else desktop_factory
+        self._feed_factory: Callable[[QtWidgets.QApplication, AgentWindow], AgentToasts] = _native_feed_view if feed_factory is None else feed_factory
+        self._notice_dismissal: Callable[[NoticeKey], None] | None = dismiss_notice
         if threading.current_thread() is not threading.main_thread():
             raise RuntimeError("Qt must be created on the process's main thread.")
         self._agent: AgentWindow | None = None
-        self._communication_action: Callable[[CommunicationCommand], bool] | None = None
-        self._communication_feed = CommunicationFeed()
+        self._communication_action: Callable[[assistant.communications.Command], bool] | None = None
+        self._communication_feed = assistant.communications.Feed()
         self._communication_drafts: dict[str, str] = {}
         self._native_feed = NativeFeed()
-        self._console_action: Callable[[ConsoleCommand], bool] | None = None
-        self._console_requests: tuple[ConsoleRequest, ...] = ()
+        self._console_action: Callable[[assistant.console_requests.Command], bool] | None = None
+        self._console_requests: tuple[assistant.console_requests.Request, ...] = ()
         self._triage = Board()
-        self._triage_observe: Callable[[CommunicationFeed, tuple[ConsoleRequest, ...]], None] | None = None
+        self._triage_observe: Callable[[assistant.communications.Feed, tuple[assistant.console_requests.Request, ...]], None] | None = None
         self._choose_work: Callable[[str, str, str], bool] | None = None
         self._dismiss_work: Callable[[str], bool] | None = None
         self._desktop: DesktopBar | None = None
@@ -283,9 +329,9 @@ class Ui:
                 self._dialogs.remove(dialog)
                 dialog.deleteLater()
             dialog.finished.connect(finish)
-            _near_pointer(dialog, 640, 130)
+            self.presentation.position(dialog, 640, 130)
             dialog.open()
-            _bring_forward(dialog, dialog)
+            self.presentation.reveal(dialog, dialog)
         return self._ask(build, on_close=lambda: None)
 
     def choose_region(self, screen: Rect) -> Rect | None:
@@ -367,7 +413,7 @@ class Ui:
         with self._agent_lock:
             if self._agent is None:
                 self._agent = AgentWindow(
-                    stop, post=lambda job: self.post(lambda root: job()), create_view=lambda agent: AgentToasts(self._root, agent),
+                    stop, post=lambda job: self.post(lambda root: job()), create_view=lambda agent: self._feed_factory(self._root, agent),
                     on_problem=on_problem, on_reset=on_reset, on_submit=on_submit, on_waiting=self._agent_waiting, on_recording=self._recording,
                     on_work=on_work,
                     on_communication=self.communicate,
@@ -386,7 +432,7 @@ class Ui:
             panel.show(focus=focus)
         return panel
 
-    def configure_triage(self, observe: Callable[[CommunicationFeed, tuple[ConsoleRequest, ...]], None],
+    def configure_triage(self, observe: Callable[[assistant.communications.Feed, tuple[assistant.console_requests.Request, ...]], None],
                          dismiss: Callable[[str], bool] | None = None,
                          choose: Callable[[str, str, str], bool] | None = None) -> None:
         self._triage_observe = observe
@@ -408,12 +454,12 @@ class Ui:
         if self._triage_observe is not None:
             self._triage_observe(self._communication_feed, self._console_requests)
 
-    def configure_communications(self, action: Callable[[CommunicationCommand], bool]) -> None:
+    def configure_communications(self, action: Callable[[assistant.communications.Command], bool]) -> None:
         self._communication_action = action
         if self._agent is not None:
             self._agent.on_communication = self.communicate
 
-    def communicate(self, command: CommunicationCommand) -> bool:
+    def communicate(self, command: assistant.communications.Command) -> bool:
         if self._communication_action is None:
             return False
         accepted = [self._communication_action(item) for item in forward(self._communication_feed, command)]
@@ -431,7 +477,7 @@ class Ui:
             self.dismiss_system_notice(key)
         return True
 
-    def communications_changed(self, feed: CommunicationFeed, drafts: dict[str, str]) -> None:
+    def communications_changed(self, feed: assistant.communications.Feed, drafts: dict[str, str]) -> None:
         def update(_: QtWidgets.QApplication) -> None:
             self._communication_feed, self._communication_drafts = project(self._native_feed, feed), drafts
             self.observe_triage()
@@ -440,7 +486,7 @@ class Ui:
             self.refresh_inbox()
         self.post(update)
 
-    def system_notices(self, observation: Notices) -> None:
+    def system_notices(self, observation: assistant.system_notices.Observed) -> None:
         def update(_: QtWidgets.QApplication) -> None:
             self._native_feed = observed(self._native_feed, observation)
             self._communication_feed = project(self._native_feed, self._communication_feed)
@@ -452,12 +498,12 @@ class Ui:
         if self._communication_action is not None:
             self._communication_action(WindowsObserved(observation))
 
-    def configure_console(self, action: Callable[[ConsoleCommand], bool]) -> None:
+    def configure_console(self, action: Callable[[assistant.console_requests.Command], bool]) -> None:
         self._console_action = action
         if self._agent is not None:
             self._agent.on_console = action
 
-    def console_changed(self, requests: tuple[ConsoleRequest, ...]) -> None:
+    def console_changed(self, requests: tuple[assistant.console_requests.Request, ...]) -> None:
         def update(_: QtWidgets.QApplication) -> None:
             self._console_requests = requests
             self.observe_triage()
@@ -480,7 +526,10 @@ class Ui:
         self._desktop.inbox_changed(pending_count(session))
 
     def dismiss_system_notice(self, key: NoticeKey) -> None:
-        self.post(lambda _: self._desktop.remove_notification(key) if self._desktop is not None else None)
+        if self._notice_dismissal is not None:
+            self._notice_dismissal(key)
+        else:
+            self.post(lambda _: self._desktop.remove_notification(key) if self._desktop is not None else None)
 
     def handle_system_notice(self, key: NoticeKey) -> bool:
         if self._communication_action is None or self._desktop is None or self._desktop.notification_observation is None:
@@ -584,7 +633,7 @@ class Ui:
                 actions = BarActions(show_agent, show_work, stop, self._recording or (lambda _: None), self.show_keymap, overlay, menu,
                                      on_problem, tiling or (lambda _tool, _hwnd: None), self.system_notices, self.handle_system_notice,
                                      inbox=lambda: self.open_inbox(show_agent))
-                self._desktop = DesktopBar(actions, audio_level=audio_level)
+                self._desktop = self._desktop_factory(actions, audio_level=audio_level)
                 self.refresh_inbox()
             except Exception:
                 traceback.print_exc()
@@ -603,7 +652,7 @@ class Ui:
     def toggle_taskbar(self) -> None:
         self.post(lambda _: self._desktop.toggle_taskbar() if self._desktop is not None else None)
 
-    def switch_windows(self, choices: tuple[NativeWindow, ...], focus: Callable[[int], None]) -> None:
+    def switch_windows(self, choices: tuple[winapi.shapes.Window, ...], focus: Callable[[int], None]) -> None:
         def show(_: QtWidgets.QApplication) -> None:
             if self._switcher is not None and self._switcher.isVisible():
                 self._switcher.activate()
@@ -722,8 +771,8 @@ class AnswerWindow:
         bottom.addWidget(button("Copy answer", self.copy_all))
         layout.addLayout(bottom)
         self.add(f"{title}\n\n", "accent")
-        _near_pointer(self.window, 760, 540)
-        _bring_forward(self.window, self.text)
+        ui.presentation.position(self.window, 760, 540)
+        ui.presentation.reveal(self.window, self.text)
 
     def close(self) -> None:
         self.window.hide()
@@ -897,10 +946,18 @@ class KeymapCanvas(QtWidgets.QWidget):
             painter.drawText(bounds.adjusted(0, 0, 0, -3 * self.scale), Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignBottom, cap.hold)
 
 
+@dataclass(frozen=True, slots=True)
+class OverlayDrag:
+    start: Callable[[QtCore.QPoint], None]
+    move: Callable[[QtCore.QPoint], None]
+    end: Callable[[], None]
+
+
 class OverlayHandle(QtWidgets.QLabel):
-    def __init__(self, start: Callable[[QtCore.QPoint], None], move: Callable[[QtCore.QPoint], None], end: Callable[[], None]) -> None:
+    def __init__(self, drag: OverlayDrag, cursor: Callable[[], tuple[int, int]]) -> None:
         super().__init__("≡  Drag to move")
-        self.start, self.move_drag, self.end = start, move, end
+        self.drag: OverlayDrag = drag
+        self.read_cursor: Callable[[], tuple[int, int]] = cursor
         self.setWindowFlags(Qt.WindowType.Tool | Qt.WindowType.FramelessWindowHint)
         self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
         self.setStyleSheet("background: #26313d; color: #cbd5e1; padding: 6px 12px; border-radius: 5px; font: 11px 'Segoe UI';")
@@ -909,22 +966,23 @@ class OverlayHandle(QtWidgets.QLabel):
 
     def mousePressEvent(self, event: QtGui.QMouseEvent) -> None:  # noqa: N802
         if event.button() == Qt.MouseButton.LeftButton:
-            self.start(QtCore.QPoint(*inputs.cursor_position()))
+            self.drag.start(QtCore.QPoint(*self.read_cursor()))
             self.grabMouse()
 
     def mouseMoveEvent(self, event: QtGui.QMouseEvent) -> None:  # noqa: N802
         # The saved overlay position and native moves use physical pixels.
-        self.move_drag(QtCore.QPoint(*inputs.cursor_position()))
+        self.drag.move(QtCore.QPoint(*self.read_cursor()))
 
     def mouseReleaseEvent(self, event: QtGui.QMouseEvent) -> None:  # noqa: N802
         self.releaseMouse()
-        self.end()
+        self.drag.end()
 
 
 class KeymapOverlay:
     __slots__ = (
         "__weakref__",
         "_canvas",
+        "_desktop",
         "_drag",
         "_frame",
         "_handle",
@@ -937,7 +995,8 @@ class KeymapOverlay:
         "_window",
     )
 
-    def __init__(self, root: QtWidgets.QApplication) -> None:
+    def __init__(self, root: QtWidgets.QApplication, desktop: OverlayDesktop | None = None) -> None:
+        self._desktop: OverlayDesktop = desktop if desktop is not None else NativeOverlayDesktop()
         self._window = QtWidgets.QWidget()
         self._window.setObjectName("workspaceWindow")
         self._window.setWindowTitle("Workspace keyboard overlay")
@@ -951,13 +1010,11 @@ class KeymapOverlay:
         layout.addWidget(self._heading)
         self._canvas = KeymapCanvas()
         layout.addWidget(self._canvas)
-        self._frame = int(self._window.winId())
-        windows.make_overlay(self._frame)
-        self._handle = OverlayHandle(self._start_drag, self._drag_to, self._finish_drag)
+        self._frame = self._desktop.prepare(self._window, click_through=True)
+        self._handle = OverlayHandle(OverlayDrag(self._start_drag, self._drag_to, self._finish_drag), self._desktop.cursor)
         self._handle.setWindowTitle("Workspace keyboard overlay handle")
-        self._handle_frame = int(self._handle.winId())
-        windows.make_overlay(self._handle_frame, click_through=False)
-        self._position = load_position()
+        self._handle_frame = self._desktop.prepare(self._handle, click_through=False)
+        self._position = self._desktop.load_position()
         self._drag: QtCore.QPoint | None = None
         self._view: tuple[Layer | None, str, tuple[Rect, ...]] | None = None
         self._highlights = KeyHighlights()
@@ -971,7 +1028,7 @@ class KeymapOverlay:
             self._window.hide()
             self._view = None
             return
-        areas = tuple(m.work for m in screen.monitors()) or (work,)
+        areas = self._desktop.work_areas() or (work,)
         view = (layer, title, areas)
         if view == self._view:
             self.set_pressed(pressed)
@@ -988,22 +1045,20 @@ class KeymapOverlay:
         if self._position is None:
             self._position = (work.left + work.width // 2, work.bottom - round((self._window.height() + self._handle.height() + 90) * density))
         self._move(self._position)
-        self._window.show()
-        self._handle.show()
-        windows.show_quietly(self._frame, visible=True)
-        windows.show_quietly(self._handle_frame, visible=True)
+        self._desktop.present(self._window)
+        self._desktop.present(self._handle)
 
     def set_pressed(self, pressed: frozenset[Scancode], *, reset: bool = False) -> None:
         if reset:
             self._highlights.clear()
         if self._view is not None:
-            self._highlights.update(pressed, time.monotonic())
+            self._highlights.update(pressed, self._desktop.clock())
             self._paint_highlights()
 
     def _paint_highlights(self) -> None:
         cancel(self._highlight_timer)
         self._highlight_timer = None
-        now = time.monotonic()
+        now = self._desktop.clock()
         self._canvas.press(frozenset(PHYSICAL_NAMES[key] for key in self._highlights.visible(now)))
         if (delay := self._highlights.delay(now)) is not None:
             self._highlight_timer = later(self._window, delay, self._paint_highlights)
@@ -1015,9 +1070,9 @@ class KeymapOverlay:
         width, height = round(self._window.width() * scale), round(self._window.height() * scale)
         handle_width, handle_height = round(self._handle.width() * scale), round(self._handle.height() * scale)
         left, top = x - width // 2, y + handle_height + 4
-        windows.move(self._frame, Rect(left, top, left + width, top + height))
+        self._desktop.move(self._frame, Rect(left, top, left + width, top + height))
         left = x - handle_width // 2
-        windows.move(self._handle_frame, Rect(left, y, left + handle_width, y + handle_height))
+        self._desktop.move(self._handle_frame, Rect(left, y, left + handle_width, y + handle_height))
 
     def _start_drag(self, point: QtCore.QPoint) -> None:
         if self._position is not None and self._view is not None:
@@ -1033,13 +1088,13 @@ class KeymapOverlay:
             return
         self._drag = None
         if self._position is not None:
-            areas = tuple(m.work for m in screen.monitors())
+            areas = self._desktop.work_areas()
             if areas:
                 scale = self._window.devicePixelRatioF()
                 self._move(fit_position(self._position, round(self._window.width() * scale),
                                         round((self._window.height() + self._handle.height() + 4) * scale), nearest_work_area(self._position, areas)))
             try:
-                save_position(self._position)
+                self._desktop.save_position(self._position)
             except OSError:
                 traceback.print_exc()
 

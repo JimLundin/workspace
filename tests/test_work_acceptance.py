@@ -16,11 +16,10 @@ from automation.controller import ControllerSnapshot, WorkController
 from automation.routines import RoutineStore
 from automation.store import TaskStore
 from automation.task import ActionVerified, Completed, FileDigest, RoutineSource, Task, Waiting
-
-from .fake_endpoint import fake_endpoint
-from .test_agent import FakeMachine, FakeWindow, calls, says
-from .test_meetings import GeneratedCapture
-from .test_workspace import live_tree
+from tests.fake_endpoint import fake_endpoint
+from tests.test_agent import FakeMachine, FakeWindow, calls, says
+from tests.test_meetings import GeneratedCapture
+from tests.test_workspace import live_tree
 
 TRANSCRIPT = "Decision: ship on Friday. Ada owns the release notes; Lee will review them on Thursday."
 

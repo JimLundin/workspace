@@ -8,10 +8,9 @@ from pathlib import Path
 from assistant.work_window import AnswerTask, RemoveContext, WorkSnapshot
 from automation.context import Preference
 from automation.task import Question, RequestSource, TaskStatus, TextAnswer, Waiting
-
-from .test_external_input import has_pending_input
-from .test_work_agent import RecordingBridge, WorkRig
-from .test_work_submissions import PollHold
+from tests.test_external_input import has_pending_input
+from tests.test_work_agent import RecordingBridge, WorkRig
+from tests.test_work_submissions import PollHold
 
 
 class SnapshotFeed:

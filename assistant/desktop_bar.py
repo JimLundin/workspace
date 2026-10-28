@@ -10,27 +10,30 @@ from dataclasses import dataclass, field
 from datetime import datetime
 lazy import os
 
+lazy from PySide6 import QtCore, QtGui, QtWidgets
+
+from assistant.qt_runtime import prepare
 lazy import winapi.ambient
+lazy from assistant.ambient import Ambient, Power, PowerUnavailable, Weather
+lazy from assistant.audio_meter import AudioMeter
+lazy from assistant.bar_button import Divider, StatusView
+lazy from assistant.bar_geometry import OVERLAP
+lazy from assistant.bar_model import Resting, Toolbar, toolbar
+lazy from assistant.bar_status import StatusObserver
+lazy from assistant.bar_surface import Pill
+lazy from assistant.bar_weather import LocalWeather
+lazy from assistant.icons import State
+lazy from assistant.notifications import Tone
+lazy from assistant.qt_ui import EventLoop, application
+lazy from assistant.recording_state import RecordingAction, RecordingState
+lazy from assistant.shell_controls import TASKBAR_TOGGLE, TaskbarControl, WindowsKeyObserver
+lazy from assistant.system_notices import Access, NoticeKey, Observed, Unavailable
 lazy from protocol import Tool
 lazy from winapi import appearance, shell, windows
 lazy from winapi.notifications import NotificationObserver
 lazy from winapi.shapes import Rect
 
-lazy from .ambient import Ambient, Power, PowerUnavailable, Weather
-lazy from .audio_meter import AudioMeter
-lazy from .bar_button import CapsuleButton
-lazy from .bar_geometry import OVERLAP
-lazy from .bar_model import Resting, Toolbar, toolbar
-lazy from .bar_status import StatusObserver
-lazy from .bar_surface import Pill
-lazy from .bar_weather import LocalWeather
-lazy from .icons import State
-lazy from .notifications import Tone
-lazy from .qt import QtCore, QtGui, QtWidgets
-lazy from .qt_ui import EventLoop, application
-lazy from .recording_state import RecordingAction, RecordingState
-lazy from .shell_controls import TASKBAR_TOGGLE, TaskbarControl, WindowsKeyObserver
-lazy from .system_notices import Access, NoticeKey, Observed, Unavailable
+prepare()
 
 
 @dataclass(frozen=True, slots=True)
@@ -53,6 +56,8 @@ class BarActions:
 class BarObservations:
     """Native facts and presentation preferences, supplied at UI composition."""
 
+    clock: Callable[[], float] = time.monotonic
+    foreground: Callable[[], int] = windows.foreground
     power: Callable[[], Power] = winapi.ambient.power
     material: Callable[[], appearance.Preference] = appearance.preference
     motion: Callable[[], bool] = appearance.animations_enabled
@@ -68,9 +73,11 @@ class DesktopBar:
         'capture',
         'closed',
         'controls',
+        'controls_divider',
         'current_layer',
         'errors',
         'inbox',
+        'inbox_divider',
         'keyboard',
         'keycaps',
         'keys',
@@ -78,6 +85,7 @@ class DesktopBar:
         'loop',
         'materials',
         'menu',
+        'menu_button',
         'next_material',
         'next_power',
         'notification_access',
@@ -107,9 +115,9 @@ class DesktopBar:
     # Actions, native-shell lifetime, audio ownership and desktop observations
     # are separate composition dependencies rather than UI options.
     def __init__(self, actions: BarActions, *, native_shell: bool = True, audio_level: Callable[[], float | None] | None = None,
-                 observations: BarObservations = BarObservations()) -> None:
+                 observations: BarObservations | None = None) -> None:
         self.actions = actions
-        self.observations = observations
+        self.observations = BarObservations() if observations is None else observations
         self.closed = False
         self.visible = native_shell
         self.activity = State.READY
@@ -164,14 +172,18 @@ class DesktopBar:
         self.capture = Pill(self.loop, "Workspace recording controls", attached=True)
         self.keycaps = Pill(self.loop, "Workspace keyboard mode", attached=True)
         self.pills = (self.window, self.capture, self.keycaps)
-        self.status = CapsuleButton(self.window)
+        # Function boundaries are menu | status + its Stop | inbox. Auxiliary
+        # capsules already mark recording/keyboard boundaries with their shape.
+        self.menu_button = self.window.button("menu", "", "Open Workspace controls", self.open_menu)
+        self.controls_divider = Divider(self.window)
+        self.window.row.addWidget(self.controls_divider)
+        self.status = StatusView(self.window)
         self.window.row.addWidget(self.status)
-        self.window.buttons.append((self.status, "clock"))
-        self.status.clicked.connect(self.open_menu)
-        self.window.click = self.open_menu
-        self.window.setCursor(QtCore.Qt.CursorShape.PointingHandCursor)
         self.stop = self.window.button("close", "", "Stop agent work", self.actions.stop)
         self.stop.hide()
+        self.inbox_divider = Divider(self.window)
+        self.window.row.addWidget(self.inbox_divider)
+        self.inbox_divider.hide()
         self.inbox: QtWidgets.QToolButton = self.window.button("bell", "", "Open inbox · Hold V + T", self.actions.inbox)
         self.inbox.hide()
         self.record = self.capture.button("mic", "", "Open meeting recording", self.actions.work)
@@ -201,7 +213,7 @@ class DesktopBar:
             self.actions.problem(str(error))
 
     def open_menu(self) -> None:
-        target = windows.foreground()
+        target = self.observations.foreground()
         self.menu.clear()
         def item(label: str, action: Callable[[], None]) -> None:
             self.menu.addAction(label).triggered.connect(lambda: action())  # noqa: PLW0108
@@ -253,6 +265,7 @@ QMenu::separator {{ height: 1px; background: {colors.edge}; margin: 4px 10px; }}
         self.inbox.setToolTip(description)
         self.inbox.setAccessibleName(description)
         self.inbox.setVisible(count > 0)
+        self.inbox_divider.setVisible(count > 0)
         self.window.adjustSize()
         self.position()
 
@@ -278,18 +291,18 @@ QMenu::separator {{ height: 1px; background: {colors.edge}; margin: 4px 10px; }}
             self.status.capture(listening=self.activity is State.LISTENING, processing=self.activity is State.WORKING)
             if isinstance(view.activity, Resting):
                 self.status.facts(self.ambient)
-                self.status.setToolTip("Open Workspace controls · Space: hold to dictate · B: toggle · N: agent")
+                self.status.setToolTip("Clock, battery and local weather")
                 self.stop.hide()
             else:
                 self.status.facts(None)
                 self.status.setText(view.activity.title)
-                self.status.setToolTip(view.activity.title + " · Open Workspace controls")
+                self.status.setToolTip(view.activity.title)
                 self.status.accessible()
-                self.window.set_icon(self.status, view.activity.icon)
+                self.status.symbol = view.activity.icon
                 self.stop.setVisible(view.activity.can_stop)
                 self.stop.setToolTip("Stop speech capture" if self.activity is State.LISTENING else "Stop agent work")
-                self.status.setToolTip("Transcribing captured audio · open Workspace controls" if self.activity is State.WORKING
-                                       else "Open Workspace controls · Space: hold to dictate · B: toggle · N: agent")
+                self.status.setToolTip("Transcribing captured audio" if self.activity is State.WORKING
+                                       else view.activity.title + (" · use Stop to finish" if view.activity.can_stop else ""))
             if self.activity is State.LISTENING:
                 self.audio_timer.start()
             else:
@@ -306,7 +319,7 @@ QMenu::separator {{ height: 1px; background: {colors.edge}; margin: 4px 10px; }}
             for pill in self.pills:
                 pill.adjustSize()
         self.position()
-        now = time.monotonic()
+        now = self.observations.clock()
         self.window.show_activity(self.visible, now, animate=animate)
         self.capture.show_activity(self.visible and view.capture is not None, now, animate=animate)
         self.keycaps.show_activity(self.visible and view.keyboard is not None, now, animate=animate)
@@ -334,7 +347,7 @@ QMenu::separator {{ height: 1px; background: {colors.edge}; margin: 4px 10px; }}
     def paint_frames(self) -> None:
         if self.closed:
             return
-        now = time.monotonic()
+        now = self.observations.clock()
         moving = [pill.advance(now) for pill in self.pills]
         spinning = self.status.pulse(now, animate=self.visible and self.observations.motion())
         self.position()
@@ -350,7 +363,7 @@ QMenu::separator {{ height: 1px; background: {colors.edge}; margin: 4px 10px; }}
         while not self.errors.empty():
             self.actions.problem(self.errors.get_nowait())
         self.poll_notifications()
-        now = time.monotonic()
+        now = self.observations.clock()
         if now >= self.next_power:
             self.next_power = now + 15
             self.power = self.observations.power()

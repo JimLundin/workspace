@@ -32,6 +32,14 @@ remove it. Apply this rule when adding, reviewing or consolidating tests.
 Before writing a test, name the plausible defect in Workspace code it detects;
 if there is no such defect, omit the test.
 
+Patches and mocks are disallowed throughout the codebase, including tests.
+Pass explicit typed dependencies into effect owners; test decisions with pure
+inputs, real local resources, or concrete adapters implementing those interfaces.
+Do not replace imported functions, module globals, native bindings or instance
+methods to control behavior. Assert observable behavior through the same interface
+used by callers. The architecture review enforces the framework ban for every
+source file, including explicit test selections.
+
 Before maintaining custom general-purpose functionality, check whether a focused
 dependency provides it. Assess its complete dependency footprint, supported
 runtime and integration cost. Prefer a suitable small dependency; keep custom
@@ -99,11 +107,14 @@ paths, environment variables, control-window identifiers and new artifacts.
   When changing an existing signature or adding an interface exception, read
   [docs/code-quality-policies.md](docs/code-quality-policies.md) for the exact migration
   baseline and checker scope.
-- Import symbols from their owning module. Avoid forwarding re-exports,
-  self-alias imports and cosmetic prefixes such as `Request as ConsoleRequest`;
-  use module-qualified names to resolve collisions. A boundary facade must own
+- Use absolute imports only. Import symbols from their owning module; forwarding
+  re-exports are forbidden, including package-level shortcuts and compatibility
+  aliases. Review indirect forwarding as well: static checks cannot establish
+  every symbol's ownership. Avoid self-alias imports and cosmetic prefixes such
+  as `Request as ConsoleRequest`;
+  use module-qualified names to resolve collisions. A boundary adapter must own
   real validation, lifecycle or adaptation with an explicit contract. When
-  changing an import exception or introducing a facade, read
+  changing an import exception or introducing an adapter, read
   [docs/code-quality-policies.md](docs/code-quality-policies.md).
 - Declare imports at module level. Use Python 3.15's `lazy import` and
   `lazy from` when loading must wait for first use; inline imports inside

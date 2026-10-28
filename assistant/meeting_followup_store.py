@@ -25,11 +25,8 @@ from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Literal, Protocol, assert_never, cast
 from urllib.parse import quote
 
-from automation.files import filesystem_path
-from automation.task import FileDigest, digest, identifier, integer, text, timestamp, variant
-
-from .llm import RATE, Json
-from .meeting_followup import (
+from assistant.llm import RATE, Json
+from assistant.meeting_followup import (
     MAX_MODEL_BYTES,
     MAX_TRANSCRIPT_BYTES,
     RECIPE_VERSION,
@@ -57,8 +54,10 @@ from .meeting_followup import (
     followup_data,
     parse_followup,
 )
-from .meeting_store import MeetingStore
-from .recording_state import source_name
+from assistant.meeting_store import MeetingStore
+from assistant.recording_state import source_name
+from automation.files import filesystem_path
+from automation.task import FileDigest, digest, identifier, integer, text, timestamp, variant
 
 MAX_PACKAGE_BYTES = 16 * 1024 * 1024
 MAX_VERSIONS = 128

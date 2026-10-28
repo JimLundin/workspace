@@ -6,13 +6,15 @@ reads accessibility settings and samples nearby pixels off the UI thread.
 
 import ctypes
 import winreg
+from collections.abc import Callable
 from concurrent.futures import Future, ThreadPoolExecutor
 from ctypes import wintypes
 from dataclasses import dataclass
 from enum import Enum, auto
+from typing import Protocol
 
-from ._core import fn, gdi32, user32
-from .shapes import Rect
+from winapi._core import fn, gdi32, user32
+from winapi.shapes import Rect
 
 
 class Material(Enum):
@@ -40,9 +42,10 @@ class FrostSampler:
     for desktop pixels. The owner discards observations after a card moves.
     """
 
-    __slots__ = ("pending", "worker")
+    __slots__ = ("pending", "sample", "worker")
 
-    def __init__(self) -> None:
+    def __init__(self, sample: Callable[[tuple[Rect, ...]], tuple[Backdrop, ...]] | None = None) -> None:
+        self.sample = sample_backgrounds if sample is None else sample
         self.worker: ThreadPoolExecutor | None = None
         self.pending: Future[tuple[Backdrop, ...]] | None = None
 
@@ -51,7 +54,7 @@ class FrostSampler:
             return
         if self.worker is None:
             self.worker = ThreadPoolExecutor(max_workers=1, thread_name_prefix="workspace-glass")
-        self.pending = self.worker.submit(sample_backgrounds, bounds)
+        self.pending = self.worker.submit(self.sample, bounds)
 
     def read(self) -> tuple[Backdrop, ...]:
         if self.pending is None or not self.pending.done():
@@ -94,6 +97,22 @@ _TimeBeginPeriod = fn(_winmm, "timeBeginPeriod", wintypes.UINT, wintypes.UINT)
 _TimeEndPeriod = fn(_winmm, "timeEndPeriod", wintypes.UINT, wintypes.UINT)
 
 
+class TimerPeriod(Protocol):
+    def request(self) -> bool: ...
+
+    def release(self) -> None: ...
+
+
+class NativeTimerPeriod:
+    __slots__ = ()
+
+    def request(self) -> bool:
+        return bool(_TimeBeginPeriod(1) == 0)
+
+    def release(self) -> None:
+        _TimeEndPeriod(1)
+
+
 class TimerResolution:
     """Keep the UI's short frame timers accurate only while UI motion is running.
 
@@ -102,16 +121,17 @@ class TimerResolution:
     view closes; idle notifications and the keyboard process never request it.
     """
 
-    __slots__ = ("active",)
+    __slots__ = ("active", "period")
 
-    def __init__(self) -> None:
+    def __init__(self, period: TimerPeriod | None = None) -> None:
+        self.period = NativeTimerPeriod() if period is None else period
         self.active = False
 
     def update(self, active: bool) -> None:
         if active and not self.active:
-            self.active = _TimeBeginPeriod(1) == 0
+            self.active = self.period.request()
         elif not active and self.active:
-            _TimeEndPeriod(1)
+            self.period.release()
             self.active = False
 
 

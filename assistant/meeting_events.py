@@ -10,9 +10,8 @@ import time
 from collections.abc import Callable
 from pathlib import Path
 
+from assistant.meeting_store import MeetingArchive, MeetingStore
 from automation.routines import MAX_TRANSCRIPTS, RoutineStore, TranscriptReady, transcript_ready
-
-from .meeting_store import MeetingArchive, MeetingStore
 
 
 class TranscriptEvents:

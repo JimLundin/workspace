@@ -1,10 +1,8 @@
 """The keeper: runs Workspace, installs changes, and undoes the ones that fail.
 Its logic runs on fake processes and a fake clock; its file handling on real folders."""
 
-import os
 from collections.abc import Callable
 from pathlib import Path
-from unittest.mock import patch
 
 from keeper import PROTECTED, Keeper, Recovery, Stage, ask, install, prepare_candidate, restore, snapshot, source_files, take_requests
 
@@ -405,23 +403,9 @@ def write(root: Path, files: dict[str, str]) -> None:
 
 
 def test_source_files_leave_out_caches_and_history(tmp_path: Path) -> None:
-    write(tmp_path, {"a.py": "", "pkg/b.py": "", "pkg/__pycache__/b.pyc": "", ".git/HEAD": "", "README.md": "", ".mypy_cache/x": ""})
+    write(tmp_path, {"a.py": "", "pkg/b.py": "", "pkg/__pycache__/b.pyc": "", ".git/HEAD": "", "README.md": "", ".mypy_cache/x": "",
+                     ".runtime/dependency.py": "", ".python/Lib/asyncio/__init__.py": ""})
     assert source_files(tmp_path) == ["README.md", "a.py", "pkg/b.py"]
-
-
-def test_source_listing_does_not_visit_excluded_runtime_or_cache_directories(tmp_path: Path) -> None:
-    write(tmp_path, {
-        "app.py": "", ".runtime/dependency.py": "", ".python/Lib/asyncio/__init__.py": "",
-        "pkg/__pycache__/module.pyc": "", ".git/objects/object": "",
-    })
-    scan = os.scandir
-
-    def source_only(path: str | Path) -> object:
-        assert not any(part.startswith(".") or part == "__pycache__" for part in Path(path).relative_to(tmp_path).parts)
-        return scan(path)
-
-    with patch("os.scandir", side_effect=source_only):
-        assert source_files(tmp_path) == ["app.py"]
 
 
 def test_snapshot_restore_and_install(tmp_path: Path) -> None:

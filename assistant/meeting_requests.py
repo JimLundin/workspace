@@ -14,9 +14,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol, cast
 
+from assistant.meeting_followup import MAX_BUNDLE_BYTES, RECIPE_VERSION, TranscriptBundle, bundle_data, bundle_of
 from automation.task import digest, identifier, integer, text, timestamp, variant
-
-from .meeting_followup import MAX_BUNDLE_BYTES, RECIPE_VERSION, TranscriptBundle, bundle_data, bundle_of
 
 MAX_REQUESTS = 128
 _SCHEMA_VERSION = 1

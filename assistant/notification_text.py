@@ -2,13 +2,13 @@
 
 from dataclasses import dataclass
 
-from . import feed_items, tool_text
-from .action_text import readable
-from .agent_session import Answer, Approval, ChatMessage, ToolActivity, pending
-from .feed_items import WorkItem, action_spans, expanded_spans, link
-from .feed_triage import Assessment
-from .notifications import Content, Entry, Response, Turn, body, heading, plain, results, steps
-from .rich_text import Span, formatted
+from assistant import feed_items, tool_text
+from assistant.action_text import readable
+from assistant.agent_session import Answer, Approval, ChatMessage, ToolActivity, pending
+from assistant.feed_items import WorkItem, action_spans, expanded_spans, link
+from assistant.feed_triage import Assessment
+from assistant.notifications import Content, Entry, Response, Turn, body, heading, plain, results, steps
+from assistant.rich_text import Span, formatted
 
 
 def answer(content: Content | None) -> Answer | None:
@@ -61,7 +61,7 @@ def step_blocks(content: Content, *, expanded: bool = True) -> tuple[Step, ...]:
         case _:
             return ()
     if not expanded:
-        selected = ()
+        selected: tuple[Entry, ...] = ()
         for entry in reversed(entries):
             match entry:
                 case Entry(message=ToolActivity()):

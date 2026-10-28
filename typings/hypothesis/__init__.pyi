@@ -2,7 +2,7 @@
 
 from collections.abc import Callable
 
-from .strategies import SearchStrategy
+from hypothesis.strategies import SearchStrategy
 
 def given[T](strategy: SearchStrategy[T], /) -> Callable[[Callable[[T], None]], Callable[[], None]]: ...
 

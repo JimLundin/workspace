@@ -15,11 +15,12 @@ import tempfile
 import time
 import traceback
 import unittest
-from collections.abc import Generator, Iterator, Mapping
+from collections.abc import Callable, Generator, Iterator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol, runtime_checkable
+lazy from concurrent.futures import ProcessPoolExecutor
 
 from pydantic import TypeAdapter, ValidationError
 
@@ -31,7 +32,6 @@ lazy import selfcheck
 lazy from runtime import activate
 lazy from scripts import quality
 lazy from scripts.check_native import execute_native
-lazy from concurrent.futures import ProcessPoolExecutor
 
 ROOT = Path(__file__).resolve().parent.parent
 BROAD = frozenset({'keeper.py', 'selfcheck.py', 'runtime.py', 'workspace.pyw', 'config.py', 'protocol.py', 'pyproject.toml'})
@@ -116,7 +116,10 @@ def windows_only(error: BaseException) -> bool:
             return False
 
 
-def import_changed(changed: tuple[str, ...], root: Path, failures: list[str]) -> None:
+def import_changed(changed: tuple[str, ...], root: Path, failures: list[str],
+                   load: Callable[[str], object] = importlib.import_module) -> None:
+    # Changed source, its root and failure ledger identify one import review;
+    # the loader belongs to the check runtime, shared with test discovery.
 
     for name in changed:
         if not name.endswith(('.py', '.pyw')) or not (root / name).exists():
@@ -124,7 +127,7 @@ def import_changed(changed: tuple[str, ...], root: Path, failures: list[str]) ->
         compile((root / name).read_text(encoding='utf-8'), name, 'exec')
         if name.endswith('.py') and not name.startswith('tests/'):
             try:
-                importlib.import_module(module_name(name))
+                load(module_name(name))
             except Exception as error:
                 if not windows_only(error):
                     failures.append(f'{name} does not import\n{traceback.format_exc()}')
@@ -153,16 +156,66 @@ def timed(label: str, timings: list[tuple[float, str]]) -> Generator[None]:
         timings.append((time.perf_counter() - started, label))
 
 
-def execute(selection: Selection, root: Path) -> Results:
+class SourceRuntime(Protocol):
+    """Runtime initialization and source loading owned by a check invocation."""
+
+    def activate(self) -> None: ...
+    def compile(self, root: Path, failures: list[str]) -> None: ...
+    def import_all(self, root: Path, failures: list[str]) -> None: ...
+    def load(self, module: str) -> object: ...
+
+
+class NativeSourceRuntime:
+    def activate(self) -> None:
+        activate()
+
+    def compile(self, root: Path, failures: list[str]) -> None:
+        selfcheck.compile_all(root, failures)
+
+    def import_all(self, root: Path, failures: list[str]) -> None:
+        selfcheck.import_all(root, failures)
+
+    def load(self, module: str) -> object:
+        return importlib.import_module(module)
+
+
+@dataclass(frozen=True, slots=True)
+class ExecutionPlan:
+    portable: tuple[str, ...]
+    sequential: tuple[str, ...]
+
+
+def execution_plan(tests: tuple[str, ...]) -> ExecutionPlan:
+    portable = tuple(selector for name in PORTABLE for selector in tests if selector.partition('::')[0] == name)
+    if len(portable) < 2 or not any(name.startswith('tests/test_windows_') for name in tests):
+        return ExecutionPlan((), tests)
+    return ExecutionPlan(portable, tuple(name for name in tests if name not in portable))
+
+
+def worker_result(result: Results) -> Results:
+    passed, skipped, failures, timings = result
+    return passed, skipped, failures, tuple((seconds, 'worker:' + label) for seconds, label in timings)
+
+
+def combined_results(results: tuple[Results, ...], phases: tuple[tuple[float, str], ...] = ()) -> Results:
+    return (sum(result[0] for result in results), sum(result[1] for result in results),
+            tuple(failure for result in results for failure in result[2]),
+            (*phases, *(duration for result in results for duration in result[3])))
+
+
+NATIVE_SOURCE_RUNTIME = NativeSourceRuntime()
+
+
+def execute(selection: Selection, root: Path, runtime: SourceRuntime = NATIVE_SOURCE_RUNTIME) -> Results:
     phases: list[tuple[float, str]] = []
     with timed('phase:runtime activation', phases):
-        activate()
+        runtime.activate()
     os.environ.pop('WORKSPACE_E2E', None)
     failures: list[str] = []
     broad = selection.reason not in ('transitive Python import dependencies', 'explicit iteration scope')
     if broad:
         with timed('phase:compile all source', phases):
-            selfcheck.compile_all(root, failures)
+            runtime.compile(root, failures)
         if failures:
             return 0, 0, tuple(failures), tuple(phases)
     # Hypothesis inspects loaded modules for local constants. Keep generated
@@ -170,22 +223,22 @@ def execute(selection: Selection, root: Path) -> Results:
     # dependencies do not become their generation catalog. Full compile/import
     # coverage and the final source binding still apply to this same run.
     generated = tuple(name for name in selection.tests if name.startswith('tests/properties/'))
-    first = execute_tests(generated, root)
+    first = execute_tests(generated, root, runtime.load)
     if broad:
         with timed('phase:import all production modules', phases):
             # This phase already requires the SDK. Resolve its dependency graph
             # before Qt installs its per-module source-inspection callback.
             # Narrow/Qt-only checks never pay this preload; generic source
             # fixtures without the SDK keep their existing import inventory.
-            import_changed(('assistant/sdk.py',), root, failures)
-            selfcheck.import_all(root, failures)
+            import_changed(('assistant/sdk.py',), root, failures, runtime.load)
+            runtime.import_all(root, failures)
     if not failures:
         with timed('phase:import changed source', phases):
-            import_changed(selection.changed, root, failures)
+            import_changed(selection.changed, root, failures, runtime.load)
     if failures:
         return first[0], first[1], (*first[2], *failures), (*phases, *first[3])
     remaining = tuple(name for name in selection.tests if not name.startswith('tests/properties/'))
-    following = execute_overlapped(remaining, root) if broad else execute_tests(remaining, root)
+    following = execute_overlapped(remaining, root) if broad else execute_tests(remaining, root, runtime.load)
     return first[0] + following[0], first[1] + following[1], (*first[2], *following[2]), (*phases, *first[3], *following[3])
 
 
@@ -199,12 +252,9 @@ def prepare_worker(root: Path) -> None:
 
 
 def execute_overlapped(tests: tuple[str, ...], root: Path) -> Results:
-    portable = tuple(selector for name in PORTABLE for selector in tests if selector.partition('::')[0] == name)
-    # Worker startup is disproportionate for a small editing scope. Use this
-    # only in broad native runs, where the desktop lane can hide that startup.
-    if len(portable) < 2 or not any(name.startswith('tests/test_windows_') for name in tests):
-        return execute_tests(tests, root)
-    sequential = tuple(name for name in tests if name not in portable)
+    plan = execution_plan(tests)
+    if not plan.portable:
+        return execute_tests(plan.sequential, root)
     phases: list[tuple[float, str]] = []
     results: list[Results] = []
     # The coordinator owns futures and ledgers until all children exit. Only
@@ -215,24 +265,21 @@ def execute_overlapped(tests: tuple[str, ...], root: Path) -> Results:
         pool = ProcessPoolExecutor(max_workers=2, initializer=prepare_worker, initargs=(root,))
     try:
         with timed('phase:portable worker submission', phases):
-            pending = tuple((name, pool.submit(execute_tests, (name,), root)) for name in portable)
-        results.append(execute_tests(sequential, root))
+            pending = tuple((name, pool.submit(execute_tests, (name,), root)) for name in plan.portable)
+        results.append(execute_tests(plan.sequential, root))
         with timed('phase:portable worker completion', phases):
             for name, future in pending:
                 try:
-                    passed, skipped, failures, timings = future.result(timeout=240)
-                    results.append((passed, skipped, failures, tuple((seconds, 'worker:' + label) for seconds, label in timings)))
+                    results.append(worker_result(future.result(timeout=240)))
                 except Exception:
                     results.append((0, 0, (f'Portable worker failed for {name}\n{traceback.format_exc()}',), ()))
     finally:
         with timed('phase:portable worker shutdown', phases):
             pool.shutdown(wait=True, cancel_futures=True)
-    return (sum(result[0] for result in results), sum(result[1] for result in results),
-            tuple(failure for result in results for failure in result[2]),
-            (*phases, *(duration for result in results for duration in result[3])))
+    return combined_results(tuple(results), tuple(phases))
 
 
-def execute_tests(tests: tuple[str, ...], root: Path) -> Results:
+def execute_tests(tests: tuple[str, ...], root: Path, load: Callable[[str], object] = importlib.import_module) -> Results:
     # Same small test-function protocol as selfcheck, sequential within its owner.
     # Accumulators belong to this executor; only immutable observations leave it.
     failures: list[str] = []
@@ -243,7 +290,7 @@ def execute_tests(tests: tuple[str, ...], root: Path) -> Results:
         module = module_name(name)
         import_started = time.perf_counter()
         try:
-            loaded = importlib.import_module(module)
+            loaded = load(module)
         except unittest.SkipTest:
             skipped += 1
             continue
@@ -349,6 +396,42 @@ def choose(args: Options, current: Mapping[str, str], parser: argparse.ArgumentP
     return selection
 
 
+@dataclass(frozen=True, slots=True)
+class CheckRun:
+    """One completed check's immutable source, scope, policy and cost evidence."""
+
+    files: frozendict[str, str]
+    selection: Selection
+    results: Results
+    architecture: Report
+    elapsed: float
+
+
+def publish_check(options: Options, run: CheckRun) -> bool:
+    passed, skipped, failures, observations = run.results
+    for failure in failures:
+        print(failure)
+    evidence = options.timings or PROFILE / 'development' / 'timings' / f'check-{time.time_ns()}.json'
+    evidence.parent.mkdir(parents=True, exist_ok=True)
+    write(evidence, {'kind': 'workspace-check-timings-v1', 'files': dict(run.files), 'tests': run.selection.tests,
+                     'profile': run.selection.reason, 'passed': passed, 'failed': len(failures), 'skipped': skipped,
+                     'elapsed_seconds': run.elapsed, 'durations': observations,
+                     'worker_seconds': sum(seconds for seconds, label in observations if label.startswith('worker:')),
+                     'unattributed_seconds': max(0.0, run.elapsed - sum(seconds for seconds, label in observations
+                                                                      if not label.startswith('worker:')))})
+    print(f'{passed} passed, {len(failures)} failed, {skipped} skipped in {run.elapsed:.2f}s; source-bound editing profile')
+    print(f'Complete cost evidence: {evidence}', flush=True)
+    for seconds, name in sorted((item for item in observations if not item[1].startswith(('phase:', 'module:', 'worker:module:'))), reverse=True)[:5]:
+        print(f'{seconds:.3f}s {name}')
+    if not failures and options.receipt:
+        write(options.receipt, {'kind': 'workspace-edit-check-v1', 'files': dict(run.files), 'tests': run.selection.tests,
+                                'profile': run.selection.reason, 'platform': 'win32' if options.native else sys.platform,
+                                'passed': passed, 'skipped': skipped,
+                                'architecture': {'sources': len(run.architecture.sources), 'exceptions': len(run.architecture.exceptions)},
+                                'elapsed_seconds': run.elapsed, 'checked_at_ns': time.time_ns()})
+    return bool(failures)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--full', action='store_true')
@@ -386,30 +469,9 @@ def main() -> None:
     if final != current:
         changed = tuple(name for name in sorted(final.keys() | current.keys()) if final.get(name) != current.get(name))
         failures = (*failures, 'Working source changed during checks; no receipt written. Changed: ' + ', '.join(changed))
-    for failure in failures:
-        print(failure)
     elapsed = time.perf_counter() - started
-    observations = (*overhead, *timings)
-    evidence = args.timings or PROFILE / 'development' / 'timings' / f'check-{time.time_ns()}.json'
-    evidence.parent.mkdir(parents=True, exist_ok=True)
-    # Separate from authorization: failed checks keep the complete diagnostic
-    # report, while source-bound deployment receipts remain success-only.
-    write(evidence, {'kind': 'workspace-check-timings-v1', 'files': current, 'tests': selection.tests,
-                     'profile': selection.reason, 'passed': passed, 'failed': len(failures), 'skipped': skipped,
-                     'elapsed_seconds': elapsed, 'durations': observations,
-                     'worker_seconds': sum(seconds for seconds, label in observations if label.startswith('worker:')),
-                     'unattributed_seconds': max(0.0, elapsed - sum(seconds for seconds, label in observations
-                                                                  if not label.startswith('worker:')))})
-    print(f'{passed} passed, {len(failures)} failed, {skipped} skipped in {elapsed:.2f}s; source-bound editing profile')
-    print(f'Complete cost evidence: {evidence}', flush=True)
-    for seconds, name in sorted((item for item in timings if not item[1].startswith(('phase:', 'module:', 'worker:module:'))), reverse=True)[:5]:
-        print(f'{seconds:.3f}s {name}')
-    if not failures and args.receipt:
-        write(args.receipt, {'kind': 'workspace-edit-check-v1', 'files': current, 'tests': selection.tests,
-                             'profile': selection.reason, 'platform': 'win32' if args.native else sys.platform, 'passed': passed, 'skipped': skipped,
-                             'architecture': {'sources': len(architecture.sources), 'exceptions': len(architecture.exceptions)},
-                             'elapsed_seconds': elapsed, 'checked_at_ns': time.time_ns()})
-    raise SystemExit(bool(failures))
+    run = CheckRun(frozendict(current), selection, (passed, skipped, failures, (*overhead, *timings)), architecture, elapsed)
+    raise SystemExit(publish_check(args, run))
 
 
 if __name__ == '__main__':

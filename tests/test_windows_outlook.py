@@ -10,8 +10,7 @@ if sys.platform != "win32":
     raise SkipTest("Windows draft binding sharing")
 
 from assistant.outlook import DraftConflict, DraftUncertain, SavedEmlDraft, SavedOutlookDraft, draft_key, eml_bytes
-
-from .test_outlook import adapter, request
+from tests.test_outlook import adapter, request
 
 
 def test_pending_bindings_stay_uncertain_when_a_reader_blocks_the_required_ready_commit(tmp_path: Path) -> None:

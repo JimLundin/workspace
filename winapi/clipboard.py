@@ -5,7 +5,7 @@ import time
 from ctypes import wintypes
 from typing import Final
 
-from ._core import fn, kernel32, user32
+from winapi._core import fn, kernel32, user32
 
 _OpenClipboard = fn(user32, "OpenClipboard", wintypes.BOOL, wintypes.HWND)
 _CloseClipboard = fn(user32, "CloseClipboard", wintypes.BOOL)

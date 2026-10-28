@@ -8,13 +8,12 @@ Both need the assistant, started by `workspace.pyw`.
 
 import sys
 
+lazy from miryoku.win import Exit, run, show_error
+
 
 def main() -> None:
     if sys.platform != "win32":
         sys.exit("miryoku only runs on Windows")
-    # Imported here: the module declares Win32 functions, which only exist on Windows.
-    from .win import Exit, run, show_error  # noqa: PLC0415
-
     match run():
         case Exit.QUIT:
             sys.exit(0)  # a normal quit: the assistant doesn't restart the layout

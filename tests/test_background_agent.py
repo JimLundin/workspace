@@ -8,10 +8,9 @@ from assistant.agent import BROWSER_SPECS, MEETING_SPECS, TEAMS_SPECS, Agent
 from assistant.agent_session import ToolActivity
 from assistant.geometry import Shot
 from assistant.llm import Json, Settings, ToolCall
+from tests.fake_endpoint import fake_endpoint
+from tests.test_agent import FakeMachine, FakeWindow, Rig, calls, says
 from winapi.shapes import Rect
-
-from .fake_endpoint import fake_endpoint
-from .test_agent import FakeMachine, FakeWindow, Rig, calls, says
 
 
 def test_meeting_voice_commands_use_the_recording_service_without_default_approvals() -> None:

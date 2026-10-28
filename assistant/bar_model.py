@@ -3,9 +3,9 @@
 from dataclasses import dataclass
 from typing import Literal
 
-from .icons import State
-from .notifications import Tone
-from .recording_state import RecordingState
+from assistant.icons import State
+from assistant.notifications import Tone
+from assistant.recording_state import RecordingState
 
 
 @dataclass(frozen=True, slots=True)

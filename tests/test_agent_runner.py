@@ -5,18 +5,17 @@ import threading
 from collections.abc import Callable, Mapping
 from concurrent.futures import ThreadPoolExecutor
 
+import tests.test_computer_tools
 from assistant.activity import ContextSnapshot
 from assistant.agent import Log
 from assistant.agent_execution import AgentExecution
 from assistant.agent_runner import Active, AgentRunner, Control, Execution, Idle, Stopping, Task, transition
 from assistant.llm import Settings
+from tests.fake_endpoint import Received, Reply, fake_endpoint
+from tests.test_agent import FakeMachine, Rig, says
+from tests.test_agent_session import asking
+from tests.test_agent_window import RecordingWindow
 from usage import Detail
-
-from .fake_endpoint import Received, Reply, fake_endpoint
-from .test_agent import FakeMachine, Rig, says
-from .test_agent_session import asking
-from .test_agent_window import RecordingWindow
-from .test_computer_tools import context as request_context
 
 
 class RecordingExecution:
@@ -61,7 +60,8 @@ class RunnerRig:
 
 
 def test_task_transitions_preserve_context_and_stop_discards_the_queue() -> None:
-    first, second = Task("First", request_context("First workbook")), Task("Second", request_context("Second workbook"))
+    first = Task("First", tests.test_computer_tools.context("First workbook"))
+    second = Task("Second", tests.test_computer_tools.context("Second workbook"))
     active = transition(Idle.READY, first)
     queued = transition(active, second)
     assert active == Active(first), "Queuing must leave the earlier snapshot unchanged."
@@ -105,7 +105,7 @@ def test_voice_replies_reach_pending_input_instead_of_starting_a_task() -> None:
 
 def test_queued_requests_keep_their_invocation_context_without_revealing_the_panel() -> None:
     entered, release = threading.Event(), threading.Event()
-    first, second = request_context("First workbook"), request_context("Second workbook")
+    first, second = tests.test_computer_tools.context("First workbook"), tests.test_computer_tools.context("Second workbook")
     current = first
 
     def run(task: Task, stop: threading.Event) -> None:
@@ -121,7 +121,7 @@ def test_queued_requests_keep_their_invocation_context_without_revealing_the_pan
         assert not rig.runner.new_conversation()
         current = second
         rig.runner.start("And this one")
-        current = request_context("An unrelated window opened later")
+        current = tests.test_computer_tools.context("An unrelated window opened later")
         assert rig.panel.state.queued == ("And this one",)
     finally:
         release.set()

@@ -101,10 +101,13 @@ Every `Dev.cmd check` first runs the source architecture review, including when
 `--tests` selects individual behavioral checks. The review parses source without
 importing the application. It enforces transitive keyboard isolation, immutable
 dataclass defaults, concrete mutable-field and reflection restrictions, and exact
-explained exceptions declared in `pyproject.toml`. Existing migration exceptions
+explained exceptions declared in `pyproject.toml`. It also rejects patch/mock
+frameworks and monkeypatch fixtures across production and test source; explicit
+test selections cannot bypass this check. Existing migration exceptions
 are followed by the development Ruff signature gate: new Boolean positional
 declarations block checks, and new interfaces over three inputs produce review
-warnings. The gate also rejects new aliased imports, inline imports and direct forwarding exports.
+warnings. The gate also rejects relative imports, new aliased imports, inline
+imports and direct forwarding exports.
 Read [code-quality-policies.md](code-quality-policies.md) when changing a
 signature or its exact migration entry. Architecture migration exceptions
 are printed as cleanup debt. A policy failure stops before tests or a receipt.

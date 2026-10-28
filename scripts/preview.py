@@ -13,7 +13,10 @@ from pathlib import Path
 from typing import Literal
 
 from pydantic import TypeAdapter, ValidationError
+lazy from PySide6 import QtCore, QtWidgets
+lazy from PySide6.QtCore import Qt
 
+from assistant.qt_runtime import prepare
 from runtime import activate
 lazy from assistant.agent_session import Answer, StreamState, Succeeded, ToolActivity
 lazy from assistant.agent_toasts import AgentToasts
@@ -22,11 +25,12 @@ lazy from assistant.desktop_bar import BarActions, DesktopBar
 lazy from assistant.feed_triage import Assessment, Board
 lazy from assistant.icons import State
 lazy from assistant.panel import PanelPreferences
-lazy from assistant.qt import Qt, QtCore, QtWidgets
 lazy from assistant.qt_ui import application
 lazy from assistant.recording_state import RecordingState
 lazy from winapi import screen
 lazy from winapi.shapes import Rect
+
+prepare()
 
 SCENARIOS = ('Idle', 'Agent working', 'Recording', 'Keyboard mode', 'Needs input', 'Transcribing', 'Dictating')
 

@@ -4,7 +4,7 @@ import ctypes
 from ctypes import wintypes
 from typing import Any
 
-from .shapes import Rect
+from winapi.shapes import Rect
 
 ULONG_PTR = ctypes.c_size_t
 LONG_PTR = ctypes.c_ssize_t

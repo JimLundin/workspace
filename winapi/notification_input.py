@@ -12,9 +12,9 @@ from collections import deque
 from ctypes import wintypes
 from dataclasses import dataclass
 
-from . import system
-from ._core import LRESULT, ULONG_PTR, fn, kernel32, last_error, user32
-from .shapes import Rect
+from winapi import system
+from winapi._core import LRESULT, ULONG_PTR, fn, kernel32, last_error, user32
+from winapi.shapes import Rect
 
 _WM_MOUSEWHEEL = 0x020A
 _WM_QUIT = 0x0012

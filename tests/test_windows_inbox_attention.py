@@ -5,33 +5,54 @@ import unittest
 from collections.abc import Callable
 from dataclasses import replace
 from pathlib import Path
-from unittest.mock import patch
+
+import assistant.console_requests
+import assistant.icons
 
 if sys.platform != 'win32':
     raise unittest.SkipTest('Windows toolbar inbox attention')
+
+lazy from PySide6 import QtCore, QtWidgets
 
 from assistant.agent_session import Question
 from assistant.agent_toasts import AgentToasts
 from assistant.agent_window import AgentWindow
 from assistant.communications import Feed, HandleNotice, Update, WindowsNotice
 from assistant.console_requests import Provider, Request, State
-from assistant.console_requests import Question as ConsoleQuestion
 from assistant.desktop_bar import BarActions, DesktopBar
 from assistant.feed_items import SourceKey
 from assistant.feed_triage import Assessment, Board, Disposition
-from assistant.icons import State as Activity
 from assistant.notifications import TurnKey
-from assistant.qt import QtCore
+from assistant.qt_runtime import prepare
 from assistant.qt_ui import application
 from assistant.system_notices import Notice, NoticeKey, Observed
 from assistant.ui import Ui
 
+prepare()
+
 
 class InboxUi(Ui):
-    __slots__ = ()
+    __slots__ = ("current_feed",)
+
+    def __init__(self, *, dismiss_notice: Callable[[NoticeKey], None] | None = None) -> None:
+        self.current_feed: AgentToasts | None = None
+        super().__init__(desktop_factory=isolated_bar, feed_factory=self.create_feed, dismiss_notice=dismiss_notice or (lambda _: None))
+
+    def create_feed(self, root: QtWidgets.QApplication, agent: AgentWindow) -> AgentToasts:
+        self.current_feed = AgentToasts(root, agent)
+        return self.current_feed
+
+    @property
+    def communications(self) -> Feed:
+        return self._communication_feed
+
+    @property
+    def root(self) -> QtWidgets.QApplication:
+        return self._root
 
     def pump(self) -> None:
         self._poll(self._root)
+        self._root.processEvents()
 
     @property
     def bar(self) -> DesktopBar:
@@ -45,20 +66,13 @@ class InboxUi(Ui):
 
     @property
     def feed(self) -> AgentToasts:
-        match self.panel._view:
-            case AgentToasts() as view:
-                return view
-            case _:
-                raise AssertionError('The native inbox view was not created.')
+        assert self.current_feed is not None
+        return self.current_feed
 
     def dispose(self) -> None:
         self._poll_timer.stop()
         self._close_views()
         self.pump()
-
-
-def ignore_focus(hwnd: int) -> None:
-    pass
 
 
 def isolated_bar(actions: BarActions, *, audio_level: Callable[[], float | None] | None = None) -> DesktopBar:
@@ -79,6 +93,10 @@ def test_bell_opens_inbox_keeps_exact_accessible_count_and_survives_activity(tmp
                          lambda: None, lambda: None, lambda: invoke('menu'), lambda _: None, inbox=lambda: invoke('inbox'))
     bar = DesktopBar(actions, native_shell=False)
     try:
+        # Exercise the rendered toolbar while keeping native observers disabled.
+        # Hidden Qt windows defer resize layout when activity removes the Stop button.
+        bar.visible = True
+        bar.render(animate=False)
         width = bar.window.width()
         assert bar.inbox.isHidden()
         bar.inbox_changed(1)
@@ -88,11 +106,11 @@ def test_bell_opens_inbox_keeps_exact_accessible_count_and_survives_activity(tmp
         assert bar.window.width() > width
         bar.inbox.click()
         assert invoked == ('inbox',) and not bar.menu.isVisible()
-        for state in (Activity.AGENT, Activity.LISTENING, Activity.WORKING):
+        for state in (assistant.icons.State.AGENT, assistant.icons.State.LISTENING, assistant.icons.State.WORKING):
             bar.state(state)
             assert not bar.inbox.isHidden()
             assert bar.inbox.geometry().right() < bar.window.width()
-        bar.state(Activity.READY)
+        bar.state(assistant.icons.State.READY)
         bar.inbox_changed(137)
         assert bar.inbox.text() == '99+' and '137 inbox items need' in bar.inbox.toolTip()
         assert '137 inbox items need' in bar.inbox.accessibleName()
@@ -108,7 +126,6 @@ def test_bell_opens_inbox_keeps_exact_accessible_count_and_survives_activity(tmp
         app.processEvents()
 
 
-@patch('winapi.windows.focus', new=ignore_focus)
 def test_inbox_updates_before_view_creation_and_tracks_agent_console_and_curated_resolution() -> None:
     app, original_style = application(), application().styleSheet()
     ui = InboxUi()
@@ -122,10 +139,9 @@ def test_inbox_updates_before_view_creation_and_tracks_agent_console_and_curated
     try:
         notice = Notice(NoticeKey(11, 100), 'mail', 'Outlook', 'Review', 'Budget needs review')
         ui.system_notices(Observed((notice,)))
-        with patch('assistant.ui.DesktopBar', side_effect=isolated_bar):
-            ui.desktop(show_agent=show_agent, show_work=lambda: None,
-                       stop=lambda: None, overlay=lambda: None, menu=lambda: None, on_problem=record_problem)
-            ui.pump()
+        ui.desktop(show_agent=show_agent, show_work=lambda: None,
+                   stop=lambda: None, overlay=lambda: None, menu=lambda: None, on_problem=record_problem)
+        ui.pump()
         bar = ui.bar
         assert not errors
         assert bar.inbox.text() == '1' and not bar.inbox.isHidden()
@@ -135,7 +151,8 @@ def test_inbox_updates_before_view_creation_and_tracks_agent_console_and_curated
                                                         notice.body, notice.app_name, 1),)), {})
         ui.pump()
         assert bar.inbox.isHidden()  # A late source publication cannot revive the handled notice.
-        waiting = Request('console', Provider.CODEX, 'session', 'C:/fictional', 'Choose a sheet', '', (ConsoleQuestion('Which sheet?'),), 2)
+        waiting = Request('console', Provider.CODEX, 'session', 'C:/fictional', 'Choose a sheet', '',
+                              (assistant.console_requests.Question('Which sheet?'),), 2)
         ui.console_changed((waiting,))
         ui.pump()
         assert bar.inbox.text() == '1' and not bar.inbox.isHidden()
@@ -163,7 +180,6 @@ def test_inbox_updates_before_view_creation_and_tracks_agent_console_and_curated
         app.setStyleSheet(original_style)
 
 
-@patch('winapi.windows.focus', new=ignore_focus)
 def test_bell_restores_current_feed_and_locally_hidden_unanswered_and_source_bubbles() -> None:
     app, original_style = application(), application().styleSheet()
     ui = InboxUi()
@@ -171,10 +187,9 @@ def test_bell_restores_current_feed_and_locally_hidden_unanswered_and_source_bub
     def show_agent() -> None:
         ui.agent(None, lambda: None, reveal=False)
     try:
-        with patch('assistant.ui.DesktopBar', side_effect=isolated_bar):
-            ui.desktop(show_agent=show_agent, show_work=lambda: None, stop=lambda: None,
-                       overlay=lambda: None, menu=lambda: None, on_problem=lambda _: None)
-            ui.pump()
+        ui.desktop(show_agent=show_agent, show_work=lambda: None, stop=lambda: None,
+                   overlay=lambda: None, menu=lambda: None, on_problem=lambda _: None)
+        ui.pump()
         # Keyboard access creates the inbox even before there is a visible bell.
         assert ui.bar.inbox.isHidden()
         ui.open_inbox(show_agent)

@@ -1,4 +1,5 @@
 from typing import Protocol
+
 from watchdog.events import FileSystemEvent
 
 class EventHandler(Protocol):

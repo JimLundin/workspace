@@ -7,11 +7,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Final, cast
 
+from assistant.keymap import PHYSICAL_NAMES
 from miryoku.layout import Layer, Scancode
 from usage import DIRECTORY
 from winapi.shapes import Rect
-
-from .keymap import PHYSICAL_NAMES
 
 PREFERENCE: Final = DIRECTORY / "overlay.json"
 POSITION: Final = DIRECTORY / "overlay-position.json"

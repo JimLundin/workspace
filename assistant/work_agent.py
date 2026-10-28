@@ -14,6 +14,12 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import assert_never
 
+lazy from assistant import agent_session
+lazy from assistant.activity import ContextSnapshot
+lazy from assistant.agent_window import AgentWindow
+lazy from assistant.feed_triage import request_context
+lazy from assistant.work_service import IdentifiedSubmission, Issued, WorkBridge, WorkService
+lazy from assistant.work_window import AnswerTask, FollowUp, Redirect, Submit, WorkCommand, WorkSnapshot
 lazy from automation.context import ContextStore
 lazy from automation.execution import ApprovalReview, review_matches
 lazy from automation.ipc import (
@@ -51,13 +57,6 @@ lazy from automation.task import (
     text,
 )
 
-lazy from . import agent_session as session
-lazy from .activity import ContextSnapshot
-lazy from .agent_window import AgentWindow
-lazy from .feed_triage import request_context
-lazy from .work_service import IdentifiedSubmission, Issued, WorkBridge, WorkService
-lazy from .work_window import AnswerTask, FollowUp, Redirect, Submit, WorkCommand, WorkSnapshot
-
 type MeetingControl = Callable[[StartMeeting | MeetingCommand], MeetingSucceeded | MeetingFailed]
 @dataclass(frozen=True, slots=True)
 class StopConversation:
@@ -87,14 +86,14 @@ def chronological(task: Task) -> tuple[float, str]:
     return task.created_at, task.id
 
 
-def input_message(task: Task, review: ApprovalReview | None) -> session.Question | session.Approval | None:
+def input_message(task: Task, review: ApprovalReview | None) -> agent_session.Question | agent_session.Approval | None:
     """A redacted journal record cannot become an approvable conversation row."""
     match task.state:
         case Waiting(Question(identity, question, detail)):
-            return session.Question(identity, question, detail, task.updated_at)
+            return agent_session.Question(identity, question, detail, task.updated_at)
         case Waiting(Approval()):
             if review is not None and review_matches(task, review):
-                return session.Approval(review.request.id, review.title, review.detail, task.updated_at)
+                return agent_session.Approval(review.request.id, review.title, review.detail, task.updated_at)
             return None
         case _:
             return None
@@ -143,7 +142,7 @@ class WorkAgent:
         self._rejected_input: tuple[str, str] | None = None
         self._watch_groups: dict[str, frozenset[str]] = {}
         self._watched: frozenset[str] = frozenset()
-        self._live: Callable[[session.LiveMessage], None] | None = None
+        self._live: Callable[[agent_session.LiveMessage], None] | None = None
         self._meeting_results: dict[tuple[str, RunRef, str], MeetingSucceeded | MeetingFailed] = {}
         self.window: AgentWindow | None = None
 
@@ -331,9 +330,9 @@ class WorkAgent:
                 return False
             return self._enqueue(Issued(AnswerTask(task_id, request_id, reply), self.identity(), self._source(), None))
 
-    def _request(self, task: Task, message: session.Question | session.Approval) -> None:
+    def _request(self, task: Task, message: agent_session.Question | agent_session.Approval) -> None:
         def respond(answer: str) -> bool:
-            if isinstance(message, session.Question):
+            if isinstance(message, agent_session.Question):
                 try:
                     return self._reply(task.id, message.request_id, TextAnswer(answer))
                 except ValueError:
@@ -513,19 +512,19 @@ class WorkAgent:
             if self._displayed is None or self._displayed.id != task.id or self.window is None or self._closing.is_set():
                 return
             match event.event:
-                case session.Begin():
+                case agent_session.Begin():
                     pass  # The persisted task already introduced this turn.
-                case session.Progress(text):
+                case agent_session.Progress(text):
                     self.window.step(text)
-                case session.Said(text, _):
+                case agent_session.Said(text, _):
                     self.window.say(text)
-                case session.Done():
+                case agent_session.Done():
                     pass  # A durable outcome, not a late live frame, completes work.
-                case session.Problem(text, _):
+                case agent_session.Problem(text, _):
                     self.window.problem(text)
-                case session.Finished():
+                case agent_session.Finished():
                     pass
-                case session.Answer() | session.ReasoningSummary() | session.ToolActivity():
+                case agent_session.Answer() | agent_session.ReasoningSummary() | agent_session.ToolActivity():
                     if self._live is not None:
                         self._live(event.event)
                 case _:

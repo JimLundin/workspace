@@ -1,24 +1,25 @@
 """Exact-chat Teams automation against fictional local DOMs in an isolated Edge."""
 
+import json
 import sys
 import threading
 import unittest
+from contextlib import AbstractContextManager
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import cast
-from unittest.mock import patch
 
 if sys.platform != "win32":
     raise unittest.SkipTest("Native Teams DOM fixture")
 
 from assistant.browser import Browser, BrowserResult
+from assistant.browser_session import BrowserConnection, BrowserSession, NativeSessions, Owner, Source
 from assistant.browser_values import BrowserError
 from assistant.communications import SourceDate, SourceDateHint, SourceDateStatus, TeamsActivity, UpdateKind
 from assistant.communications_browser import TeamsWeb
 from assistant.llm import Json
-
-from .browser_fixture import fixture
-from .test_windows_browser import dispose, installed, request
+from tests.browser_fixture import fixture
+from tests.test_windows_browser import dispose, installed, request
 
 # Fixture-only private CDP calls preserve real freeze/launcher recovery without
 # navigating an account page. Narrow annotations below acknowledge that access.
@@ -61,6 +62,114 @@ render();
 </script>"""
 
 
+class FixtureBrowser:
+    """Adapt Teams addresses to a local app while retaining real browser effects.
+
+    The fixture owns a chronological request trace for navigation assertions;
+    immutable observations leave that owner. The native Browser owns its process.
+    """
+
+    __slots__ = ("browser", "origin", "requests")
+
+    def __init__(self, browser: Browser, origin: str = "") -> None:
+        self.browser = browser
+        self.origin = origin
+        self.requests: tuple[tuple[str, frozendict[str, Json]], ...] = ()
+
+    @property
+    def connection(self) -> BrowserConnection | None:
+        return self.browser.connection
+
+    @property
+    def owner(self) -> Owner:
+        return self.browser.owner
+
+    def connect(self, cancel: threading.Event, *, visible: bool = False) -> None:
+        self.browser.connect(cancel, visible=visible)
+
+    def awake(self, target: str, cancel: threading.Event) -> AbstractContextManager[None]:
+        return self.browser.awake(target, cancel)
+
+    def activate_page(self, target: str, cancel: threading.Event) -> None:
+        self.browser.activate_page(target, cancel)
+
+    def request(self, operation: str, args: dict[str, Json], cancel: threading.Event) -> BrowserResult:
+        self.requests += ((operation, frozendict(args)),)
+        if operation == "open" and str(args.get("url", "")).startswith("https://teams.cloud.microsoft/l/chat/"):
+            args = {**args, "url": self.origin + "dl/launcher/launcher.html"}
+        result = self.browser.request(operation, args, cancel)
+        if operation == "tabs":
+            # Only catalog addresses cross the adapter; DOM reads and native
+            # activation still exercise the real isolated browser connection.
+            data = cast(dict[str, Json], json.loads(result.text))
+            rows = cast(list[dict[str, Json]], data["tabs"])
+            data = {**data, "tabs": [{**row, "url": "https://teams.cloud.microsoft/v2/"} for row in rows]}
+            return BrowserResult(json.dumps(data), result.image)
+        return result
+
+    def close(self) -> None:
+        self.browser.close()
+
+
+class NativeTrace:
+    """Observe native commands through the browser's existing connection seam."""
+
+    __slots__ = ("commands", "sessions")
+
+    def __init__(self, profile: Path) -> None:
+        self.sessions = NativeSessions(profile)
+        # The fixture owns the ordered native command evidence; only this
+        # browser contributes to the observation.
+        self.commands: tuple[tuple[str, frozendict[str, Json]], ...] = ()
+
+    def open(self, source: Source, cancel: threading.Event, *, visible: bool = False) -> BrowserSession:
+        native = self.sessions.open(source, cancel, visible=visible)
+        return BrowserSession(TracedConnection(native.connection, self), native.owner)
+
+
+class TracedConnection:
+    __slots__ = ("connection", "trace")
+
+    def __init__(self, connection: BrowserConnection, trace: NativeTrace) -> None:
+        self.connection = connection
+        self.trace = trace
+
+    # The native protocol requires method, parameters, cancellation, session and
+    # deadline together; this adapter preserves its complete calling contract.
+    def call(self, method: str, params: dict[str, Json], cancel: threading.Event, *, session: str = "", timeout: float = 15) -> dict[str, Json]:
+        self.trace.commands += ((method, frozendict(params)),)
+        return self.connection.call(method, params, cancel, session=session, timeout=timeout)
+
+    def close(self) -> None:
+        self.connection.close()
+
+
+def close_fixture(web: TeamsWeb, browser: Browser) -> None:
+    """Release only the exact native process launched by this fixture.
+
+    Preserve a failed normal close as a test failure, while still attempting
+    owned-process cleanup and profile removal before the next scenario runs.
+    """
+    process = browser.process
+    try:
+        web.close()
+    except Exception as primary:
+        # The job already requested termination. A second kill can return
+        # access denied while native exit is pending and hide the first failure.
+        if process is not None:
+            try:
+                process.wait(timeout=10)
+            except Exception as error:
+                primary.add_note(f"The captured browser root did not finish exiting: {error}")
+        try:
+            dispose(browser)
+        except Exception as error:
+            primary.add_note(f"The disposable browser profile could not be removed: {error}")
+        raise
+    else:
+        dispose(browser)
+
+
 ACTIVITY_PAGE = """<!doctype html><meta charset="utf-8"><title>Fictional Teams Activity</title>
 <div data-tid="activity-list-container">
 <div data-tid="activity-feed-list-item-wrap" id="123">
@@ -94,11 +203,11 @@ document.addEventListener('keydown',e=>{if(e.key==='Escape')document.getElementB
 def test_activity_identity_read_action_and_relative_clock_changes_are_verified_in_a_native_browser(tmp_path: Path) -> None:
     installed()
     cancel = threading.Event()
-    web = TeamsWeb(tmp_path / "unused")
-    web.browser = Browser(tmp_path / "activity-profile")
+    browser = Browser(tmp_path / "activity-profile")
+    web = TeamsWeb(tmp_path / "unused", browser=browser)
     try:
-        with patch("tests.browser_fixture.PAGE", ACTIVITY_PAGE), fixture() as url:
-            opened = request(web.browser, "open", url=url)
+        with fixture(ACTIVITY_PAGE) as url:
+            opened = request(browser, "open", url=url)
             web.target = cast(str, opened["target_id"])
             first = web.activity(cancel)
             assert len(first.items) == 2
@@ -126,42 +235,37 @@ def test_activity_identity_read_action_and_relative_clock_changes_are_verified_i
             assert web.evaluate("document.body.dataset.toggles", cancel, target=web.target) == "1"
             assert not web.activity_read("999", cancel)
     finally:
-        web.close()
-        dispose(web.browser)
+        close_fixture(web, browser)
 
 
 def test_activity_source_opens_the_exact_saved_page_after_native_tab_metadata_is_lost(tmp_path: Path) -> None:
     installed()
     cancel = threading.Event()
-    web = TeamsWeb(tmp_path / "unused")
-    web.browser = Browser(tmp_path / "activity-reopen-profile")
+    profile = tmp_path / "activity-reopen-profile"
+    trace = NativeTrace(profile)
+    browser = Browser(profile, opener=trace)
+    web = TeamsWeb(tmp_path / "unused", browser=browser)
     try:
-        with patch("tests.browser_fixture.PAGE", ACTIVITY_PAGE), fixture() as url:
-            opened = request(web.browser, "open", url=url)
+        with fixture(ACTIVITY_PAGE) as url:
+            opened = request(browser, "open", url=url)
             web.target = cast(str, opened["target_id"])
-            request(web.browser, "open", url="about:blank")
-            web.browser.native_targets.clear()
-            calls: list[tuple[str, dict[str, Json]]] = []
-            original = web.browser._call  # pyright: ignore[reportPrivateUsage]
-            def capture(method: str, params: dict[str, Json], event: threading.Event, *, session: str = "", timeout: float = 20) -> dict[str, Json]:
-                calls.append((method, params))
-                return original(method, params, event, session=session, timeout=timeout)
-            with patch.object(Browser, "_call", side_effect=capture):
-                web.open_activity("123", cancel)
-            assert ("Target.activateTarget", {"targetId": web.target}) in calls
+            assert browser.connection is not None
+            browser.connection.call("Target.createTarget", {"url": "about:blank"}, cancel)
+            browser.native_targets.clear()
+            web.open_activity("123", cancel)
+            assert ("Target.activateTarget", {"targetId": web.target}) in trace.commands
     finally:
-        web.close()
-        dispose(web.browser)
+        close_fixture(web, browser)
 
 
 def test_observation_reply_binding_and_inspection_use_isolated_fictional_chats(tmp_path: Path) -> None:
     installed()
     cancel = threading.Event()
-    web = TeamsWeb(tmp_path / "unused")
-    web.browser = Browser(tmp_path / "isolated-profile")
+    browser = Browser(tmp_path / "isolated-profile")
+    web = TeamsWeb(tmp_path / "unused", browser=FixtureBrowser(browser))
     try:
-        with patch("tests.browser_fixture.PAGE", PAGE), fixture() as url:
-            first = request(web.browser, "open", url=url)
+        with fixture(PAGE) as url:
+            first = request(browser, "open", url=url)
             web.target = cast(str, first["target_id"])
             web.evaluate("(() => { const nodes=[...document.body.childNodes]; document.body.replaceChildren();"
                          " setTimeout(()=>document.body.replaceChildren(...nodes),1000); return true; })()", cancel)
@@ -192,10 +296,7 @@ def test_observation_reply_binding_and_inspection_use_isolated_fictional_chats(t
             assert web.evaluate("JSON.parse(document.body.dataset.sent).length", cancel) == 1
 
             original_target = web.target
-            # Only page metadata is adapted; CDP stays on the localhost fixture.
-            page = {"id": web.target, "url": "https://teams.cloud.microsoft/v2/"}
-            with patch.object(TeamsWeb, "pages", return_value=(page,)):
-                web.open("19:one@thread.v2", cancel)
+            web.open("19:one@thread.v2", cancel)
             assert web.target == original_target
             assert web.read(cancel).current == "19:one@thread.v2"
 
@@ -207,20 +308,14 @@ def test_observation_reply_binding_and_inspection_use_isolated_fictional_chats(t
                 web.send("19:two@thread.v2", "Route changed", cancel)
             assert web.evaluate("JSON.parse(document.body.dataset.sent).length", cancel) == 1
     finally:
-        web.close()
-        dispose(web.browser)
+        close_fixture(web, browser)
 
 
 def test_chat_navigation_recovers_activity_frozen_pages_and_exact_launcher_destination(tmp_path: Path) -> None:
     installed()
     cancel = threading.Event()
-    web = TeamsWeb(tmp_path / "unused")
-    web.browser = Browser(tmp_path / "isolated-profile")
-    # Each navigation replaces the document and its JS state on the same owned
-    # target. Recovery variants need no independent browser startup or teardown.
-    try:
-        with fixture() as url:
-            activity = PAGE + """<div data-tid="app-layout-area--nav"><button aria-label="Chat" id="restore-chats">Chat</button></div>
+    browser = Browser(tmp_path / "isolated-profile")
+    activity = PAGE + """<div data-tid="app-layout-area--nav"><button aria-label="Chat" id="restore-chats">Chat</button></div>
             <script>
             const chatRows=[...document.querySelectorAll('[role=treeitem]')];
             for(const row of chatRows) row.remove();
@@ -230,27 +325,7 @@ def test_chat_navigation_recovers_activity_frozen_pages_and_exact_launcher_desti
               setTimeout(()=>{for(const row of chatRows)document.body.append(row);},300);
             };
             </script>"""
-            with patch("tests.browser_fixture.PAGE", activity):
-                opened = request(web.browser, "open", url=url)
-                web.target = cast(str, opened["target_id"])
-                assert len(web.read(cancel).conversations) == 1
-                second = web.select("19:two@thread.v2", cancel)
-                assert second.current == "19:two@thread.v2" and second.messages[0].sender == "Sam"
-                web.evaluate("(() => {for(const row of document.querySelectorAll('[role=treeitem]'))row.remove();return true;})()", cancel)
-                first = web.select("19:one@thread.v2", cancel)
-                assert first.current == "19:one@thread.v2"
-                assert web.evaluate("document.body.dataset.navigation", cancel) == "2"
-
-            delayed = PAGE.replace("editor.textContent=''; render();", "editor.textContent='';setTimeout(render,300);")
-            with patch("tests.browser_fixture.PAGE", delayed):
-                opened = request(web.browser, "open", url=url, target_id=web.target)
-                web.target = cast(str, opened["target_id"])
-                session = web.browser._session(web.target, cancel)  # pyright: ignore[reportPrivateUsage]
-                web.browser._call("Page.setWebLifecycleState", {"state": "frozen"}, cancel, session=session)  # pyright: ignore[reportPrivateUsage]
-                second = web.select("19:two@thread.v2", cancel)
-                assert second.current == "19:two@thread.v2" and second.messages[0].sender == "Sam"
-
-            activity = PAGE + """<div data-tid="app-layout-area--nav"><button aria-label="Chat" id="chat-nav">Chat</button></div>
+    empty = PAGE + """<div data-tid="app-layout-area--nav"><button aria-label="Chat" id="chat-nav">Chat</button></div>
             <script>
             const sidebar=[...document.querySelectorAll('[role=treeitem]')];
             for(const row of sidebar)row.remove();
@@ -260,15 +335,7 @@ def test_chat_navigation_recovers_activity_frozen_pages_and_exact_launcher_desti
               document.body.append(editor);render();
             },300);
             </script>"""
-            with patch("tests.browser_fixture.PAGE", activity):
-                opened = request(web.browser, "open", url=url, target_id=web.target)
-                web.target = cast(str, opened["target_id"])
-                assert web.read(cancel).current == ""
-                found = web.discover(cancel)
-                assert len(found.conversations) == 2 and found.current == "19:one@thread.v2"
-                assert web.select("19:two@thread.v2", cancel).messages[0].sender == "Sam"
-
-            launcher = PAGE + """<button id="openTeamsClientInBrowser">Continue in this browser</button><script>
+    launcher = PAGE + """<button id="openTeamsClientInBrowser">Continue in this browser</button><script>
             if(location.pathname==='/dl/launcher/launcher.html'){
               for(const row of document.querySelectorAll('[role=treeitem]'))row.remove();
               editor.remove();send.setAttribute('data-track-thread-id','');document.querySelector('#messages').replaceChildren();
@@ -277,23 +344,44 @@ def test_chat_navigation_recovers_activity_frozen_pages_and_exact_launcher_desti
               current='19:two@thread.v2';render();
               document.querySelector('#openTeamsClientInBrowser').remove();
             }</script>"""
-            with patch("tests.browser_fixture.PAGE", launcher):
-                opened = request(web.browser, "open", url=url, target_id=web.target)
-                web.target = cast(str, opened["target_id"])
-                original = web.browser._open  # pyright: ignore[reportPrivateUsage]
+    delayed = PAGE.replace("editor.textContent=''; render();", "editor.textContent='';setTimeout(render,300);")
+    # Static routes give each navigation its own document while one native
+    # process and server retain ownership across the recovery scenarios.
+    with fixture(launcher, pages={"/activity": activity, "/delayed": delayed, "/empty": empty}) as url:
+        adapter = FixtureBrowser(browser, url)
+        web = TeamsWeb(tmp_path / "unused", browser=adapter)
+        try:
+            opened = request(browser, "open", url=url + "activity")
+            web.target = cast(str, opened["target_id"])
+            assert len(web.read(cancel).conversations) == 1
+            second = web.select("19:two@thread.v2", cancel)
+            assert second.current == "19:two@thread.v2" and second.messages[0].sender == "Sam"
+            web.evaluate("(() => {for(const row of document.querySelectorAll('[role=treeitem]'))row.remove();return true;})()", cancel)
+            first = web.select("19:one@thread.v2", cancel)
+            assert first.current == "19:one@thread.v2"
+            assert web.evaluate("document.body.dataset.navigation", cancel) == "2"
 
-                def redirect(_browser: Browser, args: dict[str, Json], stop: threading.Event, *, visible: bool) -> BrowserResult:
-                    assert args["target_id"] == web.target
-                    assert args["url"] == "https://teams.cloud.microsoft/l/chat/19:two@thread.v2/conversations?webjoin=true"
-                    return original({**args, "url": url + "dl/launcher/launcher.html"}, stop, visible=visible)
+            opened = request(browser, "open", url=url + "delayed", target_id=web.target)
+            web.target = cast(str, opened["target_id"])
+            session = browser._session(web.target, cancel)  # pyright: ignore[reportPrivateUsage]
+            browser._call("Page.setWebLifecycleState", {"state": "frozen"}, cancel, session=session)  # pyright: ignore[reportPrivateUsage]
+            second = web.select("19:two@thread.v2", cancel)
+            assert second.current == "19:two@thread.v2" and second.messages[0].sender == "Sam"
 
-                page = {"id": web.target, "url": "https://teams.cloud.microsoft/v2/"}
-                with patch.object(TeamsWeb, "pages", return_value=(page,)), patch.object(
-                    Browser, "_open", new=redirect,
-                ), web.browser.awake(web.target, cancel):
-                    restored = web._reopen("19:two@thread.v2", cancel)  # pyright: ignore[reportPrivateUsage]
-                assert restored.current == "19:two@thread.v2" and restored.messages[0].sender == "Sam"
-                assert web.opening == {}
-    finally:
-        web.close()
-        dispose(web.browser)
+            opened = request(browser, "open", url=url + "empty", target_id=web.target)
+            web.target = cast(str, opened["target_id"])
+            assert web.read(cancel).current == ""
+            found = web.discover(cancel)
+            assert len(found.conversations) == 2 and found.current == "19:one@thread.v2"
+            assert web.select("19:two@thread.v2", cancel).messages[0].sender == "Sam"
+
+            opened = request(browser, "open", url=url, target_id=web.target)
+            web.target = cast(str, opened["target_id"])
+            with browser.awake(web.target, cancel):
+                restored = web._reopen("19:two@thread.v2", cancel)  # pyright: ignore[reportPrivateUsage]
+            assert ("open", {"target_id": web.target,
+                             "url": "https://teams.cloud.microsoft/l/chat/19:two@thread.v2/conversations?webjoin=true"}) in adapter.requests
+            assert restored.current == "19:two@thread.v2" and restored.messages[0].sender == "Sam"
+            assert web.opening == {}
+        finally:
+            close_fixture(web, browser)

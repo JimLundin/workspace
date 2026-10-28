@@ -8,8 +8,8 @@ from http.client import HTTPResponse
 from pathlib import Path
 from typing import cast, override
 
-from .console_requests import object_value, text
-from .feed_triage import decode_solutions
+from assistant.console_requests import object_value, text
+from assistant.feed_triage import decode_solutions
 
 INSTRUCTIONS = '''The floating conversation is the user's personal work feed. For work/notification/chat questions, feedback,
 or a short reply to a feed proposal, read work_feed first. It includes current proposals, focus and exact pending console questions.

@@ -24,7 +24,8 @@ pinned dependency's source and exercise our integration; stubs must not assert
 that external data already satisfies a domain schema.
 
 The [Python 3.15 typeshed override](.workspace-typeshed/README.md) retains Pyright 1.1.414's
-standard-library contracts and corrects its native `frozendict` constructor.
+standard-library contracts and corrects its native `frozendict` constructor and
+the binary/text types of subprocess streams.
 Both checkers select it through their supported typeshed-directory settings;
 runtime uses the builtin directly. Python's frozen mapping implementation is
 trusted, without library tests.

@@ -11,8 +11,8 @@ from pathlib import Path
 from typing import Protocol, assert_never, cast
 from urllib.parse import quote, urlencode, urlsplit
 
-from .graph_http import GraphError, Http
-from .llm import Json
+from assistant.graph_http import GraphError, Http
+from assistant.llm import Json
 
 GRAPH = "https://graph.microsoft.com/v1.0"
 MAX_OUTPUT = 20_000

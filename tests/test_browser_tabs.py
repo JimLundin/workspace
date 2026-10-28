@@ -23,8 +23,7 @@ from assistant.browser_values import (
     tab_of,
 )
 from assistant.llm import Json
-
-from .test_browser import Channel, connected_browser, decoded
+from tests.test_browser import Channel, connected_browser, decoded
 
 
 def test_default_open_reuses_the_users_expanded_workspace_group_without_changing_it() -> None:

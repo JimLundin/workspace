@@ -7,9 +7,9 @@ from dataclasses import dataclass, replace
 from enum import Enum, auto
 from typing import Protocol, assert_never
 
-from .activity import ContextSnapshot
-from .agent import Log
-from .agent_window import AgentWindow
+from assistant.activity import ContextSnapshot
+from assistant.agent import Log
+from assistant.agent_window import AgentWindow
 
 
 @dataclass(frozen=True, slots=True)

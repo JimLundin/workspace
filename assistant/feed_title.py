@@ -2,8 +2,15 @@
 
 import math
 
-from .qt import QFontMetricsF, QLabel, QPainter, QPaintEvent, QRectF, Qt, QtGui, QWidget
-from .qt_text import INSET, font
+lazy from PySide6 import QtGui
+lazy from PySide6.QtCore import QRectF, Qt
+lazy from PySide6.QtGui import QFontMetricsF, QPainter, QPaintEvent
+lazy from PySide6.QtWidgets import QLabel, QWidget
+
+from assistant.qt_runtime import prepare
+from assistant.qt_text import INSET, font
+
+prepare()
 
 TITLE_SIZE = 13.0
 

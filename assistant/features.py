@@ -14,16 +14,10 @@ from dataclasses import dataclass
 from enum import Enum, auto
 from typing import Final, Literal, Protocol
 
-from config import REWRITES
-from diagnostics import failure_info
-from protocol import App, Request, Tool
-from usage import Detail
-from winapi.shapes import Rect, Window
-
-from . import prompts
-from .geometry import Shot
-from .icons import State
-from .llm import (
+from assistant import prompts
+from assistant.geometry import Shot
+from assistant.icons import State
+from assistant.llm import (
     MAX_SECONDS,
     RATE,
     Failure,
@@ -42,8 +36,13 @@ from .llm import (
     user_message,
     wav,
 )
-from .text import one_line_command, typed_text, unwrap
-from .tiling_commands import TILING_COMMANDS
+from assistant.text import one_line_command, typed_text, unwrap
+from assistant.tiling_commands import TILING_COMMANDS
+from config import REWRITES
+from diagnostics import failure_info
+from protocol import App, Request, Tool
+from usage import Detail
+from winapi.shapes import Rect, Window
 
 
 class Answer(Protocol):

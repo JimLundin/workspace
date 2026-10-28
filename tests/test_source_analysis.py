@@ -5,9 +5,8 @@ from pathlib import Path
 from scripts.architecture import review
 from scripts.quality import compare, scan
 from scripts.source_analysis import Cache
-
-from .test_architecture import write_tree
-from .test_quality import development_lint, source_tree
+from tests.test_architecture import write_tree
+from tests.test_quality import development_lint, source_tree
 
 
 def test_cached_policy_review_recomputes_changed_imports_and_whole_graph_ownership(tmp_path: Path) -> None:

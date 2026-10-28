@@ -3,8 +3,8 @@
 from dataclasses import dataclass
 from typing import Final, assert_never
 
-from .feed_origin import App
-from .notifications import Tone
+from assistant.feed_origin import App
+from assistant.notifications import Tone
 
 INK: Final = "#f6f3ff"
 SECONDARY: Final = "#e0dced"

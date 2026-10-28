@@ -14,10 +14,8 @@ from dataclasses import dataclass
 from enum import Enum, auto
 from typing import assert_never, cast
 
-from automation.task import Completed, RequestSource, Task, digest, identifier, integer, variant
-
-from .meeting_followup import MAX_SOURCES, ActionContent, DraftContent, Transcript, TranscriptBundle, TranscriptSource
-from .meeting_followup_store import (
+from assistant.meeting_followup import MAX_SOURCES, ActionContent, DraftContent, Transcript, TranscriptBundle, TranscriptSource
+from assistant.meeting_followup_store import (
     ActionRevision,
     DraftRevision,
     FollowupStore,
@@ -25,9 +23,10 @@ from .meeting_followup_store import (
     TranscriptNotReadyError,
     observe_transcript,
 )
-from .meeting_requests import MAX_REQUESTS, MeetingRequests, PreparedFollowup, followup_prompt, task_identity
-from .meeting_store import MeetingArchive
-from .work_window import WorkSnapshot
+from assistant.meeting_requests import MAX_REQUESTS, MeetingRequests, PreparedFollowup, followup_prompt, task_identity
+from assistant.meeting_store import MeetingArchive
+from assistant.work_window import WorkSnapshot
+from automation.task import Completed, RequestSource, Task, digest, identifier, integer, variant
 
 MAX_MEETINGS = 512
 MAX_COMMANDS = 64

@@ -40,10 +40,10 @@ from win32more.Windows.Win32.System.WinRT import (
 from win32more.Windows.Win32.System.WinRT.Composition import ICompositorDesktopInterop
 from win32more.Windows.Win32.UI.WindowsAndMessaging import CreateWindowExW, GetWindow, SetWindowPos
 
-from . import windows
-from .composition_paths import composition_path
-from .contours import Contour
-from .shapes import Rect
+from winapi import windows
+from winapi.composition_paths import composition_path
+from winapi.contours import Contour
+from winapi.shapes import Rect
 
 
 def _check(result: object) -> None:

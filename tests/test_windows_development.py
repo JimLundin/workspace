@@ -8,15 +8,17 @@ import sys
 import time
 import unittest
 from pathlib import Path
-from unittest.mock import patch
 
 if sys.platform != 'win32':
     raise unittest.SkipTest('Native development tools')
 
-from assistant.qt import shiboken6
-from scripts.preview import Files, Preview
+lazy import shiboken6
 
-from .test_quality import migrations
+from assistant.qt_runtime import prepare
+from scripts.preview import Files, Preview
+from tests.test_quality import migrations
+
+prepare()
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -116,34 +118,31 @@ def test_preview_uses_real_views_without_starting_native_services_and_closes_cle
     # Detect accidentally starting the production taskbar/hook/communication
     # services or failing to route sample-state changes to the real views.
     files = Files(tmp_path, tmp_path / 'state.json')
-    with (patch('assistant.desktop_bar.NotificationObserver', side_effect=AssertionError('live notifications')),
-          patch('assistant.desktop_bar.LocalWeather', side_effect=AssertionError('live weather')),
-          patch('assistant.desktop_bar.StatusObserver', side_effect=AssertionError('live status')),
-          patch('assistant.desktop_bar.WindowsKeyObserver', side_effect=AssertionError('live key hook')),
-          patch('assistant.shell_controls.TaskbarControl.toggle', side_effect=AssertionError('live taskbar')),
-          patch('os.startfile', side_effect=AssertionError('live Windows settings'))):
-        preview = Preview('both', files)
-        try:
-            assert preview.bar is not None and preview.feed is not None
-            assert preview.bar.controls is None and preview.bar.worker is None and preview.bar.audio_meter is None
-            preview.selector.setCurrentIndex(2)
-            preview.root.processEvents()
-            assert preview.bar.record.text() == '02:05' and preview.bar.status.text() == preview.bar.ambient.text
-            preview.selector.setCurrentIndex(5)
-            preview.root.processEvents()
-            assert preview.bar.status.text() == 'Transcribing' and preview.bar.status.processing
-            preview.selector.setCurrentIndex(2)
-            preview.root.processEvents()
-            assert preview.feed.cards and json.loads(files.state.read_text()) == {'scenario': 2}
-            assert preview.control.isVisible()
-            assert all(pill.windowTitle().startswith('Workspace preview') for pill in preview.bar.pills)
-            preview.bar.open_menu()
-            for action in preview.bar.menu.actions():
-                if action.text() in ('Windows taskbar', 'Windows notification settings'):
-                    action.trigger()
-                    assert preview.status.text() == 'Preview action: ' + action.text()
-            preview.bar.menu.close()
-        finally:
-            preview.close()
+    preview = Preview('both', files)
+    try:
+        assert preview.bar is not None and preview.feed is not None
+        assert preview.bar.controls is None and preview.bar.worker is None and preview.bar.audio_meter is None
+        assert preview.bar.keys is None and not preview.bar.taskbar.ready
+        assert preview.bar.notification_service is None
+        assert preview.bar.weather_service is None and preview.bar.status_service is None
+        preview.selector.setCurrentIndex(2)
+        preview.root.processEvents()
+        assert preview.bar.record.text() == '02:05' and preview.bar.status.text() == preview.bar.ambient.text
+        preview.selector.setCurrentIndex(5)
+        preview.root.processEvents()
+        assert preview.bar.status.text() == 'Transcribing' and preview.bar.status.processing
+        preview.selector.setCurrentIndex(2)
+        preview.root.processEvents()
+        assert preview.feed.cards and json.loads(files.state.read_text()) == {'scenario': 2}
+        assert preview.control.isVisible()
+        assert all(pill.windowTitle().startswith('Workspace preview') for pill in preview.bar.pills)
+        preview.bar.open_menu()
+        for action in preview.bar.menu.actions():
+            if action.text() in ('Windows taskbar', 'Windows notification settings'):
+                action.trigger()
+                assert preview.status.text() == 'Preview action: ' + action.text()
+        preview.bar.menu.close()
+    finally:
         preview.close()
-        assert preview.bar.closed and preview.feed.closed and not shiboken6.isValid(preview.control)
+    preview.close()
+    assert preview.bar.closed and preview.feed.closed and not shiboken6.isValid(preview.control)

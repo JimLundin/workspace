@@ -8,7 +8,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Literal, NotRequired, Protocol, TypedDict, assert_never
 
-from .browser_values import (
+from assistant.browser_values import (
     BrowserError,
     ChangeTab,
     CloseGroup,
@@ -41,7 +41,7 @@ from .browser_values import (
     tab_state,
     text,
 )
-from .llm import Json
+from assistant.llm import Json
 
 _PROBE = """({ready: location.protocol === 'edge:' && location.hostname === 'favorites' &&
     typeof chrome.tabs?.query === 'function' && typeof chrome.tabGroups?.update === 'function', url: location.href})"""

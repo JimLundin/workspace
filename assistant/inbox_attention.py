@@ -1,7 +1,7 @@
 """Toolbar attention follows unhandled work, independent of bubble visibility."""
 
-from .agent_session import Snapshot, pending
-from .feed_items import WorkState, observed
+from assistant.agent_session import Snapshot, pending
+from assistant.feed_items import WorkState, observed
 
 
 def pending_count(session: Snapshot) -> int:

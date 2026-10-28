@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from typing import Literal, assert_never, cast
 from uuid import UUID
 
-from .tiling import GlazeWM
+from assistant.tiling import GlazeWM
 
 type Direction = Literal['horizontal', 'vertical']
 

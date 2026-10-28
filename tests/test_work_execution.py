@@ -33,11 +33,10 @@ from automation.task import (
     Waiting,
 )
 from keeper import copy_source, source_digest
-
-from .fake_endpoint import Reply, fake_endpoint
-from .test_agent import FakeMachine, FakeWindow, calls, says
-from .test_work_actions import claimed
-from .test_workspace import live_tree
+from tests.fake_endpoint import Reply, fake_endpoint
+from tests.test_agent import FakeMachine, FakeWindow, calls, says
+from tests.test_work_actions import claimed
+from tests.test_workspace import live_tree
 
 
 def request(store: TaskStore, identity: str, prompt: str, source: Source | None = None) -> Claim:

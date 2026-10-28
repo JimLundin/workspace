@@ -12,7 +12,10 @@ from dataclasses import replace
 if sys.platform != "win32":
     raise unittest.SkipTest("Windows native work overview")
 
-from assistant.qt import Qt, QtCore, QtGui, QtWidgets
+lazy from PySide6 import QtCore, QtGui, QtWidgets
+lazy from PySide6.QtCore import Qt
+
+from assistant.qt_runtime import prepare
 from assistant.qt_ui import application
 from assistant.work_panel import WorkPanel
 from assistant.work_window import (
@@ -37,9 +40,10 @@ from assistant.work_window import (
 from automation.context import Preference, ProjectNote
 from automation.routines import Disabled, Enabled, Every, Routine, RoutineSummary
 from automation.task import ApprovalDecision, Completed, Control, Question, TaskStatus, TextAnswer, Waiting
+from tests.test_work_window import approval_task, work_task
 from winapi import windows
 
-from .test_work_window import approval_task, work_task
+prepare()
 
 
 def button(parent: QtWidgets.QWidget, caption: str) -> QtWidgets.QToolButton:

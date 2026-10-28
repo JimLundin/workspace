@@ -8,7 +8,7 @@ from typing import cast
 
 import httpx
 
-from .ambient import Weather
+from assistant.ambient import Weather
 
 
 def weather_response(raw: object) -> Weather:

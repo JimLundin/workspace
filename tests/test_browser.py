@@ -2,16 +2,22 @@
 
 import base64
 import json
+import os
+import subprocess
+import sys
 import threading
+import time
+from collections.abc import Callable
 from pathlib import Path
 from typing import cast
 from unittest import TestCase
-from unittest.mock import patch
 
-from assistant.browser import MAX_OUTPUT, MAX_RESPONSE, Attached, Browser, BrowserError, Cdp, InterruptedError, Managed, Product, Separate, web_url
-from assistant.browser_session import BrowserSession, Source
+from websockets.sync.server import ServerConnection, serve
+
+from assistant.browser import MAX_OUTPUT, Browser, web_url
+from assistant.browser_session import MAX_RESPONSE, Attached, BrowserSession, Cdp, Managed, Product, Separate, Source
 from assistant.browser_tabs import TabStrip
-from assistant.browser_values import NavigationContextError
+from assistant.browser_values import BrowserError, InterruptedError, NavigationContextError
 from assistant.llm import Json
 
 VIEWPORT_PNG = base64.b64decode(
@@ -69,10 +75,11 @@ class ScriptedSessions:
 
 def connected_browser(
     path: Path, channel: Channel, *, owner: Attached | Managed | None = None, strip: TabStrip | None = None,
+    clock: Callable[[], float] = time.monotonic,
 ) -> Browser:
     owner = owner if owner is not None else Attached(Product.EDGE)
     source = owner.product if isinstance(owner, Attached) else Separate.PROFILE
-    browser = Browser(path, source=source, opener=ScriptedSessions(BrowserSession(Cdp(channel), owner)), strip=strip)
+    browser = Browser(path, source=source, opener=ScriptedSessions(BrowserSession(Cdp(channel, clock=clock), owner)), strip=strip)
     browser.connect(threading.Event(), visible=isinstance(owner, Managed) and owner.visible)
     return browser
 
@@ -85,7 +92,7 @@ def screenshot_channel() -> Channel:
 
 
 def test_background_activity_restores_focus_even_when_the_action_is_cancelled(tmp_path: Path) -> None:
-    channel = Channel.results({"targetInfos": [{"type": "page", "targetId": "fixture"}]}, {"sessionId": "page-session"}, {}, {})
+    channel = Channel.results({"targetInfos": [{"type": "page", "targetId": "fixture"}]}, {"sessionId": "page-session"}, {}, {}, {})
     browser = connected_browser(tmp_path, channel)
     cancel = threading.Event()
     try:
@@ -95,6 +102,34 @@ def test_background_activity_restores_focus_even_when_the_action_is_cancelled(tm
         changes = [item["params"] for item in channel.sent if item["method"] == "Emulation.setFocusEmulationEnabled"]
         assert changes == [{"enabled": True}, {"enabled": False}]
         assert browser.connection is not None
+    finally:
+        browser.close()
+
+
+def test_background_activity_resumes_a_frozen_page_before_running_work(tmp_path: Path) -> None:
+    """Detect focus emulation being used without resuming the page's lifecycle."""
+    class FrozenPage(Channel):
+        # This native-page adapter owns its lifecycle observation for one test.
+        __slots__ = ("running",)
+
+        def __init__(self) -> None:
+            super().__init__(*Channel.results(
+                {"targetInfos": [{"type": "page", "targetId": "fixture"}]}, {"sessionId": "page-session"}, {}, {}, {},
+            ).replies)
+            self.running = False
+
+        def send(self, message: str) -> None:
+            super().send(message)
+            command = decoded(message)
+            if command["method"] == "Page.setWebLifecycleState" and command["params"] == {"state": "active"}:
+                self.running = True
+
+    channel = FrozenPage()
+    browser = connected_browser(tmp_path, channel)
+    try:
+        with browser.awake("fixture", threading.Event()):
+            assert channel.running, "Background work began while its native page was frozen."
+        assert all(command["method"] != "Target.activateTarget" for command in channel.sent)
     finally:
         browser.close()
 
@@ -129,17 +164,16 @@ def test_slow_page_keeps_the_connection_and_accepts_the_next_response(tmp_path: 
         {"frameTree": {"frame": {"id": "main"}}}, {"executionContextId": 1}, {"result": {"value": "late reply"}},
         {"targetInfos": [{"type": "page", "targetId": "fixture"}]},
     )
-    browser = connected_browser(tmp_path, channel)
-    connection = browser.connection
     def clock() -> float:
         return 20.0 if channel.sent and channel.sent[-1]["method"] == "Runtime.evaluate" else 0.0
+    browser = connected_browser(tmp_path, channel, clock=clock)
+    connection = browser.connection
     try:
-        with patch("assistant.browser_session.time.monotonic", side_effect=clock):
-            with TestCase().assertRaisesRegex(BrowserError, "timed out") as raised:
-                browser.request("evaluate", {"target_id": "fixture", "expression": "1"}, threading.Event())
-            assert not isinstance(raised.exception, InterruptedError)
-            assert browser.connection is connection and not channel.closed
-            assert decoded(browser.request("tabs", {}, threading.Event()).text)["mode"] == "attached"
+        with TestCase().assertRaisesRegex(BrowserError, "timed out") as raised:
+            browser.request("evaluate", {"target_id": "fixture", "expression": "1"}, threading.Event())
+        assert not isinstance(raised.exception, InterruptedError)
+        assert browser.connection is connection and not channel.closed
+        assert decoded(browser.request("tabs", {}, threading.Event()).text)["mode"] == "attached"
         assert [call["method"] for call in channel.sent].count("Runtime.evaluate") == 1
     finally:
         browser.close()
@@ -172,12 +206,36 @@ def test_cdp_refuses_non_loopback_debugging_and_proxy_use() -> None:
     for uri in ("ws://localhost:9222/", "wss://127.0.0.1:9222/", "ws://example.com/", "ws://user:pass@127.0.0.1:9222/", "ws://[broken"):
         with TestCase().assertRaisesRegex(BrowserError, "loopback"):
             Cdp.connect(uri)
-    channel = Channel()
-    with patch("websockets.sync.client.connect", return_value=channel) as connect:
-        cdp = Cdp.connect("ws://127.0.0.1:12345/devtools/browser/fixture")
-        arguments = cast(tuple[tuple[object, ...], dict[str, object]], connect.call_args)
-        assert arguments[1]["proxy"] is None
-        cdp.close()
+    connected = threading.Event()
+
+    def accept(connection: ServerConnection) -> None:
+        connected.set()
+        for _message in connection:
+            raise AssertionError("The proxy-bypass check must not send a browser command.")
+
+    # A separate process owns its proxy environment. This observes our real
+    # transport choosing a direct connection even when loopback is not exempt.
+    with serve(accept, "127.0.0.1", 0, ping_interval=None, close_timeout=.5) as server:
+        port = cast(tuple[str, int], server.socket.getsockname())[1]
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            environment = dict(os.environ)
+            for name in ("http_proxy", "https_proxy", "all_proxy", "ws_proxy", "wss_proxy",
+                         "HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "WS_PROXY", "WSS_PROXY"):
+                environment[name] = "http://127.0.0.1:1"
+            environment["no_proxy"] = environment["NO_PROXY"] = ""
+            script = (
+                "from assistant.browser_session import Cdp\n"
+                f"connection = Cdp.connect('ws://127.0.0.1:{port}/devtools/browser/fixture')\n"
+                "connection.close()\n"
+            )
+            result = subprocess.run([sys.executable, "-c", script], check=False, env=environment, capture_output=True, text=True, timeout=10)
+            assert result.returncode == 0, result.stderr
+            assert connected.is_set(), "The browser transport did not reach its local endpoint."
+        finally:
+            server.shutdown()
+            thread.join(timeout=2)
 
 
 def test_browser_initialization_and_status_do_not_launch_or_create_a_profile(tmp_path: Path) -> None:
@@ -435,8 +493,6 @@ def test_browser_waits_for_the_root_after_job_termination_instead_of_killing_it_
 
         def wait(self, timeout: float) -> int:
             if not self.job_closed or timeout < 5:
-                import subprocess  # noqa: PLC0415
-
                 raise subprocess.TimeoutExpired("fixture", timeout)
             return 0  # Job termination can precede the process handle's exit signal.
 
@@ -454,3 +510,48 @@ def test_browser_waits_for_the_root_after_job_termination_instead_of_killing_it_
     browser = connected_browser(tmp_path / "profile", Channel.results({}), owner=Managed(process, Job(), False))
     browser.close()
     assert process.job_closed
+
+
+def test_browser_allows_normal_shutdown_before_forcing_its_owned_job(tmp_path: Path) -> None:
+    """Detect a grace period that interrupts a browser already closing normally."""
+    class ClosingProcess:
+        # This adapter owns one pending exit and publishes its exit observation.
+        __slots__ = ("returncode",)
+        pid = 42
+
+        def __init__(self) -> None:
+            self.returncode: int | None = None
+
+        def poll(self) -> int | None:
+            return self.returncode
+
+        def wait(self, timeout: float) -> int:
+            if self.returncode is None:
+                if timeout < 3:
+                    raise subprocess.TimeoutExpired("closing fixture", timeout)
+                self.returncode = 0
+            return self.returncode
+
+        def kill(self) -> None:
+            raise AssertionError("A normally closing owned browser must not be killed.")
+
+    process = ClosingProcess()
+
+    class Job:
+        # Keep the termination observation local to this fixture lifetime.
+        __slots__ = ("closed", "terminated_running_root")
+
+        def __init__(self) -> None:
+            self.terminated_running_root = False
+            self.closed = False
+
+        def close(self) -> None:
+            self.closed = True
+            if process.poll() is None:
+                self.terminated_running_root = True
+                process.returncode = 1
+
+    job = Job()
+    browser = connected_browser(tmp_path / "profile", Channel.results({}), owner=Managed(process, job, False))
+    browser.close()
+    assert process.poll() == 0 and job.closed and not job.terminated_running_root

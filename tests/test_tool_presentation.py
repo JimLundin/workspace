@@ -2,7 +2,6 @@
 
 import json
 from datetime import UTC, datetime
-from unittest.mock import patch
 
 from assistant import notification_text
 from assistant.agent_session import Answer, StreamState, Succeeded, ToolActivity
@@ -10,19 +9,17 @@ from assistant.communications import Delivery, Reply
 from assistant.feed_items import SourceKey, WorkItem
 from assistant.feed_triage import Assessment, Solution, SolutionKind
 from assistant.notifications import Entry, Settled, Turn
-
-from .fake_endpoint import fake_endpoint
-from .test_agent import Rig, ToolRig, calls, says
+from tests.fake_endpoint import fake_endpoint
+from tests.test_agent import Rig, ToolRig, calls, says
 
 
 def test_time_calls_observe_fresh_time_and_publish_tool_activity() -> None:
     """Detect a missing dispatch or a tool reusing the prompt's stale time."""
-    rig = ToolRig()
     observations = (datetime(2026, 10, 28, 10, tzinfo=UTC), datetime(2026, 10, 28, 11, tzinfo=UTC))
-    with patch('assistant.agent.datetime') as clock:
-        clock.now.side_effect = (observations[0], observations[0], observations[1], observations[1])
-        first = rig.call('get_current_time')
-        second = rig.call('get_current_time')
+    times = iter(observations)
+    rig = ToolRig(clock=lambda: next(times))
+    first = rig.call('get_current_time')
+    second = rig.call('get_current_time')
     assert first.ok and second.ok
     assert '2026-10-28T10:00:00+00:00' in first.text
     assert '2026-10-28T11:00:00+00:00' in second.text

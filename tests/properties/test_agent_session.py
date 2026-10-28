@@ -3,7 +3,7 @@
 from dataclasses import dataclass, replace
 from typing import Literal
 
-from hypothesis import strategies as st
+from hypothesis import strategies
 
 from assistant.agent_session import (
     Answered,
@@ -17,8 +17,7 @@ from assistant.agent_session import (
     Session,
     transition,
 )
-
-from .generation import cases, property_test
+from tests.properties.generation import cases, property_test
 
 
 @dataclass(frozen=True, slots=True)
@@ -30,10 +29,10 @@ class ReplyCase:
     stopping: bool
 
 
-def reply_cases(draw: st.DrawFn) -> ReplyCase:
+def reply_cases(draw: strategies.DrawFn) -> ReplyCase:
     decisions: tuple[Literal["approved", "declined"], ...] = ("approved", "declined")
-    return ReplyCase(draw(st.text(min_size=1, max_size=32)), draw(st.text(max_size=96)), draw(st.booleans()),
-                     draw(st.sampled_from(decisions)), draw(st.booleans()))
+    return ReplyCase(draw(strategies.text(min_size=1, max_size=32)), draw(strategies.text(max_size=96)), draw(strategies.booleans()),
+                     draw(strategies.sampled_from(decisions)), draw(strategies.booleans()))
 
 
 @property_test(cases(reply_cases))

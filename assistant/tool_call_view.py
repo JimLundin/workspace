@@ -1,153 +1,137 @@
-"""A native tool-call element owns its header, payload views and copy action.
+"""One retained tool-call row, with native status feedback and payload copying.
 
-Qt owns mutable widgets and documents. Only immutable call observations enter;
-the element's lifetime follows the invocation identity, never its status text.
+Qt owns the widgets and painted angle. Immutable invocation observations enter;
+status changes retain the row and never create payload boxes or text documents.
 """
 
-import math
 from collections.abc import Callable
-from dataclasses import dataclass
+from html import escape
+from typing import assert_never
 
-from .qt import QPoint, Qt, QtWidgets
-from .qt_text import Document, TextView, font
-from .rich_text import Span
-from .toast_style import Ink
-from .tool_text import Call, State
+lazy from PySide6 import QtWidgets
+lazy from PySide6.QtCore import QRectF, Qt
+lazy from PySide6.QtGui import QColor, QPainter, QPaintEvent, QPen
 
-INSET = 8
-HEADER = 24
-NAME = 18
-GAP = 4
-RESULT_LABEL = 18
+from assistant.action_text import shortened
+from assistant.qt_runtime import prepare
+from assistant.qt_text import font
+from assistant.toast_style import Ink
+from assistant.tool_text import Call, State
 
+prepare()
 
-@dataclass(frozen=True, slots=True)
-class Callbacks:
-    scroll: Callable[[int], None]
-    history: Callable[[], None]
+ROW_HEIGHT = 28
 
 
-@dataclass(frozen=True, slots=True)
-class Size:
-    argument: int
-    result: int
-
-    @property
-    def height(self) -> int:
-        return INSET * 2 + HEADER + NAME + (GAP + self.argument if self.argument else 0) + (
-            GAP + RESULT_LABEL + self.result if self.result else 0)
+def copy_text(text: str) -> None:
+    QtWidgets.QApplication.clipboard().setText(text)
 
 
-def literal(text: str) -> tuple[Span, ...]:
-    return (Span(text, ('code', 'codeblock', 'step_detail')),) if text else ()
+def status_color(state: State, ink: Ink) -> str:
+    # High contrast supplies one foreground for every ink role; retain it.
+    if ink.foreground == ink.secondary == ink.error:
+        return ink.foreground
+    match state:
+        case State.SUCCEEDED:
+            return '#76d49a'
+        case State.FAILED:
+            return ink.error
+        case State.RUNNING | State.CANCELLED:
+            return ink.secondary
+        case _:
+            assert_never(state)
 
 
-class Measure:
-    __slots__ = ('document',)
+class StatusIcon(QtWidgets.QWidget):
+    __slots__ = ('angle', 'owner')
 
-    def __init__(self) -> None:
-        self.document = Document()
+    def __init__(self, owner: ToolCall) -> None:
+        super().__init__(owner)
+        self.owner = owner
+        # The conversation frame loop owns timestamps; Qt retains its last angle.
+        self.angle: float = 90.0
+        self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
 
-    def size(self, call: Call, width: float) -> Size:
-        text_width = max(1, width - INSET * 2)
-        argument = math.ceil(self.document.load(literal(call.argument), text_width)) if call.argument else 0
-        result = math.ceil(self.document.load(literal(call.result), text_width)) if call.result else 0
-        return Size(argument, result)
-
-    def close(self) -> None:
-        self.document.close()
+    def paintEvent(self, event: QPaintEvent) -> None:  # noqa: N802 -- Qt virtual method
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.setPen(QPen(QColor(status_color(self.owner.call.state, self.owner.ink)), 1.7,
+                            Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
+        match self.owner.call.state:
+            case State.RUNNING:
+                painter.drawArc(QRectF(2, 2, 12, 12), round(self.angle * 16), 240 * 16)
+            case State.SUCCEEDED:
+                painter.drawLine(3, 8, 7, 12)
+                painter.drawLine(7, 12, 13, 4)
+            case State.FAILED:
+                painter.drawLine(4, 4, 12, 12)
+                painter.drawLine(12, 4, 4, 12)
+            case State.CANCELLED:
+                painter.drawLine(4, 8, 12, 8)
+            case _:
+                assert_never(self.owner.call.state)
 
 
 class ToolCall(QtWidgets.QWidget):
-    __slots__ = ('argument', 'call', 'callbacks', 'copy', 'ink', 'name', 'presented', 'result', 'result_label', 'status', 'title')
+    __slots__ = ('call', 'copy', 'copy_action', 'ink', 'presented', 'status', 'title')
 
-    def __init__(self, parent: QtWidgets.QWidget, call: Call, callbacks: Callbacks) -> None:
+    def __init__(self, parent: QtWidgets.QWidget, call: Call, copy: Callable[[str], None] = copy_text) -> None:
         super().__init__(parent)
-        self.callbacks, self.call, self.ink = callbacks, call, Ink()
+        self.copy_action, self.call, self.ink = copy, call, Ink()
         self.presented: tuple[Call, int] | None = None
         self.setObjectName('toolCall-' + call.identity)
-        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground)
+        self.status = StatusIcon(self)
         self.title = QtWidgets.QLabel(self)
-        self.status = QtWidgets.QLabel(self)
-        self.name = QtWidgets.QLabel(self)
-        self.result_label = QtWidgets.QLabel('Result', self)
-        for label in (self.title, self.status, self.name, self.result_label):
-            label.setTextFormat(Qt.TextFormat.PlainText)
-            label.setFont(font(9.5, bold=label is self.title))
-            label.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
-        self.name.setFont(font(9, family='Consolas'))
+        self.title.setTextFormat(Qt.TextFormat.PlainText)
+        self.title.setFont(font(9))
+        self.title.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
         self.copy = QtWidgets.QPushButton('Copy', self)
         self.copy.setFont(font(8))
         self.copy.clicked.connect(self.copy_payload)
-        self.argument = TextView(self, callbacks.scroll, self.argument_menu)
-        self.result = TextView(self, callbacks.scroll, self.result_menu)
-        self.argument.setAccessibleName('Tool arguments')
-        self.result.setAccessibleName('Tool result')
 
     @property
     def identity(self) -> str:
         return self.call.identity
 
     def copy_payload(self) -> None:
-        QtWidgets.QApplication.clipboard().setText(self.call.copy_text)
-
-    def argument_menu(self, point: QPoint) -> None:
-        self.argument.copy_menu(point, self.callbacks.history)
-
-    def result_menu(self, point: QPoint) -> None:
-        self.result.copy_menu(point, self.callbacks.history)
+        self.copy_action(self.call.copy_text)
 
     def present(self, call: Call, width: int) -> int:
         if self.presented == (call, width):
-            return self.height()
+            return ROW_HEIGHT
         self.call = call
-        self.title.setText(call.symbol + '  ' + call.label)
-        self.status.setText(call.state.value)
-        self.name.setText(call.name)
+        self.resize(width, ROW_HEIGHT)
+        self.copy.setVisible(bool(call.copy_text))
+        copy_width = 44 if call.copy_text else 0
+        text_width = max(1, width - 24 - copy_width)
+        preview = call.result if call.state is State.FAILED else call.argument or call.result
+        label = call.label + (' · ' + shortened(' '.join(preview.split()), 240) if preview else '')
+        self.title.setText(self.title.fontMetrics().elidedText(label, Qt.TextElideMode.ElideRight, text_width))
+        self.status.setGeometry(0, 6, 16, 16)
+        self.title.setGeometry(24, 0, text_width, ROW_HEIGHT)
+        self.copy.setGeometry(max(24, width - 40), 2, 40, 24)
         self.setAccessibleName('Tool call: ' + call.name)
         self.setAccessibleDescription(call.state.value)
-        self.copy.setAccessibleName('Copy arguments for ' + call.name if call.argument else 'Copy result for ' + call.name)
-        self.copy.setVisible(bool(call.copy_text))
-        text_width = max(1, width - INSET * 2)
-        self.argument.update_spans(literal(call.argument), text_width)
-        self.result.update_spans(literal(call.result), text_width)
-        size = Size(math.ceil(self.argument.content.height), math.ceil(self.result.content.height))
-        self.resize(width, size.height)
-        self.title.setGeometry(INSET, INSET, max(1, width - 160), HEADER)
-        self.status.setGeometry(max(INSET, width - 142), INSET, 82, HEADER)
-        self.copy.setGeometry(max(INSET, width - 54), INSET, 46, HEADER)
-        self.name.setGeometry(INSET, INSET + HEADER, text_width, NAME)
-        top = INSET + HEADER + NAME
-        self.argument.setVisible(bool(size.argument))
-        if size.argument:
-            top += GAP
-            self.argument.setGeometry(INSET, top, text_width, size.argument)
-            self.argument.fit_width()
-            top += size.argument
-        self.result_label.setVisible(bool(size.result))
-        self.result.setVisible(bool(size.result))
-        if size.result:
-            top += GAP
-            self.result_label.setGeometry(INSET, top, text_width, RESULT_LABEL)
-            self.result.setGeometry(INSET, top + RESULT_LABEL, text_width, size.result)
-            self.result.fit_width()
+        self.copy.setAccessibleName(('Copy arguments for ' if call.argument else 'Copy result for ') + call.name)
+        detail = '\n'.join(part for part in (call.name + ' · ' + call.state.value,
+                                           shortened(call.argument, 800), shortened(call.result, 800)) if part)
+        self.setToolTip('<pre>' + escape(detail) + '</pre>')
         self.recolor(self.ink)
         self.presented = (call, width)
-        return size.height
+        return ROW_HEIGHT
+
+    def pulse(self, angle: float) -> None:
+        if self.call.state is State.RUNNING:
+            self.status.angle = angle
+            self.status.update()
 
     def recolor(self, ink: Ink) -> None:
         self.ink = ink
-        self.setStyleSheet(f'QWidget#{self.objectName()} {{ background: rgba(118,106,154,18); '
-                          f'border: 1px solid {ink.secondary}; border-radius: 9px; }}')
-        for label in (self.title, self.name, self.result_label):
-            label.setStyleSheet(f'background: transparent; border: none; color: {ink.foreground};')
-        status_color = ink.error if self.call.state is State.FAILED else ink.foreground
-        self.status.setStyleSheet(f'background: rgba(118,106,154,24); border: none; border-radius: 6px; color: {status_color};')
-        self.status.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.copy.setStyleSheet(f'background: transparent; border: none; color: {ink.secondary};')
-        self.argument.recolor(ink)
-        self.result.recolor(ink)
+        self.setStyleSheet(f'QWidget#{self.objectName()} {{ background: transparent; border: none; }}')
+        self.title.setStyleSheet(f'background: transparent; border: none; padding: 0; margin: 0; color: {ink.foreground};')
+        self.copy.setStyleSheet(f'background: transparent; border: none; padding: 0; margin: 0; color: {ink.secondary};')
+        self.status.update()
 
-    def toPlainText(self) -> str:  # noqa: N802 -- matches the native conversation text interface
-        return '\n'.join(part for part in (self.title.text(), self.status.text(), self.call.name,
+    def toPlainText(self) -> str:  # noqa: N802 -- native conversation text observation
+        return '\n'.join(part for part in (self.call.label, self.call.state.value, self.call.name,
                                           self.call.argument, self.call.result) if part)

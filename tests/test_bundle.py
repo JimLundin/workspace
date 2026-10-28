@@ -4,7 +4,6 @@ import json
 import unittest
 import zipfile
 from pathlib import Path
-from unittest.mock import patch
 
 from scripts.bundle import WEB_ENGINE_PROCESS, extract, release
 
@@ -43,5 +42,5 @@ def test_pin_rejects_non_relative_exclusions_at_the_input_boundary(tmp_path: Pat
     for invalid in ("../outside", "/absolute", "C:/drive", "Lib\\tkinter", "Lib/../python.exe", "."):
         data: dict[str, str | list[str]] = {**pin, "exclude": [invalid]}
         (requirements / "python-win64.json").write_text(json.dumps(data))
-        with patch("scripts.bundle.ROOT", tmp_path), unittest.TestCase().assertRaises(ValueError):
-            release()
+        with unittest.TestCase().assertRaises(ValueError):
+            release(tmp_path)

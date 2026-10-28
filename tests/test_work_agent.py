@@ -60,9 +60,8 @@ from automation.task import (
     Waiting,
     owns,
 )
+from tests.test_agent_window import RecordingWindow
 from winapi.shapes import Window
-
-from .test_agent_window import RecordingWindow
 
 
 class Clock:

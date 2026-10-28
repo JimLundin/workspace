@@ -19,9 +19,8 @@ from assistant.meeting_followup_store import FollowupStore
 from automation.actions import FileVerifier
 from automation.files import filesystem_path
 from automation.task import ActionVerified
+from tests.test_meeting_followup import followup_response, followup_sources
 from winapi._core import fn, kernel32
-
-from .test_meeting_followup import followup_response, followup_sources
 
 _open_directory = cast(
     Callable[[str, int, int, None, int, int, None], int | None],

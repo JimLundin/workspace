@@ -2,10 +2,9 @@
 
 from typing import Protocol
 
+from assistant.overlay import nearest_work_area
 from winapi import inputs, screen, windows
 from winapi.shapes import Rect
-
-from .overlay import nearest_work_area
 
 
 class Desktop(Protocol):

@@ -10,20 +10,21 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import cast
 from unittest import TestCase
-from unittest.mock import patch
 
 from websockets.http11 import Request, Response
 from websockets.sync.server import ServerConnection, serve
 
-from assistant.browser import MAX_OUTPUT, Attached, Browser, BrowserError, Cdp, InterruptedError, Product, endpoint
-from assistant.browser_session import NativeSessions
+from assistant.browser import MAX_OUTPUT, Browser
+from assistant.browser_session import Attached, Cdp, NativeSessions, Product, SocketConnector, connect_socket, endpoint
+from assistant.browser_values import BrowserError, InterruptedError
 from assistant.llm import Json
-
-from .test_browser import Channel, ScriptedSessions, connected_browser, decoded
+from tests.test_browser import Channel, ScriptedSessions, connected_browser, decoded
 
 
 @contextmanager
-def consent_browser(tmp_path: Path, approval: threading.Event) -> Generator[tuple[Browser, list[str], threading.Event]]:
+def consent_browser(
+    tmp_path: Path, approval: threading.Event, *, sockets: SocketConnector = connect_socket,
+) -> Generator[tuple[Browser, list[str], threading.Event]]:
     """A real CDP socket whose WebSocket upgrade waits for browser consent."""
     approvals: list[str] = []
     requested = threading.Event()
@@ -45,7 +46,13 @@ def consent_browser(tmp_path: Path, approval: threading.Event) -> Generator[tupl
     server = serve(commands, "127.0.0.1", 0, process_request=approve, ping_interval=None, close_timeout=.5)
     port = cast(tuple[str, int], server.socket.getsockname())[1]
     (tmp_path / "DevToolsActivePort").write_text(f"{port}\n/devtools/browser/fixture\n", encoding="ascii")
-    browser = Browser(tmp_path / "unused", source=Product.EDGE, opener=NativeSessions(tmp_path / "unused", profiles=lambda _: tmp_path))
+    def connect(uri: str, cancel: threading.Event, *, timeout: float = 2) -> Cdp:
+        return Cdp.connect(uri, cancel, timeout=timeout, sockets=sockets)
+
+    browser = Browser(
+        tmp_path / "unused", source=Product.EDGE,
+        opener=NativeSessions(tmp_path / "unused", profiles=lambda _: tmp_path, connect=connect),
+    )
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     try:
@@ -60,16 +67,13 @@ def consent_browser(tmp_path: Path, approval: threading.Event) -> Generator[tupl
 def test_attachment_waits_for_consent_then_reuses_the_approved_connection(tmp_path: Path) -> None:
     approval = threading.Event()
     sockets: list[socket.socket] = []
-    create = socket.create_connection
-
-    def connecting(address: tuple[str, int], timeout: float) -> socket.socket:
-        transport = create(address, timeout=timeout)
+    def connecting(address: tuple[str, int], *, timeout: float) -> socket.socket:
+        transport = socket.create_connection(address, timeout=timeout)
         sockets.append(transport)
         return transport
 
     with (
-        consent_browser(tmp_path, approval) as (browser, approvals, requested),
-        patch("assistant.browser_session.socket.create_connection", new=connecting),
+        consent_browser(tmp_path, approval, sockets=connecting) as (browser, approvals, requested),
         ThreadPoolExecutor(max_workers=1) as worker,
     ):
         pending = worker.submit(browser.request, "attach", {}, threading.Event())

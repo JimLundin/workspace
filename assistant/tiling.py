@@ -11,6 +11,7 @@ from typing import Protocol, cast
 from uuid import UUID
 
 from usage import DIRECTORY
+lazy from winapi.processes import shell_start
 
 
 class ManagedProcess(Protocol):
@@ -21,11 +22,34 @@ class ManagedProcess(Protocol):
     def kill(self) -> None: ...
 
 
-def launch(arguments: list[str]) -> ManagedProcess:
-    if os.name == "nt":
-        from winapi.processes import shell_start  # noqa: PLC0415  # Keep portable command validation importable off Windows.
-        return shell_start(arguments)
-    return subprocess.Popen(arguments, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+class ManagerRuntime(Protocol):
+    """The manager's command transport, process lifetime and polling environment."""
+
+    def run(self, arguments: Sequence[str]) -> subprocess.CompletedProcess[str]: ...
+    def launch(self, arguments: Sequence[str]) -> ManagedProcess: ...
+    def enabled(self) -> bool: ...
+    def clock(self) -> float: ...
+    def sleep(self, seconds: float) -> None: ...
+
+
+class NativeRuntime:
+    def run(self, arguments: Sequence[str]) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(arguments, check=False, capture_output=True, text=True, encoding="utf-8",
+                              timeout=3, creationflags=0x08000000 if os.name == "nt" else 0)
+
+    def launch(self, arguments: Sequence[str]) -> ManagedProcess:
+        if os.name == "nt":
+            return shell_start(list(arguments))
+        return subprocess.Popen(arguments, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+    def enabled(self) -> bool:
+        return os.environ.get("WORKSPACE_TILING", "on").lower() != "off"
+
+    def clock(self) -> float:
+        return time.monotonic()
+
+    def sleep(self, seconds: float) -> None:
+        time.sleep(seconds)
 
 
 def reply(body: str) -> object:
@@ -111,15 +135,16 @@ def scoped_config(source: bytes) -> bytes:
 
 
 class GlazeWM:
-    __slots__ = ("binary", "cli", "closed", "config", "lock", "process")
+    __slots__ = ("binary", "cli", "closed", "config", "lock", "process", "runtime")
 
-    def __init__(self, binary: Path | None = None, config: Path | None = None) -> None:
+    def __init__(self, binary: Path | None = None, config: Path | None = None, *, runtime: ManagerRuntime | None = None) -> None:
         self.binary = binary or executable()
         self.cli = self.binary.parent / "cli" / "glazewm.exe"
         self.config = config or DIRECTORY / "glazewm.yaml"
         self.process: ManagedProcess | None = None
         self.lock = threading.RLock()
         self.closed = False
+        self.runtime: ManagerRuntime = NativeRuntime() if runtime is None else runtime
 
     def available(self) -> bool:
         return self.binary.is_file() and self.cli.is_file()
@@ -128,8 +153,7 @@ class GlazeWM:
         if not self.available():
             raise OSError("GlazeWM isn't installed. See Workspace's tiling setup instructions.")
         try:
-            result = subprocess.run([str(self.cli), *args], check=False, capture_output=True, text=True, encoding="utf-8",
-                                    timeout=3, creationflags=0x08000000 if os.name == "nt" else 0)
+            result = self.runtime.run((str(self.cli), *args))
         except subprocess.TimeoutExpired as error:
             raise OSError("GlazeWM did not answer within three seconds.") from error
         if result.returncode:
@@ -145,7 +169,7 @@ class GlazeWM:
 
     def start(self) -> None:
         with self.lock:
-            if self.closed or os.environ.get("WORKSPACE_TILING", "on").lower() == "off" or not self.available():
+            if self.closed or not self.runtime.enabled() or not self.available():
                 return
             if self.paused() is not None:
                 return  # An existing manager is borrowed; preserve its config and lifetime.
@@ -159,12 +183,12 @@ class GlazeWM:
                 if configured != original:
                     self.config.write_bytes(configured)
             try:
-                self.process = launch([str(self.binary), "start", "--config", str(self.config)])
-                deadline = time.monotonic() + 8
-                while self.process.poll() is None and time.monotonic() < deadline:
+                self.process = self.runtime.launch((str(self.binary), "start", "--config", str(self.config)))
+                deadline = self.runtime.clock() + 8
+                while self.process.poll() is None and self.runtime.clock() < deadline:
                     if self.paused() is not None:
                         return
-                    time.sleep(.1)
+                    self.runtime.sleep(.1)
                 raise OSError("GlazeWM could not start. See %USERPROFILE%\\.glzr\\glazewm\\errors.log.")
             except BaseException:
                 self._stop_owned()

@@ -16,8 +16,21 @@ from pathlib import Path
 from typing import Protocol, assert_never, cast
 from urllib.parse import urlsplit
 
-from .browser_values import BrowserError, DisconnectedError, InterruptedError, NavigationContextError, mapping, navigation_context_error, text
-from .llm import Json
+lazy from websockets.exceptions import WebSocketException
+lazy from websockets.sync.client import connect
+
+from assistant.browser_values import (
+    BrowserError,
+    DisconnectedError,
+    InterruptedError,
+    NavigationContextError,
+    mapping,
+    navigation_context_error,
+    text,
+)
+from assistant.llm import Json
+lazy from assistant.browser_host import connect_shared
+lazy from usage import DIRECTORY
 
 MAX_RESPONSE = 16_000_000
 
@@ -121,19 +134,30 @@ class Process(Protocol):
     def kill(self) -> None: ...
 
 
+class SocketConnector(Protocol):
+    def __call__(self, address: tuple[str, int], *, timeout: float) -> socket.socket: ...
+
+
+def connect_socket(address: tuple[str, int], *, timeout: float) -> socket.socket:
+    return socket.create_connection(address, timeout=timeout)
+
+
 class Cdp:
     """One serialized connection; events never get mistaken for command replies."""
 
-    __slots__ = ("channel", "sequence")
+    __slots__ = ("channel", "clock", "sequence")
 
-    def __init__(self, channel: Channel) -> None:
+    def __init__(self, channel: Channel, *, clock: Callable[[], float] = time.monotonic) -> None:
         self.channel, self.sequence = channel, 0
+        self.clock = clock
 
     @classmethod
-    def connect(cls, uri: str, cancel: threading.Event | None = None, *, timeout: float = 2) -> Cdp:
-        from websockets.exceptions import WebSocketException  # noqa: PLC0415
-        from websockets.sync.client import connect  # noqa: PLC0415
-
+    def connect(
+        cls, uri: str, cancel: threading.Event | None = None, *, timeout: float = 2,
+        sockets: SocketConnector = connect_socket,
+    ) -> Cdp:
+        # The opening deadline and TCP acquisition are separate dependencies:
+        # this owner clears the TCP timeout and closes pending consent on Stop.
         try:
             parsed = urlsplit(uri)
             port = parsed.port
@@ -150,7 +174,7 @@ class Cdp:
             if cancel is not None:
                 # Approval happens before the WebSocket upgrade. Own the pending
                 # socket so Stop can interrupt that wait without another attempt.
-                transport = socket.create_connection(("127.0.0.1", port), timeout=min(2, timeout))
+                transport = sockets(("127.0.0.1", port), timeout=min(2, timeout))
                 # websockets leaves a supplied socket's timeout unchanged. Clear
                 # the TCP deadline so it cannot kill approval or an idle session;
                 # open_timeout and the cancellation watcher bound the handshake.
@@ -181,8 +205,6 @@ class Cdp:
     def call(
         self, method: str, params: dict[str, Json], cancel: threading.Event, *, session: str = "", timeout: float = 15,
     ) -> dict[str, Json]:
-        from websockets.exceptions import WebSocketException  # noqa: PLC0415
-
         if cancel.is_set():
             raise InterruptedError("Stopped. Inspect the page before retrying an action that may already have completed.")
         self.sequence += 1
@@ -190,16 +212,16 @@ class Cdp:
         request: dict[str, Json] = {"id": identity, "method": method, "params": params}
         if session:
             request["sessionId"] = session
-        deadline = time.monotonic() + timeout
+        deadline = self.clock() + timeout
         try:
             self.channel.send(json.dumps(request))
             while True:
                 if cancel.is_set():
                     raise InterruptedError("Stopped. Inspect the page before retrying an action that may already have completed.")
-                if time.monotonic() >= deadline:
+                if self.clock() >= deadline:
                     raise BrowserError("Browser operation timed out. Inspect its result before retrying; it may already have completed.")
                 try:
-                    raw = self.channel.recv(timeout=min(.1, max(.001, deadline - time.monotonic())))
+                    raw = self.channel.recv(timeout=min(.1, max(.001, deadline - self.clock())))
                 except TimeoutError:
                     continue
                 if len(raw) > MAX_RESPONSE:
@@ -256,7 +278,11 @@ type Owner = Stopped | Managed | Attached
 def _close_process(owner: Managed) -> None:
     process, job = owner.process, owner.job
     with contextlib.suppress(subprocess.TimeoutExpired):
-        process.wait(timeout=2)
+        # Native Edge acknowledged close immediately but took 2.9 to 4.0 seconds
+        # to exit. Forcing its job after two seconds interrupted that teardown
+        # and delayed the exact root handle's exit signal by up to 90 seconds.
+        # Bound normal shutdown at five seconds before forcing owned children.
+        process.wait(timeout=5)
     if job is not None:
         job.close()
         process.wait(timeout=10)  # The job already terminated it; Windows may signal exit later.
@@ -307,10 +333,6 @@ class NativeSessions:
         match source:
             case Product():
                 if self.persistent:
-                    from usage import DIRECTORY  # noqa: PLC0415
-
-                    from .browser_host import connect_shared  # noqa: PLC0415
-
                     return BrowserSession(connect_shared(DIRECTORY / "browser-connections" / source.value, source, cancel), Attached(source))
                 try:
                     connection = self.connect(read_endpoint(self.profiles(source)), cancel, timeout=60)

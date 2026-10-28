@@ -35,8 +35,7 @@ from assistant.outlook import (
     matches,
     read_eml,
 )
-
-from .outlook_fixture import Record, perform
+from tests.outlook_fixture import Record, perform
 
 
 class LocalOutlookCommand:

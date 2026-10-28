@@ -7,7 +7,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import assert_never
 
-from .agent_session import Approval, ApprovalDecided, Event, InputCancelled, Question, QuestionAnswered, Resolution
+from assistant.agent_session import Approval, ApprovalDecided, Event, InputCancelled, Question, QuestionAnswered, Resolution
 
 
 @dataclass(slots=True)

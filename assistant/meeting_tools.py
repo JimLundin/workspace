@@ -2,7 +2,7 @@
 
 from typing import Final
 
-from .llm import Json, ToolSpec
+from assistant.llm import Json, ToolSpec
 
 
 def _object(properties: dict[str, Json], required: tuple[str, ...]) -> dict[str, Json]:

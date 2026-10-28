@@ -9,28 +9,16 @@ from datetime import datetime
 from enum import Enum, auto
 from typing import assert_never
 
-from winapi import windows
-lazy from automation.context import ContextRecord, Preference, ProjectNote
-lazy from automation.routines import EventTrigger, Every, FileChanged, Once, Routine, RoutineSummary, Trigger
-lazy from automation.task import (
-    Approval,
-    ApprovalDecision,
-    Completed,
-    Control,
-    Question,
-    Task,
-    TaskStatus,
-    TextAnswer,
-    Waiting,
-    allowed_controls,
-)
+lazy from PySide6 import QtGui, QtWidgets
+lazy from PySide6.QtCore import Qt
 
-lazy from .meeting_panel import MeetingPanel
-lazy from .panel_controls import button, label
-lazy from .qt import Qt, QtGui, QtWidgets
-lazy from .qt_text import units
-lazy from .widgets import Editor, Window, column, replace_text, row, show_window
-lazy from .work_window import (
+from assistant.qt_runtime import prepare
+from winapi import windows
+lazy from assistant.meeting_panel import MeetingPanel
+lazy from assistant.panel_controls import button, label
+lazy from assistant.qt_text import units
+lazy from assistant.widgets import Editor, Window, column, replace_text, row, show_window
+lazy from assistant.work_window import (
     AddPreference,
     AddProjectNote,
     AnswerTask,
@@ -54,6 +42,22 @@ lazy from .work_window import (
     trigger_label,
     when,
 )
+lazy from automation.context import ContextRecord, Preference, ProjectNote
+lazy from automation.routines import EventTrigger, Every, FileChanged, Once, Routine, RoutineSummary, Trigger
+lazy from automation.task import (
+    Approval,
+    ApprovalDecision,
+    Completed,
+    Control,
+    Question,
+    Task,
+    TaskStatus,
+    TextAnswer,
+    Waiting,
+    allowed_controls,
+)
+
+prepare()
 
 
 def _tree(title: str) -> QtWidgets.QTreeWidget:

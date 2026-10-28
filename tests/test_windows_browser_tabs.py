@@ -9,13 +9,12 @@ from typing import cast
 if sys.platform != "win32":
     raise unittest.SkipTest("Native Edge tab groups")
 
-from assistant.browser import Browser, Product
-from assistant.browser_session import NativeSessions
+from assistant.browser import Browser
+from assistant.browser_session import NativeSessions, Product
 from assistant.browser_values import Group, Tab, group_of, tab_of
-
-from .browser_fixture import fixture
-from .test_browser import decoded
-from .test_windows_browser import dispose, installed, request
+from tests.browser_fixture import fixture
+from tests.test_browser import decoded
+from tests.test_windows_browser import dispose, installed, request
 
 
 def strip(browser: Browser) -> tuple[dict[int, Tab], dict[int, Group]]:

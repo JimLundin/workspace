@@ -4,6 +4,28 @@ from collections.abc import Callable
 from dataclasses import dataclass, replace
 from typing import Protocol, assert_never
 
+from assistant.activity import ContextSnapshot
+from assistant.work_window import (
+    AddPreference,
+    AddProjectNote,
+    AnswerTask,
+    ControlTask,
+    CreateRoutine,
+    DisableRoutine,
+    EnableRoutine,
+    FollowUp,
+    Redirect,
+    RefreshApproval,
+    RemoveContext,
+    ReplyProblem,
+    SubmissionProblem,
+    Submit,
+    UpdatePreference,
+    UpdateProjectNote,
+    UpdateRoutine,
+    WorkCommand,
+    WorkSnapshot,
+)
 from automation.context import ContextStore, Preference, ProjectNote
 from automation.execution import ApprovalReview, review_matches
 from automation.ipc import (
@@ -29,29 +51,6 @@ from automation.task import (
     Waiting,
     owns,
     text,
-)
-
-from .activity import ContextSnapshot
-from .work_window import (
-    AddPreference,
-    AddProjectNote,
-    AnswerTask,
-    ControlTask,
-    CreateRoutine,
-    DisableRoutine,
-    EnableRoutine,
-    FollowUp,
-    Redirect,
-    RefreshApproval,
-    RemoveContext,
-    ReplyProblem,
-    SubmissionProblem,
-    Submit,
-    UpdatePreference,
-    UpdateProjectNote,
-    UpdateRoutine,
-    WorkCommand,
-    WorkSnapshot,
 )
 
 

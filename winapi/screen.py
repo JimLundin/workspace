@@ -5,8 +5,8 @@ from ctypes import wintypes
 from dataclasses import dataclass
 from typing import Final
 
-from ._core import fn, gdi32, optional_fn, rect, user32
-from .shapes import Rect
+from winapi._core import fn, gdi32, optional_fn, rect, user32
+from winapi.shapes import Rect
 
 
 class MONITORINFO(ctypes.Structure):

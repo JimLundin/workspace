@@ -2,9 +2,14 @@
 
 from functools import lru_cache
 
-from .feed_origin import App
-from .qt import Qt, QtCore, QtGui, QtSvg
-from .vector_icons import icon as workspace_icon
+lazy from PySide6 import QtCore, QtGui, QtSvg
+lazy from PySide6.QtCore import Qt
+
+import assistant.vector_icons
+from assistant.feed_origin import App
+from assistant.qt_runtime import prepare
+
+prepare()
 
 _MARKS = {
     App.TEAMS: '<circle cx="17" cy="6" r="3" fill="#b8b5ff"/><circle cx="22" cy="9" r="2" fill="#8f8be5"/>'
@@ -28,7 +33,7 @@ _MARKS = {
 @lru_cache(maxsize=16)
 def icon(app: App) -> QtGui.QIcon:
     if app is App.WORKSPACE:
-        return workspace_icon('agent', '#d7c8ff', 20)
+        return assistant.vector_icons.icon('agent', '#d7c8ff', 20)
     source = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">' + _MARKS[app] + '</svg>'
     renderer = QtSvg.QSvgRenderer(QtCore.QByteArray(source.encode()))
     pixmap = QtGui.QPixmap(48, 48)

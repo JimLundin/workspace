@@ -7,6 +7,7 @@ from assistant.agent_session import (
     Approval,
     ApprovalDecided,
     Begin,
+    ChatMessage,
     Enqueued,
     Failed,
     Finished,
@@ -72,8 +73,10 @@ def test_thinking_keeps_its_actions_in_one_stable_bubble_in_order() -> None:
     stack = advance(Stack(), session, 100)
     assert [toast.key for toast in stack.toasts] == [TurnKey(0)]
     work, = stack.toasts
-    assert work.content.entries[0].message.text == "Find the workbook"
     turn = bubble(stack)
+    first = turn.entries[0]
+    assert isinstance(first, Entry) and isinstance(first.message, ChatMessage)
+    assert first.message.text == "Find the workbook"
     assert isinstance(turn.state, Working) and turn.state.phase is Busy.THINKING
     assert body(turn) == "" and spinning(turn)
     session = transition(session, ReasoningSummary("summary", "Checking **recent files**.", 2))

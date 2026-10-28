@@ -3,7 +3,7 @@
 import ctypes
 from ctypes import wintypes
 
-from ._core import fn, kernel32, last_error
+from winapi._core import fn, kernel32, last_error
 
 
 class _Blob(ctypes.Structure):

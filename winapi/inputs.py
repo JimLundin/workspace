@@ -6,8 +6,8 @@ from ctypes import wintypes
 from dataclasses import dataclass
 from typing import Final
 
-from ._core import LRESULT, ULONG_PTR, fn, kernel32, user32
-from .shapes import Rect, require_input_count, utf16_units
+from winapi._core import LRESULT, ULONG_PTR, fn, kernel32, user32
+from winapi.shapes import Rect, require_input_count, utf16_units
 
 
 class KBDLLHOOKSTRUCT(ctypes.Structure):
@@ -134,10 +134,17 @@ def _key(vk: int, scancode: int, flags: int, extra: int) -> INPUT:
     return INPUT(_INPUT_KEYBOARD, INPUT_UNION(ki=KEYBDINPUT(vk, scancode, flags, 0, extra)))
 
 
-def _send(events: Sequence[INPUT]) -> int:
+def _submit(events: Sequence[INPUT]) -> int:
     """All in one call, so the user's own input can't land in the middle."""
     array = (INPUT * len(events))(*events)
-    sent = int(_SendInput(len(events), array, ctypes.sizeof(INPUT)))
+    return int(_SendInput(len(events), array, ctypes.sizeof(INPUT)))
+
+
+type SubmitInput = Callable[[Sequence[INPUT]], int]
+
+
+def _send(events: Sequence[INPUT], submit: SubmitInput = _submit) -> int:
+    sent = submit(events)
     require_input_count(sent, len(events))
     return sent
 
@@ -146,9 +153,9 @@ def send_key(vk: int, scancode: int, flags: int, extra: int) -> None:
     _send([_key(vk, scancode, flags, extra)])
 
 
-def send_keys(strokes: Sequence[KeyStroke], extra: int) -> None:
+def send_keys(strokes: Sequence[KeyStroke], extra: int, *, submit: SubmitInput = _submit) -> None:
     """Virtual keys, with the scancodes Windows' layout gives them."""
-    _send([_key(s.vk, scancode_for(s.vk), (0 if s.down else KEYEVENTF_KEYUP) | (KEYEVENTF_EXTENDEDKEY if s.extended else 0), extra) for s in strokes])
+    _send([_key(s.vk, scancode_for(s.vk), (0 if s.down else KEYEVENTF_KEYUP) | (KEYEVENTF_EXTENDEDKEY if s.extended else 0), extra) for s in strokes], submit)
 
 
 def send_scancodes(strokes: Sequence[tuple[int, bool]], extra: int) -> None:
@@ -196,12 +203,14 @@ def click(x: int, y: int, button: str, count: int, screen: Rect, extra: int) -> 
     _send([move, *(_mouse(0, 0, _BUTTON_DATA.get(button, 0), flag, extra) for _ in range(count) for flag in (down, up))])
 
 
-def mouse_button(button: str, down: bool, extra: int) -> None:
+# A button transition, output tag and sink form one native input contract.
+def mouse_button(button: str, extra: int, *, down: bool, submit: SubmitInput = _submit) -> None:
     """Presses or releases a button where the mouse is (for dragging)."""
     pressed, released = _BUTTON_FLAGS[button]
-    _send([_mouse(0, 0, _BUTTON_DATA.get(button, 0), pressed if down else released, extra)])
+    _send([_mouse(0, 0, _BUTTON_DATA.get(button, 0), pressed if down else released, extra)], submit)
 
 
-def scroll(clicks: int, extra: int, *, horizontal: bool = False) -> None:
+# Wheel direction and output tag travel through the same typed native sink.
+def scroll(clicks: int, extra: int, *, horizontal: bool = False, submit: SubmitInput = _submit) -> None:
     """Positive is up, or right for a horizontal wheel."""
-    _send([_mouse(0, 0, (clicks * 120) & 0xFFFF_FFFF, _MOUSEEVENTF_HWHEEL if horizontal else _MOUSEEVENTF_WHEEL, extra)])
+    _send([_mouse(0, 0, (clicks * 120) & 0xFFFF_FFFF, _MOUSEEVENTF_HWHEEL if horizontal else _MOUSEEVENTF_WHEEL, extra)], submit)

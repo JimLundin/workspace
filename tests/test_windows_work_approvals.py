@@ -7,8 +7,7 @@ if sys.platform != "win32":
     raise unittest.SkipTest("Windows native approval visibility")
 
 from assistant.agent_session import Approval
-
-from .test_windows_agent_toasts import notifications
+from tests.test_windows_agent_toasts import notifications
 
 
 def test_toast_approval_waits_for_a_visible_painted_card_and_a_fresh_request() -> None:

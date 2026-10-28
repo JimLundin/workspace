@@ -8,10 +8,11 @@ import time
 from collections.abc import Callable
 from dataclasses import replace
 from pathlib import Path
-from typing import cast
+from typing import Protocol, cast
 
-from .browser_values import BrowserError
-from .communications import (
+import assistant.system_notices
+from assistant.browser_values import BrowserError
+from assistant.communications import (
     MAX_FOLLOWED,
     MAX_HANDLED,
     Acknowledgement,
@@ -23,6 +24,7 @@ from .communications import (
     Follow,
     Handle,
     HandleNotice,
+    Message,
     NotificationFilters,
     OpenChat,
     OpenUpdate,
@@ -48,10 +50,38 @@ from .communications import (
     update_fingerprint,
     updates_observed,
 )
-from .communications_browser import ChatUnavailableError, TeamsWeb, obj, string
-from .llm import Json
-from .system_notices import NoticeKey
-from .system_notices import Observed as Notices
+from assistant.communications_browser import ActivityObservation, ChatUnavailableError, Observation, obj, string
+from assistant.llm import Json
+from assistant.system_notices import NoticeKey
+
+
+class Teams(Protocol):
+    """Observed Teams work and exact-source actions consumed by the collector."""
+
+    @property
+    def target(self) -> str: ...
+
+    def connect(self, saved_target: str, cancel: threading.Event) -> str: ...
+
+    def available(self, cancel: threading.Event) -> bool: ...
+
+    def read(self, cancel: threading.Event, *, target: str = "") -> Observation: ...
+
+    def discover(self, cancel: threading.Event) -> Observation: ...
+
+    def select(self, identity: str, cancel: threading.Event, *, target: str = "") -> Observation: ...
+
+    def activity(self, cancel: threading.Event) -> ActivityObservation: ...
+
+    def activity_read(self, identity: str, cancel: threading.Event) -> bool: ...
+
+    def open_activity(self, identity: str, cancel: threading.Event) -> None: ...
+
+    def send(self, identity: str, text: str, cancel: threading.Event) -> tuple[Message, ...]: ...
+
+    def open(self, identity: str, cancel: threading.Event) -> None: ...
+
+    def close(self) -> None: ...
 
 
 class SavedState:
@@ -93,15 +123,17 @@ class Communications:
     )
 
     def __init__(
-        self, web: TeamsWeb, store: SavedState, publish: Callable[[Feed, dict[str, str]], None],
+        self, web: Teams, store: SavedState, publish: Callable[[Feed, dict[str, str]], None],
         dismiss_notice: Callable[[NoticeKey], None] = lambda _: None,
     ) -> None:
+        # These four dependencies compose browser work, durable storage, Qt
+        # publication and native dismissal; none shares an effect owner.
         self.web, self.store, self.publish = web, store, publish
         self.dismiss_notice = dismiss_notice
         self.feed = Feed()
         self.drafts: dict[str, str] = {}
         self.pending_drafts: dict[str, str] = {}
-        self.pending_notices: Notices | None = None
+        self.pending_notices: assistant.system_notices.Observed | None = None
         self.draft_lock = threading.Lock()
         self.enabled = self.dirty = self.started = False
         self.saved_target = ""

@@ -5,19 +5,20 @@ import json
 import threading
 import uuid
 from collections.abc import Callable, Mapping
+from datetime import datetime
 from pathlib import Path
 from typing import Final, cast
 
 from assistant.agent import Agent, Output, allowed, key_strokes
 from assistant.agent_session import LiveMessage, Succeeded, ToolActivity, ToolStatus
+from assistant.feed_agent_tools import request
 from assistant.geometry import Shot
 from assistant.llm import Json, Settings, ToolCall, settings_from
 from assistant.workspace import Workspace
 from automation.execution import WorkExecution
+from tests.fake_endpoint import FakeEndpoint, Received, Reply, fake_endpoint, sse
+from tests.test_workspace import live_tree
 from winapi.shapes import Rect, Window
-
-from .fake_endpoint import FakeEndpoint, Received, Reply, fake_endpoint, sse
-from .test_workspace import live_tree
 
 
 def dumps(value: Json) -> str:
@@ -246,6 +247,8 @@ class ToolRig:
     def __init__(
         self, *, approvals: bool = False, workspace: Workspace | None = None, machine: FakeMachine | None = None,
         work: WorkExecution | None = None,
+        clock: Callable[[], datetime] = datetime.now,
+        feed_request: Callable[[dict[str, object]], str] = request,
     ) -> None:
         self.machine = machine if machine is not None else FakeMachine()
         self.window = FakeWindow()
@@ -253,6 +256,7 @@ class ToolRig:
         self.agent = Agent(
             Settings("", "", "", "", "", "", "", agent_approvals=approvals), self.machine, self.window,
             threading.Event(), journal=self.journal.append, workspace=workspace, work=work,
+            clock=clock, feed_request=feed_request,
         )
 
     def call(self, name: str, **arguments: Json) -> Output:

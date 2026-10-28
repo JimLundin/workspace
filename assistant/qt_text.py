@@ -3,28 +3,28 @@
 import math
 from collections.abc import Callable
 
-from .qt import (
+lazy import shiboken6
+lazy from PySide6.QtCore import QPoint, Qt
+lazy from PySide6.QtGui import (
     QColor,
     QContextMenuEvent,
     QFont,
     QFontMetricsF,
-    QFrame,
-    QMenu,
     QPalette,
-    QPoint,
-    Qt,
     QTextBlockFormat,
-    QTextBrowser,
     QTextCharFormat,
     QTextCursor,
     QTextDocument,
     QTextOption,
     QWheelEvent,
-    QWidget,
-    shiboken6,
 )
-from .rich_text import Span, changed_tail
-from .toast_style import Ink
+lazy from PySide6.QtWidgets import QFrame, QMenu, QTextBrowser, QWidget
+
+from assistant.qt_runtime import prepare
+from assistant.rich_text import Span, changed_tail
+from assistant.toast_style import Ink
+
+prepare()
 
 INSET = 16
 TEXT_PADDING = 8

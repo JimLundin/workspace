@@ -13,10 +13,9 @@ from collections.abc import Callable
 from dataclasses import dataclass, replace
 from typing import Final, Protocol
 
-from usage import DIRECTORY
-
-from .agent_input import Inputs, acceptable, resolution
-from .agent_session import (
+import assistant.console_requests
+from assistant.agent_input import Inputs, acceptable, resolution
+from assistant.agent_session import (
     Approval,
     Begin,
     Done,
@@ -36,12 +35,11 @@ from .agent_session import (
     pending,
     transition,
 )
-from .communications import Command, Feed
-from .console_requests import Command as ConsoleCommand
-from .console_requests import Request as ConsoleRequest
-from .feed_origin import FeedRequest
-from .feed_triage import Board
-from .recording_state import RecordingAction, RecordingState
+from assistant.communications import Command, Feed
+from assistant.feed_origin import FeedRequest
+from assistant.feed_triage import Board
+from assistant.recording_state import RecordingAction, RecordingState
+from usage import DIRECTORY
 
 VIEW_LOG: Final = DIRECTORY / "agent-ui.log"
 
@@ -111,9 +109,14 @@ class AgentWindow:
         on_recording: Callable[[RecordingAction], None] | None = None,
         on_work: Callable[[], None] | None = None,
         on_communication: Callable[[Command], bool] | None = None,
-        on_console: Callable[[ConsoleCommand], bool] | None = None,
+        on_console: Callable[[assistant.console_requests.Command], bool] | None = None,
         on_snapshot: Callable[[Snapshot], None] | None = None,
+        on_choose_work: Callable[[str, str, str], bool] | None = None,
+        on_dismiss_work: Callable[[str], bool] | None = None,
     ) -> None:
+        # This conversation owns one view, request lifetime and snapshot stream.
+        # Its independent interaction callbacks are composed together here so a
+        # caller can connect the actual effect owners before the first render.
         self.stop, self.on_problem, self.on_reset, self.on_submit = stop, on_problem, on_reset, on_submit
         self.on_waiting = on_waiting
         self.on_recording = on_recording
@@ -121,8 +124,8 @@ class AgentWindow:
         self.on_communication = on_communication
         self.on_console = on_console
         self.on_snapshot: Callable[[Snapshot], None] | None = on_snapshot
-        self.on_choose_work: Callable[[str, str, str], bool] | None = None
-        self.on_dismiss_work: Callable[[str], bool] | None = None
+        self.on_choose_work = on_choose_work
+        self.on_dismiss_work = on_dismiss_work
         self._external: _ExternalRequest | _ExternalAnswer | None = None
         self._presented: str | None = None
         self.state = Session(identity=uuid.uuid4().hex)
@@ -401,7 +404,7 @@ class AgentWindow:
                 self.state = replace(self.state, triage=board)
                 self._changed()
 
-    def consoles(self, requests: tuple[ConsoleRequest, ...]) -> None:
+    def consoles(self, requests: tuple[assistant.console_requests.Request, ...]) -> None:
         with self.lock:
             if not self.closed:
                 self.state = replace(self.state, console_requests=requests)

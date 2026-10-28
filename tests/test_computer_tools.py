@@ -8,10 +8,9 @@ from assistant.activity import Activity, ContextSnapshot
 from assistant.agent import Agent
 from assistant.geometry import Shot
 from assistant.llm import Json, Settings, ToolCall
+from tests.fake_endpoint import fake_endpoint
+from tests.test_agent import FakeMachine, FakeWindow, Rig, calls, says
 from winapi.shapes import Rect, Window
-
-from .fake_endpoint import fake_endpoint
-from .test_agent import FakeMachine, FakeWindow, Rig, calls, says
 
 
 def call(agent: Agent, name: str, arguments: dict[str, object]) -> str:

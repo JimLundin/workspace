@@ -1,56 +1,86 @@
 """Bounded, local Notification Center reads and explicit individual dismissal."""
-# pyright: reportUnknownMemberType=false, reportUnknownArgumentType=false, reportUnknownVariableType=false, reportMissingTypeStubs=false
-
 import asyncio
 import queue
 import threading
 from contextlib import suppress
 from dataclasses import replace
 from itertools import islice
+from typing import Protocol
+
+lazy from win32more import FAILED
+lazy from win32more.Windows.UI.Notifications import NotificationKinds
+lazy from win32more.Windows.UI.Notifications.Management import UserNotificationListener, UserNotificationListenerAccessStatus
+lazy from win32more.Windows.Win32.System.WinRT import RO_INIT_MULTITHREADED, RoInitialize, RoUninitialize
 
 from assistant.system_notices import Access, Banners, Notice, NoticeKey, Observation, Observed, Unavailable, creation_time
+from winapi.notification_banners import BannerPolicy, Coverage
 
-from .notification_banners import BannerPolicy
+
+class NotificationSource(Protocol):
+    """The notification worker owns one source's apartment and observation lifetime."""
+
+    def open(self) -> bool: ...
+    async def read(self) -> Observation: ...
+    def dismiss(self, key: NoticeKey) -> None: ...
+    def close(self) -> None: ...
 
 
-async def read() -> Observation:
-    from win32more.Windows.UI.Notifications import NotificationKinds  # noqa: PLC0415
-    from win32more.Windows.UI.Notifications.Management import UserNotificationListener, UserNotificationListenerAccessStatus  # noqa: PLC0415
+class BannerLease(Protocol):
+    def sync(self) -> Coverage: ...
+    def close(self) -> None: ...
 
-    listener = UserNotificationListener.get_Current()
-    if listener.GetAccessStatus() != UserNotificationListenerAccessStatus.Allowed:
-        return Unavailable(Access.DENIED)
-    rows = await asyncio.wait_for(listener.GetNotificationsAsync(NotificationKinds.Toast), 3)
-    found: list[Notice] = []
-    for index, row in enumerate(rows):
-        if index >= 256:
-            break
-        try:
-            binding = row.Notification.Visual.GetBinding('ToastGeneric')
-            if not binding:
-                continue
-            texts = tuple(str(text.Text).strip()[:4096] for text in islice(binding.GetTextElements(), 16))
-            if not texts or not any(texts):
-                continue
-            identity, created = int(row.Id), creation_time(row.CreationTime)
-            if identity < 0 or created < 0:
-                continue
-            info = row.AppInfo
-            found.append(Notice(NoticeKey(identity, created), str(info.AppUserModelId)[:512],
-                                str(info.DisplayInfo.DisplayName)[:256], texts[0][:512], '\n'.join(texts[1:])[:8192]))
-        except OSError:
-            continue  # The source can disappear between enumeration and reading.
-    return Observed(tuple(sorted(found, key=lambda notice: notice.key.created, reverse=True)))
+
+class NativeNotifications:
+    __slots__ = ()
+
+    def open(self) -> bool:
+        return not FAILED(RoInitialize(RO_INIT_MULTITHREADED))
+
+    async def read(self) -> Observation:
+        listener = UserNotificationListener.get_Current()
+        if listener.GetAccessStatus() != UserNotificationListenerAccessStatus.Allowed:
+            return Unavailable(Access.DENIED)
+        rows = await asyncio.wait_for(listener.GetNotificationsAsync(NotificationKinds.Toast), 3)
+        found: list[Notice] = []
+        for index, row in enumerate(rows):
+            if index >= 256:
+                break
+            try:
+                binding = row.Notification.Visual.GetBinding('ToastGeneric')
+                if not binding:
+                    continue
+                texts = tuple(str(text.Text).strip()[:4096] for text in islice(binding.GetTextElements(), 16))
+                if not texts or not any(texts):
+                    continue
+                identity, created = int(row.Id), creation_time(row.CreationTime)
+                if identity < 0 or created < 0:
+                    continue
+                info = row.AppInfo
+                found.append(Notice(NoticeKey(identity, created), str(info.AppUserModelId)[:512],
+                                    str(info.DisplayInfo.DisplayName)[:256], texts[0][:512], '\n'.join(texts[1:])[:8192]))
+            except OSError:
+                continue  # The source can disappear between enumeration and reading.
+        return Observed(tuple(sorted(found, key=lambda notice: notice.key.created, reverse=True)))
+
+    def dismiss(self, key: NoticeKey) -> None:
+        listener = UserNotificationListener.get_Current()
+        source = listener.GetNotification(key.identity)
+        if source and creation_time(source.CreationTime) == key.created:
+            listener.RemoveNotification(key.identity)
+
+    def close(self) -> None:
+        RoUninitialize()
 
 
 class NotificationObserver:
     """WinRT lives on one MTA worker; no notification content is logged or saved."""
 
-    __slots__ = ('banner_policy', 'dismissals', 'results', 'stopped', 'thread')
+    __slots__ = ('banner_policy', 'dismissals', 'results', 'source', 'stopped', 'thread')
 
-    def __init__(self) -> None:
+    def __init__(self, *, source: NotificationSource | None = None, banner_policy: BannerLease | None = None) -> None:
         self.results: queue.Queue[Observation] = queue.Queue(maxsize=1)
-        self.banner_policy = BannerPolicy()
+        self.source: NotificationSource = NativeNotifications() if source is None else source
+        self.banner_policy: BannerLease = BannerPolicy() if banner_policy is None else banner_policy
         self.dismissals: queue.Queue[NoticeKey] = queue.Queue(maxsize=64)
         self.stopped = threading.Event()
         self.thread = threading.Thread(target=self.run, name='Windows notifications', daemon=True)
@@ -66,11 +96,7 @@ class NotificationObserver:
             self.dismissals.put_nowait(key)
 
     def run(self) -> None:
-        from win32more import FAILED  # noqa: PLC0415
-        from win32more.Windows.UI.Notifications.Management import UserNotificationListener  # noqa: PLC0415
-        from win32more.Windows.Win32.System.WinRT import RO_INIT_MULTITHREADED, RoInitialize, RoUninitialize  # noqa: PLC0415
-
-        if FAILED(RoInitialize(RO_INIT_MULTITHREADED)):
+        if not self.source.open():
             self.publish(Unavailable(Access.UNAVAILABLE))
             return
         try:
@@ -78,25 +104,23 @@ class NotificationObserver:
                 failures = 0
                 while not self.stopped.is_set():
                     try:
-                        listener = UserNotificationListener.get_Current()
                         while not self.dismissals.empty():
                             key = self.dismissals.get_nowait()
                             with suppress(OSError):
-                                source = listener.GetNotification(key.identity)
-                                if source and creation_time(source.CreationTime) == key.created:
-                                    listener.RemoveNotification(key.identity)
-                        observation = runner.run(read())
-                        if isinstance(observation, Observed):
-                            failures = 0
-                            try:
-                                coverage = self.banner_policy.sync()
-                                observation = replace(observation, banners=Banners.PARTIAL if coverage.unavailable else Banners.SUPPRESSED)
-                            except OSError:
-                                observation = replace(observation, banners=Banners.PARTIAL)
-                        else:
-                            failures += 1
-                            if observation.access is Access.DENIED or failures >= 3:
-                                self.banner_policy.close()
+                                self.source.dismiss(key)
+                        observation = runner.run(self.source.read())
+                        match observation:
+                            case Observed():
+                                failures = 0
+                                try:
+                                    coverage = self.banner_policy.sync()
+                                    observation = replace(observation, banners=Banners.PARTIAL if coverage.unavailable else Banners.SUPPRESSED)
+                                except OSError:
+                                    observation = replace(observation, banners=Banners.PARTIAL)
+                            case Unavailable(access=access):
+                                failures += 1
+                                if access is Access.DENIED or failures >= 3:
+                                    self.banner_policy.close()
                         self.publish(observation)
                     except (OSError, TimeoutError):
                         failures += 1
@@ -111,7 +135,7 @@ class NotificationObserver:
             try:
                 self.banner_policy.close()
             finally:
-                RoUninitialize()
+                self.source.close()
 
     def close(self) -> None:
         self.stopped.set()

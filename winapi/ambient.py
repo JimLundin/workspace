@@ -9,8 +9,7 @@ from ctypes import wintypes
 from typing import Any
 
 from assistant.ambient import Battery, Power, PowerUnavailable
-
-from ._core import fn, kernel32
+from winapi._core import fn, kernel32
 
 
 class SYSTEM_POWER_STATUS(ctypes.Structure):  # noqa: N801  # Windows structure name.
@@ -23,7 +22,12 @@ _GetSystemPowerStatus = fn(kernel32, "GetSystemPowerStatus", wintypes.BOOL, ctyp
 
 def power() -> Power:
     status = SYSTEM_POWER_STATUS()
-    if not _GetSystemPowerStatus(ctypes.byref(status)) or status.flags == 255:
+    return power_from_status(status if _GetSystemPowerStatus(ctypes.byref(status)) else None)
+
+
+def power_from_status(status: SYSTEM_POWER_STATUS | None) -> Power:
+    """Validate one native observation before publishing the toolbar's power state."""
+    if status is None or status.flags == 255:
         return PowerUnavailable.UNKNOWN
     if status.flags & 128:
         return PowerUnavailable.NO_BATTERY

@@ -21,7 +21,8 @@ the durable recovery marker handles interruption between files.
 Regression tests exercise native navigation, blocked clipboard writes, partial
 input, pre-review execution, retained rollback state, interrupted trials, failed
 installs/restores, source changes during review, and windowless launcher syntax.
-Windows-only boundary tests mock input functions without sending real keystrokes.
+Windows-only boundary tests use injected typed input adapters without sending
+real keystrokes.
 
 GitHub Actions runs the full selfcheck once on Windows/Linux Python 3.15,
 checks the extracted Windows bundle, and runs Mypy, Pyright and Ruff. Editing

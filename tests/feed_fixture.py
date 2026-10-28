@@ -6,6 +6,7 @@ delay after the test has supplied the observations for that step.
 """
 
 import threading
+import time
 from collections.abc import Callable
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -31,11 +32,12 @@ class TriageFixture(Triage):
 
     def __init__(self, endpoint: Path, store: Store, publish: Callable[[Board], None],
                  model: Callable[[tuple[Candidate, ...], tuple[str, ...]], str], console: Callable[[Command], bool], *,
-                 submit: Callable[[str, str], None] | None = None) -> None:
+                 submit: Callable[[str, str], None] | None = None,
+                 clock: Callable[[], float] = time.time) -> None:
         # Preserve the real owner's dependency interface rather than hide it in options.
         self.delays: Queue[tuple[float, threading.Event]] = Queue()
         super().__init__(endpoint, store, publish, model, console, submit=submit,
-                         server_factory=open_bridge, wait=self.wait_for_stop)
+                         server_factory=open_bridge, wait=self.wait_for_stop, clock=clock)
 
     def wait_for_stop(self, stopped: threading.Event, timeout: float) -> bool:
         released = threading.Event()

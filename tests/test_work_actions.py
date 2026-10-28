@@ -30,8 +30,7 @@ from automation.task import (
     RunRef,
     Waiting,
 )
-
-from .work_fixture import seed_verified_actions
+from tests.work_fixture import seed_verified_actions
 
 
 @dataclass(slots=True)

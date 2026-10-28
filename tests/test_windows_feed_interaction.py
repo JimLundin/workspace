@@ -6,15 +6,21 @@ from dataclasses import replace
 
 if sys.platform != "win32":
     raise unittest.SkipTest("Windows feed interactions")
+lazy from PySide6 import QtWidgets
+lazy from PySide6.QtCore import Qt
+lazy from PySide6.QtTest import QTest
+
 from assistant.agent_session import Question, Succeeded, ToolActivity
 from assistant.console_requests import Answer, Command, Provider, request
 from assistant.feed_items import WorkItem
 from assistant.feed_triage import Assessment, Board, Solution, SolutionKind, request_context, solution_task, solutions_for
 from assistant.notification_text import details, spans
 from assistant.notifications import Turn
-from assistant.qt import Qt, QTest, QtWidgets
+from assistant.qt_runtime import prepare
 from tests.test_console_inbox import event
 from tests.test_windows_agent_toasts import notifications
+
+prepare()
 
 
 def test_thinking_and_reply_share_one_dismissible_bubble() -> None:

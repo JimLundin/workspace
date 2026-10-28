@@ -5,9 +5,9 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import assert_never
 
-from . import action_text
-from .agent_session import Failed, Succeeded, ToolActivity, ToolStatus
-from .rich_text import Span
+from assistant import action_text
+from assistant.agent_session import Failed, Succeeded, ToolActivity, ToolStatus
+from assistant.rich_text import Span
 
 
 class State(Enum):

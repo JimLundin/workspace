@@ -11,9 +11,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, Any, cast
 
-from agents import (
-    Agent as SdkAgent,
-)
+import agents
 from agents import (
     AgentsException,
     FunctionTool,
@@ -38,14 +36,13 @@ from openai import APIError, AsyncOpenAI, DefaultAsyncHttpxClient
 from openai.types.responses import ResponseOutputItem, ResponseStreamEvent
 from openai.types.shared import Reasoning
 
+from assistant.agent import KEPT_SCREENSHOTS
+from assistant.agent_session import Answer, LiveMessage, ReasoningSummary, StreamState
+from assistant.llm import Json, ToolCall, ToolSpec
 from automation.execution import Incomplete, InstallationRequested, InvalidConfiguration, Reported, ReportStatus
 
-from .agent import KEPT_SCREENSHOTS
-from .agent_session import Answer, LiveMessage, ReasoningSummary, StreamState
-from .llm import Json, ToolCall, ToolSpec
-
 if TYPE_CHECKING:
-    from .agent import Agent
+    from assistant.agent import Agent
 
 set_tracing_disabled(True)
 
@@ -92,7 +89,7 @@ class Hooks(RunHooks["Agent"]):
         self.awaiting_model = True
 
     async def on_llm_start(
-        self, context: RunContextWrapper[Agent], agent: SdkAgent[Agent], system_prompt: str | None, input_items: list[Any],
+        self, context: RunContextWrapper[Agent], agent: agents.Agent[Agent], system_prompt: str | None, input_items: list[Any],
     ) -> None:
         if context.context.stop.is_set():
             raise StoppedError
@@ -100,7 +97,7 @@ class Hooks(RunHooks["Agent"]):
         context.context.mark("startup_seconds")
         context.context.log.step("Waiting for the model...")
 
-    async def on_llm_end(self, context: RunContextWrapper[Agent], agent: SdkAgent[Agent], response: ModelResponse) -> None:
+    async def on_llm_end(self, context: RunContextWrapper[Agent], agent: agents.Agent[Agent], response: ModelResponse) -> None:
         self.awaiting_model = False
         context.context.mark("first_response_seconds")
 
@@ -287,7 +284,7 @@ async def run(local: Agent, task: str, prompt: str, specs: tuple[ToolSpec, ...])
         base_url=local.settings.base_url, api_key=local.settings.api_key, max_retries=0, timeout=600, http_client=http,
     ) as client:
         model = OpenAIResponsesModel(model=local.settings.agent_model, openai_client=client)
-        agent: SdkAgent[Agent] = SdkAgent(
+        agent: agents.Agent[Agent] = agents.Agent(
             name="Workspace", instructions=prompt, model=model, tools=[tool(spec) for spec in specs],
             model_settings=ModelSettings(reasoning=reasoning, store=False, response_include=["reasoning.encrypted_content"]),
             tool_use_behavior=after_tools,

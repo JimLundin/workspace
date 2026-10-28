@@ -29,10 +29,9 @@ from assistant.agent_session import (
 )
 from assistant.llm import Json
 from assistant.recording_state import AudioSource
+from automation.execution import ApprovalReview
+from automation.task import Approval, RunRef, digest, identifier, integer, text, timestamp
 from winapi.shapes import Window
-
-from .execution import ApprovalReview
-from .task import Approval, RunRef, digest, identifier, integer, text, timestamp
 
 VERSION: Final = 1
 MAX_FRAME: Final = 1_048_576

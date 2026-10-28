@@ -7,8 +7,8 @@ from ctypes import wintypes
 from pathlib import PureWindowsPath
 from typing import Final
 
-from ._core import LRESULT, ULONG_PTR, comctl32, dwmapi, fn, kernel32, rect, user32
-from .shapes import Rect, Window
+from winapi._core import LRESULT, ULONG_PTR, comctl32, dwmapi, fn, kernel32, rect, user32
+from winapi.shapes import Rect, Window
 
 WNDENUMPROC = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
 _EnumWindows = fn(user32, "EnumWindows", wintypes.BOOL, WNDENUMPROC, wintypes.LPARAM)

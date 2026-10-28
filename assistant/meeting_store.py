@@ -12,11 +12,11 @@ from collections.abc import Callable, Generator, Iterator, Sequence
 from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
-from typing import Final, Protocol, cast
+from typing import Final, Protocol
 
-from .llm import RATE
-from .pcm import quiet_tail
-from .recording_state import AudioSource, Batch, StoredState, duration, source_name
+from assistant.llm import RATE
+from assistant.pcm import quiet_tail
+from assistant.recording_state import AudioSource, Batch, StoredState, duration, source_name
 
 MAX_PENDING_BYTES: Final = 256 * 1024 * 1024
 MIN_CHUNK_SECONDS: Final = 20
@@ -44,8 +44,8 @@ class _Cursor(Protocol):
 
 
 class _Connection(Protocol):
-    def execute(self, sql: str, parameters: Sequence[object] = ()) -> _Cursor: ...
-    def executescript(self, sql: str) -> _Cursor: ...
+    def execute(self, sql: str, parameters: Sequence[object] = (), /) -> _Cursor: ...
+    def executescript(self, sql: str, /) -> _Cursor: ...
     def commit(self) -> None: ...
     def rollback(self) -> None: ...
     def close(self) -> None: ...
@@ -63,16 +63,24 @@ def _text(value: object) -> str:
     return value
 
 
+def _connect_journal(path: Path) -> _Connection:
+    return sqlite3.connect(path, timeout=2, isolation_level=None)
+
+
 class BacklogFullError(OSError):
     """The last block was saved, but capture must stop before storing another."""
 
 
 class MeetingStore:
-    __slots__ = ("folder", "max_pending_bytes", "publish")
+    __slots__ = ("connect", "folder", "max_pending_bytes", "publish")
 
     def __init__(
         self, folder: Path, *, max_pending_bytes: int = MAX_PENDING_BYTES, publish: Callable[[Path, Path], None] = _replace_transcript,
+        connect: Callable[[Path], _Connection] = _connect_journal,
     ) -> None:
+        # Location, storage bound, publication and connection lifetime are the
+        # cohesive journal policy. Readers and writers use the same interface.
+        self.connect = connect
         self.folder = folder
         self.max_pending_bytes = max_pending_bytes
         self.publish = publish
@@ -83,9 +91,9 @@ class MeetingStore:
 
     @contextmanager
     def connection(self, *, writing: bool = False) -> Generator[_Connection]:
-        # SQLite's stubs expose Any for query results. Narrow to object at this
-        # boundary and validate every column before it enters the domain model.
-        connection = cast(_Connection, sqlite3.connect(self.folder / "session.sqlite3", timeout=2, isolation_level=None))
+        # The consumed connection exposes unknown columns as objects; validate
+        # each observation before it enters the recording model.
+        connection = self.connect(self.folder / "session.sqlite3")
         try:
             connection.execute("PRAGMA secure_delete=ON")
             connection.execute("PRAGMA synchronous=FULL")

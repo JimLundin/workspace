@@ -4,7 +4,7 @@ import math
 from array import array
 from dataclasses import dataclass
 
-from .llm import RATE
+from assistant.llm import RATE
 
 
 @dataclass(frozen=True, slots=True)

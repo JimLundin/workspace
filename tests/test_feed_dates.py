@@ -5,18 +5,16 @@ import threading
 from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
-from unittest.mock import patch
 
 from assistant.communications import Feed, SourceDate, SourceDateStatus, TeamsActivity, Update
 from assistant.communications_browser import activity_observation, observation
 from assistant.feed_triage import Board, Candidate, Disposition, candidate, collect, decode, restored, saved, unassessed
 from assistant.feed_triage_service import classify, source_context
 from assistant.llm import Settings
-
-from . import fake_endpoint
-from .feed_fixture import TriageFixture
-from .test_feed_triage import output
-from .test_feed_triage_service import MemoryStore, wait_until
+from tests import fake_endpoint
+from tests.feed_fixture import TriageFixture
+from tests.test_feed_triage import output
+from tests.test_feed_triage_service import MemoryStore, wait_until
 
 LAST_WEEK = datetime(2026, 10, 20, 9, tzinfo=UTC).timestamp()
 THIS_WEEK = datetime(2026, 10, 27, 9, tzinfo=UTC).timestamp()
@@ -74,10 +72,10 @@ def test_an_undated_chat_is_not_presented_as_created_today() -> None:
 
 def test_triage_model_receives_readable_current_and_source_dates() -> None:
     source = candidate('chat', 'old-invite', 'Meeting reminder', 'The meeting is tomorrow.', LAST_WEEK)
-    with fake_endpoint.fake_endpoint() as endpoint, patch('assistant.feed_triage_service.time.time', return_value=THIS_WEEK):
+    with fake_endpoint.fake_endpoint() as endpoint:
         endpoint.replies = [fake_endpoint.Reply(b'{"choices":[{"message":{"content":"fixture"}}]}')]
         settings = Settings(endpoint.url, 'fixture', 'transcribe', 'chat', 'agent', '', '')
-        classify(settings, (source,), ())
+        classify(settings, (source,), (), clock=lambda: THIS_WEEK)
         request: object = json.loads(endpoint.last.body)
     match request:
         case {'messages': [{'role': 'system'}, {'content': str() as content}]}:
@@ -93,12 +91,12 @@ def test_triage_model_receives_readable_current_and_source_dates() -> None:
 
 
 def test_voice_feed_snapshot_keeps_the_source_date_with_its_text(tmp_path: Path) -> None:
-    triage = TriageFixture(tmp_path / 'feed.json', MemoryStore(), lambda _: None, lambda _batch, _rules: '{}', lambda _: False)
+    triage = TriageFixture(tmp_path / 'feed.json', MemoryStore(), lambda _: None, lambda _batch, _rules: '{}', lambda _: False,
+                          clock=lambda: THIS_WEEK)
     try:
         source = candidate('chat', 'old-invite', 'Meeting reminder', 'The meeting is tomorrow.', LAST_WEEK)
         triage.candidates = (source,)
-        with patch('assistant.feed_triage_service.time.time', return_value=THIS_WEEK):
-            snapshot = triage.snapshot()
+        snapshot = triage.snapshot()
         match snapshot:
             case {'reviewed_at': str() as reviewed, 'sources': [{'created_at': str() as created}]}:
                 assert reviewed.startswith('2026-10-27T')
@@ -114,9 +112,9 @@ def test_teams_activity_uses_the_provider_date_instead_of_its_collection_time() 
                                     'text': 'The meeting is tomorrow.', 'kind': 'invitation',
                                     'created_at': LAST_WEEK, 'date_hint': '20 October 2026'}]}, THIS_WEEK)
     sources = collect(Feed(updates=observed.items), ())
-    with fake_endpoint.fake_endpoint() as endpoint, patch('assistant.feed_triage_service.time.time', return_value=THIS_WEEK):
+    with fake_endpoint.fake_endpoint() as endpoint:
         endpoint.replies = [fake_endpoint.Reply(b'{"choices":[{"message":{"content":"fixture"}}]}')]
-        classify(Settings(endpoint.url, 'fixture', 'transcribe', 'chat', 'agent', '', ''), sources, ())
+        classify(Settings(endpoint.url, 'fixture', 'transcribe', 'chat', 'agent', '', ''), sources, (), clock=lambda: THIS_WEEK)
         request: object = json.loads(endpoint.last.body)
     match request:
         case {'messages': [{'role': 'system'}, {'content': str() as content}]}:
@@ -131,7 +129,7 @@ def test_teams_activity_uses_the_provider_date_instead_of_its_collection_time() 
 
 
 def test_a_new_day_reconsiders_cached_work_without_a_new_notification(tmp_path: Path) -> None:
-    now = [LAST_WEEK]
+    now = LAST_WEEK
     calls: list[tuple[str, ...]] = []
     reconsidered = threading.Event()
 
@@ -141,17 +139,16 @@ def test_a_new_day_reconsiders_cached_work_without_a_new_notification(tmp_path: 
             reconsidered.set()
         return output(([item.identity for item in batch], 'action' if len(calls) == 1 else 'quiet'))
 
-    with patch('assistant.feed_triage_service.time.time', side_effect=lambda: now[0]):
-        triage = TriageFixture(tmp_path / 'clock.json', MemoryStore(), lambda _: None, model, lambda _: False)
-        try:
-            feed = Feed(updates=(Update(TeamsActivity('old-invite'), 'Meeting reminder', 'The meeting is tomorrow.', 'Teams', LAST_WEEK),))
-            triage.observe(feed, ())
-            triage.advance()
-            wait_until(lambda: bool(triage.board.actions))
-            now[0] = THIS_WEEK
-            triage.advance()
-            assert reconsidered.wait(5), 'Last week\'s recommendation stayed cached despite the current date changing.'
-            wait_until(lambda: not triage.board.actions)
-            assert len(calls) == 2 and calls[0] == calls[1], 'Refresh must reconsider the same evidence once, without a new arrival.'
-        finally:
-            triage.close()
+    triage = TriageFixture(tmp_path / 'clock.json', MemoryStore(), lambda _: None, model, lambda _: False, clock=lambda: now)
+    try:
+        feed = Feed(updates=(Update(TeamsActivity('old-invite'), 'Meeting reminder', 'The meeting is tomorrow.', 'Teams', LAST_WEEK),))
+        triage.observe(feed, ())
+        triage.advance()
+        wait_until(lambda: bool(triage.board.actions))
+        now = THIS_WEEK
+        triage.advance()
+        assert reconsidered.wait(5), 'Last week\'s recommendation stayed cached despite the current date changing.'
+        wait_until(lambda: not triage.board.actions)
+        assert len(calls) == 2 and calls[0] == calls[1], 'Refresh must reconsider the same evidence once, without a new arrival.'
+    finally:
+        triage.close()

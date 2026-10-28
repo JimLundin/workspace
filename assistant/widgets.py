@@ -4,10 +4,14 @@
 import threading
 from collections.abc import Callable
 
+lazy from PySide6 import QtCore, QtGui, QtWidgets
+lazy from PySide6.QtCore import Qt
+
+from assistant.panel_controls import STYLE
+from assistant.qt_runtime import prepare
 from winapi import windows
 
-from .panel_controls import STYLE
-from .qt import Qt, QtCore, QtGui, QtWidgets
+prepare()
 
 
 class Window(QtWidgets.QWidget):

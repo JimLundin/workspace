@@ -10,17 +10,20 @@ if sys.platform != 'win32':
 
 from win32more.Windows.UI.Composition import CompositionPath, CompositionPathGeometry
 from win32more.Windows.Win32.UI.WindowsAndMessaging import GetWindow
+lazy from PySide6 import QtCore
 
 from assistant.bar_geometry import segment
 from assistant.bar_surface import Pill
 from assistant.notifications import Tone
-from assistant.qt import QtCore
+from assistant.qt_runtime import prepare
 from assistant.qt_ui import EventLoop, application
 from winapi import appearance
 from winapi.composition import Glass, stack_behind
 from winapi.composition_paths import composition_path
 from winapi.contours import Contour
 from winapi.shapes import Rect
+
+prepare()
 
 
 def test_toolbar_publishes_only_final_geometry_in_one_qt_turn() -> None:

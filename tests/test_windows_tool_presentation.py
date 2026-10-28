@@ -2,19 +2,26 @@
 
 import sys
 import unittest
-from unittest.mock import patch
 
 if sys.platform != 'win32':
     raise unittest.SkipTest('Windows tool-call bubbles')
+
+lazy import shiboken6
+lazy from PySide6 import QtWidgets
+lazy from PySide6.QtCore import Qt
+lazy from PySide6.QtGui import QFont
 
 from assistant.agent_session import Answer, Failed, StreamState, Succeeded, ToolActivity
 from assistant.feed_items import SourceKey, WorkItem
 from assistant.feed_triage import Assessment, Solution, SolutionKind
 from assistant.notifications import TurnKey
-from assistant.qt import QFont
+from assistant.qt_runtime import prepare
 from assistant.qt_text import TextView
+from assistant.tool_call_view import ToolCall
+from assistant.tool_text import State, presentation
+from tests.test_windows_agent_toasts import notifications
 
-from .test_windows_agent_toasts import notifications
+prepare()
 
 
 def test_real_tool_element_keeps_identity_status_and_copy_target() -> None:
@@ -28,17 +35,15 @@ def test_real_tool_element_keeps_identity_status_and_copy_target() -> None:
         card = panel.view.cards[TurnKey(0)]
         call = card.details.calls[0]
         assert call.objectName() == 'toolCall-cli' and call.isVisible()
-        assert call.status.text() == 'Running'
-        with patch('assistant.tool_call_view.QtWidgets.QApplication.clipboard') as clipboard:
-            call.copy.click()
-            clipboard.return_value.setText.assert_called_once_with(command)
+        assert call.accessibleDescription() == 'Running'
         publish(ToolActivity('cli', 'run_powershell', command, 1, Failed('Exit code 1.\nMissing file.')))
         publish(Answer('a', 'Check **the path**.', 2, StreamState.COMPLETE))
         panel.pump()
-        assert card.details.calls[0] is call and call.status.text() == 'Failed'
+        assert card.details.calls[0] is call and call.accessibleDescription() == 'Failed'
         card.toggle(animate=False)
         panel.pump()
-        assert call.result.toPlainText() == 'Exit code 1.\nMissing file.'
+        assert call.call.result == 'Exit code 1.\nMissing file.' and 'Missing file.' in call.toolTip()
+        assert call.height() <= 32
         publish(ToolActivity('time', 'get_current_time', '', 3, Succeeded('Timezone: CET')))
         panel.pump()
         assert card.details.calls[0] is call and len(card.details.calls) == 2
@@ -81,7 +86,11 @@ def test_cli_call_remains_visible_and_updates_in_its_original_bubble() -> None:
         handle = card.handle
         assert card.details.isVisible()
         assert 'Running' in card.details.toPlainText() and '**literal**' in card.details.toPlainText()
-        assert card.details.calls[0].argument.document().find('Write-Output').charFormat().font().family() == 'Consolas'
+        assert card.details.calls[0].title.textFormat() is Qt.TextFormat.PlainText
+        assert card.details.calls[0].width() == card.details.viewport().width()
+        assert card.details.calls[0].title.text().startswith('PowerShell'), (
+            card.details.calls[0].title.text(), card.details.calls[0].size(), card.details.viewport().size())
+        assert card.details.calls[0].call.argument == 'Write-Output "**literal**"'
         publish(ToolActivity('cli', 'run_powershell', 'Write-Output "**literal**"', 1, Failed('Exit code 1.\nMissing file.')))
         publish(Answer('a', 'Check **the path** and `report.csv`.', 2, StreamState.COMPLETE))
         panel.agent.finish()
@@ -116,3 +125,59 @@ def test_time_observation_and_proposed_reply_reach_native_rich_views() -> None:
         assert '**' not in card.text.toPlainText()
         assert card.text.document().find('the totals').charFormat().fontWeight() >= QFont.Weight.DemiBold
         assert card.text.document().find('FY27').charFormat().font().family() == 'Consolas'
+
+
+def test_native_copy_action_uses_the_complete_current_invocation_payload() -> None:
+    """Detect a copy action using the shortened preview or an earlier invocation."""
+    with notifications():
+        copied: list[str] = []
+        parent = QtWidgets.QWidget()
+        command = 'Write-Output "' + '**literal** ' * 30 + '"'
+        initial = presentation(ToolActivity('cli', 'run_powershell', command, 1), expanded=False)
+        call = ToolCall(parent, initial, copied.append)
+        try:
+            call.copy.click()
+            revised = command + '; Get-Date'
+            current = presentation(ToolActivity('cli', 'run_powershell', revised, 1), expanded=False)
+            call.present(current, 360)
+            call.copy.click()
+            assert copied == [command, revised]
+        finally:
+            parent.close()
+            shiboken6.delete(parent)
+
+
+def test_tool_rows_keep_one_line_and_paint_running_success_and_failure_feedback() -> None:
+    # Defects: arguments/output grow a payload box, status updates rebuild the row,
+    # or the running/success/failure states paint the same stationary indicator.
+    with notifications():
+        parent = QtWidgets.QWidget()
+        activity = ToolActivity('row', 'run_powershell', 'Write-Output "**literal**"\n' * 50, 1)
+        row = ToolCall(parent, presentation(activity, expanded=True))
+        try:
+            row.present(presentation(activity, expanded=True), 300)
+            status = row.status
+            row.pulse(0)
+            before = status.grab().toImage()
+            row.pulse(90)
+            assert status.grab().toImage() != before
+            height = row.height()
+            assert height <= 32 and not row.findChildren(TextView)
+            for outcome, state in ((Succeeded('A long result.\n' * 50), State.SUCCEEDED), (Failed('Missing file.'), State.FAILED)):
+                call = presentation(ToolActivity(activity.identity, activity.name, activity.detail, 1, outcome), expanded=True)
+                row.present(call, 300)
+                assert row.status is status and row.call.state is state
+                assert row.height() == height and row.rect().contains(row.title.geometry())
+                assert row.rect().contains(row.copy.geometry()) and row.title.geometry().right() < row.copy.x()
+                image = status.grab().toImage()
+                pixels = tuple(image.pixelColor(x, y) for x in range(image.width()) for y in range(image.height()))
+                if state is State.SUCCEEDED:
+                    assert any(pixel.alpha() > 100 and pixel.green() > pixel.red() * 1.2 for pixel in pixels)
+                else:
+                    assert any(pixel.alpha() > 100 and pixel.red() > pixel.green() * 1.2 for pixel in pixels)
+                angle = status.angle
+                row.pulse(180)
+                assert status.angle == angle, 'A completed tool kept spinning.'
+        finally:
+            parent.close()
+            shiboken6.delete(parent)

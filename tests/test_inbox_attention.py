@@ -4,16 +4,15 @@ from collections import deque
 from collections.abc import Callable
 from dataclasses import replace
 
+import assistant.console_requests
 from assistant.agent_session import Answered, Approval, ChatMessage, Question, Session, Snapshot
 from assistant.agent_window import AgentWindow
 from assistant.communications import Acknowledgement, Conversation, Delivery, Feed, Message, Reply, Update, WindowsNotice, handle, update_fingerprint
 from assistant.console_requests import Provider, Request, State
-from assistant.console_requests import Question as ConsoleQuestion
 from assistant.feed_triage import Assessment, Board, Disposition
 from assistant.inbox_attention import pending_count
 from assistant.system_notices import NoticeKey
-
-from .test_agent_window import RecordingView
+from tests.test_agent_window import RecordingView
 
 
 def test_attention_counts_grouped_chats_unhandled_updates_and_unanswered_prompts() -> None:
@@ -27,7 +26,8 @@ def test_attention_counts_grouped_chats_unhandled_updates_and_unanswered_prompts
                 updates=(update, muted),
                 replies=(Reply('failed', 'chat', 'Planning', 'Draft', 5, Delivery.FAILED),
                          Reply('sent', 'chat', 'Planning', 'Sent', 6, Delivery.OBSERVED)))
-    waiting = Request('console', Provider.CODEX, 'session', 'C:/fictional', 'Choose a sheet', '', (ConsoleQuestion('Which sheet?'),), 7)
+    waiting = Request('console', Provider.CODEX, 'session', 'C:/fictional', 'Choose a sheet', '',
+                          (assistant.console_requests.Question('Which sheet?'),), 7)
     session = Session(communications=feed, console_requests=(waiting, replace(waiting, identity='old', state=State.EXPIRED)),
                       messages=(Question('question', 'Which sheet?', '', 8), Approval('approval', 'Approve?', '', 9),
                                 Question('answered', 'Old question', '', 1, Answered('Done')),
@@ -42,7 +42,7 @@ def test_curated_attention_uses_groups_and_ignores_dismissed_work_and_raw_duplic
                     for index in range(1, 8))
     grouped = Assessment('group', (('one', 'revision'), ('two', 'revision')), 'Review budget', '', '', '', 1, 1)
     dismissed = replace(grouped, identity='dismissed', disposition=Disposition.DISMISSED)
-    waiting = Request('console', Provider.CLAUDE, 'session', 'C:/fictional', 'Choose', '', (ConsoleQuestion('Which sheet?'),), 2)
+    waiting = Request('console', Provider.CLAUDE, 'session', 'C:/fictional', 'Choose', '', (assistant.console_requests.Question('Which sheet?'),), 2)
     session = Session(communications=Feed(updates=updates), console_requests=(waiting,),
                       triage=Board(enabled=True, items=(grouped, dismissed)))
     assert pending_count(session) == 2

@@ -7,8 +7,8 @@ import ctypes
 from collections.abc import Callable
 from ctypes import wintypes
 
-from ._core import dwmapi, fn, kernel32, rect, shell32, user32
-from .shapes import Rect
+from winapi._core import dwmapi, fn, kernel32, rect, shell32, user32
+from winapi.shapes import Rect
 
 
 class _AppBarData(ctypes.Structure):

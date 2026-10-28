@@ -43,10 +43,9 @@ from assistant.meeting_workflow import (
 )
 from assistant.work_window import WorkSnapshot
 from automation.task import Completed, RoutineSource, Running
-
-from .test_meeting_events import saved_meeting
-from .test_meetings import SPEECH
-from .test_work_agent import WorkRig
+from tests.test_meeting_events import saved_meeting
+from tests.test_meetings import SPEECH
+from tests.test_work_agent import WorkRig
 
 
 class WorkflowRig:

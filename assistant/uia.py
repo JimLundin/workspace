@@ -4,7 +4,7 @@ import base64
 import json
 from pathlib import Path
 
-from .llm import Json
+from assistant.llm import Json
 
 
 def script(request: dict[str, Json]) -> str:

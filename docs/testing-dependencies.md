@@ -6,13 +6,13 @@ time. Tests pass observations or adapters through the same interfaces as the
 application, and continue to use real SQLite, temporary files, sockets, and SDK
 requests where those establish the contract.
 
-At the dependency-refactor checkpoint, portable tests had **5 patch call sites,
-down from 49**. The changed test
-areas remove 65 sites in total, including the former Windows-only agent-runner
-tests. This counts calls to `patch`, `patch.object`, and `patch.dict`, rather
-than runtime invocations. It does not count subclasses or ordinary adapters;
-replacing a patch with a private-field assignment would not establish a better
-interface.
+Patches and mocks are disallowed in production and tests. Effect owners accept
+explicit typed dependencies; concrete test adapters own their observations and
+state. Real resources remain in integration coverage. The architecture review
+checks every source file for replacement frameworks and monkeypatch fixtures,
+including when the editing runner selects only one test. Its scanner is a
+framework guard; review also rejects hand-written replacement of methods or
+module globals.
 
 ## Implemented seams
 
@@ -37,29 +37,60 @@ application modules requiring Python 3.15. Pyright 1.1.414 incorrectly declares
 narrow, documented `reportCallIssue` suppressions; their input and result types
 remain checked. Mypy and Python 3.15 on Linux and Windows accept those constructors.
 
-## Remaining instrumentation
+## Repository-wide pass, 2026-10-28
 
-The five portable patch sites at that checkpoint each observe a specific external operation:
+The remaining test patches are removed across the assistant, native UI,
+Windows adapters and development tooling. The production defaults retain native
+effect ownership; fixtures construct the same owners with explicit adapters.
 
-| Test | Reason retained |
+| Area | Explicit dependency or direct test surface |
 | --- | --- |
-| `test_browser.py` | Verifies that the WebSocket library receives `proxy=None`, independent of machine proxy configuration. |
-| `test_browser_attachment.py` | Observes the real socket's timeout while consent is pending and after approval. The actual socket, handshake, and commands still run. |
-| `test_meetings.py` | Interleaves a real SQLite writer between reader queries to prove that batch data and capture completion come from one transaction snapshot. |
-| `test_keeper.py`, `test_selfcheck.py` | Instrument directory traversal to prove excluded dependency/cache trees are never entered. A timing assertion would be weaker. |
+| Feed triage and agent tools | Triage and tool clocks, the authenticated feed request, real ConsoleInbox answers and durable SQLite action outcomes. |
+| Browser and Teams | Browser/Teams interfaces, session connector and clock. Proxy behavior uses a real child environment and WebSocket server; consent uses a concrete connector around the real socket. Native cases retain actual Edge pages and tab activation. |
+| Audio and meetings | WASAPI and wave-input drivers own native calls and lifetime; concrete capture fixtures supply packets and cancellable waits. Snapshot tests inject a connection factory around real SQLite connections. |
+| Shell and keyboard | Native observation/output adapters, taskbar desktop and recovery launcher, keyboard-language observations. Tests use actual ctypes event data and disposable native windows where Windows behavior matters. |
+| Notifications | Native observation, banner lease and publication dependencies retain real threads, one event loop and shutdown ownership. |
+| UI and startup | Explicit presentation, view construction, dismissal, placement, materials, sampling and timer owners; runtime factories and unique native lifetime identities. Tests keep real Qt widgets while fixture adapters record application-owned effects. |
+| Assistant controls | Immutable menu/message decisions, startup ordering and deferred file handoff. Tests call those actual interfaces with concrete effects, without partial app/UI/native-window construction. |
+| Development tooling | Check runtime loading, pure worker-lane selection and result aggregation, immutable check publication and deployment coordination. Filesystem tests use real excluded sources; archive tests compare preserved compressed local records directly. |
 
-Windows tests still inject native failures and instrument Qt/Win32/COM effects.
-These include input rejection, partially initialized audio, focus, placement,
-and application wiring. Native appearance tests also contain concurrent work.
-The remaining count is an inventory, not a claim that every Windows patch is
-essential. Further changes should move decisions behind an existing seam and
-retain native ownership/cleanup checks; adding a constructor argument for every
-Win32 call would only move the coupling.
+The protected selfcheck gate and runtime pins remain unchanged. Excluded-tree
+coverage asserts our source selection and compilation policy through real files,
+without instrumenting Python's traversal implementation. Preview coverage uses
+the existing inert PreviewBar adapter and verifies absent live service owners.
 
 The [durable-work validation](agentic-validation.md) adds behavioral checks
 for supervised task execution and recovery.
 
-## Keyboard measurements
+## Measurements for the repository-wide pass
+
+Native Windows Python 3.15.1 ran five rounds of 100,000 synthetic engine events
+before and after this pass with GC enabled. The engine and layout hashes are
+unchanged. Median p50 was 9.3 → 8.2 µs and p99 was 85.6 → 96.9 µs; the worst
+individual event was 12,127.9 → 46,556.6 µs. Both runs retained 1,016 bytes, peaked
+at 1,943 traced bytes, observed zero GC collections and imported no assistant
+modules. Scheduling varied substantially between rounds; these results do not
+establish a speedup or isolate native hook effects.
+
+A separate native callback harness read actual foreground/cursor observations
+without installing a hook or emitting input. Its five-round median p50 was
+9.6 → 9.8 µs, p95 was 16.5 → 17.1 µs and p99 was 237.7 → 223.1 µs. Worst events
+were 207,251.7 → 86,522.3 µs; peak traced live bytes were 4,320 → 4,272. Both sides
+had zero GC collections and no assistant imports. Direct typed native function
+bindings avoid an extra forwarding call in the hot observation path.
+
+The audio adapter measurement used seven alternating rounds of 20,000 synthetic
+COM calls with GC enabled. Median call times were 15.629 → 14.458 µs, worst round
+averages were 31.237 → 20.500 µs and traced peaks were 1,040 → 1,072 bytes, with
+zero GC collections. Native HRESULT bindings already establish integer results;
+an unnecessary validation wrapper was removed. PCM resampling, mixing and copying
+are unchanged. This is adapter evidence, not a live microphone benchmark.
+
+Raw evidence remains in Windows Temp: `workspace-no-mocks-keyboard-before.json`,
+`workspace-no-mocks-keyboard-after.json`, `workspace-no-mocks-hook-before.json`,
+`workspace-no-mocks-hook-after.json` and `workspace-audio-seam-benchmark.json`.
+
+## Earlier keyboard measurements
 
 The before/after runs use the same Windows Python 3.15.1 build, 100,000 events
 per round, five rounds per process, and enabled GC. No run imports the assistant.
@@ -88,7 +119,7 @@ regression. They measure engine decisions with a silent host, not native hook
 or `SendInput` latency. Raw rounds and source hashes are retained with the
 verification evidence in [dependency-refactor-checks.json](dependency-refactor-checks.json).
 
-## Verification
+## Earlier verification
 
 Twelve seeded regressions across the runner, SDK history, browser ownership,
 transcript publication, retry exhaustion, Teams polling, bootstrap environment,

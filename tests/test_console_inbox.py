@@ -2,10 +2,10 @@
 
 import json
 import threading
+import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from urllib.error import HTTPError
-from urllib.request import Request as HttpRequest
 from urllib.request import urlopen
 
 from assistant.console_inbox import ConsoleInbox
@@ -21,7 +21,8 @@ def event(provider: Provider, session: str = "fixture-session") -> dict[str, obj
 def post(endpoint: Path, provider: Provider, payload: dict[str, object]) -> object:
     data = json.loads(endpoint.read_text())
     message = json.dumps({"provider": provider.value, "event": payload}).encode()
-    command = HttpRequest(data["url"], data=message, headers={"Authorization": "Bearer " + data["token"], "Content-Type": "application/json"})
+    command = urllib.request.Request(data["url"], data=message, headers={"Authorization": "Bearer " + data["token"],
+                                  "Content-Type": "application/json"})
     with urlopen(command, timeout=4) as response:
         return json.loads(response.read())
 
@@ -44,7 +45,9 @@ def test_both_cli_hooks_receive_the_exact_user_answer_over_local_transport(tmp_p
                 assert not inbox.command(Answer("wrong-request", 0, "Revenue"))
                 assert inbox.command(Answer(current.identity, 0, "Revenue"))
                 assert not inbox.command(Answer(current.identity, 0, "Another answer"))
-                expected = hook_output(provider, raw, answered(current, Answer(current.identity, 0, "Revenue")))
+                reply = answered(current, Answer(current.identity, 0, "Revenue"))
+                assert reply is not None
+                expected = hook_output(provider, raw, reply)
                 assert pending.result(3) == expected
                 assert observed[-1][0].state is State.ANSWERED
         finally:
@@ -62,7 +65,7 @@ def test_permission_requests_cannot_be_approved_by_dismissal_or_free_text(tmp_pa
     inbox = ConsoleInbox(endpoint, publish, timeout=3)
     try:
         with ThreadPoolExecutor(max_workers=1) as worker:
-            raw = {"session_id": "fixture", "cwd": "/fictional", "hook_event_name": "PermissionRequest",
+            raw: dict[str, object] = {"session_id": "fixture", "cwd": "/fictional", "hook_event_name": "PermissionRequest",
                    "tool_name": "Bash", "tool_input": {"command": "echo fixture"}}
             waiting = worker.submit(post, endpoint, Provider.CLAUDE, raw)
             assert arrived.wait(2)
@@ -105,7 +108,7 @@ def test_transport_rejects_unauthenticated_requests_and_close_restores_native_pr
     try:
         location = json.loads(endpoint.read_text())["url"]
         try:
-            urlopen(HttpRequest(location, data=b"{}"), timeout=2)
+            urlopen(urllib.request.Request(location, data=b"{}"), timeout=2)
         except HTTPError as error:
             assert error.code == 403
         else:

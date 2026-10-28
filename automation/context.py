@@ -10,8 +10,8 @@ from math import isfinite
 from pathlib import Path
 from typing import Protocol, assert_never, cast
 
-from .store import TaskStore
-from .task import integer
+from automation.store import TaskStore
+from automation.task import integer
 
 MAX_RECORDS = 200
 MAX_CONTENT = 4000

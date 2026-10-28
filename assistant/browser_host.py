@@ -19,9 +19,17 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
 
-from .browser_session import MAX_RESPONSE, BrowserSession, NativeSessions, Product, SessionOpener
-from .browser_values import BrowserError, DisconnectedError, InterruptedError, NavigationContextError, mapping, navigation_context_error, text
-from .llm import Json
+from assistant.browser_session import MAX_RESPONSE, BrowserSession, NativeSessions, Product, SessionOpener
+from assistant.browser_values import (
+    BrowserError,
+    DisconnectedError,
+    InterruptedError,
+    NavigationContextError,
+    mapping,
+    navigation_context_error,
+    text,
+)
+from assistant.llm import Json
 
 MAX_CLIENTS = 8
 

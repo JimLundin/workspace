@@ -13,8 +13,7 @@ from urllib.parse import parse_qs, urlsplit
 from assistant.graph_http import GraphError
 from assistant.llm import Json
 from assistant.teams import GRAPH, MAX_OUTPUT, SCOPES, DeviceFlow, Poll, Teams, TokenStore, WaitForPoll, defer_poll, sign_in_action
-
-from .test_browser import decoded
+from tests.test_browser import decoded
 
 CLIENT = "11111111-1111-1111-1111-111111111111"
 TENANT = "22222222-2222-2222-2222-222222222222"

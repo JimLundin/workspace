@@ -13,8 +13,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol, cast
 
-from .files import filesystem_path
-from .task import (
+from automation.files import filesystem_path
+from automation.task import (
     Action,
     ActionNotApplied,
     ActionOutcome,

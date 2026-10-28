@@ -13,6 +13,7 @@ import shutil
 import subprocess
 import time
 import zipfile
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
@@ -118,6 +119,16 @@ def arguments(parser: argparse.ArgumentParser) -> Options:
     return parser.error('Invalid deployment arguments.')
 
 
+def coordinate_native(stage: Path, operation: Callable[[], None],
+                      snapshot: Callable[[], Mapping[str, str]] | None = None) -> None:
+    """Own the native coordinator's working folder and checked source lifetime."""
+    before = snapshot() if snapshot is not None else None
+    with contextlib.chdir(stage):
+        operation()
+    if snapshot is not None and snapshot() != before:
+        raise RuntimeError('Source changed during deployment; the installed stage must be reconciled.')
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('action', choices=('stage', 'verify', 'deploy'))
@@ -138,10 +149,9 @@ def main() -> None:
     if os.name == 'nt':
         # The venv shares the installed interpreter. Keep one coordinator so
         # an installed Python parent is not mistaken for an unowned workload.
-        with contextlib.chdir(stage):
+        def coordinate() -> None:
             run(args.action, stage, config, wanted)
-        if source_checkout and workspace_files() != wanted:
-            raise RuntimeError('Source changed during deployment; the installed stage must be reconciled.')
+        coordinate_native(stage, coordinate, workspace_files if source_checkout else None)
         return
     result = subprocess.run(
         [str(LIVE / '.python' / 'python.exe'), '-B', '-m', 'scripts.deploy', args.action, '--stage', win(stage)],

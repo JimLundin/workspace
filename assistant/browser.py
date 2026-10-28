@@ -14,13 +14,11 @@ from pathlib import Path
 from typing import assert_never
 from urllib.parse import urlsplit
 
-from . import browser_dom
-from .browser_session import (
-    MAX_RESPONSE,
+from assistant import browser_dom
+from assistant.browser_session import (
     Attached,
     BrowserConnection,
     BrowserSession,
-    Cdp,
     Managed,
     NativeSessions,
     Owner,
@@ -30,16 +28,13 @@ from .browser_session import (
     SessionOpener,
     Source,
     Stopped,
-    edge_path,
-    endpoint,
-    read_endpoint,
     setup_message,
     source_of,
-    user_data_root,
 )
-from .browser_tabs import TabStrip
-from .browser_values import (
+from assistant.browser_tabs import TabStrip
+from assistant.browser_values import (
     MAX_ID,
+    BrowserError,
     BrowserStatus,
     ChangeTab,
     CloseGroup,
@@ -50,9 +45,11 @@ from .browser_values import (
     CreateGroup,
     Destination,
     Disconnect,
+    DisconnectedError,
     EditGroup,
     GroupData,
     InGroup,
+    InterruptedError,
     MoveTab,
     NavigationLoadingError,
     Page,
@@ -73,17 +70,10 @@ from .browser_values import (
     tab_edit,
     text,
 )
-from .browser_values import BrowserError as BrowserError  # noqa: PLC0414 (public exception re-export)
-from .browser_values import DisconnectedError as DisconnectedError  # noqa: PLC0414
-from .browser_values import InterruptedError as InterruptedError  # noqa: PLC0414
-from .llm import Json
+from assistant.llm import Json
 
 MAX_OUTPUT = 20_000
 
-__all__ = [
-    "MAX_OUTPUT", "MAX_RESPONSE", "Attached", "Browser", "BrowserError", "BrowserResult", "Cdp", "DisconnectedError",
-    "InterruptedError", "Managed", "Product", "Separate", "Stopped", "edge_path", "endpoint", "read_endpoint", "user_data_root", "web_url",
-]
 
 
 def web_url(value: str) -> str:
@@ -211,10 +201,13 @@ class Browser:
 
     @contextmanager
     def awake(self, target: str, cancel: threading.Event) -> Generator[None]:
-        """Let an inactive page finish UI work without activating its native tab."""
+        """Resume page work without activating its native tab."""
         with self.lock:
             session = self._session(target, cancel)
             try:
+                # Focus emulation changes visibility; a frozen lifecycle needs
+                # its own explicit resume before JavaScript and timers run.
+                self._call("Page.setWebLifecycleState", {"state": "active"}, cancel, session=session)
                 self._call("Emulation.setFocusEmulationEnabled", {"enabled": True}, cancel, session=session)
                 yield
             except BaseException as error:

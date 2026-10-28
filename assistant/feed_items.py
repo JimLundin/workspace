@@ -6,14 +6,14 @@ from enum import Enum, auto
 from typing import assert_never
 from urllib.parse import urlencode
 
-from .agent_session import Snapshot
-from .communications import ChatTicket, Delivery, Message, Reply, Update, UpdateKind, WindowsNotice, chat_tickets
-from .console_requests import Request, State
-from .feed_origin import App, Origin, application
-from .feed_triage import Assessment, Candidate, collect, identity
-from .inbox import Query, matches
-from .rich_text import Span, formatted
-lazy from .action_text import readable
+from assistant.agent_session import Snapshot
+from assistant.communications import ChatTicket, Delivery, Message, Reply, Update, UpdateKind, WindowsNotice, chat_tickets
+from assistant.console_requests import Request, State
+from assistant.feed_origin import App, Origin, application
+from assistant.feed_triage import Assessment, Candidate, collect, identity
+from assistant.inbox import Query, matches
+from assistant.rich_text import Span, formatted
+lazy from assistant.action_text import readable
 
 DEFAULT_QUERY = Query()
 

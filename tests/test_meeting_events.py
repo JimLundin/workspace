@@ -14,9 +14,8 @@ from assistant.recording_state import AudioSource, RecordingState
 from automation.routines import MEETING_NOTES_ID, RoutineStore, TranscriptReady
 from automation.store import TaskStore
 from automation.task import RoutineSource
-
-from .test_llm import settings
-from .test_meetings import SPEECH, GeneratedCapture
+from tests.test_llm import settings
+from tests.test_meetings import SPEECH, GeneratedCapture
 
 
 def saved_meeting(archive: MeetingArchive, title: str) -> MeetingStore:

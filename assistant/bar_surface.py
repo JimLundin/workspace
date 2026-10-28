@@ -3,18 +3,22 @@
 from collections.abc import Callable
 from typing import assert_never
 
+lazy from PySide6 import QtCore, QtGui, QtWidgets
+lazy from PySide6.QtCore import Qt
+
+from assistant.agent_window import log_view
+from assistant.bar_geometry import SHOULDER, Segment, segment
+from assistant.notifications import REVEAL_SECONDS, Tone, ease_out
+from assistant.qt_runtime import prepare
+from assistant.qt_ui import EventLoop
+from assistant.toast_style import Ink, Palette, palette
+from assistant.vector_icons import icon
 from winapi import appearance, windows
 from winapi.composition import Glass, borderless
 from winapi.contours import Contour, Curve, End, Line, Move
 from winapi.shapes import Rect
 
-from .agent_window import log_view
-from .bar_geometry import SHOULDER, Segment, segment
-from .notifications import REVEAL_SECONDS, Tone, ease_out
-from .qt import Qt, QtCore, QtGui, QtWidgets
-from .qt_ui import EventLoop
-from .toast_style import Ink, Palette, palette
-from .vector_icons import icon
+prepare()
 
 BAR_HEIGHT = 28
 CONTROL_HEIGHT = 24
@@ -67,7 +71,6 @@ class Pill(QtWidgets.QWidget):
         self.fade_to: float = 0.0
         self.fade_started: float = 0.0
         self.buttons: list[tuple[QtWidgets.QToolButton, str]] = []
-        self.click: Callable[[], None] | None = None
         self.setWindowTitle(title)
         self.setWindowFlags(Qt.WindowType.Tool | Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
@@ -171,13 +174,6 @@ QToolTip {{ background: {self.colors.surface}; color: {self.ink.foreground}; bor
         edge.setAlpha(85 if self.glass else 255)
         painter.setPen(QtGui.QPen(edge, 1))
         painter.drawPath(painter_path(shape.edge) if shape is not None else outline)
-
-    def mouseReleaseEvent(self, event: QtGui.QMouseEvent) -> None:  # noqa: N802
-        if self.click is not None and event.button() == Qt.MouseButton.LeftButton and self.rect().contains(event.position().toPoint()):
-            self.click()
-            event.accept()
-        else:
-            super().mouseReleaseEvent(event)
 
     def place(self, x: int, y: int, *, origin: int | None = None) -> None:
         self.anchor = QtCore.QPoint(x, y)

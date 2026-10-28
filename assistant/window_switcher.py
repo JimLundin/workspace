@@ -3,20 +3,24 @@
 
 from collections.abc import Callable, Sequence
 
-from winapi.shapes import Window as NativeWindow
+lazy from PySide6 import QtCore, QtGui, QtWidgets
+lazy from PySide6.QtCore import Qt
 
-from .notifications import Tone
-from .qt import Qt, QtCore, QtGui, QtWidgets
-from .toast_style import Ink, palette
+import winapi.shapes
+from assistant.notifications import Tone
+from assistant.qt_runtime import prepare
+from assistant.toast_style import Ink, palette
+
+prepare()
 
 
-def matching(windows: Sequence[NativeWindow], query: str) -> tuple[NativeWindow, ...]:
+def matching(windows: Sequence[winapi.shapes.Window], query: str) -> tuple[winapi.shapes.Window, ...]:
     terms = query.casefold().split()
     return tuple(window for window in windows if all(term in f"{window.title} {window.exe}".casefold() for term in terms))
 
 
 class WindowSwitcher(QtWidgets.QDialog):
-    def __init__(self, windows: Sequence[NativeWindow], focus: Callable[[int], None]) -> None:
+    def __init__(self, windows: Sequence[winapi.shapes.Window], focus: Callable[[int], None]) -> None:
         super().__init__()
         self.windows = tuple(windows)
         self.focus_window = focus

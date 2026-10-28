@@ -125,6 +125,24 @@ def test_gate_blocks_imports_inside_function_bodies() -> None:
     assert tuple(item.key.rule for item in compare(findings, ()).failures) == ('inline-import',)
 
 
+def test_absolute_import_gate_covers_lazy_and_parent_imports(tmp_path: Path) -> None:
+    # A missing level check would let explicit test scopes accept relative
+    # dependencies even though ordinary Ruff lint rejects them.
+    development_lint()
+    source_tree(tmp_path, 'from .owner import Event\nlazy from .. import model\n'
+                'from assistant.owner import Local\n')
+    report = compare(scan(tmp_path), ())
+    assert tuple(item.key.rule for item in report.failures) == ('relative-import', 'relative-import')
+    assert tuple(item.line for item in report.failures) == (1, 2)
+    entry = Entry(report.failures[0].key, 'A migration must not relax the absolute import policy.')
+    try:
+        load(migrations(tmp_path, (entry,)))
+    except ValueError:
+        pass
+    else:
+        raise AssertionError('A relative import migration was accepted.')
+
+
 def test_explicit_test_scope_cannot_bypass_quality_or_write_a_receipt(tmp_path: Path) -> None:
     development_lint()
     source_tree(tmp_path, 'def update(enabled: bool):\n    pass\n')

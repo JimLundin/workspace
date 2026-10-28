@@ -14,6 +14,7 @@ from email.parser import BytesParser
 from pathlib import Path
 from typing import cast
 
+import tests.test_outlook
 from assistant import outlook
 from assistant.activity import Activity, ContextSnapshot
 from assistant.agent import Agent, Output
@@ -30,13 +31,11 @@ from automation.execution import WorkExecution
 from automation.files import filesystem_path
 from automation.store import TaskStore
 from automation.task import ActionUncertain, ActionVerified, Blocked, Claim, Completed, Control, FileDigest, RequestSource, Waiting
+from tests.fake_endpoint import FakeEndpoint, fake_endpoint
+from tests.test_agent import FakeMachine, FakeWindow, calls, says
+from tests.test_meeting_followup import BODY, NOTICE, followup_response, followup_sources, response_item
+from tests.test_workspace import live_tree
 from winapi.shapes import Window
-
-from .fake_endpoint import FakeEndpoint, fake_endpoint
-from .test_agent import FakeMachine, FakeWindow, calls, says
-from .test_meeting_followup import BODY, NOTICE, followup_response, followup_sources, response_item
-from .test_outlook import adapter as outlook_adapter
-from .test_workspace import live_tree
 
 
 class MeetingRig:
@@ -50,7 +49,7 @@ class MeetingRig:
         self.requests = MeetingRequests(folder / "followups")
         self.prepared = self.requests.prepare(task_identity(self.bundle), self.bundle, followup_prompt(self.bundle), at=time.time())
         self.packages = FollowupStore(folder / "followups" / "packages")
-        self.drafts, self.command = outlook_adapter(folder / "mail")
+        self.drafts, self.command = tests.test_outlook.adapter(folder / "mail")
         self.command.configure("unavailable")
         self.meeting = MeetingWork(self.requests, self.packages, self.drafts)
         self.tasks = TaskStore(folder / "work.sqlite3")

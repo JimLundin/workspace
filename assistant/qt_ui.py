@@ -3,12 +3,18 @@
 from collections.abc import Callable
 from typing import ClassVar
 
+lazy import shiboken6
+lazy from PySide6 import QtCore
+lazy from PySide6.QtCore import QCoreApplication, QEvent
+lazy from PySide6.QtWidgets import QApplication
+
+from assistant.qt_runtime import prepare
+lazy from assistant.agent_window import log_view
 lazy from winapi import screen
 lazy from winapi.composition import DesktopComposition
 lazy from winapi.shapes import Rect
 
-lazy from .agent_window import log_view
-lazy from .qt import QApplication, QCoreApplication, QEvent, QtCore, shiboken6
+prepare()
 
 
 def application() -> QApplication:

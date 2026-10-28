@@ -10,19 +10,18 @@ from collections import OrderedDict
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 
+from assistant.activity import ContextSnapshot
+from assistant.agent import Agent, Log, Machine
+from assistant.agent_runner import Task
+from assistant.llm import Json, Settings
+from assistant.meeting_execution import MeetingWork
+from assistant.workspace import Workspace
 from automation.actions import ActionError, Resources, target
 from automation.execution import ApprovalReview, Incomplete, Outcome, WorkExecution
 from automation.store import TaskStore
 from automation.task import ActionVerified, Blocked, Claim, RequestSource, Waiting
 from keeper import source_digest
 from usage import Detail
-
-from .activity import ContextSnapshot
-from .agent import Agent, Log, Machine
-from .agent_runner import Task
-from .llm import Json, Settings
-from .meeting_execution import MeetingWork
-from .workspace import Workspace
 
 
 @dataclass(frozen=True, slots=True)

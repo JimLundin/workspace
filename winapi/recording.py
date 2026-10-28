@@ -3,7 +3,6 @@
 Only the recording thread owns COM interfaces. The engine keeps capturing while
 we drain small packets; no microphone stop/start occurs between transcript chunks.
 """
-# pyright: reportUnknownVariableType=false, reportUnknownMemberType=false, reportUnknownArgumentType=false
 
 import contextlib
 import ctypes
@@ -11,13 +10,12 @@ import threading
 import uuid
 from collections.abc import Callable, Iterator
 from ctypes import wintypes
-from typing import Any, Final
+from typing import Final, Protocol
 
 from assistant.llm import RATE
 from assistant.pcm import Converter, Mixer, PcmFormat
-
-from ._core import fn, kernel32
-from .audio import WAVEFORMATEX
+from winapi._core import fn, kernel32
+from winapi.audio import WAVEFORMATEX
 
 _ole32 = ctypes.WinDLL("ole32", use_last_error=True)
 _CoInitializeEx = fn(_ole32, "CoInitializeEx", ctypes.c_long, ctypes.c_void_p, wintypes.DWORD)
@@ -49,14 +47,57 @@ def _check(result: int, action: str) -> None:
         raise OSError(f"{action} failed (Windows audio 0x{result & 0xFFFF_FFFF:08X}). Check the selected audio devices and desktop microphone access.")
 
 
-def _method(pointer: ctypes.c_void_p, index: int, *arguments: Any) -> Any:
-    table = ctypes.cast(pointer, ctypes.POINTER(ctypes.POINTER(ctypes.c_void_p))).contents
-    return ctypes.WINFUNCTYPE(ctypes.c_long, ctypes.c_void_p, *arguments)(table[index])
+# These are the scalar ABI argument types consumed by WASAPI's COM methods.
+type ArgumentType = type[ctypes.c_int] | type[ctypes.c_uint] | type[ctypes.c_ulong] | type[ctypes.c_longlong] | type[ctypes.c_void_p]
 
 
-def _release(pointer: ctypes.c_void_p) -> None:
+class NativeCall(Protocol):
+    def __call__(self, *arguments: object) -> int: ...
+
+
+class WasapiApi(Protocol):
+    """The recording thread's COM lifetime, clock and cancellable wait owner."""
+
+    def initialize(self) -> int: ...
+    def uninitialize(self) -> None: ...
+    def create_enumerator(self, pointer: ctypes.c_void_p) -> int: ...
+    def free_format(self, pointer: ctypes.c_void_p) -> None: ...
+    def method(self, pointer: ctypes.c_void_p, index: int, *arguments: ArgumentType) -> NativeCall: ...
+    def clock(self) -> float: ...
+    def wait(self, stop: threading.Event, timeout: float) -> bool: ...
+
+
+class NativeWasapi:
+    __slots__ = ()
+
+    def initialize(self) -> int:
+        return _CoInitializeEx(None, 0)
+
+    def uninitialize(self) -> None:
+        _CoUninitialize()
+
+    def create_enumerator(self, pointer: ctypes.c_void_p) -> int:
+        return _CoCreateInstance(_ENUMERATOR, None, 23, _IID_ENUMERATOR, ctypes.byref(pointer))
+
+    def free_format(self, pointer: ctypes.c_void_p) -> None:
+        _CoTaskMemFree(pointer)
+
+    def method(self, pointer: ctypes.c_void_p, index: int, *arguments: ArgumentType) -> NativeCall:
+        table = ctypes.cast(pointer, ctypes.POINTER(ctypes.POINTER(ctypes.c_void_p))).contents
+        # ctypes' declared c_long restype supplies an integer HRESULT. Keep
+        # that native callable directly: packet draining creates no extra wrapper.
+        return ctypes.WINFUNCTYPE(ctypes.c_long, ctypes.c_void_p, *arguments)(table[index])
+
+    def clock(self) -> float:
+        return _clock()
+
+    def wait(self, stop: threading.Event, timeout: float) -> bool:
+        return stop.wait(timeout)
+
+
+def _release(pointer: ctypes.c_void_p, api: WasapiApi) -> None:
     if pointer:
-        _method(pointer, 2)(pointer)
+        api.method(pointer, 2)(pointer)
         pointer.value = None
 
 
@@ -87,9 +128,10 @@ def _format(pointer: ctypes.c_void_p) -> PcmFormat:
 
 
 class Stream:
-    __slots__ = ("capture", "client", "converter", "device", "frames", "label", "loopback", "started")
+    __slots__ = ("api", "capture", "client", "converter", "device", "frames", "label", "loopback", "started")
 
-    def __init__(self, enumerator: ctypes.c_void_p, *, loopback: bool) -> None:
+    def __init__(self, enumerator: ctypes.c_void_p, api: WasapiApi, *, loopback: bool) -> None:
+        self.api = api
         self.device, self.client, self.capture = ctypes.c_void_p(), ctypes.c_void_p(), ctypes.c_void_p()
         self.label = "Computer audio" if loopback else "Microphone"
         self.loopback = loopback
@@ -98,38 +140,38 @@ class Stream:
         try:
             # Multimedia default matches normal app playback and the system's
             # selected microphone. Both use shared mode, including alongside B/N.
-            _check(_method(enumerator, 4, ctypes.c_int, ctypes.c_int, ctypes.c_void_p)(
+            _check(self.api.method(enumerator, 4, ctypes.c_int, ctypes.c_int, ctypes.c_void_p)(
                 enumerator, 0 if loopback else 1, 1, ctypes.byref(self.device)), f"Opening {self.label.lower()}")
-            _check(_method(self.device, 3, ctypes.c_void_p, wintypes.DWORD, ctypes.c_void_p, ctypes.c_void_p)(
+            _check(self.api.method(self.device, 3, ctypes.c_void_p, wintypes.DWORD, ctypes.c_void_p, ctypes.c_void_p)(
                 self.device, _IID_CLIENT, 23, None, ctypes.byref(self.client)), f"Preparing {self.label.lower()}")
             format = ctypes.c_void_p()
-            _check(_method(self.client, 8, ctypes.c_void_p)(self.client, ctypes.byref(format)), "Reading audio format")
+            _check(self.api.method(self.client, 8, ctypes.c_void_p)(self.client, ctypes.byref(format)), "Reading audio format")
             try:
                 self.converter = Converter(_format(format))
-                _check(_method(self.client, 3, ctypes.c_int, wintypes.DWORD, ctypes.c_longlong, ctypes.c_longlong,
+                _check(self.api.method(self.client, 3, ctypes.c_int, wintypes.DWORD, ctypes.c_longlong, ctypes.c_longlong,
                                ctypes.c_void_p, ctypes.c_void_p)(
                     self.client, 0, _LOOPBACK if loopback else 0, 10_000_000, 0, format, None), f"Initializing {self.label.lower()}")
             finally:
-                _CoTaskMemFree(format)
-            _check(_method(self.client, 14, ctypes.c_void_p, ctypes.c_void_p)(
+                self.api.free_format(format)
+            _check(self.api.method(self.client, 14, ctypes.c_void_p, ctypes.c_void_p)(
                 self.client, _IID_CAPTURE, ctypes.byref(self.capture)), "Opening audio capture")
         except BaseException:
             self.close()
             raise
 
     def start(self) -> None:
-        _check(_method(self.client, 10)(self.client), f"Starting {self.label.lower()}")
+        _check(self.api.method(self.client, 10)(self.client), f"Starting {self.label.lower()}")
         self.started = True
 
     def packets(self, origin: float) -> Iterator[tuple[int, bytes]]:
         size = wintypes.UINT()
         while True:
-            _check(_method(self.capture, 5, ctypes.c_void_p)(self.capture, ctypes.byref(size)), "Reading audio packet size")
+            _check(self.api.method(self.capture, 5, ctypes.c_void_p)(self.capture, ctypes.byref(size)), "Reading audio packet size")
             if not size.value:
                 return
             data, frames, flags = ctypes.c_void_p(), wintypes.UINT(), wintypes.DWORD()
             position, timestamp = ctypes.c_ulonglong(), ctypes.c_ulonglong()
-            _check(_method(self.capture, 3, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p)(
+            _check(self.api.method(self.capture, 3, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p)(
                 self.capture, ctypes.byref(data), ctypes.byref(frames), ctypes.byref(flags), ctypes.byref(position), ctypes.byref(timestamp)),
                 f"Capturing {self.label.lower()}")
             try:
@@ -150,12 +192,12 @@ class Stream:
                 start = round((timestamp.value / 10_000_000 - origin + offset) * RATE)
                 pcm = self.converter.convert(raw)
             finally:
-                _check(_method(self.capture, 4, wintypes.UINT)(self.capture, frames), "Returning audio packet")
+                _check(self.api.method(self.capture, 4, wintypes.UINT)(self.capture, frames), "Returning audio packet")
             yield start, pcm
 
     def stop(self) -> None:
         if self.started:
-            _check(_method(self.client, 11)(self.client), f"Stopping {self.label.lower()}")
+            _check(self.api.method(self.client, 11)(self.client), f"Stopping {self.label.lower()}")
             self.started = False
 
     def close(self) -> None:
@@ -163,29 +205,30 @@ class Stream:
             self.stop()
         finally:
             for pointer in (self.capture, self.client, self.device):
-                _release(pointer)
+                _release(pointer, self.api)
 
 
 class MeetingAudio:
     """Capture only between explicit Start and Stop; never opens a device at import."""
 
-    __slots__ = ("computer_audio",)
+    __slots__ = ("api", "computer_audio",)
 
-    def __init__(self, *, computer_audio: bool = True) -> None:
+    def __init__(self, api: WasapiApi | None = None, *, computer_audio: bool = True) -> None:
+        self.api = api if api is not None else NativeWasapi()
         self.computer_audio = computer_audio
 
     def record(self, stop: threading.Event, consume: Callable[[bytes], None], ready: Callable[[], None]) -> None:
-        _check(_CoInitializeEx(None, 0), "Preparing Windows audio")
+        _check(self.api.initialize(), "Preparing Windows audio")
         enumerator = ctypes.c_void_p()
         streams: list[Stream] = []
         try:
-            _check(_CoCreateInstance(_ENUMERATOR, None, 23, _IID_ENUMERATOR, ctypes.byref(enumerator)), "Finding audio devices")
-            streams.append(Stream(enumerator, loopback=False))
+            _check(self.api.create_enumerator(enumerator), "Finding audio devices")
+            streams.append(Stream(enumerator, self.api, loopback=False))
             if self.computer_audio:
-                streams.append(Stream(enumerator, loopback=True))
+                streams.append(Stream(enumerator, self.api, loopback=True))
             if stop.is_set():
                 return
-            mixer, origin = Mixer(), _clock()
+            mixer, origin = Mixer(), self.api.clock()
             for stream in streams:
                 stream.start()
             ready()
@@ -194,8 +237,8 @@ class MeetingAudio:
             for stream in reversed(streams):
                 with contextlib.suppress(OSError):
                     stream.close()
-            _release(enumerator)
-            _CoUninitialize()
+            _release(enumerator, self.api)
+            self.api.uninitialize()
 
     def _capture(self, streams: list[Stream], mixer: Mixer, origin: float, stop: threading.Event, consume: Callable[[bytes], None]) -> None:
         latest = 0
@@ -208,12 +251,12 @@ class MeetingAudio:
                     latest = max(latest, start + len(pcm) // 2)
 
         try:
-            while not stop.wait(0.02):
+            while not self.api.wait(stop, 0.02):
                 drain()
-                until = max(0, int((_clock() - origin - _LATENCY) * RATE))
+                until = max(0, int((self.api.clock() - origin - _LATENCY) * RATE))
                 if until - mixer.cursor >= RATE // 10:
                     consume(mixer.take(until))
-            until = round((_clock() - origin) * RATE)
+            until = round((self.api.clock() - origin) * RATE)
             for stream in streams:
                 stream.stop()
             drain()

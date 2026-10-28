@@ -9,10 +9,9 @@ from assistant.geometry import Shot
 from assistant.icons import State
 from assistant.llm import MAX_SECONDS, RATE, Json, Missing, Settings
 from protocol import App, Tool
+from tests.fake_endpoint import FakeEndpoint, Reply, fake_endpoint, sse
 from usage import Detail
 from winapi.shapes import InputRejectedError, Rect, Window
-
-from .fake_endpoint import FakeEndpoint, Reply, fake_endpoint, sse
 
 SPEECH = bytes(2 * RATE)  # a second of silence: long enough to send
 

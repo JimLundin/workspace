@@ -3,31 +3,38 @@
 import sys
 import unittest
 from dataclasses import replace
-from unittest.mock import patch
 
 if sys.platform != 'win32':
     raise unittest.SkipTest('Windows floating work feed')
 
+lazy from PySide6.QtCore import QPoint, QRectF, Qt
+lazy from PySide6.QtGui import QPainterPath
+lazy from PySide6.QtTest import QTest
+
 from assistant.communications import Handle, HandleNotice, Update, WindowsNotice, handle
 from assistant.feed_items import WorkItem, action_spans
+from assistant.feed_origin import App
+from assistant.feed_title import TITLE_SIZE
+from assistant.feed_triage import Assessment, Board, Solution, SolutionKind, candidate, collect, decode, proposal_revision
 from assistant.notifications import MAX_VISIBLE
-from assistant.qt import QPoint, Qt, QTest
+from assistant.panel_controls import STYLE
+from assistant.qt_runtime import prepare
 from assistant.qt_ui import application
 from assistant.system_notices import Notice, NoticeKey, Observed
 from assistant.toast_card import Card
-from assistant.ui import Ui
+from tests.communications_fixture import communication_feed
+from tests.test_feed_triage import output
+from tests.test_windows_agent_toasts import notifications, widget_rect
+from tests.test_windows_inbox_attention import InboxUi
 from winapi.shapes import Rect
 
-from .communications_fixture import communication_feed
-from .test_windows_agent_toasts import notifications
+prepare()
 
 
 def click_bubble(card: Card) -> None:
     QTest.mouseClick(card.window, Qt.MouseButton.LeftButton, pos=QPoint(card.label.x() + 4, card.label.y() + 4))
 
 def test_source_badge_overlaps_and_title_shares_header_with_controls() -> None:
-    from assistant.feed_origin import App  # noqa: PLC0415
-    from assistant.feed_triage import Assessment, Board, collect  # noqa: PLC0415
     with notifications() as panel:
         feed = replace(communication_feed(), updates=(Update(WindowsNotice(NoticeKey(81, 100), 'outlook'),
                        'Review reminder', 'Please review the figures.', 'Outlook', 2),))
@@ -61,7 +68,6 @@ def test_source_badge_overlaps_and_title_shares_header_with_controls() -> None:
 
 
 def test_feed_details_expand_on_request_and_never_scroll_themselves() -> None:
-    from assistant.feed_triage import Assessment, Board, collect  # noqa: PLC0415
     with notifications() as panel:
         original = 'Fictional source content: check the FY27 forecast before Friday.'
         feed = replace(communication_feed(), messages=(), updates=(Update(WindowsNotice(NoticeKey(811, 100), 'outlook'),
@@ -104,16 +110,11 @@ def test_feed_details_expand_on_request_and_never_scroll_themselves() -> None:
 
 
 def test_curated_bubbles_show_priority_at_the_top_and_dismiss_without_opening_the_composer() -> None:
-    from assistant.feed_triage import Assessment, Board, edited  # noqa: PLC0415
     with notifications() as panel:
         items = tuple(Assessment(str(index), ((str(index), 'revision'),), f'Work {index}', 'Needs review', 'Review it', '',
                                  2 if index == 0 else 1 if index < 3 else 0, index + 1) for index in range(8))
         panel.agent.triage(Board(enabled=True, items=items))
         panel.pump()
-        def dismiss(identity: str) -> bool:
-            panel.agent.triage(edited(panel.agent.state.triage, {'operation': 'dismiss', 'item': identity}))
-            return True
-        panel.agent.on_dismiss_work = dismiss
         visible = sorted((card for card in panel.view.cards.values() if not card.retiring), key=lambda card: card.y)
         assert [card.content.title for card in visible if isinstance(card.content, WorkItem)] == ['Work 0', 'Work 1', 'Work 2']
         first = visible[0]
@@ -125,7 +126,7 @@ def test_curated_bubbles_show_priority_at_the_top_and_dismiss_without_opening_th
         visible = sorted((card for card in panel.view.cards.values() if not card.retiring), key=lambda card: card.y)
         assert [card.content.title for card in visible if isinstance(card.content, WorkItem)] == ['Work 1', 'Work 2', 'Work 3']
         assert len(panel.agent.state.triage.actions) == 7
-        panel.agent.on_dismiss_work = lambda _: False
+        panel.dismiss_allowed = False
         visible[0].dismiss.click()
         panel.pump()
         assert len(panel.agent.state.triage.actions) == 7
@@ -134,8 +135,7 @@ def test_curated_bubbles_show_priority_at_the_top_and_dismiss_without_opening_th
 
 def test_windows_notifications_use_the_chat_renderer_and_handling_removes_only_the_exact_work_item() -> None:
     with notifications() as panel:
-        commands: list[object] = []
-        panel.agent.on_communication = lambda command: commands.append(command) is None
+        commands = panel.commands
         first = Update(WindowsNotice(NoticeKey(91, 100), 'owned'), 'Review the figures', 'A fictional notice', 'Outlook', 1)
         second = Update(WindowsNotice(NoticeKey(92, 101), 'owned'), 'Another request', 'Another fictional notice', 'Outlook', 2)
         feed = replace(communication_feed(), messages=(), updates=(first, second))
@@ -145,6 +145,7 @@ def test_windows_notifications_use_the_chat_renderer_and_handling_removes_only_t
         assert card.text.toPlainText().startswith('Review the figures') and card.glass
         done = next(button for button in card.choices if button.text() == 'Done')
         assert done.isVisible() and card.window.rect().contains(done.geometry())
+        assert isinstance(card.content, WorkItem)
         action = next(span.link for span in action_spans(card.content) if span.link.startswith('workspace://done?'))
         panel.view.action_link(action)
         command = commands[-1]
@@ -160,85 +161,74 @@ def test_short_screen_keeps_every_work_item_reachable_through_the_bubble_paginat
     with notifications() as panel:
         updates = tuple(Update(WindowsNotice(NoticeKey(index, 100 + index), 'owned'), f'Item {index}', 'Fictional notice', 'Mail', index)
                         for index in range(1, 9))
-        with patch('assistant.agent_toasts.AgentToasts.area', return_value=Rect(0, 0, 700, 560)):
-            panel.agent.communications(replace(communication_feed(), messages=(), updates=updates), {})
-            panel.agent.show(focus=True)
+        panel.desktop.bounds = Rect(0, 0, 700, 560)
+        panel.agent.communications(replace(communication_feed(), messages=(), updates=updates), {})
+        panel.agent.show(focus=True)
+        panel.pump()
+        view = panel.view
+        seen: set[tuple[str, str]] = set()
+        assert 0 < view.capacity < MAX_VISIBLE
+        for _page in range(len(updates)):
+            seen.update(card.content.item.key for card in view.cards.values()
+                        if isinstance(card.content, WorkItem) and isinstance(card.content.item, Update) and not card.retiring)
+            if view.page >= view.stack.pages - 1:
+                break
+            view.older()
             panel.pump()
-            view, seen = panel.view, set()
-            assert 0 < view.capacity < MAX_VISIBLE
-            for _page in range(len(updates)):
-                seen.update(card.content.item.key for card in view.cards.values()
-                            if isinstance(card.content, WorkItem) and isinstance(card.content.item, Update) and not card.retiring)
-                if view.page >= view.stack.pages - 1:
-                    break
-                view.older()
-                panel.pump()
-            assert seen == {update.key for update in updates}
-            assert view.page > 0
-            view.newer()
-            panel.pump()
+        assert seen == {update.key for update in updates}
+        assert view.page > 0
+        view.newer()
+        panel.pump()
 
 
-@patch("winapi.windows.focus", new=lambda _handle: None)
 def test_native_notice_arrives_and_is_handled_before_the_busy_teams_worker_publishes_anything() -> None:
     original_style = application().styleSheet()
-    ui = Ui()
     commands: list[object] = []
     dismissed: list[NoticeKey] = []
+    ui = InboxUi(dismiss_notice=dismissed.append)
     ui.configure_communications(lambda command: commands.append(command) is None)
     try:
         agent = ui.agent(None, lambda: None, reveal=False)
-        ui._poll(ui._root)
+        ui.pump()
         ui.communications_changed(communication_feed(), {})
-        ui._poll(ui._root)
+        ui.pump()
         agent.show(focus=True)
-        ui._poll(ui._root)
-        view = agent._view
-        assert view is not None
-        from assistant.agent_toasts import AgentToasts  # noqa: PLC0415
-        assert isinstance(view, AgentToasts)
+        ui.pump()
+        view = ui.feed
         notice = Notice(NoticeKey(11, 100), 'owned', 'Mail', 'Review this', 'Immediate fictional notice')
         # The worker only queues commands; it never publishes this observation.
         ui.system_notices(Observed((notice,)))
-        ui._poll(ui._root)
-        ui._root.processEvents()
+        ui.pump()
+        ui.root.processEvents()
         card = next(card for card in view.cards.values() if isinstance(card.content, WorkItem) and isinstance(card.content.item, Update))
         assert 'Immediate fictional notice' in card.text.toPlainText()
-        with patch.object(Ui, 'dismiss_system_notice', side_effect=dismissed.append):
-            action = next(span.link for span in action_spans(card.content) if span.link.startswith('workspace://done?'))
-            view.action_link(action)
+        assert isinstance(card.content, WorkItem)
+        action = next(span.link for span in action_spans(card.content) if span.link.startswith('workspace://done?'))
+        view.action_link(action)
         assert dismissed == [notice.key] and HandleNotice(notice) in commands
         ui.communications_changed(communication_feed(), {})
-        ui._poll(ui._root)
-        native = next(item for item in ui._communication_feed.updates if isinstance(item.source, WindowsNotice))
-        assert not ui._communication_feed.pending_update(native)
+        ui.pump()
+        native = next(item for item in ui.communications.updates if isinstance(item.source, WindowsNotice))
+        assert not ui.communications.pending_update(native)
         for index in range(20):
             arrival = Notice(NoticeKey(20 + index, (index + 1) * 10_000_000), 'owned', 'Mail', 'Review this',
                              f'Immediate fictional notice {index}')
             ui.system_notices(Observed((arrival,)))
-            ui._poll(ui._root)
+            ui.pump()
             assert any(isinstance(card.content, WorkItem) and isinstance(card.content.item, Update)
                        and card.content.item.source == WindowsNotice(arrival.key, arrival.app_id)
                        for card in view.cards.values() if not card.retiring)
     finally:
-        ui._poll_timer.stop()
-        ui._close_views()
-        ui._poll(ui._root)
-        ui._root.setStyleSheet(original_style)
+        ui.dispose()
+        ui.root.setStyleSheet(original_style)
 
 
 def test_solution_buttons_are_compact_and_start_exact_work_without_a_composer() -> None:
-    from assistant.feed_triage import Board, candidate, decode, proposal_revision  # noqa: PLC0415
 
-    from .test_feed_triage import output  # noqa: PLC0415
     with notifications() as panel:
         source = candidate('chat', 'fixture', 'Budget', 'Review it.', 1)
         item = decode(output(([source.identity], 'action')), (source,))[0]
-        submissions: list[tuple[str, str, str]] = []
-        def choose(identity: str, revision: str, choice: str) -> bool:
-            submissions.append((identity, revision, choice))
-            return True
-        panel.agent.on_choose_work = choose
+        submissions = panel.choices
         panel.agent.triage(Board(enabled=True, items=(item,)))
         panel.pump()
         card = next(card for card in panel.view.cards.values() if isinstance(card.content, WorkItem))
@@ -262,13 +252,11 @@ def test_solution_buttons_are_compact_and_start_exact_work_without_a_composer() 
 
 
 def test_failed_solution_start_keeps_choices_available() -> None:
-    from assistant.feed_triage import Board, candidate, decode  # noqa: PLC0415
 
-    from .test_feed_triage import output  # noqa: PLC0415
     with notifications() as panel:
         source = candidate('chat', 'fixture', 'Review', 'Please check.', 1)
         item = decode(output(([source.identity], 'action')), (source,))[0]
-        panel.agent.on_choose_work = lambda _identity, _revision, _choice: False
+        panel.choose_allowed = False
         panel.agent.triage(Board(enabled=True, items=(item,)))
         panel.pump()
         card = next(card for card in panel.view.cards.values() if isinstance(card.content, WorkItem))
@@ -278,7 +266,6 @@ def test_failed_solution_start_keeps_choices_available() -> None:
 
 
 def test_expanded_feed_text_wraps_inside_the_live_card_and_scrolls_without_a_hidden_gutter() -> None:
-    from assistant.feed_triage import Assessment, Board  # noqa: PLC0415
     with notifications(animated=True) as panel:
         item = Assessment('wrap-test', (), 'Review budget',
                           ('Compare **the updated forecast** and `FY27` figures before preparing a reply. '
@@ -288,6 +275,7 @@ def test_expanded_feed_text_wraps_inside_the_live_card_and_scrolls_without_a_hid
         panel.pump()
         panel.advance(.3)
         card = next(card for card in panel.view.cards.values() if isinstance(card.content, WorkItem))
+        view = card.text
         for _ in range(2):
             click_bubble(card)
             panel.pump()
@@ -319,10 +307,7 @@ def test_expanded_feed_text_wraps_inside_the_live_card_and_scrolls_without_a_hid
 
 
 def test_feed_controls_are_inside_the_painted_bubble() -> None:
-    from assistant.feed_triage import Assessment, Board  # noqa: PLC0415
-    from assistant.qt import QPainterPath, QRectF  # noqa: PLC0415
 
-    from .test_windows_agent_toasts import widget_rect  # noqa: PLC0415
     with notifications() as panel:
         item = Assessment('inside', (), 'Review the budget', 'Compare the figures.', 'Prepare a recommendation.', '', 1, 1)
         longer = replace(item, identity='longer', title='Confirm the revised forecast and discuss the next steps with the project team')
@@ -339,7 +324,6 @@ def test_feed_controls_are_inside_the_painted_bubble() -> None:
 
 
 def test_collapsed_feed_titles_keep_one_line_and_elide_long_text() -> None:
-    from assistant.feed_triage import Assessment, Board, Solution, SolutionKind  # noqa: PLC0415
     with notifications() as panel:
         for length in (36, 64, 96, 128, 160):
             title = ('Confirm the revised forecast and discuss next steps with the project team. ' * 3)[:length]
@@ -354,25 +338,21 @@ def test_collapsed_feed_titles_keep_one_line_and_elide_long_text() -> None:
 
 
 def test_crowded_feed_keeps_fixed_height_title_rows() -> None:
-    from assistant.agent_toasts import AgentToasts  # noqa: PLC0415
-    from assistant.feed_triage import Assessment, Board  # noqa: PLC0415
     with notifications() as panel:
         items = tuple(Assessment(str(index), (),
                                  ('Confirm the revised forecast and discuss next steps with the project team. ' * 3)[:160],
                                  'A fictional review.', 'Prepare a recommendation.', '', 1, index + 1) for index in range(3))
-        with patch.object(AgentToasts, 'area', return_value=Rect(0, 0, 420, 400)):
-            panel.agent.triage(Board(enabled=True, items=items))
-            panel.pump()
-            cards = [card for card in panel.view.cards.values() if isinstance(card.content, WorkItem) and not card.retiring]
-            assert cards
-            for card in cards:
-                assert card.label.height() >= card.label.heightForWidth(card.label.width())
-                assert card.text.isHidden() and not card.text.toPlainText()
+        panel.desktop.bounds = Rect(0, 0, 420, 400)
+        panel.agent.triage(Board(enabled=True, items=items))
+        panel.pump()
+        cards = [card for card in panel.view.cards.values() if isinstance(card.content, WorkItem) and not card.retiring]
+        assert cards
+        for card in cards:
+            assert card.label.height() >= card.label.heightForWidth(card.label.width())
+            assert card.text.isHidden() and not card.text.toPlainText()
 
 
 def test_production_theme_does_not_shrink_or_scroll_collapsed_feed_titles() -> None:
-    from assistant.feed_triage import Assessment, Board  # noqa: PLC0415
-    from assistant.panel_controls import STYLE  # noqa: PLC0415
     with notifications() as panel:
         previous_style = panel.root.styleSheet()
         try:
@@ -397,8 +377,6 @@ def test_production_theme_does_not_shrink_or_scroll_collapsed_feed_titles() -> N
 
 
 def test_feed_titles_elide_without_growing_and_clicking_the_bubble_expands_details() -> None:
-    from assistant.feed_title import TITLE_SIZE  # noqa: PLC0415
-    from assistant.feed_triage import Assessment, Board  # noqa: PLC0415
     with notifications() as panel:
         short = Assessment('short', (), 'Review the budget', 'Check the figures.', 'Prepare a draft.', '', 1, 1)
         long = replace(short, identity='long', title='Confirm the revised forecast and discuss next steps with the project team before Friday')

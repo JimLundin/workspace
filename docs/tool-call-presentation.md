@@ -9,13 +9,18 @@ approval. Existing `wait` and `run_powershell` remain callable tools.
 
 Every call follows the existing SDK dispatch and publishes identified
 `ToolActivity` events. Each call has a dedicated native `ToolCall` widget with
-a header, status label, exact tool name, selectable argument and result views,
-and a copy button. `StepsView` retains these widgets by invocation identity and
+a single 28-pixel row: a status icon, an elided label/preview and a quiet copy
+button. Running calls rotate an arc using the existing conversation frame loop;
+success shows a green check and failure a red cross. Cancellation uses a neutral
+dash. Reduced motion retains a stationary arc; high contrast uses its configured
+foreground. The row has no filled box, border or nested argument/result views.
+The exact tool name and bounded literal arguments/results are available on hover;
+copy retains the complete argument observation. `StepsView` retains widgets by invocation identity and
 owns their scrolling and lifetime; status changes update the existing element.
 A compact bubble shows the latest call and a bounded argument preview. Time
-observations remain visible there. Expansion shows the full call history and
-bounded results; PowerShell commands and outputs retain literal text with
-monospace styling. Copy uses the retained argument observation, including when
+observations remain visible there. Expansion shows the full call history as the
+same compact rows. Tool commands and outputs remain literal in previews and
+hover details. Copy uses the retained argument observation, including when
 the compact display is shortened. No prose is interpreted as an executed tool.
 The same bubble and attached reply survive status changes, disclosure and finish.
 Qt owns scroll state; the card preserves the full history's position while its

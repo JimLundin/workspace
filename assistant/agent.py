@@ -23,27 +23,26 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Final, Protocol, cast
 
+from assistant import action_text, feed_agent_tools, meeting_tools, outlook
+from assistant.activity import ContextSnapshot
+from assistant.agent_session import Failed, LiveMessage, Succeeded, ToolActivity, ToolStatus
+from assistant.geometry import Shot
+from assistant.llm import (
+    Json,
+    Settings,
+    ToolCall,
+    ToolSpec,
+)
+from assistant.meeting_execution import MeetingRun, encoded, verified_mail
+from assistant.publishing import DEFAULT_REMOTE, PublishError, publish_source
+from assistant.workspace import CheckCompleted, CheckInterrupted, CheckResult, SourceError, Workspace
 from automation.actions import ActionError, Observation, plan
 from automation.execution import Report, ReportStatus, WorkExecution
 from automation.task import ActionNotApplied, ActionUncertain, ActionVerified, FileDigest, NoVerification, Verification
 from config import AGENT_MAX_STEPS, ALLOWED_COMMANDS
 from keeper import copy_source, source_digest
 from winapi.shapes import Rect, Window
-
-from . import action_text, feed_agent_tools, meeting_tools, outlook
-from .activity import ContextSnapshot
-from .agent_session import Failed, LiveMessage, Succeeded, ToolActivity, ToolStatus
-from .geometry import Shot
-from .llm import (
-    Json,
-    Settings,
-    ToolCall,
-    ToolSpec,
-)
-from .meeting_execution import MeetingRun, encoded, verified_mail
-from .publishing import DEFAULT_REMOTE, PublishError, publish_source
-from .workspace import CheckCompleted, CheckInterrupted, CheckResult, SourceError, Workspace
-lazy from . import sdk
+lazy from assistant import sdk
 
 MAX_CHARS: Final = 20_000
 """Most text one tool result gives the model (a file, a command's output)."""
@@ -550,11 +549,13 @@ class Agent:
         "after_step",
         "check_failed",
         "checked",
+        "clock",
         "context",
         "context_image",
         "context_reader",
         "context_text",
         "control",
+        "feed_request",
         "followup",
         "history",
         "install_root",
@@ -592,8 +593,14 @@ class Agent:
         work: WorkExecution | None = None,
         install_root: Path | None = None,
         followup: MeetingRun | None = None,
+        clock: Callable[[], datetime] = datetime.now,
+        feed_request: Callable[[dict[str, object]], str] = feed_agent_tools.request,
     ) -> None:
+        # The agent owns tool dispatch across machine, durable work, feed and
+        # clock effects. Each independently varying effect stays explicit here.
         self.settings = settings
+        self.clock: Callable[[], datetime] = clock
+        self.feed_request: Callable[[dict[str, object]], str] = feed_request
         self.machine = machine
         self.log = log
         self.update = log.updates()
@@ -673,7 +680,7 @@ class Agent:
                           'question_index': args.integer('question_index'), 'text': args.text('text')}
             values = feed_agent_tools.validated(values)
         def perform() -> Output:
-            reply = feed_agent_tools.request(values)
+            reply = self.feed_request(values)
             return Output(reply, ok=not feed_agent_tools.rejected(reply))
         return self.effect(args, perform,
                            verify=lambda output: ActionVerified("Local feed owner committed the requested update.")
@@ -936,7 +943,7 @@ class Agent:
 
     def get_current_time(self, _: Args) -> Output:
         """The tool owner samples the clock once and publishes that observation."""
-        observed = datetime.now().astimezone()
+        observed = self.clock().astimezone()
         return Output(f"Local time: {observed.isoformat(timespec='seconds')}\n"
                       f"Timezone: {observed.tzname()}\n"
                       f"UTC time: {observed.astimezone(UTC).isoformat(timespec='seconds')}\n"

@@ -12,7 +12,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import cast
 
-from .console_requests import Answer, Command, Dismiss, Provider, Request, State, answered, hook_output, object_value, request, text
+from assistant.console_requests import Answer, Command, Dismiss, Provider, Request, State, answered, hook_output, object_value, request, text
 
 MAX_REQUESTS = 128
 

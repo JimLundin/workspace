@@ -13,10 +13,9 @@ from typing import Protocol, assert_never, cast
 
 from assistant.agent_session import LiveMessage
 from assistant.llm import Json
-
-from .actions import Actions, Observation, Resources, evidence_matches, fingerprint, observed_resources, plan
-from .store import TaskStore
-from .task import (
+from automation.actions import Actions, Observation, Resources, evidence_matches, fingerprint, observed_resources, plan
+from automation.store import TaskStore
+from automation.task import (
     ActionNotApplied,
     ActionReturned,
     ActionUncertain,

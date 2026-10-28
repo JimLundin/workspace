@@ -6,10 +6,10 @@ from dataclasses import dataclass, field, replace
 from datetime import UTC, date, datetime
 from enum import Enum
 
-from .communications import Delivery, Feed, SourceDate, SourceDateStatus, SourceTime, TeamsActivity, UpdateKind, WindowsNotice, chat_tickets
-from .console_requests import Request, State, list_value, object_value, text
-from .feed_origin import FeedRequest
-from .llm import Json
+from assistant.communications import Delivery, Feed, SourceDate, SourceDateStatus, SourceTime, TeamsActivity, UpdateKind, WindowsNotice, chat_tickets
+from assistant.console_requests import Request, State, list_value, object_value, text
+from assistant.feed_origin import FeedRequest
+from assistant.llm import Json
 
 
 class Disposition(Enum):

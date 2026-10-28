@@ -36,8 +36,9 @@ class SystemStatus:
 
     @property
     def description(self) -> str:
-        return ". ".join((*(("Speakers unmuted",) if self.speakers is Speakers.AUDIBLE else ()),
-                          *(("Wi-Fi disconnected",) if self.wifi is Wifi.DISCONNECTED else ())))
+        observations = ("Speakers unmuted" if self.speakers is Speakers.AUDIBLE else "",
+                        "Wi-Fi disconnected" if self.wifi is Wifi.DISCONNECTED else "")
+        return ". ".join(value for value in observations if value)
 
 
 @dataclass(frozen=True, slots=True)
@@ -104,5 +105,5 @@ class Ambient:
 
     @property
     def text(self) -> str:
-        return "  ·  ".join((self.clock, *((self.battery_text,) if self.battery_text else ()),
-                            *((self.weather.text,) if self.weather is not None else ())))
+        facts = (self.clock, self.battery_text, self.weather.text if self.weather is not None else "")
+        return "  ·  ".join(value for value in facts if value)

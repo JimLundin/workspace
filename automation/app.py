@@ -18,14 +18,15 @@ from typing import assert_never
 
 import keeper
 import usage
-from protocol import AUTOMATION_WINDOW
+from keeper import AUTOMATION_WINDOW
 from usage import DIRECTORY
 from winapi import screen, system, windows
 from winapi.shapes import Window
 lazy from assistant.activity import ContextSnapshot, Observation, observed
 lazy from assistant.agent_execution import AgentExecution
 lazy from assistant.agent_session import Begin, Done, Finished, LiveMessage, Problem, Progress, Said
-lazy from assistant.browser import Browser, Product
+lazy from assistant.browser import Browser
+lazy from assistant.browser_session import Product
 lazy from assistant.llm import Missing, Settings
 lazy from assistant.machine import NativeDesktop, WinMachine
 lazy from assistant.meeting_execution import MeetingWork
@@ -33,15 +34,14 @@ lazy from assistant.meeting_followup_store import FollowupStore
 lazy from assistant.meeting_requests import MeetingRequests
 lazy from assistant.outlook import OutlookDrafts
 lazy from assistant.recording_state import AudioSource
-
-lazy from . import ipc
-lazy from .bridge import BridgeServer, ProfileLease
-lazy from .context import ContextStore, select_context
-lazy from .controller import ControllerSnapshot, Fault, Idle, Stopping, WorkController, WorkExecution, Working
-lazy from .execution import ApprovalReview, Log, Outcome
-lazy from .routines import RoutineStore
-lazy from .store import TaskStore
-lazy from .task import Claim, RunRef, owns
+lazy from automation import ipc
+lazy from automation.bridge import BridgeServer, ProfileLease
+lazy from automation.context import ContextStore, select_context
+lazy from automation.controller import ControllerSnapshot, Fault, Idle, Stopping, WorkController, WorkExecution, Working
+lazy from automation.execution import ApprovalReview, Log, Outcome
+lazy from automation.routines import RoutineStore
+lazy from automation.store import TaskStore
+lazy from automation.task import Claim, RunRef, owns
 
 
 def report(message: str, *, folder: Path = DIRECTORY / "work") -> None:

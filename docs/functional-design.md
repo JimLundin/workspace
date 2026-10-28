@@ -34,6 +34,7 @@ The main places to read are:
 | `assistant/meeting_execution.py`, `meeting_tools.py`, `outlook.py` | Constrained meeting execution, bounded source reads and verified draft outcomes | The work process owns generation; `outlook.ps1` owns Outlook COM observation and draft operations |
 | `assistant/teams.py` | Frozen device flow, polling deadlines, and retry intervals from clock observations | `Teams`, `SystemClock`, `TokenStore`, and `graph_http.Http` |
 | `runtime.py` | Bootstrap handoff plan and dependency ABI validation | `execute_bootstrap`, `bootstrap`, and `activate` |
+| `assistant/control_policy.py` | Immutable native message actions and tray observations, menu projection, press-only control routing, startup ordering and queued file handoff | `AssistantApp` owns native interpretation, layout transport, UI feedback and worker lifetime |
 | `assistant/activity.py` | Bounded window history reduced from a window or desktop-state observation | `ActivityTracker` and the Windows foreground reader |
 | `assistant/communications.py` | Source identities, grouped pending chat tickets, captured handling revisions and reply evidence | `communications_service.py` owns encrypted settings/drafts/handling, collection and effects; `communications_browser.py` owns exact-chat and Activity DOM boundaries; `agent_toasts.py` owns the personal work feed |
 | `assistant/inbox.py`, `feed_items.py`, `notifications.py`, `console_requests.py` | Optional history selection, shared agent/proposal bubble projection, bounded console requests and exact answer transitions | `agent_toasts.py` and `toast_card.py` own the read-only floating feed, history and action buttons; `console_inbox.py` owns the local hook transport and pending lifetime; `scripts/inbox_hook.py` returns supported CLI hook responses |
@@ -439,6 +440,15 @@ Compare the distributions over multiple rounds and retain the worst observed
 latency. The benchmark also records source hashes and whether the engine imported
 the assistant. It measures engine decisions with a silent host; native hook,
 `SendInput`, and operating-system scheduling require separate desktop evidence.
+
+For the 2026-10-28 import-ownership cleanup, paired native Windows Python 3.15.1
+runs used five 100,000-event rounds against the original and current engine.
+Median latency was 7.4 → 6.5 µs and median p99 was 42.7 → 38.3 µs. Both retained
+the same 1,943-byte traced peak, no measured GC collections and no assistant
+imports. Desktop load varies, so these timings establish no speedup. The engine's
+non-import AST is unchanged. Full reports are in Windows Temp as
+`workspace-keyboard-imports-paired-before.json` and
+`workspace-keyboard-imports-paired-after.json`.
 
 For the 2026-10-26 voice/recovery change, five 100,000-event rounds compared the
 prior deployed source with the changed engine under the same Linux Python 3.15.1

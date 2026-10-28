@@ -6,7 +6,7 @@ from ctypes import wintypes
 from dataclasses import dataclass
 from typing import Final, NewType
 
-from ._core import ULONG_PTR, fn, kernel32, last_error, user32
+from winapi._core import ULONG_PTR, fn, kernel32, last_error, user32
 
 WM_NULL: Final = 0x0000
 WM_DESTROY: Final = 0x0002

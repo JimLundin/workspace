@@ -14,11 +14,10 @@ from dataclasses import replace
 from pathlib import Path
 from typing import Protocol
 
+from assistant.llm import RATE, Failure, Settings, transcribe, wav
+from assistant.meeting_store import MeetingArchive, MeetingStore
+from assistant.recording_state import AudioSource, Exhausted, Phase, Publication, RecordingState, RetryPolicy, published, source_name
 from usage import DIRECTORY
-
-from .llm import RATE, Failure, Settings, transcribe, wav
-from .meeting_store import MeetingArchive, MeetingStore
-from .recording_state import AudioSource, Exhausted, Phase, Publication, RecordingState, RetryPolicy, published, source_name
 
 
 class Transcriber(Protocol):

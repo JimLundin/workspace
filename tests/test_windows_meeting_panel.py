@@ -12,6 +12,9 @@ from pathlib import Path
 if sys.platform != "win32":
     raise unittest.SkipTest("Native Windows meeting follow-through")
 
+lazy from PySide6 import QtCore
+lazy from PySide6.QtCore import Qt
+
 from assistant.meeting_followup import (
     ActionItem,
     ActionStatus,
@@ -46,8 +49,10 @@ from assistant.meeting_workflow import (
     WorkPending,
 )
 from assistant.panel_controls import STYLE
-from assistant.qt import Qt, QtCore
+from assistant.qt_runtime import prepare
 from assistant.qt_ui import application
+
+prepare()
 
 
 def package_fixture(folder: Path, version: str = "a" * 64) -> FollowupPackage:

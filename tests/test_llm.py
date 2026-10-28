@@ -4,6 +4,7 @@ tools and images). Against a local fake endpoint; runs anywhere."""
 import json
 from typing import cast
 
+import tests.fake_endpoint
 from assistant.llm import (
     RATE,
     Failure,
@@ -24,9 +25,7 @@ from assistant.llm import (
     user_message,
     wav,
 )
-
-from .fake_endpoint import Reply as Canned
-from .fake_endpoint import fake_endpoint, sse
+from tests.fake_endpoint import fake_endpoint, sse
 
 ENV = {"OPENAI_BASE_URL": "https://ai.example/v1/", "OPENAI_API_KEY": "k"}
 
@@ -83,7 +82,7 @@ def test_agent_model_is_independent_of_the_quick_chat_model() -> None:
 def test_truncated_success_and_error_responses_are_retriable_failures() -> None:
     with fake_endpoint() as endpoint:
         for status in (200, 503):
-            endpoint.replies = [Canned(b'{"text":"incomplete', status=status, content_length=1000)]
+            endpoint.replies = [tests.fake_endpoint.Reply(b'{"text":"incomplete', status=status, content_length=1000)]
             result = transcribe(settings(endpoint.url), wav(bytes(RATE * 2), RATE))
             assert isinstance(result, Failure)
             assert "connection dropped" in result.message if status == 200 else "HTTP 503" in result.message
@@ -113,13 +112,13 @@ def test_transcribe_sends_vocabulary_and_language_when_set() -> None:
 
 def test_failures_carry_the_servers_message() -> None:
     with fake_endpoint() as endpoint:
-        endpoint.replies = [Canned(b'{"error": {"message": "Invalid session key", "type": "auth"}}', status=401)]
+        endpoint.replies = [tests.fake_endpoint.Reply(b'{"error": {"message": "Invalid session key", "type": "auth"}}', status=401)]
         assert transcribe(settings(endpoint.url), wav(b"", RATE)) == Failure("HTTP 401: Invalid session key")
 
 
 def test_failures_for_replies_that_arent_what_was_asked() -> None:
     with fake_endpoint() as endpoint:
-        endpoint.replies = [Canned(b"<html>proxy login</html>")]
+        endpoint.replies = [tests.fake_endpoint.Reply(b"<html>proxy login</html>")]
         assert transcribe(settings(endpoint.url), wav(b"", RATE)) == Failure("unexpected reply: <html>proxy login</html>")
 
 
@@ -136,7 +135,7 @@ ANSWER = b'{"choices": [{"message": {"role": "assistant", "content": "Hej!"}}]}'
 
 def test_chat_sends_messages_and_returns_the_answer() -> None:
     with fake_endpoint() as endpoint:
-        endpoint.replies = [Canned(ANSWER)]
+        endpoint.replies = [tests.fake_endpoint.Reply(ANSWER)]
         reply = chat(settings(endpoint.url), [system_message("Be brief."), user_message("Say hi")])
         assert reply == Reply("Hej!", ())
         assert endpoint.last.path == "/v1/chat/completions"
@@ -149,14 +148,14 @@ def test_chat_sends_messages_and_returns_the_answer() -> None:
 
 def test_chat_can_use_another_model() -> None:
     with fake_endpoint() as endpoint:
-        endpoint.replies = [Canned(ANSWER)]
+        endpoint.replies = [tests.fake_endpoint.Reply(ANSWER)]
         chat(settings(endpoint.url), [user_message("hi")], model="agent-model")
         assert body_json(endpoint.last.body)["model"] == "agent-model"
 
 
 def test_chat_sends_images_as_data_urls() -> None:
     with fake_endpoint() as endpoint:
-        endpoint.replies = [Canned(ANSWER)]
+        endpoint.replies = [tests.fake_endpoint.Reply(ANSWER)]
         chat(settings(endpoint.url), [user_message([Text("What is this?"), Image(b"\x89PNG")])])
         expected: object = [
             {
@@ -175,7 +174,7 @@ def test_chat_with_tools_returns_tool_calls() -> None:
     answer = f'{{"choices": [{{"message": {{"role": "assistant", "content": null, "tool_calls": [{call}]}}}}]}}'.encode()
     spec = ToolSpec("read_file", "Read a file", {"type": "object", "properties": {"path": {"type": "string"}}, "required": ["path"]})
     with fake_endpoint() as endpoint:
-        endpoint.replies = [Canned(answer)]
+        endpoint.replies = [tests.fake_endpoint.Reply(answer)]
         reply = chat(settings(endpoint.url), [user_message("read a.txt")], tools=[spec])
         assert reply == Reply("", (ToolCall("call_1", "read_file", '{"path": "a.txt"}'),))
         expected: object = [
@@ -194,7 +193,7 @@ def test_chat_with_tools_returns_tool_calls() -> None:
 def test_tool_calls_and_results_go_back_to_the_model() -> None:
     call = ToolCall("call_1", "read_file", '{"path": "a.txt"}')
     with fake_endpoint() as endpoint:
-        endpoint.replies = [Canned(ANSWER)]
+        endpoint.replies = [tests.fake_endpoint.Reply(ANSWER)]
         chat(settings(endpoint.url), [assistant_message("", (call,)), tool_result("call_1", "file contents")])
         expected: object = [
             {
@@ -219,5 +218,5 @@ def test_stream_passes_text_on_as_it_arrives() -> None:
 
 def test_stream_reports_failures() -> None:
     with fake_endpoint() as endpoint:
-        endpoint.replies = [Canned(b'{"error": {"message": "model not found"}}', status=404)]
+        endpoint.replies = [tests.fake_endpoint.Reply(b'{"error": {"message": "model not found"}}', status=404)]
         assert stream(settings(endpoint.url), [user_message("hi")], print) == Failure("HTTP 404: model not found")

@@ -100,7 +100,9 @@ def test_work_window_closes_with_its_ui_owner_in_a_fresh_process(tmp_path: Path)
         import threading
         from runtime import activate
         activate()
-        from assistant.qt import QApplication
+        from assistant.qt_runtime import prepare
+        prepare()
+        from PySide6.QtWidgets import QApplication
         from assistant.qt_ui import later
         from assistant.ui import Ui
 
@@ -160,12 +162,13 @@ def _native_controller_lifetime(tmp_path: Path, *, qt_first: bool) -> None:
         import sys
         import threading
         import uuid
-        from unittest.mock import patch
         from runtime import activate
         activate()
         from assistant import app
         from assistant.llm import Missing
-        from assistant.qt import QApplication
+        from assistant.qt_runtime import prepare
+        prepare()
+        from PySide6.QtWidgets import QApplication
         from assistant.ui import Ui
         from winapi import shell, system
 
@@ -215,9 +218,8 @@ def _native_controller_lifetime(tmp_path: Path, *, qt_first: bool) -> None:
                     return 0
                 return None
 
-        with patch.object(app, "Ui", OffscreenUi), patch.object(app, "AssistantApp", Controller), \\
-             patch.object(app, "ASSISTANT_WINDOW", title), patch.object(app, "LOCK_NAME", "Local\\\\" + title):
-            assert app.run(Missing(())) is app.Exit.QUIT
+        runtime = app.Runtime(title, "Local" + chr(92) + title, OffscreenUi, Controller)
+        assert app.run(Missing(()), runtime=runtime) is app.Exit.QUIT
         assert observed == [("qt", True), ("control", True)], observed
         assert QApplication.instance() is None
         assert not any(thread.name == "assistant control" for thread in threading.enumerate())
@@ -245,22 +247,25 @@ def test_controller_initialization_failure_closes_qt_and_propagates(tmp_path: Pa
     script = textwrap.dedent("""\
         import threading
         import uuid
-        from unittest.mock import patch
         from runtime import activate
         activate()
         from assistant import app
         from assistant.llm import Missing
-        from assistant.qt import QApplication
+        from assistant.qt_runtime import prepare
+        prepare()
+        from PySide6.QtWidgets import QApplication
 
         title = "Workspace startup failure " + uuid.uuid4().hex
-        with patch.object(app, "AssistantApp", side_effect=RuntimeError("Fixture startup failed")), \\
-             patch.object(app, "ASSISTANT_WINDOW", title), patch.object(app, "LOCK_NAME", "Local\\\\" + title):
-            try:
-                app.run(Missing(()))
-            except RuntimeError as error:
-                assert str(error) == "Fixture startup failed"
-            else:
-                raise AssertionError("The controller startup failure was lost")
+        def fail(settings, ui):
+            raise RuntimeError("Fixture startup failed")
+
+        runtime = app.Runtime(title=title, lock_name="Local" + chr(92) + title, controller=fail)
+        try:
+            app.run(Missing(()), runtime=runtime)
+        except RuntimeError as error:
+            assert str(error) == "Fixture startup failed"
+        else:
+            raise AssertionError("The controller startup failure was lost")
         assert QApplication.instance() is None
         assert not any(thread.name == "assistant control" for thread in threading.enumerate())
         print("Controller failure closed Qt")
@@ -278,21 +283,27 @@ def test_controller_initialization_failure_closes_qt_and_propagates(tmp_path: Pa
 def test_shutdown_resolves_pending_and_late_ui_requests(tmp_path: Path) -> None:
     script = textwrap.dedent("""\
         import threading
-        from unittest.mock import patch
         from runtime import activate
         activate()
-        from assistant import ui as module
-        from assistant.qt import Qt, QtWidgets
+        from assistant.ui import Ui
+        from assistant.qt_runtime import prepare
+        prepare()
+        from PySide6 import QtWidgets
+        from PySide6.QtCore import Qt
         from assistant.qt_ui import later
 
-        ui = module.Ui()
+        class OffscreenPresentation:
+            def position(self, dialog, width, height):
+                dialog.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
+                dialog.setWindowFlag(Qt.WindowType.WindowDoesNotAcceptFocus)
+                dialog.setGeometry(-4000, -3000, width, height)
+
+            def reveal(self, window, focus):
+                pass
+
+        ui = Ui(presentation=OffscreenPresentation())
         answers = []
         failures = []
-
-        def position(dialog, width, height):
-            dialog.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
-            dialog.setWindowFlag(Qt.WindowType.WindowDoesNotAcceptFocus)
-            dialog.setGeometry(-4000, -3000, width, height)
 
         def close_pending(root, attempts=0):
             if any(isinstance(window, QtWidgets.QInputDialog) for window in root.topLevelWidgets()):
@@ -320,11 +331,10 @@ def test_shutdown_resolves_pending_and_late_ui_requests(tmp_path: Path) -> None:
                 failures.append(error)
 
         controller = threading.Thread(target=control, name="pending UI request", daemon=True)
-        with patch.object(module, "_near_pointer", side_effect=position), patch.object(module, "_bring_forward"):
-            controller.start()
-            ui.post(close_pending)
-            ui.run()
-            controller.join(timeout=10)
+        controller.start()
+        ui.post(close_pending)
+        ui.run()
+        controller.join(timeout=10)
         assert not controller.is_alive(), "Shutdown left an input caller waiting"
         assert not failures, failures
         assert answers == [None, None], answers

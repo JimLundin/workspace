@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass, field, replace
 
-from .communications import (
+from assistant.communications import (
     MAX_HANDLED,
     Acknowledgement,
     Command,
@@ -20,7 +20,7 @@ from .communications import (
     update_fingerprint,
     updates_observed,
 )
-from .system_notices import Notice, NoticeKey, Observed
+from assistant.system_notices import Notice, NoticeKey, Observed
 
 
 @dataclass(frozen=True, slots=True)

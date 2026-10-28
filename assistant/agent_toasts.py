@@ -7,14 +7,18 @@ from collections.abc import Callable
 from dataclasses import replace
 from urllib.parse import parse_qs, urlsplit
 
+lazy from PySide6 import QtCore
+lazy from PySide6.QtCore import Qt
+lazy from PySide6.QtGui import QFontMetricsF
+lazy from PySide6.QtWidgets import QApplication
+
+from assistant.qt_runtime import prepare
 from winapi import appearance, windows
 from winapi.shapes import Rect
-lazy from winapi.notification_input import Region, WheelRouter
-
-lazy from . import console_requests, notification_reading
-lazy from .agent_session import Approval, Session, Snapshot, pending
-lazy from .agent_window import AgentWindow
-lazy from .communications import (
+lazy from assistant import console_requests, notification_reading
+lazy from assistant.agent_session import Approval, Session, Snapshot, pending
+lazy from assistant.agent_window import AgentWindow
+lazy from assistant.communications import (
     Acknowledgement,
     Handle,
     NotificationFilters,
@@ -26,11 +30,11 @@ lazy from .communications import (
     fingerprint,
     update_fingerprint,
 )
-lazy from .feed_items import WorkItem
-lazy from .feed_desktop import Desktop, NativeDesktop
-lazy from .feed_triage import Assessment
-lazy from .inbox import Query, review_prompt
-lazy from .notifications import (
+lazy from assistant.feed_desktop import Desktop, NativeDesktop
+lazy from assistant.feed_items import WorkItem
+lazy from assistant.feed_triage import Assessment
+lazy from assistant.inbox import Query, review_prompt
+lazy from assistant.notifications import (
     MAX_VISIBLE,
     WIDTH,
     Entry,
@@ -53,11 +57,13 @@ lazy from .notifications import (
     results,
     spinning,
 )
-lazy from .panel import PanelPreferences, load_preferences
-lazy from .qt import QApplication, QFontMetricsF, Qt, QtCore
-lazy from .qt_text import font
-lazy from .qt_ui import EventLoop, cancel, later
-lazy from .toast_card import Card, Measure
+lazy from assistant.panel import PanelPreferences, load_preferences
+lazy from assistant.qt_text import font
+lazy from assistant.qt_ui import EventLoop, cancel, later
+lazy from assistant.toast_card import Card, Measure
+lazy from winapi.notification_input import Region, WheelRouter
+
+prepare()
 
 
 class AgentToasts:
@@ -68,8 +74,8 @@ class AgentToasts:
         "capacity",
         "cards",
         "clock",
-        "create_card",
         "closed",
+        "create_card",
         "desktop",
         "expiry_timer",
         "loop",
@@ -101,9 +107,11 @@ class AgentToasts:
         material_preference: Callable[[], appearance.Preference] = appearance.preference,
         desktop: Desktop | None = None,
         create_card: Callable[[AgentToasts, Toast, int], Card] | None = None,
+        timing: appearance.TimerResolution | None = None,
     ) -> None:
-        # The view composes native lifetime with independent clock, preferences
-        # and desktop observation boundaries; tests supply those same contracts.
+        # One view owns cards, desktop observation and motion timer lifetimes.
+        # Independent preferences, clock and native adapters enter at construction
+        # so every card shares that ownership; tests consume the same contracts.
         self.root, self.agent, self.clock, self.motion_enabled = root, agent, clock, motion_enabled
         self.desktop: Desktop = NativeDesktop() if desktop is None else desktop
         self.create_card = Card if create_card is None else create_card
@@ -115,7 +123,7 @@ class AgentToasts:
         self.stack = Stack()
         self.loop = EventLoop(root, self.sync_layers)
         self.measure = Measure()
-        self.timing = appearance.TimerResolution()
+        self.timing = appearance.TimerResolution() if timing is None else timing
         self.wheel = WheelRouter()
         self.cards: dict[Key, Card] = {}
         # Qt owns these native resources. Keep at most MAX_VISIBLE surfaces for
@@ -346,6 +354,9 @@ class AgentToasts:
         exits: tuple[Card, ...] = ()
         for key, card in tuple(self.cards.items()):
             if key in desired:
+                # Reusing a fading recording restores its controls immediately;
+                # fixed-width content may need no geometric change at all.
+                immediate = immediate or (card.retiring and isinstance(card.content, Recording))
                 card.retiring = False
             elif not card.retiring:
                 card.retiring = True
@@ -361,10 +372,13 @@ class AgentToasts:
             current = self.cards[toast.key]
             before = current.width, current.height
             current.render(toast.content, width, limits[toast.key], preference)
-            # A recording's controls become usable immediately when it starts.
-            immediate = immediate or (toast.key not in created and before != (current.width, current.height)
-                                      and (isinstance(toast.content, Recording)
-                                           or (isinstance(toast.content, WorkItem) and isinstance(toast.content.item, Assessment))))
+            # A resumed recording must restore usable controls immediately,
+            # even when its fixed-width geometry matches the fading saved card.
+            resized = before != (current.width, current.height)
+            immediate = immediate or (toast.key not in created
+                                      and ((isinstance(toast.content, Recording) and (resized or current.alpha < 1))
+                                           or (resized and isinstance(toast.content, WorkItem)
+                                               and isinstance(toast.content.item, Assessment))))
             if toast.key in created:
                 current.position(self.work.right - margin,
                                  Frame(self.work.bottom - margin - current.height + round(16 * scale), current.width, current.height, 0,

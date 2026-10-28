@@ -6,8 +6,8 @@ Windows' reduced-transparency and high-contrast settings retain solid fallbacks.
 
 | Situation | Visible controls |
 | --- | --- |
-| Idle | Local time, battery level and available local temperature; the entire capsule opens controls |
-| Dictating | Microphone, Listening and live audio waveform; release Spacebar, press B again, or use Stop to finish |
+| Idle | Workspace menu button and read-only local time, battery level and available local temperature |
+| Dictating | Microphone, Listening, live audio waveform and its Stop control |
 | Transcribing | Compact rotating spinner and Transcribing |
 | Agent working | Activity label and Stop |
 | Agent needs input | Needs you; conversation access is in the capsule's menu |
@@ -15,11 +15,20 @@ Windows' reduced-transparency and high-contrast settings retain solid fallbacks.
 | Saving or interrupted recording | Separate progress or attention capsule |
 | Temporary keyboard layer or layout disabled | Small keyboard-mode capsule |
 
+Dividers separate independent functions. The main capsule groups are the
+Workspace menu, the current readout with its applicable Stop control, and the
+inbox. Icons, labels and controls for one function stay together without an
+internal divider. Read-only ambient facts use spacing within their single group.
+Recording and keyboard capsules already establish their boundaries through their
+separate shapes, so their joins need no redundant divider. An absent inbox hides
+its divider too. Each action's hover text names its matching function.
+
 Agent, recording and keyboard state are independent. Finishing a recording
 removes its capsule without hiding an active agent or dictation. Routine Work,
 recording-start, conversation and keyboard actions live in the controls menu.
-There is no separate dropdown target. Its entire capsule, including the padding,
-opens the menu; the content button also supports keyboard focus and activation.
+The menu has its own explicit button. Ambient facts, activity text and capsule
+padding are read-only and do not open unrelated controls. Keyboard focus and
+hover/press feedback belong to actionable buttons.
 A small bell beside the controls opens the work feed directly when inbox items
 need attention. Its count follows unhandled work and unanswered questions,
 including items beyond the visible bubble page. Curated work uses its grouped
@@ -83,10 +92,10 @@ text. Reduced motion retains a stationary arc and the Transcribing label.
 Completion restores the ambient presentation and stops the frame timer.
 
 Windows `GetSystemPowerStatus` supplies battery percentage, charging and external
-power. Unknown readings show a dash; machines without a battery show AC. Power
-above 95% while plugged in hides the percentage and retains the charger symbol.
+power. Unknown readings show a dash; machines without a battery show AC. A battery
+above 95% while plugged in hides its percentage and retains the charger symbol.
 At 95% or below, or after unplugging, the percentage is visible.
-refreshes every fifteen seconds and the local clock updates at minute changes.
+Power refreshes every fifteen seconds and the local clock updates at minute changes.
 Weather uses Windows geolocation when already available, with no consent request
 or IP-based fallback. A background worker sends coordinates rounded to a tenth
 of a degree to Open-Meteo, refreshes successful observations every fifteen minutes,

@@ -5,7 +5,7 @@ from enum import Enum, auto
 from math import isfinite
 from typing import Literal, assert_never
 
-from .llm import RATE
+from assistant.llm import RATE
 
 type AudioSource = Literal["both", "microphone"]
 type Phase = Literal["idle", "starting", "recording", "stopping", "finishing", "paused", "saved", "interrupted"]

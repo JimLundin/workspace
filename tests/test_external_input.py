@@ -6,8 +6,7 @@ from collections.abc import Callable
 
 from assistant.agent_session import Approval, Question, pending
 from assistant.agent_window import AgentWindow, View
-
-from .test_agent_window import RecordingWindow
+from tests.test_agent_window import RecordingWindow
 
 
 def has_pending_input(panel: AgentWindow) -> bool:

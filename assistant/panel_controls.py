@@ -3,7 +3,12 @@
 
 from collections.abc import Callable
 
-from .qt import Qt, QtWidgets
+lazy from PySide6 import QtWidgets
+lazy from PySide6.QtCore import Qt
+
+from assistant.qt_runtime import prepare
+
+prepare()
 
 STYLE = """
 QWidget { color: #d8e0ea; font-family: 'Segoe UI'; font-size: 12px; }
