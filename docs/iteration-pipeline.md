@@ -98,12 +98,26 @@ require type checking and review under the policy in `AGENTS.md`.
 
 Test review starts with the Workspace decision, policy or ownership failure a
 case can detect. Direct Python/dependency behavior is outside the test surface.
-The static architecture check enforces frozen, slotted data-record declarations; native bundle and Qt startup
-checks verify our selection and initialization order. Those remain owned
+The static architecture check enforces frozen, slotted data-record declarations.
+Native bundle and Qt startup checks verify our selection and initialization order. Those remain owned
 contracts even though their fixtures use Python and dependencies. Disposable
 browser fixtures explicitly remove their profiles after closing the browser,
 with a short bounded retry for late native file release; persistent cleanup
 failures remain failures.
+
+Draft policy tests use a fictional command handler with real JSON response files.
+One complete draft scenario runs that same handler in a subprocess; other cases
+avoid starting Python for every simulated mail operation. The draft identity,
+commit ordering, lost acknowledgment, edited/deleted items and recipient checks
+still run, including Windows sharing behavior. The blanket runtime slots audit
+was removed; Python instance-storage behavior is trusted.
+
+Feed-triage fixtures keep real worker threads, locks and authenticated HTTP
+requests. Tests explicitly release debounce steps instead of waiting 1.5 seconds
+per step; the local fixture server uses a short idle shutdown poll. The daily
+refresh case still exercises the real periodic wake without a new observation.
+Feed-tool cases use the registered tool boundary; the general SDK conversation
+scenarios remain in `tests/test_agent.py`.
 
 Generated tests live in `tests/properties/` and use the pinned `test` extra
 (`python -m pip install -e ".[test]"` in the development environment). Editing

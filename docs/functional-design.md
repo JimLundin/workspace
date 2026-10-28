@@ -326,8 +326,9 @@ handles, SDK-owned histories, and mutable buffers retain a single explicit owner
 `scripts/architecture.py` owns recursive source inventory, import resolution and
 policy reports. Editing checks supply their Git-listed snapshot; the deployed
 full check can review the filesystem without Git. `scripts/check.py` uses the
-same import resolution for affected-test selection. `tests/test_slots.py` uses
-the inventory instead of immediate-package file lists. Application modules stay
+same import resolution for affected-test selection. Data-record declarations are
+checked from source; the retired runtime instance-storage audit is not required.
+Application modules stay
 in their current locations while this enforcement is established.
 
 Immutable data is the repository default specified in `AGENTS.md`. All source

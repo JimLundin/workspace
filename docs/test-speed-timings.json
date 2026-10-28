@@ -2523,5 +2523,301 @@
         }
       ]
     }
+  },
+  "overhead_reduction": {
+    "notes": [
+      "Individual sequential observations, not statistical full-suite benchmarks.",
+      "The initial portable inventory hit its 180s budget after 717 completed tests; its191remaining functions ran in a fresh process. Their sums are not a single full-suite timing.",
+      "No Edge or Teams browser was launched."
+    ],
+    "portable_inventory": {
+      "completed_before_cutoff": 717,
+      "completed_in_remainder": 191,
+      "unique_completed": 908,
+      "remainder_before_seconds": 131.59827110002516,
+      "remainder_after_seconds": 44.91088160005165,
+      "preserved_behavioral_cases": 190,
+      "removed_runtime_audit_seconds": 67.08549899997888
+    },
+    "outlook": {
+      "preserved_cases": 17,
+      "before_body_seconds": 27.48272279999219,
+      "after_body_seconds": 7.530179600114934,
+      "after_editing_command_seconds": 29.218682600010652,
+      "before_durations": [
+        {
+          "offset": 7.601384300040081,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_outlook.test_ambiguous_marker_and_incomplete_or_wrong_readback_do_not_verify",
+          "seconds": 6.422166800010018,
+          "cpu": 0.40625,
+          "outcome": "completed"
+        },
+        {
+          "offset": 7.651709600002505,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_outlook.test_content_identity_retains_whitespace_recipient_roles_and_explicit_revision",
+          "seconds": 0.0024719000211916864,
+          "cpu": 0.0,
+          "outcome": "completed"
+        },
+        {
+          "offset": 7.818699299998116,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_outlook.test_eml_roundtrip_keeps_complete_unicode_body_and_all_recipient_roles",
+          "seconds": 0.16268750000745058,
+          "cpu": 0.125,
+          "outcome": "completed"
+        },
+        {
+          "offset": 7.906620500027202,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_outlook.test_eml_subject_preserves_leading_whitespace_and_long_encoded_headers",
+          "seconds": 0.08440120000159368,
+          "cpu": 0.0625,
+          "outcome": "completed"
+        },
+        {
+          "offset": 7.91737690003356,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_outlook.test_external_addresses_and_header_injection_are_rejected_before_saving",
+          "seconds": 0.0009048999636434019,
+          "cpu": 0.0,
+          "outcome": "completed"
+        },
+        {
+          "offset": 8.467925100005232,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_outlook.test_failed_identity_publication_prevents_native_save_or_fallback",
+          "seconds": 0.5476374999852851,
+          "cpu": 0.0625,
+          "outcome": "completed"
+        },
+        {
+          "offset": 9.00657670001965,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_outlook.test_file_draft_user_edits_and_same_key_collisions_are_preserved",
+          "seconds": 0.5322575999889523,
+          "cpu": 0.140625,
+          "outcome": "completed"
+        },
+        {
+          "offset": 9.018620400049258,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_outlook.test_inspection_and_pre_cancelled_save_do_not_create_records_or_probe_outlook",
+          "seconds": 0.0024384999996982515,
+          "cpu": 0.0,
+          "outcome": "completed"
+        },
+        {
+          "offset": 11.490336800052319,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_outlook.test_lost_native_save_acknowledgement_recovers_same_marker_in_original_store",
+          "seconds": 2.4676978000206873,
+          "cpu": 0.15625,
+          "outcome": "completed"
+        },
+        {
+          "offset": 11.637781500001438,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_outlook.test_malformed_existing_identity_fails_closed_without_probing_or_mutating_drafts",
+          "seconds": 0.13440210005501285,
+          "cpu": 0.0625,
+          "outcome": "completed"
+        },
+        {
+          "offset": 13.920372500026133,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_outlook.test_native_response_bound_retains_valid_content_when_json_expands_control_characters",
+          "seconds": 2.255881299963221,
+          "cpu": 0.40625,
+          "outcome": "completed"
+        },
+        {
+          "offset": 15.73523660004139,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_outlook.test_native_save_has_durable_mailbox_binding_and_preserves_body_beyond_command_output_limit",
+          "seconds": 1.8052941999631003,
+          "cpu": 0.140625,
+          "outcome": "completed"
+        },
+        {
+          "offset": 18.095044900022913,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_outlook.test_native_user_edits_deletion_and_changed_request_never_restore_model_content",
+          "seconds": 2.3524396999855526,
+          "cpu": 0.15625,
+          "outcome": "completed"
+        },
+        {
+          "offset": 19.54357560002245,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_outlook.test_parallel_retry_waits_for_one_owner_and_waiting_stop_does_not_create_a_draft",
+          "seconds": 1.436702500039246,
+          "cpu": 0.0625,
+          "outcome": "completed"
+        },
+        {
+          "offset": 20.225346500054002,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_outlook.test_unavailable_outlook_saves_one_complete_editable_eml_and_retries_that_file",
+          "seconds": 0.6741132999886759,
+          "cpu": 0.15625,
+          "outcome": "completed"
+        },
+        {
+          "offset": 22.883112300012726,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_outlook.test_uncertain_native_save_never_selects_fallback_or_replays_a_missing_draft",
+          "seconds": 2.6496071000001393,
+          "cpu": 0.203125,
+          "outcome": "completed"
+        },
+        {
+          "offset": 28.842464000044856,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_outlook.test_verified_retries_keep_the_readable_binding_and_still_check_edited_or_missing_drafts",
+          "seconds": 5.951618899998721,
+          "cpu": 0.5625,
+          "outcome": "completed"
+        }
+      ],
+      "after_durations": [
+        [
+          0.8909607999958098,
+          "tests.test_outlook.test_ambiguous_marker_and_incomplete_or_wrong_readback_do_not_verify"
+        ],
+        [
+          0.007054799993056804,
+          "tests.test_outlook.test_content_identity_retains_whitespace_recipient_roles_and_explicit_revision"
+        ],
+        [
+          0.14076400001067668,
+          "tests.test_outlook.test_eml_roundtrip_keeps_complete_unicode_body_and_all_recipient_roles"
+        ],
+        [
+          0.10351829999126494,
+          "tests.test_outlook.test_eml_subject_preserves_leading_whitespace_and_long_encoded_headers"
+        ],
+        [
+          0.0039293000008910894,
+          "tests.test_outlook.test_external_addresses_and_header_injection_are_rejected_before_saving"
+        ],
+        [
+          0.08517079998273402,
+          "tests.test_outlook.test_failed_identity_publication_prevents_native_save_or_fallback"
+        ],
+        [
+          0.35752690001390874,
+          "tests.test_outlook.test_file_draft_user_edits_and_same_key_collisions_are_preserved"
+        ],
+        [
+          0.007259300036821514,
+          "tests.test_outlook.test_inspection_and_pre_cancelled_save_do_not_create_records_or_probe_outlook"
+        ],
+        [
+          0.257255999953486,
+          "tests.test_outlook.test_lost_native_save_acknowledgement_recovers_same_marker_in_original_store"
+        ],
+        [
+          0.22167940001236275,
+          "tests.test_outlook.test_malformed_existing_identity_fails_closed_without_probing_or_mutating_drafts"
+        ],
+        [
+          0.950926800025627,
+          "tests.test_outlook.test_native_response_bound_retains_valid_content_when_json_expands_control_characters"
+        ],
+        [
+          2.692220599972643,
+          "tests.test_outlook.test_native_save_has_durable_mailbox_binding_and_preserves_body_beyond_command_output_limit"
+        ],
+        [
+          0.2598283000406809,
+          "tests.test_outlook.test_native_user_edits_deletion_and_changed_request_never_restore_model_content"
+        ],
+        [
+          0.17197780002607033,
+          "tests.test_outlook.test_parallel_retry_waits_for_one_owner_and_waiting_stop_does_not_create_a_draft"
+        ],
+        [
+          0.29119130002800375,
+          "tests.test_outlook.test_unavailable_outlook_saves_one_complete_editable_eml_and_retries_that_file"
+        ],
+        [
+          0.2558046000194736,
+          "tests.test_outlook.test_uncertain_native_save_never_selects_fallback_or_replays_a_missing_draft"
+        ],
+        [
+          0.8331106000114232,
+          "tests.test_outlook.test_verified_retries_keep_the_readable_binding_and_still_check_edited_or_missing_drafts"
+        ]
+      ]
+    }
+  },
+  "feed_overhead_reduction": {
+    "description": "Same five native test functions, sequential Windows runs. Body costs include setup and cleanup. Before command selected five cases; after selected all 20 feed/date cases. Shared workstation/caches vary; no full-suite saving inferred.",
+    "cases": [
+      {
+        "name": "tests.test_feed_dates.test_a_new_day_reconsiders_cached_work_without_a_new_notification",
+        "before_seconds": 4.2300657000159845,
+        "after_seconds": 1.1448160999570973
+      },
+      {
+        "name": "tests.test_feed_triage_service.test_automatic_triage_coalesces_polls_and_voice_feedback_updates_the_live_plan",
+        "before_seconds": 3.8290871999925002,
+        "after_seconds": 0.20810570003231987
+      },
+      {
+        "name": "tests.test_feed_triage_service.test_dismissal_is_durable_and_a_failed_save_keeps_the_item_visible",
+        "before_seconds": 1.7764079000335187,
+        "after_seconds": 0.23311279999325052
+      },
+      {
+        "name": "tests.test_feed_triage_service.test_inflight_model_cannot_overwrite_new_voice_feedback",
+        "before_seconds": 3.1226553000160493,
+        "after_seconds": 0.11880900000687689
+      },
+      {
+        "name": "tests.test_feed_triage_service.test_stable_arrival_is_retried_alone_when_a_grouped_chat_changes_during_evaluation",
+        "before_seconds": 3.122136399964802,
+        "after_seconds": 0.16447379998862743
+      }
+    ],
+    "before_body_seconds": 16.080352500022855,
+    "after_body_seconds": 1.869317399978172,
+    "all_feed_date_cases_after": 20,
+    "cold_sdk_feed_case_seconds": 20.066704700002447,
+    "production_timing_changed": false,
+    "general_sdk_conversation_cases_retained": true,
+    "all_20_cases_before_tool_boundary": {
+      "body_seconds": 23.598440999747254,
+      "command_seconds": 36.19252470001811
+    },
+    "all_20_cases_after_tool_boundary": {
+      "body_seconds": 4.566724600153975,
+      "command_seconds": 14.397105799987912
+    },
+    "focused_defects_detected": [
+      "missing_feed_catalog",
+      "wrong_feed_dispatch"
+    ],
+    "tool_boundary_seconds": 0.33098820003215224
   }
 }

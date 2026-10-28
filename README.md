@@ -731,8 +731,9 @@ The logic never calls Windows directly: the layout's engine goes through a
 `Any` outside the boundaries to untyped code (`winapi` for ctypes,
 the assistant's Qt view modules for GUI bindings,
 `assistant/sdk.py` for SDK integration, and
-`selfcheck.py` for looking inside modules). Our classes use `__slots__`; SDK
-lifecycle subclasses and Qt objects inherit their libraries' storage. Behaviour changes come with tests.
+`selfcheck.py` for looking inside modules). Data records use frozen dataclasses
+with slots, checked from source. SDK lifecycle subclasses and Qt objects inherit
+their libraries' storage. Tests exercise Workspace behavior and integration wiring.
 
 ## Development
 

@@ -14,6 +14,70 @@ full run; they do not establish where all nineteen minutes went. Full timing ret
 first requirement for a responsible whole-suite fix; it is now implemented for
 editing runs that reach execution. [1–4]
 
+## Applied overhead reductions
+
+The blanket runtime audit in `tests/test_slots.py` was removed. It imported every
+production module and used `inspect.getmembers` plus `__dictoffset__` to inspect
+instance storage. This was unnecessary runtime work for declarations: the
+required frozen/slotted data-record rule is already enforced from source by
+`scripts/architecture.py`. No replacement test of Python's storage behavior was
+added. Existing architecture tests cover the checker accepting/rejecting our
+record declarations. [4,20]
+
+A complete portable inventory finished 717 tests before its 180-second budget;
+its remaining 191 functions then passed in a fresh process. The runtime slots
+audit took 67.085s in that remainder. After deleting it, the identical other
+190 behavioral cases passed in **44.911s**, versus **131.598s** for the cohort
+with the audit. Removing eager runtime inspection also avoids its loaded-module
+side effects; these are individual observations with filesystem/cache variation,
+not a measured full-suite saving. The two initial inventory segments account for
+908 unique completed functions, but their durations must not be combined as a
+single-process suite benchmark. [20]
+
+The next measured cost was repeated interpreter startup in the fictional Outlook
+command fixture. Ordinary cases now call the handler directly with copied JSON
+requests and real response files. The same handler remains executable in a child
+process, used by the existing complete-body/durable-mailbox-boundary scenario.
+All original assertions and modes remain: lost acknowledgment, wrong mailbox,
+recipient/body corruption, edits/deletion, duplicate identities, and cancellation
+while another owner holds the draft lock. No live Outlook or Teams is involved.
+The Windows binding-sharing case and meeting workflows use the same fixture.
+[20,21]
+
+The same **17 Outlook cases** passed with body time **27.483s → 7.530s**. The
+post-change editing command was 29.219s including preflight; its command total
+is not directly comparable to the earlier body-only measurement. These changes
+remove actual fixture work without reducing the behavioral assertions. A new
+full native suite has not been run, so the nineteen-minute total is not claimed
+to be fixed. [20]
+
+Five feed-triage/date cases were measured before and after replacing elapsed
+wall-clock debounce waits with explicitly released steps in the test fixture.
+Their same-name body total fell **16.080s → 1.869s**; all 20 feed/date cases passed
+after the change. The real worker, locks, authenticated HTTP requests and response
+files remain. The coalescing case now also rejects a model call before the test
+releases the debounce. The new-day case retains the real one-second periodic
+wake path, so refresh cannot silently depend on another notification. Fixture
+server shutdown polls at 20ms instead of the standard half second. Production
+timing and bridge code are unchanged. [22]
+
+That 20-case run exposed **20.067s** in the first SDK-using feed-tool case. The
+case now uses the existing registered-tool fixture, retaining real bridge reads,
+feedback persistence, catalog membership and journal redaction assertions. SDK
+conversation routing still has its ordinary scenarios in `tests/test_agent.py`.
+Removing SDK startup from this focused scope improves its edit loop; the full
+suite must still initialize the SDK for its own integration cases. [22]
+
+With that tool-boundary change, the same 20 cases passed with summed bodies
+**23.598s → 4.567s** and command totals **36.193s → 14.397s**. The feed-tool body
+was 0.331s. Workstation/cache variation affects command totals, so these are
+scoped observations. A bounded probe confirmed the changed case fails when a
+feed catalog entry is removed and when its dispatch points to the time handler.
+The probe changed only in-memory observations and left checkout source intact.
+Its script is retained in Windows Temp `workspace-test-cost-probes/feed_boundary_probe.py`.
+The measured report is `workspace-feed-overhead-local-tools.timings.json`; the
+final receipt check has its own complete report. [22]
+
 ## What the evidence actually shows
 
 | Observation | Scope | Result |
@@ -295,3 +359,14 @@ Installed PySide6 and shiboken6 version files both report 6.12.0. Fetched GitHub
 v6.12.0 feature/loader sources match Qt code.qt.io branch 6.12.0. The installed
 signature helpers are embedded in the distribution; they were not imported or
 extracted during this source investigation.
+
+20. [Retained overhead-removal observations](test-speed-timings.json),
+    `overhead_reduction`; complete incremental logs remain in Windows Temp
+    `workspace-test-cost-probes/`.
+21. [Fictional command handler](../tests/outlook_fixture.py),
+    [draft policy and retained child-process scenario](../tests/test_outlook.py),
+    [native binding-sharing case](../tests/test_windows_outlook.py).
+
+22. Feed waiting/bridge observations retained in [timing data](test-speed-timings.json),
+    `feed_overhead_reduction`; the final full report is in Windows Temp
+    `workspace-feed-overhead-final.timings.json`. [Fixture](../tests/feed_fixture.py).

@@ -3560,33 +3560,6 @@
       "key": {
         "rule": "inline-import",
         "path": "tests/test_feed_triage_service.py",
-        "scope": "test_voice_agent_tools_read_the_curated_plan_and_save_feedback_without_logging_source_text",
-        "signature": "2a91d0a231c212cc0be95ffcf7f5105f78eff72ee246273234c5534c325ed4df"
-      },
-      "reason": "Existing inline dependency declaration awaits migration to its module owner; use module-level lazy imports when deferred loading is required."
-    },
-    {
-      "key": {
-        "rule": "inline-import",
-        "path": "tests/test_feed_triage_service.py",
-        "scope": "test_voice_agent_tools_read_the_curated_plan_and_save_feedback_without_logging_source_text",
-        "signature": "2ab175aefd9b62c358d689a0276ec963870d2d401ea8f51944a1a1d82cdb4d8e"
-      },
-      "reason": "Existing inline dependency declaration awaits migration to its module owner; use module-level lazy imports when deferred loading is required."
-    },
-    {
-      "key": {
-        "rule": "inline-import",
-        "path": "tests/test_feed_triage_service.py",
-        "scope": "test_voice_agent_tools_read_the_curated_plan_and_save_feedback_without_logging_source_text",
-        "signature": "37920ab45a5eea18702c6ecd9fe83dc89cfecbf961b71025dddff2ba25b30f1a"
-      },
-      "reason": "Existing inline dependency declaration awaits migration to its module owner; use module-level lazy imports when deferred loading is required."
-    },
-    {
-      "key": {
-        "rule": "inline-import",
-        "path": "tests/test_feed_triage_service.py",
         "scope": "test_voice_choice_tool_requires_exact_revision_before_effect",
         "signature": "37920ab45a5eea18702c6ecd9fe83dc89cfecbf961b71025dddff2ba25b30f1a"
       },

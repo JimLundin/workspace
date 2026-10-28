@@ -5,14 +5,17 @@ import threading
 import time
 from collections.abc import Callable
 from pathlib import Path
+from unittest.mock import patch
 
 from assistant.communications import Feed, TeamsActivity, Update
 from assistant.feed_agent_tools import request
 from assistant.feed_triage import Assessment, Board, Candidate, Disposition, candidate, saved
-from assistant.feed_triage_service import Triage
 from assistant.llm import Json
+lazy from assistant.agent import SPECS
 
+from .feed_fixture import TriageFixture
 from .test_feed_triage import output
+lazy from .test_agent import ToolRig
 
 
 class MemoryStore:
@@ -33,7 +36,7 @@ def test_dismissal_is_durable_and_a_failed_save_keeps_the_item_visible(tmp_path:
     item = Assessment('proposal', ((source.identity, source.revision),), 'Review', 'Review the figures', 'Check totals', '', 1, 1)
     store = MemoryStore()
     store.data = saved(Board(enabled=True, items=(item,)))
-    triage = Triage(tmp_path / 'bridge.json', store, lambda _: None, lambda _batch, _rules: '{}', lambda _: False)
+    triage = TriageFixture(tmp_path / 'bridge.json', store, lambda _: None, lambda _batch, _rules: '{}', lambda _: False)
     try:
         assert triage.dismiss('proposal') and not triage.board.actions
         assert triage.board.items[0].disposition is Disposition.DISMISSED
@@ -42,7 +45,7 @@ def test_dismissal_is_durable_and_a_failed_save_keeps_the_item_visible(tmp_path:
         assert len(triage.board.items) == 1
     finally:
         triage.close()
-    restarted = Triage(tmp_path / 'restart.json', store, lambda _: None, lambda _batch, _rules: '{}', lambda _: False)
+    restarted = TriageFixture(tmp_path / 'restart.json', store, lambda _: None, lambda _batch, _rules: '{}', lambda _: False)
     try:
         assert not restarted.board.actions and restarted.board.items[0].disposition is Disposition.DISMISSED
     finally:
@@ -54,7 +57,7 @@ def test_dismissal_is_durable_and_a_failed_save_keeps_the_item_visible(tmp_path:
 
     broken = BrokenStore()
     broken.data = saved(Board(enabled=True, items=(item,)))
-    failed = Triage(tmp_path / 'failure.json', broken, lambda _: None, lambda _batch, _rules: '{}', lambda _: False)
+    failed = TriageFixture(tmp_path / 'failure.json', broken, lambda _: None, lambda _batch, _rules: '{}', lambda _: False)
     try:
         assert not failed.dismiss('proposal') and failed.board.actions == (item,)
     finally:
@@ -76,18 +79,21 @@ def test_automatic_triage_coalesces_polls_and_voice_feedback_updates_the_live_pl
         return output(([item.identity for item in batch], 'quiet' if rules else 'action'))
     store = MemoryStore()
     endpoint = tmp_path / 'bridge.json'
-    triage = Triage(endpoint, store, boards.append, model, lambda _: False)
+    triage = TriageFixture(endpoint, store, boards.append, model, lambda _: False)
     try:
         feed = Feed(updates=(Update(TeamsActivity('fictional'), 'Budget review', 'Please check the figures.', 'Teams', 1),))
         triage.observe(feed, ())
         for _ in range(20):
             triage.observe(feed, ())
+        assert not calls, "The model ran before coalescing completed."
+        triage.advance()
         wait_until(lambda: bool(triage.board.actions))
         assert len(calls) == 1
         snapshot = json.loads(request({'operation': 'read'}, endpoint))
         assert snapshot['focus'] == triage.board.actions[0].identity
         updated = json.loads(request({'operation': 'rule', 'text': 'Keep fictional budget notices quiet.'}, endpoint))
         assert updated['rules'] == ['Keep fictional budget notices quiet.']
+        triage.advance()
         wait_until(lambda: len(calls) == 2 and triage.board.pending == 0)
         assert not triage.board.actions and store.read()['rules'] == updated['rules']
     finally:
@@ -102,12 +108,14 @@ def test_inflight_model_cannot_overwrite_new_voice_feedback(tmp_path: Path) -> N
             entered.set()
             assert release.wait(5)
         return output(([item.identity for item in batch], 'quiet' if rules else 'action'))
-    triage = Triage(tmp_path / 'bridge.json', MemoryStore(), lambda _: None, model, lambda _: False)
+    triage = TriageFixture(tmp_path / 'bridge.json', MemoryStore(), lambda _: None, model, lambda _: False)
     try:
         triage.observe(Feed(updates=(Update(TeamsActivity('fictional'), 'Review', 'Please review.', 'Teams', 1),)), ())
+        triage.advance()
         assert entered.wait(5)
         triage.command({'operation': 'rule', 'text': 'Ignore fictional review notices.'})
         release.set()
+        triage.advance()
         wait_until(lambda: triage.board.pending == 0)
         assert not triage.board.actions
     finally:
@@ -138,26 +146,28 @@ def test_saved_visibility_preferences_are_trusted_but_notification_text_is_only_
 
 
 def test_voice_agent_tools_read_the_curated_plan_and_save_feedback_without_logging_source_text(tmp_path: Path) -> None:
-    from unittest.mock import patch  # noqa: PLC0415
-
-    from .fake_endpoint import fake_endpoint  # noqa: PLC0415
-    from .test_agent import Rig, calls, says  # noqa: PLC0415
+    # Missing catalog entries, wrong bridge routing and source text in the
+    # journal are owned defects. SDK conversation transport is covered in test_agent.
+    assert {'work_feed', 'work_feed_update'} <= {spec.name for spec in SPECS}
     endpoint = tmp_path / 'bridge.json'
-    triage = Triage(endpoint, MemoryStore(), lambda _: None,
+    triage = TriageFixture(endpoint, MemoryStore(), lambda _: None,
                     lambda batch, rules: output(([item.identity for item in batch], 'quiet')), lambda _: False)
     original = request
     try:
         triage.observe(Feed(updates=(Update(TeamsActivity('fictional'), 'Private fictional subject',
                                            'Private fictional source body.', 'Teams', 1),)), ())
-        with fake_endpoint() as model:
-            rig = Rig(model, calls(('work_feed', {})),
-                      calls(('work_feed_update', {'operation': 'rule', 'text': 'Keep routine fictional notices quiet.'})),
-                      says("I will keep those notices quiet."))
-            with patch('assistant.feed_agent_tools.request', side_effect=lambda data: original(data, endpoint)):
-                rig.run('Keep routine fictional notices quiet.')
-            assert triage.board.rules == ('Keep routine fictional notices quiet.',)
-            assert all(entry['args'] == '[integration details omitted]' for entry in rig.journal)
-            assert 'Private fictional source body' not in json.dumps(rig.journal)
+        triage.advance()
+        wait_until(lambda: triage.board.pending == 0)
+        rig = ToolRig()
+        with patch('assistant.feed_agent_tools.request', side_effect=lambda data: original(data, endpoint)):
+            current = rig.call('work_feed')
+            assert current.ok and 'Private fictional source body' in current.text
+            updated = rig.call('work_feed_update', operation='rule', text='Keep routine fictional notices quiet.')
+            assert updated.ok
+        assert triage.board.rules == ('Keep routine fictional notices quiet.',)
+        assert len(rig.journal) == 2
+        assert all(entry['args'] == '[integration details omitted]' for entry in rig.journal)
+        assert 'Private fictional source body' not in json.dumps(rig.journal)
     finally:
         triage.close()
 
@@ -184,14 +194,16 @@ def test_stable_arrival_is_retried_alone_when_a_grouped_chat_changes_during_eval
             entered.set()
             assert release.wait(5)
         return output(([item.identity for item in batch], 'action'))
-    triage = Triage(tmp_path / 'bridge.json', MemoryStore(), lambda _: None, model, lambda _: False)
+    triage = TriageFixture(tmp_path / 'bridge.json', MemoryStore(), lambda _: None, model, lambda _: False)
     first = Update(TeamsActivity('changing'), 'Changing chat', 'First revision.', 'Teams', 1)
     stable = Update(TeamsActivity('stable'), 'Stable review request', 'Please review.', 'Teams', 2)
     try:
         triage.observe(Feed(updates=(first, stable)), ())
+        triage.advance()
         assert entered.wait(4)
         triage.observe(Feed(updates=(replace(first, text='A new revision.'), stable)), ())
         release.set()
+        triage.advance()
         wait_until(lambda: len(calls) >= 2)
         assert len(calls[1]) == 1 and calls[1][0].title.endswith('Stable review request')
         wait_until(lambda: bool(triage.board.actions))
@@ -224,7 +236,7 @@ def test_rejected_stale_edit_does_not_block_the_voice_agent_from_saving_feedback
     from .test_agent import ToolRig  # noqa: PLC0415
     from .test_work_actions import claimed  # noqa: PLC0415
     endpoint = tmp_path / 'bridge.json'
-    triage = Triage(endpoint, MemoryStore(), lambda _: None, lambda batch, rules: output(([item.identity for item in batch], 'action')),
+    triage = TriageFixture(endpoint, MemoryStore(), lambda _: None, lambda batch, rules: output(([item.identity for item in batch], 'action')),
                     lambda _: False)
     original = request
     store, claim, clock = claimed(tmp_path)
@@ -251,7 +263,7 @@ def test_lost_acknowledgement_stays_uncertain_after_the_owner_commits_feedback(t
     from .test_agent import ToolRig  # noqa: PLC0415
     from .test_work_actions import claimed  # noqa: PLC0415
     endpoint = tmp_path / 'bridge.json'
-    triage = Triage(endpoint, MemoryStore(), lambda _: None, lambda batch, rules: output(([item.identity for item in batch], 'quiet')),
+    triage = TriageFixture(endpoint, MemoryStore(), lambda _: None, lambda batch, rules: output(([item.identity for item in batch], 'quiet')),
                     lambda _: False)
     store, claim, clock = claimed(tmp_path)
     work = WorkExecution(claim, store, Resources(), clock=clock)
@@ -280,7 +292,7 @@ def test_click_and_voice_choose_the_same_task_and_stale_or_unavailable_choices_d
     def submit(task: str, prompt: str) -> None:
         submitted.append((task, prompt))
     endpoint = tmp_path / 'choices.json'
-    triage = Triage(endpoint, store, lambda _: None, lambda _batch, _rules: '{}', lambda _: False, submit=submit)
+    triage = TriageFixture(endpoint, store, lambda _: None, lambda _batch, _rules: '{}', lambda _: False, submit=submit)
     try:
         revision = proposal_revision(item)
         assert triage.choose_from_ui(item.identity, revision, '1')
@@ -324,7 +336,7 @@ def test_reasoned_rejection_remains_recorded_once_after_feedback_and_reload(tmp_
     store.data = saved(Board(enabled=True, items=(item,)))
     reason = 'I cannot approve incomplete figures.'
     endpoint = tmp_path / 'rejection.json'
-    triage = Triage(endpoint, store, lambda _: None, lambda _batch, _rules: '{}', lambda _: False)
+    triage = TriageFixture(endpoint, store, lambda _: None, lambda _batch, _rules: '{}', lambda _: False)
     try:
         answer = json.loads(request({'operation': 'reject', 'item': item.identity, 'revision': proposal_revision(item),
                                      'text': reason}, endpoint))
@@ -334,7 +346,7 @@ def test_reasoned_rejection_remains_recorded_once_after_feedback_and_reload(tmp_
         assert triage.board.items[0].decision == reason
     finally:
         triage.close()
-    restarted = Triage(tmp_path / 'reloaded.json', store, lambda _: None, lambda _batch, _rules: '{}', lambda _: False)
+    restarted = TriageFixture(tmp_path / 'reloaded.json', store, lambda _: None, lambda _batch, _rules: '{}', lambda _: False)
     try:
         assert len(restarted.snapshot()['decisions']) == 1 and not restarted.board.actions
         assert restarted.board.items[0].decision == reason
