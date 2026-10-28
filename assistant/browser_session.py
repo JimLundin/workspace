@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Protocol, assert_never, cast
 from urllib.parse import urlsplit
 
-from .browser_values import BrowserError, DisconnectedError, InterruptedError, mapping, text
+from .browser_values import BrowserError, DisconnectedError, InterruptedError, NavigationContextError, mapping, navigation_context_error, text
 from .llm import Json
 
 MAX_RESPONSE = 16_000_000
@@ -98,6 +98,14 @@ def edge_path() -> Path | None:
 class Channel(Protocol):
     def send(self, message: str) -> None: ...
     def recv(self, timeout: float) -> str | bytes: ...
+    def close(self) -> None: ...
+
+
+class BrowserConnection(Protocol):
+    def call(
+        self, method: str, params: dict[str, Json], cancel: threading.Event, *, session: str = "", timeout: float = 15,
+    ) -> dict[str, Json]: ...
+
     def close(self) -> None: ...
 
 
@@ -189,7 +197,7 @@ class Cdp:
                 if cancel.is_set():
                     raise InterruptedError("Stopped. Inspect the page before retrying an action that may already have completed.")
                 if time.monotonic() >= deadline:
-                    raise InterruptedError("Browser operation timed out. Inspect its result before retrying; it may already have completed.")
+                    raise BrowserError("Browser operation timed out. Inspect its result before retrying; it may already have completed.")
                 try:
                     raw = self.channel.recv(timeout=min(.1, max(.001, deadline - time.monotonic())))
                 except TimeoutError:
@@ -200,7 +208,10 @@ class Cdp:
                 if message.get("id") != identity:
                     continue
                 if "error" in message:
-                    raise BrowserError(text(mapping(message["error"]), "message", "Browser command failed.")[:500])
+                    details = text(mapping(message["error"]), "message", "Browser command failed.")[:500]
+                    if navigation_context_error(details):
+                        raise NavigationContextError(details)
+                    raise BrowserError(details)
                 return mapping(message.get("result", {}))
         except BrowserError:
             raise
@@ -248,6 +259,8 @@ def _close_process(owner: Managed) -> None:
         process.wait(timeout=2)
     if job is not None:
         job.close()
+        process.wait(timeout=10)  # The job already terminated it; Windows may signal exit later.
+        return
     try:
         process.wait(timeout=2)
     except subprocess.TimeoutExpired:
@@ -259,7 +272,7 @@ def _close_process(owner: Managed) -> None:
 class BrowserSession:
     """A connection with its ownership; only a managed session may close a browser."""
 
-    connection: Cdp
+    connection: BrowserConnection
     owner: Managed | Attached
 
     def close(self) -> None:
@@ -281,17 +294,24 @@ class Connector(Protocol):
 
 
 class NativeSessions:
-    __slots__ = ("connect", "executable", "profile", "profiles")
+    __slots__ = ("connect", "executable", "persistent", "profile", "profiles")
 
     def __init__(
         self, profile: Path, *, executable: Path | None = None, profiles: Callable[[Product], Path] = user_data_root,
-        connect: Connector = Cdp.connect,
+        connect: Connector = Cdp.connect, persistent: bool = False,
     ) -> None:
         self.profile, self.executable, self.profiles, self.connect = profile, executable, profiles, connect
+        self.persistent = persistent
 
     def open(self, source: Source, cancel: threading.Event, *, visible: bool = False) -> BrowserSession:
         match source:
             case Product():
+                if self.persistent:
+                    from usage import DIRECTORY  # noqa: PLC0415
+
+                    from .browser_host import connect_shared  # noqa: PLC0415
+
+                    return BrowserSession(connect_shared(DIRECTORY / "browser-connections" / source.value, source, cancel), Attached(source))
                 try:
                     connection = self.connect(read_endpoint(self.profiles(source)), cancel, timeout=60)
                 except InterruptedError:

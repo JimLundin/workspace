@@ -28,18 +28,18 @@ from .test_browser import Channel, connected_browser, decoded
 
 
 def test_default_open_reuses_the_users_expanded_workspace_group_without_changing_it() -> None:
-    first = Group(10, 1, "Workspace", "blue", True, False)
-    expanded = Group(20, 2, "Workspace", "purple", False, False)
+    title = "Workspace"
+    first = Group(10, 1, title, "blue", True, False)
+    expanded = Group(20, 2, title, "purple", False, False)
     state = TabState((), (first, expanded), (1, 2), 2)
     assert opening(state, DefaultGroup.WORKSPACE, None) == Opening(2, InGroup(20))
     assert opening(state, DefaultGroup.WORKSPACE, 1) == Opening(1, InGroup(10))
-    assert expanded == Group(20, 2, "Workspace", "purple", False, False)
+    assert expanded == Group(20, 2, title, "purple", False, False)
     assert opening(state, Ungrouped.TABS, None) == Opening(2, Ungrouped.TABS)
     with TestCase().assertRaisesRegex(BrowserError, "match"):
         opening(state, InGroup(10), 2)
     with TestCase().assertRaisesRegex(BrowserError, "group is closed"):
         opening(state, InGroup(30), None)
-
 
 def test_default_open_does_not_add_work_to_other_or_shared_groups() -> None:
     state = TabState((), (Group(10, 1, "Personal", "blue", False, False), Group(20, 1, "Workspace", "blue", False, True)), (1,), 1)

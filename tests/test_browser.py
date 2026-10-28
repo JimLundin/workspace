@@ -11,6 +11,7 @@ from unittest.mock import patch
 from assistant.browser import MAX_OUTPUT, MAX_RESPONSE, Attached, Browser, BrowserError, Cdp, InterruptedError, Managed, Product, Separate, web_url
 from assistant.browser_session import BrowserSession, Source
 from assistant.browser_tabs import TabStrip
+from assistant.browser_values import NavigationContextError
 from assistant.llm import Json
 
 VIEWPORT_PNG = base64.b64decode(
@@ -83,6 +84,21 @@ def screenshot_channel() -> Channel:
     )
 
 
+def test_background_activity_restores_focus_even_when_the_action_is_cancelled(tmp_path: Path) -> None:
+    channel = Channel.results({"targetInfos": [{"type": "page", "targetId": "fixture"}]}, {"sessionId": "page-session"}, {}, {})
+    browser = connected_browser(tmp_path, channel)
+    cancel = threading.Event()
+    try:
+        with TestCase().assertRaisesRegex(InterruptedError, "Action stopped"), browser.awake("fixture", cancel):
+            cancel.set()
+            raise InterruptedError("Action stopped")
+        changes = [item["params"] for item in channel.sent if item["method"] == "Emulation.setFocusEmulationEnabled"]
+        assert changes == [{"enabled": True}, {"enabled": False}]
+        assert browser.connection is not None
+    finally:
+        browser.close()
+
+
 def test_cdp_ignores_events_and_late_replies_and_preserves_session() -> None:
     channel = Channel('{"method":"Page.loadEventFired"}', '{"id":99,"result":{}}', TimeoutError(), '{"id":1,"result":{"value":42}}')
     cdp = Cdp(channel)
@@ -102,9 +118,31 @@ def test_cdp_cancellation_and_timeout_never_repeat_an_action() -> None:
     with TestCase().assertRaisesRegex(InterruptedError, "Stopped"):
         Cdp(channel).call("Page.navigate", {}, stop)
     assert not channel.sent
-    with TestCase().assertRaisesRegex(InterruptedError, "timed out"):
+    with TestCase().assertRaisesRegex(BrowserError, "timed out"):
         Cdp(channel).call("Runtime.evaluate", {}, threading.Event(), timeout=0)
     assert len(channel.sent) == 1
+
+
+def test_slow_page_keeps_the_connection_and_accepts_the_next_response(tmp_path: Path) -> None:
+    channel = Channel.results(
+        {"targetInfos": [{"type": "page", "targetId": "fixture"}]}, {"sessionId": "page-session"},
+        {"frameTree": {"frame": {"id": "main"}}}, {"executionContextId": 1}, {"result": {"value": "late reply"}},
+        {"targetInfos": [{"type": "page", "targetId": "fixture"}]},
+    )
+    browser = connected_browser(tmp_path, channel)
+    connection = browser.connection
+    def clock() -> float:
+        return 20.0 if channel.sent and channel.sent[-1]["method"] == "Runtime.evaluate" else 0.0
+    try:
+        with patch("assistant.browser_session.time.monotonic", side_effect=clock):
+            with TestCase().assertRaisesRegex(BrowserError, "timed out") as raised:
+                browser.request("evaluate", {"target_id": "fixture", "expression": "1"}, threading.Event())
+            assert not isinstance(raised.exception, InterruptedError)
+            assert browser.connection is connection and not channel.closed
+            assert decoded(browser.request("tabs", {}, threading.Event()).text)["mode"] == "attached"
+        assert [call["method"] for call in channel.sent].count("Runtime.evaluate") == 1
+    finally:
+        browser.close()
 
 
 def test_cdp_rejects_malformed_oversized_and_error_replies() -> None:
@@ -115,6 +153,19 @@ def test_cdp_rejects_malformed_oversized_and_error_replies() -> None:
     ):
         with TestCase().assertRaisesRegex(BrowserError, message):
             Cdp(Channel(response)).call("Page.getFrameTree", {}, threading.Event())
+
+
+def test_retired_page_context_does_not_close_or_repeat_a_browser_request() -> None:
+    channel = Channel('{"id":1,"error":{"message":"Cannot find context with specified id"}}', '{"id":2,"result":{"value":42}}')
+    cdp = Cdp(channel)
+    try:
+        with TestCase().assertRaises(NavigationContextError):
+            cdp.call("Runtime.evaluate", {"expression": "read()"}, threading.Event(), session="page")
+        assert not channel.closed
+        assert cdp.call("Runtime.evaluate", {"expression": "read()"}, threading.Event(), session="page") == {"value": 42}
+        assert len(channel.sent) == 2
+    finally:
+        cdp.close()
 
 
 def test_cdp_refuses_non_loopback_debugging_and_proxy_use() -> None:
@@ -383,11 +434,11 @@ def test_browser_waits_for_the_root_after_job_termination_instead_of_killing_it_
             return None  # Windows has not signalled the process handle yet.
 
         def wait(self, timeout: float) -> int:
-            if not self.job_closed:
+            if not self.job_closed or timeout < 5:
                 import subprocess  # noqa: PLC0415
 
                 raise subprocess.TimeoutExpired("fixture", timeout)
-            return 0
+            return 0  # Job termination can precede the process handle's exit signal.
 
         def kill(self) -> None:
             raise PermissionError("Windows refuses a second termination while a process is exiting.")

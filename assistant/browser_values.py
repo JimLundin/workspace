@@ -104,6 +104,20 @@ class DisconnectedError(BrowserError):
     """The transport ended; an interrupted action must not be replayed."""
 
 
+class NavigationContextError(BrowserError):
+    """A page navigation retired the execution context, while transport remains live."""
+
+
+class NavigationLoadingError(BrowserError):
+    """Navigation started but did not finish within the observation deadline."""
+
+
+def navigation_context_error(message: str) -> bool:
+    return any(phrase in message for phrase in (
+        "Cannot find context with specified id", "Cannot find execution context", "Execution context was destroyed",
+    ))
+
+
 def mapping(value: Json) -> dict[str, Json]:
     if not isinstance(value, dict):
         raise BrowserError("The browser returned an unexpected response.")
