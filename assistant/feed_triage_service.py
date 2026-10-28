@@ -71,9 +71,11 @@ def classify(settings: Settings, batch: tuple[Candidate, ...], rules: tuple[str,
     # The model request combines its settings, evidence and saved policy with a
     # fresh clock observation; the request owner supplies that effect explicitly.
     now = datetime.fromtimestamp(clock(), UTC).astimezone()
-    payload = {'reviewed_at': now.isoformat(), 'candidates': [source_context(item) for item in batch]}
-    instructions = INSTRUCTIONS + '\nSaved visibility preferences (JSON):\n' + json.dumps(list(rules), ensure_ascii=False)
-    reply = llm.chat(settings, [llm.system_message(instructions), llm.user_message(json.dumps(payload, ensure_ascii=False))], timeout_s=45)
+    payload: dict[str, Json] = {'reviewed_at': now.isoformat(), 'candidates': list[Json](source_context(item) for item in batch)}
+    visibility: list[str] = list(rules)
+    instructions = INSTRUCTIONS + '\nSaved visibility preferences (JSON):\n' + json.dumps(visibility, ensure_ascii=False)
+    messages = (llm.system_message(instructions), llm.user_message(json.dumps(payload, ensure_ascii=False)))
+    reply = llm.chat(settings, messages, timeout_s=45)
     if isinstance(reply, llm.Failure):
         raise OSError('Work-feed triage could not reach the configured model.')
     return reply.text

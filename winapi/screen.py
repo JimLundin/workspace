@@ -5,15 +5,30 @@ from ctypes import wintypes
 from dataclasses import dataclass
 from typing import Final
 
-from winapi._core import fn, gdi32, optional_fn, rect, user32
+from winapi._core import fn, gdi32, last_error, optional_fn, rect, user32
 from winapi.shapes import Rect
 
 
 class MONITORINFO(ctypes.Structure):
+    cbSize: int
+    rcMonitor: wintypes.RECT
+    rcWork: wintypes.RECT
+    dwFlags: int
     _fields_ = (("cbSize", wintypes.DWORD), ("rcMonitor", wintypes.RECT), ("rcWork", wintypes.RECT), ("dwFlags", wintypes.DWORD))
 
 
 class BITMAPINFOHEADER(ctypes.Structure):
+    biSize: int
+    biWidth: int
+    biHeight: int
+    biPlanes: int
+    biBitCount: int
+    biCompression: int
+    biSizeImage: int
+    biXPelsPerMeter: int
+    biYPelsPerMeter: int
+    biClrUsed: int
+    biClrImportant: int
     _fields_ = (
         ("biSize", wintypes.DWORD),
         ("biWidth", wintypes.LONG),
@@ -30,6 +45,8 @@ class BITMAPINFOHEADER(ctypes.Structure):
 
 
 class BITMAPINFO(ctypes.Structure):
+    bmiHeader: BITMAPINFOHEADER
+    bmiColors: ctypes.Array[ctypes.c_ulong]
     _fields_ = (("bmiHeader", BITMAPINFOHEADER), ("bmiColors", wintypes.DWORD * 3))
 
 
@@ -121,11 +138,14 @@ def monitors() -> list[Monitor]:
         return True
 
     _EnumDisplayMonitors(None, None, MONITORENUMPROC(each), 0)
-    return sorted(found, key=lambda m: (m.area.left, m.area.top))
+    return sorted(found, key=monitor_position)
 
 
 def monitor_of(hwnd: int) -> Monitor:
-    return _monitor(_MonitorFromWindow(hwnd, _MONITOR_DEFAULTTONEAREST))
+    handle = _MonitorFromWindow(hwnd, _MONITOR_DEFAULTTONEAREST)
+    if handle is None:
+        raise last_error()
+    return _monitor(handle)
 
 
 def capture(area: Rect, width: int, height: int) -> bytes:
@@ -147,3 +167,7 @@ def capture(area: Rect, width: int, height: int) -> bytes:
         _DeleteObject(bitmap)
         _DeleteDC(memory)
         _ReleaseDC(None, screen)
+
+
+def monitor_position(monitor: Monitor) -> tuple[int, int]:
+    return monitor.area.left, monitor.area.top

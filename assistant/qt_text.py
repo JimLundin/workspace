@@ -232,11 +232,11 @@ class TextView(QTextBrowser):
         self.content.qt.size()  # Resolve layout before restoring a pixel position.
         self.verticalScrollBar().setValue(offset)
 
-    def wheelEvent(self, event: QWheelEvent) -> None:  # noqa: N802 — Qt virtual method
+    def wheelEvent(self, event: QWheelEvent) -> None:
         self.on_scroll(event.angleDelta().y())
         event.accept()
 
-    def contextMenuEvent(self, event: QContextMenuEvent) -> None:  # noqa: N802
+    def contextMenuEvent(self, event: QContextMenuEvent) -> None:
         self.on_menu(event.globalPos())
         event.accept()
 

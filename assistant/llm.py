@@ -1,6 +1,6 @@
 """The AI endpoint: settings, transcription, and chat (plain, streamed, with tools
-and images), against any OpenAI-style API. Uses only the standard library, so
-there is nothing to install. Every call returns its result or a `Failure`; none
+and images), against any OpenAI-style API. Pydantic validates incoming JSON.
+Every call returns its result or a `Failure`; none
 raise for network or server problems."""
 
 import base64
@@ -13,7 +13,9 @@ import wave
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from http.client import HTTPException, HTTPResponse
-from typing import Final, assert_never, cast
+from typing import Final, assert_never
+
+from pydantic import TypeAdapter
 
 RATE: Final = 16_000
 """Samples per second. Speech models work at 16 kHz; more only makes uploads bigger."""
@@ -23,6 +25,8 @@ MIN_SECONDS: Final = 0.3
 """Shorter recordings are accidental taps, and aren't sent."""
 
 type Json = str | int | float | bool | list[Json] | dict[str, Json] | None
+
+_JSON = TypeAdapter(Json)
 
 
 # ---- Settings --------------------------------------------------------------------------
@@ -214,33 +218,33 @@ def _tool(spec: ToolSpec) -> Json:
 # ---- Reading JSON replies --------------------------------------------------------------
 
 
-def _json(body: bytes) -> object:
+def _json(body: bytes) -> Json:
     try:
-        data: object = json.loads(body)
+        return _JSON.validate_json(body)
     except ValueError:
         return None
-    return data
 
 
-def _get(data: object, *path: str | int) -> object:
+def _get(data: Json, *path: str | int) -> Json:
     """`data[a][b]...`, or None where the path doesn't exist."""
     for step in path:
-        if isinstance(step, str) and isinstance(data, dict):
-            data = cast("dict[object, object]", data).get(step)
-        elif isinstance(step, int) and isinstance(data, list) and -len(data) <= step < len(data):  # pyright: ignore[reportUnknownArgumentType]
-            data = cast("list[object]", data)[step]
-        else:
-            return None
+        match step, data:
+            case str() as key, dict() as values:
+                data = values.get(key)
+            case int() as index, list() as values if -len(values) <= index < len(values):
+                data = values[index]
+            case _:
+                return None
     return data
 
 
-def _str(data: object, *path: str | int) -> str:
+def _str(data: Json, *path: str | int) -> str:
     value = _get(data, *path)
     return value if isinstance(value, str) else ""
 
 
-def _items(data: object) -> list[object]:
-    return cast("list[object]", data) if isinstance(data, list) else []
+def _items(data: Json) -> list[Json]:
+    return data if isinstance(data, list) else []
 
 
 def _unexpected(body: bytes) -> Failure:
@@ -263,7 +267,7 @@ def _open(request: urllib.request.Request, timeout_s: float) -> HTTPResponse | F
     """Goes through the system's proxy settings, and trusts the certificates the
     system trusts (so company TLS inspection works)."""
     try:
-        response: HTTPResponse = urllib.request.urlopen(request, timeout=timeout_s)
+        response: object = urllib.request.urlopen(request, timeout=timeout_s)
     except urllib.error.HTTPError as error:
         try:
             with error:
@@ -275,7 +279,11 @@ def _open(request: urllib.request.Request, timeout_s: float) -> HTTPResponse | F
         return Failure(f"can't reach {request.host}: {error.reason}")
     except (OSError, HTTPException) as error:  # timeouts, truncated replies and dropped connections
         return Failure(f"can't reach {request.host}: {error}")
-    return response
+    match response:
+        case HTTPResponse():
+            return response
+        case _:
+            return Failure("unexpected HTTP response")
 
 
 def _post(request: urllib.request.Request, timeout_s: float) -> bytes | Failure:
@@ -343,7 +351,7 @@ def chat(
     return Reply(_str(message, "content"), calls)
 
 
-def _events(response: HTTPResponse) -> Iterator[object]:
+def _events(response: HTTPResponse) -> Iterator[Json]:
     """The JSON payloads of a server-sent event stream, up to `[DONE]`."""
     for raw in response:
         line = raw.decode("utf-8", errors="replace").strip()

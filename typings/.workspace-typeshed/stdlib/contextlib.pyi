@@ -108,13 +108,14 @@ class _AsyncGeneratorContextManager(
     ) -> bool | None: ...
 
 @overload
-def asynccontextmanager(func: Callable[_P, AsyncGenerator[_T_co]]) -> Callable[_P, _AsyncGeneratorContextManager[_T_co]]: ...
-@overload
 @deprecated(
     "Annotating the return type as `-> AsyncIterator[Foo]` with `@asynccontextmanager` is deprecated. "
     "Use `-> AsyncGenerator[Foo]` instead."
 )
 def asynccontextmanager(func: Callable[_P, AsyncIterator[_T_co]]) -> Callable[_P, _AsyncGeneratorContextManager[_T_co]]: ...
+
+@overload
+def asynccontextmanager(func: Callable[_P, AsyncGenerator[_T_co]]) -> Callable[_P, _AsyncGeneratorContextManager[_T_co]]: ...
 
 @type_check_only
 class _SupportsClose(Protocol):

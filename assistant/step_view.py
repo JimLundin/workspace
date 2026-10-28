@@ -78,7 +78,7 @@ class HistoryView(QtWidgets.QWidget):
     def recolor(self, ink: Ink) -> None:
         self.text.recolor(ink)
 
-    def toPlainText(self) -> str:  # noqa: N802 -- exposes the row's conversation text
+    def toPlainText(self) -> str:
         return self.text.toPlainText()
 
 
@@ -188,7 +188,7 @@ class StepsView(QtWidgets.QScrollArea):
     def fit_width(self) -> None:
         self.place(max(1, self.viewport().width()))
 
-    def resizeEvent(self, event: QtGui.QResizeEvent) -> None:  # noqa: N802 -- Qt virtual method
+    def resizeEvent(self, event: QtGui.QResizeEvent) -> None:
         # Qt resolves the scroll viewport after the card sets its bounds. Reflow
         # retained rows at that boundary instead of keeping the initial 100px width.
         super().resizeEvent(event)
@@ -204,10 +204,10 @@ class StepsView(QtWidgets.QScrollArea):
             if not element.isHidden():
                 element.pulse(angle)
 
-    def toPlainText(self) -> str:  # noqa: N802 -- the conversation exposes one text observation for accessibility
+    def toPlainText(self) -> str:
         visible = tuple(block.identity for block in self.visible_blocks)
         return '\n\n'.join(element.toPlainText() for element in self.elements if element.identity in visible)
 
-    def wheelEvent(self, event: QWheelEvent) -> None:  # noqa: N802 -- Qt virtual method
+    def wheelEvent(self, event: QWheelEvent) -> None:
         self.callbacks.scroll(event.angleDelta().y())
         event.accept()

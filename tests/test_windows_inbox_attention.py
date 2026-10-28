@@ -203,17 +203,18 @@ def test_bell_restores_current_feed_and_locally_hidden_unanswered_and_source_bub
         ui.panel.request_input(Question('owned', 'Which sheet?', '', 3), accept_answer)
         ui.pump()
         view, source_key = ui.feed, SourceKey(*update.key)
-        for open_inbox in (lambda: ui.open_inbox(show_agent), ui.bar.inbox.click):
+        openers: tuple[Callable[[], None], ...] = (lambda: ui.open_inbox(show_agent), ui.bar.inbox.click)
+        for open_inbox in openers:
             view.show_history()
             view.dismiss_card(TurnKey(-1))
             view.dismiss_card(source_key)
             ui.pump()
-            assert view.query.history and not view.stack.toasts
+            assert bool(view.query.history) and not view.stack.toasts
             assert ui.bar.inbox.text() == '2'  # Hiding bubbles does not handle their work.
             view.page = 3
             open_inbox()
             ui.pump()
-            assert not view.query.history and view.page == 0
+            assert not bool(view.query.history) and view.page == 0
             assert frozenset(toast.key for toast in view.stack.toasts) == frozenset((TurnKey(-1), source_key))
             question = view.cards[TurnKey(-1)]
             assert question.text.isReadOnly() and "agent voice-to-text button" in question.window.toolTip()

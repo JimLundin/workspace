@@ -50,7 +50,8 @@ def test_open_tool_runs_without_approval_by_default() -> None:
     opened: list[str] = []
     machine = WinMachine(Desktop(), ui, browser=Browser(), teams=Teams(), open_target=opened.append)
     agent = Agent(Settings("", "", "", "", "", "", ""), machine, FakeWindow(), threading.Event(), journal=lambda entry: None)
-    result = agent.call(ToolCall("open-1", "open", json.dumps({"target": r"C:\example\budget.xlsx"})))
+    arguments: dict[str, str] = {"target": r"C:\example\budget.xlsx"}
+    result = agent.call(ToolCall("open-1", "open", json.dumps(arguments)))
     assert ui.requests == []
     assert opened == [r"C:\example\budget.xlsx"]
     assert result.ok

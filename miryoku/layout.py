@@ -60,13 +60,13 @@ class Key(Enum):
     F = 0x46
     G = 0x47
     H = 0x48
-    I = 0x49  # noqa: E741
+    LETTER_I = 0x49
     J = 0x4A
     K = 0x4B
     L = 0x4C
     M = 0x4D
     N = 0x4E
-    O = 0x4F  # noqa: E741
+    LETTER_O = 0x4F
     P = 0x50
     Q = 0x51
     R = 0x52
@@ -206,7 +206,7 @@ while the key is held; a Tool or App is a request to the assistant (see `protoco
 
 
 CHARACTERS: Final[dict[Key, tuple[str, str]]] = {
-    **{key: (key.name.lower(), key.name) for key in Key if key.is_letter()},
+    **{key: (chr(key.value).lower(), chr(key.value)) for key in Key if key.is_letter()},
     **{Key[f"N{d}"]: (str(d), ")!@#$%^&*("[d]) for d in range(10)},
     Key.GRAVE: ("`", "~"), Key.MINUS: ("-", "_"), Key.EQUAL: ("=", "+"),
     Key.LBRACKET: ("[", "{"), Key.RBRACKET: ("]", "}"), Key.BACKSLASH: ("\\", "|"),
@@ -289,8 +289,8 @@ def is_left_hand(cell: int) -> bool:
 # ---- Short names used in the tables --------------------------------------------
 
 # fmt: off
-A, B, C, D, E, F, G, H, I, J, K, L, M = Key.A, Key.B, Key.C, Key.D, Key.E, Key.F, Key.G, Key.H, Key.I, Key.J, Key.K, Key.L, Key.M  # noqa: E741
-N, O, P, Q, R, S, T, U, V, W, X, Y, Z = Key.N, Key.O, Key.P, Key.Q, Key.R, Key.S, Key.T, Key.U, Key.V, Key.W, Key.X, Key.Y, Key.Z  # noqa: E741
+A, B, C, D, E, F, G, H, LETTER_I, J, K, L, M = Key.A, Key.B, Key.C, Key.D, Key.E, Key.F, Key.G, Key.H, Key.LETTER_I, Key.J, Key.K, Key.L, Key.M
+N, LETTER_O, P, Q, R, S, T, U, V, W, X, Y, Z = Key.N, Key.LETTER_O, Key.P, Key.Q, Key.R, Key.S, Key.T, Key.U, Key.V, Key.W, Key.X, Key.Y, Key.Z
 N0, N1, N2, N3, N4, N5, N6, N7, N8, N9 = Key.N0, Key.N1, Key.N2, Key.N3, Key.N4, Key.N5, Key.N6, Key.N7, Key.N8, Key.N9
 GRAVE, MINUS, EQUAL, LBRACKET, RBRACKET, BACKSLASH = Key.GRAVE, Key.MINUS, Key.EQUAL, Key.LBRACKET, Key.RBRACKET, Key.BACKSLASH
 SEMICOLON, QUOTE, COMMA, PERIOD, SLASH = Key.SEMICOLON, Key.QUOTE, Key.COMMA, Key.PERIOD, Key.SLASH
@@ -344,7 +344,7 @@ FUNCTION_KEYS: Final = frozenset(Scancode(code) for code in range(0x3B, 0x45)) |
 BASE: Final[Board[Action]] = Board(
     # Colemak-DH with home row mods (Win Alt Ctrl Shift).
     top=      Row((Q,          W,          F,          P,              B  ), (J,              L,                  U,          Y,          QUOTE     )),
-    home=     Row((ht(A, GUI), ht(R, ALT), ht(S, CTL), ht(T, SFT),     G  ), (M,              ht(N, SFT),         ht(E, CTL), ht(I, ALT), ht(O, GUI))),
+    home=     Row((ht(A, GUI), ht(R, ALT), ht(S, CTL), ht(T, SFT),     G  ), (M,              ht(N, SFT),         ht(E, CTL), ht(LETTER_I, ALT), ht(LETTER_O, GUI))),
     bottom=   Row((Z,          X,          C,          D,              V  ), (K,              H,                  COMMA,      PERIOD,     SLASH     )),
     thumbs=Thumbs((                        ESC,        ht(SPACE, NAV), ht(TAB, Layer.TOOLS)), (ht(ENTER, SYM), ht(BACKSPACE, NUM), ht(DELETE, Layer.APPS))),
 )

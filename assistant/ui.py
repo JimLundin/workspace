@@ -2,7 +2,6 @@
 
 No GUI objects cross the keyboard process. Domain work remains off the UI thread.
 """
-# pyright: reportUnknownMemberType=false, reportUnknownArgumentType=false
 
 import queue
 import threading
@@ -11,7 +10,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, replace
 from functools import partial
 from pathlib import Path
-from typing import Final, Protocol, cast
+from typing import Final, Protocol
 
 lazy import shiboken6
 lazy from PySide6 import QtCore, QtGui, QtWidgets
@@ -56,6 +55,11 @@ prepare()
 
 
 type Job = Callable[[QtWidgets.QApplication], None]
+
+
+@dataclass(frozen=True, slots=True)
+class _Answer[T]:
+    value: T
 
 
 @dataclass(frozen=True, slots=True)
@@ -274,29 +278,29 @@ class Ui:
         self, build: Callable[[QtWidgets.QApplication, Callable[[T], None]], None], *, on_close: Callable[[], T] | None = None,
     ) -> T:
         """Builds a window on the Qt thread and waits for the answer it gives."""
-        answers: queue.Queue[tuple[T | None, Exception | None]] = queue.Queue()
+        answers: queue.Queue[_Answer[T] | Exception] = queue.Queue()
 
-        def finish(value: T | None, error: Exception | None) -> None:
+        def finish(result: _Answer[T] | Exception) -> None:
             with self._input_lock:
                 if cancel_input not in self._pending_inputs:
                     return
                 self._pending_inputs.remove(cancel_input)
-            answers.put((value, error))
+            answers.put(result)
 
         def cancel_input() -> None:
             if on_close is not None:
-                finish(on_close(), None)
+                finish(_Answer(on_close()))
             else:
-                finish(None, OSError("The Qt UI is closed."))
+                finish(OSError("The Qt UI is closed."))
 
         def job(root: QtWidgets.QApplication) -> None:
             with self._input_lock:
                 if cancel_input not in self._pending_inputs:
                     return
             try:
-                build(root, lambda value: finish(value, None))
+                build(root, lambda value: finish(_Answer(value)))
             except Exception as error:
-                finish(None, error)
+                finish(error)
 
         with self._input_lock:
             if self._inputs_closed:
@@ -306,13 +310,15 @@ class Ui:
             self._pending_inputs.add(cancel_input)
         self.post(job)
         try:
-            answer, error = answers.get()
+            result = answers.get()
         finally:
             with self._input_lock:
                 self._pending_inputs.discard(cancel_input)
-        if error is not None:
-            raise error
-        return cast("T", answer)
+        match result:
+            case Exception():
+                raise result
+            case _Answer(value):
+                return value
 
     # ---- a text box --------------------------------------------------------------------
 
@@ -695,25 +701,25 @@ class RegionPicker(QtWidgets.QWidget):
         self.setCursor(Qt.CursorShape.CrossCursor)
         windows.move(int(self.winId()), area)
 
-    def paintEvent(self, event: QtGui.QPaintEvent) -> None:  # noqa: N802
+    def paintEvent(self, event: QtGui.QPaintEvent) -> None:
         painter = QtGui.QPainter(self)
         painter.fillRect(self.rect(), QtGui.QColor(0, 0, 0, 76))
         if self.start is not None and self.current is not None:
             painter.setPen(QtGui.QPen(QtGui.QColor("#ffffff"), 2))
             painter.drawRect(QtCore.QRectF(self.start, self.current).normalized())
 
-    def mousePressEvent(self, event: QtGui.QMouseEvent) -> None:  # noqa: N802
+    def mousePressEvent(self, event: QtGui.QMouseEvent) -> None:
         if event.button() == Qt.MouseButton.RightButton:
             self.finish(None)
         else:
             self.start = self.current = event.position()
             self.update()
 
-    def mouseMoveEvent(self, event: QtGui.QMouseEvent) -> None:  # noqa: N802
+    def mouseMoveEvent(self, event: QtGui.QMouseEvent) -> None:
         self.current = event.position()
         self.update()
 
-    def mouseReleaseEvent(self, event: QtGui.QMouseEvent) -> None:  # noqa: N802
+    def mouseReleaseEvent(self, event: QtGui.QMouseEvent) -> None:
         if self.start is not None and event.button() == Qt.MouseButton.LeftButton:
             scale = self.devicePixelRatioF()
             first = (self.area.left + round(self.start.x() * scale), self.area.top + round(self.start.y() * scale))
@@ -721,11 +727,11 @@ class RegionPicker(QtWidgets.QWidget):
             area = region(first, last)
             self.finish(area if area.width > 4 and area.height > 4 else None)
 
-    def keyPressEvent(self, event: QtGui.QKeyEvent) -> None:  # noqa: N802
+    def keyPressEvent(self, event: QtGui.QKeyEvent) -> None:
         if event.key() == Qt.Key.Key_Escape:
             self.finish(None)
 
-    def closeEvent(self, event: QtGui.QCloseEvent) -> None:  # noqa: N802
+    def closeEvent(self, event: QtGui.QCloseEvent) -> None:
         self.finish(None)
         event.accept()
 
@@ -913,7 +919,7 @@ class KeymapCanvas(QtWidgets.QWidget):
             if name in self.boxes:
                 self.update(self.boxes[name].toAlignedRect())
 
-    def paintEvent(self, event: QtGui.QPaintEvent) -> None:  # noqa: N802
+    def paintEvent(self, event: QtGui.QPaintEvent) -> None:
         painter = QtGui.QPainter(self)
         painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
         for name, cap in self.caps.items():
@@ -956,16 +962,16 @@ class OverlayHandle(QtWidgets.QLabel):
         self.setCursor(Qt.CursorShape.SizeAllCursor)
         self.adjustSize()
 
-    def mousePressEvent(self, event: QtGui.QMouseEvent) -> None:  # noqa: N802
+    def mousePressEvent(self, event: QtGui.QMouseEvent) -> None:
         if event.button() == Qt.MouseButton.LeftButton:
             self.drag.start(QtCore.QPoint(*self.read_cursor()))
             self.grabMouse()
 
-    def mouseMoveEvent(self, event: QtGui.QMouseEvent) -> None:  # noqa: N802
+    def mouseMoveEvent(self, event: QtGui.QMouseEvent) -> None:
         # The saved overlay position and native moves use physical pixels.
         self.drag.move(QtCore.QPoint(*self.read_cursor()))
 
-    def mouseReleaseEvent(self, event: QtGui.QMouseEvent) -> None:  # noqa: N802
+    def mouseReleaseEvent(self, event: QtGui.QMouseEvent) -> None:
         self.releaseMouse()
         self.drag.end()
 

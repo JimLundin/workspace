@@ -58,23 +58,26 @@ def test_attention_snapshots_are_published_on_the_ui_queue_and_stop_after_close(
     def publish(state: Snapshot) -> None:
         nonlocal counts
         counts = (*counts, pending_count(state))
+    def observed_counts() -> tuple[int, ...]:
+        return counts
+
     panel = AgentWindow(lambda: None, post=jobs.append, create_view=lambda _: view, on_snapshot=publish)
     try:
         while jobs:
             jobs.popleft()()
-        assert counts == (0,)
+        assert observed_counts() == (0,)
         panel.request_input(Question('owned', 'Which sheet?', '', 1), lambda _: True)
-        assert counts == (0,)
+        assert observed_counts() == (0,)
         while jobs:
             jobs.popleft()()
-        assert counts == (0, 1)
+        assert observed_counts() == (0, 1)
         assert panel.respond('owned', 'Revenue')
         while jobs:
             jobs.popleft()()
-        assert counts == (0, 1, 0)
+        assert observed_counts() == (0, 1, 0)
         panel.request_input(Question('late', 'Another sheet?', '', 2), lambda _: True)
     finally:
         panel.close()
         while jobs:
             jobs.popleft()()
-    assert counts == (0, 1, 0)
+    assert observed_counts() == (0, 1, 0)

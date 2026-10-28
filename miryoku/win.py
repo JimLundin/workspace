@@ -381,7 +381,7 @@ class Keyboard:
                 return True
 
 
-def run() -> Exit:  # noqa: PLR0915
+def run() -> Exit:
     """Blocks until the layout quits."""
     lock = system.create_lock(LOCK_NAME)
     if lock is None:
@@ -392,12 +392,7 @@ def run() -> Exit:  # noqa: PLR0915
         hook = inputs.set_keyboard_hook(keyboard.hook_proc)
         if hook is None:
             return Exit.HOOK_REFUSED
-        languages: keyboard_language.KeyboardLanguages | None = None
-        try:
-            languages = keyboard_language.KeyboardLanguages()
-            languages.enforce(True)
-        except OSError:
-            traceback.print_exc()
+        languages = open_languages()
         language_timer = system.set_timer(200)
         flush_timer = system.set_timer(USAGE_FLUSH_MS)
         keeper.ready()  # tells the keeper this version came up
@@ -435,15 +430,7 @@ def run() -> Exit:  # noqa: PLR0915
             if languages is not None:
                 with contextlib.suppress(OSError):
                     languages.close()
-            keyboard.clear_pressed()
-            try:
-                keyboard.engine.release_all(keyboard.host)
-            except Exception as error:
-                keyboard.input_failed(error, phase="shutdown")
-            keyboard.host.release_owned()
-            keyboard.maintenance()
-            keyboard.host.flush_usage()
-            keyboard.host.tell_assistant(WM_LAYOUT_STATE, LayoutState.QUIT.value, 0)
+            release_keyboard(keyboard)
             gc.enable()
         return Exit.QUIT
     finally:
@@ -453,3 +440,25 @@ def run() -> Exit:  # noqa: PLR0915
 
 def show_error(message: str) -> None:
     system.message_box(message, "Miryoku", system.MB_ICONHAND)
+
+
+def release_keyboard(keyboard: Keyboard) -> None:
+    keyboard.clear_pressed()
+    try:
+        keyboard.engine.release_all(keyboard.host)
+    except Exception as error:
+        keyboard.input_failed(error, phase="shutdown")
+    keyboard.host.release_owned()
+    keyboard.maintenance()
+    keyboard.host.flush_usage()
+    keyboard.host.tell_assistant(WM_LAYOUT_STATE, LayoutState.QUIT.value, 0)
+
+
+def open_languages() -> keyboard_language.KeyboardLanguages | None:
+    languages: keyboard_language.KeyboardLanguages | None = None
+    try:
+        languages = keyboard_language.KeyboardLanguages()
+        languages.enforce(True)
+    except OSError:
+        traceback.print_exc()
+    return languages

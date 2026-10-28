@@ -52,7 +52,7 @@ class StatusIcon(QtWidgets.QWidget):
         self.angle: float = 90.0
         self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
 
-    def paintEvent(self, event: QPaintEvent) -> None:  # noqa: N802 -- Qt virtual method
+    def paintEvent(self, event: QPaintEvent) -> None:
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         painter.setPen(QPen(QColor(status_color(self.owner.call.state, self.owner.ink)), 1.7,
@@ -132,6 +132,6 @@ class ToolCall(QtWidgets.QWidget):
         self.copy.setStyleSheet(f'background: transparent; border: none; padding: 0; margin: 0; color: {ink.secondary};')
         self.status.update()
 
-    def toPlainText(self) -> str:  # noqa: N802 -- native conversation text observation
+    def toPlainText(self) -> str:
         return '\n'.join(part for part in (self.call.label, self.call.state.value, self.call.name,
                                           self.call.argument, self.call.result) if part)

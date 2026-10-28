@@ -19,7 +19,7 @@ PINS = ("requirements/python-win64.json", "requirements/windows-py315.lock")
 HELPERS = (
     "scripts/deploy.py", "scripts/deploy_files.py", "scripts/deploy_windows.py",
     "scripts/deploy_archive.py", "scripts/deploy_processes.py", "scripts/deploy_values.py",
-    "scripts/development_paths.py",
+    "scripts/development_paths.py", "winapi/__init__.py", "winapi/_core.py", "winapi/shapes.py",
 )
 RECORD = TypeAdapter[dict[str, object]](dict[str, object])
 SOURCE_HASHES = TypeAdapter[dict[str, str]](dict[str, str])

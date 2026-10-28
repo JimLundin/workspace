@@ -13,6 +13,7 @@ from urllib.parse import quote, urlencode, urlsplit
 
 from assistant.graph_http import GraphError, Http
 from assistant.llm import Json
+lazy from winapi.protection import protect, unprotect
 
 GRAPH = "https://graph.microsoft.com/v1.0"
 MAX_OUTPUT = 20_000
@@ -58,13 +59,11 @@ def _atomic(path: Path, data: bytes) -> None:
 
 
 def _protect(data: bytes) -> bytes:
-    from winapi.protection import protect  # noqa: PLC0415
 
     return protect(data)
 
 
 def _unprotect(data: bytes) -> bytes:
-    from winapi.protection import unprotect  # noqa: PLC0415
 
     return unprotect(data)
 
@@ -173,7 +172,7 @@ class Teams:
         self.folder = folder
         settings: Mapping[str, str] = environment if environment is not None else {}
         # Pyright 1.1.414's stub incorrectly gives frozendict.__init__ no arguments.
-        self.environment: frozendict[str, str] = frozendict({  # pyright: ignore[reportCallIssue]
+        self.environment: frozendict[str, str] = frozendict({
             name: settings[name] for name in ("WORKSPACE_GRAPH_CLIENT_ID", "WORKSPACE_GRAPH_TENANT_ID") if name in settings
         })
         self.clock: Clock = clock if clock is not None else SystemClock()

@@ -4,15 +4,18 @@ from dataclasses import replace
 
 import assistant.notification_text
 from assistant.agent_session import Begin, Said, Session, transition
-from assistant.communications import Feed, Update, WindowsNotice
+from assistant.communications import Update, WindowsNotice
 from assistant.console_requests import Provider, request
 from assistant.feed_items import WorkItem, action_spans, body_spans, expanded_spans, observed
 from assistant.feed_origin import FeedRequest
-from assistant.feed_triage import Assessment, Board, collect
 from assistant.inbox import Query, Source
 from assistant.notifications import MAX_VISIBLE, Stack, Turn, advance, body, observe
 from assistant.system_notices import NoticeKey
 from tests.test_console_inbox import event
+lazy from assistant.communications import Acknowledgement, Conversation, Feed, Message, Status, TeamsActivity, UpdateKind, handle, update_fingerprint
+lazy from assistant.feed_items import reactions
+lazy from assistant.feed_origin import App
+lazy from assistant.feed_triage import Assessment, Board, collect
 
 
 def test_notification_projection_shares_evidence_for_proposals_and_attached_turns() -> None:
@@ -37,8 +40,6 @@ def test_notification_projection_shares_evidence_for_proposals_and_attached_turn
 
 
 def test_expansion_shows_only_matching_source_revisions_and_labels_missing_originals() -> None:
-    from assistant.communications import Feed  # noqa: PLC0415
-    from assistant.feed_triage import Assessment, Board, collect  # noqa: PLC0415
     update = Update(WindowsNotice(NoticeKey(80, 2), 'outlook'), 'Forecast', 'Original captured figures', 'Outlook', 3)
     feed = Feed(updates=(update,))
     source = collect(feed, ())[0]
@@ -55,9 +56,6 @@ def test_expansion_shows_only_matching_source_revisions_and_labels_missing_origi
 
 
 def test_grouped_work_keeps_app_identity_and_rich_body_links_without_an_action_footer() -> None:
-    from assistant.communications import Conversation, Feed, Message  # noqa: PLC0415
-    from assistant.feed_origin import App  # noqa: PLC0415
-    from assistant.feed_triage import Assessment, Board, collect  # noqa: PLC0415
     feed = Feed(conversations=(Conversation('chat', 'Planning'),), followed=('chat',),
                 messages=(Message('chat', 'one', 'Anna', 'Review the figures', 2, 2),),
                 updates=(Update(WindowsNotice(NoticeKey(1, 2), 'outlook'), 'Review reminder', 'Please review', 'Outlook', 3),))
@@ -78,8 +76,6 @@ def test_grouped_work_keeps_app_identity_and_rich_body_links_without_an_action_f
 
 
 def test_reactions_share_one_compact_strip_and_disappear_after_exact_handling() -> None:
-    from assistant.communications import Acknowledgement, Feed, TeamsActivity, UpdateKind, handle, update_fingerprint  # noqa: PLC0415
-    from assistant.feed_items import reactions  # noqa: PLC0415
     updates = (Update(TeamsActivity('one'), 'Anna liked your message', 'A preview', 'Teams', 1, UpdateKind.REACTION),
                Update(TeamsActivity('two'), 'Alex reacted', 'Like\nA preview', 'Teams', 2, UpdateKind.REACTION),
                Update(TeamsActivity('three'), 'Morgan reacted with Laugh', 'A preview', 'Teams', 3, UpdateKind.REACTION))
@@ -92,7 +88,6 @@ def test_reactions_share_one_compact_strip_and_disappear_after_exact_handling() 
 
 def test_windows_teams_and_console_requests_join_agent_bubbles_with_exact_source_links() -> None:
     # Build the source fixture here; native fixture modules cannot load off Windows.
-    from assistant.communications import Conversation, Feed, Message, Status  # noqa: PLC0415
     feed = Feed(status=Status.CONNECTED, conversations=(Conversation('chat', 'Planning'),), followed=('chat',),
                 messages=(Message('chat', 'one', 'Anna', 'Review the figures', 2, 2),),
                 updates=(Update(WindowsNotice(NoticeKey(1, 2), 'owned'), 'Friday review', 'Please review', 'Outlook', 3),))
@@ -116,7 +111,6 @@ def test_windows_teams_and_console_requests_join_agent_bubbles_with_exact_source
 
 
 def test_pending_sources_remain_reachable_after_overflow_filtering_and_agent_reset() -> None:
-    from assistant.communications import Feed  # noqa: PLC0415
     feed = Feed(updates=tuple(Update(WindowsNotice(NoticeKey(index, index + 10), 'owned'), f'Item {index}', 'Fixture', 'Mail', index)
                              for index in range(1, 13)))
     state = Session(identity='one', communications=feed)
@@ -133,7 +127,6 @@ def test_pending_sources_remain_reachable_after_overflow_filtering_and_agent_res
 
 
 def test_small_viewport_pages_through_every_pending_item_even_when_questions_overflow() -> None:
-    from assistant.communications import Feed  # noqa: PLC0415
     feed = Feed(updates=tuple(Update(WindowsNotice(NoticeKey(index, index + 10), 'owned'), f'Item {index}', 'Fixture', 'Mail', index)
                              for index in range(1, 8)))
     requests = tuple(request(Provider.CLAUDE, event(Provider.CLAUDE, str(index)), str(index), index) for index in range(8, 12))
@@ -149,8 +142,6 @@ def test_small_viewport_pages_through_every_pending_item_even_when_questions_ove
 
 
 def test_expanded_question_context_excludes_other_topics_in_the_same_chat() -> None:
-    from assistant.communications import Conversation, Feed, Message  # noqa: PLC0415
-    from assistant.feed_triage import Assessment, Board, collect  # noqa: PLC0415
     feed = Feed(conversations=(Conversation('chat', 'Project'),), followed=('chat',), messages=(
         Message('chat', 'budget', 'Anna', 'Can you approve the budget?', 1, 1),
         Message('chat', 'lunch', 'Sam', 'Lunch is in the kitchen.', 2, 2)))

@@ -21,4 +21,5 @@ class Timings:
         elapsed, self.last = now - self.last, now
         if self.output is not None:
             with contextlib.suppress(OSError), self.output.open('a', encoding='utf-8') as stream:
-                stream.write(json.dumps({'event': self.event, 'phase': phase, 'seconds': round(elapsed, 4)}) + '\n')
+                record: dict[str, str | float] = {'event': self.event, 'phase': phase, 'seconds': round(elapsed, 4)}
+                stream.write(json.dumps(record) + '\n')

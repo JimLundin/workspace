@@ -69,7 +69,8 @@ class Browser:
     def request(self, operation: str, args: dict[str, Json], cancel: threading.Event) -> BrowserResult:
         match operation:
             case "tabs":
-                return BrowserResult(json.dumps({"tabs": self.pages}))
+                result: dict[str, object] = {"tabs": self.pages}
+                return BrowserResult(json.dumps(result))
             case "open":
                 self.opens += (dict(args),)
                 if self.navigation_failure is not None:

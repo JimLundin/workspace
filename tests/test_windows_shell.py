@@ -111,28 +111,15 @@ def test_toolbar_groups_keep_their_actions_and_dividers_between_functions() -> N
         for button in (bar.menu_button, bar.stop, bar.record_stop):
             assert button.width() == button.height() == 24
             assert button.toolButtonStyle() is QtCore.Qt.ToolButtonStyle.ToolButtonIconOnly
-        for button in (bar.inbox, bar.record):
-            assert button.toolButtonStyle() is QtCore.Qt.ToolButtonStyle.ToolButtonTextBesideIcon
-            assert button.width() >= button.fontMetrics().horizontalAdvance(button.text()) + button.iconSize().width()
+        for labelled in (bar.inbox, bar.record):
+            assert labelled.toolButtonStyle() is QtCore.Qt.ToolButtonStyle.ToolButtonTextBesideIcon
+            assert labelled.width() >= labelled.fontMetrics().horizontalAdvance(labelled.text()) + labelled.iconSize().width()
             # Defect: native text-beside-icon metrics reserve an oversized blank
             # trailing area, so the hover surface extends far past the count.
-            assert 24 <= button.width() - button.fontMetrics().horizontalAdvance(button.text()) <= 30
+            assert 24 <= labelled.width() - labelled.fontMetrics().horizontalAdvance(labelled.text()) <= 30
         # Defects: the toolbar omits shared hover feedback or native painting
         # leaves the icon/count off-center inside its shaded hit target.
-        target = bar.inbox.geometry()
-        point = QtCore.QPointF(2, 2)
-        app.sendEvent(bar.inbox, QtGui.QEnterEvent(point, point, point))
-        image = QtGui.QImage(bar.inbox.size(), QtGui.QImage.Format.Format_ARGB32_Premultiplied)
-        image.fill(QtCore.Qt.GlobalColor.transparent)
-        painter = QtGui.QPainter(image)
-        bar.inbox.render(painter, QtCore.QPoint(), QtGui.QRegion(), QtWidgets.QWidget.RenderFlag.DrawChildren)
-        painter.end()
-        left, right = image.pixelColor(3, image.height() // 2), image.pixelColor(image.width() - 4, image.height() // 2)
-        assert 0 < left.alpha() < 100 and left == right
-        columns = tuple(x for x in range(image.width())
-                        if any(image.pixelColor(x, y).alpha() >= 200 for y in range(image.height())))
-        assert columns and abs(columns[0] - (image.width() - 1 - columns[-1])) <= 3
-        assert bar.inbox.geometry() == target
+        check_inbox_painting(app, bar)
         bar.layer('NAV')
         bar.keyboard.click()
         assert invoked == ['stop', 'inbox', 'meeting', 'record-stop', 'keyboard']
@@ -589,3 +576,20 @@ def test_window_switcher_search_navigation_and_activation() -> None:
     finally:
         picker.close()
         app.processEvents()
+
+
+def check_inbox_painting(app: QtWidgets.QApplication, bar: DesktopBar) -> None:
+    target = bar.inbox.geometry()
+    point = QtCore.QPointF(2, 2)
+    app.sendEvent(bar.inbox, QtGui.QEnterEvent(point, point, point))
+    image = QtGui.QImage(bar.inbox.size(), QtGui.QImage.Format.Format_ARGB32_Premultiplied)
+    image.fill(QtCore.Qt.GlobalColor.transparent)
+    painter = QtGui.QPainter(image)
+    bar.inbox.render(painter, QtCore.QPoint(), QtGui.QRegion(), QtWidgets.QWidget.RenderFlag.DrawChildren)
+    painter.end()
+    left, right = image.pixelColor(3, image.height() // 2), image.pixelColor(image.width() - 4, image.height() // 2)
+    assert 0 < left.alpha() < 100 and left == right
+    columns = tuple(x for x in range(image.width())
+                    if any(image.pixelColor(x, y).alpha() >= 200 for y in range(image.height())))
+    assert columns and abs(columns[0] - (image.width() - 1 - columns[-1])) <= 3
+    assert bar.inbox.geometry() == target

@@ -2,13 +2,16 @@
 
 import asyncio
 import contextlib
-import json
 import ssl
 import threading
 from math import isfinite
-from typing import cast
+
+from pydantic import TypeAdapter
+lazy import httpx
 
 from assistant.llm import Json
+
+_JSON_OBJECT = TypeAdapter(dict[str, Json])
 
 
 class GraphError(OSError):
@@ -33,22 +36,9 @@ class Http:
     async def _request(
         self, method: str, url: str, headers: dict[str, str], body: bytes | None, cancel: threading.Event,
     ) -> tuple[int, dict[str, Json]]:
-        import httpx  # noqa: PLC0415 (no SDK or HTTP client work on Workspace startup)
-
         async def receive() -> tuple[int, dict[str, Json]]:
-            async with (
-                httpx.AsyncClient(verify=ssl.create_default_context(), timeout=self.socket_timeout, follow_redirects=False) as client,
-                client.stream(method, url, headers=headers, content=body) as response,
-            ):
-                data = bytearray()
-                async for chunk in response.aiter_bytes():
-                    data.extend(chunk)
-                    if len(data) > 1_000_000:
-                        raise GraphError("Microsoft's response exceeded the size limit.")
-                result = cast(Json, json.loads(data or b"{}"))
-                if not isinstance(result, dict):
-                    raise GraphError("Microsoft returned an unexpected response.")
-                return response.status_code, result
+            async with httpx.AsyncClient(verify=ssl.create_default_context(), timeout=self.socket_timeout, follow_redirects=False) as client:
+                return await self._receive(client, method, url, headers, body)
 
         pending = asyncio.create_task(receive())
         try:
@@ -67,3 +57,16 @@ class Http:
                 pending.cancel()
             with contextlib.suppress(asyncio.CancelledError, GraphError, httpx.HTTPError, ValueError):
                 await pending
+
+    async def _receive(
+        self, client: httpx.AsyncClient, method: str, url: str, headers: dict[str, str], body: bytes | None,
+    ) -> tuple[int, dict[str, Json]]:
+        """The HTTP boundary pairs a request's verb, endpoint, headers and body with its live client."""
+        async with client.stream(method, url, headers=headers, content=body) as response:
+            data = bytearray()
+            async for chunk in response.aiter_bytes():
+                data.extend(chunk)
+                if len(data) > 1_000_000:
+                    raise GraphError("Microsoft's response exceeded the size limit.")
+            result = _JSON_OBJECT.validate_json(data or b"{}")
+            return response.status_code, result

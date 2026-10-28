@@ -2,10 +2,11 @@
 
 import contextlib
 import io
-import json
 import sys
 from pathlib import Path
+from typing import cast
 
+from assistant.llm import Json
 from scripts.architecture import Report, dependencies
 from scripts.check import (
     CheckRun,
@@ -20,6 +21,7 @@ from scripts.check import (
     windows_only,
     worker_result,
 )
+from tests.json_fixture import json_fields, json_object
 
 
 def tree(root: Path) -> dict[str, str]:
@@ -161,15 +163,15 @@ def test_failed_checks_keep_complete_cost_evidence_without_a_success_receipt(tmp
     run = CheckRun(current, selected, (6, 0, ('Fixture failure',), durations), Report((), (), ()), 80)
     with contextlib.redirect_stdout(io.StringIO()):
         assert publish_check(options, run)
-    evidence = json.loads(report.read_text())
-    assert evidence['failed'] == 1 and evidence['files'] == current
-    assert all([seconds, name] in evidence['durations'] for seconds, name in durations)
+    evidence = json_object(report.read_text())
+    assert evidence['failed'] == 1 and json_fields(evidence['files']) == dict(current)
+    assert all([seconds, name] in cast(list[Json], evidence['durations']) for seconds, name in durations)
     assert evidence['worker_seconds'] == 50.0
     assert not receipt.exists()
 
 
 def test_broad_workers_keep_desktop_ownership_exact_selection_and_failures() -> None:
-    selectors = ('tests/test_agent.py::test_declined', 'tests/test_work_store.py',
+    selectors: tuple[str, ...] = ('tests/test_agent.py::test_declined', 'tests/test_work_store.py',
                  'tests/test_windows_browser.py', 'tests/test_unreviewed.py')
     plan = execution_plan(selectors)
     assert plan == ExecutionPlan(selectors[:2], selectors[2:])

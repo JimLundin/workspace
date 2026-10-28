@@ -1,5 +1,4 @@
 """Completed recordings and sourced follow-through, with retained local edits."""
-# pyright: reportUnknownMemberType=false, reportUnknownArgumentType=false
 
 from collections.abc import Callable
 from dataclasses import dataclass, replace
@@ -147,8 +146,13 @@ def choice(combo: QtWidgets.QComboBox) -> str:
     return value if isinstance(value, str) else ""
 
 
+def _choice(combo: QtWidgets.QComboBox, index: int) -> tuple[object, str]:
+    identity: object = combo.itemData(index)
+    return identity, combo.itemText(index)
+
+
 def choices(combo: QtWidgets.QComboBox, values: tuple[tuple[str, str], ...]) -> None:
-    if tuple((combo.itemData(index), combo.itemText(index)) for index in range(combo.count())) == values:
+    if tuple(_choice(combo, index) for index in range(combo.count())) == values:
         return
     selected = choice(combo)
     combo.blockSignals(True)
@@ -169,7 +173,7 @@ def citations_html(citations: tuple[Citation, ...], sources: TranscriptBundle) -
 
 
 class MeetingPanel(QtWidgets.QWidget):
-    def __init__(self, workflow: MeetingWorkflow, *, open_file: Callable[[Path], None]) -> None:  # noqa: PLR0915
+    def __init__(self, workflow: MeetingWorkflow, *, open_file: Callable[[Path], None]) -> None:
         super().__init__()
         self.workflow, self.open_file = workflow, open_file
         self.snapshot = MeetingSnapshot()
@@ -183,24 +187,7 @@ class MeetingPanel(QtWidgets.QWidget):
         self.draft_errors: dict[ArtifactKey, str] = {}
         layout = row(self)
         layout.setContentsMargins(16, 16, 16, 16)
-        left = QtWidgets.QWidget()
-        left.setMaximumWidth(310)
-        sources = column(left)
-        sources.addWidget(label("Completed recordings", "title"))
-        sources.addWidget(label("Select the segments of one meeting.", "muted"))
-        self.recordings = QtWidgets.QTreeWidget()
-        self.recordings.setHeaderLabels(["Recorded", "Length"])
-        self.recordings.setRootIsDecorated(False)
-        self.recordings.setColumnWidth(0, 215)
-        self.recordings.setAccessibleName("Completed recording segments")
-        self.recordings.itemChanged.connect(self.select_recordings)
-        sources.addWidget(self.recordings, 1)
-        self.selection = label("No recordings selected", "muted")
-        self.selection.setWordWrap(True)
-        sources.addWidget(self.selection)
-        self.prepare_button = button("Prepare notes & follow-ups", self.prepare, name="primary")
-        sources.addWidget(self.prepare_button)
-        sources.addWidget(button("Refresh recordings", self.refresh))
+        left, self.recordings, self.selection, self.prepare_button = recording_widgets(self)
         layout.addWidget(left, 2)
         right = QtWidgets.QWidget()
         content = column(right)
@@ -225,17 +212,7 @@ class MeetingPanel(QtWidgets.QWidget):
         self.tabs.addTab(self.action_panel, "Actions")
         self.draft_panel = self.build_draft()
         self.tabs.addTab(self.draft_panel, "Drafts")
-        self.source_panel = QtWidgets.QWidget()
-        source_layout = column(self.source_panel)
-        self.source_choice = QtWidgets.QComboBox()
-        self.source_choice.setAccessibleName("Original recording transcript")
-        source_layout.addWidget(self.source_choice)
-        self.source_notice = label("", "status")
-        self.source_notice.setWordWrap(True)
-        source_layout.addWidget(self.source_notice)
-        self.source_text = Editor(readonly=True)
-        self.source_text.setAccessibleName("Sourced transcript")
-        source_layout.addWidget(self.source_text, 1)
+        self.source_panel, self.source_choice, self.source_notice, self.source_text = source_widgets(self)
         self.tabs.addTab(self.source_panel, "Sources")
         files = row()
         self.open_notes = button("Open notes", self.open_package_notes)
@@ -347,7 +324,7 @@ class MeetingPanel(QtWidgets.QWidget):
         self.prepare_button.setEnabled(1 <= len(self.checked) <= 8)
 
     def prepare(self) -> None:
-        selected = tuple(sorted(self.checked.values(), key=lambda value: (value.started_at, value.id)))
+        selected = tuple(sorted(self.checked.values(), key=recording_order))
         try:
             self.workflow.prepare(selected)
             self.status.setText("Preparing notes, actions and follow-up drafts…")
@@ -449,7 +426,8 @@ class MeetingPanel(QtWidgets.QWidget):
                     sections.extend(f"<p>{escape(statement.text)}</p><p>{citations_html(statement.citations, followup.sources)}</p>"
                                     for statement in statements)
             rendered = "".join(sections)
-            if self.notes.property("rendered") != rendered:
+            previous_rendering: object = self.notes.property("rendered")
+            if previous_rendering != rendered:
                 self.notes.setProperty("rendered", rendered)
                 self.notes.setHtml(rendered)
             choices(self.action_choice, tuple((value.id, value.content.text[:120]) for value in package.actions))
@@ -642,3 +620,44 @@ class MeetingPanel(QtWidgets.QWidget):
     def open_package_notes(self) -> None:
         if (package := self.package()) is not None:
             self.open_file(package.publication.notes_path)
+
+
+def recording_order(value: TranscriptSource) -> tuple[float, str]:
+    return value.started_at, value.id
+
+
+def recording_widgets(owner: MeetingPanel) -> tuple[QtWidgets.QWidget, QtWidgets.QTreeWidget, QtWidgets.QLabel, QtWidgets.QToolButton]:
+    left = QtWidgets.QWidget()
+    left.setMaximumWidth(310)
+    sources = column(left)
+    sources.addWidget(label("Completed recordings", "title"))
+    sources.addWidget(label("Select the segments of one meeting.", "muted"))
+    recordings = QtWidgets.QTreeWidget()
+    recordings.setHeaderLabels(["Recorded", "Length"])
+    recordings.setRootIsDecorated(False)
+    recordings.setColumnWidth(0, 215)
+    recordings.setAccessibleName("Completed recording segments")
+    recordings.itemChanged.connect(owner.select_recordings)
+    sources.addWidget(recordings, 1)
+    selection = label("No recordings selected", "muted")
+    selection.setWordWrap(True)
+    sources.addWidget(selection)
+    prepare_button = button("Prepare notes & follow-ups", owner.prepare, name="primary")
+    sources.addWidget(prepare_button)
+    sources.addWidget(button("Refresh recordings", owner.refresh))
+    return left, recordings, selection, prepare_button
+
+
+def source_widgets(owner: MeetingPanel) -> tuple[QtWidgets.QWidget, QtWidgets.QComboBox, QtWidgets.QLabel, Editor]:
+    source_panel = QtWidgets.QWidget()
+    source_layout = column(source_panel)
+    source_choice = QtWidgets.QComboBox()
+    source_choice.setAccessibleName("Original recording transcript")
+    source_layout.addWidget(source_choice)
+    source_notice = label("", "status")
+    source_notice.setWordWrap(True)
+    source_layout.addWidget(source_notice)
+    source_text = Editor(readonly=True)
+    source_text.setAccessibleName("Sourced transcript")
+    source_layout.addWidget(source_text, 1)
+    return source_panel, source_choice, source_notice, source_text

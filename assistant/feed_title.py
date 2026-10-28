@@ -39,7 +39,7 @@ class FeedTitle(QLabel):
             return self.text()
         return QFontMetricsF(font(TITLE_SIZE, bold=True)).elidedText(self.text(), Qt.TextElideMode.ElideRight, self.width())
 
-    def heightForWidth(self, width: int) -> int:  # noqa: N802 -- Qt override
+    def heightForWidth(self, width: int) -> int:
         if not self.flow:
             return super().heightForWidth(width)
         if self.expanded:
@@ -47,7 +47,7 @@ class FeedTitle(QLabel):
                 QRectF(0, 0, max(1, width), 10000), Qt.TextFlag.TextWordWrap.value, self.text()).height())
         return math.ceil(QFontMetricsF(font(TITLE_SIZE, bold=True)).height())
 
-    def paintEvent(self, event: QPaintEvent) -> None:  # noqa: N802 -- Qt override
+    def paintEvent(self, event: QPaintEvent) -> None:
         if not self.flow:
             super().paintEvent(event)
             return

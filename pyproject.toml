@@ -35,30 +35,6 @@ disallow_any_decorated = true
 disallow_any_unimported = true
 warn_unreachable = true
 
-[[tool.mypy.overrides]]
-# The ctypes, GUI, SDK and inspection boundaries: values inside may be Any
-# until converted; every public signature is concrete, so nothing untyped leaves.
-module = ["winapi", "winapi.*", "assistant.ui", "assistant.work_panel", "assistant.agent_toasts", "assistant.qt_text", "assistant.qt_ui", "assistant.toast_card", "assistant.sdk", "selfcheck"]
-disallow_any_expr = false
-disallow_any_explicit = false
-
-[[tool.mypy.overrides]]
-# Native panels share the typed Qt signal interface with the conversation.
-module = ["assistant.panel_controls", "assistant.widgets", "assistant.vector_icons", "assistant.meeting_panel", "assistant.desktop_bar", "assistant.bar_button", "keeper_ui"]
-disallow_any_expr = false
-disallow_any_explicit = false
-
-[[tool.mypy.overrides]]
-# Generated WinRT bindings are validated inside the native composition boundary.
-module = ["win32more", "win32more.*"]
-ignore_missing_imports = true
-
-[[tool.mypy.overrides]]
-# These owners now consume focused native stubs without typing escapes.
-module = ["winapi.composition", "winapi.composition_paths", "assistant.bar_surface"]
-disallow_any_expr = true
-disallow_any_explicit = true
-
 [tool.pyright]
 stubPath = "typings"
 typeshedPath = "typings/.workspace-typeshed"
@@ -69,10 +45,175 @@ typeCheckingMode = "strict"
 [tool.ruff]
 target-version = "py315"
 line-length = 150
+# Preserve vendored upstream declarations; lint consumed local stubs separately.
+extend-exclude = ["typings/.workspace-typeshed"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "N", "UP", "B", "SIM", "RUF", "PL", "C4", "RET", "TID252"]
 ignore = ["PLR2004", "PLR0911", "PLR0912", "PLR0913"]
+
+# Required Qt virtual methods and Win32 boundary signatures retain native names.
+[tool.ruff.lint.pep8-naming]
+extend-ignore-names = [
+    "settings",
+    "_lru_cache_wrapper",
+    "eConsole",
+    "eRender",
+    "FindWindowW",
+    "GetGeometry",
+    "PostMessageW",
+    "TryGetGeometryUsingFactory",
+    "closeEvent",
+    "contextMenuEvent",
+    "enterEvent",
+    "eventFilter",
+    "heightForWidth",
+    "keyPressEvent",
+    "keyReleaseEvent",
+    "leaveEvent",
+    "minimumSizeHint",
+    "mouseMoveEvent",
+    "mousePressEvent",
+    "mouseReleaseEvent",
+    "paintEvent",
+    "resizeEvent",
+    "setText",
+    "sizeHint",
+    "toPlainText",
+    "wheelEvent",
+    "ActiveProcessLimit",
+    "ActiveProcesses",
+    "BasicLimitInformation",
+    "IoInfo",
+    "JobMemoryLimit",
+    "LimitFlags",
+    "MaximumLength",
+    "MaximumWorkingSetSize",
+    "MinimumWorkingSetSize",
+    "OtherOperationCount",
+    "OtherTransferCount",
+    "PeakJobMemoryUsed",
+    "PeakProcessMemoryUsed",
+    "PerJobUserTimeLimit",
+    "PerProcessUserTimeLimit",
+    "PriorityClass",
+    "ProcessMemoryLimit",
+    "ReadOperationCount",
+    "ReadTransferCount",
+    "SchedulingClass",
+    "ThisPeriodTotalKernelTime",
+    "ThisPeriodTotalUserTime",
+    "TotalKernelTime",
+    "TotalPageFaultCount",
+    "TotalProcesses",
+    "TotalTerminatedProcesses",
+    "TotalUserTime",
+    "WriteOperationCount",
+    "WriteTransferCount",
+    "biBitCount",
+    "biClrImportant",
+    "biClrUsed",
+    "biCompression",
+    "biHeight",
+    "biPlanes",
+    "biSize",
+    "biSizeImage",
+    "biWidth",
+    "biXPelsPerMeter",
+    "biYPelsPerMeter",
+    "bmiColors",
+    "bmiHeader",
+    "cbClsExtra",
+    "cbReserved2",
+    "cbSize",
+    "cbWndExtra",
+    "dwBufferLength",
+    "dwBytesRecorded",
+    "dwExtraInfo",
+    "dwFillAttribute",
+    "dwFlags",
+    "dwHotKey",
+    "dwInfoFlags",
+    "dwLoops",
+    "dwSize",
+    "dwState",
+    "dwStateMask",
+    "dwUser",
+    "dwX",
+    "dwXCountChars",
+    "dwXSize",
+    "dwY",
+    "dwYCountChars",
+    "dwYSize",
+    "fIcon",
+    "fMask",
+    "fSourceClientAreaOnly",
+    "fVisible",
+    "guidItem",
+    "hBalloonIcon",
+    "hCursor",
+    "hIcon",
+    "hInstApp",
+    "hInstance",
+    "hProcess",
+    "hStdError",
+    "hStdInput",
+    "hStdOutput",
+    "hWnd",
+    "hbmColor",
+    "hbmMask",
+    "hbrBackground",
+    "hkeyClass",
+    "lParam",
+    "lpClass",
+    "lpData",
+    "lpDesktop",
+    "lpDirectory",
+    "lpFile",
+    "lpIDList",
+    "lpNext",
+    "lpParameters",
+    "lpReserved",
+    "lpReserved2",
+    "lpTitle",
+    "lpVerb",
+    "lpfnWndProc",
+    "lpszClassName",
+    "lpszMenuName",
+    "mouseData",
+    "nAvgBytesPerSec",
+    "nBlockAlign",
+    "nChannels",
+    "nSamplesPerSec",
+    "nShow",
+    "rcDestination",
+    "rcMonitor",
+    "rcSource",
+    "rcWork",
+    "scanCode",
+    "szInfo",
+    "szInfoTitle",
+    "szTip",
+    "th32ParentProcessID",
+    "th32ProcessID",
+    "uCallbackMessage",
+    "uEdge",
+    "uFlags",
+    "uID",
+    "uVersion",
+    "vkCode",
+    "wBitsPerSample",
+    "wFormatTag",
+    "wScan",
+    "wShowWindow",
+    "wVk",
+    "xHotspot",
+    "yHotspot",
+    "maximumAge",
+    "hThread",
+    "dwProcessId",
+    "dwThreadId",
+]
 
 [tool.ruff.lint.pylint]
 max-args = 3
@@ -82,6 +223,9 @@ max-positional-args = 5
 ban-relative-imports = "all"
 
 [tool.ruff.lint.per-file-ignores]
+# Python 3.12 bootstrap resolves candidate/runtime imports after activation.
+"keeper.py" = ["PLC0415"]
+"selfcheck.py" = ["PLC0415"]
 # The layout tables are kept as a wide grid that reads across the keyboard.
 "miryoku/layout.py" = ["E501"]
 # Win32 functions keep their Windows names, one prototype per line.
@@ -117,13 +261,6 @@ module = "assistant.meeting_followup_store"
 declaration = "FollowupStore._publish"
 expression = "getattr(error, 'winerror', None)"
 reason = "Read the optional native OSError code for bounded publication retry after Windows sharing/access errors."
-
-[[tool.workspace.architecture.exceptions]]
-rule = "explicit-attributes"
-module = "scripts.deploy_windows"
-declaration = "Release.__init__"
-expression = "getattr(library, name)"
-reason = "Resolve fixed reviewed ctypes function declarations before assigning their concrete native prototypes."
 
 [[tool.workspace.architecture.exceptions]]
 rule = "explicit-attributes"

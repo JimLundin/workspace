@@ -26,7 +26,7 @@ from _ctypes import (
 from _typeshed import StrPath, SupportsBool, SupportsLen
 from ctypes._endian import BigEndianStructure as BigEndianStructure, LittleEndianStructure as LittleEndianStructure
 from types import GenericAlias
-from typing import Any, ClassVar, Final, Generic, Literal, TypeAlias, TypeVar, overload, type_check_only
+from typing import Any, ClassVar, Final, Generic, Literal, Protocol, TypeAlias, TypeVar, overload, type_check_only
 from typing_extensions import Self, deprecated
 
 if sys.platform == "win32":
@@ -42,6 +42,9 @@ _CT = TypeVar("_CT", bound=_CData)
 _T = TypeVar("_T", default=Any)
 _DLLT = TypeVar("_DLLT", bound=CDLL)
 
+class _Scalar(Protocol[_T]):
+    value: _T
+
 if sys.version_info >= (3, 14):
     @overload
     @deprecated("ctypes.POINTER with string")
@@ -54,7 +57,8 @@ if sys.version_info >= (3, 14):
     def pointer(obj: _CT) -> _Pointer[_CT]: ...
 
 else:
-    from _ctypes import POINTER as POINTER, pointer as pointer
+    from _ctypes import POINTER as POINTER
+    from _ctypes import pointer as pointer
 
 if sys.version_info >= (3, 14):
     CField = _CField
@@ -124,10 +128,11 @@ pythonapi: PyDLL
 # ctypes.WINFUNCTYPE.<locals>.WinFunctionType
 # ctypes.PYFUNCTYPE.<locals>.CFunctionType
 @type_check_only
-class _CFunctionType(_CFuncPtr):
+class _CFunctionType(_CFuncPtr, Generic[_T]):
     _argtypes_: ClassVar[list[type[_CData | _CDataType]]]
     _restype_: ClassVar[type[_CData | _CDataType] | None]
     _flags_: ClassVar[int]
+    def __call__(self, *args: object) -> _T: ...
 
 # Alias for either function pointer type
 _FuncPointer: TypeAlias = _CDLLFuncPointer | _CFunctionType  # noqa: Y047  # not used here
@@ -140,12 +145,27 @@ def CFUNCTYPE(
 ) -> type[_CFunctionType]: ...
 
 if sys.platform == "win32":
+    @overload
     def WINFUNCTYPE(
-        restype: type[_CData | _CDataType] | None,
-        *argtypes: type[_CData | _CDataType],
+        restype: type[_Scalar[_T]],
+        *argtypes: type[object],
         use_errno: bool = False,
         use_last_error: bool = False,
-    ) -> type[_CFunctionType]: ...
+    ) -> type[_CFunctionType[_T]]: ...
+    @overload
+    def WINFUNCTYPE(
+        restype: None,
+        *argtypes: type[object],
+        use_errno: bool = False,
+        use_last_error: bool = False,
+    ) -> type[_CFunctionType[None]]: ...
+    @overload
+    def WINFUNCTYPE(
+        restype: type[_CData],
+        *argtypes: type[_CData],
+        use_errno: bool = False,
+        use_last_error: bool = False,
+    ) -> type[_CFunctionType[object]]: ...
 
 def PYFUNCTYPE(restype: type[_CData | _CDataType] | None, *argtypes: type[_CData | _CDataType]) -> type[_CFunctionType]: ...
 
@@ -160,7 +180,7 @@ _CVoidConstPLike: TypeAlias = _CVoidPLike | bytes
 
 _CastT = TypeVar("_CastT", bound=_CanCastTo)
 
-def cast(obj: _CData | _CDataType | _CArgObject | int, typ: type[_CastT]) -> _CastT: ...
+def cast(obj: _CData | _CArgObject | int, typ: type[_CastT]) -> _CastT: ...
 def create_string_buffer(init: int | bytes, size: int | None = None) -> Array[c_char]: ...
 
 c_buffer = create_string_buffer

@@ -3,7 +3,7 @@
 from collections.abc import Callable
 from typing import Concatenate, Protocol
 
-class _lru_cache_wrapper[**P, R](Protocol):  # noqa: N801 -- The dependency's concrete wrapper name.
+class _lru_cache_wrapper[**P, R](Protocol):
     def __call__(self, *args: P.args, **kwargs: P.kwargs) -> R: ...
     def cache_clear(self) -> None: ...
 

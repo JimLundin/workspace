@@ -207,7 +207,7 @@ def can_stop(content: Content) -> bool:
             assert_never(content)
 
 
-def observe(session: Snapshot, query: Query = DEFAULT_QUERY) -> tuple[Content, ...]:  # noqa: PLR0915
+def observe(session: Snapshot, query: Query = DEFAULT_QUERY) -> tuple[Content, ...]:
     result: list[Content] = []
     proposals = proposal_index(session)
     requests = tuple(index for index, message in enumerate(session.messages) if isinstance(message, ChatMessage) and message.speaker == "You")
@@ -261,25 +261,7 @@ def observe(session: Snapshot, query: Query = DEFAULT_QUERY) -> tuple[Content, .
     finish_turn()
     if session.recording.visible:
         result.append(Recording(session.recording))
-    selected: list[Content] = []
-    for item in result:
-        match item:
-            case Entry(message=message):
-                if matches(message, query):
-                    selected.append(item)
-            case Turn():
-                visible = query == DEFAULT_QUERY or active(item)
-                if visible or any(isinstance(entry, Entry) and matches(entry.message, query) for entry in item.entries):
-                    selected.append(item)
-            case Response():
-                if query.source in (Source.ALL, Source.AGENTS):
-                    selected.append(item)
-            case Recording():
-                selected.append(item)
-            case WorkItem():
-                selected.append(item)
-            case _:
-                assert_never(item)
+    selected = tuple(item for item in result if visible(item, query))
     attached = {item.origin.key for item in selected if isinstance(item, Turn) and item.origin is not None}
     return (*selected, *(item for item in assistant.feed_items.observed(session, query, proposals=proposals) if item.key not in attached))
 
@@ -692,3 +674,18 @@ def origin_item(content: Content | None) -> WorkItem | None:
 
 def hide(stack: Stack, key: Key) -> Stack:
     return replace(stack, hidden=stack.hidden | {key}, toasts=tuple(toast for toast in stack.toasts if toast.key != key))
+
+
+def visible(item: Content, query: Query) -> bool:
+    match item:
+        case Entry(message=message):
+            return matches(message, query)
+        case Turn():
+            return (query == DEFAULT_QUERY or active(item)
+                    or any(isinstance(entry, Entry) and matches(entry.message, query) for entry in item.entries))
+        case Response():
+            return query.source in (Source.ALL, Source.AGENTS)
+        case Recording() | WorkItem():
+            return True
+        case _:
+            assert_never(item)

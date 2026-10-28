@@ -57,7 +57,8 @@ def response(root: Path, index: Path, request: Record) -> tuple[int, Record]:
     control = read(root / 'control.json')
     operation = request['operation']
     with (root / 'calls.jsonl').open('a', encoding='utf-8') as calls:
-        calls.write(json.dumps({'operation': operation, 'folder': request.get('folder')}) + '\n')
+        row: dict[str, object] = {'operation': operation, 'folder': request.get('folder')}
+        calls.write(json.dumps(row) + '\n')
     if operation == 'status':
         result: Record = ({'kind': 'unavailable', 'reason': 'Classic Outlook is not running.'}
                           if control['mode'] == 'unavailable' else

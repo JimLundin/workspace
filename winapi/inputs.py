@@ -11,6 +11,11 @@ from winapi.shapes import Rect, require_input_count, utf16_units
 
 
 class KBDLLHOOKSTRUCT(ctypes.Structure):
+    vkCode: int
+    scanCode: int
+    flags: int
+    time: int
+    dwExtraInfo: int
     _fields_ = (
         ("vkCode", wintypes.DWORD),
         ("scanCode", wintypes.DWORD),
@@ -21,6 +26,11 @@ class KBDLLHOOKSTRUCT(ctypes.Structure):
 
 
 class KEYBDINPUT(ctypes.Structure):
+    wVk: int
+    wScan: int
+    dwFlags: int
+    time: int
+    dwExtraInfo: int
     _fields_ = (
         ("wVk", wintypes.WORD),
         ("wScan", wintypes.WORD),
@@ -31,6 +41,12 @@ class KEYBDINPUT(ctypes.Structure):
 
 
 class MOUSEINPUT(ctypes.Structure):
+    dx: int
+    dy: int
+    mouseData: int
+    dwFlags: int
+    time: int
+    dwExtraInfo: int
     _fields_ = (
         ("dx", wintypes.LONG),
         ("dy", wintypes.LONG),
@@ -41,12 +57,16 @@ class MOUSEINPUT(ctypes.Structure):
     )
 
 
-class INPUT_UNION(ctypes.Union):  # noqa: N801 (Win32 name)
+class InputUnion(ctypes.Union):
+    ki: KEYBDINPUT
+    mi: MOUSEINPUT
     _fields_ = (("ki", KEYBDINPUT), ("mi", MOUSEINPUT))
 
 
 class INPUT(ctypes.Structure):
-    _fields_ = (("type", wintypes.DWORD), ("u", INPUT_UNION))
+    type: int
+    u: InputUnion
+    _fields_ = (("type", wintypes.DWORD), ("u", InputUnion))
 
 
 # Struct sizes must match Windows exactly, or SendInput silently does nothing.
@@ -131,7 +151,7 @@ def scancode_for(vk: int) -> int:
 
 
 def _key(vk: int, scancode: int, flags: int, extra: int) -> INPUT:
-    return INPUT(_INPUT_KEYBOARD, INPUT_UNION(ki=KEYBDINPUT(vk, scancode, flags, 0, extra)))
+    return INPUT(_INPUT_KEYBOARD, InputUnion(ki=KEYBDINPUT(vk, scancode, flags, 0, extra)))
 
 
 def _submit(events: Sequence[INPUT]) -> int:
@@ -182,7 +202,7 @@ def cursor_position() -> tuple[int, int]:
 
 
 def _mouse(dx: int, dy: int, data: int, flags: int, extra: int) -> INPUT:
-    return INPUT(_INPUT_MOUSE, INPUT_UNION(mi=MOUSEINPUT(dx, dy, data, flags, 0, extra)))
+    return INPUT(_INPUT_MOUSE, InputUnion(mi=MOUSEINPUT(dx, dy, data, flags, 0, extra)))
 
 
 def _absolute(x: int, y: int, screen: Rect) -> tuple[int, int]:

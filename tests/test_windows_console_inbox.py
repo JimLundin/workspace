@@ -8,6 +8,8 @@ import time
 import unittest
 from pathlib import Path
 
+from tests.json_fixture import json_fields, json_object, json_text
+
 if sys.platform != "win32":
     raise unittest.SkipTest("Windows console hook transport")
 
@@ -64,14 +66,14 @@ def test_windows_cli_hook_processes_receive_native_inbox_answers_and_explicit_pe
                     assert any(provider.value in card.content.title for card in view.cards.values() if isinstance(card.content, WorkItem))
                     answer_request(view, current, approval)
                     output, errors = process.communicate(timeout=4)
-                    assert process.returncode == 0 and not errors
-                    result = json.loads(output)["hookSpecificOutput"]
+                    assert int(process.returncode or 0) == 0 and not errors
+                    result = json_fields(json_object(output)['hookSpecificOutput'])
                     if approval:
-                        assert result["decision"]["behavior"] == ("allow" if approval == "Approve" else "deny")
+                        assert json_fields(result['decision'])['behavior'] == ("allow" if approval == "Approve" else "deny")
                     elif provider is Provider.CLAUDE:
-                        assert result["updatedInput"]["answers"] == {"Which sheet?": "Revenue · Åäö"}
+                        assert json_fields(result['updatedInput'])['answers'] == {"Which sheet?": "Revenue · Åäö"}
                     else:
-                        assert result["permissionDecision"] == "deny" and "Revenue · Åäö" in result["permissionDecisionReason"]
+                        assert result["permissionDecision"] == "deny" and "Revenue · Åäö" in json_text(result['permissionDecisionReason'])
                 finally:
                     if process.poll() is None:
                         process.kill()

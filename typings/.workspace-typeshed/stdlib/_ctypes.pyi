@@ -10,7 +10,7 @@ from typing import Any, ClassVar, Final, Generic, Literal, SupportsIndex, TypeAl
 from typing_extensions import Self
 
 _T = TypeVar("_T")
-_CT = TypeVar("_CT", bound=_CData)
+_CT = TypeVar("_CT", bound=_CData, default=_CData)
 
 FUNCFLAG_CDECL: Final = 0x1
 FUNCFLAG_PYTHONAPI: Final = 0x4
@@ -79,10 +79,8 @@ class _CData:
     if sys.version_info >= (3, 14):
         __pointer_type__: type
 
-# this is a union of all the subclasses of _CData, which is useful because of
-# the methods that are present on each of those subclasses which are not present
-# on _CData itself.
-_CDataType: TypeAlias = _SimpleCData[Any] | _Pointer[Any] | CFuncPtr | Union | Structure | Array[Any]
+# ctypes accepts any subclass of its native data base in ABI declarations.
+type _CDataType = _CData
 
 # This class is not exposed. It calls itself _ctypes.PyCSimpleType.
 @type_check_only
@@ -151,13 +149,15 @@ if sys.version_info < (3, 14):
 # This class is not exposed. It calls itself _ctypes.CArgObject.
 @final
 @type_check_only
-class _CArgObject: ...
+class _CArgObject(Generic[_CT]):
+    @property
+    def _obj(self) -> _CT: ...
 
 if sys.version_info >= (3, 14):
-    def byref(obj: _CData | _CDataType, offset: int = 0, /) -> _CArgObject: ...
+    def byref(obj: _CT, offset: int = 0, /) -> _CArgObject[_CT]: ...
 
 else:
-    def byref(obj: _CData | _CDataType, offset: int = 0) -> _CArgObject: ...
+    def byref(obj: _CT, offset: int = 0) -> _CArgObject[_CT]: ...
 
 _ECT: TypeAlias = Callable[[_CData | _CDataType | None, CFuncPtr, tuple[_CData | _CDataType, ...]], _CDataType]
 _PF: TypeAlias = tuple[int] | tuple[int, str | None] | tuple[int, str | None, Any]
@@ -262,9 +262,9 @@ class Union(_CData, metaclass=_UnionType):
     if sys.version_info >= (3, 13):
         _align_: ClassVar[int]
 
-    def __init__(self, *args: Any, **kw: Any) -> None: ...
-    def __getattr__(self, name: str) -> Any: ...
-    def __setattr__(self, name: str, value: Any) -> None: ...
+    def __init__(self, *args: object, **kw: object) -> None: ...
+    def __getattr__(self, name: str) -> object: ...
+    def __setattr__(self, name: str, value: object) -> None: ...
 
 # This class is not exposed. It calls itself _ctypes.PyCStructType.
 @type_check_only
@@ -294,9 +294,9 @@ class Structure(_CData, metaclass=_PyCStructType):
         # _layout_ can be defined by the user, but is not always present.
         _layout_: ClassVar[Literal["ms", "gcc-sysv"]]
 
-    def __init__(self, *args: Any, **kw: Any) -> None: ...
-    def __getattr__(self, name: str) -> Any: ...
-    def __setattr__(self, name: str, value: Any) -> None: ...
+    def __init__(self, *args: object, **kw: object) -> None: ...
+    def __getattr__(self, name: str) -> object: ...
+    def __setattr__(self, name: str, value: object) -> None: ...
 
 # This class is not exposed. It calls itself _ctypes.PyCArrayType.
 @type_check_only

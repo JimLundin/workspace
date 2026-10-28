@@ -50,7 +50,7 @@ def test_expanded_turn_reserves_the_title_width_left_by_its_disclosure() -> None
         card = next(card for card in panel.view.cards.values() if not card.retiring)
         card.toggle(animate=False)
         panel.pump()
-        assert card.expanded and card.disclosure.isVisible()
+        assert bool(card.expanded) and card.disclosure.isVisible()
         assert card.label.display_text() == title
         assert card.label.height() >= card.label.heightForWidth(card.label.width()), "The complete wrapped title fits beside its controls."
         assert card.label.geometry().right() < card.disclosure.x()
@@ -60,8 +60,11 @@ def test_pending_question_points_to_agent_voice_without_an_editor() -> None:
     # Defects: creating an editable reply widget, or losing the voice handoff hint.
     with notifications() as panel:
         replies: list[str] = []
+        def record_reply(answer: str) -> bool:
+            replies.append(answer)
+            return True
         panel.agent.request_input(
-            Question("owned-question", "Which figures should I check?", "Only the project totals.", 1), lambda answer: replies.append(answer) is None
+            Question("owned-question", "Which figures should I check?", "Only the project totals.", 1), record_reply
         )
         panel.pump()
         card = next(c for c in panel.view.cards.values() if not c.retiring)
@@ -156,9 +159,9 @@ def test_expanding_a_bubble_collapses_the_previous_one() -> None:
         first_card, second_card = cards
         collapsed = first_card.height
         first_card.toggle(animate=False)
-        assert first_card.expanded and first_card.height > collapsed
+        assert bool(first_card.expanded) and first_card.height > collapsed
         second_card.toggle(animate=False)
-        assert not first_card.expanded and first_card.height == collapsed
-        assert second_card.expanded and sum(card.expanded for card in cards) == 1
+        assert not bool(first_card.expanded) and first_card.height == collapsed
+        assert bool(second_card.expanded) and sum(bool(card.expanded) for card in cards) == 1
         second_card.toggle(animate=False)
-        assert not any(card.expanded for card in cards)
+        assert not any(bool(card.expanded) for card in cards)

@@ -257,7 +257,7 @@ def test_live_meter_reads_recorded_pcm_without_trusting_the_unfinished_header() 
     assert device.header is not None
     pcm = b"\x00\x40" * 640  # constant half-scale signal, exactly 40 ms
     ctypes.memmove(cast("int", device.header.lpData), pcm, len(pcm))
-    assert cast(int, device.header.dwBytesRecorded) == 0
+    assert device.header.dwBytesRecorded == 0
     device.position_bytes = len(pcm)
     assert mic.level() == .5
     assert mic.level() == 0  # No new data: don't invent continued activity.

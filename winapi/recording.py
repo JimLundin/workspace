@@ -83,10 +83,17 @@ class NativeWasapi:
         _CoTaskMemFree(pointer)
 
     def method(self, pointer: ctypes.c_void_p, index: int, *arguments: ArgumentType) -> NativeCall:
-        table = ctypes.cast(pointer, ctypes.POINTER(ctypes.POINTER(ctypes.c_void_p))).contents
+        if pointer.value is None:
+            raise OSError("The audio interface pointer is null.")
+        table = ctypes.c_void_p.from_address(pointer.value).value
+        if table is None:
+            raise OSError("The audio interface has no method table.")
+        address = ctypes.c_void_p.from_address(table + index * ctypes.sizeof(ctypes.c_void_p)).value
+        if address is None:
+            raise OSError("The audio interface method is null.")
         # ctypes' declared c_long restype supplies an integer HRESULT. Keep
         # that native callable directly: packet draining creates no extra wrapper.
-        return ctypes.WINFUNCTYPE(ctypes.c_long, ctypes.c_void_p, *arguments)(table[index])
+        return ctypes.WINFUNCTYPE(ctypes.c_long, ctypes.c_void_p, *arguments)(address)
 
     def clock(self) -> float:
         return _clock()

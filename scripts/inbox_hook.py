@@ -3,6 +3,8 @@
 import json
 import os
 import sys
+from http.client import HTTPResponse
+from io import BufferedReader, BufferedWriter, TextIOWrapper
 from pathlib import Path
 from urllib.parse import urlsplit
 from urllib.request import Request, urlopen
@@ -12,7 +14,19 @@ def main() -> None:
     provider = "Claude Code" if "--claude" in sys.argv else "Codex"
     profile = Path(os.environ.get("LOCALAPPDATA", "")) / "workspace" / "inbox-bridge.json"
     try:
-        raw = sys.stdin.buffer.read(64_001)
+        match sys.stdin, sys.stdout:
+            case TextIOWrapper() as incoming, TextIOWrapper() as outgoing:
+                pass
+            case _:
+                return
+        input_buffer: object = incoming.buffer
+        output_buffer: object = outgoing.buffer
+        match input_buffer, output_buffer:
+            case BufferedReader() as source, BufferedWriter() as destination:
+                pass
+            case _:
+                return
+        raw = source.read(64_001)
         if len(raw) > 64_000:
             return
         event: object = json.loads(raw)
@@ -25,14 +39,20 @@ def main() -> None:
         location = urlsplit(url)
         if location.scheme != "http" or location.hostname != "127.0.0.1" or location.path != "/request":
             return
-        payload = json.dumps({"provider": provider, "event": event}).encode("utf-8")
+        message: dict[str, object] = {"provider": provider, "event": event}
+        payload = json.dumps(message).encode("utf-8")
         request = Request(url, data=payload, headers={"Authorization": "Bearer " + token,
                                                                "Content-Type": "application/json"})
-        with urlopen(request, timeout=575) as response:
-            output = response.read(128_001)
+        response: object = urlopen(request, timeout=575)
+        match response:
+            case HTTPResponse():
+                with response:
+                    output = response.read(128_001)
+            case _:
+                return
         if len(output) <= 128_000:
-            sys.stdout.buffer.write(output)
-            sys.stdout.buffer.flush()
+            destination.write(output)
+            destination.flush()
     except (OSError, ValueError, KeyError):
         pass  # Never add a broken prompt, log private data, or approve by default.
 

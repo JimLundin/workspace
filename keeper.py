@@ -476,8 +476,8 @@ class Keeper:
 
 
 class _User32(Protocol):
-    def FindWindowW(self, cls: None, title: str) -> int: ...  # noqa: N802 (Win32 names)
-    def PostMessageW(self, hwnd: int, message: int, wparam: int, lparam: int) -> int: ...  # noqa: N802
+    def FindWindowW(self, cls: None, title: str) -> int: ...
+    def PostMessageW(self, hwnd: int, message: int, wparam: int, lparam: int) -> int: ...
 
 
 def _log(text: str) -> None:
@@ -548,9 +548,9 @@ class _Check:
 def main() -> None:
     if sys.platform != "win32":
         sys.exit("the keeper runs on Windows")
-    import msvcrt  # noqa: PLC0415 (Windows only)
+    import msvcrt
 
-    from keeper_ui import KeeperUi  # noqa: PLC0415  # Activated pinned Qt; isolated from assistant source.
+    from keeper_ui import KeeperUi
 
     STATE.mkdir(parents=True, exist_ok=True)
     lock_file = (STATE / "keeper.lock").open("a+b")

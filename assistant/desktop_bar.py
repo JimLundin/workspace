@@ -1,5 +1,4 @@
 """Contextual desktop capsules; native glass is shared with agent messages."""
-# pyright: reportUnknownMemberType=false, reportUnknownArgumentType=false
 
 import queue
 import threading
@@ -216,7 +215,10 @@ class DesktopBar:
         target = self.observations.foreground()
         self.menu.clear()
         def item(label: str, action: Callable[[], None]) -> None:
-            self.menu.addAction(label).triggered.connect(lambda: action())  # noqa: PLW0108
+            def triggered() -> None:
+                action()
+
+            self.menu.addAction(label).triggered.connect(triggered)
         item("Your work feed", self.actions.agent)
         item("Work and meetings", self.actions.work)
         record_action: RecordingAction = "stop" if self.recording.capturing else "start"
@@ -230,11 +232,16 @@ class DesktopBar:
         item("Windows notification settings", self.notification_settings)
         tiling = self.menu.addMenu("Window tiling")
         tiling.addAction("Spread windows across screens").triggered.connect(lambda: self.actions.tiling(Tool.TILE_BALANCE, target))
+        def tile_action(selected: Tool) -> Callable[[object], None]:
+            def triggered(_checked: object) -> None:
+                self.actions.tiling(selected, target)
+            return triggered
+
         for label, tool in (("Focus left", Tool.TILE_FOCUS_LEFT), ("Focus right", Tool.TILE_FOCUS_RIGHT),
                             ("Previous workspace", Tool.TILE_PREVIOUS_WORKSPACE), ("Next workspace", Tool.TILE_NEXT_WORKSPACE),
                             ("Float or tile the active window", Tool.TILE_FLOAT), ("Change split direction", Tool.TILE_DIRECTION),
                             ("Pause or resume automatic tiling", Tool.TILE_PAUSE)):
-            tiling.addAction(label).triggered.connect(lambda checked=False, selected=tool: self.actions.tiling(selected, target))
+            tiling.addAction(label).triggered.connect(tile_action(tool))
         self.menu.addSeparator()
         item("All Workspace controls…", self.actions.menu)
         colors, ink = self.window.colors, self.window.ink
@@ -312,7 +319,8 @@ QMenu::separator {{ height: 1px; background: {colors.edge}; margin: 4px 10px; }}
             if view.capture is not None:
                 self.record.setText(view.capture.title)
                 self.record_stop.setVisible(view.capture.can_stop)
-                if self.record.property("recording") != self.recording.capturing:
+                was_recording: object = self.record.property("recording")
+                if was_recording != self.recording.capturing:
                     self.record.setProperty("recording", self.recording.capturing)
                     self.capture.recolor()
             self.keyboard.setText(view.keyboard or "")

@@ -34,22 +34,22 @@ class Control(QtWidgets.QToolButton):
         self.setFixedHeight(CONTROL_HEIGHT)
         self.setSizePolicy(QtWidgets.QSizePolicy.Policy.Fixed, QtWidgets.QSizePolicy.Policy.Fixed)
 
-    def setText(self, text: str) -> None:  # noqa: N802 -- Qt native interface
+    def setText(self, text: str) -> None:
         super().setText(text)
         self.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon if text else Qt.ToolButtonStyle.ToolButtonIconOnly)
         self.updateGeometry()
 
-    def sizeHint(self) -> QtCore.QSize:  # noqa: N802 -- Qt native interface
+    def sizeHint(self) -> QtCore.QSize:
         if not self.text():
             return QtCore.QSize(CONTROL_HEIGHT, CONTROL_HEIGHT)
         # Own the compact icon/caption spacing instead of inheriting platform
         # button margins that leave a wide blank hover region after the count.
         return QtCore.QSize(CONTROL_HEIGHT + 4 + self.fontMetrics().horizontalAdvance(self.text()), CONTROL_HEIGHT)
 
-    def minimumSizeHint(self) -> QtCore.QSize:  # noqa: N802 -- Qt native interface
+    def minimumSizeHint(self) -> QtCore.QSize:
         return self.sizeHint()
 
-    def paintEvent(self, event: QtGui.QPaintEvent) -> None:  # noqa: N802 -- Qt native interface
+    def paintEvent(self, event: QtGui.QPaintEvent) -> None:
         painter = QtGui.QPainter(self)
         painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
         paint_feedback(self, painter, self.surface.ink.foreground)
@@ -62,11 +62,11 @@ class Control(QtWidgets.QToolButton):
             painter.drawText(QtCore.QRect(CONTROL_HEIGHT - left + 4, 0, max(1, self.width() - CONTROL_HEIGHT - 4), self.height()),
                              Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, self.text())
 
-    def enterEvent(self, event: QtGui.QEnterEvent) -> None:  # noqa: N802 -- Qt native interface
+    def enterEvent(self, event: QtGui.QEnterEvent) -> None:
         super().enterEvent(event)
         self.update()
 
-    def leaveEvent(self, event: QtCore.QEvent) -> None:  # noqa: N802 -- Qt native interface
+    def leaveEvent(self, event: QtCore.QEvent) -> None:
         super().leaveEvent(event)
         self.update()
 
@@ -156,7 +156,10 @@ class Pill(QtWidgets.QWidget):
         button.setIconSize(QtCore.QSize(14, 14))
         button.setCursor(Qt.CursorShape.PointingHandCursor)
         button.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
-        button.clicked.connect(lambda: action())  # noqa: PLW0108  # Retain slotted callback owners.
+        def clicked() -> None:
+            action()
+
+        button.clicked.connect(clicked)
         self.row.addWidget(button)
         self.buttons.append((button, name))
         self.recolor()
@@ -203,7 +206,7 @@ QToolTip {{ background: {self.colors.surface}; color: {self.ink.foreground}; bor
             recording: object = button.property("recording")
             button.setIcon(icon(name, self.ink.error if recording is True else self.ink.foreground))
 
-    def paintEvent(self, event: QtGui.QPaintEvent) -> None:  # noqa: N802
+    def paintEvent(self, event: QtGui.QPaintEvent) -> None:
         painter = QtGui.QPainter(self)
         painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
         shape = self.shape()

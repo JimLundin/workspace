@@ -60,7 +60,7 @@ class NativeNotifications:
                                     str(info.DisplayInfo.DisplayName)[:256], texts[0][:512], '\n'.join(texts[1:])[:8192]))
             except OSError:
                 continue  # The source can disappear between enumeration and reading.
-        return Observed(tuple(sorted(found, key=lambda notice: notice.key.created, reverse=True)))
+        return Observed(tuple(sorted(found, key=notice_created, reverse=True)))
 
     def dismiss(self, key: NoticeKey) -> None:
         listener = UserNotificationListener.get_Current()
@@ -140,3 +140,7 @@ class NotificationObserver:
     def close(self) -> None:
         self.stopped.set()
         self.thread.join(timeout=4)
+
+
+def notice_created(notice: Notice) -> int:
+    return notice.key.created

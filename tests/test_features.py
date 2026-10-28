@@ -3,6 +3,7 @@
 import json
 from collections.abc import Callable, Mapping
 from typing import cast
+lazy from dataclasses import replace
 
 from assistant.features import Assistant, pick_window, switcher_windows
 from assistant.geometry import Shot
@@ -645,7 +646,6 @@ def test_tiling_commands_use_worker_without_ai_credentials() -> None:
 
 
 def test_voice_limit_uses_the_deadline_across_a_float_precision_boundary() -> None:
-    from dataclasses import replace  # noqa: PLC0415
     with fake_endpoint() as endpoint:
         endpoint.replies = [said('Full limited recording')]
         rig = Rig(endpoint)

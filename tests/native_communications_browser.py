@@ -21,9 +21,6 @@ from assistant.llm import Json
 from tests.browser_fixture import fixture
 from tests.native_browser_fixture import request
 
-# Fixture-only private CDP calls preserve real freeze/launcher recovery without
-# navigating an account page. Narrow annotations below acknowledge that access.
-
 PAGE = """<!doctype html><meta charset="utf-8"><title>Fictional Teams fixture</title>
 <div role="treeitem" data-item-type="chat" data-fui-tree-item-value="chat-19:one@thread.v2">Same title</div>
 <div role="treeitem" data-item-type="chat" data-fui-tree-item-value="chat-19:two@thread.v2">Same title</div>
@@ -303,10 +300,17 @@ def verify_chat_navigation_recovery(browser: Browser, web: TeamsWeb, adapter: Fi
 
     opened = request(browser, "open", url=url + "delayed", target_id=web.target)
     web.target = cast(str, opened["target_id"])
-    session = browser._session(web.target, cancel)  # pyright: ignore[reportPrivateUsage]
-    browser._call("Page.setWebLifecycleState", {"state": "frozen"}, cancel, session=session)  # pyright: ignore[reportPrivateUsage]
-    second = web.select("19:two@thread.v2", cancel)
-    assert second.current == "19:two@thread.v2" and second.messages[0].sender == "Sam"
+    connection = browser.connection
+    assert connection is not None
+    attached = connection.call("Target.attachToTarget", {"targetId": web.target, "flatten": True}, cancel)
+    session = attached["sessionId"]
+    assert isinstance(session, str)
+    try:
+        connection.call("Page.setWebLifecycleState", {"state": "frozen"}, cancel, session=session)
+        second = web.select("19:two@thread.v2", cancel)
+        assert second.current == "19:two@thread.v2" and second.messages[0].sender == "Sam"
+    finally:
+        connection.call("Target.detachFromTarget", {"sessionId": session}, cancel)
 
     opened = request(browser, "open", url=url + "empty", target_id=web.target)
     web.target = cast(str, opened["target_id"])
@@ -317,8 +321,8 @@ def verify_chat_navigation_recovery(browser: Browser, web: TeamsWeb, adapter: Fi
 
     opened = request(browser, "open", url=url, target_id=web.target)
     web.target = cast(str, opened["target_id"])
-    with browser.awake(web.target, cancel):
-        restored = web._reopen("19:two@thread.v2", cancel)  # pyright: ignore[reportPrivateUsage]
+    web.evaluate("(() => {for(const row of document.querySelectorAll('[role=treeitem]'))row.remove();return true;})()", cancel)
+    restored = web.select("19:two@thread.v2", cancel)
     assert ("open", {"target_id": web.target,
                      "url": "https://teams.cloud.microsoft/l/chat/19:two@thread.v2/conversations?webjoin=true"}) in adapter.requests
     assert restored.current == "19:two@thread.v2" and restored.messages[0].sender == "Sam"

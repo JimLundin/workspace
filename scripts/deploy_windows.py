@@ -16,7 +16,6 @@ import traceback
 import zipfile
 from collections.abc import Generator, Mapping
 from ctypes import wintypes
-from dataclasses import asdict
 from pathlib import Path, PurePosixPath
 lazy import msvcrt
 
@@ -24,6 +23,7 @@ from scripts.deploy_archive import repack
 from scripts.deploy_files import PINS, RUNTIME, file_at, files, no_link, read, sha, write, zip_files
 from scripts.deploy_processes import Process, inventory
 from scripts.deploy_values import PREPARED, RELOADED, RUNTIME_AUDIT, STOPPED, Config, Exit, Prepared, Ready, Role, Stopped
+lazy from winapi._core import fn
 
 CORE = frozenset({"keeper", "assistant", "automation", "miryoku"})
 FLAGS = ("ready-assistant", "ready-automation", "ready-layout")
@@ -47,7 +47,27 @@ def group(rows: tuple[Process, ...]) -> dict[Role, Process]:
 
 
 class Release:
-    __slots__ = ('_baseline', 'archive', 'config', 'kernel', 'live', 'profile', 'stage', 'state', 'user', 'wanted')
+    __slots__ = (
+        '_baseline',
+        'archive',
+        'close_handle',
+        'config',
+        'find_window',
+        'image_name',
+        'live',
+        'open_process',
+        'post_message',
+        'process_exit',
+        'process_id',
+        'process_times',
+        'profile',
+        'stage',
+        'state',
+        'wait_process',
+        'wanted',
+        'window_owner',
+        'window_visible',
+    )
 
     def __init__(self, stage: Path, config: Config, wanted: dict[str, str]) -> None:
         self.stage, self.config, self.wanted = stage, config, wanted
@@ -61,31 +81,27 @@ class Release:
                 or self.profile != Path(r"C:\Users\Jim.Lundin\AppData\Local\workspace")):
             raise RuntimeError("The release requires its C-drive cwd and exact reviewed installation/profile.")
         self._baseline: Prepared | None = None
-        self.kernel = ctypes.WinDLL("kernel32", use_last_error=True)
-        self.user = ctypes.WinDLL("user32", use_last_error=True)
-        declarations = (
-            (self.kernel, "OpenProcess", [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD], wintypes.HANDLE),
-            (self.kernel, "GetProcessId", [wintypes.HANDLE], wintypes.DWORD),
-            (self.kernel, "QueryFullProcessImageNameW",
-             [wintypes.HANDLE, wintypes.DWORD, wintypes.LPWSTR, ctypes.POINTER(wintypes.DWORD)], wintypes.BOOL),
-            (self.kernel, "GetProcessTimes", [wintypes.HANDLE] + [ctypes.POINTER(wintypes.FILETIME)] * 4, wintypes.BOOL),
-            (self.kernel, "WaitForSingleObject", [wintypes.HANDLE, wintypes.DWORD], wintypes.DWORD),
-            (self.kernel, "GetExitCodeProcess", [wintypes.HANDLE, ctypes.POINTER(wintypes.DWORD)], wintypes.BOOL),
-            (self.kernel, "CloseHandle", [wintypes.HANDLE], wintypes.BOOL),
-            (self.user, "FindWindowW", [wintypes.LPCWSTR, wintypes.LPCWSTR], wintypes.HWND),
-            (self.user, "GetWindowThreadProcessId", [wintypes.HWND, ctypes.POINTER(wintypes.DWORD)], wintypes.DWORD),
-            (self.user, "IsWindowVisible", [wintypes.HWND], wintypes.BOOL),
-            (self.user, "PostMessageW", [wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM], wintypes.BOOL),
-        )
-        for library, name, arguments, result in declarations:
-            function = getattr(library, name)
-            function.argtypes, function.restype = arguments, result
+        kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+        user = ctypes.WinDLL("user32", use_last_error=True)
+        self.open_process = fn(kernel, "OpenProcess", wintypes.HANDLE, wintypes.DWORD, wintypes.BOOL, wintypes.DWORD)
+        self.process_id = fn(kernel, "GetProcessId", wintypes.DWORD, wintypes.HANDLE)
+        self.image_name = fn(kernel, "QueryFullProcessImageNameW", wintypes.BOOL,
+                             wintypes.HANDLE, wintypes.DWORD, wintypes.LPWSTR, ctypes.POINTER(wintypes.DWORD))
+        self.process_times = fn(kernel, "GetProcessTimes", wintypes.BOOL, wintypes.HANDLE, *([ctypes.POINTER(wintypes.FILETIME)] * 4))
+        self.wait_process = fn(kernel, "WaitForSingleObject", wintypes.DWORD, wintypes.HANDLE, wintypes.DWORD)
+        self.process_exit = fn(kernel, "GetExitCodeProcess", wintypes.BOOL, wintypes.HANDLE, ctypes.POINTER(wintypes.DWORD))
+        self.close_handle = fn(kernel, "CloseHandle", wintypes.BOOL, wintypes.HANDLE)
+        self.find_window = fn(user, "FindWindowW", wintypes.HWND, wintypes.LPCWSTR, wintypes.LPCWSTR)
+        self.window_owner = fn(user, "GetWindowThreadProcessId", wintypes.DWORD, wintypes.HWND, ctypes.POINTER(wintypes.DWORD))
+        self.window_visible = fn(user, "IsWindowVisible", wintypes.BOOL, wintypes.HWND)
+        self.post_message = fn(user, "PostMessageW", wintypes.BOOL, wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM)
 
     def receipt(self, name: str, value: Mapping[str, object]) -> None:
         write(self.stage / name, dict(value, stage_id=self.stage.name))
 
     def announce(self, phase: str) -> None:
-        print(json.dumps({"phase": phase, "at": time.time()}), flush=True)
+        observation: dict[str, str | float] = {"phase": phase, "at": time.time()}
+        print(json.dumps(observation), flush=True)
 
     def inventory(self) -> tuple[Process, ...]:
         return inventory(self.live)
@@ -93,43 +109,44 @@ class Release:
     def footprint(self, name: str, rows: tuple[Process, ...], *, workload: str) -> None:
         if rows:
             group(rows)
+        observations = [process_observation(row) for row in rows]
         self.receipt(name, {"observed_at_ns": time.time_ns(), "workload": workload,
-                            "processes": [asdict(row) for row in rows], "deployment_observer_excluded_pid": os.getpid()})
+                            "processes": observations, "deployment_observer_excluded_pid": os.getpid()})
 
     def hwnd(self, title: str, window_class: str | None = None) -> tuple[int, int]:
-        handle = self.user.FindWindowW(window_class, title)
+        handle = self.find_window(window_class, title)
         pid = wintypes.DWORD()
         if handle:
-            self.user.GetWindowThreadProcessId(handle, ctypes.byref(pid))
+            self.window_owner(handle, ctypes.byref(pid))
         return int(handle or 0), pid.value
 
     def opened(self, row: Process) -> int:
-        handle = self.kernel.OpenProcess(0x1000 | 0x100000, False, row.pid)
+        handle = self.open_process(0x1000 | 0x100000, False, row.pid)
         if not handle:
             raise ctypes.WinError(ctypes.get_last_error())
         try:
             image = ctypes.create_unicode_buffer(32768)
             size = wintypes.DWORD(len(image))
             times = [wintypes.FILETIME() for _ in range(4)]
-            if (not self.kernel.QueryFullProcessImageNameW(handle, 0, image, ctypes.byref(size))
-                    or not self.kernel.GetProcessTimes(handle, *(ctypes.byref(value) for value in times))):
+            if (not self.image_name(handle, 0, image, ctypes.byref(size))
+                    or not self.process_times(handle, *(ctypes.byref(value) for value in times))):
                 raise ctypes.WinError(ctypes.get_last_error())
             created = ((times[0].dwHighDateTime << 32) | times[0].dwLowDateTime) // 10000 - 11644473600000
-            if self.kernel.GetProcessId(handle) != row.pid or Path(image.value) != Path(row.executable) or created != row.created_ms:
+            if self.process_id(handle) != row.pid or Path(image.value) != Path(row.executable) or created != row.created_ms:
                 raise RuntimeError("A process changed identity before its handle could be retained.")
             return handle
         except BaseException:
-            self.kernel.CloseHandle(handle)
+            self.close_handle(handle)
             raise
 
     def exit_code(self, handle: int) -> int | None:
-        status = self.kernel.WaitForSingleObject(handle, 0)
+        status = self.wait_process(handle, 0)
         if status == 258:
             return None
         if status != 0:
             raise ctypes.WinError(ctypes.get_last_error())
         code = wintypes.DWORD()
-        if not self.kernel.GetExitCodeProcess(handle, ctypes.byref(code)):
+        if not self.process_exit(handle, ctypes.byref(code)):
             raise ctypes.WinError(ctypes.get_last_error())
         return code.value
 
@@ -202,7 +219,7 @@ class Release:
             raise RuntimeError("An originally stopped copy has conflicting process evidence.")
         return value
 
-    def prepare(self) -> None:  # noqa: PLR0915 -- before-images and validation are one preparation transaction
+    def prepare(self) -> None:
         self.announce("prepare checked source, backups and compressed runtime records while running")
         self.pins()
         if (self.stage / "prepared.json").exists():
@@ -231,12 +248,7 @@ class Release:
             raise RuntimeError("The installed archive runtime pins differ from the checked source.")
         source = self.stage / "source"
         source.mkdir()
-        with zipfile.ZipFile(payload) as archive:
-            for name in self.wanted:
-                target = file_at(source, name)
-                target.parent.mkdir(parents=True, exist_ok=True)
-                with archive.open("workspace/" + name) as incoming, target.open("xb") as output:
-                    shutil.copyfileobj(incoming, output)
+        extract_source(payload, source, self.wanted)
         if files(source) != self.wanted:
             raise RuntimeError("The extracted source differs from the checked manifest.")
         existing = files(self.live, skip_roots=RUNTIME, ignore_extra_bytecode=True)
@@ -249,16 +261,7 @@ class Release:
         if zip_files(output, source_only=True) != self.wanted or sha(self.archive) != old_archive_sha:
             raise RuntimeError("The new ZIP source differs or the prior bundle changed during preparation.")
         # Full verified before-images are built while the client remains available.
-        backup = self.stage / "backup"
-        source_backup = backup / "source"
-        source_backup.mkdir(parents=True)
-        for name in existing:
-            target = file_at(source_backup, name)
-            target.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copyfile(file_at(self.live, name), target)
-        shutil.copyfile(self.archive, backup / "previous-bundle.zip")
-        if files(source_backup) != existing or sha(backup / "previous-bundle.zip") != old_archive_sha:
-            raise RuntimeError("Source or ZIP before-images did not verify.")
+        self.backup_source(existing, old_archive_sha)
         if self.runtime_fingerprint(runtime) != fingerprint:
             raise RuntimeError("The runtime changed during preparation.")
         self.receipt("backup.json", {"source": existing, "zip_sha256": old_archive_sha, "verified_at_ns": time.time_ns()})
@@ -272,14 +275,22 @@ class Release:
         })
         self.prepared()
 
-    def stop(self) -> None:  # noqa: PLR0915 -- retain every process handle through clean shutdown
+    def backup_source(self, existing: Mapping[str, str], old_archive_sha: str) -> None:
+        backup = self.stage / "backup"
+        source_backup = backup / "source"
+        source_backup.mkdir(parents=True)
+        for name in existing:
+            target = file_at(source_backup, name)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(file_at(self.live, name), target)
+        shutil.copyfile(self.archive, backup / "previous-bundle.zip")
+        if files(source_backup) != existing or sha(backup / "previous-bundle.zip") != old_archive_sha:
+            raise RuntimeError("Source or ZIP before-images did not verify.")
+
+    def stop(self) -> None:
         self.prepared()
-        if (self.stage / "stopped.json").exists():
-            if self.inventory():
-                raise RuntimeError("Workspace restarted after its recorded clean stop.")
+        if not self.may_stop():
             return
-        if (self.stage / "stop-started.json").exists():
-            raise RuntimeError("A prior close attempt needs review; this helper never retries it automatically.")
         rows = self.inventory()
         if not rows:
             self.footprint("footprint-before.json", rows, workload="Workspace was already stopped")
@@ -291,14 +302,14 @@ class Release:
             raise RuntimeError("The installed assistant has no matching owned control window.")
         bar, bar_owner = self.hwnd("Workspace floating bar")
         record: Stopped = {"was_running": True, "clean_exit": False, "processes_before": [row.identity() for row in rows],
-                  "bar_was_visible": bool(bar and bar_owner == owner and self.user.IsWindowVisible(bar)), "exits": []}
+                  "bar_was_visible": bool(bar and bar_owner == owner and self.window_visible(bar)), "exits": []}
         retained: dict[int, tuple[Process, int]] = {}
         try:
             with contextlib.ExitStack() as cleanup:
                 for row in rows:
                     native = self.opened(row)
                     retained[row.pid] = (row, native)
-                    cleanup.callback(self.kernel.CloseHandle, native)
+                    cleanup.callback(self.close_handle, native)
                     if self.exit_code(native) is not None:
                         raise RuntimeError("The inspected process group changed before shutdown.")
                 fresh = self.inventory()
@@ -308,37 +319,21 @@ class Release:
                 self.keeper_idle()
                 record["requested_at_ns"] = time.time_ns()
                 self.receipt("stop-started.json", record)
-                if not self.user.PostMessageW(handle, 0x0010, 0, 0):
+                if not self.post_message(handle, 0x0010, 0, 0):
                     raise ctypes.WinError(ctypes.get_last_error())
                 seen: set[int] = set()
                 deadline = time.monotonic() + 90
                 while True:
-                    for pid, (row, native) in retained.items():
-                        code = self.exit_code(native)
-                        if code is not None and pid not in seen:
-                            seen.add(pid)
-                            record["exits"].append(Exit(**row.identity(), exit_code=code, observed_at_ns=time.time_ns()))
-                            self.receipt("stop-progress.json", record)
-                            if row.role in CORE and code != 0:
-                                raise RuntimeError("A core Workspace process did not exit cleanly; no source replacement is allowed.")
+                    self.observe_exits(record, retained, seen)
                     remaining = self.inventory()
                     if any(row.role in CORE and row.identity() != core[row.role].identity() for row in remaining):
                         raise RuntimeError("The keeper replaced a core process during shutdown; installation is blocked.")
-                    for row in remaining:
-                        if row.pid not in retained:
-                            try:
-                                native = self.opened(row)
-                            except OSError:
-                                if row.role == "runtime" and all(item.identity() != row.identity() for item in self.inventory()):
-                                    record.setdefault("transient_exits", []).append(row.identity() | {"disappeared_before_handle": True})
-                                    continue
-                                raise
-                            retained[row.pid] = (row, native)
-                            cleanup.callback(self.kernel.CloseHandle, native)
+                    self.retain_arrivals(remaining, retained, cleanup, record)
                     if not remaining:
                         if len(seen) != len(retained):
                             continue
-                        record.update(clean_exit=True, completed_at_ns=time.time_ns())
+                        record["clean_exit"] = True
+                        record["completed_at_ns"] = time.time_ns()
                         self.receipt("stopped.json", record)
                         return
                     if time.monotonic() >= deadline:
@@ -347,6 +342,48 @@ class Release:
         except Exception as error:
             self.receipt("stop-failure.json", dict(record, error_type=type(error).__name__, error=str(error)))
             raise
+
+
+    def retain_arrivals(
+        self, rows: tuple[Process, ...], retained: dict[int, tuple[Process, int]],
+        cleanup: contextlib.ExitStack, record: Stopped,
+    ) -> None:
+        """Keep new handles in the same close transaction and cleanup lifetime.
+
+        Rows, retained identities, cleanup and progress receipt are independently
+        required to prove a clean stop while native children finish spawning.
+        """
+        for row in rows:
+            if row.pid not in retained:
+                try:
+                    native = self.opened(row)
+                except OSError:
+                    if row.role == "runtime" and all(item.identity() != row.identity() for item in self.inventory()):
+                        record.setdefault("transient_exits", []).append(dict[str, object](row.identity(), disappeared_before_handle=True))
+                        continue
+                    raise
+                retained[row.pid] = (row, native)
+                cleanup.callback(self.close_handle, native)
+
+    def may_stop(self) -> bool:
+        if (self.stage / "stopped.json").exists():
+            if self.inventory():
+                raise RuntimeError("Workspace restarted after its recorded clean stop.")
+            return False
+        if (self.stage / "stop-started.json").exists():
+            raise RuntimeError("A prior close attempt needs review; this helper never retries it automatically.")
+        return True
+
+    def observe_exits(self, record: Stopped, retained: Mapping[int, tuple[Process, int]], seen: set[int]) -> None:
+        """The stop transaction owns receipt accumulation while handles stay retained."""
+        for pid, (row, native) in retained.items():
+            code = self.exit_code(native)
+            if code is not None and pid not in seen:
+                seen.add(pid)
+                record["exits"].append(Exit(**row.identity(), exit_code=code, observed_at_ns=time.time_ns()))
+                self.receipt("stop-progress.json", record)
+                if row.role in CORE and code != 0:
+                    raise RuntimeError("A core Workspace process did not exit cleanly; no source replacement is allowed.")
 
     @contextlib.contextmanager
     def exclusive(self) -> Generator[None]:
@@ -479,7 +516,7 @@ class Release:
             return None
         if require_bar:
             bar, bar_owner = self.hwnd("Workspace floating bar")
-            if not bar or bar_owner != owner or not self.user.IsWindowVisible(bar):
+            if not bar or bar_owner != owner or not self.window_visible(bar):
                 return None
         return {"core": {role: row.identity() for role, row in core.items()}, "markers": markers}, rows
 
@@ -579,10 +616,25 @@ def drive(release: Release, action: str) -> None:
                 (stage / "rollback-failure.log").write_text(traceback.format_exc(), encoding="utf-8")
         path = stage / f"failure-{time.time_ns()}.log"
         path.write_text(traceback.format_exc(), encoding="utf-8")
-        print(json.dumps({"failed_action": action, "error_type": type(error).__name__, "details": str(path),
-                          "backup": str(stage / "backup"), "timings": measurements}), flush=True)
+        failure: dict[str, object] = {"failed_action": action, "error_type": type(error).__name__, "details": str(path),
+                          "backup": str(stage / "backup"), "timings": measurements}
+        print(json.dumps(failure), flush=True)
         raise
 
 
 def run(action: str, stage: Path, config: Config, wanted: dict[str, str]) -> None:
     drive(Release(stage, config, wanted), action)
+
+
+def extract_source(payload: Path, source: Path, wanted: Mapping[str, str]) -> None:
+    with zipfile.ZipFile(payload) as archive:
+        for name in wanted:
+            target = file_at(source, name)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            with archive.open("workspace/" + name) as incoming, target.open("xb") as extracted:
+                shutil.copyfileobj(incoming, extracted)
+
+
+def process_observation(row: Process) -> dict[str, object]:
+    return dict[str, object](row.identity(), private_bytes=row.private_bytes, working_set_bytes=row.working_set_bytes,
+                             user_cpu_100ns=row.user_cpu_100ns, kernel_cpu_100ns=row.kernel_cpu_100ns)

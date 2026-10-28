@@ -12,11 +12,23 @@ from winapi.shapes import Rect
 
 
 class _AppBarData(ctypes.Structure):
+    cbSize: int
+    hWnd: int | None
+    uCallbackMessage: int
+    uEdge: int
+    rc: wintypes.RECT
+    lParam: int
     _fields_ = [("cbSize", wintypes.DWORD), ("hWnd", wintypes.HWND), ("uCallbackMessage", wintypes.UINT),
                 ("uEdge", wintypes.UINT), ("rc", wintypes.RECT), ("lParam", wintypes.LPARAM)]
 
 
 class _ThumbnailProperties(ctypes.Structure):
+    dwFlags: int
+    rcDestination: wintypes.RECT
+    rcSource: wintypes.RECT
+    opacity: int
+    fVisible: int
+    fSourceClientAreaOnly: int
     _fields_ = [("dwFlags", wintypes.DWORD), ("rcDestination", wintypes.RECT), ("rcSource", wintypes.RECT),
                 ("opacity", ctypes.c_ubyte), ("fVisible", wintypes.BOOL), ("fSourceClientAreaOnly", wintypes.BOOL)]
 

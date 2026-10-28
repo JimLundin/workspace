@@ -7,15 +7,21 @@ from assistant.agent_session import Session
 from assistant.communications import Conversation, Feed, Message, TeamsActivity, Update, UpdateKind
 from assistant.feed_items import WorkItem, action_spans, observed, text
 from assistant.feed_triage import Assessment, Board, Disposition, applied, candidate, collect, decode, edited, reconcile, restored, saved, unassessed
+from assistant.llm import Json
 from assistant.notifications import Stack, advance
+from tests.json_fixture import json_object, json_rows
+lazy from assistant.feed_agent_tools import validated
+lazy from assistant.feed_triage import batch_for, proposal_revision, selected, solution_task
 
 
 def output(*groups: tuple[list[str], str]) -> str:
-    return json.dumps({'items': [{'sources': refs, 'disposition': kind, 'title': 'Review the budget', 'summary': 'Anna needs your review.',
+    payload: dict[str, Json] = {'items': [{'sources': list[Json](refs), 'disposition': kind, 'title': 'Review the budget',
+                                    'summary': 'Anna needs your review.',
                                     'suggestion': 'Check the totals before replying.', 'solutions': [
                                         {'label': 'Check totals', 'kind': 'check', 'detail': 'Compare totals against the budget.'},
                                         {'label': 'Draft reply', 'kind': 'draft', 'detail': 'Prepare a reply explaining the review.'}], 'priority': 1}
-                                for refs, kind in groups]})
+                                for refs, kind in groups]}
+    return json.dumps(payload)
 
 
 def test_reactions_never_become_cards_and_grouped_requests_have_no_manual_action_strip() -> None:
@@ -83,7 +89,6 @@ def test_explicit_voice_feedback_reclassifies_open_and_quiet_work_and_survives_r
 
 
 def test_new_related_arrival_can_join_an_existing_action_without_duplicate_cards() -> None:
-    from assistant.feed_triage import batch_for  # noqa: PLC0415
     first = candidate('chat', 'one', 'Budget', 'Please review.', 1)
     second = candidate('windows', 'two', 'Budget reminder', 'Reminder to review.', 2)
     board = applied(Board(enabled=True), decode(output(([first.identity], 'action')), (first,)), (first,))
@@ -133,7 +138,6 @@ def test_top_work_is_selected_by_importance_and_dismissal_advances_the_queue_wit
 
 
 def test_solutions_are_revision_bound_persisted_and_untrusted_details_cannot_expand_the_recipe() -> None:
-    from assistant.feed_triage import proposal_revision, selected, solution_task  # noqa: PLC0415
     source = candidate('chat', 'budget', 'Budget', 'Please review.', 1)
     item = decode(output(([source.identity], 'action')), (source,))[0]
     board = restored(saved(Board(enabled=True, items=(item,))))
@@ -156,12 +160,13 @@ def test_solutions_are_revision_bound_persisted_and_untrusted_details_cannot_exp
 
 def test_action_solutions_require_valid_distinct_bounded_choices() -> None:
     source = candidate('chat', 'one', 'Review', 'Please review.', 1)
-    for solutions in ([], [{'label': 'Send', 'kind': 'send', 'detail': 'Send it now.'}],
+    options: tuple[list[Json], ...] = ([], [{'label': 'Send', 'kind': 'send', 'detail': 'Send it now.'}],
                       [{'label': 'Check', 'kind': 'check', 'detail': ''}],
                       [{'label': 'Check', 'kind': 'check', 'detail': 'Check it.'}] * 2,
-                      [{'label': str(index), 'kind': 'check', 'detail': 'Check it.'} for index in range(4)]):
-        payload = json.loads(output(([source.identity], 'action')))
-        payload['items'][0]['solutions'] = solutions
+                      [{'label': str(index), 'kind': 'check', 'detail': 'Check it.'} for index in range(4)])
+    for solutions in options:
+        payload = json_object(output(([source.identity], 'action')))
+        json_rows(payload['items'])[0]['solutions'] = solutions
         try:
             decode(json.dumps(payload), (source,))
         except ValueError:
@@ -184,8 +189,6 @@ def test_voice_correction_replaces_solutions_immediately_even_without_live_sourc
 
 
 def test_meaningful_rejection_records_reason_and_revision_without_completing_or_sending() -> None:
-    from assistant.feed_agent_tools import validated  # noqa: PLC0415
-    from assistant.feed_triage import proposal_revision  # noqa: PLC0415
     source = candidate('chat', 'request', 'Budget', 'Can you approve this budget?', 1)
     item = decode(output(([source.identity], 'action')), (source,))[0]
     board = Board(enabled=True, items=(item,))

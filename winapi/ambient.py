@@ -1,31 +1,40 @@
 """Windows power and optional, bounded geolocation observations."""
-# pyright: reportUnknownMemberType=false, reportUnknownArgumentType=false, reportUnknownVariableType=false, reportMissingTypeStubs=false
 
 import ctypes
 import math
 import threading
 import time
 from ctypes import wintypes
-from typing import Any
+
+lazy from win32more import FAILED
+lazy from win32more.Windows.Devices.Geolocation import BasicGeoposition, Geolocator, Geoposition, PositionStatus
+lazy from win32more.Windows.Foundation import IAsyncInfo, IAsyncOperation, TimeSpan
+lazy from win32more.Windows.Win32.System.WinRT import RO_INIT_MULTITHREADED, RoInitialize, RoUninitialize
 
 from assistant.ambient import Battery, Power, PowerUnavailable
 from winapi._core import fn, kernel32
 
 
-class SYSTEM_POWER_STATUS(ctypes.Structure):  # noqa: N801  # Windows structure name.
+class PowerStatus(ctypes.Structure):
+    ac: int
+    flags: int
+    percent: int
+    saver: int
+    seconds: int
+    full_seconds: int
     _fields_ = (("ac", ctypes.c_ubyte), ("flags", ctypes.c_ubyte), ("percent", ctypes.c_ubyte),
                ("saver", ctypes.c_ubyte), ("seconds", wintypes.DWORD), ("full_seconds", wintypes.DWORD))
 
 
-_GetSystemPowerStatus = fn(kernel32, "GetSystemPowerStatus", wintypes.BOOL, ctypes.POINTER(SYSTEM_POWER_STATUS))
+_GetSystemPowerStatus = fn(kernel32, "GetSystemPowerStatus", wintypes.BOOL, ctypes.POINTER(PowerStatus))
 
 
 def power() -> Power:
-    status = SYSTEM_POWER_STATUS()
+    status = PowerStatus()
     return power_from_status(status if _GetSystemPowerStatus(ctypes.byref(status)) else None)
 
 
-def power_from_status(status: SYSTEM_POWER_STATUS | None) -> Power:
+def power_from_status(status: PowerStatus | None) -> Power:
     """Validate one native observation before publishing the toolbar's power state."""
     if status is None or status.flags == 255:
         return PowerUnavailable.UNKNOWN
@@ -38,17 +47,12 @@ def power_from_status(status: SYSTEM_POWER_STATUS | None) -> Power:
 
 def location(cancelled: threading.Event) -> tuple[float, float] | None:
     """Use an already available Windows location; never request consent or infer IP location."""
-    from win32more import FAILED  # noqa: PLC0415
-    from win32more.Windows.Devices.Geolocation import Geolocator, PositionStatus  # noqa: PLC0415
-    from win32more.Windows.Foundation import IAsyncInfo, TimeSpan  # noqa: PLC0415
-    from win32more.Windows.Win32.System.WinRT import RO_INIT_MULTITHREADED, RoInitialize, RoUninitialize  # noqa: PLC0415
-
     if FAILED(RoInitialize(RO_INIT_MULTITHREADED)):
         return None
-    operation: Any = None
-    info: Any = None
-    locator: Any = None
-    position: Any = None
+    operation: IAsyncOperation[Geoposition] | None = None
+    info: IAsyncInfo | None = None
+    locator: Geolocator | None = None
+    position: BasicGeoposition | None = None
     try:
         locator = Geolocator()
         if locator.LocationStatus in (PositionStatus.Disabled, PositionStatus.NotAvailable):

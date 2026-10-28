@@ -9,7 +9,6 @@ from collections.abc import Callable, Generator, Mapping, Sequence
 from contextlib import contextmanager
 from ctypes import wintypes
 from pathlib import Path
-from typing import cast
 
 if sys.platform != "win32":
     raise unittest.SkipTest("Windows bindings")
@@ -275,7 +274,7 @@ def test_toggle_and_input_failure_clear_held_keys() -> None:
         keyboard.input_failed(OSError("Rejected input"))
         assert not keyboard.pressed
         assert (WM_KEY_STATE, 0, 0) in messages[-3:]
-        assert not keyboard.engine.enabled
+        assert not bool(keyboard.engine.enabled)
 
 
 def test_hook_failure_passes_input_even_when_recovery_effects_also_fail() -> None:
@@ -287,7 +286,7 @@ def test_hook_failure_passes_input_even_when_recovery_effects_also_fail() -> Non
     keyboard.engine.pressed[0] = Key.A
     keyboard.host.owned.add(Key.A)
     assert keyboard.hook_proc(0, 0x0100, 1) == 7
-    assert not keyboard.engine.enabled and not keyboard.busy
+    assert not bool(keyboard.engine.enabled) and not keyboard.busy
     assert keyboard.fault is not None and keyboard.fault.kind == "RuntimeError"
     assert not driver.recoveries
     for _ in range(5):
@@ -303,7 +302,7 @@ def test_rejected_chord_releases_its_added_modifier_and_defers_diagnostics() -> 
     keyboard = Keyboard(driver)
     keyboard.engine.locked = Layer.SYM
     assert keyboard.hook_proc(0, 0x0100, 1) == 7
-    assert not keyboard.engine.enabled and not keyboard.host.owned
+    assert not bool(keyboard.engine.enabled) and not keyboard.host.owned
     assert (Mod.SHIFT, False) in driver.output
     assert not driver.recoveries
     keyboard.maintenance()
@@ -334,10 +333,10 @@ def test_recovery_retries_are_bounded_and_enabling_waits_for_accepted_releases()
     assert len(driver.output) == 6  # Immediate cleanup plus five timer attempts.
     assert not keyboard.recovery_ticks and keyboard.fault is None
     keyboard.on_message(WM_TOGGLE_LAYOUT)
-    assert not keyboard.engine.enabled
+    assert not bool(keyboard.engine.enabled)
     driver.send_error = None
     keyboard.on_message(WM_TOGGLE_LAYOUT)
-    assert keyboard.engine.enabled and not keyboard.host.owned
+    assert bool(keyboard.engine.enabled) and not keyboard.host.owned
 
 def test_capture_watchdog_timer_is_delivered_to_its_hidden_window() -> None:
     hwnd = windows.create_hidden("Workspace watchdog fixture")
@@ -357,7 +356,7 @@ def test_escape_toggle_clears_highlights_with_other_keys_still_held() -> None:
         keyboard.swallow(inputs.KeyEvent(0, 0x32, 0, 10, 0), True)
         keyboard.swallow(inputs.KeyEvent(0, ESCAPE, 0, 20, 0), True)
         keyboard.swallow(inputs.KeyEvent(0, ESCAPE, 0, 40, 0), False)
-        assert not keyboard.engine.enabled
+        assert not bool(keyboard.engine.enabled)
         assert not keyboard.pressed
         assert messages[-1] == (WM_KEY_STATE, 0, 0)
 
@@ -439,7 +438,7 @@ def test_native_arrow_reaches_apps_and_clears_snippets() -> None:
 
 def test_physical_shift_arrow_selection_remains_native_with_layout_enabled() -> None:
     with observed_keyboard() as (keyboard, messages):
-        assert keyboard.engine.enabled
+        assert bool(keyboard.engine.enabled)
         for vk, scancode in ((0x10, 0x2A), (0xA0, 0x2A), (0xA1, 0x36)):
             shift = inputs.KeyEvent(vk, scancode, 0, 0, 0)
             assert not keyboard.swallow(shift, True)
@@ -499,8 +498,8 @@ def test_extra_mouse_buttons_and_horizontal_scroll_preserve_native_flags() -> No
 
     def send(batch: Sequence[inputs.INPUT]) -> int:
         for event in batch:
-            mouse = cast(inputs.MOUSEINPUT, cast(inputs.INPUT_UNION, event.u).mi)
-            events.append((cast(int, mouse.dwFlags), cast(int, mouse.mouseData), cast(int, mouse.dwExtraInfo)))
+            mouse = event.u.mi
+            events.append((mouse.dwFlags, mouse.mouseData, mouse.dwExtraInfo))
         return len(batch)
 
     inputs.mouse_button("x1", MAGIC, down=True, submit=send)
@@ -538,7 +537,7 @@ def test_failed_key_release_during_tray_toggle_still_turns_the_layout_off() -> N
     keyboard = Keyboard(driver)
     keyboard.engine.pressed[0] = Key.Q  # An output held before opening the tray.
     keyboard.on_message(WM_TOGGLE_LAYOUT)
-    assert not keyboard.engine.enabled
+    assert not bool(keyboard.engine.enabled)
     assert not keyboard.busy
 
 def test_layout_query_includes_the_current_locked_layer_for_a_new_overlay() -> None:

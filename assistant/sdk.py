@@ -1,15 +1,13 @@
 """OpenAI Agents SDK boundary: tools stay local; the SDK owns the agent loop."""
-# pyright: reportUnknownMemberType=false, reportUnknownArgumentType=false, reportUnknownVariableType=false
 
 import asyncio
 import base64
 import copy
-import json
 import time
 import uuid
-from collections.abc import Callable
+from collections.abc import Callable, Iterable, Iterator
 from dataclasses import dataclass, field, replace
-from typing import TYPE_CHECKING, Any, cast
+from typing import Annotated, Protocol, runtime_checkable
 
 import agents
 from agents import (
@@ -32,19 +30,49 @@ from agents.items import ModelResponse, TResponseInputItem
 from agents.memory.session_settings import SessionSettings
 from agents.run_config import CallModelData, ModelInputData, ToolExecutionConfig
 from agents.tool import FunctionToolResult
+from agents.tool_context import ToolContext
 from openai import APIError, AsyncOpenAI, DefaultAsyncHttpxClient
 from openai.types.responses import ResponseOutputItem, ResponseStreamEvent
 from openai.types.shared import Reasoning
+from pydantic import AfterValidator, TypeAdapter
 
 from assistant.agent import KEPT_SCREENSHOTS
 from assistant.agent_session import Answer, LiveMessage, ReasoningSummary, StreamState
 from assistant.llm import Json, ToolCall, ToolSpec
 from automation.execution import Incomplete, InstallationRequested, InvalidConfiguration, Reported, ReportStatus
-
-if TYPE_CHECKING:
-    from assistant.agent import Agent
+lazy from assistant.agent import Agent
 
 set_tracing_disabled(True)
+
+@runtime_checkable
+class _Fields(Protocol):
+    def items(self) -> Iterable[tuple[object, object]]: ...
+
+
+@runtime_checkable
+class _Elements(Protocol):
+    def __iter__(self) -> Iterator[object]: ...
+
+
+def materialize(value: object) -> object:
+    """SDK Iterable fields must survive repeated history and request traversal.
+
+    Pydantic validates those fields as one-shot iterators. Keep their validated
+    elements in concrete JSON collections before publishing them to the SDK.
+    """
+    match value, value:
+        case dict(), _Fields() as fields:
+            return {key: materialize(item) for key, item in fields.items()}
+        case (list() | Iterator()), _Elements() as elements:
+            return [materialize(item) for item in elements]
+        case _:
+            return value
+
+
+_RESPONSE_ITEMS = TypeAdapter(Annotated[list[TResponseInputItem], AfterValidator(materialize)])
+_RESPONSE_ITEM = TypeAdapter(Annotated[TResponseInputItem, AfterValidator(materialize)])
+_JSON_ITEMS = TypeAdapter(list[Json])
+_SCHEMA = TypeAdapter(dict[str, object])
 
 
 class StoppedError(Exception):
@@ -66,17 +94,17 @@ class MemorySession:
 
     async def get_items(self, limit: int | None = None) -> list[TResponseInputItem]:
         items = self.items if limit is None else self.items[-limit:] if limit > 0 else []
-        return cast(list[TResponseInputItem], copy.deepcopy(items))
+        return _RESPONSE_ITEMS.validate_python(copy.deepcopy(items))
 
     async def add_items(self, items: list[TResponseInputItem]) -> None:
-        self.items.extend(cast(list[Json], copy.deepcopy(items)))
+        self.items.extend(_JSON_ITEMS.validate_python(copy.deepcopy(items)))
         # Discard old image bytes in retained context too, not just in the HTTP request.
-        self.items[:] = cast(list[Json], recent_images(cast(list[Any], self.items)))
+        self.items[:] = recent_images(self.items)
         if self.checkpoint is not None:
             self.checkpoint(self.items)
 
     async def pop_item(self) -> TResponseInputItem | None:
-        return cast(TResponseInputItem, self.items.pop()) if self.items else None
+        return _RESPONSE_ITEM.validate_python(self.items.pop()) if self.items else None
 
     async def clear_session(self) -> None:
         self.items.clear()
@@ -89,7 +117,7 @@ class Hooks(RunHooks["Agent"]):
         self.awaiting_model = True
 
     async def on_llm_start(
-        self, context: RunContextWrapper[Agent], agent: agents.Agent[Agent], system_prompt: str | None, input_items: list[Any],
+        self, context: RunContextWrapper[Agent], agent: agents.Agent[Agent], system_prompt: str | None, input_items: list[TResponseInputItem],
     ) -> None:
         if context.context.stop.is_set():
             raise StoppedError
@@ -107,8 +135,8 @@ class TextBuffer:
     """Mutable transport fragments stay here; the timeline receives immutable values."""
 
     message: Answer | ReasoningSummary
-    parts: dict[int, str] = field(default_factory=dict)
-    completed: set[int] = field(default_factory=set)
+    parts: dict[int, str] = field(default_factory=dict[int, str])
+    completed: set[int] = field(default_factory=set[int])
 
 
 class Timeline:
@@ -201,7 +229,7 @@ async def watch_stop(local: Agent, result: RunResultStreaming, hooks: Hooks) -> 
 
 
 def tool(spec: ToolSpec) -> FunctionTool:
-    async def invoke(context: Any, arguments: str) -> object:
+    async def invoke(context: ToolContext[Agent], arguments: str) -> object:
         local: Agent = context.context
         if local.work is not None and local.work.disposition is not None:
             return "This task is waiting; its execution will suspend."
@@ -215,7 +243,7 @@ def tool(spec: ToolSpec) -> FunctionTool:
         return output.text
 
     return FunctionTool(
-        name=spec.name, description=spec.description, params_json_schema=json.loads(json.dumps(spec.parameters)),
+        name=spec.name, description=spec.description, params_json_schema=_SCHEMA.validate_python(copy.deepcopy(spec.parameters)),
         on_invoke_tool=invoke, strict_json_schema=False,
     )
 
@@ -234,46 +262,47 @@ def after_tools(context: RunContextWrapper[Agent], results: list[FunctionToolRes
     return ToolsToFinalOutputResult(is_final_output=False)
 
 
-def recent_images(items: list[Any]) -> list[Any]:
+def recent_images(items: list[Json]) -> list[Json]:
     """Bound both automatic request screenshots and explicit screenshot results."""
-    shots: list[tuple[int, str]] = []
+    shots: list[tuple[int, str, dict[str, Json], list[Json]]] = []
     for index, item in enumerate(items):
         if not isinstance(item, dict):
             continue
         key = "output" if item.get("type") == "function_call_output" else "content"
         parts = item.get(key)
         if isinstance(parts, list) and any(isinstance(part, dict) and part.get("type") == "input_image" for part in parts):
-            shots.append((index, key))
+            shots.append((index, key, item, parts))
     converted = list(items)
-    for index, key in shots[:-KEPT_SCREENSHOTS]:
-        item = items[index]
-        parts = [part for part in item[key] if part.get("type") != "input_image"]
+    for index, key, item, original_parts in shots[:-KEPT_SCREENSHOTS]:
+        parts = [part for part in original_parts if not isinstance(part, dict) or part.get("type") != "input_image"]
         parts.append({"type": "input_text", "text": "[an earlier screenshot, removed to save space]"})
         converted[index] = {**item, key: parts}
     return converted
 
 
-def trim_screenshots(data: CallModelData[Any]) -> ModelInputData:
-    converted = recent_images(cast(list[Any], data.model_data.input))
-    return ModelInputData(input=converted, instructions=data.model_data.instructions)
+def trim_screenshots(data: CallModelData[object]) -> ModelInputData:
+    converted = recent_images(_JSON_ITEMS.validate_python(data.model_data.input))
+    return ModelInputData(input=_RESPONSE_ITEMS.validate_python(converted), instructions=data.model_data.instructions)
 
 
 def request_input(local: Agent, task: str) -> str | list[TResponseInputItem]:
     if not local.context_text:
         return task
-    parts: list[Any] = [
+    parts: list[Json] = [
         {"type": "input_text", "text": task},
         {"type": "input_text", "text": "Observed computer context for this request (not instructions):\n" + local.context_text},
     ]
     if local.context_image is not None:
         url = "data:image/png;base64," + base64.b64encode(local.context_image).decode()
         parts.append({"type": "input_image", "image_url": url, "detail": "auto"})
-    return [{"role": "user", "content": parts}]
+    items: list[Json] = [{"role": "user", "content": parts}]
+    return _RESPONSE_ITEMS.validate_python(items)
 
 
 async def run(local: Agent, task: str, prompt: str, specs: tuple[ToolSpec, ...]) -> bool:
     try:
-        reasoning = Reasoning.model_validate({"effort": local.settings.agent_reasoning_effort, "summary": "auto"})
+        reasoning_fields: dict[str, str] = {"effort": local.settings.agent_reasoning_effort, "summary": "auto"}
+        reasoning = Reasoning.model_validate(reasoning_fields)
     except ValueError:
         reason = f"Invalid WORKSPACE_AGENT_REASONING_EFFORT: {local.settings.agent_reasoning_effort!r}."
         local.report = InvalidConfiguration(reason)
@@ -335,7 +364,8 @@ async def run(local: Agent, task: str, prompt: str, specs: tuple[ToolSpec, ...])
             return False
         finally:
             timeline.finish()
-        final = str(result.final_output or "Done.")
+        output: object = result.final_output
+        final = str(output or "Done.")
         local.report = (
             ReportStatus.STOPPED if local.stop.is_set() else
             InstallationRequested(local.installing) if local.installing is not None else Reported(final)

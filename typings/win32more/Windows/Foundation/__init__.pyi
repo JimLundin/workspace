@@ -10,6 +10,9 @@ class IAsyncInfo(ComPtr):
 
 class IAsyncAction(ComPtr): ...
 
+class IAsyncOperation[T](ComPtr):
+    def GetResults(self) -> T: ...
+
 class TimeSpan(ctypes.Structure):
     def __init__(self, duration: int) -> None: ...
     Duration: int

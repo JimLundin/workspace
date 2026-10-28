@@ -1,5 +1,4 @@
 """Shared Qt controls, selection-preserving text updates and native window behavior."""
-# pyright: reportUnknownMemberType=false, reportUnknownArgumentType=false
 
 import threading
 from collections.abc import Callable
@@ -26,13 +25,16 @@ class Window(QtWidgets.QWidget):
         self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
         self.resize(width, height)
         self.escape = QtGui.QShortcut(QtGui.QKeySequence("Escape"), self)
-        self.escape.activated.connect(lambda: self.on_close())  # noqa: PLW0108  # Retain slotted callback owners.
+        def escaped() -> None:
+            self.on_close()
 
-    def closeEvent(self, event: QtGui.QCloseEvent) -> None:  # noqa: N802
+        self.escape.activated.connect(escaped)
+
+    def closeEvent(self, event: QtGui.QCloseEvent) -> None:
         event.ignore()
         self.on_close()
 
-    def resizeEvent(self, event: QtGui.QResizeEvent) -> None:  # noqa: N802
+    def resizeEvent(self, event: QtGui.QResizeEvent) -> None:
         super().resizeEvent(event)
         self.geometry_changed.emit()
 
@@ -45,18 +47,18 @@ class GestureHandle(QtWidgets.QFrame):
         super().__init__(parent)
         self.start, self.move_pointer, self.finish = start, move, finish
 
-    def mousePressEvent(self, event: QtGui.QMouseEvent) -> None:  # noqa: N802
+    def mousePressEvent(self, event: QtGui.QMouseEvent) -> None:
         if event.button() == Qt.MouseButton.LeftButton:
             self.start(event)
             self.grabMouse()
             event.accept()
 
-    def mouseMoveEvent(self, event: QtGui.QMouseEvent) -> None:  # noqa: N802
+    def mouseMoveEvent(self, event: QtGui.QMouseEvent) -> None:
         if event.buttons() & Qt.MouseButton.LeftButton:
             self.move_pointer(event)
             event.accept()
 
-    def mouseReleaseEvent(self, event: QtGui.QMouseEvent) -> None:  # noqa: N802
+    def mouseReleaseEvent(self, event: QtGui.QMouseEvent) -> None:
         if event.button() == Qt.MouseButton.LeftButton:
             self.releaseMouse()
             self.finish(event)
@@ -88,7 +90,7 @@ class Editor(QtWidgets.QPlainTextEdit):
         self.setTabChangesFocus(True)
         self.setMinimumHeight(60)
 
-    def keyPressEvent(self, event: QtGui.QKeyEvent) -> None:  # noqa: N802
+    def keyPressEvent(self, event: QtGui.QKeyEvent) -> None:
         enter = event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter)
         send = not bool(event.modifiers() & Qt.KeyboardModifier.ShiftModifier) if self.enter_sends else bool(
             event.modifiers() & Qt.KeyboardModifier.ControlModifier
@@ -99,7 +101,7 @@ class Editor(QtWidgets.QPlainTextEdit):
         else:
             super().keyPressEvent(event)
 
-    def paintEvent(self, event: QtGui.QPaintEvent) -> None:  # noqa: N802
+    def paintEvent(self, event: QtGui.QPaintEvent) -> None:
         super().paintEvent(event)
         self.painted.emit()
 
@@ -107,7 +109,7 @@ class Editor(QtWidgets.QPlainTextEdit):
 class Browser(QtWidgets.QTextBrowser):
     painted = QtCore.Signal()
 
-    def paintEvent(self, event: QtGui.QPaintEvent) -> None:  # noqa: N802
+    def paintEvent(self, event: QtGui.QPaintEvent) -> None:
         super().paintEvent(event)
         self.painted.emit()
 

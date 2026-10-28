@@ -49,8 +49,17 @@ def unavailable_journal(rig: WorkRig, gate: PollHold) -> Generator[None]:
         assert completed.wait(5)
         yield
     finally:
-        path.rmdir()
-        backup.rename(path)
+        # Park the sole observer for restoration too. Otherwise it can create
+        # an empty journal between removing the directory and restoring the file.
+        gate.arm()
+        restored = rig.agent.refresh()
+        assert gate.entered.wait(5)
+        try:
+            path.rmdir()
+            backup.rename(path)
+        finally:
+            gate.release.set()
+        assert restored.wait(5)
 
 
 def test_identified_duplicates_reuse_the_original_source_and_invocation_context_after_new_chat(tmp_path: Path) -> None:
@@ -230,8 +239,11 @@ def test_watch_recovers_an_old_completed_id_outside_the_overview_and_coalesces_r
 def test_stop_remains_available_when_ordinary_input_capacity_is_full(tmp_path: Path) -> None:
     rig = WorkRig(tmp_path, start=False)
     try:
-        for index in range(256):
-            rig.agent.submit_identified(f"accepted-{index:03}", f"Accepted request {index}")
+        # Observations consume the same ordinary queue slots as submissions.
+        # One real task makes Stop meaningful without 256 repeated journal writes.
+        rig.agent.submit_identified("accepted", "Accepted request")
+        observations = tuple(rig.agent.refresh() for _ in range(255))
+        assert all(not completed.is_set() for completed in observations)
         with TestCase().assertRaisesRegex(ValueError, "queue is full"):
             rig.agent.submit_identified("over-capacity", "This request was not accepted")
         for _ in range(10):
@@ -239,7 +251,8 @@ def test_stop_remains_available_when_ordinary_input_capacity_is_full(tmp_path: P
         rig.agent.close()
         assert rig.agent.wait_closed(10)
         tasks = rig.tasks.list_tasks(limit=1_000)
-        assert len(tasks) == 256 and all(task.state is TaskStatus.CANCELLED for task in tasks)
+        assert len(tasks) == 1 and tasks[0].id == "accepted" and tasks[0].state is TaskStatus.CANCELLED
+        assert all(completed.is_set() for completed in observations)
         assert rig.tasks.get("over-capacity") is None
     finally:
         rig.close()

@@ -9,6 +9,7 @@ from typing import cast
 import httpx
 
 from assistant.ambient import Weather
+lazy from winapi.ambient import location
 
 
 def weather_response(raw: object) -> Weather:
@@ -34,7 +35,6 @@ class LocalWeather:
         self.worker.start()
 
     def run(self) -> None:
-        from winapi.ambient import location  # noqa: PLC0415
 
         while not self.cancelled.is_set():
             observed = None

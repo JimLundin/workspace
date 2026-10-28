@@ -1,6 +1,5 @@
 """Regressions for Workspace's tool routing and reply presentation choices."""
 
-import json
 from datetime import UTC, datetime
 
 from assistant import notification_text
@@ -10,6 +9,7 @@ from assistant.feed_items import SourceKey, WorkItem
 from assistant.feed_triage import Assessment, Solution, SolutionKind
 from assistant.notifications import Entry, Settled, Turn
 from tests.fake_endpoint import fake_endpoint
+from tests.json_fixture import json_object, json_rows
 from tests.test_agent import Rig, ToolRig, calls, says
 
 
@@ -57,8 +57,8 @@ def test_model_can_invoke_the_registered_time_tool() -> None:
     with fake_endpoint() as endpoint:
         rig = Rig(endpoint, calls(('get_current_time', {})), says('Time checked.'))
         rig.run('Check the current time.')
-        request = json.loads(endpoint.received[0].body)
-        assert any(spec['name'] == 'get_current_time' for spec in request['tools'])
+        request = json_object(endpoint.received[0].body)
+        assert any(spec['name'] == 'get_current_time' for spec in json_rows(request['tools']))
         assert 'UTC time:' in rig.results()[0]
 
 

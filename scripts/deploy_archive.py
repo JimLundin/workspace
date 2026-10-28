@@ -14,7 +14,7 @@ from scripts.deploy_files import RUNTIME, member, names
 
 def repack(previous: Path, destination: Path, source: Path, wanted: dict[str, str]) -> None:
     with zipfile.ZipFile(previous) as prior, zipfile.ZipFile(destination, 'x', zipfile.ZIP_DEFLATED, compresslevel=1) as output:
-        records = sorted(prior.infolist(), key=lambda info: info.header_offset)
+        records = sorted(prior.infolist(), key=record_offset)
         members: set[str] = set()
         for info in records:
             if not info.filename.startswith('workspace/') or info.flag_bits & 1 or (info.external_attr >> 16) & 0o170000 == 0o120000:
@@ -49,3 +49,7 @@ def repack(previous: Path, destination: Path, source: Path, wanted: dict[str, st
             output.write(source / name, 'workspace/' + name)
         # ZipFile.close now writes one fresh central directory. Dead source records
         # never accumulate, and retained compressed local records are byte-for-byte.
+
+
+def record_offset(info: zipfile.ZipInfo) -> int:
+    return info.header_offset

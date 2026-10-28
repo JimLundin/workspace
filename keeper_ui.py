@@ -3,12 +3,14 @@
 Import this only after runtime activation. The bootstrap itself uses the standard
 library and remains importable on Python 3.12. Qt is the pinned GUI dependency.
 """
-# pyright: reportUnknownMemberType=false, reportUnknownArgumentType=false
 
 from collections.abc import Callable
-from concurrent.futures import ThreadPoolExecutor  # noqa: F401  # pyright: ignore[reportUnusedImport]
+from concurrent.futures import ThreadPoolExecutor
 
 from PySide6 import QtCore, QtGui, QtWidgets
+
+# Resolve Python 3.15's deferred executor export before Qt inspects imports.
+_executor = ThreadPoolExecutor
 
 STYLE = """
 QWidget { color: #d8e0ea; background: #252c34; font: 12px 'Segoe UI'; }

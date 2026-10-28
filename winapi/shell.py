@@ -7,12 +7,22 @@ from ctypes import wintypes
 from dataclasses import dataclass
 from typing import Final
 
-from winapi._core import LRESULT, fn, gdi32, kernel32, last_error, shell32, user32
+from winapi._core import LRESULT, NativeFunction, fn, gdi32, kernel32, last_error, shell32, user32
 
 WNDPROC = ctypes.WINFUNCTYPE(LRESULT, wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM)
 
 
 class WNDCLASSW(ctypes.Structure):
+    style: int
+    lpfnWndProc: NativeFunction[int]
+    cbClsExtra: int
+    cbWndExtra: int
+    hInstance: int | None
+    hIcon: int | None
+    hCursor: int | None
+    hbrBackground: int | None
+    lpszMenuName: str | None
+    lpszClassName: str | None
     _fields_ = (
         ("style", wintypes.UINT),
         ("lpfnWndProc", WNDPROC),
@@ -28,10 +38,29 @@ class WNDCLASSW(ctypes.Structure):
 
 
 class GUID(ctypes.Structure):
+    Data1: int
+    Data2: int
+    Data3: int
+    Data4: ctypes.Array[ctypes.c_ubyte]
     _fields_ = (("Data1", wintypes.DWORD), ("Data2", wintypes.WORD), ("Data3", wintypes.WORD), ("Data4", wintypes.BYTE * 8))
 
 
 class NOTIFYICONDATAW(ctypes.Structure):
+    cbSize: int
+    hWnd: int | None
+    uID: int
+    uFlags: int
+    uCallbackMessage: int
+    hIcon: int | None
+    szTip: str
+    dwState: int
+    dwStateMask: int
+    szInfo: str
+    uVersion: int
+    szInfoTitle: str
+    dwInfoFlags: int
+    guidItem: GUID
+    hBalloonIcon: int | None
     _fields_ = (
         ("cbSize", wintypes.DWORD),
         ("hWnd", wintypes.HWND),
@@ -52,6 +81,11 @@ class NOTIFYICONDATAW(ctypes.Structure):
 
 
 class ICONINFO(ctypes.Structure):
+    fIcon: int
+    xHotspot: int
+    yHotspot: int
+    hbmMask: int | None
+    hbmColor: int | None
     _fields_ = (
         ("fIcon", wintypes.BOOL),
         ("xHotspot", wintypes.DWORD),
@@ -62,6 +96,17 @@ class ICONINFO(ctypes.Structure):
 
 
 class BITMAPINFOHEADER(ctypes.Structure):
+    biSize: int
+    biWidth: int
+    biHeight: int
+    biPlanes: int
+    biBitCount: int
+    biCompression: int
+    biSizeImage: int
+    biXPelsPerMeter: int
+    biYPelsPerMeter: int
+    biClrUsed: int
+    biClrImportant: int
     _fields_ = (
         ("biSize", wintypes.DWORD),
         ("biWidth", wintypes.LONG),

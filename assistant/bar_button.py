@@ -82,7 +82,7 @@ class StatusView(QtWidgets.QLabel):
                         else "Listening · microphone level is unavailable · use Stop to finish")
         self.update()
 
-    def sizeHint(self) -> QtCore.QSize:  # noqa: N802
+    def sizeHint(self) -> QtCore.QSize:
         metrics = self.fontMetrics()
         if self.ambient is not None:
             width = metrics.horizontalAdvance(self.ambient.clock) + 14 + metrics.horizontalAdvance(self.ambient.battery_text)
@@ -94,7 +94,7 @@ class StatusView(QtWidgets.QLabel):
             width = 14 + (5 + metrics.horizontalAdvance(self.text()) if self.text() else 0) + (81 if self.listening else 0)
         return QtCore.QSize(width + 10 + len(self.system.alerts) * 19, CONTROL_HEIGHT)
 
-    def paintEvent(self, event: QtGui.QPaintEvent) -> None:  # noqa: N802
+    def paintEvent(self, event: QtGui.QPaintEvent) -> None:
         painter = QtGui.QPainter(self)
         painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
         painter.setFont(self.font())
@@ -183,7 +183,7 @@ class Divider(QtWidgets.QWidget):
         self.setFixedSize(9, 16)
         self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
 
-    def paintEvent(self, event: QtGui.QPaintEvent) -> None:  # noqa: N802 -- Qt virtual method
+    def paintEvent(self, event: QtGui.QPaintEvent) -> None:
         painter = QtGui.QPainter(self)
         color = QtGui.QColor(self.surface.ink.foreground)
         color.setAlpha(65)

@@ -1,6 +1,4 @@
-from ctypes import _CArgObject
-
-from win32more._win32 import ComPtr
+from win32more._win32 import ByReference, ComPtr, Guid
 from win32more.Windows.Win32.Graphics.Direct2D.Common import D2D1_BEZIER_SEGMENT, D2D_POINT_2F
 
 class ID2D1Factory(ComPtr):
@@ -18,4 +16,4 @@ class ID2D1GeometrySink(ComPtr):
     def EndFigure(self, end: int) -> None: ...
     def Close(self) -> int: ...
 
-def D2D1CreateFactory(factory_type: int, iid: _CArgObject, options: None, result: _CArgObject) -> int: ...
+def D2D1CreateFactory(factory_type: int, iid: ByReference[Guid], options: None, result: ByReference[ID2D1Factory]) -> int: ...

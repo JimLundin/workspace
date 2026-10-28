@@ -7,7 +7,9 @@ from winapi._core import fn, kernel32, last_error
 
 
 class _Blob(ctypes.Structure):
-    _fields_ = [("size", wintypes.DWORD), ("data", ctypes.POINTER(ctypes.c_ubyte))]
+    size: int
+    data: int | None
+    _fields_ = (("size", wintypes.DWORD), ("data", ctypes.c_void_p))
 
 
 _crypt32 = ctypes.WinDLL("crypt32", use_last_error=True)
@@ -20,12 +22,14 @@ _LocalFree = fn(kernel32, "LocalFree", ctypes.c_void_p, ctypes.c_void_p)
 
 def _transform(data: bytes, *, decrypt: bool) -> bytes:
     buffer = ctypes.create_string_buffer(data)
-    source = _Blob(len(data), ctypes.cast(buffer, ctypes.POINTER(ctypes.c_ubyte)))
+    source = _Blob(len(data), ctypes.addressof(buffer))
     result = _Blob()
     operation = _Unprotect if decrypt else _Protect
     if not operation(ctypes.byref(source), None, None, None, None, 1, ctypes.byref(result)):
         raise last_error()
     try:
+        if result.data is None:
+            raise OSError("DPAPI returned no output buffer.")
         return ctypes.string_at(result.data, result.size)
     finally:
         _LocalFree(result.data)

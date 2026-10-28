@@ -1,5 +1,4 @@
 """Shared native panel controls and styling. Qt objects stay on the UI thread."""
-# pyright: reportUnknownMemberType=false, reportUnknownArgumentType=false
 
 from collections.abc import Callable
 
@@ -71,7 +70,10 @@ def button(text: str, callback: Callable[[], None], *, tip: str = "", name: str 
         widget.setObjectName(name)
     # Plain slotted controllers need not support weak references just because a
     # Qt signal owns a callback. Qt retains this small closure with the button.
-    widget.clicked.connect(lambda: callback())  # noqa: PLW0108  # Qt cannot weak-reference every slotted callback owner.
+    def clicked() -> None:
+        callback()
+
+    widget.clicked.connect(clicked)
     return widget
 
 

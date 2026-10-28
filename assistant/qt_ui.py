@@ -54,7 +54,10 @@ class EventLoop:
         self.closed = False
         self.timer = QtCore.QTimer(app)
         self.timer.setInterval(16)
-        self.timer.timeout.connect(lambda: self.painted())  # noqa: PLW0108  # Retain slotted callback owners.
+        def paint_tick() -> None:
+            self.painted()
+
+        self.timer.timeout.connect(paint_tick)
         EventLoop._users += 1
         if EventLoop._users == 1:
             try:

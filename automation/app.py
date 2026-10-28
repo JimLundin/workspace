@@ -196,7 +196,7 @@ def _native_execution(settings: Settings | Missing, bridge: BridgeServer, hwnd: 
     return NativeExecution(execution, bridge, meetings, contexts), machine
 
 
-def run(  # noqa: PLR0915 (one scope owns the lease, native window, and cleanup order)
+def run(
     settings: Settings | Missing, *, folder: Path = DIRECTORY / "work", execution: WorkExecution | None = None,
     ready: Callable[[], None] = keeper.ready, title: str = AUTOMATION_WINDOW,
 ) -> None:
@@ -212,7 +212,7 @@ def run(  # noqa: PLR0915 (one scope owns the lease, native window, and cleanup 
         tasks = TaskStore(folder / "work.sqlite3")
         routines, contexts = RoutineStore(tasks.path), ContextStore(tasks.path)
         routines.ensure_meeting_notes(at=time.time())
-        shutdown, failed = threading.Event(), threading.Event()
+        shutdown = threading.Event()
         controller: WorkController
 
         def run_owns(reference: RunRef) -> bool:
@@ -227,80 +227,26 @@ def run(  # noqa: PLR0915 (one scope owns the lease, native window, and cleanup 
         if execution is None:
             execution, machine = _native_execution(settings, bridge, hwnd, contexts)
             cleanup.callback(machine.close_background)
-        previous: RunRef | None = None
+        events = WorkEvents(bridge, folder, hwnd)
+        controller = WorkController(tasks, execution, owner=bridge.discovery.epoch, log=events.log, now=time.time,
+                                    new_run_id=lambda: uuid.uuid4().hex, on_change=events.changed, on_error=events.problem)
 
-        def problem(reason: str) -> None:
-            # Caller details may include exception payloads; retain only an
-            # operational marker here and expose durable task state separately.
-            failed.set()
-            report("The work process encountered an error and is stopping for recovery.", folder=folder)
-            system.post_message(hwnd, system.WM_CLOSE, 0, 0)
-
-        def changed(snapshot: ControllerSnapshot) -> None:
-            nonlocal previous
-            active: RunRef | None
-            match snapshot.status:
-                case Working(reference) | Stopping(reference):
-                    active = reference
-                case Fault():
-                    active = None
-                    problem("Work controller failed.")
-                case Idle():
-                    active = None
-                case _:
-                    assert_never(snapshot.status)
-            if previous is not None and active != previous:
-                bridge.publish(ipc.LogEvent(previous, Finished()))
-            previous = active
-
-        def log(claim: Claim) -> Log:
-            result = VolatileLog(bridge, claim.run)
-            result.publish(Begin(claim.task.prompt, time.time()))
-            return result
-
-        controller = WorkController(tasks, execution, owner=bridge.discovery.epoch, log=log, now=time.time,
-                                    new_run_id=lambda: uuid.uuid4().hex, on_change=changed, on_error=problem)
-
-        def stop_work() -> None:
-            controller.shutdown()
-            try:
-                bridge.close()
-            finally:
-                controller.wait()
-
-        cleanup.callback(stop_work)
-
-        def maintenance() -> None:
-            while not shutdown.is_set():
-                try:
-                    if bridge.wait(0):
-                        problem("Work transport exited.")
-                        return
-                    now = time.time()
-                    routines.scan_files(now)
-                    if routines.dispatch(tasks, now=now):
-                        controller.wake()
-                except Exception:
-                    problem("Routine polling failed.")
-                    return
-                shutdown.wait(1)
+        cleanup.callback(stop_work, controller, bridge)
 
         bridge.start()
         controller.start()  # Synchronous exclusive-owner recovery precedes readiness.
-        thread = threading.Thread(target=maintenance, name="standing work", daemon=True)
+        worker_options: dict[str, object] = {"problem": events.problem}
+        thread = threading.Thread(
+            target=maintain_routines, args=(bridge, routines, tasks, controller, shutdown), kwargs=worker_options,
+            name="standing work", daemon=True,
+        )
         thread.start()
         warmup: threading.Thread | None = None
-
-        def warm_sdk() -> None:
-            try:
-                importlib.import_module("assistant.sdk")
-            except Exception:
-                report("The agent SDK could not be warmed; the next task will report its configuration state.", folder=folder)
 
         try:
             ready()
             if isinstance(settings, Settings) and settings.api_key:
-                warmup = threading.Thread(target=warm_sdk, name="work SDK warmup", daemon=True)
+                warmup = threading.Thread(target=warm_sdk, args=(folder,), name="work SDK warmup", daemon=True)
                 warmup.start()
             for message in system.messages():
                 if message.hwnd == hwnd and message.message == system.WM_CLOSE:
@@ -311,5 +257,88 @@ def run(  # noqa: PLR0915 (one scope owns the lease, native window, and cleanup 
             thread.join()
             if warmup is not None:
                 warmup.join()
-        if failed.is_set():
+        if events.failed.is_set():
             raise OSError("The work process stopped after an operational failure.")
+
+
+class WorkEvents:
+    """The work process owns failure signalling and sequential run observations.
+
+    Previous-run identity changes in this observer so it can publish exactly one
+    Finished event when the controller leaves a run. Callers see native/log effects.
+    """
+
+    __slots__ = ('bridge', 'failed', 'folder', 'hwnd', 'previous')
+
+    def __init__(self, bridge: BridgeServer, folder: Path, hwnd: int) -> None:
+        self.bridge, self.folder, self.hwnd = bridge, folder, hwnd
+        self.failed = threading.Event()
+        self.previous: RunRef | None = None
+
+    def problem(self, reason: str) -> None:
+        # Caller details may include exception payloads; retain only an
+        # operational marker here and expose durable task state separately.
+        self.failed.set()
+        report("The work process encountered an error and is stopping for recovery.", folder=self.folder)
+        system.post_message(self.hwnd, system.WM_CLOSE, 0, 0)
+
+    def changed(self, snapshot: ControllerSnapshot) -> None:
+        active: RunRef | None
+        match snapshot.status:
+            case Working(reference) | Stopping(reference):
+                active = reference
+            case Fault():
+                active = None
+                self.problem("Work controller failed.")
+            case Idle():
+                active = None
+            case _:
+                assert_never(snapshot.status)
+        if self.previous is not None and active != self.previous:
+            self.bridge.publish(ipc.LogEvent(self.previous, Finished()))
+        self.previous = active
+
+    def log(self, claim: Claim) -> Log:
+        result = VolatileLog(self.bridge, claim.run)
+        result.publish(Begin(claim.task.prompt, time.time()))
+        return result
+
+
+
+def stop_work(controller: WorkController, bridge: BridgeServer) -> None:
+    controller.shutdown()
+    try:
+        bridge.close()
+    finally:
+        controller.wait()
+
+
+def warm_sdk(folder: Path) -> None:
+    try:
+        importlib.import_module("assistant.sdk")
+    except Exception:
+        report("The agent SDK could not be warmed; the next task will report its configuration state.", folder=folder)
+
+
+def maintain_routines(
+    bridge: BridgeServer, routines: RoutineStore, tasks: TaskStore, controller: WorkController,
+    shutdown: threading.Event, *, problem: Callable[[str], None],
+) -> None:
+    """Poll this process's transport/store, waking its controller until shutdown.
+
+    These six dependencies bind the worker to the same owned transport, durable
+    routine and task stores, controller, shutdown lifetime and native failure dispatcher.
+    """
+    while not shutdown.is_set():
+        try:
+            if bridge.wait(0):
+                problem("Work transport exited.")
+                return
+            now = time.time()
+            routines.scan_files(now)
+            if routines.dispatch(tasks, now=now):
+                controller.wake()
+        except Exception:
+            problem("Routine polling failed.")
+            return
+        shutdown.wait(1)

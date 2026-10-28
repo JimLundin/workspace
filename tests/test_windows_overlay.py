@@ -1,5 +1,4 @@
 """Live key feedback on a hidden Qt canvas, without taking focus or sending input."""
-# pyright: reportPrivateUsage=false
 
 import sys
 import time
@@ -35,7 +34,9 @@ class HiddenDesktop:
     def __init__(self) -> None:
         self.now: float | None = 1.0
         self.point: tuple[int, int] = (0, 0)
-        self.position: tuple[int, int] | None = None
+        self.position: tuple[int, int] | None = (1000, 600)
+        self.windows: list[QtWidgets.QWidget] = []
+        self.moves: tuple[tuple[int, Rect], ...] = ()
 
     def clock(self) -> float:
         return time.monotonic() if self.now is None else self.now
@@ -53,13 +54,19 @@ class HiddenDesktop:
         self.position = position
 
     def prepare(self, window: QtWidgets.QWidget, *, click_through: bool) -> int:
+        self.windows.append(window)
         return int(window.winId())
 
     def present(self, window: QtWidgets.QWidget) -> None:
         window.hide()
 
     def move(self, frame: int, area: Rect) -> None:
-        pass
+        self.moves = (*self.moves, (frame, area))
+
+    def canvas(self) -> KeymapCanvas:
+        value = self.windows[0].findChild(KeymapCanvas)
+        assert value is not None
+        return value
 
 
 @contextmanager
@@ -72,8 +79,8 @@ def hidden_overlay() -> Generator[tuple[QtWidgets.QApplication, KeymapOverlay, H
         yield root, overlay, desktop
     finally:
         overlay.show(None, "BASE", WORK, visible=False)
-        overlay._window.deleteLater()
-        overlay._handle.deleteLater()
+        for window in desktop.windows:
+            window.deleteLater()
         QtCore.QCoreApplication.sendPostedEvents(None, QtCore.QEvent.Type.DeferredDelete)
 
 
@@ -83,8 +90,7 @@ def key_style(canvas: KeymapCanvas, name: str) -> tuple[str, ...]:
 
 
 def test_overlay_drag_retains_physical_pixels_at_fractional_display_scale() -> None:
-    with hidden_overlay() as (_, overlay, desktop):
-        overlay._move((1000, 600))
+    with hidden_overlay() as (_, _overlay, desktop):
         for kind, logical, physical, pressed in (
             (QtCore.QEvent.Type.MouseButtonPress, (800, 480), (1000, 600), Qt.MouseButton.LeftButton),
             (QtCore.QEvent.Type.MouseMove, (820, 500), (1025, 625), Qt.MouseButton.LeftButton),
@@ -93,14 +99,19 @@ def test_overlay_drag_retains_physical_pixels_at_fractional_display_scale() -> N
             event = QtGui.QMouseEvent(kind, QtCore.QPointF(5, 5), QtCore.QPointF(*logical),
                                      Qt.MouseButton.LeftButton, pressed, Qt.KeyboardModifier.NoModifier)
             desktop.point = physical
-            QtWidgets.QApplication.sendEvent(overlay._handle, event)
-        assert overlay._position == (1025, 625) and overlay._drag is None
+            QtWidgets.QApplication.sendEvent(desktop.windows[1], event)
         assert desktop.position == (1025, 625)
-        assert not overlay._window.isVisible() and not overlay._handle.isVisible()
+        assert all(not window.isVisible() for window in desktop.windows)
+        released = desktop.moves
+        desktop.point = (1050, 650)
+        event = QtGui.QMouseEvent(QtCore.QEvent.Type.MouseMove, QtCore.QPointF(5, 5), QtCore.QPointF(840, 520),
+                                 Qt.MouseButton.NoButton, Qt.MouseButton.NoButton, Qt.KeyboardModifier.NoModifier)
+        QtWidgets.QApplication.sendEvent(desktop.windows[1], event)
+        assert desktop.moves == released
 
 
 def check_chord_feedback(overlay: KeymapOverlay, desktop: HiddenDesktop) -> None:
-    canvas = overlay._canvas
+    canvas = desktop.canvas()
     desktop.now = 1.0
     normal_q, normal_m, normal_b = (key_style(canvas, name) for name in ("Q", "M", "B"))
     normal_n = key_style(canvas, "N")
@@ -127,7 +138,7 @@ def check_chord_feedback(overlay: KeymapOverlay, desktop: HiddenDesktop) -> None
 
 
 def check_feedback_across_layers(overlay: KeymapOverlay, desktop: HiddenDesktop) -> None:
-    canvas = overlay._canvas
+    canvas = desktop.canvas()
     desktop.now = 1.0
     overlay.show(Layer.SYM, "SYM", WORK, visible=True)
     normal_q, normal_m = key_style(canvas, "Q"), key_style(canvas, "M")
@@ -148,7 +159,7 @@ def check_feedback_across_layers(overlay: KeymapOverlay, desktop: HiddenDesktop)
 
 
 def check_hiding_and_resetting(overlay: KeymapOverlay, desktop: HiddenDesktop) -> None:
-    canvas = overlay._canvas
+    canvas = desktop.canvas()
     desktop.now = 1.0
     overlay.show(None, "BASE", WORK, visible=True)
     normal_q, normal_m = key_style(canvas, "Q"), key_style(canvas, "M")
@@ -167,7 +178,7 @@ def check_hiding_and_resetting(overlay: KeymapOverlay, desktop: HiddenDesktop) -
 
 def test_overlay_renders_chords_flashes_layer_changes_and_resets() -> None:
     with hidden_overlay() as (root, overlay, desktop):
-        canvas = overlay._canvas
+        canvas = desktop.canvas()
         check_chord_feedback(overlay, desktop)
         check_feedback_across_layers(overlay, desktop)
         check_hiding_and_resetting(overlay, desktop)

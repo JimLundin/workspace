@@ -1,5 +1,4 @@
 """Bounded conversation bubbles and history on the assistant UI thread."""
-# pyright: reportUnknownMemberType=false, reportUnknownArgumentType=false
 
 import time
 import webbrowser
@@ -301,7 +300,7 @@ class AgentToasts:
         for _attempt in range(MAX_VISIBLE):
             desired = {toast.key for toast in self.stack.toasts}
             retiring = sorted((card for key, card in self.cards.items() if key not in desired),
-                              key=lambda card: card.order, reverse=True)
+                              key=card_order, reverse=True)
             # Reclaim surplus exits before acquiring arrivals. Active and spare
             # windows together stay bounded, even when a whole page is replaced.
             for card in retiring[max(0, MAX_VISIBLE - len(desired)):]:
@@ -311,7 +310,7 @@ class AgentToasts:
                     self.cards[toast.key] = self.acquire(toast, width)
                     created.add(toast.key)
             retiring = sorted((card for key, card in self.cards.items() if key not in desired),
-                              key=lambda card: card.order, reverse=True)
+                              key=card_order, reverse=True)
             reserved = retiring[:max(0, MAX_VISIBLE - len(desired))]
             available = (work.height - margin * 2 - reserve - gap * max(0, len(desired) + len(reserved) - 1)
                          - sum(card.height for card in reserved))
@@ -365,7 +364,7 @@ class AgentToasts:
                 else:
                     card.motion = None
                     exits = (*exits, card)
-        retiring = sorted((card for card in self.cards.values() if card.retiring), key=lambda card: card.order, reverse=True)
+        retiring = sorted((card for card in self.cards.values() if card.retiring), key=card_order, reverse=True)
         for card in retiring[max(0, MAX_VISIBLE - len(desired)):]:
             self.release(card)
         for toast in self.stack.toasts:
@@ -404,7 +403,7 @@ class AgentToasts:
         margin, gap = round(16 * scale), round(10 * scale)
         bottom = self.work.bottom - margin
         targets: list[tuple[Card, Frame]] = []
-        for card in sorted(self.cards.values(), key=lambda card: card.order, reverse=True):
+        for card in sorted(self.cards.values(), key=card_order, reverse=True):
             bottom -= card.height
             right = self.work.right - margin
             if card.right != right:
@@ -467,36 +466,21 @@ class AgentToasts:
         self.stack = hide(self.stack, key)
         self.refresh()
 
-    def action(self, url: QtCore.QUrl) -> None:  # noqa: PLR0915  # Exact source actions share the floating feed dispatcher.
+    def action(self, url: QtCore.QUrl) -> None:
         parsed = urlsplit(url.toString())
         if parsed.scheme in ('http', 'https', 'mailto'):
             webbrowser.open(url.toString())
             return
         if parsed.scheme != 'workspace':
             return
+        if parsed.netloc == 'agent-option':
+            self.answer_option(parsed.query)
+            return
         values = parse_qs(parsed.query)
         chat, identity, source = (values.get(key, [''])[0] for key in ('chat', 'message', 'source'))
         feed = self.session.communications
-        if parsed.netloc == 'agent-option':
-            self.agent.respond(values.get('request', [''])[0], values.get('answer', [''])[0])
-            return
         if parsed.netloc == 'console-option':
-            index = values.get('question', ['0'])[0]
-            if not index.isdecimal():
-                return
-            question = int(index)
-            answer = values.get('answer', [''])[0]
-            for card in self.cards.values():
-                origin = origin_item(card.content)
-                match origin:
-                    case WorkItem(item=console_requests.Request(identity=request_id, questions=questions, state=console_requests.State.WAITING)):
-                        if (not card.retiring and request_id == identity and 0 <= question < len(questions)
-                                and not questions[question].multiple and answer in (option.label for option in questions[question].options)
-                                and self.agent.on_console is not None):
-                            self.agent.on_console(console_requests.Answer(identity, question, answer))
-                            break
-                    case _:
-                        pass
+            self.answer_console(identity, values)
             return
         if parsed.netloc == 'console-dismiss' and self.agent.on_console is not None:
             self.agent.on_console(console_requests.Dismiss(identity))
@@ -558,7 +542,7 @@ class AgentToasts:
         spin = False
         revealing = False
         animate = self.motion_enabled()
-        reader = next((card for card in sorted(self.cards.values(), key=lambda card: card.order) if card.needs_reading()), None)
+        reader = next((card for card in sorted(self.cards.values(), key=card_order) if card.needs_reading()), None)
         before = self.stack
         for key, card in tuple(self.cards.items()):
             if card.motion is not None:
@@ -659,3 +643,31 @@ class AgentToasts:
         self.materials.close()
         self.measure.close()
         self.loop.close()
+
+
+
+    def answer_console(self, identity: str, values: dict[str, list[str]]) -> None:
+        index = values.get('question', ['0'])[0]
+        if not index.isdecimal():
+            return
+        question = int(index)
+        answer = values.get('answer', [''])[0]
+        for card in self.cards.values():
+            origin = origin_item(card.content)
+            match origin:
+                case WorkItem(item=console_requests.Request(identity=request_id, questions=questions, state=console_requests.State.WAITING)):
+                    if (not card.retiring and request_id == identity and 0 <= question < len(questions)
+                            and not questions[question].multiple and answer in (option.label for option in questions[question].options)
+                            and self.agent.on_console is not None):
+                        self.agent.on_console(console_requests.Answer(identity, question, answer))
+                        break
+                case _:
+                    pass
+
+    def answer_option(self, query: str) -> None:
+        values = parse_qs(query)
+        self.agent.respond(values.get('request', [''])[0], values.get('answer', [''])[0])
+
+
+def card_order(card: Card) -> tuple[int, float, int, int]:
+    return card.order

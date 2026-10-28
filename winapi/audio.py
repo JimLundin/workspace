@@ -13,6 +13,13 @@ from winapi.system import EventHandle, wait_any
 
 
 class WAVEFORMATEX(ctypes.Structure):
+    wFormatTag: int
+    nChannels: int
+    nSamplesPerSec: int
+    nAvgBytesPerSec: int
+    nBlockAlign: int
+    wBitsPerSample: int
+    cbSize: int
     _pack_ = 1
     _fields_ = (
         ("wFormatTag", wintypes.WORD),
@@ -26,6 +33,14 @@ class WAVEFORMATEX(ctypes.Structure):
 
 
 class WAVEHDR(ctypes.Structure):
+    lpData: int | None
+    dwBufferLength: int
+    dwBytesRecorded: int
+    dwUser: int
+    dwFlags: int
+    dwLoops: int
+    lpNext: int | None
+    reserved: int
     _fields_ = (
         ("lpData", ctypes.c_void_p),
         ("dwBufferLength", wintypes.DWORD),
@@ -59,6 +74,9 @@ _waveInClose = fn(winmm, "waveInClose", wintypes.UINT, _HWAVEIN)
 
 
 class MMTIME(ctypes.Structure):
+    kind: int
+    value: int
+    padding: int
     _fields_ = (("kind", wintypes.UINT), ("value", wintypes.DWORD), ("padding", wintypes.DWORD))
 
     def __init__(self, kind: int = 4, value: int = 0, padding: int = 0) -> None:

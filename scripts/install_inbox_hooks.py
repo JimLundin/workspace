@@ -2,6 +2,7 @@
 
 import argparse
 import copy
+import inspect
 import json
 import os
 import shlex
@@ -82,7 +83,10 @@ def merged(original: dict[str, object], command: str, *, codex: bool) -> dict[st
 
 
 def install(path: Path, command: str, *, codex: bool) -> bool:
-    loaded: object = json.loads(path.read_text()) if path.exists() else {}
+    if path.exists():
+        loaded: object = json.loads(path.read_text())
+    else:
+        loaded = dict[str, object]()
     current = configuration(loaded)
     updated = merged(current, command, codex=codex)
     if updated == current:
@@ -104,12 +108,18 @@ def main() -> None:
     parser.add_argument("--python", required=True)
     parser.add_argument("--script", required=True)
     parser.add_argument("--home", type=Path, default=Path.home())
-    args = parser.parse_args()
-    parts = (args.python, "-B", args.script)
+    observed: dict[str, object] = dict(inspect.getmembers(parser.parse_args()))
+    match observed:
+        case {"python": str() as interpreter, "script": str() as script, "home": Path() as home}:
+            pass
+        case _:
+            parser.error("Invalid hook installation arguments.")
+    parts = (interpreter, "-B", script)
     command = subprocess.list2cmdline(parts) if os.name == "nt" else shlex.join(parts)
-    changes = {"codex": install(args.home / ".codex" / "hooks.json", command, codex=True),
-               "claude": install(args.home / ".claude" / "settings.json", command + " --claude", codex=False)}
-    print(json.dumps({"workspace_hooks_updated": changes}))
+    changes = {"codex": install(home / ".codex" / "hooks.json", command, codex=True),
+               "claude": install(home / ".claude" / "settings.json", command + " --claude", codex=False)}
+    result: dict[str, object] = {"workspace_hooks_updated": changes}
+    print(json.dumps(result))
 
 
 if __name__ == "__main__":

@@ -1,5 +1,4 @@
 """A searchable window list, independent of the window manager and its workspaces."""
-# pyright: reportUnknownMemberType=false, reportUnknownArgumentType=false
 
 from collections.abc import Callable, Sequence
 
@@ -70,7 +69,7 @@ QLabel {{ color: {ink.secondary}; font: 11px 'Segoe UI'; }}
             self.close()
             self.focus_window(handle)
 
-    def eventFilter(self, watched: QtCore.QObject, event: QtCore.QEvent) -> bool:  # noqa: N802
+    def eventFilter(self, watched: QtCore.QObject, event: QtCore.QEvent) -> bool:
         if event.type() == QtCore.QEvent.Type.KeyPress and isinstance(event, QtGui.QKeyEvent):
             key = event.key()
             if key in (Qt.Key.Key_Up, Qt.Key.Key_Down):

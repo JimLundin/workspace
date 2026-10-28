@@ -1,5 +1,4 @@
 """WASAPI ABI and continuous capture with synthetic devices, never the real mic."""
-# pyright: reportPrivateUsage=false
 
 import ctypes
 import sys
@@ -134,7 +133,7 @@ class Wasapi:
         return 0
 
     def capture(self, handle: int, index: int, arguments: tuple[object, ...]) -> None:
-        rate = cast(int, self.format.nSamplesPerSec)
+        rate = self.format.nSamplesPerSec
         if index == 5:
             if missing := self.dropouts.pop((handle, self.delivered[handle]), 0):
                 self.delivered[handle] += missing
@@ -143,8 +142,8 @@ class Wasapi:
             set_uint(arguments[1], self.packet_frames if available >= self.packet_frames else 0)
         elif index == 3:
             value = 1000 if handle == 30 else 2000
-            samples = self.packet_frames * cast(int, self.format.nChannels)
-            pcm = array("f", [value / 32768] * samples) if cast(int, self.format.wFormatTag) == 3 else array("h", [value] * samples)
+            samples = self.packet_frames * self.format.nChannels
+            pcm = array("f", [value / 32768] * samples) if self.format.wFormatTag == 3 else array("h", [value] * samples)
             self.buffer = ctypes.create_string_buffer(pcm.tobytes())
             set_pointer(arguments[1], ctypes.addressof(self.buffer))
             set_uint(arguments[2], self.packet_frames)

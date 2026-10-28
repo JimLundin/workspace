@@ -3,6 +3,7 @@
 from assistant.keymap import ROWS, Kind, indicator_text, keymap
 from miryoku.layout import Layer
 from protocol import Tool
+lazy from assistant.keymap import TOOL_NAMES
 
 
 def caps(layer: Layer | None) -> dict[str, tuple[str, str, Kind]]:
@@ -69,7 +70,6 @@ def test_every_tool_has_a_label() -> None:
     layers: list[Layer | None] = [None, *list(Layer)]
     labels = {cap.label for layer in layers for row in keymap(layer) for cap in row if cap.kind is Kind.TOOL}
     assert len(labels) == len(set(Tool))
-    from assistant.keymap import TOOL_NAMES  # noqa: PLC0415
     assert set(TOOL_NAMES) == set(Tool)
 
 

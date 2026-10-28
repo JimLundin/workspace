@@ -9,6 +9,15 @@ from winapi._core import fn, kernel32, last_error, shell32
 
 
 class _Limits(ctypes.Structure):
+    PerProcessUserTimeLimit: int
+    PerJobUserTimeLimit: int
+    LimitFlags: int
+    MinimumWorkingSetSize: int
+    MaximumWorkingSetSize: int
+    ActiveProcessLimit: int
+    Affinity: int
+    PriorityClass: int
+    SchedulingClass: int
     _fields_ = [
         ("PerProcessUserTimeLimit", ctypes.c_int64), ("PerJobUserTimeLimit", ctypes.c_int64),
         ("LimitFlags", wintypes.DWORD), ("MinimumWorkingSetSize", ctypes.c_size_t),
@@ -18,12 +27,24 @@ class _Limits(ctypes.Structure):
 
 
 class _Counters(ctypes.Structure):
+    ReadOperationCount: int
+    WriteOperationCount: int
+    OtherOperationCount: int
+    ReadTransferCount: int
+    WriteTransferCount: int
+    OtherTransferCount: int
     _fields_ = [(name, ctypes.c_uint64) for name in (
         "ReadOperationCount", "WriteOperationCount", "OtherOperationCount", "ReadTransferCount", "WriteTransferCount", "OtherTransferCount",
     )]
 
 
 class _ExtendedLimits(ctypes.Structure):
+    BasicLimitInformation: _Limits
+    IoInfo: _Counters
+    ProcessMemoryLimit: int
+    JobMemoryLimit: int
+    PeakProcessMemoryUsed: int
+    PeakJobMemoryUsed: int
     _fields_ = [
         ("BasicLimitInformation", _Limits), ("IoInfo", _Counters),
         ("ProcessMemoryLimit", ctypes.c_size_t), ("JobMemoryLimit", ctypes.c_size_t),
@@ -32,6 +53,14 @@ class _ExtendedLimits(ctypes.Structure):
 
 
 class _Accounting(ctypes.Structure):
+    TotalUserTime: int
+    TotalKernelTime: int
+    ThisPeriodTotalUserTime: int
+    ThisPeriodTotalKernelTime: int
+    TotalPageFaultCount: int
+    TotalProcesses: int
+    ActiveProcesses: int
+    TotalTerminatedProcesses: int
     _fields_ = [
         ("TotalUserTime", ctypes.c_int64), ("TotalKernelTime", ctypes.c_int64),
         ("ThisPeriodTotalUserTime", ctypes.c_int64), ("ThisPeriodTotalKernelTime", ctypes.c_int64),
@@ -41,6 +70,24 @@ class _Accounting(ctypes.Structure):
 
 
 class _Startup(ctypes.Structure):
+    cb: int
+    lpReserved: str | None
+    lpDesktop: str | None
+    lpTitle: str | None
+    dwX: int
+    dwY: int
+    dwXSize: int
+    dwYSize: int
+    dwXCountChars: int
+    dwYCountChars: int
+    dwFillAttribute: int
+    dwFlags: int
+    wShowWindow: int
+    cbReserved2: int
+    lpReserved2: int | None
+    hStdInput: int | None
+    hStdOutput: int | None
+    hStdError: int | None
     _fields_ = [
         ("cb", wintypes.DWORD), ("lpReserved", wintypes.LPWSTR), ("lpDesktop", wintypes.LPWSTR), ("lpTitle", wintypes.LPWSTR),
         ("dwX", wintypes.DWORD), ("dwY", wintypes.DWORD), ("dwXSize", wintypes.DWORD), ("dwYSize", wintypes.DWORD),
@@ -51,6 +98,10 @@ class _Startup(ctypes.Structure):
 
 
 class _ProcessInfo(ctypes.Structure):
+    process: int | None
+    thread: int | None
+    pid: int
+    tid: int
     _fields_ = [("process", wintypes.HANDLE), ("thread", wintypes.HANDLE), ("pid", wintypes.DWORD), ("tid", wintypes.DWORD)]
 
 
@@ -72,6 +123,21 @@ _GetProcessId = fn(kernel32, "GetProcessId", wintypes.DWORD, wintypes.HANDLE)
 
 
 class _ShellExecuteInfo(ctypes.Structure):
+    cbSize: int
+    fMask: int
+    hwnd: int | None
+    lpVerb: str | None
+    lpFile: str | None
+    lpParameters: str | None
+    lpDirectory: str | None
+    nShow: int
+    hInstApp: int | None
+    lpIDList: int | None
+    lpClass: str | None
+    hkeyClass: int | None
+    dwHotKey: int
+    hIcon: int | None
+    hProcess: int | None
     _fields_ = [
         ("cbSize", wintypes.DWORD), ("fMask", wintypes.ULONG), ("hwnd", wintypes.HWND),
         ("lpVerb", wintypes.LPCWSTR), ("lpFile", wintypes.LPCWSTR), ("lpParameters", wintypes.LPCWSTR),
@@ -174,7 +240,9 @@ class ProcessJob:
         flags = 0x0800_0004  # CREATE_NO_WINDOW | CREATE_SUSPENDED
         if not _CreateProcess(arguments[0], command, None, None, False, flags, None, None, ctypes.byref(startup), ctypes.byref(info)):
             raise last_error()
-        process = Process(int(info.process), int(info.pid))
+        if info.process is None:
+            raise OSError("Windows returned no process handle after process creation.")
+        process = Process(info.process, info.pid)
         try:
             if not _AssignProcessToJobObject(self.handle, info.process) or _ResumeThread(info.thread) == 0xFFFF_FFFF:
                 raise last_error()

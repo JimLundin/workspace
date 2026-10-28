@@ -59,9 +59,11 @@ class ManagerPeer:
         if self.answer is not None:
             body = self.answer
         elif args == ("query", "paused"):
-            body = json.dumps({"success": self.pause_state is not None, "data": self.pause_state})
+            observation: dict[str, object] = {"success": self.pause_state is not None, "data": self.pause_state}
+            body = json.dumps(observation)
         elif args == ("query", "windows"):
-            body = json.dumps({"success": True, "data": self.windows})
+            observation = {"success": True, "data": self.windows}
+            body = json.dumps(observation)
         else:
             assert args[0] == "command"
             self.commands.append(args)
@@ -135,7 +137,7 @@ def test_existing_manager_is_borrowed_and_its_config_and_lifetime_are_preserved(
     wm.close()
     assert not peer.starts and not peer.commands
     assert peer.pause_state is True
-    assert wm.process is None and wm.config.read_bytes() == original
+    assert process_of(wm) is None and wm.config.read_bytes() == original
 
 
 def test_owned_paused_manager_is_resumed_before_exit_and_keeps_user_config(tmp_path: Path) -> None:
@@ -148,7 +150,7 @@ def test_owned_paused_manager_is_resumed_before_exit_and_keeps_user_config(tmp_p
     peer.pause_state = True
     wm.close()
     assert peer.commands == [("command", "wm-toggle-pause"), ("command", "wm-exit")]
-    assert peer.process.waits == [5] and not peer.process.killed and wm.process is None
+    assert peer.process.waits == [5] and not peer.process.killed and process_of(wm) is None
     wm.close()
     assert len(peer.commands) == 2
 
@@ -187,7 +189,7 @@ def test_failed_start_releases_ownership_and_disabled_tiling_does_not_launch(tmp
     wm = manager(tmp_path, peer)
     with TestCase().assertRaisesRegex(OSError, "could not start"):
         wm.start()
-    assert wm.process is None and len(peer.starts) == 1
+    assert process_of(wm) is None and len(peer.starts) == 1
     peer.start_enabled = False
     wm.start()
     assert len(peer.starts) == 1
@@ -237,3 +239,7 @@ def test_window_switcher_focuses_the_exact_container_including_a_hidden_workspac
     wm = manager(tmp_path, peer)
     assert wm.focus(42)
     assert peer.commands == [('command', 'focus', '--container-id', IDENTITY)]
+
+
+def process_of(wm: GlazeWM) -> object:
+    return wm.process

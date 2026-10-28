@@ -27,6 +27,11 @@ _PeekMessageW = fn(user32, "PeekMessageW", wintypes.BOOL, ctypes.POINTER(wintype
 
 
 class _Mouse(ctypes.Structure):
+    point: wintypes.POINT
+    data: int
+    flags: int
+    time: int
+    extra: int
     _fields_ = [("point", wintypes.POINT), ("data", wintypes.DWORD), ("flags", wintypes.DWORD),
                 ("time", wintypes.DWORD), ("extra", ULONG_PTR)]
 

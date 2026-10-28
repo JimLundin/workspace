@@ -82,11 +82,11 @@ def test_feed_details_expand_on_request_and_never_scroll_themselves() -> None:
         panel.pump()
         card = next(card for card in panel.view.cards.values() if isinstance(card.content, WorkItem))
         handle, collapsed_height = card.handle, card.height
-        assert card.label.text() == proposal.title and not card.expanded
+        assert card.label.text() == proposal.title and not bool(card.expanded)
         assert card.label.display_text() != title, 'The compact title needs an ellipsis.'
         click_bubble(card)
         panel.pump()
-        assert card.expanded and card.height > collapsed_height and card.handle == handle
+        assert bool(card.expanded) and card.height > collapsed_height and card.handle == handle
         assert card.label.display_text() == title, 'Expansion reveals the full title.'
         assert card.label.height() >= card.label.heightForWidth(card.label.width())
         assert card.label.height() > card.label.fontMetrics().height()
@@ -105,7 +105,7 @@ def test_feed_details_expand_on_request_and_never_scroll_themselves() -> None:
         assert card.text.offset == offset
         click_bubble(card)
         panel.pump()
-        assert not card.expanded and card.label.text() == proposal.title and card.text.offset == 0
+        assert not bool(card.expanded) and card.label.text() == proposal.title and card.text.offset == 0
         assert card.height == collapsed_height
 
 
@@ -115,7 +115,7 @@ def test_curated_bubbles_show_priority_at_the_top_and_dismiss_without_opening_th
                                  2 if index == 0 else 1 if index < 3 else 0, index + 1) for index in range(8))
         panel.agent.triage(Board(enabled=True, items=items))
         panel.pump()
-        visible = sorted((card for card in panel.view.cards.values() if not card.retiring), key=lambda card: card.y)
+        visible = sorted((card for card in panel.view.cards.values() if not card.retiring), key=card_y)
         assert [card.content.title for card in visible if isinstance(card.content, WorkItem)] == ['Work 0', 'Work 1', 'Work 2']
         first = visible[0]
         assert first.dismiss.isVisible() and first.dismiss.accessibleName() == 'Dismiss item'
@@ -123,7 +123,7 @@ def test_curated_bubbles_show_priority_at_the_top_and_dismiss_without_opening_th
         assert first.text.isHidden() and first.prepared is not None and first.prepared[2].body_height == 0
         first.dismiss.click()
         panel.pump()
-        visible = sorted((card for card in panel.view.cards.values() if not card.retiring), key=lambda card: card.y)
+        visible = sorted((card for card in panel.view.cards.values() if not card.retiring), key=card_y)
         assert [card.content.title for card in visible if isinstance(card.content, WorkItem)] == ['Work 1', 'Work 2', 'Work 3']
         assert len(panel.agent.state.triage.actions) == 7
         panel.dismiss_allowed = False
@@ -184,9 +184,12 @@ def test_short_screen_keeps_every_work_item_reachable_through_the_bubble_paginat
 def test_native_notice_arrives_and_is_handled_before_the_busy_teams_worker_publishes_anything() -> None:
     original_style = application().styleSheet()
     commands: list[object] = []
+    def record_command(command: object) -> bool:
+        commands.append(command)
+        return True
     dismissed: list[NoticeKey] = []
     ui = InboxUi(dismiss_notice=dismissed.append)
-    ui.configure_communications(lambda command: commands.append(command) is None)
+    ui.configure_communications(record_command)
     try:
         agent = ui.agent(None, lambda: None, reveal=False)
         ui.pump()
@@ -232,7 +235,7 @@ def test_solution_buttons_are_compact_and_start_exact_work_without_a_composer() 
         panel.agent.triage(Board(enabled=True, items=(item,)))
         panel.pump()
         card = next(card for card in panel.view.cards.values() if isinstance(card.content, WorkItem))
-        assert card.label.text() == item.title and not card.expanded
+        assert card.label.text() == item.title and not bool(card.expanded)
         assert len(card.choices) == 2 and all(button.isVisible() for button in card.choices)
         assert card.choices[0].accessibleName() == 'Check totals · Recommended'
         assert card.choices[0].geometry().bottom() < card.window.height()
@@ -245,7 +248,7 @@ def test_solution_buttons_are_compact_and_start_exact_work_without_a_composer() 
         assert card.choices[0].text() == 'Queued'
         click_bubble(card)
         panel.pump()
-        assert card.expanded and card.height > height and not card.hint.isVisible()
+        assert bool(card.expanded) and card.height > height and not card.hint.isVisible()
         click_bubble(card)
         panel.pump()
         assert card.height == height and card.chosen
@@ -298,12 +301,12 @@ def test_expanded_feed_text_wraps_inside_the_live_card_and_scrolls_without_a_hid
                         line = layout.lineAt(index)
                         assert line.x() + line.naturalTextWidth() <= view.viewport().width() + 1
                     block = block.next()
-            if card.expanded:
+            if bool(card.expanded):
                 assert view.verticalScrollBar().maximum() > 0 and view.offset == 0
                 view.verticalScrollBar().setValue(view.verticalScrollBar().maximum())
                 panel.pump()
                 assert view.offset > 0 and view.document().textWidth() <= view.viewport().width() + 1
-        assert not card.expanded and card.label.text() == item.title and card.text.offset == 0
+        assert not bool(card.expanded) and card.label.text() == item.title and card.text.offset == 0
 
 
 def test_feed_controls_are_inside_the_painted_bubble() -> None:
@@ -391,7 +394,11 @@ def test_feed_titles_elide_without_growing_and_clicking_the_bubble_expands_detai
         collapsed = card.height
         click_bubble(card)
         panel.pump()
-        assert card.expanded and card.height > collapsed and 'Check the figures.' in card.text.toPlainText()
+        assert bool(card.expanded) and card.height > collapsed and 'Check the figures.' in card.text.toPlainText()
         click_bubble(card)
         panel.pump()
-        assert not card.expanded and card.height == collapsed
+        assert not bool(card.expanded) and card.height == collapsed
+
+
+def card_y(card: Card) -> float:
+    return card.y

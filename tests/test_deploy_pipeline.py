@@ -35,7 +35,7 @@ def test_native_development_tools_can_coexist_with_deployment_only_from_the_revi
     interpreter = PureWindowsPath(r'C:\Users\Jim.Lundin\Projects\workspace\.venv\Scripts\python.exe')
     editor = (interpreter, PureWindowsPath(r'C:\Users\Jim.Lundin\.vscode\extensions'))
     for module in ('scripts.watch', 'scripts.check', 'scripts.preview'):
-        command = (str(interpreter), '-B', '-m', module, '--once')
+        command: tuple[str, ...] = (str(interpreter), '-B', '-m', module, '--once')
         assert role_for(command, windowed=False, editor=editor) is None
         assert role_for(command, windowed=True, editor=editor) == 'runtime'
         assert role_for((r'C:\elsewhere\python.exe', *command[1:]), windowed=False, editor=editor) == 'runtime'
@@ -199,10 +199,11 @@ def test_process_classifier_preserves_only_independent_browser_host() -> None:
 
 
 def test_process_group_rejects_unowned_or_duplicate_children() -> None:
-    rows = (Process(10, 1, 'keeper', 'pythonw.exe', 1), Process(11, 10, 'assistant', 'pythonw.exe', 1),
+    rows: tuple[Process, ...] = (Process(10, 1, 'keeper', 'pythonw.exe', 1), Process(11, 10, 'assistant', 'pythonw.exe', 1),
             Process(12, 10, 'automation', 'pythonw.exe', 1), Process(13, 10, 'miryoku', 'pythonw.exe', 1))
     assert group(rows)['assistant'].pid == 11
-    for bad in ((*rows, rows[1]), (*rows, Process(14, 99, 'runtime', 'python.exe', 1)), rows[:-1]):
+    variants: tuple[tuple[Process, ...], ...] = ((*rows, rows[1]), (*rows, Process(14, 99, 'runtime', 'python.exe', 1)), rows[:-1])
+    for bad in variants:
         try:
             group(bad)
         except RuntimeError:

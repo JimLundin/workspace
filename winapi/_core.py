@@ -2,7 +2,7 @@
 
 import ctypes
 from ctypes import wintypes
-from typing import Any
+from typing import Protocol, overload
 
 from winapi.shapes import Rect
 
@@ -19,13 +19,37 @@ dwmapi = ctypes.WinDLL("dwmapi", use_last_error=True)
 comctl32 = ctypes.WinDLL("comctl32", use_last_error=True)
 
 
-def fn(dll: ctypes.WinDLL, name: str, restype: Any, *argtypes: Any) -> Any:
+class Scalar[T](Protocol):
+    """A ctypes scalar exposes the converted native return value."""
+
+    value: T
+
+
+class NativeFunction[T](Protocol):
+    """ctypes validates positional ABI arguments; the prototype fixes the result."""
+
+    def __call__(self, *args: object) -> T: ...
+
+
+@overload
+def fn[T](dll: ctypes.WinDLL, name: str, restype: type[Scalar[T]], *argtypes: type[object]) -> NativeFunction[T]: ...
+
+
+@overload
+def fn(dll: ctypes.WinDLL, name: str, restype: None, *argtypes: type[object]) -> NativeFunction[None]: ...
+
+
+def fn[T](
+    dll: ctypes.WinDLL, name: str, restype: type[Scalar[T]] | None, *argtypes: type[object],
+) -> NativeFunction[T] | NativeFunction[None]:
     """A typed foreign function: `fn(user32, "GetForegroundWindow", HWND)`."""
     prototype = ctypes.WINFUNCTYPE(restype, *argtypes, use_last_error=True)
     return prototype((name, dll))
 
 
-def optional_fn(dll: ctypes.WinDLL, name: str, restype: Any, *argtypes: Any) -> Any:
+def optional_fn[T](
+    dll: ctypes.WinDLL, name: str, restype: type[Scalar[T]], *argtypes: type[object],
+) -> NativeFunction[T] | None:
     """Like `fn`, for functions older Windows versions don't have; None if missing."""
     try:
         return fn(dll, name, restype, *argtypes)

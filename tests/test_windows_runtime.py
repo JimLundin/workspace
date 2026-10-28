@@ -1,6 +1,7 @@
 """Copied source uses the inherited SDK and Qt from the installed bundle."""
 
 import os
+import shutil
 import socket
 import subprocess
 import sys
@@ -13,7 +14,6 @@ from typing import cast
 if sys.platform != "win32":
     raise unittest.SkipTest("Windows bundle integration")
 
-from keeper import copy_source
 from runtime import LaunchMode, Relaunch, activate, execute_bootstrap
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -46,10 +46,23 @@ def test_copied_source_starts_the_sdk_and_qt_with_the_inherited_bundle(tmp_path:
         raise unittest.SkipTest("Windows bundle integration")
     activate()
     source = tmp_path / "source"
-    copy_source(ROOT, source)
+    # This owns copied production source binding, not keeper's complete mirror
+    # policy. Keeper's tests cover that policy; docs/tests/tooling are not needed
+    # to initialize the SDK and native UI in this fresh process.
+    source.mkdir()
+    def ignore_bytecode(_folder: str, names: list[str]) -> set[str]:
+        return set(names) & {"__pycache__"}
+
+    for package in ("assistant", "automation", "miryoku", "winapi"):
+        shutil.copytree(ROOT / package, source / package, ignore=ignore_bytecode)
+    for module in ROOT.glob("*.py"):
+        shutil.copyfile(module, source / module.name)
     assert not (source / ".runtime").exists() and not (source / ".python").exists()
     script = (
         "from runtime import activate; activate(); import assistant.sdk, assistant.agent_toasts; "
+        "from pathlib import Path; import os, runtime, PySide6; "
+        "assert all(Path(module.__file__).is_relative_to(Path.cwd()) for module in (runtime, assistant.sdk, assistant.agent_toasts)); "
+        "assert Path(PySide6.__file__).is_relative_to(Path(os.environ['WORKSPACE_BUNDLED_RUNTIME'])); "
         "from assistant.qt_ui import EventLoop, application; "
         "root=application(); "
         "loop=EventLoop(root, lambda: None); loop.pump(); loop.close(); root.processEvents(); print('Copied SDK and Qt passed')"

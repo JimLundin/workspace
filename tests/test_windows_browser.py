@@ -253,10 +253,10 @@ def verify_attached_dom(personal: Browser, attached: Browser, url: str) -> None:
     shot = attached.request("screenshot", {"target_id": target}, threading.Event()).image
     assert shot is not None and shot.startswith(b"\x89PNG")
     # Repaint the same attached, inactive tab without changing user selection.
-    target, identity = page["target_id"], page["tab_id"]
-    assert isinstance(target, str) and isinstance(identity, int)
+    inactive_target, identity = page["target_id"], page["tab_id"]
+    assert isinstance(inactive_target, str) and isinstance(identity, int)
 
-    verify_inactive_screenshots(attached, target, identity)
+    verify_inactive_screenshots(attached, inactive_target, identity)
 
     assert "remain open" in attached.request("close", {}, threading.Event()).text
     rows = request(personal, "tabs")["tabs"]

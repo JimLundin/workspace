@@ -2,8 +2,8 @@
 # integer HRESULTs, rather than ctypes' generic function-pointer result union.
 from win32more._win32 import ComPtr, Guid
 
-eConsole: int  # noqa: N816 - native SDK enum constant spelling.
-eRender: int  # noqa: N816 - native SDK enum constant spelling.
+eConsole: int
+eRender: int
 MMDeviceEnumerator: Guid
 
 class IMMDevice(ComPtr):

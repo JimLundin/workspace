@@ -17,6 +17,15 @@ attributes erase the already selected binary/text contract and make the native
 taskbar readiness adapter untyped. The constructor overloads and runtime behavior
 are unchanged; no subprocess wrapper or type assertion is needed.
 
+`stdlib/_ctypes.pyi` and `stdlib/ctypes/__init__.pyi` preserve the payload of
+`byref` and scalar `WINFUNCTYPE` results. Native structure construction accepts
+external values as `object`; consumed fields are declared explicitly by Workspace.
+`stdlib/winreg.pyi` and `stdlib/urllib/request.pyi` expose queried values and URL
+responses as `object`, requiring boundary validation instead of inferred `Any`.
+`stdlib/contextlib.pyi` places the AsyncIterator overload of
+`asynccontextmanager` before AsyncGenerator. This prevents Mypy from inferring
+an unreachable `Never` stream for HTTPX's AsyncIterator context managers.
+
 Replacing `builtins` as an ordinary module under `stubPath`/`mypy_path` breaks
 intrinsic type identity and narrowing. Both checkers instead use their supported
 typeshed-directory setting in `pyproject.toml`. The complete 4.1 MB standard-library
@@ -35,7 +44,7 @@ frozen mapping, hashing or Python language semantics are added.
 
 When upgrading, check the bundled `frozendict` declaration first. Remove this
 override and both typeshed-directory settings once upstream accepts the native
-constructor and preserves subprocess stream types. If an override remains
+constructor and preserves the consumed native and streaming contracts. If an override remains
 necessary, refresh the upstream standard-library files and retain only the
 required declaration corrections. Keep
 the license and record the source version here.

@@ -73,7 +73,7 @@ def test_desktop_bootstrap_preserves_arguments_streams_and_failure_status(tmp_pa
         "from runtime import activate\nactivate()\n"
         "from scripts.check import Selection, execute\n"
         "execute(Selection((), (), 'explicit iteration scope'), Path.cwd())\n"
-        "from tests.desktop_session import current_name\n"
+        "from scripts.native_desktop import current_name\n"
         "assert current_name() == os.environ['WORKSPACE_TEST_DESKTOP']\n"
         "assert sys.stdin.read() == 'Fixture input Åäö\\n'\n"
         "print(json.dumps(sys.argv[1:], ensure_ascii=False))\n"

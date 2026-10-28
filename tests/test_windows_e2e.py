@@ -4,6 +4,7 @@ It presses physical keys with SendInput, so it takes over the keyboard for a few
 seconds; that's why it only runs when asked: `WORKSPACE_E2E=1 pytest tests/test_windows_e2e.py`.
 """
 
+import ctypes
 import json
 import os
 import queue
@@ -16,27 +17,28 @@ from collections.abc import Callable, Generator
 from contextlib import contextmanager
 from pathlib import Path
 
+lazy from PySide6 import QtCore, QtWidgets
+
+from assistant.qt_runtime import prepare
+from keeper import LAYOUT_WINDOW, WM_QUIT_LAYOUT
+from protocol import MAGIC
+from tests.json_fixture import json_value
+lazy from assistant.qt_ui import application
+lazy from assistant.shell_controls import WindowsKeyObserver
+lazy from winapi import inputs, shell, system, windows
+lazy from winapi._core import fn, kernel32, user32
+
 ROOT = Path(__file__).resolve().parent.parent
 
 if sys.platform != "win32" or os.environ.get("WORKSPACE_E2E") != "1":
     raise unittest.SkipTest("end-to-end tests run on Windows, with WORKSPACE_E2E=1")
 
-import ctypes  # noqa: E402
-
-lazy from PySide6 import QtCore, QtWidgets  # noqa: E402
-
-from assistant.qt_runtime import prepare  # noqa: E402
-from assistant.qt_ui import application  # noqa: E402
-from assistant.shell_controls import WindowsKeyObserver  # noqa: E402
-from keeper import LAYOUT_WINDOW, WM_QUIT_LAYOUT  # noqa: E402
-from protocol import MAGIC  # noqa: E402
-from winapi import inputs, shell, system, windows  # noqa: E402 (Windows only)
-from winapi._core import fn, kernel32  # noqa: E402
 
 prepare()
 
 _GetModuleHandle = fn(kernel32, 'GetModuleHandleW', ctypes.c_void_p, ctypes.c_wchar_p)
 _GetProcAddress = fn(kernel32, 'GetProcAddress', ctypes.c_void_p, ctypes.c_void_p, ctypes.c_char_p)
+_SendInput = fn(user32, 'SendInput', ctypes.c_uint, ctypes.c_uint, ctypes.POINTER(inputs.INPUT), ctypes.c_int)
 UNDER_WINE = bool(_GetProcAddress(_GetModuleHandle('ntdll.dll'), b'wine_get_version'))
 """Wine garbles typed Unicode text (KEYEVENTF_UNICODE) into native text boxes; real Windows doesn't."""
 
@@ -68,7 +70,8 @@ def layout_running() -> bool:
 
 def focus_fixture(handle: int) -> None:
     # Establish native-test focus permission without a click, cursor movement or key press.
-    inputs._send([inputs.INPUT(0, inputs.INPUT_UNION(mi=inputs.MOUSEINPUT()))])  # pyright: ignore[reportPrivateUsage]
+    event = inputs.INPUT(0, inputs.InputUnion(mi=inputs.MOUSEINPUT()))
+    assert _SendInput(1, ctypes.byref(event), ctypes.sizeof(inputs.INPUT)) == 1
     assert windows.focus(handle), 'Windows refused fixture focus; no keys sent.'
     assert windows.foreground() == handle
 
@@ -132,7 +135,7 @@ def test_layout_types_colemak_dh_and_expands_snippets() -> None:
 
 
 def input_response(body: bytes) -> int | str:
-    value: object = json.loads(body)
+    value: object = json_value(body)
     if type(value) is int and value > 0:
         return value
     if isinstance(value, str) and len(value) <= 1024:
@@ -211,7 +214,7 @@ def test_mapped_typing_and_unicode_dictation_reach_a_real_console(tmp_path: Path
             tap('2', '3', '4', '5', 'q', 'w', 'e', 'r')
             inputs.type_text('\n', MAGIC)
             assert wait_for(result.exists, lambda: None)
-            assert json.loads(result.read_text(encoding='utf-8')) == 'qwfparst ' + transcript + 'qwfparst'
+            assert json_value(result.read_text(encoding='utf-8')) == 'qwfparst ' + transcript + 'qwfparst'
         console.wait(timeout=5)
     finally:
         if console.poll() is None:

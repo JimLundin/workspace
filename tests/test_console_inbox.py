@@ -4,12 +4,15 @@ import json
 import threading
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor
+from http.client import HTTPResponse
 from pathlib import Path
+from typing import cast
 from urllib.error import HTTPError
 from urllib.request import urlopen
 
 from assistant.console_inbox import ConsoleInbox
 from assistant.console_requests import Answer, Dismiss, Provider, Request, State, answered, hook_output, request
+from tests.json_fixture import json_object, json_text
 
 
 def event(provider: Provider, session: str = "fixture-session") -> dict[str, object]:
@@ -19,12 +22,13 @@ def event(provider: Provider, session: str = "fixture-session") -> dict[str, obj
 
 
 def post(endpoint: Path, provider: Provider, payload: dict[str, object]) -> object:
-    data = json.loads(endpoint.read_text())
-    message = json.dumps({"provider": provider.value, "event": payload}).encode()
-    command = urllib.request.Request(data["url"], data=message, headers={"Authorization": "Bearer " + data["token"],
+    data = cast(dict[str, str], json_object(endpoint.read_text()))
+    message_data: dict[str, object] = {"provider": provider.value, "event": payload}
+    message = json.dumps(message_data).encode()
+    command = urllib.request.Request(json_text(data["url"]), data=message, headers={"Authorization": "Bearer " + data["token"],
                                   "Content-Type": "application/json"})
-    with urlopen(command, timeout=4) as response:
-        return json.loads(response.read())
+    with cast(HTTPResponse, urlopen(command, timeout=4)) as response:
+        return json_object(response.read())
 
 
 def test_both_cli_hooks_receive_the_exact_user_answer_over_local_transport(tmp_path: Path) -> None:
@@ -106,7 +110,7 @@ def test_transport_rejects_unauthenticated_requests_and_close_restores_native_pr
     endpoint = tmp_path / "bridge.json"
     inbox = ConsoleInbox(endpoint, lambda _: arrived.set(), timeout=3)
     try:
-        location = json.loads(endpoint.read_text())["url"]
+        location = json_text(json_object(endpoint.read_text())["url"])
         try:
             urlopen(urllib.request.Request(location, data=b"{}"), timeout=2)
         except HTTPError as error:

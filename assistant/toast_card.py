@@ -227,7 +227,7 @@ class IconButton(QAbstractButton):
         self.setAccessibleName("Dismiss item" if icon is Icon.DISMISS else "Stop agent" if icon is Icon.STOP else "Show steps")
         self.setToolTip(self.accessibleName())
 
-    def paintEvent(self, event: QPaintEvent) -> None:  # noqa: N802
+    def paintEvent(self, event: QPaintEvent) -> None:
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         paint_feedback(self, painter, self.ink)
@@ -250,22 +250,22 @@ class IconButton(QAbstractButton):
                 path.lineTo(cx + 3.5, cy - direction * 1.5)
         painter.drawPath(path)
 
-    def enterEvent(self, event: QEnterEvent) -> None:  # noqa: N802 -- Qt native interface
+    def enterEvent(self, event: QEnterEvent) -> None:
         super().enterEvent(event)
         self.update()
 
-    def leaveEvent(self, event: QtCore.QEvent) -> None:  # noqa: N802 -- Qt native interface
+    def leaveEvent(self, event: QtCore.QEvent) -> None:
         super().leaveEvent(event)
         self.update()
 
-    def keyPressEvent(self, event: QKeyEvent) -> None:  # noqa: N802
+    def keyPressEvent(self, event: QKeyEvent) -> None:
         if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter, Qt.Key.Key_Space):
             self.setDown(True)
             event.accept()
         else:
             super().keyPressEvent(event)
 
-    def keyReleaseEvent(self, event: QKeyEvent) -> None:  # noqa: N802
+    def keyReleaseEvent(self, event: QKeyEvent) -> None:
         if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter, Qt.Key.Key_Space):
             self.setDown(False)
             if self.isEnabled() and not event.isAutoRepeat():
@@ -295,7 +295,7 @@ class SourceBadge(QWidget):
         self.raise_()
         self.update()
 
-    def paintEvent(self, event: QPaintEvent) -> None:  # noqa: N802
+    def paintEvent(self, event: QPaintEvent) -> None:
         content = self.card.content
         source = origin_item(content)
         sources = source.origins if source is not None and source.origins else (Origin(App.WORKSPACE, App.WORKSPACE.value),)
@@ -324,7 +324,7 @@ class Bubble(QWidget):
         self.setWindowTitle("Workspace · Agent notification")
         self.setToolTip("Press the agent voice-to-text button (N) to reply.")
 
-    def paintEvent(self, event: QPaintEvent) -> None:  # noqa: N802
+    def paintEvent(self, event: QPaintEvent) -> None:
         card = self.card
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
@@ -353,7 +353,7 @@ class Bubble(QWidget):
                 painter.setPen(QPen(QColor(card.ink.secondary), 2, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
                 painter.drawLine(self.width() - 6, round(start), self.width() - 6, min(text.y() + height, round(end)))
 
-    def mouseReleaseEvent(self, event: QMouseEvent) -> None:  # noqa: N802
+    def mouseReleaseEvent(self, event: QMouseEvent) -> None:
         prepared = self.card.prepared
         source = isinstance(self.card.content, WorkItem) and isinstance(self.card.content.item, Assessment)
         if (event.button() is Qt.MouseButton.LeftButton and prepared is not None
@@ -363,7 +363,7 @@ class Bubble(QWidget):
         else:
             super().mouseReleaseEvent(event)
 
-    def contextMenuEvent(self, event: QContextMenuEvent) -> None:  # noqa: N802
+    def contextMenuEvent(self, event: QContextMenuEvent) -> None:
         self.card.menu(event.globalPos())
         event.accept()
 
@@ -586,7 +586,7 @@ class Card:
                 button.setFont(font(8.5))
                 button.setCursor(Qt.CursorShape.PointingHandCursor)
                 button.setAccessibleName(option.text)
-                button.clicked.connect(lambda checked=False, url=option.link: self.owner.action_link(url))
+                button.clicked.connect(self.link_action(option.link))
                 self.choices.append(button)
             self.style_choices()
             return
@@ -597,9 +597,19 @@ class Card:
             button.setCursor(Qt.CursorShape.PointingHandCursor)
             button.setAccessibleName(solution.label + (' · Recommended' if index == 0 else ''))
             button.setToolTip(('Recommended: ' if index == 0 else '') + solution.detail)
-            button.clicked.connect(lambda checked=False, choice=solution.identity, version=revision: self.choose_solution(version, choice))
+            button.clicked.connect(self.solution_action(revision, solution.identity))
             self.choices.append(button)
         self.style_choices()
+
+    def link_action(self, url: str) -> Callable[[object], None]:
+        def clicked(_checked: object) -> None:
+            self.owner.action_link(url)
+        return clicked
+
+    def solution_action(self, revision: str, choice: str) -> Callable[[object], None]:
+        def clicked(_checked: object) -> None:
+            self.choose_solution(revision, choice)
+        return clicked
 
     def style_choices(self) -> None:
         for index, button in enumerate(self.choices):
@@ -699,7 +709,7 @@ class Card:
                 self.layer.show(self.handle)
 
     def measure(self, content: Content, width: int) -> Prepared:
-        if self.prepared is None or self.prepared[:2] != (content, width):
+        if self.prepared is None or self.prepared[0] != content or self.prepared[1] != width:
             self.prepared = (content, width, self.owner.measure.prepare(content, width, expanded=self.expanded))
         return self.prepared[2]
 

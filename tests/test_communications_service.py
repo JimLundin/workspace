@@ -200,7 +200,7 @@ def test_one_unavailable_chat_does_not_drop_other_chats_observed_updates(tmp_pat
     web.unavailable = frozenset()
     controller.cursor = 1
     controller.collect()
-    assert controller.feed.unavailable == ()
+    assert not tuple(controller.feed.unavailable)
 
 
 def test_saved_followed_chat_recovers_when_no_conversation_pane_is_open(tmp_path: Path) -> None:

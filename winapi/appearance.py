@@ -5,6 +5,7 @@ reads accessibility settings and samples nearby pixels off the UI thread.
 """
 
 import ctypes
+import math
 import winreg
 from collections.abc import Callable
 from concurrent.futures import Future, ThreadPoolExecutor
@@ -83,6 +84,9 @@ type Preference = Material | Contrast
 
 
 class _HighContrast(ctypes.Structure):
+    size: int
+    flags: int
+    scheme: str | None
     _fields_ = [("size", wintypes.UINT), ("flags", wintypes.DWORD), ("scheme", wintypes.LPWSTR)]
 
 
@@ -199,5 +203,5 @@ def frost_for(colors: tuple[int, ...]) -> Frost:
 
 def luminance(color: int) -> float:
     channels = tuple((color >> shift & 255) / 255 for shift in (0, 8, 16))
-    linear = tuple(value / 12.92 if value <= .04045 else ((value + .055) / 1.055) ** 2.4 for value in channels)
+    linear = tuple(value / 12.92 if value <= .04045 else math.pow((value + .055) / 1.055, 2.4) for value in channels)
     return sum(value * weight for value, weight in zip(linear, (.2126, .7152, .0722), strict=True))

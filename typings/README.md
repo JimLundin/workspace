@@ -26,6 +26,9 @@ that external data already satisfies a domain schema.
 The [Python 3.15 typeshed override](.workspace-typeshed/README.md) retains Pyright 1.1.414's
 standard-library contracts and corrects its native `frozendict` constructor and
 the binary/text types of subprocess streams.
+It also preserves native ctypes result/pointer payloads, keeps registry and URL
+observations unknown until validation, and corrects asynchronous context-manager
+overload selection. The override README records each correction.
 Both checkers select it through their supported typeshed-directory settings;
 runtime uses the builtin directly. Python's frozen mapping implementation is
 trusted, without library tests.
@@ -43,3 +46,13 @@ callback logic consumes only a writable output slot through a protocol.
 Unknown external observations remain `object` until validated, with no `Any`,
 casts or checker suppressions in the composition logic. These stubs retain the
 native API names; runtime still loads the installed dependency.
+
+Geolocation declarations cover access requests and the consumed coordinate
+fields. COM output slots carry their concrete pointer payload; ctypes prototypes
+preserve scalar results through `winapi._core.NativeFunction`. Structure fields
+are explicitly declared at their effect owners. Stubs describe native contracts;
+Workspace validates nullable pointers and unknown external values before use.
+
+Project-owned stubs use native `type` declarations and contain no checker or
+lint suppression comments. Native dependency spellings are documented in Ruff's
+naming configuration. Vendored typeshed retains its upstream declarations.

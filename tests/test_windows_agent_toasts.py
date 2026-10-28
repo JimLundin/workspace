@@ -305,7 +305,7 @@ def test_wheel_over_empty_glass_reaches_text_without_focusing_other_apps() -> No
         assert scroll_position(card) > 0 and windows.foreground() == foreground
         panel.view.show_history()
         panel.pump()
-        assert panel.view.query.history
+        assert bool(panel.view.query.history)
         panel.agent.close()
         panel.pump()
         assert router.thread is not None and not router.thread.is_alive() and not router.active
@@ -469,7 +469,7 @@ def test_one_bubble_keeps_its_result_when_finished_and_when_steps_collapse() -> 
         card.disclosure.click()
         panel.pump()
         expanded = windows.outer_rect(handle)
-        assert card.expanded and expanded.height > compact.height
+        assert bool(card.expanded) and expanded.height > compact.height
         steps = card.details.toPlainText()
         assert "Path: budget.xlsx" in steps and "Rows: 24" in steps
         assert steps.index("budget.xlsx") < steps.index("forecast.xlsx")
@@ -560,7 +560,7 @@ def test_keyboard_disclosure_is_immediate_and_keeps_the_result_attached() -> Non
         for key, expanded in ((Qt.Key.Key_Return, True), (Qt.Key.Key_Space, False)):
             QTest.keyClick(card.disclosure, key)
             panel.pump()
-            assert card.expanded is expanded and card.motion is None
+            assert bool(card.expanded) is expanded and card.motion is None
             assert card.text.toPlainText() == "The workbook is ready." and tail_visible(card.text)
 
 
@@ -826,9 +826,12 @@ def test_measured_previews_end_on_complete_lines_with_mixed_markdown_fonts() -> 
                     line = layout.lineAt(index)
                     boundaries.append(math.ceil(top + line.y() + line.height()))
                 block = block.next()
-            for available in range(1, min(math.ceil(wanted) + 1, 500)):
+            # Fit changes at rendered line ends. Exercise both sides of each
+            # decision instead of repeating equivalent integer viewport heights.
+            heights = frozenset(max(0, boundary + offset) for boundary in boundaries for offset in (-1, 0, 1))
+            for available in sorted(heights):
                 fitted = document.fit(available)
-                assert fitted in boundaries and fitted <= available
+                assert fitted == max(boundary for boundary in boundaries if boundary <= available)
 
 
 def test_notifications_are_idle_until_needed_and_leave_focus_untouched() -> None:
@@ -1021,11 +1024,11 @@ def test_history_uses_the_existing_feed_and_returns_to_current_work() -> None:
         assert not panel.view.cards
         panel.view.show_history()
         panel.pump()
-        assert panel.view.query.history and panel.view.cards
+        assert bool(panel.view.query.history) and panel.view.cards
         assert any('An earlier result worth retaining.' in card.text.toPlainText() for card in panel.view.cards.values())
         panel.view.resume()
         panel.pump()
-        assert not panel.view.query.history
+        assert not bool(panel.view.query.history)
 
 
 def test_recording_stop_is_independent_and_shutdown_closes_every_native_layer() -> None:

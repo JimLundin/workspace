@@ -1,5 +1,4 @@
 """The session schedules painting without blocking model work or revealing a window."""
-# pyright: reportPrivateUsage=false
 
 import threading
 from collections import deque

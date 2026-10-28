@@ -1,5 +1,4 @@
 """The native work overview. Every widget and draft belongs to the UI thread."""
-# pyright: reportUnknownMemberType=false, reportUnknownArgumentType=false
 
 import math
 import time
@@ -71,15 +70,19 @@ def _tree(title: str) -> QtWidgets.QTreeWidget:
     return tree
 
 
+def _identity(item: QtWidgets.QTreeWidgetItem) -> str | None:
+    value: object = item.data(0, Qt.ItemDataRole.UserRole)
+    return value if isinstance(value, str) else None
+
+
 def _selected(tree: QtWidgets.QTreeWidget) -> str | None:
     item = tree.currentItem()
-    value: object = item.data(0, Qt.ItemDataRole.UserRole) if item is not None else None
-    return value if isinstance(value, str) else None
+    return _identity(item) if item is not None else None
 
 
 def _rows(tree: QtWidgets.QTreeWidget, rows: Sequence[tuple[str, str, tuple[str, ...]]]) -> None:
     selected, scroll = _selected(tree), tree.verticalScrollBar().value()
-    previous = {item.data(0, Qt.ItemDataRole.UserRole): item for i in range(tree.topLevelItemCount())
+    previous = {_identity(item): item for i in range(tree.topLevelItemCount())
                 if (item := tree.topLevelItem(i)) is not None}
     tree.blockSignals(True)
     try:
@@ -187,7 +190,7 @@ class WorkPanel:
     )
 
 
-    def __init__(self, root: QtWidgets.QApplication, work: WorkWindow, *, clock: Callable[[], float] = time.time) -> None:  # noqa: PLR0915
+    def __init__(self, root: QtWidgets.QApplication, work: WorkWindow, *, clock: Callable[[], float] = time.time) -> None:
         self.work = work
         self.meetings: MeetingPanel | None = None
         self.snapshot = WorkSnapshot()
@@ -196,20 +199,7 @@ class WorkPanel:
         self.question_key: tuple[str, str] | None = None
         self.approval_position: int | None = None
         self.preview_painted = False
-        self.window = Window("Workspace · Work", self.hide, width=1080, height=740)
-        self.window.setMinimumSize(740, 500)
-        layout = column(self.window)
-        layout.setContentsMargins(22, 18, 22, 18)
-        heading = row()
-        heading.addWidget(label("Your work", "title"))
-        heading.addStretch()
-        heading.addWidget(button("New task", lambda: self.compose(NewDraft.NEW), name="primary"))
-        layout.addLayout(heading)
-        self.status = label("", "muted")
-        self.status.setWordWrap(True)
-        layout.addWidget(self.status)
-        self.notebook = QtWidgets.QTabWidget()
-        layout.addWidget(self.notebook, 1)
+        self.window, self.status, self.notebook = panel_frame(self)
         tasks = QtWidgets.QWidget()
         self.notebook.addTab(tasks, "Tasks")
         task_layout = row(tasks)
@@ -233,47 +223,16 @@ class WorkPanel:
             controls.addWidget(control)
         controls.addStretch()
         content.addLayout(controls)
-        self.question_frame = QtWidgets.QFrame()
-        question_layout = column(self.question_frame)
-        self.question = label("")
-        self.question.setWordWrap(True)
-        question_layout.addWidget(self.question)
-        self.reply = Editor()
-        self.reply.setMaximumHeight(100)
-        self.reply.setAccessibleName("Answer the current question")
-        question_layout.addWidget(self.reply)
-        answers = row()
-        self.answer = button("Send answer", self.answer_question, name="primary")
-        self.approve = button("Approve", lambda: self.answer_approval(ApprovalDecision.APPROVED), name="primary")
-        self.decline = button("Decline", lambda: self.answer_approval(ApprovalDecision.DECLINED))
-        self.refresh = button("Read action preview", self.review_action)
-        for control in (self.answer, self.approve, self.decline, self.refresh):
-            answers.addWidget(control)
-        answers.addStretch()
-        question_layout.addLayout(answers)
+        self.question_frame, self.question, self.reply, self.answer, self.approve, self.decline, self.refresh = question_widgets(self)
         content.addWidget(self.question_frame)
-        self.prompt_frame = QtWidgets.QFrame()
-        composer = column(self.prompt_frame)
-        self.prompt_label = label("")
-        composer.addWidget(self.prompt_label)
-        self.prompt = Editor()
-        self.prompt.setAccessibleName("Task instructions")
-        self.prompt.setMaximumHeight(140)
-        composer.addWidget(self.prompt)
-        send = row()
-        send.addWidget(button("Send", self.submit, name="primary"))
-        send.addWidget(button("Keep draft", self.hide_composer))
-        send.addStretch()
-        send.addWidget(label("Ctrl+Enter to send", "muted"))
-        composer.addLayout(send)
+        self.prompt_frame, self.prompt_label, self.prompt = composer_widgets(self)
         content.addWidget(self.prompt_frame)
-        self.prompt_frame.hide()
         self.routines = RoutinesPanel(self.notebook, work, clock)
         self.notebook.addTab(self.routines.frame, "Standing instructions")
         self.context = ContextPanel(self.notebook, work)
         self.notebook.addTab(self.context.frame, "Context")
         self.tasks.itemSelectionChanged.connect(self.render_task)
-        self.tasks.itemActivated.connect(lambda: self.compose_selected())  # noqa: PLW0108  # Discard the signal's row and column arguments.
+        self.tasks.itemActivated.connect(task_activation(self))
         self.prompt.submitted.connect(self.submit)
         self.reply.submitted.connect(self.answer_question)
         self.detail.painted.connect(self.preview_paint)
@@ -808,3 +767,70 @@ class ContextPanel:
         self.summary.show()
         self.editing = None
         self.message.clear()
+
+
+def question_widgets(owner: WorkPanel) -> tuple[
+    QtWidgets.QFrame, QtWidgets.QLabel, Editor, QtWidgets.QToolButton, QtWidgets.QToolButton, QtWidgets.QToolButton, QtWidgets.QToolButton,
+]:
+    question_frame = QtWidgets.QFrame()
+    question_layout = column(question_frame)
+    question = label("")
+    question.setWordWrap(True)
+    question_layout.addWidget(question)
+    reply = Editor()
+    reply.setMaximumHeight(100)
+    reply.setAccessibleName("Answer the current question")
+    question_layout.addWidget(reply)
+    answers = row()
+    answer = button("Send answer", owner.answer_question, name="primary")
+    approve = button("Approve", lambda: owner.answer_approval(ApprovalDecision.APPROVED), name="primary")
+    decline = button("Decline", lambda: owner.answer_approval(ApprovalDecision.DECLINED))
+    refresh = button("Read action preview", owner.review_action)
+    for control in (answer, approve, decline, refresh):
+        answers.addWidget(control)
+    answers.addStretch()
+    question_layout.addLayout(answers)
+    return question_frame, question, reply, answer, approve, decline, refresh
+
+
+def composer_widgets(owner: WorkPanel) -> tuple[QtWidgets.QFrame, QtWidgets.QLabel, Editor]:
+    prompt_frame = QtWidgets.QFrame()
+    composer = column(prompt_frame)
+    prompt_label = label("")
+    composer.addWidget(prompt_label)
+    prompt = Editor()
+    prompt.setAccessibleName("Task instructions")
+    prompt.setMaximumHeight(140)
+    composer.addWidget(prompt)
+    send = row()
+    send.addWidget(button("Send", owner.submit, name="primary"))
+    send.addWidget(button("Keep draft", owner.hide_composer))
+    send.addStretch()
+    send.addWidget(label("Ctrl+Enter to send", "muted"))
+    composer.addLayout(send)
+    prompt_frame.hide()
+    return prompt_frame, prompt_label, prompt
+
+
+def panel_frame(owner: WorkPanel) -> tuple[Window, QtWidgets.QLabel, QtWidgets.QTabWidget]:
+    window = Window("Workspace · Work", owner.hide, width=1080, height=740)
+    window.setMinimumSize(740, 500)
+    layout = column(window)
+    layout.setContentsMargins(22, 18, 22, 18)
+    heading = row()
+    heading.addWidget(label("Your work", "title"))
+    heading.addStretch()
+    heading.addWidget(button("New task", lambda: owner.compose(NewDraft.NEW), name="primary"))
+    layout.addLayout(heading)
+    status = label("", "muted")
+    status.setWordWrap(True)
+    layout.addWidget(status)
+    notebook = QtWidgets.QTabWidget()
+    layout.addWidget(notebook, 1)
+    return window, status, notebook
+
+
+def task_activation(owner: WorkPanel) -> Callable[[QtWidgets.QTreeWidgetItem, int], None]:
+    def activated(_item: QtWidgets.QTreeWidgetItem, _column: int) -> None:
+        owner.compose_selected()
+    return activated

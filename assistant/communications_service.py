@@ -53,6 +53,7 @@ from assistant.communications import (
 from assistant.communications_browser import ActivityObservation, ChatUnavailableError, Observation, obj, string
 from assistant.llm import Json
 from assistant.system_notices import NoticeKey
+lazy from winapi.protection import protect, unprotect
 
 
 class Teams(Protocol):
@@ -110,7 +111,6 @@ class SavedState:
 
 
 def windows_store(path: Path) -> SavedState:
-    from winapi.protection import protect, unprotect  # noqa: PLC0415
 
     return SavedState(path, protect=protect, unprotect=unprotect)
 
@@ -379,30 +379,17 @@ class Communications:
                                         "Handled here · Teams read state could not be confirmed. Open Teams to check it."))
                     self.changed()
 
-    def command(self, command: Command) -> None:  # noqa: PLR0915  # Dispatch typed commands in one owner.
+    def command(self, command: Command) -> None:
         match command:
             case Connect():
                 self.connect()
             case Disconnect():
-                self.enabled = False
-                self.web.close()
-                self.feed = replace(self.feed, status=Status.DISCONNECTED,
-                                    detail="Teams disconnected. Saved drafts and observed messages remain available.")
-                self.save()
-                self.changed()
+                self.disconnect()
             case Refresh():
                 self.next_poll = 0
                 self.next_activity = 0
             case Follow(identities):
-                known = {chat.identity for chat in self.feed.conversations}
-                followed: list[str] = []
-                for identity in identities:
-                    if identity in known and identity not in followed:
-                        followed.append(identity)
-                self.feed = replace(self.feed, followed=tuple(followed[:MAX_FOLLOWED]))
-                self.save()
-                self.next_poll = 0
-                self.changed()
+                self.follow(identities)
             case NotificationFilters(apps):
                 if len(apps) <= 256 and all(app and len(app) <= 512 for app in apps):
                     self.feed = replace(self.feed, muted_apps=tuple(dict.fromkeys(apps, True)))
@@ -426,14 +413,7 @@ class Communications:
                 self.feed = notices_observed(self.feed, notices)
                 self.changed()
             case OpenUpdate(key):
-                update = next((item for item in self.feed.updates if item.key == key), None)
-                if update is not None:
-                    match update.source:
-                        case TeamsActivity(identity):
-                            self.web.open_activity(identity, self.stop)
-                        case WindowsNotice(_, app_id):
-                            if app_id:
-                                os.startfile("shell:AppsFolder\\" + app_id)
+                self.open_update(key)
             case SaveDraft(identity, text):
                 if len(text) <= 32_000 and len(identity) <= 512:
                     self.drafts[identity] = text
@@ -443,12 +423,46 @@ class Communications:
             case OpenChat(identity):
                 self.web.open(identity, self.stop)
             case ResolveAttempt(identity):
-                reply = next((item for item in self.feed.replies if item.identity == identity), None)
-                if reply is not None and reply.delivery is Delivery.UNKNOWN:
-                    self.feed = reply_changed(self.feed, replace(reply, delivery=Delivery.REVIEWED,
-                                              detail="You checked this attempt in Teams. Delivery remains unverified; future replies are enabled."))
-                    self.save()
-                    self.changed()
+                self.resolve_attempt(identity)
+
+
+    def open_update(self, key: tuple[str, str]) -> None:
+        update = next((item for item in self.feed.updates if item.key == key), None)
+        if update is not None:
+            match update.source:
+                case TeamsActivity(identity):
+                    self.web.open_activity(identity, self.stop)
+                case WindowsNotice(_, app_id):
+                    if app_id:
+                        os.startfile("shell:AppsFolder\\" + app_id)
+
+    def resolve_attempt(self, identity: str) -> None:
+        reply = next((item for item in self.feed.replies if item.identity == identity), None)
+        if reply is not None and reply.delivery is Delivery.UNKNOWN:
+            self.feed = reply_changed(self.feed, replace(reply, delivery=Delivery.REVIEWED,
+                                      detail="You checked this attempt in Teams. Delivery remains unverified; future replies are enabled."))
+            self.save()
+            self.changed()
+
+
+    def disconnect(self) -> None:
+        self.enabled = False
+        self.web.close()
+        self.feed = replace(self.feed, status=Status.DISCONNECTED,
+                            detail="Teams disconnected. Saved drafts and observed messages remain available.")
+        self.save()
+        self.changed()
+
+    def follow(self, identities: tuple[str, ...]) -> None:
+        known = {chat.identity for chat in self.feed.conversations}
+        followed: list[str] = []
+        for identity in identities:
+            if identity in known and identity not in followed:
+                followed.append(identity)
+        self.feed = replace(self.feed, followed=tuple(followed[:MAX_FOLLOWED]))
+        self.save()
+        self.next_poll = 0
+        self.changed()
 
     def run(self) -> None:
         try:

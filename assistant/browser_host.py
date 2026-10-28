@@ -18,6 +18,8 @@ from collections.abc import Generator
 from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
+lazy import fcntl
+lazy import msvcrt
 
 from assistant.browser_session import MAX_RESPONSE, BrowserSession, NativeSessions, Product, SessionOpener
 from assistant.browser_values import (
@@ -30,6 +32,8 @@ from assistant.browser_values import (
     text,
 )
 from assistant.llm import Json
+lazy from runtime import activate
+lazy from winapi.protection import protect, unprotect
 
 MAX_CLIENTS = 8
 
@@ -44,7 +48,6 @@ class Endpoint:
 def sealed(data: bytes, *, opening: bool = False) -> bytes:
     if sys.platform != "win32":
         return data
-    from winapi.protection import protect, unprotect  # noqa: PLC0415
 
     return unprotect(data) if opening else protect(data)
 
@@ -145,11 +148,9 @@ def lease(folder: Path) -> Generator[None]:
             stream.flush()
         stream.seek(0)
         if sys.platform == "win32":
-            import msvcrt  # noqa: PLC0415
 
             msvcrt.locking(stream.fileno(), msvcrt.LK_NBLCK, 1)
         else:
-            import fcntl  # noqa: PLC0415
 
             fcntl.flock(stream.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
         yield
@@ -272,9 +273,8 @@ class Server:
                 try:
                     watched: list[socket.socket] = [stream]
                     empty: list[socket.socket] = []
-                    ready, _, _ = cast(  # pyright: ignore[reportUnnecessaryCast] # Mypy's select stub returns Any.
-                        tuple[list[socket.socket], list[socket.socket], list[socket.socket]], select.select(watched, empty, empty, .1),
-                    )
+                    selection: tuple[list[socket.socket], list[socket.socket], list[socket.socket]] = select.select(watched, empty, empty, .1)
+                    ready = selection[0]
                     if ready:
                         cancel.set()  # Each local socket carries one request; EOF cancels it.
                         return
@@ -349,7 +349,6 @@ def connect_shared(folder: Path, product: Product, cancel: threading.Event) -> H
 
 
 def main() -> None:
-    from runtime import activate  # noqa: PLC0415
 
     activate()
     product, folder = Product(sys.argv[1]), Path(sys.argv[2])

@@ -5,6 +5,7 @@ import threading
 from contextlib import suppress
 
 from assistant.ambient import SystemStatus
+lazy from winapi.system_status import speakers, wifi
 
 
 class StatusObserver:
@@ -17,7 +18,6 @@ class StatusObserver:
         self.worker.start()
 
     def run(self) -> None:
-        from winapi.system_status import speakers, wifi  # noqa: PLC0415
 
         while not self.cancelled.is_set():
             observed = SystemStatus(speakers(), wifi())

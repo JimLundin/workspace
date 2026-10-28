@@ -4,7 +4,7 @@ from typing import Literal, NotRequired, TypedDict
 
 from pydantic import TypeAdapter
 
-Role = Literal['keeper', 'assistant', 'automation', 'miryoku', 'runtime']
+type Role = Literal['keeper', 'assistant', 'automation', 'miryoku', 'runtime']
 
 
 class Config(TypedDict):

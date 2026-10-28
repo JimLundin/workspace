@@ -12,10 +12,9 @@ before installing it, so the agent can't change it (see keeper.py).
 The optional fast editing profile defers tests/test_windows_*.py. The keeper
 always uses the default full profile. Both profiles compile and import all source.
 
-It looks inside arbitrary modules, which is untyped by nature, so like the other
-boundaries (winapi, assistant/ui.py) it's exempt from the "no Any" rule inside.
+Discovered member values remain objects; the runner validates origin and the
+supported keyword arguments before invoking a test.
 """
-# pyright: reportUnknownMemberType=false, reportUnknownArgumentType=false, reportUnknownVariableType=false
 
 import argparse
 import importlib
@@ -27,8 +26,9 @@ import tempfile
 import time
 import traceback
 import unittest
-from collections.abc import Callable, Iterator
+from collections.abc import Iterator
 from pathlib import Path
+from typing import Protocol
 
 _WINDOWS_ONLY = ("WinDLL", "WINFUNCTYPE", "windll", "winreg", "msvcrt", "_winapi", "PySide6", "shiboken6", "win32more")
 """Signs that an import failed only because this isn't Windows."""
@@ -80,8 +80,12 @@ def import_all(root: Path, problems: list[str]) -> None:
                 problems.append(f"doesn't import: {name}\n{''.join(traceback.format_exception(error))}")
 
 
-def _call(test: Callable[..., object]) -> None:
-    arguments: dict[str, object] = {}
+class Test(Protocol):
+    def __call__(self, **arguments: Path) -> object: ...
+
+
+def _call(test: Test) -> None:
+    arguments: dict[str, Path] = {}
     for name in inspect.signature(test).parameters:
         if name != "tmp_path":
             raise TypeError(f"selfcheck can only give a test tmp_path, not {name}")
@@ -110,11 +114,16 @@ def run_tests(root: Path, problems: list[str], *, fast: bool = False, timings: l
             else:
                 problems.append(f"FAILED {name} (while loading)\n{''.join(traceback.format_exception(error))}")
             continue
-        for attribute, test in sorted(vars(module).items()):
-            if attribute.startswith("test_") and callable(test) and getattr(test, "__module__", None) == name:
+        members: dict[str, object] = vars(module)
+        for attribute, test in sorted(members.items()):
+            if attribute.startswith("test_") and callable(test):
+                origin: object = getattr(test, "__module__", None)
+                if origin != name:
+                    continue
+                invoke: Test = test
                 started = time.perf_counter()
                 try:
-                    _call(test)
+                    _call(invoke)
                     passed += 1
                 except unittest.SkipTest:
                     pass
@@ -132,7 +141,7 @@ def check(root: Path, *, fast: bool = False, durations: int = 0) -> tuple[bool, 
     os.environ.pop("WORKSPACE_E2E", None)  # never the end-to-end tests: they'd start a second workspace
     sys.path.insert(0, str(root))
     os.chdir(root)
-    from runtime import activate  # noqa: PLC0415
+    from runtime import activate
 
     activate()
     problems: list[str] = []
@@ -159,10 +168,14 @@ def main() -> None:
     parser.add_argument("folder", nargs="?", type=Path, default=Path(__file__).parent)
     parser.add_argument("--fast", action="store_true", help="editing checks; defer Windows integration modules")
     parser.add_argument("--durations", type=int, default=0, metavar="N", help="report the N slowest checks")
-    args = parser.parse_args()
-    if args.durations < 0:
+    match dict(inspect.getmembers(parser.parse_args())):
+        case {"folder": Path() as folder, "fast": bool() as fast, "durations": int() as durations}:
+            pass
+        case _:
+            parser.error("Invalid selfcheck arguments.")
+    if durations < 0:
         parser.error("durations must be nonnegative")
-    ok, report = check(args.folder.resolve(), fast=args.fast, durations=args.durations)
+    ok, report = check(folder.resolve(), fast=fast, durations=durations)
     sys.stdout.write(report)
     sys.exit(0 if ok else 1)
 

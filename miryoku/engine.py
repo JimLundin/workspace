@@ -120,7 +120,7 @@ class Configuration:
         if self.streak_ms < 0 or self.quick_tap_ms < 0 or self.quit_hold_ms <= 0:
             raise ValueError("Keyboard timings must be nonnegative, with a positive quit hold.")
         # Pyright 1.1.414's stub incorrectly gives frozendict.__init__ no arguments.
-        table = frozendict(actions)  # pyright: ignore[reportCallIssue]
+        table = frozendict(actions)
         object.__setattr__(self, "actions", table)
         object.__setattr__(self, "snippets", snippets)
         object.__setattr__(self, "max_trigger", max((len(trigger) for trigger, _value in snippets), default=0))

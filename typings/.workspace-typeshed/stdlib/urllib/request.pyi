@@ -55,7 +55,7 @@ _T = TypeVar("_T")
 # See
 # - https://github.com/python/typeshed/pull/15042
 # - https://github.com/python/typing/issues/566
-_UrlopenRet: TypeAlias = Any
+type _UrlopenRet = object
 
 _DataType: TypeAlias = ReadableBuffer | SupportsRead[bytes] | Iterable[bytes] | None
 

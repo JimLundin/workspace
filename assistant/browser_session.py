@@ -31,6 +31,7 @@ from assistant.browser_values import (
 from assistant.llm import Json
 lazy from assistant.browser_host import connect_shared
 lazy from usage import DIRECTORY
+lazy from winapi.processes import ProcessJob
 
 MAX_RESPONSE = 16_000_000
 
@@ -369,7 +370,6 @@ class NativeSessions:
         owner: Managed | None = None
         try:
             if sys.platform == "win32":
-                from winapi.processes import ProcessJob  # noqa: PLC0415
 
                 job = ProcessJob()
                 process: Process = job.start(arguments)

@@ -1,8 +1,13 @@
 """Read-only default speaker mute and Wi-Fi association; no scans or connection changes."""
-# pyright: reportUnknownMemberType=false, reportUnknownArgumentType=false, reportUnknownVariableType=false, reportMissingTypeStubs=false
 
 import ctypes
 from ctypes import wintypes
+
+lazy from win32more import FAILED
+lazy from win32more._win32 import Guid
+lazy from win32more.Windows.Win32.Media.Audio import IMMDevice, IMMDeviceEnumerator, MMDeviceEnumerator, eConsole, eRender
+lazy from win32more.Windows.Win32.Media.Audio.Endpoints import IAudioEndpointVolume
+lazy from win32more.Windows.Win32.System.Com import CLSCTX_ALL, COINIT_MULTITHREADED, CoCreateInstance, CoInitializeEx, CoUninitialize
 
 from assistant.ambient import Speakers, Wifi
 from winapi._core import fn
@@ -16,6 +21,9 @@ _WlanCloseHandle = fn(_wlan, "WlanCloseHandle", wintypes.DWORD, wintypes.HANDLE,
 
 
 class WlanInterface(ctypes.Structure):
+    guid: ctypes.Array[ctypes.c_byte]
+    description: str
+    state: int
     _fields_ = (("guid", ctypes.c_byte * 16), ("description", ctypes.c_wchar * 256), ("state", wintypes.DWORD))
 
 
@@ -49,28 +57,20 @@ def wifi() -> Wifi:
 
 def speakers() -> Speakers:
     """Resolve the current default playback endpoint on each observation, so device changes are reflected."""
-    from win32more import FAILED  # noqa: PLC0415
-    from win32more.Windows.Win32.Media.Audio import IMMDevice, IMMDeviceEnumerator, MMDeviceEnumerator, eConsole, eRender  # noqa: PLC0415
-    from win32more.Windows.Win32.Media.Audio.Endpoints import IAudioEndpointVolume  # noqa: PLC0415
-    from win32more.Windows.Win32.System.Com import (  # noqa: PLC0415
-        CLSCTX_ALL,
-        COINIT_MULTITHREADED,
-        CoCreateInstance,
-        CoInitializeEx,
-        CoUninitialize,
-    )
-
     if FAILED(CoInitializeEx(None, COINIT_MULTITHREADED)):
         return Speakers.UNKNOWN
     enumerator = IMMDeviceEnumerator(own=True)
     device = IMMDevice(own=True)
     volume = IAudioEndpointVolume(own=True)
     try:
-        if FAILED(CoCreateInstance(MMDeviceEnumerator, None, CLSCTX_ALL, IMMDeviceEnumerator._iid_, enumerator)):  # pyright: ignore[reportPrivateUsage]
+        # Published Windows interface IDs; avoid the binding's private metadata.
+        enumerator_id = Guid("{a95664d2-9614-4f35-a746-de8db63617e6}")
+        volume_id = Guid("{5cdf2c82-841e-4546-9722-0cf74078229a}")
+        if FAILED(CoCreateInstance(MMDeviceEnumerator, None, CLSCTX_ALL, enumerator_id, enumerator)):
             return Speakers.UNKNOWN
         if FAILED(enumerator.GetDefaultAudioEndpoint(eRender, eConsole, device)):
             return Speakers.UNKNOWN
-        if FAILED(device.Activate(IAudioEndpointVolume._iid_, CLSCTX_ALL, None, volume)):  # pyright: ignore[reportPrivateUsage]
+        if FAILED(device.Activate(volume_id, CLSCTX_ALL, None, volume)):
             return Speakers.UNKNOWN
         muted = wintypes.BOOL()
         if FAILED(volume.GetMute(ctypes.byref(muted))) or muted.value not in (0, 1):

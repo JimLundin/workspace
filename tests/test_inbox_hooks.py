@@ -5,21 +5,24 @@ from pathlib import Path
 from typing import cast
 
 from scripts.install_inbox_hooks import MARKER, install, merged
+from tests.json_fixture import json_object
 
 
 def test_installing_both_providers_preserves_unrelated_handlers_and_is_idempotent(tmp_path: Path) -> None:
     for codex in (True, False):
-        previous = {"PreToolUse": [{"matcher": "Bash", "hooks": [{"type": "command", "command": "existing-handler"}]}],
+        previous: dict[str, list[dict[str, object]]] = {
+            "PreToolUse": [{"matcher": "Bash", "hooks": [{"type": "command", "command": "existing-handler"}]}],
                     "CustomEvent": [{"hooks": [{"command": "another-handler"}]}]}
         original = {"unrelated": {"enabled": True}, "hooks": previous}
         current = tmp_path / ("codex.json" if codex else "claude.json")
         current.write_text(json.dumps(original))
         command = "python owned-hook.py"
         assert install(current, command, codex=codex)
-        updated = json.loads(current.read_text())
+        updated = cast(dict[str, object], json_object(current.read_text()))
+        updated_hooks = cast(dict[str, list[dict[str, object]]], updated['hooks'])
         assert updated["unrelated"] == original["unrelated"]
-        assert updated["hooks"]["PreToolUse"][0] == previous["PreToolUse"][0]
-        assert updated["hooks"]["CustomEvent"] == previous["CustomEvent"]
+        assert updated_hooks["PreToolUse"][0] == previous["PreToolUse"][0]
+        assert updated_hooks["CustomEvent"] == previous["CustomEvent"]
         assert not install(current, command, codex=codex)
         changed = merged(updated, "python new-hook.py", codex=codex)
         hooks = cast(dict[str, list[dict[str, object]]], changed["hooks"])
@@ -28,4 +31,4 @@ def test_installing_both_providers_preserves_unrelated_handlers_and_is_idempoten
                      if handler.get("statusMessage") == MARKER]
             assert len(owned) == 1 and owned[0]["command"] == "python new-hook.py"
         backups = list(tmp_path.glob(current.name + ".workspace-backup-*"))
-        assert len(backups) == 1 and json.loads(backups[0].read_text()) == original
+        assert len(backups) == 1 and json_object(backups[0].read_text()) == original

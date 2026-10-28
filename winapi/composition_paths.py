@@ -34,12 +34,12 @@ class GeometrySource(ComClass, IGeometrySource2D, IGeometrySource2DInterop):
         super().__init__()
         self.geometry: ID2D1Geometry = geometry
 
-    def GetGeometry(self, value: GeometryOutput) -> int:  # noqa: N802 -- Required native callback.
+    def GetGeometry(self, value: GeometryOutput) -> int:
         self.geometry.AddRef()
         value[0] = self.geometry
         return 0
 
-    def TryGetGeometryUsingFactory(self, factory: ID2D1Factory, value: GeometryOutput) -> int:  # noqa: N802 -- Required native callback.
+    def TryGetGeometryUsingFactory(self, factory: ID2D1Factory, value: GeometryOutput) -> int:
         value[0] = ID2D1Geometry()
         return 0  # Let the compositor use GetGeometry for its own factory.
 
