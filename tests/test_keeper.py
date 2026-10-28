@@ -1,4 +1,4 @@
-"""The keeper: runs the workspace, installs changes, and undoes the ones that fail.
+"""The keeper: runs Workspace, installs changes, and undoes the ones that fail.
 Its logic runs on fake processes and a fake clock; its file handling on real folders."""
 
 import os

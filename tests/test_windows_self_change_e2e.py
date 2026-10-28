@@ -1,4 +1,4 @@
-"""End to end on Windows: the workspace changing itself. On a copy of the workspace, the
+"""End to end on Windows: Workspace changing itself. On a copy of Workspace, the
 keeper installs a good change and the new code runs; undoes a change that crashes
 on start; and refuses a change that fails its checks.
 
@@ -19,7 +19,7 @@ from keeper import ask, copy_source
 from winapi import windows
 
 from .fake_endpoint import fake_endpoint
-from .test_windows_assistant_e2e import ROOT, both_ready, logs, workspace, wait_for
+from .test_windows_assistant_e2e import ROOT, both_ready, logs, wait_for, workspace
 
 
 def keeper_log(home: Path) -> str:

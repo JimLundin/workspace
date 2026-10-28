@@ -18,14 +18,15 @@ from typing import Final, assert_never
 
 import keeper
 import usage
-from automation.bridge import BridgeClient
-from automation.context import ContextStore
-from automation.ipc import MeetingCommand, MeetingFailed, MeetingSucceeded, StartMeeting
-from automation.routines import RoutineStore
-from automation.store import TaskStore
 from config import APPS
-from miryoku.layout import Layer, Scancode
-from protocol import (
+from usage import DIRECTORY, Detail
+lazy from automation.bridge import BridgeClient
+lazy from automation.context import ContextStore
+lazy from automation.ipc import MeetingCommand, MeetingFailed, MeetingSucceeded, StartMeeting
+lazy from automation.routines import RoutineStore
+lazy from automation.store import TaskStore
+lazy from miryoku.layout import Layer, Scancode
+lazy from protocol import (
     ASSISTANT_WINDOW,
     LAYOUT_WINDOW,
     WM_INDICATOR,
@@ -39,30 +40,34 @@ from protocol import (
     decode,
     decode_indicator,
 )
-from usage import DIRECTORY, Detail
-from winapi import audio, recording, screen, shell, system, windows
-from winapi.shapes import Rect, Window
+lazy from winapi import audio, recording, screen, shell, system, windows
+lazy from winapi.shapes import Rect, Window
 
-from .activity import ActivityTracker, ContextSnapshot, Observation
-from .canvas_requests import CanvasRequests
-from .desktop import WinDesktop
-from .features import Assistant
-from .icons import State, dot
-from .keymap import indicator_text
-from .llm import MAX_SECONDS, RATE, Missing, Settings
-from .machine import WinMachine as WinMachine  # noqa: PLC0414 (compatibility re-export)
-from .meeting_events import TranscriptEvents
-from .meeting_followup_store import FollowupStore
-from .meeting_requests import MeetingRequests
-from .meeting_store import MeetingArchive
-from .meeting_workflow import MeetingWorkflow
-from .meetings import Meetings
-from .overlay import OverlayState, load_enabled, save_enabled
-from .recording_state import RecordingAction, RecordingState
-from .report import write_report
-from .ui import Ui
-from .work_agent import WorkAgent
-from .work_window import WorkSnapshot
+lazy from .activity import ActivityTracker, ContextSnapshot, Observation
+lazy from .communications_browser import TeamsWeb
+lazy from .communications_service import Communications, windows_store
+lazy from .console_inbox import ConsoleInbox
+lazy from .desktop import WinDesktop
+lazy from .features import Assistant, switcher_windows
+lazy from .feed_triage_service import Triage, classify
+lazy from .icons import State, dot
+lazy from .keymap import indicator_text
+lazy from .lifecycle import Timings
+lazy from .llm import MAX_SECONDS, RATE, Missing, Settings
+lazy from .meeting_events import TranscriptEvents
+lazy from .meeting_followup_store import FollowupStore
+lazy from .meeting_requests import MeetingRequests
+lazy from .meeting_store import MeetingArchive
+lazy from .meeting_workflow import MeetingWorkflow
+lazy from .meetings import Meetings
+lazy from .monitor_layout import MonitorLayout
+lazy from .overlay import OverlayState, load_enabled, save_enabled
+lazy from .recording_state import RecordingAction, RecordingState
+lazy from .report import write_report
+lazy from .tiling import GlazeWM
+lazy from .ui import Ui
+lazy from .work_agent import WorkAgent
+lazy from .work_window import WorkSnapshot
 
 ROOT: Final = Path(__file__).resolve().parent.parent
 LOCK_NAME: Final = "Local\\workspace-assistant"
@@ -139,6 +144,9 @@ def indicator_area() -> Rect:
     return next((m.work for m in monitors if m.primary), monitors[0].work)
 
 
+WM_SHOW_MENU: Final = 0x8056
+
+
 class _Menu(Enum):
     KEYMAP = 9
     TOGGLE_LAYOUT = 1
@@ -154,18 +162,39 @@ class _Menu(Enum):
     MEETING = 12
     TRANSCRIPTS = 13
     WORK = 14
-    CANVAS = 15
-    LAUNCHER = 16
+    TASKBAR = 15
     FOLLOWUPS = 17
 
 
 class AssistantApp:
     __slots__ = (
-        "_recording_phase", "activity", "agent", "assistant", "desktop", "followups", "jobs", "layout", "meetings", "mic_event", "overlay",
-        "settings", "tray", "ui", "window", "worker",
+        "_recording_phase",
+        "activity",
+        "agent",
+        "assistant",
+        "capture_timer",
+        "communications",
+        "consoles",
+        "desktop",
+        "followups",
+        "jobs",
+        "layout",
+        "meetings",
+        "mic_event",
+        "monitor_layout",
+        "overlay",
+        "settings",
+        "tiling",
+        "timings",
+        "tray",
+        "triage",
+        "ui",
+        "window",
+        "worker",
     )
 
     def __init__(self, settings: Settings | Missing, ui: Ui) -> None:
+        self.timings = Timings("startup")
         self._recording_phase = "idle"
         self.ui = ui
         self.ui.configure_controls(
@@ -176,8 +205,12 @@ class AssistantApp:
         self.window = shell.AppWindow(ASSISTANT_WINDOW, self.on_message)
         self.tray = Tray(self.window.handle)
         self.mic_event = system.create_event()
+        self.tiling = GlazeWM()
+        self.monitor_layout = MonitorLayout(self.tiling, self.problem)
         mic = audio.Microphone(RATE, MAX_SECONDS, self.mic_event)
-        self.desktop = WinDesktop(self.window.handle, mic, self.ui, on_state=self.show, on_notify=self.tray.notify, on_problem=self.problem)
+        self.desktop = WinDesktop(self.window.handle, mic, self.ui, on_state=self.show, on_notify=self.tray.notify,
+                                  on_problem=self.problem, tiling=self.tiling)
+        self.timings.mark("control window and microphone")
         missing = settings if isinstance(settings, Missing) else None
         usable = settings if isinstance(settings, Settings) else Settings("", "", "", "", "", "", "")
         self.settings = usable
@@ -198,9 +231,19 @@ class AssistantApp:
             ),
             on_snapshot=self.work_changed, on_done=self.agent_done, report_error=log,
             on_start=lambda: self.show(State.AGENT), context=context, meeting=self.meeting_command,
-            browser_app=self.ui.browser_app,
-            canvas_requests=CanvasRequests(work_folder / "canvas-requests"),
         )
+        self.timings.mark("work frontend")
+        self.communications = Communications(TeamsWeb(DIRECTORY / "browser-profile"),
+                                             windows_store(DIRECTORY / "communications.bin"), self.ui.communications_changed,
+                                             self.ui.dismiss_system_notice)
+        self.ui.configure_communications(self.communications.submit)
+        self.consoles = ConsoleInbox(DIRECTORY / "inbox-bridge.json", self.ui.console_changed)
+        self.ui.configure_console(self.consoles.command)
+        self.triage = Triage(DIRECTORY / "work-feed-bridge.json", windows_store(DIRECTORY / "work-feed.bin"),
+                             self.ui.triage_changed, lambda batch, rules: classify(usable, batch, rules), self.consoles.command,
+                             submit=self.agent.submit_identified)
+        self.ui.configure_triage(self.triage.observe, self.triage.dismiss, self.triage.choose_from_ui)
+        self.timings.mark("communications and feed bridges")
         archive = MeetingArchive(DIRECTORY / "meetings")
         followup_folder = work_folder / "meeting-followups"
         self.followups = MeetingWorkflow(
@@ -215,6 +258,7 @@ class AssistantApp:
             usable, lambda source: recording.MeetingAudio(computer_audio=source == "both"), archive=archive,
             on_update=self.recording_changed, on_recovery=events.recover, on_complete=events.completed,
         )
+        self.timings.mark("meeting services")
         self.activity = ActivityTracker(
             foreground_context, self.agent.running, enabled=os.environ.get("WORKSPACE_AGENT_CONTEXT", "recent").lower() != "off",
         )
@@ -223,12 +267,13 @@ class AssistantApp:
             usable,
             record=self.record,
             submit=self.jobs.put,
-            run_agent=self.canvas_voice,
+            run_agent=self.agent.voice,
             show_agent=self.agent.show,
             stop_agent=self.agent.stop,
             missing=missing,
         )
         self.layout: LayoutState | None = None
+        self.capture_timer: int | None = None
         """What the layout last said; None until it does."""
         self.worker = threading.Thread(target=self.work, name="worker", daemon=True)
         if missing is not None:
@@ -237,24 +282,41 @@ class AssistantApp:
     # ---- running -----------------------------------------------------------------------
 
     def run(self) -> None:
+        self.capture_timer = system.set_window_timer(self.window.handle, 1000)
         self.activity.start()
         self.worker.start()
         self.agent.start_worker()
+        self.communications.start()
         self.followups.start()
         self.meetings.start_worker()
+        self.monitor_layout.start()
         if os.environ.get("WORKSPACE_DESKTOP", "on").lower() != "off":
-            self.ui.desktop(self.agent.submit_canvas, self.agent.command, self.agent.snapshot,
-                            watch=self.agent.watch,
-                            show_agent=self.agent.show, show_work=self.show_work, stop=self.agent.stop,
-                            overlay=self.toggle_overlay, on_problem=self.problem)
+            self.ui.desktop(show_agent=self.agent.show, show_work=self.show_work, stop=self.stop_requested,
+                            overlay=self.toggle_overlay, menu=self.request_menu, on_problem=self.problem, audio_level=self.desktop.mic.level,
+                            tiling=self.tile_from_menu)
         if (layout_window := windows.find(LAYOUT_WINDOW)) is not None:
             system.post_message(layout_window, WM_QUERY_LAYOUT_STATE, 0, 0)
+        self.timings.mark("workers and readiness")
         keeper.ready()  # tells the keeper this version came up
         if self.settings.api_key:
             threading.Thread(target=self.agent.prepare, name="agent panel warmup", daemon=True).start()
         system.run_message_loop()
 
     def quit(self) -> None:
+        timings = Timings("shutdown")
+        if self.capture_timer is not None:
+            system.kill_window_timer(self.window.handle, self.capture_timer)
+            self.capture_timer = None
+        self.assistant.stop_capture(discard=True, reason="shutdown")
+        timings.mark("stop capture")
+        self.triage.close()
+        timings.mark("feed triage")
+        self.consoles.close()
+        timings.mark("console bridge")
+        self.communications.close()
+        timings.mark("Teams worker")
+        self.monitor_layout.close()
+        timings.mark("monitor layout")
         try:
             self.ui.close_desktop()
         except OSError as error:
@@ -268,16 +330,64 @@ class AssistantApp:
         self.agent.close()
         if not self.agent.wait_closed(timeout=5):
             log("The work frontend did not finish closing before assistant shutdown.")
+        timings.mark("meetings and work frontend")
         self.activity.close()
         self.ui.close_agent()
         self.ui.close_work()
         self.ui.close()
+        timings.mark("Qt shutdown")
         self.jobs.put(None)
         self.desktop.mic.close()
+        try:
+            self.tiling.close()
+        except OSError as error:
+            log(str(error))
         self.tray.remove()
         self.window.destroy()
         system.close_event(self.mic_event)
+        timings.mark("microphone and tiling cleanup")
         system.post_quit()
+
+    def tile_from_menu(self, tool: Tool, hwnd: int) -> None:
+        if tool is Tool.WINDOW_SWITCHER:
+            self.switch_windows()
+            return
+        if tool is Tool.COPY_TRANSCRIPT:
+            self.assistant.handle(tool, True)
+            return
+        if tool is Tool.TILE_BALANCE:
+            threading.Thread(target=self.monitor_layout.balance, name="window redistribution", daemon=True).start()
+            return
+        def arrange() -> None:
+            try:
+                self.desktop.arrange(tool, target=hwnd)
+            except OSError as error:
+                self.problem(str(error))
+        self.jobs.put(arrange)
+
+    def switch_windows(self) -> None:
+        def focus(handle: int) -> None:
+            def activate() -> None:
+                try:
+                    if self.tiling.focus(handle):
+                        return
+                except OSError:
+                    pass
+                if not windows.focus(handle):
+                    self.problem("That window is no longer available or Windows refused to focus it.")
+            threading.Thread(target=activate, name="window navigation", daemon=True).start()
+        def collect() -> None:
+            try:
+                managed = self.tiling.managed_handles()
+            except OSError:
+                managed = frozenset[int]()
+            visible = frozenset(w.handle for w in windows.windows())
+            all_windows = tuple(w for w in windows.windows(include_cloaked=True) if windows.process_id(w.handle) != os.getpid())
+            self.ui.switch_windows(switcher_windows(all_windows, visible, managed), focus)
+        threading.Thread(target=collect, name="window list", daemon=True).start()
+
+    def stop_requested(self) -> None:
+        system.post_message(self.window.handle, WM_REQUEST, Tool.STOP.value, 1)
 
     def work(self) -> None:
         """The worker thread: slow jobs, one at a time."""
@@ -295,13 +405,15 @@ class AssistantApp:
     # ---- what the user sees ------------------------------------------------------------
 
     def show(self, state: State) -> None:
-        if self.meetings.snapshot().capturing:
-            state = State.RECORDING
-        elif state in (State.READY, State.LAYOUT_OFF) and self.agent.running():
+        if self.assistant.listening is not None:
+            state = State.LISTENING
+        if state in (State.READY, State.LAYOUT_OFF) and self.agent.running():
             state = State.NEEDS_INPUT if self.agent.window is not None and self.agent.window.waiting else State.AGENT
-        self.tray.show(state)
+        self.ui.desktop_state(state)
+        self.tray.show(State.RECORDING if self.meetings.snapshot().capturing else state)
 
     def recording_changed(self, state: RecordingState) -> None:
+        self.ui.desktop_recording(state)
         self.agent.prepare()
         if self.agent.window is not None:
             self.agent.window.recording(state)
@@ -309,7 +421,7 @@ class AssistantApp:
         failed_capture = prior in ("starting", "recording", "stopping") and state.phase == "finishing" and bool(state.detail)
         if (prior != state.phase and state.phase in ("paused", "interrupted")) or failed_capture:
             self.tray.notify("Meeting transcript", state.detail or "Recording was interrupted. Open Transcripts for the saved part.", warning=True)
-        self.show(State.READY if self.assistant.layout_on else State.LAYOUT_OFF)
+        self.show(State.LISTENING if self.assistant.listening is not None else State.READY if self.assistant.layout_on else State.LAYOUT_OFF)
 
     def recording_action(self, action: RecordingAction) -> None:
         try:
@@ -379,10 +491,6 @@ class AssistantApp:
         if self.assistant.listening is None:
             self.assistant.idle()
 
-    def canvas_voice(self, text: str) -> None:
-        if not self.ui.submit_canvas_voice(text, self.agent.voice):
-            self.agent.voice(text)
-
     def problem(self, message: str) -> None:
         log(message)
         system.beep(system.MB_ICONEXCLAMATION)
@@ -401,15 +509,50 @@ class AssistantApp:
 
     # ---- messages ----------------------------------------------------------------------
 
+    def layout_changed(self, value: int) -> None:
+        with contextlib.suppress(ValueError):
+            self.layout = LayoutState(value)
+        work = indicator_area()
+        if self.layout is not LayoutState.QUIT:
+            self.ui.flash("Layout on" if self.layout is LayoutState.ON else "Layout off", work)
+        self.assistant.layout_on = self.layout is LayoutState.ON
+        if not self.assistant.layout_on:
+            self.assistant.stop_capture(reason="layout_off")
+        self.ui.desktop_layout(self.assistant.layout_on)
+        self.overlay.set_layout(self.assistant.layout_on)
+        self.ui.show_pressed_keys(self.overlay.pressed, reset=True)
+        self.show_overlay(work)
+        if self.assistant.listening is None:
+            self.assistant.idle()
+
     def on_message(self, hwnd: int, message: int, wparam: int, lparam: int) -> int | None:
         try:
+            if message == system.WM_TIMER and wparam == self.capture_timer:
+                self.assistant.expire_capture(time.monotonic())
+                return 0
+            if message == WM_SHOW_MENU:
+                self.menu()
+                return 0
             if message == WM_KEY_STATE:
                 self.overlay.key(Scancode(wparam), bool(lparam))
                 self.ui.show_pressed_keys(self.overlay.pressed, reset=wparam == 0)
                 return 0
             if message == WM_REQUEST:
                 if (request := decode(wparam, APPS)) is not None:
-                    self.assistant.handle(request, bool(lparam))
+                    if request is Tool.WINDOW_SWITCHER:
+                        if lparam:
+                            self.switch_windows()
+                    elif request is Tool.OPEN_INBOX:
+                        if lparam:
+                            self.ui.open_inbox(self.agent.show)
+                    elif request is Tool.MEETING_TOGGLE:
+                        if lparam:
+                            self.recording_action("stop" if self.meetings.snapshot().capturing else "start")
+                    elif request is Tool.TILE_BALANCE:
+                        if lparam:
+                            self.tile_from_menu(request, 0)
+                    else:
+                        self.assistant.handle(request, bool(lparam))
                 return 0
             if message == WM_INDICATOR:
                 index, locked, caps_word = decode_indicator(wparam)
@@ -420,17 +563,7 @@ class AssistantApp:
                 self.show_overlay(work)
                 return 0
             if message == WM_LAYOUT_STATE:
-                with contextlib.suppress(ValueError):
-                    self.layout = LayoutState(wparam)
-                work = indicator_area()
-                if self.layout is not LayoutState.QUIT:
-                    self.ui.flash("Layout on" if self.layout is LayoutState.ON else "Layout off", work)
-                self.assistant.layout_on = self.layout is LayoutState.ON
-                self.overlay.set_layout(self.assistant.layout_on)
-                self.ui.show_pressed_keys(self.overlay.pressed, reset=True)
-                self.show_overlay(work)
-                if self.assistant.listening is None:
-                    self.assistant.idle()
+                self.layout_changed(wparam)
                 return 0
             if message == system.WM_CLOSE:  # the keeper asks: it's restarting or installing
                 self.quit()
@@ -441,6 +574,9 @@ class AssistantApp:
         except Exception:
             log(traceback.format_exc())
         return None
+
+    def request_menu(self) -> None:
+        system.post_message(self.window.handle, WM_SHOW_MENU, 0, 0)
 
     def menu(self) -> None:
         status = {
@@ -464,8 +600,7 @@ class AssistantApp:
             shell.MenuItem(_Menu.ASK.value, "Ask\u2026\tHold V + P"),
             shell.MenuItem(_Menu.AGENT.value, "Agent session\tHold V + L"),
             shell.MenuItem(_Menu.WORK.value, "Work\u2026"),
-            shell.MenuItem(_Menu.CANVAS.value, "Workspace canvas\tCtrl+Alt+D"),
-            shell.MenuItem(_Menu.LAUNCHER.value, "Desktop launcher\tCtrl+Alt+Space"),
+            shell.MenuItem(_Menu.TASKBAR.value, "Toggle Windows taskbar\tWindows key"),
             shell.MenuItem(_Menu.STOP_AGENT.value, "Stop agent\tHold V + \u00d6", enabled=self.agent.running()),
             shell.MenuItem(_Menu.MEETING.value, "Stop recording" if self.meetings.snapshot().capturing else "Record a meeting"),
             shell.MenuItem(_Menu.TRANSCRIPTS.value, "Transcripts"),
@@ -475,7 +610,7 @@ class AssistantApp:
             shell.MenuItem(_Menu.USAGE.value, "Usage report"),
             shell.MenuItem(_Menu.LOGS.value, "Open logs folder"),
             shell.MenuItem(0),
-            shell.MenuItem(_Menu.QUIT.value, "Quit workspace"),
+            shell.MenuItem(_Menu.QUIT.value, "Quit Workspace"),
         ]
         match shell.show_menu(self.window.handle, items):
             case _Menu.TOGGLE_LAYOUT.value:
@@ -494,10 +629,8 @@ class AssistantApp:
                 self.assistant.handle(Tool.AGENT_TYPED, True)
             case _Menu.WORK.value:
                 self.show_work()
-            case _Menu.CANVAS.value:
-                self.ui.show_desktop()
-            case _Menu.LAUNCHER.value:
-                self.ui.show_desktop(launcher=True)
+            case _Menu.TASKBAR.value:
+                self.ui.toggle_taskbar()
             case _Menu.STOP_AGENT.value:
                 self.agent.stop()
             case _Menu.MEETING.value:
@@ -519,14 +652,16 @@ class AssistantApp:
                 pass
 
 
-def run(settings: Settings | Missing) -> Exit:
+def run(settings: Settings | Missing, *, timings: Timings | None = None) -> Exit:
     """Blocks until quit from the tray."""
     screen.use_physical_pixels()  # before any window exists
     lock = system.create_lock(LOCK_NAME)
     if lock is None:
         return Exit.ALREADY_RUNNING
     try:
+        timings = timings or Timings("startup")
         ui = Ui()
+        timings.mark("Qt initialization")
         errors: queue.Queue[BaseException] = queue.Queue()
 
         def control() -> None:

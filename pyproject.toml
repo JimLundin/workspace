@@ -20,6 +20,7 @@ dependencies = [
 
 [project.optional-dependencies]
 test = ["hypothesis==6.170.12"]
+dev = ["watchdog==6.0.0"]
 
 [tool.mypy]
 mypy_path = "typings"
@@ -37,13 +38,13 @@ warn_unreachable = true
 [[tool.mypy.overrides]]
 # The ctypes, GUI, SDK and inspection boundaries: values inside may be Any
 # until converted; every public signature is concrete, so nothing untyped leaves.
-module = ["winapi", "winapi.*", "assistant.ui", "assistant.agent_panel", "assistant.work_panel", "assistant.agent_toasts", "assistant.qt_text", "assistant.qt_ui", "assistant.toast_card", "assistant.sdk", "selfcheck"]
+module = ["winapi", "winapi.*", "assistant.ui", "assistant.work_panel", "assistant.agent_toasts", "assistant.qt_text", "assistant.qt_ui", "assistant.toast_card", "assistant.sdk", "selfcheck"]
 disallow_any_expr = false
 disallow_any_explicit = false
 
 [[tool.mypy.overrides]]
-# Native canvas widgets have the same typed Qt signal boundary as the conversation.
-module = ["assistant.canvas_ui", "assistant.canvas_web", "assistant.canvas_widgets", "assistant.canvas_launcher", "assistant.widgets", "assistant.canvas_icons", "assistant.meeting_panel", "keeper_ui"]
+# Native panels share the typed Qt signal interface with the conversation.
+module = ["assistant.panel_controls", "assistant.widgets", "assistant.vector_icons", "assistant.meeting_panel", "assistant.desktop_bar", "assistant.bar_button", "keeper_ui"]
 disallow_any_expr = false
 disallow_any_explicit = false
 
@@ -51,6 +52,12 @@ disallow_any_explicit = false
 # Generated WinRT bindings are validated inside the native composition boundary.
 module = ["win32more", "win32more.*"]
 ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+# These owners now consume focused native stubs without typing escapes.
+module = ["winapi.composition", "winapi.composition_paths", "assistant.bar_surface"]
+disallow_any_expr = true
+disallow_any_explicit = true
 
 [tool.pyright]
 stubPath = "typings"
@@ -76,186 +83,29 @@ max-positional-args = 5
 "miryoku/layout.py" = ["E501"]
 # Win32 functions keep their Windows names, one prototype per line.
 "winapi/*.py" = ["E501", "N816", "PLR0917"]
+# Dependency stubs preserve the pinned SDK's actual method names.
+"typings/win32more/**/*.pyi" = ["N801", "N802"]
 
 [tool.setuptools]
-py-modules = ["config", "keeper", "keeper_ui", "protocol", "runtime", "selfcheck", "usage"]
+py-modules = ["config", "diagnostics", "keeper", "keeper_ui", "protocol", "runtime", "selfcheck", "usage"]
 
 [tool.setuptools.packages.find]
 include = ["assistant*", "automation*", "miryoku*", "winapi*"]
 
 [tool.setuptools.package-data]
-assistant = ["*.ps1", "canvas_assets/*", "canvas_assets/examples/*"]
+assistant = ["*.ps1", "*.yaml"]
 
 [tool.workspace.architecture]
-models = ["assistant.agent_session", "assistant.recording_state", "automation.task"]
-
-[[tool.workspace.architecture.exceptions]]
-rule = "mutable-field"
-module = "assistant.agent"
-declaration = "Args.values"
-expression = "dict[str, object]"
-reason = "Existing tool arguments retain mutable parsed JSON. Freeze validated nested data at ingress while preserving the external encoding in its adapter."
-kind = "migration"
-
-[[tool.workspace.architecture.exceptions]]
-rule = "immutable-data"
-module = "assistant.agent_input"
-declaration = "_Input"
-expression = "_Input"
-reason = "Existing reply mailbox is shared by a waiting thread and its answer callback. Move mutable coordination into its effect owner before making the reply record immutable."
-kind = "migration"
-
-[[tool.workspace.architecture.exceptions]]
-rule = "immutable-data"
-module = "assistant.browser_surfaces"
-declaration = "_Surface"
-expression = "_Surface"
-reason = "Existing committed assistant.browser_surfaces._Surface uses _Surface; migrate this exact declaration to the documented policy when changing its owner."
-kind = "migration"
-
-[[tool.workspace.architecture.exceptions]]
-rule = "explicit-attributes"
-module = "assistant.canvas_ui"
-declaration = "DesktopWindow.layout_controls"
-expression = "hasattr(self, 'status')"
-reason = "Existing committed assistant.canvas_ui.DesktopWindow.layout_controls uses hasattr(self, 'status'); migrate this exact declaration to the documented policy when changing its owner."
-kind = "migration"
-
-[[tool.workspace.architecture.exceptions]]
-rule = "explicit-attributes"
-module = "assistant.canvas_ui"
-declaration = "DesktopWindow.view_changed"
-expression = "hasattr(self, 'view_timer')"
-reason = "Existing committed assistant.canvas_ui.DesktopWindow.view_changed uses hasattr(self, 'view_timer'); migrate this exact declaration to the documented policy when changing its owner."
-kind = "migration"
-
-[[tool.workspace.architecture.exceptions]]
-rule = "explicit-attributes"
-module = "assistant.canvas_ui"
-declaration = "DesktopWindow.update_map"
-expression = "hasattr(self, 'map')"
-reason = "Existing committed assistant.canvas_ui.DesktopWindow.update_map uses hasattr(self, 'map'); migrate this exact declaration to the documented policy when changing its owner."
-kind = "migration"
-
-[[tool.workspace.architecture.exceptions]]
-rule = "explicit-attributes"
-module = "assistant.canvas_ui"
-declaration = "DesktopWindow._abort"
-expression = "getattr(self, name, None)"
-reason = "Existing committed assistant.canvas_ui.DesktopWindow._abort uses getattr(self, name, None); migrate this exact declaration to the documented policy when changing its owner."
-kind = "migration"
-
-[[tool.workspace.architecture.exceptions]]
-rule = "explicit-attributes"
-module = "assistant.canvas_ui"
-declaration = "DesktopWindow._abort"
-expression = "hasattr(self, 'native')"
-reason = "Existing committed assistant.canvas_ui.DesktopWindow._abort uses hasattr(self, 'native'); migrate this exact declaration to the documented policy when changing its owner."
-kind = "migration"
-
-[[tool.workspace.architecture.exceptions]]
-rule = "explicit-attributes"
-module = "assistant.canvas_ui"
-declaration = "DesktopWindow._abort"
-expression = "hasattr(self, 'work_queue')"
-reason = "Existing committed assistant.canvas_ui.DesktopWindow._abort uses hasattr(self, 'work_queue'); migrate this exact declaration to the documented policy when changing its owner."
-kind = "migration"
-
-[[tool.workspace.architecture.exceptions]]
-rule = "explicit-attributes"
-module = "assistant.canvas_ui"
-declaration = "DesktopWindow._abort"
-expression = "hasattr(self, 'worker')"
-reason = "Existing committed assistant.canvas_ui.DesktopWindow._abort uses hasattr(self, 'worker'); migrate this exact declaration to the documented policy when changing its owner."
-kind = "migration"
-
-[[tool.workspace.architecture.exceptions]]
-rule = "explicit-attributes"
-module = "assistant.canvas_ui"
-declaration = "DesktopWindow._abort"
-expression = "hasattr(self, 'keys_window')"
-reason = "Existing committed assistant.canvas_ui.DesktopWindow._abort uses hasattr(self, 'keys_window'); migrate this exact declaration to the documented policy when changing its owner."
-kind = "migration"
-
-[[tool.workspace.architecture.exceptions]]
-rule = "explicit-attributes"
-module = "assistant.canvas_ui"
-declaration = "DesktopWindow._abort"
-expression = "hasattr(self, 'loop')"
-reason = "Existing committed assistant.canvas_ui.DesktopWindow._abort uses hasattr(self, 'loop'); migrate this exact declaration to the documented policy when changing its owner."
-kind = "migration"
-
-[[tool.workspace.architecture.exceptions]]
-rule = "explicit-attributes"
-module = "assistant.canvas_web"
-declaration = "DesktopWindow.canvas_loading"
-expression = "hasattr(self, 'applications')"
-reason = "Existing committed assistant.canvas_web.DesktopWindow.canvas_loading uses hasattr(self, 'applications'); migrate this exact declaration to the documented policy when changing its owner."
-kind = "migration"
-
-[[tool.workspace.architecture.exceptions]]
-rule = "explicit-attributes"
-module = "assistant.canvas_web"
-declaration = "DesktopWindow.render"
-expression = "hasattr(self, 'bridge')"
-reason = "Existing committed assistant.canvas_web.DesktopWindow.render uses hasattr(self, 'bridge'); migrate this exact declaration to the documented policy when changing its owner."
-kind = "migration"
-
-[[tool.workspace.architecture.exceptions]]
-rule = "explicit-attributes"
-module = "assistant.canvas_web"
-declaration = "DesktopWindow.render"
-expression = "hasattr(self, 'applications')"
-reason = "Existing committed assistant.canvas_web.DesktopWindow.render uses hasattr(self, 'applications'); migrate this exact declaration to the documented policy when changing its owner."
-kind = "migration"
-
-[[tool.workspace.architecture.exceptions]]
-rule = "explicit-attributes"
-module = "assistant.canvas_web"
-declaration = "DesktopWindow.suspend_applications"
-expression = "hasattr(self, 'applications')"
-reason = "Existing committed assistant.canvas_web.DesktopWindow.suspend_applications uses hasattr(self, 'applications'); migrate this exact declaration to the documented policy when changing its owner."
-kind = "migration"
-
-[[tool.workspace.architecture.exceptions]]
-rule = "explicit-attributes"
-module = "assistant.canvas_web"
-declaration = "DesktopWindow.application_geometry_changed"
-expression = "hasattr(self, 'applications')"
-reason = "Existing committed assistant.canvas_web.DesktopWindow.application_geometry_changed uses hasattr(self, 'applications'); migrate this exact declaration to the documented policy when changing its owner."
-kind = "migration"
-
-[[tool.workspace.architecture.exceptions]]
-rule = "explicit-attributes"
-module = "assistant.canvas_web"
-declaration = "DesktopWindow.hide_previews"
-expression = "hasattr(self, 'surface')"
-reason = "Existing committed assistant.canvas_web.DesktopWindow.hide_previews uses hasattr(self, 'surface'); migrate this exact declaration to the documented policy when changing its owner."
-kind = "migration"
-
-[[tool.workspace.architecture.exceptions]]
-rule = "explicit-attributes"
-module = "assistant.canvas_web"
-declaration = "DesktopWindow.close"
-expression = "hasattr(self, 'controller')"
-reason = "Existing committed assistant.canvas_web.DesktopWindow.close uses hasattr(self, 'controller'); migrate this exact declaration to the documented policy when changing its owner."
-kind = "migration"
-
-[[tool.workspace.architecture.exceptions]]
-rule = "explicit-attributes"
-module = "assistant.canvas_web"
-declaration = "DesktopWindow.close"
-expression = "hasattr(self, 'timer')"
-reason = "Existing committed assistant.canvas_web.DesktopWindow.close uses hasattr(self, 'timer'); migrate this exact declaration to the documented policy when changing its owner."
-kind = "migration"
-
-[[tool.workspace.architecture.exceptions]]
-rule = "mutable-field"
-module = "assistant.llm"
-declaration = "ToolSpec.parameters"
-expression = "dict[str, Json]"
-reason = "Existing tool schemas are mutable JSON dictionaries. Introduce immutable schemas together with explicit JSON conversion in the SDK and HTTP adapters."
-kind = "migration"
+# Model ownership follows module moves; mutable effect owners are not models.
+models = [
+    "assistant.agent_session",
+    "assistant.communications",
+    "assistant.feed_triage",
+    "assistant.native_feed",
+    "assistant.recording_state",
+    "assistant.system_notices",
+    "automation.task",
+]
 
 [[tool.workspace.architecture.exceptions]]
 rule = "explicit-attributes"
@@ -263,39 +113,6 @@ module = "assistant.meeting_followup_store"
 declaration = "FollowupStore._publish"
 expression = "getattr(error, 'winerror', None)"
 reason = "Read the optional native OSError code for bounded publication retry after Windows sharing/access errors."
-kind = "necessity"
-
-[[tool.workspace.architecture.exceptions]]
-rule = "immutable-data"
-module = "assistant.overlay"
-declaration = "OverlayState"
-expression = "OverlayState"
-reason = "Existing overlay callers expect in-place updates. Replace them with immutable transitions in a focused native-view change; no performance necessity is claimed."
-kind = "migration"
-
-[[tool.workspace.architecture.exceptions]]
-rule = "immutable-data"
-module = "assistant.sdk"
-declaration = "TextBuffer"
-expression = "TextBuffer"
-reason = "Private streaming accumulators update growing fragment maps and completion sets; persistent copies per fragment add substantial cumulative work. Published timeline values remain immutable."
-kind = "necessity"
-
-[[tool.workspace.architecture.exceptions]]
-rule = "immutable-data"
-module = "miryoku.engine"
-declaration = "Modifiers"
-expression = "Modifiers"
-reason = "Modifier ownership counters are updated for every key event inside the measured keyboard path; copying them would add per-event allocation."
-kind = "necessity"
-
-[[tool.workspace.architecture.exceptions]]
-rule = "immutable-data"
-module = "miryoku.engine"
-declaration = "Engine"
-expression = "Engine"
-reason = "The isolated keyboard path uses bounded mutable buffers and direct updates; docs/functional-design.md records latency, allocation and GC measurements."
-kind = "necessity"
 
 [[tool.workspace.architecture.exceptions]]
 rule = "explicit-attributes"
@@ -303,7 +120,6 @@ module = "scripts.deploy_windows"
 declaration = "Release.__init__"
 expression = "getattr(library, name)"
 reason = "Resolve fixed reviewed ctypes function declarations before assigning their concrete native prototypes."
-kind = "necessity"
 
 [[tool.workspace.architecture.exceptions]]
 rule = "explicit-attributes"
@@ -311,13 +127,72 @@ module = "selfcheck"
 declaration = "run_tests"
 expression = "getattr(test, '__module__', None)"
 reason = "The protected runner inspects discovered test callables to verify their defining module."
-kind = "necessity"
 
+[[tool.workspace.architecture.exceptions]]
+rule = "immutable-data"
+module = "miryoku.engine"
+declaration = "Engine"
+expression = "Engine"
+reason = "The isolated keyboard path uses bounded mutable buffers and direct updates; docs/functional-design.md records latency, allocation and GC measurements."
+
+[[tool.workspace.architecture.exceptions]]
+rule = "immutable-data"
+module = "miryoku.engine"
+declaration = "Modifiers"
+expression = "Modifiers"
+reason = "Modifier ownership counters are updated for every key event inside the measured keyboard path; copying them would add per-event allocation."
+
+[[tool.workspace.architecture.exceptions]]
+rule = "immutable-data"
+module = "assistant.sdk"
+declaration = "TextBuffer"
+expression = "TextBuffer"
+reason = "Private streaming accumulators update growing fragment maps and completion sets; persistent copies per fragment add substantial cumulative work. Published timeline values remain immutable."
+
+[[tool.workspace.architecture.exceptions]]
+rule = "immutable-data"
+module = "assistant.agent_input"
+declaration = "_Input"
+expression = "_Input"
+kind = "migration"
+reason = "Existing reply mailbox is shared by a waiting thread and its answer callback. Move mutable coordination into its effect owner before making the reply record immutable."
+
+[[tool.workspace.architecture.exceptions]]
+rule = "immutable-data"
+module = "assistant.overlay"
+declaration = "OverlayState"
+expression = "OverlayState"
+kind = "migration"
+reason = "Existing overlay callers expect in-place updates. Replace them with immutable transitions in a focused native-view change; no performance necessity is claimed."
+
+[[tool.workspace.architecture.exceptions]]
+rule = "immutable-data"
+module = "assistant.shell_state"
+declaration = "WindowsKeyTap"
+expression = "WindowsKeyTap"
+kind = "migration"
+reason = "Existing Windows-key hook mutates held-key state. Measure its native callback before replacing that state; the current shape has no specific before/after evidence."
+
+[[tool.workspace.architecture.exceptions]]
+rule = "mutable-field"
+module = "assistant.agent"
+declaration = "Args.values"
+expression = "dict[str, object]"
+kind = "migration"
+reason = "Existing tool arguments retain mutable parsed JSON. Freeze validated nested data at ingress while preserving the external encoding in its adapter."
 
 [[tool.workspace.architecture.exceptions]]
 rule = "mutable-field"
 module = "assistant.agent_execution"
 declaration = "Conversation.history"
 expression = "list[Json]"
-reason = "Existing volatile SDK history is shared by identity with Agent. Move its mutation behind the execution owner while preserving ADR-0001 recovery and privacy constraints."
 kind = "migration"
+reason = "Existing volatile SDK history is shared by identity with Agent. Move its mutation behind the execution owner while preserving ADR-0001 recovery and privacy constraints."
+
+[[tool.workspace.architecture.exceptions]]
+rule = "mutable-field"
+module = "assistant.llm"
+declaration = "ToolSpec.parameters"
+expression = "dict[str, Json]"
+kind = "migration"
+reason = "Existing tool schemas are mutable JSON dictionaries. Introduce immutable schemas together with explicit JSON conversion in the SDK and HTTP adapters."

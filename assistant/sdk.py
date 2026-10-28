@@ -233,7 +233,7 @@ def after_tools(context: RunContextWrapper[Agent], results: list[FunctionToolRes
     if local.work is not None and local.work.disposition is not None:
         return ToolsToFinalOutputResult(is_final_output=True, final_output="Waiting for this task to continue.")
     if local.installing is not None:
-        return ToolsToFinalOutputResult(is_final_output=True, final_output=f"Installing: {local.installing}. The workspace restarts in a moment.")
+        return ToolsToFinalOutputResult(is_final_output=True, final_output=f"Installing: {local.installing}. Workspace restarts in a moment.")
     return ToolsToFinalOutputResult(is_final_output=False)
 
 

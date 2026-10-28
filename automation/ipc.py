@@ -27,17 +27,12 @@ from assistant.agent_session import (
     ToolOutcome,
     ToolStatus,
 )
-from assistant.browser_surface_operations import AppOperation, AppResult
-from assistant.browser_surface_operations import operation_data as app_operation_data
-from assistant.browser_surface_operations import operation_of as app_operation_of
-from assistant.browser_surface_operations import result_data as app_result_data
-from assistant.browser_surface_operations import result_of as app_result_of
 from assistant.llm import Json
 from assistant.recording_state import AudioSource
 from winapi.shapes import Window
 
 from .execution import ApprovalReview
-from .task import Approval, RunRef, digest, identifier, integer, text, timestamp, variant
+from .task import Approval, RunRef, digest, identifier, integer, text, timestamp
 
 VERSION: Final = 1
 MAX_FRAME: Final = 1_048_576
@@ -97,35 +92,11 @@ type MeetingResult = MeetingSucceeded | MeetingFailed
 
 
 @dataclass(frozen=True, slots=True)
-class BrowserAppRequest:
-    run: RunRef
-    request_id: str
-    operation: AppOperation
-    expires_at: float
-
-    def __post_init__(self) -> None:
-        variant(self.run, RunRef, "browser app run")
-        identifier(self.request_id, "browser app request")
-        app_operation_of(app_operation_data(self.operation))
-        object.__setattr__(self, "expires_at", timestamp(self.expires_at, "browser app expiry"))
-
-
-@dataclass(frozen=True, slots=True)
-class BrowserAppCancelled:
-    run: RunRef
-    request_id: str
-
-    def __post_init__(self) -> None:
-        variant(self.run, RunRef, "browser app run")
-        identifier(self.request_id, "browser app request")
-
-
-@dataclass(frozen=True, slots=True)
 class Resync:
     reason: str
 
 
-type BridgeEvent = LogEvent | ReviewEvent | MeetingRequest | BrowserAppRequest | BrowserAppCancelled | Resync
+type BridgeEvent = LogEvent | ReviewEvent | MeetingRequest | Resync
 
 
 @dataclass(frozen=True, slots=True)
@@ -166,18 +137,11 @@ class MeetingResponse:
     result: MeetingResult
 
 
-@dataclass(frozen=True, slots=True)
-class BrowserAppResponse:
-    run: RunRef
-    request_id: str
-    result: AppResult
-
-
 class Command(Enum):
     WAKE = auto()
 
 
-type Operation = Hello | Poll | Register | PublishContext | MeetingResponse | BrowserAppResponse | Command
+type Operation = Hello | Poll | Register | PublishContext | MeetingResponse | Command
 
 
 @dataclass(frozen=True, slots=True)
@@ -434,11 +398,6 @@ def event_data(message: Envelope) -> dict[str, Json]:
                        "fingerprint": review.fingerprint, "title": review.title, "detail": review.detail}
         case MeetingRequest(run, request_id, operation):
             payload = {"kind": "meeting", "run": _run_data(run), "request": request_id, "operation": _meeting_data(operation)}
-        case BrowserAppRequest(run, request_id, operation, expires_at):
-            payload = {"kind": "browser_app", "run": _run_data(run), "request": request_id,
-                       "operation": app_operation_data(operation), "expires_at": expires_at}
-        case BrowserAppCancelled(run, request_id):
-            payload = {"kind": "browser_app_cancelled", "run": _run_data(run), "request": request_id}
         case Resync(reason):
             payload = {"kind": "resync", "reason": reason}
         case _:
@@ -469,13 +428,6 @@ def decode_event(value: object) -> Envelope:
         case "meeting":
             part = record(value, "kind run request operation")
             payload = MeetingRequest(_run(part["run"]), identifier(part["request"]), _meeting(part["operation"]))
-        case "browser_app":
-            part = record(value, "kind run request operation expires_at")
-            payload = BrowserAppRequest(_run(part["run"]), identifier(part["request"]), app_operation_of(part["operation"]),
-                                        timestamp(part["expires_at"], "browser app expiry"))
-        case "browser_app_cancelled":
-            part = record(value, "kind run request")
-            payload = BrowserAppCancelled(_run(part["run"]), identifier(part["request"]))
         case "resync":
             part = record(value, "kind reason")
             payload = Resync(text(part["reason"], "resynchronization reason", maximum=1000))
@@ -518,8 +470,6 @@ def _operation_data(operation: Operation) -> dict[str, Json]:
             return {"kind": "context", "context": context_data(context), "pid": pid}
         case MeetingResponse(run, request_id, result):
             return {"kind": "response", "run": _run_data(run), "request": request_id, "result": _result_data(result)}
-        case BrowserAppResponse(run, request_id, result):
-            return {"kind": "browser_app_response", "run": _run_data(run), "request": request_id, "result": app_result_data(result)}
         case Command.WAKE:
             return {"kind": "wake"}
         case _:
@@ -544,9 +494,6 @@ def _operation(value: object) -> Operation:
         case "response":
             data = record(value, "kind run request result")
             return MeetingResponse(_run(data["run"]), identifier(data["request"]), _result(data["result"]))
-        case "browser_app_response":
-            data = record(value, "kind run request result")
-            return BrowserAppResponse(_run(data["run"]), identifier(data["request"]), app_result_of(data["result"]))
         case "wake":
             record(value, "kind")
             return Command.WAKE

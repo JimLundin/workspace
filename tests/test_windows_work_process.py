@@ -40,6 +40,8 @@ def notify(message):
     with lock:
         channel.sendall((message + "\n").encode("utf-8"))
 
+notify("pid:" + str(os.getpid()))
+
 class Execution:
     def run_work(self, claim, store, log, stop):
         assert isinstance(claim.previous, Interrupted), claim.previous
@@ -80,6 +82,7 @@ class NativeWorker:
     process: subprocess.Popen[bytes]
     peer: socket.socket
     title: str
+    process_id: int
 
     def receive(self) -> str:
         message = bytearray()
@@ -95,7 +98,7 @@ class NativeWorker:
 
     def close_window(self) -> None:
         hwnd = windows.find(self.title)
-        assert hwnd is not None and windows.process_id(hwnd) == self.process.pid
+        assert hwnd is not None and windows.process_id(hwnd) == self.process_id
         assert system.post_message(hwnd, system.WM_CLOSE, 0, 0)
 
 
@@ -114,7 +117,11 @@ def worker(folder: Path, *, mode: str) -> Generator[NativeWorker]:
             peer, _address = server.accept()
             with peer:
                 peer.settimeout(12)
-                yield NativeWorker(process, peer, title)
+                native = NativeWorker(process, peer, title, process.pid)
+                identity = native.receive()
+                assert identity.startswith("pid:") and identity[4:].isdecimal()
+                native.process_id = int(identity[4:])
+                yield native
         finally:
             if process.poll() is None:
                 process.kill()  # Only this isolated fixture child; never the desktop Workspace.

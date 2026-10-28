@@ -11,6 +11,7 @@ from automation.task import Completed, Question, RequestSource, RoutineSource, T
 
 from .test_external_input import has_pending_input
 from .test_work_agent import RecordingBridge, WorkRig, invocation
+from .work_fixture import seed_tasks
 
 
 class PollHold:
@@ -57,21 +58,21 @@ def test_identified_duplicates_reuse_the_original_source_and_invocation_context_
     current = invocation("Original workbook")
     rig = WorkRig(tmp_path, context=lambda: current)
     try:
-        rig.agent.submit_identified("canvas-task", "Summarize this workbook")
+        rig.agent.submit_identified("caller-task", "Summarize this workbook")
         rig.refresh()
-        original = rig.tasks.get("canvas-task")
+        original = rig.tasks.get("caller-task")
         assert original is not None
         current = invocation("A different workbook")
         assert rig.agent.new_conversation()
-        rig.agent.submit_identified("canvas-task", "Summarize this workbook")
+        rig.agent.submit_identified("caller-task", "Summarize this workbook")
         snapshot = rig.refresh()
-        assert rig.tasks.get("canvas-task") == original
+        assert rig.tasks.get("caller-task") == original
         assert rig.bridge.registrations == [(original.id, invocation("Original workbook"), 1234)]
         assert snapshot.submission_problems == () and len(snapshot.tasks) == 1
         assert snapshot.status == "" and not rig.errors
-        rig.agent.submit_identified("canvas-task", "An unrelated request")
+        rig.agent.submit_identified("caller-task", "An unrelated request")
         snapshot = rig.refresh()
-        assert rig.tasks.get("canvas-task") == original
+        assert rig.tasks.get("caller-task") == original
         assert len(rig.bridge.registrations) == 1
         assert [(problem.task_id, "different request" in problem.reason) for problem in snapshot.submission_problems] == [(original.id, True)]
         # An unrelated row with the same ID cannot clear the failed submission.
@@ -92,7 +93,7 @@ def test_an_identified_request_cannot_attach_a_routine_task_with_the_same_id_and
         rig.close()
 
 
-def test_invalid_identified_input_is_rejected_before_the_canvas_accepts_it(tmp_path: Path) -> None:
+def test_invalid_identified_input_is_rejected_before_the_caller_accepts_it(tmp_path: Path) -> None:
     rig = WorkRig(tmp_path, start=False)
     try:
         with TestCase().assertRaisesRegex(ValueError, "task identity"):
@@ -148,34 +149,34 @@ def test_watching_a_missing_id_distinguishes_an_observed_absence_from_a_failed_r
         rig.close()
 
 
-def test_canvas_and_meeting_watches_retain_each_others_tasks(tmp_path: Path) -> None:
+def test_caller_and_meeting_watches_retain_each_others_tasks(tmp_path: Path) -> None:
     rig = WorkRig(tmp_path)
     try:
-        rig.agent.watch(("canvas-result",))
+        rig.agent.watch(("caller-result",))
         rig.agent.watch(("meeting-followup",), owner="meetings")
-        assert {problem.task_id for problem in rig.refresh().submission_problems} == {"canvas-result", "meeting-followup"}
+        assert {problem.task_id for problem in rig.refresh().submission_problems} == {"caller-result", "meeting-followup"}
         rig.agent.watch(())
         assert {problem.task_id for problem in rig.refresh().submission_problems} == {"meeting-followup"}
-        rig.agent.watch(("canvas-result",))
+        rig.agent.watch(("caller-result",))
         rig.agent.watch((), owner="meetings")
-        assert {problem.task_id for problem in rig.refresh().submission_problems} == {"canvas-result"}
+        assert {problem.task_id for problem in rig.refresh().submission_problems} == {"caller-result"}
     finally:
         rig.close()
 
 
 def test_watch_capacity_rejection_preserves_both_views_interests(tmp_path: Path) -> None:
     rig = WorkRig(tmp_path)
-    canvas = tuple(f"canvas-{index}" for index in range(256))
+    caller = tuple(f"caller-{index}" for index in range(256))
     meetings = tuple(f"meeting-{index}" for index in range(256))
     try:
-        rig.agent.watch(canvas)
+        rig.agent.watch(caller)
         rig.agent.watch(meetings, owner="meetings")
         with TestCase().assertRaisesRegex(ValueError, "512"):
             rig.agent.watch((*meetings, "one-too-many"), owner="meetings")
-        assert {problem.task_id for problem in rig.refresh().submission_problems} == {*canvas, *meetings}
+        assert {problem.task_id for problem in rig.refresh().submission_problems} == {*caller, *meetings}
         rig.agent.watch((), owner="meetings")
         rig.agent.watch(("replacement",), owner="meetings")
-        assert {problem.task_id for problem in rig.refresh().submission_problems} == {*canvas, "replacement"}
+        assert {problem.task_id for problem in rig.refresh().submission_problems} == {*caller, "replacement"}
     finally:
         rig.close()
 
@@ -206,24 +207,23 @@ def test_unrelated_failures_cannot_evict_a_watched_identity_collision(tmp_path: 
 def test_watch_recovers_an_old_completed_id_outside_the_overview_and_coalesces_replacements(tmp_path: Path) -> None:
     rig = WorkRig(tmp_path, start=False)
     try:
-        rig.tasks.submit("old-canvas-task", "Old task", "Old task", RequestSource("old-conversation"), at=10)
+        rig.tasks.submit("old-caller-task", "Old task", "Old task", RequestSource("old-conversation"), at=10)
         claim = rig.tasks.claim("worker", "old-run", at=11)
         assert claim is not None
         rig.tasks.finish(claim.run, Completed("The old saved result", ()), at=12)
-        for index in range(1_000):
-            rig.tasks.submit(f"newer-{index:04}", "Newer work", "Newer work", RequestSource("another-conversation"), at=100 + index)
-        assert all(task.id != "old-canvas-task" for task in rig.tasks.list_tasks(limit=1_000))
+        seed_tasks(rig.tasks, tuple(f"newer-{index:04d}" for index in range(1_000)), RequestSource("another-conversation"), at=100)
+        assert all(task.id != "old-caller-task" for task in rig.tasks.list_tasks(limit=1_000))
         rig.agent.watch(("superseded-interest",))
-        rig.agent.watch(("old-canvas-task",) * 600)
+        rig.agent.watch(("old-caller-task",) * 600)
         with TestCase().assertRaisesRegex(ValueError, "512"):
             rig.agent.watch(tuple(f"over-capacity-{index}" for index in range(513)))
         rig.agent.start_worker()
         snapshot = rig.refresh()
-        recovered = next(task for task in snapshot.tasks if task.id == "old-canvas-task")
+        recovered = next(task for task in snapshot.tasks if task.id == "old-caller-task")
         assert recovered.state == Completed("The old saved result", ())
         assert not snapshot.submission_problems
         rig.agent.watch(())
-        assert all(task.id != "old-canvas-task" for task in rig.refresh().tasks)
+        assert all(task.id != "old-caller-task" for task in rig.refresh().tasks)
     finally:
         rig.close()
 
@@ -306,3 +306,30 @@ def test_a_later_confirmed_answer_is_not_reopened_after_a_failed_observation(tmp
         assert [response.reply for response in rig.tasks.responses("question-task")] == [TextAnswer("2026")]
     finally:
         rig.close()
+
+
+def test_ordinary_unconfirmed_submission_requires_its_original_prompt_and_conversation(tmp_path: Path) -> None:
+    for mismatch in ("prompt", "conversation", "routine"):
+        gate = PollHold()
+        rig = WorkRig(tmp_path / mismatch, bridge=RecordingBridge(on_poll=gate.poll))
+        try:
+            rig.agent.start("Establish the original conversation")
+            original = rig.refresh().tasks[0]
+            with unavailable_journal(rig, gate):
+                rig.agent.start("The unconfirmed ordinary request")
+                assert rig.agent.refresh().wait(5)
+                pending = rig.agent.snapshot().submission_problems
+                assert len(pending) == 1
+                identity = pending[0].task_id
+            source = (RequestSource("another-conversation") if mismatch == "conversation" else
+                      RoutineSource("routine", 0, "occurrence") if mismatch == "routine" else original.source)
+            prompt = "A different request" if mismatch == "prompt" else "The unconfirmed ordinary request"
+            rig.tasks.submit(identity, "Externally committed work", prompt, source, at=rig.clock())
+            assert [problem.task_id for problem in rig.refresh().submission_problems] == [identity]
+            if mismatch == "prompt":
+                rig.tasks.revise(identity, "The unconfirmed ordinary request", at=rig.clock())
+                assert rig.refresh().submission_problems == ()
+            else:
+                assert [problem.task_id for problem in rig.refresh().submission_problems] == [identity]
+        finally:
+            rig.close()

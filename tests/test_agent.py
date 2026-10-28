@@ -637,7 +637,7 @@ def test_key_combinations() -> None:
     assert key_strokes("ctrl+banana") is None
 
 
-# ---- changing the workspace itself -------------------------------------------------------
+# ---- changing Workspace itself -------------------------------------------------------
 
 
 def source(tmp_path: Path) -> Workspace:
@@ -657,7 +657,7 @@ def test_the_agent_edits_checks_and_applies_a_change(tmp_path: Path) -> None:
         assert rig.machine.log == ["install Say hello"]
         assert rig.machine.reviewed == []
         assert "1 passed, 0 failed" in rig.results(2)[0]
-        assert rig.window.log[-1] == "done Installing: Say hello. The workspace restarts in a moment."
+        assert rig.window.log[-1] == "done Installing: Say hello. Workspace restarts in a moment."
         assert len(endpoint.received) == 3  # the task ends with the install
 
 

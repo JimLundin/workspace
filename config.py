@@ -1,6 +1,6 @@
 """Your settings: the apps on the Apps layer, text snippets, what each rewrite key
 asks for, and which commands skip prompts in optional approval mode. Edit freely; it's
-checked when the workspace starts. (Secrets and the AI endpoint are environment
+checked when Workspace starts. (Secrets and the AI endpoint are environment
 variables instead; see the README.)
 """
 

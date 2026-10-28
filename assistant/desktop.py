@@ -7,15 +7,17 @@ from collections.abc import Callable
 from typing import Final, Literal
 
 from config import TERMINALS
-from protocol import MAGIC, Tool
 from winapi import audio, clipboard, inputs, screen, windows
 from winapi.shapes import Rect, Window
+lazy from protocol import MAGIC, Tool
 
-from .geometry import Shot, fit, half, to_monitor
-from .icons import State
-from .png import encode_png
-from .textio import paste_text
-from .ui import AnswerWindow, Ui
+lazy from .geometry import Shot, fit, half, to_monitor
+lazy from .icons import State
+lazy from .png import encode_png
+lazy from .textio import paste_text
+lazy from .tiling import GlazeWM
+lazy from .tiling_commands import GLOBAL_TILING, TILING_COMMANDS, WINDOW_COMMANDS
+lazy from .ui import AnswerWindow, Ui
 
 _VK_CONTROL, _VK_C, _VK_V = 0xA2, 0x43, 0x56
 _CLIPBOARD_WAIT_S: Final = 0.6
@@ -32,7 +34,7 @@ def _shortcut(vk: int) -> None:
 
 
 class WinDesktop:
-    __slots__ = ("mic", "on_notify", "on_problem", "on_state", "owner", "ui")
+    __slots__ = ("mic", "on_notify", "on_problem", "on_state", "owner", "tiling", "ui")
 
     def __init__(
         self,
@@ -43,6 +45,7 @@ class WinDesktop:
         on_state: Callable[[State], None],
         on_notify: Callable[[str, str], None],
         on_problem: Callable[[str], None],
+        tiling: GlazeWM | None = None,
     ) -> None:
         self.owner = owner
         """The assistant's window: it owns what we put on the clipboard."""
@@ -51,6 +54,7 @@ class WinDesktop:
         self.on_state = on_state
         self.on_notify = on_notify
         self.on_problem = on_problem
+        self.tiling = tiling
 
     # ---- the microphone ----------------------------------------------------------------
 
@@ -91,7 +95,8 @@ class WinDesktop:
         inputs.type_text(text, MAGIC)
 
     def set_clipboard(self, text: str) -> None:
-        clipboard.set_text(self.owner, text)
+        if not clipboard.set_text(self.owner, text):
+            raise OSError("The clipboard is busy. Try copying the transcript again.")
 
     # ---- the screen --------------------------------------------------------------------
 
@@ -136,9 +141,16 @@ class WinDesktop:
         except OSError:
             subprocess.Popen(["cmd", "/c", "start", "", command], creationflags=_CREATE_NO_WINDOW)
 
-    def arrange(self, tool: Tool) -> None:
-        hwnd = windows.foreground()
+    def arrange(self, tool: Tool, *, target: int | None = None) -> None:
+        hwnd = windows.foreground() if target is None else target
+        if command := TILING_COMMANDS.get(tool):
+            if self.tiling is None:
+                raise OSError("Automatic tiling isn't available.")
+            self.tiling.command(command, None if tool in GLOBAL_TILING else hwnd)
+            return
         if not hwnd:
+            return
+        if self.tiling is not None and (command := WINDOW_COMMANDS.get(tool)) and self.tiling.arrange(command, hwnd):
             return
         match tool:
             case Tool.SNAP_LEFT | Tool.SNAP_RIGHT:

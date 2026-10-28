@@ -1,4 +1,4 @@
-"""The agent's workspace: a copy of the workspace's source it may edit freely. Nothing
+"""The agent's workspace: a copy of Workspace's source it may edit freely. Nothing
 it does here touches the running workspace; the keeper installs the workspace, after
 checking it, when asked (see keeper.py)."""
 
@@ -60,10 +60,10 @@ class Workspace:
     def _path(self, name: str) -> Path:
         relative = PurePosixPath(name.replace("\\", "/"))
         if relative.is_absolute() or ".." in relative.parts or ":" in name or any(p.endswith((".", " ")) for p in relative.parts):
-            raise SourceError(f"{name} is outside the workspace's source")
+            raise SourceError(f"{name} is outside Workspace's source")
         path = self.root / relative
         if not path.resolve().is_relative_to(self.root.resolve()):
-            raise SourceError(f"{name} is outside the workspace's source")
+            raise SourceError(f"{name} is outside Workspace's source")
         return path
 
     def _writable(self, name: str) -> Path:

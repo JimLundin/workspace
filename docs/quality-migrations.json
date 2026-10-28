@@ -3,402 +3,6 @@
   "entries": [
     {
       "key": {
-        "rule": "FBT001",
-        "path": "assistant/agent.py",
-        "scope": "Machine.mouse_button.down",
-        "signature": "97539690c2e1def12788f7419609f0213bf6a4bd8e67a65f70032f1bc46e121c"
-      },
-      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
-    },
-    {
-      "key": {
-        "rule": "FBT001",
-        "path": "assistant/agent_toasts.py",
-        "scope": "AgentToasts.set_hover.inside",
-        "signature": "92cab3b5e62a1086b4006a2abe4870644f6e69be4ad436faea5177b82a9e26f5"
-      },
-      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
-    },
-    {
-      "key": {
-        "rule": "FBT001",
-        "path": "assistant/browser_surfaces.py",
-        "scope": "BrowserSurfaces._loaded.success",
-        "signature": "fd81fa726ac43c7d125ca3ead6c3dcdc67a3b8edc42a7c6ecbfc306b78628a3b"
-      },
-      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
-    },
-    {
-      "key": {
-        "rule": "FBT001",
-        "path": "assistant/browser_surfaces.py",
-        "scope": "_Page.acceptNavigationRequest._main",
-        "signature": "7ccb55be2614e909bb9a87f03801264aecc67e1d3380f0afdb156fb95e5e55eb"
-      },
-      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
-    },
-    {
-      "key": {
-        "rule": "FBT001",
-        "path": "assistant/browser_values.py",
-        "scope": "boolean.default",
-        "signature": "150cac38cefb7a3a8ad82a6df444a115c505d70bc0752f2ac15ddb252b08e4d4"
-      },
-      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
-    },
-    {
-      "key": {
-        "rule": "FBT001",
-        "path": "assistant/canvas_web.py",
-        "scope": "Page.acceptNavigationRequest._main",
-        "signature": "7ccb55be2614e909bb9a87f03801264aecc67e1d3380f0afdb156fb95e5e55eb"
-      },
-      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
-    },
-    {
-      "key": {
-        "rule": "FBT001",
-        "path": "assistant/features.py",
-        "scope": "Assistant.handle.down",
-        "signature": "992a51e4971347d1634e5e0c4216de14be3d2606e22cbfa6a432d9c7d379a97c"
-      },
-      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
-    },
-    {
-      "key": {
-        "rule": "FBT001",
-        "path": "assistant/features.py",
-        "scope": "Assistant.hold.down",
-        "signature": "735e176f99333da90922bd0cbd15b31a6cc5e88ad032403b6cae42717806260b"
-      },
-      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
-    },
-    {
-      "key": {
-        "rule": "FBT001",
-        "path": "assistant/llm.py",
-        "scope": "_chat_body.streaming",
-        "signature": "4326e818bdcecafeff4c33ac0ccc7231fea7394afef4c7e43c59da286d1b7f65"
-      },
-      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
-    },
-    {
-      "key": {
-        "rule": "FBT001",
-        "path": "assistant/machine.py",
-        "scope": "WinMachine.mouse_button.down",
-        "signature": "97539690c2e1def12788f7419609f0213bf6a4bd8e67a65f70032f1bc46e121c"
-      },
-      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
-    },
-    {
-      "key": {
-        "rule": "FBT001",
-        "path": "assistant/notifications.py",
-        "scope": "hover.inside",
-        "signature": "09ae5145e9babf6e207c8faf9be3e43d37432c04c9d5165870fd7b8952be8230"
-      },
-      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
-    },
-    {
-      "key": {
-        "rule": "FBT001",
-        "path": "assistant/notifications.py",
-        "scope": "reading_hold.reading",
-        "signature": "dc68593350710137597de7f1c69944d7297e5f98f19d3d03fdcf603ac16d94f1"
-      },
-      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
-    },
-    {
-      "key": {
-        "rule": "FBT001",
-        "path": "assistant/overlay.py",
-        "scope": "OverlayState.key.down",
-        "signature": "e24ac2aaad6790b3a7daf82d65de76f6cfa6cd1ac7253eaf9073b5ff18b93070"
-      },
-      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
-    },
-    {
-      "key": {
-        "rule": "FBT001",
-        "path": "assistant/overlay.py",
-        "scope": "OverlayState.set_layout.on",
-        "signature": "0ecd8c262d2ff9e5b885ecb6deb12af6b64eed3bb5ac1458bd3624260c5bdaab"
-      },
-      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
-    },
-    {
-      "key": {
-        "rule": "FBT001",
-        "path": "assistant/overlay.py",
-        "scope": "save_enabled.enabled",
-        "signature": "39cdb09971205afa58328bbec1a78ed60af91d565ae118a3300f2d9b4b183630"
-      },
-      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
-    },
-    {
-      "key": {
-        "rule": "FBT001",
-        "path": "assistant/qt_ui.py",
-        "scope": "EventLoop.watch.visible",
-        "signature": "6ed3d0b73769b674456e002fd5022fa251d464888f34898f6a3692f315a8ea88"
-      },
-      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
-    },
-    {
-      "key": {
-        "rule": "FBT001",
-        "path": "assistant/ui.py",
-        "scope": "ReviewWindow.finish.install",
-        "signature": "07fd6bd3652922462cbfb8a4e7a67a6c1091bab3352d39a72f6ef5ee8858d900"
-      },
-      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
-    },
-    {
-      "key": {
-        "rule": "FBT001",
-        "path": "automation/execution.py",
-        "scope": "WorkExecution.reconcile.applied",
-        "signature": "b156a90170de7d8e1c8a8089f819170d2ee68cce74961ef82049854386fcd112"
-      },
-      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
-    },
-    {
-      "key": {
-        "rule": "FBT001",
-        "path": "keeper.py",
-        "scope": "Keeper.persist.pending",
-        "signature": "d0844993137c3963b1fb239a94d53c96c79da49dd966be9c5b9e92398bb3bc4e"
-      },
-      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
-    },
-    {
-      "key": {
-        "rule": "FBT001",
-        "path": "keeper.py",
-        "scope": "Recovery.write.pending",
-        "signature": "bc1bff898b42d8cbd9319aeb852e399f8285d4d380de2e6b1260032723a44567"
-      },
-      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
-    },
-    {
-      "key": {
-        "rule": "FBT001",
-        "path": "miryoku/engine.py",
-        "scope": "Engine.key.down",
-        "signature": "0614e4e89f2040aacc059e8f231b31b3126feb7d1cf2662346c3135db9131823"
-      },
-      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
-    },
-    {
-      "key": {
-        "rule": "FBT001",
-        "path": "miryoku/engine.py",
-        "scope": "Engine.on_key.down",
-        "signature": "0614e4e89f2040aacc059e8f231b31b3126feb7d1cf2662346c3135db9131823"
-      },
-      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
-    },
-    {
-      "key": {
-        "rule": "FBT001",
-        "path": "miryoku/engine.py",
-        "scope": "Host.request.down",
-        "signature": "992a51e4971347d1634e5e0c4216de14be3d2606e22cbfa6a432d9c7d379a97c"
-      },
-      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
-    },
-    {
-      "key": {
-        "rule": "FBT001",
-        "path": "miryoku/engine.py",
-        "scope": "Host.send.down",
-        "signature": "5c6e8cb17ec813e17c2f1c65c1127a157cd61cc1a1d665821ec7f8a3cc083b7a"
-      },
-      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
-    },
-    {
-      "key": {
-        "rule": "FBT001",
-        "path": "miryoku/layout.py",
-        "scope": "character.shifted",
-        "signature": "00c59be191f19a88b7f04503eeeb7cadf32370eb505c0cc2760aa46b98004af8"
-      },
-      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
-    },
-    {
-      "key": {
-        "rule": "FBT001",
-        "path": "miryoku/win.py",
-        "scope": "Keyboard.show_key.down",
-        "signature": "e24ac2aaad6790b3a7daf82d65de76f6cfa6cd1ac7253eaf9073b5ff18b93070"
-      },
-      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
-    },
-    {
-      "key": {
-        "rule": "FBT001",
-        "path": "miryoku/win.py",
-        "scope": "Keyboard.swallow.down",
-        "signature": "9958bbb06154a7dc388044e72cdaa9813781816c854472d52b2def7b6f5c7c6a"
-      },
-      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
-    },
-    {
-      "key": {
-        "rule": "FBT001",
-        "path": "miryoku/win.py",
-        "scope": "WinHost.request.down",
-        "signature": "992a51e4971347d1634e5e0c4216de14be3d2606e22cbfa6a432d9c7d379a97c"
-      },
-      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
-    },
-    {
-      "key": {
-        "rule": "FBT001",
-        "path": "miryoku/win.py",
-        "scope": "WinHost.send.down",
-        "signature": "5c6e8cb17ec813e17c2f1c65c1127a157cd61cc1a1d665821ec7f8a3cc083b7a"
-      },
-      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
-    },
-    {
-      "key": {
-        "rule": "FBT001",
-        "path": "protocol.py",
-        "scope": "encode_indicator.caps_word",
-        "signature": "fe1d90cc71a9ef46eeb596bd6b4ea1a3669e567bbe76e50fc34d6b33dad635fa"
-      },
-      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
-    },
-    {
-      "key": {
-        "rule": "FBT001",
-        "path": "protocol.py",
-        "scope": "encode_indicator.locked",
-        "signature": "fe1d90cc71a9ef46eeb596bd6b4ea1a3669e567bbe76e50fc34d6b33dad635fa"
-      },
-      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
-    },
-    {
-      "key": {
-        "rule": "FBT001",
-        "path": "scripts/benchmark_keyboard.py",
-        "scope": "run.Host.request.down",
-        "signature": "992a51e4971347d1634e5e0c4216de14be3d2606e22cbfa6a432d9c7d379a97c"
-      },
-      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
-    },
-    {
-      "key": {
-        "rule": "FBT001",
-        "path": "scripts/benchmark_keyboard.py",
-        "scope": "run.Host.send.down",
-        "signature": "5c6e8cb17ec813e17c2f1c65c1127a157cd61cc1a1d665821ec7f8a3cc083b7a"
-      },
-      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
-    },
-    {
-      "key": {
-        "rule": "FBT001",
-        "path": "tests/test_agent.py",
-        "scope": "FakeMachine.mouse_button.down",
-        "signature": "97539690c2e1def12788f7419609f0213bf6a4bd8e67a65f70032f1bc46e121c"
-      },
-      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
-    },
-    {
-      "key": {
-        "rule": "FBT001",
-        "path": "tests/test_computer_tools.py",
-        "scope": "StoppingMouse.mouse_button.down",
-        "signature": "97539690c2e1def12788f7419609f0213bf6a4bd8e67a65f70032f1bc46e121c"
-      },
-      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
-    },
-    {
-      "key": {
-        "rule": "FBT001",
-        "path": "tests/test_engine.py",
-        "scope": "FakeHost.request.down",
-        "signature": "992a51e4971347d1634e5e0c4216de14be3d2606e22cbfa6a432d9c7d379a97c"
-      },
-      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
-    },
-    {
-      "key": {
-        "rule": "FBT001",
-        "path": "tests/test_engine.py",
-        "scope": "FakeHost.send.down",
-        "signature": "5c6e8cb17ec813e17c2f1c65c1127a157cd61cc1a1d665821ec7f8a3cc083b7a"
-      },
-      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
-    },
-    {
-      "key": {
-        "rule": "FBT001",
-        "path": "tests/test_engine.py",
-        "scope": "Harness.key.down",
-        "signature": "13c50bd2b5b411a99f3a1a2551161c66d9566f330fdf44db280efeba7c1674d6"
-      },
-      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
-    },
-    {
-      "key": {
-        "rule": "FBT001",
-        "path": "tests/test_textio.py",
-        "scope": "Clipboard.__init__.accept",
-        "signature": "457b275af3134e252d73e31340693652f4ad8c81c7beeec904c947e6e29e6678"
-      },
-      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
-    },
-    {
-      "key": {
-        "rule": "FBT001",
-        "path": "winapi/appearance.py",
-        "scope": "TimerResolution.update.active",
-        "signature": "74d74e52435bb9072b2cdae607b39106ffbdfe06ef6cdfbca0a34929ad4c64e8"
-      },
-      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
-    },
-    {
-      "key": {
-        "rule": "FBT001",
-        "path": "winapi/inputs.py",
-        "scope": "mouse_button.down",
-        "signature": "401e26b3c90db87c27f52050658c72f099eac895520b64af91bb48b170ccb825"
-      },
-      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
-    },
-    {
-      "key": {
-        "rule": "FBT001",
-        "path": "winapi/windows.py",
-        "scope": "allow_activation.allowed",
-        "signature": "688c785409612feea24d6ed099bcf4d5aaa79829b0872fc63de1657de01eb4f0"
-      },
-      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
-    },
-    {
-      "key": {
-        "rule": "FBT001",
-        "path": "winapi/windows.py",
-        "scope": "show_quietly.visible",
-        "signature": "a2d850d075365f3cc1b890136e8fafc56e1f5d61ebf171ad171c0f11f3912bed"
-      },
-      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
-    },
-    {
-      "key": {
-        "rule": "FBT002",
-        "path": "assistant/browser_values.py",
-        "scope": "boolean.default",
-        "signature": "150cac38cefb7a3a8ad82a6df444a115c505d70bc0752f2ac15ddb252b08e4d4"
-      },
-      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
-    },
-    {
-      "key": {
         "rule": "PLR0913",
         "path": "assistant/activity.py",
         "scope": "ActivityTracker.__init__",
@@ -420,18 +24,18 @@
         "rule": "PLR0913",
         "path": "assistant/agent.py",
         "scope": "Agent.__init__",
-        "signature": "114f7b3bb8395b0fab43879eb03fe75b4d418df830fe23fcf69aaf255c328c88"
+        "signature": "31bc38bc7aee00144148ed94798c00b7ee30b201ca308e442a8de1db93057920"
       },
-      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
     },
     {
       "key": {
         "rule": "PLR0913",
         "path": "assistant/agent.py",
         "scope": "Agent.effect",
-        "signature": "c21c848438871b8c031f306eea83a7b9a7517f9d8669a3307f7bba23bc5cea00"
+        "signature": "b18fec5190f0015e745e60d5a140a79a562f35544a1a6c819506c7688695cde5"
       },
-      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
     },
     {
       "key": {
@@ -450,6 +54,15 @@
         "signature": "e46675a3fa8d7c2003a0627dc80d6a899e20efffcfc3abb427f17c822fcd4c09"
       },
       "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "FBT001",
+        "path": "assistant/agent.py",
+        "scope": "Machine.mouse_button.down",
+        "signature": "97539690c2e1def12788f7419609f0213bf6a4bd8e67a65f70032f1bc46e121c"
+      },
+      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
     },
     {
       "key": {
@@ -483,9 +96,9 @@
         "rule": "PLR0913",
         "path": "assistant/agent_execution.py",
         "scope": "AgentExecution.__init__",
-        "signature": "2a28bddac66af7d7817644aadfcc8c1f7c707c40736b151e624227203393f150"
+        "signature": "5be9fa6f6cedfed28c88c75cc783eb8c1bc815310de3423ab9ce7b6b5d17728b"
       },
-      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
     },
     {
       "key": {
@@ -504,15 +117,6 @@
         "signature": "a6e2f8041d65ee8d3a9cf0c4067db418b7cb45c79ddb943b31f256de99551525"
       },
       "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
-    },
-    {
-      "key": {
-        "rule": "PLR0913",
-        "path": "assistant/agent_panel.py",
-        "scope": "AgentPanel.__init__",
-        "signature": "882f4a95ac2c6f43582ddccdb6b6a563a45165bde418b724c098a4d536872a32"
-      },
-      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
     },
     {
       "key": {
@@ -543,6 +147,15 @@
     },
     {
       "key": {
+        "rule": "import-alias",
+        "path": "assistant/agent_session.py",
+        "scope": "<module>",
+        "signature": "785202fb9ff36af0bff2e68e530b23b653e7dd6e47c50ae88684e4f1c1f5e04c"
+      },
+      "reason": "Existing import forwarding or alias; use the owning module or document a necessary boundary."
+    },
+    {
+      "key": {
         "rule": "PLR0913",
         "path": "assistant/agent_toasts.py",
         "scope": "AgentToasts.__init__",
@@ -553,11 +166,56 @@
     {
       "key": {
         "rule": "PLR0913",
+        "path": "assistant/agent_toasts.py",
+        "scope": "AgentToasts.fit_viewport",
+        "signature": "921b50681ff2e15eae08c0f26ed49513c4887e862827ff0025ad5e65461df775"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "FBT001",
+        "path": "assistant/agent_toasts.py",
+        "scope": "AgentToasts.set_hover.inside",
+        "signature": "92cab3b5e62a1086b4006a2abe4870644f6e69be4ad436faea5177b82a9e26f5"
+      },
+      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
+    },
+    {
+      "key": {
+        "rule": "import-alias",
+        "path": "assistant/agent_window.py",
+        "scope": "<module>",
+        "signature": "59afbc1b2ddf5116f7301b68c6c4b44ea038f7c28572c090494a1a377160bb92"
+      },
+      "reason": "Existing import forwarding or alias; use the owning module or document a necessary boundary."
+    },
+    {
+      "key": {
+        "rule": "import-alias",
+        "path": "assistant/agent_window.py",
+        "scope": "<module>",
+        "signature": "785202fb9ff36af0bff2e68e530b23b653e7dd6e47c50ae88684e4f1c1f5e04c"
+      },
+      "reason": "Existing import forwarding or alias; use the owning module or document a necessary boundary."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
         "path": "assistant/agent_window.py",
         "scope": "AgentWindow.__init__",
-        "signature": "5e8de1bcb9b042e6f08359a457f70cbb83b86b7e278f82fcd9f92e3b51f5e947"
+        "signature": "a5b036a7958fe6d962af7ebf84c67a0ed6e110cbe93a60b887ac2b9d304bfd14"
       },
-      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "assistant/agent_window.py",
+        "scope": "AgentWindow.begin",
+        "signature": "c603826b6901d73b7b120508da22e30c141e47ab811886cb1c3a243ad8684f6f"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
     },
     {
       "key": {
@@ -576,6 +234,78 @@
         "signature": "6b1c2637d86e2001144e8c96c9e112fc4668ab84bac3391b3c9b685cf66bf5bd"
       },
       "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "assistant/bar_geometry.py",
+        "scope": "segment",
+        "signature": "014f69261a998d9572c52e57f040bac85857967d6ebe33583392a519c8ba851a"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "assistant/bar_model.py",
+        "scope": "toolbar",
+        "signature": "e4e6714d4a5b6a203e7acb22affe8bb58c778b2bf5310bc96c7708592f2fbf3a"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "FBT001",
+        "path": "assistant/bar_surface.py",
+        "scope": "Pill.attach.attached",
+        "signature": "67b0015666ba111710870658c573c045578cf79cc58c6ac494a83bcfa6e0500b"
+      },
+      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "assistant/bar_surface.py",
+        "scope": "Pill.button",
+        "signature": "ecf7c8950358fd455892f0b8ae0d99e7bff1b09c3ad536ac267e3b135be91349"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "FBT001",
+        "path": "assistant/bar_surface.py",
+        "scope": "Pill.show_activity.visible",
+        "signature": "15ae5127d86fb3e3434b2ed62831a8f22bd376ab1b2692d6dcfd447a0380b742"
+      },
+      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
+    },
+    {
+      "key": {
+        "rule": "import-alias",
+        "path": "assistant/browser.py",
+        "scope": "<module>",
+        "signature": "6dfd6e0fd4f03e675b14b10dd2d0fab5900e11f43663b6be41eda1bd1fc0896b"
+      },
+      "reason": "Existing import forwarding or alias; use the owning module or document a necessary boundary."
+    },
+    {
+      "key": {
+        "rule": "import-alias",
+        "path": "assistant/browser.py",
+        "scope": "<module>",
+        "signature": "a0459b3ddd9071af5b6bfbc3b1965768e5015e5c2528dce34f246e0fbd973015"
+      },
+      "reason": "Existing import forwarding or alias; use the owning module or document a necessary boundary."
+    },
+    {
+      "key": {
+        "rule": "import-alias",
+        "path": "assistant/browser.py",
+        "scope": "<module>",
+        "signature": "bb658b8625bc7468ed7615115c0f6d8752650366ca2e3c3d26bc386d0f5c9886"
+      },
+      "reason": "Existing import forwarding or alias; use the owning module or document a necessary boundary."
     },
     {
       "key": {
@@ -606,6 +336,42 @@
     },
     {
       "key": {
+        "rule": "re-export",
+        "path": "assistant/browser.py",
+        "scope": "__all__",
+        "signature": "b7bc65a386cb45f98b44115bdbbde6efaf95489b157a7075fd9f6c1c72f1a0fe"
+      },
+      "reason": "Existing import forwarding or alias; use the owning module or document a necessary boundary."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "assistant/browser_host.py",
+        "scope": "HostedConnection.call",
+        "signature": "0b594bea2f8d5041e49e4ecf20794600c72d91f65ad1dac64129988e7950fed6"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "assistant/browser_host.py",
+        "scope": "exchange",
+        "signature": "1550813a7277828f0062c901e144a08d1d964578fc82b0b4ae8f04c161492c70"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "assistant/browser_session.py",
+        "scope": "BrowserConnection.call",
+        "signature": "0b594bea2f8d5041e49e4ecf20794600c72d91f65ad1dac64129988e7950fed6"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
         "rule": "PLR0913",
         "path": "assistant/browser_session.py",
         "scope": "Cdp.call",
@@ -618,36 +384,9 @@
         "rule": "PLR0913",
         "path": "assistant/browser_session.py",
         "scope": "NativeSessions.__init__",
-        "signature": "5f8ed48c1bb2a7490a44b533565744f7f17a89418214a46fd8e2b78692071210"
+        "signature": "50a74e37346b17b63a6a42780bb1c244fbcb065a13b5ea6b709f6728df63e469"
       },
-      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
-    },
-    {
-      "key": {
-        "rule": "PLR0913",
-        "path": "assistant/browser_surface_control.py",
-        "scope": "AppBridge.browser_app",
-        "signature": "93549ebc0fcf0b72651af9c5ce6980eb256690ab0365e342716bf91d92557f3e"
-      },
-      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
-    },
-    {
-      "key": {
-        "rule": "PLR0913",
-        "path": "assistant/browser_surface_operations.py",
-        "scope": "_text",
-        "signature": "dbfa0740a75137abf6c9d5b70c846176bbb1d8f7becbd73abaf1760f3f7b84be"
-      },
-      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
-    },
-    {
-      "key": {
-        "rule": "PLR0913",
-        "path": "assistant/browser_surface_values.py",
-        "scope": "accepts_frame",
-        "signature": "e5f1088e41b3f55c28b09827899299b8d1bfd6af0b4ad66764532d5d2020dc82"
-      },
-      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
     },
     {
       "key": {
@@ -678,6 +417,24 @@
     },
     {
       "key": {
+        "rule": "FBT001",
+        "path": "assistant/browser_values.py",
+        "scope": "boolean.default",
+        "signature": "150cac38cefb7a3a8ad82a6df444a115c505d70bc0752f2ac15ddb252b08e4d4"
+      },
+      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
+    },
+    {
+      "key": {
+        "rule": "FBT002",
+        "path": "assistant/browser_values.py",
+        "scope": "boolean.default",
+        "signature": "150cac38cefb7a3a8ad82a6df444a115c505d70bc0752f2ac15ddb252b08e4d4"
+      },
+      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
+    },
+    {
+      "key": {
         "rule": "PLR0913",
         "path": "assistant/browser_values.py",
         "scope": "number",
@@ -693,132 +450,6 @@
         "signature": "21ba81d9fd18a2a76a357f932b4c07e74ad05dbc18ff5929c4d3d12a60afc830"
       },
       "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
-    },
-    {
-      "key": {
-        "rule": "PLR0913",
-        "path": "assistant/canvas_agent.py",
-        "scope": "WorkBackend.__init__",
-        "signature": "55a19e8f94440c5fb242147171e8527f78b6513dde4fa5943a9be1cf846dc95a"
-      },
-      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
-    },
-    {
-      "key": {
-        "rule": "PLR0913",
-        "path": "assistant/canvas_agent.py",
-        "scope": "WorkBackend._waiting",
-        "signature": "6f7d7ef75119a3aeb740c4437413554ac71fe84f07e72df42b958014a92ca03d"
-      },
-      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
-    },
-    {
-      "key": {
-        "rule": "PLR0913",
-        "path": "assistant/canvas_controller.py",
-        "scope": "CanvasController.voice",
-        "signature": "0a2da82f8af7e54b970378ef9a523e2ea3fa4daff872d6e36949e21726b94cf1"
-      },
-      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
-    },
-    {
-      "key": {
-        "rule": "PLR0913",
-        "path": "assistant/canvas_drafts.py",
-        "scope": "CanvasDrafts.__init__",
-        "signature": "fcb5e80799f1f7892649323ae46111f5debaaab2aaaab91d54cec935847aca27"
-      },
-      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
-    },
-    {
-      "key": {
-        "rule": "PLR0913",
-        "path": "assistant/canvas_drafts.py",
-        "scope": "capture",
-        "signature": "6a022bc6dfc76803f7e56378800d43e218d5871e9fcd732fe25583d94a9c28fe"
-      },
-      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
-    },
-    {
-      "key": {
-        "rule": "PLR0913",
-        "path": "assistant/canvas_model.py",
-        "scope": "add",
-        "signature": "84e6575e3af36f90877aeaf3dd5fcdebb4363a1a67490eaf27df1c7a57ab7525"
-      },
-      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
-    },
-    {
-      "key": {
-        "rule": "PLR0913",
-        "path": "assistant/canvas_model.py",
-        "scope": "bounded",
-        "signature": "61414cd3a8f38b4c1caae4715db745d5b252ac81d254557a9642f5103a2ee01e"
-      },
-      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
-    },
-    {
-      "key": {
-        "rule": "PLR0913",
-        "path": "assistant/canvas_model.py",
-        "scope": "request",
-        "signature": "da58289b0626e78bde8619aea9416a6d4f10deb5f700c595920245346f12f5cc"
-      },
-      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
-    },
-    {
-      "key": {
-        "rule": "PLR0913",
-        "path": "assistant/canvas_store.py",
-        "scope": "string",
-        "signature": "e3747141a02bdf987020a06073e665379aa626d096579ca632495ca439c901c5"
-      },
-      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
-    },
-    {
-      "key": {
-        "rule": "PLR0913",
-        "path": "assistant/canvas_ui.py",
-        "scope": "DesktopWindow.__init__",
-        "signature": "2abc2ed194bee42361e211e61ddf984f7490941dff6fef429fd945500b5f1946"
-      },
-      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
-    },
-    {
-      "key": {
-        "rule": "PLR0913",
-        "path": "assistant/canvas_ui.py",
-        "scope": "DesktopWindow._initialize",
-        "signature": "2abc2ed194bee42361e211e61ddf984f7490941dff6fef429fd945500b5f1946"
-      },
-      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
-    },
-    {
-      "key": {
-        "rule": "PLR0913",
-        "path": "assistant/canvas_web.py",
-        "scope": "DesktopWindow.__init__",
-        "signature": "7e7b41b5e02ff4faa6b4211f694318a3601b1424d0242b3162114b0887e67ce4"
-      },
-      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
-    },
-    {
-      "key": {
-        "rule": "PLR0913",
-        "path": "assistant/canvas_widgets.py",
-        "scope": "Card.__init__",
-        "signature": "f44f7fbc1daff6073cd5fe9d1ecb431ffbda69daa9e4601d41fc81a9a729d6a4"
-      },
-      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
-    },
-    {
-      "key": {
-        "rule": "PLR0913",
-        "path": "assistant/canvas_widgets.py",
-        "scope": "button",
-        "signature": "99b44bc87de3b64925d42e62bdada33300962fab8ddd938985dd924e4e2ddc4a"
-      },
-      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
     },
     {
       "key": {
@@ -840,12 +471,66 @@
     },
     {
       "key": {
+        "rule": "import-alias",
+        "path": "assistant/communications.py",
+        "scope": "<module>",
+        "signature": "19c8826262c40061e7fa3c8aa3f392fb70cc72c9702385b3dac9203eb3f9275c"
+      },
+      "reason": "Existing import forwarding or alias; use the owning module or document a necessary boundary."
+    },
+    {
+      "key": {
+        "rule": "import-alias",
+        "path": "assistant/communications_service.py",
+        "scope": "<module>",
+        "signature": "19c8826262c40061e7fa3c8aa3f392fb70cc72c9702385b3dac9203eb3f9275c"
+      },
+      "reason": "Existing import forwarding or alias; use the owning module or document a necessary boundary."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "assistant/communications_service.py",
+        "scope": "Communications.__init__",
+        "signature": "fd8dc58d073aff4817f36812caf74b43cd27c89c1bdf4ef45cb0e0cfb9e9fab8"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "assistant/console_requests.py",
+        "scope": "request",
+        "signature": "ce8d369dd6abf707491d891e3a29fde0e6cc14329217139eac5cbc981be1fe43"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
         "rule": "PLR0913",
         "path": "assistant/desktop.py",
         "scope": "WinDesktop.__init__",
-        "signature": "0d850ebb1659c5b7aa95212c32b0572766263d4e0d23fb062d008459843a13d3"
+        "signature": "8afb51115d56226bd7259633fee9c2ecd4dc74b94400c0f0abb216618f6ca89b"
       },
-      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "FBT001",
+        "path": "assistant/desktop_bar.py",
+        "scope": "DesktopBar.layout.enabled",
+        "signature": "7b174362c1286a56c781ba421bebb950a571fae821cccba1dc1ed5186a886942"
+      },
+      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "assistant/desktop_bar.py",
+        "scope": "DesktopBar.message",
+        "signature": "6b1c2637d86e2001144e8c96c9e112fc4668ab84bac3391b3c9b685cf66bf5bd"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
     },
     {
       "key": {
@@ -858,10 +543,64 @@
     },
     {
       "key": {
+        "rule": "FBT001",
+        "path": "assistant/features.py",
+        "scope": "Assistant.handle.down",
+        "signature": "992a51e4971347d1634e5e0c4216de14be3d2606e22cbfa6a432d9c7d379a97c"
+      },
+      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
+    },
+    {
+      "key": {
+        "rule": "FBT001",
+        "path": "assistant/features.py",
+        "scope": "Assistant.hold.down",
+        "signature": "735e176f99333da90922bd0cbd15b31a6cc5e88ad032403b6cae42717806260b"
+      },
+      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
+    },
+    {
+      "key": {
         "rule": "PLR0913",
         "path": "assistant/features.py",
         "scope": "Conversation.__init__",
         "signature": "29bfe2c3c2e35ba39c8cb27a696631f040ceaabe36c52e4ad183c8eea2b85cf5"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "import-alias",
+        "path": "assistant/feed_icons.py",
+        "scope": "<module>",
+        "signature": "b7df46693f560a26257b8ba1005c7e9fbc4844cac2e4de5b4a3d754c793d0920"
+      },
+      "reason": "Existing import forwarding or alias; use the owning module or document a necessary boundary."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "assistant/feed_title.py",
+        "scope": "heading_width",
+        "signature": "09b8251c69d514e2e9582db2b46a92bb926aa40d582fd999a3c13ef91bbc3ecc"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "assistant/feed_triage.py",
+        "scope": "candidate",
+        "signature": "99f67dcafccc110a05c366e8022d225660ad2cfa333523843b020fbe982b166e"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "assistant/feed_triage.py",
+        "scope": "selected",
+        "signature": "cbf4f83f1e7bc924a1495ac7b5353dd78901c54932a78c91ecaffcb0fee153f8"
       },
       "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
     },
@@ -894,12 +633,39 @@
     },
     {
       "key": {
+        "rule": "import-alias",
+        "path": "assistant/inbox.py",
+        "scope": "<module>",
+        "signature": "358c75615e4db5ea0a8b80a3f20d6d9c0fd2302508500a6759582fbd125137c0"
+      },
+      "reason": "Existing import forwarding or alias; use the owning module or document a necessary boundary."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "assistant/inbox.py",
+        "scope": "review_prompt",
+        "signature": "5a2c0d8fa6e9d8575b07792468f939e06344748ddf52e9e9ada545ca5b1ec1ec"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
         "rule": "PLR0913",
         "path": "assistant/llm.py",
         "scope": "_chat_body",
         "signature": "4326e818bdcecafeff4c33ac0ccc7231fea7394afef4c7e43c59da286d1b7f65"
       },
       "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "FBT001",
+        "path": "assistant/llm.py",
+        "scope": "_chat_body.streaming",
+        "signature": "4326e818bdcecafeff4c33ac0ccc7231fea7394afef4c7e43c59da286d1b7f65"
+      },
+      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
     },
     {
       "key": {
@@ -975,6 +741,15 @@
     },
     {
       "key": {
+        "rule": "FBT001",
+        "path": "assistant/machine.py",
+        "scope": "WinMachine.mouse_button.down",
+        "signature": "97539690c2e1def12788f7419609f0213bf6a4bd8e67a65f70032f1bc46e121c"
+      },
+      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
+    },
+    {
+      "key": {
         "rule": "PLR0913",
         "path": "assistant/machine.py",
         "scope": "WinMachine.run_powershell",
@@ -999,24 +774,6 @@
         "signature": "79de4cafbf4c7fb5c1bd40ec9cb47f8b87777afd928d5787eafe4e0aebfc1f77"
       },
       "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
-    },
-    {
-      "key": {
-        "rule": "PLR0913",
-        "path": "assistant/meeting_canvas.py",
-        "scope": "_item",
-        "signature": "f8774c452a22684352185061a7f283e15287ecc601ea72cd35c47fe6e07b1614"
-      },
-      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
-    },
-    {
-      "key": {
-        "rule": "PLR0913",
-        "path": "assistant/meeting_canvas.py",
-        "scope": "_source_cards",
-        "signature": "14f3cc26d95105ff37a54f3021574150cbb37ecb518c7cf7b1fffbf541bdccc3"
-      },
-      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
     },
     {
       "key": {
@@ -1156,15 +913,6 @@
     {
       "key": {
         "rule": "PLR0913",
-        "path": "assistant/meeting_web.py",
-        "scope": "dispatch",
-        "signature": "0621151dd287734b5efe7a4f1a3aaf8d7bc80f856b9e2b9631a9257265f688ed"
-      },
-      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
-    },
-    {
-      "key": {
-        "rule": "PLR0913",
         "path": "assistant/meeting_workflow.py",
         "scope": "MeetingWorkflow.__init__",
         "signature": "eaa2bf81a866a5be8983d66f49c844177ec97a10c978ae8062b095c85b0f796e"
@@ -1209,12 +957,57 @@
     },
     {
       "key": {
+        "rule": "import-alias",
+        "path": "assistant/notifications.py",
+        "scope": "<module>",
+        "signature": "77b12c400675c865400a5f871c9fa2fcc684119e04922c34dbda94516ca85cd9"
+      },
+      "reason": "Existing import forwarding or alias; use the owning module or document a necessary boundary."
+    },
+    {
+      "key": {
+        "rule": "import-alias",
+        "path": "assistant/notifications.py",
+        "scope": "<module>",
+        "signature": "818f31810f6e00abcde59649288644214a5369cb9f2d86c0c315c273ee02cf8d"
+      },
+      "reason": "Existing import forwarding or alias; use the owning module or document a necessary boundary."
+    },
+    {
+      "key": {
+        "rule": "import-alias",
+        "path": "assistant/notifications.py",
+        "scope": "<module>",
+        "signature": "c40ea6154a901546875d617e56758582ada50bd6fc798578c259f4e5bbb313c2"
+      },
+      "reason": "Existing import forwarding or alias; use the owning module or document a necessary boundary."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "assistant/notifications.py",
+        "scope": "advance",
+        "signature": "5f8258c21010969b894a161e19a568a919b1f036152116f795ccd5a805095fd9"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
         "rule": "PLR0913",
         "path": "assistant/notifications.py",
         "scope": "hover",
         "signature": "09ae5145e9babf6e207c8faf9be3e43d37432c04c9d5165870fd7b8952be8230"
       },
       "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "FBT001",
+        "path": "assistant/notifications.py",
+        "scope": "hover.inside",
+        "signature": "09ae5145e9babf6e207c8faf9be3e43d37432c04c9d5165870fd7b8952be8230"
+      },
+      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
     },
     {
       "key": {
@@ -1227,12 +1020,39 @@
     },
     {
       "key": {
+        "rule": "FBT001",
+        "path": "assistant/notifications.py",
+        "scope": "reading_hold.reading",
+        "signature": "dc68593350710137597de7f1c69944d7297e5f98f19d3d03fdcf603ac16d94f1"
+      },
+      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
+    },
+    {
+      "key": {
         "rule": "PLR0913",
         "path": "assistant/outlook.py",
         "scope": "_text",
         "signature": "3ecc38dcc213e22500d408ef43d331da904ec99967d6261a0f0f271691f78cf0"
       },
       "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "FBT001",
+        "path": "assistant/overlay.py",
+        "scope": "OverlayState.key.down",
+        "signature": "e24ac2aaad6790b3a7daf82d65de76f6cfa6cd1ac7253eaf9073b5ff18b93070"
+      },
+      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
+    },
+    {
+      "key": {
+        "rule": "FBT001",
+        "path": "assistant/overlay.py",
+        "scope": "OverlayState.set_layout.on",
+        "signature": "0ecd8c262d2ff9e5b885ecb6deb12af6b64eed3bb5ac1458bd3624260c5bdaab"
+      },
+      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
     },
     {
       "key": {
@@ -1245,30 +1065,12 @@
     },
     {
       "key": {
-        "rule": "PLR0913",
-        "path": "assistant/page_sources.py",
-        "scope": "PageSources._capture",
-        "signature": "676611a0d7c96aa341cdcde9d708f93ab3b49319a23b1c46c891b1e4fc6f4e80"
+        "rule": "FBT001",
+        "path": "assistant/overlay.py",
+        "scope": "save_enabled.enabled",
+        "signature": "39cdb09971205afa58328bbec1a78ed60af91d565ae118a3300f2d9b4b183630"
       },
-      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
-    },
-    {
-      "key": {
-        "rule": "PLR0913",
-        "path": "assistant/page_sources.py",
-        "scope": "PageSources._observed",
-        "signature": "06f964075d7566033005d05306eb47c3a847ddf84aea50318642758786f0ba25"
-      },
-      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
-    },
-    {
-      "key": {
-        "rule": "PLR0913",
-        "path": "assistant/page_sources.py",
-        "scope": "PageSources._read",
-        "signature": "06f964075d7566033005d05306eb47c3a847ddf84aea50318642758786f0ba25"
-      },
-      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
+      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
     },
     {
       "key": {
@@ -1291,11 +1093,38 @@
     {
       "key": {
         "rule": "PLR0913",
+        "path": "assistant/panel_controls.py",
+        "scope": "button",
+        "signature": "99b44bc87de3b64925d42e62bdada33300962fab8ddd938985dd924e4e2ddc4a"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
         "path": "assistant/publishing.py",
         "scope": "publish_source",
         "signature": "03d5da46404536343919318d9d607cc6cba23335d0109c6d092135a56c5c9ffa"
       },
       "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "re-export",
+        "path": "assistant/qt.py",
+        "scope": "__all__",
+        "signature": "703cd516579b6549d190bef71cb6a419c0f1ffbcf910ce1b6d80190ff1a5ff13"
+      },
+      "reason": "Existing import forwarding or alias; use the owning module or document a necessary boundary."
+    },
+    {
+      "key": {
+        "rule": "FBT001",
+        "path": "assistant/qt_ui.py",
+        "scope": "EventLoop.watch.visible",
+        "signature": "6ed3d0b73769b674456e002fd5022fa251d464888f34898f6a3692f315a8ea88"
+      },
+      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
     },
     {
       "key": {
@@ -1305,6 +1134,15 @@
         "signature": "e32bd55ab3bd4a1eeb5060649b353fb2c73b5ef0c8bbe675b07d50e4cc949570"
       },
       "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "import-alias",
+        "path": "assistant/sdk.py",
+        "scope": "<module>",
+        "signature": "57a0ddc9dc5245fb3ad7a9b46a9c8f71a1a82263243383168b6aae01f98b0d6a"
+      },
+      "reason": "Existing import forwarding or alias; use the owning module or document a necessary boundary."
     },
     {
       "key": {
@@ -1332,6 +1170,15 @@
         "signature": "70e1fb5106be73fba2e0599e72872c933dc2200fcfffda5ec82287a82e1ac54a"
       },
       "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "FBT001",
+        "path": "assistant/shell_state.py",
+        "scope": "WindowsKeyTap.key.down",
+        "signature": "1304c23592a458e90ec8564b3a238af9e2a80b5a9e2706f5d9d6f9268ffefc79"
+      },
+      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
     },
     {
       "key": {
@@ -1389,6 +1236,33 @@
     },
     {
       "key": {
+        "rule": "import-alias",
+        "path": "assistant/toast_card.py",
+        "scope": "<module>",
+        "signature": "39bb9479d0c6711682b572be22fd825d8d240cdf3f32bf76cee3574a05e7ac6f"
+      },
+      "reason": "Existing import forwarding or alias; use the owning module or document a necessary boundary."
+    },
+    {
+      "key": {
+        "rule": "import-alias",
+        "path": "assistant/toast_card.py",
+        "scope": "<module>",
+        "signature": "66a0547e92ead34a0f13c0a230b542ebc999ba150f86f017114440b154a43121"
+      },
+      "reason": "Existing import forwarding or alias; use the owning module or document a necessary boundary."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "assistant/toast_card.py",
+        "scope": "Card.place_heading",
+        "signature": "9d02fe09a0b39479591ad4d56387c92ae7e7a7812a3ddb1114ade1ba3bc8c843"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
         "rule": "PLR0913",
         "path": "assistant/toast_card.py",
         "scope": "Card.render",
@@ -1425,6 +1299,60 @@
     },
     {
       "key": {
+        "rule": "import-alias",
+        "path": "assistant/ui.py",
+        "scope": "<module>",
+        "signature": "00a41d855ae399a44bd2208f1f31215301409ba6214ea169e9062899a1d698f9"
+      },
+      "reason": "Existing import forwarding or alias; use the owning module or document a necessary boundary."
+    },
+    {
+      "key": {
+        "rule": "import-alias",
+        "path": "assistant/ui.py",
+        "scope": "<module>",
+        "signature": "542fde2a3065998c08cf1627b4b4d2b3e401667815ca2b720c18f7fe2d40d722"
+      },
+      "reason": "Existing import forwarding or alias; use the owning module or document a necessary boundary."
+    },
+    {
+      "key": {
+        "rule": "import-alias",
+        "path": "assistant/ui.py",
+        "scope": "<module>",
+        "signature": "929cdd97f36601c58ec05cc4de538616fd2b6bd6a8a8a0ad78fcdbb60cdc4ca0"
+      },
+      "reason": "Existing import forwarding or alias; use the owning module or document a necessary boundary."
+    },
+    {
+      "key": {
+        "rule": "import-alias",
+        "path": "assistant/ui.py",
+        "scope": "<module>",
+        "signature": "a2452148d3e944bac323a846ec99ea89f6c88b71342916fed4867a57a0b211c0"
+      },
+      "reason": "Existing import forwarding or alias; use the owning module or document a necessary boundary."
+    },
+    {
+      "key": {
+        "rule": "import-alias",
+        "path": "assistant/ui.py",
+        "scope": "<module>",
+        "signature": "d4fba6e6d4ab312513389f0dce3b93f354a8548bfe6d9b41927e460982a9a049"
+      },
+      "reason": "Existing import forwarding or alias; use the owning module or document a necessary boundary."
+    },
+    {
+      "key": {
+        "rule": "import-alias",
+        "path": "assistant/ui.py",
+        "scope": "<module>",
+        "signature": "ea46bed40faae888c25feda09c1f04c12d872e74803530b3a3c8b8ae0e0f61bd"
+      },
+      "reason": "Existing import forwarding or alias; use the owning module or document a necessary boundary."
+    },
+    {
+      "key": {
         "rule": "PLR0913",
         "path": "assistant/ui.py",
         "scope": "AnswerWindow.__init__",
@@ -1452,6 +1380,15 @@
     },
     {
       "key": {
+        "rule": "FBT001",
+        "path": "assistant/ui.py",
+        "scope": "ReviewWindow.finish.install",
+        "signature": "07fd6bd3652922462cbfb8a4e7a67a6c1091bab3352d39a72f6ef5ee8858d900"
+      },
+      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
+    },
+    {
+      "key": {
         "rule": "PLR0913",
         "path": "assistant/ui.py",
         "scope": "Ui.agent",
@@ -1473,9 +1410,18 @@
         "rule": "PLR0913",
         "path": "assistant/ui.py",
         "scope": "Ui.desktop",
-        "signature": "870bed75a154a42e8f3c5329c1c52355501451941084e88c8b9aac60510d4a32"
+        "signature": "1a92684a03c2add67191b73f83ca3e14a876ba42d50191ae947918fcbd3e40c7"
       },
-      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "FBT001",
+        "path": "assistant/ui.py",
+        "scope": "Ui.desktop_layout.enabled",
+        "signature": "7b174362c1286a56c781ba421bebb950a571fae821cccba1dc1ed5186a886942"
+      },
+      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
     },
     {
       "key": {
@@ -1494,6 +1440,15 @@
         "signature": "ee3d2c64e7ec19a722e25517af2105aa56b3703f1f8996c0c094a7b2e00d18c7"
       },
       "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "re-export",
+        "path": "assistant/ui.py",
+        "scope": "__all__",
+        "signature": "1e3aef670ade315fed262be50e61b0ed9d4edf26fb37e58dba4b7a7b32d81dcb"
+      },
+      "reason": "Existing import forwarding or alias; use the owning module or document a necessary boundary."
     },
     {
       "key": {
@@ -1524,21 +1479,39 @@
     },
     {
       "key": {
+        "rule": "import-alias",
+        "path": "assistant/window_switcher.py",
+        "scope": "<module>",
+        "signature": "00a41d855ae399a44bd2208f1f31215301409ba6214ea169e9062899a1d698f9"
+      },
+      "reason": "Existing import forwarding or alias; use the owning module or document a necessary boundary."
+    },
+    {
+      "key": {
+        "rule": "import-alias",
+        "path": "assistant/work_agent.py",
+        "scope": "<module>",
+        "signature": "4294744dad959a00c4789ca49a774f05e729cf2c3913e40fb7b1acb49e2868a2"
+      },
+      "reason": "Existing import forwarding or alias; use the owning module or document a necessary boundary."
+    },
+    {
+      "key": {
         "rule": "PLR0913",
         "path": "assistant/work_agent.py",
         "scope": "WorkAgent.__init__",
-        "signature": "cf4336b5f1258092b1dc4309861a7b1debba8254b0704ab564b19486724c7871"
+        "signature": "8d094cd08adcfc90d1f601b419cab5bb2d5a2d54e20ce0da9bc0179e55f62078"
       },
-      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
     },
     {
       "key": {
         "rule": "PLR0913",
         "path": "assistant/work_service.py",
         "scope": "WorkService.__init__",
-        "signature": "992eceb1d9a65c47a2379d4179778b2197e5d06e960b094751ebca97b4583d57"
+        "signature": "4f4ba149beef792f10e00f7fed75b617decd3bd8b9b6f4b27c1bc0e4baac2f2a"
       },
-      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
     },
     {
       "key": {
@@ -1554,9 +1527,9 @@
         "rule": "PLR0913",
         "path": "assistant/work_service.py",
         "scope": "WorkService._submit",
-        "signature": "45718c7e8893973a337283e0263794b81544e00c5c21304f7e92a1aebf14e27b"
+        "signature": "7f2dfc246051cfc433218f2ac6ef5eb061d059d30c282f09bb14a678bd8a6190"
       },
-      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
     },
     {
       "key": {
@@ -1590,9 +1563,9 @@
         "rule": "PLR0913",
         "path": "automation/actions.py",
         "scope": "Actions.execute",
-        "signature": "1b1919df8d1d50ecace6e70af679e57e41989e27223c2d87fdf0d443e55983b7"
+        "signature": "f3f3eda8a1dc24eb1c17e9027e09058607f5938b719cf5e58331016c1fc7473d"
       },
-      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
     },
     {
       "key": {
@@ -1608,9 +1581,9 @@
         "rule": "PLR0913",
         "path": "automation/app.py",
         "scope": "NativeExecution.__init__",
-        "signature": "8a98d9853e798643d8d7c7b9917a906d7fede2fec40dc48b241fe9460f43a5a3"
+        "signature": "337a5a10963c26a04ff4be22711eb3e80270ada8349638965363436de5ddd970"
       },
-      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
     },
     {
       "key": {
@@ -1647,15 +1620,6 @@
         "signature": "2909d4f3397e3d95d85722b2a7f7d3501badf6d0666884aeeb8e1d74fcff9a50"
       },
       "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
-    },
-    {
-      "key": {
-        "rule": "PLR0913",
-        "path": "automation/bridge.py",
-        "scope": "BridgeServer.browser_app",
-        "signature": "93549ebc0fcf0b72651af9c5ce6980eb256690ab0365e342716bf91d92557f3e"
-      },
-      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
     },
     {
       "key": {
@@ -1710,6 +1674,15 @@
         "signature": "b59e04dc903cbfcf4ce941f304f12992d6edc914f3bfdc53d2851f35bdaee49c"
       },
       "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "FBT001",
+        "path": "automation/execution.py",
+        "scope": "WorkExecution.reconcile.applied",
+        "signature": "b156a90170de7d8e1c8a8089f819170d2ee68cce74961ef82049854386fcd112"
+      },
+      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
     },
     {
       "key": {
@@ -1857,6 +1830,24 @@
     },
     {
       "key": {
+        "rule": "FBT001",
+        "path": "keeper.py",
+        "scope": "Keeper.persist.pending",
+        "signature": "d0844993137c3963b1fb239a94d53c96c79da49dd966be9c5b9e92398bb3bc4e"
+      },
+      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
+    },
+    {
+      "key": {
+        "rule": "FBT001",
+        "path": "keeper.py",
+        "scope": "Recovery.write.pending",
+        "signature": "bc1bff898b42d8cbd9319aeb852e399f8285d4d380de2e6b1260032723a44567"
+      },
+      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
+    },
+    {
+      "key": {
         "rule": "PLR0913",
         "path": "keeper.py",
         "scope": "_Process.__init__",
@@ -1893,12 +1884,174 @@
     },
     {
       "key": {
+        "rule": "FBT001",
+        "path": "miryoku/engine.py",
+        "scope": "Engine.key.down",
+        "signature": "0614e4e89f2040aacc059e8f231b31b3126feb7d1cf2662346c3135db9131823"
+      },
+      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "miryoku/engine.py",
+        "scope": "Engine.native_direction",
+        "signature": "9ee5368dbc1e2f40296a395a5615f012b4e397a6949b860f154fda2b3e1b5bca"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "FBT001",
+        "path": "miryoku/engine.py",
+        "scope": "Engine.native_direction.down",
+        "signature": "9ee5368dbc1e2f40296a395a5615f012b4e397a6949b860f154fda2b3e1b5bca"
+      },
+      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
+    },
+    {
+      "key": {
         "rule": "PLR0913",
         "path": "miryoku/engine.py",
         "scope": "Engine.on_key",
         "signature": "0614e4e89f2040aacc059e8f231b31b3126feb7d1cf2662346c3135db9131823"
       },
       "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "FBT001",
+        "path": "miryoku/engine.py",
+        "scope": "Engine.on_key.down",
+        "signature": "0614e4e89f2040aacc059e8f231b31b3126feb7d1cf2662346c3135db9131823"
+      },
+      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
+    },
+    {
+      "key": {
+        "rule": "FBT001",
+        "path": "miryoku/engine.py",
+        "scope": "Host.request.down",
+        "signature": "992a51e4971347d1634e5e0c4216de14be3d2606e22cbfa6a432d9c7d379a97c"
+      },
+      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
+    },
+    {
+      "key": {
+        "rule": "FBT001",
+        "path": "miryoku/engine.py",
+        "scope": "Host.send.down",
+        "signature": "5c6e8cb17ec813e17c2f1c65c1127a157cd61cc1a1d665821ec7f8a3cc083b7a"
+      },
+      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
+    },
+    {
+      "key": {
+        "rule": "FBT001",
+        "path": "miryoku/layout.py",
+        "scope": "character.shifted",
+        "signature": "00c59be191f19a88b7f04503eeeb7cadf32370eb505c0cc2760aa46b98004af8"
+      },
+      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
+    },
+    {
+      "key": {
+        "rule": "FBT001",
+        "path": "miryoku/win.py",
+        "scope": "Keyboard.desktop_direction.down",
+        "signature": "9958bbb06154a7dc388044e72cdaa9813781816c854472d52b2def7b6f5c7c6a"
+      },
+      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
+    },
+    {
+      "key": {
+        "rule": "FBT001",
+        "path": "miryoku/win.py",
+        "scope": "Keyboard.show_key.down",
+        "signature": "e24ac2aaad6790b3a7daf82d65de76f6cfa6cd1ac7253eaf9073b5ff18b93070"
+      },
+      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
+    },
+    {
+      "key": {
+        "rule": "FBT001",
+        "path": "miryoku/win.py",
+        "scope": "Keyboard.swallow.down",
+        "signature": "9958bbb06154a7dc388044e72cdaa9813781816c854472d52b2def7b6f5c7c6a"
+      },
+      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
+    },
+    {
+      "key": {
+        "rule": "FBT001",
+        "path": "miryoku/win.py",
+        "scope": "WinHost.request.down",
+        "signature": "992a51e4971347d1634e5e0c4216de14be3d2606e22cbfa6a432d9c7d379a97c"
+      },
+      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
+    },
+    {
+      "key": {
+        "rule": "FBT001",
+        "path": "miryoku/win.py",
+        "scope": "WinHost.send.down",
+        "signature": "5c6e8cb17ec813e17c2f1c65c1127a157cd61cc1a1d665821ec7f8a3cc083b7a"
+      },
+      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
+    },
+    {
+      "key": {
+        "rule": "import-alias",
+        "path": "protocol.py",
+        "scope": "<module>",
+        "signature": "30c034b34367cce9697fd211061ae8b739d893d43e98fc732863d268b1f9ff63"
+      },
+      "reason": "Existing import forwarding or alias; use the owning module or document a necessary boundary."
+    },
+    {
+      "key": {
+        "rule": "import-alias",
+        "path": "protocol.py",
+        "scope": "<module>",
+        "signature": "9538fb16110e2892186ca8cba10f16652142a5adcc866a9657e19acc6f515f95"
+      },
+      "reason": "Existing import forwarding or alias; use the owning module or document a necessary boundary."
+    },
+    {
+      "key": {
+        "rule": "import-alias",
+        "path": "protocol.py",
+        "scope": "<module>",
+        "signature": "c0e2d878e84206e936451fbd0efb8f5183e2d077af5280caaae6d5663830ecb2"
+      },
+      "reason": "Existing import forwarding or alias; use the owning module or document a necessary boundary."
+    },
+    {
+      "key": {
+        "rule": "import-alias",
+        "path": "protocol.py",
+        "scope": "<module>",
+        "signature": "c5d04576722db96ca0cc7c1d706ac5f4dc6aaa46185854f0378db0079bd54efe"
+      },
+      "reason": "Existing import forwarding or alias; use the owning module or document a necessary boundary."
+    },
+    {
+      "key": {
+        "rule": "FBT001",
+        "path": "protocol.py",
+        "scope": "encode_indicator.caps_word",
+        "signature": "fe1d90cc71a9ef46eeb596bd6b4ea1a3669e567bbe76e50fc34d6b33dad635fa"
+      },
+      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
+    },
+    {
+      "key": {
+        "rule": "FBT001",
+        "path": "protocol.py",
+        "scope": "encode_indicator.locked",
+        "signature": "fe1d90cc71a9ef46eeb596bd6b4ea1a3669e567bbe76e50fc34d6b33dad635fa"
+      },
+      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
     },
     {
       "key": {
@@ -1935,6 +2088,24 @@
         "signature": "2fd68e6cee02fc927d2c802bce507eff4e4afb1d28556b9151bea1c1be6ff2c4"
       },
       "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "FBT001",
+        "path": "scripts/benchmark_keyboard.py",
+        "scope": "run.Host.request.down",
+        "signature": "992a51e4971347d1634e5e0c4216de14be3d2606e22cbfa6a432d9c7d379a97c"
+      },
+      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
+    },
+    {
+      "key": {
+        "rule": "FBT001",
+        "path": "scripts/benchmark_keyboard.py",
+        "scope": "run.Host.send.down",
+        "signature": "5c6e8cb17ec813e17c2f1c65c1127a157cd61cc1a1d665821ec7f8a3cc083b7a"
+      },
+      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
     },
     {
       "key": {
@@ -2019,12 +2190,39 @@
     },
     {
       "key": {
+        "rule": "import-alias",
+        "path": "tests/properties/test_agent_session.py",
+        "scope": "<module>",
+        "signature": "108d6fd7c886577bc7b038c6535c6d7295dde5717140e29fce5f65ce52ed4599"
+      },
+      "reason": "Existing import forwarding or alias; use the owning module or document a necessary boundary."
+    },
+    {
+      "key": {
+        "rule": "import-alias",
+        "path": "tests/properties/test_pcm.py",
+        "scope": "<module>",
+        "signature": "108d6fd7c886577bc7b038c6535c6d7295dde5717140e29fce5f65ce52ed4599"
+      },
+      "reason": "Existing import forwarding or alias; use the owning module or document a necessary boundary."
+    },
+    {
+      "key": {
         "rule": "PLR0913",
         "path": "tests/test_agent.py",
         "scope": "FakeMachine.click",
         "signature": "e46675a3fa8d7c2003a0627dc80d6a899e20efffcfc3abb427f17c822fcd4c09"
       },
       "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "FBT001",
+        "path": "tests/test_agent.py",
+        "scope": "FakeMachine.mouse_button.down",
+        "signature": "97539690c2e1def12788f7419609f0213bf6a4bd8e67a65f70032f1bc46e121c"
+      },
+      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
     },
     {
       "key": {
@@ -2073,6 +2271,15 @@
     },
     {
       "key": {
+        "rule": "import-alias",
+        "path": "tests/test_agent_runner.py",
+        "scope": "<module>",
+        "signature": "32b108f1e0e46a7f93b330c44128a2e119b3dbac4a723686620bc37d018865e8"
+      },
+      "reason": "Existing import forwarding or alias; use the owning module or document a necessary boundary."
+    },
+    {
+      "key": {
         "rule": "PLR0913",
         "path": "tests/test_agent_streaming.py",
         "scope": "make_agent",
@@ -2101,11 +2308,11 @@
     {
       "key": {
         "rule": "PLR0913",
-        "path": "tests/test_browser_surface_control.py",
-        "scope": "CompletedDuringCancellation.browser_app",
-        "signature": "93549ebc0fcf0b72651af9c5ce6980eb256690ab0365e342716bf91d92557f3e"
+        "path": "tests/test_browser_host.py",
+        "scope": "Connection.call",
+        "signature": "0b594bea2f8d5041e49e4ecf20794600c72d91f65ad1dac64129988e7950fed6"
       },
-      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
     },
     {
       "key": {
@@ -2127,12 +2334,12 @@
     },
     {
       "key": {
-        "rule": "PLR0913",
-        "path": "tests/test_canvas_work.py",
-        "scope": "task",
-        "signature": "dcc2efb9ec9f6dcabf682f9f2a0362e8b72536d0a1e5c2eebb32e61dcb8abc75"
+        "rule": "FBT001",
+        "path": "tests/test_computer_tools.py",
+        "scope": "StoppingMouse.mouse_button.down",
+        "signature": "97539690c2e1def12788f7419609f0213bf6a4bd8e67a65f70032f1bc46e121c"
       },
-      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
+      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
     },
     {
       "key": {
@@ -2145,12 +2352,102 @@
     },
     {
       "key": {
+        "rule": "import-alias",
+        "path": "tests/test_console_inbox.py",
+        "scope": "<module>",
+        "signature": "cd867dcd7b5bc2b1699918287963a6d7ca6dc59f8b7af1faf9fc1a58eabcba35"
+      },
+      "reason": "Existing import forwarding or alias; use the owning module or document a necessary boundary."
+    },
+    {
+      "key": {
         "rule": "PLR0913",
         "path": "tests/test_deploy_pipeline.py",
         "scope": "test_source_repack_preserves_compressed_runtime_without_opening_it.source_only",
         "signature": "2a8baa82ba1389b1268c30c071240ded2e1f468c966d091dc752670601b3ebaa"
       },
       "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "FBT001",
+        "path": "tests/test_engine.py",
+        "scope": "FakeHost.request.down",
+        "signature": "992a51e4971347d1634e5e0c4216de14be3d2606e22cbfa6a432d9c7d379a97c"
+      },
+      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
+    },
+    {
+      "key": {
+        "rule": "FBT001",
+        "path": "tests/test_engine.py",
+        "scope": "FakeHost.send.down",
+        "signature": "5c6e8cb17ec813e17c2f1c65c1127a157cd61cc1a1d665821ec7f8a3cc083b7a"
+      },
+      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
+    },
+    {
+      "key": {
+        "rule": "FBT001",
+        "path": "tests/test_engine.py",
+        "scope": "Harness.key.down",
+        "signature": "13c50bd2b5b411a99f3a1a2551161c66d9566f330fdf44db280efeba7c1674d6"
+      },
+      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
+    },
+    {
+      "key": {
+        "rule": "FBT001",
+        "path": "tests/test_engine.py",
+        "scope": "test_rejected_modifier_release_does_not_skip_remaining_modifiers.RejectedModifier.send.down",
+        "signature": "5c6e8cb17ec813e17c2f1c65c1127a157cd61cc1a1d665821ec7f8a3cc083b7a"
+      },
+      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
+    },
+    {
+      "key": {
+        "rule": "FBT001",
+        "path": "tests/test_engine.py",
+        "scope": "test_rejected_release_does_not_leave_other_keys_modifiers_or_voice_held.RejectedRelease.send.down",
+        "signature": "5c6e8cb17ec813e17c2f1c65c1127a157cd61cc1a1d665821ec7f8a3cc083b7a"
+      },
+      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
+    },
+    {
+      "key": {
+        "rule": "import-alias",
+        "path": "tests/test_feed_items.py",
+        "scope": "test_expansion_shows_only_matching_source_revisions_and_labels_missing_originals",
+        "signature": "43ce0480b7d7b3c1ee0975435b076f00002a734ad47548f05eaa2591d77f8985"
+      },
+      "reason": "Existing import forwarding or alias; use the owning module or document a necessary boundary."
+    },
+    {
+      "key": {
+        "rule": "import-alias",
+        "path": "tests/test_inbox_attention.py",
+        "scope": "<module>",
+        "signature": "b88bc81555c0b253b6d4b52a3bfcc80acd49bfb5e08c800ec5658a41be917981"
+      },
+      "reason": "Existing import forwarding or alias; use the owning module or document a necessary boundary."
+    },
+    {
+      "key": {
+        "rule": "import-alias",
+        "path": "tests/test_llm.py",
+        "scope": "<module>",
+        "signature": "942953e43e775090d10beeea8299f91cd2035b601755a5dfa2dc75f7d9e0b9c2"
+      },
+      "reason": "Existing import forwarding or alias; use the owning module or document a necessary boundary."
+    },
+    {
+      "key": {
+        "rule": "import-alias",
+        "path": "tests/test_meeting_execution.py",
+        "scope": "<module>",
+        "signature": "c5daf14593eea8f9aed12af5f6f0207e1f17de7c7ebb5b2b1a12a8162f8bafba"
+      },
+      "reason": "Existing import forwarding or alias; use the owning module or document a necessary boundary."
     },
     {
       "key": {
@@ -2182,11 +2479,11 @@
     {
       "key": {
         "rule": "PLR0913",
-        "path": "tests/test_page_sources.py",
-        "scope": "Documents.add",
-        "signature": "f2e84829e5ec9108dd6d13244295d634d3d8da72e48f223ac15d2792ee3ace31"
+        "path": "tests/test_monitor_layout.py",
+        "scope": "display",
+        "signature": "2c007c6499ac5c7f8fb05ec9b0a1f341bb16ce7b540d7647a4958684cfe96e7b"
       },
-      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
     },
     {
       "key": {
@@ -2196,6 +2493,15 @@
         "signature": "3d840bc448f5668a2e2611b0a6a8c0ae53b67c81b4637115f9b2c013b183405f"
       },
       "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "FBT001",
+        "path": "tests/test_textio.py",
+        "scope": "Clipboard.__init__.accept",
+        "signature": "457b275af3134e252d73e31340693652f4ad8c81c7beeec904c947e6e29e6678"
+      },
+      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
     },
     {
       "key": {
@@ -2263,6 +2569,15 @@
     {
       "key": {
         "rule": "PLR0913",
+        "path": "tests/test_windows_bindings.py",
+        "scope": "test_rejected_chord_releases_its_added_modifier_and_defers_diagnostics.send",
+        "signature": "bc4c1ec819ebda0b10536fc8a1b286c57dc2959ce1d2189d171b12db3f964fa0"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
         "path": "tests/test_windows_browser.py",
         "scope": "act",
         "signature": "c7fd47f3df365ecff0886ce894c3c3ef190ee4dda5d975ca6cda8cc8bcd874ad"
@@ -2272,29 +2587,11 @@
     {
       "key": {
         "rule": "PLR0913",
-        "path": "tests/test_windows_browser_surfaces.py",
-        "scope": "contains",
-        "signature": "762ef2d7251086df18d51cf03abfb2c6e8d19d2cf2893eeec0cd816ddcab80c1"
+        "path": "tests/test_windows_communications_browser.py",
+        "scope": "test_activity_source_opens_the_exact_saved_page_after_native_tab_metadata_is_lost.capture",
+        "signature": "144e702899cfdb51471b1104ff9cc8e74330272c8a0e37bf4bbc9c28334264e0"
       },
-      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
-    },
-    {
-      "key": {
-        "rule": "PLR0913",
-        "path": "tests/test_windows_browser_surfaces.py",
-        "scope": "file_access_choice",
-        "signature": "3b1fd33414891c3ade337c92802f2ce34713873f1f9612502e0f7ff065fc014e"
-      },
-      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
-    },
-    {
-      "key": {
-        "rule": "PLR0913",
-        "path": "tests/test_windows_canvas_web.py",
-        "scope": "drag_pointer",
-        "signature": "2c1ec2ae64e981373d0695a6c2b8ee723e996de4b3079ee44fb637218e0ccead"
-      },
-      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
     },
     {
       "key": {
@@ -2304,6 +2601,24 @@
         "signature": "b00b85c9771b62b8d3b4ba95722393e9b1d62b75efa217c86f5b23072df8911d"
       },
       "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "import-alias",
+        "path": "tests/test_windows_inbox_attention.py",
+        "scope": "<module>",
+        "signature": "b88bc81555c0b253b6d4b52a3bfcc80acd49bfb5e08c800ec5658a41be917981"
+      },
+      "reason": "Existing import forwarding or alias; use the owning module or document a necessary boundary."
+    },
+    {
+      "key": {
+        "rule": "import-alias",
+        "path": "tests/test_windows_inbox_attention.py",
+        "scope": "<module>",
+        "signature": "e8d71ebc16cb4ba8fbe6c9aeeffa9a41995c6743f9ace5d94118f1db937a29c6"
+      },
+      "reason": "Existing import forwarding or alias; use the owning module or document a necessary boundary."
     },
     {
       "key": {
@@ -2373,9 +2688,18 @@
         "rule": "PLR0913",
         "path": "tests/test_work_agent.py",
         "scope": "WorkRig.__init__",
-        "signature": "43e48d9931bffcd34eb1f81491be7f55b8893431519cd035e63ea89da395a2e8"
+        "signature": "6e702b703aa1d44317ae65f4586f2d8e14f33bbdd333bdbe59d2b0961ecdf04c"
       },
-      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "import-alias",
+        "path": "tests/test_work_controller.py",
+        "scope": "<module>",
+        "signature": "c02a9b1ca7c2ca6b3501d9737c0e8191d1bc89738ec557939b976cf6f2a5dc5d"
+      },
+      "reason": "Existing import forwarding or alias; use the owning module or document a necessary boundary."
     },
     {
       "key": {
@@ -2416,9 +2740,36 @@
     {
       "key": {
         "rule": "PLR0913",
+        "path": "tests/work_fixture.py",
+        "scope": "seed_tasks",
+        "signature": "bcc6407480d3315e771a16a8e5eecfee9683f4820f5c1f4358163c6afa15f2b0"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
         "path": "usage.py",
         "scope": "record",
         "signature": "7380ab4d1a38f1d98f0838577efaa400169aba4d7a20140a16db99477a16ae45"
+      },
+      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "FBT001",
+        "path": "winapi/appearance.py",
+        "scope": "TimerResolution.update.active",
+        "signature": "74d74e52435bb9072b2cdae607b39106ffbdfe06ef6cdfbca0a34929ad4c64e8"
+      },
+      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "winapi/composition.py",
+        "scope": "Glass.position",
+        "signature": "3830d3ad30a32ecd7a7bf92e16be374d5cb975c0eec6c74375fcdf126b4c8e7c"
       },
       "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
     },
@@ -2451,6 +2802,15 @@
     },
     {
       "key": {
+        "rule": "FBT001",
+        "path": "winapi/inputs.py",
+        "scope": "mouse_button.down",
+        "signature": "401e26b3c90db87c27f52050658c72f099eac895520b64af91bb48b170ccb825"
+      },
+      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
+    },
+    {
+      "key": {
         "rule": "PLR0913",
         "path": "winapi/inputs.py",
         "scope": "move_mouse",
@@ -2466,6 +2826,15 @@
         "signature": "bc4c1ec819ebda0b10536fc8a1b286c57dc2959ce1d2189d171b12db3f964fa0"
       },
       "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "FBT001",
+        "path": "winapi/keyboard_language.py",
+        "scope": "KeyboardLanguages.enforce.enabled",
+        "signature": "7b174362c1286a56c781ba421bebb950a571fae821cccba1dc1ed5186a886942"
+      },
+      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
     },
     {
       "key": {
@@ -2514,6 +2883,33 @@
     },
     {
       "key": {
+        "rule": "FBT001",
+        "path": "winapi/windows.py",
+        "scope": "_on_taskbar.include_cloaked",
+        "signature": "6687d21e63ea4852f4ba9e91379a66f9b7adc48d2c5c19d6a17020f5189019e8"
+      },
+      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
+    },
+    {
+      "key": {
+        "rule": "FBT002",
+        "path": "winapi/windows.py",
+        "scope": "_on_taskbar.include_cloaked",
+        "signature": "6687d21e63ea4852f4ba9e91379a66f9b7adc48d2c5c19d6a17020f5189019e8"
+      },
+      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
+    },
+    {
+      "key": {
+        "rule": "FBT001",
+        "path": "winapi/windows.py",
+        "scope": "allow_activation.allowed",
+        "signature": "688c785409612feea24d6ed099bcf4d5aaa79829b0872fc63de1657de01eb4f0"
+      },
+      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
+    },
+    {
+      "key": {
         "rule": "PLR0913",
         "path": "winapi/windows.py",
         "scope": "overlay_message",
@@ -2523,714 +2919,12 @@
     },
     {
       "key": {
-        "rule": "import-alias",
-        "path": "assistant/agent_toasts.py",
-        "scope": "<module>",
-        "signature": "39bb9479d0c6711682b572be22fd825d8d240cdf3f32bf76cee3574a05e7ac6f"
-      },
-      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
-    },
-    {
-      "key": {
-        "rule": "import-alias",
-        "path": "assistant/app.py",
-        "scope": "<module>",
-        "signature": "85a26cc792eee7415e4fbe31e777fdda761a72349508c89b55f72aa5642fb698"
-      },
-      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
-    },
-    {
-      "key": {
-        "rule": "import-alias",
-        "path": "assistant/browser.py",
-        "scope": "<module>",
-        "signature": "6dfd6e0fd4f03e675b14b10dd2d0fab5900e11f43663b6be41eda1bd1fc0896b"
-      },
-      "reason": "Existing import forwarding or alias; use the owning module or document a necessary boundary."
-    },
-    {
-      "key": {
-        "rule": "import-alias",
-        "path": "assistant/browser.py",
-        "scope": "<module>",
-        "signature": "a0459b3ddd9071af5b6bfbc3b1965768e5015e5c2528dce34f246e0fbd973015"
-      },
-      "reason": "Existing import forwarding or alias; use the owning module or document a necessary boundary."
-    },
-    {
-      "key": {
-        "rule": "import-alias",
-        "path": "assistant/browser.py",
-        "scope": "<module>",
-        "signature": "bb658b8625bc7468ed7615115c0f6d8752650366ca2e3c3d26bc386d0f5c9886"
-      },
-      "reason": "Existing import forwarding or alias; use the owning module or document a necessary boundary."
-    },
-    {
-      "key": {
-        "rule": "import-alias",
-        "path": "assistant/browser_surface_values.py",
-        "scope": "<module>",
-        "signature": "f67eaa43782800ef8607285b925b1c038b728ba9c9729d0f046eef5a5869c84b"
-      },
-      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
-    },
-    {
-      "key": {
-        "rule": "import-alias",
-        "path": "assistant/browser_surfaces.py",
-        "scope": "<module>",
-        "signature": "1b6b765abc38b4952317f98605a8c3906379b9100f36a3d90f35a69d16970d78"
-      },
-      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
-    },
-    {
-      "key": {
-        "rule": "import-alias",
-        "path": "assistant/browser_surfaces.py",
-        "scope": "<module>",
-        "signature": "5e8a799c9f00d83b300878653c5c4703087a3c1dffb70d2d440f66dae91399f1"
-      },
-      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
-    },
-    {
-      "key": {
-        "rule": "import-alias",
-        "path": "assistant/canvas_agent.py",
-        "scope": "<module>",
-        "signature": "01b4d8f99eecf02b91417ccc1ae789f061443c6f7a3d92d47f755c68e09207b1"
-      },
-      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
-    },
-    {
-      "key": {
-        "rule": "import-alias",
-        "path": "assistant/canvas_agent.py",
-        "scope": "<module>",
-        "signature": "f67eaa43782800ef8607285b925b1c038b728ba9c9729d0f046eef5a5869c84b"
-      },
-      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
-    },
-    {
-      "key": {
-        "rule": "import-alias",
-        "path": "assistant/canvas_controller.py",
-        "scope": "<module>",
-        "signature": "f67eaa43782800ef8607285b925b1c038b728ba9c9729d0f046eef5a5869c84b"
-      },
-      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
-    },
-    {
-      "key": {
-        "rule": "import-alias",
-        "path": "assistant/canvas_drafts.py",
-        "scope": "<module>",
-        "signature": "f67eaa43782800ef8607285b925b1c038b728ba9c9729d0f046eef5a5869c84b"
-      },
-      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
-    },
-    {
-      "key": {
-        "rule": "import-alias",
-        "path": "assistant/canvas_launcher.py",
-        "scope": "<module>",
-        "signature": "f67eaa43782800ef8607285b925b1c038b728ba9c9729d0f046eef5a5869c84b"
-      },
-      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
-    },
-    {
-      "key": {
-        "rule": "import-alias",
-        "path": "assistant/canvas_native.py",
-        "scope": "<module>",
-        "signature": "f67eaa43782800ef8607285b925b1c038b728ba9c9729d0f046eef5a5869c84b"
-      },
-      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
-    },
-    {
-      "key": {
-        "rule": "import-alias",
-        "path": "assistant/canvas_requests.py",
-        "scope": "<module>",
-        "signature": "f67eaa43782800ef8607285b925b1c038b728ba9c9729d0f046eef5a5869c84b"
-      },
-      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
-    },
-    {
-      "key": {
-        "rule": "import-alias",
-        "path": "assistant/canvas_store.py",
-        "scope": "<module>",
-        "signature": "f67eaa43782800ef8607285b925b1c038b728ba9c9729d0f046eef5a5869c84b"
-      },
-      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
-    },
-    {
-      "key": {
-        "rule": "import-alias",
-        "path": "assistant/canvas_ui.py",
-        "scope": "<module>",
-        "signature": "f67eaa43782800ef8607285b925b1c038b728ba9c9729d0f046eef5a5869c84b"
-      },
-      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
-    },
-    {
-      "key": {
-        "rule": "import-alias",
-        "path": "assistant/canvas_web.py",
-        "scope": "<module>",
-        "signature": "00ec11b2143eaf2e985639f59b1e52fda8922bf70057b7467be09979af44e953"
-      },
-      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
-    },
-    {
-      "key": {
-        "rule": "import-alias",
-        "path": "assistant/canvas_web.py",
-        "scope": "<module>",
-        "signature": "6337b256afcc40544c67fa3f48588e3c4ff642f3024e3c6efaf69f8dd52264fc"
-      },
-      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
-    },
-    {
-      "key": {
-        "rule": "import-alias",
-        "path": "assistant/canvas_web.py",
-        "scope": "<module>",
-        "signature": "931675ddacad12b4ca4db5576ac6e309c7b26581f5ac717bd691ab35d1dd1568"
-      },
-      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
-    },
-    {
-      "key": {
-        "rule": "import-alias",
-        "path": "assistant/canvas_web.py",
-        "scope": "<module>",
-        "signature": "e5ef5775875fcfcc9d1bcc7c5d0d57024cc56ba2bb5ac6639de7d8372d0345f6"
-      },
-      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
-    },
-    {
-      "key": {
-        "rule": "import-alias",
-        "path": "assistant/canvas_web.py",
-        "scope": "<module>",
-        "signature": "f67eaa43782800ef8607285b925b1c038b728ba9c9729d0f046eef5a5869c84b"
-      },
-      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
-    },
-    {
-      "key": {
-        "rule": "import-alias",
-        "path": "assistant/canvas_web_contract.py",
-        "scope": "<module>",
-        "signature": "e5ef5775875fcfcc9d1bcc7c5d0d57024cc56ba2bb5ac6639de7d8372d0345f6"
-      },
-      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
-    },
-    {
-      "key": {
-        "rule": "import-alias",
-        "path": "assistant/canvas_web_contract.py",
-        "scope": "<module>",
-        "signature": "f67eaa43782800ef8607285b925b1c038b728ba9c9729d0f046eef5a5869c84b"
-      },
-      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
-    },
-    {
-      "key": {
-        "rule": "import-alias",
-        "path": "assistant/canvas_widgets.py",
-        "scope": "<module>",
-        "signature": "f67eaa43782800ef8607285b925b1c038b728ba9c9729d0f046eef5a5869c84b"
-      },
-      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
-    },
-    {
-      "key": {
-        "rule": "import-alias",
-        "path": "assistant/canvas_work.py",
-        "scope": "<module>",
-        "signature": "01b4d8f99eecf02b91417ccc1ae789f061443c6f7a3d92d47f755c68e09207b1"
-      },
-      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
-    },
-    {
-      "key": {
-        "rule": "import-alias",
-        "path": "assistant/canvas_work.py",
-        "scope": "<module>",
-        "signature": "f67eaa43782800ef8607285b925b1c038b728ba9c9729d0f046eef5a5869c84b"
-      },
-      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
-    },
-    {
-      "key": {
-        "rule": "import-alias",
-        "path": "assistant/meeting_canvas.py",
-        "scope": "<module>",
-        "signature": "f67eaa43782800ef8607285b925b1c038b728ba9c9729d0f046eef5a5869c84b"
-      },
-      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
-    },
-    {
-      "key": {
-        "rule": "import-alias",
-        "path": "assistant/meeting_web.py",
-        "scope": "<module>",
-        "signature": "01b4d8f99eecf02b91417ccc1ae789f061443c6f7a3d92d47f755c68e09207b1"
-      },
-      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
-    },
-    {
-      "key": {
-        "rule": "import-alias",
-        "path": "assistant/meeting_web.py",
-        "scope": "<module>",
-        "signature": "bd9199864410acced0bede0eafd62f9e55fd0b80c00dcd15da4c433132ae7e21"
-      },
-      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
-    },
-    {
-      "key": {
-        "rule": "import-alias",
-        "path": "assistant/meeting_web.py",
-        "scope": "<module>",
-        "signature": "f67eaa43782800ef8607285b925b1c038b728ba9c9729d0f046eef5a5869c84b"
-      },
-      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
-    },
-    {
-      "key": {
-        "rule": "import-alias",
-        "path": "assistant/sdk.py",
-        "scope": "<module>",
-        "signature": "57a0ddc9dc5245fb3ad7a9b46a9c8f71a1a82263243383168b6aae01f98b0d6a"
-      },
-      "reason": "Existing import forwarding or alias; use the owning module or document a necessary boundary."
-    },
-    {
-      "key": {
-        "rule": "import-alias",
-        "path": "assistant/toast_card.py",
-        "scope": "<module>",
-        "signature": "39bb9479d0c6711682b572be22fd825d8d240cdf3f32bf76cee3574a05e7ac6f"
-      },
-      "reason": "Existing import forwarding or alias; use the owning module or document a necessary boundary."
-    },
-    {
-      "key": {
-        "rule": "import-alias",
-        "path": "assistant/ui.py",
-        "scope": "<module>",
-        "signature": "9b4b8b7c08eef05cc3f30468c38176e05d919c8c5d1fe94ffb3e0a700c733e34"
-      },
-      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
-    },
-    {
-      "key": {
-        "rule": "import-alias",
-        "path": "assistant/work_agent.py",
-        "scope": "<module>",
-        "signature": "9b4b8b7c08eef05cc3f30468c38176e05d919c8c5d1fe94ffb3e0a700c733e34"
-      },
-      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
-    },
-    {
-      "key": {
-        "rule": "import-alias",
-        "path": "assistant/work_agent.py",
-        "scope": "<module>",
-        "signature": "e932d38c23cdfd34ef26bfaa6c46380d3d0d9a6e40b8e55294550b113a3bca0d"
-      },
-      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
-    },
-    {
-      "key": {
-        "rule": "import-alias",
-        "path": "assistant/work_service.py",
-        "scope": "<module>",
-        "signature": "9b4b8b7c08eef05cc3f30468c38176e05d919c8c5d1fe94ffb3e0a700c733e34"
-      },
-      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
-    },
-    {
-      "key": {
-        "rule": "import-alias",
-        "path": "automation/ipc.py",
-        "scope": "<module>",
-        "signature": "44fdf9bc00a2cd5639e603339227b8f3bbab5deccdaf9407ce46c5623379e773"
-      },
-      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
-    },
-    {
-      "key": {
-        "rule": "import-alias",
-        "path": "automation/ipc.py",
-        "scope": "<module>",
-        "signature": "89ee0fdf48b1478b2c503c535d0ca9b3a4d6822c1e4b8e5dca35aabffe937f76"
-      },
-      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
-    },
-    {
-      "key": {
-        "rule": "import-alias",
-        "path": "automation/ipc.py",
-        "scope": "<module>",
-        "signature": "a6143a8acd98c559fcb222a9ead5987f7b02d9fcbbd11bd3ec070e20e8888f0e"
-      },
-      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
-    },
-    {
-      "key": {
-        "rule": "import-alias",
-        "path": "automation/ipc.py",
-        "scope": "<module>",
-        "signature": "d53933a875b178fc25a49732e4b107f778ca2c873a6c2451e4dfbbb4be87f014"
-      },
-      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
-    },
-    {
-      "key": {
-        "rule": "import-alias",
-        "path": "protocol.py",
-        "scope": "<module>",
-        "signature": "30c034b34367cce9697fd211061ae8b739d893d43e98fc732863d268b1f9ff63"
-      },
-      "reason": "Existing import forwarding or alias; use the owning module or document a necessary boundary."
-    },
-    {
-      "key": {
-        "rule": "import-alias",
-        "path": "protocol.py",
-        "scope": "<module>",
-        "signature": "9538fb16110e2892186ca8cba10f16652142a5adcc866a9657e19acc6f515f95"
-      },
-      "reason": "Existing import forwarding or alias; use the owning module or document a necessary boundary."
-    },
-    {
-      "key": {
-        "rule": "import-alias",
-        "path": "protocol.py",
-        "scope": "<module>",
-        "signature": "c0e2d878e84206e936451fbd0efb8f5183e2d077af5280caaae6d5663830ecb2"
-      },
-      "reason": "Existing import forwarding or alias; use the owning module or document a necessary boundary."
-    },
-    {
-      "key": {
-        "rule": "import-alias",
-        "path": "protocol.py",
-        "scope": "<module>",
-        "signature": "c5d04576722db96ca0cc7c1d706ac5f4dc6aaa46185854f0378db0079bd54efe"
-      },
-      "reason": "Existing import forwarding or alias; use the owning module or document a necessary boundary."
-    },
-    {
-      "key": {
-        "rule": "import-alias",
-        "path": "tests/properties/test_agent_session.py",
-        "scope": "<module>",
-        "signature": "108d6fd7c886577bc7b038c6535c6d7295dde5717140e29fce5f65ce52ed4599"
-      },
-      "reason": "Existing import forwarding or alias; use the owning module or document a necessary boundary."
-    },
-    {
-      "key": {
-        "rule": "import-alias",
-        "path": "tests/properties/test_pcm.py",
-        "scope": "<module>",
-        "signature": "108d6fd7c886577bc7b038c6535c6d7295dde5717140e29fce5f65ce52ed4599"
-      },
-      "reason": "Existing import forwarding or alias; use the owning module or document a necessary boundary."
-    },
-    {
-      "key": {
-        "rule": "import-alias",
-        "path": "tests/test_agent_runner.py",
-        "scope": "<module>",
-        "signature": "32b108f1e0e46a7f93b330c44128a2e119b3dbac4a723686620bc37d018865e8"
-      },
-      "reason": "Existing import forwarding or alias; use the owning module or document a necessary boundary."
-    },
-    {
-      "key": {
-        "rule": "import-alias",
-        "path": "tests/test_browser_app_delivery.py",
-        "scope": "<module>",
-        "signature": "796fa6158c229fecb84a0bee308e86420aee5e69420196ef3b0a72e3d76cf812"
-      },
-      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
-    },
-    {
-      "key": {
-        "rule": "import-alias",
-        "path": "tests/test_browser_surface_values.py",
-        "scope": "<module>",
-        "signature": "318f134ce291dddbb2d4e6da1888a6238c814280cc56a6bd9d59452b22b836ee"
-      },
-      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
-    },
-    {
-      "key": {
-        "rule": "import-alias",
-        "path": "tests/test_browser_surface_values.py",
-        "scope": "<module>",
-        "signature": "998c62a6dafcadb5a99d6309beb74ccd86283bcf65e487c0c6e1bd9711efba87"
-      },
-      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
-    },
-    {
-      "key": {
-        "rule": "import-alias",
-        "path": "tests/test_canvas.py",
-        "scope": "<module>",
-        "signature": "01b4d8f99eecf02b91417ccc1ae789f061443c6f7a3d92d47f755c68e09207b1"
-      },
-      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
-    },
-    {
-      "key": {
-        "rule": "import-alias",
-        "path": "tests/test_canvas.py",
-        "scope": "<module>",
-        "signature": "998c62a6dafcadb5a99d6309beb74ccd86283bcf65e487c0c6e1bd9711efba87"
-      },
-      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
-    },
-    {
-      "key": {
-        "rule": "import-alias",
-        "path": "tests/test_canvas_drafts.py",
-        "scope": "<module>",
-        "signature": "998c62a6dafcadb5a99d6309beb74ccd86283bcf65e487c0c6e1bd9711efba87"
-      },
-      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
-    },
-    {
-      "key": {
-        "rule": "import-alias",
-        "path": "tests/test_canvas_execution.py",
-        "scope": "<module>",
-        "signature": "998c62a6dafcadb5a99d6309beb74ccd86283bcf65e487c0c6e1bd9711efba87"
-      },
-      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
-    },
-    {
-      "key": {
-        "rule": "import-alias",
-        "path": "tests/test_canvas_origin.py",
-        "scope": "<module>",
-        "signature": "998c62a6dafcadb5a99d6309beb74ccd86283bcf65e487c0c6e1bd9711efba87"
-      },
-      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
-    },
-    {
-      "key": {
-        "rule": "import-alias",
-        "path": "tests/test_canvas_persistence.py",
-        "scope": "<module>",
-        "signature": "998c62a6dafcadb5a99d6309beb74ccd86283bcf65e487c0c6e1bd9711efba87"
-      },
-      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
-    },
-    {
-      "key": {
-        "rule": "import-alias",
-        "path": "tests/test_canvas_requests.py",
-        "scope": "<module>",
-        "signature": "998c62a6dafcadb5a99d6309beb74ccd86283bcf65e487c0c6e1bd9711efba87"
-      },
-      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
-    },
-    {
-      "key": {
-        "rule": "import-alias",
-        "path": "tests/test_canvas_web_apps.py",
-        "scope": "<module>",
-        "signature": "998c62a6dafcadb5a99d6309beb74ccd86283bcf65e487c0c6e1bd9711efba87"
-      },
-      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
-    },
-    {
-      "key": {
-        "rule": "import-alias",
-        "path": "tests/test_canvas_web_contract.py",
-        "scope": "<module>",
-        "signature": "7f14029f4be8c0ffa0df98ecab3c6e84d3abe1c365b4a718fe3a8727b016b300"
-      },
-      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
-    },
-    {
-      "key": {
-        "rule": "import-alias",
-        "path": "tests/test_canvas_web_contract.py",
-        "scope": "<module>",
-        "signature": "998c62a6dafcadb5a99d6309beb74ccd86283bcf65e487c0c6e1bd9711efba87"
-      },
-      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
-    },
-    {
-      "key": {
-        "rule": "import-alias",
-        "path": "tests/test_canvas_web_contract.py",
-        "scope": "<module>",
-        "signature": "bd0979bfbd1203e65ae14f0e809ef682c74fff5f42bde8dd0a7e05dfac16d2f5"
-      },
-      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
-    },
-    {
-      "key": {
-        "rule": "import-alias",
-        "path": "tests/test_canvas_work.py",
-        "scope": "<module>",
-        "signature": "01b4d8f99eecf02b91417ccc1ae789f061443c6f7a3d92d47f755c68e09207b1"
-      },
-      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
-    },
-    {
-      "key": {
-        "rule": "import-alias",
-        "path": "tests/test_canvas_work.py",
-        "scope": "<module>",
-        "signature": "998c62a6dafcadb5a99d6309beb74ccd86283bcf65e487c0c6e1bd9711efba87"
-      },
-      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
-    },
-    {
-      "key": {
-        "rule": "import-alias",
-        "path": "tests/test_llm.py",
-        "scope": "<module>",
-        "signature": "942953e43e775090d10beeea8299f91cd2035b601755a5dfa2dc75f7d9e0b9c2"
-      },
-      "reason": "Existing import forwarding or alias; use the owning module or document a necessary boundary."
-    },
-    {
-      "key": {
-        "rule": "import-alias",
-        "path": "tests/test_meeting_canvas.py",
-        "scope": "<module>",
-        "signature": "998c62a6dafcadb5a99d6309beb74ccd86283bcf65e487c0c6e1bd9711efba87"
-      },
-      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
-    },
-    {
-      "key": {
-        "rule": "import-alias",
-        "path": "tests/test_meeting_execution.py",
-        "scope": "<module>",
-        "signature": "c5daf14593eea8f9aed12af5f6f0207e1f17de7c7ebb5b2b1a12a8162f8bafba"
-      },
-      "reason": "Existing import forwarding or alias; use the owning module or document a necessary boundary."
-    },
-    {
-      "key": {
-        "rule": "import-alias",
-        "path": "tests/test_windows_browser_surfaces.py",
-        "scope": "<module>",
-        "signature": "0d3a58138bfe9d918364f5aa6dbab636630614c687463b180ad5eb7be10832f1"
-      },
-      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
-    },
-    {
-      "key": {
-        "rule": "import-alias",
-        "path": "tests/test_windows_browser_surfaces.py",
-        "scope": "<module>",
-        "signature": "318f134ce291dddbb2d4e6da1888a6238c814280cc56a6bd9d59452b22b836ee"
-      },
-      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
-    },
-    {
-      "key": {
-        "rule": "import-alias",
-        "path": "tests/test_windows_browser_surfaces.py",
-        "scope": "<module>",
-        "signature": "998c62a6dafcadb5a99d6309beb74ccd86283bcf65e487c0c6e1bd9711efba87"
-      },
-      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
-    },
-    {
-      "key": {
-        "rule": "import-alias",
-        "path": "tests/test_windows_canvas.py",
-        "scope": "<module>",
-        "signature": "998c62a6dafcadb5a99d6309beb74ccd86283bcf65e487c0c6e1bd9711efba87"
-      },
-      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
-    },
-    {
-      "key": {
-        "rule": "import-alias",
-        "path": "tests/test_windows_canvas_applications.py",
-        "scope": "<module>",
-        "signature": "0d3a58138bfe9d918364f5aa6dbab636630614c687463b180ad5eb7be10832f1"
-      },
-      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
-    },
-    {
-      "key": {
-        "rule": "import-alias",
-        "path": "tests/test_windows_canvas_applications.py",
-        "scope": "<module>",
-        "signature": "226e9d6c6da9b9dc762c11027ddb47bbdd12e94776a6477cd3b67ef4ab059333"
-      },
-      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
-    },
-    {
-      "key": {
-        "rule": "import-alias",
-        "path": "tests/test_windows_canvas_applications.py",
-        "scope": "<module>",
-        "signature": "998c62a6dafcadb5a99d6309beb74ccd86283bcf65e487c0c6e1bd9711efba87"
-      },
-      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
-    },
-    {
-      "key": {
-        "rule": "import-alias",
-        "path": "tests/test_windows_canvas_applications.py",
-        "scope": "<module>",
-        "signature": "bd0979bfbd1203e65ae14f0e809ef682c74fff5f42bde8dd0a7e05dfac16d2f5"
-      },
-      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
-    },
-    {
-      "key": {
-        "rule": "import-alias",
-        "path": "tests/test_windows_canvas_pages.py",
-        "scope": "<module>",
-        "signature": "998c62a6dafcadb5a99d6309beb74ccd86283bcf65e487c0c6e1bd9711efba87"
-      },
-      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
-    },
-    {
-      "key": {
-        "rule": "import-alias",
-        "path": "tests/test_windows_canvas_web.py",
-        "scope": "<module>",
-        "signature": "226e9d6c6da9b9dc762c11027ddb47bbdd12e94776a6477cd3b67ef4ab059333"
-      },
-      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
-    },
-    {
-      "key": {
-        "rule": "import-alias",
-        "path": "tests/test_windows_canvas_web.py",
-        "scope": "<module>",
-        "signature": "998c62a6dafcadb5a99d6309beb74ccd86283bcf65e487c0c6e1bd9711efba87"
-      },
-      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
-    },
-    {
-      "key": {
-        "rule": "import-alias",
-        "path": "tests/test_work_controller.py",
-        "scope": "<module>",
-        "signature": "c02a9b1ca7c2ca6b3501d9737c0e8191d1bc89738ec557939b976cf6f2a5dc5d"
-      },
-      "reason": "Existing import forwarding or alias; use the owning module or document a necessary boundary."
+        "rule": "FBT001",
+        "path": "winapi/windows.py",
+        "scope": "show_quietly.visible",
+        "signature": "a2d850d075365f3cc1b890136e8fafc56e1f5d61ebf171ad171c0f11f3912bed"
+      },
+      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
     },
     {
       "key": {
@@ -3244,9 +2938,54 @@
     {
       "key": {
         "rule": "inline-import",
-        "path": "assistant/agent.py",
-        "scope": "Agent.run",
-        "signature": "9c843693e67ddf209b6b1a78b79982e32233a640dc41273066c7ed39447a5c96"
+        "path": "assistant/bar_status.py",
+        "scope": "StatusObserver.run",
+        "signature": "a9c42679468e28f9211cd8e89b2f0bb1ede22f66169289d8a57b17ea6e13f271"
+      },
+      "reason": "Existing inline dependency declaration awaits migration to its module owner; use module-level lazy imports when deferred loading is required."
+    },
+    {
+      "key": {
+        "rule": "inline-import",
+        "path": "assistant/bar_weather.py",
+        "scope": "LocalWeather.run",
+        "signature": "af3870b4cede9643f32f48294a308f3072d2919f9910b382999be29a727c7a2e"
+      },
+      "reason": "Existing inline dependency declaration awaits migration to its module owner; use module-level lazy imports when deferred loading is required."
+    },
+    {
+      "key": {
+        "rule": "inline-import",
+        "path": "assistant/browser_host.py",
+        "scope": "lease",
+        "signature": "028a967c4e81370dc9c27c71e4dd00b69ad56d06b836ec89bc368dfc403f7c5e"
+      },
+      "reason": "Existing inline dependency declaration awaits migration to its module owner; use module-level lazy imports when deferred loading is required."
+    },
+    {
+      "key": {
+        "rule": "inline-import",
+        "path": "assistant/browser_host.py",
+        "scope": "lease",
+        "signature": "176191115fae517255770d10caec5c9d56f33db9f94747c59ef0f1b1b960a9f0"
+      },
+      "reason": "Existing inline dependency declaration awaits migration to its module owner; use module-level lazy imports when deferred loading is required."
+    },
+    {
+      "key": {
+        "rule": "inline-import",
+        "path": "assistant/browser_host.py",
+        "scope": "main",
+        "signature": "c0e5646f11d3bafc22d1798b833924d312f2b700f12d098c8e10818f3b0829d2"
+      },
+      "reason": "Existing inline dependency declaration awaits migration to its module owner; use module-level lazy imports when deferred loading is required."
+    },
+    {
+      "key": {
+        "rule": "inline-import",
+        "path": "assistant/browser_host.py",
+        "scope": "sealed",
+        "signature": "3302f1044b01c8aef92854c3236fbb6555aa898375e9181fb05f9f776bd4d0a0"
       },
       "reason": "Existing inline dependency declaration awaits migration to its module owner; use module-level lazy imports when deferred loading is required."
     },
@@ -3289,29 +3028,29 @@
     {
       "key": {
         "rule": "inline-import",
-        "path": "assistant/canvas_controller.py",
-        "scope": "default_store",
+        "path": "assistant/browser_session.py",
+        "scope": "NativeSessions.open",
         "signature": "40ebddec9e93daae43c4ec1eb2afcf4e97e0548039574bb0b8cead6ee0d26f33"
       },
-      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
+      "reason": "Existing inline dependency declaration awaits migration to its module owner; use module-level lazy imports when deferred loading is required."
     },
     {
       "key": {
         "rule": "inline-import",
-        "path": "assistant/canvas_guard.py",
-        "scope": "main",
-        "signature": "e66dc17bb081e75972d6b1e21beab70ff78458d48862b988eb95997d0af4d5d0"
+        "path": "assistant/browser_session.py",
+        "scope": "NativeSessions.open",
+        "signature": "b682d7252ce6750257112d7f4213abfd354e507a405f5a69c8db9f979c9e9b11"
       },
-      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
+      "reason": "Existing inline dependency declaration awaits migration to its module owner; use module-level lazy imports when deferred loading is required."
     },
     {
       "key": {
         "rule": "inline-import",
-        "path": "assistant/canvas_ui.py",
-        "scope": "DesktopWindow.open_setting",
-        "signature": "7d0f261415ed4a987738d124b1056d0440208ea1e4da9fd7a379f18604529620"
+        "path": "assistant/communications_service.py",
+        "scope": "windows_store",
+        "signature": "3302f1044b01c8aef92854c3236fbb6555aa898375e9181fb05f9f776bd4d0a0"
       },
-      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
+      "reason": "Existing inline dependency declaration awaits migration to its module owner; use module-level lazy imports when deferred loading is required."
     },
     {
       "key": {
@@ -3319,6 +3058,15 @@
         "path": "assistant/graph_http.py",
         "scope": "Http._request",
         "signature": "b2060bd2f32e2f7c2caacbaebde26a31942d5fffaa90961bb53d7c0588123554"
+      },
+      "reason": "Existing inline dependency declaration awaits migration to its module owner; use module-level lazy imports when deferred loading is required."
+    },
+    {
+      "key": {
+        "rule": "inline-import",
+        "path": "assistant/taskbar_guard.py",
+        "scope": "main",
+        "signature": "fdc58a5876f45b45bdcddf0878ba1f0c628b124f7dfb93cc9e383a4f78c9bde9"
       },
       "reason": "Existing inline dependency declaration awaits migration to its module owner; use module-level lazy imports when deferred loading is required."
     },
@@ -3337,6 +3085,15 @@
         "path": "assistant/teams.py",
         "scope": "_unprotect",
         "signature": "225f9a708920adc244bbdb964386a32382665a6ce94b86db64a16e8b095d488c"
+      },
+      "reason": "Existing inline dependency declaration awaits migration to its module owner; use module-level lazy imports when deferred loading is required."
+    },
+    {
+      "key": {
+        "rule": "inline-import",
+        "path": "assistant/tiling.py",
+        "scope": "launch",
+        "signature": "04e4fe0edd5e58b72d0b5ef2ad1218255aef7397a6e334fe45b8c5f81c1b5fd4"
       },
       "reason": "Existing inline dependency declaration awaits migration to its module owner; use module-level lazy imports when deferred loading is required."
     },
@@ -3406,74 +3163,740 @@
     {
       "key": {
         "rule": "inline-import",
-        "path": "tests/test_windows_canvas_web.py",
-        "scope": "test_web_meeting_cards_edit_the_existing_package_and_wait_for_receipts",
-        "signature": "7f8ae3d4a0a626ba5cc30e3d0a57d552c368d12b6d10e04f5c2cd667a24d5025"
-      },
-      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
-    },
-    {
-      "key": {
-        "rule": "inline-import",
-        "path": "tests/test_windows_canvas_web.py",
-        "scope": "test_web_meeting_cards_edit_the_existing_package_and_wait_for_receipts",
-        "signature": "dd3c22e9c7e11811bc91e8363d8e4999bbfeab7dce83e9069a2ea98eb539af14"
-      },
-      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
-    },
-    {
-      "key": {
-        "rule": "inline-import",
-        "path": "tests/test_windows_canvas_web.py",
-        "scope": "test_web_source_reselection_and_late_reads_preserve_revisions_and_workspace",
+        "path": "tests/test_features.py",
+        "scope": "test_voice_limit_uses_the_deadline_across_a_float_precision_boundary",
         "signature": "30674311fc01e81ccfe2bc8611cbd25baa782338b715ef6a64fa27e3cfe9a7e9"
       },
-      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
+      "reason": "Existing inline dependency declaration awaits migration to its module owner; use module-level lazy imports when deferred loading is required."
     },
     {
       "key": {
-        "rule": "re-export",
-        "path": "assistant/browser.py",
-        "scope": "__all__",
-        "signature": "b7bc65a386cb45f98b44115bdbbde6efaf95489b157a7075fd9f6c1c72f1a0fe"
+        "rule": "inline-import",
+        "path": "tests/test_feed_items.py",
+        "scope": "test_expanded_question_context_excludes_other_topics_in_the_same_chat",
+        "signature": "8281ca8c9c01cb816b5849a1720147ba1e7538d9426ddefd9dc5c3552689e5d1"
       },
-      "reason": "Existing import forwarding or alias; use the owning module or document a necessary boundary."
+      "reason": "Existing inline dependency declaration awaits migration to its module owner; use module-level lazy imports when deferred loading is required."
     },
     {
       "key": {
-        "rule": "re-export",
-        "path": "assistant/canvas_agent.py",
-        "scope": "__all__",
-        "signature": "3b44e07939e45a5b73cae48f9c0cce3d1eeae63a2163fc2c5a50507b474279fd"
+        "rule": "inline-import",
+        "path": "tests/test_feed_items.py",
+        "scope": "test_expanded_question_context_excludes_other_topics_in_the_same_chat",
+        "signature": "c0023aa46e28abdabbc5479c43ba28be87d00f019d303bef293b051e36730a23"
       },
-      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
+      "reason": "Existing inline dependency declaration awaits migration to its module owner; use module-level lazy imports when deferred loading is required."
     },
     {
       "key": {
-        "rule": "re-export",
-        "path": "assistant/page_sources.py",
-        "scope": "__all__",
-        "signature": "a35bc01e4a720b66967a08b0989588b468e9a1197fbede51a0ee60006a7eee95"
+        "rule": "inline-import",
+        "path": "tests/test_feed_items.py",
+        "scope": "test_expansion_shows_only_matching_source_revisions_and_labels_missing_originals",
+        "signature": "43ce0480b7d7b3c1ee0975435b076f00002a734ad47548f05eaa2591d77f8985"
       },
-      "reason": "Existing committed interface/import requires migration at its owner; this exact entry does not permit new violations."
+      "reason": "Existing inline dependency declaration awaits migration to its module owner; use module-level lazy imports when deferred loading is required."
     },
     {
       "key": {
-        "rule": "re-export",
-        "path": "assistant/qt.py",
-        "scope": "__all__",
-        "signature": "703cd516579b6549d190bef71cb6a419c0f1ffbcf910ce1b6d80190ff1a5ff13"
+        "rule": "inline-import",
+        "path": "tests/test_feed_items.py",
+        "scope": "test_expansion_shows_only_matching_source_revisions_and_labels_missing_originals",
+        "signature": "604c6187fb06ec25b0e63f0f1fb6ae4991bf24b5f47a72349488b3696a98810f"
       },
-      "reason": "Existing import forwarding or alias; use the owning module or document a necessary boundary."
+      "reason": "Existing inline dependency declaration awaits migration to its module owner; use module-level lazy imports when deferred loading is required."
     },
     {
       "key": {
-        "rule": "re-export",
-        "path": "assistant/ui.py",
-        "scope": "__all__",
-        "signature": "1e3aef670ade315fed262be50e61b0ed9d4edf26fb37e58dba4b7a7b32d81dcb"
+        "rule": "inline-import",
+        "path": "tests/test_feed_items.py",
+        "scope": "test_expansion_shows_only_matching_source_revisions_and_labels_missing_originals",
+        "signature": "c0023aa46e28abdabbc5479c43ba28be87d00f019d303bef293b051e36730a23"
       },
-      "reason": "Existing import forwarding or alias; use the owning module or document a necessary boundary."
+      "reason": "Existing inline dependency declaration awaits migration to its module owner; use module-level lazy imports when deferred loading is required."
+    },
+    {
+      "key": {
+        "rule": "inline-import",
+        "path": "tests/test_feed_items.py",
+        "scope": "test_grouped_work_keeps_app_identity_and_rich_body_links_without_an_action_footer",
+        "signature": "8281ca8c9c01cb816b5849a1720147ba1e7538d9426ddefd9dc5c3552689e5d1"
+      },
+      "reason": "Existing inline dependency declaration awaits migration to its module owner; use module-level lazy imports when deferred loading is required."
+    },
+    {
+      "key": {
+        "rule": "inline-import",
+        "path": "tests/test_feed_items.py",
+        "scope": "test_grouped_work_keeps_app_identity_and_rich_body_links_without_an_action_footer",
+        "signature": "b24efbef270273214ac15de3be9810088c247dd8d7ca88791c489b674f8fb64f"
+      },
+      "reason": "Existing inline dependency declaration awaits migration to its module owner; use module-level lazy imports when deferred loading is required."
+    },
+    {
+      "key": {
+        "rule": "inline-import",
+        "path": "tests/test_feed_items.py",
+        "scope": "test_grouped_work_keeps_app_identity_and_rich_body_links_without_an_action_footer",
+        "signature": "c0023aa46e28abdabbc5479c43ba28be87d00f019d303bef293b051e36730a23"
+      },
+      "reason": "Existing inline dependency declaration awaits migration to its module owner; use module-level lazy imports when deferred loading is required."
+    },
+    {
+      "key": {
+        "rule": "inline-import",
+        "path": "tests/test_feed_items.py",
+        "scope": "test_pending_sources_remain_reachable_after_overflow_filtering_and_agent_reset",
+        "signature": "604c6187fb06ec25b0e63f0f1fb6ae4991bf24b5f47a72349488b3696a98810f"
+      },
+      "reason": "Existing inline dependency declaration awaits migration to its module owner; use module-level lazy imports when deferred loading is required."
+    },
+    {
+      "key": {
+        "rule": "inline-import",
+        "path": "tests/test_feed_items.py",
+        "scope": "test_reactions_share_one_compact_strip_and_disappear_after_exact_handling",
+        "signature": "cee8295cec8f91c2f721c53f0866f929e31a4989da7ee967fab6966ff3591afc"
+      },
+      "reason": "Existing inline dependency declaration awaits migration to its module owner; use module-level lazy imports when deferred loading is required."
+    },
+    {
+      "key": {
+        "rule": "inline-import",
+        "path": "tests/test_feed_items.py",
+        "scope": "test_reactions_share_one_compact_strip_and_disappear_after_exact_handling",
+        "signature": "ebdec2d8883b0a451936a0b5ded4ad1f4df1bfb20c87875c65974f4d200a3d32"
+      },
+      "reason": "Existing inline dependency declaration awaits migration to its module owner; use module-level lazy imports when deferred loading is required."
+    },
+    {
+      "key": {
+        "rule": "inline-import",
+        "path": "tests/test_feed_items.py",
+        "scope": "test_small_viewport_pages_through_every_pending_item_even_when_questions_overflow",
+        "signature": "604c6187fb06ec25b0e63f0f1fb6ae4991bf24b5f47a72349488b3696a98810f"
+      },
+      "reason": "Existing inline dependency declaration awaits migration to its module owner; use module-level lazy imports when deferred loading is required."
+    },
+    {
+      "key": {
+        "rule": "inline-import",
+        "path": "tests/test_feed_items.py",
+        "scope": "test_windows_teams_and_console_requests_join_agent_bubbles_with_exact_source_links",
+        "signature": "1cf388fa25cd322ad5a4e5a3b8431ca5308bcdc1b58ba886d8cdb971fa61f095"
+      },
+      "reason": "Existing inline dependency declaration awaits migration to its module owner; use module-level lazy imports when deferred loading is required."
+    },
+    {
+      "key": {
+        "rule": "inline-import",
+        "path": "tests/test_feed_triage.py",
+        "scope": "test_meaningful_rejection_records_reason_and_revision_without_completing_or_sending",
+        "signature": "c5c40a48c7683d986892b1f9ec15c0fda266c9513013ca3923ef0f75bcfec199"
+      },
+      "reason": "Existing inline dependency declaration awaits migration to its module owner; use module-level lazy imports when deferred loading is required."
+    },
+    {
+      "key": {
+        "rule": "inline-import",
+        "path": "tests/test_feed_triage.py",
+        "scope": "test_meaningful_rejection_records_reason_and_revision_without_completing_or_sending",
+        "signature": "dd78509472477a0e863b161223f82f2d8e3c18dad87aa2145bade950bf721ff0"
+      },
+      "reason": "Existing inline dependency declaration awaits migration to its module owner; use module-level lazy imports when deferred loading is required."
+    },
+    {
+      "key": {
+        "rule": "inline-import",
+        "path": "tests/test_feed_triage.py",
+        "scope": "test_new_related_arrival_can_join_an_existing_action_without_duplicate_cards",
+        "signature": "a120164852f8e1b1e4e1f8dca953e65967cff45674d29a12e7f9b54d008d2b71"
+      },
+      "reason": "Existing inline dependency declaration awaits migration to its module owner; use module-level lazy imports when deferred loading is required."
+    },
+    {
+      "key": {
+        "rule": "inline-import",
+        "path": "tests/test_feed_triage.py",
+        "scope": "test_solutions_are_revision_bound_persisted_and_untrusted_details_cannot_expand_the_recipe",
+        "signature": "24ba515a6299fce388366d88f8a7a2ac1a005f2e3f5b010cf6d3c11a3d497759"
+      },
+      "reason": "Existing inline dependency declaration awaits migration to its module owner; use module-level lazy imports when deferred loading is required."
+    },
+    {
+      "key": {
+        "rule": "inline-import",
+        "path": "tests/test_feed_triage_service.py",
+        "scope": "test_click_and_voice_choose_the_same_task_and_stale_or_unavailable_choices_do_not_start_work",
+        "signature": "2b05bedbd2cacc5ce4b08391277ff165780b2501be0ce91d7d8939f9d7661654"
+      },
+      "reason": "Existing inline dependency declaration awaits migration to its module owner; use module-level lazy imports when deferred loading is required."
+    },
+    {
+      "key": {
+        "rule": "inline-import",
+        "path": "tests/test_feed_triage_service.py",
+        "scope": "test_click_and_voice_choose_the_same_task_and_stale_or_unavailable_choices_do_not_start_work",
+        "signature": "30674311fc01e81ccfe2bc8611cbd25baa782338b715ef6a64fa27e3cfe9a7e9"
+      },
+      "reason": "Existing inline dependency declaration awaits migration to its module owner; use module-level lazy imports when deferred loading is required."
+    },
+    {
+      "key": {
+        "rule": "inline-import",
+        "path": "tests/test_feed_triage_service.py",
+        "scope": "test_console_answer_tool_has_one_required_destination_and_validates_before_effect",
+        "signature": "37920ab45a5eea18702c6ecd9fe83dc89cfecbf961b71025dddff2ba25b30f1a"
+      },
+      "reason": "Existing inline dependency declaration awaits migration to its module owner; use module-level lazy imports when deferred loading is required."
+    },
+    {
+      "key": {
+        "rule": "inline-import",
+        "path": "tests/test_feed_triage_service.py",
+        "scope": "test_console_answer_tool_has_one_required_destination_and_validates_before_effect",
+        "signature": "3cd25d1ddf617358a9235df1482db1c05743060c42054e8b706da5ec5005bdcd"
+      },
+      "reason": "Existing inline dependency declaration awaits migration to its module owner; use module-level lazy imports when deferred loading is required."
+    },
+    {
+      "key": {
+        "rule": "inline-import",
+        "path": "tests/test_feed_triage_service.py",
+        "scope": "test_console_answer_tool_has_one_required_destination_and_validates_before_effect",
+        "signature": "88133db81ae300d2e01bb40b6d1ffee0314f679201d5a4361fbe9489dfb4fb39"
+      },
+      "reason": "Existing inline dependency declaration awaits migration to its module owner; use module-level lazy imports when deferred loading is required."
+    },
+    {
+      "key": {
+        "rule": "inline-import",
+        "path": "tests/test_feed_triage_service.py",
+        "scope": "test_lost_acknowledgement_stays_uncertain_after_the_owner_commits_feedback",
+        "signature": "0bf16ff697f82ef2ecf212be6e93987f405a74f1b53c0f9cd32bde3c24812da5"
+      },
+      "reason": "Existing inline dependency declaration awaits migration to its module owner; use module-level lazy imports when deferred loading is required."
+    },
+    {
+      "key": {
+        "rule": "inline-import",
+        "path": "tests/test_feed_triage_service.py",
+        "scope": "test_lost_acknowledgement_stays_uncertain_after_the_owner_commits_feedback",
+        "signature": "37920ab45a5eea18702c6ecd9fe83dc89cfecbf961b71025dddff2ba25b30f1a"
+      },
+      "reason": "Existing inline dependency declaration awaits migration to its module owner; use module-level lazy imports when deferred loading is required."
+    },
+    {
+      "key": {
+        "rule": "inline-import",
+        "path": "tests/test_feed_triage_service.py",
+        "scope": "test_lost_acknowledgement_stays_uncertain_after_the_owner_commits_feedback",
+        "signature": "37b7c92300502d7d6aad2a53979f8d1bfb217b21fb5cfc091aa80dd697664d67"
+      },
+      "reason": "Existing inline dependency declaration awaits migration to its module owner; use module-level lazy imports when deferred loading is required."
+    },
+    {
+      "key": {
+        "rule": "inline-import",
+        "path": "tests/test_feed_triage_service.py",
+        "scope": "test_lost_acknowledgement_stays_uncertain_after_the_owner_commits_feedback",
+        "signature": "3cd25d1ddf617358a9235df1482db1c05743060c42054e8b706da5ec5005bdcd"
+      },
+      "reason": "Existing inline dependency declaration awaits migration to its module owner; use module-level lazy imports when deferred loading is required."
+    },
+    {
+      "key": {
+        "rule": "inline-import",
+        "path": "tests/test_feed_triage_service.py",
+        "scope": "test_lost_acknowledgement_stays_uncertain_after_the_owner_commits_feedback",
+        "signature": "e2261938444f9e5bc51cfc5b55937a69c481b6df21b362446cd30387dd5538bf"
+      },
+      "reason": "Existing inline dependency declaration awaits migration to its module owner; use module-level lazy imports when deferred loading is required."
+    },
+    {
+      "key": {
+        "rule": "inline-import",
+        "path": "tests/test_feed_triage_service.py",
+        "scope": "test_missing_console_destination_is_rejected_before_a_durable_action_attempt",
+        "signature": "37920ab45a5eea18702c6ecd9fe83dc89cfecbf961b71025dddff2ba25b30f1a"
+      },
+      "reason": "Existing inline dependency declaration awaits migration to its module owner; use module-level lazy imports when deferred loading is required."
+    },
+    {
+      "key": {
+        "rule": "inline-import",
+        "path": "tests/test_feed_triage_service.py",
+        "scope": "test_missing_console_destination_is_rejected_before_a_durable_action_attempt",
+        "signature": "3cd25d1ddf617358a9235df1482db1c05743060c42054e8b706da5ec5005bdcd"
+      },
+      "reason": "Existing inline dependency declaration awaits migration to its module owner; use module-level lazy imports when deferred loading is required."
+    },
+    {
+      "key": {
+        "rule": "inline-import",
+        "path": "tests/test_feed_triage_service.py",
+        "scope": "test_missing_console_destination_is_rejected_before_a_durable_action_attempt",
+        "signature": "6781faf499d0ce82063135e9c13c17902a17401fba05758bf18b13dd0ce51b6a"
+      },
+      "reason": "Existing inline dependency declaration awaits migration to its module owner; use module-level lazy imports when deferred loading is required."
+    },
+    {
+      "key": {
+        "rule": "inline-import",
+        "path": "tests/test_feed_triage_service.py",
+        "scope": "test_reasoned_rejection_remains_recorded_once_after_feedback_and_reload",
+        "signature": "2b05bedbd2cacc5ce4b08391277ff165780b2501be0ce91d7d8939f9d7661654"
+      },
+      "reason": "Existing inline dependency declaration awaits migration to its module owner; use module-level lazy imports when deferred loading is required."
+    },
+    {
+      "key": {
+        "rule": "inline-import",
+        "path": "tests/test_feed_triage_service.py",
+        "scope": "test_rejected_stale_edit_does_not_block_the_voice_agent_from_saving_feedback",
+        "signature": "0bf16ff697f82ef2ecf212be6e93987f405a74f1b53c0f9cd32bde3c24812da5"
+      },
+      "reason": "Existing inline dependency declaration awaits migration to its module owner; use module-level lazy imports when deferred loading is required."
+    },
+    {
+      "key": {
+        "rule": "inline-import",
+        "path": "tests/test_feed_triage_service.py",
+        "scope": "test_rejected_stale_edit_does_not_block_the_voice_agent_from_saving_feedback",
+        "signature": "37920ab45a5eea18702c6ecd9fe83dc89cfecbf961b71025dddff2ba25b30f1a"
+      },
+      "reason": "Existing inline dependency declaration awaits migration to its module owner; use module-level lazy imports when deferred loading is required."
+    },
+    {
+      "key": {
+        "rule": "inline-import",
+        "path": "tests/test_feed_triage_service.py",
+        "scope": "test_rejected_stale_edit_does_not_block_the_voice_agent_from_saving_feedback",
+        "signature": "37b7c92300502d7d6aad2a53979f8d1bfb217b21fb5cfc091aa80dd697664d67"
+      },
+      "reason": "Existing inline dependency declaration awaits migration to its module owner; use module-level lazy imports when deferred loading is required."
+    },
+    {
+      "key": {
+        "rule": "inline-import",
+        "path": "tests/test_feed_triage_service.py",
+        "scope": "test_rejected_stale_edit_does_not_block_the_voice_agent_from_saving_feedback",
+        "signature": "3cd25d1ddf617358a9235df1482db1c05743060c42054e8b706da5ec5005bdcd"
+      },
+      "reason": "Existing inline dependency declaration awaits migration to its module owner; use module-level lazy imports when deferred loading is required."
+    },
+    {
+      "key": {
+        "rule": "inline-import",
+        "path": "tests/test_feed_triage_service.py",
+        "scope": "test_rejected_stale_edit_does_not_block_the_voice_agent_from_saving_feedback",
+        "signature": "d6bd8ed37726fb411e5c92dd88a027465f99182d5edb4b81760e411cd73c95c3"
+      },
+      "reason": "Existing inline dependency declaration awaits migration to its module owner; use module-level lazy imports when deferred loading is required."
+    },
+    {
+      "key": {
+        "rule": "inline-import",
+        "path": "tests/test_feed_triage_service.py",
+        "scope": "test_rejected_stale_edit_does_not_block_the_voice_agent_from_saving_feedback",
+        "signature": "e2261938444f9e5bc51cfc5b55937a69c481b6df21b362446cd30387dd5538bf"
+      },
+      "reason": "Existing inline dependency declaration awaits migration to its module owner; use module-level lazy imports when deferred loading is required."
+    },
+    {
+      "key": {
+        "rule": "inline-import",
+        "path": "tests/test_feed_triage_service.py",
+        "scope": "test_saved_visibility_preferences_are_trusted_but_notification_text_is_only_evidence",
+        "signature": "676670c9fef2c6e99629fd976f2050556c256db7179b1aa2dc08a20dc9286e5b"
+      },
+      "reason": "Existing inline dependency declaration awaits migration to its module owner; use module-level lazy imports when deferred loading is required."
+    },
+    {
+      "key": {
+        "rule": "inline-import",
+        "path": "tests/test_feed_triage_service.py",
+        "scope": "test_saved_visibility_preferences_are_trusted_but_notification_text_is_only_evidence",
+        "signature": "6f2fc34d854c6397fc66fa09051b9ca16a77cc8cdf2f6e64f92657f8fdea4dd5"
+      },
+      "reason": "Existing inline dependency declaration awaits migration to its module owner; use module-level lazy imports when deferred loading is required."
+    },
+    {
+      "key": {
+        "rule": "inline-import",
+        "path": "tests/test_feed_triage_service.py",
+        "scope": "test_saved_visibility_preferences_are_trusted_but_notification_text_is_only_evidence",
+        "signature": "76359a50d085946e820c5f6200000300adda6fbdcade72d0ca1b4e3635e4932f"
+      },
+      "reason": "Existing inline dependency declaration awaits migration to its module owner; use module-level lazy imports when deferred loading is required."
+    },
+    {
+      "key": {
+        "rule": "inline-import",
+        "path": "tests/test_feed_triage_service.py",
+        "scope": "test_saved_visibility_preferences_are_trusted_but_notification_text_is_only_evidence",
+        "signature": "ac702db88bb1a98ad1a4aa50523dffd990684138d74bb9965c47b6a5fb26554c"
+      },
+      "reason": "Existing inline dependency declaration awaits migration to its module owner; use module-level lazy imports when deferred loading is required."
+    },
+    {
+      "key": {
+        "rule": "inline-import",
+        "path": "tests/test_feed_triage_service.py",
+        "scope": "test_stable_arrival_is_retried_alone_when_a_grouped_chat_changes_during_evaluation",
+        "signature": "30674311fc01e81ccfe2bc8611cbd25baa782338b715ef6a64fa27e3cfe9a7e9"
+      },
+      "reason": "Existing inline dependency declaration awaits migration to its module owner; use module-level lazy imports when deferred loading is required."
+    },
+    {
+      "key": {
+        "rule": "inline-import",
+        "path": "tests/test_feed_triage_service.py",
+        "scope": "test_voice_choice_tool_requires_exact_revision_before_effect",
+        "signature": "37920ab45a5eea18702c6ecd9fe83dc89cfecbf961b71025dddff2ba25b30f1a"
+      },
+      "reason": "Existing inline dependency declaration awaits migration to its module owner; use module-level lazy imports when deferred loading is required."
+    },
+    {
+      "key": {
+        "rule": "inline-import",
+        "path": "tests/test_feed_triage_service.py",
+        "scope": "test_voice_choice_tool_requires_exact_revision_before_effect",
+        "signature": "3cd25d1ddf617358a9235df1482db1c05743060c42054e8b706da5ec5005bdcd"
+      },
+      "reason": "Existing inline dependency declaration awaits migration to its module owner; use module-level lazy imports when deferred loading is required."
+    },
+    {
+      "key": {
+        "rule": "inline-import",
+        "path": "tests/test_feed_triage_service.py",
+        "scope": "test_voice_choice_tool_requires_exact_revision_before_effect",
+        "signature": "88133db81ae300d2e01bb40b6d1ffee0314f679201d5a4361fbe9489dfb4fb39"
+      },
+      "reason": "Existing inline dependency declaration awaits migration to its module owner; use module-level lazy imports when deferred loading is required."
+    },
+    {
+      "key": {
+        "rule": "inline-import",
+        "path": "tests/test_keymap.py",
+        "scope": "test_every_tool_has_a_label",
+        "signature": "a85e4e7991b3c6fc71277c1bb5faed6f5539aa68bbf0e753594bcd0828cc529a"
+      },
+      "reason": "Existing inline dependency declaration awaits migration to its module owner; use module-level lazy imports when deferred loading is required."
+    },
+    {
+      "key": {
+        "rule": "inline-import",
+        "path": "tests/test_windows_agent_toasts.py",
+        "scope": "test_glass_surface_accepts_transitional_frames_smaller_than_its_inset",
+        "signature": "373602c71f6f6c6912fd941b2480579f71f3482b110a52e15a9b4b4a6f19b676"
+      },
+      "reason": "Existing inline dependency declaration awaits migration to its module owner; use module-level lazy imports when deferred loading is required."
+    },
+    {
+      "key": {
+        "rule": "inline-import",
+        "path": "tests/test_windows_audio.py",
+        "scope": "test_meter_never_waits_for_capture_shutdown_or_buffer_release",
+        "signature": "0109b96b171e48f6247898e13c29b72807d52a369607dc6462cb3ef2cade9529"
+      },
+      "reason": "Existing inline dependency declaration awaits migration to its module owner; use module-level lazy imports when deferred loading is required."
+    },
+    {
+      "key": {
+        "rule": "inline-import",
+        "path": "tests/test_windows_feed.py",
+        "scope": "test_collapsed_feed_titles_keep_one_line_and_elide_long_text",
+        "signature": "a3430aa2d28c486f4aa04d0bf2a22808c25e3ce2e8c0285e4c47da71951a3bb4"
+      },
+      "reason": "Existing inline dependency declaration awaits migration to its module owner; use module-level lazy imports when deferred loading is required."
+    },
+    {
+      "key": {
+        "rule": "inline-import",
+        "path": "tests/test_windows_feed.py",
+        "scope": "test_crowded_feed_keeps_fixed_height_title_rows",
+        "signature": "cd6aa9f443d68390e46879cdbdaace31cbdf2122670c95d801e41182542df529"
+      },
+      "reason": "Existing inline dependency declaration awaits migration to its module owner; use module-level lazy imports when deferred loading is required."
+    },
+    {
+      "key": {
+        "rule": "inline-import",
+        "path": "tests/test_windows_feed.py",
+        "scope": "test_crowded_feed_keeps_fixed_height_title_rows",
+        "signature": "fdaff064303297dd0813f12cb0f7f3a852c1218c9ca820ef150cc9ec684ec45d"
+      },
+      "reason": "Existing inline dependency declaration awaits migration to its module owner; use module-level lazy imports when deferred loading is required."
+    },
+    {
+      "key": {
+        "rule": "inline-import",
+        "path": "tests/test_windows_feed.py",
+        "scope": "test_curated_bubbles_show_priority_at_the_top_and_dismiss_without_opening_the_composer",
+        "signature": "85cd4a59c87f580bf1e6786e8392a549f853428169923b18cdcdc2fa22b1e273"
+      },
+      "reason": "Existing inline dependency declaration awaits migration to its module owner; use module-level lazy imports when deferred loading is required."
+    },
+    {
+      "key": {
+        "rule": "inline-import",
+        "path": "tests/test_windows_feed.py",
+        "scope": "test_expanded_feed_text_wraps_inside_the_live_card_and_scrolls_without_a_hidden_gutter",
+        "signature": "cd6aa9f443d68390e46879cdbdaace31cbdf2122670c95d801e41182542df529"
+      },
+      "reason": "Existing inline dependency declaration awaits migration to its module owner; use module-level lazy imports when deferred loading is required."
+    },
+    {
+      "key": {
+        "rule": "inline-import",
+        "path": "tests/test_windows_feed.py",
+        "scope": "test_failed_solution_start_keeps_choices_available",
+        "signature": "75dfccc5d77592071cc7b0b6d86abcb5a65b78db56ab1aad002deed48ba5afa5"
+      },
+      "reason": "Existing inline dependency declaration awaits migration to its module owner; use module-level lazy imports when deferred loading is required."
+    },
+    {
+      "key": {
+        "rule": "inline-import",
+        "path": "tests/test_windows_feed.py",
+        "scope": "test_failed_solution_start_keeps_choices_available",
+        "signature": "7e9288ade046810a1a246e9e9990342b9c93e96b45f4fd0289ccfee28e0f9b26"
+      },
+      "reason": "Existing inline dependency declaration awaits migration to its module owner; use module-level lazy imports when deferred loading is required."
+    },
+    {
+      "key": {
+        "rule": "inline-import",
+        "path": "tests/test_windows_feed.py",
+        "scope": "test_feed_controls_are_inside_the_painted_bubble",
+        "signature": "2d5c7513bf8f67462634cfa8743bf37aa81c01bd44fbf88d42ec4c2bcdcf6f82"
+      },
+      "reason": "Existing inline dependency declaration awaits migration to its module owner; use module-level lazy imports when deferred loading is required."
+    },
+    {
+      "key": {
+        "rule": "inline-import",
+        "path": "tests/test_windows_feed.py",
+        "scope": "test_feed_controls_are_inside_the_painted_bubble",
+        "signature": "5353c41e913569a65c00105f71b585d5df6bf6c4efaff1649e0da53705e38107"
+      },
+      "reason": "Existing inline dependency declaration awaits migration to its module owner; use module-level lazy imports when deferred loading is required."
+    },
+    {
+      "key": {
+        "rule": "inline-import",
+        "path": "tests/test_windows_feed.py",
+        "scope": "test_feed_controls_are_inside_the_painted_bubble",
+        "signature": "cd6aa9f443d68390e46879cdbdaace31cbdf2122670c95d801e41182542df529"
+      },
+      "reason": "Existing inline dependency declaration awaits migration to its module owner; use module-level lazy imports when deferred loading is required."
+    },
+    {
+      "key": {
+        "rule": "inline-import",
+        "path": "tests/test_windows_feed.py",
+        "scope": "test_feed_details_expand_on_request_and_never_scroll_themselves",
+        "signature": "c0023aa46e28abdabbc5479c43ba28be87d00f019d303bef293b051e36730a23"
+      },
+      "reason": "Existing inline dependency declaration awaits migration to its module owner; use module-level lazy imports when deferred loading is required."
+    },
+    {
+      "key": {
+        "rule": "inline-import",
+        "path": "tests/test_windows_feed.py",
+        "scope": "test_feed_titles_elide_without_growing_and_clicking_the_bubble_expands_details",
+        "signature": "69819980c1bbaedd8213fdf411533f0e15c1634dc427962f64fcbcc030c1384e"
+      },
+      "reason": "Existing inline dependency declaration awaits migration to its module owner; use module-level lazy imports when deferred loading is required."
+    },
+    {
+      "key": {
+        "rule": "inline-import",
+        "path": "tests/test_windows_feed.py",
+        "scope": "test_feed_titles_elide_without_growing_and_clicking_the_bubble_expands_details",
+        "signature": "cd6aa9f443d68390e46879cdbdaace31cbdf2122670c95d801e41182542df529"
+      },
+      "reason": "Existing inline dependency declaration awaits migration to its module owner; use module-level lazy imports when deferred loading is required."
+    },
+    {
+      "key": {
+        "rule": "inline-import",
+        "path": "tests/test_windows_feed.py",
+        "scope": "test_native_notice_arrives_and_is_handled_before_the_busy_teams_worker_publishes_anything",
+        "signature": "fdaff064303297dd0813f12cb0f7f3a852c1218c9ca820ef150cc9ec684ec45d"
+      },
+      "reason": "Existing inline dependency declaration awaits migration to its module owner; use module-level lazy imports when deferred loading is required."
+    },
+    {
+      "key": {
+        "rule": "inline-import",
+        "path": "tests/test_windows_feed.py",
+        "scope": "test_production_theme_does_not_shrink_or_scroll_collapsed_feed_titles",
+        "signature": "6aa45b1492c0f6848c14950897abdbb16c0c556331dd801e6e592d8f969c6815"
+      },
+      "reason": "Existing inline dependency declaration awaits migration to its module owner; use module-level lazy imports when deferred loading is required."
+    },
+    {
+      "key": {
+        "rule": "inline-import",
+        "path": "tests/test_windows_feed.py",
+        "scope": "test_production_theme_does_not_shrink_or_scroll_collapsed_feed_titles",
+        "signature": "cd6aa9f443d68390e46879cdbdaace31cbdf2122670c95d801e41182542df529"
+      },
+      "reason": "Existing inline dependency declaration awaits migration to its module owner; use module-level lazy imports when deferred loading is required."
+    },
+    {
+      "key": {
+        "rule": "inline-import",
+        "path": "tests/test_windows_feed.py",
+        "scope": "test_solution_buttons_are_compact_and_start_exact_work_without_a_composer",
+        "signature": "54f9fbeb40cb3b6e9b2759948839a0bf3012c086af902aeefccf33a8bc8a77a7"
+      },
+      "reason": "Existing inline dependency declaration awaits migration to its module owner; use module-level lazy imports when deferred loading is required."
+    },
+    {
+      "key": {
+        "rule": "inline-import",
+        "path": "tests/test_windows_feed.py",
+        "scope": "test_solution_buttons_are_compact_and_start_exact_work_without_a_composer",
+        "signature": "75dfccc5d77592071cc7b0b6d86abcb5a65b78db56ab1aad002deed48ba5afa5"
+      },
+      "reason": "Existing inline dependency declaration awaits migration to its module owner; use module-level lazy imports when deferred loading is required."
+    },
+    {
+      "key": {
+        "rule": "inline-import",
+        "path": "tests/test_windows_feed.py",
+        "scope": "test_source_badge_overlaps_and_title_shares_header_with_controls",
+        "signature": "b24efbef270273214ac15de3be9810088c247dd8d7ca88791c489b674f8fb64f"
+      },
+      "reason": "Existing inline dependency declaration awaits migration to its module owner; use module-level lazy imports when deferred loading is required."
+    },
+    {
+      "key": {
+        "rule": "inline-import",
+        "path": "tests/test_windows_feed.py",
+        "scope": "test_source_badge_overlaps_and_title_shares_header_with_controls",
+        "signature": "c0023aa46e28abdabbc5479c43ba28be87d00f019d303bef293b051e36730a23"
+      },
+      "reason": "Existing inline dependency declaration awaits migration to its module owner; use module-level lazy imports when deferred loading is required."
+    },
+    {
+      "key": {
+        "rule": "inline-import",
+        "path": "winapi/ambient.py",
+        "scope": "location",
+        "signature": "746ff65a9798972c339ffc71294be19ecd43b9114841bdbbcc48a2ea0b8598e9"
+      },
+      "reason": "Existing inline dependency declaration awaits migration to its module owner; use module-level lazy imports when deferred loading is required."
+    },
+    {
+      "key": {
+        "rule": "inline-import",
+        "path": "winapi/ambient.py",
+        "scope": "location",
+        "signature": "bf78c99b3003069b4ae59f443d629e3a032ef2be87f9d98d779703abf6548171"
+      },
+      "reason": "Existing inline dependency declaration awaits migration to its module owner; use module-level lazy imports when deferred loading is required."
+    },
+    {
+      "key": {
+        "rule": "inline-import",
+        "path": "winapi/ambient.py",
+        "scope": "location",
+        "signature": "f6c7fe90ce0d3452d49e1f3b8e542b6ead30cb15c1652c039c467b4f626e4c4f"
+      },
+      "reason": "Existing inline dependency declaration awaits migration to its module owner; use module-level lazy imports when deferred loading is required."
+    },
+    {
+      "key": {
+        "rule": "inline-import",
+        "path": "winapi/ambient.py",
+        "scope": "location",
+        "signature": "fe9371e6f32d0499398c1f0c992e547128656493f07b65ca0bab7e8baf89a346"
+      },
+      "reason": "Existing inline dependency declaration awaits migration to its module owner; use module-level lazy imports when deferred loading is required."
+    },
+    {
+      "key": {
+        "rule": "inline-import",
+        "path": "winapi/notifications.py",
+        "scope": "NotificationObserver.run",
+        "signature": "1983e85c366eaf3ea2123b6d92256db811063a46b182dfbb7467421188a29540"
+      },
+      "reason": "Existing inline dependency declaration awaits migration to its module owner; use module-level lazy imports when deferred loading is required."
+    },
+    {
+      "key": {
+        "rule": "inline-import",
+        "path": "winapi/notifications.py",
+        "scope": "NotificationObserver.run",
+        "signature": "f6c7fe90ce0d3452d49e1f3b8e542b6ead30cb15c1652c039c467b4f626e4c4f"
+      },
+      "reason": "Existing inline dependency declaration awaits migration to its module owner; use module-level lazy imports when deferred loading is required."
+    },
+    {
+      "key": {
+        "rule": "inline-import",
+        "path": "winapi/notifications.py",
+        "scope": "NotificationObserver.run",
+        "signature": "fe9371e6f32d0499398c1f0c992e547128656493f07b65ca0bab7e8baf89a346"
+      },
+      "reason": "Existing inline dependency declaration awaits migration to its module owner; use module-level lazy imports when deferred loading is required."
+    },
+    {
+      "key": {
+        "rule": "inline-import",
+        "path": "winapi/notifications.py",
+        "scope": "read",
+        "signature": "29e68ce3c8adeb75c83f1f94a554741dacc6713bcdf2b856f0b30085710b0423"
+      },
+      "reason": "Existing inline dependency declaration awaits migration to its module owner; use module-level lazy imports when deferred loading is required."
+    },
+    {
+      "key": {
+        "rule": "inline-import",
+        "path": "winapi/notifications.py",
+        "scope": "read",
+        "signature": "a5068923d48904a53af9d708248b1f81f5791c9c72a305f22483cec934f0eb32"
+      },
+      "reason": "Existing inline dependency declaration awaits migration to its module owner; use module-level lazy imports when deferred loading is required."
+    },
+    {
+      "key": {
+        "rule": "inline-import",
+        "path": "winapi/system_status.py",
+        "scope": "speakers",
+        "signature": "e08bb8504841ff7200b63e575b6867cfcf0c6279212210014878499de38189c1"
+      },
+      "reason": "Existing inline dependency declaration awaits migration to its module owner; use module-level lazy imports when deferred loading is required."
+    },
+    {
+      "key": {
+        "rule": "inline-import",
+        "path": "winapi/system_status.py",
+        "scope": "speakers",
+        "signature": "e1ec1d488bb8720fb3fecdf3824f77a6e0d3bf08120e4c90e980d399e0ba8684"
+      },
+      "reason": "Existing inline dependency declaration awaits migration to its module owner; use module-level lazy imports when deferred loading is required."
+    },
+    {
+      "key": {
+        "rule": "inline-import",
+        "path": "winapi/system_status.py",
+        "scope": "speakers",
+        "signature": "eed5a4d1126615f65951270a40156c8fb744ea831738916f6834686e3cf81471"
+      },
+      "reason": "Existing inline dependency declaration awaits migration to its module owner; use module-level lazy imports when deferred loading is required."
+    },
+    {
+      "key": {
+        "rule": "inline-import",
+        "path": "winapi/system_status.py",
+        "scope": "speakers",
+        "signature": "f6c7fe90ce0d3452d49e1f3b8e542b6ead30cb15c1652c039c467b4f626e4c4f"
+      },
+      "reason": "Existing inline dependency declaration awaits migration to its module owner; use module-level lazy imports when deferred loading is required."
     }
   ]
 }

@@ -26,7 +26,6 @@ from typing import BinaryIO, Final, Protocol, assert_never
 
 from assistant.activity import ContextSnapshot
 from assistant.agent_session import Answer, Progress, ReasoningSummary, StreamState, ToolActivity, ToolStatus
-from assistant.browser_surface_operations import AppCancelled, AppFailed, AppOperation, AppResult
 
 from . import ipc
 from .task import RunRef, digest, identifier, integer
@@ -42,6 +41,7 @@ else:
 MAX_BUFFER_BYTES: Final = 4 * ipc.MAX_FRAME
 MAX_REGISTRATIONS: Final = 128
 CLIENT_FRESH_SECONDS: Final = 10
+AUTH_PREFIX: Final = b"Workspace1:"
 
 
 class Channel(Protocol):
@@ -230,7 +230,7 @@ def _deadline(channel: Channel, seconds: float) -> Generator[Channel]:
 
 def _server_auth(channel: Channel, key: bytes) -> None:
     nonce = secrets.token_bytes(32)
-    channel.send_bytes(b"Workspace1:" + nonce)
+    channel.send_bytes(AUTH_PREFIX + nonce)
     answer = channel.recv_bytes(128)
     if len(answer) != 64 or not hmac.compare_digest(answer[32:], hmac.digest(key, b"client:" + nonce + answer[:32], "sha256")):
         raise OSError("Work IPC authentication failed.")
@@ -239,12 +239,12 @@ def _server_auth(channel: Channel, key: bytes) -> None:
 
 def _client_auth(channel: Channel, key: bytes) -> None:
     challenge = channel.recv_bytes(128)
-    if len(challenge) != 41 or not challenge.startswith(b"Workspace1:"):
+    if len(challenge) != len(AUTH_PREFIX) + 32 or not challenge.startswith(AUTH_PREFIX):
         raise OSError("Work IPC authentication failed.")
     nonce = secrets.token_bytes(32)
-    channel.send_bytes(nonce + hmac.digest(key, b"client:" + challenge[9:] + nonce, "sha256"))
+    channel.send_bytes(nonce + hmac.digest(key, b"client:" + challenge[len(AUTH_PREFIX):] + nonce, "sha256"))
     answer = channel.recv_bytes(128)
-    if not hmac.compare_digest(answer, hmac.digest(key, b"server:" + challenge[9:] + nonce, "sha256")):
+    if not hmac.compare_digest(answer, hmac.digest(key, b"server:" + challenge[len(AUTH_PREFIX):] + nonce, "sha256")):
         raise OSError("Work IPC authentication failed.")
 
 
@@ -312,24 +312,11 @@ class PendingMeeting:
     result: Future[ipc.MeetingResult]
 
 
-class StopSignal(Protocol):
-    def is_set(self) -> bool: ...
-
-
-@dataclass(frozen=True, slots=True)
-class PendingBrowserApp:
-    run: RunRef
-    client: str
-    result: Future[AppResult]
-    stop: StopSignal
-    expires_at: float
-
-
 class BridgeServer:
     """One worker's bounded listener, context cache, and UI-owned requests."""
 
     __slots__ = (
-        "_active", "_assistant_pid", "_browser_pending", "_client", "_closed", "_context", "_finished", "_io_lock", "_last_poll", "_listener",
+        "_active", "_assistant_pid", "_client", "_closed", "_context", "_finished", "_io_lock", "_last_poll", "_listener",
         "_lock", "_outbox", "_pending", "_registrations", "_started", "discovery", "folder", "owns", "timeout_s", "wake",
     )
 
@@ -351,7 +338,6 @@ class BridgeServer:
         self._context = ContextSnapshot(0, "unavailable")
         self._registrations: dict[str, ContextSnapshot | None] = {}
         self._pending: dict[str, PendingMeeting] = {}
-        self._browser_pending: dict[str, PendingBrowserApp] = {}
         self._outbox = Outbox()
 
     def start(self) -> None:
@@ -417,11 +403,6 @@ class BridgeServer:
             if not pending.result.done():
                 pending.result.set_result(ipc.MeetingFailed(reason))
         self._pending.clear()
-        for app_pending in self._browser_pending.values():
-            if not app_pending.result.done():
-                app_pending.result.set_result(AppFailed(reason))
-        self._browser_pending.clear()
-
     def _publish(self, payload: ipc.BridgeEvent) -> None:
         self._outbox, lost = enqueue(self._outbox, self.discovery.epoch, payload)
         if lost:
@@ -431,7 +412,7 @@ class BridgeServer:
         if request.epoch != self.discovery.epoch:
             return ipc.Rejected("This message belongs to an earlier work process.")
         operation = request.operation
-        if isinstance(operation, (ipc.MeetingResponse, ipc.BrowserAppResponse)) and not self.owns(operation.run):
+        if isinstance(operation, ipc.MeetingResponse) and not self.owns(operation.run):
             return ipc.Accepted(self.discovery.epoch, False)
         with self._lock:
             if self._closed.is_set():
@@ -466,13 +447,6 @@ class BridgeServer:
                     if pending is None or pending.run != run or pending.client != request.client or pending.result.done():
                         return ipc.Accepted(self.discovery.epoch, False)
                     pending.result.set_result(result)
-                    return ipc.Accepted(self.discovery.epoch, True)
-                case ipc.BrowserAppResponse(run, request_id, app_result):
-                    app_pending = self._browser_pending.get(request_id)
-                    if (app_pending is None or app_pending.run != run or app_pending.client != request.client or app_pending.result.done()
-                            or app_pending.stop.is_set() or time.time() >= app_pending.expires_at):
-                        return ipc.Accepted(self.discovery.epoch, False)
-                    app_pending.result.set_result(app_result)
                     return ipc.Accepted(self.discovery.epoch, True)
                 case ipc.Command.WAKE:
                     pass
@@ -560,49 +534,6 @@ class BridgeServer:
         finally:
             with self._lock:
                 self._pending.pop(identity, None)
-
-    def browser_app(self, run: RunRef, operation: AppOperation, stop: StopSignal, *, timeout_s: float = 20) -> AppResult:
-        """One exact UI-owned app request; cancellation never replays its effect."""
-        if isinstance(timeout_s, bool) or not 0 < timeout_s <= 120:
-            raise ValueError("Invalid browser app response deadline.")
-        if stop.is_set() or not self.owns(run):
-            return AppCancelled.REQUEST
-        identity = uuid.uuid4().hex
-        expires_at = time.time() + timeout_s
-        result: Future[AppResult] = Future()
-        with self._lock:
-            if self._closed.is_set() or not self._client or time.monotonic() - self._last_poll > CLIENT_FRESH_SECONDS:
-                return AppFailed("The assistant is unavailable for browser apps.")
-            if self._browser_pending:
-                return AppFailed("Another browser app request is already awaiting its owner.")
-            if stop.is_set():
-                return AppCancelled.REQUEST
-            self._publish(ipc.BrowserAppRequest(run, identity, operation, expires_at))
-            self._browser_pending[identity] = PendingBrowserApp(run, self._client, result, stop, expires_at)
-        deadline = time.monotonic() + timeout_s
-        completed = False
-        try:
-            while True:
-                if stop.is_set() or not self.owns(run):
-                    return AppCancelled.REQUEST
-                remaining = deadline - time.monotonic()
-                if remaining <= 0:
-                    return AppFailed("The browser app owner did not respond. Inspect the card before retrying; its action may have completed.")
-                try:
-                    answer = result.result(timeout=min(remaining, .05))
-                except TimeoutError:
-                    continue
-                if stop.is_set() or not self.owns(run):
-                    return AppCancelled.REQUEST
-                if time.monotonic() >= deadline:
-                    return AppFailed("The browser app response arrived after its deadline. Inspect the card before retrying.")
-                completed = True
-                return answer
-        finally:
-            with self._lock:
-                pending = self._browser_pending.pop(identity, None)
-                if pending is not None and not completed and not self._closed.is_set():
-                    self._publish(ipc.BrowserAppCancelled(run, identity))
 
     def close(self) -> None:
         self._closed.set()
@@ -749,16 +680,6 @@ class BridgeClient:
                 return False
             request = message.payload
             return self._send(discovery, ipc.MeetingResponse(request.run, request.request_id, result))
-
-    def respond_browser_app(self, message: ipc.Envelope, result: AppResult) -> bool:
-        if not isinstance(message.payload, ipc.BrowserAppRequest):
-            raise ValueError("Only a browser app request can receive an app response.")
-        with self._gate:
-            discovery = self._connect()
-            if discovery.epoch != message.epoch:
-                return False
-            request = message.payload
-            return self._send(discovery, ipc.BrowserAppResponse(request.run, request.request_id, result))
 
     def close(self) -> None:
         self._closed.set()

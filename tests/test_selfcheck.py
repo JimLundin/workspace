@@ -1,4 +1,4 @@
-"""selfcheck: deciding whether a copy of the workspace is sound, with only Python."""
+"""selfcheck: deciding whether a copy of Workspace is sound, with only Python."""
 
 import os
 import subprocess

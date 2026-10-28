@@ -12,7 +12,6 @@ from pathlib import Path
 if sys.platform != "win32":
     raise unittest.SkipTest("Native Windows meeting follow-through")
 
-from assistant.canvas_widgets import STYLE
 from assistant.meeting_followup import (
     ActionItem,
     ActionStatus,
@@ -46,6 +45,7 @@ from assistant.meeting_workflow import (
     MeetingWorkflow,
     WorkPending,
 )
+from assistant.panel_controls import STYLE
 from assistant.qt import Qt, QtCore
 from assistant.qt_ui import application
 
@@ -104,7 +104,7 @@ class WorkflowFixture(MeetingWorkflow):
 
 
 class NativeMeetings:
-    __slots__ = ("canvas", "opened", "package", "root", "view", "workflow")
+    __slots__ = ("opened", "package", "root", "view", "workflow")
 
     def __init__(self, folder: Path, *, multiple: bool = False) -> None:
         self.root = application()
@@ -112,8 +112,7 @@ class NativeMeetings:
         packages = (self.package, package_fixture(folder, "b" * 64)) if multiple else (self.package,)
         self.workflow = WorkflowFixture(packages)
         self.opened: list[Path] = []
-        self.canvas: list[Path] = []
-        self.view = MeetingPanel(self.workflow, open_file=self.opened.append, add_to_canvas=self.canvas.append)
+        self.view = MeetingPanel(self.workflow, open_file=self.opened.append)
         self.view.setStyleSheet(STYLE)
         self.view.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
         self.view.setGeometry(-4000, -3000, 1150, 760)
@@ -170,8 +169,7 @@ def test_same_title_sources_have_distinct_parts_and_citations_select_exact_saved
         assert view.source_text.textCursor().selectedText().strip() == "Ada will follow up."
         assert "Microphone gap" in view.source_notice.text()
         view.open_notes.click()
-        view.canvas_notes.click()
-        assert panel.opened == panel.canvas == [panel.package.publication.notes_path]
+        assert panel.opened == [panel.package.publication.notes_path]
 
 
 def test_multiple_versions_require_a_choice_and_preserve_local_edits_per_version(tmp_path: Path) -> None:

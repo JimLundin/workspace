@@ -14,17 +14,17 @@ from typing import Final, Protocol
 import keeper
 from protocol import MAGIC
 from usage import DIRECTORY
-from winapi import clipboard, inputs, screen, system, windows
 from winapi.shapes import Rect, Window
+lazy from winapi import clipboard, inputs, screen, system, windows
 
-from . import commands, uia
-from .browser import Browser, BrowserResult, Product
-from .geometry import Shot, fit, half
-from .llm import Json
-from .png import encode_png
-from .recording_state import AudioSource
-from .teams import Teams
-from .textio import paste_text
+lazy from . import commands, uia
+lazy from .browser import Browser, BrowserResult, Product
+lazy from .geometry import Shot, fit, half
+lazy from .llm import Json
+lazy from .png import encode_png
+lazy from .recording_state import AudioSource
+lazy from .teams import Teams
+lazy from .textio import paste_text
 
 _EXTENDED_VKS: Final = frozenset({0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27, 0x28, 0x2C, 0x2D, 0x2E, 0x5B, 0x5D, 0x90})
 _PASTE_WAIT_S: Final = 0.4

@@ -25,7 +25,7 @@ Windows-only boundary tests mock input functions without sending real keystrokes
 
 GitHub Actions runs the full selfcheck once on Windows/Linux Python 3.15,
 checks the extracted Windows bundle, and runs Mypy, Pyright and Ruff. Editing
-uses `selfcheck.py --fast`; the keeper always uses the full Windows gate before
+uses [source-bound affected checks](iteration-pipeline.md); the keeper always uses the full Windows gate before
 installation. The manual desktop workflow requires an interactive,
 dedicated self-hosted Windows runner labelled workspace-desktop. Do not run it on a
 workstation someone is using.

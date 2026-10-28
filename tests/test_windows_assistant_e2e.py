@@ -81,7 +81,7 @@ def type_ascii(text: str) -> None:
 
 @contextmanager
 def workspace(endpoint: FakeEndpoint, home: Path, live: Path = ROOT) -> Generator[None]:
-    """The workspace as the user starts it: the keeper, running layout, assistant, and automation
+    """Workspace as the user starts it: the keeper, running layout, assistant, and automation
     from `live`. Logs and state go under `home` (it's LOCALAPPDATA)."""
     env = {
         **os.environ, "OPENAI_BASE_URL": endpoint.url, "OPENAI_API_KEY": "k", "WORKSPACE_CHAT_MODEL": "chat",
@@ -89,7 +89,7 @@ def workspace(endpoint: FakeEndpoint, home: Path, live: Path = ROOT) -> Generato
     }
     process = subprocess.Popen([sys.executable, str(live / "keeper.py")], cwd=live, env=env)
     try:
-        assert wait_for(lambda: both_ready(home), lambda: None, 30), "the workspace didn't start"
+        assert wait_for(lambda: both_ready(home), lambda: None, 30), "Workspace didn't start"
         time.sleep(0.5)
         yield
     finally:

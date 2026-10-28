@@ -56,12 +56,8 @@ essential. Further changes should move decisions behind an existing seam and
 retain native ownership/cleanup checks; adding a constructor argument for every
 Win32 call would only move the coupling.
 
-The later [durable-work validation](agentic-validation.md) and
-[desktop canvas](desktop-canvas.md) add their own behavioral checks. Their native
-failure instrumentation is outside the historical counts above. Canvas storage
-checks inject an atomic-rename failure after a real Windows probe reproduced
-transient file sharing errors; they verify old-file preservation and bounded
-failure handling through the public store.
+The [durable-work validation](agentic-validation.md) adds behavioral checks
+for supervised task execution and recovery.
 
 ## Keyboard measurements
 

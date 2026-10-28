@@ -1,0 +1,2574 @@
+{
+  "kind": "workspace-ui-pause-inventory-v1",
+  "date": "2026-10-28",
+  "base_snapshot": "1a1cafec783e475aae10301f4391ad3bcd840edb",
+  "projection_fix_before_inventory": "70d2356",
+  "runtime": "Windows CPython 3.15.1, PySide6/Qt 6.12.0, GC enabled",
+  "probe": "Windows Temp/workspace-qt-stalls-probes/pause_inventory.py",
+  "probe_sha256": "ae5b0bf27b3df545421d736ff1378768072ea31587d962769eb8a59dfde29c1c",
+  "probe_revision_note": "Second/third rounds add GC generation/count details; timing and trigger logic is unchanged.",
+  "source_sha256": {
+    "assistant/agent_session.py": "6775cdf21a943da3457556b55e67011a5f5aab27452d80a6277b21e2c55ca8c5",
+    "assistant/agent_window.py": "c7a33b0a8c92bb7d8661863c7a97cc61f4eba6e6b8371faf45f8377f8efe23fd",
+    "assistant/agent_toasts.py": "f08a6f996281a1c94a568a81732d88ed738ed5f468ba7f8a04ab14710d518162",
+    "assistant/bar_surface.py": "572fbef1953a531010accd1473208e741ca53e9b6dcedaab505a557901d93a02",
+    "assistant/bar_geometry.py": "84c335fc91cac32f34764c507bb8da278a70566ae144f36134d243395b93a216",
+    "assistant/bar_model.py": "321402c9dd049d17534d5e2674b4e7e951a80ee8f76986db490acdc0d27ab6cd",
+    "assistant/desktop_bar.py": "009a5017f5ebc15e958021920ea2d6151994cf8b1a80a8a767c5048813529e6f",
+    "assistant/feed_items.py": "41d5fa011b7d6f623433590008f7a7ffa253c2960f7d32ba1545d5f8b651c52c",
+    "assistant/notifications.py": "5e89773d0bef4bd170b104511499c3f949ee6175985a703b669b0cbaea66309b",
+    "assistant/communications.py": "1d4fc367e93e23c65df225aff84183c320bf8cc6c2723b9a28aaa3b5b9dc7927",
+    "assistant/notification_text.py": "f045c48602e56d74507408fd18a39646cd4d9bafd7b2fcc3735f2ffcfb4aff4e",
+    "assistant/rich_text.py": "ce99b2289cfd6e2758a658daca40a9e4fb8fbb31cacaa10de2d3ed3a95c712cd",
+    "assistant/qt_text.py": "0813e2aa10c9652d8b978172cb5d0246821ff4a3e0859784b00f6b40e7e7e222",
+    "assistant/toast_card.py": "1198e2cde85e7eef680bb732bcb393cb4028a3d2d83ac765bb3467d374880c74",
+    "assistant/step_view.py": "5aa7024b6f138bcbab50df92b60570fe67eba75a5b4fcfc9a8d5eb30dce1c0f6",
+    "assistant/tool_call_view.py": "bbc97a89078e3ff52e2d95a49ace80d41f81d50c9d8ab326d62e68fa4f26bad6",
+    "assistant/qt_ui.py": "944ca69ecf3b88260b061bb249fac0a243a65bfea10c5353401a68186f519110",
+    "assistant/qt.py": "e1d29828e5b65150cfe1cb3ea03d2c1ae67cb04e1ee6d24c73377c5405685812",
+    "scripts/preview.py": "fdb9b4b9c50e0a1482fe547d4af3a37ebeab7c01e79d09fde25237fcadcfb879",
+    "winapi/composition.py": "38bf630bc4c030870c66124ef7d3dfd6f274525444e53f5c68d2f74fb1ba06f7",
+    "winapi/composition_paths.py": "79114283769236babda54d1059147319e328e6356f8b20fe89aa227d106d930e",
+    "winapi/windows.py": "e0d9209419ff1911e6718c198ab873c9fc4525fce3e41d3853344e214a777dc0"
+  },
+  "notes": [
+    "Fictional content; native desktop runs sequentially.",
+    "Profiled runs add substantial overhead; do not use them as unprofiled pause measurements.",
+    "Invalid early stream/tools records were overwritten by successful trigger runs.",
+    "Timing gaps measure Qt delivery, not physical presentation or input/sample freshness."
+  ],
+  "runs": [
+    {
+      "artifact": "inventory-badge-1.json",
+      "scenario": "badge",
+      "profiled": false,
+      "surface": "toolbar",
+      "activation_ms": 0.81,
+      "imports_ms": 645.79,
+      "constructor_ms": 3774.97,
+      "elapsed_seconds": 8.01,
+      "gc_enabled": true,
+      "heartbeat_samples": 789,
+      "heartbeat_max_ms": 32.4,
+      "heartbeat_p99_ms": 21.04,
+      "heartbeat_over_50": 0,
+      "warm_max_ms": 32.4,
+      "action_ms": [
+        14.71,
+        16.73,
+        20.78,
+        15.07,
+        17.16,
+        11.67,
+        16.26,
+        16.38,
+        18.21,
+        14.58,
+        11.96,
+        21.37,
+        21.5,
+        15.92,
+        18.46
+      ],
+      "gc_collections": 3,
+      "gc_max_ms": 0.76
+    },
+    {
+      "artifact": "inventory-capsules-1.json",
+      "scenario": "capsules",
+      "profiled": false,
+      "surface": "toolbar",
+      "activation_ms": 0.8,
+      "imports_ms": 539.64,
+      "constructor_ms": 5601.58,
+      "elapsed_seconds": 8.02,
+      "gc_enabled": true,
+      "heartbeat_samples": 588,
+      "heartbeat_max_ms": 223.48,
+      "heartbeat_p99_ms": 93.73,
+      "heartbeat_over_50": 23,
+      "warm_max_ms": 223.48,
+      "action_ms": [
+        61.17,
+        16.76,
+        177.56,
+        42.86,
+        46.67,
+        72.65,
+        76.79,
+        18.32,
+        211.83,
+        36.82,
+        60.01,
+        85.43,
+        101.04,
+        25.75,
+        135.13
+      ],
+      "gc_collections": 17,
+      "gc_max_ms": 2.04
+    },
+    {
+      "artifact": "inventory-capsules-2.json",
+      "scenario": "capsules",
+      "profiled": false,
+      "surface": "toolbar",
+      "activation_ms": 0.86,
+      "imports_ms": 617.82,
+      "constructor_ms": 3964.68,
+      "elapsed_seconds": 8.49,
+      "gc_enabled": true,
+      "heartbeat_samples": 454,
+      "heartbeat_max_ms": 1394.58,
+      "heartbeat_p99_ms": 118.14,
+      "heartbeat_over_50": 15,
+      "warm_max_ms": 1394.58,
+      "action_ms": [
+        86.04,
+        8.19,
+        148.41,
+        38.41,
+        63.05,
+        102.28,
+        120.7,
+        10.76,
+        143.76,
+        23.52,
+        53.28,
+        349.37,
+        685.5
+      ],
+      "gc_collections": 14,
+      "gc_max_ms": 1.77,
+      "gc_slowest": [
+        {
+          "generation": 1,
+          "collected": 4618,
+          "ms": 1.77
+        },
+        {
+          "generation": 0,
+          "collected": 2016,
+          "ms": 1.74
+        },
+        {
+          "generation": 0,
+          "collected": 2016,
+          "ms": 1.52
+        },
+        {
+          "generation": 0,
+          "collected": 2016,
+          "ms": 1.27
+        },
+        {
+          "generation": 0,
+          "collected": 1728,
+          "ms": 1.17
+        }
+      ]
+    },
+    {
+      "artifact": "inventory-capsules-3.json",
+      "scenario": "capsules",
+      "profiled": false,
+      "surface": "toolbar",
+      "activation_ms": 1.02,
+      "imports_ms": 971.79,
+      "constructor_ms": 4996.5,
+      "elapsed_seconds": 8.03,
+      "gc_enabled": true,
+      "heartbeat_samples": 540,
+      "heartbeat_max_ms": 193.33,
+      "heartbeat_p99_ms": 125.08,
+      "heartbeat_over_50": 27,
+      "warm_max_ms": 193.33,
+      "action_ms": [
+        105.18,
+        9.24,
+        175.93,
+        41.52,
+        100.23,
+        118.01,
+        115.58,
+        9.03,
+        147.59,
+        63.47,
+        91.49,
+        113.31,
+        104.28,
+        21.03,
+        167.31
+      ],
+      "gc_collections": 16,
+      "gc_max_ms": 2.51,
+      "gc_slowest": [
+        {
+          "generation": 0,
+          "collected": 1728,
+          "ms": 2.51
+        },
+        {
+          "generation": 1,
+          "collected": 4623,
+          "ms": 2.46
+        },
+        {
+          "generation": 0,
+          "collected": 2016,
+          "ms": 2.35
+        },
+        {
+          "generation": 0,
+          "collected": 2016,
+          "ms": 1.14
+        },
+        {
+          "generation": 0,
+          "collected": 2016,
+          "ms": 1.09
+        }
+      ]
+    },
+    {
+      "artifact": "inventory-capsules-profile.json",
+      "scenario": "capsules",
+      "profiled": true,
+      "surface": "toolbar",
+      "activation_ms": 0.78,
+      "imports_ms": 1075.35,
+      "constructor_ms": 5957.51,
+      "elapsed_seconds": 8.02,
+      "gc_enabled": true,
+      "heartbeat_samples": 250,
+      "heartbeat_max_ms": 517.45,
+      "heartbeat_p99_ms": 411.0,
+      "heartbeat_over_50": 25,
+      "warm_max_ms": 517.45,
+      "action_ms": [
+        261.23,
+        23.12,
+        453.96,
+        279.42,
+        214.63,
+        245.18,
+        295.5,
+        69.06,
+        494.94,
+        228.18,
+        205.96,
+        290.94,
+        289.48,
+        111.86
+      ],
+      "gc_collections": 15,
+      "gc_max_ms": 10.46,
+      "profile": [
+        {
+          "function": "assistant/bar_surface.py",
+          "line": 223,
+          "name": "sync_glass",
+          "calls": 736,
+          "self_ms": 21.62,
+          "cumulative_ms": 4961.38
+        },
+        {
+          "function": "winapi/composition.py",
+          "line": 162,
+          "name": "position",
+          "calls": 516,
+          "self_ms": 38.76,
+          "cumulative_ms": 4611.61
+        },
+        {
+          "function": "assistant/bar_surface.py",
+          "line": 180,
+          "name": "move_frame",
+          "calls": 694,
+          "self_ms": 82.36,
+          "cumulative_ms": 4125.0
+        },
+        {
+          "function": "assistant/desktop_bar.py",
+          "line": 258,
+          "name": "render",
+          "calls": 28,
+          "self_ms": 26.32,
+          "cumulative_ms": 3498.93
+        },
+        {
+          "function": "assistant/desktop_bar.py",
+          "line": 319,
+          "name": "paint_frames",
+          "calls": 74,
+          "self_ms": 2.86,
+          "cumulative_ms": 3475.8
+        },
+        {
+          "function": "assistant/desktop_bar.py",
+          "line": 300,
+          "name": "position",
+          "calls": 139,
+          "self_ms": 13.71,
+          "cumulative_ms": 3033.36
+        },
+        {
+          "function": "assistant/bar_surface.py",
+          "line": 210,
+          "name": "advance",
+          "calls": 266,
+          "self_ms": 8.39,
+          "cumulative_ms": 2706.91
+        },
+        {
+          "function": "assistant/desktop_bar.py",
+          "line": 245,
+          "name": "recording_changed",
+          "calls": 14,
+          "self_ms": 0.33,
+          "cumulative_ms": 2050.04
+        },
+        {
+          "function": "winapi/composition_paths.py",
+          "line": 42,
+          "name": "composition_path",
+          "calls": 96,
+          "self_ms": 35.04,
+          "cumulative_ms": 1996.77
+        },
+        {
+          "function": "win32more/_winrt.py",
+          "line": 522,
+          "name": "__call__",
+          "calls": 1505,
+          "self_ms": 21.22,
+          "cumulative_ms": 1995.35
+        },
+        {
+          "function": "win32more/_win32.py",
+          "line": 403,
+          "name": "get_type_hints",
+          "calls": 4193,
+          "self_ms": 81.65,
+          "cumulative_ms": 1802.31
+        },
+        {
+          "function": "assistant/desktop_bar.py",
+          "line": 327,
+          "name": "tick",
+          "calls": 37,
+          "self_ms": 3.57,
+          "cumulative_ms": 1716.75
+        },
+        {
+          "function": "assistant/bar_surface.py",
+          "line": 175,
+          "name": "place",
+          "calls": 417,
+          "self_ms": 12.01,
+          "cumulative_ms": 1635.41
+        },
+        {
+          "function": "assistant/desktop_bar.py",
+          "line": 254,
+          "name": "layout",
+          "calls": 14,
+          "self_ms": 0.14,
+          "cumulative_ms": 1451.73
+        },
+        {
+          "function": "winapi/composition_paths.py",
+          "line": 26,
+          "name": "__init__",
+          "calls": 96,
+          "self_ms": 1.94,
+          "cumulative_ms": 1331.27
+        },
+        {
+          "function": "win32more/_comclass.py",
+          "line": 56,
+          "name": "__init__",
+          "calls": 96,
+          "self_ms": 2.51,
+          "cumulative_ms": 1329.33
+        },
+        {
+          "function": "win32more/_comclass.py",
+          "line": 64,
+          "name": "_make_iid_vtbls",
+          "calls": 96,
+          "self_ms": 6.18,
+          "cumulative_ms": 1323.06
+        },
+        {
+          "function": "win32more/_comclass.py",
+          "line": 142,
+          "name": "__init__",
+          "calls": 576,
+          "self_ms": 4.66,
+          "cumulative_ms": 1313.91
+        },
+        {
+          "function": "win32more/_comclass.py",
+          "line": 148,
+          "name": "_make_lpvtbl",
+          "calls": 576,
+          "self_ms": 27.14,
+          "cumulative_ms": 1309.25
+        },
+        {
+          "function": "assistant/bar_surface.py",
+          "line": 89,
+          "name": "connections",
+          "calls": 417,
+          "self_ms": 1.22,
+          "cumulative_ms": 1296.83
+        },
+        {
+          "function": "win32more/_comclass.py",
+          "line": 166,
+          "name": "_make_thunk_com",
+          "calls": 2592,
+          "self_ms": 78.76,
+          "cumulative_ms": 1106.43
+        },
+        {
+          "function": "win32more/_winrt.py",
+          "line": 375,
+          "name": "__call__",
+          "calls": 1601,
+          "self_ms": 23.48,
+          "cumulative_ms": 839.47
+        },
+        {
+          "function": "win32more/_winrt.py",
+          "line": 398,
+          "name": "__call__",
+          "calls": 1601,
+          "self_ms": 94.93,
+          "cumulative_ms": 770.48
+        },
+        {
+          "function": "assistant/bar_surface.py",
+          "line": 196,
+          "name": "show_activity",
+          "calls": 84,
+          "self_ms": 0.91,
+          "cumulative_ms": 769.68
+        },
+        {
+          "function": "win32more/_win32.py",
+          "line": 498,
+          "name": "__call__",
+          "calls": 6458,
+          "self_ms": 33.34,
+          "cumulative_ms": 736.35
+        },
+        {
+          "function": "win32more/_win32.py",
+          "line": 516,
+          "name": "__call__",
+          "calls": 6458,
+          "self_ms": 107.88,
+          "cumulative_ms": 703.02
+        },
+        {
+          "function": "win32more/_win32.py",
+          "line": 220,
+          "name": "as_",
+          "calls": 2177,
+          "self_ms": 153.79,
+          "cumulative_ms": 657.23
+        },
+        {
+          "function": "assistant/qt_ui.py",
+          "line": 51,
+          "name": "<lambda>",
+          "calls": 9,
+          "self_ms": 0.16,
+          "cumulative_ms": 611.64
+        },
+        {
+          "function": "win32more/_win32.py",
+          "line": 522,
+          "name": "make_args",
+          "calls": 6458,
+          "self_ms": 80.7,
+          "cumulative_ms": 564.99
+        },
+        {
+          "function": "win32more/_winrt.py",
+          "line": 446,
+          "name": "_add_argument",
+          "calls": 1601,
+          "self_ms": 18.89,
+          "cumulative_ms": 408.29
+        },
+        {
+          "function": "winapi/windows.py",
+          "line": 244,
+          "name": "move",
+          "calls": 83,
+          "self_ms": 389.36,
+          "cumulative_ms": 389.47
+        },
+        {
+          "function": "win32more/Windows/UI/Composition/__init__.py",
+          "line": 860,
+          "name": "__init__",
+          "calls": 288,
+          "self_ms": 6.96,
+          "cumulative_ms": 334.8
+        },
+        {
+          "function": "win32more/_winrt.py",
+          "line": 559,
+          "name": "__call__",
+          "calls": 96,
+          "self_ms": 2.07,
+          "cumulative_ms": 318.21
+        },
+        {
+          "function": "winapi/composition.py",
+          "line": 196,
+          "name": "show",
+          "calls": 516,
+          "self_ms": 154.26,
+          "cumulative_ms": 269.65
+        },
+        {
+          "function": "win32more/_win32.py",
+          "line": 370,
+          "name": "easycast",
+          "calls": 13539,
+          "self_ms": 136.62,
+          "cumulative_ms": 260.19
+        }
+      ]
+    },
+    {
+      "artifact": "inventory-history-1.json",
+      "scenario": "history",
+      "profiled": false,
+      "surface": "feed",
+      "activation_ms": 0.7,
+      "imports_ms": 451.44,
+      "constructor_ms": 7310.83,
+      "elapsed_seconds": 8.04,
+      "gc_enabled": true,
+      "heartbeat_samples": 800,
+      "heartbeat_max_ms": 13.1,
+      "heartbeat_p99_ms": 11.76,
+      "heartbeat_over_50": 0,
+      "warm_max_ms": 13.1,
+      "action_ms": [
+        2.49,
+        3.18,
+        2.32,
+        2.57,
+        2.44,
+        2.62,
+        3.74,
+        5.66,
+        2.88,
+        2.66,
+        3.76,
+        2.41,
+        3.12,
+        3.53,
+        2.01
+      ],
+      "gc_collections": 0,
+      "gc_max_ms": 0
+    },
+    {
+      "artifact": "inventory-idle-1.json",
+      "scenario": "idle",
+      "profiled": false,
+      "surface": "both",
+      "activation_ms": 0.94,
+      "imports_ms": 704.13,
+      "constructor_ms": 8937.96,
+      "elapsed_seconds": 8.02,
+      "gc_enabled": true,
+      "heartbeat_samples": 800,
+      "heartbeat_max_ms": 16.4,
+      "heartbeat_p99_ms": 12.09,
+      "heartbeat_over_50": 0,
+      "warm_max_ms": 16.4,
+      "action_ms": [],
+      "gc_collections": 1,
+      "gc_max_ms": 0.39
+    },
+    {
+      "artifact": "inventory-idle-20s.json",
+      "scenario": "idle",
+      "profiled": false,
+      "surface": "both",
+      "activation_ms": 0.55,
+      "imports_ms": 457.95,
+      "constructor_ms": 4089.2,
+      "elapsed_seconds": 20.03,
+      "gc_enabled": true,
+      "heartbeat_samples": 2000,
+      "heartbeat_max_ms": 16.69,
+      "heartbeat_p99_ms": 11.28,
+      "heartbeat_over_50": 0,
+      "warm_max_ms": 16.69,
+      "action_ms": [],
+      "gc_collections": 1,
+      "gc_max_ms": 0.37,
+      "gc_slowest": [
+        {
+          "generation": 0,
+          "collected": 293,
+          "ms": 0.37
+        }
+      ]
+    },
+    {
+      "artifact": "inventory-keyboard-1.json",
+      "scenario": "keyboard",
+      "profiled": false,
+      "surface": "toolbar",
+      "activation_ms": 0.75,
+      "imports_ms": 575.84,
+      "constructor_ms": 3671.84,
+      "elapsed_seconds": 8.02,
+      "gc_enabled": true,
+      "heartbeat_samples": 647,
+      "heartbeat_max_ms": 191.03,
+      "heartbeat_p99_ms": 82.96,
+      "heartbeat_over_50": 14,
+      "warm_max_ms": 191.03,
+      "action_ms": [
+        97.96,
+        16.66,
+        60.37,
+        18.53,
+        65.11,
+        22.83,
+        65.84,
+        16.95,
+        73.53,
+        22.24,
+        62.28,
+        17.06,
+        70.01,
+        23.56,
+        76.92
+      ],
+      "gc_collections": 12,
+      "gc_max_ms": 2.99
+    },
+    {
+      "artifact": "inventory-keyboard-2.json",
+      "scenario": "keyboard",
+      "profiled": false,
+      "surface": "toolbar",
+      "activation_ms": 0.84,
+      "imports_ms": 716.52,
+      "constructor_ms": 3648.65,
+      "elapsed_seconds": 8.02,
+      "gc_enabled": true,
+      "heartbeat_samples": 688,
+      "heartbeat_max_ms": 109.82,
+      "heartbeat_p99_ms": 65.34,
+      "heartbeat_over_50": 12,
+      "warm_max_ms": 109.82,
+      "action_ms": [
+        57.01,
+        17.68,
+        60.14,
+        18.29,
+        54.39,
+        12.76,
+        52.55,
+        12.95,
+        52.62,
+        12.09,
+        68.66,
+        12.94,
+        47.89,
+        16.3,
+        48.76
+      ],
+      "gc_collections": 12,
+      "gc_max_ms": 1.92,
+      "gc_slowest": [
+        {
+          "generation": 1,
+          "collected": 4608,
+          "ms": 1.92
+        },
+        {
+          "generation": 0,
+          "collected": 2016,
+          "ms": 1.05
+        },
+        {
+          "generation": 0,
+          "collected": 2016,
+          "ms": 1.02
+        },
+        {
+          "generation": 0,
+          "collected": 2016,
+          "ms": 0.99
+        },
+        {
+          "generation": 0,
+          "collected": 2016,
+          "ms": 0.96
+        }
+      ]
+    },
+    {
+      "artifact": "inventory-keyboard-3.json",
+      "scenario": "keyboard",
+      "profiled": false,
+      "surface": "toolbar",
+      "activation_ms": 0.72,
+      "imports_ms": 667.48,
+      "constructor_ms": 3695.49,
+      "elapsed_seconds": 8.01,
+      "gc_enabled": true,
+      "heartbeat_samples": 718,
+      "heartbeat_max_ms": 74.26,
+      "heartbeat_p99_ms": 49.85,
+      "heartbeat_over_50": 6,
+      "warm_max_ms": 74.26,
+      "action_ms": [
+        60.53,
+        15.37,
+        37.56,
+        9.14,
+        40.21,
+        8.91,
+        34.79,
+        12.01,
+        40.05,
+        7.58,
+        39.23,
+        15.63,
+        38.05,
+        10.84,
+        33.85
+      ],
+      "gc_collections": 14,
+      "gc_max_ms": 1.79,
+      "gc_slowest": [
+        {
+          "generation": 1,
+          "collected": 4340,
+          "ms": 1.79
+        },
+        {
+          "generation": 0,
+          "collected": 1728,
+          "ms": 0.57
+        },
+        {
+          "generation": 0,
+          "collected": 2016,
+          "ms": 0.57
+        },
+        {
+          "generation": 0,
+          "collected": 2031,
+          "ms": 0.53
+        },
+        {
+          "generation": 0,
+          "collected": 2016,
+          "ms": 0.53
+        }
+      ]
+    },
+    {
+      "artifact": "inventory-keyboard-profile.json",
+      "scenario": "keyboard",
+      "profiled": true,
+      "surface": "toolbar",
+      "activation_ms": 0.86,
+      "imports_ms": 1291.54,
+      "constructor_ms": 5160.92,
+      "elapsed_seconds": 8.03,
+      "gc_enabled": true,
+      "heartbeat_samples": 448,
+      "heartbeat_max_ms": 286.73,
+      "heartbeat_p99_ms": 212.14,
+      "heartbeat_over_50": 28,
+      "warm_max_ms": 243.5,
+      "action_ms": [
+        248.33,
+        73.42,
+        201.92,
+        62.32,
+        212.79,
+        53.49,
+        162.6,
+        50.33,
+        203.23,
+        49.95,
+        173.28,
+        58.58,
+        176.11,
+        41.49,
+        223.07
+      ],
+      "gc_collections": 11,
+      "gc_max_ms": 7.37,
+      "profile": [
+        {
+          "function": "assistant/bar_surface.py",
+          "line": 223,
+          "name": "sync_glass",
+          "calls": 821,
+          "self_ms": 19.15,
+          "cumulative_ms": 3566.8
+        },
+        {
+          "function": "winapi/composition.py",
+          "line": 162,
+          "name": "position",
+          "calls": 474,
+          "self_ms": 29.41,
+          "cumulative_ms": 3211.59
+        },
+        {
+          "function": "assistant/bar_surface.py",
+          "line": 180,
+          "name": "move_frame",
+          "calls": 791,
+          "self_ms": 95.87,
+          "cumulative_ms": 2914.69
+        },
+        {
+          "function": "assistant/desktop_bar.py",
+          "line": 319,
+          "name": "paint_frames",
+          "calls": 88,
+          "self_ms": 3.26,
+          "cumulative_ms": 2419.24
+        },
+        {
+          "function": "assistant/desktop_bar.py",
+          "line": 300,
+          "name": "position",
+          "calls": 163,
+          "self_ms": 12.0,
+          "cumulative_ms": 2354.55
+        },
+        {
+          "function": "assistant/desktop_bar.py",
+          "line": 250,
+          "name": "layer",
+          "calls": 15,
+          "self_ms": 0.23,
+          "cumulative_ms": 2008.18
+        },
+        {
+          "function": "assistant/desktop_bar.py",
+          "line": 258,
+          "name": "render",
+          "calls": 15,
+          "self_ms": 18.38,
+          "cumulative_ms": 2006.91
+        },
+        {
+          "function": "assistant/bar_surface.py",
+          "line": 210,
+          "name": "advance",
+          "calls": 294,
+          "self_ms": 7.85,
+          "cumulative_ms": 1715.75
+        },
+        {
+          "function": "assistant/desktop_bar.py",
+          "line": 327,
+          "name": "tick",
+          "calls": 60,
+          "self_ms": 6.09,
+          "cumulative_ms": 1523.6
+        },
+        {
+          "function": "win32more/_winrt.py",
+          "line": 522,
+          "name": "__call__",
+          "calls": 1101,
+          "self_ms": 14.83,
+          "cumulative_ms": 1478.2
+        },
+        {
+          "function": "winapi/composition_paths.py",
+          "line": 42,
+          "name": "composition_path",
+          "calls": 70,
+          "self_ms": 24.8,
+          "cumulative_ms": 1297.35
+        },
+        {
+          "function": "assistant/bar_surface.py",
+          "line": 175,
+          "name": "place",
+          "calls": 489,
+          "self_ms": 11.32,
+          "cumulative_ms": 1282.84
+        },
+        {
+          "function": "win32more/_win32.py",
+          "line": 403,
+          "name": "get_type_hints",
+          "calls": 3061,
+          "self_ms": 44.78,
+          "cumulative_ms": 1186.39
+        },
+        {
+          "function": "assistant/bar_surface.py",
+          "line": 89,
+          "name": "connections",
+          "calls": 489,
+          "self_ms": 1.16,
+          "cumulative_ms": 1052.35
+        },
+        {
+          "function": "winapi/composition_paths.py",
+          "line": 26,
+          "name": "__init__",
+          "calls": 70,
+          "self_ms": 0.87,
+          "cumulative_ms": 849.75
+        },
+        {
+          "function": "win32more/_comclass.py",
+          "line": 56,
+          "name": "__init__",
+          "calls": 70,
+          "self_ms": 1.66,
+          "cumulative_ms": 848.89
+        },
+        {
+          "function": "win32more/_comclass.py",
+          "line": 64,
+          "name": "_make_iid_vtbls",
+          "calls": 70,
+          "self_ms": 4.1,
+          "cumulative_ms": 844.42
+        },
+        {
+          "function": "win32more/_comclass.py",
+          "line": 142,
+          "name": "__init__",
+          "calls": 420,
+          "self_ms": 6.18,
+          "cumulative_ms": 838.46
+        },
+        {
+          "function": "win32more/_comclass.py",
+          "line": 148,
+          "name": "_make_lpvtbl",
+          "calls": 420,
+          "self_ms": 19.04,
+          "cumulative_ms": 832.29
+        },
+        {
+          "function": "win32more/_comclass.py",
+          "line": 166,
+          "name": "_make_thunk_com",
+          "calls": 1890,
+          "self_ms": 50.24,
+          "cumulative_ms": 694.98
+        },
+        {
+          "function": "win32more/_winrt.py",
+          "line": 375,
+          "name": "__call__",
+          "calls": 1171,
+          "self_ms": 14.72,
+          "cumulative_ms": 620.52
+        },
+        {
+          "function": "win32more/_win32.py",
+          "line": 498,
+          "name": "__call__",
+          "calls": 4716,
+          "self_ms": 21.99,
+          "cumulative_ms": 559.7
+        },
+        {
+          "function": "assistant/qt_ui.py",
+          "line": 51,
+          "name": "<lambda>",
+          "calls": 13,
+          "self_ms": 0.37,
+          "cumulative_ms": 547.92
+        },
+        {
+          "function": "win32more/_winrt.py",
+          "line": 398,
+          "name": "__call__",
+          "calls": 1171,
+          "self_ms": 71.36,
+          "cumulative_ms": 543.81
+        },
+        {
+          "function": "win32more/_win32.py",
+          "line": 220,
+          "name": "as_",
+          "calls": 1591,
+          "self_ms": 100.56,
+          "cumulative_ms": 495.02
+        },
+        {
+          "function": "win32more/_win32.py",
+          "line": 516,
+          "name": "__call__",
+          "calls": 4716,
+          "self_ms": 72.64,
+          "cumulative_ms": 489.74
+        },
+        {
+          "function": "assistant/bar_surface.py",
+          "line": 196,
+          "name": "show_activity",
+          "calls": 45,
+          "self_ms": 0.54,
+          "cumulative_ms": 486.43
+        },
+        {
+          "function": "win32more/_win32.py",
+          "line": 522,
+          "name": "make_args",
+          "calls": 4716,
+          "self_ms": 57.02,
+          "cumulative_ms": 395.82
+        },
+        {
+          "function": "winapi/windows.py",
+          "line": 244,
+          "name": "move",
+          "calls": 71,
+          "self_ms": 317.54,
+          "cumulative_ms": 317.63
+        },
+        {
+          "function": "win32more/_winrt.py",
+          "line": 446,
+          "name": "_add_argument",
+          "calls": 1171,
+          "self_ms": 13.15,
+          "cumulative_ms": 290.12
+        },
+        {
+          "function": "winapi/composition.py",
+          "line": 196,
+          "name": "show",
+          "calls": 474,
+          "self_ms": 114.4,
+          "cumulative_ms": 223.18
+        },
+        {
+          "function": "winapi/appearance.py",
+          "line": 69,
+          "name": "sample_backgrounds",
+          "calls": 10,
+          "self_ms": 0.59,
+          "cumulative_ms": 217.68
+        },
+        {
+          "function": "win32more/Windows/UI/Composition/__init__.py",
+          "line": 860,
+          "name": "__init__",
+          "calls": 210,
+          "self_ms": 3.02,
+          "cumulative_ms": 190.77
+        },
+        {
+          "function": "win32more/_winrt.py",
+          "line": 559,
+          "name": "__call__",
+          "calls": 70,
+          "self_ms": 1.58,
+          "cumulative_ms": 181.74
+        },
+        {
+          "function": "winapi/appearance.py",
+          "line": 70,
+          "name": "<genexpr>",
+          "calls": 20,
+          "self_ms": 0.28,
+          "cumulative_ms": 180.24
+        }
+      ]
+    },
+    {
+      "artifact": "inventory-long-stream-1.json",
+      "scenario": "long-stream",
+      "profiled": false,
+      "surface": "feed",
+      "activation_ms": 0.48,
+      "imports_ms": 411.69,
+      "constructor_ms": 3841.55,
+      "elapsed_seconds": 8.19,
+      "gc_enabled": true,
+      "heartbeat_samples": 662,
+      "heartbeat_max_ms": 255.47,
+      "heartbeat_p99_ms": 101.64,
+      "heartbeat_over_50": 13,
+      "warm_max_ms": 255.47,
+      "action_ms": [
+        30.75,
+        46.91,
+        42.71,
+        63.36,
+        51.35,
+        54.21,
+        87.03,
+        95.64,
+        97.82,
+        106.84,
+        116.05,
+        144.51,
+        245.21,
+        157.31,
+        141.06,
+        169.39
+      ],
+      "gc_collections": 115,
+      "gc_max_ms": 105.64
+    },
+    {
+      "artifact": "inventory-long-stream-2.json",
+      "scenario": "long-stream",
+      "profiled": false,
+      "surface": "feed",
+      "activation_ms": 0.91,
+      "imports_ms": 459.81,
+      "constructor_ms": 3951.29,
+      "elapsed_seconds": 8.28,
+      "gc_enabled": true,
+      "heartbeat_samples": 581,
+      "heartbeat_max_ms": 408.79,
+      "heartbeat_p99_ms": 162.97,
+      "heartbeat_over_50": 14,
+      "warm_max_ms": 408.79,
+      "action_ms": [
+        30.35,
+        37.1,
+        55.68,
+        67.82,
+        65.28,
+        96.85,
+        103.01,
+        143.55,
+        167.13,
+        170.53,
+        216.05,
+        202.29,
+        415.76,
+        253.24,
+        232.45,
+        250.83
+      ],
+      "gc_collections": 115,
+      "gc_max_ms": 154.71,
+      "gc_slowest": [
+        {
+          "generation": 2,
+          "collected": 24434,
+          "ms": 154.71
+        },
+        {
+          "generation": 1,
+          "collected": 6609,
+          "ms": 9.94
+        },
+        {
+          "generation": 1,
+          "collected": 5729,
+          "ms": 9.86
+        },
+        {
+          "generation": 1,
+          "collected": 5289,
+          "ms": 9.64
+        },
+        {
+          "generation": 1,
+          "collected": 6169,
+          "ms": 7.51
+        }
+      ]
+    },
+    {
+      "artifact": "inventory-long-stream-3.json",
+      "scenario": "long-stream",
+      "profiled": false,
+      "surface": "feed",
+      "activation_ms": 0.41,
+      "imports_ms": 323.88,
+      "constructor_ms": 2780.37,
+      "elapsed_seconds": 8.02,
+      "gc_enabled": true,
+      "heartbeat_samples": 704,
+      "heartbeat_max_ms": 208.29,
+      "heartbeat_p99_ms": 62.39,
+      "heartbeat_over_50": 10,
+      "warm_max_ms": 208.29,
+      "action_ms": [
+        20.31,
+        27.31,
+        38.46,
+        39.85,
+        40.48,
+        58.44,
+        63.2,
+        49.16,
+        62.6,
+        90.13,
+        79.04,
+        82.21,
+        203.42,
+        103.0,
+        139.04
+      ],
+      "gc_collections": 101,
+      "gc_max_ms": 99.42,
+      "gc_slowest": [
+        {
+          "generation": 2,
+          "collected": 24434,
+          "ms": 99.42
+        },
+        {
+          "generation": 1,
+          "collected": 6169,
+          "ms": 5.66
+        },
+        {
+          "generation": 1,
+          "collected": 12784,
+          "ms": 3.67
+        },
+        {
+          "generation": 1,
+          "collected": 3969,
+          "ms": 3.48
+        },
+        {
+          "generation": 1,
+          "collected": 5289,
+          "ms": 3.43
+        }
+      ]
+    },
+    {
+      "artifact": "inventory-long-stream-profile.json",
+      "scenario": "long-stream",
+      "profiled": true,
+      "surface": "feed",
+      "activation_ms": 1.02,
+      "imports_ms": 882.37,
+      "constructor_ms": 6598.39,
+      "elapsed_seconds": 8.04,
+      "gc_enabled": true,
+      "heartbeat_samples": 372,
+      "heartbeat_max_ms": 574.56,
+      "heartbeat_p99_ms": 370.83,
+      "heartbeat_over_50": 18,
+      "warm_max_ms": 574.56,
+      "action_ms": [
+        543.89,
+        167.5,
+        159.8,
+        193.66,
+        242.71,
+        267.91,
+        466.21,
+        349.52,
+        363.19,
+        485.77,
+        530.11,
+        571.13
+      ],
+      "gc_collections": 64,
+      "gc_max_ms": 7.54,
+      "profile": [
+        {
+          "function": "assistant/qt_ui.py",
+          "line": 26,
+          "name": "deliver",
+          "calls": 322,
+          "self_ms": 4.78,
+          "cumulative_ms": 5729.53
+        },
+        {
+          "function": "assistant/agent_toasts.py",
+          "line": 531,
+          "name": "tick",
+          "calls": 153,
+          "self_ms": 28.15,
+          "cumulative_ms": 5579.72
+        },
+        {
+          "function": "assistant/agent_window.py",
+          "line": 163,
+          "name": "_render",
+          "calls": 13,
+          "self_ms": 109.12,
+          "cumulative_ms": 4253.57
+        },
+        {
+          "function": "assistant/qt_ui.py",
+          "line": 60,
+          "name": "pump",
+          "calls": 165,
+          "self_ms": 4.4,
+          "cumulative_ms": 4219.71
+        },
+        {
+          "function": "assistant/agent_toasts.py",
+          "line": 129,
+          "name": "render",
+          "calls": 13,
+          "self_ms": 0.8,
+          "cumulative_ms": 4106.01
+        },
+        {
+          "function": "assistant/agent_toasts.py",
+          "line": 137,
+          "name": "refresh",
+          "calls": 12,
+          "self_ms": 0.57,
+          "cumulative_ms": 3811.07
+        },
+        {
+          "function": "assistant/agent_toasts.py",
+          "line": 319,
+          "name": "sync",
+          "calls": 12,
+          "self_ms": 2.01,
+          "cumulative_ms": 3795.13
+        },
+        {
+          "function": "assistant/agent_toasts.py",
+          "line": 283,
+          "name": "fit_viewport",
+          "calls": 12,
+          "self_ms": 0.9,
+          "cumulative_ms": 2891.27
+        },
+        {
+          "function": "assistant/agent_toasts.py",
+          "line": 225,
+          "name": "height_limits",
+          "calls": 12,
+          "self_ms": 2.31,
+          "cumulative_ms": 2889.65
+        },
+        {
+          "function": "assistant/toast_card.py",
+          "line": 692,
+          "name": "measure",
+          "calls": 96,
+          "self_ms": 0.58,
+          "cumulative_ms": 2881.94
+        },
+        {
+          "function": "assistant/toast_card.py",
+          "line": 137,
+          "name": "prepare",
+          "calls": 12,
+          "self_ms": 4.02,
+          "cumulative_ms": 2878.1
+        },
+        {
+          "function": "assistant/notification_text.py",
+          "line": 28,
+          "name": "spans",
+          "calls": 24,
+          "self_ms": 19.63,
+          "cumulative_ms": 2036.44
+        },
+        {
+          "function": "assistant/rich_text.py",
+          "line": 165,
+          "name": "formatted",
+          "calls": 12504,
+          "self_ms": 54.37,
+          "cumulative_ms": 2012.28
+        },
+        {
+          "function": "assistant/qt_text.py",
+          "line": 104,
+          "name": "load",
+          "calls": 62,
+          "self_ms": 86.96,
+          "cumulative_ms": 1557.9
+        },
+        {
+          "function": "winapi/appearance.py",
+          "line": 70,
+          "name": "<genexpr>",
+          "calls": 35,
+          "self_ms": 9.98,
+          "cumulative_ms": 1400.5
+        },
+        {
+          "function": "winapi/appearance.py",
+          "line": 146,
+          "name": "background_frost",
+          "calls": 28,
+          "self_ms": 592.56,
+          "cumulative_ms": 1283.26
+        },
+        {
+          "function": "assistant/toast_card.py",
+          "line": 712,
+          "name": "render",
+          "calls": 48,
+          "self_ms": 10.24,
+          "cumulative_ms": 860.35
+        },
+        {
+          "function": "assistant/qt_text.py",
+          "line": 130,
+          "name": "intrinsic_width",
+          "calls": 12,
+          "self_ms": 0.73,
+          "cumulative_ms": 824.69
+        },
+        {
+          "function": "assistant/qt_text.py",
+          "line": 206,
+          "name": "update_spans",
+          "calls": 12,
+          "self_ms": 1.42,
+          "cumulative_ms": 756.48
+        },
+        {
+          "function": "winapi/appearance.py",
+          "line": 69,
+          "name": "sample_backgrounds",
+          "calls": 7,
+          "self_ms": 0.1,
+          "cumulative_ms": 686.71
+        },
+        {
+          "function": "assistant/rich_text.py",
+          "line": 81,
+          "name": "_inline",
+          "calls": 31248,
+          "self_ms": 113.18,
+          "cumulative_ms": 448.82
+        },
+        {
+          "function": "assistant/rich_text.py",
+          "line": 148,
+          "name": "_blocks",
+          "calls": 24,
+          "self_ms": 11.4,
+          "cumulative_ms": 441.81
+        },
+        {
+          "function": "assistant/toast_card.py",
+          "line": 329,
+          "name": "paintEvent",
+          "calls": 158,
+          "self_ms": 48.41,
+          "cumulative_ms": 351.23
+        },
+        {
+          "function": "assistant/qt_text.py",
+          "line": 45,
+          "name": "character_style",
+          "calls": 3864,
+          "self_ms": 137.29,
+          "cumulative_ms": 305.32
+        },
+        {
+          "function": "assistant/agent_toasts.py",
+          "line": 241,
+          "name": "sync_layers",
+          "calls": 256,
+          "self_ms": 18.4,
+          "cumulative_ms": 287.1
+        },
+        {
+          "function": "assistant/toast_card.py",
+          "line": 765,
+          "name": "fade_text",
+          "calls": 612,
+          "self_ms": 31.42,
+          "cumulative_ms": 256.51
+        },
+        {
+          "function": "assistant/qt_text.py",
+          "line": 77,
+          "name": "paragraph_style",
+          "calls": 3864,
+          "self_ms": 98.61,
+          "cumulative_ms": 224.71
+        },
+        {
+          "function": "winapi/composition.py",
+          "line": 162,
+          "name": "position",
+          "calls": 1025,
+          "self_ms": 14.35,
+          "cumulative_ms": 220.33
+        },
+        {
+          "function": "assistant/agent_toasts.py",
+          "line": 205,
+          "name": "poll_pointer",
+          "calls": 181,
+          "self_ms": 6.73,
+          "cumulative_ms": 160.44
+        },
+        {
+          "function": "assistant/qt_text.py",
+          "line": 33,
+          "name": "font",
+          "calls": 8116,
+          "self_ms": 81.44,
+          "cumulative_ms": 151.51
+        },
+        {
+          "function": "win32more/_winrt.py",
+          "line": 522,
+          "name": "__call__",
+          "calls": 69,
+          "self_ms": 1.07,
+          "cumulative_ms": 140.38
+        },
+        {
+          "function": "assistant/qt_ui.py",
+          "line": 21,
+          "name": "later",
+          "calls": 334,
+          "self_ms": 31.09,
+          "cumulative_ms": 103.39
+        },
+        {
+          "function": "assistant/agent_toasts.py",
+          "line": 186,
+          "name": "observe_pointer",
+          "calls": 181,
+          "self_ms": 8.49,
+          "cumulative_ms": 102.83
+        },
+        {
+          "function": "winapi/windows.py",
+          "line": 244,
+          "name": "move",
+          "calls": 17,
+          "self_ms": 88.82,
+          "cumulative_ms": 92.51
+        },
+        {
+          "function": "assistant/feed_title.py",
+          "line": 43,
+          "name": "paintEvent",
+          "calls": 158,
+          "self_ms": 13.45,
+          "cumulative_ms": 91.84
+        }
+      ]
+    },
+    {
+      "artifact": "inventory-projection-1.json",
+      "scenario": "projection",
+      "profiled": false,
+      "surface": "feed",
+      "activation_ms": 0.53,
+      "imports_ms": 540.91,
+      "constructor_ms": 4726.11,
+      "elapsed_seconds": 8.03,
+      "gc_enabled": true,
+      "heartbeat_samples": 771,
+      "heartbeat_max_ms": 219.46,
+      "heartbeat_p99_ms": 17.09,
+      "heartbeat_over_50": 1,
+      "warm_max_ms": 18.83,
+      "action_ms": [
+        324.0,
+        16.55,
+        8.42,
+        7.33,
+        9.34,
+        7.54,
+        8.81,
+        10.4,
+        8.29,
+        8.53,
+        8.68,
+        8.75,
+        8.75,
+        7.89,
+        9.95
+      ],
+      "gc_collections": 1,
+      "gc_max_ms": 0.36
+    },
+    {
+      "artifact": "inventory-projection-2.json",
+      "scenario": "projection",
+      "profiled": false,
+      "surface": "feed",
+      "activation_ms": 1.39,
+      "imports_ms": 1032.36,
+      "constructor_ms": 8288.76,
+      "elapsed_seconds": 8.04,
+      "gc_enabled": true,
+      "heartbeat_samples": 736,
+      "heartbeat_max_ms": 375.33,
+      "heartbeat_p99_ms": 21.65,
+      "heartbeat_over_50": 3,
+      "warm_max_ms": 21.44,
+      "action_ms": [
+        590.52,
+        13.41,
+        13.79,
+        13.1,
+        11.32,
+        10.43,
+        9.24,
+        11.25,
+        11.24,
+        11.36,
+        10.5,
+        10.51,
+        11.7,
+        10.85
+      ],
+      "gc_collections": 1,
+      "gc_max_ms": 0.45,
+      "gc_slowest": [
+        {
+          "generation": 0,
+          "collected": 288,
+          "ms": 0.45
+        }
+      ]
+    },
+    {
+      "artifact": "inventory-projection-3.json",
+      "scenario": "projection",
+      "profiled": false,
+      "surface": "feed",
+      "activation_ms": 0.56,
+      "imports_ms": 359.88,
+      "constructor_ms": 5637.42,
+      "elapsed_seconds": 8.01,
+      "gc_enabled": true,
+      "heartbeat_samples": 773,
+      "heartbeat_max_ms": 190.78,
+      "heartbeat_p99_ms": 15.25,
+      "heartbeat_over_50": 2,
+      "warm_max_ms": 15.37,
+      "action_ms": [
+        298.24,
+        17.59,
+        5.67,
+        7.01,
+        5.78,
+        5.41,
+        3.59,
+        6.83,
+        5.13,
+        6.46,
+        6.06,
+        5.99,
+        6.36,
+        6.34,
+        5.98
+      ],
+      "gc_collections": 1,
+      "gc_max_ms": 0.44,
+      "gc_slowest": [
+        {
+          "generation": 0,
+          "collected": 288,
+          "ms": 0.44
+        }
+      ]
+    },
+    {
+      "artifact": "inventory-reset-1.json",
+      "scenario": "reset",
+      "profiled": false,
+      "surface": "feed",
+      "activation_ms": 0.78,
+      "imports_ms": 795.97,
+      "constructor_ms": 5095.61,
+      "elapsed_seconds": 8.02,
+      "gc_enabled": true,
+      "heartbeat_samples": 455,
+      "heartbeat_max_ms": 165.66,
+      "heartbeat_p99_ms": 111.52,
+      "heartbeat_over_50": 30,
+      "warm_max_ms": 165.66,
+      "action_ms": [
+        313.31,
+        309.82,
+        302.09,
+        325.22,
+        382.34,
+        331.14,
+        282.0,
+        261.33,
+        353.21,
+        337.0,
+        301.95,
+        281.42,
+        308.79,
+        324.13,
+        318.62
+      ],
+      "gc_collections": 4,
+      "gc_max_ms": 0.93
+    },
+    {
+      "artifact": "inventory-reset-2.json",
+      "scenario": "reset",
+      "profiled": false,
+      "surface": "feed",
+      "activation_ms": 0.59,
+      "imports_ms": 496.48,
+      "constructor_ms": 4583.75,
+      "elapsed_seconds": 8.07,
+      "gc_enabled": true,
+      "heartbeat_samples": 441,
+      "heartbeat_max_ms": 215.75,
+      "heartbeat_p99_ms": 179.04,
+      "heartbeat_over_50": 18,
+      "warm_max_ms": 215.75,
+      "action_ms": [
+        206.36,
+        257.6,
+        216.38,
+        234.03,
+        265.78,
+        239.06,
+        252.82,
+        385.2,
+        314.67,
+        275.87,
+        443.48,
+        275.27,
+        305.61,
+        455.91,
+        309.78
+      ],
+      "gc_collections": 2,
+      "gc_max_ms": 1.22,
+      "gc_slowest": [
+        {
+          "generation": 0,
+          "collected": 1899,
+          "ms": 1.22
+        },
+        {
+          "generation": 0,
+          "collected": 1716,
+          "ms": 0.99
+        }
+      ]
+    },
+    {
+      "artifact": "inventory-reset-3.json",
+      "scenario": "reset",
+      "profiled": false,
+      "surface": "feed",
+      "activation_ms": 0.25,
+      "imports_ms": 309.82,
+      "constructor_ms": 2493.15,
+      "elapsed_seconds": 8.03,
+      "gc_enabled": true,
+      "heartbeat_samples": 622,
+      "heartbeat_max_ms": 99.4,
+      "heartbeat_p99_ms": 65.92,
+      "heartbeat_over_50": 17,
+      "warm_max_ms": 99.4,
+      "action_ms": [
+        147.6,
+        172.88,
+        191.64,
+        171.87,
+        140.63,
+        161.81,
+        247.81,
+        188.14,
+        192.79,
+        157.86,
+        168.79,
+        191.14,
+        159.42,
+        283.93,
+        294.02
+      ],
+      "gc_collections": 4,
+      "gc_max_ms": 0.61,
+      "gc_slowest": [
+        {
+          "generation": 0,
+          "collected": 1910,
+          "ms": 0.61
+        },
+        {
+          "generation": 0,
+          "collected": 1693,
+          "ms": 0.6
+        },
+        {
+          "generation": 0,
+          "collected": 1948,
+          "ms": 0.4
+        },
+        {
+          "generation": 0,
+          "collected": 1901,
+          "ms": 0.35
+        }
+      ]
+    },
+    {
+      "artifact": "inventory-reset-profile.json",
+      "scenario": "reset",
+      "profiled": true,
+      "surface": "feed",
+      "activation_ms": 1.03,
+      "imports_ms": 1544.55,
+      "constructor_ms": 7558.03,
+      "elapsed_seconds": 8.03,
+      "gc_enabled": true,
+      "heartbeat_samples": 353,
+      "heartbeat_max_ms": 301.76,
+      "heartbeat_p99_ms": 213.49,
+      "heartbeat_over_50": 19,
+      "warm_max_ms": 301.76,
+      "action_ms": [
+        558.78,
+        309.14,
+        411.66,
+        318.07,
+        366.75,
+        485.34,
+        327.74,
+        449.82,
+        380.92,
+        545.86,
+        287.07,
+        335.5
+      ],
+      "gc_collections": 2,
+      "gc_max_ms": 1.11,
+      "profile": [
+        {
+          "function": "assistant/agent_window.py",
+          "line": 163,
+          "name": "_render",
+          "calls": 12,
+          "self_ms": 0.15,
+          "cumulative_ms": 4741.18
+        },
+        {
+          "function": "assistant/agent_toasts.py",
+          "line": 129,
+          "name": "render",
+          "calls": 12,
+          "self_ms": 0.26,
+          "cumulative_ms": 4741.01
+        },
+        {
+          "function": "assistant/agent_toasts.py",
+          "line": 137,
+          "name": "refresh",
+          "calls": 24,
+          "self_ms": 1.16,
+          "cumulative_ms": 4474.2
+        },
+        {
+          "function": "assistant/agent_toasts.py",
+          "line": 319,
+          "name": "sync",
+          "calls": 24,
+          "self_ms": 6.5,
+          "cumulative_ms": 4451.19
+        },
+        {
+          "function": "assistant/agent_toasts.py",
+          "line": 531,
+          "name": "tick",
+          "calls": 116,
+          "self_ms": 33.95,
+          "cumulative_ms": 3858.7
+        },
+        {
+          "function": "assistant/qt_ui.py",
+          "line": 60,
+          "name": "pump",
+          "calls": 152,
+          "self_ms": 4.55,
+          "cumulative_ms": 3276.55
+        },
+        {
+          "function": "assistant/qt_ui.py",
+          "line": 26,
+          "name": "deliver",
+          "calls": 128,
+          "self_ms": 2.76,
+          "cumulative_ms": 3012.05
+        },
+        {
+          "function": "winapi/composition.py",
+          "line": 162,
+          "name": "position",
+          "calls": 783,
+          "self_ms": 33.46,
+          "cumulative_ms": 2187.77
+        },
+        {
+          "function": "winapi/windows.py",
+          "line": 244,
+          "name": "move",
+          "calls": 559,
+          "self_ms": 1598.55,
+          "cumulative_ms": 1753.03
+        },
+        {
+          "function": "assistant/agent_toasts.py",
+          "line": 241,
+          "name": "sync_layers",
+          "calls": 261,
+          "self_ms": 21.14,
+          "cumulative_ms": 1552.02
+        },
+        {
+          "function": "assistant/toast_card.py",
+          "line": 887,
+          "name": "reveal",
+          "calls": 36,
+          "self_ms": 2.14,
+          "cumulative_ms": 1483.02
+        },
+        {
+          "function": "assistant/agent_window.py",
+          "line": 191,
+          "name": "reveal",
+          "calls": 12,
+          "self_ms": 0.15,
+          "cumulative_ms": 1252.7
+        },
+        {
+          "function": "assistant/agent_toasts.py",
+          "line": 581,
+          "name": "show",
+          "calls": 12,
+          "self_ms": 0.06,
+          "cumulative_ms": 1252.54
+        },
+        {
+          "function": "win32more/_winrt.py",
+          "line": 522,
+          "name": "__call__",
+          "calls": 750,
+          "self_ms": 15.43,
+          "cumulative_ms": 1167.75
+        },
+        {
+          "function": "assistant/toast_card.py",
+          "line": 859,
+          "name": "position",
+          "calls": 384,
+          "self_ms": 31.61,
+          "cumulative_ms": 1115.84
+        },
+        {
+          "function": "assistant/toast_card.py",
+          "line": 712,
+          "name": "render",
+          "calls": 72,
+          "self_ms": 8.14,
+          "cumulative_ms": 641.23
+        },
+        {
+          "function": "winapi/appearance.py",
+          "line": 69,
+          "name": "sample_backgrounds",
+          "calls": 4,
+          "self_ms": 0.14,
+          "cumulative_ms": 554.93
+        },
+        {
+          "function": "winapi/appearance.py",
+          "line": 70,
+          "name": "<genexpr>",
+          "calls": 16,
+          "self_ms": 0.29,
+          "cumulative_ms": 553.24
+        },
+        {
+          "function": "winapi/appearance.py",
+          "line": 146,
+          "name": "background_frost",
+          "calls": 12,
+          "self_ms": 532.39,
+          "cumulative_ms": 552.8
+        },
+        {
+          "function": "winapi/windows.py",
+          "line": 259,
+          "name": "show_quietly",
+          "calls": 108,
+          "self_ms": 480.33,
+          "cumulative_ms": 487.15
+        },
+        {
+          "function": "winapi/composition.py",
+          "line": 196,
+          "name": "show",
+          "calls": 36,
+          "self_ms": 126.5,
+          "cumulative_ms": 477.47
+        },
+        {
+          "function": "win32more/_win32.py",
+          "line": 403,
+          "name": "get_type_hints",
+          "calls": 750,
+          "self_ms": 18.85,
+          "cumulative_ms": 466.68
+        },
+        {
+          "function": "win32more/_winrt.py",
+          "line": 375,
+          "name": "__call__",
+          "calls": 750,
+          "self_ms": 11.82,
+          "cumulative_ms": 415.32
+        },
+        {
+          "function": "assistant/step_view.py",
+          "line": 133,
+          "name": "present",
+          "calls": 36,
+          "self_ms": 1.69,
+          "cumulative_ms": 413.71
+        },
+        {
+          "function": "win32more/_winrt.py",
+          "line": 398,
+          "name": "__call__",
+          "calls": 750,
+          "self_ms": 61.14,
+          "cumulative_ms": 396.31
+        },
+        {
+          "function": "assistant/tool_call_view.py",
+          "line": 138,
+          "name": "recolor",
+          "calls": 61,
+          "self_ms": 7.73,
+          "cumulative_ms": 365.64
+        },
+        {
+          "function": "assistant/step_view.py",
+          "line": 151,
+          "name": "place",
+          "calls": 60,
+          "self_ms": 4.27,
+          "cumulative_ms": 353.94
+        },
+        {
+          "function": "win32more/_win32.py",
+          "line": 220,
+          "name": "as_",
+          "calls": 822,
+          "self_ms": 57.19,
+          "cumulative_ms": 280.7
+        },
+        {
+          "function": "assistant/agent_toasts.py",
+          "line": 614,
+          "name": "clear_cards",
+          "calls": 12,
+          "self_ms": 0.57,
+          "cumulative_ms": 266.56
+        },
+        {
+          "function": "assistant/agent_toasts.py",
+          "line": 270,
+          "name": "release",
+          "calls": 36,
+          "self_ms": 0.48,
+          "cumulative_ms": 256.33
+        },
+        {
+          "function": "assistant/toast_card.py",
+          "line": 480,
+          "name": "park",
+          "calls": 36,
+          "self_ms": 3.71,
+          "cumulative_ms": 255.7
+        },
+        {
+          "function": "winapi/windows.py",
+          "line": 84,
+          "name": "overlay_message",
+          "calls": 1470,
+          "self_ms": 242.34,
+          "cumulative_ms": 242.34
+        },
+        {
+          "function": "win32more/_win32.py",
+          "line": 498,
+          "name": "__call__",
+          "calls": 1668,
+          "self_ms": 11.97,
+          "cumulative_ms": 238.01
+        },
+        {
+          "function": "win32more/_win32.py",
+          "line": 516,
+          "name": "__call__",
+          "calls": 1668,
+          "self_ms": 37.15,
+          "cumulative_ms": 226.04
+        },
+        {
+          "function": "win32more/_winrt.py",
+          "line": 446,
+          "name": "_add_argument",
+          "calls": 750,
+          "self_ms": 17.01,
+          "cumulative_ms": 220.83
+        }
+      ]
+    },
+    {
+      "artifact": "inventory-stream-1.json",
+      "scenario": "stream",
+      "profiled": false,
+      "surface": "feed",
+      "activation_ms": 0.75,
+      "imports_ms": 558.55,
+      "constructor_ms": 10616.8,
+      "elapsed_seconds": 8.02,
+      "gc_enabled": true,
+      "heartbeat_samples": 683,
+      "heartbeat_max_ms": 37.16,
+      "heartbeat_p99_ms": 34.35,
+      "heartbeat_over_50": 0,
+      "warm_max_ms": 37.16,
+      "action_ms": [
+        6.83,
+        9.66,
+        9.51,
+        12.13,
+        12.42,
+        12.35,
+        15.21,
+        16.03,
+        16.54,
+        15.44,
+        17.44,
+        20.99,
+        22.42,
+        15.46,
+        14.05
+      ],
+      "gc_collections": 2,
+      "gc_max_ms": 0.93
+    },
+    {
+      "artifact": "inventory-tools-1.json",
+      "scenario": "tools",
+      "profiled": false,
+      "surface": "feed",
+      "activation_ms": 0.55,
+      "imports_ms": 550.14,
+      "constructor_ms": 4571.68,
+      "elapsed_seconds": 8.02,
+      "gc_enabled": true,
+      "heartbeat_samples": 670,
+      "heartbeat_max_ms": 80.83,
+      "heartbeat_p99_ms": 44.04,
+      "heartbeat_over_50": 4,
+      "warm_max_ms": 80.83,
+      "action_ms": [
+        20.08,
+        36.35,
+        31.1,
+        46.75,
+        53.67,
+        58.62,
+        223.09,
+        55.91,
+        42.78,
+        40.86,
+        36.19,
+        40.11,
+        31.28,
+        32.38,
+        45.23
+      ],
+      "gc_collections": 2,
+      "gc_max_ms": 0.51
+    },
+    {
+      "artifact": "inventory-tools-profile.json",
+      "scenario": "tools",
+      "profiled": true,
+      "surface": "feed",
+      "activation_ms": 1.18,
+      "imports_ms": 741.56,
+      "constructor_ms": 6357.96,
+      "elapsed_seconds": 8.16,
+      "gc_enabled": true,
+      "heartbeat_samples": 505,
+      "heartbeat_max_ms": 121.72,
+      "heartbeat_p99_ms": 82.04,
+      "heartbeat_over_50": 43,
+      "warm_max_ms": 121.72,
+      "action_ms": [
+        45.2,
+        85.7,
+        87.57,
+        66.16,
+        75.81,
+        339.65,
+        371.04,
+        386.96,
+        84.43,
+        92.64,
+        319.03,
+        81.63,
+        54.81,
+        81.41,
+        91.84
+      ],
+      "gc_collections": 2,
+      "gc_max_ms": 0.72,
+      "profile": [
+        {
+          "function": "assistant/agent_toasts.py",
+          "line": 531,
+          "name": "tick",
+          "calls": 171,
+          "self_ms": 27.36,
+          "cumulative_ms": 4609.72
+        },
+        {
+          "function": "assistant/qt_ui.py",
+          "line": 26,
+          "name": "deliver",
+          "calls": 308,
+          "self_ms": 4.17,
+          "cumulative_ms": 4541.1
+        },
+        {
+          "function": "assistant/qt_ui.py",
+          "line": 60,
+          "name": "pump",
+          "calls": 186,
+          "self_ms": 5.02,
+          "cumulative_ms": 3592.58
+        },
+        {
+          "function": "assistant/agent_window.py",
+          "line": 163,
+          "name": "_render",
+          "calls": 16,
+          "self_ms": 59.96,
+          "cumulative_ms": 2254.2
+        },
+        {
+          "function": "assistant/agent_toasts.py",
+          "line": 129,
+          "name": "render",
+          "calls": 16,
+          "self_ms": 0.12,
+          "cumulative_ms": 2175.39
+        },
+        {
+          "function": "assistant/agent_toasts.py",
+          "line": 137,
+          "name": "refresh",
+          "calls": 16,
+          "self_ms": 1031.08,
+          "cumulative_ms": 2175.12
+        },
+        {
+          "function": "assistant/agent_toasts.py",
+          "line": 319,
+          "name": "sync",
+          "calls": 15,
+          "self_ms": 2.29,
+          "cumulative_ms": 2155.86
+        },
+        {
+          "function": "assistant/agent_toasts.py",
+          "line": 241,
+          "name": "sync_layers",
+          "calls": 359,
+          "self_ms": 26.57,
+          "cumulative_ms": 1129.79
+        },
+        {
+          "function": "winapi/composition.py",
+          "line": 162,
+          "name": "position",
+          "calls": 1435,
+          "self_ms": 26.71,
+          "cumulative_ms": 1037.61
+        },
+        {
+          "function": "winapi/appearance.py",
+          "line": 70,
+          "name": "<genexpr>",
+          "calls": 40,
+          "self_ms": 3.06,
+          "cumulative_ms": 972.68
+        },
+        {
+          "function": "winapi/appearance.py",
+          "line": 146,
+          "name": "background_frost",
+          "calls": 32,
+          "self_ms": 614.31,
+          "cumulative_ms": 837.33
+        },
+        {
+          "function": "assistant/toast_card.py",
+          "line": 712,
+          "name": "render",
+          "calls": 60,
+          "self_ms": 3.46,
+          "cumulative_ms": 807.5
+        },
+        {
+          "function": "assistant/tool_call_view.py",
+          "line": 138,
+          "name": "recolor",
+          "calls": 126,
+          "self_ms": 15.94,
+          "cumulative_ms": 767.66
+        },
+        {
+          "function": "win32more/_winrt.py",
+          "line": 522,
+          "name": "__call__",
+          "calls": 615,
+          "self_ms": 8.6,
+          "cumulative_ms": 730.6
+        },
+        {
+          "function": "assistant/step_view.py",
+          "line": 133,
+          "name": "present",
+          "calls": 15,
+          "self_ms": 1.61,
+          "cumulative_ms": 683.39
+        },
+        {
+          "function": "assistant/toast_card.py",
+          "line": 859,
+          "name": "position",
+          "calls": 126,
+          "self_ms": 4.01,
+          "cumulative_ms": 582.94
+        },
+        {
+          "function": "assistant/step_view.py",
+          "line": 151,
+          "name": "place",
+          "calls": 65,
+          "self_ms": 6.87,
+          "cumulative_ms": 554.83
+        },
+        {
+          "function": "winapi/appearance.py",
+          "line": 69,
+          "name": "sample_backgrounds",
+          "calls": 8,
+          "self_ms": 1.03,
+          "cumulative_ms": 494.61
+        },
+        {
+          "function": "assistant/tool_call_view.py",
+          "line": 100,
+          "name": "present",
+          "calls": 185,
+          "self_ms": 9.43,
+          "cumulative_ms": 464.74
+        },
+        {
+          "function": "assistant/toast_card.py",
+          "line": 800,
+          "name": "place_content",
+          "calls": 53,
+          "self_ms": 18.0,
+          "cumulative_ms": 454.53
+        },
+        {
+          "function": "winapi/windows.py",
+          "line": 244,
+          "name": "move",
+          "calls": 155,
+          "self_ms": 385.57,
+          "cumulative_ms": 422.28
+        },
+        {
+          "function": "assistant/toast_card.py",
+          "line": 329,
+          "name": "paintEvent",
+          "calls": 207,
+          "self_ms": 54.33,
+          "cumulative_ms": 399.05
+        },
+        {
+          "function": "assistant/step_view.py",
+          "line": 175,
+          "name": "fit_width",
+          "calls": 50,
+          "self_ms": 0.68,
+          "cumulative_ms": 336.89
+        },
+        {
+          "function": "win32more/_win32.py",
+          "line": 403,
+          "name": "get_type_hints",
+          "calls": 615,
+          "self_ms": 9.25,
+          "cumulative_ms": 288.82
+        },
+        {
+          "function": "win32more/_winrt.py",
+          "line": 375,
+          "name": "__call__",
+          "calls": 615,
+          "self_ms": 6.88,
+          "cumulative_ms": 261.61
+        },
+        {
+          "function": "win32more/_winrt.py",
+          "line": 398,
+          "name": "__call__",
+          "calls": 615,
+          "self_ms": 32.4,
+          "cumulative_ms": 242.02
+        },
+        {
+          "function": "assistant/agent_toasts.py",
+          "line": 205,
+          "name": "poll_pointer",
+          "calls": 152,
+          "self_ms": 4.93,
+          "cumulative_ms": 200.51
+        },
+        {
+          "function": "win32more/_win32.py",
+          "line": 220,
+          "name": "as_",
+          "calls": 723,
+          "self_ms": 43.89,
+          "cumulative_ms": 194.34
+        },
+        {
+          "function": "assistant/agent_toasts.py",
+          "line": 186,
+          "name": "observe_pointer",
+          "calls": 152,
+          "self_ms": 6.76,
+          "cumulative_ms": 166.65
+        },
+        {
+          "function": "win32more/_win32.py",
+          "line": 498,
+          "name": "__call__",
+          "calls": 1482,
+          "self_ms": 7.45,
+          "cumulative_ms": 164.4
+        },
+        {
+          "function": "win32more/_win32.py",
+          "line": 516,
+          "name": "__call__",
+          "calls": 1482,
+          "self_ms": 24.15,
+          "cumulative_ms": 156.95
+        },
+        {
+          "function": "assistant/qt_text.py",
+          "line": 104,
+          "name": "load",
+          "calls": 282,
+          "self_ms": 10.79,
+          "cumulative_ms": 154.38
+        },
+        {
+          "function": "win32more/_winrt.py",
+          "line": 446,
+          "name": "_add_argument",
+          "calls": 615,
+          "self_ms": 7.0,
+          "cumulative_ms": 131.39
+        },
+        {
+          "function": "win32more/_win32.py",
+          "line": 522,
+          "name": "make_args",
+          "calls": 1482,
+          "self_ms": 19.91,
+          "cumulative_ms": 130.18
+        },
+        {
+          "function": "assistant/toast_card.py",
+          "line": 238,
+          "name": "paintEvent",
+          "calls": 611,
+          "self_ms": 59.47,
+          "cumulative_ms": 121.67
+        }
+      ]
+    },
+    {
+      "artifact": "inventory-voice-1.json",
+      "scenario": "voice",
+      "profiled": false,
+      "surface": "toolbar",
+      "activation_ms": 0.78,
+      "imports_ms": 546.08,
+      "constructor_ms": 3378.31,
+      "elapsed_seconds": 8.01,
+      "gc_enabled": true,
+      "heartbeat_samples": 786,
+      "heartbeat_max_ms": 36.38,
+      "heartbeat_p99_ms": 22.88,
+      "heartbeat_over_50": 0,
+      "warm_max_ms": 36.38,
+      "action_ms": [
+        16.14,
+        13.35,
+        14.52,
+        21.54,
+        19.89,
+        27.27,
+        23.15,
+        21.16,
+        16.62,
+        14.28,
+        18.3,
+        18.01,
+        16.68,
+        17.71,
+        20.65
+      ],
+      "gc_collections": 3,
+      "gc_max_ms": 0.89
+    }
+  ]
+}

@@ -1,4 +1,4 @@
-"""The keeper: the one part of the workspace that never changes itself.
+"""The keeper: the one part of Workspace that never changes itself.
 
 It runs the layout, assistant, and automation worker, and installs changes to
 them: when the agent asks, it checks the change (selfcheck.py), keeps a copy of
@@ -34,7 +34,7 @@ from pathlib import Path
 from typing import Final, Protocol, cast
 
 LIVE: Final = Path(__file__).resolve().parent
-"""The workspace's own folder: the version that runs."""
+"""Workspace's own folder: the version that runs."""
 DIRECTORY: Final = Path(os.environ.get("LOCALAPPDATA") or tempfile.gettempdir()) / "workspace"
 STATE: Final = DIRECTORY / "keeper"
 REQUESTS: Final = STATE / "requests"
@@ -109,7 +109,7 @@ def ready() -> None:
 
 
 def source_files(root: Path) -> list[str]:
-    """The workspace's own files under `root`, as relative paths: not caches or history."""
+    """Workspace's own files under `root`, as relative paths: not caches or history."""
     found: list[str] = []
     for folder, directories, files in os.walk(root):
         # Prune before descending: the bundled runtime contains thousands of non-source files.
@@ -419,7 +419,7 @@ class Keeper:
         if failed and self.fresh and self.undoable is not None:
             self.rollback("it didn't start", now)
         elif failed:
-            self.world.notify("The workspace didn't start properly; see the logs.")
+            self.world.notify("Workspace didn't start properly; see the logs.")
             self.stage = Stage.RUNNING
         elif all(self.world.is_ready(name) for name in self.children):
             if self.fresh:

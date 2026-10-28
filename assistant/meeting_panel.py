@@ -10,8 +10,7 @@ from pathlib import Path
 from urllib.parse import quote
 from uuid import uuid4
 
-from .canvas_widgets import button, label
-from .meeting_followup import (
+lazy from .meeting_followup import (
     ActionContent,
     ActionStatus,
     Addressee,
@@ -25,8 +24,8 @@ from .meeting_followup import (
     TranscriptSource,
     Unspecified,
 )
-from .meeting_followup_store import ActionRevision, DraftRevision
-from .meeting_workflow import (
+lazy from .meeting_followup_store import ActionRevision, DraftRevision
+lazy from .meeting_workflow import (
     ActionChange,
     ActionSaveProblem,
     DraftChange,
@@ -40,10 +39,11 @@ from .meeting_workflow import (
     package_values,
     previous_task,
 )
-from .qt import Qt, QtCore, QtGui, QtWidgets
-from .recording_state import duration
-from .widgets import Browser, Editor, column, replace_text, row
-from .work_window import task_label
+lazy from .panel_controls import button, label
+lazy from .qt import Qt, QtCore, QtGui, QtWidgets
+lazy from .recording_state import duration
+lazy from .widgets import Browser, Editor, column, replace_text, row
+lazy from .work_window import task_label
 
 
 @dataclass(frozen=True, slots=True)
@@ -164,9 +164,9 @@ def citations_html(citations: tuple[Citation, ...], sources: TranscriptBundle) -
 
 
 class MeetingPanel(QtWidgets.QWidget):
-    def __init__(self, workflow: MeetingWorkflow, *, open_file: Callable[[Path], None], add_to_canvas: Callable[[Path], None]) -> None:  # noqa: PLR0915
+    def __init__(self, workflow: MeetingWorkflow, *, open_file: Callable[[Path], None]) -> None:  # noqa: PLR0915
         super().__init__()
-        self.workflow, self.open_file, self.add_to_canvas = workflow, open_file, add_to_canvas
+        self.workflow, self.open_file = workflow, open_file
         self.snapshot = MeetingSnapshot()
         self.checked: dict[str, TranscriptSource] = {}
         self.loading = False
@@ -234,9 +234,7 @@ class MeetingPanel(QtWidgets.QWidget):
         self.tabs.addTab(self.source_panel, "Sources")
         files = row()
         self.open_notes = button("Open notes", self.open_package_notes)
-        self.canvas_notes = button("Put notes on canvas", self.canvas_package_notes)
         files.addWidget(self.open_notes)
-        files.addWidget(self.canvas_notes)
         files.addStretch()
         content.addLayout(files)
         layout.addWidget(right, 5)
@@ -428,7 +426,6 @@ class MeetingPanel(QtWidgets.QWidget):
     def show_package(self) -> None:
         package = self.package()
         self.open_notes.setEnabled(package is not None)
-        self.canvas_notes.setEnabled(package is not None)
         self.action_panel.setEnabled(package is not None)
         self.draft_panel.setEnabled(package is not None)
         if package is None:
@@ -640,7 +637,3 @@ class MeetingPanel(QtWidgets.QWidget):
     def open_package_notes(self) -> None:
         if (package := self.package()) is not None:
             self.open_file(package.publication.notes_path)
-
-    def canvas_package_notes(self) -> None:
-        if (package := self.package()) is not None:
-            self.add_to_canvas(package.publication.notes_path)

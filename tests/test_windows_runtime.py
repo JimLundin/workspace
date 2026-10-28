@@ -49,7 +49,7 @@ def test_copied_source_starts_the_sdk_and_qt_with_the_inherited_bundle(tmp_path:
     copy_source(ROOT, source)
     assert not (source / ".runtime").exists() and not (source / ".python").exists()
     script = (
-        "from runtime import activate; activate(); import assistant.sdk, assistant.agent_panel; "
+        "from runtime import activate; activate(); import assistant.sdk, assistant.agent_toasts; "
         "from assistant.qt_ui import EventLoop, application; "
         "root=application(); "
         "loop=EventLoop(root, lambda: None); loop.pump(); loop.close(); root.processEvents(); print('Copied SDK and Qt passed')"
@@ -308,7 +308,8 @@ def test_shutdown_resolves_pending_and_late_ui_requests(tmp_path: Path) -> None:
                 answers.append(ui.prompt("Isolated shutdown check"))
                 ui.close()
                 answers.append(ui.prompt("Already closed"))
-                assert ui.choose_region(module.Rect(0, 0, 100, 100)) is None
+                from winapi.shapes import Rect
+                assert ui.choose_region(Rect(0, 0, 100, 100)) is None
                 try:
                     ui.answer("Already closed", lambda text: None)
                 except OSError:
