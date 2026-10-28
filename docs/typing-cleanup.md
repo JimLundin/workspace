@@ -34,3 +34,17 @@ are evidence against a regression, not a precise speedup claim.
 | Median p99 | 33.0 µs | 15.3 µs |
 | Traced peak / retained | 1,943 / 1,016 bytes | 1,943 / 1,016 bytes |
 | Collections during latency measurement | 0 | 0 |
+
+The focused notification-filter campaign detected four of five mutations, with
+no timeouts or errors. The remaining mutation changes the standalone `Response`
+filter; current `observe` construction always places responses inside a `Turn`,
+so that branch is unreachable from its caller. One behavioral regression checks
+completed-turn source/search filtering and active-turn reachability. No test of
+the impossible standalone response was added.
+
+Integration joined `investigate/qt-stalls` at `7e24d3f` to current main. Comparing
+the final toolbar commit against main showed identical runtime behavior and
+tests, with only obsolete relative imports/bootstrap interfaces differing; the
+final handoff ledger was already identical. The ancestry merge retains current
+source rather than replaying stale snapshot artifacts. Typing and pending
+test-runner commits were rebased onto that merge before combined validation.

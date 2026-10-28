@@ -41,5 +41,3 @@ def current_name() -> str:
         case _:
             raise ValueError("Windows returned an invalid desktop name status")
     return buffer.value
-
-
