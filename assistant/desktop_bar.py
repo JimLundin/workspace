@@ -257,7 +257,7 @@ QMenu::separator {{ height: 1px; background: {colors.edge}; margin: 4px 10px; }}
         """Qt requires updating its live button in place, solely on this owner thread."""
         if self.closed:
             return
-        text = str(count) if count < 100 else "99+"
+        text = "" if not count else str(count) if count < 100 else "99+"
         description = f"{count} inbox {'item needs' if count == 1 else 'items need'} your attention · open inbox · Hold V + T"
         if self.inbox.text() == text and self.inbox.toolTip() == description:
             return
