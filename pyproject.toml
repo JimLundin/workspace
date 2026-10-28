@@ -23,6 +23,7 @@ test = ["hypothesis==6.170.12"]
 
 [tool.mypy]
 mypy_path = "typings"
+custom_typeshed_dir = "typings/.workspace-typeshed"
 python_version = "3.15"
 platform = "win32"  # the workspace targets Windows; check it as Windows code
 strict = true
@@ -53,6 +54,7 @@ ignore_missing_imports = true
 
 [tool.pyright]
 stubPath = "typings"
+typeshedPath = "typings/.workspace-typeshed"
 pythonVersion = "3.15"
 pythonPlatform = "Windows"
 typeCheckingMode = "strict"
