@@ -69,7 +69,9 @@ def stage_source(receipt: Path, stage: Path | None = None) -> Path:
     (stage / 'scripts' / '__init__.py').write_text('', encoding='utf-8')
     hashes: dict[str, str] = {}
     for name in HELPERS:
-        shutil.copyfile(WORKSPACE / name, stage / name)
+        destination = stage / name
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(WORKSPACE / name, destination)
         hashes[name] = sha(stage / name)
     with zipfile.ZipFile(stage / 'source.zip', 'x', zipfile.ZIP_DEFLATED, compresslevel=1) as archive:
         for name in wanted:

@@ -57,3 +57,9 @@ unexpected top-level shape. The streaming fixture's tool-start deadline missed
 under portable-worker contention and passed in the affected run. Its module now
 uses the runner's existing post-worker phase, preserving its deadlines and
 assertions. Both affected modules passed ten tests after the HTTP correction.
+
+The subsequent full run passed 1,123 tests with five skips. Deployment then
+detected a staging defect before installed files were replaced: the newly
+consumed native helpers required a `winapi` parent directory. The stager now
+creates each helper's parent directories. A real checked-source staging regression
+verifies nested helpers, their hashes and the source payload before deployment.

@@ -11,7 +11,7 @@ from pathlib import Path, PureWindowsPath
 
 from scripts import deploy
 from scripts.deploy_archive import repack
-from scripts.deploy_files import file_at, files, member, names, sha, source_map, write, zip_files
+from scripts.deploy_files import HELPERS, file_at, files, member, names, sha, source_map, write, zip_files
 from scripts.deploy_processes import Process, role_for
 from scripts.deploy_values import Prepared
 from scripts.deploy_windows import Release, drive, group
@@ -54,6 +54,19 @@ def test_only_the_exact_installed_console_hook_is_external_to_the_application_pr
                     (interpreter, '-c', hook)):
         assert role_for(command, windowed=False) == 'runtime'
     assert role_for((interpreter, hook), windowed=True) == 'runtime'
+
+
+def test_staging_includes_nested_native_helpers_and_the_checked_source(tmp_path: Path) -> None:
+    # Adding a native helper must not leave the release unable to create its stage.
+    wanted = deploy.workspace_files()
+    receipt = tmp_path / 'checked.json'
+    write(receipt, {'kind': 'workspace-edit-check-v1', 'tests': [], 'files': wanted, 'passed': 1})
+    stage = tmp_path / 'workspace-source-test'
+    assert deploy.stage_source(receipt, stage) == stage
+    config, payload = deploy.checked_config(stage)
+    assert payload == wanted
+    assert config['helpers'] == {name: sha(stage / name) for name in HELPERS}
+    assert sha(stage / 'winapi' / '_core.py') == wanted['winapi/_core.py']
 
 
 def test_native_coordinator_owns_stage_folder_and_detects_source_changes(tmp_path: Path) -> None:
