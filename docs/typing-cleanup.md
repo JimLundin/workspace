@@ -19,6 +19,8 @@ callbacks, extracted widget/lifecycle operations, and explicit dependency naming
 configuration. The Python 3.12 bootstrap owners `keeper.py` and `selfcheck.py`
 retain narrowly configured inline-import exceptions: candidate/runtime imports
 must occur after activation. Protected runtime validation is unchanged.
+The double-click `.pyw` launchers likewise retain their configured import-order
+exception, loading product modules after bootstrap without suppression comments.
 
 Keyboard character mapping uses virtual-key values, preserving the letters I and
 O after giving their enum members unambiguous names. Native measurements used

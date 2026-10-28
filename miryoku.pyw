@@ -4,6 +4,6 @@ from runtime import bootstrap
 
 bootstrap()
 
-from miryoku.__main__ import main  # noqa: E402
+from miryoku.__main__ import main
 
 main()

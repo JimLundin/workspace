@@ -5,6 +5,6 @@ from runtime import activate, bootstrap
 bootstrap()
 activate()
 
-from keeper import main  # noqa: E402
+from keeper import main
 
 main()

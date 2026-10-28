@@ -226,6 +226,9 @@ ban-relative-imports = "all"
 # Python 3.12 bootstrap resolves candidate/runtime imports after activation.
 "keeper.py" = ["PLC0415"]
 "selfcheck.py" = ["PLC0415"]
+# Double-click launchers must activate the bundled runtime before product imports.
+"workspace.pyw" = ["E402"]
+"miryoku.pyw" = ["E402"]
 # The layout tables are kept as a wide grid that reads across the keyboard.
 "miryoku/layout.py" = ["E501"]
 # Win32 functions keep their Windows names, one prototype per line.
