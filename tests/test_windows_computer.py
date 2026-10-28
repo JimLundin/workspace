@@ -17,10 +17,10 @@ if sys.platform != "win32":
     raise unittest.SkipTest("Windows computer automation")
 
 from assistant import commands, uia
-from assistant.app import WinMachine
 from assistant.desktop import WinDesktop
 from assistant.geometry import Shot, fit
 from assistant.llm import Json
+from assistant.machine import WinMachine
 from assistant.ui import Ui
 from winapi.screen import Monitor
 from winapi.shapes import Rect
@@ -185,7 +185,9 @@ def test_uia_controls_are_inspected_and_operated_across_separate_processes(tmp_p
             action({"id": "42.2147483647.2147483646"}, "invoke"),
             {"operation": "inspect", "handle": handle, "limit": 2, "offset": 0, "depth": 10},
             {"operation": "inspect", "handle": handle, "limit": 2, "offset": 2, "depth": 10},
-            action(editor, "set_value", "'\"\n" * 10000), action(editor, "read"),
+            # Exceed both the text and encoded-JSON caps without asking WPF to
+            # lay out 10,000 lines. The earlier value retains multiline/UTF-8.
+            action(editor, "set_value", '"' * 12001), action(editor, "read"),
         ])
         assert [ok for ok, _text in results] == [True] * 8 + [False] * 3 + [True] * 4, results
         assert decoded(results[1][1])["text"] == value
@@ -200,7 +202,10 @@ def test_uia_controls_are_inspected_and_operated_across_separate_processes(tmp_p
         assert first["next_offset"] == 2
         assert {str(row["id"]) for row in controls(first)}.isdisjoint(str(row["id"]) for row in controls(second))
         long_read = results[14][1]
-        assert len(long_read) < 19000 and decoded(long_read)["truncated"] is True
+        bounded = decoded(long_read)
+        assert len(long_read) <= 18000 and bounded["truncated"] is True
+        text = bounded["text"]
+        assert isinstance(text, str) and 0 < len(text) < 12000 and text == '"' * len(text)
         # A third process must see the effects of actions made with the first
         # process's control IDs; no AutomationElement instances are shared.
         after = inspect(handle)

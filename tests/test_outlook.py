@@ -36,65 +36,7 @@ from assistant.outlook import (
     read_eml,
 )
 
-# This executable fixture replaces only the external Outlook command. It reads
-# and writes actual files, and returns the same complete JSON response protocol.
-# Tests do not inspect or assert on generated PowerShell text.
-_COMMAND = r"""
-import hashlib, json, sys
-from pathlib import Path
-payload = json.load(sys.stdin)
-request = payload['request']
-root = Path(payload['fixture'])
-control = json.loads((root / 'control.json').read_text(encoding='utf-8'))
-operation = request['operation']
-with (root / 'calls.jsonl').open('a', encoding='utf-8') as calls:
-    calls.write(json.dumps({'operation': operation, 'folder': request.get('folder')}) + '\n')
-if operation == 'status':
-    result = ({'kind': 'unavailable', 'reason': 'Classic Outlook is not running.'} if control['mode'] == 'unavailable'
-              else {'kind': 'available', 'folder': {'entry_id': control['folder'], 'store_id': control['store']}})
-else:
-    (root / 'items').mkdir(exist_ok=True)
-    found = []
-    for path in (root / 'items').glob('*.json'):
-        value = json.loads(path.read_text(encoding='utf-8'))
-        same = value['folder'] == request['folder']
-        same = same and (value['entry_id'] == request['entry_id'] if operation == 'read' else value['key'] == request['key'])
-        if same:
-            found.append(value)
-    if control['mode'] == 'unavailable':
-        result = {'kind': 'unavailable', 'reason': 'The original mailbox is unavailable.'}
-    elif len(found) > 1:
-        result = {'kind': 'conflict', 'reason': 'Multiple items have this workflow key.'}
-    elif found:
-        result = found[0]
-    elif operation != 'ensure':
-        result = {'kind': 'missing'}
-    else:
-        record = json.loads((Path(payload['index']) / (request['key'] + '.json')).read_text(encoding='utf-8'))
-        assert record['fingerprint'] == request['fingerprint'] and record['folder'] == request['folder']
-        assert record['kind'] == 'pending_outlook', 'A durable mailbox binding must precede Save.'
-        result = {
-            'kind': 'draft', 'entry_id': 'item-' + request['key'], 'folder': request['folder'],
-            'key': request['key'], 'fingerprint': request['fingerprint'], 'content': request['content'],
-            'saved': True, 'sent': False, 'submitted': False,
-        }
-        name = hashlib.sha256(request['folder']['store_id'].encode()).hexdigest() + '-' + request['key'] + '.json'
-        (root / 'items' / name).write_text(json.dumps(result, ensure_ascii=False), encoding='utf-8')
-        if control['mode'] == 'lose_ack':
-            sys.exit(17)
-    if result.get('kind') == 'draft':
-        if control['mode'] == 'short_body':
-            result['content']['body'] = result['content']['body'][:7]
-        if control['mode'] == 'extra_bcc':
-            result['content']['bcc'].append('unexpected@example.invalid')
-        if control['mode'] == 'wrong_store':
-            result['folder']['store_id'] = 'unrelated-store'
-        if control['mode'] == 'already_sent':
-            result['sent'] = True
-        if control['mode'] == 'malformed_recipient':
-            result['content']['to'] = ['unresolved recipient']
-Path(payload['response']).write_text(json.dumps(result, ensure_ascii=False), encoding='utf-8')
-"""
+from .outlook_fixture import Record, perform
 
 
 class LocalOutlookCommand:
@@ -113,7 +55,11 @@ class LocalOutlookCommand:
         payload: dict[str, object] = {
             "request": dict(request), "response": str(response), "fixture": str(self.root), "index": str(self.index),
         }
-        return commands.run([sys.executable, "-c", _COMMAND], input_text=json.dumps(payload), timeout_s=10, cancel=cancel)
+        if cancel.is_set():
+            return -1, "Stopped by the user."
+        # Keep request isolation and the real response-file protocol without
+        # paying interpreter startup for each policy decision.
+        return perform(cast(Record, json.loads(json.dumps(payload))))
 
     def files(self) -> tuple[Path, ...]:
         return tuple(sorted((self.root / "items").glob("*.json")))
@@ -131,13 +77,24 @@ class LocalOutlookCommand:
         (path.parent / "duplicate.json").write_text(json.dumps(value), encoding="utf-8")
 
 
+class ProcessOutlookCommand(LocalOutlookCommand):
+    __slots__ = ()
+
+    def run(self, request: Mapping[str, object], response: Path, cancel: threading.Event) -> tuple[int, str]:
+        payload: dict[str, object] = {
+            "request": dict(request), "response": str(response), "fixture": str(self.root), "index": str(self.index),
+        }
+        return commands.run([sys.executable, "-S", str(Path(__file__).with_name("outlook_fixture.py"))],
+                            input_text=json.dumps(payload), timeout_s=10, cancel=cancel)
+
+
 def request(body: str = "Factual notes\n\nPlease review the assigned actions.\n") -> DraftRequest:
     return DraftRequest("meeting-workflow", "administrative-followup-v1", DraftContent("Interview follow-up", body))
 
 
-def adapter(tmp_path: Path) -> tuple[OutlookDrafts, LocalOutlookCommand]:
+def adapter(tmp_path: Path, *, command_type: type[LocalOutlookCommand] = LocalOutlookCommand) -> tuple[OutlookDrafts, LocalOutlookCommand]:
     folder = tmp_path / "drafts"
-    command = LocalOutlookCommand(tmp_path / "outlook-fixture", folder)
+    command = command_type(tmp_path / "outlook-fixture", folder)
     return OutlookDrafts(folder, transport=PowerShellOutlook(command)), command
 
 
@@ -267,7 +224,7 @@ def test_verified_retries_keep_the_readable_binding_and_still_check_edited_or_mi
 
 
 def test_native_save_has_durable_mailbox_binding_and_preserves_body_beyond_command_output_limit(tmp_path: Path) -> None:
-    drafts, command = adapter(tmp_path)
+    drafts, command = adapter(tmp_path, command_type=ProcessOutlookCommand)
     original = request("Private complete draft content.\n" * 5_000 + "verified ending")
     original = replace(original, content=replace(original.content,
                        to=(Recipient("ada@example.invalid"),), cc=(Recipient("lee@example.invalid"),), bcc=(Recipient("audit@example.invalid"),)))

@@ -31,6 +31,8 @@ from automation.task import (
     Waiting,
 )
 
+from .work_fixture import seed_verified_actions
+
 
 @dataclass(slots=True)
 class Clock:
@@ -277,11 +279,15 @@ def test_old_unverified_action_cannot_fall_off_the_completion_page(tmp_path: Pat
     store, claim, clock = claimed(tmp_path)
     work = WorkExecution(claim, store, Resources(), clock=clock)
     work.actions.execute(plan("set_clipboard", {"text": "needs verification"}), lambda: True, bool, threading.Event())
-    for index in range(100):
-        spec = plan("write_file", {"path": f"note-{index}.txt", "content": "verified"})
-        assert isinstance(spec, ActionSpec)
-        assert store.begin_action(claim.run, f"later-{index}", spec, at=clock()) is not None
-        assert store.finish_action(f"later-{index}", ActionVerified("Read back the file."), at=clock()) is not None
+    spec = plan("write_file", {"path": "note.txt", "content": "verified"})
+    assert isinstance(spec, ActionSpec)
+    assert store.begin_action(claim.run, "later-0", spec, at=clock()) is not None
+    sample = store.finish_action("later-0", ActionVerified("Read back the file."), at=clock())
+    assert sample is not None
+    later = tuple(f"later-{index}" for index in range(1, 100))
+    seed_verified_actions(store, sample, later)
+    # Subsequent transitions happen after the fixture catalog's timestamps.
+    clock.value = sample.updated_at + 2 * len(later)
     assert len(store.actions("task", limit=100)) == 100
     assert isinstance(work.outcome(Reported("Everything is complete."), threading.Event()), Waiting)
 

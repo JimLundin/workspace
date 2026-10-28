@@ -44,7 +44,9 @@ def test_reviewed_change_is_pushed_to_new_branch(tmp_path: Path) -> None:
     assert "Published" in result
 
 
-def test_declined_review_never_executes_candidate_or_pushes(tmp_path: Path) -> None:
+def test_declined_review_failed_checks_and_diverged_base_refuse_publication(tmp_path: Path) -> None:
+    # The refusal paths leave the repository unchanged. Reset only the
+    # candidate inputs between them; actual Git and candidate checks still run.
     live, workspace, remote = repository(tmp_path)
     marker = tmp_path / "executed"
     (workspace / "candidate.py").write_text(f"from pathlib import Path\nPath({str(marker)!r}).touch()\n", encoding="utf-8")
@@ -57,9 +59,7 @@ def test_declined_review_never_executes_candidate_or_pushes(tmp_path: Path) -> N
     assert not marker.exists()
     assert not git(remote, "for-each-ref", "refs/heads/workspace/")
 
-
-def test_failed_runtime_checks_never_push(tmp_path: Path) -> None:
-    live, workspace, remote = repository(tmp_path)
+    (workspace / "candidate.py").unlink()
     (workspace / "config.py").write_text("GREETING = ''\n", encoding="utf-8")
     try:
         publish_source(live, workspace, "broken", lambda _title, _diff: True, lambda: False, remote=str(remote))
@@ -69,9 +69,7 @@ def test_failed_runtime_checks_never_push(tmp_path: Path) -> None:
         raise AssertionError("failing tests must prevent push")
     assert not git(remote, "for-each-ref", "refs/heads/workspace/")
 
-
-def test_remote_divergence_blocks_publishing(tmp_path: Path) -> None:
-    live, workspace, remote = repository(tmp_path)
+    (workspace / "config.py").write_text("GREETING = 'hello'\n", encoding="utf-8")
     (live / "config.py").write_text("GREETING = 'local change'\n", encoding="utf-8")
     try:
         publish_source(live, workspace, "change", lambda _title, _diff: True, lambda: False, remote=str(remote))
