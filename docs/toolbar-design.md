@@ -8,7 +8,7 @@ Windows' reduced-transparency and high-contrast settings retain solid fallbacks.
 | --- | --- |
 | Idle | Local time, battery level and available local temperature; the entire capsule opens controls |
 | Dictating | Microphone, Listening and live audio waveform; release Spacebar, press B again, or use Stop to finish |
-| Transcribing | Transcribing and the dimmed, frozen captured waveform |
+| Transcribing | Compact rotating spinner and Transcribing |
 | Agent working | Activity label and Stop |
 | Agent needs input | Needs you; conversation access is in the capsule's menu |
 | Meeting recording | Separate microphone/timer capsule and its own Stop |
@@ -76,11 +76,16 @@ The audio trace is a bounded 24-sample history of real RMS levels, read every
 PCM buffer used for transcription. Each read copies at most 40 ms (1,280 bytes
 at 16 kHz). A nonblocking lock prevents reads during reset or release without
 making the UI wait. Silence remains flat; unavailable observations do not
-simulate activity. Stopping capture stops the meter and dims its final trace while the
-transcription request runs. Completion restores the ambient presentation.
+simulate activity. Stopping capture stops the meter and replaces the trace with a
+compact spinner while the transcription request runs. The existing frame loop
+rotates its arc at 300 degrees per second without sampling audio or measuring
+text. Reduced motion retains a stationary arc and the Transcribing label.
+Completion restores the ambient presentation and stops the frame timer.
 
 Windows `GetSystemPowerStatus` supplies battery percentage, charging and external
 power. Unknown readings show a dash; machines without a battery show AC. Power
+above 95% while plugged in hides the percentage and retains the charger symbol.
+At 95% or below, or after unplugging, the percentage is visible.
 refreshes every fifteen seconds and the local clock updates at minute changes.
 Weather uses Windows geolocation when already available, with no consent request
 or IP-based fallback. A background worker sends coordinates rounded to a tenth
