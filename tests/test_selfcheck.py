@@ -1,4 +1,4 @@
-"""selfcheck: deciding whether a copy of the toolkit is sound, with only Python."""
+"""selfcheck: deciding whether a copy of Workspace is sound, with only Python."""
 
 import os
 import subprocess
@@ -86,9 +86,9 @@ def test_a_crashing_test_module_fails(tmp_path: Path) -> None:
 
 
 def test_broken_windowless_launcher_fails(tmp_path: Path) -> None:
-    code, report = selfcheck(tree(tmp_path, {**SOUND, "toolkit.pyw": "def broken(:\n"}))
+    code, report = selfcheck(tree(tmp_path, {**SOUND, "workspace.pyw": "def broken(:\n"}))
     assert code == 1
-    assert "doesn't compile: toolkit.pyw" in report
+    assert "doesn't compile: workspace.pyw" in report
 
 
 def test_fast_checks_defer_native_tests_but_the_default_install_gate_runs_them(tmp_path: Path) -> None:

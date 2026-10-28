@@ -23,6 +23,61 @@ and 13.3 seconds from identical Windows-local source in a paired measurement.
 
 ## Edit loop
 
+For continuous feedback, install the small development-only watcher once:
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install watchdog==6.0.0
+.\Dev.cmd watch --tests tests/test_bar_model.py
+.\Dev.cmd preview
+```
+
+`watch` runs affected tests by default, including native tests on Windows.
+`--tests` accepts the same files and `::test_function` selectors as `check`;
+`--source-only` omits native modules from automatic selection. Saves are debounced
+and checks run sequentially in fresh processes. An edit during a check queues the
+latest source; failures and superseded checks keep the previous successful session
+baseline. That baseline lives in Windows Temp, separately from the deployed
+manifest, and is removed when the watch session ends. Finish with the ordinary
+source-bound final check and deployment commands below.
+
+`preview` watches and restarts real toolbar/feed widgets with sample data and
+inert actions. Its selector retains the sample state across restarts. It starts
+no keeper, microphone, keyboard observer, live communications or taskbar recovery
+worker. The preview's native-only menu actions are inert too. Closing the preview
+control window or pressing Ctrl+C closes its views and stops the watcher.
+Use `Dev.cmd preview --preview toolbar` or `--preview feed` to narrow the surface;
+`Dev.cmd watch --preview both` combines checks with a preview. Saves to production
+Python/UI assets restart the preview; test/docs saves only trigger checks.
+Watch and preview tasks are also available in VS Code. These development processes
+are separately classified so they can coexist with source deployment.
+
+Editing checks cache immutable per-file policy findings and import dependencies
+under `%LOCALAPPDATA%\workspace\development\analysis`. Keys bind source content,
+file identity, checkout, Python/Pydantic versions, analysis code and project
+configuration; quality keys also bind fresh Ruff diagnostics. Whole-graph keyboard
+ownership, model membership, migration baselines and exact exceptions are still
+evaluated every run. Source hashes are still checked before and after execution.
+Missing/damaged cached records are recomputed. The protected full selfcheck uses
+no disk cache; CI coverage and runtime pins are unchanged. Shared bounded AST
+parsing and grouping Ruff diagnostics also reduce work in the first analysis.
+
+Generated domain checks run before the editing runner's broad dependency import
+review. Hypothesis examines loaded modules for constants; loading the complete
+native SDK first also feeds bundled dependency sources into that work. Compilation,
+the complete broad import review and final source binding still run. This reduces
+one setup cost; native process/browser fixtures remain expensive.
+
+Every editing check that reaches execution retains full cost evidence, including on test or
+import failure, under `%LOCALAPPDATA%\workspace\development\timings\check-*.json`.
+Use `--timings "$env:TEMP\workspace-cost.json"` to choose the destination. Reports
+contain source identities, the selected scope, all phase/test-module import/test
+body durations, counts and unattributed overhead. Bodies include fixture setup
+and cleanup; the spans do not overlap. Evidence excludes source/response content
+and exception messages. It is separate from the success-only deployment receipt.
+Runner startup before its timer, report-writing cost, early preflight failures
+and interrupted processes are outside this accounting. See the [full-suite investigation](test-speed-investigation.md)
+for measured portable costs and the limits of current full-run attribution.
+
 Every `Dev.cmd check` first runs the source architecture review, including when
 `--tests` selects individual behavioral checks. The review parses source without
 importing the application. It enforces transitive keyboard isolation, immutable
@@ -35,7 +90,7 @@ Read [code-quality-policies.md](code-quality-policies.md) when changing a
 signature or its exact migration entry. Architecture migration exceptions
 are printed as cleanup debt. A policy failure stops before tests or a receipt.
 The full protected selfcheck also exercises the review through its ordinary flat
-test discovery. Source discovery and the class-slots policy recurse into nested
+test discovery. Source discovery and the static data-record declaration checks recurse into nested
 modules without scanning interpreter/dependency folders; deployed copies need no
 Git checkout. Static checks do not prove deep immutability through arbitrary
 aliases or objects, mathematical purity, or external-data validation; those also
@@ -43,7 +98,7 @@ require type checking and review under the policy in `AGENTS.md`.
 
 Test review starts with the Workspace decision, policy or ownership failure a
 case can detect. Direct Python/dependency behavior is outside the test surface.
-The class-slots check enforces our declarations; native bundle and Qt startup
+The static architecture check enforces frozen, slotted data-record declarations; native bundle and Qt startup
 checks verify our selection and initialization order. Those remain owned
 contracts even though their fixtures use Python and dependencies. Disposable
 browser fixtures explicitly remove their profiles after closing the browser,

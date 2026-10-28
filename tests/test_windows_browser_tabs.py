@@ -15,7 +15,7 @@ from assistant.browser_values import Group, Tab, group_of, tab_of
 
 from .browser_fixture import fixture
 from .test_browser import decoded
-from .test_windows_browser import installed, request
+from .test_windows_browser import dispose, installed, request
 
 
 def strip(browser: Browser) -> tuple[dict[int, Tab], dict[int, Group]]:
@@ -47,13 +47,13 @@ def test_agent_tabs_share_a_collapsed_group_and_preserve_user_state_across_disco
             first_id, second_id = cast(int, first["tab_id"]), cast(int, second["tab_id"])
             tabs, groups = strip(attached)
             group = groups[tabs[first_id].group_id]
-            assert group.title == "Toolkit" and group.collapsed and group.color == "blue"
+            assert group.title == "Workspace" and group.collapsed and group.color == "blue"
             assert tabs[second_id].group_id == group.id
             assert {tab.id for tab in tabs.values() if tab.active} == active, (before, tabs)
             assert all(tabs[identity] == tab for identity, tab in before.items())
             assert tabs[first_id].url == url and tabs[second_id].url == "about:blank"
             assert first["target_id"] not in (original["target_id"], blank["target_id"])
-            assert "Toolkit browser fixture" in str(request(attached, "snapshot", target_id=first["target_id"]))
+            assert "Workspace browser fixture" in str(request(attached, "snapshot", target_id=first["target_id"]))
             control = attached.strip.control
             assert control is not None and all(tab.url != "edge://favorites/" for tab in tabs.values())
 
@@ -68,7 +68,7 @@ def test_agent_tabs_share_a_collapsed_group_and_preserve_user_state_across_disco
             tabs, groups = strip(attached)
             assert tabs[cast(int, third["tab_id"])].group_id == group.id and not groups[group.id].collapsed
             assert {tab.id for tab in tabs.values() if tab.active} == active, (before, tabs)
-            assert len([item for item in groups.values() if item.title == "Toolkit"]) == 1
+            assert len([item for item in groups.values() if item.title == "Workspace"]) == 1
 
             closed = request(attached, "close", group_id=group.id)
             assert closed["closed_count"] == 3
@@ -78,7 +78,7 @@ def test_agent_tabs_share_a_collapsed_group_and_preserve_user_state_across_disco
             assert not attached.profile.exists()
     finally:
         attached.close()
-        personal.close()
+        dispose(personal)
 
 
 def test_native_ids_allow_grouping_moving_and_closing_tabs_with_identical_urls(tmp_path: Path) -> None:
@@ -110,7 +110,7 @@ def test_native_ids_allow_grouping_moving_and_closing_tabs_with_identical_urls(t
             renamed = group_of(request(attached, "group", group_id=group.id, title="Ready", color="green", index=-1))
             assert renamed.title == "Ready" and renamed.color == "green" and renamed.collapsed
 
-            # Explicit group operations also accept tabs that Toolkit did not create.
+            # Explicit group operations also accept tabs that Workspace did not create.
             user_id = next(iter(before))
             request(attached, "group", group_id=group.id, tab_ids=[user_id], collapsed=False)
             assert strip(attached)[0][user_id].group_id == group.id
@@ -125,7 +125,7 @@ def test_native_ids_allow_grouping_moving_and_closing_tabs_with_identical_urls(t
             assert decoded(personal.request("tabs", {}, cancel).text)["tabs"]
     finally:
         attached.close()
-        personal.close()
+        dispose(personal)
 
 
 def test_native_moves_between_windows_and_explicit_activation_and_reload(tmp_path: Path) -> None:
@@ -168,4 +168,4 @@ def test_native_moves_between_windows_and_explicit_activation_and_reload(tmp_pat
             assert reloaded.id == identity and reloaded.url == url
     finally:
         attached.close()
-        personal.close()
+        dispose(personal)

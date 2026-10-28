@@ -60,19 +60,19 @@ def test_settings_defaults() -> None:
 def test_settings_overrides() -> None:
     env = {
         **ENV,
-        "TOOLKIT_TRANSCRIBE_MODEL": "whisper-1",
-        "TOOLKIT_CHAT_MODEL": "fast",
-        "TOOLKIT_AGENT_MODEL": "smart",
-        "TOOLKIT_AGENT_REASONING_EFFORT": "high",
-        "TOOLKIT_AGENT_APPROVALS": "ask",
-        "TOOLKIT_VOCABULARY": "Miryoku, Colemak",
-        "TOOLKIT_LANGUAGE": "sv",
+        "WORKSPACE_TRANSCRIBE_MODEL": "whisper-1",
+        "WORKSPACE_CHAT_MODEL": "fast",
+        "WORKSPACE_AGENT_MODEL": "smart",
+        "WORKSPACE_AGENT_REASONING_EFFORT": "high",
+        "WORKSPACE_AGENT_APPROVALS": "ask",
+        "WORKSPACE_VOCABULARY": "Miryoku, Colemak",
+        "WORKSPACE_LANGUAGE": "sv",
     }
     assert settings_from(env) == Settings("https://ai.example/v1", "k", "whisper-1", "fast", "smart", "Miryoku, Colemak", "sv", "high", True)
 
 
 def test_agent_model_is_independent_of_the_quick_chat_model() -> None:
-    result = settings_from({**ENV, "TOOLKIT_CHAT_MODEL": "fast"})
+    result = settings_from({**ENV, "WORKSPACE_CHAT_MODEL": "fast"})
     assert isinstance(result, Settings)
     assert result.agent_model == "gpt-6.1-sol"
 

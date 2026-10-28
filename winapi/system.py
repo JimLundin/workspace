@@ -98,6 +98,18 @@ def kill_timer(timer: int) -> None:
     _KillTimer(None, timer)
 
 
+def set_window_timer(hwnd: int, ms: int) -> int:
+    """A WM_TIMER delivered to a window through the ordinary dispatch loop."""
+    timer = int(_SetTimer(hwnd, 1, ms, None))
+    if not timer:
+        raise OSError("Windows refused the capture watchdog timer.")
+    return timer
+
+
+def kill_window_timer(hwnd: int, timer: int) -> None:
+    _KillTimer(hwnd, timer)
+
+
 def beep(sound: int) -> None:
     """A Windows system sound (an MB_ICON* value, or MB_OK); it plays in the background."""
     _MessageBeep(sound)

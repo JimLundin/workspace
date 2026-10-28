@@ -17,10 +17,10 @@ if sys.platform != "win32":
     raise unittest.SkipTest("Windows computer automation")
 
 from assistant import commands, uia
-from assistant.app import WinMachine
 from assistant.desktop import WinDesktop
 from assistant.geometry import Shot, fit
 from assistant.llm import Json
+from assistant.machine import WinMachine
 from assistant.ui import Ui
 from winapi.screen import Monitor
 from winapi.shapes import Rect
