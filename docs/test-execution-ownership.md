@@ -11,7 +11,12 @@ All native modules run after those workers exit.
 Their provider/process startup slowed in the first expanded-pool measurement.
 The strict overall-deadline HTTP module runs in that quiet phase too: its
 half-second budget must not be consumed by competing SDK initialization before
-the fixture receives the request. The remaining non-native sequential modules can overlap the portable phase. Narrow checks retain their selected order without pool startup.
+the fixture receives the request. The streaming module also runs there: its
+bounded tool/event handshakes took 3.40 seconds and missed the three-second start
+deadline during the combined full run, then passed in 1.75 seconds in the focused
+run without the worker pool. Its assertions and deadlines are unchanged.
+The remaining non-native sequential modules can overlap the portable phase.
+Narrow checks retain their selected order without pool startup.
 
 The additional inventory was reviewed against these resource owners:
 

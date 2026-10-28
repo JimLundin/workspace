@@ -60,6 +60,7 @@ PORTABLE = (
 # Strict elapsed deadlines suffer under competing SDK/source work. All native
 # modules run after these workers exit too, keeping their fixture costs stable.
 AFTER_WORKERS = frozenset({
+    'tests/test_agent_streaming.py',
     'tests/test_graph_http.py',
 })
 

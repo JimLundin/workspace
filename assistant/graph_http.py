@@ -11,7 +11,7 @@ lazy import httpx
 
 from assistant.llm import Json
 
-_JSON_OBJECT = TypeAdapter(dict[str, Json])
+_JSON_VALUE = TypeAdapter(Json)
 
 
 class GraphError(OSError):
@@ -68,5 +68,8 @@ class Http:
                 data.extend(chunk)
                 if len(data) > 1_000_000:
                     raise GraphError("Microsoft's response exceeded the size limit.")
-            result = _JSON_OBJECT.validate_json(data or b"{}")
-            return response.status_code, result
+            match _JSON_VALUE.validate_json(data or b"{}"):
+                case dict() as result:
+                    return response.status_code, result
+                case _:
+                    raise GraphError("Microsoft returned an unexpected response.")

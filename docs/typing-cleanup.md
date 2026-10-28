@@ -50,3 +50,10 @@ tests, with only obsolete relative imports/bootstrap interfaces differing; the
 final handoff ledger was already identical. The ancestry merge retains current
 source rather than replaying stale snapshot artifacts. Typing and pending
 test-runner commits were rebased onto that merge before combined validation.
+
+The first combined full run passed 1,121 tests and found two failures. The HTTP
+boundary now preserves the existing distinct error for valid JSON with an
+unexpected top-level shape. The streaming fixture's tool-start deadline missed
+under portable-worker contention and passed in the affected run. Its module now
+uses the runner's existing post-worker phase, preserving its deadlines and
+assertions. Both affected modules passed ten tests after the HTTP correction.
