@@ -34,7 +34,7 @@ from automation.task import (
     Waiting,
 )
 
-from .work_fixture import seed_tasks
+from .work_fixture import seed_tasks, seed_verified_actions
 
 
 def specification(operation: str = "write notes") -> ActionSpec:
@@ -448,11 +448,12 @@ def test_approval_consumption_query_does_not_depend_on_action_pagination(tmp_pat
     first = specification("first authorized action")
     store.begin_action(run.run, "first", first, at=3)
     store.finish_action("first", ActionNotApplied("The application rejected it before applying a change."), at=4)
-    for index in range(105):
-        action_id = f"later-{index:03d}"
-        store.begin_action(run.run, action_id, specification(action_id), at=10 + index * 2)
-        outcome = ActionReturned("The adapter returned.") if index == 0 else ActionVerified("The result was inspected.")
-        store.finish_action(action_id, outcome, at=11 + index * 2)
+    store.begin_action(run.run, "later-000", specification("later-000"), at=10)
+    store.finish_action("later-000", ActionReturned("The adapter returned."), at=11)
+    store.begin_action(run.run, "later-001", specification("later-001"), at=12)
+    sample = store.finish_action("later-001", ActionVerified("The result was inspected."), at=13)
+    assert sample is not None
+    seed_verified_actions(store, sample, tuple(f"later-{index:03d}" for index in range(2, 105)))
     assert "first" not in {action.id for action in store.actions("task")}
     assert store.action_since("task", first.fingerprint, after=3)
     assert not store.action_since("task", first.fingerprint, after=4)

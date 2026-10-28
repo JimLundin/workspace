@@ -31,11 +31,23 @@ lazy import selfcheck
 lazy from runtime import activate
 lazy from scripts import quality
 lazy from scripts.check_native import execute_native
+lazy from concurrent.futures import ProcessPoolExecutor
 
 ROOT = Path(__file__).resolve().parent.parent
 BROAD = frozenset({'keeper.py', 'selfcheck.py', 'runtime.py', 'workspace.pyw', 'config.py', 'protocol.py', 'pyproject.toml'})
 TEST_NAMES = TypeAdapter[list[str]](list[str])
 WINDOWS_IMPORTS = ('WinDLL', 'WINFUNCTYPE', 'windll', 'winreg', 'msvcrt', '_winapi', 'PySide6', 'shiboken6', 'win32more')
+# Reviewed effect owners: fake desktop adapters, private localhost endpoints,
+# and per-function temporary stores. These modules never use the shared desktop
+# or installed source. Explicit inventory, rather than filename inference, keeps
+# new/native tests sequential until their effects have been reviewed.
+# Heavier modules lead the queue. Two workers halved this exact group's measured
+# elapsed time (123.49 -> 60.86s), including SDK startup and worker shutdown.
+PORTABLE = (
+    'tests/test_agent.py', 'tests/test_meeting_followup.py', 'tests/test_publishing.py',
+    'tests/test_meeting_execution.py', 'tests/test_architecture.py', 'tests/test_meeting_workflow.py',
+    'tests/test_quality.py', 'tests/test_work_store.py', 'tests/test_work_actions.py',
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -161,6 +173,11 @@ def execute(selection: Selection, root: Path) -> Results:
     first = execute_tests(generated, root)
     if broad:
         with timed('phase:import all production modules', phases):
+            # This phase already requires the SDK. Resolve its dependency graph
+            # before Qt installs its per-module source-inspection callback.
+            # Narrow/Qt-only checks never pay this preload; generic source
+            # fixtures without the SDK keep their existing import inventory.
+            import_changed(('assistant/sdk.py',), root, failures)
             selfcheck.import_all(root, failures)
     if not failures:
         with timed('phase:import changed source', phases):
@@ -168,12 +185,55 @@ def execute(selection: Selection, root: Path) -> Results:
     if failures:
         return first[0], first[1], (*first[2], *failures), (*phases, *first[3])
     remaining = tuple(name for name in selection.tests if not name.startswith('tests/properties/'))
-    following = execute_tests(remaining, root)
+    following = execute_overlapped(remaining, root) if broad else execute_tests(remaining, root)
     return first[0] + following[0], first[1] + following[1], (*first[2], *following[2]), (*phases, *first[3], *following[3])
 
 
+def prepare_worker(root: Path) -> None:
+    activate()
+    os.environ.pop('WORKSPACE_E2E', None)
+    # No properties run in these workers. Their selected SDK tests already need
+    # this graph; resolving it before Qt avoids Qt's dependency-source inspection.
+    if (root / 'assistant' / 'sdk.py').is_file():
+        importlib.import_module('assistant.sdk')
+
+
+def execute_overlapped(tests: tuple[str, ...], root: Path) -> Results:
+    portable = tuple(selector for name in PORTABLE for selector in tests if selector.partition('::')[0] == name)
+    # Worker startup is disproportionate for a small editing scope. Use this
+    # only in broad native runs, where the desktop lane can hide that startup.
+    if len(portable) < 2 or not any(name.startswith('tests/test_windows_') for name in tests):
+        return execute_tests(tests, root)
+    sequential = tuple(name for name in tests if name not in portable)
+    phases: list[tuple[float, str]] = []
+    results: list[Results] = []
+    # The coordinator owns futures and ledgers until all children exit. Only
+    # immutable Results cross the stdlib pool boundary; no desktop work is
+    # submitted to it. Parent tests and each complete worker module keep their
+    # ordinary executor, fixtures, assertions and failure protocol.
+    with timed('phase:portable worker dispatch', phases):
+        pool = ProcessPoolExecutor(max_workers=2, initializer=prepare_worker, initargs=(root,))
+    try:
+        with timed('phase:portable worker submission', phases):
+            pending = tuple((name, pool.submit(execute_tests, (name,), root)) for name in portable)
+        results.append(execute_tests(sequential, root))
+        with timed('phase:portable worker completion', phases):
+            for name, future in pending:
+                try:
+                    passed, skipped, failures, timings = future.result(timeout=240)
+                    results.append((passed, skipped, failures, tuple((seconds, 'worker:' + label) for seconds, label in timings)))
+                except Exception:
+                    results.append((0, 0, (f'Portable worker failed for {name}\n{traceback.format_exc()}',), ()))
+    finally:
+        with timed('phase:portable worker shutdown', phases):
+            pool.shutdown(wait=True, cancel_futures=True)
+    return (sum(result[0] for result in results), sum(result[1] for result in results),
+            tuple(failure for result in results for failure in result[2]),
+            (*phases, *(duration for result in results for duration in result[3])))
+
+
 def execute_tests(tests: tuple[str, ...], root: Path) -> Results:
-    # Same small test-function protocol as selfcheck, sequential on the shared desktop.
+    # Same small test-function protocol as selfcheck, sequential within its owner.
     # Accumulators belong to this executor; only immutable observations leave it.
     failures: list[str] = []
     timings: list[tuple[float, str]] = []
@@ -337,10 +397,12 @@ def main() -> None:
     write(evidence, {'kind': 'workspace-check-timings-v1', 'files': current, 'tests': selection.tests,
                      'profile': selection.reason, 'passed': passed, 'failed': len(failures), 'skipped': skipped,
                      'elapsed_seconds': elapsed, 'durations': observations,
-                     'unattributed_seconds': max(0.0, elapsed - sum(seconds for seconds, _ in observations))})
+                     'worker_seconds': sum(seconds for seconds, label in observations if label.startswith('worker:')),
+                     'unattributed_seconds': max(0.0, elapsed - sum(seconds for seconds, label in observations
+                                                                  if not label.startswith('worker:')))})
     print(f'{passed} passed, {len(failures)} failed, {skipped} skipped in {elapsed:.2f}s; source-bound editing profile')
     print(f'Complete cost evidence: {evidence}', flush=True)
-    for seconds, name in sorted((item for item in timings if not item[1].startswith(('phase:', 'module:'))), reverse=True)[:5]:
+    for seconds, name in sorted((item for item in timings if not item[1].startswith(('phase:', 'module:', 'worker:module:'))), reverse=True)[:5]:
         print(f'{seconds:.3f}s {name}')
     if not failures and args.receipt:
         write(args.receipt, {'kind': 'workspace-edit-check-v1', 'files': current, 'tests': selection.tests,

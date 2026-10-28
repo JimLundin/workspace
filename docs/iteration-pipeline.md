@@ -66,17 +66,36 @@ review. Hypothesis examines loaded modules for constants; loading the complete
 native SDK first also feeds bundled dependency sources into that work. Compilation,
 the complete broad import review and final source binding still run. This reduces
 one setup cost; native process/browser fixtures remain expensive.
+The broad editing import phase resolves the required SDK before Qt can inspect
+its new dependency sources. This applies only when that phase already imports
+all production modules; narrow/Qt-only checks do not acquire the SDK. The
+protected import gate remains unchanged and import failures still block.
+
 
 Every editing check that reaches execution retains full cost evidence, including on test or
 import failure, under `%LOCALAPPDATA%\workspace\development\timings\check-*.json`.
 Use `--timings "$env:TEMP\workspace-cost.json"` to choose the destination. Reports
 contain source identities, the selected scope, all phase/test-module import/test
 body durations, counts and unattributed overhead. Bodies include fixture setup
-and cleanup; the spans do not overlap. Evidence excludes source/response content
+and cleanup. Evidence excludes source/response content
 and exception messages. It is separate from the success-only deployment receipt.
 Runner startup before its timer, report-writing cost, early preflight failures
 and interrupted processes are outside this accounting. See the [full-suite investigation](test-speed-investigation.md)
 for measured portable costs and the limits of current full-run attribution.
+
+Broad native editing checks run nine explicitly reviewed isolated test modules
+through two standard-library process workers, alongside the single sequential
+desktop-test lane. Their private files, localhost transports and fake desktop
+adapters allow that overlap; new modules stay sequential until reviewed.
+Properties still run first, before SDK/native imports, and narrow editing checks
+keep their existing executor without worker startup. Workers finish and exit
+before source validation and any deployment. The protected full gate is unchanged.
+
+Worker module/body durations use the `worker:` prefix and may overlap parent
+spans. `worker_seconds` is aggregate child work, not elapsed time; unattributed
+overhead excludes those overlapping spans. Parent phase/body durations remain
+nonoverlapping. The paired 152-function worker benchmark took 123.49 seconds
+with one worker and 60.86 seconds with two, including startup and shutdown.
 
 Every `Dev.cmd check` first runs the source architecture review, including when
 `--tests` selects individual behavioral checks. The review parses source without
@@ -104,6 +123,14 @@ contracts even though their fixtures use Python and dependencies. Disposable
 browser fixtures explicitly remove their profiles after closing the browser,
 with a short bounded retry for late native file release; persistent cleanup
 failures remain failures.
+Compatible DOM, screenshot and chat-navigation cases share explicitly owned
+isolated browser fixtures with page state reset between scenarios. Persistence,
+cancellation, attach/detach and native tab/group ownership checks remain. UIA
+truncation uses a boundary-sized quote-heavy value rather than 10,000 WPF lines;
+short multiline input and independent process readback remain. Pagination
+catalogs batch irrelevant verified action rows; important effects and durable
+failure/recovery checks still use public writes and independent connections.
+
 
 Draft policy tests use a fictional command handler with real JSON response files.
 One complete draft scenario runs that same handler in a subprocess; other cases

@@ -1,12 +1,105 @@
 # Why the full Windows suite became slow
 
+## Portable workers and the remaining browser cost
+
+The next authoritative full baseline was **576.819 seconds (9m 37s)**:
+1109 passed, zero failed and six reported skips. The previous changes saved
+27.849 seconds overall; bodies and fixtures still consumed 545.218 seconds.
+The two properties including their module imports took 15.332 seconds. The
+browser family took 169.718 seconds. These timings rule out property generation
+and tiny test functions as the main remaining bottleneck.
+
+A paired native benchmark ran the same 152 functions from nine reviewed
+modules through the unchanged test executor. One standard library process
+worker took **123.493 seconds**, two took **60.860 seconds**, including worker
+startup, SDK imports, real fixtures and shutdown; both had zero failures/skips.
+The editing runner now overlaps those two workers with its sequential native
+lane during broad native checks. The explicit module inventory in `check.py`
+owns this decision; filenames do not automatically authorize concurrent effects.
+Narrow checks avoid startup. Properties, full imports, final hashes, failure
+aggregation and success-only receipts remain. Worker spans have a `worker:`
+prefix and are excluded from nonoverlapping elapsed accounting. This benchmark
+is not a predicted new full-suite total.
+
+The next browser probe ran the actual recovery case and three native tab cases
+against disposable profiles and fictional localhost pages. Its 90.876 seconds
+included 56.252 seconds in 15 `browser_open` requests and 12.411 seconds in
+browser close calls. Nested spans must not be summed. Recovery polling was
+smaller than repeated CDP frame/context requests. The three compatible native
+tab scenarios now share one lifecycle and explicitly restore their created
+tabs between scenarios; all disconnect, grouping, identical-URL, cross-window,
+activation and reload assertions remain. The first changed probe passed every
+behavioral assertion but reported a native process-exit timeout during cleanup;
+that failure remains visible and requires the final native run to pass.
+
+Reproduction and raw observations are in Windows Temp
+`workspace-test-cost-probes/portable_workers_probe.py`, `portable-workers-1.json`,
+`portable-workers-2.json`, `browser_next_probe.py` and `browser-next-*.json`.
+The completed full result is retained separately as
+`workspace-native-portable-overlap-final.timings.json` and its success receipt.
+
+## Latest full measurement and four ordered changes
+
+The last complete run, before these four changes, took **604.668 seconds
+(10m 5s)**: 1115 passed, one failed and six reported skips. The earlier native
+run took 1143.67 seconds (19m 4s). This is an observed 47.1% reduction across
+snapshots, not a controlled benchmark. The failed localhost Teams fixture is
+fixed below; its single-tab reuse remains in production.
+
+That snapshot had **1124 actual test functions in 122 modules**: 1122 ordinary
+scenarios and two Hypothesis properties, configured for at most 100 examples
+each. Runner passes count functions, not generated examples. Five opt-in E2E
+functions were omitted through three module skips; three further functions
+skipped. The properties plus their module imports took **8.641 seconds (1.43%)**.
+They do not explain the ten-minute suite.
+
+Complete attribution: test bodies/fixtures 540.240s (native 307.284s,
+portable/property 232.956s), broad production imports 53.423s, compilation
+5.652s, test-module imports 2.604s, remaining policy/manifests about 2.6s.
+Only 109 functions taking at least one second consumed 416.599s; 692 functions
+below 0.1s consumed 12.412s. The browser family consumed 153.145s and the
+largest UI Automation case 37.946s.
+
+The ordered investigation produced these changes:
+
+| Area | Change and evidence |
+| --- | --- |
+| Browser | Removed five duplicate lifecycles: pagination shares the DOM/persistence browser; inactive screenshots share the attached-session browser; four navigation recoveries reload one explicitly owned localhost target. Recovery bodies observed 39.970s → 20.336s. All 15 browser/group cases passed. The before group had a late profile cleanup failure; warmed unchanged cases also improved, so this is not an isolated causal delta. |
+| Imports | Broad editing checks now resolve the required SDK graph after properties and before the unchanged full import gate. Qt classifications fell 1437 → 286. Existing/SDK-first/existing fresh-process profiles took 63.599s / 17.897s / 18.394s; Qt source inspection took 43.621s / 0.279s / 1.401s. This removes cold-source-read exposure; warmed savings were only 0.497s. Narrow and Qt-only checks do not preload SDK. |
+| UI Automation | Replaced 10,000 WPF lines with 12,001 quotes, retaining short multiline/UTF-8 input and both truncation boundaries. Whole scenario observed 39.989s → 19.250s, including warmer unaffected operations. Same fixture, same provider, one batch: old/new/old SetValue took 4.078s / 0.183s / 1.773s. Real IDs, 15 actions, password protection, failures, pagination and independent readback remain. |
+| Publishing/storage | Two irrelevant action catalogs now use verified template rows: 410 catalog commits → eight, keeping the earlier unresolved outcomes on real public writes. The same two pagination bodies took 4.484s → 0.368s. Publication refusal bodies share one reset local repository: 9.077s → 5.704s; six baseline repositories → four. Real Git, candidate execution, durable ordering and remote readback remain. All 44 affected publication/store/action cases passed. |
+
+The current inventory is **1117 functions in the same 122 modules**: 1115
+ordinary scenarios plus two properties. Seven former functions were consolidated;
+their assertions remain. No new complete suite was run after these changes and
+no new full-suite total is claimed. Before/after whole scoped totals often select
+different modules; compare their named bodies and the mechanism evidence.
+
+All browser probes use disposable Edge profiles and localhost fictional pages.
+They never navigate the user's signed-in browser or open real Teams tabs. The
+localhost Teams fixture supplies Teams-looking metadata only at its connection
+boundary. Explicit profile disposal uses the existing bounded native-release
+retry, and persistent failures remain visible. The protected selfcheck/full CI
+gates and runtime pins were not changed for these optimizations.
+
+Detailed reports and exact selected scopes are retained in
+[test-speed-timings.json](test-speed-timings.json). Reproduction/complete raw
+profiles remain under Windows Temp `workspace-test-cost-probes/`, including
+`import_order_comparison.py`, `profile_uia_after.py` and
+`uia_value_comparison.py`. The last full report is
+`workspace-full-after-overhead.timings.json` in Windows Temp. These measurements
+include setup/cleanup, run sequentially on one workstation, and have varying
+filesystem caches. Nested/cumulative profiler spans must not be added.
+
+## Earlier investigation
+
 Investigated on 2026-10-28 against the active checkout, recorded full-test history,
 exact Qt/PySide6 6.12.0 upstream source, and the coordinating agent's completed
 native probes. Bounded diagnostic cohorts ran sequentially after the coordinated
 deployment; none launched Edge or the full suite. Historical/static inventories
 and individual runs refer to different snapshots and are not a controlled benchmark.
 
-**About 910 seconds of the latest 1143.67-second run remain unaccounted for.** Only
+**At this earlier point, about 910 seconds of the 1143.67-second run were unaccounted for.** Only
 its five slowest body timings were retained: 234.102 seconds, or 20.5% of the total.
 There is a context-sensitive SDK/Qt import cost and substantial test growth.
 Current portable cohorts and warmed import-gate repeats are much faster than the
