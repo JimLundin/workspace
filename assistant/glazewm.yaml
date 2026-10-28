@@ -1,0 +1,62 @@
+# Workspace owns keyboard bindings and the desktop bar. GlazeWM only tiles windows.
+general:
+  startup_commands: []
+  shutdown_commands: []
+  config_reload_commands: []
+  focus_follows_cursor: false
+  toggle_workspace_on_refocus: false
+  cursor_jump: { enabled: false, trigger: monitor_focus }
+  hide_method: cloak
+  show_all_in_taskbar: false
+
+gaps:
+  scale_with_dpi: true
+  inner_gap: 0px
+  outer_gap: { top: 0px, right: 0px, bottom: 0px, left: 0px }
+
+window_effects:
+  focused_window:
+    border: { enabled: false, color: '#8e9dcc' }
+    hide_title_bar: { enabled: false }
+    corner_style: { enabled: true, style: square }
+    transparency: { enabled: false, opacity: '100%' }
+  other_windows:
+    border: { enabled: false, color: '#8e9dcc' }
+    hide_title_bar: { enabled: false }
+    corner_style: { enabled: true, style: square }
+    transparency: { enabled: false, opacity: '100%' }
+
+window_behavior:
+  initial_state: tiling
+  state_defaults:
+    floating: { centered: false, shown_on_top: false }
+    fullscreen: { maximized: true, shown_on_top: false }
+
+workspaces:
+  - name: '1'
+  - name: '2'
+  - name: '3'
+  - name: '4'
+  - name: '5'
+
+window_rules:
+  - commands: ['ignore']
+    match:
+      - window_title: { regex: '(?i)^workspace(?:\b| ·)' }
+        window_process: { regex: '^pythonw?$' }
+      - window_class: { equals: '#32770' }
+      - window_process: { equals: 'LockApp' }
+      - window_process: { equals: 'SearchHost' }
+      - window_process: { equals: 'StartMenuExperienceHost' }
+      - window_process: { equals: 'ShellExperienceHost' }
+      - window_title: { regex: '[Pp]icture.in.[Pp]icture' }
+        window_class: { regex: 'Chrome_WidgetWin_1|MozillaDialogClass' }
+      - window_process: { equals: 'EXCEL' }
+        window_class: { not_regex: 'XLMAIN' }
+      - window_process: { equals: 'WINWORD' }
+        window_class: { not_regex: 'OpusApp' }
+      - window_process: { equals: 'POWERPNT' }
+        window_class: { not_regex: 'PPTFrameClass' }
+
+binding_modes: []
+keybindings: []
