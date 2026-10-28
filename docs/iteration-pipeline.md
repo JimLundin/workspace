@@ -23,6 +23,80 @@ and 13.3 seconds from identical Windows-local source in a paired measurement.
 
 ## Edit loop
 
+For continuous feedback, install the small development-only watcher once:
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install watchdog==6.0.0
+.\Dev.cmd watch --tests tests/test_bar_model.py
+.\Dev.cmd preview
+```
+
+`watch` runs affected tests by default, including native tests on Windows.
+`--tests` accepts the same files and `::test_function` selectors as `check`;
+`--source-only` omits native modules from automatic selection. Saves are debounced
+and checks run sequentially in fresh processes. An edit during a check queues the
+latest source; failures and superseded checks keep the previous successful session
+baseline. That baseline lives in Windows Temp, separately from the deployed
+manifest, and is removed when the watch session ends. Finish with the ordinary
+source-bound final check and deployment commands below.
+
+`preview` watches and restarts real toolbar/feed widgets with sample data and
+inert actions. Its selector retains the sample state across restarts. It starts
+no keeper, microphone, keyboard observer, live communications or taskbar recovery
+worker. The preview's native-only menu actions are inert too. Closing the preview
+control window or pressing Ctrl+C closes its views and stops the watcher.
+Use `Dev.cmd preview --preview toolbar` or `--preview feed` to narrow the surface;
+`Dev.cmd watch --preview both` combines checks with a preview. Saves to production
+Python/UI assets restart the preview; test/docs saves only trigger checks.
+Watch and preview tasks are also available in VS Code. These development processes
+are separately classified so they can coexist with source deployment.
+
+Editing checks cache immutable per-file policy findings and import dependencies
+under `%LOCALAPPDATA%\workspace\development\analysis`. Keys bind source content,
+file identity, checkout, Python/Pydantic versions, analysis code and project
+configuration; quality keys also bind fresh Ruff diagnostics. Whole-graph keyboard
+ownership, model membership, migration baselines and exact exceptions are still
+evaluated every run. Source hashes are still checked before and after execution.
+Missing/damaged cached records are recomputed. The protected full selfcheck uses
+no disk cache; CI coverage and runtime pins are unchanged. Shared bounded AST
+parsing and grouping Ruff diagnostics also reduce work in the first analysis.
+
+Generated domain checks run before the editing runner's broad dependency import
+review. Hypothesis examines loaded modules for constants; loading the complete
+native SDK first also feeds bundled dependency sources into that work. Compilation,
+the complete broad import review and final source binding still run. This reduces
+one setup cost; native process/browser fixtures remain expensive.
+The broad editing import phase resolves the required SDK before Qt can inspect
+its new dependency sources. This applies only when that phase already imports
+all production modules; narrow/Qt-only checks do not acquire the SDK. The
+protected import gate remains unchanged and import failures still block.
+
+
+Every editing check that reaches execution retains full cost evidence, including on test or
+import failure, under `%LOCALAPPDATA%\workspace\development\timings\check-*.json`.
+Use `--timings "$env:TEMP\workspace-cost.json"` to choose the destination. Reports
+contain source identities, the selected scope, all phase/test-module import/test
+body durations, counts and unattributed overhead. Bodies include fixture setup
+and cleanup. Evidence excludes source/response content
+and exception messages. It is separate from the success-only deployment receipt.
+Runner startup before its timer, report-writing cost, early preflight failures
+and interrupted processes are outside this accounting. See the [full-suite investigation](test-speed-investigation.md)
+for measured portable costs and the limits of current full-run attribution.
+
+Broad native editing checks run nine explicitly reviewed isolated test modules
+through two standard-library process workers, alongside the single sequential
+desktop-test lane. Their private files, localhost transports and fake desktop
+adapters allow that overlap; new modules stay sequential until reviewed.
+Properties still run first, before SDK/native imports, and narrow editing checks
+keep their existing executor without worker startup. Workers finish and exit
+before source validation and any deployment. The protected full gate is unchanged.
+
+Worker module/body durations use the `worker:` prefix and may overlap parent
+spans. `worker_seconds` is aggregate child work, not elapsed time; unattributed
+overhead excludes those overlapping spans. Parent phase/body durations remain
+nonoverlapping. The paired 152-function worker benchmark took 123.49 seconds
+with one worker and 60.86 seconds with two, including startup and shutdown.
+
 Every `Dev.cmd check` first runs the source architecture review, including when
 `--tests` selects individual behavioral checks. The review parses source without
 importing the application. It enforces transitive keyboard isolation, immutable
@@ -35,7 +109,7 @@ Read [code-quality-policies.md](code-quality-policies.md) when changing a
 signature or its exact migration entry. Architecture migration exceptions
 are printed as cleanup debt. A policy failure stops before tests or a receipt.
 The full protected selfcheck also exercises the review through its ordinary flat
-test discovery. Source discovery and the class-slots policy recurse into nested
+test discovery. Source discovery and the static data-record declaration checks recurse into nested
 modules without scanning interpreter/dependency folders; deployed copies need no
 Git checkout. Static checks do not prove deep immutability through arbitrary
 aliases or objects, mathematical purity, or external-data validation; those also
@@ -43,12 +117,36 @@ require type checking and review under the policy in `AGENTS.md`.
 
 Test review starts with the Workspace decision, policy or ownership failure a
 case can detect. Direct Python/dependency behavior is outside the test surface.
-The class-slots check enforces our declarations; native bundle and Qt startup
-checks verify our selection and initialization order. Those remain owned
+The static architecture check enforces frozen, slotted data-record declarations.
+Native bundle and Qt startup checks verify our selection and initialization order. Those remain owned
 contracts even though their fixtures use Python and dependencies. Disposable
 browser fixtures explicitly remove their profiles after closing the browser,
 with a short bounded retry for late native file release; persistent cleanup
 failures remain failures.
+Compatible DOM, screenshot and chat-navigation cases share explicitly owned
+isolated browser fixtures with page state reset between scenarios. Persistence,
+cancellation, attach/detach and native tab/group ownership checks remain. UIA
+truncation uses a boundary-sized quote-heavy value rather than 10,000 WPF lines;
+short multiline input and independent process readback remain. Pagination
+catalogs batch irrelevant verified action rows; important effects and durable
+failure/recovery checks still use public writes and independent connections.
+
+
+Draft policy tests use a fictional command handler with real JSON response files.
+One complete draft scenario runs that same handler in a subprocess; other cases
+avoid starting Python for every simulated mail operation. The draft identity,
+commit ordering, lost acknowledgment, edited/deleted items and recipient checks
+still run, including Windows sharing behavior. The blanket runtime slots audit
+was removed; Python instance-storage behavior is trusted.
+
+Feed-triage fixtures keep real worker threads, locks and authenticated HTTP
+requests. Tests explicitly release debounce steps instead of waiting 1.5 seconds
+per step; the local fixture server uses a short idle shutdown poll. The daily
+refresh case still exercises the real periodic wake without a new observation.
+The fixture supplies the real server adapter and cancellable wait dependency
+through `Triage` construction; it does not patch native events or module globals.
+Feed-tool cases use the registered tool boundary; the general SDK conversation
+scenarios remain in `tests/test_agent.py`.
 
 Generated tests live in `tests/properties/` and use the pinned `test` extra
 (`python -m pip install -e ".[test]"` in the development environment). Editing
