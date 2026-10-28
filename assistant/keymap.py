@@ -39,8 +39,9 @@ ROWS: Final = (
     _row(0x10, "Q W E R T Y U I O P \u00c5 \u00a8"),
     ((Scancode(0x3A), "Caps"), *_row(0x1E, "A S D F G H J K L \u00d6 \u00c4"), (Scancode(0x2B), "'")),
     ((Scancode(0x56), "<"), *_row(0x2C, "Z X C V B N M , . -")),
+    ((Scancode(0x39), "Space"),),
 )
-"""The keyboard's letter block, row by row: scancode and the Nordic keycap's name."""
+"""The keyboard's letter block and Spacebar: scancode and Nordic keycap name."""
 
 PHYSICAL_NAMES: Final = {scancode: name for row in ROWS for scancode, name in row}
 
@@ -85,6 +86,14 @@ TOOL_NAMES: Final = {
     Tool.AGENT_VOICE: "Agent talk", Tool.AGENT_TYPED: "Agent", Tool.STOP: "Stop",
     Tool.SNAP_LEFT: "Snap ←", Tool.SNAP_RIGHT: "Snap →", Tool.MAXIMIZE: "Max", Tool.MINIMIZE: "Min",
     Tool.NEXT_MONITOR: "Monitor →",
+    Tool.TILE_FOCUS_LEFT: "Focus ←", Tool.TILE_FOCUS_DOWN: "Focus ↓", Tool.TILE_FOCUS_UP: "Focus ↑", Tool.TILE_FOCUS_RIGHT: "Focus →",
+    Tool.TILE_FLOAT: "Float", Tool.TILE_PREVIOUS_WORKSPACE: "Space ←", Tool.TILE_NEXT_WORKSPACE: "Space →",
+    Tool.TILE_DIRECTION: "Tile axis", Tool.TILE_PAUSE: "Pause tiles",
+    Tool.MEETING_TOGGLE: "Record", Tool.AGENT_VOICE_TOGGLE: "Agent toggle", Tool.COPY_TRANSCRIPT: "Copy speech",
+    Tool.DICTATE_TOGGLE: "Dictate toggle",
+    Tool.OPEN_INBOX: "Inbox",
+    Tool.WINDOW_SWITCHER: "Windows", Tool.TILE_BALANCE: "Spread tiles",
+
 }  # fmt: skip
 if set(TOOL_NAMES) != set(Tool):
     raise ImportError("every tool needs a name on the key map")
@@ -123,8 +132,6 @@ def describe(a: Action) -> tuple[str, Kind]:
 
 
 _HOLD_TO_TALK: Final = frozenset({Tool.DICTATE, Tool.DICTATE_CLEAN, Tool.DICTATE_COMMAND, Tool.REWRITE_VOICE, Tool.AGENT_VOICE})
-
-
 def _hold(a: Action) -> str:
     if a in _HOLD_TO_TALK:
         return "hold"
@@ -148,8 +155,7 @@ def keymap(layer: Layer | None) -> list[list[Cap]]:
             if scancode == ESCAPE:
                 caps.append(Cap(name, "On/off", "hold: quit", Kind.SPECIAL))
             elif (tool := VOICE_KEYS.get(scancode)) is not None:
-                label = "Agent" if tool is Tool.AGENT_VOICE else TOOL_NAMES[tool]
-                caps.append(Cap(name, label, "hold", Kind.TOOL))
+                caps.append(Cap(name, TOOL_NAMES[tool], "hold" if tool is Tool.DICTATE else "toggle", Kind.TOOL))
             else:
                 match slot(scancode):
                     case Unmapped():
@@ -159,7 +165,8 @@ def keymap(layer: Layer | None) -> list[list[Cap]]:
                     case int(cell):
                         a = action(layer, cell)
                         label, kind = describe(a)
-                        caps.append(Cap(name, label, _hold(a), kind))
+                        hold = _hold(a)
+                        caps.append(Cap(name, label, hold, kind))
         rows.append(caps)
     return rows
 
