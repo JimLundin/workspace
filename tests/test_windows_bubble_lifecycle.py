@@ -2,12 +2,12 @@
 
 import sys
 import unittest
-from unittest.mock import patch
 
 if sys.platform != "win32":
     raise unittest.SkipTest("Windows bubble resource ownership")
 
-from assistant.notifications import Content, Frame
+from assistant.agent_toasts import AgentToasts
+from assistant.notifications import Content, Frame, Toast
 from assistant.qt import shiboken6
 from assistant.toast_card import Card
 from winapi import appearance, windows
@@ -28,9 +28,8 @@ def test_expired_bubble_reuses_its_windows_without_retaining_content() -> None:
         assert not panel.view.cards
         assert windows.exists(handle) and windows.exists(layer.handle)
         assert not windows.is_visible(handle) and not windows.is_visible(layer.handle)
-        with patch.object(Card, "__init__", side_effect=AssertionError("A retained surface was rebuilt")):
-            panel.agent.say("Second fictional reply.")
-            panel.pump()
+        panel.agent.say("Second fictional reply.")
+        panel.pump()
         reused = next(iter(panel.view.cards.values()))
         assert reused is card and reused.handle == handle and reused.layer is layer
         assert "Second fictional reply." in reused.text.toPlainText()
@@ -43,16 +42,16 @@ def test_expired_bubble_reuses_its_windows_without_retaining_content() -> None:
 
 def test_animation_clock_starts_after_native_preparation() -> None:
     # Defect: synchronous preparation consumes the transition before its first tick.
-    with notifications(animated=True) as panel:
-        original = Card.apply_style
+    class SlowCard(Card):
+        __slots__ = ()
 
-        def prepare(card: Card, content: Content, preference: appearance.Preference) -> None:
-            original(card, content, preference)
+        def apply_style(self, content: Content, preference: appearance.Preference) -> None:
+            super().apply_style(content, preference)
             panel.now += .4
 
-        with patch.object(Card, "apply_style", prepare):
-            panel.agent.say("Fictional reply with a slow native preparation.")
-            panel.pump()
+    with notifications(animated=True, create_card=SlowCard) as panel:
+        panel.agent.say("Fictional reply with a slow native preparation.")
+        panel.pump()
         card = next(iter(panel.view.cards.values()))
         assert card.motion is not None, "Preparation used up the animation's entire duration."
         assert card.motion.started == panel.now and card.alpha == 0
@@ -63,11 +62,24 @@ def test_animation_clock_starts_after_native_preparation() -> None:
 
 def test_translation_does_not_relayout_unchanged_bubble_contents() -> None:
     # Defect: every translation frame reshapes text and lays out child controls.
-    with notifications() as panel:
+    class CountedCard(Card):
+        __slots__ = ("layouts",)
+
+        def __init__(self, owner: AgentToasts, toast: Toast, width: int) -> None:
+            self.layouts = 0
+            super().__init__(owner, toast, width)
+
+        def place_content(self, width: float, height: float, details: float) -> None:
+            self.layouts += 1
+            super().place_content(width, height, details)
+
+    with notifications(create_card=CountedCard) as panel:
         panel.agent.say("Fictional reply.")
         panel.pump()
         card = next(iter(panel.view.cards.values()))
+        assert isinstance(card, CountedCard)
         frame = card.frame
-        with patch.object(Card, "place_content", side_effect=AssertionError("Translation relaid out content")):
-            card.position(card.right, Frame(frame.y - 10, frame.width, frame.height, frame.alpha, frame.details))
+        layouts = card.layouts
+        card.position(card.right, Frame(frame.y - 10, frame.width, frame.height, frame.alpha, frame.details))
         assert card.y == frame.y - 10
+        assert card.layouts == layouts, "Translation relaid out content."

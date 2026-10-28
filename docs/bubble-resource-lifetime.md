@@ -1,5 +1,15 @@
 # Retained bubble surfaces
 
+The feed uses one column width for proposals, conversations, standalone replies
+and recording notices. The person's speech can use a smaller bubble. Long text
+wraps and expands vertically within the work-area budget; narrow-screen tests
+exercise that budget, rather than preserving text-sized reply silhouettes.
+All native scenarios use the production `Card` renderer. `AgentToasts` accepts
+desktop observations and a card factory at composition, so controlled pointer,
+work-area and native-preparation scenarios need no global patching. Qt's own
+painting and the native composition APIs remain trusted dependencies; tests
+check our geometry, resource ownership and state decisions.
+
 `AgentToasts` owns the native bubble windows and glass layers on Qt's thread.
 Dismissal, expiry, pagination and conversation resets park those resources
 instead of destroying them. Active and spare surfaces together are bounded by
