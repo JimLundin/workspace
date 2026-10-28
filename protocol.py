@@ -1,4 +1,4 @@
-"""How the toolkit's two programs talk. The layout (miryoku) owns the keyboard;
+"""How the workspace's two programs talk. The layout (miryoku) owns the keyboard;
 the assistant does everything slow. Keys on the layout send the assistant
 requests, as window messages: they are queued, ordered, cost the layout nothing
 to send, and need no admin rights. Plain Python: importable anywhere.
@@ -19,7 +19,7 @@ LAYOUT_MAGIC: Final = 0x4D49_5250
 """Layout output: bypass remapping without invalidating its own snippet history."""
 
 MAGIC: Final = 0x4D49_524F
-"""Tags input the toolkit sends, so the layout's hook lets it through untouched."""
+"""Tags input the workspace sends, so the layout's hook lets it through untouched."""
 
 
 _WM_APP: Final = 0x8000
@@ -77,6 +77,12 @@ class Tool(Enum):
     """Type a task for the agent in a box."""
     STOP = 32
     """Stop the agent."""
+    MEETING_TOGGLE = 33
+    AGENT_VOICE_TOGGLE = 34
+    COPY_TRANSCRIPT = 35
+    WINDOW_SWITCHER = 36
+    DICTATE_TOGGLE = 37
+    OPEN_INBOX = 38
     SNAP_LEFT = 40
     SNAP_RIGHT = 41
     MAXIMIZE = 42
@@ -84,6 +90,17 @@ class Tool(Enum):
     MINIMIZE = 43
     NEXT_MONITOR = 44
     """Move the window to the next monitor, same place relative to the screen."""
+    TILE_FOCUS_LEFT = 50
+    TILE_FOCUS_DOWN = 51
+    TILE_FOCUS_UP = 52
+    TILE_FOCUS_RIGHT = 53
+    TILE_FLOAT = 54
+    TILE_PREVIOUS_WORKSPACE = 55
+    TILE_NEXT_WORKSPACE = 56
+    TILE_DIRECTION = 57
+    TILE_PAUSE = 58
+    TILE_BALANCE = 59
+
 
 
 @dataclass(frozen=True, slots=True)

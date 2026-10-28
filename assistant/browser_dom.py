@@ -46,7 +46,7 @@ SNAPSHOT = r"""(options => {
             href: e.tagName === 'A' ? short(e.href, 500) : '',
         };
     });
-    globalThis.__toolkitControls = refs;
+    globalThis.__workspaceControls = refs;
     const text = document.body?.innerText || '';
     return {
         title: short(document.title, 300), url: short(location.href, 1500),
@@ -58,7 +58,7 @@ SNAPSHOT = r"""(options => {
 })"""
 
 ACTION = r"""(options => {
-    const e = globalThis.__toolkitControls?.get(options.id);
+    const e = globalThis.__workspaceControls?.get(options.id);
     if (!e || !e.isConnected) throw new Error('Control is stale. Take a fresh browser snapshot.');
     if (e.disabled || e.getAttribute('aria-disabled') === 'true') throw new Error('The control is disabled.');
     const send = type => e.dispatchEvent(new Event(type, {bubbles: true, composed: true}));

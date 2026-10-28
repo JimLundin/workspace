@@ -15,15 +15,20 @@ if sys.platform != "win32":
 
 from assistant.activity import ActivityTracker
 from assistant.app import AssistantApp
+from assistant.communications_service import Communications
+from assistant.desktop import WinDesktop
+from assistant.lifecycle import Timings
 from assistant.llm import Settings
 from assistant.meeting_store import MeetingArchive
 from assistant.meeting_workflow import MeetingWorkflow
 from assistant.meetings import Meetings
+from assistant.monitor_layout import MonitorLayout
 from assistant.overlay import OverlayState
+from assistant.tiling import GlazeWM
 from assistant.ui import Ui
 from miryoku.engine import Indicator
-from miryoku.layout import AGENT, ESCAPE, TALK, Key, Layer, Scancode
-from miryoku.win import Keyboard
+from miryoku.layout import AGENT, DICTATE_TOGGLE, ESCAPE, TALK, Key, Layer, Scancode
+from miryoku.win import Keyboard, WinHost
 from protocol import (
     LAYOUT_MAGIC,
     LAYOUT_WINDOW,
@@ -39,7 +44,7 @@ from protocol import (
     decode_indicator,
 )
 from tests.test_engine import Harness
-from winapi import inputs, recording, shell, windows
+from winapi import audio, inputs, recording, shell, system, windows
 from winapi.shapes import Rect
 
 from .test_work_agent import WorkRig
@@ -50,8 +55,9 @@ def observed_keyboard() -> Generator[tuple[Keyboard, list[tuple[int, int, int]]]
     """Capture notifications while keeping keyboard output and timers off the desktop."""
     messages: list[tuple[int, int, int]] = []
 
-    def notify(message: int, wparam: int, lparam: int) -> None:
+    def notify(message: int, wparam: int, lparam: int) -> bool:
         messages.append((message, wparam, lparam))
+        return True
 
     with (
         patch("miryoku.win.inputs.cursor_position", return_value=(0, 0)),
@@ -92,26 +98,85 @@ def test_generated_and_extended_input_does_not_light_physical_keys() -> None:
 
 def test_voice_and_unused_keys_light_up_but_unpictured_keys_do_not() -> None:
     with observed_keyboard() as (keyboard, messages):
-        for scancode in (TALK, AGENT, 0x15, 0x56, 0x35, 0x39):  # B, N, Y, ISO <, old thumb position, physical Space
+        for scancode in (TALK, AGENT, 0x15, 0x56, 0x35, DICTATE_TOGGLE):
             keyboard.swallow(inputs.KeyEvent(0, scancode, 0, 10, 0), True)
             keyboard.swallow(inputs.KeyEvent(0, scancode, 0, 40, 0), False)
         keys = [(scancode, down) for message, scancode, down in messages if message == WM_KEY_STATE]
-        assert keys == [(scancode, down) for scancode in (TALK, AGENT, 0x15, 0x56, 0x35) for down in (1, 0)]
+        assert keys == [(scancode, down) for scancode in (TALK, AGENT, 0x15, 0x56, 0x35, DICTATE_TOGGLE) for down in (1, 0)]
 
 
-def test_n_starts_agent_voice_immediately_and_updates_its_highlight() -> None:
+def test_n_toggles_agent_voice_immediately_and_updates_its_highlight() -> None:
     with observed_keyboard() as (keyboard, messages):
-        key = inputs.KeyEvent(0x4E, 0x31, 0, 10, 0)  # physical N, beside B
+        control = inputs.KeyEvent(0xA2, 0x1D, 0, 0, 0)
+        assert not keyboard.swallow(control, True)
+        key = inputs.KeyEvent(0x4E, AGENT, 0, 10, 0)
         assert keyboard.swallow(key, True)
-        assert messages == [(WM_KEY_STATE, 0x31, 1), (WM_REQUEST, Tool.AGENT_VOICE.value, 1)]
-        assert keyboard.pressed == {Scancode(0x31)}
+        assert messages == [(WM_KEY_STATE, AGENT, 1), (WM_REQUEST, Tool.AGENT_VOICE_TOGGLE.value, 1)]
+        assert keyboard.pressed == {AGENT}
         keyboard.swallow(key, True)
-        keyboard.swallow(inputs.KeyEvent(0x4E, 0x31, 0, 300, 0), False)
+        assert not keyboard.swallow(control, False)
+        keyboard.swallow(inputs.KeyEvent(0x4E, AGENT, 0, 300, 0), False)
         assert messages == [
-            (WM_KEY_STATE, 0x31, 1), (WM_REQUEST, Tool.AGENT_VOICE.value, 1),
-            (WM_KEY_STATE, 0x31, 0), (WM_REQUEST, Tool.AGENT_VOICE.value, 0),
+            (WM_KEY_STATE, AGENT, 1), (WM_REQUEST, Tool.AGENT_VOICE_TOGGLE.value, 1),
+            (WM_KEY_STATE, AGENT, 0), (WM_REQUEST, Tool.AGENT_VOICE_TOGGLE.value, 0),
         ]
         assert not keyboard.pressed
+
+
+def test_native_modifier_released_after_enabling_does_not_stick_to_space() -> None:
+    with observed_keyboard() as (keyboard, messages):
+        control = inputs.KeyEvent(0xA2, 0x1D, 0, 10, 0)
+        keyboard.engine.enabled = False
+        assert not keyboard.swallow(control, True)
+        keyboard.engine.enabled = True
+        assert not keyboard.swallow(control, False)
+        keyboard.swallow(inputs.KeyEvent(0x20, 0x39, 0, 20, 0), True)
+        assert (WM_REQUEST, Tool.DICTATE.value, 1) in messages
+
+
+def test_f6_stays_native_and_b_uses_one_toggle_per_press() -> None:
+    with observed_keyboard() as (keyboard, messages):
+        shift = inputs.KeyEvent(0xA0, 0x2A, 0, 0, 0)
+        assert not keyboard.swallow(shift, True)
+        key = inputs.KeyEvent(0x42, DICTATE_TOGGLE, 0, 10, 0)
+        keyboard.swallow(key, True)
+        keyboard.swallow(key, True)
+        keyboard.swallow(key, False)
+        requests = [(tool, down) for message, tool, down in messages if message == WM_REQUEST]
+        assert requests == [(Tool.DICTATE_TOGGLE.value, 1), (Tool.DICTATE_TOGGLE.value, 0)]
+        messages.clear()
+        function = inputs.KeyEvent(0x75, 0x40, 0, 30, 0)
+        assert not keyboard.swallow(function, True)
+        assert not keyboard.swallow(function, False)
+        assert not any(message == WM_REQUEST for message, _tool, _down in messages)
+
+
+def test_physical_arrows_navigate_apps_and_release_cleanly_after_the_thumb() -> None:
+    with observed_keyboard() as (keyboard, messages):
+        thumb = inputs.KeyEvent(0xBE, 0x34, 0, 0, 0)
+        control = inputs.KeyEvent(0xA2, 0x1D, 0, 10, 0)
+        arrow = inputs.KeyEvent(0x27, 0x4D, inputs.LLKHF_EXTENDED, 20, 0)
+        assert keyboard.swallow(thumb, True)
+        assert not keyboard.swallow(control, True)
+        assert keyboard.swallow(arrow, True)
+        assert keyboard.swallow(thumb, False)
+        assert keyboard.swallow(arrow, False)
+        assert not keyboard.swallow(control, False)
+        assert (WM_REQUEST, Tool.TILE_FOCUS_RIGHT.value, 1) in messages
+        assert (WM_REQUEST, Tool.TILE_FOCUS_RIGHT.value, 0) in messages
+        assert not keyboard.engine.desktop_held
+        assert not keyboard.swallow(arrow, True)
+        assert not keyboard.swallow(arrow, False)
+
+
+def test_picker_enter_release_passes_after_the_selected_window_takes_focus() -> None:
+    with observed_keyboard() as (keyboard, messages), patch('miryoku.win.windows.title', return_value='Workspace window switcher'):
+        keyboard.foreground = 0
+        enter = inputs.KeyEvent(0x0D, 0x1C, 0, 0, 0)
+        assert not keyboard.swallow(enter, True)
+        keyboard.picker_active = False
+        assert not keyboard.swallow(enter, False)
+        assert not keyboard.native_releases and messages == []
 
 
 def test_layout_query_resets_then_replays_all_physically_held_keys() -> None:
@@ -137,10 +202,107 @@ def test_toggle_and_input_failure_clear_held_keys() -> None:
         assert messages == []
         keyboard.on_message(WM_TOGGLE_LAYOUT)
         keyboard.swallow(key, True)
-        keyboard.input_failed()
+        keyboard.input_failed(OSError("Rejected input"))
         assert not keyboard.pressed
         assert (WM_KEY_STATE, 0, 0) in messages[-3:]
         assert not keyboard.engine.enabled
+
+
+def test_hook_failure_passes_input_even_when_recovery_effects_also_fail() -> None:
+    with (
+        patch("miryoku.win.inputs.cursor_position", return_value=(0, 0)),
+        patch("miryoku.win.inputs.read_key_event", side_effect=RuntimeError("Read failed")),
+        patch("miryoku.win.Engine.release_all", side_effect=OSError("Release failed")),
+        patch("miryoku.win.WinHost.release_owned", side_effect=OSError("Retry failed")),
+        patch("miryoku.win.WinHost.tell_assistant", side_effect=OSError("Post failed")),
+        patch("miryoku.win.inputs.call_next_hook", return_value=7),
+        patch("miryoku.win.usage.record") as record,
+    ):
+        keyboard = Keyboard()
+        assert keyboard.hook_proc(0, 0x0100, 1) == 7
+        assert not keyboard.engine.enabled and not keyboard.busy
+        assert keyboard.fault is not None and keyboard.fault.kind == "RuntimeError"
+        record.assert_not_called()
+        keyboard.maintenance()
+        record.assert_called_once()
+
+
+def test_rejected_chord_releases_its_added_modifier_and_defers_diagnostics() -> None:
+    output: list[tuple[int, int]] = []
+
+    def send(vk: int, scancode: int, flags: int, extra: int) -> None:
+        output.append((vk, flags))
+        if vk == Key.LBRACKET.vk and not flags & inputs.KEYEVENTF_KEYUP:
+            raise OSError("Sensitive content must not enter recovery logs")
+
+    with (
+        patch("miryoku.win.inputs.cursor_position", return_value=(0, 0)),
+        patch("miryoku.win.windows.foreground", return_value=0),
+        patch("miryoku.win.inputs.read_key_event", return_value=inputs.KeyEvent(0x32, 0x03, 0, 10, 0)),
+        patch("miryoku.win.inputs.send_key", side_effect=send),
+        patch("miryoku.win.inputs.scancode_for", return_value=0),
+        patch("miryoku.win.WinHost.tell_assistant", return_value=True),
+        patch("miryoku.win.inputs.call_next_hook", return_value=7),
+        patch("miryoku.win.usage.record") as record,
+    ):
+        keyboard = Keyboard()
+        keyboard.engine.locked = Layer.SYM
+        assert keyboard.hook_proc(0, 0x0100, 1) == 7
+        assert not keyboard.engine.enabled and not keyboard.host.owned
+        assert (0xA0, inputs.KEYEVENTF_KEYUP) in output
+        record.assert_not_called()
+        keyboard.maintenance()
+        record.assert_called_once()
+        assert "Sensitive content" not in str(record.call_args)
+
+
+def test_native_output_ownership_survives_rejection_until_release_is_accepted() -> None:
+    host = WinHost()
+    with patch("miryoku.win.inputs.scancode_for", return_value=0), patch("miryoku.win.inputs.send_key", side_effect=OSError("Rejected")):
+        with unittest.TestCase().assertRaises(OSError):
+            host.send(Key.A, True)
+        assert host.owned == {Key.A}
+        host.release_owned()
+        assert host.owned == {Key.A}
+    with patch("miryoku.win.inputs.scancode_for", return_value=0), patch("miryoku.win.inputs.send_key"):
+        host.release_owned()
+        assert not host.owned
+
+
+def test_recovery_retries_are_bounded_and_enabling_waits_for_accepted_releases() -> None:
+    with (
+        patch("miryoku.win.inputs.cursor_position", return_value=(0, 0)),
+        patch("miryoku.win.inputs.scancode_for", return_value=0),
+        patch("miryoku.win.inputs.send_key", side_effect=OSError("Rejected")) as send,
+        patch("miryoku.win.WinHost.tell_assistant", return_value=True),
+        patch("miryoku.win.system.beep"),
+        patch("miryoku.win.usage.record"),
+    ):
+        keyboard = Keyboard()
+        keyboard.host.owned.add(Key.A)
+        keyboard.input_failed(OSError("Input rejected"))
+        for _ in range(10):
+            keyboard.maintenance()
+        assert send.call_count == 6  # Immediate cleanup plus five timer attempts.
+        assert not keyboard.recovery_ticks and keyboard.fault is None
+        keyboard.on_message(WM_TOGGLE_LAYOUT)
+        assert not keyboard.engine.enabled
+        with patch("miryoku.win.inputs.send_key"):
+            keyboard.on_message(WM_TOGGLE_LAYOUT)
+        assert keyboard.engine.enabled and not keyboard.host.owned
+
+
+def test_capture_watchdog_timer_is_delivered_to_its_hidden_window() -> None:
+    hwnd = windows.create_hidden("Workspace watchdog fixture")
+    timer = system.set_window_timer(hwnd, 20)
+    try:
+        message = next(system.messages())
+        while message.message != system.WM_TIMER:
+            message = next(system.messages())
+        assert message.hwnd == hwnd and message.wparam == timer
+    finally:
+        system.kill_window_timer(hwnd, timer)
+        windows.destroy(hwnd)
 
 
 def test_escape_toggle_clears_highlights_with_other_keys_still_held() -> None:
@@ -159,7 +321,7 @@ def test_assistant_routes_physical_chords_and_resets_to_the_overlay(tmp_path: Pa
     def show(pressed: frozenset[Scancode], *, reset: bool = False) -> None:
         shown.append((pressed, reset))
 
-    with menu_app(LayoutState.ON, tmp_path) as app, patch("assistant.app.Ui.show_pressed_keys", side_effect=show):
+    with menu_app(LayoutState.ON, tmp_path) as app, patch.object(Ui, "show_pressed_keys", side_effect=show):
         app.ui = Ui.__new__(Ui)
         for key, down in ((0x32, 1), (0x10, 1), (0x10, 0), (0, 0)):
             assert app.on_message(1, WM_KEY_STATE, key, down) == 0
@@ -169,6 +331,27 @@ def test_assistant_routes_physical_chords_and_resets_to_the_overlay(tmp_path: Pa
         (frozenset({Scancode(0x32)}), False),
         (frozenset(), True),
     ]
+
+
+def test_tools_t_opens_inbox_once_per_press_through_keyboard_and_assistant(tmp_path: Path) -> None:
+    # Detect a wrong physical binding, repeated activation, release dispatch or wrong UI action.
+    with observed_keyboard() as (keyboard, messages), menu_app(LayoutState.ON, tmp_path) as app:
+        app.ui = Ui.__new__(Ui)
+        keyboard.swallow(inputs.KeyEvent(0x56, 0x2F, 0, 10, 0), True)
+        keyboard.engine.timeout(keyboard.host, 17)
+        assert keyboard.engine.layer() is Layer.TOOLS
+        key = inputs.KeyEvent(0x54, 0x14, 0, 250, 0)
+        keyboard.swallow(key, True)
+        keyboard.swallow(key, True)
+        keyboard.swallow(inputs.KeyEvent(0x54, 0x14, 0, 280, 0), False)
+        keyboard.swallow(inputs.KeyEvent(0x56, 0x2F, 0, 300, 0), False)
+        requests = tuple((tool, down) for message, tool, down in messages if message == WM_REQUEST)
+        assert requests == ((Tool.OPEN_INBOX.value, 1), (Tool.OPEN_INBOX.value, 0))
+        assert not keyboard.pressed and keyboard.engine.layer() is None
+        with patch.object(Ui, "open_inbox") as open_inbox:
+            for tool, down in requests:
+                assert app.on_message(1, WM_REQUEST, tool, down) == 0
+                open_inbox.assert_called_once_with(app.agent.show)
 
 
 def test_overlay_handle_accepts_mouse_input_without_taking_keyboard_focus() -> None:
@@ -214,13 +397,66 @@ def test_layout_output_preserves_snippets_but_assistant_input_resets_them() -> N
         assert keyboard.engine.typed == ""
 
 
-def test_physical_extended_arrow_clears_snippets() -> None:
+def test_native_arrow_reaches_apps_and_clears_snippets() -> None:
     with patch("miryoku.win.inputs.cursor_position", return_value=(0, 0)), patch("miryoku.win.windows.foreground", return_value=1):
         keyboard = Keyboard()
         keyboard.foreground = 1
         keyboard.engine.typed = ",,t"
         assert not keyboard.swallow(inputs.KeyEvent(0x25, 0x4B, inputs.LLKHF_EXTENDED, 0, 0), True)
         assert keyboard.engine.typed == ""
+
+
+def test_physical_shift_arrow_selection_remains_native_with_layout_enabled() -> None:
+    with observed_keyboard() as (keyboard, messages):
+        assert keyboard.engine.enabled
+        for vk, scancode in ((0x10, 0x2A), (0xA0, 0x2A), (0xA1, 0x36)):
+            shift = inputs.KeyEvent(vk, scancode, 0, 0, 0)
+            assert not keyboard.swallow(shift, True)
+            for arrow_vk, arrow_scancode in ((0x25, 0x4B), (0x26, 0x48), (0x27, 0x4D), (0x28, 0x50)):
+                arrow = inputs.KeyEvent(arrow_vk, arrow_scancode, inputs.LLKHF_EXTENDED, 1, 0)
+                assert not keyboard.swallow(arrow, True)
+                assert not keyboard.swallow(arrow, True)  # Holding an arrow still repeats.
+                assert not keyboard.swallow(arrow, False)
+            assert not keyboard.swallow(shift, False)
+        assert messages == [] and not keyboard.pressed
+
+
+def test_extended_keys_never_fall_into_layout_bindings_and_function_controls_remain_available() -> None:
+    with observed_keyboard() as (keyboard, messages):
+        for vk, scancode in ((0x0D, 0x1C), (0x12, 0x38), (0x2E, 0x53), (0x4D, 0x32)):
+            for down in (True, False):
+                assert keyboard.swallow(inputs.KeyEvent(vk, scancode, inputs.LLKHF_EXTENDED, 0, 0), down)
+        assert messages == []
+        for vk, scancode in ((0x70, 0x3B), (0x7B, 0x58), (0xAD, 0x20), (0xAE, 0x2E), (0xAF, 0x30), (0xB3, 0x22), (0x5B, 0x5B)):
+            for down in (True, False):
+                assert not keyboard.swallow(inputs.KeyEvent(vk, scancode, inputs.LLKHF_EXTENDED, 0, 0), down)
+        assert messages == []
+        for down in (True, False):
+            assert not keyboard.swallow(inputs.KeyEvent(0xA3, 0x1D, inputs.LLKHF_EXTENDED, 0, 0), down)
+        keyboard.engine.enabled = False
+        for vk, scancode in ((0x0D, 0x1C), (0x11, 0x1D), (0x12, 0x38), (0x2E, 0x53)):
+            for down in (True, False):
+                assert not keyboard.swallow(inputs.KeyEvent(vk, scancode, inputs.LLKHF_EXTENDED, 0, 0), down)
+
+
+def test_modifiers_pressed_while_disabled_can_release_after_enabling_the_layout() -> None:
+    with observed_keyboard() as (keyboard, messages):
+        for vk, scancode, flags in ((0xA2, 0x1D, 0), (0xA3, 0x1D, inputs.LLKHF_EXTENDED)):
+            keyboard.engine.enabled = False
+            assert not keyboard.swallow(inputs.KeyEvent(vk, scancode, flags, 0, 0), True)
+            keyboard.engine.enabled = True
+            assert not keyboard.swallow(inputs.KeyEvent(vk, scancode, flags, 1, 0), False)
+            assert not keyboard.swallow(inputs.KeyEvent(vk, scancode, flags, 2, 0), True)
+            assert not keyboard.swallow(inputs.KeyEvent(vk, scancode, flags, 3, 0), False)
+        assert messages == []
+
+
+def test_native_function_key_clears_a_partial_snippet_without_remapping() -> None:
+    with observed_keyboard() as (keyboard, messages):
+        keyboard.engine.typed = ",,t"
+        assert not keyboard.swallow(inputs.KeyEvent(0x70, 0x3B, 0, 0, 0), True)
+        assert keyboard.engine.typed == ""
+        assert messages == []
 
 
 def test_rejected_sendinput_is_reported_without_real_injection() -> None:
@@ -323,6 +559,7 @@ def test_layout_query_includes_the_current_locked_layer_for_a_new_overlay() -> N
 def menu_app(state: LayoutState | None, folder: Path) -> Generator[AssistantApp]:
     """Only the state the menu needs; no native windows or microphone are opened."""
     app = AssistantApp.__new__(AssistantApp)
+    app.timings = Timings("test startup")
     app.layout = state
     app.overlay = OverlayState(layout_on=state is LayoutState.ON)
     app.window = shell.AppWindow.__new__(shell.AppWindow)
@@ -330,6 +567,8 @@ def menu_app(state: LayoutState | None, folder: Path) -> Generator[AssistantApp]
     rig = WorkRig(folder)
     app.agent = rig.agent
     app.settings = Settings("", "", "", "", "", "", "")
+    app.tiling = GlazeWM()
+    app.monitor_layout = MonitorLayout(app.tiling, lambda _: None)
     app.meetings = Meetings(
         app.settings, lambda source: recording.MeetingAudio(), archive=MeetingArchive(Path(__file__).parent / "missing-meeting-fixture"),
     )
@@ -360,8 +599,8 @@ def check_layout_toggle(state: LayoutState, folder: Path) -> None:
 
     with (
         menu_app(state, folder) as app,
-        patch("assistant.app.shell.show_menu", side_effect=choose),
-        patch("assistant.app.windows.find", side_effect=find),
+        patch.object(shell, "show_menu", side_effect=choose),
+        patch("winapi.windows.find", side_effect=find),
         patch("assistant.app.system.post_message", side_effect=post_message),
     ):
         app.menu()
@@ -382,7 +621,7 @@ def test_stopped_layout_has_a_start_action_and_no_active_toggle_hotkey(tmp_path:
         assert items[1].enabled
         return 0
 
-    with patch("assistant.app.shell.show_menu", side_effect=inspect_menu):
+    with patch.object(shell, "show_menu", side_effect=inspect_menu):
         for state in (None, LayoutState.QUIT):
             with menu_app(state, tmp_path) as app:
                 app.menu()
@@ -402,7 +641,7 @@ def test_tray_overlay_toggle_updates_and_remembers_the_preference(tmp_path: Path
 
     with (
         menu_app(LayoutState.ON, tmp_path) as app,
-        patch("assistant.app.shell.show_menu", side_effect=choose),
+        patch.object(shell, "show_menu", side_effect=choose),
         patch("assistant.app.indicator_area", return_value=Rect(0, 0, 1920, 1040)),
         patch("assistant.app.AssistantApp.show_overlay", side_effect=show_overlay),
         patch("assistant.app.save_enabled", side_effect=saved.append),
@@ -423,19 +662,26 @@ def test_assistant_queries_a_layout_that_started_before_it(tmp_path: Path) -> No
 
     with (
         menu_app(None, tmp_path) as app,
-        patch("assistant.app.windows.find", return_value=2),
+        patch("winapi.windows.find", return_value=2),
         patch("assistant.app.system.post_message", side_effect=post_message),
         patch("assistant.app.system.run_message_loop"),
+        patch("assistant.app.system.set_window_timer", return_value=1),
         patch("assistant.app.keeper.ready"),
-        patch("assistant.app.Ui.desktop"),
-        patch("assistant.app.MeetingWorkflow.start"),
+        patch.object(Ui, "desktop"),
+        patch.object(MeetingWorkflow, "start"),
+        patch.object(Communications, "start"),
+        patch.object(MonitorLayout, "start") as auto_tiling,
         patch("threading.Thread.start"),
     ):
         app.ui = Ui.__new__(Ui)
         app.followups = MeetingWorkflow.__new__(MeetingWorkflow)
+        app.communications = Communications.__new__(Communications)
         app.activity = ActivityTracker(lambda: "unavailable", lambda: False, enabled=False)
         app.worker = threading.Thread()
+        app.desktop = WinDesktop.__new__(WinDesktop)
+        app.desktop.mic = audio.Microphone.__new__(audio.Microphone)
         app.run()
+        auto_tiling.assert_called_once()
     assert requests == [WM_QUERY_LAYOUT_STATE]
 
 

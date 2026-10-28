@@ -62,7 +62,7 @@ class MemorySession:
     session_settings: SessionSettings | None = None
 
     def __init__(
-        self, items: list[Json], *, checkpoint: Callable[[list[Json]], None] | None = None, session_id: str = "toolkit",
+        self, items: list[Json], *, checkpoint: Callable[[list[Json]], None] | None = None, session_id: str = "workspace",
     ) -> None:
         self.items = items
         self.checkpoint, self.session_id = checkpoint, session_id
@@ -233,7 +233,7 @@ def after_tools(context: RunContextWrapper[Agent], results: list[FunctionToolRes
     if local.work is not None and local.work.disposition is not None:
         return ToolsToFinalOutputResult(is_final_output=True, final_output="Waiting for this task to continue.")
     if local.installing is not None:
-        return ToolsToFinalOutputResult(is_final_output=True, final_output=f"Installing: {local.installing}. The toolkit restarts in a moment.")
+        return ToolsToFinalOutputResult(is_final_output=True, final_output=f"Installing: {local.installing}. Workspace restarts in a moment.")
     return ToolsToFinalOutputResult(is_final_output=False)
 
 
@@ -278,7 +278,7 @@ async def run(local: Agent, task: str, prompt: str, specs: tuple[ToolSpec, ...])
     try:
         reasoning = Reasoning.model_validate({"effort": local.settings.agent_reasoning_effort, "summary": "auto"})
     except ValueError:
-        reason = f"Invalid TOOLKIT_AGENT_REASONING_EFFORT: {local.settings.agent_reasoning_effort!r}."
+        reason = f"Invalid WORKSPACE_AGENT_REASONING_EFFORT: {local.settings.agent_reasoning_effort!r}."
         local.report = InvalidConfiguration(reason)
         local.log.problem(reason)
         return False
@@ -288,7 +288,7 @@ async def run(local: Agent, task: str, prompt: str, specs: tuple[ToolSpec, ...])
     ) as client:
         model = OpenAIResponsesModel(model=local.settings.agent_model, openai_client=client)
         agent: SdkAgent[Agent] = SdkAgent(
-            name="Toolkit", instructions=prompt, model=model, tools=[tool(spec) for spec in specs],
+            name="Workspace", instructions=prompt, model=model, tools=[tool(spec) for spec in specs],
             model_settings=ModelSettings(reasoning=reasoning, store=False, response_include=["reasoning.encrypted_content"]),
             tool_use_behavior=after_tools,
         )
@@ -298,7 +298,7 @@ async def run(local: Agent, task: str, prompt: str, specs: tuple[ToolSpec, ...])
                 agent, request_input(local, task), context=local, max_turns=local.max_steps, hooks=hooks,
                 session=MemorySession(
                     local.history, checkpoint=local.work.checkpoint if local.work is not None else None,
-                    session_id=local.work.claim.run.run_id if local.work is not None else "toolkit",
+                    session_id=local.work.claim.run.run_id if local.work is not None else "workspace",
                 ),
                 run_config=RunConfig(
                     tracing_disabled=True, trace_include_sensitive_data=False,

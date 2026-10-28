@@ -9,37 +9,47 @@ import threading
 import time
 import traceback
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from functools import partial
 from pathlib import Path
 from typing import Final, cast
 
-from miryoku.layout import Layer, Scancode
 from winapi import inputs, screen, windows
 from winapi.shapes import Rect
+from winapi.shapes import Window as NativeWindow
+lazy from miryoku.layout import Layer, Scancode
+lazy from protocol import Tool
 
-from .agent_session import Session
-from .agent_toasts import AgentToasts
-from .agent_window import AgentWindow
-from .browser_surface_operations import AppCancelled, AppFailed, AppOperation, AppResult
-from .canvas_agent import WorkBackend
-from .canvas_icons import icon
-from .canvas_model import Request as CanvasRequest
-from .canvas_ui import DesktopActions
-from .canvas_web import DesktopWindow
-from .canvas_widgets import STYLE, button, label
-from .geometry import region
-from .keymap import PHYSICAL_NAMES, Cap, Kind, keymap
-from .meeting_panel import MeetingPanel
-from .meeting_workflow import MeetingSnapshot, MeetingWorkflow
 from .overlay import KeyHighlights, fit_position, load_position, nearest_work_area, save_position
-from .qt import Qt, QtCore, QtGui, QtWidgets, shiboken6
-from .qt_ui import application, cancel, later
-from .recording_state import RecordingAction
-from .theme import ACCENT, BACKGROUND, FOREGROUND, MUTED
-from .widgets import Editor, Window, column, row, show_window
-from .work_panel import WorkPanel
-from .work_window import WorkCommand, WorkSnapshot, WorkWindow
+lazy from .agent_session import Session, Snapshot
+lazy from .agent_toasts import AgentToasts
+lazy from .agent_window import AgentWindow
+lazy from .communications import Command as CommunicationCommand
+lazy from .communications import Feed as CommunicationFeed
+lazy from .communications import HandleNotice, WindowsObserved
+lazy from .console_requests import Command as ConsoleCommand
+lazy from .console_requests import Request as ConsoleRequest
+lazy from .desktop_bar import BarActions, DesktopBar
+lazy from .feed_triage import Board
+lazy from .geometry import region
+lazy from .icons import State
+lazy from .inbox_attention import pending_count
+lazy from .keymap import PHYSICAL_NAMES, Cap, Kind, keymap
+lazy from .meeting_panel import MeetingPanel
+lazy from .meeting_workflow import MeetingSnapshot, MeetingWorkflow
+lazy from .native_feed import NativeFeed, acted, forward, observed, project
+lazy from .panel_controls import STYLE, button, label
+lazy from .qt import Qt, QtCore, QtGui, QtWidgets, shiboken6
+lazy from .qt_ui import application, cancel, later
+lazy from .recording_state import RecordingAction, RecordingState
+lazy from .system_notices import NoticeKey
+lazy from .system_notices import Observed as Notices
+lazy from .theme import ACCENT, BACKGROUND, FOREGROUND, MUTED
+lazy from .vector_icons import icon
+lazy from .widgets import Editor, Window, column, row, show_window
+lazy from .window_switcher import WindowSwitcher
+lazy from .work_panel import WorkPanel
+lazy from .work_window import WorkCommand, WorkWindow
 
 __all__ = ["AgentWindow", "Ui"]
 
@@ -69,10 +79,16 @@ class Ui:
         "_agent",
         "_agent_lock",
         "_agent_waiting",
-        "_browser_closed",
+        "_choose_work",
         "_closed",
+        "_communication_action",
+        "_communication_drafts",
+        "_communication_feed",
+        "_console_action",
+        "_console_requests",
         "_desktop",
         "_dialogs",
+        "_dismiss_work",
         "_indicator",
         "_input_lock",
         "_inputs_closed",
@@ -80,12 +96,15 @@ class Ui:
         "_keyboard_overlay",
         "_keymap",
         "_meetings",
-        "_pending_browser",
+        "_native_feed",
         "_pending_inputs",
         "_poll_timer",
         "_recording",
         "_root",
+        "_switcher",
         "_thread",
+        "_triage",
+        "_triage_observe",
         "_work",
         "_work_lock",
         "_work_view",
@@ -97,7 +116,18 @@ class Ui:
         if threading.current_thread() is not threading.main_thread():
             raise RuntimeError("Qt must be created on the process's main thread.")
         self._agent: AgentWindow | None = None
-        self._desktop: DesktopWindow | None = None
+        self._communication_action: Callable[[CommunicationCommand], bool] | None = None
+        self._communication_feed = CommunicationFeed()
+        self._communication_drafts: dict[str, str] = {}
+        self._native_feed = NativeFeed()
+        self._console_action: Callable[[ConsoleCommand], bool] | None = None
+        self._console_requests: tuple[ConsoleRequest, ...] = ()
+        self._triage = Board()
+        self._triage_observe: Callable[[CommunicationFeed, tuple[ConsoleRequest, ...]], None] | None = None
+        self._choose_work: Callable[[str, str, str], bool] | None = None
+        self._dismiss_work: Callable[[str], bool] | None = None
+        self._desktop: DesktopBar | None = None
+        self._switcher: WindowSwitcher | None = None
         self._agent_lock = threading.Lock()
         self._work: WorkWindow | None = None
         self._work_view: WorkPanel | None = None
@@ -113,8 +143,6 @@ class Ui:
         self._closed = threading.Event()
         self._input_lock = threading.Lock()
         self._inputs_closed = False
-        self._browser_closed = False
-        self._pending_browser: set[Callable[[], None]] = set()
         self._pending_inputs: set[Callable[[], None]] = set()
         self._dialogs: list[QtWidgets.QWidget] = []
         self._thread = threading.current_thread()
@@ -170,14 +198,7 @@ class Ui:
             pending = tuple(self._pending_inputs)
         for cancel_input in pending:
             cancel_input()
-        self._close_browser_apps()
 
-    def _close_browser_apps(self) -> None:
-        with self._input_lock:
-            self._browser_closed = True
-            pending = tuple(self._pending_browser)
-        for cancel_request in pending:
-            cancel_request()
 
     def _poll(self, root: QtWidgets.QApplication) -> None:
         for _ in range(64):
@@ -252,7 +273,7 @@ class Ui:
     def prompt(self, title: str) -> str | None:
         def build(root: QtWidgets.QApplication, done: Callable[[str | None], None]) -> None:
             dialog = QtWidgets.QInputDialog()
-            dialog.setWindowTitle("Toolkit")
+            dialog.setWindowTitle("Workspace")
             dialog.setLabelText(title)
             dialog.setInputMode(QtWidgets.QInputDialog.InputMode.TextInput)
             dialog.setStyleSheet(STYLE)
@@ -330,7 +351,7 @@ class Ui:
         self.post(lambda root: self._overlay(root).flash(text, work, seconds))
 
     def review(self, summary: str, diff: str) -> bool:
-        """Shows a change to the toolkit; True if the user chooses Install."""
+        """Shows a change to Workspace; True if the user chooses Install."""
 
         def build(root: QtWidgets.QApplication, done: Callable[[bool], None]) -> None:
             ReviewWindow(root, summary, diff, done)
@@ -349,13 +370,123 @@ class Ui:
                     stop, post=lambda job: self.post(lambda root: job()), create_view=lambda agent: AgentToasts(self._root, agent),
                     on_problem=on_problem, on_reset=on_reset, on_submit=on_submit, on_waiting=self._agent_waiting, on_recording=self._recording,
                     on_work=on_work,
+                    on_communication=self.communicate,
+                    on_snapshot=self.refresh_inbox,
                 )
+                self._agent.communications(self._communication_feed, self._communication_drafts)
+                self._agent.on_console = self._console_action
+                self._agent.consoles(self._console_requests)
+                self._agent.triage(self._triage)
+                self._agent.on_dismiss_work = self._dismiss_work
+                self._agent.on_choose_work = self._choose_work
             panel = self._agent
         if task is not None:
             panel.begin(task, stop, queued=queued)
         if reveal:
             panel.show(focus=focus)
         return panel
+
+    def configure_triage(self, observe: Callable[[CommunicationFeed, tuple[ConsoleRequest, ...]], None],
+                         dismiss: Callable[[str], bool] | None = None,
+                         choose: Callable[[str, str, str], bool] | None = None) -> None:
+        self._triage_observe = observe
+        self._dismiss_work = dismiss
+        self._choose_work = choose
+        if self._agent is not None:
+            self._agent.on_dismiss_work = dismiss
+            self._agent.on_choose_work = choose
+
+    def triage_changed(self, board: Board) -> None:
+        def update(_: QtWidgets.QApplication) -> None:
+            self._triage = board
+            if self._agent is not None:
+                self._agent.triage(board)
+            self.refresh_inbox()
+        self.post(update)
+
+    def observe_triage(self) -> None:
+        if self._triage_observe is not None:
+            self._triage_observe(self._communication_feed, self._console_requests)
+
+    def configure_communications(self, action: Callable[[CommunicationCommand], bool]) -> None:
+        self._communication_action = action
+        if self._agent is not None:
+            self._agent.on_communication = self.communicate
+
+    def communicate(self, command: CommunicationCommand) -> bool:
+        if self._communication_action is None:
+            return False
+        accepted = [self._communication_action(item) for item in forward(self._communication_feed, command)]
+        if not accepted or not all(accepted):
+            return False
+        change = acted(self._native_feed, self._communication_feed, command)
+        if change.state != self._native_feed:
+            self._native_feed = change.state
+            self._communication_feed = project(self._native_feed, self._communication_feed)
+            self.observe_triage()
+            if self._agent is not None:
+                self._agent.communications(self._communication_feed, self._communication_drafts)
+            self.refresh_inbox()
+        for key in change.dismiss:
+            self.dismiss_system_notice(key)
+        return True
+
+    def communications_changed(self, feed: CommunicationFeed, drafts: dict[str, str]) -> None:
+        def update(_: QtWidgets.QApplication) -> None:
+            self._communication_feed, self._communication_drafts = project(self._native_feed, feed), drafts
+            self.observe_triage()
+            if self._agent is not None:
+                self._agent.communications(self._communication_feed, drafts)
+            self.refresh_inbox()
+        self.post(update)
+
+    def system_notices(self, observation: Notices) -> None:
+        def update(_: QtWidgets.QApplication) -> None:
+            self._native_feed = observed(self._native_feed, observation)
+            self._communication_feed = project(self._native_feed, self._communication_feed)
+            self.observe_triage()
+            if self._agent is not None:
+                self._agent.communications(self._communication_feed, self._communication_drafts)
+            self.refresh_inbox()
+        self.post(update)
+        if self._communication_action is not None:
+            self._communication_action(WindowsObserved(observation))
+
+    def configure_console(self, action: Callable[[ConsoleCommand], bool]) -> None:
+        self._console_action = action
+        if self._agent is not None:
+            self._agent.on_console = action
+
+    def console_changed(self, requests: tuple[ConsoleRequest, ...]) -> None:
+        def update(_: QtWidgets.QApplication) -> None:
+            self._console_requests = requests
+            self.observe_triage()
+            if self._agent is not None:
+                self._agent.consoles(requests)
+            self.refresh_inbox()
+        self.post(update)
+
+    def refresh_inbox(self, session: Snapshot | None = None) -> None:
+        """Publish attention on the Qt thread, including before the agent view exists."""
+        if self._desktop is None:
+            return
+        if session is None:
+            if self._agent is None:
+                session = Session()
+            else:
+                with self._agent.lock:
+                    session = self._agent.state
+        session = replace(session, communications=self._communication_feed, console_requests=self._console_requests, triage=self._triage)
+        self._desktop.inbox_changed(pending_count(session))
+
+    def dismiss_system_notice(self, key: NoticeKey) -> None:
+        self.post(lambda _: self._desktop.remove_notification(key) if self._desktop is not None else None)
+
+    def handle_system_notice(self, key: NoticeKey) -> bool:
+        if self._communication_action is None or self._desktop is None or self._desktop.notification_observation is None:
+            return False
+        notice = next((item for item in self._desktop.notification_observation.notices if item.key == key), None)
+        return notice is not None and self.communicate(HandleNotice(notice))
 
     def agent_input(
         self, title: str, detail: str = "", *, question: bool = False, cancel: threading.Event | None = None,
@@ -396,22 +527,18 @@ class Ui:
     def _attach_meetings(self) -> None:
         connection, view = self._meetings, self._work_view
         if connection is not None and view is not None and view.meetings is None:
-            view.attach_meetings(MeetingPanel(connection.workflow, open_file=connection.open_file, add_to_canvas=self.add_canvas_document))
+            view.attach_meetings(MeetingPanel(connection.workflow, open_file=connection.open_file))
 
     def configure_meetings(self, workflow: MeetingWorkflow, open_file: Callable[[Path], None]) -> None:
         def configure(_: QtWidgets.QApplication) -> None:
             self._meetings = MeetingConnection(workflow, open_file)
             self._attach_meetings()
-            if self._desktop is not None:
-                self._desktop.attach_meetings(workflow)
         self.post(configure)
 
     def meetings_changed(self, snapshot: MeetingSnapshot) -> None:
         def render(_: QtWidgets.QApplication) -> None:
             if self._work_view is not None and self._work_view.meetings is not None:
                 self._work_view.meetings.render_snapshot(snapshot)
-            if self._desktop is not None:
-                self._desktop.meetings_changed(snapshot)
         self.post(render)
 
     def show_meetings(self) -> None:
@@ -420,13 +547,6 @@ class Ui:
                 self._work_view.show_meetings()
         self.post(reveal)
 
-    def add_canvas_document(self, path: Path) -> None:
-        def add(_: QtWidgets.QApplication) -> None:
-            if self._desktop is not None:
-                self._desktop.add_files((str(path),))
-            elif self._agent is not None:
-                self._agent.problem("The desktop canvas is disabled. Open the saved notes from Meetings instead.")
-        self.post(add)
 
     def close_work(self) -> None:
         if self._work is not None:
@@ -436,20 +556,24 @@ class Ui:
             elif threading.current_thread() is not self._thread:
                 self._work.closed_ready.wait(timeout=3)
 
-    def desktop(
-        self, submit: Callable[[CanvasRequest], None], command: Callable[[WorkCommand], None], snapshot: Callable[[], WorkSnapshot], *,
-        watch: Callable[[tuple[str, ...]], None],
-        show_agent: Callable[[], None], show_work: Callable[[], None], stop: Callable[[], None], overlay: Callable[[], None],
-        on_problem: Callable[[str], None],
-    ) -> None:
-        """Start the native shell without changing focus or the keyboard process."""
-        def session() -> Session | None:
-            agent = self._agent
-            if agent is None:
-                return None
-            with agent.lock:
-                return agent.state
+    def open_inbox(self, show_agent: Callable[[], None]) -> None:
+        """Bell and keyboard requests share Qt-owned initialization and inbox focus."""
+        def reveal(_: QtWidgets.QApplication) -> None:
+            with self._input_lock:
+                if self._inputs_closed:
+                    return
+            show_agent()
+            if self._agent is not None:
+                self._agent.open_inbox()
+        self.post(reveal)
 
+    def desktop(
+        self, *, show_agent: Callable[[], None], show_work: Callable[[], None], stop: Callable[[], None],
+        overlay: Callable[[], None], menu: Callable[[], None], on_problem: Callable[[str], None],
+        audio_level: Callable[[], float | None] | None = None,
+        tiling: Callable[[Tool, int], None] | None = None,
+    ) -> None:
+        """Create only Workspace's floating native controls."""
         def create(root: QtWidgets.QApplication) -> None:
             with self._input_lock:
                 if self._inputs_closed:
@@ -457,95 +581,44 @@ class Ui:
             if self._desktop is not None:
                 return
             try:
-                backend = WorkBackend(submit, command, snapshot, session, watch=watch)
-                actions = DesktopActions(show_agent, show_work, stop, self._recording or (lambda _: None), self.show_keymap, overlay, backend.poll)
-                self._desktop = DesktopWindow(root, backend, actions, work_snapshot=backend.work_snapshot)
-                if self._meetings is not None:
-                    self._desktop.attach_meetings(self._meetings.workflow)
-                with self._input_lock:
-                    if not self._inputs_closed:
-                        self._browser_closed = False
+                actions = BarActions(show_agent, show_work, stop, self._recording or (lambda _: None), self.show_keymap, overlay, menu,
+                                     on_problem, tiling or (lambda _tool, _hwnd: None), self.system_notices, self.handle_system_notice,
+                                     inbox=lambda: self.open_inbox(show_agent))
+                self._desktop = DesktopBar(actions, audio_level=audio_level)
+                self.refresh_inbox()
             except Exception:
                 traceback.print_exc()
-                on_problem("The desktop canvas could not start. Details are in the assistant log; the tray remains available.")
+                on_problem("The Workspace bar could not start. The tray remains available.")
         self.post(create)
 
-    def show_desktop(self, *, launcher: bool = False) -> None:
-        def reveal(_: QtWidgets.QApplication) -> None:
-            if self._desktop is not None:
-                if launcher:
-                    self._desktop.show_launcher()
-                else:
-                    self._desktop.show()
-        self.post(reveal)
+    def desktop_state(self, state: State) -> None:
+        self.post(lambda _: self._desktop.state(state) if self._desktop is not None else None)
 
-    def browser_app(self, operation: AppOperation, cancel: threading.Event, finished: Callable[[AppResult], None]) -> None:
-        """Queue an owned app operation; completion never waits for Qt or performs observer I/O."""
-        def finish(result: AppResult) -> None:
-            with self._input_lock:
-                if cancel_request not in self._pending_browser:
-                    return
-                self._pending_browser.remove(cancel_request)
-            try:
-                finished(result)
-            except Exception:
-                traceback.print_exc()
+    def desktop_recording(self, recording: RecordingState) -> None:
+        self.post(lambda _: self._desktop.recording_changed(recording) if self._desktop is not None else None)
 
-        def cancel_request() -> None:
-            cancel.set()
-            finish(AppFailed("Browser apps are closing; the operation's outcome could not be confirmed."))
+    def desktop_layout(self, enabled: bool) -> None:
+        self.post(lambda _: self._desktop.layout(enabled) if self._desktop is not None else None)
 
-        def dispatch(_: QtWidgets.QApplication) -> None:
-            with self._input_lock:
-                if cancel_request not in self._pending_browser:
-                    return
-                closing = self._inputs_closed or self._browser_closed
-            if cancel.is_set():
-                finish(AppCancelled.REQUEST)
+    def toggle_taskbar(self) -> None:
+        self.post(lambda _: self._desktop.toggle_taskbar() if self._desktop is not None else None)
+
+    def switch_windows(self, choices: tuple[NativeWindow, ...], focus: Callable[[int], None]) -> None:
+        def show(_: QtWidgets.QApplication) -> None:
+            if self._switcher is not None and self._switcher.isVisible():
+                self._switcher.activate()
                 return
-            if closing:
-                cancel_request()
-                return
-            desktop = self._desktop
-            if desktop is None or desktop.closed:
-                finish(AppFailed("Browser apps are unavailable."))
-                return
-            try:
-                if cancel.is_set():
-                    finish(AppCancelled.REQUEST)
-                    return
-                desktop.browser_request(operation, cancel, finish)
-            except Exception:
-                traceback.print_exc()
-                finish(AppFailed("The browser app operation failed; its outcome could not be confirmed."))
-
-        with self._input_lock:
-            self._pending_browser.add(cancel_request)
-            closing = self._inputs_closed or self._browser_closed
-        if cancel.is_set():
-            finish(AppCancelled.REQUEST)
-        elif closing:
-            cancel_request()
-        else:
-            self.post(dispatch)
-
-    def submit_canvas_voice(self, text: str, fallback: Callable[[str], None]) -> bool:
-        """Only immutable owner-published availability is read off the UI thread."""
-        desktop = self._desktop
-        if desktop is None or not desktop.voice_active:
-            return False
-        def route(_: QtWidgets.QApplication) -> None:
-            agent = self._agent
-            reply: Callable[[str], bool] = agent.reply_by_voice if agent is not None else (lambda _: False)
-            if self._desktop is not desktop or desktop.closed:
-                fallback(text)
-                return
-            desktop.controller.voice(text, reply=reply, active=desktop.active_context(), fallback=fallback)
-        self.post(route)
-        return True
+            self._switcher = WindowSwitcher(choices, focus)
+            current = self._switcher
+            def cleared(_: int) -> None:
+                if self._switcher is current:
+                    self._switcher = None
+            current.finished.connect(cleared)
+            _near_pointer(current, current.width(), current.height())
+            _bring_forward(current, current.search)
+        self.post(show)
 
     def close_desktop(self) -> None:
-        self._close_browser_apps()
         if self._closed.is_set():
             return
         done = threading.Event()
@@ -564,7 +637,7 @@ class Ui:
         else:
             self.post(close)
             if not done.wait(timeout=10):
-                raise OSError("The desktop canvas did not finish closing.")
+                raise OSError("The Workspace bar did not finish closing.")
         if problems:
             raise OSError("; ".join(problems))
 
@@ -706,7 +779,7 @@ class Indicator:
 
     def __init__(self, root: QtWidgets.QApplication) -> None:
         self._window = QtWidgets.QWidget()
-        self._window.setObjectName("toolkitWindow")
+        self._window.setObjectName("workspaceWindow")
         self._window.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Tool)
         self._window.setStyleSheet(STYLE)
         self._window.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
@@ -761,7 +834,7 @@ _COLOURS: Final = {
     Kind.BLANK: ("#191b1e", MUTED),
 }
 _LAYERS: Final[tuple[tuple[str, Layer | None], ...]] = (("Base", None), *((layer.name.title(), layer) for layer in Layer))
-_ROW_START: Final = (0.0, 1.5, 0.0, 1.25)
+_ROW_START: Final = (0.0, 1.5, 0.0, 1.25, 3.5)
 """Where each row starts, in key widths, as on an ISO keyboard."""
 _UNIT, _GAP, _HEIGHT = 64, 5, 56
 
@@ -782,11 +855,11 @@ class KeymapCanvas(QtWidgets.QWidget):
         for row_number, (caps, start) in enumerate(zip(keymap(layer), _ROW_START, strict=True)):
             x, y = start * _UNIT * scale, row_number * (_HEIGHT + _GAP) * scale
             for cap in caps:
-                size = 1.75 if cap.physical == "Caps" else 1.0
+                size = 6.25 if cap.physical == "Space" else 1.75 if cap.physical == "Caps" else 1.0
                 self.caps[cap.physical] = cap
                 self.boxes[cap.physical] = QtCore.QRectF(x, y, (size * _UNIT - _GAP) * scale, _HEIGHT * scale)
                 x += size * _UNIT * scale
-        self.setFixedSize(round(14 * _UNIT * scale), round(4 * (_HEIGHT + _GAP) * scale))
+        self.setFixedSize(round(14 * _UNIT * scale), round(len(_ROW_START) * (_HEIGHT + _GAP) * scale))
         self.update()
 
     def colors(self, name: str) -> tuple[str, str]:
@@ -866,8 +939,8 @@ class KeymapOverlay:
 
     def __init__(self, root: QtWidgets.QApplication) -> None:
         self._window = QtWidgets.QWidget()
-        self._window.setObjectName("toolkitWindow")
-        self._window.setWindowTitle("Toolkit keyboard overlay")
+        self._window.setObjectName("workspaceWindow")
+        self._window.setWindowTitle("Workspace keyboard overlay")
         self._window.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Tool)
         self._window.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
         self._window.setStyleSheet(STYLE)
@@ -881,7 +954,7 @@ class KeymapOverlay:
         self._frame = int(self._window.winId())
         windows.make_overlay(self._frame)
         self._handle = OverlayHandle(self._start_drag, self._drag_to, self._finish_drag)
-        self._handle.setWindowTitle("Toolkit keyboard overlay handle")
+        self._handle.setWindowTitle("Workspace keyboard overlay handle")
         self._handle_frame = int(self._handle.winId())
         windows.make_overlay(self._handle_frame, click_through=False)
         self._position = load_position()
@@ -907,7 +980,7 @@ class KeymapOverlay:
             work = nearest_work_area(self._position, areas)
         density = self._window.devicePixelRatioF()
         scale = max(.2, min(.85, (work.width / density - 32) / (14 * _UNIT), (work.height / density - 180) / (4 * (_HEIGHT + _GAP))))
-        self._heading.setText(f"Toolkit keyboard · {title}")
+        self._heading.setText(f"Workspace keyboard · {title}")
         self._canvas.draw(layer, scale)
         self._view = view
         self.set_pressed(pressed)
@@ -982,7 +1055,7 @@ class KeymapWindow:
     )
 
     def __init__(self, root: QtWidgets.QApplication) -> None:
-        self.window = Window("Toolkit key map", self.close, width=940, height=390)
+        self.window = Window("Workspace key map", self.close, width=940, height=390)
         layout = column(self.window)
         layout.setContentsMargins(20, 16, 20, 16)
         buttons = row()
@@ -1002,7 +1075,7 @@ class KeymapWindow:
         self.canvas = KeymapCanvas()
         layout.addWidget(self.canvas)
         layout.addWidget(label(
-            "Hold a thumb for its layer · § toggles the layout · B dictates · N speaks to the agent · Keys 1-6 switch layer", "muted",
+            "Space: hold · B: dictate toggle · N: agent toggle · Apps + Esc: windows", "muted",
         ))
         self.layer: Layer | None = None
         self.draw(None)
@@ -1030,7 +1103,7 @@ class ReviewWindow:
 
     def __init__(self, root: QtWidgets.QApplication, summary: str, diff: str, done: Callable[[bool], None]) -> None:
         self.done, self.finished = done, False
-        self.window = Window("Change the toolkit?", lambda: self.finish(False), width=900, height=640)
+        self.window = Window("Change Workspace?", lambda: self.finish(False), width=900, height=640)
         layout = column(self.window)
         layout.setContentsMargins(20, 18, 20, 18)
         layout.addWidget(label(summary, "title"))

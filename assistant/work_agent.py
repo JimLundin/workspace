@@ -14,10 +14,9 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import assert_never
 
-from automation.context import ContextStore
-from automation.execution import ApprovalReview, review_matches
-from automation.ipc import (
-    BrowserAppRequest,
+lazy from automation.context import ContextStore
+lazy from automation.execution import ApprovalReview, review_matches
+lazy from automation.ipc import (
     Envelope,
     LogEvent,
     MeetingCommand,
@@ -26,16 +25,13 @@ from automation.ipc import (
     MeetingSucceeded,
     StartMeeting,
 )
-from automation.routines import RoutineStore
-from automation.store import TaskStore
-from automation.task import (
-    CANVAS_EDIT_GUIDANCE,
+lazy from automation.routines import RoutineStore
+lazy from automation.store import TaskStore
+lazy from automation.task import (
     Approval,
     ApprovalDecision,
     Blocked,
-    CanvasSource,
     Completed,
-    Control,
     Failed,
     Interrupted,
     Question,
@@ -55,45 +51,14 @@ from automation.task import (
     text,
 )
 
-from . import agent_session as session
-from .activity import ContextSnapshot
-from .agent_window import AgentWindow
-from .browser_surface_operations import AppFailed, AppOperation, AppResult
-from .canvas_model import Request as CanvasRequest
-from .canvas_requests import CanvasRequests, captured_request
-from .work_service import BrowserAppDelivery, CanvasSubmission, IdentifiedSubmission, Issued, WorkBridge, WorkService
-from .work_window import AnswerTask, ControlTask, FollowUp, Redirect, Submit, WorkCommand, WorkSnapshot
+lazy from . import agent_session as session
+lazy from .activity import ContextSnapshot
+lazy from .agent_window import AgentWindow
+lazy from .feed_triage import request_context
+lazy from .work_service import IdentifiedSubmission, Issued, WorkBridge, WorkService
+lazy from .work_window import AnswerTask, FollowUp, Redirect, Submit, WorkCommand, WorkSnapshot
 
 type MeetingControl = Callable[[StartMeeting | MeetingCommand], MeetingSucceeded | MeetingFailed]
-type BrowserAppControl = Callable[[AppOperation, threading.Event, Callable[[AppResult], None]], None]
-
-
-class BrowserAppCancellation(threading.Event):
-    """Let a deferred Qt action observe its deadline without journal access."""
-
-    __slots__ = ("clock", "expires_at")
-
-    def __init__(self, expires_at: float, clock: Callable[[], float]) -> None:
-        super().__init__()
-        self.expires_at, self.clock = expires_at, clock
-
-    def is_set(self) -> bool:
-        if not super().is_set() and self.clock() >= self.expires_at:
-            self.set()
-        return super().is_set()
-
-    def wait(self, timeout: float | None = None) -> bool:
-        remaining = max(0.0, self.expires_at - self.clock())
-        return super().wait(remaining if timeout is None else min(timeout, remaining)) or self.is_set()
-
-
-@dataclass(frozen=True, slots=True)
-class PendingBrowserApp:
-    delivery: BrowserAppDelivery
-    cancel: threading.Event
-    results: queue.Queue[AppResult]
-
-
 @dataclass(frozen=True, slots=True)
 class StopConversation:
     conversation_id: str
@@ -105,7 +70,7 @@ class Observe:
     completed: threading.Event
 
 
-type Job = Issued | IdentifiedSubmission | CanvasSubmission | StopConversation | Observe
+type Job = Issued | IdentifiedSubmission | StopConversation | Observe
 
 
 def in_conversation(task: Task, conversation_id: str | None) -> bool:
@@ -120,14 +85,6 @@ def active(task: Task) -> bool:
 
 def chronological(task: Task) -> tuple[float, str]:
     return task.created_at, task.id
-
-
-def retires_browser_app(command: WorkCommand, task_id: str) -> bool:
-    match command:
-        case ControlTask(identity, Control.PAUSE | Control.CANCEL) | Redirect(identity):
-            return identity == task_id
-        case _:
-            return False
 
 
 def input_message(task: Task, review: ApprovalReview | None) -> session.Question | session.Approval | None:
@@ -145,10 +102,10 @@ def input_message(task: Task, review: ApprovalReview | None) -> session.Question
 
 class WorkAgent:
     __slots__ = (
-        "_browser_pending", "_closed", "_closing", "_conversation", "_create_window", "_displayed", "_displayed_review", "_input", "_jobs",
+        "_closed", "_closing", "_conversation", "_create_window", "_displayed", "_displayed_review", "_input", "_jobs",
         "_last_stop", "_last_submission_source", "_live", "_lock", "_meeting_results", "_ordinary_pending", "_pending", "_queued", "_rejected_input",
         "_reported_running", "_sequence", "_service", "_settled", "_snapshot", "_thread", "_wake", "_watch_groups", "_watched",
-        "browser_app", "clock", "context", "identity", "meeting", "on_done", "on_snapshot", "on_start", "report_error", "window",
+        "clock", "context", "identity", "meeting", "on_done", "on_snapshot", "on_start", "report_error", "window",
     )
 
     def __init__(
@@ -156,17 +113,14 @@ class WorkAgent:
         create_window: Callable[[WorkAgent], AgentWindow], *, on_snapshot: Callable[[WorkSnapshot], None],
         on_done: Callable[[], None], report_error: Callable[[str], None], on_start: Callable[[], None] | None = None,
         context: Callable[[], ContextSnapshot] | None = None, meeting: MeetingControl | None = None,
-        browser_app: BrowserAppControl | None = None,
-        canvas_requests: CanvasRequests | None = None,
         clock: Callable[[], float] = time.time, identity: Callable[[], str] = lambda: uuid.uuid4().hex,
         assistant_pid: int | None = None,
     ) -> None:
         self._service = WorkService(tasks, routines, saved_context, bridge,
-                                    assistant_pid=os.getpid() if assistant_pid is None else assistant_pid, canvas_requests=canvas_requests)
+                                    assistant_pid=os.getpid() if assistant_pid is None else assistant_pid)
         self._create_window = create_window
         self.on_snapshot, self.on_done, self.report_error, self.on_start = on_snapshot, on_done, report_error, on_start
         self.context, self.meeting, self.clock, self.identity = context, meeting, clock, identity
-        self.browser_app = browser_app
         self._lock = threading.RLock()
         # A Stop marker follows its accepted work in FIFO order. Between two
         # distinct Stop markers there is at least one ordinary command, so
@@ -191,7 +145,6 @@ class WorkAgent:
         self._watched: frozenset[str] = frozenset()
         self._live: Callable[[session.LiveMessage], None] | None = None
         self._meeting_results: dict[tuple[str, RunRef, str], MeetingSucceeded | MeetingFailed] = {}
-        self._browser_pending: PendingBrowserApp | None = None
         self.window: AgentWindow | None = None
 
     def start_worker(self) -> None:
@@ -206,7 +159,7 @@ class WorkAgent:
             self._conversation = self.identity()
         return RequestSource(self._conversation)
 
-    def _enqueue(self, job: Issued | IdentifiedSubmission | CanvasSubmission | Observe) -> bool:
+    def _enqueue(self, job: Issued | IdentifiedSubmission | Observe) -> bool:
         with self._lock:
             if self._closing.is_set() or self._ordinary_pending >= 256:
                 return False
@@ -216,15 +169,9 @@ class WorkAgent:
                 return False
             self._ordinary_pending += 1
             self._sequence += 1
-            if isinstance(job, CanvasSubmission):
-                self._pending[job.identity] = None
-            elif isinstance(job, IdentifiedSubmission) or (isinstance(job, Issued) and isinstance(job.command, (Submit, FollowUp))):
+            if isinstance(job, IdentifiedSubmission) or (isinstance(job, Issued) and isinstance(job.command, (Submit, FollowUp))):
                 self._pending[job.identity] = job.source.conversation_id
                 self._last_submission_source = job.source.conversation_id
-            pending = self._browser_pending
-            if (isinstance(job, Issued) and pending is not None and isinstance(pending.delivery.message.payload, BrowserAppRequest)
-                    and retires_browser_app(job.command, pending.delivery.message.payload.run.task_id)):
-                pending.cancel.set()
             self._wake.set()
         return True
 
@@ -232,16 +179,7 @@ class WorkAgent:
         if isinstance(command, AnswerTask):
             identifier(command.task_id, "reply task identity")
             identifier(command.request_id, "reply request identity")
-        capture = isinstance(command, Submit)
-        if isinstance(command, (FollowUp, Redirect)):
-            with self._lock:
-                original = next((task for task in self._snapshot.tasks if task.id == command.task_id), None)
-            if original is not None and isinstance(original.source, CanvasSource):
-                raise ValueError(CANVAS_EDIT_GUIDANCE)
-            # An uncached task is checked by the observer without capturing
-            # context first; it may be immutable selected-source work.
-            capture = original is not None
-        captured = self.context() if self.context is not None and capture else None
+        captured = self.context() if self.context is not None and isinstance(command, (Submit, FollowUp, Redirect)) else None
         with self._lock:
             issued = Issued(command, self.identity(), self._source(), captured)
             if not self._enqueue(issued):
@@ -260,7 +198,7 @@ class WorkAgent:
             self._panel().show()
 
     def submit_identified(self, identity: str, prompt: str) -> None:
-        """Accept a frontend-owned task ID so canvas results can reconnect exactly.
+        """Accept a caller-owned task ID so repeated submissions reuse the same task.
 
         The observer retains journal and transport ownership, just as it does
         for conversation commands. Returning means queued, not yet committed.
@@ -271,12 +209,6 @@ class WorkAgent:
         with self._lock:
             if not self._enqueue(IdentifiedSubmission(identity, prompt, self._source(), captured)):
                 raise ValueError("Work is closing or its input queue is full. Try the request again.")
-
-    def submit_canvas(self, request: CanvasRequest) -> None:
-        """Queue an exact source snapshot without capturing the current desktop or conversation."""
-        submission = CanvasSubmission(captured_request(request))
-        if not self._enqueue(submission):
-            raise ValueError("Work is closing or its input queue is full. Try the request again.")
 
     def watch(self, task_ids: tuple[str, ...], *, owner: str = "default") -> None:
         """Replace one view's interests while the observer retains their union."""
@@ -347,10 +279,6 @@ class WorkAgent:
                 return
             self._jobs.put_nowait(stop)
             self._last_stop = stop
-            pending = self._browser_pending
-            if (pending is not None and isinstance(pending.delivery.source, RequestSource)
-                    and pending.delivery.source.conversation_id == self._conversation):
-                pending.cancel.set()
             self._wake.set()
             if self.window is not None:
                 self.window.stopping()
@@ -378,7 +306,6 @@ class WorkAgent:
             if self._closing.is_set():
                 return
             self._closing.set()
-            self._cancel_browser_app()
             self._wake.set()
             if self.window is not None:
                 self.window.close()
@@ -430,13 +357,14 @@ class WorkAgent:
             self._input = None
 
     def _display(self, task: Task, review: ApprovalReview | None) -> None:
+        source = request_context(task.prompt) if task.id.startswith('feed-choice:') else None
         previous = self._displayed
         if task == previous and review == self._displayed_review:
             return
         window = self._panel()
         if previous is None or previous.id != task.id:
             self._clear_input()
-            window.begin(task.prompt, self.stop, queued=task.id in self._queued)
+            window.begin(source.title if source is not None else task.prompt, self.stop, queued=task.id in self._queued, source=source)
             self._queued.discard(task.id)
             self._live = window.updates()
         elif (
@@ -447,7 +375,7 @@ class WorkAgent:
             self._clear_input()
             if active(task):
                 window.finish()
-                window.begin(f"Continue: {task.title}", self.stop)
+                window.begin(f"Continue: {task.title}", self.stop, source=source)
                 self._live = window.updates()
         self._displayed, self._displayed_review = task, review
         if task.checkpoint is not None and (previous is None or previous.checkpoint != task.checkpoint):
@@ -624,60 +552,6 @@ class WorkAgent:
         except (OSError, ValueError):
             self._service.problem = "The work process disconnected before confirming the meeting result. Check Recordings for its current state."
 
-    def _cancel_browser_app(self) -> None:
-        with self._lock:
-            if self._browser_pending is not None:
-                self._browser_pending.cancel.set()
-                self._browser_pending = None
-
-    def _browser_apps(self) -> None:
-        delivery = self._service.browser_app_pending(at=self.clock())
-        with self._lock:
-            pending = self._browser_pending
-            if pending is not None and pending.delivery != delivery:
-                self._cancel_browser_app()
-                pending = None
-            # Commands accepted during transport must commit before a new
-            # page action can start. This lock also makes later controls see
-            # the new pending token and cancel it before queued Qt work.
-            if delivery is None or self._closing.is_set() or not self._jobs.empty():
-                return
-            dispatch = pending is None
-            if pending is None:
-                request = delivery.message.payload
-                assert isinstance(request, BrowserAppRequest)
-                pending = PendingBrowserApp(delivery, BrowserAppCancellation(request.expires_at, self.clock), queue.Queue(maxsize=1))
-                self._browser_pending = pending
-        if dispatch:
-            request = delivery.message.payload
-            assert isinstance(request, BrowserAppRequest)
-            results, wake = pending.results, self._wake
-
-            def complete(result: AppResult) -> None:
-                # Qt only deposits a value. Expiry, ownership, and all journal
-                # and transport work stay on this observer.
-                try:
-                    results.put_nowait(result)
-                except queue.Full:
-                    return
-                wake.set()
-
-            try:
-                if self.browser_app is None:
-                    complete(AppFailed("Browser app controls are unavailable."))
-                else:
-                    self.browser_app(request.operation, pending.cancel, complete)
-            except Exception:
-                self.report_error(traceback.format_exc())
-                complete(AppFailed("The browser app operation failed; see the assistant log."))
-        try:
-            result = pending.results.get_nowait()
-        except queue.Empty:
-            return
-        self._cancel_browser_app()
-        if not self._closing.is_set():
-            self._service.complete_browser_app(delivery.message, result, at=self.clock())
-
     def _jobs_ready(self) -> tuple[Observe, ...]:
         observed: list[Observe] = []
         for _ in range(64):
@@ -690,7 +564,7 @@ class WorkAgent:
                     self._ordinary_pending -= 1
             try:
                 match job:
-                    case Issued() | IdentifiedSubmission() | CanvasSubmission():
+                    case Issued() | IdentifiedSubmission():
                         self._service.apply(job, at=self.clock())
                     case StopConversation(conversation_id):
                         self._service.stop_conversation(conversation_id, at=self.clock())
@@ -700,7 +574,7 @@ class WorkAgent:
                         assert_never(job)
             except Exception as error:
                 self._service.problem = str(error) or "The work request could not be saved."
-                if isinstance(job, (Issued, IdentifiedSubmission, CanvasSubmission)):
+                if isinstance(job, (Issued, IdentifiedSubmission)):
                     watched, _ = self._observed_ids()
                     self._service.submission_failed(job, self._service.problem, watched=watched)
                     if isinstance(job, Issued) and isinstance(job.command, AnswerTask):
@@ -710,7 +584,7 @@ class WorkAgent:
                                 self._rejected_input = self._input
                 self.report_error(traceback.format_exc())
             finally:
-                if isinstance(job, (Issued, IdentifiedSubmission, CanvasSubmission)):
+                if isinstance(job, (Issued, IdentifiedSubmission)):
                     with self._lock:
                         self._pending.pop(job.identity, None)
                 elif isinstance(job, StopConversation):
@@ -731,7 +605,6 @@ class WorkAgent:
                             self._service.publish_context(current_context)
                             previous_context = current_context
                         events = self._service.events(at=self.clock())
-                        self._browser_apps()
                         watched, pending = self._observed_ids()
                         self._publish(self._service.snapshot(at=self.clock(), watched=watched, pending=pending))
                         for event in events:
@@ -743,8 +616,6 @@ class WorkAgent:
                                 case _:
                                     raise ValueError("Unexpected frontend event.")
                 except Exception as error:
-                    self._service.invalidate_browser_app()
-                    self._cancel_browser_app()
                     self._service.problem = str(error) or "Work could not be refreshed."
                     self._publish_unavailable()
                     self.report_error(traceback.format_exc())
@@ -757,7 +628,6 @@ class WorkAgent:
                     self._wake.wait(0.25)
                     self._wake.clear()
         finally:
-            self._cancel_browser_app()
             try:
                 self._service.bridge.close()
             finally:

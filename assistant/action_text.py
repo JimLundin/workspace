@@ -11,7 +11,8 @@ def label(name: str) -> str:
 
 def title(name: str) -> str:
     return {"inspect_ui": "Inspect controls", "ui_action": "Use a control", "desktop_state": "Check desktop",
-            "get_context": "Check recent work", "get_clipboard": "Read clipboard"}.get(name, label(name))
+            "get_context": "Check recent work", "get_clipboard": "Read clipboard",
+            "get_current_time": "Current time", "run_powershell": "PowerShell"}.get(name, label(name))
 
 
 def shortened(text: str, limit: int) -> str:
@@ -32,8 +33,28 @@ def arguments(name: str, text: str, *, limit: int = 0) -> str:
     """Keep the user's target visible and omit transport IDs and search knobs."""
     fields = object_fields(text)
     if fields is None:
-        return readable(text, limit=limit)
+        return shortened(text, limit) if name == 'run_powershell' else readable(text, limit=limit)
     match name:
+        case "run_powershell":
+            match fields:
+                case {"command": str(command)}:
+                    description = command
+                case _:
+                    description = "No command supplied."
+        case "work_feed":
+            description = "Read the current work priorities and pending questions."
+        case "work_feed_update":
+            operation = fields.get('operation')
+            value = fields.get('text')
+            description = {'reject': 'Record the reason for declining', 'propose': 'Update the suggested solution',
+                           'rule': 'Save your filtering preference', 'quiet': 'Keep this item quiet',
+                           'dismiss': 'Hide this item', 'done': 'Mark this item handled'}.get(str(operation), 'Update the work feed')
+            description += ': ' + value if isinstance(value, str) and value else '.'
+        case "work_feed_choose":
+            description = "Start the solution you selected."
+        case "work_feed_answer":
+            value = fields.get('text')
+            description = 'Answer the pending question' + (': ' + value if isinstance(value, str) and value else '.')
         case "inspect_ui":
             query = fields.get("query")
             description = f"Find controls matching “{query}”" if isinstance(query, str) and query else "Inspect the selected window."
@@ -55,6 +76,21 @@ def arguments(name: str, text: str, *, limit: int = 0) -> str:
 
 
 def result(name: str, text: str, *, limit: int = 0) -> str:
+    if name == 'run_powershell':
+        return shortened(text, limit)
+    if name.startswith('work_feed') and (fields := object_fields(text)) is not None:
+        error = fields.get('error')
+        if isinstance(error, str) and error:
+            return shortened(error, limit)
+        if fields.get('accepted') is False:
+            reason = fields.get('reason')
+            return shortened('No change was made.' + (' ' + reason if isinstance(reason, str) else ''), limit)
+        if name == 'work_feed':
+            items = fields.get('items')
+            count = len(cast(list[object], items)) if isinstance(items, list) else 0
+            return f'{count} current work item' + ('s' if count != 1 else '') + '.'
+        return {'work_feed_choose': 'The selected solution is queued.', 'work_feed_answer': 'Your answer was delivered.',
+                'work_feed_update': 'The work feed was updated.'}.get(name, 'The work feed was read.')
     if name == "inspect_ui" and (fields := object_fields(text)) is not None and isinstance(controls := fields.get("controls"), list):
         items = cast(list[object], controls)
         names: list[str] = []

@@ -1,0 +1,144 @@
+"""Our save/recheck and preview wiring on the native development runtime."""
+
+import importlib.util
+import json
+import shutil
+import subprocess
+import sys
+import time
+import unittest
+from pathlib import Path
+from unittest.mock import patch
+
+if sys.platform != 'win32':
+    raise unittest.SkipTest('Native development tools')
+
+from assistant.qt import shiboken6
+from scripts.preview import Files, Preview
+
+from .test_quality import migrations
+
+ROOT = Path(__file__).resolve().parent.parent
+
+
+def wait_for(path: Path, condition: str, process: subprocess.Popen[bytes]) -> dict[str, object]:
+    deadline = time.monotonic() + 30
+    while time.monotonic() < deadline:
+        if process.poll() is not None:
+            raise AssertionError('Watch exited before ' + condition)
+        if path.exists():
+            try:
+                record: dict[str, object] = json.loads(path.read_text())
+            except (OSError, ValueError):
+                pass
+            else:
+                return record
+        time.sleep(.05)
+    raise AssertionError('Watch never published ' + condition)
+
+
+def write_watch_source(root: Path, output: Path) -> None:
+    scripts = root / 'scripts'
+    scripts.mkdir(parents=True)
+    (scripts / '__init__.py').write_text('')
+    for name in ('watch.py', 'check.py', 'source_analysis.py', 'architecture.py', 'quality.py',
+                 'deploy_files.py', 'development_paths.py', 'check_native.py'):
+        shutil.copyfile(ROOT / 'scripts' / name, scripts / name)
+    shutil.copyfile(ROOT / 'runtime.py', root / 'runtime.py')
+    (root / 'pyproject.toml').write_text('[tool.workspace.architecture]\nmodels=[]\n'
+                                       '[tool.ruff]\ntarget-version="py315"\n'
+                                       '[tool.ruff.lint.pylint]\nmax-args=3\nmax-positional-args=5\n')
+    (root / '.gitignore').write_text('__pycache__/\n.ruff_cache/\n')
+    (root / 'requirements').mkdir()
+    for name in ('python-win64.json', 'windows-py315.lock'):
+        shutil.copyfile(ROOT / 'requirements' / name, root / 'requirements' / name)
+    migrations(root)
+    (root / 'value.py').write_text('value = 1\n')
+    tests = root / 'tests'
+    tests.mkdir()
+    (tests / '__init__.py').write_text('')
+    (tests / 'test_value.py').write_text(
+        'import json\nfrom pathlib import Path\nfrom value import value\n'
+        'def test_current():\n'
+        f'    output = Path({str(output)!r})\n'
+        '    output.write_text(json.dumps({"value": value}))\n'
+        '    assert value != 2, "an intentional failed edit"\n')
+    subprocess.run(('git', 'init', '--quiet', str(root)), check=True, capture_output=True)
+
+
+def test_watch_rechecks_fresh_source_and_retains_baseline_after_failed_edits(tmp_path: Path) -> None:
+    # Detect stale imported values in a reused test process, missed save events,
+    # or a failed check advancing the session baseline instead of retrying it.
+    if importlib.util.find_spec('watchdog') is None or importlib.util.find_spec('ruff') is None:
+        raise unittest.SkipTest('Watchdog/Ruff are development-only dependencies.')
+    root, output = tmp_path / 'source', tmp_path / 'observed.json'
+    write_watch_source(root, output)
+    stop = tmp_path / 'stop'
+    log = tmp_path / 'watch.log'
+    with log.open('wb') as stream, subprocess.Popen((sys.executable, '-B', '-m', 'scripts.watch', '--tests',
+            'tests/test_value.py', '--stop-file', str(stop)), cwd=root, stdout=stream, stderr=stream) as process:
+        try:
+            assert wait_for(output, 'initial source', process)['value'] == 1
+            deadline = time.monotonic() + 10
+            while 'Watching ' not in log.read_text() and time.monotonic() < deadline:
+                time.sleep(.05)
+            text = log.read_text()
+            assert 'Session receipt: ' in text, text
+            receipt = Path(text.split('Session receipt: ', 1)[1].splitlines()[0])
+            original = receipt.read_bytes()
+            output.unlink()
+            (root / 'value.py').write_text('value = 2\n')
+            assert wait_for(output, 'failed edit', process)['value'] == 2
+            deadline = time.monotonic() + 10
+            while 'keeping the last successful baseline' not in log.read_text() and time.monotonic() < deadline:
+                time.sleep(.05)
+            assert receipt.read_bytes() == original
+            output.unlink()
+            (root / 'value.py').write_text('value = 3\n')
+            assert wait_for(output, 'corrected source', process)['value'] == 3
+            deadline = time.monotonic() + 10
+            while log.read_text().count('Watch baseline advanced.') < 2 and time.monotonic() < deadline:
+                time.sleep(.05)
+            assert receipt.read_bytes() != original and '0 failed' in log.read_text()
+        except Exception as error:
+            raise AssertionError(log.read_text()) from error
+        finally:
+            stop.touch()
+            try:
+                process.wait(timeout=15)
+            except subprocess.TimeoutExpired:
+                process.terminate()
+                process.wait(timeout=5)
+        assert process.returncode == 0, log.read_text()
+
+
+def test_preview_uses_real_views_without_starting_native_services_and_closes_cleanly(tmp_path: Path) -> None:
+    # Detect accidentally starting the production taskbar/hook/communication
+    # services or failing to route sample-state changes to the real views.
+    files = Files(tmp_path, tmp_path / 'state.json')
+    with (patch('assistant.desktop_bar.NotificationObserver', side_effect=AssertionError('live notifications')),
+          patch('assistant.desktop_bar.LocalWeather', side_effect=AssertionError('live weather')),
+          patch('assistant.desktop_bar.StatusObserver', side_effect=AssertionError('live status')),
+          patch('assistant.desktop_bar.WindowsKeyObserver', side_effect=AssertionError('live key hook')),
+          patch('assistant.shell_controls.TaskbarControl.toggle', side_effect=AssertionError('live taskbar')),
+          patch('os.startfile', side_effect=AssertionError('live Windows settings'))):
+        preview = Preview('both', files)
+        try:
+            assert preview.bar is not None and preview.feed is not None
+            assert preview.bar.controls is None and preview.bar.worker is None and preview.bar.audio_meter is None
+            preview.selector.setCurrentIndex(2)
+            preview.root.processEvents()
+            assert preview.bar.record.text() == '02:05' and preview.bar.status.text() == 'Listening'
+            assert preview.feed.cards and json.loads(files.state.read_text()) == {'scenario': 2}
+            assert preview.control.isVisible()
+            assert all(pill.windowTitle().startswith('Workspace preview') for pill in preview.bar.pills)
+            preview.bar.open_menu()
+            for action in preview.bar.menu.actions():
+                if action.text() in ('Windows taskbar', 'Windows notification settings'):
+                    action.trigger()
+                    assert preview.status.text() == 'Preview action: ' + action.text()
+            preview.bar.menu.close()
+        finally:
+            preview.close()
+        preview.close()
+        assert preview.bar.closed and preview.feed.closed and not shiboken6.isValid(preview.control)

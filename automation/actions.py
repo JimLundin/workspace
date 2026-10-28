@@ -13,8 +13,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol, cast
 
-from assistant.browser_surface_operations import target_card_id
-
 from .files import filesystem_path
 from .task import (
     Action,
@@ -70,10 +68,10 @@ type Plan = Observation | ActionSpec
 
 
 _READS = frozenset({
-    "list_directory", "read_file", "find_files", "get_clipboard", "list_windows", "desktop_state", "get_context",
+    "list_directory", "read_file", "find_files", "get_clipboard", "list_windows", "desktop_state", "get_context", "get_current_time",
     "inspect_ui", "screenshot", "wait", "ask_user", "list_source", "read_source", "show_changes",
-    "work_actions", "reconcile_action",
-    "browser_tabs", "browser_snapshot", "browser_screenshot", "browser_app_list", "browser_app_snapshot",
+    "work_actions", "reconcile_action", "work_feed",
+    "browser_tabs", "browser_snapshot", "browser_screenshot",
     "teams_status", "teams_find_users", "teams_list_chats", "teams_read_messages", "meeting_status", "meeting_list",
     "meeting_read_sources", "meeting_followup_result",
 })
@@ -100,12 +98,12 @@ def ownership(tool: str, arguments: Mapping[str, object]) -> tuple[str, ...]:
         return ("foreground", "clipboard") if tool == "paste_text" else ("foreground",)
     if tool in ("get_clipboard", "set_clipboard"):
         return ("clipboard",)
-    if tool.startswith("browser_app_"):
-        return ("browser-app",)
     if tool.startswith("browser_"):
         return ("browser", "foreground") if tool == "browser_sign_in" or (
             tool == "browser_tab" and arguments.get("action") == "activate"
         ) else ("browser",)
+    if tool.startswith("work_feed"):
+        return ("work-feed",)
     if tool.startswith("teams_"):
         return ("teams",)
     if tool.startswith("meeting_"):
@@ -143,14 +141,6 @@ def resources(tool: str, arguments: Mapping[str, object]) -> tuple[str, ...]:
         digest, destination = arguments.get("source_digest"), arguments.get("destination")
         if isinstance(digest, str) and len(digest) == 64 and isinstance(destination, str):
             return (*selected, target("installed-root", destination), "source-digest:" + digest)
-    if tool.startswith("browser_app_"):
-        if card := target_card_id(arguments.get("target_id")):
-            return (*selected, target("browser-app-card", card))
-        if tool == "browser_app_open":
-            # Only the matching saved-card receipt verifies creation. A list
-            # containing an older card at the same URL cannot prove this open.
-            return (*selected, target("browser-app-open", fingerprint(tool, arguments)))
-        return selected
     if tool.startswith("browser_"):
         if isinstance(page := arguments.get("target_id"), str) and page:
             return (*selected, target("browser-page", page))
@@ -168,6 +158,8 @@ def resources(tool: str, arguments: Mapping[str, object]) -> tuple[str, ...]:
         return selected
     if tool == "teams_open_chat" and isinstance(recipient := arguments.get("user_id"), str):
         return (*selected, target("teams-recipient", recipient))
+    if tool.startswith("work_feed"):
+        return ("work-feed",)
     if tool.startswith("teams_"):
         return (*selected, target("teams-account", "current"))
     if tool in ("focus_window", "manage_window", "inspect_ui", "ui_action", "screenshot"):
@@ -187,7 +179,7 @@ def observed_resources(tool: str, arguments: Mapping[str, object], result: str) 
     selected = resources(tool, arguments)
     if tool == "desktop_state":
         return (*selected, "all:window")
-    if tool not in ("browser_tabs", "browser_app_list", "teams_list_chats"):
+    if tool not in ("browser_tabs", "teams_list_chats"):
         return selected
     try:
         raw: object = json.loads(result)
@@ -196,11 +188,6 @@ def observed_resources(tool: str, arguments: Mapping[str, object], result: str) 
     if not isinstance(raw, dict):
         return selected
     data = cast("dict[str, object]", raw)
-    if tool == "browser_app_list":
-        for row in _objects(data.get("apps")):
-            if card := target_card_id(row.get("target_id")):
-                selected += (target("browser-app-card", card),)
-        return selected
     if tool == "teams_list_chats":
         for chat in _objects(data.get("chats")):
             if chat.get("chatType") == "oneOnOne":
@@ -227,12 +214,6 @@ def observed_resources(tool: str, arguments: Mapping[str, object], result: str) 
 
 def evidence_matches(specification: ActionSpec, tool: str, observed: tuple[str, ...]) -> bool:
     """A lock category is never sufficient proof for an operation with a target."""
-    if specification.tool == "browser_app_open":
-        return False
-    if specification.tool == "browser_app_action" and tool != "browser_app_snapshot":
-        return False
-    if specification.tool == "browser_app_navigate" and tool not in ("browser_app_list", "browser_app_snapshot"):
-        return False
     if specification.tool == "meeting_save_draft":
         # The adapter verifies the exact saved revision and original mailbox.
         # A model assertion about another observation cannot replace that proof.
@@ -240,7 +221,7 @@ def evidence_matches(specification: ActionSpec, tool: str, observed: tuple[str, 
     if specification.tool == "run_powershell":
         # Arbitrary commands have no inferred target. The agent must explicitly
         # reconcile them using a later inspection of the actual requested result.
-        return bool(ownership(tool, {})) and tool not in ("teams_status", "browser_tabs", "browser_app_list", "meeting_list")
+        return bool(ownership(tool, {})) and tool not in ("teams_status", "browser_tabs", "meeting_list")
     expected = tuple(item for item in specification.resources if item.startswith("target:"))
     if expected:
         broad = (
@@ -346,7 +327,7 @@ class Actions:
 
     def execute[T](
         self, specification: Plan, perform: Callable[[], T], succeeded: Callable[[T], bool], cancel: threading.Event,
-        *, verify: Callable[[T], ActionVerified | ActionUncertain] | None = None,
+        *, verify: Callable[[T], ActionVerified | ActionUncertain | ActionNotApplied] | None = None,
     ) -> T:
         with self.resources.hold(specification.resources, cancel):
             if isinstance(specification, Observation):

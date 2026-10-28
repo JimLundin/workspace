@@ -1,5 +1,5 @@
 """The usage log: which features get used, so unused ones can be removed. One JSON
-object per line in `%LOCALAPPDATA%/toolkit/usage.jsonl`. It records that a feature
+object per line in `%LOCALAPPDATA%/workspace/usage.jsonl`. It records that a feature
 was used (and how long it took, whether it failed), never what was typed or said.
 Plain Python: importable anywhere.
 """
@@ -13,8 +13,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Final, cast
 
-DIRECTORY: Final = Path(os.environ.get("LOCALAPPDATA") or tempfile.gettempdir()) / "toolkit"
-"""Where the toolkit keeps its logs."""
+DIRECTORY: Final = Path(os.environ.get("LOCALAPPDATA") or tempfile.gettempdir()) / "workspace"
+"""Where the workspace keeps its logs."""
 USAGE_LOG: Final = DIRECTORY / "usage.jsonl"
 
 type Detail = str | int | float | bool

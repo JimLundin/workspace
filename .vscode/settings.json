@@ -1,0 +1,5 @@
+{
+  "python.defaultInterpreterPath": "${workspaceFolder}\\.venv\\Scripts\\python.exe",
+  "python.analysis.extraPaths": ["C:/Users/Jim.Lundin/Downloads/workspace-sdk/workspace/.runtime"],
+  "terminal.integrated.defaultProfile.windows": "Windows PowerShell"
+}

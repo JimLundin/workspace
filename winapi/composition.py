@@ -30,6 +30,8 @@ from win32more.Windows.Win32.System.WinRT.Composition import ICompositorDesktopI
 
 from . import windows
 from ._core import dwmapi, fn, kernel32, user32
+from .composition_paths import composition_path
+from .contours import Contour
 from .shapes import Rect
 
 _DwmSetWindowAttribute = fn(dwmapi, "DwmSetWindowAttribute", ctypes.c_long,
@@ -51,6 +53,12 @@ def _check(result: object) -> None:
 
 def _color(value: str, opacity: float) -> ctypes.Structure:
     return cast(ctypes.Structure, Color(round(max(0, min(1, opacity)) * 255), *(int(value[index:index + 2], 16) for index in (1, 3, 5))))
+
+
+def borderless(handle: int) -> None:
+    """The vector silhouette supplies the edge; suppress Windows 11's rectangular frame."""
+    none = ctypes.c_uint32(0xFFFF_FFFE)  # DWMWA_COLOR_NONE; older Windows can ignore this attribute.
+    _DwmSetWindowAttribute(handle, 34, ctypes.byref(none), ctypes.sizeof(none))
 
 
 class DesktopComposition:
@@ -91,20 +99,20 @@ class DesktopComposition:
 
 class Glass:
     __slots__ = (
-        "backdrop", "bounds", "closed", "geometry", "group", "handle", "mask", "mask_shape", "mask_surface", "mask_visual",
+        "backdrop", "bounds", "closed", "compositor", "geometry", "group", "handle", "mask", "mask_shape", "mask_surface", "mask_visual",
         "opacity", "root", "shadow", "shadow_visual", "size", "target", "tint", "tint_brush", "visible",
     )
 
     def __init__(self, owner: DesktopComposition) -> None:
         # NOREDIRECTIONBITMAP lets composition supply the entire surface. It is
         # intentionally not a layered/color-keyed window.
-        self.handle = int(_CreateWindowExW(0x0820_00A0, "STATIC", "Toolkit · Glass", 0x8000_0000,
+        self.handle = int(_CreateWindowExW(0x0820_00A0, "STATIC", "Workspace · Glass", 0x8000_0000,
                                                   0, 0, 1, 1, None, None, _GetModuleHandleW(None), None) or 0)
         if not self.handle:
             raise ctypes.WinError(ctypes.get_last_error())
         self.closed = self.visible = False
         self.bounds: Rect | None = None
-        self.size: tuple[int, int, float] | None = None
+        self.size: tuple[int, int, float, bool, Contour | None] | None = None
         self.opacity = 1.0
         try:
             enabled = ctypes.c_int(1)
@@ -112,6 +120,8 @@ class Glass:
             self.target: Any = DesktopWindowTarget(own=True)
             _check(owner._interop.CreateDesktopWindowTarget(self.handle, False, self.target))  # pyright: ignore[reportPrivateUsage]
             compositor = owner._compositor  # pyright: ignore[reportPrivateUsage]
+            self.compositor = compositor
+            borderless(self.handle)
             self.root = compositor.CreateContainerVisual()
             self.target.Root = self.root
             self.geometry = compositor.CreateRoundedRectangleGeometry()
@@ -149,20 +159,29 @@ class Glass:
     def color(self, tint: str, opacity: float = .22) -> None:
         self.tint_brush.Color = _color(tint, opacity)
 
-    def position(self, bounds: Rect, scale: float, opacity: float) -> None:
+    def position(self, bounds: Rect, scale: float, opacity: float, *, attached: bool = False, contour: Contour | None = None) -> None:
         padding = round(28 * scale)
         outer = Rect(bounds.left - padding, bounds.top - padding, bounds.right + padding, bounds.bottom + padding)
         if self.bounds != outer:
             self.bounds = outer
             windows.move(self.handle, outer)
-        if self.size != (bounds.width, bounds.height, scale):
-            self.size = (bounds.width, bounds.height, scale)
+        if self.size != (bounds.width, bounds.height, scale, attached, contour):
+            previous = self.size
+            self.size = (bounds.width, bounds.height, scale, attached, contour)
             size = Vector2(bounds.width, bounds.height)
             offset = Vector3(padding, padding, 0)
             self.root.Size = Vector2(outer.width, outer.height)
-            self.geometry.Size = size
-            radius = min(26 * scale, bounds.height / 2, bounds.width / 2)
-            self.geometry.CornerRadius = Vector2(radius, radius)
+            if contour is not None:
+                self.geometry = self.compositor.CreatePathGeometryWithPath(composition_path(contour, scale))
+            else:
+                if previous is not None and previous[4] is not None:
+                    self.geometry = self.compositor.CreateRoundedRectangleGeometry()
+                radius = min(26 * scale, bounds.height / 2, bounds.width / 2)
+                self.geometry.Offset = Vector2(0, -radius if attached else 0)
+                self.geometry.Size = Vector2(bounds.width, bounds.height + radius if attached else bounds.height)
+                self.geometry.CornerRadius = Vector2(radius, radius)
+            self.group.Clip = self.compositor.CreateGeometricClipWithGeometry(self.geometry)
+            self.mask_shape.Geometry = self.geometry
             for visual in (self.group, self.backdrop, self.tint, self.mask_visual, self.shadow_visual):
                 visual.Size = size
             self.group.Offset = self.shadow_visual.Offset = offset

@@ -308,7 +308,7 @@ class PowerShellOutlook:
 
     def _exchange(self, request: Mapping[str, object], cancel: threading.Event) -> dict[str, object] | DraftUncertain:
         try:
-            with tempfile.TemporaryDirectory(prefix="toolkit-outlook-") as scratch:
+            with tempfile.TemporaryDirectory(prefix="workspace-outlook-") as scratch:
                 response = Path(scratch) / "response.json"
                 code, _ = self.command.run(request, response, cancel)
                 if code != 0:
@@ -394,10 +394,10 @@ def eml_bytes(request: DraftRequest) -> bytes:
     for name, recipients in (("To", request.content.to), ("Cc", request.content.cc), ("Bcc", request.content.bcc)):
         if recipients:
             message[name] = ", ".join(item.address for item in recipients)
-    message["Message-ID"] = "<toolkit." + draft_key(request) + "@drafts.invalid>"
+    message["Message-ID"] = "<workspace." + draft_key(request) + "@drafts.invalid>"
     message["X-Unsent"] = "1"
-    message["X-Toolkit-Draft-Key"] = draft_key(request)
-    message["X-Toolkit-Draft-Fingerprint"] = fingerprint(request)
+    message["X-Workspace-Draft-Key"] = draft_key(request)
+    message["X-Workspace-Draft-Fingerprint"] = fingerprint(request)
     message["MIME-Version"] = "1.0"
     message["Content-Type"] = 'text/plain; charset="utf-8"'
     message["Content-Transfer-Encoding"] = "base64"
@@ -415,13 +415,13 @@ def read_eml(data: bytes) -> tuple[str, str, DraftContent]:
     headers: dict[str, list[str]] = {}
     for name, value in message.raw_items():
         headers.setdefault(name.lower(), []).append(value)
-    for name in ("subject", "message-id", "x-unsent", "x-toolkit-draft-key", "x-toolkit-draft-fingerprint"):
+    for name in ("subject", "message-id", "x-unsent", "x-workspace-draft-key", "x-workspace-draft-fingerprint"):
         if len(headers.get(name, [])) != 1:
             raise ValueError("The saved draft has missing or duplicate identity headers.")
     if str(message["X-Unsent"]) != "1":
         raise ValueError("The saved message is not marked as an editable unsent draft.")
-    key, digest = _digest(str(message["X-Toolkit-Draft-Key"])), _digest(str(message["X-Toolkit-Draft-Fingerprint"]))
-    if str(message["Message-ID"]) != "<toolkit." + key + "@drafts.invalid>":
+    key, digest = _digest(str(message["X-Workspace-Draft-Key"])), _digest(str(message["X-Workspace-Draft-Fingerprint"]))
+    if str(message["Message-ID"]) != "<workspace." + key + "@drafts.invalid>":
         raise ValueError("The saved message identity changed.")
     body = cast("object", message.get_payload(decode=True))
     if not isinstance(body, bytes):

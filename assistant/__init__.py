@@ -1,1 +1,1 @@
-"""The assistant: everything the toolkit does that takes longer than a keystroke."""
+"""The assistant: everything Workspace does that takes longer than a keystroke."""

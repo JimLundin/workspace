@@ -17,6 +17,7 @@ from typing import Annotated, Literal
 from pydantic import StrictInt, StrictStr, StringConstraints, TypeAdapter
 
 from scripts.architecture import python_sources
+from scripts.source_analysis import Cache, Source, parse
 
 type LintRule = Literal['FBT001', 'FBT002', 'PLR0913']
 type Rule = LintRule | Literal['import-alias', 're-export', 'inline-import']
@@ -77,8 +78,15 @@ class Report:
     legacy: int
 
 
+@dataclass(frozen=True, slots=True)
+class LintSource:
+    source: Source
+    diagnostics: tuple[Diagnostic, ...]
+
+
 DIAGNOSTICS = TypeAdapter[tuple[Diagnostic, ...]](tuple[Diagnostic, ...])
 BASELINE = TypeAdapter[Baseline](Baseline)
+FINDINGS = TypeAdapter[tuple[Finding, ...]](tuple[Finding, ...])
 
 
 def definitions(tree: ast.AST, scope: str = '') -> Iterator[_Definition]:
@@ -111,7 +119,20 @@ def identify(root: Path, diagnostic: Diagnostic, scopes: Iterable[_Definition]) 
     return Finding(key, row, diagnostic.message)
 
 
-def scan(root: Path, names: Iterable[str] | None = None) -> tuple[Finding, ...]:
+def located(root: Path, observed: LintSource, cache: Cache | None) -> tuple[Finding, ...]:
+    source = observed.source
+    key = cache.key('quality', source, extra=DIAGNOSTICS.dump_json(observed.diagnostics)) if cache is not None else ''
+    if cache is not None and (saved := cache.read(key, FINDINGS)) is not None:
+        return saved
+    tree = parse(source)
+    scopes = tuple(definitions(tree)) if observed.diagnostics else ()
+    result = (*(identify(root, item, scopes) for item in observed.diagnostics), *imports(source.name, tree))
+    if cache is not None:
+        cache.write(key, result, FINDINGS)
+    return result
+
+
+def scan(root: Path, names: Iterable[str] | None = None, *, cache: Cache | None = None) -> tuple[Finding, ...]:
     root = root.resolve()
     sources = python_sources(root, names)
     if not sources:
@@ -124,17 +145,14 @@ def scan(root: Path, names: Iterable[str] | None = None) -> tuple[Finding, ...]:
     if result.returncode not in (0, 1):
         raise RuntimeError('Signature lint did not complete: ' + result.stderr.strip())
     diagnostics = DIAGNOSTICS.validate_json(result.stdout)
-
-    def located() -> Iterator[Finding]:
-        for name in sources:
-            filename = str(root / name)
-            tree = ast.parse(Path(filename).read_text(encoding='utf-8'), filename=filename)
-            scopes = tuple(definitions(tree))
-            for item in diagnostics:
-                if Path(item.filename) == Path(filename):
-                    yield identify(root, item, scopes)
-            yield from imports(name, tree)
-    return tuple(located())
+    # Group once instead of comparing every diagnostic's Windows path to every
+    # source. This local accumulator prevents quadratic path construction.
+    grouped: dict[str, list[Diagnostic]] = {}
+    for item in diagnostics:
+        name = Path(item.filename).relative_to(root).as_posix()
+        grouped.setdefault(name, []).append(item)
+    return tuple(finding for name in sources for finding in located(
+        root, LintSource(Source(name, (root / name).read_text(encoding='utf-8')), tuple(grouped.get(name, ()))), cache))
 
 
 def imports(path: str, tree: ast.Module) -> Iterator[Finding]:
@@ -211,8 +229,8 @@ def compare(findings: Iterable[Finding], entries: Iterable[Entry]) -> Report:
                   stale=tuple(entry for entry in baseline if entry.key not in observed), legacy=len(accepted & observed))
 
 
-def check(root: Path, names: Iterable[str] | None = None) -> Report:
-    report = compare(scan(root, names), load(root / 'docs' / 'quality-migrations.json'))
+def check(root: Path, names: Iterable[str] | None = None, *, cache: Cache | None = None) -> Report:
+    report = compare(scan(root, names, cache=cache), load(root / 'docs' / 'quality-migrations.json'))
     for finding in (*report.failures, *report.warnings):
         print(('Review warning: ' if finding.key.rule == 'PLR0913' else '') + finding.describe(), flush=True)
     for entry in report.stale:

@@ -221,9 +221,15 @@ class Modifiers:
             host.send(mod, False)
 
     def release_all(self, host: Host) -> None:
-        for mod in self.counts:
-            host.send(mod, False)
-        self.counts = {}
+        held, self.counts = self.counts, {}
+        failures = 0
+        for mod in held:
+            try:
+                host.send(mod, False)
+            except Exception:
+                failures += 1
+        if failures:
+            raise OSError(f"Failed to release {failures} modifiers.")
 
 
 @dataclass(slots=True)
@@ -248,9 +254,9 @@ class Engine:
     capitalised until something that isn't part of a word: a space, punctuation,
     Enter, an arrow... Digits, `_`, Backspace and Delete keep it going.
 
-    Voice keys: hold B to dictate or N to speak an agent task; releasing the key
-    (or switching the layout off) asks the assistant to stop listening. Tool and
-    app keys on the Tools and Apps layers are passed on the same way.
+    Spacebar holds dictation; B toggles dictation; N toggles agent speech.
+    A second toggle press stops speech, as does disabling the layout.
+    Hold-to-talk tools on the Tools layer retain their press/release behavior.
 
     Snippets: the last characters typed are remembered; once they end in a
     snippet's trigger, the trigger is erased and the snippet typed instead.
@@ -277,7 +283,8 @@ class Engine:
     caps_word: bool = False
     locked: Layer | None = None
     mods: Modifiers = field(default_factory=Modifiers)
-    voice_held: set[Scancode] = field(default_factory=set[Scancode])
+    voice_held: dict[Scancode, Tool] = field(default_factory=dict[Scancode, Tool])
+    desktop_held: dict[Key, Tool] = field(default_factory=dict[Key, Tool])
     """Dedicated voice keys currently held, independent of the layout's layers."""
     typed: str = ""
     """The last characters typed, for snippets. Anything that moves the cursor, or a
@@ -325,13 +332,14 @@ class Engine:
         if not self.enabled:
             return Verdict.PASS
         # Voice buttons act immediately and never decide a pending tap-hold key.
-        if (tool := VOICE_KEYS.get(scancode)) is not None:
-            if down != (scancode in self.voice_held):
-                if down:
-                    self.voice_held.add(scancode)
-                else:
-                    self.voice_held.remove(scancode)
-                host.request(tool, down)
+        if scancode in VOICE_KEYS:
+            if down and scancode not in self.voice_held:
+                tool = VOICE_KEYS[scancode]
+                self.voice_held[scancode] = tool
+                host.request(tool, True)
+            elif not down and scancode in self.voice_held:
+                tool = self.voice_held.pop(scancode)
+                host.request(tool, False)
             return Verdict.SWALLOW
         match slot(scancode):
             case Unmapped.FREE:
@@ -342,6 +350,35 @@ class Engine:
             case int(cell):
                 self.event(host, KeyDown(cell, now) if down else KeyUp(cell, now))
                 return Verdict.SWALLOW
+
+    def native_direction(self, host: Host, key: Key, down: bool, now: int) -> bool:
+        """Physical arrows compose with Apps; their release stays paired after leaving the layer."""
+        if key in self.desktop_held:
+            if not down:
+                host.request(self.desktop_held.pop(key), False)
+            return True
+        if not self.enabled or not down:
+            return False
+        if self.pending is not None and self.pending.hold is Layer.APPS:
+            self.resolve(host, Decision.HOLD, now=now)
+            self.refresh(host)
+        if self.layer() is not Layer.APPS:
+            return False
+        match key:
+            case Key.LEFT:
+                action = Tool.TILE_FOCUS_LEFT
+            case Key.DOWN:
+                action = Tool.TILE_FOCUS_DOWN
+            case Key.UP:
+                action = Tool.TILE_FOCUS_UP
+            case Key.RIGHT:
+                action = Tool.TILE_FOCUS_RIGHT
+            case _:
+                return False
+        self.desktop_held[key] = action
+        self.typed = ''
+        host.request(action, True)
+        return True
 
     def in_streak(self, now: int) -> bool:
         return self.configuration.streak_ms > 0 and self.last_typed_at is not None and elapsed(now, self.last_typed_at) < self.configuration.streak_ms
@@ -460,25 +497,46 @@ class Engine:
             self.event(host, e)
 
     def release_all(self, host: Host) -> None:
-        """Let go of everything (used when switching off or quitting)."""
-        if self.pending is not None:
-            host.stop_timer(self.pending.timer)
-            self.pending = None
+        """Clear ownership first and attempt every release, even after rejection."""
+        pending, self.pending = self.pending, None
         self.buffer = []
         held_down, self.pressed = self.pressed, no_keys()
+        held_voice, self.voice_held = self.voice_held, {}
+        held_desktop, self.desktop_held = self.desktop_held, {}
+        failures = 0
+        if pending is not None:
+            try:
+                host.stop_timer(pending.timer)
+            except Exception:
+                failures += 1
         for a in held_down:
             if a is not None:
-                self.release(host, a)
+                try:
+                    self.release(host, a)
+                except Exception:
+                    failures += 1
         self.active_layers = []
         self.last_typed_at = None
         self.last_tap = None
         self.caps_word = False
         self.locked = None
-        self.mods.release_all(host)  # nothing should be left, but never leave one stuck
+        try:
+            self.mods.release_all(host)
+        except Exception:
+            failures += 1
         self.typed = ""
-        held_voice, self.voice_held = self.voice_held, set()
-        for scancode in sorted(held_voice):
-            host.request(VOICE_KEYS[scancode], False)
+        for tool in held_voice.values():
+            try:
+                host.request(tool, False)
+            except Exception:
+                failures += 1
+        for tool in held_desktop.values():
+            try:
+                host.request(tool, False)
+            except Exception:
+                failures += 1
+        if failures:
+            raise OSError(f"Failed to complete {failures} keyboard cleanup operations.")
 
     def apply_caps_word(self, a: Action) -> Action:
         """Caps word: capitalise letters, let word characters through, end on anything else."""

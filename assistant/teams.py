@@ -174,7 +174,7 @@ class Teams:
         settings: Mapping[str, str] = environment if environment is not None else {}
         # Pyright 1.1.414's stub incorrectly gives frozendict.__init__ no arguments.
         self.environment: frozendict[str, str] = frozendict({  # pyright: ignore[reportCallIssue]
-            name: settings[name] for name in ("TOOLKIT_GRAPH_CLIENT_ID", "TOOLKIT_GRAPH_TENANT_ID") if name in settings
+            name: settings[name] for name in ("WORKSPACE_GRAPH_CLIENT_ID", "WORKSPACE_GRAPH_TENANT_ID") if name in settings
         })
         self.clock: Clock = clock if clock is not None else SystemClock()
         self.store = store or TokenStore(folder / "tokens.bin")
@@ -189,8 +189,8 @@ class Teams:
             saved = _object(cast(Json, json.loads(path.read_bytes()))) if path.is_file() else {}
         except (OSError, ValueError) as error:
             raise GraphError("Teams setup could not be read. Use teams_configure with the approved app's IDs.") from error
-        client = self.environment.get("TOOLKIT_GRAPH_CLIENT_ID") or _text(saved, "client_id")
-        tenant = self.environment.get("TOOLKIT_GRAPH_TENANT_ID") or _text(saved, "tenant_id")
+        client = self.environment.get("WORKSPACE_GRAPH_CLIENT_ID") or _text(saved, "client_id")
+        tenant = self.environment.get("WORKSPACE_GRAPH_TENANT_ID") or _text(saved, "tenant_id")
         if not client or not tenant:
             if required:
                 raise GraphError("Teams setup needs an approved Entra app's client ID and tenant ID. Use teams_configure when available.")
@@ -375,7 +375,7 @@ class Teams:
         config: dict[str, Json] = {
             "client_id": _guid(_text(args, "client_id"), "Client ID"), "tenant_id": _guid(_text(args, "tenant_id"), "Tenant ID"),
         }
-        for key, variable in (("client_id", "TOOLKIT_GRAPH_CLIENT_ID"), ("tenant_id", "TOOLKIT_GRAPH_TENANT_ID")):
+        for key, variable in (("client_id", "WORKSPACE_GRAPH_CLIENT_ID"), ("tenant_id", "WORKSPACE_GRAPH_TENANT_ID")):
             if (environment := self.environment.get(variable)) and _guid(environment, key) != config[key]:
                 raise GraphError(f"{variable} overrides saved setup. Update that environment setting before saving different app IDs.")
         if config != self._config(required=False):
@@ -439,7 +439,7 @@ class Teams:
             self.store.clear()
             self.flow = None
             self.pages.clear()
-            return {"state": "signed_out", "message": "Toolkit's saved Teams API tokens were removed. Browser sign-in is separate."}
+            return {"state": "signed_out", "message": "Workspace's saved Teams API tokens were removed. Browser sign-in is separate."}
         if operation == "sign_in":
             return self._begin(cancel)
         if operation == "finish_sign_in":

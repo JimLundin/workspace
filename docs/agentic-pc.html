@@ -4,8 +4,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="dark light">
-  <meta name="description" content="An interactive architecture sketch for Toolkit as a persistent automation layer over Windows.">
-  <title>Toolkit — an automated PC</title>
+  <meta name="description" content="An interactive architecture sketch for Workspace as a persistent automation layer over Windows.">
+  <title>Workspace — an automated PC</title>
   <style>
     :root {
       --bg: #101316; --surface: #171c21; --raised: #1d232a; --subtle: #13181d;
@@ -217,14 +217,14 @@
   <div class="page">
     <header>
       <div class="masthead">
-        <div class="brand"><span class="brand-icon" aria-hidden="true"><i></i><i></i><i></i><i></i></span> toolkit <span class="divider"></span><span class="eyebrow">Architecture explorer</span></div>
+        <div class="brand"><span class="brand-icon" aria-hidden="true"><i></i><i></i><i></i><i></i></span> workspace <span class="divider"></span><span class="eyebrow">Architecture explorer</span></div>
         <div class="top-actions">
           <button class="icon-button" id="theme" aria-label="Switch to light theme" title="Switch theme"><svg class="icon"><use href="#i-sun"/></svg></button>
           <button class="icon-button" id="print" aria-label="Print architecture" title="Print architecture"><svg class="icon"><use href="#i-print"/></svg></button>
         </div>
       </div>
       <div class="hero">
-        <div><div class="eyebrow">A persistent automation layer over Windows</div><h1>Toolkit as an automated PC.</h1><p>One system for your requests, standing instructions, and work that survives interruptions.</p></div>
+        <div><div class="eyebrow">A persistent automation layer over Windows</div><h1>Workspace as an automated PC.</h1><p>One system for your requests, standing instructions, and work that survives interruptions.</p></div>
         <span class="concept">Implementation map · October 2026</span>
       </div>
     </header>
@@ -364,7 +364,7 @@
         rule:"Prefer application APIs, then background browser operations, accessibility, and foreground input. Verify outcomes from fresh state.",
         build:"Reuse these adapters in the work process. Each acquired browser session, handle, and child process retains an explicit owner.",source:"assistant/browser.py · assistant/desktop.py · assistant/uia.py · assistant/teams.py"},
       {id:"windows",title:"Windows & applications",code:"Host",kind:"host",x:672,y:704,w:278,h:84,summary:"Apps · browser · filesystem",icon:"screen",
-        description:"Windows provides the desktop, running applications, files, devices, and user sessions that Toolkit operates.",
+        description:"Windows provides the desktop, running applications, files, devices, and user sessions that Workspace operates.",
         owns:["Actual application and filesystem state.","Device and session availability.","The observable effects of automation."],
         rule:"The outside world can change between observations. A lock, disconnect, or changed window can turn a runnable task into waiting work.",
         build:"Continue using the user’s existing Windows session and installed applications. Report observed limitations to the task controller.",source:"winapi/ · existing browser and application integrations"},
@@ -377,7 +377,7 @@
         description:"The protected supervisor starts processes, detects failure, and manages checked updates and rollback.",
         owns:["Assistant, keyboard, and automation process lifetimes.","Readiness, recovery, and update installation.","Independent worker restarts and ordered shutdown."],
         rule:"Process recovery and task recovery have separate owners: the keeper restarts a process; the work controller reconciles its unfinished tasks.",
-        build:"The keeper starts three children. It stops execution before UI/input, checks all readiness markers, and rolls back failed update trials.",source:"keeper.py · runtime.py · toolkit.pyw"}
+        build:"The keeper starts three children. It stops execution before UI/input, checks all readiness markers, and rolls back failed update trials.",source:"keeper.py · runtime.py · workspace.pyw"}
     ];
     const connections = [
       {id:"intent",a:"user",b:"interface",d:"M155 142V222"},
@@ -399,7 +399,7 @@
     // A route is a sequence of existing connections; a leading "-" reverses it.
     const scenarios = {
       request: {label:"Your request",steps:[
-        {node:"user",title:"Give Toolkit an outcome.",text:"“Gather the project updates and prepare a briefing.” Voice and typed requests enter the same work system.",state:"Intent",checkpoint:"An outcome and its constraints",route:[]},
+        {node:"user",title:"Give Workspace an outcome.",text:"“Gather the project updates and prepare a briefing.” Voice and typed requests enter the same work system.",state:"Intent",checkpoint:"An outcome and its constraints",route:[]},
         {node:"interface",title:"The interface submits work.",text:"The assistant turns your request into a task submission. Its conversation and work overview will show the same task.",state:"Submitted",checkpoint:"One identity across every view",route:["intent"]},
         {node:"journal",title:"Accept the task durably.",text:"The controller validates the transition and commits the goal, constraints, and initial state before dispatching execution.",state:"Ready",checkpoint:"Checkpoint · accepted task",route:["request","transition","-transition","commit"]},
         {node:"executor",title:"Plan with the relevant context.",text:"The controller dispatches the saved task. Execution gathers project references and fresh observations before choosing its next action.",state:"Running",checkpoint:"The task owns its execution context",route:["-commit","dispatch","-context","context"]},
@@ -626,12 +626,12 @@
     function theme(value) {
       document.documentElement.dataset.theme = value;
       $("theme").setAttribute("aria-label","Switch to " + (value === "dark" ? "light" : "dark") + " theme");
-      try { localStorage.setItem("toolkit-architecture-theme",value); } catch { /* A local file may have storage disabled. */ }
+      try { localStorage.setItem("workspace-architecture-theme",value); } catch { /* A local file may have storage disabled. */ }
     }
     $("theme").addEventListener("click",function() { theme(document.documentElement.dataset.theme === "dark" ? "light" : "dark"); });
     $("print").addEventListener("click",function() { pause(); window.print(); });
     window.addEventListener("beforeprint",pause);
-    try { const saved = localStorage.getItem("toolkit-architecture-theme"); if (saved === "dark" || saved === "light") theme(saved); } catch { /* The page also works without local storage. */ }
+    try { const saved = localStorage.getItem("workspace-architecture-theme"); if (saved === "dark" || saved === "light") theme(saved); } catch { /* The page also works without local storage. */ }
     setScenario("request");
     selectModule("controller",true);
   </script>

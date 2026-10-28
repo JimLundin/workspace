@@ -19,6 +19,8 @@ from typing import Annotated, Literal
 
 from pydantic import StrictStr, StringConstraints, TypeAdapter
 
+from scripts.source_analysis import Cache, Source, parse
+
 type Text = Annotated[StrictStr, StringConstraints(strip_whitespace=True, min_length=1)]
 
 REFLECTION = frozenset({'getattr', 'hasattr', 'setattr', 'delattr'})
@@ -68,7 +70,15 @@ class Configuration:
     exceptions: tuple[ExceptionSpec, ...] = ()
 
 
+@dataclass(frozen=True, slots=True)
+class Observation:
+    declarations: tuple[Finding, ...]
+    dynamic_imports: tuple[Finding, ...]
+
+
 CONFIGURATION = TypeAdapter[Configuration](Configuration)
+OBSERVATION = TypeAdapter[Observation](Observation)
+DEPENDENCIES = TypeAdapter[frozenset[str]](frozenset[str])
 
 
 def python_sources(root: Path, names: Iterable[str] | None = None) -> tuple[str, ...]:
@@ -134,8 +144,15 @@ def _imports(name: str, tree: ast.AST) -> frozenset[str]:
     return frozenset('.'.join(value.split('.')[:index]) for value in result for index in range(1, len(value.split('.')) + 1))
 
 
-def dependencies(name: str, text: str) -> frozenset[str]:
-    return _imports(name, ast.parse(text, filename=name))
+def dependencies(name: str, text: str, *, cache: Cache | None = None) -> frozenset[str]:
+    source = Source(name, text)
+    key = cache.key('dependencies', source) if cache is not None else ''
+    if cache is not None and (saved := cache.read(key, DEPENDENCIES)) is not None:
+        return saved
+    result = _imports(name, parse(source))
+    if cache is not None:
+        cache.write(key, result, DEPENDENCIES)
+    return result
 
 
 def _configuration(root: Path) -> tuple[tuple[str, ...], tuple[ExceptionSpec, ...]]:
@@ -234,16 +251,42 @@ def _declarations(tree: ast.AST, module: str, declaration: str = '',
         yield from _declarations(child, module, declaration, local)
 
 
-def review(root: Path, names: Iterable[str] | None = None) -> Report:
+def observation(source: Source, cache: Cache | None) -> Observation:
+    key = cache.key('architecture', source) if cache is not None else ''
+    if cache is not None and (saved := cache.read(key, OBSERVATION)) is not None:
+        return saved
+    tree = parse(source)
+    module = module_name(source.name)
+    aliases = _aliases(tree)
+    dynamic: list[Finding] = []
+    for node in ast.walk(tree):
+        match node:
+            case ast.Call(func=function, args=args, keywords=keywords) if _call_name(function, aliases) in (
+                    'importlib.import_module', '__import__', 'builtins.__import__'):
+                match args:
+                    case [ast.Constant(value=str() as target), *_] if not target.startswith('.') and not any(
+                            keyword.arg == 'level' for keyword in keywords):
+                        pass
+                    case _:
+                        dynamic.append(Finding('keyboard-import', module, '', ast.unparse(node), node.lineno,
+                                               'Keyboard dependencies require statically resolvable absolute import targets.'))
+            case _:
+                pass
+    result = Observation(tuple(_declarations(tree, module)), tuple(dynamic))
+    if cache is not None:
+        cache.write(key, result, OBSERVATION)
+    return result
+
+
+def review(root: Path, names: Iterable[str] | None = None, *, cache: Cache | None = None) -> Report:
     sources = python_sources(root, names)
     models, exceptions = _configuration(root)
-    trees = {module_name(name): ast.parse((root / name).read_text(encoding='utf-8'), filename=name)
-             for name in sources if not name.startswith('tests/')}
-    graph = {module_name(name): _imports(name, trees[module_name(name)]) & trees.keys()
-             for name in sources if not name.startswith('tests/')}
-    findings = [finding for module, tree in trees.items() for finding in _declarations(tree, module)]
+    loaded = tuple(Source(name, (root / name).read_text(encoding='utf-8')) for name in sources if not name.startswith('tests/'))
+    observations = {module_name(source.name): observation(source, cache) for source in loaded}
+    graph = {module_name(source.name): dependencies(source.name, source.text, cache=cache) & observations.keys() for source in loaded}
+    findings = [finding for observed in observations.values() for finding in observed.declarations]
     findings.extend(Finding('model-coverage', module, '', '', 0, 'Declared model module is absent; update its ownership declaration.')
-                    for module in models if module not in trees)
+                    for module in models if module not in observations)
     pending: deque[tuple[str, ...]] = deque((module,) for module in sorted(graph) if module == 'miryoku' or module.startswith('miryoku.'))
     visited: set[str] = set()
     while pending:
@@ -255,20 +298,7 @@ def review(root: Path, names: Iterable[str] | None = None) -> Report:
         if module == 'assistant' or module.startswith('assistant.') or module == 'automation' or module.startswith('automation.'):
             findings.append(Finding('keyboard-isolation', route[0], '', '', 0, ' → '.join(route)))
             continue
-        aliases = _aliases(trees[module])
-        for node in ast.walk(trees[module]):
-            match node:
-                case ast.Call(func=function, args=args, keywords=keywords) if _call_name(function, aliases) in (
-                        'importlib.import_module', '__import__', 'builtins.__import__'):
-                    match args:
-                        case [ast.Constant(value=str() as target), *_] if not target.startswith('.') and not any(
-                                keyword.arg == 'level' for keyword in keywords):
-                            pass
-                        case _:
-                            findings.append(Finding('keyboard-import', module, '', ast.unparse(node), node.lineno,
-                                                    'Keyboard dependencies require statically resolvable absolute import targets.'))
-                case _:
-                    pass
+        findings.extend(observations[module].dynamic_imports)
         pending.extend((*route, target) for target in sorted(graph[module]) if target not in visited)
     accepted = tuple(exception for exception in exceptions if any(exception.matches(finding) for finding in findings))
     failures = [finding for finding in findings if not any(exception.matches(finding) for exception in accepted)]

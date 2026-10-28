@@ -13,7 +13,7 @@ if sys.platform != "win32":
 from assistant.qt import Qt, QtCore, QtGui, QtWidgets
 from assistant.qt_ui import application
 from assistant.ui import KeymapCanvas, KeymapOverlay
-from miryoku.layout import AGENT, Layer, Scancode
+from miryoku.layout import AGENT, TALK, Layer, Scancode
 from winapi.shapes import Rect
 
 WORK = Rect(0, 0, 1920, 1040)
@@ -69,19 +69,23 @@ def check_chord_feedback(overlay: KeymapOverlay, canvas: KeymapCanvas) -> None:
     with patch("assistant.ui.time.monotonic", side_effect=lambda: now):
         normal_q, normal_m, normal_b = (key_style(canvas, name) for name in ("Q", "M", "B"))
         normal_n = key_style(canvas, "N")
+        normal_space = key_style(canvas, "Space")
         items = tuple(canvas.boxes.items())
-        overlay.set_pressed(frozenset({Q, M, AGENT}))
+        overlay.set_pressed(frozenset({Q, M, AGENT, TALK}))
         pressed_q, pressed_m = key_style(canvas, "Q"), key_style(canvas, "M")
         assert pressed_q != normal_q and pressed_m != normal_m
         assert pressed_q == pressed_m  # both keys use the same contrasting feedback
         assert pressed_q[0] != pressed_q[1] == pressed_q[2] == pressed_q[3]
         assert key_style(canvas, "B") == normal_b
         assert key_style(canvas, "N") == pressed_q
+        assert key_style(canvas, "Space") == pressed_q
+        assert canvas.boxes["Space"].bottom() <= canvas.height()
         now = 2.0
         overlay.set_pressed(frozenset({M}))
         assert key_style(canvas, "Q") == normal_q
         assert key_style(canvas, "M") == pressed_m
         assert key_style(canvas, "N") == normal_n
+        assert key_style(canvas, "Space") == normal_space
         overlay.set_pressed(frozenset())
         assert key_style(canvas, "M") == normal_m
         assert tuple(canvas.boxes.items()) == items

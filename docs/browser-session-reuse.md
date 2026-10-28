@@ -6,18 +6,18 @@ live authenticated session has been tested.
 
 ## Recommendation
 
-Toolkit can reuse the user's signed-in **running Edge or Chrome** through the
+Workspace can reuse the user's signed-in **running Edge or Chrome** through the
 browser's opt-in remote-debugging connection. Microsoft explicitly documents
 this for Edge, including discovery through `DevToolsActivePort`. Chrome documents
-the equivalent flow from version 144. Attach directly with Toolkit's existing
+the equivalent flow from version 144. Attach directly with Workspace's existing
 Python WebSocket/CDP layer; adding Chrome DevTools MCP, Node.js or Puppeteer is
 unnecessary for the existing browser tools. [Sources: Edge guide][edge-mcp],
 [Chrome announcement][chrome-connect], [MCP connection implementation][mcp-connect].
 
 This provides **background work in the user's running browser**. It does not
 create a second headless browser that can concurrently share the live profile.
-Normal background tabs remain in the tab strip; Toolkit now groups new Edge
-work in a collapsed **Toolkit** group. Native tab/group controls and their
+Normal background tabs remain in the tab strip; Workspace now groups new Edge
+work in a collapsed **Workspace** group. Native tab/group controls and their
 version-specific validation are described in [background automation](background-automation.md).
 An experimental CDP option can
 create targets outside the tab strip, but those still belong to the running
@@ -44,7 +44,7 @@ For the user's default Edge browser:
 2. Open `edge://inspect/#remote-debugging`, or `edge://inspect` and then
    **Remote debugging**.
 3. Select **Allow remote debugging for this browser instance**.
-4. When Toolkit requests a connection, respond to the browser's permission
+4. When Workspace requests a connection, respond to the browser's permission
    dialog. Chrome's documented flow asks for permission for each new connection;
    Chromium's approval-mode server waits for that decision before accepting the
    WebSocket. [Sources: Edge setup][edge-mcp], [Chrome consent][chrome-connect],
@@ -58,7 +58,7 @@ later background page operations need not bring it forward. The browser also
 displays an automation indicator during the connection. [Sources: Chrome
 consent][chrome-connect], [connection dialog implementation][connection-dialog].
 
-Toolkit must leave these browser decisions to the user. Enabling debugging or
+Workspace must leave these browser decisions to the user. Enabling debugging or
 accepting its dialog is not a site sign-in. The connection can use existing site
 sessions, but expired sessions, MFA and company access requirements can still require
 interaction. The Edge guide specifically recommends attachment for existing
@@ -98,17 +98,17 @@ flow, which avoids needing to restart the user's browser with debugging flags.
 Copying a profile or extracting authentication material is unnecessary for this
 design. [Source: Edge guide][edge-mcp].
 
-## Smallest integration with Toolkit
+## Smallest integration with Workspace
 
 The reusable layers are `Cdp`, the frame/session handling and operations in
 [assistant/browser.py](../assistant/browser.py), and the DOM scripts in
 [assistant/browser_dom.py](../assistant/browser_dom.py). The main change is the
 connection and ownership boundary.
 
-Model a Toolkit-managed browser separately from an attached user browser. The
+Model a Workspace-managed browser separately from an attached user browser. The
 managed variant owns its process, Windows job and dedicated profile. The
 attached variant owns only its connection, CDP sessions and records of pages
-Toolkit created. Both can use the same snapshots, actions, evaluation and
+Workspace created. Both can use the same snapshots, actions, evaluation and
 screenshots. This is an implementation recommendation based on the current
 module and the attachment APIs, not a requirement to adopt an MCP server.
 
@@ -137,7 +137,7 @@ module and the attachment APIs, not a requirement to adopt an MCP server.
   published WebSocket, then use CDP after approval. [Source: HTTP
   implementation][http-handler].
 - The permission decision occurs **before the WebSocket upgrade completes**.
-  Toolkit's original two-second `Cdp.connect` opening timeout is unsuitable for
+  Workspace's original two-second `Cdp.connect` opening timeout is unsuitable for
   that interaction. Give explicit attachment a bounded human-length deadline
   (for example, 60 seconds), expose that it is waiting for browser permission,
   and make Stop close the pending socket. This is an implementation
@@ -146,9 +146,9 @@ module and the attachment APIs, not a requirement to adopt an MCP server.
 - Keep a successful connection for the task. Reconnecting repeatedly can show
   repeated permission dialogs. A denial should end that request; status polling
   should not silently start connection attempts. The browser owns its dialog,
-  so Toolkit should not promise to dismiss it when cancelling its own socket.
+  so Workspace should not promise to dismiss it when cancelling its own socket.
   [Sources: per-connection consent][chrome-connect], [dialog lifetime][connection-dialog].
-- Run the browser-facing transport on Windows alongside the deployed Toolkit.
+- Run the browser-facing transport on Windows alongside the deployed Workspace.
   Do not assume WSL's loopback is Windows' loopback or introduce network exposure
   to solve a local attachment problem. The upstream MCP troubleshooting guide
   distinguishes WSL networking and recommends Windows shells as one supported
@@ -172,17 +172,17 @@ specification][web-storage].
 ### Ownership, disconnect and Stop
 
 - In attached mode, never call `Browser.close`, terminate the browser process,
-  assign it to Toolkit's kill-on-close job, or restart it to switch modes.
-  Disconnect CDP and clear Toolkit's session handles instead. The browser-level
+  assign it to Workspace's kill-on-close job, or restart it to switch modes.
+  Disconnect CDP and clear Workspace's session handles instead. The browser-level
   close operation closes the browser, while detaching a debugging session is a
   distinct operation. [Source: CDP lifecycle APIs][browser-api],
   [target/session APIs][target-api].
-- Create a new Toolkit-owned target unless the caller explicitly supplies an
+- Create a new Workspace-owned target unless the caller explicitly supplies an
   existing target. The old `_open` shortcut that reused any `about:blank` page
-  must not take over a user's blank tab. Apply tab limits to Toolkit-created
+  must not take over a user's blank tab. Apply tab limits to Workspace-created
   pages, not all personal tabs. These are ownership requirements for adapting
   the existing module.
-- Ordinary user tabs survive detachment. Cleanup may close pages Toolkit
+- Ordinary user tabs survive detachment. Cleanup may close pages Workspace
   created, but must distinguish those from personal pages. Closing a socket is
   not a rollback: navigation, requests or JavaScript already started in a user
   page can continue. Report an interrupted action as uncertain instead of
@@ -207,7 +207,7 @@ session without requiring a second profile. [Sources: target API][target-api],
 `ScreenshotInactiveTab` test attaches to a blue page, opens a red foreground tab,
 then verifies that the screenshot still shows the blue page. Its implementation
 requests frames with `stay_hidden=true` and `stay_awake=true`. Keep
-`fromSurface=true` (the default) and Toolkit's existing viewport-bounded capture;
+`fromSurface=true` (the default) and Workspace's existing viewport-bounded capture;
 do not capture the desktop or select the tab. This is upstream evidence, not a
 claim that every installed browser state or company site was exercised here.
 Missing render views, unloaded pages and browser refusals must still be reported.
@@ -233,7 +233,7 @@ captures. [Sources: hidden contents implementation][hidden-manager],
 
 ## Alternatives
 
-| Option | Session reuse | Fit for Toolkit |
+| Option | Session reuse | Fit for Workspace |
 |---|---|---|
 | Direct CDP attachment | Uses the running opted-in browser | Smallest addition; preserves the existing Python tools. |
 | Chrome DevTools MCP `--autoConnect` | Same attachment mechanism; Edge additionally supplies its user-data root | Useful as a reference or for another MCP client, but adds Node/Puppeteer and another tool layer here. |
@@ -247,7 +247,7 @@ source; the last row follows the documented profile ownership rules.
 For an extension, `chrome.debugger` is an official alternative CDP transport, and
 Microsoft lists the `debugger` API as supported by Edge MV3 extensions on Windows.
 It exposes the `Page`, `Runtime`, `DOM`, `Input` and `Target` domains used by much
-of Toolkit, but not every CDP domain. Use extension tab APIs and debugger
+of Workspace, but not every CDP domain. Use extension tab APIs and debugger
 attachment to replace browser-level target discovery/lifecycle; it is not simply
 the same WebSocket channel. Opening DevTools or a user cancellation can detach
 the extension, which must handle `onDetach`. [Sources: debugger API][extension-debugger],

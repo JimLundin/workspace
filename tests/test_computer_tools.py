@@ -86,7 +86,7 @@ def test_bad_coordinates_and_action_arguments_do_not_produce_input() -> None:
 
 def context(title: str = "Budget.xlsx - Excel") -> ContextSnapshot:
     now = time.time()
-    return ContextSnapshot(now, "toolkit", (Activity(Window(7, title, "excel.exe", False), now - 2, now, False),))
+    return ContextSnapshot(now, "workspace", (Activity(Window(7, title, "excel.exe", False), now - 2, now, False),))
 
 
 def test_request_context_includes_the_work_window_and_one_current_screenshot() -> None:

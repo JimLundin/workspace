@@ -1,0 +1,2527 @@
+{
+  "description": "Sequential bounded native observations, Python 3.15.1 / PySide6 6.12.0. Fresh processes, shared workstation and OS caches; not a controlled full-suite benchmark. No Edge or full suite launched.",
+  "cohorts": {
+    "storage": {
+      "process_wall_seconds": 14.822879099985585,
+      "returncode": 0,
+      "summary": {
+        "offset": 14.458249300019816,
+        "event": "summary",
+        "passed": 54,
+        "skipped": 0,
+        "failure_count": 0,
+        "body_total": 13.502721800119616
+      },
+      "durations": [
+        {
+          "offset": 0.0550537999952212,
+          "event": "end",
+          "kind": "setup",
+          "label": "activation",
+          "seconds": 0.007940899988170713,
+          "cpu": 0.015625,
+          "outcome": "completed"
+        },
+        {
+          "offset": 0.5305853000027128,
+          "event": "end",
+          "kind": "import",
+          "label": "tests.test_work_store",
+          "seconds": 0.06589850003365427,
+          "cpu": 0.03125,
+          "outcome": "completed"
+        },
+        {
+          "offset": 0.6453266000025906,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_work_store.test_action_finishing_in_the_same_clock_tick_is_saved_and_can_complete",
+          "seconds": 0.10668190004071221,
+          "cpu": 0.03125,
+          "outcome": "completed"
+        },
+        {
+          "offset": 0.7339926999993622,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_work_store.test_answer_and_ready_state_commit_together",
+          "seconds": 0.08413150004344061,
+          "cpu": 0.03125,
+          "outcome": "completed"
+        },
+        {
+          "offset": 2.755781300016679,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_work_store.test_approval_consumption_query_does_not_depend_on_action_pagination",
+          "seconds": 2.0182346000219695,
+          "cpu": 1.15625,
+          "outcome": "completed"
+        },
+        {
+          "offset": 2.837566100002732,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_work_store.test_approval_requires_explicit_matching_decision_and_redirection_drops_its_authority",
+          "seconds": 0.07778730004793033,
+          "cpu": 0.0625,
+          "outcome": "completed"
+        },
+        {
+          "offset": 2.8951024999842048,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_work_store.test_batch_reads_keep_requested_order_and_omit_missing_or_repeated_tasks",
+          "seconds": 0.0540416999720037,
+          "cpu": 0.03125,
+          "outcome": "completed"
+        },
+        {
+          "offset": 2.923032200022135,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_work_store.test_batch_reads_validate_all_identifiers_and_the_supplied_batch_bound",
+          "seconds": 0.024052599968854338,
+          "cpu": 0.015625,
+          "outcome": "completed"
+        },
+        {
+          "offset": 2.983909800008405,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_work_store.test_batch_reads_validate_the_requested_tasks_pending_input_relationships",
+          "seconds": 0.05752460000803694,
+          "cpu": 0.046875,
+          "outcome": "completed"
+        },
+        {
+          "offset": 3.049886399996467,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_work_store.test_claim_is_atomic_across_independent_connections_and_respects_priority",
+          "seconds": 0.06261720001930371,
+          "cpu": 0.0625,
+          "outcome": "completed"
+        },
+        {
+          "offset": 3.3860454999958165,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_work_store.test_conversation_stop_reaches_hidden_tasks_and_preserves_other_sources",
+          "seconds": 0.3329354000161402,
+          "cpu": 0.3125,
+          "outcome": "completed"
+        },
+        {
+          "offset": 3.4810347000020556,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_work_store.test_durable_attempt_requires_reconciliation_before_replay_or_completion",
+          "seconds": 0.09157889999914914,
+          "cpu": 0.046875,
+          "outcome": "completed"
+        },
+        {
+          "offset": 3.5454321000142954,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_work_store.test_failed_claim_rolls_back_the_execution_identity",
+          "seconds": 0.06097700004465878,
+          "cpu": 0.0625,
+          "outcome": "completed"
+        },
+        {
+          "offset": 3.634002499980852,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_work_store.test_failed_work_can_be_explicitly_retried_but_completion_is_terminal",
+          "seconds": 0.08455640001920983,
+          "cpu": 0.0625,
+          "outcome": "completed"
+        },
+        {
+          "offset": 3.7201651000068523,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_work_store.test_graceful_interruption_is_recoverable_but_cancellation_stays_terminal",
+          "seconds": 0.08283919998211786,
+          "cpu": 0.0625,
+          "outcome": "completed"
+        },
+        {
+          "offset": 3.7363297999836504,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_work_store.test_input_validation_rejects_invalid_limits_and_nonfinite_times_without_writes",
+          "seconds": 0.012613200000487268,
+          "cpu": 0.015625,
+          "outcome": "completed"
+        },
+        {
+          "offset": 3.822779999987688,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_work_store.test_invalid_action_and_reply_rows_do_not_enter_typed_interfaces",
+          "seconds": 0.08325299998978153,
+          "cpu": 0.0625,
+          "outcome": "completed"
+        },
+        {
+          "offset": 3.9049356000032276,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_work_store.test_late_action_results_survive_cancellation_without_reviving_work",
+          "seconds": 0.07707349996780977,
+          "cpu": 0.0625,
+          "outcome": "completed"
+        },
+        {
+          "offset": 4.000590800016653,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_work_store.test_pause_resume_and_cancellation_fence_old_worker_updates",
+          "seconds": 0.09131470002466813,
+          "cpu": 0.0625,
+          "outcome": "completed"
+        },
+        {
+          "offset": 4.093143299978692,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_work_store.test_recovery_preserves_checkpoint_and_requires_a_new_run_identity",
+          "seconds": 0.08761069999309257,
+          "cpu": 0.03125,
+          "outcome": "completed"
+        },
+        {
+          "offset": 4.189461999980267,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_work_store.test_refresh_approval_requires_exact_pending_approval_and_never_approves",
+          "seconds": 0.0931107000214979,
+          "cpu": 0.0625,
+          "outcome": "completed"
+        },
+        {
+          "offset": 4.285771999973804,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_work_store.test_revise_records_new_goal_and_retains_observations_while_fencing_old_run",
+          "seconds": 0.0925843000295572,
+          "cpu": 0.046875,
+          "outcome": "completed"
+        },
+        {
+          "offset": 4.354855399986263,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_work_store.test_routine_occurrence_retry_deduplicates_without_changing_accepted_work",
+          "seconds": 0.06580300000496209,
+          "cpu": 0.046875,
+          "outcome": "completed"
+        },
+        {
+          "offset": 4.422640900011174,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_work_store.test_run_identity_cannot_be_borrowed_from_another_task",
+          "seconds": 0.0633807000122033,
+          "cpu": 0.0625,
+          "outcome": "completed"
+        },
+        {
+          "offset": 4.502749199979007,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_work_store.test_submitted_work_survives_reopen_and_new_conversations",
+          "seconds": 0.07641310000326484,
+          "cpu": 0.0625,
+          "outcome": "completed"
+        },
+        {
+          "offset": 4.5809620000072755,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_work_store.test_timed_waits_wake_at_the_deadline_and_blocked_work_requires_explicit_resume",
+          "seconds": 0.07487939996644855,
+          "cpu": 0.046875,
+          "outcome": "completed"
+        },
+        {
+          "offset": 4.683870400011074,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_work_store.test_uncertain_and_definitely_unapplied_actions_have_distinct_replay_rules",
+          "seconds": 0.0990243999985978,
+          "cpu": 0.0625,
+          "outcome": "completed"
+        },
+        {
+          "offset": 4.7436759999836795,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_work_store.test_unknown_schema_and_invalid_rows_are_rejected_before_execution",
+          "seconds": 0.056491299998015165,
+          "cpu": 0.03125,
+          "outcome": "completed"
+        },
+        {
+          "offset": 4.833554800017737,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_work_store.test_waiting_questions_survive_restart_and_only_the_exact_reply_resumes",
+          "seconds": 0.08635279996087775,
+          "cpu": 0.0625,
+          "outcome": "completed"
+        },
+        {
+          "offset": 5.080489500018302,
+          "event": "end",
+          "kind": "import",
+          "label": "tests.test_work_actions",
+          "seconds": 0.24389280000468716,
+          "cpu": 0.203125,
+          "outcome": "completed"
+        },
+        {
+          "offset": 5.172208399977535,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_work_actions.test_approval_needs_live_preview_and_cannot_authorize_changed_arguments_or_goal",
+          "seconds": 0.08923979999963194,
+          "cpu": 0.046875,
+          "outcome": "completed"
+        },
+        {
+          "offset": 5.284356999967713,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_work_actions.test_exact_approval_is_once_only_and_private_review_never_enters_storage",
+          "seconds": 0.10865650000050664,
+          "cpu": 0.0625,
+          "outcome": "completed"
+        },
+        {
+          "offset": 5.4142972999834456,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_work_actions.test_lost_result_commit_recovers_by_readback_without_replaying",
+          "seconds": 0.1270731000113301,
+          "cpu": 0.078125,
+          "outcome": "completed"
+        },
+        {
+          "offset": 5.494562399981078,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_work_actions.test_message_reconciliation_requires_same_chat_new_matching_complete_text",
+          "seconds": 0.07677500002318993,
+          "cpu": 0.046875,
+          "outcome": "completed"
+        },
+        {
+          "offset": 5.660233000002336,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_work_actions.test_mismatched_recovery_file_stays_uncertain_and_cannot_be_overwritten",
+          "seconds": 0.1626519999699667,
+          "cpu": 0.03125,
+          "outcome": "completed"
+        },
+        {
+          "offset": 5.724273199972231,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_work_actions.test_native_tab_verification_uses_the_listed_target_even_when_the_strip_is_paged",
+          "seconds": 0.059709199995268136,
+          "cpu": 0.03125,
+          "outcome": "completed"
+        },
+        {
+          "offset": 7.792883299989626,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_work_actions.test_old_unverified_action_cannot_fall_off_the_completion_page",
+          "seconds": 2.0657329999958165,
+          "cpu": 1.0625,
+          "outcome": "completed"
+        },
+        {
+          "offset": 7.867591299989726,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_work_actions.test_open_chat_requires_matching_one_to_one_membership_not_account_status",
+          "seconds": 0.07112979999510571,
+          "cpu": 0.0625,
+          "outcome": "completed"
+        },
+        {
+          "offset": 7.95535960001871,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_work_actions.test_reconciliation_requires_post_attempt_same_target_and_is_durable",
+          "seconds": 0.08400299999630079,
+          "cpu": 0.046875,
+          "outcome": "completed"
+        },
+        {
+          "offset": 8.066562799969688,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_work_actions.test_script_result_requires_explicit_inspection_and_reconciliation",
+          "seconds": 0.10780870000598952,
+          "cpu": 0.078125,
+          "outcome": "completed"
+        },
+        {
+          "offset": 8.167941699968651,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_work_actions.test_stale_run_and_stop_after_commit_cannot_enter_the_effect",
+          "seconds": 0.09739320003427565,
+          "cpu": 0.03125,
+          "outcome": "completed"
+        },
+        {
+          "offset": 8.254509099991992,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_work_actions.test_stop_cancels_resource_wait_and_releases_the_next_owner",
+          "seconds": 0.08303119998890907,
+          "cpu": 0.015625,
+          "outcome": "completed"
+        },
+        {
+          "offset": 8.37357090000296,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_work_actions.test_storage_commit_precedes_effect_and_failure_refuses_the_effect",
+          "seconds": 0.11519440001575276,
+          "cpu": 0.078125,
+          "outcome": "completed"
+        },
+        {
+          "offset": 8.550075399980415,
+          "event": "end",
+          "kind": "import",
+          "label": "tests.test_work_submissions",
+          "seconds": 0.17305049998685718,
+          "cpu": 0.0625,
+          "outcome": "completed"
+        },
+        {
+          "offset": 8.774168899981305,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_work_submissions.test_a_failed_answer_commit_restores_the_exact_question_for_a_new_reply",
+          "seconds": 0.22165280004264787,
+          "cpu": 0.1875,
+          "outcome": "completed"
+        },
+        {
+          "offset": 8.919583100010641,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_work_submissions.test_a_later_confirmed_answer_is_not_reopened_after_a_failed_observation",
+          "seconds": 0.14126040000701323,
+          "cpu": 0.109375,
+          "outcome": "completed"
+        },
+        {
+          "offset": 9.009029400011059,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_work_submissions.test_an_identified_request_cannot_attach_a_routine_task_with_the_same_id_and_prompt",
+          "seconds": 0.08475659997202456,
+          "cpu": 0.09375,
+          "outcome": "completed"
+        },
+        {
+          "offset": 9.108051199989859,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_work_submissions.test_caller_and_meeting_watches_retain_each_others_tasks",
+          "seconds": 0.09400089998962358,
+          "cpu": 0.0625,
+          "outcome": "completed"
+        },
+        {
+          "offset": 9.227087999985088,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_work_submissions.test_identified_duplicates_reuse_the_original_source_and_invocation_context_after_new_chat",
+          "seconds": 0.11450590001186356,
+          "cpu": 0.09375,
+          "outcome": "completed"
+        },
+        {
+          "offset": 9.2750164999743,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_work_submissions.test_invalid_identified_input_is_rejected_before_the_caller_accepts_it",
+          "seconds": 0.04305969999404624,
+          "cpu": 0.015625,
+          "outcome": "completed"
+        },
+        {
+          "offset": 9.618403700005729,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_work_submissions.test_ordinary_unconfirmed_submission_requires_its_original_prompt_and_conversation",
+          "seconds": 0.3392891999683343,
+          "cpu": 0.234375,
+          "outcome": "completed"
+        },
+        {
+          "offset": 9.709088200004771,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_work_submissions.test_stop_ordering_preserves_new_requests_accepted_after_stop",
+          "seconds": 0.08395530004054308,
+          "cpu": 0.09375,
+          "outcome": "completed"
+        },
+        {
+          "offset": 12.938547600002494,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_work_submissions.test_stop_remains_available_when_ordinary_input_capacity_is_full",
+          "seconds": 3.225505000038538,
+          "cpu": 2.125,
+          "outcome": "completed"
+        },
+        {
+          "offset": 13.052738600003067,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_work_submissions.test_unconfirmed_submission_keeps_known_rows_and_later_matching_work_clears_only_its_problem",
+          "seconds": 0.10939870000584051,
+          "cpu": 0.09375,
+          "outcome": "completed"
+        },
+        {
+          "offset": 13.775998199998867,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_work_submissions.test_unrelated_failures_cannot_evict_a_watched_identity_collision",
+          "seconds": 0.7190864000003785,
+          "cpu": 0.6875,
+          "outcome": "completed"
+        },
+        {
+          "offset": 13.88101930002449,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_work_submissions.test_watch_capacity_rejection_preserves_both_views_interests",
+          "seconds": 0.10086239996599033,
+          "cpu": 0.078125,
+          "outcome": "completed"
+        },
+        {
+          "offset": 14.38096989999758,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_work_submissions.test_watch_recovers_an_old_completed_id_outside_the_overview_and_coalesces_replacements",
+          "seconds": 0.49535520002245903,
+          "cpu": 0.453125,
+          "outcome": "completed"
+        },
+        {
+          "offset": 14.456245700013824,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_work_submissions.test_watching_a_missing_id_distinguishes_an_observed_absence_from_a_failed_read",
+          "seconds": 0.06995740003185347,
+          "cpu": 0.0625,
+          "outcome": "completed"
+        }
+      ]
+    },
+    "transport": {
+      "process_wall_seconds": 4.972891899989918,
+      "returncode": 0,
+      "summary": {
+        "offset": 4.674368300009519,
+        "event": "summary",
+        "passed": 55,
+        "skipped": 0,
+        "failure_count": 0,
+        "body_total": 3.8957067002775148
+      },
+      "durations": [
+        {
+          "offset": 0.05587139999261126,
+          "event": "end",
+          "kind": "setup",
+          "label": "activation",
+          "seconds": 0.007534699980169535,
+          "cpu": 0.0,
+          "outcome": "completed"
+        },
+        {
+          "offset": 0.6905104999896139,
+          "event": "end",
+          "kind": "import",
+          "label": "tests.test_llm",
+          "seconds": 0.1343009999836795,
+          "cpu": 0.109375,
+          "outcome": "completed"
+        },
+        {
+          "offset": 0.6966450000181794,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_llm.test_agent_model_is_independent_of_the_quick_chat_model",
+          "seconds": 6.669998401775956e-05,
+          "cpu": 0.0,
+          "outcome": "completed"
+        },
+        {
+          "offset": 0.8123740000301041,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_llm.test_chat_can_use_another_model",
+          "seconds": 0.11182989994995296,
+          "cpu": 0.078125,
+          "outcome": "completed"
+        },
+        {
+          "offset": 0.8435979000059888,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_llm.test_chat_sends_images_as_data_urls",
+          "seconds": 0.028204299975186586,
+          "cpu": 0.03125,
+          "outcome": "completed"
+        },
+        {
+          "offset": 0.8912303000106476,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_llm.test_chat_sends_messages_and_returns_the_answer",
+          "seconds": 0.04039790004026145,
+          "cpu": 0.0,
+          "outcome": "completed"
+        },
+        {
+          "offset": 0.9213020000024699,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_llm.test_chat_with_tools_returns_tool_calls",
+          "seconds": 0.026883100043050945,
+          "cpu": 0.015625,
+          "outcome": "completed"
+        },
+        {
+          "offset": 0.967097399989143,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_llm.test_failures_carry_the_servers_message",
+          "seconds": 0.042445599974598736,
+          "cpu": 0.0,
+          "outcome": "completed"
+        },
+        {
+          "offset": 2.9832711999770254,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_llm.test_failures_for_an_unreachable_endpoint",
+          "seconds": 2.0123894999851473,
+          "cpu": 0.0,
+          "outcome": "completed"
+        },
+        {
+          "offset": 3.012034900020808,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_llm.test_failures_for_replies_that_arent_what_was_asked",
+          "seconds": 0.025104000000283122,
+          "cpu": 0.0,
+          "outcome": "completed"
+        },
+        {
+          "offset": 3.0153072000248358,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_llm.test_settings_defaults",
+          "seconds": 6.130000110715628e-05,
+          "cpu": 0.0,
+          "outcome": "completed"
+        },
+        {
+          "offset": 3.01804529997753,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_llm.test_settings_need_the_endpoint_and_key",
+          "seconds": 4.140002420172095e-05,
+          "cpu": 0.0,
+          "outcome": "completed"
+        },
+        {
+          "offset": 3.0209662999841385,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_llm.test_settings_overrides",
+          "seconds": 5.8399979025125504e-05,
+          "cpu": 0.0,
+          "outcome": "completed"
+        },
+        {
+          "offset": 3.0579919000156224,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_llm.test_stream_passes_text_on_as_it_arrives",
+          "seconds": 0.033840699994470924,
+          "cpu": 0.015625,
+          "outcome": "completed"
+        },
+        {
+          "offset": 3.0892807000200264,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_llm.test_stream_reports_failures",
+          "seconds": 0.027645599970128387,
+          "cpu": 0.0,
+          "outcome": "completed"
+        },
+        {
+          "offset": 3.1214926000102423,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_llm.test_tool_calls_and_results_go_back_to_the_model",
+          "seconds": 0.027275800006464124,
+          "cpu": 0.0,
+          "outcome": "completed"
+        },
+        {
+          "offset": 3.152086500020232,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_llm.test_transcribe_posts_the_audio_and_returns_the_text",
+          "seconds": 0.02683459996478632,
+          "cpu": 0.0,
+          "outcome": "completed"
+        },
+        {
+          "offset": 3.198886100028176,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_llm.test_transcribe_sends_vocabulary_and_language_when_set",
+          "seconds": 0.04323500004829839,
+          "cpu": 0.0,
+          "outcome": "completed"
+        },
+        {
+          "offset": 3.2445541999768466,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_llm.test_truncated_success_and_error_responses_are_retriable_failures",
+          "seconds": 0.038639500038698316,
+          "cpu": 0.015625,
+          "outcome": "completed"
+        },
+        {
+          "offset": 3.3290763000259176,
+          "event": "end",
+          "kind": "import",
+          "label": "tests.test_features",
+          "seconds": 0.081383700016886,
+          "cpu": 0.046875,
+          "outcome": "completed"
+        },
+        {
+          "offset": 3.3683664000127465,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_features.test_a_second_talk_key_while_listening_is_ignored",
+          "seconds": 0.03616590000456199,
+          "cpu": 0.0,
+          "outcome": "completed"
+        },
+        {
+          "offset": 3.3985622000182047,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_features.test_a_tap_of_a_talk_key_sends_nothing",
+          "seconds": 0.02599310001824051,
+          "cpu": 0.0,
+          "outcome": "completed"
+        },
+        {
+          "offset": 3.428640900005121,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_features.test_agent_capture_toggle_ignores_releases_and_stops_on_the_second_press",
+          "seconds": 0.026496599952224642,
+          "cpu": 0.0,
+          "outcome": "completed"
+        },
+        {
+          "offset": 3.4905213000020012,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_features.test_an_incomplete_recording_is_reported_without_sending_a_partial_prompt",
+          "seconds": 0.058651600033044815,
+          "cpu": 0.0,
+          "outcome": "completed"
+        },
+        {
+          "offset": 3.5224133000010625,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_features.test_app_key_focuses_the_app",
+          "seconds": 0.02847489999840036,
+          "cpu": 0.0,
+          "outcome": "completed"
+        },
+        {
+          "offset": 3.5526866000145674,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_features.test_app_key_starts_the_app_if_it_isnt_running",
+          "seconds": 0.02721540001221001,
+          "cpu": 0.0,
+          "outcome": "completed"
+        },
+        {
+          "offset": 3.55818900000304,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_features.test_app_title_narrows_the_windows",
+          "seconds": 4.840001929551363e-05,
+          "cpu": 0.0,
+          "outcome": "completed"
+        },
+        {
+          "offset": 3.5988918999792077,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_features.test_ask_includes_the_selection",
+          "seconds": 0.03660020005190745,
+          "cpu": 0.0,
+          "outcome": "completed"
+        },
+        {
+          "offset": 3.644965899991803,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_features.test_ask_streams_the_answer_and_takes_follow_ups",
+          "seconds": 0.04102589999092743,
+          "cpu": 0.015625,
+          "outcome": "completed"
+        },
+        {
+          "offset": 3.6753398000146262,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_features.test_cancelled_prompts_do_nothing",
+          "seconds": 0.027144199993927032,
+          "cpu": 0.0,
+          "outcome": "completed"
+        },
+        {
+          "offset": 3.7229142999858595,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_features.test_clipboard_failure_keeps_a_recoverable_transcript_and_still_types",
+          "seconds": 0.03940629999851808,
+          "cpu": 0.0,
+          "outcome": "completed"
+        },
+        {
+          "offset": 3.770347599987872,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_features.test_dictate_clean_types_the_tidied_text",
+          "seconds": 0.04362100001890212,
+          "cpu": 0.03125,
+          "outcome": "completed"
+        },
+        {
+          "offset": 3.8169297000276856,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_features.test_dictate_command_types_one_line_and_never_enter",
+          "seconds": 0.0434804999968037,
+          "cpu": 0.0,
+          "outcome": "completed"
+        },
+        {
+          "offset": 3.8643400000291876,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_features.test_dictate_types_what_was_said",
+          "seconds": 0.04162460000952706,
+          "cpu": 0.0,
+          "outcome": "completed"
+        },
+        {
+          "offset": 3.89545230002841,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_features.test_endpoint_failures_are_reported_and_logged",
+          "seconds": 0.027107000001706183,
+          "cpu": 0.015625,
+          "outcome": "completed"
+        },
+        {
+          "offset": 3.9268382000154816,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_features.test_lost_voice_release_finishes_at_the_existing_microphone_limit",
+          "seconds": 0.028126099961809814,
+          "cpu": 0.015625,
+          "outcome": "completed"
+        },
+        {
+          "offset": 3.972480700002052,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_features.test_partial_input_is_logged_without_retrying_or_losing_the_transcript",
+          "seconds": 0.04216329997871071,
+          "cpu": 0.015625,
+          "outcome": "completed"
+        },
+        {
+          "offset": 3.975447900011204,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_features.test_pressing_again_goes_through_the_apps_windows",
+          "seconds": 3.619998460635543e-05,
+          "cpu": 0.0,
+          "outcome": "completed"
+        },
+        {
+          "offset": 4.018504699983168,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_features.test_queued_voice_diagnostics_belong_to_their_own_recording",
+          "seconds": 0.04018830001587048,
+          "cpu": 0.015625,
+          "outcome": "completed"
+        },
+        {
+          "offset": 4.066217900021002,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_features.test_rewrite_by_voice_follows_the_spoken_instruction",
+          "seconds": 0.04351590003352612,
+          "cpu": 0.0,
+          "outcome": "completed"
+        },
+        {
+          "offset": 4.096434900013264,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_features.test_rewrite_keys_replace_the_selection",
+          "seconds": 0.02686030004406348,
+          "cpu": 0.015625,
+          "outcome": "completed"
+        },
+        {
+          "offset": 4.127504299976863,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_features.test_rewrite_without_a_selection_says_so",
+          "seconds": 0.02809430001070723,
+          "cpu": 0.0,
+          "outcome": "completed"
+        },
+        {
+          "offset": 4.159545500006061,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_features.test_screen_ask_answers_about_the_area",
+          "seconds": 0.026177800027653575,
+          "cpu": 0.015625,
+          "outcome": "completed"
+        },
+        {
+          "offset": 4.190733800001908,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_features.test_screen_text_copies_the_text_in_the_area",
+          "seconds": 0.028048800013493747,
+          "cpu": 0.015625,
+          "outcome": "completed"
+        },
+        {
+          "offset": 4.221316399984062,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_features.test_screen_tools_do_nothing_when_no_area_is_chosen",
+          "seconds": 0.026743700029328465,
+          "cpu": 0.0,
+          "outcome": "completed"
+        },
+        {
+          "offset": 4.2525651000323705,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_features.test_shutdown_discards_active_voice_without_submitting_a_task",
+          "seconds": 0.027563200041186064,
+          "cpu": 0.0,
+          "outcome": "completed"
+        },
+        {
+          "offset": 4.282309299975168,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_features.test_space_release_does_not_stop_dictation_started_with_the_toggle",
+          "seconds": 0.024384699994698167,
+          "cpu": 0.015625,
+          "outcome": "completed"
+        },
+        {
+          "offset": 4.313383000029717,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_features.test_the_tray_shows_listening_then_working_then_ready",
+          "seconds": 0.026678099995478988,
+          "cpu": 0.015625,
+          "outcome": "completed"
+        },
+        {
+          "offset": 4.345197200018447,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_features.test_tiling_commands_use_worker_without_ai_credentials",
+          "seconds": 0.027251499996054918,
+          "cpu": 0.015625,
+          "outcome": "completed"
+        },
+        {
+          "offset": 4.376924099982716,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_features.test_unexpected_input_error_recovers_and_identifies_the_failed_phase",
+          "seconds": 0.028266699984669685,
+          "cpu": 0.015625,
+          "outcome": "completed"
+        },
+        {
+          "offset": 4.422795700025745,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_features.test_unexpected_microphone_stop_error_clears_capture_and_allows_another_recording",
+          "seconds": 0.04218580003362149,
+          "cpu": 0.015625,
+          "outcome": "completed"
+        },
+        {
+          "offset": 4.469448200019542,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_features.test_voice_diagnostics_distinguish_a_failed_request_from_failed_input",
+          "seconds": 0.04333100002259016,
+          "cpu": 0.015625,
+          "outcome": "completed"
+        },
+        {
+          "offset": 4.531293999985792,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_features.test_voice_diagnostics_keep_the_full_ending_and_record_only_lengths",
+          "seconds": 0.05841070000315085,
+          "cpu": 0.015625,
+          "outcome": "completed"
+        },
+        {
+          "offset": 4.562555100012105,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_features.test_voice_limit_uses_the_deadline_across_a_float_precision_boundary",
+          "seconds": 0.02756970003247261,
+          "cpu": 0.015625,
+          "outcome": "completed"
+        },
+        {
+          "offset": 4.59291220002342,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_features.test_voice_sends_a_task_and_typed_opens_the_agent_session",
+          "seconds": 0.027416099968831986,
+          "cpu": 0.03125,
+          "outcome": "completed"
+        },
+        {
+          "offset": 4.6248106000130065,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_features.test_window_keys_arrange_the_window",
+          "seconds": 0.02847070002462715,
+          "cpu": 0.0,
+          "outcome": "completed"
+        },
+        {
+          "offset": 4.631264700030442,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_features.test_window_list_keeps_hidden_managed_windows_and_excludes_cloaked_shell_hosts",
+          "seconds": 0.00014429999282583594,
+          "cpu": 0.0,
+          "outcome": "completed"
+        },
+        {
+          "offset": 4.6703724000253715,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_features.test_without_ai_settings_ai_tools_say_what_is_missing_and_the_rest_works",
+          "seconds": 0.03616620000684634,
+          "cpu": 0.015625,
+          "outcome": "completed"
+        }
+      ]
+    },
+    "agent": {
+      "process_wall_seconds": 21.29394709999906,
+      "returncode": 0,
+      "summary": {
+        "offset": 20.043552999966778,
+        "event": "summary",
+        "passed": 46,
+        "skipped": 0,
+        "failure_count": 0,
+        "body_total": 18.814217600040138
+      },
+      "durations": [
+        {
+          "offset": 0.06061379995662719,
+          "event": "end",
+          "kind": "setup",
+          "label": "activation",
+          "seconds": 0.010210899985395372,
+          "cpu": 0.0,
+          "outcome": "completed"
+        },
+        {
+          "offset": 1.225813599943649,
+          "event": "end",
+          "kind": "import",
+          "label": "tests.test_agent",
+          "seconds": 0.6789025000180118,
+          "cpu": 0.4375,
+          "outcome": "completed"
+        },
+        {
+          "offset": 8.394857199979015,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_agent.test_a_declined_review_installs_nothing",
+          "seconds": 7.162675500032492,
+          "cpu": 5.46875,
+          "outcome": "completed"
+        },
+        {
+          "offset": 8.784840099979192,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_agent.test_agent_preserves_reasoning_between_tool_calls_and_follow_ups",
+          "seconds": 0.35700710001401603,
+          "cpu": 0.25,
+          "outcome": "completed"
+        },
+        {
+          "offset": 8.996657099982258,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_agent.test_agent_uses_responses_with_max_reasoning_and_opens_without_approval",
+          "seconds": 0.20651980000548065,
+          "cpu": 0.1875,
+          "outcome": "completed"
+        },
+        {
+          "offset": 9.00064729998121,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_agent.test_allowed_commands_run_without_asking",
+          "seconds": 0.0007653000066056848,
+          "cpu": 0.0,
+          "outcome": "completed"
+        },
+        {
+          "offset": 9.004671299946494,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_agent.test_allowed_means_nothing_can_be_chained_on",
+          "seconds": 0.0001881999778561294,
+          "cpu": 0.0,
+          "outcome": "completed"
+        },
+        {
+          "offset": 10.331837099976838,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_agent.test_apply_needs_a_passing_check_of_exactly_these_changes",
+          "seconds": 1.323593399953097,
+          "cpu": 0.703125,
+          "outcome": "completed"
+        },
+        {
+          "offset": 10.497422399988864,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_agent.test_approval_mode_defers_runtime_checks_until_keeper_review",
+          "seconds": 0.15278160001616925,
+          "cpu": 0.09375,
+          "outcome": "completed"
+        },
+        {
+          "offset": 10.508251799969003,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_agent.test_ask_user_passes_the_answer_back",
+          "seconds": 0.00035580003168433905,
+          "cpu": 0.0,
+          "outcome": "completed"
+        },
+        {
+          "offset": 10.5114193999907,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_agent.test_clicks_before_any_screenshot_are_refused",
+          "seconds": 0.000235699990298599,
+          "cpu": 0.0,
+          "outcome": "completed"
+        },
+        {
+          "offset": 10.515876199991908,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_agent.test_commands_need_confirmation",
+          "seconds": 0.0004900000058114529,
+          "cpu": 0.0,
+          "outcome": "completed"
+        },
+        {
+          "offset": 10.520729599986225,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_agent.test_confirmed_commands_run_and_report_their_output",
+          "seconds": 0.0003437999985180795,
+          "cpu": 0.0,
+          "outcome": "completed"
+        },
+        {
+          "offset": 10.52505899994867,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_agent.test_declining_the_mouse_and_keyboard_is_remembered_for_the_task",
+          "seconds": 0.0003218000056222081,
+          "cpu": 0.0,
+          "outcome": "completed"
+        },
+        {
+          "offset": 10.718764399993233,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_agent.test_default_agent_uses_sol_with_low_reasoning_across_tool_turns",
+          "seconds": 0.19055229995865375,
+          "cpu": 0.140625,
+          "outcome": "completed"
+        },
+        {
+          "offset": 11.13892819994362,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_agent.test_default_tools_write_run_and_control_the_desktop_without_approval",
+          "seconds": 0.4168550000176765,
+          "cpu": 0.375,
+          "outcome": "completed"
+        },
+        {
+          "offset": 11.340006799960975,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_agent.test_desktop_requests_do_not_prepare_a_source_workspace",
+          "seconds": 0.19665989995701239,
+          "cpu": 0.203125,
+          "outcome": "completed"
+        },
+        {
+          "offset": 11.60325569997076,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_agent.test_every_call_gets_a_result_even_bad_ones",
+          "seconds": 0.2572651000227779,
+          "cpu": 0.21875,
+          "outcome": "completed"
+        },
+        {
+          "offset": 11.834725699969567,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_agent.test_failed_turn_keeps_completed_actions_for_the_follow_up",
+          "seconds": 0.22503760003019124,
+          "cpu": 0.21875,
+          "outcome": "completed"
+        },
+        {
+          "offset": 12.300937099964358,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_agent.test_failing_checks_are_reported_and_block_apply",
+          "seconds": 0.4633246000157669,
+          "cpu": 0.390625,
+          "outcome": "completed"
+        },
+        {
+          "offset": 13.68335779994959,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_agent.test_fast_editing_checks_leave_native_failures_for_the_full_install_gate",
+          "seconds": 1.3704402999719605,
+          "cpu": 0.1875,
+          "outcome": "completed"
+        },
+        {
+          "offset": 13.704414699983317,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_agent.test_find_files_matches_names_under_a_folder",
+          "seconds": 0.010255799978040159,
+          "cpu": 0.0,
+          "outcome": "completed"
+        },
+        {
+          "offset": 13.793464799993671,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_agent.test_first_source_use_starts_from_the_running_version",
+          "seconds": 0.08093880000524223,
+          "cpu": 0.046875,
+          "outcome": "completed"
+        },
+        {
+          "offset": 14.19639079994522,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_agent.test_follow_up_asks_for_desktop_control_again",
+          "seconds": 0.3883666999754496,
+          "cpu": 0.390625,
+          "outcome": "completed"
+        },
+        {
+          "offset": 14.525058199942578,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_agent.test_follow_up_keeps_the_prompt_answer_and_tool_results",
+          "seconds": 0.32424929999979213,
+          "cpu": 0.28125,
+          "outcome": "completed"
+        },
+        {
+          "offset": 15.020708099997137,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_agent.test_follow_ups_keep_only_recent_screenshots_in_memory_and_in_requests",
+          "seconds": 0.49043290002737194,
+          "cpu": 0.5,
+          "outcome": "completed"
+        },
+        {
+          "offset": 15.023868799966294,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_agent.test_git_external_execution_options_require_confirmation",
+          "seconds": 0.00026000000070780516,
+          "cpu": 0.0,
+          "outcome": "completed"
+        },
+        {
+          "offset": 15.052190199960023,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_agent.test_invalid_reasoning_effort_is_reported_without_a_request",
+          "seconds": 0.02529099996900186,
+          "cpu": 0.015625,
+          "outcome": "completed"
+        },
+        {
+          "offset": 15.054907199984882,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_agent.test_key_combinations",
+          "seconds": 6.990000838413835e-05,
+          "cpu": 0.0,
+          "outcome": "completed"
+        },
+        {
+          "offset": 15.16089869994903,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_agent.test_model_failures_end_the_task",
+          "seconds": 0.10321199998725206,
+          "cpu": 0.09375,
+          "outcome": "completed"
+        },
+        {
+          "offset": 15.165274799976032,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_agent.test_mouse_and_keyboard_need_permission_once_per_task",
+          "seconds": 0.0007031999994069338,
+          "cpu": 0.0,
+          "outcome": "completed"
+        },
+        {
+          "offset": 15.216094299976248,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_agent.test_protected_files_cant_be_edited",
+          "seconds": 0.047702600015327334,
+          "cpu": 0.046875,
+          "outcome": "completed"
+        },
+        {
+          "offset": 15.32558829995105,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_agent.test_read_file_returns_text_and_says_when_it_was_cut",
+          "seconds": 0.09956930001499131,
+          "cpu": 0.015625,
+          "outcome": "completed"
+        },
+        {
+          "offset": 15.400637999991886,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_agent.test_reading_and_listing_the_source",
+          "seconds": 0.07018360000802204,
+          "cpu": 0.0625,
+          "outcome": "completed"
+        },
+        {
+          "offset": 17.438209599989932,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_agent.test_runtime_failure_returns_to_the_agent_to_fix_before_installing",
+          "seconds": 2.02672879997408,
+          "cpu": 0.828125,
+          "outcome": "completed"
+        },
+        {
+          "offset": 17.871861099964008,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_agent.test_screenshots_go_to_the_model_as_images_and_only_recent_ones_are_kept",
+          "seconds": 0.42318769998382777,
+          "cpu": 0.4375,
+          "outcome": "completed"
+        },
+        {
+          "offset": 18.26611279998906,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_agent.test_source_edits_survive_follow_up_requests",
+          "seconds": 0.3905668000224978,
+          "cpu": 0.328125,
+          "outcome": "completed"
+        },
+        {
+          "offset": 18.27779769996414,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_agent.test_stop_during_confirmation_prevents_the_approved_write",
+          "seconds": 0.001415700011420995,
+          "cpu": 0.0,
+          "outcome": "completed"
+        },
+        {
+          "offset": 18.376520099991467,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_agent.test_stop_ends_the_task_before_the_next_step",
+          "seconds": 0.09555780002847314,
+          "cpu": 0.078125,
+          "outcome": "completed"
+        },
+        {
+          "offset": 18.38099679996958,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_agent.test_stop_prevents_actions_even_with_approvals_disabled",
+          "seconds": 0.0007713999948464334,
+          "cpu": 0.0,
+          "outcome": "completed"
+        },
+        {
+          "offset": 18.535459999984596,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_agent.test_stopped_turn_keeps_completed_actions_and_accepts_a_follow_up",
+          "seconds": 0.1518645000178367,
+          "cpu": 0.140625,
+          "outcome": "completed"
+        },
+        {
+          "offset": 19.45944139995845,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_agent.test_the_agent_edits_checks_and_applies_a_change",
+          "seconds": 0.9209437999525107,
+          "cpu": 0.453125,
+          "outcome": "completed"
+        },
+        {
+          "offset": 19.725076699978672,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_agent.test_the_agent_stops_after_its_step_limit",
+          "seconds": 0.2562037999741733,
+          "cpu": 0.25,
+          "outcome": "completed"
+        },
+        {
+          "offset": 19.89406899997266,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_agent.test_the_agent_uses_tools_then_answers",
+          "seconds": 0.16571250004926696,
+          "cpu": 0.140625,
+          "outcome": "completed"
+        },
+        {
+          "offset": 19.897747799986973,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_agent.test_the_journal_records_each_action",
+          "seconds": 0.00024910003412514925,
+          "cpu": 0.0,
+          "outcome": "completed"
+        },
+        {
+          "offset": 19.900583699985873,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_agent.test_tool_publishes_readable_previews_without_changing_the_model_result",
+          "seconds": 0.0003404999733902514,
+          "cpu": 0.0,
+          "outcome": "completed"
+        },
+        {
+          "offset": 20.002593499957584,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_agent.test_without_a_workspace_there_are_no_source_tools",
+          "seconds": 0.09936839999863878,
+          "cpu": 0.0625,
+          "outcome": "completed"
+        },
+        {
+          "offset": 20.041020099946763,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_agent.test_write_file_asks_first_and_then_writes",
+          "seconds": 0.032956200011540204,
+          "cpu": 0.0,
+          "outcome": "completed"
+        }
+      ]
+    },
+    "framework": {
+      "process_wall_seconds": 22.70322250004392,
+      "returncode": 0,
+      "summary": {
+        "offset": 21.063580900023226,
+        "event": "summary",
+        "passed": 47,
+        "skipped": 0,
+        "failure_count": 0,
+        "body_total": 20.29086410003947
+      },
+      "durations": [
+        {
+          "offset": 0.04276660003233701,
+          "event": "end",
+          "kind": "setup",
+          "label": "activation",
+          "seconds": 0.0068651000037789345,
+          "cpu": 0.015625,
+          "outcome": "completed"
+        },
+        {
+          "offset": 0.40829190000658855,
+          "event": "end",
+          "kind": "import",
+          "label": "tests.test_architecture",
+          "seconds": 0.004850399971473962,
+          "cpu": 0.0,
+          "outcome": "completed"
+        },
+        {
+          "offset": 0.46261430002050474,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_architecture.test_a_frozen_record_cannot_hide_a_mutable_collection",
+          "seconds": 0.049947099993005395,
+          "cpu": 0.0,
+          "outcome": "completed"
+        },
+        {
+          "offset": 5.226852299994789,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_architecture.test_current_working_tree_satisfies_declared_architecture",
+          "seconds": 4.7603272999986075,
+          "cpu": 4.40625,
+          "outcome": "completed"
+        },
+        {
+          "offset": 5.3684784000506625,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_architecture.test_exact_reflection_exception_survives_lines_but_cannot_cover_other_declarations",
+          "seconds": 0.13794939999934286,
+          "cpu": 0.03125,
+          "outcome": "completed"
+        },
+        {
+          "offset": 6.9591506000142545,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_architecture.test_explicit_test_scope_cannot_bypass_architecture_or_write_a_receipt",
+          "seconds": 1.584825300029479,
+          "cpu": 0.03125,
+          "outcome": "completed"
+        },
+        {
+          "offset": 7.085352200025227,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_architecture.test_immutable_data_is_default_even_outside_declared_model_modules",
+          "seconds": 0.10483369999565184,
+          "cpu": 0.03125,
+          "outcome": "completed"
+        },
+        {
+          "offset": 7.1187937000067905,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_architecture.test_keyboard_cannot_hide_dependencies_in_unresolved_dynamic_imports",
+          "seconds": 0.02854289999231696,
+          "cpu": 0.0,
+          "outcome": "completed"
+        },
+        {
+          "offset": 7.18994070001645,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_architecture.test_keyboard_rejection_follows_lazy_imports_and_package_initializers",
+          "seconds": 0.06671839999035001,
+          "cpu": 0.015625,
+          "outcome": "completed"
+        },
+        {
+          "offset": 7.209939200023655,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_architecture.test_recursive_inventory_excludes_dependencies_and_honors_checked_names",
+          "seconds": 0.013006800028961152,
+          "cpu": 0.015625,
+          "outcome": "completed"
+        },
+        {
+          "offset": 7.252919999998994,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_architecture.test_reflection_aliases_are_detected_without_leaking_between_functions",
+          "seconds": 0.03269050002563745,
+          "cpu": 0.0,
+          "outcome": "completed"
+        },
+        {
+          "offset": 7.257515000004787,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_architecture.test_relative_lazy_and_aliased_dynamic_imports_select_their_consumers",
+          "seconds": 0.0003410999779589474,
+          "cpu": 0.0,
+          "outcome": "completed"
+        },
+        {
+          "offset": 7.282097600051202,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_architecture.test_unsupported_and_unexplained_exceptions_are_configuration_errors",
+          "seconds": 0.02156329998979345,
+          "cpu": 0.015625,
+          "outcome": "completed"
+        },
+        {
+          "offset": 7.305699300020933,
+          "event": "end",
+          "kind": "import",
+          "label": "tests.test_quality",
+          "seconds": 0.020252799964509904,
+          "cpu": 0.015625,
+          "outcome": "completed"
+        },
+        {
+          "offset": 7.672518200008199,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_quality.test_boolean_gate_and_three_input_target_use_workspace_configuration",
+          "seconds": 0.36438339995220304,
+          "cpu": 0.0625,
+          "outcome": "completed"
+        },
+        {
+          "offset": 9.707122299994808,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_quality.test_explicit_test_scope_cannot_bypass_quality_or_write_a_receipt",
+          "seconds": 2.029214000038337,
+          "cpu": 0.03125,
+          "outcome": "completed"
+        },
+        {
+          "offset": 9.746816400031094,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_quality.test_gate_blocks_imports_inside_function_bodies",
+          "seconds": 0.00037269998574629426,
+          "cpu": 0.015625,
+          "outcome": "completed"
+        },
+        {
+          "offset": 9.750769500038587,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_quality.test_gate_separates_blocking_violations_from_interface_review_warnings",
+          "seconds": 0.00017169996863231063,
+          "cpu": 0.0,
+          "outcome": "completed"
+        },
+        {
+          "offset": 9.757719999994151,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_quality.test_import_ownership_rejects_aliases_and_forwarding_with_exact_keys",
+          "seconds": 0.0017778000328689814,
+          "cpu": 0.0,
+          "outcome": "completed"
+        },
+        {
+          "offset": 9.95596230000956,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_quality.test_migration_schema_requires_unique_explained_exact_entries",
+          "seconds": 0.19551980000687763,
+          "cpu": 0.03125,
+          "outcome": "completed"
+        },
+        {
+          "offset": 11.078018600004725,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_quality.test_signature_migration_survives_line_moves_but_cannot_cover_another_interface",
+          "seconds": 1.1162035000161268,
+          "cpu": 0.0625,
+          "outcome": "completed"
+        },
+        {
+          "offset": 11.087693900044542,
+          "event": "end",
+          "kind": "import",
+          "label": "tests.test_source_analysis",
+          "seconds": 0.004574100021272898,
+          "cpu": 0.0,
+          "outcome": "completed"
+        },
+        {
+          "offset": 11.412188700051047,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_source_analysis.test_cached_policy_review_recomputes_changed_imports_and_whole_graph_ownership",
+          "seconds": 0.3214460000162944,
+          "cpu": 0.140625,
+          "outcome": "completed"
+        },
+        {
+          "offset": 12.520815600000788,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_source_analysis.test_cached_quality_cannot_accept_changed_boolean_signature_or_import_ownership",
+          "seconds": 1.095729199994821,
+          "cpu": 0.03125,
+          "outcome": "completed"
+        },
+        {
+          "offset": 12.811180500022601,
+          "event": "end",
+          "kind": "import",
+          "label": "tests.test_selfcheck",
+          "seconds": 0.27838640002300963,
+          "cpu": 0.265625,
+          "outcome": "completed"
+        },
+        {
+          "offset": 13.381529600010253,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_selfcheck.test_a_crashing_test_module_fails",
+          "seconds": 0.5665585999959148,
+          "cpu": 0.0,
+          "outcome": "completed"
+        },
+        {
+          "offset": 13.842772800009698,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_selfcheck.test_a_failing_test_fails",
+          "seconds": 0.45055059995502234,
+          "cpu": 0.015625,
+          "outcome": "completed"
+        },
+        {
+          "offset": 14.339663300022949,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_selfcheck.test_a_module_that_cant_import_fails",
+          "seconds": 0.48805679997894913,
+          "cpu": 0.0,
+          "outcome": "completed"
+        },
+        {
+          "offset": 14.79331410001032,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_selfcheck.test_a_sound_tree_passes",
+          "seconds": 0.44579230004455894,
+          "cpu": 0.0,
+          "outcome": "completed"
+        },
+        {
+          "offset": 15.263242900022306,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_selfcheck.test_a_syntax_error_fails",
+          "seconds": 0.44731409999076277,
+          "cpu": 0.015625,
+          "outcome": "completed"
+        },
+        {
+          "offset": 15.72022110002581,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_selfcheck.test_broken_windowless_launcher_fails",
+          "seconds": 0.4516967000090517,
+          "cpu": 0.015625,
+          "outcome": "completed"
+        },
+        {
+          "offset": 15.771538400033023,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_selfcheck.test_compile_prunes_dependency_and_cache_directories_before_opening_them",
+          "seconds": 0.044502299977466464,
+          "cpu": 0.046875,
+          "outcome": "completed"
+        },
+        {
+          "offset": 16.65103910001926,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_selfcheck.test_fast_checks_defer_native_tests_but_the_default_install_gate_runs_them",
+          "seconds": 0.8709899000241421,
+          "cpu": 0.015625,
+          "outcome": "completed"
+        },
+        {
+          "offset": 17.62083980004536,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_selfcheck.test_fast_checks_still_compile_native_tests_and_import_production_modules",
+          "seconds": 0.9609481999650598,
+          "cpu": 0.03125,
+          "outcome": "completed"
+        },
+        {
+          "offset": 18.279172500013374,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_selfcheck.test_missing_native_ui_dependencies_are_only_skipped_off_windows",
+          "seconds": 0.6195384999737144,
+          "cpu": 0.03125,
+          "outcome": "completed"
+        },
+        {
+          "offset": 18.321592200023588,
+          "event": "end",
+          "kind": "import",
+          "label": "tests.test_workspace",
+          "seconds": 0.0315726000117138,
+          "cpu": 0.046875,
+          "outcome": "completed"
+        },
+        {
+          "offset": 19.450521300022956,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_workspace.test_check_runs_selfcheck_on_the_workspace",
+          "seconds": 1.1263242000131868,
+          "cpu": 0.125,
+          "outcome": "completed"
+        },
+        {
+          "offset": 19.520968700002413,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_workspace.test_deleting_a_file",
+          "seconds": 0.06215290003456175,
+          "cpu": 0.03125,
+          "outcome": "completed"
+        },
+        {
+          "offset": 19.63588370004436,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_workspace.test_edits_show_as_changes_and_a_diff",
+          "seconds": 0.10600390000035986,
+          "cpu": 0.03125,
+          "outcome": "completed"
+        },
+        {
+          "offset": 19.68320460000541,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_workspace.test_protected_file_aliases_are_refused",
+          "seconds": 0.03709240001626313,
+          "cpu": 0.015625,
+          "outcome": "completed"
+        },
+        {
+          "offset": 19.737240500049666,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_workspace.test_protected_files_and_paths_outside_are_refused",
+          "seconds": 0.04580390005139634,
+          "cpu": 0.046875,
+          "outcome": "completed"
+        },
+        {
+          "offset": 19.84158649999881,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_workspace.test_replace_needs_exactly_one_match",
+          "seconds": 0.09499169996706769,
+          "cpu": 0.0625,
+          "outcome": "completed"
+        },
+        {
+          "offset": 19.921234800014645,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_workspace.test_reset_copies_the_running_source",
+          "seconds": 0.06612520001363009,
+          "cpu": 0.0625,
+          "outcome": "completed"
+        },
+        {
+          "offset": 20.636096100031864,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_workspace.test_runtime_checks_cannot_change_the_source_that_was_checked",
+          "seconds": 0.7055927999899723,
+          "cpu": 0.09375,
+          "outcome": "completed"
+        },
+        {
+          "offset": 20.76801830000477,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_workspace.test_validation_does_not_import_candidate_modules",
+          "seconds": 0.12191719998372719,
+          "cpu": 0.0625,
+          "outcome": "completed"
+        },
+        {
+          "offset": 20.784225600014906,
+          "event": "end",
+          "kind": "import",
+          "label": "tests.test_runtime",
+          "seconds": 0.0029170000343583524,
+          "cpu": 0.0,
+          "outcome": "completed"
+        },
+        {
+          "offset": 20.982289300009143,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_runtime.test_console_handoff_preserves_the_childs_exit_code_and_environment",
+          "seconds": 0.19561109994538128,
+          "cpu": 0.0,
+          "outcome": "completed"
+        },
+        {
+          "offset": 20.989605500013568,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_runtime.test_current_interpreter_and_unbundled_sources_continue_without_a_handoff",
+          "seconds": 0.00039790000300854445,
+          "cpu": 0.0,
+          "outcome": "completed"
+        },
+        {
+          "offset": 21.02830460004043,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_runtime.test_dependency_abi_is_checked_before_native_modules_are_loaded",
+          "seconds": 0.031647899944800884,
+          "cpu": 0.015625,
+          "outcome": "completed"
+        },
+        {
+          "offset": 21.033487700042315,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_runtime.test_incomplete_bundles_report_the_missing_interpreter",
+          "seconds": 0.0003809999907389283,
+          "cpu": 0.0,
+          "outcome": "completed"
+        },
+        {
+          "offset": 21.03647250001086,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_runtime.test_manifest_requires_the_declared_python_and_windows_abi",
+          "seconds": 0.000506300013512373,
+          "cpu": 0.0,
+          "outcome": "completed"
+        },
+        {
+          "offset": 21.04014570004074,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_runtime.test_old_file_association_hands_off_before_loading_dependencies",
+          "seconds": 0.00022270000772550702,
+          "cpu": 0.0,
+          "outcome": "completed"
+        },
+        {
+          "offset": 21.053514700033702,
+          "event": "end",
+          "kind": "import",
+          "label": "tests.test_development",
+          "seconds": 0.011271600029431283,
+          "cpu": 0.015625,
+          "outcome": "completed"
+        },
+        {
+          "offset": 21.057729299995117,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_development.test_watch_filters_its_outputs_and_only_restarts_preview_for_production_changes",
+          "seconds": 0.0015986000071279705,
+          "cpu": 0.0,
+          "outcome": "completed"
+        },
+        {
+          "offset": 21.061911600001622,
+          "event": "end",
+          "kind": "test",
+          "label": "tests.test_development.test_watch_uses_only_successful_session_baseline_and_keeps_native_scope",
+          "seconds": 0.001201900013256818,
+          "cpu": 0.0,
+          "outcome": "completed"
+        }
+      ]
+    }
+  },
+  "imports": {
+    "broad-current": {
+      "process_wall_seconds": 20.576150399981998,
+      "returncode": 0,
+      "summary": {
+        "offset": 18.95529339998029,
+        "event": "summary",
+        "failures": []
+      },
+      "accounted_seconds": 18.32178090006346,
+      "slowest_imports": [
+        {
+          "offset": 17.895675000036135,
+          "event": "end",
+          "kind": "import",
+          "label": "assistant.sdk",
+          "seconds": 10.855242100020405,
+          "cpu": 5.109375,
+          "outcome": "completed"
+        },
+        {
+          "offset": 6.139390000025742,
+          "event": "end",
+          "kind": "import",
+          "label": "assistant.bar_button",
+          "seconds": 4.475834899989422,
+          "cpu": 2.046875,
+          "outcome": "completed"
+        },
+        {
+          "offset": 1.5148755999980494,
+          "event": "end",
+          "kind": "import",
+          "label": "assistant.agent",
+          "seconds": 0.6803532000049017,
+          "cpu": 0.484375,
+          "outcome": "completed"
+        },
+        {
+          "offset": 6.512639700027648,
+          "event": "end",
+          "kind": "import",
+          "label": "assistant.bar_weather",
+          "seconds": 0.3395262000267394,
+          "cpu": 0.203125,
+          "outcome": "completed"
+        },
+        {
+          "offset": 0.808891799999401,
+          "event": "end",
+          "kind": "import",
+          "label": "assistant.__main__",
+          "seconds": 0.2710776000167243,
+          "cpu": 0.140625,
+          "outcome": "completed"
+        },
+        {
+          "offset": 0.524923300021328,
+          "event": "end",
+          "kind": "import",
+          "label": "keeper_ui",
+          "seconds": 0.24484419997315854,
+          "cpu": 0.21875,
+          "outcome": "completed"
+        },
+        {
+          "offset": 18.720373600022867,
+          "event": "end",
+          "kind": "import",
+          "label": "scripts.mutate",
+          "seconds": 0.16518180002458394,
+          "cpu": 0.015625,
+          "outcome": "completed"
+        },
+        {
+          "offset": 18.33127660001628,
+          "event": "end",
+          "kind": "import",
+          "label": "scripts.architecture",
+          "seconds": 0.10562580003170297,
+          "cpu": 0.015625,
+          "outcome": "completed"
+        },
+        {
+          "offset": 18.429420200001914,
+          "event": "end",
+          "kind": "import",
+          "label": "scripts.benchmark_keyboard",
+          "seconds": 0.09643320000031963,
+          "cpu": 0.0,
+          "outcome": "completed"
+        },
+        {
+          "offset": 6.594241400016472,
+          "event": "end",
+          "kind": "import",
+          "label": "assistant.browser",
+          "seconds": 0.07994109997525811,
+          "cpu": 0.0625,
+          "outcome": "completed"
+        }
+      ]
+    },
+    "broad-sdk-first": {
+      "process_wall_seconds": 10.345046499976888,
+      "returncode": 0,
+      "summary": {
+        "offset": 8.687548900023103,
+        "event": "summary",
+        "failures": []
+      },
+      "accounted_seconds": 8.09355140000116,
+      "slowest_imports": [
+        {
+          "offset": 4.652727100008633,
+          "event": "end",
+          "kind": "import",
+          "label": "assistant.sdk prewarm",
+          "seconds": 4.485486699966714,
+          "cpu": 4.015625,
+          "outcome": "completed"
+        },
+        {
+          "offset": 7.274938100017607,
+          "event": "end",
+          "kind": "import",
+          "label": "assistant.bar_button",
+          "seconds": 2.2073251999681816,
+          "cpu": 1.984375,
+          "outcome": "completed"
+        },
+        {
+          "offset": 4.862657800025772,
+          "event": "end",
+          "kind": "import",
+          "label": "keeper_ui",
+          "seconds": 0.19289790000766516,
+          "cpu": 0.265625,
+          "outcome": "completed"
+        },
+        {
+          "offset": 7.446182899991982,
+          "event": "end",
+          "kind": "import",
+          "label": "assistant.browser",
+          "seconds": 0.11518989998148754,
+          "cpu": 0.046875,
+          "outcome": "completed"
+        },
+        {
+          "offset": 7.844235100026708,
+          "event": "end",
+          "kind": "import",
+          "label": "assistant.meeting_workflow",
+          "seconds": 0.11169400002108887,
+          "cpu": 0.078125,
+          "outcome": "completed"
+        },
+        {
+          "offset": 4.967202699976042,
+          "event": "end",
+          "kind": "import",
+          "label": "assistant.agent_execution",
+          "seconds": 0.06747139996150509,
+          "cpu": 0.046875,
+          "outcome": "completed"
+        },
+        {
+          "offset": 5.025697799981572,
+          "event": "end",
+          "kind": "import",
+          "label": "assistant.agent_toasts",
+          "seconds": 0.051994799985550344,
+          "cpu": 0.015625,
+          "outcome": "completed"
+        },
+        {
+          "offset": 8.351634300022852,
+          "event": "end",
+          "kind": "import",
+          "label": "scripts.architecture",
+          "seconds": 0.04760089999763295,
+          "cpu": 0.03125,
+          "outcome": "completed"
+        },
+        {
+          "offset": 8.174834900011774,
+          "event": "end",
+          "kind": "import",
+          "label": "assistant.work_service",
+          "seconds": 0.04013269999995828,
+          "cpu": 0.03125,
+          "outcome": "completed"
+        },
+        {
+          "offset": 7.698025999998208,
+          "event": "end",
+          "kind": "import",
+          "label": "assistant.meeting_events",
+          "seconds": 0.03917609999189153,
+          "cpu": 0.015625,
+          "outcome": "completed"
+        }
+      ]
+    },
+    "broad-current-repeat": {
+      "process_wall_seconds": 11.236767199996393,
+      "returncode": 0,
+      "summary": {
+        "offset": 9.693419300019741,
+        "event": "summary",
+        "failures": []
+      },
+      "accounted_seconds": 9.227056200790685,
+      "slowest_imports": [
+        {
+          "offset": 9.120109800016508,
+          "event": "end",
+          "kind": "import",
+          "label": "assistant.sdk",
+          "seconds": 4.974540600029286,
+          "cpu": 4.609375,
+          "outcome": "completed"
+        },
+        {
+          "offset": 3.4254531000042334,
+          "event": "end",
+          "kind": "import",
+          "label": "assistant.bar_button",
+          "seconds": 2.0099959000363015,
+          "cpu": 1.875,
+          "outcome": "completed"
+        },
+        {
+          "offset": 1.284541100030765,
+          "event": "end",
+          "kind": "import",
+          "label": "assistant.agent",
+          "seconds": 0.5594292000168934,
+          "cpu": 0.453125,
+          "outcome": "completed"
+        },
+        {
+          "offset": 0.5034923999919556,
+          "event": "end",
+          "kind": "import",
+          "label": "keeper_ui",
+          "seconds": 0.28324940003221855,
+          "cpu": 0.234375,
+          "outcome": "completed"
+        },
+        {
+          "offset": 3.6513834000215866,
+          "event": "end",
+          "kind": "import",
+          "label": "assistant.bar_weather",
+          "seconds": 0.20233259996166453,
+          "cpu": 0.1875,
+          "outcome": "completed"
+        },
+        {
+          "offset": 0.6957227000384592,
+          "event": "end",
+          "kind": "import",
+          "label": "assistant.__main__",
+          "seconds": 0.1780989999533631,
+          "cpu": 0.125,
+          "outcome": "completed"
+        },
+        {
+          "offset": 3.74614920001477,
+          "event": "end",
+          "kind": "import",
+          "label": "assistant.browser",
+          "seconds": 0.09277059999294579,
+          "cpu": 0.0625,
+          "outcome": "completed"
+        },
+        {
+          "offset": 4.056415400002152,
+          "event": "end",
+          "kind": "import",
+          "label": "assistant.meeting_workflow",
+          "seconds": 0.06784380000317469,
+          "cpu": 0.0625,
+          "outcome": "completed"
+        },
+        {
+          "offset": 0.19776609999826178,
+          "event": "end",
+          "kind": "import",
+          "label": "config",
+          "seconds": 0.0533966000075452,
+          "cpu": 0.015625,
+          "outcome": "completed"
+        },
+        {
+          "offset": 1.3780969000072218,
+          "event": "end",
+          "kind": "import",
+          "label": "assistant.agent_toasts",
+          "seconds": 0.051895299984607846,
+          "cpu": 0.0625,
+          "outcome": "completed"
+        }
+      ]
+    },
+    "broad-sdk-first-repeat": {
+      "process_wall_seconds": 10.063688500027638,
+      "returncode": 0,
+      "summary": {
+        "offset": 8.546943800000008,
+        "event": "summary",
+        "failures": []
+      },
+      "accounted_seconds": 8.062268899870105,
+      "slowest_imports": [
+        {
+          "offset": 4.964531400008127,
+          "event": "end",
+          "kind": "import",
+          "label": "assistant.sdk prewarm",
+          "seconds": 4.813997899997048,
+          "cpu": 4.203125,
+          "outcome": "completed"
+        },
+        {
+          "offset": 7.429400099965278,
+          "event": "end",
+          "kind": "import",
+          "label": "assistant.bar_button",
+          "seconds": 2.0455776999588124,
+          "cpu": 1.796875,
+          "outcome": "completed"
+        },
+        {
+          "offset": 5.198034400003962,
+          "event": "end",
+          "kind": "import",
+          "label": "keeper_ui",
+          "seconds": 0.2111962999915704,
+          "cpu": 0.21875,
+          "outcome": "completed"
+        },
+        {
+          "offset": 7.804401899978984,
+          "event": "end",
+          "kind": "import",
+          "label": "assistant.meeting_workflow",
+          "seconds": 0.07475920004071668,
+          "cpu": 0.078125,
+          "outcome": "completed"
+        },
+        {
+          "offset": 7.514745799999218,
+          "event": "end",
+          "kind": "import",
+          "label": "assistant.browser",
+          "seconds": 0.06250940001336858,
+          "cpu": 0.0625,
+          "outcome": "completed"
+        },
+        {
+          "offset": 5.343539999972563,
+          "event": "end",
+          "kind": "import",
+          "label": "assistant.agent_toasts",
+          "seconds": 0.06034859997453168,
+          "cpu": 0.03125,
+          "outcome": "completed"
+        },
+        {
+          "offset": 5.277143599989358,
+          "event": "end",
+          "kind": "import",
+          "label": "assistant.agent_execution",
+          "seconds": 0.04768100002547726,
+          "cpu": 0.03125,
+          "outcome": "completed"
+        },
+        {
+          "offset": 8.239224799966905,
+          "event": "end",
+          "kind": "import",
+          "label": "scripts.architecture",
+          "seconds": 0.044648699986282736,
+          "cpu": 0.046875,
+          "outcome": "completed"
+        },
+        {
+          "offset": 8.08795509999618,
+          "event": "end",
+          "kind": "import",
+          "label": "assistant.work_service",
+          "seconds": 0.033646399970166385,
+          "cpu": 0.03125,
+          "outcome": "completed"
+        },
+        {
+          "offset": 7.71099019999383,
+          "event": "end",
+          "kind": "import",
+          "label": "assistant.meeting_events",
+          "seconds": 0.03165579994674772,
+          "cpu": 0.03125,
+          "outcome": "completed"
+        }
+      ]
+    }
+  },
+  "earlier_valid_probes": {
+    "sdk-first": {
+      "process_wall_seconds": 11.62498909997521,
+      "returncode": 0,
+      "completed_phases": [
+        {
+          "phase": "activation",
+          "wall": 0.06969129998469725,
+          "cpu": 0.0,
+          "modules": 100
+        },
+        {
+          "phase": "SDK import",
+          "wall": 9.935531500028446,
+          "cpu": 5.046875,
+          "modules": 1503
+        },
+        {
+          "phase": "Qt import",
+          "wall": 0.3402227000333369,
+          "cpu": 0.34375,
+          "modules": 1542
+        }
+      ]
+    },
+    "qt-first": {
+      "process_wall_seconds": 30.0650671000476,
+      "returncode": "30s timeout",
+      "completed_phases": [
+        {
+          "phase": "activation",
+          "wall": 0.019261800043750554,
+          "cpu": 0.03125,
+          "modules": 100
+        },
+        {
+          "phase": "Qt import",
+          "wall": 0.5246039999765344,
+          "cpu": 0.421875,
+          "modules": 192
+        }
+      ]
+    },
+    "store": {
+      "process_wall_seconds": 1.9048398000304587,
+      "returncode": 0,
+      "completed_phases": [
+        {
+          "phase": "new store",
+          "wall": 0.016428400005679578,
+          "cpu": 0.015625
+        },
+        {
+          "phase": "100 public writes",
+          "wall": 1.104123700002674,
+          "cpu": 0.484375
+        },
+        {
+          "phase": "100 public reads",
+          "wall": 0.18155899998964742,
+          "cpu": 0.15625
+        }
+      ]
+    },
+    "copy": {
+      "process_wall_seconds": 3.279973400000017,
+      "returncode": 0,
+      "completed_phases": [
+        {
+          "source_files": 368,
+          "bytes": 5927987
+        },
+        {
+          "phase": "one source copy",
+          "wall": 2.291925999976229,
+          "cpu": 1.21875
+        },
+        {
+          "phase": "one copied source cleanup",
+          "wall": 0.2902760000433773,
+          "cpu": 0.234375
+        }
+      ]
+    }
+  }
+}

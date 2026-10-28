@@ -53,7 +53,7 @@ class KeeperUi:
 
     def approve(self, diff: str) -> bool:
         dialog, layout = self.dialog(
-            "Toolkit update review",
+            "Workspace update review",
             "Run checks and install this change?\n\nThese checks execute the proposed code with your Windows account.",
         )
         dialog.resize(900, 640)
@@ -90,7 +90,7 @@ class KeeperUi:
         dialog.deleteLater()
 
     def notify(self, message: str) -> None:
-        dialog, layout = self.dialog("Toolkit", message[:700])
+        dialog, layout = self.dialog("Workspace", message[:700])
         dialog.setMinimumWidth(440)
         close = QtWidgets.QPushButton("OK")
         close.clicked.connect(dialog.accept)
@@ -107,7 +107,7 @@ class KeeperUi:
             self.trial = None
         if summary is None:
             return
-        dialog, layout = self.dialog("Toolkit update", f"Updated: {summary}\n\nOn trial for ten minutes; it's undone if it crashes.")
+        dialog, layout = self.dialog("Workspace update", f"Updated: {summary}\n\nOn trial for ten minutes; it's undone if it crashes.")
         dialog.setMinimumWidth(420)
         controls = QtWidgets.QHBoxLayout()
         controls.addStretch()

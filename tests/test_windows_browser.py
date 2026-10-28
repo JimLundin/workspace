@@ -1,10 +1,12 @@
 """Installed Edge runs real DOM actions in an isolated persistent profile."""
 
 import json
+import shutil
 import sys
 import threading
 import time
 import unittest
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import cast
@@ -45,6 +47,69 @@ def installed() -> None:
         raise unittest.SkipTest("Microsoft Edge is not installed")
 
 
+def dispose(browser: Browser, remove: Callable[[Path], None] = shutil.rmtree) -> None:
+    """Release the disposable profile owned by a browser fixture."""
+    browser.close()
+    # Windows can briefly retain a dictionary mapping after browser exit.
+    # This bounded fixture policy never hides persistent access failures.
+    delays = (0, .02, .05, .1, .2, .4, .8)
+    for attempt, delay in enumerate(delays):
+        if delay:
+            time.sleep(delay)
+        try:
+            remove(browser.profile)
+        except FileNotFoundError:
+            return
+        except PermissionError:
+            if attempt == len(delays) - 1:
+                raise
+        else:
+            return
+
+
+def test_disposable_browser_fixture_waits_for_late_native_profile_release(tmp_path: Path) -> None:
+    browser = Browser(tmp_path / 'profile')
+    browser.profile.mkdir()
+    stream = (browser.profile / 'dictionary.bdic').open('wb')
+    denied = threading.Event()
+    remove = shutil.rmtree
+
+    def release() -> None:
+        assert denied.wait(3)
+        stream.close()
+
+    def observed_remove(path: Path) -> None:
+        try:
+            remove(path)
+        except PermissionError:
+            denied.set()
+            raise
+
+    worker = threading.Thread(target=release)
+    worker.start()
+    try:
+        dispose(browser, observed_remove)
+        assert denied.is_set() and not browser.profile.exists()
+    finally:
+        denied.set()
+        worker.join(timeout=3)
+        stream.close()
+
+
+def test_disposable_browser_fixture_reports_persistent_cleanup_failure(tmp_path: Path) -> None:
+    browser = Browser(tmp_path / 'profile')
+    attempts: tuple[Path, ...] = ()
+
+    def refuse(path: Path) -> None:
+        nonlocal attempts
+        attempts += (path,)
+        raise PermissionError('Fixture profile remains inaccessible.')
+
+    with TestCase().assertRaisesRegex(PermissionError, 'remains inaccessible'):
+        dispose(browser, refuse)
+    assert attempts == (browser.profile,) * 7
+
+
 def test_endpoint_publication_recovers_after_a_native_file_lock(tmp_path: Path) -> None:
     with (tmp_path / "DevToolsActivePort").open("w+b") as stream:
         stream.write(b"12345\n/devtools/browser/fixture\n")
@@ -67,6 +132,12 @@ def test_background_edge_controls_frames_shadow_roots_and_saved_profile(tmp_path
         try:
             page = request(browser, "open", url=url)
             target = cast(str, page["target_id"])
+            # Opening returns at main-document readiness; iframe controls need the full load event.
+            browser.request("evaluate", {
+                "target_id": target,
+                "expression": "new Promise(resolve => document.readyState === 'complete' ? resolve(true) : "
+                              "window.addEventListener('load', () => resolve(true), {once: true}))",
+            }, threading.Event())
             assert "fixture-private" not in json.dumps(page)
             act(browser, target, page, "Name", "fill", value='Åäö "literal"')
             act(browser, target, page, "Choice", "select", value="beta")
@@ -155,7 +226,7 @@ def test_visible_sign_in_handoff_reuses_only_the_dedicated_profile(tmp_path: Pat
             visible = request(browser, "sign_in", url=url)
             assert visible["mode"] == "sign_in"
             result = request(browser, "open", url=url, target_id=visible["target_id"])
-            assert result["title"] == "Toolkit browser fixture"
+            assert result["title"] == "Workspace browser fixture"
             assert request(browser, "tabs")["mode"] == "background"
     finally:
         browser.close()

@@ -18,7 +18,7 @@ It is a disabled template until explicitly enabled. Scheduled times and
 specified file changes use the same task submission and recovery path.
 
 The work overview can inspect, pause, resume, cancel, answer, and redirect a
-task. Closing the overview hides the view. Quitting Toolkit interrupts active
+task. Closing the overview hides the view. Quitting Workspace interrupts active
 execution for recovery; the user's Stop and Cancel actions end their selected
 work. Existing conversation follow-ups and source-workspace drafts retain their
 meaning.

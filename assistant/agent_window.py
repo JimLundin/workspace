@@ -10,7 +10,7 @@ import time
 import traceback
 import uuid
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Final, Protocol
 
 from usage import DIRECTORY
@@ -36,6 +36,11 @@ from .agent_session import (
     pending,
     transition,
 )
+from .communications import Command, Feed
+from .console_requests import Command as ConsoleCommand
+from .console_requests import Request as ConsoleRequest
+from .feed_origin import FeedRequest
+from .feed_triage import Board
 from .recording_state import RecordingAction, RecordingState
 
 VIEW_LOG: Final = DIRECTORY / "agent-ui.log"
@@ -53,6 +58,7 @@ class View(Protocol):
 
     def render(self, state: Snapshot) -> None: ...
     def show(self, *, focus: bool = False) -> None: ...
+    def open_inbox(self) -> None: ...
     def close(self) -> None: ...
 
 
@@ -69,8 +75,33 @@ class _ExternalAnswer:
 
 class AgentWindow:
     __slots__ = (
-        "_create_view", "_external", "_failed", "_pending", "_post", "_presented", "_view", "closed", "closed_ready", "inputs", "lock", "on_problem",
-        "on_recording", "on_reset", "on_submit", "on_waiting", "on_work", "ready", "started", "state", "stop",
+        "__weakref__",
+        "_create_view",
+        "_external",
+        "_failed",
+        "_pending",
+        "_post",
+        "_presented",
+        "_view",
+        "closed",
+        "closed_ready",
+        "inputs",
+        "lock",
+        "on_choose_work",
+        "on_communication",
+        "on_console",
+        "on_dismiss_work",
+        "on_problem",
+        "on_recording",
+        "on_reset",
+        "on_snapshot",
+        "on_submit",
+        "on_waiting",
+        "on_work",
+        "ready",
+        "started",
+        "state",
+        "stop",
     )
 
     def __init__(
@@ -79,11 +110,19 @@ class AgentWindow:
         on_submit: Callable[[str], None] | None = None, on_waiting: Callable[[bool], None] | None = None,
         on_recording: Callable[[RecordingAction], None] | None = None,
         on_work: Callable[[], None] | None = None,
+        on_communication: Callable[[Command], bool] | None = None,
+        on_console: Callable[[ConsoleCommand], bool] | None = None,
+        on_snapshot: Callable[[Snapshot], None] | None = None,
     ) -> None:
         self.stop, self.on_problem, self.on_reset, self.on_submit = stop, on_problem, on_reset, on_submit
         self.on_waiting = on_waiting
         self.on_recording = on_recording
         self.on_work = on_work
+        self.on_communication = on_communication
+        self.on_console = on_console
+        self.on_snapshot: Callable[[Snapshot], None] | None = on_snapshot
+        self.on_choose_work: Callable[[str, str, str], bool] | None = None
+        self.on_dismiss_work: Callable[[str], bool] | None = None
         self._external: _ExternalRequest | _ExternalAnswer | None = None
         self._presented: str | None = None
         self.state = Session(identity=uuid.uuid4().hex)
@@ -125,8 +164,11 @@ class AgentWindow:
         with self.lock:
             self._pending = False
             state = self.state
-        if not self.closed and self._view is not None:
-            self._view.render(state)
+        if not self.closed:
+            if self.on_snapshot is not None:
+                self.on_snapshot(state)
+            if self._view is not None:
+                self._view.render(state)
 
     def _changed(self) -> None:
         if not self._pending:
@@ -151,6 +193,16 @@ class AgentWindow:
                 self._create()
                 if self._view is not None:
                     self._view.show(focus=focus)
+
+        self._post(reveal)
+
+    def open_inbox(self) -> None:
+        """Schedule current inbox access with native view creation on the UI thread."""
+        def reveal() -> None:
+            if not self.closed:
+                self._create()
+                if self._view is not None:
+                    self._view.open_inbox()
 
         self._post(reveal)
 
@@ -188,7 +240,7 @@ class AgentWindow:
                 if answer in ("approve", "decline"):
                     self.respond(identity, answer)
                 else:
-                    self.say("Approval is still waiting. Hold N and say just “approve” or “decline”.")
+                    self.say("Approval is still waiting. Toggle N and say just “approve” or “decline”.")
         return True
 
     def request_input(self, message: Question | Approval, respond: Callable[[str], bool]) -> None:
@@ -287,9 +339,9 @@ class AgentWindow:
                 return False
         return self.on_reset() if self.on_reset is not None else False
 
-    def begin(self, task: str, stop: Callable[[], None], *, queued: bool = False) -> None:
+    def begin(self, task: str, stop: Callable[[], None], *, queued: bool = False, source: FeedRequest | None = None) -> None:
         self.stop = stop
-        self._event(Begin(task, time.time(), queued))
+        self._event(Begin(task, time.time(), queued, source))
 
     def queued(self, task: str) -> None:
         self._event(Enqueued(task))
@@ -328,13 +380,32 @@ class AgentWindow:
             self._external = None
             self._presented = None
             recording = self.state.recording
-            self.state = Session(identity=uuid.uuid4().hex)
+            self.state = Session(identity=uuid.uuid4().hex, communications=self.state.communications, console_requests=self.state.console_requests,
+                                 communication_drafts=self.state.communication_drafts, triage=self.state.triage)
             if recording.phase not in ("idle", "saved", "interrupted"):
                 self.state = transition(self.state, RecordingUpdated(recording, time.time()))
             self._changed()
 
     def recording(self, state: RecordingState) -> None:
         self._event(RecordingUpdated(state, time.time()))
+
+    def communications(self, feed: Feed, drafts: dict[str, str]) -> None:
+        with self.lock:
+            if not self.closed:
+                self.state = replace(self.state, communications=feed, communication_drafts=tuple(drafts.items()))
+                self._changed()
+
+    def triage(self, board: Board) -> None:
+        with self.lock:
+            if not self.closed:
+                self.state = replace(self.state, triage=board)
+                self._changed()
+
+    def consoles(self, requests: tuple[ConsoleRequest, ...]) -> None:
+        with self.lock:
+            if not self.closed:
+                self.state = replace(self.state, console_requests=requests)
+                self._changed()
 
     def stopping(self) -> None:
         with self.lock:

@@ -9,6 +9,10 @@ from enum import Enum, auto
 from typing import Literal, assert_never
 
 from . import action_text
+from .communications import Feed
+from .console_requests import Request as ConsoleRequest
+from .feed_origin import FeedRequest
+from .feed_triage import Board
 from .recording_state import RecordingState
 
 type Decision = Literal["pending", "approved", "declined", "cancelled"]
@@ -35,9 +39,10 @@ type Reply = Pending | Answered | Cancelled
 
 @dataclass(frozen=True, slots=True)
 class ChatMessage:
-    speaker: Literal["You", "Toolkit", "Error"]
+    speaker: Literal["You", "Workspace", "Error"]
     text: str
     created_at: float
+    source: FeedRequest | None = None
 
 
 class StreamState(Enum):
@@ -140,6 +145,7 @@ class Begin:
     text: str
     at: float
     queued: bool = False
+    source: FeedRequest | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -228,6 +234,10 @@ class Session:
     activity: tuple[str, ...] = ()
     phase: Literal["idle", "running", "stopping"] = "idle"
     status: str = "Ready"
+    triage: Board = field(default_factory=Board)
+    communications: Feed = field(default_factory=Feed)
+    console_requests: tuple[ConsoleRequest, ...] = ()
+    communication_drafts: tuple[tuple[str, str], ...] = ()
     last_said: str = ""
     result: Result = "Ready"
     recording: RecordingState = field(default_factory=RecordingState)
@@ -258,10 +268,10 @@ type Snapshot = Session
 
 def transition(state: Session, event: Event) -> Session:
     match event:
-        case Begin(text, at, queued):
+        case Begin(text, at, queued, source):
             return replace(state, generation=state.generation + 1, phase="running", status="Starting…", result="Ready", last_said="",
                            queued=state.queued[1:] if queued else state.queued,
-                           messages=(*state.messages, ChatMessage("You", text.strip(), at)))
+                           messages=(*state.messages, ChatMessage("You", text.strip(), at, source)))
         case Enqueued(text):
             return replace(state, queued=(*state.queued, text.strip()))
         case Progress(text):
@@ -270,10 +280,10 @@ def transition(state: Session, event: Event) -> Session:
             return replace(state, status=status, activity=state.activity if text == "Waiting for the model..." else (*state.activity, text))
         case Said(text, at):
             text = text.strip()
-            return replace(state, messages=(*state.messages, ChatMessage("Toolkit", text, at)), last_said=text) if text else state
+            return replace(state, messages=(*state.messages, ChatMessage("Workspace", text, at)), last_said=text) if text else state
         case Done(text, at):
             text = text.strip()
-            messages = (*state.messages, ChatMessage("Toolkit", text, at)) if text and text != state.last_said else state.messages
+            messages = (*state.messages, ChatMessage("Workspace", text, at)) if text and text != state.last_said else state.messages
             return replace(state, messages=messages, result="Stopped" if text.startswith("Stopped") else "Ready")
         case Problem(text, at):
             return replace(state, messages=(*state.messages, ChatMessage("Error", text.strip(), at)),
@@ -398,7 +408,7 @@ def message_text(message: Message) -> str:
         case ChatMessage(speaker, text):
             parts = (speaker, text)
         case Answer(text=text):
-            parts = ("Toolkit", text)
+            parts = ("Workspace", text)
         case ReasoningSummary(text=text):
             parts = ("Reasoning summary", text)
         case ToolActivity(name=name):

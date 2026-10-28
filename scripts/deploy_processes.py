@@ -46,9 +46,15 @@ def role_for(arguments: tuple[str, ...], *, windowed: bool,
                 return None
         case _:
             pass
-    if editor is not None and len(arguments) == 2 and PureWindowsPath(arguments[0]) == editor[0]:
-        script = PureWindowsPath(arguments[1])
-        if script.is_relative_to(editor[1]):
+    if editor is not None and arguments and PureWindowsPath(arguments[0]) == editor[0] and not windowed:
+        # Development tools use a venv launcher sharing the installed base
+        # interpreter. Their fresh checks/isolated views are separately owned
+        # and must coexist with an ordinary source deployment.
+        if len(arguments) >= 3 and arguments[1:3] in (
+                ('-m', 'scripts.watch'), ('-m', 'scripts.check'), ('-m', 'scripts.preview')):
+            return None
+        script = PureWindowsPath(arguments[1]) if len(arguments) == 2 else None
+        if script is not None and script.is_relative_to(editor[1]):
             relative = script.relative_to(editor[1]).parts
             if (len(relative) == 4 and relative[0].casefold().startswith('ms-python.black-formatter-')
                     and tuple(part.casefold() for part in relative[1:]) == ('bundled', 'tool', 'lsp_server.py')):

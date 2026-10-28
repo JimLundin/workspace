@@ -32,12 +32,14 @@ Scancode = NewType("Scancode", int)
 
 ESCAPE: Final = Scancode(0x29)
 """The escape key (the key left of 1, § on a Nordic keyboard)."""
-TALK: Final = Scancode(0x30)
-"""The push-to-talk key: B, between the thumb keys. Hold it to dictate."""
+TALK: Final = Scancode(0x39)
+"""The physical Spacebar holds dictation. C remains the Space/Nav thumb."""
 AGENT: Final = Scancode(0x31)
-"""N, immediately to the right of B. Hold it to speak a task for the agent."""
-VOICE_KEYS: Final = {TALK: Tool.DICTATE, AGENT: Tool.AGENT_VOICE}
-"""Dedicated voice buttons, available on every layer without a tap-hold delay."""
+"""Physical N toggles agent speech."""
+DICTATE_TOGGLE: Final = Scancode(0x30)
+"""Physical B toggles dictation."""
+VOICE_KEYS: Final = {TALK: Tool.DICTATE, DICTATE_TOGGLE: Tool.DICTATE_TOGGLE, AGENT: Tool.AGENT_VOICE_TOGGLE}
+"""Dedicated voice buttons work on every layer, without a tap-hold delay."""
 
 
 # ---- Vocabulary ----------------------------------------------------------------
@@ -333,8 +335,11 @@ PHYSICAL: Final[Board[Scancode]] = Board(
 
 UNUSED: Final = frozenset(
     # Keys between and below the hands (1 7 Y U G H J Z - <): blocked.
-    sc(code) for code in (0x02, 0x08, 0x15, 0x16, 0x22, 0x23, 0x24, 0x2C, 0x35, 0x56)
+    sc(code) for code in (0x02, 0x08, 0x15, 0x16, 0x22, 0x23, 0x24, 0x2C, 0x31, 0x35, 0x56)
 )
+
+FUNCTION_KEYS: Final = frozenset(Scancode(code) for code in range(0x3B, 0x45)) | frozenset({Scancode(0x57), Scancode(0x58)})
+"""The physical F1-F12 row remains native while the layout is enabled."""
 
 BASE: Final[Board[Action]] = Board(
     # Colemak-DH with home row mods (Win Alt Ctrl Shift).
@@ -369,19 +374,21 @@ SYM_LAYER: Final[Board[Action]] = Board(
 )
 
 TOOLS_LAYER: Final[Board[Action]] = Board(
-    # Hold the Tab thumb. Right hand: the assistant's tools (see protocol.Tool).
+    # Hold the Tab thumb. Right hand: assistant tools; left T: inbox.
     top=      Row((LOCK, XX,  XX,  XX,  XX), (Tool.REWRITE_VOICE, Tool.FIX,             Tool.TRANSLATE, Tool.SHORTER,     Tool.FORMAL    )),
-    home=     Row((GUI,  ALT, CTL, SFT, XX), (Tool.DICTATE_CLEAN, Tool.DICTATE_COMMAND, Tool.ASK,       Tool.SCREEN_TEXT, Tool.SCREEN_ASK)),
+    home=     Row((GUI,  ALT, CTL, SFT, Tool.OPEN_INBOX), (Tool.DICTATE_CLEAN, Tool.DICTATE_COMMAND, Tool.ASK,       Tool.SCREEN_TEXT, Tool.SCREEN_ASK)),
     bottom=   Row((XX,   XX,  XX,  XX,  XX), (Tool.AGENT_VOICE,   Tool.AGENT_TYPED,     Tool.STOP,      XX,               XX             )),
     thumbs=Thumbs((           XX,  XX,  XX), (Tool.DICTATE,       XX,                   XX             )),
 )
 
 APPS_LAYER: Final[Board[Action]] = Board(
     # Hold the Delete thumb. Left hand: apps (from config.APPS), then window placement.
-    top=      Row((_APP[0],        _APP[1],       _APP[2],         _APP[3],           _APP[4]      ), (XX, XX,  XX,  XX,  LOCK)),
-    home=     Row((_APP[5],        _APP[6],       _APP[7],         _APP[8],           _APP[9]      ), (XX, SFT, CTL, ALT, GUI )),
-    bottom=   Row((Tool.SNAP_LEFT, Tool.MAXIMIZE, Tool.SNAP_RIGHT, Tool.NEXT_MONITOR, Tool.MINIMIZE), (XX, XX,  XX,  XX,  XX  )),
-    thumbs=Thumbs((                               XX,              XX,                XX           ), (XX, XX,  XX )),
+    top=      Row((_APP[0],        _APP[1],       _APP[2],         _APP[3],           _APP[4]      ), (Tool.TILE_FOCUS_LEFT, Tool.TILE_FOCUS_DOWN, Tool.TILE_FOCUS_UP, Tool.TILE_FOCUS_RIGHT, LOCK)),
+    home=     Row((_APP[5],        _APP[6],       _APP[7],         _APP[8],           _APP[9]      ), (Tool.TILE_FLOAT, SFT, CTL, ALT, GUI )),
+    bottom=   Row((Tool.SNAP_LEFT, Tool.MAXIMIZE, Tool.SNAP_RIGHT, Tool.NEXT_MONITOR, Tool.MINIMIZE),
+                  (Tool.TILE_PREVIOUS_WORKSPACE, Tool.TILE_NEXT_WORKSPACE, Tool.TILE_DIRECTION, Tool.TILE_PAUSE, Tool.DICTATE_TOGGLE)),
+    thumbs=Thumbs((Tool.WINDOW_SWITCHER, Tool.COPY_TRANSCRIPT, Tool.MEETING_TOGGLE),
+                  (Tool.AGENT_VOICE_TOGGLE, Tool.TILE_BALANCE, XX)),
 )
 # fmt: on
 
@@ -418,9 +425,9 @@ def action(layer: Layer | None, cell: int) -> Action:
 
 class Unmapped(Enum):
     FREE = auto()
-    """Not ours: passes through."""
+    """An explicitly permitted native function key."""
     BLOCKED = auto()
-    """Between the hands: swallowed, does nothing."""
+    """No binding: swallowed, does nothing."""
 
 
 def _build_slots() -> dict[Scancode, int | Unmapped]:
@@ -433,12 +440,21 @@ def _build_slots() -> dict[Scancode, int | Unmapped]:
         if scancode in slots:
             raise LayoutError(f"blocked key {scancode:#x} is also in the layout")
         slots[scancode] = Unmapped.BLOCKED
+    for scancode in FUNCTION_KEYS:
+        if scancode in slots:
+            raise LayoutError(f"function key {scancode:#x} is also in the layout")
+        slots[scancode] = Unmapped.FREE
     return slots
 
 
 SLOTS: Final = _build_slots()
-"""Scancode -> its cell number, or BLOCKED. Anything else is FREE."""
+"""Scancode -> a binding or explicitly permitted function key. Everything else is blocked."""
 
 
 def slot(scancode: Scancode) -> int | Unmapped:
-    return SLOTS.get(scancode, Unmapped.FREE)
+    return SLOTS.get(scancode, Unmapped.BLOCKED)
+
+
+def native_control(vk: int) -> bool:
+    """Function/media controls, text navigation and the bound taskbar hotkey remain native."""
+    return 0x70 <= vk <= 0x87 or 0xAD <= vk <= 0xB3 or 0x25 <= vk <= 0x28 or vk in (0x10, 0x11, 0xA0, 0xA1, 0xA2, 0xA3, 0x5B, 0x5C)

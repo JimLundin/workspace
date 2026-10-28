@@ -22,3 +22,7 @@ argument and retains the remaining parameters and result type.
 Extend a stub only when consuming another API. Check its signature against the
 pinned dependency's source and exercise our integration; stubs must not assert
 that external data already satisfies a domain schema.
+
+Watchdog's stubs expose its consumed event fields and observer lifecycle. The
+handler protocol records the actual dispatch call used by the native observer;
+Workspace owns filtering, batching, check sequencing and preview shutdown.

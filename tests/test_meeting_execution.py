@@ -194,25 +194,29 @@ def test_published_package_without_verified_mail_save_cannot_complete(tmp_path: 
         if saved_count:
             first = response_item(rig.response, "drafts")
             rig.response["drafts"] = [first, {**first, "id": "review-reminder", "subject": "Customer review reminder"}]
-        claim = rig.claim()
-        planned = rig.packages.plan(claim.task.id, parse_followup(rig.bundle, json.dumps(rig.response)))
-        with fake_endpoint() as endpoint:
-            endpoint.replies = [
-                calls(("meeting_publish_followup", {"followup": rig.response})),
-                calls(("meeting_followup_result", {"version": planned.version})),
-                *([calls(("meeting_save_draft", {"version": planned.version, "draft_id": "follow-up", "revision": 0}))] if saved_count else []),
-                says("The package is published, so the whole follow-up is complete."),
-            ]
-            outcome = rig.execution(endpoint, meeting=rig.meeting).run_work(claim, rig.tasks, FakeWindow(), threading.Event())
-        assert isinstance(outcome, Waiting) and isinstance(outcome.reason, Blocked), outcome
-        assert not rig.errors and not rig.machine.log and not rig.command.files()
-        assert len(tuple((rig.drafts.folder / "drafts").glob("*.eml"))) == saved_count
-        package = FollowupStore(rig.packages.root).read(claim.task.id, planned.version)
-        assert package.notes_path.exists() and all(draft.eml.exists() for draft in package.drafts)
-        actions = rig.tasks.actions(claim.task.id)
-        assert len(actions) == 1 + saved_count
-        assert sum(action.specification.tool == "meeting_publish_followup" for action in actions) == 1
-        assert all(isinstance(action.outcome, ActionVerified) for action in actions)
+        try:
+            claim = rig.claim()
+            planned = rig.packages.plan(claim.task.id, parse_followup(rig.bundle, json.dumps(rig.response)))
+            with fake_endpoint() as endpoint:
+                endpoint.replies = [
+                    calls(("meeting_publish_followup", {"followup": rig.response})),
+                    calls(("meeting_followup_result", {"version": planned.version})),
+                    *([calls(("meeting_save_draft", {"version": planned.version, "draft_id": "follow-up", "revision": 0}))] if saved_count else []),
+                    says("The package is published, so the whole follow-up is complete."),
+                ]
+                outcome = rig.execution(endpoint, meeting=rig.meeting).run_work(claim, rig.tasks, FakeWindow(), threading.Event())
+            assert isinstance(outcome, Waiting) and isinstance(outcome.reason, Blocked), outcome
+            assert not rig.errors and not rig.machine.log and not rig.command.files()
+            assert len(tuple((rig.drafts.folder / "drafts").glob("*.eml"))) == saved_count
+            package = FollowupStore(rig.packages.root).read(claim.task.id, planned.version)
+            assert filesystem_path(package.notes_path).exists() and all(filesystem_path(draft.eml).exists() for draft in package.drafts)
+            actions = rig.tasks.actions(claim.task.id)
+            assert len(actions) == 1 + saved_count
+            assert sum(action.specification.tool == "meeting_publish_followup" for action in actions) == 1
+            assert all(isinstance(action.outcome, ActionVerified) for action in actions)
+        finally:
+            if filesystem_path(rig.packages.root).exists():
+                shutil.rmtree(filesystem_path(rig.packages.root))
 
 
 def test_saved_mail_receipt_must_belong_to_the_selected_package_version(tmp_path: Path) -> None:
@@ -318,10 +322,12 @@ def test_reserved_workflow_omits_unrelated_history_context_and_general_tools(tmp
         tools = cast("list[dict[str, object]]", payload["tools"])
         assert {tool["name"] for tool in tools} == {
             "meeting_read_sources", "meeting_publish_followup", "meeting_followup_result", "meeting_save_draft",
-            "ask_user", "work_actions", "reconcile_action",
+            "ask_user", "get_current_time", "work_actions", "reconcile_action",
         }
     assert not context_reads and not rig.machine.log
     agent = rig.agent(claim, context=context)
+    clock = call(agent, 'get_current_time', {})
+    assert clock.ok and 'UTC time:' in clock.text
     secret_file = tmp_path / "unrelated.txt"
     secret_file.write_text("UNRELATED-FILE-SECRET", encoding="utf-8")
     forbidden: tuple[tuple[str, dict[str, Json]], ...] = (

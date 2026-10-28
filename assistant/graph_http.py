@@ -33,7 +33,7 @@ class Http:
     async def _request(
         self, method: str, url: str, headers: dict[str, str], body: bytes | None, cancel: threading.Event,
     ) -> tuple[int, dict[str, Json]]:
-        import httpx  # noqa: PLC0415 (no SDK or HTTP client work on Toolkit startup)
+        import httpx  # noqa: PLC0415 (no SDK or HTTP client work on Workspace startup)
 
         async def receive() -> tuple[int, dict[str, Json]]:
             async with (

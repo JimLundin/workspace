@@ -3,6 +3,7 @@
 from dataclasses import dataclass
 from typing import Final, assert_never
 
+from .feed_origin import App
 from .notifications import Tone
 
 INK: Final = "#f6f3ff"
@@ -28,7 +29,24 @@ class Palette:
     tint: str
 
 
-def palette(tone: Tone) -> Palette:
+def palette(tone: Tone, app: App | None = None) -> Palette:
+    match app:
+        case App.TEAMS:
+            return Palette("#292540", "#8076b2", "#d8d1ff", "#6655a0")
+        case App.OUTLOOK:
+            return Palette("#1d2c40", "#587fa7", "#c2e4ff", "#2869a2")
+        case App.CODEX:
+            return Palette("#222e31", "#68878b", "#d0eaeb", "#416f74")
+        case App.CLAUDE:
+            return Palette("#372922", "#a47c69", "#f4d2be", "#9c6049")
+        case App.EDGE:
+            return Palette("#203332", "#5e9690", "#c4f1e9", "#267e76")
+        case App.WINDOWS:
+            return Palette("#252c3a", "#6e83a5", "#d4e3ff", "#486a9c")
+        case App.WORKSPACE | None:
+            pass
+        case _:
+            assert_never(app)
     match tone:
         case Tone.USER | Tone.RECORDING:
             return Palette("#222c42", "#62738e", "#d3e3ff", "#335ba5")

@@ -1,0 +1,36 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Workspace: check",
+      "type": "shell",
+      "command": ".\\Dev.cmd check",
+      "options": {"cwd": "${workspaceFolder}"},
+      "group": {"kind": "test", "isDefault": true},
+      "problemMatcher": []
+    },
+    {
+      "label": "Workspace: watch",
+      "type": "shell",
+      "command": ".\\Dev.cmd watch",
+      "options": {"cwd": "${workspaceFolder}"},
+      "isBackground": true,
+      "problemMatcher": []
+    },
+    {
+      "label": "Workspace: UI preview",
+      "type": "shell",
+      "command": ".\\Dev.cmd preview",
+      "options": {"cwd": "${workspaceFolder}"},
+      "isBackground": true,
+      "problemMatcher": []
+    },
+    {
+      "label": "Workspace: check and deploy",
+      "type": "shell",
+      "command": ".\\Dev.cmd check --receipt \"$env:TEMP\\workspace-check.json\"; if ($LASTEXITCODE -eq 0) { .\\Dev.cmd deploy --check-receipt \"$env:TEMP\\workspace-check.json\" }",
+      "options": {"cwd": "${workspaceFolder}"},
+      "problemMatcher": []
+    }
+  ]
+}

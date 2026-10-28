@@ -6,7 +6,7 @@ from collections.abc import Callable
 
 from winapi import windows
 
-from .canvas_widgets import STYLE
+from .panel_controls import STYLE
 from .qt import Qt, QtCore, QtGui, QtWidgets
 
 
@@ -16,7 +16,7 @@ class Window(QtWidgets.QWidget):
     def __init__(self, title: str, close: Callable[[], None], *, width: int = 900, height: int = 640) -> None:
         super().__init__()
         self.on_close = close
-        self.setObjectName("toolkitWindow")
+        self.setObjectName("workspaceWindow")
         self.setWindowTitle(title)
         self.setStyleSheet(STYLE)
         self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
@@ -69,7 +69,7 @@ def show_window(window: QtWidgets.QWidget, *, focus: bool, target: QtWidgets.QWi
     finally:
         windows.allow_activation(handle, True)
     if focus:
-        threading.Thread(target=lambda: windows.focus(handle), name="focus toolkit", daemon=True).start()
+        threading.Thread(target=lambda: windows.focus(handle), name="focus workspace", daemon=True).start()
         (target or window).setFocus(Qt.FocusReason.OtherFocusReason)
 
 

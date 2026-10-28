@@ -82,7 +82,7 @@ _MA_NOACTIVATE: Final = 3
 
 
 def overlay_message(hwnd: int, message: int, wparam: int, lparam: int, subclass: int, _data: int) -> int:
-    """Keep an interactive overlay from activating, even if its GUI toolkit asks to."""
+    """Keep an interactive overlay from activating, even if its GUI workspace asks to."""
     if message == _WM_MOUSEACTIVATE:
         return _MA_NOACTIVATE
     if message == _WM_NCDESTROY:
@@ -122,18 +122,18 @@ def _cloaked(hwnd: int) -> bool:
     return _DwmGetWindowAttribute(hwnd, _DWMWA_CLOAKED, ctypes.byref(value), ctypes.sizeof(value)) == 0 and bool(value.value)
 
 
-def _on_taskbar(hwnd: int) -> bool:
-    if not _IsWindowVisible(hwnd) or _GetWindow(hwnd, _GW_OWNER) or _cloaked(hwnd):
+def _on_taskbar(hwnd: int, include_cloaked: bool = False) -> bool:
+    if not _IsWindowVisible(hwnd) or _GetWindow(hwnd, _GW_OWNER) or (not include_cloaked and _cloaked(hwnd)):
         return False
     return not (int(_GetWindowLongW(hwnd, _GWL_EXSTYLE)) & _WS_EX_TOOLWINDOW) and _GetWindowTextLengthW(hwnd) > 0
 
 
-def windows() -> list[Window]:
+def windows(*, include_cloaked: bool = False) -> list[Window]:
     """Top-level windows that would be on the taskbar, front to back."""
     handles: list[int] = []
 
     def each(hwnd: int, _data: int) -> bool:
-        if _on_taskbar(hwnd):
+        if _on_taskbar(hwnd, include_cloaked):
             handles.append(int(hwnd))
         return True
 
@@ -212,6 +212,10 @@ def is_visible(hwnd: int) -> bool:
     return bool(_IsWindowVisible(hwnd))
 
 
+def is_cloaked(hwnd: int) -> bool:
+    return _cloaked(hwnd)
+
+
 def client_size(hwnd: int) -> tuple[int, int]:
     r = wintypes.RECT()
     _GetClientRect(hwnd, ctypes.byref(r))
@@ -262,7 +266,7 @@ def show_quietly(hwnd: int, visible: bool, *, topmost: bool = True) -> None:
 
 
 def allow_activation(hwnd: int, allowed: bool) -> None:
-    """Temporarily prevent a GUI toolkit's Show call from taking the keyboard."""
+    """Temporarily prevent a GUI workspace's Show call from taking the keyboard."""
     style = int(_GetWindowLongW(hwnd, _GWL_EXSTYLE))
     style = style & ~_WS_EX_NOACTIVATE if allowed else style | _WS_EX_NOACTIVATE
     _SetWindowLongW(hwnd, _GWL_EXSTYLE, ctypes.c_long(style & 0xFFFF_FFFF).value)

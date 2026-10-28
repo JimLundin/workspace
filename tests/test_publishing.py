@@ -23,7 +23,7 @@ def repository(tmp_path: Path) -> tuple[Path, Path, Path]:
     git(live, "init")
     git(live, "symbolic-ref", "HEAD", "refs/heads/main")
     git(live, "add", ".")
-    git(live, "-c", "user.name=Toolkit Test", "-c", "user.email=toolkit@example.invalid", "commit", "-m", "baseline")
+    git(live, "-c", "user.name=Workspace Test", "-c", "user.email=workspace@example.invalid", "commit", "-m", "baseline")
     remote = tmp_path / "remote.git"
     git(tmp_path, "clone", "--bare", str(live), str(remote))
     workspace = tmp_path / "workspace"
@@ -36,8 +36,8 @@ def test_reviewed_change_is_pushed_to_new_branch(tmp_path: Path) -> None:
     live, workspace, remote = repository(tmp_path)
     main = git(remote, "rev-parse", "refs/heads/main")
     result = publish_source(live, workspace, "English greeting", lambda _title, _diff: True, lambda: False, remote=str(remote))
-    refs = git(remote, "for-each-ref", "--format=%(refname)", "refs/heads/toolkit/")
-    assert refs.startswith("refs/heads/toolkit/agent-")
+    refs = git(remote, "for-each-ref", "--format=%(refname)", "refs/heads/workspace/")
+    assert refs.startswith("refs/heads/workspace/agent-")
     assert git(remote, "show", f"{refs}:config.py") == "GREETING = 'hello'"
     assert git(remote, "rev-parse", "refs/heads/main") == main
     assert "'hej'" in (live / "config.py").read_text(encoding="utf-8")
@@ -55,7 +55,7 @@ def test_declined_review_never_executes_candidate_or_pushes(tmp_path: Path) -> N
     else:
         raise AssertionError("declined publishing must stop")
     assert not marker.exists()
-    assert not git(remote, "for-each-ref", "refs/heads/toolkit/")
+    assert not git(remote, "for-each-ref", "refs/heads/workspace/")
 
 
 def test_failed_runtime_checks_never_push(tmp_path: Path) -> None:
@@ -67,7 +67,7 @@ def test_failed_runtime_checks_never_push(tmp_path: Path) -> None:
         assert "Runtime checks failed" in str(error)
     else:
         raise AssertionError("failing tests must prevent push")
-    assert not git(remote, "for-each-ref", "refs/heads/toolkit/")
+    assert not git(remote, "for-each-ref", "refs/heads/workspace/")
 
 
 def test_remote_divergence_blocks_publishing(tmp_path: Path) -> None:
@@ -104,14 +104,14 @@ def test_durable_publication_records_before_candidate_code_and_remote_push(tmp_p
         database.execute("CREATE TRIGGER refuse_publication BEFORE INSERT ON actions BEGIN SELECT RAISE(ABORT,'cannot record'); END")
     with TestCase().assertRaises(sqlite3.DatabaseError):
         publish_source(live, workspace, "Reviewed update", approve, lambda: False,
-                       remote=str(remote), branch="toolkit/agent-durable", execute=execute)
-    assert not marker.exists() and not git(remote, "for-each-ref", "refs/heads/toolkit/")
+                       remote=str(remote), branch="workspace/agent-durable", execute=execute)
+    assert not marker.exists() and not git(remote, "for-each-ref", "refs/heads/workspace/")
     with closing(sqlite3.connect(tmp_path / "work.sqlite3")) as database, database:
         database.execute("DROP TRIGGER refuse_publication")
     result = publish_source(live, workspace, "Reviewed update", approve, lambda: False,
-                            remote=str(remote), branch="toolkit/agent-durable", execute=execute)
+                            remote=str(remote), branch="workspace/agent-durable", execute=execute)
     assert marker.exists() and "Published" in result
-    assert git(remote, "show", "refs/heads/toolkit/agent-durable:config.py") == "GREETING = 'hello'"
+    assert git(remote, "show", "refs/heads/workspace/agent-durable:config.py") == "GREETING = 'hello'"
     assert isinstance(store.actions("task")[0].outcome, ActionVerified)
 
 
@@ -131,7 +131,7 @@ def test_durable_publication_approval_is_bound_to_the_frozen_candidate_and_desti
         return work.approve(title, detail)
 
     with TestCase().assertRaisesRegex(PublishError, "cancelled"):
-        publish_source(live, workspace, "Update", approve, lambda: False, remote=str(remote), branch="toolkit/agent-durable")
+        publish_source(live, workspace, "Update", approve, lambda: False, remote=str(remote), branch="workspace/agent-durable")
     assert isinstance(work.disposition, Waiting)
     assert store.finish(claim.run, work.disposition, at=clock()) is not None
     assert store.answer("task", reviews[0].request.id, ApprovalDecision.APPROVED, at=clock()) is not None
@@ -140,10 +140,10 @@ def test_durable_publication_approval_is_bound_to_the_frozen_candidate_and_desti
     work = WorkExecution(resumed, store, Resources(), review=display, clock=clock)
     (workspace / "config.py").write_text("GREETING = 'changed after review'\n", encoding="utf-8")
     with TestCase().assertRaisesRegex(PublishError, "cancelled"):
-        publish_source(live, workspace, "Update", approve, lambda: False, remote=str(remote), branch="toolkit/agent-durable")
+        publish_source(live, workspace, "Update", approve, lambda: False, remote=str(remote), branch="workspace/agent-durable")
     assert len(reviews) == 2 and reviews[0].fingerprint != reviews[1].fingerprint
     assert "changed after review" in reviews[1].detail and str(remote) in reviews[1].detail
-    assert not git(remote, "for-each-ref", "refs/heads/toolkit/")
+    assert not git(remote, "for-each-ref", "refs/heads/workspace/")
 
 
 if shutil.which("git") is None:

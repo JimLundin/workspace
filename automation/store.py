@@ -19,7 +19,6 @@ from .task import (
     Approval,
     ApprovalDecision,
     Blocked,
-    CanvasSource,
     Checkpoint,
     Claim,
     Completed,
@@ -124,8 +123,6 @@ def _source_data(source: Source) -> dict[str, object]:
             return {"kind": "request", "conversation_id": conversation_id}
         case RoutineSource(routine_id, revision, occurrence_id):
             return {"kind": "routine", "routine_id": routine_id, "revision": revision, "occurrence_id": occurrence_id}
-        case CanvasSource(fingerprint):
-            return {"kind": "canvas", "fingerprint": fingerprint}
         case _:
             assert_never(source)
 
@@ -140,9 +137,6 @@ def _source(value: object) -> Source:
             _fields(data, "kind", "routine_id", "revision", "occurrence_id")
             return RoutineSource(identifier(data["routine_id"], "routine identity"), integer(data["revision"], "routine revision"),
                                  text(data["occurrence_id"], "routine occurrence", maximum=512))
-        case "canvas":
-            _fields(data, "kind", "fingerprint")
-            return CanvasSource(digest(data["fingerprint"], "canvas preparation fingerprint"))
         case _:
             raise ValueError("Invalid stored task source.")
 
@@ -391,13 +385,8 @@ class TaskStore:
             version = integer(row[0], "work schema version") if row is not None else -1
             if version == SCHEMA_VERSION:
                 return
-            if version == 1:
-                # The table layout is unchanged. Version 2 adds a saved canvas
-                # source alternative that older readers must not execute.
-                connection.execute(f"PRAGMA user_version={SCHEMA_VERSION}")
-                return
             if version != 0:
-                raise ValueError("This work database requires a different Toolkit schema version.")
+                raise ValueError("This work database requires a different Workspace schema version.")
             if connection.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'").fetchone() is not None:
                 raise ValueError("The unversioned work database already contains tables.")
             for statement in (

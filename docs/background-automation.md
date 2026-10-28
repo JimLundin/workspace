@@ -1,6 +1,6 @@
 # Background automation
 
-Toolkit prefers an application API, then background browser DOM operations,
+Workspace prefers an application API, then background browser DOM operations,
 then accessibility, and finally foreground mouse and keyboard input. All tools
 use the same agent conversation and Stop control. The existing approval setting
 applies; its default is `never`.
@@ -14,15 +14,15 @@ no browser bundle, Node.js, Playwright, Selenium or extension is added.
 
 Open `edge://inspect/#remote-debugging` (Chrome: `chrome://inspect/#remote-debugging`)
 in the intended browser and enable **Allow remote debugging for this browser
-instance**. Keep it running and approve its connection dialog when Toolkit
+instance**. Keep it running and approve its connection dialog when Workspace
 connects. The browser owns that consent and can request it again for a new
-connection. Toolkit reuses an established connection across operations and tasks.
+connection. Workspace reuses an established connection across operations and tasks.
 Status checks never connect or trigger consent. A denied or blocked connection
 does not launch a separate profile or change browser policy.
 
-New Edge pages open in background tabs in a **Toolkit** group in the existing
+New Edge pages open in background tabs in a **Workspace** group in the existing
 browser context. The first group is blue and collapsed. Later opens reuse it,
-preserving its color and expanded state, including after Toolkit reconnects.
+preserving its color and expanded state, including after Workspace reconnects.
 The group's tabs remain accessible in the tab strip. Set `group_id=-1` for an
 ordinary ungrouped tab, or provide another group ID or normal window ID.
 Use an explicit existing `target_id` for a page whose tab-local state is needed.
@@ -32,7 +32,7 @@ and viewport captures do not select a tab or move the desktop pointer.
 | Tool | Use |
 |---|---|
 | `browser_attach` | Connect to the running signed-in `edge` or `chrome`; return current tabs. |
-| `browser_open` | Open a background HTTP(S) page or `about:blank`, normally in Toolkit's group, or navigate an explicit `target_id`. Optional `browser`: `edge`, `chrome`, or `separate`. |
+| `browser_open` | Open a background HTTP(S) page or `about:blank`, normally in Workspace's group, or navigate an explicit `target_id`. Optional `browser`: `edge`, `chrome`, or `separate`. |
 | `browser_tabs` | Report connection/setup status. Default `view=pages` lists CDP page IDs. Edge's `view=strip` lists native tab IDs, windows, group membership, active/pinned/muted state and the listed tabs' groups. Follow `next_offset` for more tabs. |
 | `browser_group` | Create a group from `tab_ids`, add tabs to `group_id`, edit its title/color/collapsed state, or move it using `index` and optional `window_id`. Unspecified existing properties stay unchanged. |
 | `browser_ungroup` | Remove native `tab_ids` from their groups, keeping the tabs open. |
@@ -42,7 +42,7 @@ and viewport captures do not select a tab or move the desktop pointer.
 | `browser_evaluate` | Evaluate a JavaScript expression in an isolated world; await promises and return bounded output. |
 | `browser_screenshot` | Capture the browser viewport. Its coordinates are independent of desktop screenshots. |
 | `browser_sign_in` | Open the dedicated profile visibly so the user can complete sign-in or MFA. |
-| `browser_close` | Close a page's `target_id`, native `tab_ids`, or every tab in a `group_id`. With no selector, detach from a personal browser or close Toolkit's separate browser. |
+| `browser_close` | Close a page's `target_id`, native `tab_ids`, or every tab in a `group_id`. With no selector, detach from a personal browser or close Workspace's separate browser. |
 
 Native tab IDs and CDP page IDs are different identifiers. Use the pages view
 for DOM tools and the strip view for tab/group management. Newly created group
@@ -78,10 +78,10 @@ with closed shadow roots, inaccessible frames or canvas interfaces may require
 custom JavaScript, screenshots or foreground automation.
 
 Selecting `browser=separate` retains the optional isolated Edge workflow and its
-profile at `%LOCALAPPDATA%\toolkit\browser-profile`. `browser_sign_in` explicitly
+profile at `%LOCALAPPDATA%\workspace\browser-profile`. `browser_sign_in` explicitly
 selects that profile and opens it visibly. After sign-in, `browser_open` restarts
 it headlessly and returns new page IDs. It has its own sign-ins; it does not
-inherit the normal browser's session. Toolkit never copies cookies or tokens
+inherit the normal browser's session. Workspace never copies cookies or tokens
 between profiles. MFA and company access policy may require further interaction.
 
 CDP connects only to `127.0.0.1`, bypassing proxies. Attachment reads only the
@@ -91,7 +91,7 @@ the pending socket promptly, although the browser controls its own dialog.
 No `/json/version` probe is used, because the consent mode does not expose it.
 
 Attached browsers and all their ordinary tabs survive Stop, disconnect and
-Toolkit exit. Only an explicitly selected target is navigated or closed; an
+Workspace exit. Only an explicitly selected target is navigated or closed; an
 arbitrary personal blank tab is never reused. There is no artificial limit of
 20 agent tabs. Attached page lists mark the current connection's new pages with
 `created_in_session`. Closing by page ID uses the target lifecycle API directly,
@@ -100,9 +100,9 @@ It waits briefly for removal and returns `state=closed`, or `state=requested`
 if the page remains open. Inspection can then handle any outstanding browser
 dialog without sending the close again.
 
-In separate mode, Toolkit starts Edge suspended, assigns it to an owned job and
+In separate mode, Workspace starts Edge suspended, assigns it to an owned job and
 then resumes it. Stop and exit close that owned process tree. Normal closure
-waits for child processes; the job also terminates them if Toolkit crashes.
+waits for child processes; the job also terminates them if Workspace crashes.
 The separate profile's sign-in state persists.
 
 Snapshots and evaluated output are limited to 20,000 characters; oversized
@@ -121,14 +121,14 @@ and status checks make no network requests. It needs an approved **Microsoft
 Entra public client application** whose tenant permits device-code sign-in and
 the required delegated permissions. No client secret is used.
 
-When the IDs are available, ask Toolkit to configure Teams using the application
+When the IDs are available, ask Workspace to configure Teams using the application
 (client) ID and directory (tenant) ID. `teams_configure` saves them in
-`%LOCALAPPDATA%\toolkit\teams\config.json`. Alternatively, set
-`TOOLKIT_GRAPH_CLIENT_ID` and `TOOLKIT_GRAPH_TENANT_ID` in the environment. Those
+`%LOCALAPPDATA%\workspace\teams\config.json`. Alternatively, set
+`WORKSPACE_GRAPH_CLIENT_ID` and `WORKSPACE_GRAPH_TENANT_ID` in the environment. Those
 settings take precedence; conflicting saved configuration is rejected explicitly.
 
 `teams_sign_in` returns a Microsoft verification URL and a short user code. Open
-that URL, enter the code and complete sign-in and consent. Toolkit can display it
+that URL, enter the code and complete sign-in and consent. Workspace can display it
 in the regular browser with `open`. After completing it, use `teams_finish_sign_in` to save
 the result. Stop cancels pending polling. Tenant policy may require administrator
 consent or disallow this flow; the adapter reports Microsoft's refusal.
@@ -158,7 +158,7 @@ consent before message readback is available.
 | `teams_read_messages` | Read bounded history or one exact message in an identified chat to inspect the requested result. |
 | `teams_open_chat` | Get or create a one-to-one chat for a resolved user ID. |
 | `teams_send_message` | Send plain text to an identified chat when requested by the user. |
-| `teams_sign_out` | Remove Toolkit's stored API credentials; browser sign-in is separate. |
+| `teams_sign_out` | Remove Workspace's stored API credentials; browser sign-in is separate. |
 
 Access and refresh tokens are encrypted with Windows DPAPI for the current
 account in `tokens.bin`. They never appear in tool results. Changing app IDs

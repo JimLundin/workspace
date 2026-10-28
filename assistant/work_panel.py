@@ -9,12 +9,12 @@ from datetime import datetime
 from enum import Enum, auto
 from typing import assert_never
 
-from automation.context import ContextRecord, Preference, ProjectNote
-from automation.routines import EventTrigger, Every, FileChanged, Once, Routine, RoutineSummary, Trigger
-from automation.task import (
+from winapi import windows
+lazy from automation.context import ContextRecord, Preference, ProjectNote
+lazy from automation.routines import EventTrigger, Every, FileChanged, Once, Routine, RoutineSummary, Trigger
+lazy from automation.task import (
     Approval,
     ApprovalDecision,
-    CanvasSource,
     Completed,
     Control,
     Question,
@@ -24,14 +24,13 @@ from automation.task import (
     Waiting,
     allowed_controls,
 )
-from winapi import windows
 
-from .canvas_widgets import button, label
-from .meeting_panel import MeetingPanel
-from .qt import Qt, QtGui, QtWidgets
-from .qt_text import units
-from .widgets import Editor, Window, column, replace_text, row, show_window
-from .work_window import (
+lazy from .meeting_panel import MeetingPanel
+lazy from .panel_controls import button, label
+lazy from .qt import Qt, QtGui, QtWidgets
+lazy from .qt_text import units
+lazy from .widgets import Editor, Window, column, replace_text, row, show_window
+lazy from .work_window import (
     AddPreference,
     AddProjectNote,
     AnswerTask,
@@ -193,7 +192,7 @@ class WorkPanel:
         self.question_key: tuple[str, str] | None = None
         self.approval_position: int | None = None
         self.preview_painted = False
-        self.window = Window("Toolkit · Work", self.hide, width=1080, height=740)
+        self.window = Window("Workspace · Work", self.hide, width=1080, height=740)
         self.window.setMinimumSize(740, 500)
         layout = column(self.window)
         layout.setContentsMargins(22, 18, 22, 18)
@@ -302,13 +301,9 @@ class WorkPanel:
         allowed = allowed_controls(task.state) if task is not None else ()
         for widget, control in ((self.pause, Control.PAUSE), (self.resume, Control.RESUME), (self.cancel, Control.CANCEL)):
             widget.setEnabled(control in allowed)
-        scoped = task is not None and isinstance(task.source, CanvasSource)
-        self.follow.setEnabled(task is not None and not scoped)
-        self.redirect.setEnabled(task is not None and not scoped and not isinstance(task.state, Completed)
+        self.follow.setEnabled(task is not None)
+        self.redirect.setEnabled(task is not None and not isinstance(task.state, Completed)
                                  and task.state is not TaskStatus.CANCELLED)
-        guidance = "Use the canvas composer or Refresh result to change this request." if scoped else ""
-        self.follow.setToolTip(guidance)
-        self.redirect.setToolTip(guidance)
         request = task.state.reason if task is not None and isinstance(task.state, Waiting) else None
         key = (task.id, request.id) if task is not None and isinstance(request, (Question, Approval)) else None
         if key != self.question_key:
@@ -358,9 +353,6 @@ class WorkPanel:
     def compose_selected(self, *, redirect: bool = False) -> None:
         task = self.selected_task()
         if task is not None:
-            if isinstance(task.source, CanvasSource):
-                self.status.setText("Use the canvas composer or Refresh result to change this request.")
-                return
             self.compose(RedirectDraft(task.id) if redirect else FollowDraft(task.id))
 
     def compose(self, draft: Draft) -> None:

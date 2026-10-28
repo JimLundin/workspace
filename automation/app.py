@@ -18,33 +18,30 @@ from typing import assert_never
 
 import keeper
 import usage
-from assistant.activity import ContextSnapshot, Observation, observed
-from assistant.agent_execution import AgentExecution
-from assistant.agent_session import Begin, Done, Finished, LiveMessage, Problem, Progress, Said
-from assistant.browser import Browser, Product
-from assistant.browser_surface_control import AppBrowserControl, CompositeBrowser
-from assistant.canvas_execution import CanvasWork
-from assistant.canvas_requests import CanvasRequests
-from assistant.llm import Missing, Settings
-from assistant.machine import NativeDesktop, WinMachine
-from assistant.meeting_execution import MeetingWork
-from assistant.meeting_followup_store import FollowupStore
-from assistant.meeting_requests import MeetingRequests
-from assistant.outlook import OutlookDrafts
-from assistant.recording_state import AudioSource
 from protocol import AUTOMATION_WINDOW
 from usage import DIRECTORY
 from winapi import screen, system, windows
 from winapi.shapes import Window
+lazy from assistant.activity import ContextSnapshot, Observation, observed
+lazy from assistant.agent_execution import AgentExecution
+lazy from assistant.agent_session import Begin, Done, Finished, LiveMessage, Problem, Progress, Said
+lazy from assistant.browser import Browser, Product
+lazy from assistant.llm import Missing, Settings
+lazy from assistant.machine import NativeDesktop, WinMachine
+lazy from assistant.meeting_execution import MeetingWork
+lazy from assistant.meeting_followup_store import FollowupStore
+lazy from assistant.meeting_requests import MeetingRequests
+lazy from assistant.outlook import OutlookDrafts
+lazy from assistant.recording_state import AudioSource
 
-from . import ipc
-from .bridge import BridgeServer, ProfileLease
-from .context import ContextStore, select_context
-from .controller import ControllerSnapshot, Fault, Idle, Stopping, WorkController, WorkExecution, Working
-from .execution import ApprovalReview, Log, Outcome
-from .routines import RoutineStore
-from .store import TaskStore
-from .task import CanvasSource, Claim, RunRef, owns
+lazy from . import ipc
+lazy from .bridge import BridgeServer, ProfileLease
+lazy from .context import ContextStore, select_context
+lazy from .controller import ControllerSnapshot, Fault, Idle, Stopping, WorkController, WorkExecution, Working
+lazy from .execution import ApprovalReview, Log, Outcome
+lazy from .routines import RoutineStore
+lazy from .store import TaskStore
+lazy from .task import Claim, RunRef, owns
 
 
 def report(message: str, *, folder: Path = DIRECTORY / "work") -> None:
@@ -103,7 +100,7 @@ class RemoteMeetings:
 
 
 class DesktopContext:
-    """Fresh foreground observations exclude both Toolkit process owners."""
+    """Fresh foreground observations exclude both Workspace process owners."""
 
     __slots__ = ("bridge", "enabled")
 
@@ -118,7 +115,7 @@ class DesktopContext:
         try:
             handle = windows.foreground()
             if handle:
-                observation = ("toolkit" if windows.process_id(handle) in (os.getpid(), self.bridge.assistant_pid)
+                observation = ("workspace" if windows.process_id(handle) in (os.getpid(), self.bridge.assistant_pid)
                                else Window(handle, windows.title(handle), windows.exe(handle), windows.is_minimized(handle)))
         except OSError:
             pass
@@ -154,13 +151,12 @@ class VolatileLog:
 
 
 class NativeExecution:
-    __slots__ = ("apps", "bridge", "contexts", "execution", "meetings")
+    __slots__ = ("bridge", "contexts", "execution", "meetings")
 
     def __init__(
-        self, execution: AgentExecution, bridge: BridgeServer, meetings: RemoteMeetings, contexts: ContextStore, apps: AppBrowserControl,
+        self, execution: AgentExecution, bridge: BridgeServer, meetings: RemoteMeetings, contexts: ContextStore,
     ) -> None:
         self.execution, self.bridge, self.meetings, self.contexts = execution, bridge, meetings, contexts
-        self.apps = apps
 
     def run_work(self, claim: Claim, store: TaskStore, log: Log, stop: threading.Event) -> Outcome:
         self.meetings.current = MeetingRun(claim.run, stop)
@@ -172,23 +168,18 @@ class NativeExecution:
                 return False
 
         try:
-            scoped = isinstance(claim.task.source, CanvasSource)
-            context = None if scoped else self.bridge.invocation(claim.task.id)
-            saved = "" if scoped else select_context(self.contexts.list(), claim.task.prompt[:20_000], time.time()).describe()
-            # Captured-source work never borrows a live app control binding.
-            # Ordinary cleanup disconnects this run while the UI keeps cards.
-            with contextlib.nullcontext() if scoped else self.apps.bind(claim.run, stop):
-                return self.execution.run_work(claim, store, log, stop, context=context, context_text=saved, review=review)
+            context = self.bridge.invocation(claim.task.id)
+            saved = select_context(self.contexts.list(), claim.task.prompt[:20_000], time.time()).describe()
+            return self.execution.run_work(claim, store, log, stop, context=context, context_text=saved, review=review)
         finally:
             self.meetings.current = None
 
 
 def _native_execution(settings: Settings | Missing, bridge: BridgeServer, hwnd: int, contexts: ContextStore) -> tuple[NativeExecution, WinMachine]:
     meetings = RemoteMeetings(bridge)
-    apps = AppBrowserControl(bridge)
-    browser = CompositeBrowser(Browser(DIRECTORY / "browser-profile", source=Product.EDGE), apps)
+    browser = Browser(DIRECTORY / "browser-profile", source=Product.EDGE)
     machine = WinMachine(NativeDesktop(hwnd), DurableInput(), meetings=meetings, browser=browser)
-    context = DesktopContext(bridge, enabled=os.environ.get("TOOLKIT_AGENT_CONTEXT", "recent").lower() != "off")
+    context = DesktopContext(bridge, enabled=os.environ.get("WORKSPACE_AGENT_CONTEXT", "recent").lower() != "off")
     usable = settings if isinstance(settings, Settings) else Settings("", "", "", "", "", "", "")
     followups = bridge.folder / "meeting-followups"
     try:
@@ -198,12 +189,11 @@ def _native_execution(settings: Settings | Missing, bridge: BridgeServer, hwnd: 
             report_error=lambda detail: report("Agent execution failed; its durable task contains the recovery state.", folder=bridge.folder),
             close_background=machine.close_background, context=context.snapshot,
             meeting=MeetingWork(MeetingRequests(followups), FollowupStore(followups / "packages"), OutlookDrafts(followups / "mail")),
-            canvas=CanvasWork(CanvasRequests(bridge.folder / "canvas-requests")),
         )
     except BaseException:
         machine.close_background()
         raise
-    return NativeExecution(execution, bridge, meetings, contexts, apps), machine
+    return NativeExecution(execution, bridge, meetings, contexts), machine
 
 
 def run(  # noqa: PLR0915 (one scope owns the lease, native window, and cleanup order)

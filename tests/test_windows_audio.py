@@ -213,3 +213,55 @@ def test_an_unreturned_buffer_times_out_without_giving_back_partial_audio() -> N
             device.say(mic)
         assert device.say(mic) == SPEECH
         mic.close()
+
+
+def test_live_meter_reads_recorded_pcm_without_trusting_the_unfinished_header() -> None:
+    with input_device() as device:
+        mic = audio.Microphone(RATE, 300, EventHandle(1))
+        assert mic.level() is None
+        device.spoken_at = device.now
+        assert mic.start() == 0
+        assert device.header is not None
+        pcm = b"\x00\x40" * 640  # constant half-scale signal, exactly 40 ms
+        ctypes.memmove(cast("int", device.header.lpData), pcm, len(pcm))
+        assert cast(int, device.header.dwBytesRecorded) == 0  # Count is only final when returned.
+
+        def position(handle: object, result: object, size: int) -> int:
+            value = ctypes.cast(cast("ctypes.c_void_p", result), ctypes.POINTER(audio.MMTIME)).contents
+            value.kind, value.value = 4, len(pcm)
+            return 0
+
+        with patch.object(audio, "_waveInGetPosition", side_effect=position):
+            assert mic.level() == .5
+            assert mic.level() == 0  # No new data: don't invent continued activity.
+        with patch.object(audio, "_waveInGetPosition", return_value=5):
+            assert mic.level() is None
+        device.now += 3
+        assert mic.stop() == SPEECH  # Metering has not changed the final recording.
+        assert mic.level() is None
+        mic.close()
+
+
+def test_meter_never_waits_for_capture_shutdown_or_buffer_release() -> None:
+    import threading  # noqa: PLC0415
+
+    with input_device() as device:
+        mic = audio.Microphone(RATE, 300, EventHandle(1))
+        assert mic.start() == 0
+        held, release = threading.Event(), threading.Event()
+        def reset(handle: object) -> int:
+            held.set()
+            release.wait(2)
+            return device.reset(handle)
+        with patch.object(audio, "_waveInReset", side_effect=reset):
+            worker = threading.Thread(target=mic.stop)
+            worker.start()
+            try:
+                assert held.wait(1)
+                with patch.object(audio, "_waveInGetPosition") as position:
+                    assert mic.level() is None
+                    position.assert_not_called()
+            finally:
+                release.set()
+                worker.join(2)
+                mic.close()

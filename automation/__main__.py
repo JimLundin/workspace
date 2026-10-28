@@ -18,7 +18,7 @@ def main() -> None:
         run(settings_from(os.environ))
     except Exception as error:
         report(f"Work process stopped: {type(error).__name__}.")
-        print(f"Work process stopped ({type(error).__name__}); see toolkit/work/worker.log and the work overview.", file=sys.stderr)
+        print(f"Work process stopped ({type(error).__name__}); see workspace/work/worker.log and the work overview.", file=sys.stderr)
         sys.exit(1)
 
 

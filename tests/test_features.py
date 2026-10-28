@@ -4,17 +4,25 @@ import json
 from collections.abc import Callable, Mapping
 from typing import cast
 
-from assistant.features import Assistant, pick_window
+from assistant.features import Assistant, pick_window, switcher_windows
 from assistant.geometry import Shot
 from assistant.icons import State
-from assistant.llm import RATE, Json, Missing, Settings
+from assistant.llm import MAX_SECONDS, RATE, Json, Missing, Settings
 from protocol import App, Tool
 from usage import Detail
-from winapi.shapes import Rect, Window
+from winapi.shapes import InputRejectedError, Rect, Window
 
 from .fake_endpoint import FakeEndpoint, Reply, fake_endpoint, sse
 
 SPEECH = bytes(2 * RATE)  # a second of silence: long enough to send
+
+
+def test_window_list_keeps_hidden_managed_windows_and_excludes_cloaked_shell_hosts() -> None:
+    current = Window(1, 'Editor', 'editor.exe', False)
+    hidden = Window(2, 'Other workspace', 'terminal.exe', False)
+    shell = Window(3, 'Settings background host', 'systemsettings.exe', False)
+    visible = Window(4, 'Settings', 'applicationframehost.exe', False)
+    assert switcher_windows((current, hidden, shell, visible), frozenset({1, 4}), frozenset({1, 2})) == (current, hidden, visible)
 
 
 def dumps(value: Json) -> str:
@@ -180,7 +188,136 @@ def test_dictate_types_what_was_said() -> None:
         endpoint.replies = [said("hej på dig\n")]
         rig = Rig(endpoint)
         rig.hold(Tool.DICTATE)
-        assert rig.take() == ["listen", "stop listening", "type 'hej på dig '"]
+        assert rig.take() == ["listen", "stop listening", "clipboard hej på dig\n", "type 'hej på dig '"]
+        assert rig.ok("dictate")
+
+
+def test_clipboard_failure_keeps_a_recoverable_transcript_and_still_types() -> None:
+    class BusyClipboard(FakeDesktop):
+        __slots__ = ('busy',)
+        def __init__(self) -> None:
+            super().__init__()
+            self.busy = True
+        def set_clipboard(self, text: str) -> None:
+            if self.busy:
+                raise OSError('Busy')
+            super().set_clipboard(text)
+    desktop = BusyClipboard()
+    with fake_endpoint() as endpoint:
+        endpoint.replies = [said('The complete transcript.')]
+        rig = Rig(endpoint, desktop=desktop)
+        rig.hold(Tool.DICTATE)
+        assert rig.assistant.latest_transcription == 'The complete transcript.'
+        assert "type 'The complete transcript. '" in desktop.log
+        desktop.busy = False
+        rig.assistant.handle(Tool.COPY_TRANSCRIPT, True)
+        assert desktop.log[-1] == 'clipboard The complete transcript.'
+
+
+def test_agent_capture_toggle_ignores_releases_and_stops_on_the_second_press() -> None:
+    with fake_endpoint() as endpoint:
+        endpoint.replies = [said('Please do this.')]
+        rig = Rig(endpoint)
+        rig.assistant.handle(Tool.AGENT_VOICE_TOGGLE, True)
+        rig.assistant.handle(Tool.AGENT_VOICE_TOGGLE, False)
+        assert rig.take() == ['listen']
+        rig.assistant.handle(Tool.AGENT_VOICE_TOGGLE, True)
+        rig.assistant.handle(Tool.AGENT_VOICE_TOGGLE, False)
+        assert rig.assistant.listening is None and rig.agent == ['Please do this.']
+
+
+def test_space_release_does_not_stop_dictation_started_with_the_toggle() -> None:
+    with fake_endpoint() as endpoint:
+        endpoint.replies = [said("Complete capture")]
+        rig = Rig(endpoint)
+        rig.press(Tool.DICTATE_TOGGLE)
+        rig.hold(Tool.DICTATE)
+        assert rig.assistant.listening is Tool.DICTATE
+        assert not endpoint.received
+        rig.press(Tool.DICTATE_TOGGLE)
+        assert rig.assistant.listening is None
+
+
+def test_unexpected_input_error_recovers_and_identifies_the_failed_phase() -> None:
+    class BrokenInput(FakeDesktop):
+        def type_text(self, text: str) -> None:
+            raise RuntimeError("Sensitive transcript must not enter diagnostics")
+
+    with fake_endpoint() as endpoint:
+        endpoint.replies = [said("A recoverable transcript")]
+        rig = Rig(endpoint, desktop=BrokenInput())
+        rig.hold(Tool.DICTATE)
+        assert rig.assistant.latest_transcription == "A recoverable transcript"
+        assert rig.assistant.listening is None
+        details = dict(rig.used)["dictate"]
+        assert details["phase"] == "submitting" and details["error_type"] == "RuntimeError" and not details["ok"]
+        assert "Sensitive transcript" not in str(rig.used)
+        assert "clipboard" in rig.take()[-1].lower()
+
+
+def test_partial_input_is_logged_without_retrying_or_losing_the_transcript() -> None:
+    with fake_endpoint() as endpoint:
+        endpoint.replies = [said("Full transcript")]
+        desktop = FakeDesktop(input_error=InputRejectedError(3, 32))
+        rig = Rig(endpoint, desktop=desktop)
+        rig.hold(Tool.DICTATE)
+        details = dict(rig.used)["dictate"]
+        assert details["input_accepted"] == 3 and details["input_expected"] == 32
+        assert details["phase"] == "submitting" and not details["ok"]
+        assert "submitted_characters" not in details
+        assert rig.assistant.latest_transcription == "Full transcript"
+        desktop.input_error = None
+        endpoint.replies = [said("Next dictation")]
+        rig.hold(Tool.DICTATE)
+        assert rig.ok("dictate") and rig.assistant.latest_transcription == "Next dictation"
+
+
+def test_lost_voice_release_finishes_at_the_existing_microphone_limit() -> None:
+    with fake_endpoint() as endpoint:
+        endpoint.replies = [said("Full limited recording")]
+        rig = Rig(endpoint)
+        rig.assistant.handle(Tool.DICTATE, True)
+        capture = rig.assistant.capture
+        assert capture is not None
+        rig.assistant.expire_capture(capture.started + MAX_SECONDS - 0.01)
+        assert rig.assistant.capture is capture and not endpoint.received
+        rig.assistant.expire_capture(capture.started + MAX_SECONDS)
+        assert rig.assistant.listening is None
+        assert dict(rig.used)["dictate"]["stop_reason"] == "limit"
+        rig.assistant.handle(Tool.DICTATE, False)
+        assert len(endpoint.received) == 1
+
+
+def test_shutdown_discards_active_voice_without_submitting_a_task() -> None:
+    with fake_endpoint() as endpoint:
+        rig = Rig(endpoint)
+        rig.press(Tool.AGENT_VOICE_TOGGLE)
+        rig.assistant.stop_capture(discard=True, reason="shutdown")
+        assert rig.assistant.listening is None and rig.agent == [] and not endpoint.received
+        assert rig.take() == ["listen", "stop listening"]
+
+
+def test_unexpected_microphone_stop_error_clears_capture_and_allows_another_recording() -> None:
+    class BrokenStop(FakeDesktop):
+        def __init__(self) -> None:
+            super().__init__()
+            self.broken = True
+
+        def stop_listening(self) -> bytes:
+            if self.broken:
+                raise RuntimeError("Device crashed")
+            return super().stop_listening()
+
+    with fake_endpoint() as endpoint:
+        desktop = BrokenStop()
+        rig = Rig(endpoint, desktop=desktop)
+        rig.hold(Tool.DICTATE)
+        assert rig.assistant.capture is None and not endpoint.received
+        details = dict(rig.used)["dictate"]
+        assert details["phase"] == "stopping" and details["error_type"] == "RuntimeError"
+        desktop.broken = False
+        endpoint.replies = [said("Recovered")]
+        rig.hold(Tool.DICTATE)
         assert rig.ok("dictate")
 
 
@@ -218,14 +355,11 @@ def test_voice_diagnostics_distinguish_a_failed_request_from_failed_input() -> N
         transcript = "The first sentence. The missing ending."
         endpoint.replies = [said(transcript)]
         rig = Rig(endpoint, desktop=FakeDesktop(input_error=OSError("Input was not accepted")))
-        try:
-            rig.hold(Tool.DICTATE)
-        except OSError:
-            pass
-        else:
-            raise AssertionError("A failed input operation must not report success.")
+        rig.hold(Tool.DICTATE)
         details = dict(rig.used)["dictate"]
         assert details["transcript_characters"] == len(transcript)
+        assert rig.assistant.latest_transcription == transcript
+        assert f"clipboard {transcript}" in rig.desktop.log
         assert details["requested_characters"] == len(transcript) + 1
         assert "submit_seconds" in details and "submitted_characters" not in details and not details["ok"]
 
@@ -240,10 +374,14 @@ def test_queued_voice_diagnostics_belong_to_their_own_recording() -> None:
         rig.hold(Tool.DICTATE)
         rig.desktop.speech = SPEECH * 2
         rig.hold(Tool.DICTATE)
-        assert rig.used == []
+        starts = [details["capture_id"] for _, details in rig.used if details["phase"] == "recording"]
+        assert starts == [1, 2]
+        assert all(feature == "voice_capture" for feature, _ in rig.used)
         for job in jobs:
             job()
-        for index, (_, details) in enumerate(rig.used):
+        completed = [(feature, details) for feature, details in rig.used if feature == "dictate"]
+        for index, (_, details) in enumerate(completed):
+            assert details["capture_id"] == index + 1
             assert details["audio_seconds"] == index + 1
             assert details["transcript_characters"] == len(transcripts[index])
             assert details["submitted_characters"] == len(transcripts[index]) + 1
@@ -285,7 +423,7 @@ def test_a_second_talk_key_while_listening_is_ignored() -> None:
         rig.assistant.handle(Tool.DICTATE_CLEAN, True)
         rig.assistant.handle(Tool.DICTATE_CLEAN, False)
         rig.assistant.handle(Tool.DICTATE, False)
-        assert rig.take() == ["listen", "stop listening", "type 'one '"]
+        assert rig.take() == ["listen", "stop listening", "clipboard one", "type 'one '"]
 
 
 def test_endpoint_failures_are_reported_and_logged() -> None:
@@ -491,3 +629,33 @@ def test_without_ai_settings_ai_tools_say_what_is_missing_and_the_rest_works() -
         problem = "problem Set OPENAI_API_KEY to use the AI tools (see the README)."
         assert rig.take() == [problem, problem, "launch wt.exe", "arrange snap_left"]
         assert endpoint.received == []
+
+
+def test_tiling_commands_use_worker_without_ai_credentials() -> None:
+    with fake_endpoint() as endpoint:
+        rig = Rig(endpoint, missing=Missing(("OPENAI_API_KEY",)))
+        jobs: list[Callable[[], None]] = []
+        rig.assistant.submit = jobs.append
+        for tool in (Tool.TILE_FOCUS_LEFT, Tool.TILE_FLOAT, Tool.TILE_NEXT_WORKSPACE, Tool.TILE_PAUSE):
+            rig.press(tool)
+        assert not rig.take() and len(jobs) == 4
+        for job in jobs:
+            job()
+        assert rig.take() == ["arrange tile_focus_left", "arrange tile_float", "arrange tile_next_workspace", "arrange tile_pause"]
+        assert endpoint.received == []
+
+
+def test_voice_limit_uses_the_deadline_across_a_float_precision_boundary() -> None:
+    from dataclasses import replace  # noqa: PLC0415
+    with fake_endpoint() as endpoint:
+        endpoint.replies = [said('Full limited recording')]
+        rig = Rig(endpoint)
+        rig.assistant.handle(Tool.DICTATE, True)
+        capture = rig.assistant.capture
+        assert capture is not None
+        started = 2**20 - 100 + 2**-33
+        assert (started + MAX_SECONDS) - started < MAX_SECONDS
+        rig.assistant.capture = replace(capture, started=started)
+        rig.assistant.expire_capture(started + MAX_SECONDS)
+        assert rig.assistant.listening is None
+        assert dict(rig.used)['dictate']['stop_reason'] == 'limit'

@@ -1,7 +1,7 @@
 # Attach only. This bridge never starts Outlook, opens an inspector, or sends mail.
 $ErrorActionPreference = 'Stop'
-$keyName = 'ToolkitWorkflowDraftKey'
-$fingerprintName = 'ToolkitWorkflowDraftFingerprint'
+$keyName = 'WorkspaceWorkflowDraftKey'
+$fingerprintName = 'WorkspaceWorkflowDraftFingerprint'
 $application = $null
 $session = $null
 $folder = $null
@@ -149,7 +149,7 @@ try {
     }
     # Both folder and store were selected and durably recorded before Save.
     $folder = $session.GetFolderFromID($request.folder.entry_id, $request.folder.store_id)
-    $mutex = [Threading.Mutex]::new($false, ('Local\ToolkitOutlookDraft-' + $request.key))
+    $mutex = [Threading.Mutex]::new($false, ('Local\WorkspaceOutlookDraft-' + $request.key))
     try { $ownsMutex = $mutex.WaitOne(5000) }
     catch [Threading.AbandonedMutexException] { $ownsMutex = $true }
     if (-not $ownsMutex) { throw 'Another process is still saving this draft.' }

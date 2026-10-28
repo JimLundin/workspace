@@ -34,6 +34,8 @@ from automation.task import (
     Waiting,
 )
 
+from .work_fixture import seed_tasks
+
 
 def specification(operation: str = "write notes") -> ActionSpec:
     return ActionSpec("write_file", "Update project notes", hashlib.sha256(operation.encode()).hexdigest(), ("project-notes",))
@@ -212,7 +214,7 @@ def test_graceful_interruption_is_recoverable_but_cancellation_stays_terminal(tm
     store.control("cancelled", Control.CANCEL, at=3)
     run = store.claim("worker", "run", at=4)
     assert run is not None and run.task.id == "paused"
-    store.interrupt(run.run, "Toolkit is shutting down.", at=5)
+    store.interrupt(run.run, "Workspace is shutting down.", at=5)
     reopened = TaskStore(path)
     assert reopened.recover("new-worker", at=6) == ()
     later = reopened.claim("new-worker", "later-run", at=7)
@@ -463,10 +465,8 @@ def test_approval_consumption_query_does_not_depend_on_action_pagination(tmp_pat
 
 def test_conversation_stop_reaches_hidden_tasks_and_preserves_other_sources(tmp_path: Path) -> None:
     store = TaskStore(tmp_path / "work.sqlite3")
-    for index in range(105):
-        store.submit(f"selected-{index:03d}", "Selected work", "Keep this request.", RequestSource("selected-chat"), at=index)
-    for index in range(1_005):
-        store.submit(f"other-{index:04d}", "Other work", "Keep this separate.", RequestSource("other-chat"), at=1_000 + index)
+    seed_tasks(store, tuple(f"selected-{index:03d}" for index in range(105)), RequestSource("selected-chat"), at=0)
+    seed_tasks(store, tuple(f"other-{index:04d}" for index in range(1_005)), RequestSource("other-chat"), at=1_000)
     routine = store.submit("routine", "Background work", "Keep the standing instruction.", RoutineSource("routine", 0, "event"), at=3_000)
     assert not any(task.id.startswith("selected-") for task in store.list_tasks(limit=1_000))
     assert store.control_conversation("selected-chat", Control.CANCEL, at=4_000) == 105

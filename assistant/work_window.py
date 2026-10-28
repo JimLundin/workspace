@@ -11,11 +11,9 @@ from automation.context import ContextRecord
 from automation.execution import ApprovalReview, review_matches
 from automation.routines import EventTrigger, Every, FileChanged, Once, RoutineSummary, Trigger
 from automation.task import (
-    CANVAS_EDIT_GUIDANCE,
     Approval,
     ApprovalDecision,
     Blocked,
-    CanvasSource,
     Completed,
     Control,
     Failed,
@@ -209,8 +207,6 @@ def task_detail(task: Task, reviews: tuple[ApprovalReview, ...] = ()) -> str:
             origin = "Your request"
         case RoutineSource(routine_id=identity):
             origin = f"Standing instruction · {identity}"
-        case CanvasSource():
-            origin = "Canvas · selected sources"
         case _:
             assert_never(task.source)
     sections = [
@@ -218,8 +214,6 @@ def task_detail(task: Task, reviews: tuple[ApprovalReview, ...] = ()) -> str:
         f"{task_label(task)} · {origin}\nCreated {when(task.created_at)} · Updated {when(task.updated_at)}",
         f"Instructions\n{task.prompt}",
     ]
-    if isinstance(task.source, CanvasSource):
-        sections.insert(2, CANVAS_EDIT_GUIDANCE)
     if task.checkpoint is not None:
         sections.append(f"Progress · {when(task.checkpoint.at)}\n{task.checkpoint.summary}")
     match task.state:

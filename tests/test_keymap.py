@@ -10,7 +10,7 @@ def caps(layer: Layer | None) -> dict[str, tuple[str, str, Kind]]:
 
 
 def test_rows_are_the_nordic_iso_keyboard() -> None:
-    assert [len(row) for row in ROWS] == [13, 12, 13, 11]
+    assert [len(row) for row in ROWS] == [13, 12, 13, 11, 1]
     assert ROWS[0][0][1] == "§"
     assert ROWS[3][0][1] == "<"
 
@@ -25,18 +25,19 @@ def test_base_layer() -> None:
     assert base["."] == ("Del", "Apps", Kind.KEY)
     assert base["-"] == ("", "", Kind.BLANK)
     assert base["§"] == ("On/off", "hold: quit", Kind.SPECIAL)
-    assert base["B"] == ("Talk", "hold", Kind.TOOL)
-    assert base["N"] == ("Agent", "hold", Kind.TOOL)
+    assert base["B"] == ("Dictate toggle", "toggle", Kind.TOOL)
+    assert base["Space"] == ("Talk", "hold", Kind.TOOL)
+    assert base["N"] == ("Agent toggle", "toggle", Kind.TOOL)
     assert base["Y"] == ("", "", Kind.BLANK)
 
 
-def test_agent_button_sits_beside_talk_and_stays_visible_on_every_layer() -> None:
+def test_voice_buttons_stay_visible_on_every_layer() -> None:
     layers: list[Layer | None] = [None, *list(Layer)]
     for layer in layers:
-        thumbs = keymap(layer)[-1]
-        talk = next(i for i, cap in enumerate(thumbs) if cap.physical == "B")
-        agent = thumbs[talk + 1]
-        assert (agent.physical, agent.label, agent.hold, agent.kind) == ("N", "Agent", "hold", Kind.TOOL)
+        keys = caps(layer)
+        assert keys["Space"] == ("Talk", "hold", Kind.TOOL)
+        assert keys["N"] == ("Agent toggle", "toggle", Kind.TOOL)
+        assert keys["B"] == ("Dictate toggle", "toggle", Kind.TOOL)
 
 
 def test_layers_show_their_keys_and_the_thumb_holding_them() -> None:
@@ -54,6 +55,7 @@ def test_layers_show_their_keys_and_the_thumb_holding_them() -> None:
 def test_tools_and_apps_layers() -> None:
     tools = caps(Layer.TOOLS)
     assert tools["9"] == ("Fix", "", Kind.TOOL)
+    assert tools["T"] == ("Inbox", "", Kind.TOOL)
     assert tools["I"] == ("Talk tidy", "hold", Kind.TOOL)
     assert tools["V"][2] is Kind.HELD
     assert tools["M"] == ("Talk", "hold", Kind.TOOL)
@@ -66,7 +68,10 @@ def test_tools_and_apps_layers() -> None:
 def test_every_tool_has_a_label() -> None:
     layers: list[Layer | None] = [None, *list(Layer)]
     labels = {cap.label for layer in layers for row in keymap(layer) for cap in row if cap.kind is Kind.TOOL}
-    assert len(labels) == len(Tool)  # every tool is somewhere on the keyboard
+    assert len(labels) == len(set(Tool))
+    from assistant.keymap import TOOL_NAMES  # noqa: PLC0415
+    assert set(TOOL_NAMES) == set(Tool)
+
 
 
 def test_indicator_text() -> None:

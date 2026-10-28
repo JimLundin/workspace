@@ -67,7 +67,7 @@ def test_explicit_approval_mode_can_decline_browser_changes_and_teams_sends() ->
     for name, arguments in (
         ("browser_attach", {"browser": "edge"}),
         ("browser_action", {"target_id": "page", "id": "button", "action": "click"}),
-        ("browser_group", {"tab_ids": [7], "title": "Toolkit"}),
+        ("browser_group", {"tab_ids": [7], "title": "Workspace"}),
         ("browser_ungroup", {"tab_ids": [7]}),
         ("browser_tab", {"tab_id": 7, "action": "pin"}),
         ("browser_close", {"group_id": 23}),
@@ -95,7 +95,7 @@ def test_agent_can_manage_tabs_and_groups_without_default_approval_prompts() -> 
     for name, arguments in (
         ("browser_tabs", {"view": "strip"}),
         ("browser_open", {"url": "about:blank", "group_id": 23}),
-        ("browser_group", {"tab_ids": [7, 8], "title": "Toolkit", "collapsed": True}),
+        ("browser_group", {"tab_ids": [7, 8], "title": "Workspace", "collapsed": True}),
         ("browser_group", {"group_id": 23, "title": "Research", "index": -1}),
         ("browser_ungroup", {"tab_ids": [8]}),
         ("browser_tab", {"tab_id": 7, "action": "pin"}),

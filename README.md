@@ -1,6 +1,6 @@
-# Toolkit
+# Workspace
 
-A personal toolkit for a Windows laptop: extract and run, with its own Python
+A personal work environment for a Windows laptop: extract and run, with its own Python
 and no admin installation. It changes itself: ask its agent for a new feature or a fix,
 and it edits, tests, installs and reloads the change without another approval.
 It undoes the update by itself if it fails. Four main processes:
@@ -9,33 +9,37 @@ It undoes the update by itself if it fails. Four main processes:
   laptop's own ISO keyboard: home row mods, layers, caps word, snippets;
 - **the assistant** (`assistant/`): dictation, rewriting, questions, screen
   reading, app switching, window placement, and an agent, all through your
-  company's OpenAI-style endpoint, with tray controls and a shared desktop canvas;
+  company's OpenAI-style endpoint, with a floating control bar and tray controls;
 - **the automation worker** (`automation/`): runs durable tasks, standing
   instructions, and recovery independently of the conversation window;
 - **the keeper** (`keeper.py`): runs the other three, restarts them if they crash,
-  and installs the agent's changes to them (see *Changing the toolkit*).
+  and installs the agent's changes to them (see *Changing Workspace*).
 
 The browser/native [Shared Workspace](https://github.com/JimLundin/shared-workspace)
-application is maintained separately. Toolkit retains its Windows Python/Qt
+application is maintained separately. Workspace retains its Windows Python/Qt
 implementation, including the keyboard, dictation, assistant and automation.
 
+The project, launcher, installation directory and bundle are named Workspace.
+
 The agent uses **OpenAI Agents SDK 0.24.0**. Every interface uses **Qt 6.12**:
-the desktop canvas, launcher, conversation bubbles, History, Work, prompts,
+the floating bar, conversation bubbles, History, Work, prompts,
 keyboard overlays, and keeper dialogs. The assistant has one Qt event loop;
 the keeper owns its own protected Qt UI. Tkinter and Tcl/Tk are excluded from
 the bundled interpreter. The keyboard process uses only the standard library
 and our typed Win32 bindings (`winapi/`), independently of the assistant.
-The [Qt implementation notes](docs/qt-interface.md) include native canvas captures
-and the migration checks.
 
 ## Start
 
-1. Extract **`toolkit-sdk-python315-win64.zip`** into a folder you can write to.
+1. Extract **`workspace-sdk-python315-win64.zip`** into a folder you can write to.
    It includes **Windows x64 Python 3.15.1** in `.python`, with
    matching agent and Qt dependencies in `.runtime`. Keep both folders beside
-   `StartToolkit.cmd` and `toolkit.pyw`. Python, Qt and the dependencies require
+   `StartWorkspace.cmd` and `workspace.pyw`. Python, Qt and the dependencies require
    no installer or separate downloads on the laptop.
-   Set the Windows keyboard layout to **English (US)**.
+   Workspace requests **English (US)** while its layout is enabled and your configured
+   **Colemak** layout when disabled or stopped. It rechecks the foreground app every
+   200 ms. Elevated applications may refuse the request. `WORKSPACE_COLEMAK_LAYOUT`
+   can select a specific installed Windows layout ID; by default Workspace resolves
+   the Colemak entry in your Windows input-language list.
 2. Set these environment variables (Start → "Edit environment variables for your
    account"; no admin needed):
 
@@ -43,31 +47,56 @@ and the migration checks.
    |---|---|
    | `OPENAI_BASE_URL` | your endpoint, ending in `/v1` |
    | `OPENAI_API_KEY` | its key |
-   | `TOOLKIT_CHAT_MODEL` | optional; default `gpt-5.4-mini` (quick jobs) |
-   | `TOOLKIT_AGENT_MODEL` | optional; default `gpt-6.1-sol` (agent tasks and self-modification) |
-   | `TOOLKIT_AGENT_REASONING_EFFORT` | optional; default `low` for quicker replies; use an effort supported by your selected model |
-   | `TOOLKIT_AGENT_APPROVALS` | optional; default `never`; set `ask` to opt in to action and update approvals |
-   | `TOOLKIT_AGENT_CONTEXT` | optional; default `recent`; set `off` to disable idle activity tracking and automatic request context |
-   | `TOOLKIT_GRAPH_CLIENT_ID` | optional; approved Entra app ID for Teams; can also be saved through the agent |
-   | `TOOLKIT_GRAPH_TENANT_ID` | optional; the matching Entra tenant ID |
-   | `TOOLKIT_TRANSCRIBE_MODEL` | optional; default `gpt-4o-transcribe` |
-   | `TOOLKIT_VOCABULARY` | optional; names and jargon to expect in dictation |
-   | `TOOLKIT_LANGUAGE` | optional; `sv` or `en`, default detected |
+   | `WORKSPACE_CHAT_MODEL` | optional; default `gpt-5.4-mini` (quick jobs) |
+   | `WORKSPACE_AGENT_MODEL` | optional; default `gpt-6.1-sol` (agent tasks and self-modification) |
+   | `WORKSPACE_AGENT_REASONING_EFFORT` | optional; default `low` for quicker replies; use an effort supported by your selected model |
+   | `WORKSPACE_AGENT_APPROVALS` | optional; default `never`; set `ask` to opt in to action and update approvals |
+   | `WORKSPACE_AGENT_CONTEXT` | optional; default `recent`; set `off` to disable idle activity tracking and automatic request context |
+   | `WORKSPACE_GRAPH_CLIENT_ID` | optional; approved Entra app ID for Teams; can also be saved through the agent |
+   | `WORKSPACE_GRAPH_TENANT_ID` | optional; the matching Entra tenant ID |
+   | `WORKSPACE_TRANSCRIBE_MODEL` | optional; default `gpt-4o-transcribe` |
+   | `WORKSPACE_VOCABULARY` | optional; names and jargon to expect in dictation |
+   | `WORKSPACE_LANGUAGE` | optional; `sv` or `en`, default detected |
 
    Without the first two the layout, snippets, apps and window keys still work;
    the AI keys tell you what's missing.
 3. Turn on Settings → Privacy & security → Microphone → **Let desktop apps access
    your microphone**.
-4. Double-click **`StartToolkit.cmd`**. A dot appears in the tray. To start it at login,
+4. Double-click **`StartWorkspace.cmd`**. A dot appears in the tray. To start it at login,
    put a shortcut to it in `shell:startup` (Win+R).
 
-Existing `toolkit.pyw` shortcuts still work when Windows has a Python file
+Existing `workspace.pyw` shortcuts still work when Windows has a Python file
 association: the launcher hands off to the bundled interpreter. The bundle
 does not change the system Python installation or file associations.
 `.python\pythonw.exe miryoku.pyw` runs the layout alone, without the assistant
 or keeper.
 
 ## What you see
+
+- **Floating Workspace controls**: a small glass capsule showing local time, battery
+  and weather when Windows location is available. Click anywhere on the capsule
+  to open its menu. Holding Spacebar shows Listening with a real microphone
+  waveform; stopping capture shows Transcribing until the request finishes.
+  The 28-pixel bar joins the top screen edge. Unmuted speakers and disconnected
+  Wi-Fi add small status icons; muted speakers are the quiet default.
+  Outer corners curve into the screen edge. Active segments join across their
+  upper edge and slide in from above, returning upward when hidden. Reduced
+  motion uses an immediate transition.
+  It expands for dictation, transcription or agent work, and shows Stop only while
+  the agent is running. Active recording has its own microphone/timer capsule.
+  Keyboard layers and Colemak appear only when relevant. Work, recording-start,
+  keyboard controls and other tools are available from the menu. The surface uses
+  the same translucent material as agent messages.
+  See [toolbar design](docs/toolbar-design.md) for the states and references.
+- **Windows taskbar**: kept hidden while Workspace runs. Tap the **Windows key** to
+  reveal it and open Start; tap it again to hide it. Win+E and other Windows-key
+  combinations retain their usual behavior. The bar's menu also offers a
+  taskbar toggle. Taskbars are restored when Workspace exits, including by an
+  independent recovery helper if its process is terminated.
+
+The canvas and embedded workspace browser are maintained in
+[Shared Workspace](https://github.com/JimLundin/shared-workspace). Workspace
+owns the Windows keyboard, dictation, assistant, floating bar and automation.
 
 - **The tray dot**: green: running, layout on · grey: layout off or not running ·
   red: listening · amber: working or waiting for your reply · blue: the agent is on a task. Hover for words;
@@ -101,30 +130,61 @@ Physical keys are named by their Nordic keycaps.
 | | |
 |---|---|
 | **§** | tap: layout on/off · hold 2 s: quit the layout |
-| **B** | hold and speak: dictation, typed where the cursor is |
-| **N** (next to B) | hold and speak an agent task; release to send it |
+| **Spacebar** | push-to-talk dictation, typed where the cursor is on release |
+| **B** | toggle dictation; press again to stop and insert |
+| **N** | toggle agent speech; press again to stop and send |
+| hold **`.`** + **X** | open the searchable window switcher (Apps + Esc) |
 | thumbs **X C V** | Esc · Space/**Nav** · Tab/**Tools** |
 | thumbs **M , .** | Enter/**Sym** · Backspace/**Num** · Delete/**Apps** |
 
-The dictation microphone is opened when Toolkit starts and kept ready between
+Use the physical **C** thumb key to type spaces; hold it for Nav. The physical
+These physical voice buttons work on every layer while the layout is on. They
+keep their voice action when a modifier is held; C remains the typing-space/Nav
+thumb. Meeting recording is available in Workspace controls. Successful voice transcripts are copied to
+the Windows clipboard before submission and retained in memory; **Copy latest
+transcript** in the bar menu recovers them if input or clipboard access fails.
+Transcription failures do not replace the saved text.
+
+**Apps + Esc** (hold physical **`.`**, tap physical **X**) opens a searchable list across screens,
+GlazeWM workspaces. Use arrow keys to select, Enter to switch,
+and Escape to cancel. The normal Enter and
+Escape thumb bindings work here. Hidden managed windows reveal their workspace
+when selected; minimized windows restore when focused.
+Unbound physical keys are blocked while the layout is enabled. Physical **Shift**, **Ctrl**
+and **arrow keys** remain native, including Shift+arrow selection. While Apps is held,
+physical arrows navigate the desktop instead. All function
+keys, media controls and Windows key's taskbar action also remain native.
+Turning the layout off restores the normal keyboard; other modifier and
+navigation actions are available through the layout's home row and layers.
+
+Tabbed window groups have been removed. Workspace uses ordinary automatic tiling
+and preserves application title bars. Apps + arrow keys moves focus between
+tiles; Apps + Esc opens the keyboard window switcher.
+
+
+The dictation microphone is opened when Workspace starts and kept ready between
 captures, so you can speak as soon as you press a talk key. Dictation records only
-while the key is held, and the microphone is released when Toolkit quits. On release,
-Toolkit waits for Windows to return the complete recording before transcribing
+while the key is held, and the microphone is released when Workspace quits. On release,
+Workspace waits for Windows to return the complete recording before transcribing
 it. A failed or incomplete buffer is reported instead of sending partial audio.
 
 **Tools** (hold the Tab thumb, then the right hand):
+
+**Hold V + T** opens the inbox, just like the notification bell, even when there
+are no items awaiting attention. The shortcut uses the physical keycaps with
+Workspace's layout enabled.
 
 | | | | | | |
 |---|---|---|---|---|---|
 | top **8 9 0 + ´** | rewrite by voice (hold, say how) | fix spelling | translate sv↔en | shorter | more formal |
 | home **I O P Å ¨** | dictate, tidied (hold) | dictate a command (hold) | ask… | copy text on screen | ask about the screen |
 | bottom **K L Ö** | agent, by voice (hold) | agent, typed | stop the agent | | |
-| thumb **M** | dictate (hold), as on B | | | | |
+| thumb **M** | dictate (hold); B uses a toggle | | | | |
 
 Rewrites replace the selected text. In terminals they don't press Ctrl+C (it
 would stop the running program), so they don't work there.
 
-**Apps** (hold the Delete thumb, then the left hand):
+**Apps** (hold the Delete thumb, physical **.**):
 
 | | | | | | |
 |---|---|---|---|---|---|
@@ -135,17 +195,87 @@ would stop the running program), so they don't work there.
 An app key brings the app forward, starts it if it isn't running, and pressed
 again goes through its windows. Change the apps in `config.py`.
 
+The right hand controls automatic tiling: **8 9 0 +** focus left/down/up/right,
+**I** floats or tiles the active window, **K L** switch to the previous/next
+workspace, **Ö** changes split direction and **Ä** pauses/resumes tiling.
+The keyboard map shows these actions too.
+
 **Snippets**: type the trigger and it's replaced: `,,date` `,,time` `,,now`
 `,,week` `,,shrug` `,,thx` `,,mvh` `,,br`. Add your own in `config.py`. Physical navigation, window changes, pointer movement
-and injected toolkit text reset a partially typed trigger.
+and injected workspace text reset a partially typed trigger.
+
+## Automatic window tiling
+
+Workspace starts the separately installed **GlazeWM v3.10.1** with five workspaces
+and automatic tiling. Opening or closing a normal window redistributes the
+space. Tiled windows meet without gaps, outlines or rounded corners and fill
+the screen to its edges. The compact bar overlays them. Workspace overlays,
+ordinary dialogs, Start/Search and browser
+picture-in-picture stay outside the tiling tree. GlazeWM adds no extra toolbar
+or competing global keyboard shortcuts.
+
+Click the bar, then **Window tiling**, to focus windows, switch workspaces,
+float/tile a window, change split direction or pause/resume. While tiling is
+active, the existing snap-left/right keys move managed windows within the tree;
+maximize toggles fullscreen. Paused or unmanaged windows keep native snapping.
+
+On a new Windows machine, run this once from the Workspace folder, then restart
+Workspace:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\install_tiling.ps1
+```
+
+The script verifies the official standalone MSI's SHA-256 and executable
+signatures, and installs its manager, CLI, watcher and GPL license under
+`%LOCALAPPDATA%\workspace\tools\glazewm-v3.10.1`. It changes no global PATH or
+startup entry. This private installation manages ordinary windows; elevated
+windows can require GlazeWM's official Program Files installation.
+`WORKSPACE_GLAZEWM` can point to that installation's main `glazewm.exe`, alongside
+its `cli` folder. `WORKSPACE_TILING=off` disables Workspace's automatic startup.
+
+Workspace copies its initial configuration to `%LOCALAPPDATA%\workspace\glazewm.yaml`
+once and preserves subsequent edits. Tiled windows reach the top screen edge;
+the compact bar overlays them without reserving a strip across the monitor.
+When the display geometry changes, Workspace spreads visible tiles in proportion
+to usable screen area and stacks portrait screens vertically. Placement stays
+unchanged between display changes; the bar menu can rebalance it explicitly.
+Only a manager started by Workspace receives automatic placement changes.
+A manager already running is borrowed;
+Workspace closes only the exact manager it launched. Exiting reveals windows from
+all tiling workspaces, retaining their current positions. See the
+[integration notes and primary sources](docs/tiling-window-manager.md).
+
+## Windows notifications
+
+Workspace reads Notification Center locally and routes Windows notifications
+into the same floating **work feed** as Teams, console requests and agent replies.
+The bar forwards observations without creating another notification stack. The
+agent evaluates new arrivals automatically and keeps routine activity quiet.
+Raw notification bodies stay in memory and are supplied to your configured AI
+endpoint for triage. Preferences, source revision hashes and proposed work are
+stored with Windows DPAPI encryption; notification bodies are not logged.
+
+While notification access is allowed, Workspace suppresses registered apps'
+native Windows banners using their **Show notification banners** setting. It
+keeps notification delivery and Notification Center enabled. A registry lease
+records the previous settings before changes, survives reloads, and restores
+them on exit. Newly registered sources are reconciled on subsequent polls.
+An entirely new source can display its first banner before that reconciliation;
+Windows **Do not disturb** also covers that gap, subject to its priority rules.
+App-drawn popups have separate settings. **Windows notification settings** in the
+bar menu opens the system page. Notification access must be allowed on each machine;
+the current Windows installation supports the listener without a packaged helper.
+The listener exposes notification text and dismissal, but not every app's original
+reply/action buttons. See [Windows shell integration](docs/windows-shell-integration.md).
 
 ## Meeting transcripts
 
 Choose **Record a meeting** from the tray or the agent timeline's **⋯** menu,
 or tell the agent to start a meeting transcript. Recording continues until you
-choose **Stop**, tell the agent to stop recording, or quit Toolkit. A red tray
+choose **Stop**, tell the agent to stop recording, or quit Workspace. A red tray
 dot and a small elapsed-time bar show when capture is active. Other agent tasks
-and the B/N voice keys keep working during a meeting.
+and the dedicated voice buttons keep working during a meeting.
 
 The default records the **Windows default microphone and default playback
 device** together, so it includes remote participants heard through that playback
@@ -157,7 +287,7 @@ the microphone. Speaker names are not inferred.
 Timestamped text appears in the existing timeline in roughly 20–30 second
 chunks, as requests finish. The timeline keeps a short recent preview; click the
 recording bar or **Open** for the complete Markdown transcript. **Transcripts**
-opens `%LOCALAPPDATA%\toolkit\meetings`; each meeting has its own dated folder.
+opens `%LOCALAPPDATA%\workspace\meetings`; each meeting has its own dated folder.
 There is no five-minute limit or fixed meeting duration.
 Brief microphone dropouts leave a gap at their original time; recording and
 computer-audio capture continue from the next valid packet.
@@ -183,13 +313,13 @@ the [official OpenAI speech-to-text documentation](https://developers.openai.com
 Choose **Meeting follow-up…** from the tray, or **Meetings** in Work, to select
 completed recording segments and prepare sourced notes, actions and email drafts.
 The Qt editors retain unfinished writing across background updates, link claims
-to the exact saved transcript lines, and can put the notes on the shared canvas.
+to the exact saved transcript lines, and open the saved notes in their own application.
 See [meeting follow-through](docs/meeting-followup.md) for source selection,
 saved versions, editing and Outlook handoff.
 
 ## The agent
 
-Hold **N**, beside B, to speak a task and release it to send. This works on every
+Press **N** to start an agent request; press it again to stop and send. This works on every
 layer. The agent appears as up to five narrow smoked-glass notification bubbles at the
 bottom-right of the screen. New bubbles move earlier ones upward; the desktop
 between them remains visible and clickable. There is no standing toolbar or
@@ -227,7 +357,7 @@ summaries remain available in the full history; private reasoning is not shown.
 Actions show readable targets and result summaries instead of JSON payloads.
 Expanded steps and the attached reply scroll independently, with a small
 scroll indicator when their content overflows.
-Questions stay visible until answered or cancelled: hold **N** to speak your
+Questions stay visible until answered or cancelled: press **N** to start and stop your spoken
 reply. If you opt in to approval mode, say exactly **approve** or **decline**
 with the same hotkey. Other speech does not decide an approval. When it is
 working without a pending question, another voice request queues a follow-up.
@@ -237,7 +367,62 @@ timeline, including expired bubbles, tool results and interrupted replies.
 Its **⋯** menu contains **Write a message…**, **Show activity**, **New chat**,
 and recording controls. **Enter** sends a typed message; **Shift+Enter** adds a
 line. Closing history returns to any active notifications. Voice and typed
-requests share the same conversation until **New chat** or Toolkit exits.
+requests share the same conversation until **New chat** or Workspace exits.
+
+The bar's **Your work feed** opens the floating agent conversation and its
+composer. The agent automatically groups incoming work, summarizes what needs
+attention, suggests next steps and asks short questions you can answer by voice.
+Reactions appear only as a compact quiet count. Routine acknowledgements and
+updates stay out of the bubble stack. There are no visible filter boxes or
+repetitive source-action rows. Earlier/Newer browse the flow; right-click a
+bubble to open the optional full conversation history.
+
+Workspace reuses one existing Teams tab on the approved Edge connection for
+chat collection, Activity and opening conversations. Collection pauses while
+that tab is visible. Reconnecting adopts an existing Teams tab if its saved ID
+has expired. The connection host survives assistant reloads.
+The first connection follows four chats; an unavailable chat keeps its place
+while others continue updating. Complete account-scoped synchronization still
+needs a supported API adapter.
+
+Speak naturally to Workspace: “What needs my attention?”, “Help me draft a
+reply”, or “Keep those routine updates quiet.” The main voice agent reads the
+current plan and exact source context, maintains proposals, and persists your
+explicit filtering feedback. Handling a plan item only changes your list; it
+does not perform the underlying work. Incoming content never authorizes sends
+or command approvals. Console answers use the originating request identity.
+Source reply drafts retain their existing exact-destination and uncertain-send
+protections. Outlook currently contributes Windows notification previews;
+full mailbox synchronization remains a later adapter.
+
+Both Codex CLI and Claude Code have installed hooks for questions, permission
+requests and turn attention. Answers stay attached to the exact provider,
+session and request. Timeout, cancellation or Workspace exit restores ordinary
+console interaction without granting permissions. New CLI sessions load the
+configuration. Codex's installed definitions have completed its one-time trust
+review. Claude receives answers through updatedInput; Codex receives the user's
+answer as model-visible hook feedback because its protocol does not support
+native question-result replacement. `scripts/install_inbox_hooks.py` preserves
+other handlers and backs up changes.
+
+Handling an activity tries its exact **Mark as read** action and checks the
+result. The source status reports an unconfirmed read action explicitly.
+Handling a Windows notification dismisses that exact notification. Handling a
+chat is local to Workspace and does not certify Teams desktop read badges or
+flashing. Calendar invitations can be triaged or opened in their source;
+accept/decline operations remain there.
+
+Coverage includes rendered messages in followed chats and rendered Activity
+rows, with bounded in-memory history. It does not provide all-chat unread counts
+or complete older history. Reactions update their original message quietly.
+Handled source identities and content fingerprints survive reloads.
+Settings, your drafts and outgoing attempt evidence are saved under your Windows
+account using DPAPI encryption. The communication cache keeps incoming bodies
+in memory; context explicitly supplied to Workspace follows its usual saved-task
+policy.
+An uncertain reply is never resent automatically: inspect the chat, then choose
+**I checked this in Teams** to allow another reply while retaining the evidence.
+Starting **New chat** resets agent context and keeps the Teams projection.
 
 The history window can still be moved, resized, snapped to either screen edge,
 or given a transparent background from its menu. Notifications use its remembered
@@ -247,7 +432,7 @@ entries share the available height, with space reserved for the
 voice-reply hint. A small scroll marker shows progress through overflowing text.
 
 The SDK loads in the background and the notification view is prepared on the
-existing UI thread after Toolkit starts. History widgets are created when you
+existing UI thread after Workspace starts. History widgets are created when you
 open it. The source workspace is prepared only when a source tool is used.
 Failed requests show the reason in a bubble and the timeline;
 they also notify you and are recorded in
@@ -256,7 +441,7 @@ quicker replies, independently of the fast model used for dictation and quick qu
 endpoint must support the selected model through the Responses API.
 
 By default, file writes, commands, opening files, desktop control and self-updates
-run without approval prompts. Requests to change Toolkit authorize the agent to
+run without approval prompts. Requests to change Workspace authorize the agent to
 edit its source and model settings, test the result, install it and reload.
 The agent is instructed to publish or send messages only when you request that.
 The **×** stop button remains available throughout the task.
@@ -274,15 +459,15 @@ through PowerShell when those suit the task.
 For web tasks, it defaults to **your running, signed-in Edge**, and can attach to
 Chrome on request. Enable **Allow remote debugging for this browser instance** at
 `edge://inspect/#remote-debugging` (or `chrome://inspect/#remote-debugging`), then
-approve the browser's connection dialog. Toolkit keeps that connection for
+approve the browser's connection dialog. Workspace keeps that connection for
 subsequent work; the browser may ask again after a disconnect or restart.
-New Edge tabs open in a **Toolkit** group, created collapsed so the agent can
+New Edge tabs open in a **Workspace** group, created collapsed so the agent can
 work while you browse. If you expand the group to collaborate, it stays expanded.
 The agent can open and close tabs, group and ungroup them, rename and collapse
 groups, move tabs or groups between windows, pin tabs and reload them. Ask it to
 show a page when you want that tab brought forward. It can also work on your
 existing tabs when requested, read page text and controls, fill forms, handle
-frames and open shadow roots, and capture browser screenshots. Stop and Toolkit
+frames and open shadow roots, and capture browser screenshots. Stop and Workspace
 exit disconnect, leaving your browser, tabs and groups open.
 
 This reuses the running browser's session; it is not a second headless process
@@ -300,10 +485,10 @@ Microsoft's device flow, and saved tokens are encrypted for your Windows account
 See [background automation and Teams setup](docs/background-automation.md) for
 permissions, tool details and current limitations.
 
-While idle, Toolkit keeps recent app and window-title changes in memory: up to
+While idle, Workspace keeps recent app and window-title changes in memory: up to
 128 changes over the last 30 minutes. Each request receives recent activity and
 a screenshot of the last work window when the request starts. This helps it
-understand "this window" and "what I was just doing". Opening Toolkit's timeline
+understand "this window" and "what I was just doing". Opening Workspace's timeline
 does not replace that work window. Queued requests retain their own invocation
 context; their screenshot is taken when they start running. Activity while the
 agent is working is marked so it can distinguish its own actions.
@@ -312,7 +497,7 @@ The idle tracker collects no screenshots, keystrokes or clipboard history, and
 makes no model calls. Request context goes to your configured endpoint and stays
 in the conversation until **New chat** or exit; only the latest two screenshots
 are retained. The idle activity buffer expires separately. Set
-`TOOLKIT_AGENT_CONTEXT=off` and restart to turn off this automatic context.
+`WORKSPACE_AGENT_CONTEXT=off` and restart to turn off this automatic context.
 
 Desktop automation uses the permissions of your Windows account. A locked
 desktop or an elevated application can block screen capture and input. Some
@@ -320,7 +505,7 @@ applications expose few accessibility controls; the agent can use screenshots,
 input or an application API instead. It checks results and reports an actual
 blocker when Windows refuses access.
 
-With `TOOLKIT_AGENT_APPROVALS=ask`, writes and opens ask each time, commands ask
+With `WORKSPACE_AGENT_APPROVALS=ask`, writes and opens ask each time, commands ask
 unless they match `ALLOWED_COMMANDS` in `config.py`, and desktop control asks once
 per task. The keeper also reviews self-updates in that optional mode.
 
@@ -329,11 +514,6 @@ success status. Browser and Teams arguments and results stay out of persistent
 journals and activity details, including form values and sign-in codes.
 
 ## Durable work
-
-The [shared desktop canvas](docs/desktop-canvas.md) attaches requests, selected
-sources, and results to these same durable task identities. Saved cards reconnect
-after a restart, including tasks outside the recent-work list. An unconfirmed
-submission stays attached and can be retried with its original identity.
 
 Open **Work…** from the tray or conversation menu. Voice requests, typed
 requests, and standing instructions use the same saved task journal. The Work
@@ -363,17 +543,17 @@ Completed transcripts trigger only after their final text has been saved.
 Duplicate delivery creates one task, missed intervals coalesce, and disabling
 an instruction prevents new handoffs. A handoff already accepted remains a
 saved task that can be cancelled separately. Meeting-note outputs live under
-`%LOCALAPPDATA%\toolkit\work\work-results`, each in its task's folder.
+`%LOCALAPPDATA%\workspace\work\work-results`, each in its task's folder.
 
 The [interactive architecture](docs/agentic-pc.html) explains the work flow.
 The [implementation guide](docs/agentic-implementation.md) records the interfaces
 and verification requirements.
 
-## Changing the toolkit
+## Changing Workspace
 
 Ask the agent, by voice or typed: "add a snippet for my email address", "make
 the indicator smaller", "add a key that opens my timesheet". It works on a copy
-of the source in its own folder under `%LOCALAPPDATA%\toolkit\workspaces`. Draft
+of the source in its own folder under `%LOCALAPPDATA%\workspace\workspaces`. Draft
 edits stay available for follow-up requests in the same conversation, then:
 
 1. **Check and fix**: every Python file, including the `.pyw` launchers, compiles.
@@ -381,7 +561,7 @@ edits stay available for follow-up requests in the same conversation, then:
    its draft. Windows integration tests are deferred until submission, so it can
    fix failures and check again quickly while editing.
 2. **Submit**: the agent sends the checked change to the keeper. There is no
-   approval step by default. With `TOOLKIT_AGENT_APPROVALS=ask`, the agent runs
+   approval step by default. With `WORKSPACE_AGENT_APPROVALS=ask`, the agent runs
    syntax checks first and the keeper shows the complete diff before running
    the proposed code and tests.
 3. **Verify**: the keeper checks its own frozen copy of the source: every module
@@ -397,8 +577,8 @@ edits stay available for follow-up requests in the same conversation, then:
 6. **Later**, tray menu → Undo the last update still works after restarting.
    Repeated crashes restore the previous version too.
 
-The last 20 versions are kept in `%LOCALAPPDATA%\toolkit\versions`. The agent
-can't change `keeper.py`, `selfcheck.py`, `runtime.py` or `toolkit.pyw`, and the keeper uses
+The last 20 versions are kept in `%LOCALAPPDATA%\workspace\versions`. The agent
+can't change `keeper.py`, `selfcheck.py`, `runtime.py` or `workspace.pyw`, and the keeper uses
 nothing but Python's standard library, so the normal source-edit tools cannot
 replace the updater. The private `.python` and `.runtime` directories are also
 protected and stay outside source snapshots and updates. Code and tests run with
@@ -409,7 +589,7 @@ your account permissions.
 Ask the agent to "make the change and publish it to GitHub". It has a
 `publish_changes` tool: it freezes its workspace, runs the runtime checks,
 commits, and pushes a new
-`toolkit/agent-*` branch. It never force-pushes or updates `main`. Publishing does
+`workspace/agent-*` branch. It never force-pushes or updates `main`. Publishing does
 not install the change; ask it to publish before applying, since installation
 restarts the agent. In optional approval mode it asks you to approve the diff
 and destination first. Merge the branch on GitHub after review.
@@ -423,10 +603,10 @@ Optional environment settings:
 
 | Variable | Default |
 |---|---|
-| `TOOLKIT_GIT_REMOTE` | `https://github.com/JimLundin/toolkit.git` |
-| `TOOLKIT_GIT_BASE` | `main` |
-| `TOOLKIT_GIT_AUTHOR_NAME` | `Toolkit Agent` |
-| `TOOLKIT_GIT_AUTHOR_EMAIL` | `toolkit@localhost` |
+| `WORKSPACE_GIT_REMOTE` | `https://github.com/JimLundin/workspace.git` |
+| `WORKSPACE_GIT_BASE` | `main` |
+| `WORKSPACE_GIT_AUTHOR_NAME` | `Workspace Agent` |
+| `WORKSPACE_GIT_AUTHOR_EMAIL` | `workspace@localhost` |
 
 The running source must match the selected remote base before publishing. After
 merging, update the running source to that base; if you installed an unmerged
@@ -434,9 +614,9 @@ change, either select its published branch as the base or merge it first.
 
 ## Agent implementation
 
-Toolkit uses the [OpenAI Agents SDK](https://developers.openai.com/api/docs/guides/agents/quickstart)
+Workspace uses the [OpenAI Agents SDK](https://developers.openai.com/api/docs/guides/agents/quickstart)
 through `assistant/sdk.py`. Its `Runner` owns model turns and tool execution;
-`assistant/agent.py` retains Toolkit's tools and permissions. The supervised
+`assistant/agent.py` retains Workspace's tools and permissions. The supervised
 automation process owns execution, browser sessions, and the durable action
 journal; the assistant owns views, human input, and audio capture. The SDK
 uses your configured OpenAI-compatible
@@ -502,7 +682,7 @@ its Windows import hooks, so a source copy can run the same checks as the live a
 
 ## Logs
 
-All in `%LOCALAPPDATA%\toolkit` (tray menu → Open logs folder):
+All in `%LOCALAPPDATA%\workspace` (tray menu → Open logs folder):
 
 | File | |
 |---|---|
@@ -517,6 +697,8 @@ What leaves the laptop: recordings (for transcription), the text, selection
 or screen area you used a tool on, and the recent app/window context and request
 screenshot when automatic context is enabled. These go to your configured
 endpoint. The idle activity buffer is not written to disk.
+Optional toolbar weather sends Windows coordinates rounded to a tenth of a degree
+to Open-Meteo. It stores neither location nor weather on disk.
 Task instructions and public progress/results are saved locally for recovery.
 The action journal does not store arbitrary command text, browser/Teams
 payloads, screenshots, credentials, encrypted reasoning, or raw SDK history.
@@ -554,7 +736,19 @@ lifecycle subclasses and Qt objects inherit their libraries' storage. Behaviour 
 
 ## Development
 
-The canonical source is [JimLundin/toolkit](https://github.com/JimLundin/toolkit). Clone it and
+On this laptop, develop in `C:\Users\Jim.Lundin\Projects\workspace` and use
+`Dev.cmd` as described in [the iteration pipeline](docs/iteration-pipeline.md).
+The Linux path `/home/jim/workspace` redirects to that checkout. The original
+Linux tree is preserved at `/home/jim/workspace-linux-reference`.
+
+Use `Dev.cmd watch` for affected tests on save, or narrow with
+`Dev.cmd watch --tests tests/test_bar_model.py`. `Dev.cmd preview` restarts a real
+toolbar/feed preview with sample data on save. Install the development-only
+watcher with `.venv\Scripts\python.exe -m pip install watchdog==6.0.0`.
+The [iteration pipeline](docs/iteration-pipeline.md) describes coverage, cached
+source analysis, preview options and final check/deployment commands.
+
+The canonical source is [JimLundin/workspace](https://github.com/JimLundin/workspace). Clone it and
 run checks with Python 3.15 or later. Install source dependencies first:
 `python -m pip install -e .`. The prebuilt Windows bundle needs no pip step.
 Development tools are optional locally and required by CI.
@@ -568,7 +762,7 @@ hand off to the bundled 3.15 interpreter before importing the application.
 GitHub Actions checks Python 3.15 on Windows and Linux, plus Mypy,
 Pyright and Ruff on Windows with the native UI dependencies. Desktop end-to-end tests are available through the manual
 **Windows desktop tests** workflow on a dedicated self-hosted Windows runner
-labelled `toolkit-desktop`; they take control of its keyboard and mouse.
+labelled `workspace-desktop`; they take control of its keyboard and mouse.
 
 If Windows refuses injected keys in an elevated application, the layout switches
 off and passes physical keys through. Use the plain keyboard there, then tap §
@@ -581,8 +775,8 @@ python selfcheck.py --fast --durations 10 # editing: defer Windows integration m
 python selfcheck.py --durations 10        # full gate, required before install
 python -m pytest -q tests/test_pcm.py     # one area, with optional pytest installed
 mypy . && pyright && ruff check .         # if you have them
-TOOLKIT_E2E=1 pytest tests/test_windows_*e2e.py
-python scripts/bundle.py dist/toolkit-sdk-python315-win64.zip
+WORKSPACE_E2E=1 pytest tests/test_windows_*e2e.py
+python scripts/bundle.py dist/workspace-sdk-python315-win64.zip
 ```
 
 Both check profiles compile every Python source and import production modules.
@@ -609,9 +803,9 @@ Inside an extracted Windows bundle, use `.python\python.exe selfcheck.py` to run
 checks with its matching interpreter. The bundle builder can run on Windows or
 Linux and accepts `--cache FOLDER` to reuse a verified Python download.
 
-The `TOOLKIT_E2E=1` command runs on Windows only: it starts the real toolkit, presses real
+The `WORKSPACE_E2E=1` command runs on Windows only: it starts the real workspace, presses real
 keys and drags the real mouse, and has the keeper install, undo and refuse
-changes on a copy of the toolkit (a few minutes, against a fake endpoint), so
+changes on a copy of Workspace (a few minutes, against a fake endpoint), so
 leave the keyboard alone while it runs.
 
 `tests/test_windows_agent_panel.py` exercises the actual Qt panel, including

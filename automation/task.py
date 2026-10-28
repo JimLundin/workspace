@@ -6,8 +6,6 @@ from dataclasses import dataclass, replace
 from enum import Enum, auto
 from typing import Literal, assert_never, cast
 
-CANVAS_EDIT_GUIDANCE = "Use the canvas composer or Refresh result to change this request."
-
 
 def text(value: object, field: str, *, maximum: int = 64_000, empty: bool = False) -> str:
     """Validate text received from storage or a typed external interface."""
@@ -79,15 +77,7 @@ class RoutineSource:
         text(self.occurrence_id, "routine occurrence", maximum=512)
 
 
-@dataclass(frozen=True, slots=True)
-class CanvasSource:
-    fingerprint: str
-
-    def __post_init__(self) -> None:
-        digest(self.fingerprint, "canvas preparation fingerprint")
-
-
-type Source = RequestSource | RoutineSource | CanvasSource
+type Source = RequestSource | RoutineSource
 
 
 @dataclass(frozen=True, slots=True)
@@ -278,7 +268,7 @@ class Task:
         integer(self.goal_revision, "goal revision")
         if self.updated_at < self.created_at or self.goal_revision > self.revision:
             raise ValueError("Invalid task chronology.")
-        variant(self.source, (RequestSource, RoutineSource, CanvasSource), "task source")
+        variant(self.source, (RequestSource, RoutineSource), "task source")
         variant(self.state, (TaskStatus, Running, Waiting, Interrupted, Completed, Failed), "task state")
         if isinstance(self.state, (Running, Interrupted)) and self.state.run.task_id != self.id:
             raise ValueError("The run belongs to another task.")
@@ -501,8 +491,6 @@ def allowed_controls(state: State) -> tuple[Control, ...]:
 
 
 def redirected(task: Task, prompt: str, *, at: float) -> Task:
-    if isinstance(task.source, CanvasSource):
-        raise ValueError(CANVAS_EDIT_GUIDANCE)
     return replace(changed(task, TaskStatus.READY, at=at), prompt=prompt, goal_revision=task.goal_revision + 1)
 
 

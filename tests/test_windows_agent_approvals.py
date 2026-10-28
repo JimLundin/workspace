@@ -13,9 +13,9 @@ if sys.platform != "win32":
 from assistant.agent import Agent
 from assistant.agent_input import Inputs
 from assistant.agent_session import Approval, Event, InputCancelled
-from assistant.app import WinMachine
 from assistant.desktop import WinDesktop
 from assistant.llm import Settings, ToolCall
+from assistant.machine import WinMachine
 from assistant.ui import Ui
 
 from .test_agent import FakeWindow

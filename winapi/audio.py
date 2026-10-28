@@ -1,7 +1,10 @@
 """Recording the microphone, through the waveIn API."""
 
 import ctypes
+import math
+import threading
 import time
+from array import array
 from ctypes import wintypes
 from typing import Final
 
@@ -54,6 +57,16 @@ _waveInStart = fn(winmm, "waveInStart", wintypes.UINT, _HWAVEIN)
 _waveInReset = fn(winmm, "waveInReset", wintypes.UINT, _HWAVEIN)
 _waveInClose = fn(winmm, "waveInClose", wintypes.UINT, _HWAVEIN)
 
+
+class MMTIME(ctypes.Structure):
+    _fields_ = (("kind", wintypes.UINT), ("value", wintypes.DWORD), ("padding", wintypes.DWORD))
+
+    def __init__(self, kind: int = 4, value: int = 0, padding: int = 0) -> None:
+        super().__init__(kind, value, padding)
+
+
+_waveInGetPosition = fn(winmm, "waveInGetPosition", wintypes.UINT, _HWAVEIN, ctypes.POINTER(MMTIME), wintypes.UINT)
+
 _WAVE_MAPPER: Final = 0xFFFF_FFFF
 _WAVE_FORMAT_PCM: Final = 1
 _CALLBACK_EVENT: Final = 0x0005_0000
@@ -67,7 +80,7 @@ class Microphone:
     the buffer is full. Opened at construction and kept ready until `close`, but
     only records between `start` and `stop`."""
 
-    __slots__ = ("_buffer", "_format", "_handle", "_header", "_prepared", "_queued", "_stopping", "event")
+    __slots__ = ("_buffer", "_format", "_handle", "_header", "_last_position", "_lock", "_prepared", "_queued", "_stopping", "event")
 
     def __init__(self, rate: int, seconds: int, event: EventHandle) -> None:
         self._format = WAVEFORMATEX(_WAVE_FORMAT_PCM, 1, rate, rate * 2, 2, 16, 0)
@@ -77,6 +90,8 @@ class Microphone:
         self._prepared = False
         self._queued = False
         self._stopping = False
+        self._lock = threading.RLock()
+        self._last_position = 0
         self.event = event
         # Opening a device can take a second. Pay that cost before the talk key is
         # pressed; start() retries and reports the error if it isn't available yet.
@@ -93,6 +108,10 @@ class Microphone:
 
     def start(self) -> int:
         """Starts recording on the ready microphone. 0, or Windows' error code."""
+        with self._lock:
+            return self._start()
+
+    def _start(self) -> int:
         if self._prepared:
             if not self._stopping:
                 return 0
@@ -103,6 +122,7 @@ class Microphone:
         if error := self._open():
             return error
         self._header = WAVEHDR(ctypes.addressof(self._buffer), len(self._buffer))
+        self._last_position = 0
         size = ctypes.sizeof(WAVEHDR)
         if error := int(_waveInPrepareHeader(self._handle, ctypes.byref(self._header), size)):
             self.close()
@@ -121,6 +141,10 @@ class Microphone:
 
     def stop(self) -> bytes:
         """Returns the recording, keeping the microphone ready for the next press."""
+        with self._lock:
+            return self._stop()
+
+    def _stop(self) -> bytes:
         if not self._prepared:
             return b""
         self._stopping = True
@@ -138,6 +162,33 @@ class Microphone:
         self._header = WAVEHDR()
         return recorded
 
+    def level(self) -> float | None:
+        """RMS of at most 40 ms of captured PCM; no wait and no full-buffer copy.
+
+        The driver's byte position, rather than the unfinished header's byte
+        count, marks data already recorded. Meter reads cannot overlap a reset
+        or buffer release; a busy or unsupported device yields no observation.
+        """
+        if not self._lock.acquire(blocking=False):
+            return None
+        try:
+            if not self._queued or self._stopping:
+                return None
+            position = MMTIME(4, 0, 0)  # TIME_BYTES; drivers may return TIME_SAMPLES.
+            if _waveInGetPosition(self._handle, ctypes.byref(position), ctypes.sizeof(MMTIME)):
+                return None
+            if position.kind not in (2, 4):
+                return None
+            end = min(len(self._buffer), int(position.value) * (2 if position.kind == 2 else 1)) & ~1
+            if end <= self._last_position:
+                return 0.0
+            beginning = max(self._last_position, end - int(self._format.nSamplesPerSec) * 2 // 25) & ~1
+            self._last_position = end
+            samples = array("h", ctypes.string_at(ctypes.addressof(self._buffer) + beginning, end - beginning))
+            return math.sqrt(sum(sample * sample for sample in samples) / len(samples)) / 32768
+        finally:
+            self._lock.release()
+
     def _wait_for_return(self) -> None:
         """Keep the header and PCM alive until the driver returns the final data.
 
@@ -152,7 +203,8 @@ class Microphone:
 
     def close(self) -> None:
         """Stops any recording and releases the microphone before its event closes."""
-        if self._handle:
-            self.stop()
-            _waveInClose(self._handle)
-            self._handle = _HWAVEIN()
+        with self._lock:
+            if self._handle:
+                self.stop()
+                _waveInClose(self._handle)
+                self._handle = _HWAVEIN()

@@ -50,7 +50,7 @@ class FrostSampler:
         if not bounds or self.pending is not None:
             return
         if self.worker is None:
-            self.worker = ThreadPoolExecutor(max_workers=1, thread_name_prefix="toolkit-glass")
+            self.worker = ThreadPoolExecutor(max_workers=1, thread_name_prefix="workspace-glass")
         self.pending = self.worker.submit(sample_backgrounds, bounds)
 
     def read(self) -> tuple[Backdrop, ...]:

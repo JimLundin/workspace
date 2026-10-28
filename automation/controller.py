@@ -229,10 +229,10 @@ class WorkController:
     def _execute(self, claim: Claim, stop: threading.Event, result: Future[Outcome]) -> None:
         try:
             if stop.is_set():
-                outcome: Outcome = Interrupted(claim.run, "Toolkit is stopping.")
+                outcome: Outcome = Interrupted(claim.run, "Workspace is stopping.")
             else:
                 log = self.log(claim)
-                outcome = (Interrupted(claim.run, "Toolkit is stopping.") if stop.is_set()
+                outcome = (Interrupted(claim.run, "Workspace is stopping.") if stop.is_set()
                            else self.execution.run_work(claim, self.store, log, stop))
             result.set_result(outcome)
         except BaseException as error:
@@ -250,7 +250,7 @@ class WorkController:
             self._report(failure_text(error))
             outcome = Waiting(Blocked("Execution failed. Inspect the task and resume when its blocker is resolved."))
         if self._shutdown.is_set():
-            self.store.interrupt(flight.claim.run, "Toolkit stopped before the task outcome was saved.", at=self.now())
+            self.store.interrupt(flight.claim.run, "Workspace stopped before the task outcome was saved.", at=self.now())
         else:
             saved = self.store.finish(flight.claim.run, outcome, at=self.now())
             if saved is None:
@@ -279,7 +279,7 @@ class WorkController:
                 try:
                     self.store.interrupt(
                         flight.claim.run,
-                        "The work controller stopped after an error." if reasons else "Toolkit stopped before the task finished.",
+                        "The work controller stopped after an error." if reasons else "Workspace stopped before the task finished.",
                         at=self.now(),
                     )
                     self._publish(Stopping(flight.claim.run))

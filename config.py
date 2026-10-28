@@ -1,6 +1,6 @@
 """Your settings: the apps on the Apps layer, text snippets, what each rewrite key
 asks for, and which commands skip prompts in optional approval mode. Edit freely; it's
-checked when the toolkit starts. (Secrets and the AI endpoint are environment
+checked when Workspace starts. (Secrets and the AI endpoint are environment
 variables instead; see the README.)
 """
 
@@ -65,7 +65,7 @@ TERMINALS: Final = frozenset({
 })  # fmt: skip
 
 # ---- Agent -----------------------------------------------------------------------------
-# With TOOLKIT_AGENT_APPROVALS=ask, these commands skip the prompt only when
+# With WORKSPACE_AGENT_APPROVALS=ask, these commands skip the prompt only when
 # nothing can chain another command after them. Default mode allows requested commands directly.
 
 ALLOWED_COMMANDS: Final[tuple[str, ...]] = (

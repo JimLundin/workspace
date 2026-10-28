@@ -34,6 +34,17 @@ def test_only_the_exact_development_editor_server_is_exempt_from_installed_proce
         assert role_for(arguments, windowed=False, editor=editor) == 'runtime'
 
 
+def test_native_development_tools_can_coexist_with_deployment_only_from_the_reviewed_venv() -> None:
+    interpreter = PureWindowsPath(r'C:\Users\Jim.Lundin\Projects\workspace\.venv\Scripts\python.exe')
+    editor = (interpreter, PureWindowsPath(r'C:\Users\Jim.Lundin\.vscode\extensions'))
+    for module in ('scripts.watch', 'scripts.check', 'scripts.preview'):
+        command = (str(interpreter), '-B', '-m', module, '--once')
+        assert role_for(command, windowed=False, editor=editor) is None
+        assert role_for(command, windowed=True, editor=editor) == 'runtime'
+        assert role_for((r'C:\elsewhere\python.exe', *command[1:]), windowed=False, editor=editor) == 'runtime'
+    assert role_for((str(interpreter), '-m', 'unrelated'), windowed=False, editor=editor) == 'runtime'
+
+
 def test_only_the_exact_installed_console_hook_is_external_to_the_application_process_tree() -> None:
     root = PureWindowsPath(r'C:\Users\Jim.Lundin\Downloads\workspace-sdk\workspace')
     interpreter = str(root / '.python' / 'python.exe')

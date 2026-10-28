@@ -1,12 +1,40 @@
-# Toolkit work
+# Workspace work
 
-Toolkit carries out requested outcomes and standing instructions across
+Workspace carries out requested outcomes and standing instructions across
 conversations and interruptions.
 
 Device connections and distributed workspace access are defined in the
 [Shared Workspace glossary](https://github.com/JimLundin/shared-workspace/blob/main/GLOSSARY.md).
 
 ## Language
+
+**Personal work feed**:
+The shared stream of colleague messages, agent exchanges and actionable updates.
+Each item keeps its source and reply destination. The feed is one view across
+conversations and tasks; opening it does not change their identities.
+_Avoid_: One Teams chat, task list
+
+**Work item**:
+A pending source update to deal with. Messages in one followed chat share a
+ticket; activity and Windows notifications retain their exact source identities.
+Handling a ticket records the observed revisions, so a later arrival or edit can
+remain pending. A ticket is independent of any agent task requested from it.
+_Avoid_: Teams unread badge, agent task
+
+**Agent request**:
+A question or approval that an agent needs the person to answer before work can
+continue. Its answer belongs to the originating request and session.
+_Avoid_: Notification, task, chat message
+
+**Notification filter**:
+A personal choice about which sources appear in the pending feed and interrupt
+the person. Filtering a source does not mean its work was handled.
+_Avoid_: Dismissal, completed work
+
+**Feed review**:
+An explicit request for the agent to summarize a captured set of feed items
+and suggest what to do next. A review is independent of acting on those items.
+_Avoid_: Automatic reply, completed ticket
 
 **Task**:
 A requested outcome with its constraints, progress, and result. A task has a
@@ -37,21 +65,6 @@ _Avoid_: Assumed success
 A bounded account of a task's progress that helps a later run continue from
 known facts.
 _Avoid_: Conversation dump
-
-**Workspace**:
-A named working context containing resources and their arrangement. Showing a
-different workspace does not change the identity of its resources or tasks.
-_Avoid_: Conversation, source checkout
-
-**Resource**:
-A document, application, note, source, or result that can be worked with and
-shown in more than one workspace.
-_Avoid_: Placement, task
-
-**Placement**:
-The presentation of a resource within one workspace. Removing that presentation
-does not delete the resource or cancel its work.
-_Avoid_: Resource, application instance
 
 **Standing instruction**:
 A saved instruction that authorizes work when a specified trigger occurs.

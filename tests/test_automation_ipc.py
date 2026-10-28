@@ -68,10 +68,10 @@ def raw_peer(server: BridgeServer) -> LocalChannel:
 def authenticate(peer: Channel, key: bytes) -> None:
     """Implement the documented challenge independently of the client adapter."""
     challenge = peer.recv_bytes(128)
-    assert len(challenge) == 41 and challenge[:9] == b"Toolkit1:"
+    assert len(challenge) == 43 and challenge[:11] == b"Workspace1:"
     nonce = b"test-client-nonce".ljust(32, b".")
-    peer.send_bytes(nonce + hmac.digest(key, b"client:" + challenge[9:] + nonce, "sha256"))
-    assert hmac.compare_digest(peer.recv_bytes(128), hmac.digest(key, b"server:" + challenge[9:] + nonce, "sha256"))
+    peer.send_bytes(nonce + hmac.digest(key, b"client:" + challenge[11:] + nonce, "sha256"))
+    assert hmac.compare_digest(peer.recv_bytes(128), hmac.digest(key, b"server:" + challenge[11:] + nonce, "sha256"))
 
 
 def disconnected(read: Future[bytes]) -> None:
@@ -215,7 +215,7 @@ def test_shutdown_releases_stalled_authentication_and_pending_meeting(tmp_path: 
         read_until(client, lambda item: isinstance(item.payload, ipc.MeetingRequest))
         peer = raw_peer(server)
         try:
-            assert peer.recv_bytes(128).startswith(b"Toolkit1:")  # accept is now blocked on authentication
+            assert peer.recv_bytes(128).startswith(b"Workspace1:")  # accept is now blocked on authentication
             server.close()
             assert server.wait(0)
             with TestCase().assertRaisesRegex(OSError, "stopping"):
@@ -234,7 +234,7 @@ def test_wrong_authentication_is_rejected_before_commands_are_read(tmp_path: Pat
         try:
             challenge = peer.recv_bytes(128)
             nonce = b"incorrect-key-peer".ljust(32, b".")
-            peer.send_bytes(nonce + hmac.digest(b"a different key", b"client:" + challenge[9:] + nonce, "sha256"))
+            peer.send_bytes(nonce + hmac.digest(b"a different key", b"client:" + challenge[11:] + nonce, "sha256"))
             disconnected(pool.submit(peer.recv_bytes, 128))
             assert not wake.is_set()
             client.wake()

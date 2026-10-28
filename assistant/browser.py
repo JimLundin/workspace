@@ -1,11 +1,14 @@
-"""Background DOM automation in an attached browser or Toolkit's own Edge."""
+"""Background DOM automation in an attached browser or Workspace's own Edge."""
 
 import base64
 import binascii
 import json
+import sys
 import threading
 import time
 import uuid
+from collections.abc import Generator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import assert_never
@@ -15,6 +18,7 @@ from . import browser_dom
 from .browser_session import (
     MAX_RESPONSE,
     Attached,
+    BrowserConnection,
     BrowserSession,
     Cdp,
     Managed,
@@ -50,6 +54,7 @@ from .browser_values import (
     GroupData,
     InGroup,
     MoveTab,
+    NavigationLoadingError,
     Page,
     PageClosure,
     TabData,
@@ -109,7 +114,7 @@ class Browser:
         strip: TabStrip | None = None,
     ) -> None:
         self.profile = profile
-        self._opener = opener if opener is not None else NativeSessions(profile, executable=executable)
+        self._opener = opener if opener is not None else NativeSessions(profile, executable=executable, persistent=sys.platform == "win32")
         self.source = source
         self._live: BrowserSession | None = None
         self.sessions: dict[str, str] = {}
@@ -119,7 +124,7 @@ class Browser:
         self.lock = threading.RLock()
 
     @property
-    def connection(self) -> Cdp | None:
+    def connection(self) -> BrowserConnection | None:
         return self._live.connection if self._live is not None else None
 
     @property
@@ -166,7 +171,7 @@ class Browser:
             self._live = self._opener.open(self.source, cancel, visible=visible)
 
     def close(self) -> None:
-        """Detach personal browsers. Only terminate a process Toolkit launched."""
+        """Detach personal browsers. Only terminate a process Workspace launched."""
         with self.lock:
             live, self._live = self._live, None
             try:
@@ -204,6 +209,23 @@ class Browser:
                 error.add_note(f"Browser session cleanup also failed: {cleanup_error}")
             raise
 
+    @contextmanager
+    def awake(self, target: str, cancel: threading.Event) -> Generator[None]:
+        """Let an inactive page finish UI work without activating its native tab."""
+        with self.lock:
+            session = self._session(target, cancel)
+            try:
+                self._call("Emulation.setFocusEmulationEnabled", {"enabled": True}, cancel, session=session)
+                yield
+            except BaseException as error:
+                try:
+                    self._reset_capture(session, threading.Event())
+                except Exception as cleanup_error:
+                    error.add_note(f"Browser activity cleanup also failed: {cleanup_error}")
+                raise
+            else:
+                self._reset_capture(session, threading.Event())
+
     def _capture(self, session: str, cancel: threading.Event) -> dict[str, Json]:
         try:
             self._call("Emulation.setFocusEmulationEnabled", {"enabled": True}, cancel, session=session)
@@ -221,7 +243,7 @@ class Browser:
         tree = mapping(self._call("Page.getFrameTree", {}, cancel, session=session).get("frameTree", {}))
         if not frame:
             frame = text(mapping(tree.get("frame", {})), "id")
-        world = self._call("Page.createIsolatedWorld", {"frameId": frame, "worldName": "toolkit"}, cancel, session=session)
+        world = self._call("Page.createIsolatedWorld", {"frameId": frame, "worldName": "workspace"}, cancel, session=session)
         return number(world, "executionContextId", 0, 1, 2**53), tree
 
     def _evaluate(self, expression: str, session: str, context: int, cancel: threading.Event, *, timeout: float = 15) -> Json:
@@ -283,7 +305,7 @@ class Browser:
     def _native_target(self, placement: Destination, window: int | None, cancel: threading.Event) -> str:
         self._require_strip()
         plan = opening(self.strip.snapshot(self._call, cancel), placement, window)
-        marker = "about:blank#toolkit-" + uuid.uuid4().hex
+        marker = "about:blank#workspace-" + uuid.uuid4().hex
         native = self.strip.open(self._call, marker, plan, cancel)
         deadline = time.monotonic() + 5
         while True:
@@ -348,7 +370,7 @@ class Browser:
                 raise
             except BrowserError:
                 continue  # Navigating briefly destroys the previous execution context.
-        raise BrowserError(f"Navigation is still loading. Inspect browser tab {target} before retrying.")
+        raise NavigationLoadingError(f"Navigation is still loading. Inspect browser tab {target} before retrying.")
 
     def request(self, operation: str, args: dict[str, Json], cancel: threading.Event) -> BrowserResult:
         with self.lock:
@@ -357,6 +379,10 @@ class Browser:
             except (InterruptedError, DisconnectedError):
                 self.close()
                 raise
+
+    def activate_page(self, target: str, cancel: threading.Event) -> None:
+        """Bring forward an exact CDP page without requiring session-local native tab metadata."""
+        self.request("activate", {"target_id": target}, cancel)
 
     def _status(self, args: dict[str, Json], cancel: threading.Event) -> BrowserResult:
         view = text(args, "view", "pages")
@@ -477,6 +503,12 @@ class Browser:
             return self._attach_request(args, cancel)
         if operation == "tabs":
             return self._status(args, cancel)
+        if operation == "activate":
+            target = text(args, "target_id")
+            if not any(page.id == target for page in self._tabs(cancel)):
+                raise BrowserError("That browser page is closed. Refresh before opening its source.")
+            self._call("Target.activateTarget", {"targetId": target}, cancel)
+            return BrowserResult("Browser page activated.")
         if operation in ("group", "ungroup", "tab"):
             return self._tab_operation(tab_edit(operation, args), cancel)
         if operation == "close":

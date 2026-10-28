@@ -9,7 +9,6 @@ from pathlib import Path
 
 from assistant.activity import Activity, ContextSnapshot
 from assistant.agent_session import Answer, ChatMessage, Said, StreamState
-from assistant.browser_surface_operations import AppOperation, AppResult
 from assistant.work_agent import MeetingControl, WorkAgent
 from assistant.work_window import (
     AddPreference,
@@ -91,8 +90,6 @@ class RecordingBridge:
         self.registrations: list[tuple[str, ContextSnapshot | None, int]] = []
         self.contexts: list[ContextSnapshot] = []
         self.responses: list[tuple[Envelope, MeetingSucceeded | MeetingFailed]] = []
-        self.browser_responses: list[tuple[Envelope, AppResult]] = []
-        self.browser_response_threads: list[int] = []
         self.on_register = on_register
         self.on_poll = on_poll
         self.on_wake = on_wake
@@ -136,12 +133,6 @@ class RecordingBridge:
         self.responses.append((message, result))
         return self.accept_meeting
 
-    def respond_browser_app(self, message: Envelope, result: AppResult) -> bool:
-        self.connect()
-        self.browser_responses.append((message, result))
-        self.browser_response_threads.append(threading.get_ident())
-        return True
-
     def publish(self, payload: BridgeEvent, *, epoch: str | None = None) -> None:
         self.sequence += 1
         self.messages.put(Envelope(self.epoch if epoch is None else epoch, self.sequence, payload))
@@ -163,7 +154,6 @@ class WorkRig:
     def __init__(
         self, folder: Path, *, bridge: RecordingBridge | None = None, context: Callable[[], ContextSnapshot] | None = None,
         start: bool = True, meeting: MeetingControl | None = None, on_snapshot: Callable[[WorkSnapshot], None] | None = None,
-        browser_app: Callable[[AppOperation, threading.Event, Callable[[AppResult], None]], None] | None = None,
     ) -> None:
         self.tasks = TaskStore(folder / "tasks.sqlite3")
         self.routines = RoutineStore(folder / "routines.sqlite3")
@@ -180,7 +170,7 @@ class WorkRig:
             self.tasks, self.routines, self.saved_context, self.bridge, self.create_window,
             on_snapshot=self.publish, on_done=lambda: self.finished.append(self.agent.running()),
             report_error=self.errors.append, on_start=lambda: self.started.append(self.agent.running()),
-            context=context, clock=self.clock, assistant_pid=1234, meeting=meeting, browser_app=browser_app,
+            context=context, clock=self.clock, assistant_pid=1234, meeting=meeting,
         )
         if start:
             self.agent.start_worker()
@@ -476,7 +466,7 @@ def test_routine_and_context_commands_persist_without_implicit_enablement(tmp_pa
     with work(tmp_path) as rig:
         rig.agent.command(CreateRoutine("Prepare notes", "Read the completed transcript", Once(1_000)))
         rig.agent.command(AddPreference("Tone", "Concise", "User"))
-        rig.agent.command(AddProjectNote("Toolkit", "Use the shared journal", "User", 3600))
+        rig.agent.command(AddProjectNote("Workspace", "Use the shared journal", "User", 3600))
         snapshot = rig.refresh()
         routine = snapshot.routines[0].routine
         preference = next(record for record in snapshot.context if isinstance(record, Preference))
@@ -485,7 +475,7 @@ def test_routine_and_context_commands_persist_without_implicit_enablement(tmp_pa
         rig.agent.command(UpdateRoutine(routine.id, routine.revision, "Prepare daily notes", "Summarize new work", Every(1_000, 3600)))
         rig.agent.command(EnableRoutine(routine.id))
         rig.agent.command(UpdatePreference(preference.id, "Tone", "Detailed", "User correction"))
-        rig.agent.command(UpdateProjectNote(note.id, "Toolkit", "Use the durable journal", "User correction", 7200))
+        rig.agent.command(UpdateProjectNote(note.id, "Workspace", "Use the durable journal", "User correction", 7200))
         snapshot = rig.refresh()
         updated = snapshot.routines[0].routine
         assert updated.enabled and updated.title == "Prepare daily notes"

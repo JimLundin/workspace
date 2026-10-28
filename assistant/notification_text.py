@@ -1,8 +1,13 @@
 """The answer and optional steps of a conversation bubble, without UI effects."""
 
-from .action_text import title
-from .agent_session import Answer, Failed, Succeeded, ToolActivity, ToolStatus
-from .notifications import Content, Entry, Turn, body, heading, plain, results, steps
+from dataclasses import dataclass
+
+from . import feed_items, tool_text
+from .action_text import readable
+from .agent_session import Answer, Approval, ChatMessage, ToolActivity, pending
+from .feed_items import WorkItem, action_spans, expanded_spans, link
+from .feed_triage import Assessment
+from .notifications import Content, Entry, Response, Turn, body, heading, plain, results, steps
 from .rich_text import Span, formatted
 
 
@@ -16,36 +21,95 @@ def answer(content: Content | None) -> Answer | None:
             return None
 
 
-def spans(content: Content) -> tuple[Span, ...]:
+def expandable(content: Content) -> bool:
+    return (isinstance(content, WorkItem) and isinstance(content.item, Assessment)) or (isinstance(content, Turn) and bool(steps(content)))
+
+
+def spans(content: Content, *, expanded: bool = True) -> tuple[Span, ...]:
+    if isinstance(content, WorkItem):
+        if isinstance(content.item, Assessment):
+            if not expanded:
+                return (Span(content.title, ('bold', 'feed', 'feed_title')),)
+            return expanded_spans(content)
+        return feed_items.body_spans(content)
     if isinstance(content, Turn):
-        parts = [spans(entry) for entry in results(content)]
+        parts = [spans(entry) for entry in results(content)
+                 if not (content.origin is not None and isinstance(entry, Entry) and isinstance(entry.message, ChatMessage)
+                         and entry.message.speaker == "You")]
         return tuple(span for index, part in enumerate(parts) for span in ((Span("\n\n"),) if index else ()) + part)
     text = body(content)
+    if not (isinstance(content, Entry) and isinstance(content.message, ChatMessage) and content.message.speaker == "You"):
+        text = readable(text)
     return ((Span(text),) if plain(content) else tuple(formatted(text))) if text else ()
 
 
-def details(content: Content) -> tuple[Span, ...]:
-    if not isinstance(content, Turn):
-        return ()
-    result: list[Span] = []
-    for entry in steps(content):
-        if result:
-            result.append(Span("\n\n"))
-        label, symbol, style = heading(entry), "·", "step"
-        match entry:
-            case Entry(message=ToolActivity(name=name, outcome=outcome)):
-                label = title(name)
-                match outcome:
-                    case Succeeded():
-                        symbol = "✓"
-                    case Failed():
-                        symbol, style = "!", "step_error"
-                    case ToolStatus.CANCELLED:
-                        symbol = "\u2013"
-                    case ToolStatus.RUNNING:
-                        pass
-            case _:
-                pass
-        result.append(Span(f"{symbol}  {label}\n", ("bold", style)))
-        result.append(Span(body(entry), ("step_detail",)))
-    return tuple(result)
+@dataclass(frozen=True, slots=True)
+class HistoryStep:
+    identity: str
+    spans: tuple[Span, ...]
+
+
+type Step = tool_text.Call | HistoryStep
+
+
+def step_blocks(content: Content, *, expanded: bool = True) -> tuple[Step, ...]:
+    match content:
+        case Entry(message=ToolActivity() as activity):
+            return (tool_text.presentation(activity, expanded=expanded),)
+        case Turn():
+            entries = steps(content)
+        case _:
+            return ()
+    if not expanded:
+        selected = ()
+        for entry in reversed(entries):
+            match entry:
+                case Entry(message=ToolActivity()):
+                    selected = (entry,)
+                    break
+                case _:
+                    pass
+        entries = selected
+    return tuple(step_block(entry, expanded=expanded) for entry in entries)
+
+
+def details(content: Content, *, expanded: bool = True) -> tuple[Span, ...]:
+    parts = tuple(block_spans(block) for block in step_blocks(content, expanded=expanded))
+    return tuple(span for index, part in enumerate(parts) for span in ((Span('\n\n'),) if index else ()) + part)
+
+
+def step_block(entry: Entry | Response, *, expanded: bool) -> Step:
+    match entry:
+        case Entry(message=ToolActivity() as activity):
+            return tool_text.presentation(activity, expanded=expanded)
+        case Entry(index=index) | Response(index=index):
+            return HistoryStep(f'{heading(entry)}:{index}', (Span(heading(entry) + '\n', ('bold', 'step')), *spans(entry)))
+
+
+def block_spans(block: Step) -> tuple[Span, ...]:
+    match block:
+        case tool_text.Call():
+            return tuple(tool_text.call_spans(block))
+        case HistoryStep(spans=values):
+            return values
+
+
+def options(content: Content) -> tuple[Span, ...]:
+    if isinstance(content, WorkItem):
+        return tuple(span for span in action_spans(content) if span.link)
+    entries = results(content) if isinstance(content, Turn) else (content,) if isinstance(content, Entry) else ()
+    for entry in entries:
+        if isinstance(entry, Entry) and isinstance(entry.message, Approval) and pending(entry.message):
+            return tuple(link('agent-option', label, {'request': entry.message.request_id, 'answer': label.casefold()})
+                         for label in ('Approve', 'Decline'))
+    return ()
+
+
+def title_text(content: Content) -> str:
+    if isinstance(content, Turn):
+        if content.origin is not None:
+            return content.origin.title
+        for entry in content.entries:
+            if isinstance(entry, Entry) and isinstance(entry.message, ChatMessage) and entry.message.speaker == 'You':
+                return entry.message.text
+    return heading(content)

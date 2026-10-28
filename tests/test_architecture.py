@@ -117,7 +117,7 @@ def test_explicit_test_scope_cannot_bypass_architecture_or_write_a_receipt(tmp_p
     write_tree(tmp_path, {'scripts/__init__.py': '', 'scripts/deploy_files.py': '',
                           'miryoku/__init__.py': '', 'miryoku/engine.py': 'import assistant\n', 'assistant/__init__.py': '',
                           'tests/test_requested.py': 'def test_requested():\n    raise AssertionError("must not execute")\n'})
-    for name in ('architecture.py', 'check.py', 'deploy_files.py', 'development_paths.py'):
+    for name in ('architecture.py', 'quality.py', 'check.py', 'deploy_files.py', 'development_paths.py', 'source_analysis.py'):
         shutil.copyfile(ROOT / 'scripts' / name, tmp_path / 'scripts' / name)
     subprocess.run(['git', 'init', '--quiet', str(tmp_path)], check=True, capture_output=True)
     receipt = tmp_path / 'checked.json'

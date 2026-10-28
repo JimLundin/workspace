@@ -79,7 +79,7 @@ SPECS: Final = (
                 ("version", "draft_id", "revision")),
     ),
 )
-ALLOWED: Final = frozenset((*tuple(spec.name for spec in SPECS), "ask_user", "work_actions", "reconcile_action"))
+ALLOWED: Final = frozenset((*tuple(spec.name for spec in SPECS), "ask_user", "get_current_time", "work_actions", "reconcile_action"))
 INSTRUCTIONS: Final = (
     "Prepare factual meeting notes, recorded decisions, source-linked action items and reviewable follow-up drafts from "
     "the recordings explicitly selected for this task. Read each selected recording completely with meeting_read_sources. "
