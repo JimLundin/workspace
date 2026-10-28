@@ -19,7 +19,7 @@ from assistant.communications import SourceDate, SourceDateHint, SourceDateStatu
 from assistant.communications_browser import TeamsWeb
 from assistant.llm import Json
 from tests.browser_fixture import fixture
-from tests.test_windows_browser import dispose, installed, request
+from tests.native_browser_fixture import request
 
 # Fixture-only private CDP calls preserve real freeze/launcher recovery without
 # navigating an account page. Narrow annotations below acknowledge that access.
@@ -142,32 +142,6 @@ class TracedConnection:
 
     def close(self) -> None:
         self.connection.close()
-
-
-def close_fixture(web: TeamsWeb, browser: Browser) -> None:
-    """Release only the exact native process launched by this fixture.
-
-    Preserve a failed normal close as a test failure, while still attempting
-    owned-process cleanup and profile removal before the next scenario runs.
-    """
-    process = browser.process
-    try:
-        web.close()
-    except Exception as primary:
-        # The job already requested termination. A second kill can return
-        # access denied while native exit is pending and hide the first failure.
-        if process is not None:
-            try:
-                process.wait(timeout=10)
-            except Exception as error:
-                primary.add_note(f"The captured browser root did not finish exiting: {error}")
-        try:
-            dispose(browser)
-        except Exception as error:
-            primary.add_note(f"The disposable browser profile could not be removed: {error}")
-        raise
-    else:
-        dispose(browser)
 
 
 ACTIVITY_PAGE = """<!doctype html><meta charset="utf-8"><title>Fictional Teams Activity</title>
@@ -351,38 +325,30 @@ def verify_chat_navigation_recovery(browser: Browser, web: TeamsWeb, adapter: Fi
     assert web.opening == {}
 
 
-def test_activity_and_chat_contracts_share_an_isolated_browser_with_fresh_documents(tmp_path: Path) -> None:
-    installed()
-    profile = tmp_path / "communications-profile"
-    trace = NativeTrace(profile)
-    browser = Browser(profile, opener=trace)
-    web = TeamsWeb(tmp_path / "unused", browser=browser)
+def verify_communications(browser: Browser, trace: NativeTrace) -> None:
+    """Borrow a managed lifetime; reload documents and construct fresh Teams state."""
+    unused = browser.profile.parent / "unused-teams-profile"
+    web = TeamsWeb(unused, browser=browser)
     pages = frozendict({"/activity-feed": ACTIVITY_PAGE, "/chats": PAGE,
                         "/activity": ACTIVITY_CHAT_PAGE, "/delayed": DELAYED_CHAT_PAGE, "/empty": EMPTY_CHAT_PAGE})
-    # One owner retains the disposable process/server. Each scenario reloads a
-    # real document and constructs fresh Teams state; no signed-in pages are used.
-    # Browser persistence, cancellation and attach/detach have separate lifetimes
-    # in test_windows_browser.py and are deliberately not combined here.
-    try:
-        with fixture(LAUNCHER_PAGE, pages=pages) as url:
-            opened = request(browser, "open", url=url + "activity-feed")
-            web.target = cast(str, opened["target_id"])
-            verify_activity_identity_dates_and_read_action(web, threading.Event())
+    with fixture(LAUNCHER_PAGE, pages=pages) as url:
+        opened = request(browser, "open", url=url + "activity-feed")
+        web.target = cast(str, opened["target_id"])
+        verify_activity_identity_dates_and_read_action(web, threading.Event())
 
-            opened = request(browser, "open", url=url + "activity-feed", target_id=web.target)
-            web = TeamsWeb(tmp_path / "unused", browser=browser)
-            web.target = cast(str, opened["target_id"])
-            verify_saved_activity_activation(browser, web, trace)
+        opened = request(browser, "open", url=url + "activity-feed", target_id=web.target)
+        web = TeamsWeb(unused, browser=browser)
+        web.target = cast(str, opened["target_id"])
+        verify_saved_activity_activation(browser, web, trace)
 
-            opened = request(browser, "open", url=url + "chats", target_id=web.target)
-            adapter = FixtureBrowser(browser, url)
-            web = TeamsWeb(tmp_path / "unused", browser=adapter)
-            web.target = cast(str, opened["target_id"])
-            verify_exact_chat_observation_and_reply(web, threading.Event())
+        opened = request(browser, "open", url=url + "chats", target_id=web.target)
+        adapter = FixtureBrowser(browser, url)
+        web = TeamsWeb(unused, browser=adapter)
+        web.target = cast(str, opened["target_id"])
+        verify_exact_chat_observation_and_reply(web, threading.Event())
 
-            target = web.target
-            web = TeamsWeb(tmp_path / "unused", browser=adapter)
-            web.target = target
-            verify_chat_navigation_recovery(browser, web, adapter)
-    finally:
-        close_fixture(web, browser)
+        target = web.target
+        adapter = FixtureBrowser(browser, url)
+        web = TeamsWeb(unused, browser=adapter)
+        web.target = target
+        verify_chat_navigation_recovery(browser, web, adapter)

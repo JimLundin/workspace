@@ -3,18 +3,15 @@
 import sys
 import threading
 import unittest
-from pathlib import Path
 from typing import cast
 
 if sys.platform != "win32":
     raise unittest.SkipTest("Native Edge tab groups")
 
 from assistant.browser import Browser
-from assistant.browser_session import NativeSessions, Product
 from assistant.browser_values import Group, Tab, group_of, tab_of
-from tests.browser_fixture import fixture
+from tests.native_browser_fixture import request
 from tests.test_browser import decoded
-from tests.test_windows_browser import dispose, installed, request
 
 
 def strip(browser: Browser) -> tuple[dict[int, Tab], dict[int, Group]]:
@@ -26,64 +23,59 @@ def strip(browser: Browser) -> tuple[dict[int, Tab], dict[int, Group]]:
     return {tab.id: tab for tab in tabs}, {group.id: group for group in native_groups}
 
 
-def test_native_tab_groups_ids_moves_and_disconnect_preserve_user_state(tmp_path: Path) -> None:
-    installed()
-    personal = Browser(tmp_path / "personal")
-    attached = Browser(
-        tmp_path / "unused", source=Product.EDGE,
-        opener=NativeSessions(tmp_path / "unused", profiles=lambda _: personal.profile),
-    )
+def verify_native_tabs(personal: Browser, attached: Browser, url: str) -> None:
+    """Exercise groups/moves against two ungrouped personal tabs, restoring both."""
     cancel = threading.Event()
-    try:
-        with fixture() as url:
-            original = request(personal, "open", url=url)
-            blank = request(personal, "open", url="about:blank")
-            request(attached, "attach")
-            before, _groups = strip(attached)
-            active = {tab.id for tab in before.values() if tab.active}
-            first = request(attached, "open", url=url)
-            second = request(attached, "open", url="about:blank")
-            first_id, second_id = cast(int, first["tab_id"]), cast(int, second["tab_id"])
-            tabs, groups = strip(attached)
-            group = groups[tabs[first_id].group_id]
-            assert group.title == "Workspace" and group.collapsed and group.color == "blue"
-            assert tabs[second_id].group_id == group.id
-            assert {tab.id for tab in tabs.values() if tab.active} == active, (before, tabs)
-            assert all(tabs[identity] == tab for identity, tab in before.items())
-            assert tabs[first_id].url == url and tabs[second_id].url == "about:blank"
-            assert first["target_id"] not in (original["target_id"], blank["target_id"])
-            assert "Workspace browser fixture" in str(request(attached, "snapshot", target_id=first["target_id"]))
-            control = attached.strip.control
-            assert control is not None and all(tab.url != "edge://favorites/" for tab in tabs.values())
+    catalog = request(personal, "tabs")["tabs"]
+    assert isinstance(catalog, list)
+    original_tab = next(tab for tab in catalog if isinstance(tab, dict) and tab["url"] == url)
+    blank_tab = next(tab for tab in catalog if isinstance(tab, dict) and tab["url"] == "about:blank")
+    original = request(personal, "snapshot", target_id=original_tab["id"])
+    blank = request(personal, "snapshot", target_id=blank_tab["id"])
+    request(attached, "attach")
+    before, initial_groups = strip(attached)
+    assert len(before) == 2 and not initial_groups, before
+    active = {tab.id for tab in before.values() if tab.active}
+    first = request(attached, "open", url=url)
+    second = request(attached, "open", url="about:blank")
+    first_id, second_id = cast(int, first["tab_id"]), cast(int, second["tab_id"])
+    tabs, groups = strip(attached)
+    group = groups[tabs[first_id].group_id]
+    assert group.title == "Workspace" and group.collapsed and group.color == "blue"
+    assert tabs[second_id].group_id == group.id
+    assert {tab.id for tab in tabs.values() if tab.active} == active, (before, tabs)
+    assert all(tabs[identity] == tab for identity, tab in before.items())
+    assert tabs[first_id].url == url and tabs[second_id].url == "about:blank"
+    assert first["target_id"] not in (original["target_id"], blank["target_id"])
+    assert "Workspace browser fixture" in str(request(attached, "snapshot", target_id=first["target_id"]))
+    control = attached.strip.control
+    assert control is not None and all(tab.url != "edge://favorites/" for tab in tabs.values())
 
-            # The user opens the group to collaborate. A reconnect must preserve it.
-            request(attached, "group", group_id=group.id, collapsed=False)
-            attached.request("close", {}, cancel)
-            assert personal.connection is not None
-            targets = personal.connection.call("Target.getTargets", {}, cancel)["targetInfos"]
-            assert isinstance(targets, list) and all(not isinstance(target, dict) or target["targetId"] != control.target for target in targets)
-            request(attached, "attach")
-            third = request(attached, "open", url=url)
-            tabs, groups = strip(attached)
-            assert tabs[cast(int, third["tab_id"])].group_id == group.id and not groups[group.id].collapsed
-            assert {tab.id for tab in tabs.values() if tab.active} == active, (before, tabs)
-            assert len([item for item in groups.values() if item.title == "Workspace"]) == 1
+    # The user opens the group to collaborate. A reconnect must preserve it.
+    request(attached, "group", group_id=group.id, collapsed=False)
+    attached.request("close", {}, cancel)
+    assert personal.connection is not None
+    targets = personal.connection.call("Target.getTargets", {}, cancel)["targetInfos"]
+    assert isinstance(targets, list) and all(not isinstance(target, dict) or target["targetId"] != control.target for target in targets)
+    request(attached, "attach")
+    third = request(attached, "open", url=url)
+    tabs, groups = strip(attached)
+    assert tabs[cast(int, third["tab_id"])].group_id == group.id and not groups[group.id].collapsed
+    assert {tab.id for tab in tabs.values() if tab.active} == active, (before, tabs)
+    assert len([item for item in groups.values() if item.title == "Workspace"]) == 1
 
-            closed = request(attached, "close", group_id=group.id)
-            assert closed["closed_count"] == 3
-            tabs, groups = strip(attached)
-            assert tabs == before and not groups
-            assert personal.process is not None and personal.process.poll() is None
-            assert not attached.profile.exists()
+    closed = request(attached, "close", group_id=group.id)
+    assert closed["closed_count"] == 3
+    tabs, groups = strip(attached)
+    assert tabs == before and not groups
+    assert personal.process is not None and personal.process.poll() is None
+    assert not attached.profile.exists()
 
-            # Each scenario restores its created tabs before the next one.
-            identical_urls(attached, before)
-            assert decoded(personal.request("tabs", {}, cancel).text)["tabs"]
-            moves_between_windows(personal, attached, url)
-            assert set(strip(attached)[0]) == set(before)
-    finally:
-        attached.close()
-        dispose(personal)
+    # Each scenario restores its created tabs before the next one.
+    identical_urls(attached, before)
+    assert decoded(personal.request("tabs", {}, cancel).text)["tabs"]
+    moves_between_windows(personal, attached, url)
+    assert set(strip(attached)[0]) == set(before)
 
 
 def identical_urls(attached: Browser, before: dict[int, Tab]) -> None:

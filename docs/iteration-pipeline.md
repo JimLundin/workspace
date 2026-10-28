@@ -126,12 +126,15 @@ contracts even though their fixtures use Python and dependencies. Disposable
 browser fixtures explicitly remove their profiles after closing the browser,
 with a short bounded retry for late native file release; persistent cleanup
 failures remain failures.
-Compatible DOM, screenshot and chat-navigation cases share explicitly owned
-isolated browser fixtures with page state reset between scenarios. The Teams/activity
-scenarios also reuse one disposable process and server, with a fresh document
-and Teams state for each scenario; the native activation trace is scoped to its
-current call and extra fixture tabs are removed before continuing. Persistence,
-cancellation, attach/detach and native tab/group ownership checks remain. UIA
+Three explicitly owned browser groups share compatible native lifetimes: managed
+DOM/Teams/persistence/cancellation, attached DOM/screenshots/tabs/cancellation,
+and sign-in handoff. They use five Edge launches in place of nine. Teams state
+and documents reset between scenarios; attached clients detach independently and
+their extra tabs/groups are removed before continuing. Required persistence and
+mode-change restarts, cancellation, and native ownership assertions remain.
+Run the groups with native Python directly:
+`python -m scripts.check --native --tests tests/test_windows_browser.py`.
+See [browser ownership and timing evidence](browser-test-lifetimes.md). UIA
 truncation uses a boundary-sized quote-heavy value rather than 10,000 WPF lines;
 short multiline input and independent process readback remain. Pagination
 catalogs batch irrelevant verified action rows; important effects and durable

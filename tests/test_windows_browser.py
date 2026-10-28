@@ -6,7 +6,6 @@ import sys
 import threading
 import time
 import unittest
-from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import cast
@@ -20,18 +19,17 @@ import msvcrt
 lazy from PySide6.QtGui import QImage
 
 from assistant.browser import MAX_OUTPUT, Browser
-from assistant.browser_session import NativeSessions, Product, edge_path, read_endpoint
+from assistant.browser_session import read_endpoint
 from assistant.browser_values import BrowserError, Group, InterruptedError, Tab, group_of, tab_of
 from assistant.llm import Json
 from assistant.qt_runtime import prepare
 from tests.browser_fixture import fixture
+from tests.native_browser_fixture import borrowed, disposable, dispose, request
+from tests.native_browser_tabs import verify_native_tabs
+from tests.native_communications_browser import NativeTrace, verify_communications
 from tests.test_browser import decoded
 
 prepare()
-
-
-def request(browser: Browser, operation: str, **args: Json) -> dict[str, Json]:
-    return decoded(browser.request(operation, args, threading.Event()).text)
 
 
 def control(page: dict[str, Json], name: str) -> str:
@@ -43,31 +41,6 @@ def control(page: dict[str, Json], name: str) -> str:
 
 def act(browser: Browser, target: str, page: dict[str, Json], name: str, action: str, **args: Json) -> None:
     browser.request("action", {"target_id": target, "id": control(page, name), "action": action, **args}, threading.Event())
-
-
-def installed() -> None:
-    if edge_path() is None:
-        raise unittest.SkipTest("Microsoft Edge is not installed")
-
-
-def dispose(browser: Browser, remove: Callable[[Path], None] = shutil.rmtree) -> None:
-    """Release the disposable profile owned by a browser fixture."""
-    browser.close()
-    # Windows can briefly retain a dictionary mapping after browser exit.
-    # This bounded fixture policy never hides persistent access failures.
-    delays = (0, .02, .05, .1, .2, .4, .8)
-    for attempt, delay in enumerate(delays):
-        if delay:
-            time.sleep(delay)
-        try:
-            remove(browser.profile)
-        except FileNotFoundError:
-            return
-        except PermissionError:
-            if attempt == len(delays) - 1:
-                raise
-        else:
-            return
 
 
 def test_disposable_browser_fixture_waits_for_late_native_profile_release(tmp_path: Path) -> None:
@@ -128,71 +101,63 @@ def test_endpoint_publication_recovers_after_a_native_file_lock(tmp_path: Path) 
     assert read_endpoint(tmp_path) == "ws://127.0.0.1:12345/devtools/browser/fixture"
 
 
-def test_background_edge_controls_pagination_frames_and_saved_profile(tmp_path: Path) -> None:
-    installed()
-    with fixture() as url:
-        browser = Browser(tmp_path / "profile")
-        try:
-            page = request(browser, "open", url=url)
-            target = cast(str, page["target_id"])
-            # Opening returns at main-document readiness; iframe controls need the full load event.
-            browser.request("evaluate", {
-                "target_id": target,
-                "expression": "new Promise(resolve => document.readyState === 'complete' ? resolve(true) : "
-                              "window.addEventListener('load', () => resolve(true), {once: true}))",
-            }, threading.Event())
-            assert "fixture-private" not in json.dumps(page)
-            act(browser, target, page, "Name", "fill", value='Åäö "literal"')
-            act(browser, target, page, "Choice", "select", value="beta")
-            act(browser, target, page, "Enabled", "check", checked=True)
-            act(browser, target, page, "Save", "click")
-            page = request(browser, "snapshot", target_id=target)
-            assert 'Åäö "literal":beta:true' in cast(str, page["text"])
-            act(browser, target, page, "Shadow action", "click")
-            page = request(browser, "snapshot", target_id=target)
-            assert page["title"] == "Shadow clicked"
-            frames = page["frames"]
-            assert isinstance(frames, list)
-            frame = next(row for row in frames if isinstance(row, dict) and row["name"] == "embedded")
-            inner = request(browser, "snapshot", target_id=target, frame_id=frame["id"])
-            act(browser, target, inner, "Frame action", "click", frame_id=frame["id"])
-            assert "Frame clicked" in cast(str, request(browser, "snapshot", target_id=target, frame_id=frame["id"])["text"])
-            shot = browser.request("screenshot", {"target_id": target}, threading.Event()).image
-            assert shot is not None and shot.startswith(b"\x89PNG")
-            with TestCase().assertRaisesRegex(BrowserError, "TrustedHTML"):
-                browser.request("evaluate", {"target_id": target, "expression": "document.body.innerHTML = '<p>blocked</p>'"}, threading.Event())
-            page = request(browser, "snapshot", target_id=target)
-            original = control(page, "Save")
-            request(browser, "snapshot", target_id=target)
-            with TestCase().assertRaisesRegex(BrowserError, "stale"):
-                browser.request("action", {"target_id": target, "id": original, "action": "click"}, threading.Event())
-            expression = """(() => {
-                const text = document.createElement('p'); text.textContent = 'long content '.repeat(2000); document.body.append(text);
-                for (let i = 0; i < 150; i++) {
-                    const b = document.createElement('button'); b.textContent = 'Button ' + i + ' x'.repeat(150); document.body.append(b);
-                }
-                return true;
-            })()"""
-            browser.request("evaluate", {"target_id": target, "expression": expression}, threading.Event())
-            output = browser.request("snapshot", {"target_id": target, "limit": 100}, threading.Event()).text
-            assert len(output) <= MAX_OUTPUT
-            first = decoded(output)
-            second = request(browser, "snapshot", target_id=target, offset=first["next_control_offset"], text_offset=first["next_text_offset"])
-            assert second["offset"] == first["next_control_offset"] and second["text_offset"] == first["next_text_offset"]
-            assert first["controls"] != second["controls"]
-            process = browser.process
-            browser.close()
-            assert process is not None and process.poll() is not None
-            page = request(browser, "open", url=url)
-            saved = browser.request("evaluate", {"target_id": page["target_id"], "expression": "localStorage.getItem('saved')"}, threading.Event())
-            assert cast(Json, json.loads(saved.text)) == 'Åäö "literal":beta:true'
-        finally:
-            dispose(browser)
+def verify_dom_and_saved_profile(browser: Browser, url: str) -> None:
+    page = request(browser, "open", url=url)
+    target = cast(str, page["target_id"])
+    # Opening returns at main-document readiness; iframe controls need the full load event.
+    browser.request("evaluate", {
+        "target_id": target,
+        "expression": "new Promise(resolve => document.readyState === 'complete' ? resolve(true) : "
+                      "window.addEventListener('load', () => resolve(true), {once: true}))",
+    }, threading.Event())
+    assert "fixture-private" not in json.dumps(page)
+    act(browser, target, page, "Name", "fill", value='Åäö "literal"')
+    act(browser, target, page, "Choice", "select", value="beta")
+    act(browser, target, page, "Enabled", "check", checked=True)
+    act(browser, target, page, "Save", "click")
+    page = request(browser, "snapshot", target_id=target)
+    assert 'Åäö "literal":beta:true' in cast(str, page["text"])
+    act(browser, target, page, "Shadow action", "click")
+    page = request(browser, "snapshot", target_id=target)
+    assert page["title"] == "Shadow clicked"
+    frames = page["frames"]
+    assert isinstance(frames, list)
+    frame = next(row for row in frames if isinstance(row, dict) and row["name"] == "embedded")
+    inner = request(browser, "snapshot", target_id=target, frame_id=frame["id"])
+    act(browser, target, inner, "Frame action", "click", frame_id=frame["id"])
+    assert "Frame clicked" in cast(str, request(browser, "snapshot", target_id=target, frame_id=frame["id"])["text"])
+    shot = browser.request("screenshot", {"target_id": target}, threading.Event()).image
+    assert shot is not None and shot.startswith(b"\x89PNG")
+    with TestCase().assertRaisesRegex(BrowserError, "TrustedHTML"):
+        browser.request("evaluate", {"target_id": target, "expression": "document.body.innerHTML = '<p>blocked</p>'"}, threading.Event())
+    page = request(browser, "snapshot", target_id=target)
+    original = control(page, "Save")
+    request(browser, "snapshot", target_id=target)
+    with TestCase().assertRaisesRegex(BrowserError, "stale"):
+        browser.request("action", {"target_id": target, "id": original, "action": "click"}, threading.Event())
+    expression = """(() => {
+        const text = document.createElement('p'); text.textContent = 'long content '.repeat(2000); document.body.append(text);
+        for (let i = 0; i < 150; i++) {
+            const b = document.createElement('button'); b.textContent = 'Button ' + i + ' x'.repeat(150); document.body.append(b);
+        }
+        return true;
+    })()"""
+    browser.request("evaluate", {"target_id": target, "expression": expression}, threading.Event())
+    output = browser.request("snapshot", {"target_id": target, "limit": 100}, threading.Event()).text
+    assert len(output) <= MAX_OUTPUT
+    first = decoded(output)
+    second = request(browser, "snapshot", target_id=target, offset=first["next_control_offset"], text_offset=first["next_text_offset"])
+    assert second["offset"] == first["next_control_offset"] and second["text_offset"] == first["next_text_offset"]
+    assert first["controls"] != second["controls"]
+    process = browser.process
+    browser.close()
+    assert process is not None and process.poll() is not None
+    page = request(browser, "open", url=url)
+    saved = browser.request("evaluate", {"target_id": page["target_id"], "expression": "localStorage.getItem('saved')"}, threading.Event())
+    assert cast(Json, json.loads(saved.text)) == 'Åäö "literal":beta:true'
 
 
-def test_stopping_a_pending_javascript_promise_reaps_edge(tmp_path: Path) -> None:
-    installed()
-    browser = Browser(tmp_path / "profile")
+def verify_managed_cancellation(browser: Browser) -> None:
     cancel = threading.Event()
     try:
         page = request(browser, "open", url="about:blank")
@@ -208,21 +173,26 @@ def test_stopping_a_pending_javascript_promise_reaps_edge(tmp_path: Path) -> Non
         assert process is not None and process.poll() is not None and browser.connection is None
     finally:
         cancel.set()
-        dispose(browser)
+
+
+def test_managed_browser_dom_teams_persistence_and_cancellation(tmp_path: Path) -> None:
+    profile = tmp_path / "managed-profile"
+    trace = NativeTrace(profile)
+    with disposable(Browser(profile, opener=trace)) as browser:
+        with fixture() as url:
+            verify_dom_and_saved_profile(browser, url)
+        verify_communications(browser, trace)
+        # Cancellation terminates the shared process, so it must run last.
+        verify_managed_cancellation(browser)
 
 
 def test_visible_sign_in_handoff_reuses_only_the_dedicated_profile(tmp_path: Path) -> None:
-    installed()
-    browser = Browser(tmp_path / "profile")
-    try:
-        with fixture() as url:
-            visible = request(browser, "sign_in", url=url)
-            assert visible["mode"] == "sign_in"
-            result = request(browser, "open", url=url, target_id=visible["target_id"])
-            assert result["title"] == "Workspace browser fixture"
-            assert request(browser, "tabs")["mode"] == "background"
-    finally:
-        dispose(browser)
+    with disposable(Browser(tmp_path / "sign-in-profile")) as browser, fixture() as url:
+        visible = request(browser, "sign_in", url=url)
+        assert visible["mode"] == "sign_in"
+        result = request(browser, "open", url=url, target_id=visible["target_id"])
+        assert result["title"] == "Workspace browser fixture"
+        assert request(browser, "tabs")["mode"] == "background"
 
 
 def verify_inactive_screenshots(browser: Browser, target: str, identity: int) -> None:
@@ -265,60 +235,49 @@ def verify_inactive_screenshots(browser: Browser, target: str, identity: int) ->
         assert current.group_id == before.group_id and current_group == group
 
 
-def test_attached_browser_preserves_personal_tabs_session_and_inactive_screenshots(tmp_path: Path) -> None:
-    installed()
-    personal = Browser(tmp_path / "fixture-personal")
-    attached = Browser(
-        tmp_path / "unused", source=Product.EDGE,
-        opener=NativeSessions(tmp_path / "unused", profiles=lambda _: personal.profile),
-    )
-    try:
-        with fixture() as url:
-            original = request(personal, "open", url=url)
-            personal.request("evaluate", {"target_id": original["target_id"],
-                                          "expression": "localStorage.setItem('fixture-session', 'already-signed-in')"}, threading.Event())
-            blank = request(personal, "open", url="about:blank")
-            assert request(attached, "attach")["mode"] == "attached"
-            connection = attached.connection
-            page = request(attached, "open", url=url)
-            target = cast(str, page["target_id"])
-            assert target not in (original["target_id"], blank["target_id"]) and attached.connection is connection
-            value = attached.request("evaluate", {"target_id": target, "expression": "localStorage.getItem('fixture-session')"}, threading.Event())
-            assert cast(Json, json.loads(value.text)) == "already-signed-in"
-            act(attached, target, page, "Name", "fill", value="Attached fixture")
-            act(attached, target, page, "Save", "click")
-            assert "Attached fixture" in cast(str, request(attached, "snapshot", target_id=target)["text"])
-            shot = attached.request("screenshot", {"target_id": target}, threading.Event()).image
-            assert shot is not None and shot.startswith(b"\x89PNG")
-            # Repaint the same attached, inactive tab without changing user selection.
-            target, identity = page["target_id"], page["tab_id"]
-            assert isinstance(target, str) and isinstance(identity, int)
+def verify_attached_dom(personal: Browser, attached: Browser, url: str) -> None:
+    original = request(personal, "open", url=url)
+    personal.request("evaluate", {"target_id": original["target_id"],
+                                  "expression": "localStorage.setItem('fixture-session', 'already-signed-in')"}, threading.Event())
+    blank = request(personal, "open", url="about:blank")
+    assert request(attached, "attach")["mode"] == "attached"
+    connection = attached.connection
+    page = request(attached, "open", url=url)
+    target = cast(str, page["target_id"])
+    assert target not in (original["target_id"], blank["target_id"]) and attached.connection is connection
+    value = attached.request("evaluate", {"target_id": target, "expression": "localStorage.getItem('fixture-session')"}, threading.Event())
+    assert cast(Json, json.loads(value.text)) == "already-signed-in"
+    act(attached, target, page, "Name", "fill", value="Attached fixture")
+    act(attached, target, page, "Save", "click")
+    assert "Attached fixture" in cast(str, request(attached, "snapshot", target_id=target)["text"])
+    shot = attached.request("screenshot", {"target_id": target}, threading.Event()).image
+    assert shot is not None and shot.startswith(b"\x89PNG")
+    # Repaint the same attached, inactive tab without changing user selection.
+    target, identity = page["target_id"], page["tab_id"]
+    assert isinstance(target, str) and isinstance(identity, int)
 
-            verify_inactive_screenshots(attached, target, identity)
+    verify_inactive_screenshots(attached, target, identity)
 
-            assert "remain open" in attached.request("close", {}, threading.Event()).text
-            rows = request(personal, "tabs")["tabs"]
-            assert isinstance(rows, list)
-            tabs = [tab for tab in rows if isinstance(tab, dict)]
-            assert {cast(str, original["target_id"]), cast(str, blank["target_id"]), target} <= {cast(str, tab["id"]) for tab in tabs}
-            assert next(tab for tab in tabs if tab["id"] == blank["target_id"])["url"] == "about:blank"
-            assert personal.process is not None and personal.process.poll() is None
-            assert not attached.profile.exists()
-    finally:
-        attached.close()
-        dispose(personal)
+    assert "remain open" in attached.request("close", {}, threading.Event()).text
+    rows = request(personal, "tabs")["tabs"]
+    assert isinstance(rows, list)
+    tabs = [tab for tab in rows if isinstance(tab, dict)]
+    assert {cast(str, original["target_id"]), cast(str, blank["target_id"]), target} <= {cast(str, tab["id"]) for tab in tabs}
+    assert next(tab for tab in tabs if tab["id"] == blank["target_id"])["url"] == "about:blank"
+    assert personal.process is not None and personal.process.poll() is None
+    assert not attached.profile.exists()
+    # Detach preserves the created tab; explicitly remove it before the next
+    # scenario so native tab/group baselines contain only the two personal tabs.
+    request(personal, "close", target_id=target)
 
 
-def test_stopping_an_attached_action_detaches_without_terminating_the_browser(tmp_path: Path) -> None:
-    installed()
-    personal = Browser(tmp_path / "fixture-personal")
-    attached = Browser(
-        tmp_path / "unused", source=Product.EDGE,
-        opener=NativeSessions(tmp_path / "unused", profiles=lambda _: personal.profile),
-    )
+def verify_attached_cancellation(personal: Browser, attached: Browser) -> None:
     cancel = threading.Event()
     try:
-        page = request(personal, "open", url="about:blank")
+        tabs = request(personal, "tabs")["tabs"]
+        assert isinstance(tabs, list)
+        blank = next(tab for tab in tabs if isinstance(tab, dict) and tab["url"] == "about:blank")
+        page = request(personal, "snapshot", target_id=blank["id"])
         request(attached, "attach")
         with ThreadPoolExecutor(max_workers=1) as worker:
             pending = worker.submit(attached.request, "evaluate",
@@ -331,5 +290,16 @@ def test_stopping_an_attached_action_detaches_without_terminating_the_browser(tm
         assert request(personal, "snapshot", target_id=page["target_id"])["url"] == "about:blank"
     finally:
         cancel.set()
-        attached.close()
-        dispose(personal)
+
+
+def test_attached_browser_dom_tabs_and_cancellation_share_a_personal_browser(tmp_path: Path) -> None:
+    with disposable(Browser(tmp_path / "fixture-personal")) as personal, fixture() as url:
+        with borrowed(personal) as attached:
+            verify_attached_dom(personal, attached, url)
+        process = personal.process
+        assert process is not None and process.poll() is None
+        with borrowed(personal) as attached:
+            verify_native_tabs(personal, attached, url)
+        assert personal.process is process and process.poll() is None
+        with borrowed(personal) as attached:
+            verify_attached_cancellation(personal, attached)

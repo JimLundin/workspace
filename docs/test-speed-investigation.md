@@ -1,5 +1,9 @@
 # Why the full Windows suite became slow
 
+The [current browser lifetime structure](browser-test-lifetimes.md) removes four
+more Edge launches and records the complete 7m 45s native cost budget. The
+observations below retain their original source snapshots and timing limits.
+
 ## Retained six-minute full result and Teams fixture consolidation
 
 The completed worker-overlap report mentioned below actually records
@@ -492,7 +496,7 @@ explicitly not a whole-project redundancy score. [1,18]
     [LLM contracts](../tests/test_llm.py), [tool vs SDK rig](../tests/test_agent.py).
 16. [Store cases](../tests/test_work_store.py), [WorkExecution pagination](../tests/test_work_actions.py),
     [transaction owner](../automation/store.py), [batch seeding](../tests/work_fixture.py).
-17. [Native browser](../tests/test_windows_browser.py), [native IDs/groups](../tests/test_windows_browser_tabs.py),
+17. [Native browser](../tests/test_windows_browser.py), [native IDs/groups](../tests/native_browser_tabs.py),
     [UIA scopes/batching](../tests/test_windows_computer.py).
 18. [Mutation evidence](testing-mutations.json), [owned-property scope](property-testing.md),
     [project test policy](../AGENTS.md).

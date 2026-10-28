@@ -34,7 +34,8 @@ fresh date on each invocation.
 
 `tests/test_feed_dates.py` covers the model request, voice snapshot, provider
 adapter, idle-day rollover, saved-review policy and date corrections.
-`tests/test_windows_communications_browser.py` verifies timestamp extraction and
-relative labels in an isolated fictional native Edge page. A synthetic check
+[The native Teams scenarios](../tests/native_communications_browser.py), called
+by `tests/test_windows_browser.py`, verify timestamp extraction and relative
+labels in an isolated fictional native Edge page. A synthetic check
 against the configured model kept an expired reminder quiet while retaining an
 unfinished request and an upcoming deadline. It used no personal message text.
