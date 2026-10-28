@@ -1,0 +1,3 @@
+from ctypes import _CArgObject
+
+def DwmSetWindowAttribute(hwnd: int, attribute: int, value: _CArgObject, size: int) -> int: ...

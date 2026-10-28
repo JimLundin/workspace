@@ -5,7 +5,6 @@ import json
 from dataclasses import dataclass, field, replace
 from datetime import UTC, date, datetime
 from enum import Enum
-from typing import cast
 
 from .communications import Delivery, Feed, SourceDate, SourceDateStatus, SourceTime, TeamsActivity, UpdateKind, WindowsNotice, chat_tickets
 from .console_requests import Request, State, list_value, object_value, text
@@ -94,7 +93,7 @@ def collect(feed: Feed, requests: tuple[Request, ...]) -> tuple[Candidate, ...]:
     for ticket in chat_tickets(feed):
         chat = feed.conversation(ticket.conversation)
         for message in ticket.messages:
-            key = json.dumps([message.conversation, message.identity], separators=(',', ':'))
+            key = json.dumps((message.conversation, message.identity), separators=(',', ':'))
             result.append(candidate('chat', key, (chat.title if chat else 'Chat') + ' · ' + message.sender,
                                     message.text, message.created_at))
     for update in feed.updates:
@@ -211,7 +210,8 @@ def solution_task(item: Assessment, option: Solution) -> tuple[str, str]:
 
 def decode(raw: str, candidates: tuple[Candidate, ...]) -> tuple[Assessment, ...]:
     """A whole batch commits together; omissions, duplicates and invented evidence fail closed."""
-    values = object_value(cast(object, json.loads(raw)))
+    decoded: object = json.loads(raw)
+    values = object_value(decoded)
     groups = list_value(values.get('items'))
     by_id = {item.identity: item for item in candidates}
     seen: set[str] = set()
@@ -402,7 +402,8 @@ def request_context(prompt: str) -> FeedRequest | None:
     if not marker:
         return None
     try:
-        data = object_value(cast(object, json.loads(payload)))
+        decoded: object = json.loads(payload)
+        data = object_value(decoded)
         key, title = text(data.get('item'), 128), text(data.get('title'), 160)
     except ValueError:
         return None

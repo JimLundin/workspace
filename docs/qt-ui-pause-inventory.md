@@ -5,6 +5,11 @@ The feed-index fix removes one multi-second cause; it does not remove toolbar
 geometry, long-reply processing or first-use surface costs. The next two
 priorities are toolbar composition and long-reply formatting/allocation.
 
+The subsequent [fixed-event delay ledger](workspace-ui-delay-ledger.md) tracks
+each reduction against the same six workloads and 108 delivered updates. It
+retains unsuccessful intermediate changes and outliers. The table below is the
+initial inventory; the ledger holds current measurements and remaining work.
+
 ## What a pause means
 
 The assistant's windows, input delivery, waveform display and animation timers
@@ -59,8 +64,12 @@ profile summaries. All content was fictional. The profile adds substantial
 overhead, so its durations are used to locate work and its call counts to expose
 repetition; its 286–575 ms timer gaps are not ordinary-runtime timings. Nested
 event pumping and background/native operations complicate cumulative attribution.
-Only known UI-owner call paths support the attribution above; background pixel
-sampling still runs on its worker.
+The pinned Python 3.15 cProfile also records worker-thread activity. Its
+cumulative durations include background queue/pixel waits and cannot be assigned
+to Qt callbacks. Counts and source paths identify repeated work, but even these
+must be interpreted with their actual thread ownership. Background pixel
+sampling still runs on its worker. The later ledger uses explicitly
+thread-filtered Qt/native tracing separately from unprofiled measurements.
 
 The 1,394.58 ms capsule-run outlier exceeds its usual action costs. It is retained
 as an **unattributed delay**: the current evidence cannot apportion it between

@@ -1,8 +1,7 @@
 """Vector path interop for Windows composition; no raster capture or extra runtime."""
-# pyright: reportUnknownMemberType=false, reportUnknownArgumentType=false, reportUnknownVariableType=false, reportMissingTypeStubs=false
 
 import ctypes
-from typing import Any, assert_never
+from typing import Protocol, assert_never
 
 from win32more import FAILED, ComClass, WinError
 from win32more.Windows.Graphics import IGeometrySource2D
@@ -15,36 +14,42 @@ from .contours import Contour, Curve, End, Line, Move
 
 
 def check(result: object) -> None:
-    if not isinstance(result, int):
-        raise TypeError("Windows returned an invalid HRESULT.")
-    if FAILED(result):
-        raise WinError(result)
+    match result:
+        case int() as value:
+            if FAILED(value):
+                raise WinError(value)
+        case _:
+            raise TypeError("Windows returned an invalid HRESULT.")
 
 
-class GeometrySource(ComClass, IGeometrySource2D, IGeometrySource2DInterop):  # type: ignore[misc, no-any-unimported]  # pyright: ignore[reportIncompatibleVariableOverride]
+class GeometryOutput(Protocol):
+    """The native callback only writes a COM pointer to its output slot."""
+
+    def __setitem__(self, index: int, geometry: ID2D1Geometry, /) -> None: ...
+
+
+class GeometrySource(ComClass, IGeometrySource2D, IGeometrySource2DInterop):
     """Author the SDK's COM descriptors with callbacks, inside the native boundary."""
-    def __init__(self, geometry: object) -> None:
+    def __init__(self, geometry: ID2D1Geometry) -> None:
         super().__init__()
-        self.geometry: Any = geometry
+        self.geometry: ID2D1Geometry = geometry
 
-    def GetGeometry(self, value: object) -> int:  # noqa: N802  # pyright: ignore[reportIncompatibleVariableOverride]
-        destination: Any = value
+    def GetGeometry(self, value: GeometryOutput) -> int:  # noqa: N802 -- Required native callback.
         self.geometry.AddRef()
-        destination[0] = self.geometry
+        value[0] = self.geometry
         return 0
 
-    def TryGetGeometryUsingFactory(self, factory: object, value: object) -> int:  # noqa: N802  # pyright: ignore[reportIncompatibleVariableOverride]
-        destination: Any = value
-        destination[0] = ID2D1Geometry()
+    def TryGetGeometryUsingFactory(self, factory: ID2D1Factory, value: GeometryOutput) -> int:  # noqa: N802 -- Required native callback.
+        value[0] = ID2D1Geometry()
         return 0  # Let the compositor use GetGeometry for its own factory.
 
 
-def composition_path(contour: Contour, scale: float) -> object:
-    factory: Any = ID2D1Factory(own=True)
-    check(D2D1CreateFactory(0, ctypes.byref(ID2D1Factory._iid_), None, ctypes.byref(factory)))  # pyright: ignore[reportPrivateUsage]
-    geometry: Any = ID2D1PathGeometry(own=True)
+def composition_path(contour: Contour, scale: float) -> CompositionPath:
+    factory = ID2D1Factory(own=True)
+    check(D2D1CreateFactory(0, ctypes.byref(ID2D1Factory._iid_), None, ctypes.byref(factory)))
+    geometry = ID2D1PathGeometry(own=True)
     check(factory.CreatePathGeometry(geometry))
-    sink: Any = ID2D1GeometrySink(own=True)
+    sink = ID2D1GeometrySink(own=True)
     check(geometry.Open(sink))
     for node in contour:
         match node:
@@ -60,4 +65,4 @@ def composition_path(contour: Contour, scale: float) -> object:
             case _:
                 assert_never(node)
     check(sink.Close())
-    return CompositionPath(GeometrySource(geometry).as_(IGeometrySource2D))
+    return CompositionPath(GeometrySource(geometry.as_(ID2D1Geometry)).as_(IGeometrySource2D))

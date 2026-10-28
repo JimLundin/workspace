@@ -5,6 +5,8 @@ toolbar geometry, long-reply formatting/GC, feed replacement, first use and
 unattributed delays. It retains repeated native timing evidence and concrete
 next actions. This feed fix has been rebased onto private snapshot `1a1cafe` of
 the coordinating agent's test-speed work; the shared checkout remains untouched.
+The [fixed-event delay ledger](workspace-ui-delay-ledger.md) records subsequent
+toolbar changes and total measured stall excess across the inventory workloads.
 
 The assistant can stall its entire Qt thread when the personal work feed changes.
 The confirmed cause is repeated source projection before rendering: each proposal

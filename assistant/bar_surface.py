@@ -1,5 +1,4 @@
 """Small toolbar capsules using the conversation messages' native glass and ink."""
-# pyright: reportUnknownMemberType=false, reportUnknownArgumentType=false
 
 from collections.abc import Callable
 from typing import assert_never
@@ -48,6 +47,13 @@ class Pill(QtWidgets.QWidget):
         self.anchor = QtCore.QPoint()
         self.origin = 0
         self.loop = loop
+        # This Qt-owned timer merges native publications until the final state
+        # of the current event turn. Layout/animation can change several joined
+        # capsules before one painted frame; native COM paths must not observe
+        # those intermediate shapes. The parent cancels delivery on disposal.
+        self.glass_timer: QtCore.QTimer = QtCore.QTimer(self)
+        self.glass_timer.setSingleShot(True)
+        self.glass_timer.timeout.connect(self.publish_glass)
         self.layer: Glass | None = None
         self.colors = palette(Tone.REPLY)
         self.ink = Ink()
@@ -83,7 +89,7 @@ class Pill(QtWidgets.QWidget):
         size = (self.width(), self.height(), self.joined_left, self.joined_right)
         if self.outline_size != size:
             self.outline_size = size
-            self.outline = segment(*size[:2], left=self.joined_left, right=self.joined_right)
+            self.outline = segment(size[0], size[1], left=self.joined_left, right=self.joined_right)
         return self.outline if self.attached else None
 
     def connections(self, *, left: bool = False, right: bool = False) -> None:
@@ -149,7 +155,8 @@ QToolButton:focus {{ border-color: {self.colors.edge}; }}
 QToolTip {{ background: {self.colors.surface}; color: {self.ink.foreground}; border: 1px solid {self.colors.edge}; padding: 6px; }}
 """)
         for button, name in self.buttons:
-            button.setIcon(icon(name, self.ink.error if button.property("recording") is True else self.ink.foreground))
+            recording: object = button.property("recording")
+            button.setIcon(icon(name, self.ink.error if recording is True else self.ink.foreground))
 
     def paintEvent(self, event: QtGui.QPaintEvent) -> None:  # noqa: N802
         painter = QtGui.QPainter(self)
@@ -223,6 +230,12 @@ QToolTip {{ background: {self.colors.surface}; color: {self.ink.foreground}; bor
     def sync_glass(self) -> None:
         if self.isVisible():
             self.bounds = windows.outer_rect(int(self.winId()))
+            if not self.glass_timer.isActive():
+                self.glass_timer.start(0)
+
+    def publish_glass(self) -> None:
+        if self.isVisible():
+            self.bounds = windows.outer_rect(int(self.winId()))
             if self.glass and self.layer is not None:
                 shape = self.shape()
                 self.layer.position(self.bounds, self.devicePixelRatioF(), self.alpha, attached=self.attached,
@@ -230,6 +243,7 @@ QToolTip {{ background: {self.colors.surface}; color: {self.ink.foreground}; bor
                 self.layer.show(int(self.winId()))
 
     def dispose(self) -> None:
+        self.glass_timer.stop()
         self.hide()
         if self.layer is not None:
             self.layer.close()

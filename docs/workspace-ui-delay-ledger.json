@@ -1,0 +1,6359 @@
+{
+  "kind": "Workspace fixed-event UI delay ledger",
+  "date": "2026-10-28",
+  "baseline_commit": "64c4476a185e09a431b35d8e2a6b73e4424dd7eb",
+  "test_speed_base": "1a1cafe",
+  "runtime": "Native Windows CPython 3.15.1 / Qt 6.12; GC enabled",
+  "metric": "sum(max(0, heartbeat_gap_ms - 50)); unrelated precise 10 ms Qt timer",
+  "warm_metric": "same metric after the first two delivered actions plus 100 ms; later shapes may still be first-use",
+  "workloads": [
+    "capsules",
+    "keyboard",
+    "long-stream",
+    "reset",
+    "tools",
+    "projection"
+  ],
+  "updates_per_workload": 18,
+  "updates_per_complete_catalog": 108,
+  "settle_ms": 1500,
+  "next_action_delay_after_return_ms": 500,
+  "final_observation_after_return_ms": 500,
+  "probe": "%TEMP%/workspace-qt-stalls-probes/pause_inventory.py",
+  "probe_sha256": "05df3ebfab640b4f0c5a8b82afce509921c766ac54a6f3fde05c3655b15d9b3c",
+  "source_sha256": {
+    "before": {
+      "assistant/bar_surface.py": "572fbef1953a531010accd1473208e741ca53e9b6dcedaab505a557901d93a02",
+      "assistant/feed_triage.py": "7715f0bb831d6db532b2a03954bf11630b77a3b49c72f2e91c68b4d06df40d39",
+      "assistant/notifications.py": "5e89773d0bef4bd170b104511499c3f949ee6175985a703b669b0cbaea66309b",
+      "pyproject.toml": "24738124753847f83cf9cbfb44c2d42f43d1328cfd1bd9ad386e0320bd81b139",
+      "winapi/composition.py": "38bf630bc4c030870c66124ef7d3dfd6f274525444e53f5c68d2f74fb1ba06f7",
+      "winapi/composition_paths.py": "79114283769236babda54d1059147319e328e6356f8b20fe89aa227d106d930e"
+    },
+    "toolbar-stack": {
+      "assistant/bar_surface.py": "58871aec44d0b3c3e655f57be27d618298ec3b924e8f72ce5ce51d5a46966ed6",
+      "assistant/feed_triage.py": "7715f0bb831d6db532b2a03954bf11630b77a3b49c72f2e91c68b4d06df40d39",
+      "assistant/notifications.py": "5e89773d0bef4bd170b104511499c3f949ee6175985a703b669b0cbaea66309b",
+      "pyproject.toml": "94d07139d02e5e8a3139a65e46a4d03a9e0612b58844b4795b252db3a6b113ab",
+      "typings/win32more/Windows/Foundation/Numerics/__init__.pyi": "3060ef5fec4c63931a8130483e1c3f2a322c740101e2c6cb1f701dfcc3cdde2c",
+      "typings/win32more/Windows/Foundation/__init__.pyi": "371dff30d77e5b33bd976201ce5a2e7170ae36c28094037d43dbd192938fafff",
+      "typings/win32more/Windows/Graphics/__init__.pyi": "93bab81742d0a48d3c855a18dca5ea153eb157eebde583a63ddf4759b9125823",
+      "typings/win32more/Windows/System/__init__.pyi": "37434858753ce3bf4b1fc44aaa14431882e9dd41467b1945efd66d128cbbd1e4",
+      "typings/win32more/Windows/UI/Composition/Desktop/__init__.pyi": "767098847ac3a9acd6e034d4c2dc9d68939f935886e68d933655d00e56a1667a",
+      "typings/win32more/Windows/UI/Composition/__init__.pyi": "1236755b60d8d7455301ded1beeef3f3289c0f1dc5a83e61a00197fbaf5f3232",
+      "typings/win32more/Windows/UI/__init__.pyi": "6d0f11a49e6cd81c414a340c33993dedc00df0be6f12c70b2da8b4e6e74d125b",
+      "typings/win32more/Windows/Win32/Foundation/__init__.pyi": "0784243f912b9c7535360d3b2fd55191ed43d1131cc5f1773c4368b6e170ef28",
+      "typings/win32more/Windows/Win32/Graphics/Direct2D/Common/__init__.pyi": "3d4fddaaae047b9661291873dfbc51f8f1ba3ce9b4cb8f79d6d269904de7e2ed",
+      "typings/win32more/Windows/Win32/Graphics/Direct2D/__init__.pyi": "45341ec4f7946e04d6347af2c507ee4f43642c23aababcb542af199df643beaa",
+      "typings/win32more/Windows/Win32/Graphics/Dwm/__init__.pyi": "13977bc12632230a17856de32fd17d99916b79acd52215dcbb4c0d594e92d589",
+      "typings/win32more/Windows/Win32/System/LibraryLoader/__init__.pyi": "202df6ff6c45dc2b769f4f5fa36fa84e6b06160b7c093216784501da1268e862",
+      "typings/win32more/Windows/Win32/System/WinRT/Composition/__init__.pyi": "aab40234eac887bbecbada8f4308915714c6760a569d7e562d10d2b3cac11c6b",
+      "typings/win32more/Windows/Win32/System/WinRT/Graphics/Direct2D/__init__.pyi": "ee005f7b3d6fc7955d6fc58f31449235fa0fa9bb37ba2c97d86ff81f9fe9536b",
+      "typings/win32more/Windows/Win32/System/WinRT/__init__.pyi": "e48e3c084b0dac748811d132cabfbddc573581e8052a3f71a84c4f4e7da5f7c3",
+      "typings/win32more/Windows/Win32/UI/WindowsAndMessaging/__init__.pyi": "ff75144873b43be56fdf01a49793806c5344e86d140983955f6563c0de1d8643",
+      "typings/win32more/__init__.pyi": "938fa9b60b09dc3c39537c694eecbe64cce2be7fc65c1389ab8dc98e4a4054df",
+      "typings/win32more/_comclass.pyi": "8990c528c4b0d5ba2cd51e0b229c48ae4db71209af919f12ebaf69308885a2b3",
+      "typings/win32more/_win32.pyi": "2010f4d8e3aca8977cccd67a903c12eea2854622a6fba3cc0103cd0c6957a93f",
+      "winapi/composition.py": "eb364386ae5fd8c1c1d916953a844750e7524baddf29a513a17a89ff6cbb841f",
+      "winapi/composition_paths.py": "f39d202904d03a5e0740542cb35ad8088fe7dee9812fac872d83d79c7ebd1b99"
+    },
+    "toolbar-geometry": {
+      "assistant/bar_surface.py": "58871aec44d0b3c3e655f57be27d618298ec3b924e8f72ce5ce51d5a46966ed6",
+      "assistant/feed_triage.py": "7715f0bb831d6db532b2a03954bf11630b77a3b49c72f2e91c68b4d06df40d39",
+      "assistant/notifications.py": "5e89773d0bef4bd170b104511499c3f949ee6175985a703b669b0cbaea66309b",
+      "pyproject.toml": "94d07139d02e5e8a3139a65e46a4d03a9e0612b58844b4795b252db3a6b113ab",
+      "typings/win32more/Windows/Foundation/Numerics/__init__.pyi": "3060ef5fec4c63931a8130483e1c3f2a322c740101e2c6cb1f701dfcc3cdde2c",
+      "typings/win32more/Windows/Foundation/__init__.pyi": "371dff30d77e5b33bd976201ce5a2e7170ae36c28094037d43dbd192938fafff",
+      "typings/win32more/Windows/Graphics/__init__.pyi": "93bab81742d0a48d3c855a18dca5ea153eb157eebde583a63ddf4759b9125823",
+      "typings/win32more/Windows/System/__init__.pyi": "37434858753ce3bf4b1fc44aaa14431882e9dd41467b1945efd66d128cbbd1e4",
+      "typings/win32more/Windows/UI/Composition/Desktop/__init__.pyi": "767098847ac3a9acd6e034d4c2dc9d68939f935886e68d933655d00e56a1667a",
+      "typings/win32more/Windows/UI/Composition/__init__.pyi": "b59bb449c21cb16cca2b23557e3b5d71f6171415aa957fcc377a550da3de6f45",
+      "typings/win32more/Windows/UI/__init__.pyi": "6d0f11a49e6cd81c414a340c33993dedc00df0be6f12c70b2da8b4e6e74d125b",
+      "typings/win32more/Windows/Win32/Foundation/__init__.pyi": "0784243f912b9c7535360d3b2fd55191ed43d1131cc5f1773c4368b6e170ef28",
+      "typings/win32more/Windows/Win32/Graphics/Direct2D/Common/__init__.pyi": "3d4fddaaae047b9661291873dfbc51f8f1ba3ce9b4cb8f79d6d269904de7e2ed",
+      "typings/win32more/Windows/Win32/Graphics/Direct2D/__init__.pyi": "45341ec4f7946e04d6347af2c507ee4f43642c23aababcb542af199df643beaa",
+      "typings/win32more/Windows/Win32/Graphics/Dwm/__init__.pyi": "13977bc12632230a17856de32fd17d99916b79acd52215dcbb4c0d594e92d589",
+      "typings/win32more/Windows/Win32/System/LibraryLoader/__init__.pyi": "202df6ff6c45dc2b769f4f5fa36fa84e6b06160b7c093216784501da1268e862",
+      "typings/win32more/Windows/Win32/System/WinRT/Composition/__init__.pyi": "aab40234eac887bbecbada8f4308915714c6760a569d7e562d10d2b3cac11c6b",
+      "typings/win32more/Windows/Win32/System/WinRT/Graphics/Direct2D/__init__.pyi": "ee005f7b3d6fc7955d6fc58f31449235fa0fa9bb37ba2c97d86ff81f9fe9536b",
+      "typings/win32more/Windows/Win32/System/WinRT/__init__.pyi": "e48e3c084b0dac748811d132cabfbddc573581e8052a3f71a84c4f4e7da5f7c3",
+      "typings/win32more/Windows/Win32/UI/WindowsAndMessaging/__init__.pyi": "ff75144873b43be56fdf01a49793806c5344e86d140983955f6563c0de1d8643",
+      "typings/win32more/__init__.pyi": "938fa9b60b09dc3c39537c694eecbe64cce2be7fc65c1389ab8dc98e4a4054df",
+      "typings/win32more/_comclass.pyi": "8990c528c4b0d5ba2cd51e0b229c48ae4db71209af919f12ebaf69308885a2b3",
+      "typings/win32more/_win32.pyi": "2010f4d8e3aca8977cccd67a903c12eea2854622a6fba3cc0103cd0c6957a93f",
+      "winapi/composition.py": "bc9103a4157ff47bc7220fa55a3a24975d6f0e877f1d201e66a195a72e66a677",
+      "winapi/composition_paths.py": "f39d202904d03a5e0740542cb35ad8088fe7dee9812fac872d83d79c7ebd1b99"
+    },
+    "toolbar-changed": {
+      "assistant/bar_surface.py": "58871aec44d0b3c3e655f57be27d618298ec3b924e8f72ce5ce51d5a46966ed6",
+      "assistant/feed_triage.py": "7715f0bb831d6db532b2a03954bf11630b77a3b49c72f2e91c68b4d06df40d39",
+      "assistant/notifications.py": "5e89773d0bef4bd170b104511499c3f949ee6175985a703b669b0cbaea66309b",
+      "pyproject.toml": "b30936b3061aa44e3c66e9170185bd819d3b5b18235b3617d6ebbb222df4c1a3",
+      "typings/win32more/Windows/Foundation/Numerics/__init__.pyi": "3060ef5fec4c63931a8130483e1c3f2a322c740101e2c6cb1f701dfcc3cdde2c",
+      "typings/win32more/Windows/Foundation/__init__.pyi": "371dff30d77e5b33bd976201ce5a2e7170ae36c28094037d43dbd192938fafff",
+      "typings/win32more/Windows/Graphics/__init__.pyi": "93bab81742d0a48d3c855a18dca5ea153eb157eebde583a63ddf4759b9125823",
+      "typings/win32more/Windows/System/__init__.pyi": "37434858753ce3bf4b1fc44aaa14431882e9dd41467b1945efd66d128cbbd1e4",
+      "typings/win32more/Windows/UI/Composition/Desktop/__init__.pyi": "767098847ac3a9acd6e034d4c2dc9d68939f935886e68d933655d00e56a1667a",
+      "typings/win32more/Windows/UI/Composition/__init__.pyi": "b59bb449c21cb16cca2b23557e3b5d71f6171415aa957fcc377a550da3de6f45",
+      "typings/win32more/Windows/UI/__init__.pyi": "6d0f11a49e6cd81c414a340c33993dedc00df0be6f12c70b2da8b4e6e74d125b",
+      "typings/win32more/Windows/Win32/Foundation/__init__.pyi": "0784243f912b9c7535360d3b2fd55191ed43d1131cc5f1773c4368b6e170ef28",
+      "typings/win32more/Windows/Win32/Graphics/Direct2D/Common/__init__.pyi": "3d4fddaaae047b9661291873dfbc51f8f1ba3ce9b4cb8f79d6d269904de7e2ed",
+      "typings/win32more/Windows/Win32/Graphics/Direct2D/__init__.pyi": "45341ec4f7946e04d6347af2c507ee4f43642c23aababcb542af199df643beaa",
+      "typings/win32more/Windows/Win32/Graphics/Dwm/__init__.pyi": "13977bc12632230a17856de32fd17d99916b79acd52215dcbb4c0d594e92d589",
+      "typings/win32more/Windows/Win32/System/LibraryLoader/__init__.pyi": "202df6ff6c45dc2b769f4f5fa36fa84e6b06160b7c093216784501da1268e862",
+      "typings/win32more/Windows/Win32/System/WinRT/Composition/__init__.pyi": "aab40234eac887bbecbada8f4308915714c6760a569d7e562d10d2b3cac11c6b",
+      "typings/win32more/Windows/Win32/System/WinRT/Graphics/Direct2D/__init__.pyi": "ee005f7b3d6fc7955d6fc58f31449235fa0fa9bb37ba2c97d86ff81f9fe9536b",
+      "typings/win32more/Windows/Win32/System/WinRT/__init__.pyi": "e48e3c084b0dac748811d132cabfbddc573581e8052a3f71a84c4f4e7da5f7c3",
+      "typings/win32more/Windows/Win32/UI/WindowsAndMessaging/__init__.pyi": "ff75144873b43be56fdf01a49793806c5344e86d140983955f6563c0de1d8643",
+      "typings/win32more/__init__.pyi": "938fa9b60b09dc3c39537c694eecbe64cce2be7fc65c1389ab8dc98e4a4054df",
+      "typings/win32more/_comclass.pyi": "8990c528c4b0d5ba2cd51e0b229c48ae4db71209af919f12ebaf69308885a2b3",
+      "typings/win32more/_win32.pyi": "2010f4d8e3aca8977cccd67a903c12eea2854622a6fba3cc0103cd0c6957a93f",
+      "winapi/composition.py": "e0c023ea71628dabe9266d07cbbc2f7e27354fd7e15fedd8837319e7b0d40bcd",
+      "winapi/composition_paths.py": "f39d202904d03a5e0740542cb35ad8088fe7dee9812fac872d83d79c7ebd1b99"
+    },
+    "toolbar-bound": {
+      "assistant/bar_surface.py": "2dad562896fdd0c650cab0a045372f312ae3625753300e1e24b9141f95505ac0",
+      "assistant/feed_triage.py": "ae023f19dc728fdaafd5995dbcb6a3f2c832afb7d00d8a212595019a9f057c58",
+      "assistant/notifications.py": "984670cc9835e4e4dafa9bf0e5a27eb97f48af9f2577205683ce6427f04f0652",
+      "pyproject.toml": "b30936b3061aa44e3c66e9170185bd819d3b5b18235b3617d6ebbb222df4c1a3",
+      "typings/win32more/Windows/Foundation/Numerics/__init__.pyi": "3060ef5fec4c63931a8130483e1c3f2a322c740101e2c6cb1f701dfcc3cdde2c",
+      "typings/win32more/Windows/Foundation/__init__.pyi": "371dff30d77e5b33bd976201ce5a2e7170ae36c28094037d43dbd192938fafff",
+      "typings/win32more/Windows/Graphics/__init__.pyi": "93bab81742d0a48d3c855a18dca5ea153eb157eebde583a63ddf4759b9125823",
+      "typings/win32more/Windows/System/__init__.pyi": "37434858753ce3bf4b1fc44aaa14431882e9dd41467b1945efd66d128cbbd1e4",
+      "typings/win32more/Windows/UI/Composition/Desktop/__init__.pyi": "767098847ac3a9acd6e034d4c2dc9d68939f935886e68d933655d00e56a1667a",
+      "typings/win32more/Windows/UI/Composition/__init__.pyi": "1a36185524928fc3e458cc3a0e71a90eca4952ed38e83682bd2c9fcb0b0e70ba",
+      "typings/win32more/Windows/UI/__init__.pyi": "6d0f11a49e6cd81c414a340c33993dedc00df0be6f12c70b2da8b4e6e74d125b",
+      "typings/win32more/Windows/Win32/Foundation/__init__.pyi": "0784243f912b9c7535360d3b2fd55191ed43d1131cc5f1773c4368b6e170ef28",
+      "typings/win32more/Windows/Win32/Graphics/Direct2D/Common/__init__.pyi": "3d4fddaaae047b9661291873dfbc51f8f1ba3ce9b4cb8f79d6d269904de7e2ed",
+      "typings/win32more/Windows/Win32/Graphics/Direct2D/__init__.pyi": "45341ec4f7946e04d6347af2c507ee4f43642c23aababcb542af199df643beaa",
+      "typings/win32more/Windows/Win32/Graphics/Dwm/__init__.pyi": "13977bc12632230a17856de32fd17d99916b79acd52215dcbb4c0d594e92d589",
+      "typings/win32more/Windows/Win32/System/LibraryLoader/__init__.pyi": "202df6ff6c45dc2b769f4f5fa36fa84e6b06160b7c093216784501da1268e862",
+      "typings/win32more/Windows/Win32/System/WinRT/Composition/__init__.pyi": "aab40234eac887bbecbada8f4308915714c6760a569d7e562d10d2b3cac11c6b",
+      "typings/win32more/Windows/Win32/System/WinRT/Graphics/Direct2D/__init__.pyi": "ee005f7b3d6fc7955d6fc58f31449235fa0fa9bb37ba2c97d86ff81f9fe9536b",
+      "typings/win32more/Windows/Win32/System/WinRT/__init__.pyi": "6877ef459db7806e0aa26a4f5a44f4f12ffe003d19fb47f3d949a15788020e7a",
+      "typings/win32more/Windows/Win32/UI/WindowsAndMessaging/__init__.pyi": "ff75144873b43be56fdf01a49793806c5344e86d140983955f6563c0de1d8643",
+      "typings/win32more/__init__.pyi": "938fa9b60b09dc3c39537c694eecbe64cce2be7fc65c1389ab8dc98e4a4054df",
+      "typings/win32more/_comclass.pyi": "8990c528c4b0d5ba2cd51e0b229c48ae4db71209af919f12ebaf69308885a2b3",
+      "typings/win32more/_win32.pyi": "2010f4d8e3aca8977cccd67a903c12eea2854622a6fba3cc0103cd0c6957a93f",
+      "winapi/composition.py": "c4bc24502cb18284ff7540550b818c7c64ce4a44e15f46b1433034a7863b3688",
+      "winapi/composition_paths.py": "f39d202904d03a5e0740542cb35ad8088fe7dee9812fac872d83d79c7ebd1b99"
+    },
+    "toolbar-final": {
+      "assistant/bar_surface.py": "2dad562896fdd0c650cab0a045372f312ae3625753300e1e24b9141f95505ac0",
+      "assistant/feed_triage.py": "27c12a6e24f87ff71139defad88221cf1575efadaca9db37d29dbcf224cbe53b",
+      "assistant/notifications.py": "984670cc9835e4e4dafa9bf0e5a27eb97f48af9f2577205683ce6427f04f0652",
+      "pyproject.toml": "b30936b3061aa44e3c66e9170185bd819d3b5b18235b3617d6ebbb222df4c1a3",
+      "typings/win32more/Windows/Foundation/Numerics/__init__.pyi": "3060ef5fec4c63931a8130483e1c3f2a322c740101e2c6cb1f701dfcc3cdde2c",
+      "typings/win32more/Windows/Foundation/__init__.pyi": "371dff30d77e5b33bd976201ce5a2e7170ae36c28094037d43dbd192938fafff",
+      "typings/win32more/Windows/Graphics/__init__.pyi": "93bab81742d0a48d3c855a18dca5ea153eb157eebde583a63ddf4759b9125823",
+      "typings/win32more/Windows/System/__init__.pyi": "37434858753ce3bf4b1fc44aaa14431882e9dd41467b1945efd66d128cbbd1e4",
+      "typings/win32more/Windows/UI/Composition/Desktop/__init__.pyi": "767098847ac3a9acd6e034d4c2dc9d68939f935886e68d933655d00e56a1667a",
+      "typings/win32more/Windows/UI/Composition/__init__.pyi": "1a36185524928fc3e458cc3a0e71a90eca4952ed38e83682bd2c9fcb0b0e70ba",
+      "typings/win32more/Windows/UI/__init__.pyi": "6d0f11a49e6cd81c414a340c33993dedc00df0be6f12c70b2da8b4e6e74d125b",
+      "typings/win32more/Windows/Win32/Foundation/__init__.pyi": "0784243f912b9c7535360d3b2fd55191ed43d1131cc5f1773c4368b6e170ef28",
+      "typings/win32more/Windows/Win32/Graphics/Direct2D/Common/__init__.pyi": "3d4fddaaae047b9661291873dfbc51f8f1ba3ce9b4cb8f79d6d269904de7e2ed",
+      "typings/win32more/Windows/Win32/Graphics/Direct2D/__init__.pyi": "45341ec4f7946e04d6347af2c507ee4f43642c23aababcb542af199df643beaa",
+      "typings/win32more/Windows/Win32/Graphics/Dwm/__init__.pyi": "13977bc12632230a17856de32fd17d99916b79acd52215dcbb4c0d594e92d589",
+      "typings/win32more/Windows/Win32/System/LibraryLoader/__init__.pyi": "202df6ff6c45dc2b769f4f5fa36fa84e6b06160b7c093216784501da1268e862",
+      "typings/win32more/Windows/Win32/System/WinRT/Composition/__init__.pyi": "aab40234eac887bbecbada8f4308915714c6760a569d7e562d10d2b3cac11c6b",
+      "typings/win32more/Windows/Win32/System/WinRT/Graphics/Direct2D/__init__.pyi": "ee005f7b3d6fc7955d6fc58f31449235fa0fa9bb37ba2c97d86ff81f9fe9536b",
+      "typings/win32more/Windows/Win32/System/WinRT/__init__.pyi": "6877ef459db7806e0aa26a4f5a44f4f12ffe003d19fb47f3d949a15788020e7a",
+      "typings/win32more/Windows/Win32/UI/WindowsAndMessaging/__init__.pyi": "ff75144873b43be56fdf01a49793806c5344e86d140983955f6563c0de1d8643",
+      "typings/win32more/__init__.pyi": "938fa9b60b09dc3c39537c694eecbe64cce2be7fc65c1389ab8dc98e4a4054df",
+      "typings/win32more/_comclass.pyi": "8990c528c4b0d5ba2cd51e0b229c48ae4db71209af919f12ebaf69308885a2b3",
+      "typings/win32more/_win32.pyi": "2010f4d8e3aca8977cccd67a903c12eea2854622a6fba3cc0103cd0c6957a93f",
+      "winapi/composition.py": "c4bc24502cb18284ff7540550b818c7c64ce4a44e15f46b1433034a7863b3688",
+      "winapi/composition_paths.py": "f39d202904d03a5e0740542cb35ad8088fe7dee9812fac872d83d79c7ebd1b99"
+    }
+  },
+  "complete_catalogs": {
+    "before-round-2": {
+      "stage": "before",
+      "round": 2,
+      "stall_excess_ms": 16103.35,
+      "warm_stall_excess_ms": 14957.42,
+      "files": [
+        "reduction-before-capsules-2.json",
+        "reduction-before-keyboard-2.json",
+        "reduction-before-long-stream-2.json",
+        "reduction-before-reset-2.json",
+        "reduction-before-tools-2.json",
+        "reduction-before-projection-2.json"
+      ],
+      "measurement_seconds": 79.56
+    },
+    "toolbar-stack-round-2": {
+      "stage": "toolbar-stack",
+      "round": 2,
+      "stall_excess_ms": 8941.56,
+      "warm_stall_excess_ms": 7590.93,
+      "files": [
+        "reduction-toolbar-stack-capsules-2.json",
+        "reduction-toolbar-stack-keyboard-2.json",
+        "reduction-toolbar-stack-long-stream-2.json",
+        "reduction-toolbar-stack-reset-2.json",
+        "reduction-toolbar-stack-tools-2.json",
+        "reduction-toolbar-stack-projection-2.json"
+      ],
+      "measurement_seconds": 73.09
+    },
+    "before-round-8": {
+      "stage": "before",
+      "round": 8,
+      "stall_excess_ms": 3986.93,
+      "warm_stall_excess_ms": 3275.72,
+      "files": [
+        "reduction-before-capsules-8.json",
+        "reduction-before-keyboard-8.json",
+        "reduction-before-long-stream-8.json",
+        "reduction-before-reset-8.json",
+        "reduction-before-tools-8.json",
+        "reduction-before-projection-8.json"
+      ],
+      "measurement_seconds": 66.06
+    },
+    "toolbar-bound-round-8": {
+      "stage": "toolbar-bound",
+      "round": 8,
+      "stall_excess_ms": 2315.39,
+      "warm_stall_excess_ms": 2070.0,
+      "files": [
+        "reduction-toolbar-bound-capsules-8.json",
+        "reduction-toolbar-bound-keyboard-8.json",
+        "reduction-toolbar-bound-long-stream-8.json",
+        "reduction-toolbar-bound-reset-8.json",
+        "reduction-toolbar-bound-tools-8.json",
+        "reduction-toolbar-bound-projection-8.json"
+      ],
+      "measurement_seconds": 63.69
+    },
+    "toolbar-final-round-11": {
+      "stage": "toolbar-final",
+      "round": 11,
+      "stall_excess_ms": 10921.05,
+      "warm_stall_excess_ms": 9627.18,
+      "files": [
+        "reduction-toolbar-final-capsules-11.json",
+        "reduction-toolbar-final-keyboard-11.json",
+        "reduction-toolbar-final-long-stream-11.json",
+        "reduction-toolbar-final-reset-11.json",
+        "reduction-toolbar-final-tools-11.json",
+        "reduction-toolbar-final-projection-12.json"
+      ],
+      "measurement_seconds": 77.58
+    }
+  },
+  "trace_artifacts": [
+    {
+      "file": "reduction-toolbar-bound-capsules-trace-10.events.json",
+      "sha256": "948f15ec9dfa53bcf29c936d287f54b41c248e7644bcbbf752cc83ffe64d727c"
+    },
+    {
+      "file": "reduction-toolbar-changed-capsules-events.events.json",
+      "sha256": "f323c20265e1ed03eebcc565b4ec54d83010c6725be73c5ea6c0eb3e1d0378ff"
+    },
+    {
+      "file": "reduction-toolbar-changed-capsules-native-events.events.json",
+      "sha256": "cfcddef8f216e6e8f2923c997c40f43fc4eaad497b3e44ed83465d05c22b2b11"
+    }
+  ],
+  "notes": [
+    "The comparable baseline already contains the earlier 2.85 s to approximately 9 ms projection fix.",
+    "Action totals, GC spans and heartbeat excess overlap and must not be added together.",
+    "Catalog totals describe a fixed synthetic suite on a shared desktop, not a live-use total or isolated causal estimate.",
+    "Round 2 alternated source variants by workload. Round 8 ran the candidate catalog first, then the baseline in reverse workload order.",
+    "Round 11 repeats the final candidate catalog after replacing the two JSON casts with validated object observations. Its projection run raised a Qt callback error and is excluded; the successful round 12 retry completes the final catalog.",
+    "Rounds 3 and 9 repeat toolbar pairs; later intermediate rounds isolate retained geometry and changed-only dimension publication.",
+    "Coalescing-only/cache-only exploratory records lack exact frozen source identities and are excluded from formal totals.",
+    "cProfile in the pinned Python also records worker activity; cumulative timings include background waits and cannot be assigned to Qt.",
+    "Thread-filtered event/native tracing adds overhead, is marked profiled and is excluded from all formal totals.",
+    "A 50 ms threshold inventories obvious stalls; this is not a painted-frame or 60 Hz smoothness measurement.",
+    "First presentation is included per workload; activation, imports and constructor costs occur before heartbeat measurement.",
+    "One-second outliers remain visible. Traces without those outliers cannot explain their cause.",
+    "Early native symbol strings were truncated; only the corrected explicit Unicode resolver output is suitable for symbol interpretation.",
+    "The recorded probe hash identifies the final probe; older rounds used the same metric and delivery timing before output-only timestamp/gap fields were added."
+  ],
+  "runs": [
+    {
+      "file": "reduction-before-capsules-1.json",
+      "artifact_sha256": "622a453ffdf6b20b94e513ae9edb6339bc1c8a7fde7872535aa2331873e20f9d",
+      "valid": true,
+      "scenario": "capsules",
+      "profiled": false,
+      "surface": "toolbar",
+      "activation_ms": 0.81,
+      "imports_ms": 583.19,
+      "constructor_ms": 7248.64,
+      "elapsed_seconds": 10.65,
+      "gc_enabled": true,
+      "heartbeat_samples": 812,
+      "heartbeat_max_ms": 174.65,
+      "heartbeat_p99_ms": 102.22,
+      "heartbeat_over_50": 28,
+      "warm_max_ms": 174.65,
+      "action_ms": [
+        58.69,
+        20.17,
+        126.93,
+        49.84,
+        66.46,
+        71.29,
+        101.98,
+        8.04,
+        154.09,
+        39.28,
+        68.47,
+        72.59,
+        107.0,
+        13.06,
+        119.87,
+        53.41,
+        54.58,
+        67.98
+      ],
+      "gc_collections": 21,
+      "gc_max_ms": 2.3,
+      "events_delivered": 18,
+      "excess_50_ms": 1112.98,
+      "warm_excess_50_ms": 1095.39,
+      "action_total_ms": 1253.75,
+      "gc_slowest": [
+        {
+          "generation": 1,
+          "collected": 4896,
+          "ms": 2.3
+        },
+        {
+          "generation": 0,
+          "collected": 2016,
+          "ms": 0.99
+        },
+        {
+          "generation": 0,
+          "collected": 1728,
+          "ms": 0.92
+        },
+        {
+          "generation": 0,
+          "collected": 2016,
+          "ms": 0.92
+        },
+        {
+          "generation": 0,
+          "collected": 2016,
+          "ms": 0.89
+        }
+      ]
+    },
+    {
+      "file": "reduction-before-capsules-2.json",
+      "artifact_sha256": "7ea56dfb646cc73cce21aa557e03e885e5271ca777715c35aaa6896c125ae3f8",
+      "valid": true,
+      "scenario": "capsules",
+      "profiled": false,
+      "surface": "toolbar",
+      "activation_ms": 1.14,
+      "imports_ms": 905.08,
+      "constructor_ms": 5834.13,
+      "elapsed_seconds": 11.66,
+      "gc_enabled": true,
+      "heartbeat_samples": 769,
+      "heartbeat_max_ms": 341.71,
+      "heartbeat_p99_ms": 160.03,
+      "heartbeat_over_50": 31,
+      "warm_max_ms": 341.71,
+      "action_ms": [
+        82.93,
+        28.86,
+        158.07,
+        246.82,
+        105.53,
+        121.81,
+        133.98,
+        9.42,
+        181.52,
+        92.83,
+        127.13,
+        128.34,
+        259.07,
+        15.43,
+        199.97,
+        73.54,
+        107.75,
+        160.02
+      ],
+      "gc_collections": 19,
+      "gc_max_ms": 2.62,
+      "events_delivered": 18,
+      "excess_50_ms": 2563.07,
+      "warm_excess_50_ms": 2522.51,
+      "action_total_ms": 2233.03,
+      "gc_slowest": [
+        {
+          "generation": 1,
+          "collected": 4911,
+          "ms": 2.62
+        },
+        {
+          "generation": 0,
+          "collected": 2016,
+          "ms": 1.6
+        },
+        {
+          "generation": 0,
+          "collected": 2016,
+          "ms": 1.44
+        },
+        {
+          "generation": 0,
+          "collected": 2016,
+          "ms": 1.34
+        },
+        {
+          "generation": 0,
+          "collected": 2016,
+          "ms": 1.23
+        }
+      ]
+    },
+    {
+      "file": "reduction-before-capsules-3.json",
+      "artifact_sha256": "48c2b786e6bd436018369559733b93ebe0f03e2d98b385bb7e6a8a39c4e5ba22",
+      "valid": true,
+      "scenario": "capsules",
+      "profiled": false,
+      "surface": "toolbar",
+      "activation_ms": 1.8,
+      "imports_ms": 1189.21,
+      "constructor_ms": 5460.51,
+      "elapsed_seconds": 12.02,
+      "gc_enabled": true,
+      "heartbeat_samples": 732,
+      "heartbeat_max_ms": 354.83,
+      "heartbeat_p99_ms": 214.09,
+      "heartbeat_over_50": 30,
+      "warm_max_ms": 354.83,
+      "action_ms": [
+        129.41,
+        30.15,
+        227.81,
+        136.11,
+        137.18,
+        106.13,
+        166.72,
+        9.54,
+        340.52,
+        82.87,
+        202.98,
+        258.41,
+        245.93,
+        67.77,
+        216.27,
+        57.25,
+        78.22,
+        115.68
+      ],
+      "gc_collections": 18,
+      "gc_max_ms": 6.14,
+      "events_delivered": 18,
+      "excess_50_ms": 3319.61,
+      "warm_excess_50_ms": 3226.48,
+      "action_total_ms": 2608.94,
+      "gc_slowest": [
+        {
+          "generation": 1,
+          "collected": 4911,
+          "ms": 6.14
+        },
+        {
+          "generation": 0,
+          "collected": 2016,
+          "ms": 1.99
+        },
+        {
+          "generation": 0,
+          "collected": 2016,
+          "ms": 1.98
+        },
+        {
+          "generation": 0,
+          "collected": 1728,
+          "ms": 1.66
+        },
+        {
+          "generation": 0,
+          "collected": 2016,
+          "ms": 1.64
+        }
+      ]
+    },
+    {
+      "file": "reduction-before-capsules-8.json",
+      "artifact_sha256": "63025c6376a5485f001da4334f15e82fba5d415669289fbb52d7cc70ea850b73",
+      "valid": true,
+      "scenario": "capsules",
+      "profiled": false,
+      "surface": "toolbar",
+      "activation_ms": 0.62,
+      "imports_ms": 567.39,
+      "constructor_ms": 3318.26,
+      "elapsed_seconds": 10.83,
+      "gc_enabled": true,
+      "measurement_started_perf": 413409.4271252,
+      "measurement_ended_perf": 413420.2611407,
+      "heartbeat_samples": 831,
+      "heartbeat_max_ms": 179.39,
+      "heartbeat_p99_ms": 122.41,
+      "heartbeat_over_50": 21,
+      "heartbeat_gaps_over_50": [
+        [
+          562.982,
+          72.745
+        ],
+        [
+          1683.189,
+          122.407
+        ],
+        [
+          2224.846,
+          54.178
+        ],
+        [
+          2420.699,
+          110.459
+        ],
+        [
+          2778.699,
+          68.793
+        ],
+        [
+          3375.947,
+          105.169
+        ],
+        [
+          3940.088,
+          89.984
+        ],
+        [
+          4042.09,
+          61.542
+        ],
+        [
+          5075.628,
+          145.75
+        ],
+        [
+          5674.754,
+          134.579
+        ],
+        [
+          5813.524,
+          125.093
+        ],
+        [
+          6205.687,
+          85.092
+        ],
+        [
+          6870.076,
+          179.392
+        ],
+        [
+          7472.558,
+          152.089
+        ],
+        [
+          7582.604,
+          102.293
+        ],
+        [
+          8092.251,
+          71.413
+        ],
+        [
+          8606.377,
+          166.283
+        ],
+        [
+          9327.243,
+          126.681
+        ],
+        [
+          9729.205,
+          88.752
+        ],
+        [
+          10351.152,
+          131.302
+        ],
+        [
+          10412.564,
+          52.254
+        ]
+      ],
+      "warm_max_ms": 179.39,
+      "action_ms": [
+        62.3,
+        12.17,
+        105.66,
+        48.43,
+        58.48,
+        79.45,
+        83.68,
+        23.97,
+        125.24,
+        86.44,
+        74.43,
+        137.3,
+        121.42,
+        7.05,
+        150.64,
+        38.18,
+        81.17,
+        107.33
+      ],
+      "gc_collections": 20,
+      "gc_max_ms": 2.26,
+      "events_delivered": 18,
+      "excess_50_ms": 1196.25,
+      "warm_excess_50_ms": 1173.5,
+      "action_total_ms": 1403.33,
+      "gc_slowest": [
+        {
+          "generation": 1,
+          "collected": 4623,
+          "ms": 2.26
+        },
+        {
+          "generation": 0,
+          "collected": 2016,
+          "ms": 1.37
+        },
+        {
+          "generation": 0,
+          "collected": 2016,
+          "ms": 1.27
+        },
+        {
+          "generation": 0,
+          "collected": 2016,
+          "ms": 1.09
+        },
+        {
+          "generation": 0,
+          "collected": 1728,
+          "ms": 1.02
+        }
+      ]
+    },
+    {
+      "file": "reduction-before-capsules-9.json",
+      "artifact_sha256": "d2a81761ba111ca98e291aa3e73bad22f8c9f6ee4b42f5b68758a6d4a9756e8b",
+      "valid": true,
+      "scenario": "capsules",
+      "profiled": false,
+      "surface": "toolbar",
+      "activation_ms": 0.63,
+      "imports_ms": 661.39,
+      "constructor_ms": 4334.65,
+      "elapsed_seconds": 10.8,
+      "gc_enabled": true,
+      "measurement_started_perf": 413427.9198364,
+      "measurement_ended_perf": 413438.7178541,
+      "heartbeat_samples": 816,
+      "heartbeat_max_ms": 163.47,
+      "heartbeat_p99_ms": 104.47,
+      "heartbeat_over_50": 29,
+      "heartbeat_gaps_over_50": [
+        [
+          605.07,
+          104.47
+        ],
+        [
+          1277.567,
+          65.002
+        ],
+        [
+          1773.674,
+          153.94
+        ],
+        [
+          1834.817,
+          55.193
+        ],
+        [
+          2337.37,
+          77.089
+        ],
+        [
+          2494.605,
+          99.329
+        ],
+        [
+          2883.654,
+          83.771
+        ],
+        [
+          3514.314,
+          154.2
+        ],
+        [
+          3581.823,
+          52.125
+        ],
+        [
+          4072.384,
+          91.902
+        ],
+        [
+          4192.6,
+          62.61
+        ],
+        [
+          4745.846,
+          65.897
+        ],
+        [
+          5220.96,
+          160.622
+        ],
+        [
+          5761.472,
+          51.413
+        ],
+        [
+          5875.359,
+          105.56
+        ],
+        [
+          5993.496,
+          111.614
+        ],
+        [
+          6319.175,
+          69.055
+        ],
+        [
+          6874.429,
+          74.844
+        ],
+        [
+          6935.868,
+          55.708
+        ],
+        [
+          7040.517,
+          90.43
+        ],
+        [
+          7458.659,
+          99.104
+        ],
+        [
+          7594.171,
+          63.834
+        ],
+        [
+          7993.008,
+          52.492
+        ],
+        [
+          8139.394,
+          69.398
+        ],
+        [
+          8644.182,
+          163.475
+        ],
+        [
+          9237.095,
+          57.174
+        ],
+        [
+          9374.619,
+          124.652
+        ],
+        [
+          9694.427,
+          64.863
+        ],
+        [
+          10301.38,
+          121.467
+        ]
+      ],
+      "warm_max_ms": 163.47,
+      "action_ms": [
+        97.71,
+        39.52,
+        142.67,
+        49.88,
+        73.72,
+        115.89,
+        80.48,
+        22.7,
+        137.7,
+        50.37,
+        58.88,
+        66.47,
+        79.65,
+        33.54,
+        139.04,
+        23.55,
+        60.9,
+        99.74
+      ],
+      "gc_collections": 21,
+      "gc_max_ms": 3.03,
+      "events_delivered": 18,
+      "excess_50_ms": 1151.23,
+      "warm_excess_50_ms": 1096.76,
+      "action_total_ms": 1372.39,
+      "gc_slowest": [
+        {
+          "generation": 1,
+          "collected": 4911,
+          "ms": 3.03
+        },
+        {
+          "generation": 0,
+          "collected": 2016,
+          "ms": 2.24
+        },
+        {
+          "generation": 0,
+          "collected": 2016,
+          "ms": 1.35
+        },
+        {
+          "generation": 0,
+          "collected": 2016,
+          "ms": 1.34
+        },
+        {
+          "generation": 0,
+          "collected": 2016,
+          "ms": 1.33
+        }
+      ]
+    },
+    {
+      "file": "reduction-before-keyboard-1.json",
+      "artifact_sha256": "1d4cfabdfac943d14d27b3ca670991e0952e6fdf92d0a384d04b9a1172cfa65d",
+      "valid": true,
+      "scenario": "keyboard",
+      "profiled": false,
+      "surface": "toolbar",
+      "activation_ms": 0.61,
+      "imports_ms": 460.02,
+      "constructor_ms": 3189.63,
+      "elapsed_seconds": 10.2,
+      "gc_enabled": true,
+      "heartbeat_samples": 867,
+      "heartbeat_max_ms": 108.31,
+      "heartbeat_p99_ms": 73.29,
+      "heartbeat_over_50": 17,
+      "warm_max_ms": 108.31,
+      "action_ms": [
+        48.4,
+        16.06,
+        61.35,
+        12.15,
+        64.46,
+        22.46,
+        69.3,
+        20.05,
+        50.7,
+        17.85,
+        62.08,
+        17.04,
+        63.27,
+        18.22,
+        66.59,
+        18.4,
+        72.29,
+        18.11
+      ],
+      "gc_collections": 14,
+      "gc_max_ms": 2.17,
+      "events_delivered": 18,
+      "excess_50_ms": 439.09,
+      "warm_excess_50_ms": 434.19,
+      "action_total_ms": 718.77,
+      "gc_slowest": [
+        {
+          "generation": 1,
+          "collected": 4325,
+          "ms": 2.17
+        },
+        {
+          "generation": 0,
+          "collected": 2016,
+          "ms": 1.29
+        },
+        {
+          "generation": 0,
+          "collected": 1728,
+          "ms": 1.26
+        },
+        {
+          "generation": 0,
+          "collected": 2016,
+          "ms": 0.81
+        },
+        {
+          "generation": 0,
+          "collected": 2016,
+          "ms": 0.8
+        }
+      ]
+    },
+    {
+      "file": "reduction-before-keyboard-2.json",
+      "artifact_sha256": "413e685558811b1fcd314ba1ae81756afd0194d0d23d8b78b21173e56d4e60c3",
+      "valid": true,
+      "scenario": "keyboard",
+      "profiled": false,
+      "surface": "toolbar",
+      "activation_ms": 0.94,
+      "imports_ms": 1518.25,
+      "constructor_ms": 5784.0,
+      "elapsed_seconds": 11.33,
+      "gc_enabled": true,
+      "heartbeat_samples": 736,
+      "heartbeat_max_ms": 413.7,
+      "heartbeat_p99_ms": 166.35,
+      "heartbeat_over_50": 31,
+      "warm_max_ms": 235.73,
+      "action_ms": [
+        373.0,
+        38.05,
+        169.21,
+        27.82,
+        140.68,
+        41.24,
+        124.53,
+        40.54,
+        143.11,
+        32.05,
+        150.76,
+        52.19,
+        142.78,
+        34.58,
+        122.81,
+        45.96,
+        160.06,
+        33.41
+      ],
+      "gc_collections": 12,
+      "gc_max_ms": 3.41,
+      "events_delivered": 18,
+      "excess_50_ms": 2348.51,
+      "warm_excess_50_ms": 1978.57,
+      "action_total_ms": 1872.75,
+      "gc_slowest": [
+        {
+          "generation": 1,
+          "collected": 4906,
+          "ms": 3.41
+        },
+        {
+          "generation": 0,
+          "collected": 2016,
+          "ms": 2.07
+        },
+        {
+          "generation": 0,
+          "collected": 2016,
+          "ms": 2.05
+        },
+        {
+          "generation": 0,
+          "collected": 1728,
+          "ms": 1.92
+        },
+        {
+          "generation": 0,
+          "collected": 2016,
+          "ms": 1.3
+        }
+      ]
+    },
+    {
+      "file": "reduction-before-keyboard-3.json",
+      "artifact_sha256": "010dbe1bd825230af2994e84e19779fe6772f79f70cd36d3f47bb86ce041e8d8",
+      "valid": true,
+      "scenario": "keyboard",
+      "profiled": false,
+      "surface": "toolbar",
+      "activation_ms": 1.18,
+      "imports_ms": 612.48,
+      "constructor_ms": 6796.86,
+      "elapsed_seconds": 10.26,
+      "gc_enabled": true,
+      "heartbeat_samples": 839,
+      "heartbeat_max_ms": 114.91,
+      "heartbeat_p99_ms": 89.63,
+      "heartbeat_over_50": 20,
+      "warm_max_ms": 114.91,
+      "action_ms": [
+        67.82,
+        17.36,
+        66.01,
+        19.63,
+        76.31,
+        21.94,
+        67.41,
+        18.74,
+        78.86,
+        20.48,
+        69.64,
+        20.2,
+        81.18,
+        24.66,
+        85.31,
+        17.85,
+        62.54,
+        20.86
+      ],
+      "gc_collections": 15,
+      "gc_max_ms": 2.7,
+      "events_delivered": 18,
+      "excess_50_ms": 713.77,
+      "warm_excess_50_ms": 689.42,
+      "action_total_ms": 836.81,
+      "gc_slowest": [
+        {
+          "generation": 1,
+          "collected": 4911,
+          "ms": 2.7
+        },
+        {
+          "generation": 0,
+          "collected": 2016,
+          "ms": 1.32
+        },
+        {
+          "generation": 0,
+          "collected": 2016,
+          "ms": 1.17
+        },
+        {
+          "generation": 0,
+          "collected": 2016,
+          "ms": 1.09
+        },
+        {
+          "generation": 0,
+          "collected": 2016,
+          "ms": 1.04
+        }
+      ]
+    },
+    {
+      "file": "reduction-before-keyboard-8.json",
+      "artifact_sha256": "da1fd6b7b69cada5668b1cfa01a8eab45c9aa384a5f6e3d59d8758d772b0ef85",
+      "valid": true,
+      "scenario": "keyboard",
+      "profiled": false,
+      "surface": "toolbar",
+      "activation_ms": 0.68,
+      "imports_ms": 426.17,
+      "constructor_ms": 2688.47,
+      "elapsed_seconds": 10.08,
+      "gc_enabled": true,
+      "measurement_started_perf": 413393.0293607,
+      "measurement_ended_perf": 413403.1097906,
+      "heartbeat_samples": 885,
+      "heartbeat_max_ms": 88.59,
+      "heartbeat_p99_ms": 59.63,
+      "heartbeat_over_50": 16,
+      "heartbeat_gaps_over_50": [
+        [
+          560.569,
+          60.839
+        ],
+        [
+          1227.57,
+          57.498
+        ],
+        [
+          1628.91,
+          59.631
+        ],
+        [
+          2680.627,
+          51.281
+        ],
+        [
+          3760.521,
+          80.867
+        ],
+        [
+          4393.898,
+          54.323
+        ],
+        [
+          4812.582,
+          62.731
+        ],
+        [
+          5501.77,
+          71.972
+        ],
+        [
+          5878.687,
+          58.714
+        ],
+        [
+          6488.303,
+          68.187
+        ],
+        [
+          6945.373,
+          65.3
+        ],
+        [
+          7708.449,
+          88.593
+        ],
+        [
+          8018.177,
+          57.997
+        ],
+        [
+          8653.089,
+          63.744
+        ],
+        [
+          9067.089,
+          57.8
+        ],
+        [
+          9747.624,
+          77.997
+        ]
+      ],
+      "warm_max_ms": 88.59,
+      "action_ms": [
+        55.35,
+        14.72,
+        54.1,
+        13.44,
+        47.03,
+        14.14,
+        61.1,
+        15.12,
+        56.94,
+        16.64,
+        57.64,
+        17.07,
+        56.18,
+        19.27,
+        52.14,
+        15.09,
+        51.49,
+        16.69
+      ],
+      "gc_collections": 15,
+      "gc_max_ms": 2.76,
+      "events_delivered": 18,
+      "excess_50_ms": 237.48,
+      "warm_excess_50_ms": 226.64,
+      "action_total_ms": 634.15,
+      "gc_slowest": [
+        {
+          "generation": 1,
+          "collected": 4623,
+          "ms": 2.76
+        },
+        {
+          "generation": 0,
+          "collected": 2016,
+          "ms": 1.09
+        },
+        {
+          "generation": 0,
+          "collected": 2031,
+          "ms": 0.98
+        },
+        {
+          "generation": 0,
+          "collected": 2016,
+          "ms": 0.87
+        },
+        {
+          "generation": 0,
+          "collected": 2016,
+          "ms": 0.81
+        }
+      ]
+    },
+    {
+      "file": "reduction-before-keyboard-9.json",
+      "artifact_sha256": "271f706df0697d86acf4ba3693bc6c1110e5ec66b9ce9f84eb773c2772c86964",
+      "valid": true,
+      "scenario": "keyboard",
+      "profiled": false,
+      "surface": "toolbar",
+      "activation_ms": 0.68,
+      "imports_ms": 722.26,
+      "constructor_ms": 5167.99,
+      "elapsed_seconds": 10.67,
+      "gc_enabled": true,
+      "measurement_started_perf": 413463.4600245,
+      "measurement_ended_perf": 413474.1324054,
+      "heartbeat_samples": 798,
+      "heartbeat_max_ms": 182.45,
+      "heartbeat_p99_ms": 117.56,
+      "heartbeat_over_50": 23,
+      "heartbeat_gaps_over_50": [
+        [
+          616.2,
+          115.225
+        ],
+        [
+          1263.84,
+          112.853
+        ],
+        [
+          1710.848,
+          110.154
+        ],
+        [
+          2363.918,
+          95.504
+        ],
+        [
+          2426.695,
+          56.355
+        ],
+        [
+          2834.675,
+          124.113
+        ],
+        [
+          3391.822,
+          51.047
+        ],
+        [
+          3548.223,
+          102.731
+        ],
+        [
+          4008.901,
+          147.551
+        ],
+        [
+          4669.977,
+          109.815
+        ],
+        [
+          5116.655,
+          96.321
+        ],
+        [
+          5753.536,
+          102.483
+        ],
+        [
+          5905.777,
+          145.453
+        ],
+        [
+          6206.387,
+          96.05
+        ],
+        [
+          6868.439,
+          117.558
+        ],
+        [
+          6931.497,
+          59.096
+        ],
+        [
+          7345.376,
+          144.87
+        ],
+        [
+          8029.657,
+          63.842
+        ],
+        [
+          8477.362,
+          126.304
+        ],
+        [
+          9045.599,
+          51.594
+        ],
+        [
+          9219.663,
+          174.064
+        ],
+        [
+          9673.11,
+          182.451
+        ],
+        [
+          10369.563,
+          118.717
+        ]
+      ],
+      "warm_max_ms": 182.45,
+      "action_ms": [
+        95.54,
+        21.85,
+        88.83,
+        40.31,
+        105.32,
+        29.78,
+        122.82,
+        32.08,
+        86.56,
+        20.44,
+        83.9,
+        25.6,
+        122.08,
+        27.02,
+        107.83,
+        34.3,
+        144.95,
+        25.62
+      ],
+      "gc_collections": 13,
+      "gc_max_ms": 4.41,
+      "events_delivered": 18,
+      "excess_50_ms": 1354.15,
+      "warm_excess_50_ms": 1288.93,
+      "action_total_ms": 1214.86,
+      "gc_slowest": [
+        {
+          "generation": 1,
+          "collected": 4325,
+          "ms": 4.41
+        },
+        {
+          "generation": 0,
+          "collected": 2016,
+          "ms": 1.92
+        },
+        {
+          "generation": 0,
+          "collected": 2016,
+          "ms": 1.81
+        },
+        {
+          "generation": 0,
+          "collected": 2016,
+          "ms": 1.39
+        },
+        {
+          "generation": 0,
+          "collected": 2016,
+          "ms": 1.05
+        }
+      ]
+    },
+    {
+      "file": "reduction-before-long-stream-2.json",
+      "artifact_sha256": "c4efe2be3a093754ede0c837b77b0d3e01b1b2b1831edc443e667fcc12446c01",
+      "valid": true,
+      "scenario": "long-stream",
+      "profiled": false,
+      "surface": "feed",
+      "activation_ms": 0.93,
+      "imports_ms": 6963.89,
+      "constructor_ms": 35415.65,
+      "elapsed_seconds": 17.25,
+      "gc_enabled": true,
+      "heartbeat_samples": 812,
+      "heartbeat_max_ms": 1154.25,
+      "heartbeat_p99_ms": 315.37,
+      "heartbeat_over_50": 30,
+      "warm_max_ms": 1154.25,
+      "action_ms": [
+        446.51,
+        109.74,
+        142.98,
+        122.4,
+        176.96,
+        270.23,
+        222.45,
+        184.74,
+        195.94,
+        773.46,
+        936.64,
+        303.57,
+        446.05,
+        467.66,
+        309.0,
+        348.89,
+        466.23,
+        552.04
+      ],
+      "gc_collections": 146,
+      "gc_max_ms": 160.61,
+      "events_delivered": 18,
+      "excess_50_ms": 6813.59,
+      "warm_excess_50_ms": 6732.04,
+      "action_total_ms": 6475.49,
+      "gc_slowest": [
+        {
+          "generation": 2,
+          "collected": 8144,
+          "ms": 160.61
+        },
+        {
+          "generation": 1,
+          "collected": 5729,
+          "ms": 51.14
+        },
+        {
+          "generation": 1,
+          "collected": 4849,
+          "ms": 32.11
+        },
+        {
+          "generation": 1,
+          "collected": 15593,
+          "ms": 20.16
+        },
+        {
+          "generation": 0,
+          "collected": 0,
+          "ms": 16.2
+        }
+      ]
+    },
+    {
+      "file": "reduction-before-long-stream-8.json",
+      "artifact_sha256": "a88ce7c4c8af1d1fda4ec78f559efb121f904daecbd1ddb3fe6432f3c888bf5b",
+      "valid": true,
+      "scenario": "long-stream",
+      "profiled": false,
+      "surface": "feed",
+      "activation_ms": 0.49,
+      "imports_ms": 438.8,
+      "constructor_ms": 3563.0,
+      "elapsed_seconds": 11.44,
+      "gc_enabled": true,
+      "measurement_started_perf": 413376.0399764,
+      "measurement_ended_perf": 413387.4830617,
+      "heartbeat_samples": 958,
+      "heartbeat_max_ms": 267.61,
+      "heartbeat_p99_ms": 91.8,
+      "heartbeat_over_50": 16,
+      "heartbeat_gaps_over_50": [
+        [
+          1612.774,
+          51.925
+        ],
+        [
+          2179.725,
+          59.33
+        ],
+        [
+          2750.242,
+          69.667
+        ],
+        [
+          3305.972,
+          66.069
+        ],
+        [
+          3904.169,
+          103.876
+        ],
+        [
+          4474.808,
+          74.903
+        ],
+        [
+          5084.492,
+          103.807
+        ],
+        [
+          5672.57,
+          91.801
+        ],
+        [
+          6302.669,
+          142.131
+        ],
+        [
+          6931.529,
+          140.141
+        ],
+        [
+          7697.845,
+          267.606
+        ],
+        [
+          8345.742,
+          155.553
+        ],
+        [
+          8992.645,
+          152.152
+        ],
+        [
+          9630.295,
+          140.19
+        ],
+        [
+          10267.844,
+          147.155
+        ],
+        [
+          10916.51,
+          156.569
+        ]
+      ],
+      "warm_max_ms": 267.61,
+      "action_ms": [
+        34.12,
+        43.08,
+        60.18,
+        63.72,
+        73.38,
+        63.08,
+        99.99,
+        76.38,
+        108.55,
+        86.98,
+        131.58,
+        143.1,
+        261.97,
+        151.05,
+        156.28,
+        132.83,
+        151.93,
+        164.88
+      ],
+      "gc_collections": 146,
+      "gc_max_ms": 122.71,
+      "events_delivered": 18,
+      "excess_50_ms": 1122.87,
+      "warm_excess_50_ms": 1122.87,
+      "action_total_ms": 2003.07,
+      "gc_slowest": [
+        {
+          "generation": 2,
+          "collected": 24434,
+          "ms": 122.71
+        },
+        {
+          "generation": 1,
+          "collected": 6169,
+          "ms": 7.63
+        },
+        {
+          "generation": 1,
+          "collected": 6609,
+          "ms": 7.08
+        },
+        {
+          "generation": 1,
+          "collected": 5729,
+          "ms": 6.52
+        },
+        {
+          "generation": 1,
+          "collected": 0,
+          "ms": 6.01
+        }
+      ]
+    },
+    {
+      "file": "reduction-before-projection-2.json",
+      "artifact_sha256": "f5c6e3fdb759dda6346e28aa479f7fbeaefd46d90de376f98fe391b5cfa643c9",
+      "valid": true,
+      "scenario": "projection",
+      "profiled": false,
+      "surface": "feed",
+      "activation_ms": 1.03,
+      "imports_ms": 912.57,
+      "constructor_ms": 7308.44,
+      "elapsed_seconds": 10.17,
+      "gc_enabled": true,
+      "heartbeat_samples": 938,
+      "heartbeat_max_ms": 369.06,
+      "heartbeat_p99_ms": 25.03,
+      "heartbeat_over_50": 1,
+      "warm_max_ms": 25.62,
+      "action_ms": [
+        438.67,
+        14.55,
+        13.38,
+        17.34,
+        12.38,
+        11.88,
+        15.57,
+        16.99,
+        12.88,
+        16.01,
+        12.53,
+        10.7,
+        13.41,
+        18.7,
+        29.9,
+        12.43,
+        11.47,
+        12.05
+      ],
+      "gc_collections": 1,
+      "gc_max_ms": 0.49,
+      "events_delivered": 18,
+      "excess_50_ms": 319.06,
+      "warm_excess_50_ms": 0,
+      "action_total_ms": 690.83,
+      "gc_slowest": [
+        {
+          "generation": 0,
+          "collected": 288,
+          "ms": 0.49
+        }
+      ]
+    },
+    {
+      "file": "reduction-before-projection-8.json",
+      "artifact_sha256": "71c7cdfb0d52a734da1d8b741712f171cd3a060e84ac8a4e2363be949a46663f",
+      "valid": true,
+      "scenario": "projection",
+      "profiled": false,
+      "surface": "feed",
+      "activation_ms": 0.53,
+      "imports_ms": 666.79,
+      "constructor_ms": 4497.98,
+      "elapsed_seconds": 9.75,
+      "gc_enabled": true,
+      "measurement_started_perf": 413321.4598063,
+      "measurement_ended_perf": 413331.2113384,
+      "heartbeat_samples": 952,
+      "heartbeat_max_ms": 173.29,
+      "heartbeat_p99_ms": 15.16,
+      "heartbeat_over_50": 1,
+      "heartbeat_gaps_over_50": [
+        [
+          673.221,
+          173.289
+        ]
+      ],
+      "warm_max_ms": 18.35,
+      "action_ms": [
+        232.21,
+        9.74,
+        8.7,
+        6.5,
+        7.54,
+        7.15,
+        6.68,
+        7.09,
+        6.41,
+        5.12,
+        4.09,
+        7.36,
+        4.13,
+        4.46,
+        6.3,
+        6.61,
+        6.02,
+        5.23
+      ],
+      "gc_collections": 1,
+      "gc_max_ms": 0.53,
+      "events_delivered": 18,
+      "excess_50_ms": 123.29,
+      "warm_excess_50_ms": 0,
+      "action_total_ms": 341.34,
+      "gc_slowest": [
+        {
+          "generation": 0,
+          "collected": 288,
+          "ms": 0.53
+        }
+      ]
+    },
+    {
+      "file": "reduction-before-reset-2.json",
+      "artifact_sha256": "e2b62a4eed9f87515e3811e68793de42473d28736fccdeb013bceda582464f3a",
+      "valid": true,
+      "scenario": "reset",
+      "profiled": false,
+      "surface": "feed",
+      "activation_ms": 0.98,
+      "imports_ms": 1092.46,
+      "constructor_ms": 11382.14,
+      "elapsed_seconds": 17.91,
+      "gc_enabled": true,
+      "heartbeat_samples": 1053,
+      "heartbeat_max_ms": 291.83,
+      "heartbeat_p99_ms": 163.84,
+      "heartbeat_over_50": 55,
+      "warm_max_ms": 291.83,
+      "action_ms": [
+        477.21,
+        278.73,
+        562.82,
+        497.81,
+        528.34,
+        434.87,
+        500.81,
+        294.97,
+        306.57,
+        286.92,
+        628.72,
+        516.97,
+        542.79,
+        396.43,
+        590.37,
+        431.06,
+        718.98,
+        486.02
+      ],
+      "gc_collections": 5,
+      "gc_max_ms": 1.8,
+      "events_delivered": 18,
+      "excess_50_ms": 3706.1,
+      "warm_excess_50_ms": 3412.76,
+      "action_total_ms": 8480.37,
+      "gc_slowest": [
+        {
+          "generation": 0,
+          "collected": 1758,
+          "ms": 1.8
+        },
+        {
+          "generation": 0,
+          "collected": 1723,
+          "ms": 1.01
+        },
+        {
+          "generation": 0,
+          "collected": 1891,
+          "ms": 0.94
+        },
+        {
+          "generation": 0,
+          "collected": 1848,
+          "ms": 0.88
+        },
+        {
+          "generation": 0,
+          "collected": 1848,
+          "ms": 0.87
+        }
+      ]
+    },
+    {
+      "file": "reduction-before-reset-8.json",
+      "artifact_sha256": "b604dc7a83d301d697b1d61832fa63828c796b31eb01b1d37176c9788334f8fd",
+      "valid": true,
+      "scenario": "reset",
+      "profiled": false,
+      "surface": "feed",
+      "activation_ms": 0.51,
+      "imports_ms": 525.88,
+      "constructor_ms": 4600.39,
+      "elapsed_seconds": 12.88,
+      "gc_enabled": true,
+      "measurement_started_perf": 413356.6164473,
+      "measurement_ended_perf": 413369.49422,
+      "heartbeat_samples": 1076,
+      "heartbeat_max_ms": 176.64,
+      "heartbeat_p99_ms": 76.35,
+      "heartbeat_over_50": 18,
+      "heartbeat_gaps_over_50": [
+        [
+          588.02,
+          77.24
+        ],
+        [
+          1405.121,
+          176.636
+        ],
+        [
+          2066.993,
+          72.0
+        ],
+        [
+          2736.881,
+          98.444
+        ],
+        [
+          3465.921,
+          68.016
+        ],
+        [
+          4095.654,
+          84.243
+        ],
+        [
+          4805.867,
+          76.351
+        ],
+        [
+          5474.16,
+          72.14
+        ],
+        [
+          6126.915,
+          99.99
+        ],
+        [
+          6792.191,
+          91.665
+        ],
+        [
+          7553.268,
+          101.97
+        ],
+        [
+          8312.256,
+          80.804
+        ],
+        [
+          8966.129,
+          83.991
+        ],
+        [
+          9692.246,
+          71.308
+        ],
+        [
+          10319.404,
+          73.114
+        ],
+        [
+          10950.063,
+          78.2
+        ],
+        [
+          11647.962,
+          103.329
+        ],
+        [
+          12303.52,
+          72.587
+        ]
+      ],
+      "warm_max_ms": 103.33,
+      "action_ms": [
+        224.74,
+        268.46,
+        130.01,
+        274.49,
+        114.05,
+        228.15,
+        168.61,
+        127.92,
+        186.79,
+        250.7,
+        283.11,
+        153.9,
+        248.79,
+        126.47,
+        132.81,
+        174.55,
+        192.87,
+        151.95
+      ],
+      "gc_collections": 4,
+      "gc_max_ms": 0.79,
+      "events_delivered": 18,
+      "excess_50_ms": 682.03,
+      "warm_excess_50_ms": 528.15,
+      "action_total_ms": 3438.36,
+      "gc_slowest": [
+        {
+          "generation": 0,
+          "collected": 1801,
+          "ms": 0.79
+        },
+        {
+          "generation": 0,
+          "collected": 1753,
+          "ms": 0.79
+        },
+        {
+          "generation": 0,
+          "collected": 1608,
+          "ms": 0.69
+        },
+        {
+          "generation": 0,
+          "collected": 1795,
+          "ms": 0.66
+        }
+      ]
+    },
+    {
+      "file": "reduction-before-tools-2.json",
+      "artifact_sha256": "d595c92b6c9da570952ec85d66f91e5934280052920f72e72dbe82a770a20547",
+      "valid": true,
+      "scenario": "tools",
+      "profiled": false,
+      "surface": "feed",
+      "activation_ms": 1.65,
+      "imports_ms": 3042.02,
+      "constructor_ms": 7817.69,
+      "elapsed_seconds": 11.24,
+      "gc_enabled": true,
+      "heartbeat_samples": 878,
+      "heartbeat_max_ms": 76.67,
+      "heartbeat_p99_ms": 64.75,
+      "heartbeat_over_50": 34,
+      "warm_max_ms": 76.67,
+      "action_ms": [
+        52.84,
+        62.95,
+        60.97,
+        71.11,
+        74.21,
+        299.85,
+        62.75,
+        256.7,
+        67.87,
+        134.19,
+        67.42,
+        76.81,
+        86.69,
+        64.66,
+        66.06,
+        75.16,
+        83.5,
+        74.4
+      ],
+      "gc_collections": 2,
+      "gc_max_ms": 0.66,
+      "events_delivered": 18,
+      "excess_50_ms": 353.02,
+      "warm_excess_50_ms": 311.54,
+      "action_total_ms": 1738.12,
+      "gc_slowest": [
+        {
+          "generation": 0,
+          "collected": 1332,
+          "ms": 0.66
+        },
+        {
+          "generation": 0,
+          "collected": 876,
+          "ms": 0.64
+        }
+      ]
+    },
+    {
+      "file": "reduction-before-tools-8.json",
+      "artifact_sha256": "ec90b92323f8c4dae17f1f219be192bd91abc93a5eaada2a1ac135d7dda317d1",
+      "valid": true,
+      "scenario": "tools",
+      "profiled": false,
+      "surface": "feed",
+      "activation_ms": 0.64,
+      "imports_ms": 455.65,
+      "constructor_ms": 3417.51,
+      "elapsed_seconds": 11.08,
+      "gc_enabled": true,
+      "measurement_started_perf": 413337.7726254,
+      "measurement_ended_perf": 413348.8477219,
+      "heartbeat_samples": 865,
+      "heartbeat_max_ms": 302.46,
+      "heartbeat_p99_ms": 62.2,
+      "heartbeat_over_50": 17,
+      "heartbeat_gaps_over_50": [
+        [
+          657.041,
+          60.121
+        ],
+        [
+          740.302,
+          60.714
+        ],
+        [
+          832.955,
+          92.653
+        ],
+        [
+          1342.128,
+          302.459
+        ],
+        [
+          1514.312,
+          122.303
+        ],
+        [
+          1576.514,
+          62.202
+        ],
+        [
+          2163.391,
+          73.307
+        ],
+        [
+          2320.958,
+          95.87
+        ],
+        [
+          2423.6,
+          102.642
+        ],
+        [
+          2738.111,
+          68.117
+        ],
+        [
+          2825.771,
+          62.307
+        ],
+        [
+          3293.831,
+          53.627
+        ],
+        [
+          3735.868,
+          55.84
+        ],
+        [
+          3911.117,
+          101.603
+        ],
+        [
+          4031.925,
+          51.547
+        ],
+        [
+          5282.273,
+          58.172
+        ],
+        [
+          9481.399,
+          51.529
+        ]
+      ],
+      "warm_max_ms": 102.64,
+      "action_ms": [
+        43.27,
+        557.09,
+        77.89,
+        80.94,
+        69.13,
+        299.6,
+        45.25,
+        53.79,
+        49.56,
+        32.37,
+        32.71,
+        37.49,
+        35.95,
+        33.77,
+        31.43,
+        50.19,
+        38.37,
+        45.5
+      ],
+      "gc_collections": 2,
+      "gc_max_ms": 0.5,
+      "events_delivered": 18,
+      "excess_50_ms": 625.01,
+      "warm_excess_50_ms": 224.56,
+      "action_total_ms": 1614.32,
+      "gc_slowest": [
+        {
+          "generation": 0,
+          "collected": 876,
+          "ms": 0.5
+        },
+        {
+          "generation": 0,
+          "collected": 1260,
+          "ms": 0.47
+        }
+      ]
+    },
+    {
+      "file": "reduction-toolbar-bound-capsules-8.json",
+      "artifact_sha256": "e5d2f72839936e8cb456a9dcd9d9df52db890edb53f934785d88b1a59e125406",
+      "valid": true,
+      "scenario": "capsules",
+      "profiled": false,
+      "surface": "toolbar",
+      "activation_ms": 1.49,
+      "imports_ms": 3148.48,
+      "constructor_ms": 14541.17,
+      "elapsed_seconds": 9.87,
+      "gc_enabled": true,
+      "measurement_started_perf": 413181.7418393,
+      "measurement_ended_perf": 413191.6106433,
+      "heartbeat_samples": 800,
+      "heartbeat_max_ms": 87.7,
+      "heartbeat_p99_ms": 51.94,
+      "heartbeat_over_50": 11,
+      "heartbeat_gaps_over_50": [
+        [
+          1581.136,
+          66.721
+        ],
+        [
+          1639.066,
+          57.93
+        ],
+        [
+          2297.348,
+          66.14
+        ],
+        [
+          3161.766,
+          51.156
+        ],
+        [
+          3702.971,
+          60.033
+        ],
+        [
+          4666.476,
+          51.936
+        ],
+        [
+          5289.404,
+          87.705
+        ],
+        [
+          5352.314,
+          62.91
+        ],
+        [
+          6755.07,
+          50.422
+        ],
+        [
+          7787.299,
+          52.72
+        ],
+        [
+          9488.967,
+          69.619
+        ]
+      ],
+      "warm_max_ms": 87.7,
+      "action_ms": [
+        25.76,
+        1.87,
+        44.07,
+        15.32,
+        20.19,
+        25.71,
+        26.42,
+        1.68,
+        35.08,
+        14.38,
+        30.94,
+        18.72,
+        34.67,
+        5.09,
+        36.14,
+        13.06,
+        36.77,
+        17.09
+      ],
+      "gc_collections": 2,
+      "gc_max_ms": 1.05,
+      "events_delivered": 18,
+      "excess_50_ms": 127.29,
+      "warm_excess_50_ms": 127.29,
+      "action_total_ms": 402.96,
+      "gc_slowest": [
+        {
+          "generation": 0,
+          "collected": 1728,
+          "ms": 1.05
+        },
+        {
+          "generation": 0,
+          "collected": 1152,
+          "ms": 0.88
+        }
+      ]
+    },
+    {
+      "file": "reduction-toolbar-bound-capsules-9.json",
+      "artifact_sha256": "3661246ec049da9687379ec985e67b26a6fd321a7f86372b272daf9150a58f8e",
+      "valid": true,
+      "scenario": "capsules",
+      "profiled": false,
+      "surface": "toolbar",
+      "activation_ms": 0.62,
+      "imports_ms": 580.49,
+      "constructor_ms": 3262.32,
+      "elapsed_seconds": 9.74,
+      "gc_enabled": true,
+      "measurement_started_perf": 413445.1162669,
+      "measurement_ended_perf": 413454.8609893,
+      "heartbeat_samples": 879,
+      "heartbeat_max_ms": 46.57,
+      "heartbeat_p99_ms": 33.81,
+      "heartbeat_over_50": 0,
+      "heartbeat_gaps_over_50": [],
+      "warm_max_ms": 46.57,
+      "action_ms": [
+        16.91,
+        3.71,
+        16.63,
+        7.02,
+        21.74,
+        17.28,
+        19.06,
+        1.36,
+        21.52,
+        6.6,
+        11.25,
+        14.62,
+        20.98,
+        1.69,
+        24.63,
+        5.29,
+        14.73,
+        15.52
+      ],
+      "gc_collections": 3,
+      "gc_max_ms": 0.65,
+      "events_delivered": 18,
+      "excess_50_ms": 0,
+      "warm_excess_50_ms": 0,
+      "action_total_ms": 240.56,
+      "gc_slowest": [
+        {
+          "generation": 0,
+          "collected": 1440,
+          "ms": 0.65
+        },
+        {
+          "generation": 0,
+          "collected": 1728,
+          "ms": 0.59
+        },
+        {
+          "generation": 0,
+          "collected": 581,
+          "ms": 0.55
+        }
+      ]
+    },
+    {
+      "file": "reduction-toolbar-bound-capsules-trace-10.json",
+      "artifact_sha256": "954ef23a9ef74c4e195aa721d7b69e8ac3531a446ef5606f2b7aa24b701d735e",
+      "valid": true,
+      "scenario": "capsules",
+      "profiled": true,
+      "surface": "toolbar",
+      "activation_ms": 0.73,
+      "imports_ms": 3150.88,
+      "constructor_ms": 2264.14,
+      "elapsed_seconds": 9.81,
+      "gc_enabled": true,
+      "measurement_started_perf": 413502.7447749,
+      "measurement_ended_perf": 413512.5567682,
+      "heartbeat_samples": 859,
+      "heartbeat_max_ms": 64.7,
+      "heartbeat_p99_ms": 40.21,
+      "heartbeat_over_50": 4,
+      "heartbeat_gaps_over_50": [
+        [
+          1561.512,
+          50.869
+        ],
+        [
+          2168.722,
+          64.535
+        ],
+        [
+          4675.144,
+          64.701
+        ],
+        [
+          8370.499,
+          58.272
+        ]
+      ],
+      "warm_max_ms": 64.7,
+      "action_ms": [
+        18.15,
+        1.72,
+        27.74,
+        10.59,
+        26.06,
+        19.66,
+        20.28,
+        1.81,
+        45.42,
+        10.13,
+        25.08,
+        18.44,
+        21.74,
+        2.25,
+        32.39,
+        10.05,
+        17.94,
+        18.48
+      ],
+      "gc_collections": 4,
+      "gc_max_ms": 5.37,
+      "events_delivered": 18,
+      "excess_50_ms": 38.38,
+      "warm_excess_50_ms": 38.38,
+      "action_total_ms": 327.94,
+      "gc_slowest": [
+        {
+          "generation": 1,
+          "collected": 1466,
+          "ms": 5.37
+        },
+        {
+          "generation": 0,
+          "collected": 1440,
+          "ms": 0.82
+        },
+        {
+          "generation": 0,
+          "collected": 1152,
+          "ms": 0.64
+        },
+        {
+          "generation": 0,
+          "collected": 864,
+          "ms": 0.52
+        }
+      ]
+    },
+    {
+      "file": "reduction-toolbar-bound-keyboard-8.json",
+      "artifact_sha256": "a936ba49b5730e14552f91ccc7fe2dc4e4f6462825611781e49706a758960dcf",
+      "valid": true,
+      "scenario": "keyboard",
+      "profiled": false,
+      "surface": "toolbar",
+      "activation_ms": 1.42,
+      "imports_ms": 1108.0,
+      "constructor_ms": 5559.27,
+      "elapsed_seconds": 9.57,
+      "gc_enabled": true,
+      "measurement_started_perf": 413201.5395488,
+      "measurement_ended_perf": 413211.112155,
+      "heartbeat_samples": 916,
+      "heartbeat_max_ms": 83.19,
+      "heartbeat_p99_ms": 22.91,
+      "heartbeat_over_50": 1,
+      "heartbeat_gaps_over_50": [
+        [
+          2190.147,
+          83.193
+        ]
+      ],
+      "warm_max_ms": 83.19,
+      "action_ms": [
+        9.45,
+        4.1,
+        10.55,
+        5.89,
+        15.49,
+        3.97,
+        8.5,
+        5.0,
+        9.56,
+        4.19,
+        10.88,
+        2.55,
+        9.03,
+        7.0,
+        13.06,
+        6.14,
+        11.72,
+        4.57
+      ],
+      "gc_collections": 2,
+      "gc_max_ms": 0.66,
+      "events_delivered": 18,
+      "excess_50_ms": 33.19,
+      "warm_excess_50_ms": 33.19,
+      "action_total_ms": 141.64,
+      "gc_slowest": [
+        {
+          "generation": 0,
+          "collected": 1728,
+          "ms": 0.66
+        },
+        {
+          "generation": 0,
+          "collected": 581,
+          "ms": 0.53
+        }
+      ]
+    },
+    {
+      "file": "reduction-toolbar-bound-keyboard-9.json",
+      "artifact_sha256": "9dfbe746f6c338e56428fd3ff2905731146c45ac0955343877593ecfeb9a68ed",
+      "valid": true,
+      "scenario": "keyboard",
+      "profiled": false,
+      "surface": "toolbar",
+      "activation_ms": 8.61,
+      "imports_ms": 1035.7,
+      "constructor_ms": 3802.22,
+      "elapsed_seconds": 9.61,
+      "gc_enabled": true,
+      "measurement_started_perf": 413482.5218625,
+      "measurement_ended_perf": 413492.1287635,
+      "heartbeat_samples": 906,
+      "heartbeat_max_ms": 35.32,
+      "heartbeat_p99_ms": 28.21,
+      "heartbeat_over_50": 0,
+      "heartbeat_gaps_over_50": [],
+      "warm_max_ms": 35.32,
+      "action_ms": [
+        16.03,
+        4.71,
+        11.13,
+        4.92,
+        14.15,
+        6.11,
+        12.01,
+        5.05,
+        11.12,
+        4.35,
+        14.48,
+        4.71,
+        14.9,
+        4.83,
+        10.9,
+        3.56,
+        10.81,
+        4.21
+      ],
+      "gc_collections": 2,
+      "gc_max_ms": 0.76,
+      "events_delivered": 18,
+      "excess_50_ms": 0,
+      "warm_excess_50_ms": 0,
+      "action_total_ms": 157.99,
+      "gc_slowest": [
+        {
+          "generation": 0,
+          "collected": 581,
+          "ms": 0.76
+        },
+        {
+          "generation": 0,
+          "collected": 1728,
+          "ms": 0.75
+        }
+      ]
+    },
+    {
+      "file": "reduction-toolbar-bound-long-stream-8.json",
+      "artifact_sha256": "c86c1d679f3bd22b3108b403a2a5700a8a7173a856821c507f6136a426aa40a2",
+      "valid": true,
+      "scenario": "long-stream",
+      "profiled": false,
+      "surface": "feed",
+      "activation_ms": 0.61,
+      "imports_ms": 557.86,
+      "constructor_ms": 9135.78,
+      "elapsed_seconds": 11.77,
+      "gc_enabled": true,
+      "measurement_started_perf": 413223.5442856,
+      "measurement_ended_perf": 413235.3159915,
+      "heartbeat_samples": 953,
+      "heartbeat_max_ms": 299.12,
+      "heartbeat_p99_ms": 117.82,
+      "heartbeat_over_50": 16,
+      "heartbeat_gaps_over_50": [
+        [
+          2211.19,
+          143.263
+        ],
+        [
+          2769.313,
+          61.549
+        ],
+        [
+          3330.778,
+          62.834
+        ],
+        [
+          3914.361,
+          86.578
+        ],
+        [
+          4526.245,
+          107.809
+        ],
+        [
+          5137.787,
+          117.824
+        ],
+        [
+          5746.018,
+          118.328
+        ],
+        [
+          6392.411,
+          144.306
+        ],
+        [
+          7105.229,
+          216.054
+        ],
+        [
+          7898.561,
+          299.119
+        ],
+        [
+          8563.636,
+          166.126
+        ],
+        [
+          9233.498,
+          184.719
+        ],
+        [
+          9889.449,
+          171.306
+        ],
+        [
+          10550.514,
+          182.372
+        ],
+        [
+          11222.796,
+          175.384
+        ],
+        [
+          11769.834,
+          61.738
+        ]
+      ],
+      "warm_max_ms": 299.12,
+      "action_ms": [
+        37.27,
+        45.87,
+        35.61,
+        120.45,
+        63.95,
+        58.88,
+        82.08,
+        113.4,
+        116.27,
+        116.18,
+        150.71,
+        210.85,
+        302.43,
+        163.79,
+        183.53,
+        167.13,
+        172.16,
+        167.5
+      ],
+      "gc_collections": 147,
+      "gc_max_ms": 128.91,
+      "events_delivered": 18,
+      "excess_50_ms": 1499.31,
+      "warm_excess_50_ms": 1499.31,
+      "action_total_ms": 2308.06,
+      "gc_slowest": [
+        {
+          "generation": 2,
+          "collected": 24434,
+          "ms": 128.91
+        },
+        {
+          "generation": 1,
+          "collected": 5848,
+          "ms": 42.77
+        },
+        {
+          "generation": 1,
+          "collected": 6169,
+          "ms": 8.47
+        },
+        {
+          "generation": 1,
+          "collected": 5289,
+          "ms": 6.1
+        },
+        {
+          "generation": 1,
+          "collected": 5729,
+          "ms": 5.48
+        }
+      ]
+    },
+    {
+      "file": "reduction-toolbar-bound-projection-8.json",
+      "artifact_sha256": "c65b20556d8e4a0a8d8560e460e86e3e898733c24879b1804bec74c47d7deb58",
+      "valid": true,
+      "scenario": "projection",
+      "profiled": false,
+      "surface": "feed",
+      "activation_ms": 0.8,
+      "imports_ms": 587.97,
+      "constructor_ms": 4011.7,
+      "elapsed_seconds": 9.79,
+      "gc_enabled": true,
+      "measurement_started_perf": 413279.0209746,
+      "measurement_ended_perf": 413288.813479,
+      "heartbeat_samples": 953,
+      "heartbeat_max_ms": 212.34,
+      "heartbeat_p99_ms": 16.47,
+      "heartbeat_over_50": 1,
+      "heartbeat_gaps_over_50": [
+        [
+          707.896,
+          212.339
+        ]
+      ],
+      "warm_max_ms": 27.98,
+      "action_ms": [
+        245.89,
+        9.27,
+        7.51,
+        6.0,
+        5.75,
+        6.16,
+        5.38,
+        6.37,
+        6.55,
+        6.55,
+        7.29,
+        5.79,
+        8.17,
+        5.08,
+        5.05,
+        7.57,
+        5.9,
+        19.28
+      ],
+      "gc_collections": 1,
+      "gc_max_ms": 0.35,
+      "events_delivered": 18,
+      "excess_50_ms": 162.34,
+      "warm_excess_50_ms": 0,
+      "action_total_ms": 369.58,
+      "gc_slowest": [
+        {
+          "generation": 0,
+          "collected": 264,
+          "ms": 0.35
+        }
+      ]
+    },
+    {
+      "file": "reduction-toolbar-bound-reset-8.json",
+      "artifact_sha256": "e5eae71e16a403e4d0a7029506e92a144fd13dacaccf46cf19f8668f1e3a2bb4",
+      "valid": true,
+      "scenario": "reset",
+      "profiled": false,
+      "surface": "feed",
+      "activation_ms": 0.5,
+      "imports_ms": 388.89,
+      "constructor_ms": 3438.93,
+      "elapsed_seconds": 12.38,
+      "gc_enabled": true,
+      "measurement_started_perf": 413241.6790781,
+      "measurement_ended_perf": 413254.0633531,
+      "heartbeat_samples": 1061,
+      "heartbeat_max_ms": 101.91,
+      "heartbeat_p99_ms": 72.21,
+      "heartbeat_over_50": 18,
+      "heartbeat_gaps_over_50": [
+        [
+          624.499,
+          101.915
+        ],
+        [
+          1374.883,
+          81.138
+        ],
+        [
+          1993.475,
+          61.433
+        ],
+        [
+          2597.021,
+          58.473
+        ],
+        [
+          3207.315,
+          77.717
+        ],
+        [
+          3873.539,
+          61.264
+        ],
+        [
+          4542.65,
+          61.141
+        ],
+        [
+          5186.848,
+          91.801
+        ],
+        [
+          5838.744,
+          74.367
+        ],
+        [
+          6529.5,
+          61.397
+        ],
+        [
+          7152.933,
+          72.209
+        ],
+        [
+          7852.718,
+          75.07
+        ],
+        [
+          8502.334,
+          78.447
+        ],
+        [
+          9154.605,
+          82.807
+        ],
+        [
+          9880.443,
+          99.562
+        ],
+        [
+          10534.537,
+          71.684
+        ],
+        [
+          11170.901,
+          82.717
+        ],
+        [
+          11815.814,
+          86.914
+        ]
+      ],
+      "warm_max_ms": 99.56,
+      "action_ms": [
+        285.35,
+        146.86,
+        113.77,
+        107.12,
+        172.51,
+        181.12,
+        119.3,
+        181.14,
+        210.99,
+        112.47,
+        209.08,
+        153.01,
+        164.42,
+        210.69,
+        189.8,
+        127.91,
+        140.54,
+        139.15
+      ],
+      "gc_collections": 4,
+      "gc_max_ms": 0.73,
+      "events_delivered": 18,
+      "excess_50_ms": 480.05,
+      "warm_excess_50_ms": 397.0,
+      "action_total_ms": 2965.23,
+      "gc_slowest": [
+        {
+          "generation": 0,
+          "collected": 1848,
+          "ms": 0.73
+        },
+        {
+          "generation": 0,
+          "collected": 1824,
+          "ms": 0.58
+        },
+        {
+          "generation": 0,
+          "collected": 1795,
+          "ms": 0.55
+        },
+        {
+          "generation": 0,
+          "collected": 1555,
+          "ms": 0.46
+        }
+      ]
+    },
+    {
+      "file": "reduction-toolbar-bound-tools-8.json",
+      "artifact_sha256": "5802f0743392b8e4b2592d8dc611be504041020bd348fe10089a2af7a784d108",
+      "valid": true,
+      "scenario": "tools",
+      "profiled": false,
+      "surface": "feed",
+      "activation_ms": 0.67,
+      "imports_ms": 507.92,
+      "constructor_ms": 4224.68,
+      "elapsed_seconds": 10.31,
+      "gc_enabled": true,
+      "measurement_started_perf": 413261.5107206,
+      "measurement_ended_perf": 413271.8197155,
+      "heartbeat_samples": 929,
+      "heartbeat_max_ms": 57.8,
+      "heartbeat_p99_ms": 37.98,
+      "heartbeat_over_50": 2,
+      "heartbeat_gaps_over_50": [
+        [
+          4390.228,
+          57.795
+        ],
+        [
+          7638.379,
+          55.415
+        ]
+      ],
+      "warm_max_ms": 57.8,
+      "action_ms": [
+        26.72,
+        45.4,
+        30.29,
+        39.81,
+        39.71,
+        163.67,
+        36.33,
+        56.58,
+        52.46,
+        38.92,
+        37.34,
+        41.82,
+        40.76,
+        56.07,
+        33.54,
+        51.63,
+        36.6,
+        54.19
+      ],
+      "gc_collections": 2,
+      "gc_max_ms": 0.92,
+      "events_delivered": 18,
+      "excess_50_ms": 13.21,
+      "warm_excess_50_ms": 13.21,
+      "action_total_ms": 881.85,
+      "gc_slowest": [
+        {
+          "generation": 0,
+          "collected": 1165,
+          "ms": 0.92
+        },
+        {
+          "generation": 0,
+          "collected": 876,
+          "ms": 0.55
+        }
+      ]
+    },
+    {
+      "file": "reduction-toolbar-cache-capsules-1.json",
+      "artifact_sha256": "ac14f239b75f2b7e36234393be452515f94ac9536c512689cd65eeb82be8cff9",
+      "valid": true,
+      "scenario": "capsules",
+      "profiled": false,
+      "surface": "toolbar",
+      "activation_ms": 0.74,
+      "imports_ms": 1167.88,
+      "constructor_ms": 4458.27,
+      "elapsed_seconds": 10.36,
+      "gc_enabled": true,
+      "heartbeat_samples": 544,
+      "heartbeat_max_ms": 495.3,
+      "heartbeat_p99_ms": 145.45,
+      "heartbeat_over_50": 36,
+      "warm_max_ms": 495.3,
+      "action_ms": [
+        43.9,
+        2.14,
+        117.47,
+        10.41,
+        23.91,
+        43.54,
+        30.27,
+        1.61,
+        44.73,
+        15.39,
+        27.69,
+        22.07,
+        28.83,
+        4.16,
+        35.56,
+        9.76,
+        21.02,
+        23.07
+      ],
+      "gc_collections": 2,
+      "gc_max_ms": 1.04,
+      "events_delivered": 18,
+      "excess_50_ms": 2648.24,
+      "warm_excess_50_ms": 2508.01,
+      "action_total_ms": 505.54,
+      "gc_slowest": [
+        {
+          "generation": 0,
+          "collected": 1728,
+          "ms": 1.04
+        },
+        {
+          "generation": 0,
+          "collected": 874,
+          "ms": 0.89
+        }
+      ]
+    },
+    {
+      "file": "reduction-toolbar-cache-keyboard-1.json",
+      "artifact_sha256": "7337026064431f22f7437fd87588cad7364ad1adb59fae814fbef41e1f58a334",
+      "valid": true,
+      "scenario": "keyboard",
+      "profiled": false,
+      "surface": "toolbar",
+      "activation_ms": 0.78,
+      "imports_ms": 1107.99,
+      "constructor_ms": 13584.02,
+      "elapsed_seconds": 10.71,
+      "gc_enabled": true,
+      "heartbeat_samples": 498,
+      "heartbeat_max_ms": 535.65,
+      "heartbeat_p99_ms": 383.18,
+      "heartbeat_over_50": 30,
+      "warm_max_ms": 535.65,
+      "action_ms": [
+        20.31,
+        6.53,
+        13.77,
+        5.59,
+        12.57,
+        6.65,
+        13.83,
+        4.87,
+        22.14,
+        5.14,
+        19.48,
+        6.96,
+        169.72,
+        54.89,
+        26.32,
+        5.45,
+        18.12,
+        5.53
+      ],
+      "gc_collections": 1,
+      "gc_max_ms": 0.8,
+      "events_delivered": 18,
+      "excess_50_ms": 3612.42,
+      "warm_excess_50_ms": 3497.73,
+      "action_total_ms": 417.88,
+      "gc_slowest": [
+        {
+          "generation": 0,
+          "collected": 869,
+          "ms": 0.8
+        }
+      ]
+    },
+    {
+      "file": "reduction-toolbar-capsules-1.json",
+      "artifact_sha256": "ec28517e0d805cb4f378d9d33aaf5ba93995ab7f5ff17d2f08f026d47ce2e4ef",
+      "valid": true,
+      "scenario": "capsules",
+      "profiled": false,
+      "surface": "toolbar",
+      "activation_ms": 0.99,
+      "imports_ms": 890.62,
+      "constructor_ms": 4840.63,
+      "elapsed_seconds": 9.9,
+      "gc_enabled": true,
+      "heartbeat_samples": 700,
+      "heartbeat_max_ms": 116.41,
+      "heartbeat_p99_ms": 90.37,
+      "heartbeat_over_50": 27,
+      "warm_max_ms": 116.41,
+      "action_ms": [
+        24.75,
+        2.17,
+        31.38,
+        17.14,
+        23.99,
+        16.86,
+        23.22,
+        1.88,
+        34.56,
+        10.99,
+        26.65,
+        19.21,
+        23.04,
+        1.88,
+        53.81,
+        8.72,
+        24.05,
+        19.56
+      ],
+      "gc_collections": 13,
+      "gc_max_ms": 3.15,
+      "events_delivered": 18,
+      "excess_50_ms": 643.28,
+      "warm_excess_50_ms": 643.28,
+      "action_total_ms": 363.85,
+      "gc_slowest": [
+        {
+          "generation": 1,
+          "collected": 4911,
+          "ms": 3.15
+        },
+        {
+          "generation": 0,
+          "collected": 2016,
+          "ms": 1.46
+        },
+        {
+          "generation": 0,
+          "collected": 2016,
+          "ms": 1.44
+        },
+        {
+          "generation": 0,
+          "collected": 1728,
+          "ms": 1.23
+        },
+        {
+          "generation": 0,
+          "collected": 2016,
+          "ms": 1.18
+        }
+      ]
+    },
+    {
+      "file": "reduction-toolbar-changed-capsules-6.json",
+      "artifact_sha256": "5d6a96636feb253fcb4680046b3e707ad3eae3f09fdf30f9c7b1cdd8bb2547b0",
+      "valid": true,
+      "scenario": "capsules",
+      "profiled": false,
+      "surface": "toolbar",
+      "activation_ms": 0.74,
+      "imports_ms": 1041.51,
+      "constructor_ms": 6497.24,
+      "elapsed_seconds": 10.69,
+      "gc_enabled": true,
+      "heartbeat_samples": 578,
+      "heartbeat_max_ms": 1317.07,
+      "heartbeat_p99_ms": 127.14,
+      "heartbeat_over_50": 23,
+      "warm_max_ms": 1317.07,
+      "action_ms": [
+        24.96,
+        2.51,
+        35.1,
+        7.79,
+        23.4,
+        20.55,
+        26.48,
+        2.26,
+        750.63,
+        11.36,
+        23.42,
+        21.08,
+        23.77,
+        2.36,
+        40.55,
+        8.78,
+        25.97,
+        20.09
+      ],
+      "gc_collections": 2,
+      "gc_max_ms": 0.79,
+      "events_delivered": 18,
+      "excess_50_ms": 2831.48,
+      "warm_excess_50_ms": 2796.66,
+      "action_total_ms": 1071.08,
+      "gc_slowest": [
+        {
+          "generation": 0,
+          "collected": 1728,
+          "ms": 0.79
+        },
+        {
+          "generation": 0,
+          "collected": 1152,
+          "ms": 0.73
+        }
+      ]
+    },
+    {
+      "file": "reduction-toolbar-changed-capsules-7.json",
+      "artifact_sha256": "117cdb9bcf7d6ce7e0a30f824a5e798228fa4b3170ef4a9d080fe1fac18f22b0",
+      "valid": true,
+      "scenario": "capsules",
+      "profiled": false,
+      "surface": "toolbar",
+      "activation_ms": 1.0,
+      "imports_ms": 674.9,
+      "constructor_ms": 4486.18,
+      "elapsed_seconds": 11.08,
+      "gc_enabled": true,
+      "heartbeat_samples": 484,
+      "heartbeat_max_ms": 993.92,
+      "heartbeat_p99_ms": 261.72,
+      "heartbeat_over_50": 30,
+      "warm_max_ms": 993.92,
+      "action_ms": [
+        28.41,
+        5.84,
+        36.16,
+        11.65,
+        28.86,
+        221.12,
+        25.48,
+        3.84,
+        59.56,
+        14.14,
+        26.34,
+        26.04,
+        23.6,
+        2.23,
+        106.31,
+        49.23,
+        26.47,
+        22.42
+      ],
+      "gc_collections": 2,
+      "gc_max_ms": 1.46,
+      "events_delivered": 18,
+      "excess_50_ms": 4349.33,
+      "warm_excess_50_ms": 4328.8,
+      "action_total_ms": 717.68,
+      "gc_slowest": [
+        {
+          "generation": 0,
+          "collected": 1728,
+          "ms": 1.46
+        },
+        {
+          "generation": 0,
+          "collected": 576,
+          "ms": 0.8
+        }
+      ]
+    },
+    {
+      "file": "reduction-toolbar-changed-capsules-events.json",
+      "artifact_sha256": "39880210010dc2ceca17b76716b3b97ce60cd45d09e09422fa875f4c6c349efc",
+      "valid": true,
+      "scenario": "capsules",
+      "profiled": true,
+      "surface": "toolbar",
+      "activation_ms": 0.66,
+      "imports_ms": 790.92,
+      "constructor_ms": 2755.19,
+      "elapsed_seconds": 9.81,
+      "gc_enabled": true,
+      "measurement_started_perf": 411592.9926504,
+      "measurement_ended_perf": 411602.8017283,
+      "heartbeat_samples": 830,
+      "heartbeat_max_ms": 70.73,
+      "heartbeat_p99_ms": 42.18,
+      "heartbeat_over_50": 4,
+      "warm_max_ms": 70.73,
+      "action_ms": [
+        19.7,
+        1.09,
+        31.42,
+        9.79,
+        18.58,
+        18.33,
+        17.08,
+        1.53,
+        28.58,
+        8.89,
+        13.33,
+        12.05,
+        15.77,
+        1.91,
+        33.98,
+        8.25,
+        19.37,
+        18.7
+      ],
+      "gc_collections": 4,
+      "gc_max_ms": 8.04,
+      "events_delivered": 18,
+      "excess_50_ms": 46.39,
+      "warm_excess_50_ms": 46.39,
+      "action_total_ms": 278.34,
+      "gc_slowest": [
+        {
+          "generation": 1,
+          "collected": 2041,
+          "ms": 8.04
+        },
+        {
+          "generation": 0,
+          "collected": 288,
+          "ms": 1.62
+        },
+        {
+          "generation": 0,
+          "collected": 1440,
+          "ms": 0.98
+        },
+        {
+          "generation": 0,
+          "collected": 864,
+          "ms": 0.66
+        }
+      ]
+    },
+    {
+      "file": "reduction-toolbar-changed-capsules-native-events.json",
+      "artifact_sha256": "66608577bb5f26b6a52e75fa0cb7883245e7e0ffa82fef1388a185642a438732",
+      "valid": true,
+      "scenario": "capsules",
+      "profiled": true,
+      "surface": "toolbar",
+      "activation_ms": 0.85,
+      "imports_ms": 1769.99,
+      "constructor_ms": 7205.91,
+      "elapsed_seconds": 9.85,
+      "gc_enabled": true,
+      "measurement_started_perf": 412142.2557537,
+      "measurement_ended_perf": 412152.101245,
+      "heartbeat_samples": 816,
+      "heartbeat_max_ms": 67.0,
+      "heartbeat_p99_ms": 48.63,
+      "heartbeat_over_50": 8,
+      "heartbeat_gaps_over_50": [
+        [
+          2206.666,
+          52.256
+        ],
+        [
+          3264.673,
+          59.498
+        ],
+        [
+          4651.109,
+          51.772
+        ],
+        [
+          4701.326,
+          50.217
+        ],
+        [
+          5380.535,
+          67.003
+        ],
+        [
+          5683.431,
+          53.495
+        ],
+        [
+          7805.172,
+          65.725
+        ],
+        [
+          7855.186,
+          50.014
+        ]
+      ],
+      "warm_max_ms": 67.0,
+      "action_ms": [
+        20.76,
+        1.2,
+        30.44,
+        11.22,
+        24.91,
+        23.27,
+        27.47,
+        1.61,
+        36.75,
+        18.53,
+        40.15,
+        20.12,
+        28.72,
+        1.59,
+        44.51,
+        8.44,
+        19.06,
+        20.07
+      ],
+      "gc_collections": 4,
+      "gc_max_ms": 5.78,
+      "events_delivered": 18,
+      "excess_50_ms": 49.98,
+      "warm_excess_50_ms": 49.98,
+      "action_total_ms": 378.81,
+      "gc_slowest": [
+        {
+          "generation": 1,
+          "collected": 1181,
+          "ms": 5.78
+        },
+        {
+          "generation": 0,
+          "collected": 1440,
+          "ms": 0.71
+        },
+        {
+          "generation": 0,
+          "collected": 1152,
+          "ms": 0.66
+        },
+        {
+          "generation": 0,
+          "collected": 581,
+          "ms": 0.56
+        }
+      ]
+    },
+    {
+      "file": "reduction-toolbar-changed-keyboard-6.json",
+      "artifact_sha256": "04c50922e0aae1485802c2095dc0432909afef27bf1b7b4a0f2adc11359a6412",
+      "valid": true,
+      "scenario": "keyboard",
+      "profiled": false,
+      "surface": "toolbar",
+      "activation_ms": 1.96,
+      "imports_ms": 841.35,
+      "constructor_ms": 7533.95,
+      "elapsed_seconds": 10.45,
+      "gc_enabled": true,
+      "heartbeat_samples": 660,
+      "heartbeat_max_ms": 952.29,
+      "heartbeat_p99_ms": 80.91,
+      "heartbeat_over_50": 19,
+      "warm_max_ms": 952.29,
+      "action_ms": [
+        34.44,
+        7.02,
+        15.41,
+        5.67,
+        19.6,
+        6.2,
+        17.78,
+        7.33,
+        18.94,
+        6.92,
+        14.59,
+        8.25,
+        16.76,
+        8.28,
+        21.79,
+        5.97,
+        27.35,
+        5.9
+      ],
+      "gc_collections": 2,
+      "gc_max_ms": 1.22,
+      "events_delivered": 18,
+      "excess_50_ms": 2113.96,
+      "warm_excess_50_ms": 1966.02,
+      "action_total_ms": 248.18,
+      "gc_slowest": [
+        {
+          "generation": 0,
+          "collected": 1728,
+          "ms": 1.22
+        },
+        {
+          "generation": 0,
+          "collected": 576,
+          "ms": 0.71
+        }
+      ]
+    },
+    {
+      "file": "reduction-toolbar-changed-keyboard-7.json",
+      "artifact_sha256": "2364e91950507f250a88dbdbb91efd7bd6751b982a8f7075f1b32efe8beb7472",
+      "valid": true,
+      "scenario": "keyboard",
+      "profiled": false,
+      "surface": "toolbar",
+      "activation_ms": 1.29,
+      "imports_ms": 419.96,
+      "constructor_ms": 2921.24,
+      "elapsed_seconds": 9.62,
+      "gc_enabled": true,
+      "heartbeat_samples": 875,
+      "heartbeat_max_ms": 71.79,
+      "heartbeat_p99_ms": 32.34,
+      "heartbeat_over_50": 2,
+      "warm_max_ms": 71.79,
+      "action_ms": [
+        17.98,
+        4.14,
+        15.21,
+        5.63,
+        9.84,
+        3.64,
+        9.66,
+        5.41,
+        15.64,
+        4.94,
+        19.29,
+        5.74,
+        21.8,
+        4.98,
+        14.86,
+        5.43,
+        14.4,
+        5.23
+      ],
+      "gc_collections": 2,
+      "gc_max_ms": 0.7,
+      "events_delivered": 18,
+      "excess_50_ms": 36.94,
+      "warm_excess_50_ms": 36.94,
+      "action_total_ms": 183.85,
+      "gc_slowest": [
+        {
+          "generation": 0,
+          "collected": 1728,
+          "ms": 0.7
+        },
+        {
+          "generation": 0,
+          "collected": 581,
+          "ms": 0.59
+        }
+      ]
+    },
+    {
+      "file": "reduction-toolbar-final-capsules-11.json",
+      "artifact_sha256": "1413258dee8b121be49d65badc756b74c17ce98750e25cc3c8aa89095798aa07",
+      "valid": true,
+      "scenario": "capsules",
+      "profiled": false,
+      "surface": "toolbar",
+      "activation_ms": 1.26,
+      "imports_ms": 1717.3,
+      "constructor_ms": 19977.71,
+      "elapsed_seconds": 9.81,
+      "gc_enabled": true,
+      "measurement_started_perf": 413567.4601989,
+      "measurement_ended_perf": 413577.2698644,
+      "heartbeat_samples": 784,
+      "heartbeat_max_ms": 130.83,
+      "heartbeat_p99_ms": 53.77,
+      "heartbeat_over_50": 12,
+      "heartbeat_gaps_over_50": [
+        [
+          590.212,
+          68.072
+        ],
+        [
+          1643.632,
+          88.765
+        ],
+        [
+          1696.633,
+          53.001
+        ],
+        [
+          2275.084,
+          59.349
+        ],
+        [
+          3680.434,
+          52.392
+        ],
+        [
+          4656.055,
+          55.219
+        ],
+        [
+          6306.47,
+          58.42
+        ],
+        [
+          6712.346,
+          51.608
+        ],
+        [
+          7755.352,
+          53.767
+        ],
+        [
+          7886.178,
+          130.826
+        ],
+        [
+          7952.931,
+          66.753
+        ],
+        [
+          8392.079,
+          67.236
+        ]
+      ],
+      "warm_max_ms": 130.83,
+      "action_ms": [
+        17.07,
+        1.77,
+        33.83,
+        8.17,
+        16.46,
+        19.11,
+        29.64,
+        1.96,
+        38.77,
+        11.87,
+        21.75,
+        24.81,
+        36.57,
+        2.15,
+        34.94,
+        13.02,
+        26.13,
+        21.72
+      ],
+      "gc_collections": 2,
+      "gc_max_ms": 1.67,
+      "events_delivered": 18,
+      "excess_50_ms": 205.41,
+      "warm_excess_50_ms": 187.34,
+      "action_total_ms": 359.75,
+      "gc_slowest": [
+        {
+          "generation": 0,
+          "collected": 1728,
+          "ms": 1.67
+        },
+        {
+          "generation": 0,
+          "collected": 1152,
+          "ms": 0.78
+        }
+      ]
+    },
+    {
+      "file": "reduction-toolbar-final-keyboard-11.json",
+      "artifact_sha256": "ae64754da72c604d3d1454dc984d2e3d0e7ad184ebbbd2fe56f27d7abb9eac8f",
+      "valid": true,
+      "scenario": "keyboard",
+      "profiled": false,
+      "surface": "toolbar",
+      "activation_ms": 0.91,
+      "imports_ms": 1003.22,
+      "constructor_ms": 7418.57,
+      "elapsed_seconds": 9.8,
+      "gc_enabled": true,
+      "measurement_started_perf": 413588.8200088,
+      "measurement_ended_perf": 413598.6202864,
+      "heartbeat_samples": 828,
+      "heartbeat_max_ms": 60.33,
+      "heartbeat_p99_ms": 41.75,
+      "heartbeat_over_50": 4,
+      "heartbeat_gaps_over_50": [
+        [
+          601.672,
+          60.326
+        ],
+        [
+          1258.785,
+          50.34
+        ],
+        [
+          2247.715,
+          54.034
+        ],
+        [
+          7825.634,
+          57.674
+        ]
+      ],
+      "warm_max_ms": 57.67,
+      "action_ms": [
+        19.2,
+        6.56,
+        18.63,
+        6.46,
+        21.58,
+        6.66,
+        20.14,
+        4.06,
+        22.71,
+        5.77,
+        19.39,
+        5.61,
+        27.74,
+        7.94,
+        18.13,
+        5.09,
+        23.36,
+        7.61
+      ],
+      "gc_collections": 2,
+      "gc_max_ms": 1.54,
+      "events_delivered": 18,
+      "excess_50_ms": 22.37,
+      "warm_excess_50_ms": 12.05,
+      "action_total_ms": 246.63,
+      "gc_slowest": [
+        {
+          "generation": 0,
+          "collected": 1440,
+          "ms": 1.54
+        },
+        {
+          "generation": 0,
+          "collected": 576,
+          "ms": 0.85
+        }
+      ]
+    },
+    {
+      "file": "reduction-toolbar-final-long-stream-11.json",
+      "artifact_sha256": "f114913ca16c9f4bd93e5a6fd5d496a53cf291c7ce3f29abc79855272a9988ce",
+      "valid": true,
+      "scenario": "long-stream",
+      "profiled": false,
+      "surface": "feed",
+      "activation_ms": 0.93,
+      "imports_ms": 1917.38,
+      "constructor_ms": 26446.14,
+      "elapsed_seconds": 15.68,
+      "gc_enabled": true,
+      "measurement_started_perf": 413631.7759696,
+      "measurement_ended_perf": 413647.458367,
+      "heartbeat_samples": 868,
+      "heartbeat_max_ms": 575.38,
+      "heartbeat_p99_ms": 260.1,
+      "heartbeat_over_50": 20,
+      "heartbeat_gaps_over_50": [
+        [
+          570.129,
+          77.783
+        ],
+        [
+          1138.81,
+          66.471
+        ],
+        [
+          1749.058,
+          116.475
+        ],
+        [
+          2393.232,
+          140.846
+        ],
+        [
+          3057.502,
+          155.004
+        ],
+        [
+          3710.689,
+          158.17
+        ],
+        [
+          4420.345,
+          207.891
+        ],
+        [
+          5172.137,
+          260.104
+        ],
+        [
+          6052.333,
+          297.101
+        ],
+        [
+          6782.392,
+          230.058
+        ],
+        [
+          7592.962,
+          320.233
+        ],
+        [
+          8467.638,
+          373.425
+        ],
+        [
+          9748.291,
+          575.382
+        ],
+        [
+          10700.612,
+          458.112
+        ],
+        [
+          11641.465,
+          459.312
+        ],
+        [
+          12569.353,
+          434.755
+        ],
+        [
+          13912.055,
+          562.101
+        ],
+        [
+          13962.393,
+          50.338
+        ],
+        [
+          14997.419,
+          524.935
+        ],
+        [
+          15644.832,
+          86.227
+        ]
+      ],
+      "warm_max_ms": 575.38,
+      "action_ms": [
+        78.29,
+        74.71,
+        126.01,
+        143.61,
+        167.63,
+        161.98,
+        213.35,
+        347.75,
+        302.62,
+        229.23,
+        310.01,
+        578.15,
+        572.83,
+        453.19,
+        454.38,
+        707.81,
+        615.07,
+        591.95
+      ],
+      "gc_collections": 146,
+      "gc_max_ms": 230.86,
+      "events_delivered": 18,
+      "excess_50_ms": 4554.72,
+      "warm_excess_50_ms": 4510.47,
+      "action_total_ms": 6128.58,
+      "gc_slowest": [
+        {
+          "generation": 2,
+          "collected": 24434,
+          "ms": 230.86
+        },
+        {
+          "generation": 1,
+          "collected": 6169,
+          "ms": 19.62
+        },
+        {
+          "generation": 1,
+          "collected": 5729,
+          "ms": 18.9
+        },
+        {
+          "generation": 1,
+          "collected": 12808,
+          "ms": 15.97
+        },
+        {
+          "generation": 1,
+          "collected": 7049,
+          "ms": 14.14
+        }
+      ]
+    },
+    {
+      "file": "reduction-toolbar-final-projection-11.json",
+      "artifact_sha256": "fa0ee2fd595849e9c60a06bec6ed58fbe938c0d365e725b043221e3c202d5e30",
+      "valid": false,
+      "reason": "Qt pointer callback raised RuntimeError: dictionary changed size during iteration in AgentToasts.observe_pointer; this run is excluded from formal totals.",
+      "scenario": "projection",
+      "profiled": false,
+      "surface": "feed",
+      "activation_ms": 3.71,
+      "imports_ms": 1358.54,
+      "constructor_ms": 10018.19,
+      "elapsed_seconds": 10.5,
+      "gc_enabled": true,
+      "measurement_started_perf": 413732.554959,
+      "measurement_ended_perf": 413743.0532125,
+      "heartbeat_samples": 923,
+      "heartbeat_max_ms": 442.4,
+      "heartbeat_p99_ms": 27.57,
+      "heartbeat_over_50": 3,
+      "heartbeat_gaps_over_50": [
+        [
+          939.564,
+          442.398
+        ],
+        [
+          1000.345,
+          60.781
+        ],
+        [
+          1648.951,
+          422.295
+        ]
+      ],
+      "warm_max_ms": 29.6,
+      "action_ms": [
+        720.24,
+        13.28,
+        16.07,
+        17.49,
+        12.91,
+        15.41,
+        25.72,
+        13.27,
+        17.16,
+        14.27,
+        17.38,
+        14.78,
+        13.88,
+        16.23,
+        13.63,
+        18.13,
+        13.4,
+        16.11
+      ],
+      "gc_collections": 2,
+      "gc_max_ms": 0.58,
+      "events_delivered": 18,
+      "excess_50_ms": 775.47,
+      "warm_excess_50_ms": 0,
+      "action_total_ms": 989.35,
+      "gc_slowest": [
+        {
+          "generation": 0,
+          "collected": 0,
+          "ms": 0.58
+        },
+        {
+          "generation": 0,
+          "collected": 264,
+          "ms": 0.48
+        }
+      ]
+    },
+    {
+      "file": "reduction-toolbar-final-projection-12.json",
+      "artifact_sha256": "5e7fafb7d7afdff8d6ed969017a9b9fc9e7ad5c69dfa328dc22db873b1ae0520",
+      "valid": true,
+      "scenario": "projection",
+      "profiled": false,
+      "surface": "feed",
+      "activation_ms": 0.95,
+      "imports_ms": 1586.08,
+      "constructor_ms": 10650.36,
+      "elapsed_seconds": 10.1,
+      "gc_enabled": true,
+      "measurement_started_perf": 413974.5770999,
+      "measurement_ended_perf": 413984.6748246,
+      "heartbeat_samples": 936,
+      "heartbeat_max_ms": 287.19,
+      "heartbeat_p99_ms": 22.71,
+      "heartbeat_over_50": 4,
+      "heartbeat_gaps_over_50": [
+        [
+          777.599,
+          287.195
+        ],
+        [
+          832.835,
+          55.236
+        ],
+        [
+          951.334,
+          83.848
+        ],
+        [
+          1464.996,
+          152.672
+        ]
+      ],
+      "warm_max_ms": 20.96,
+      "action_ms": [
+        503.03,
+        10.22,
+        9.72,
+        9.76,
+        11.58,
+        11.26,
+        9.07,
+        11.01,
+        10.18,
+        16.88,
+        23.69,
+        8.64,
+        8.86,
+        9.43,
+        9.8,
+        7.98,
+        11.88,
+        9.25
+      ],
+      "gc_collections": 1,
+      "gc_max_ms": 0.43,
+      "events_delivered": 18,
+      "excess_50_ms": 378.95,
+      "warm_excess_50_ms": 0,
+      "action_total_ms": 692.24,
+      "gc_slowest": [
+        {
+          "generation": 0,
+          "collected": 264,
+          "ms": 0.43
+        }
+      ]
+    },
+    {
+      "file": "reduction-toolbar-final-reset-11.json",
+      "artifact_sha256": "1b61a426b8376697d2ab3b2139d5e20b08baf6633fc9f7a33682a2566da053f6",
+      "valid": true,
+      "scenario": "reset",
+      "profiled": false,
+      "surface": "feed",
+      "activation_ms": 2.25,
+      "imports_ms": 1729.1,
+      "constructor_ms": 11080.32,
+      "elapsed_seconds": 19.52,
+      "gc_enabled": true,
+      "measurement_started_perf": 413664.2733006,
+      "measurement_ended_perf": 413683.7913964,
+      "heartbeat_samples": 1079,
+      "heartbeat_max_ms": 369.97,
+      "heartbeat_p99_ms": 211.28,
+      "heartbeat_over_50": 59,
+      "heartbeat_gaps_over_50": [
+        [
+          855.09,
+          327.658
+        ],
+        [
+          968.826,
+          113.736
+        ],
+        [
+          1057.041,
+          88.215
+        ],
+        [
+          1182.078,
+          60.885
+        ],
+        [
+          1877.163,
+          164.665
+        ],
+        [
+          1946.669,
+          69.506
+        ],
+        [
+          1998.194,
+          51.525
+        ],
+        [
+          2170.646,
+          172.451
+        ],
+        [
+          2258.415,
+          64.81
+        ],
+        [
+          3007.707,
+          182.182
+        ],
+        [
+          3157.369,
+          149.662
+        ],
+        [
+          3290.544,
+          107.936
+        ],
+        [
+          3386.256,
+          95.711
+        ],
+        [
+          4152.057,
+          231.234
+        ],
+        [
+          4247.352,
+          95.295
+        ],
+        [
+          4381.306,
+          133.954
+        ],
+        [
+          5147.107,
+          184.307
+        ],
+        [
+          5220.205,
+          73.097
+        ],
+        [
+          5364.847,
+          93.512
+        ],
+        [
+          5518.183,
+          67.665
+        ],
+        [
+          6237.757,
+          182.231
+        ],
+        [
+          7169.604,
+          232.897
+        ],
+        [
+          7227.366,
+          57.762
+        ],
+        [
+          7313.67,
+          71.95
+        ],
+        [
+          7414.733,
+          101.063
+        ],
+        [
+          8338.019,
+          291.086
+        ],
+        [
+          8439.097,
+          59.658
+        ],
+        [
+          9285.249,
+          217.356
+        ],
+        [
+          9338.644,
+          53.394
+        ],
+        [
+          10410.559,
+          369.973
+        ],
+        [
+          10500.408,
+          89.849
+        ],
+        [
+          10560.275,
+          59.868
+        ],
+        [
+          10672.794,
+          72.58
+        ],
+        [
+          11416.448,
+          202.786
+        ],
+        [
+          11493.328,
+          76.88
+        ],
+        [
+          11733.599,
+          191.763
+        ],
+        [
+          11817.124,
+          83.525
+        ],
+        [
+          12565.924,
+          211.28
+        ],
+        [
+          12640.256,
+          74.333
+        ],
+        [
+          12690.687,
+          50.431
+        ],
+        [
+          12768.719,
+          78.032
+        ],
+        [
+          13617.684,
+          263.943
+        ],
+        [
+          13697.153,
+          79.468
+        ],
+        [
+          13787.738,
+          90.586
+        ],
+        [
+          13886.424,
+          51.664
+        ],
+        [
+          14638.704,
+          284.809
+        ],
+        [
+          15642.597,
+          241.249
+        ],
+        [
+          15699.216,
+          56.619
+        ],
+        [
+          15831.064,
+          104.084
+        ],
+        [
+          15941.556,
+          71.714
+        ],
+        [
+          16712.492,
+          224.793
+        ],
+        [
+          16762.968,
+          50.476
+        ],
+        [
+          16855.743,
+          92.776
+        ],
+        [
+          17722.686,
+          239.956
+        ],
+        [
+          17830.202,
+          61.03
+        ],
+        [
+          17908.609,
+          50.754
+        ],
+        [
+          18013.704,
+          67.472
+        ],
+        [
+          18788.08,
+          210.728
+        ],
+        [
+          18896.699,
+          64.382
+        ]
+      ],
+      "warm_max_ms": 369.97,
+      "action_ms": [
+        699.45,
+        595.92,
+        601.66,
+        555.42,
+        596.35,
+        381.85,
+        610.69,
+        528.33,
+        474.22,
+        674.22,
+        646.68,
+        503.69,
+        506.73,
+        556.94,
+        595.96,
+        486.01,
+        594.94,
+        448.91
+      ],
+      "gc_collections": 4,
+      "gc_max_ms": 2.02,
+      "events_delivered": 18,
+      "excess_50_ms": 4713.2,
+      "warm_excess_50_ms": 4049.75,
+      "action_total_ms": 10057.97,
+      "gc_slowest": [
+        {
+          "generation": 0,
+          "collected": 1821,
+          "ms": 2.02
+        },
+        {
+          "generation": 0,
+          "collected": 1525,
+          "ms": 1.98
+        },
+        {
+          "generation": 0,
+          "collected": 1749,
+          "ms": 1.76
+        },
+        {
+          "generation": 0,
+          "collected": 1825,
+          "ms": 1.14
+        }
+      ]
+    },
+    {
+      "file": "reduction-toolbar-final-tools-11.json",
+      "artifact_sha256": "068ada3b2f3cf652f159409326454e9d23d630de7d3d4f0722d6626c952c855d",
+      "valid": true,
+      "scenario": "tools",
+      "profiled": false,
+      "surface": "feed",
+      "activation_ms": 1.44,
+      "imports_ms": 2046.44,
+      "constructor_ms": 13721.23,
+      "elapsed_seconds": 12.67,
+      "gc_enabled": true,
+      "measurement_started_perf": 413704.9133196,
+      "measurement_ended_perf": 413717.5861195,
+      "heartbeat_samples": 908,
+      "heartbeat_max_ms": 125.02,
+      "heartbeat_p99_ms": 90.38,
+      "heartbeat_over_50": 42,
+      "heartbeat_gaps_over_50": [
+        [
+          545.499,
+          52.648
+        ],
+        [
+          719.549,
+          82.236
+        ],
+        [
+          780.232,
+          60.684
+        ],
+        [
+          849.594,
+          51.473
+        ],
+        [
+          1167.24,
+          125.017
+        ],
+        [
+          1248.813,
+          50.253
+        ],
+        [
+          1349.125,
+          100.312
+        ],
+        [
+          1405.326,
+          56.201
+        ],
+        [
+          2003.192,
+          70.914
+        ],
+        [
+          2089.447,
+          55.062
+        ],
+        [
+          2179.785,
+          90.338
+        ],
+        [
+          2266.256,
+          65.649
+        ],
+        [
+          2352.896,
+          56.099
+        ],
+        [
+          2581.765,
+          69.661
+        ],
+        [
+          2682.386,
+          61.784
+        ],
+        [
+          2745.394,
+          63.008
+        ],
+        [
+          2813.529,
+          68.135
+        ],
+        [
+          3435.997,
+          83.548
+        ],
+        [
+          4028.309,
+          83.371
+        ],
+        [
+          4170.703,
+          52.296
+        ],
+        [
+          4241.197,
+          70.494
+        ],
+        [
+          4876.619,
+          64.159
+        ],
+        [
+          4962.839,
+          56.569
+        ],
+        [
+          5136.462,
+          55.942
+        ],
+        [
+          5719.874,
+          76.298
+        ],
+        [
+          5830.904,
+          73.303
+        ],
+        [
+          5920.259,
+          89.355
+        ],
+        [
+          6026.759,
+          56.723
+        ],
+        [
+          6592.853,
+          66.601
+        ],
+        [
+          6786.298,
+          102.922
+        ],
+        [
+          6886.796,
+          63.543
+        ],
+        [
+          7189.027,
+          96.466
+        ],
+        [
+          7810.225,
+          97.661
+        ],
+        [
+          7930.08,
+          92.183
+        ],
+        [
+          8415.098,
+          102.693
+        ],
+        [
+          9016.381,
+          83.582
+        ],
+        [
+          9594.468,
+          71.471
+        ],
+        [
+          10183.058,
+          90.384
+        ],
+        [
+          10801.087,
+          69.092
+        ],
+        [
+          11435.293,
+          112.539
+        ],
+        [
+          12047.642,
+          65.198
+        ],
+        [
+          12667.066,
+          90.531
+        ]
+      ],
+      "warm_max_ms": 112.54,
+      "action_ms": [
+        51.85,
+        393.19,
+        74.04,
+        353.98,
+        86.27,
+        373.22,
+        333.51,
+        393.66,
+        73.26,
+        128.69,
+        92.79,
+        130.38,
+        91.7,
+        73.68,
+        143.02,
+        96.12,
+        144.63,
+        101.65
+      ],
+      "gc_collections": 2,
+      "gc_max_ms": 0.75,
+      "events_delivered": 18,
+      "excess_50_ms": 1046.4,
+      "warm_excess_50_ms": 867.57,
+      "action_total_ms": 3135.62,
+      "gc_slowest": [
+        {
+          "generation": 0,
+          "collected": 1165,
+          "ms": 0.75
+        },
+        {
+          "generation": 0,
+          "collected": 876,
+          "ms": 0.67
+        }
+      ]
+    },
+    {
+      "file": "reduction-toolbar-geometry-capsules-4.json",
+      "artifact_sha256": "fe952ac263961dc9dbe32d8f77c256c51c43642d9254ed6e2aa4156740b6bca1",
+      "valid": true,
+      "scenario": "capsules",
+      "profiled": false,
+      "surface": "toolbar",
+      "activation_ms": 0.84,
+      "imports_ms": 1857.7,
+      "constructor_ms": 4916.93,
+      "elapsed_seconds": 9.83,
+      "gc_enabled": true,
+      "heartbeat_samples": 735,
+      "heartbeat_max_ms": 159.02,
+      "heartbeat_p99_ms": 64.71,
+      "heartbeat_over_50": 20,
+      "warm_max_ms": 159.02,
+      "action_ms": [
+        28.3,
+        1.55,
+        42.74,
+        8.02,
+        29.26,
+        21.5,
+        19.92,
+        1.62,
+        46.71,
+        11.33,
+        19.32,
+        16.03,
+        25.01,
+        1.61,
+        35.65,
+        7.74,
+        20.31,
+        44.9
+      ],
+      "gc_collections": 2,
+      "gc_max_ms": 1.2,
+      "events_delivered": 18,
+      "excess_50_ms": 517.57,
+      "warm_excess_50_ms": 517.57,
+      "action_total_ms": 381.53,
+      "gc_slowest": [
+        {
+          "generation": 0,
+          "collected": 1728,
+          "ms": 1.2
+        },
+        {
+          "generation": 0,
+          "collected": 1152,
+          "ms": 0.99
+        }
+      ]
+    },
+    {
+      "file": "reduction-toolbar-geometry-capsules-5.json",
+      "artifact_sha256": "657be14ec3512ac83407825e83414175830d97d81cd406c02f37a297972dbf39",
+      "valid": true,
+      "scenario": "capsules",
+      "profiled": false,
+      "surface": "toolbar",
+      "activation_ms": 1.26,
+      "imports_ms": 675.35,
+      "constructor_ms": 5455.38,
+      "elapsed_seconds": 10.09,
+      "gc_enabled": true,
+      "heartbeat_samples": 652,
+      "heartbeat_max_ms": 168.11,
+      "heartbeat_p99_ms": 123.89,
+      "heartbeat_over_50": 35,
+      "warm_max_ms": 168.11,
+      "action_ms": [
+        32.56,
+        3.81,
+        40.92,
+        11.75,
+        25.31,
+        25.06,
+        42.2,
+        1.81,
+        46.4,
+        13.14,
+        38.51,
+        24.21,
+        61.45,
+        2.93,
+        61.29,
+        15.18,
+        26.23,
+        35.36
+      ],
+      "gc_collections": 2,
+      "gc_max_ms": 3.16,
+      "events_delivered": 18,
+      "excess_50_ms": 1251.32,
+      "warm_excess_50_ms": 1193.08,
+      "action_total_ms": 508.13,
+      "gc_slowest": [
+        {
+          "generation": 0,
+          "collected": 576,
+          "ms": 3.16
+        },
+        {
+          "generation": 0,
+          "collected": 1728,
+          "ms": 2.16
+        }
+      ]
+    },
+    {
+      "file": "reduction-toolbar-geometry-capsules-6.json",
+      "artifact_sha256": "d906bcd7686543b798c1526d97cb5ee2c58486812e90d20210b080aed1a5d24b",
+      "valid": true,
+      "scenario": "capsules",
+      "profiled": false,
+      "surface": "toolbar",
+      "activation_ms": 0.81,
+      "imports_ms": 684.58,
+      "constructor_ms": 7752.76,
+      "elapsed_seconds": 11.01,
+      "gc_enabled": true,
+      "heartbeat_samples": 493,
+      "heartbeat_max_ms": 891.94,
+      "heartbeat_p99_ms": 310.72,
+      "heartbeat_over_50": 31,
+      "warm_max_ms": 891.94,
+      "action_ms": [
+        32.21,
+        4.27,
+        39.54,
+        36.04,
+        21.57,
+        21.28,
+        39.43,
+        1.91,
+        77.62,
+        35.4,
+        596.2,
+        20.63,
+        79.72,
+        3.23,
+        33.84,
+        10.97,
+        22.57,
+        19.7
+      ],
+      "gc_collections": 2,
+      "gc_max_ms": 0.81,
+      "events_delivered": 18,
+      "excess_50_ms": 4024.51,
+      "warm_excess_50_ms": 3758.8,
+      "action_total_ms": 1096.13,
+      "gc_slowest": [
+        {
+          "generation": 0,
+          "collected": 1728,
+          "ms": 0.81
+        },
+        {
+          "generation": 0,
+          "collected": 581,
+          "ms": 0.61
+        }
+      ]
+    },
+    {
+      "file": "reduction-toolbar-geometry-capsules-7.json",
+      "artifact_sha256": "a91f3173370b842dba88c3f5a3c3dc3c31a4cb18b06865080307d073d7364301",
+      "valid": true,
+      "scenario": "capsules",
+      "profiled": false,
+      "surface": "toolbar",
+      "activation_ms": 0.79,
+      "imports_ms": 1553.1,
+      "constructor_ms": 6882.72,
+      "elapsed_seconds": 9.93,
+      "gc_enabled": true,
+      "heartbeat_samples": 675,
+      "heartbeat_max_ms": 151.73,
+      "heartbeat_p99_ms": 92.55,
+      "heartbeat_over_50": 32,
+      "warm_max_ms": 151.73,
+      "action_ms": [
+        51.02,
+        1.64,
+        49.34,
+        13.14,
+        27.19,
+        21.44,
+        28.88,
+        6.45,
+        33.18,
+        11.4,
+        17.89,
+        27.66,
+        25.16,
+        1.76,
+        62.58,
+        12.21,
+        20.59,
+        25.88
+      ],
+      "gc_collections": 2,
+      "gc_max_ms": 1.29,
+      "events_delivered": 18,
+      "excess_50_ms": 1027.28,
+      "warm_excess_50_ms": 953.59,
+      "action_total_ms": 437.42,
+      "gc_slowest": [
+        {
+          "generation": 0,
+          "collected": 581,
+          "ms": 1.29
+        },
+        {
+          "generation": 0,
+          "collected": 1728,
+          "ms": 1.12
+        }
+      ]
+    },
+    {
+      "file": "reduction-toolbar-geometry-capsules-traced.json",
+      "artifact_sha256": "560499cec75f3ace1588ddc31427746e492a465392a63f4bec5ab2de5de8a3cd",
+      "valid": true,
+      "scenario": "capsules",
+      "profiled": true,
+      "surface": "toolbar",
+      "activation_ms": 1.8,
+      "imports_ms": 1363.52,
+      "constructor_ms": 10039.95,
+      "elapsed_seconds": 10.34,
+      "gc_enabled": true,
+      "heartbeat_samples": 384,
+      "heartbeat_max_ms": 454.71,
+      "heartbeat_p99_ms": 210.39,
+      "heartbeat_over_50": 49,
+      "warm_max_ms": 454.71,
+      "action_ms": [
+        29.63,
+        6.65,
+        62.72,
+        34.6,
+        30.4,
+        32.88,
+        29.41,
+        12.15,
+        49.44,
+        20.59,
+        100.01,
+        30.11,
+        33.17,
+        9.95,
+        51.64,
+        35.58,
+        35.0,
+        31.42
+      ],
+      "gc_collections": 3,
+      "gc_max_ms": 1.03,
+      "events_delivered": 18,
+      "excess_50_ms": 4082.1,
+      "warm_excess_50_ms": 3827.96,
+      "action_total_ms": 635.34,
+      "gc_slowest": [
+        {
+          "generation": 0,
+          "collected": 1152,
+          "ms": 1.03
+        },
+        {
+          "generation": 0,
+          "collected": 581,
+          "ms": 0.9
+        },
+        {
+          "generation": 0,
+          "collected": 576,
+          "ms": 0.55
+        }
+      ]
+    },
+    {
+      "file": "reduction-toolbar-geometry-keyboard-4.json",
+      "artifact_sha256": "baf13bb42fc38cacbeebe11676cb0a8c1e905812bf3fb1142b6ca1fecf6bf7b3",
+      "valid": true,
+      "scenario": "keyboard",
+      "profiled": false,
+      "surface": "toolbar",
+      "activation_ms": 0.87,
+      "imports_ms": 511.43,
+      "constructor_ms": 3702.0,
+      "elapsed_seconds": 9.7,
+      "gc_enabled": true,
+      "heartbeat_samples": 829,
+      "heartbeat_max_ms": 59.75,
+      "heartbeat_p99_ms": 43.35,
+      "heartbeat_over_50": 4,
+      "warm_max_ms": 59.75,
+      "action_ms": [
+        13.95,
+        5.02,
+        15.56,
+        5.33,
+        19.13,
+        7.27,
+        24.39,
+        9.19,
+        14.47,
+        5.58,
+        16.64,
+        4.19,
+        16.21,
+        5.2,
+        13.22,
+        4.78,
+        20.31,
+        5.66
+      ],
+      "gc_collections": 2,
+      "gc_max_ms": 0.84,
+      "events_delivered": 18,
+      "excess_50_ms": 18.13,
+      "warm_excess_50_ms": 15.42,
+      "action_total_ms": 206.11,
+      "gc_slowest": [
+        {
+          "generation": 0,
+          "collected": 1728,
+          "ms": 0.84
+        },
+        {
+          "generation": 0,
+          "collected": 576,
+          "ms": 0.6
+        }
+      ]
+    },
+    {
+      "file": "reduction-toolbar-geometry-keyboard-5.json",
+      "artifact_sha256": "8649b01982cc9fb456d503b22c7ba9081e43d7dfbb71996f6ba0a127fb60884d",
+      "valid": true,
+      "scenario": "keyboard",
+      "profiled": false,
+      "surface": "toolbar",
+      "activation_ms": 1.03,
+      "imports_ms": 703.85,
+      "constructor_ms": 6064.72,
+      "elapsed_seconds": 9.77,
+      "gc_enabled": true,
+      "heartbeat_samples": 700,
+      "heartbeat_max_ms": 257.14,
+      "heartbeat_p99_ms": 77.87,
+      "heartbeat_over_50": 20,
+      "warm_max_ms": 257.14,
+      "action_ms": [
+        24.29,
+        6.85,
+        23.81,
+        5.16,
+        17.21,
+        4.75,
+        18.86,
+        6.43,
+        18.85,
+        9.15,
+        19.61,
+        5.59,
+        20.78,
+        19.74,
+        14.8,
+        7.04,
+        17.42,
+        5.66
+      ],
+      "gc_collections": 2,
+      "gc_max_ms": 0.85,
+      "events_delivered": 18,
+      "excess_50_ms": 843.17,
+      "warm_excess_50_ms": 733.91,
+      "action_total_ms": 245.99,
+      "gc_slowest": [
+        {
+          "generation": 0,
+          "collected": 576,
+          "ms": 0.85
+        },
+        {
+          "generation": 0,
+          "collected": 1440,
+          "ms": 0.78
+        }
+      ]
+    },
+    {
+      "file": "reduction-toolbar-geometry-keyboard-6.json",
+      "artifact_sha256": "95ed2041ec8bb2cb320fe1e4abf326007a3e89224ba0214ab14ea7c09f8ae707",
+      "valid": true,
+      "scenario": "keyboard",
+      "profiled": false,
+      "surface": "toolbar",
+      "activation_ms": 0.91,
+      "imports_ms": 556.41,
+      "constructor_ms": 4431.17,
+      "elapsed_seconds": 10.47,
+      "gc_enabled": true,
+      "heartbeat_samples": 627,
+      "heartbeat_max_ms": 859.96,
+      "heartbeat_p99_ms": 117.9,
+      "heartbeat_over_50": 20,
+      "warm_max_ms": 626.6,
+      "action_ms": [
+        14.78,
+        29.06,
+        14.45,
+        8.05,
+        17.1,
+        5.75,
+        17.24,
+        5.4,
+        16.83,
+        9.38,
+        53.36,
+        8.2,
+        18.54,
+        5.35,
+        15.77,
+        5.77,
+        17.51,
+        25.06
+      ],
+      "gc_collections": 2,
+      "gc_max_ms": 0.71,
+      "events_delivered": 18,
+      "excess_50_ms": 2483.82,
+      "warm_excess_50_ms": 1522.13,
+      "action_total_ms": 287.61,
+      "gc_slowest": [
+        {
+          "generation": 0,
+          "collected": 1440,
+          "ms": 0.71
+        },
+        {
+          "generation": 0,
+          "collected": 581,
+          "ms": 0.66
+        }
+      ]
+    },
+    {
+      "file": "reduction-toolbar-geometry-keyboard-7.json",
+      "artifact_sha256": "665df789dde65ceb65bdd73f1e94da501f102bf59d4f0f1511295c13baf68ece",
+      "valid": true,
+      "scenario": "keyboard",
+      "profiled": false,
+      "surface": "toolbar",
+      "activation_ms": 1.02,
+      "imports_ms": 569.08,
+      "constructor_ms": 4181.59,
+      "elapsed_seconds": 9.64,
+      "gc_enabled": true,
+      "heartbeat_samples": 818,
+      "heartbeat_max_ms": 108.8,
+      "heartbeat_p99_ms": 42.32,
+      "heartbeat_over_50": 4,
+      "warm_max_ms": 108.8,
+      "action_ms": [
+        16.18,
+        4.29,
+        15.08,
+        4.94,
+        18.93,
+        5.39,
+        14.8,
+        5.04,
+        14.93,
+        4.79,
+        13.32,
+        5.44,
+        16.25,
+        5.5,
+        17.4,
+        3.38,
+        13.05,
+        6.76
+      ],
+      "gc_collections": 2,
+      "gc_max_ms": 0.79,
+      "events_delivered": 18,
+      "excess_50_ms": 99.18,
+      "warm_excess_50_ms": 87.16,
+      "action_total_ms": 185.48,
+      "gc_slowest": [
+        {
+          "generation": 0,
+          "collected": 1728,
+          "ms": 0.79
+        },
+        {
+          "generation": 0,
+          "collected": 576,
+          "ms": 0.63
+        }
+      ]
+    },
+    {
+      "file": "reduction-toolbar-keyboard-1.json",
+      "artifact_sha256": "dc28cfdc5ce86ec80dcd858ee1b541833a745be7a5a9526a69d07a6d0479b9ba",
+      "valid": true,
+      "scenario": "keyboard",
+      "profiled": false,
+      "surface": "toolbar",
+      "activation_ms": 0.85,
+      "imports_ms": 883.12,
+      "constructor_ms": 6839.57,
+      "elapsed_seconds": 9.86,
+      "gc_enabled": true,
+      "heartbeat_samples": 625,
+      "heartbeat_max_ms": 282.8,
+      "heartbeat_p99_ms": 105.15,
+      "heartbeat_over_50": 31,
+      "warm_max_ms": 282.8,
+      "action_ms": [
+        30.81,
+        10.62,
+        22.8,
+        11.26,
+        20.04,
+        6.94,
+        24.05,
+        7.24,
+        25.28,
+        6.1,
+        22.24,
+        9.7,
+        15.81,
+        12.58,
+        16.25,
+        7.8,
+        20.18,
+        11.18
+      ],
+      "gc_collections": 9,
+      "gc_max_ms": 2.84,
+      "events_delivered": 18,
+      "excess_50_ms": 1212.01,
+      "warm_excess_50_ms": 1174.25,
+      "action_total_ms": 280.89,
+      "gc_slowest": [
+        {
+          "generation": 0,
+          "collected": 869,
+          "ms": 2.84
+        },
+        {
+          "generation": 0,
+          "collected": 2016,
+          "ms": 2.76
+        },
+        {
+          "generation": 0,
+          "collected": 2016,
+          "ms": 2.43
+        },
+        {
+          "generation": 0,
+          "collected": 1728,
+          "ms": 1.93
+        },
+        {
+          "generation": 0,
+          "collected": 2016,
+          "ms": 1.9
+        }
+      ]
+    },
+    {
+      "file": "reduction-toolbar-stack-capsules-2.json",
+      "artifact_sha256": "d0de787dd210e3da1eb95d33ac2ec086d8c3b40080fc6f342d2d38c9ab5080d7",
+      "valid": true,
+      "scenario": "capsules",
+      "profiled": false,
+      "surface": "toolbar",
+      "activation_ms": 0.96,
+      "imports_ms": 1155.53,
+      "constructor_ms": 4250.47,
+      "elapsed_seconds": 9.88,
+      "gc_enabled": true,
+      "heartbeat_samples": 678,
+      "heartbeat_max_ms": 231.81,
+      "heartbeat_p99_ms": 87.23,
+      "heartbeat_over_50": 29,
+      "warm_max_ms": 231.81,
+      "action_ms": [
+        18.97,
+        2.45,
+        68.78,
+        15.39,
+        21.3,
+        25.09,
+        25.77,
+        3.65,
+        42.47,
+        8.38,
+        25.18,
+        18.79,
+        22.34,
+        2.13,
+        44.76,
+        14.06,
+        26.68,
+        33.55
+      ],
+      "gc_collections": 2,
+      "gc_max_ms": 11.25,
+      "events_delivered": 18,
+      "excess_50_ms": 896.48,
+      "warm_excess_50_ms": 896.48,
+      "action_total_ms": 419.76,
+      "gc_slowest": [
+        {
+          "generation": 0,
+          "collected": 1728,
+          "ms": 11.25
+        },
+        {
+          "generation": 0,
+          "collected": 576,
+          "ms": 0.53
+        }
+      ]
+    },
+    {
+      "file": "reduction-toolbar-stack-capsules-3.json",
+      "artifact_sha256": "d6f81fbe694798a4a5b3f1e62e649eae42c252789d5f93d949c3a7222fe03a19",
+      "valid": true,
+      "scenario": "capsules",
+      "profiled": false,
+      "surface": "toolbar",
+      "activation_ms": 0.77,
+      "imports_ms": 668.35,
+      "constructor_ms": 7325.85,
+      "elapsed_seconds": 9.75,
+      "gc_enabled": true,
+      "heartbeat_samples": 794,
+      "heartbeat_max_ms": 107.54,
+      "heartbeat_p99_ms": 56.58,
+      "heartbeat_over_50": 11,
+      "warm_max_ms": 107.54,
+      "action_ms": [
+        18.65,
+        4.79,
+        27.08,
+        8.73,
+        16.18,
+        17.11,
+        26.43,
+        1.15,
+        36.59,
+        6.24,
+        13.86,
+        13.52,
+        18.67,
+        1.9,
+        28.64,
+        9.83,
+        9.85,
+        16.92
+      ],
+      "gc_collections": 2,
+      "gc_max_ms": 0.79,
+      "events_delivered": 18,
+      "excess_50_ms": 164.28,
+      "warm_excess_50_ms": 156.52,
+      "action_total_ms": 276.14,
+      "gc_slowest": [
+        {
+          "generation": 0,
+          "collected": 1728,
+          "ms": 0.79
+        },
+        {
+          "generation": 0,
+          "collected": 576,
+          "ms": 0.6
+        }
+      ]
+    },
+    {
+      "file": "reduction-toolbar-stack-capsules-4.json",
+      "artifact_sha256": "dd47104750d6782b4b7221b46e11f9ae14a252022675facfd66e6aa88e91814b",
+      "valid": true,
+      "scenario": "capsules",
+      "profiled": false,
+      "surface": "toolbar",
+      "activation_ms": 3.23,
+      "imports_ms": 530.08,
+      "constructor_ms": 3343.41,
+      "elapsed_seconds": 10.05,
+      "gc_enabled": true,
+      "heartbeat_samples": 709,
+      "heartbeat_max_ms": 259.61,
+      "heartbeat_p99_ms": 82.36,
+      "heartbeat_over_50": 25,
+      "warm_max_ms": 259.61,
+      "action_ms": [
+        17.98,
+        1.53,
+        35.7,
+        8.99,
+        25.52,
+        18.73,
+        24.57,
+        1.81,
+        91.54,
+        11.43,
+        20.19,
+        22.78,
+        24.44,
+        1.58,
+        162.72,
+        10.83,
+        23.83,
+        19.13
+      ],
+      "gc_collections": 2,
+      "gc_max_ms": 0.84,
+      "events_delivered": 18,
+      "excess_50_ms": 981.17,
+      "warm_excess_50_ms": 981.17,
+      "action_total_ms": 523.28,
+      "gc_slowest": [
+        {
+          "generation": 0,
+          "collected": 576,
+          "ms": 0.84
+        },
+        {
+          "generation": 0,
+          "collected": 1728,
+          "ms": 0.73
+        }
+      ]
+    },
+    {
+      "file": "reduction-toolbar-stack-capsules-5.json",
+      "artifact_sha256": "b75d0f57b6f9325b82223727dd8c98564d26402b6d08a3dcee57c536e3a8168d",
+      "valid": true,
+      "scenario": "capsules",
+      "profiled": false,
+      "surface": "toolbar",
+      "activation_ms": 1.08,
+      "imports_ms": 484.21,
+      "constructor_ms": 4202.77,
+      "elapsed_seconds": 9.93,
+      "gc_enabled": true,
+      "heartbeat_samples": 656,
+      "heartbeat_max_ms": 230.79,
+      "heartbeat_p99_ms": 104.23,
+      "heartbeat_over_50": 24,
+      "warm_max_ms": 230.79,
+      "action_ms": [
+        20.33,
+        1.58,
+        41.03,
+        10.7,
+        17.14,
+        23.33,
+        29.74,
+        1.59,
+        36.03,
+        11.17,
+        19.83,
+        19.9,
+        41.28,
+        1.69,
+        34.67,
+        9.67,
+        30.88,
+        19.29
+      ],
+      "gc_collections": 2,
+      "gc_max_ms": 0.85,
+      "events_delivered": 18,
+      "excess_50_ms": 1225.04,
+      "warm_excess_50_ms": 1225.04,
+      "action_total_ms": 369.84,
+      "gc_slowest": [
+        {
+          "generation": 0,
+          "collected": 1728,
+          "ms": 0.85
+        },
+        {
+          "generation": 0,
+          "collected": 576,
+          "ms": 0.75
+        }
+      ]
+    },
+    {
+      "file": "reduction-toolbar-stack-capsules-profile.json",
+      "artifact_sha256": "9744ca314558cfc59bd71c1838d17e0e0e8802cfaa1f2d5e6bc752d84c3a3287",
+      "valid": true,
+      "scenario": "capsules",
+      "profiled": true,
+      "surface": "toolbar",
+      "activation_ms": 1.01,
+      "imports_ms": 816.84,
+      "constructor_ms": 4575.88,
+      "elapsed_seconds": 9.78,
+      "gc_enabled": true,
+      "heartbeat_samples": 649,
+      "heartbeat_max_ms": 121.29,
+      "heartbeat_p99_ms": 98.84,
+      "heartbeat_over_50": 35,
+      "warm_max_ms": 121.29,
+      "action_ms": [
+        20.93,
+        5.58,
+        39.26,
+        10.22,
+        17.37,
+        22.43,
+        28.64,
+        2.21,
+        35.06,
+        11.97,
+        21.51,
+        24.06,
+        27.5,
+        4.86,
+        44.15,
+        11.35,
+        29.13,
+        17.55
+      ],
+      "gc_collections": 3,
+      "gc_max_ms": 4.41,
+      "events_delivered": 18,
+      "excess_50_ms": 983.69,
+      "warm_excess_50_ms": 925.97,
+      "action_total_ms": 373.78,
+      "gc_slowest": [
+        {
+          "generation": 0,
+          "collected": 581,
+          "ms": 4.41
+        },
+        {
+          "generation": 0,
+          "collected": 1152,
+          "ms": 0.9
+        },
+        {
+          "generation": 0,
+          "collected": 864,
+          "ms": 0.76
+        }
+      ],
+      "profile": [
+        {
+          "function": "C:/Users/Jim.Lundin/AppData/Local/Temp/workspace-ui-reduction-toolbar-stack/assistant/bar_surface.py",
+          "line": 235,
+          "name": "publish_glass",
+          "calls": 269,
+          "self_ms": 14.62,
+          "cumulative_ms": 2783.18
+        },
+        {
+          "function": "C:/Users/Jim.Lundin/AppData/Local/Temp/workspace-ui-reduction-toolbar-stack/winapi/composition.py",
+          "line": 182,
+          "name": "position",
+          "calls": 261,
+          "self_ms": 30.68,
+          "cumulative_ms": 2459.65
+        },
+        {
+          "function": "C:/Users/Jim.Lundin/Downloads/workspace-sdk/workspace/.runtime/win32more/_winrt.py",
+          "line": 522,
+          "name": "__call__",
+          "calls": 1458,
+          "self_ms": 17.48,
+          "cumulative_ms": 1773.0
+        },
+        {
+          "function": "C:/Users/Jim.Lundin/AppData/Local/Temp/workspace-ui-reduction-toolbar-stack/assistant/bar_surface.py",
+          "line": 186,
+          "name": "move_frame",
+          "calls": 1369,
+          "self_ms": 18.8,
+          "cumulative_ms": 806.65
+        },
+        {
+          "function": "C:/Users/Jim.Lundin/AppData/Local/Temp/workspace-ui-reduction-toolbar-stack/assistant/desktop_bar.py",
+          "line": 319,
+          "name": "paint_frames",
+          "calls": 154,
+          "self_ms": 5.18,
+          "cumulative_ms": 801.24
+        },
+        {
+          "function": "C:/Users/Jim.Lundin/Downloads/workspace-sdk/workspace/.runtime/win32more/_win32.py",
+          "line": 403,
+          "name": "get_type_hints",
+          "calls": 1766,
+          "self_ms": 23.21,
+          "cumulative_ms": 776.19
+        },
+        {
+          "function": "C:/Users/Jim.Lundin/Downloads/workspace-sdk/workspace/.runtime/win32more/_winrt.py",
+          "line": 375,
+          "name": "__call__",
+          "calls": 1469,
+          "self_ms": 25.51,
+          "cumulative_ms": 728.05
+        },
+        {
+          "function": "C:/Users/Jim.Lundin/AppData/Local/Temp/workspace-ui-reduction-toolbar-stack/assistant/bar_surface.py",
+          "line": 216,
+          "name": "advance",
+          "calls": 520,
+          "self_ms": 12.76,
+          "cumulative_ms": 713.54
+        },
+        {
+          "function": "C:/Users/Jim.Lundin/AppData/Local/Temp/workspace-ui-reduction-toolbar-stack/assistant/desktop_bar.py",
+          "line": 327,
+          "name": "tick",
+          "calls": 88,
+          "self_ms": 7.35,
+          "cumulative_ms": 557.18
+        },
+        {
+          "function": "C:/Users/Jim.Lundin/Downloads/workspace-sdk/workspace/.runtime/win32more/_winrt.py",
+          "line": 398,
+          "name": "__call__",
+          "calls": 1469,
+          "self_ms": 68.55,
+          "cumulative_ms": 535.94
+        },
+        {
+          "function": "C:/Users/Jim.Lundin/Downloads/workspace-sdk/workspace/.runtime/win32more/_win32.py",
+          "line": 220,
+          "name": "as_",
+          "calls": 1866,
+          "self_ms": 101.25,
+          "cumulative_ms": 457.57
+        },
+        {
+          "function": "C:/Users/Jim.Lundin/AppData/Local/Temp/workspace-ui-reduction-toolbar-stack/winapi/appearance.py",
+          "line": 69,
+          "name": "sample_backgrounds",
+          "calls": 12,
+          "self_ms": 0.29,
+          "cumulative_ms": 456.84
+        },
+        {
+          "function": "C:/Users/Jim.Lundin/AppData/Local/Temp/workspace-ui-reduction-toolbar-stack/assistant/desktop_bar.py",
+          "line": 258,
+          "name": "render",
+          "calls": 36,
+          "self_ms": 60.81,
+          "cumulative_ms": 452.61
+        },
+        {
+          "function": "C:/Users/Jim.Lundin/AppData/Local/Temp/workspace-ui-reduction-toolbar-stack/winapi/appearance.py",
+          "line": 70,
+          "name": "<genexpr>",
+          "calls": 24,
+          "self_ms": 0.33,
+          "cumulative_ms": 428.84
+        },
+        {
+          "function": "C:/Users/Jim.Lundin/AppData/Local/Temp/workspace-ui-reduction-toolbar-stack/winapi/appearance.py",
+          "line": 146,
+          "name": "background_frost",
+          "calls": 12,
+          "self_ms": 244.46,
+          "cumulative_ms": 417.07
+        },
+        {
+          "function": "C:/Users/Jim.Lundin/Downloads/workspace-sdk/workspace/.runtime/win32more/_win32.py",
+          "line": 498,
+          "name": "__call__",
+          "calls": 4121,
+          "self_ms": 18.77,
+          "cumulative_ms": 407.37
+        },
+        {
+          "function": "C:/Users/Jim.Lundin/Downloads/workspace-sdk/workspace/.runtime/win32more/_win32.py",
+          "line": 516,
+          "name": "__call__",
+          "calls": 4121,
+          "self_ms": 56.89,
+          "cumulative_ms": 388.6
+        },
+        {
+          "function": "C:/Users/Jim.Lundin/Downloads/workspace-sdk/workspace/.runtime/win32more/_win32.py",
+          "line": 522,
+          "name": "make_args",
+          "calls": 4121,
+          "self_ms": 49.25,
+          "cumulative_ms": 322.73
+        },
+        {
+          "function": "C:/Users/Jim.Lundin/AppData/Local/Temp/workspace-ui-reduction-toolbar-stack/winapi/windows.py",
+          "line": 244,
+          "name": "move",
+          "calls": 82,
+          "self_ms": 309.12,
+          "cumulative_ms": 309.2
+        },
+        {
+          "function": "C:/Users/Jim.Lundin/AppData/Local/Temp/workspace-ui-reduction-toolbar-stack/winapi/composition.py",
+          "line": 219,
+          "name": "show",
+          "calls": 261,
+          "self_ms": 1.98,
+          "cumulative_ms": 307.82
+        },
+        {
+          "function": "C:/Users/Jim.Lundin/Downloads/workspace-sdk/workspace/.runtime/win32more/_winrt.py",
+          "line": 446,
+          "name": "_add_argument",
+          "calls": 1469,
+          "self_ms": 15.62,
+          "cumulative_ms": 289.28
+        },
+        {
+          "function": "C:/Users/Jim.Lundin/AppData/Local/Temp/workspace-ui-reduction-toolbar-stack/assistant/desktop_bar.py",
+          "line": 254,
+          "name": "layout",
+          "calls": 18,
+          "self_ms": 0.34,
+          "cumulative_ms": 283.2
+        },
+        {
+          "function": "C:/Users/Jim.Lundin/AppData/Local/Temp/workspace-ui-reduction-toolbar-stack/assistant/desktop_bar.py",
+          "line": 300,
+          "name": "position",
+          "calls": 278,
+          "self_ms": 16.11,
+          "cumulative_ms": 272.74
+        },
+        {
+          "function": "C:/Users/Jim.Lundin/AppData/Local/Temp/workspace-ui-reduction-toolbar-stack/assistant/bar_surface.py",
+          "line": 181,
+          "name": "place",
+          "calls": 834,
+          "self_ms": 13.57,
+          "cumulative_ms": 248.8
+        },
+        {
+          "function": "C:/Users/Jim.Lundin/AppData/Local/Temp/workspace-ui-reduction-toolbar-stack/assistant/qt_ui.py",
+          "line": 51,
+          "name": "<lambda>",
+          "calls": 30,
+          "self_ms": 0.35,
+          "cumulative_ms": 226.57
+        },
+        {
+          "function": "C:/Users/Jim.Lundin/AppData/Local/Temp/workspace-ui-reduction-toolbar-stack/winapi/composition_paths.py",
+          "line": 47,
+          "name": "composition_path",
+          "calls": 11,
+          "self_ms": 3.37,
+          "cumulative_ms": 212.05
+        },
+        {
+          "function": "C:/Users/Jim.Lundin/Downloads/workspace-sdk/workspace/.runtime/win32more/_winrt.py",
+          "line": 141,
+          "name": "winrt_easycast",
+          "calls": 1094,
+          "self_ms": 82.17,
+          "cumulative_ms": 176.27
+        },
+        {
+          "function": "C:/Users/Jim.Lundin/AppData/Local/Temp/workspace-ui-reduction-toolbar-stack/assistant/desktop_bar.py",
+          "line": 245,
+          "name": "recording_changed",
+          "calls": 18,
+          "self_ms": 0.33,
+          "cumulative_ms": 172.22
+        },
+        {
+          "function": "C:/Users/Jim.Lundin/AppData/Local/Temp/workspace-ui-reduction-toolbar-stack/winapi/windows.py",
+          "line": 259,
+          "name": "show_quietly",
+          "calls": 29,
+          "self_ms": 169.14,
+          "cumulative_ms": 169.15
+        },
+        {
+          "function": "C:/Users/Jim.Lundin/AppData/Local/Temp/workspace-ui-reduction-toolbar-stack/winapi/composition_paths.py",
+          "line": 33,
+          "name": "__init__",
+          "calls": 11,
+          "self_ms": 0.09,
+          "cumulative_ms": 150.56
+        },
+        {
+          "function": "C:/Users/Jim.Lundin/Downloads/workspace-sdk/workspace/.runtime/win32more/_comclass.py",
+          "line": 56,
+          "name": "__init__",
+          "calls": 11,
+          "self_ms": 0.45,
+          "cumulative_ms": 150.47
+        },
+        {
+          "function": "C:/Users/Jim.Lundin/Downloads/workspace-sdk/workspace/.runtime/win32more/_comclass.py",
+          "line": 64,
+          "name": "_make_iid_vtbls",
+          "calls": 11,
+          "self_ms": 0.55,
+          "cumulative_ms": 149.69
+        },
+        {
+          "function": "C:/Users/Jim.Lundin/Downloads/workspace-sdk/workspace/.runtime/win32more/_comclass.py",
+          "line": 142,
+          "name": "__init__",
+          "calls": 66,
+          "self_ms": 0.44,
+          "cumulative_ms": 148.92
+        },
+        {
+          "function": "C:/Users/Jim.Lundin/Downloads/workspace-sdk/workspace/.runtime/win32more/_comclass.py",
+          "line": 148,
+          "name": "_make_lpvtbl",
+          "calls": 66,
+          "self_ms": 3.42,
+          "cumulative_ms": 148.49
+        },
+        {
+          "function": "C:/Users/Jim.Lundin/Downloads/workspace-sdk/workspace/.runtime/win32more/_win32.py",
+          "line": 184,
+          "name": "__del__",
+          "calls": 2110,
+          "self_ms": 12.26,
+          "cumulative_ms": 145.0
+        }
+      ]
+    },
+    {
+      "file": "reduction-toolbar-stack-capsules-traced.json",
+      "artifact_sha256": "852fe66a9e95e8a326c0a008e46b1d78f97756767fb28881b809357c40de8914",
+      "valid": true,
+      "scenario": "capsules",
+      "profiled": true,
+      "surface": "toolbar",
+      "activation_ms": 1.86,
+      "imports_ms": 1332.03,
+      "constructor_ms": 6673.96,
+      "elapsed_seconds": 9.82,
+      "gc_enabled": true,
+      "heartbeat_samples": 601,
+      "heartbeat_max_ms": 165.7,
+      "heartbeat_p99_ms": 107.57,
+      "heartbeat_over_50": 40,
+      "warm_max_ms": 165.7,
+      "action_ms": [
+        18.29,
+        6.14,
+        34.26,
+        10.42,
+        20.94,
+        21.2,
+        25.37,
+        5.46,
+        28.08,
+        11.11,
+        20.6,
+        13.55,
+        20.73,
+        2.32,
+        29.26,
+        8.92,
+        44.4,
+        14.54
+      ],
+      "gc_collections": 3,
+      "gc_max_ms": 1.04,
+      "events_delivered": 18,
+      "excess_50_ms": 1565.76,
+      "warm_excess_50_ms": 1450.76,
+      "action_total_ms": 335.6,
+      "gc_slowest": [
+        {
+          "generation": 0,
+          "collected": 1440,
+          "ms": 1.04
+        },
+        {
+          "generation": 0,
+          "collected": 1152,
+          "ms": 1.01
+        },
+        {
+          "generation": 0,
+          "collected": 581,
+          "ms": 0.54
+        }
+      ]
+    },
+    {
+      "file": "reduction-toolbar-stack-idle-2.json",
+      "artifact_sha256": "33dfda48e6d9a85ae4faabf213c9d5040f552cc5230fde74124988562925c0db",
+      "valid": true,
+      "scenario": "idle",
+      "profiled": false,
+      "surface": "both",
+      "activation_ms": 1.06,
+      "imports_ms": 943.84,
+      "constructor_ms": 7014.48,
+      "elapsed_seconds": 20.03,
+      "gc_enabled": true,
+      "heartbeat_samples": 1997,
+      "heartbeat_max_ms": 42.4,
+      "heartbeat_p99_ms": 11.94,
+      "heartbeat_over_50": 0,
+      "warm_max_ms": 42.4,
+      "action_ms": [],
+      "gc_collections": 1,
+      "gc_max_ms": 0.43,
+      "events_delivered": 0,
+      "excess_50_ms": 0,
+      "warm_excess_50_ms": 0,
+      "action_total_ms": 0,
+      "gc_slowest": [
+        {
+          "generation": 0,
+          "collected": 155,
+          "ms": 0.43
+        }
+      ]
+    },
+    {
+      "file": "reduction-toolbar-stack-keyboard-2.json",
+      "artifact_sha256": "30ed77fd413894fa31745c8e1ba267ec11b2899bfddc52a78306649b0dacdbb6",
+      "valid": true,
+      "scenario": "keyboard",
+      "profiled": false,
+      "surface": "toolbar",
+      "activation_ms": 1.34,
+      "imports_ms": 1911.86,
+      "constructor_ms": 5662.82,
+      "elapsed_seconds": 9.68,
+      "gc_enabled": true,
+      "heartbeat_samples": 824,
+      "heartbeat_max_ms": 121.67,
+      "heartbeat_p99_ms": 42.57,
+      "heartbeat_over_50": 3,
+      "warm_max_ms": 50.31,
+      "action_ms": [
+        16.61,
+        5.64,
+        20.23,
+        4.73,
+        14.67,
+        6.34,
+        14.9,
+        5.78,
+        16.71,
+        6.68,
+        19.08,
+        5.12,
+        17.3,
+        6.12,
+        12.95,
+        6.11,
+        17.35,
+        5.83
+      ],
+      "gc_collections": 2,
+      "gc_max_ms": 1.42,
+      "events_delivered": 18,
+      "excess_50_ms": 72.17,
+      "warm_excess_50_ms": 0.49,
+      "action_total_ms": 202.15,
+      "gc_slowest": [
+        {
+          "generation": 0,
+          "collected": 1728,
+          "ms": 1.42
+        },
+        {
+          "generation": 0,
+          "collected": 576,
+          "ms": 0.75
+        }
+      ]
+    },
+    {
+      "file": "reduction-toolbar-stack-keyboard-3.json",
+      "artifact_sha256": "27c3c1974185b433828ed503d8d4c213463d11b4886c7c3482f170c3f357e034",
+      "valid": true,
+      "scenario": "keyboard",
+      "profiled": false,
+      "surface": "toolbar",
+      "activation_ms": 1.41,
+      "imports_ms": 1309.65,
+      "constructor_ms": 6896.51,
+      "elapsed_seconds": 9.59,
+      "gc_enabled": true,
+      "heartbeat_samples": 899,
+      "heartbeat_max_ms": 45.45,
+      "heartbeat_p99_ms": 28.61,
+      "heartbeat_over_50": 0,
+      "warm_max_ms": 45.45,
+      "action_ms": [
+        14.56,
+        4.54,
+        15.77,
+        4.27,
+        13.65,
+        5.37,
+        11.66,
+        4.08,
+        8.25,
+        4.35,
+        11.06,
+        4.02,
+        10.99,
+        3.99,
+        14.98,
+        4.97,
+        11.88,
+        4.78
+      ],
+      "gc_collections": 2,
+      "gc_max_ms": 0.7,
+      "events_delivered": 18,
+      "excess_50_ms": 0,
+      "warm_excess_50_ms": 0,
+      "action_total_ms": 153.15,
+      "gc_slowest": [
+        {
+          "generation": 0,
+          "collected": 1728,
+          "ms": 0.7
+        },
+        {
+          "generation": 0,
+          "collected": 576,
+          "ms": 0.55
+        }
+      ]
+    },
+    {
+      "file": "reduction-toolbar-stack-keyboard-4.json",
+      "artifact_sha256": "7b7c8aad05b9a3c3cbaee891b9281d412fb907ed286559d5793dd966119131b5",
+      "valid": true,
+      "scenario": "keyboard",
+      "profiled": false,
+      "surface": "toolbar",
+      "activation_ms": 0.86,
+      "imports_ms": 514.0,
+      "constructor_ms": 3257.11,
+      "elapsed_seconds": 9.63,
+      "gc_enabled": true,
+      "heartbeat_samples": 837,
+      "heartbeat_max_ms": 90.16,
+      "heartbeat_p99_ms": 38.82,
+      "heartbeat_over_50": 4,
+      "warm_max_ms": 90.16,
+      "action_ms": [
+        17.25,
+        5.9,
+        20.4,
+        5.04,
+        12.5,
+        4.27,
+        13.18,
+        5.02,
+        20.7,
+        4.72,
+        12.94,
+        5.78,
+        11.02,
+        4.86,
+        18.24,
+        3.7,
+        12.91,
+        5.18
+      ],
+      "gc_collections": 2,
+      "gc_max_ms": 0.81,
+      "events_delivered": 18,
+      "excess_50_ms": 58.31,
+      "warm_excess_50_ms": 58.31,
+      "action_total_ms": 183.61,
+      "gc_slowest": [
+        {
+          "generation": 0,
+          "collected": 576,
+          "ms": 0.81
+        },
+        {
+          "generation": 0,
+          "collected": 1728,
+          "ms": 0.75
+        }
+      ]
+    },
+    {
+      "file": "reduction-toolbar-stack-keyboard-5.json",
+      "artifact_sha256": "6304158673777dec98100cc3ef3bc40251e33592d78428d61e52e0934d837a92",
+      "valid": true,
+      "scenario": "keyboard",
+      "profiled": false,
+      "surface": "toolbar",
+      "activation_ms": 1.45,
+      "imports_ms": 765.87,
+      "constructor_ms": 5227.26,
+      "elapsed_seconds": 9.75,
+      "gc_enabled": true,
+      "heartbeat_samples": 636,
+      "heartbeat_max_ms": 192.8,
+      "heartbeat_p99_ms": 109.91,
+      "heartbeat_over_50": 30,
+      "warm_max_ms": 192.8,
+      "action_ms": [
+        22.2,
+        9.52,
+        20.65,
+        5.94,
+        24.42,
+        10.24,
+        19.26,
+        6.24,
+        17.35,
+        18.8,
+        18.81,
+        7.02,
+        28.59,
+        9.77,
+        23.55,
+        29.51,
+        22.21,
+        5.97
+      ],
+      "gc_collections": 2,
+      "gc_max_ms": 1.23,
+      "events_delivered": 18,
+      "excess_50_ms": 1017.71,
+      "warm_excess_50_ms": 967.4,
+      "action_total_ms": 300.04,
+      "gc_slowest": [
+        {
+          "generation": 0,
+          "collected": 1152,
+          "ms": 1.23
+        },
+        {
+          "generation": 0,
+          "collected": 879,
+          "ms": 1.11
+        }
+      ]
+    },
+    {
+      "file": "reduction-toolbar-stack-long-stream-2.json",
+      "artifact_sha256": "6fab45a613134adadd0ded99fce6c2828b36ba1ecb6eebeb4f492eec3478ca1f",
+      "valid": true,
+      "scenario": "long-stream",
+      "profiled": false,
+      "surface": "feed",
+      "activation_ms": 1.43,
+      "imports_ms": 2945.29,
+      "constructor_ms": 15541.77,
+      "elapsed_seconds": 15.36,
+      "gc_enabled": true,
+      "heartbeat_samples": 874,
+      "heartbeat_max_ms": 568.77,
+      "heartbeat_p99_ms": 256.38,
+      "heartbeat_over_50": 26,
+      "warm_max_ms": 568.77,
+      "action_ms": [
+        520.3,
+        223.46,
+        87.71,
+        205.22,
+        286.55,
+        263.89,
+        160.43,
+        197.91,
+        281.13,
+        319.48,
+        527.5,
+        288.09,
+        565.07,
+        282.34,
+        302.61,
+        444.63,
+        395.39,
+        422.9
+      ],
+      "gc_collections": 146,
+      "gc_max_ms": 171.92,
+      "events_delivered": 18,
+      "excess_50_ms": 4372.46,
+      "warm_excess_50_ms": 4042.65,
+      "action_total_ms": 5774.62,
+      "gc_slowest": [
+        {
+          "generation": 2,
+          "collected": 24434,
+          "ms": 171.92
+        },
+        {
+          "generation": 1,
+          "collected": 6609,
+          "ms": 15.54
+        },
+        {
+          "generation": 1,
+          "collected": 7049,
+          "ms": 9.78
+        },
+        {
+          "generation": 1,
+          "collected": 6169,
+          "ms": 9.6
+        },
+        {
+          "generation": 1,
+          "collected": 5729,
+          "ms": 9.54
+        }
+      ]
+    },
+    {
+      "file": "reduction-toolbar-stack-projection-2.json",
+      "artifact_sha256": "35239a15a58c4578254de681f5829f92d7c49d08859d6c201fa4e13791a6efc6",
+      "valid": true,
+      "scenario": "projection",
+      "profiled": false,
+      "surface": "feed",
+      "activation_ms": 0.94,
+      "imports_ms": 1263.93,
+      "constructor_ms": 16265.43,
+      "elapsed_seconds": 10.32,
+      "gc_enabled": true,
+      "heartbeat_samples": 936,
+      "heartbeat_max_ms": 447.33,
+      "heartbeat_p99_ms": 28.24,
+      "heartbeat_over_50": 3,
+      "warm_max_ms": 34.68,
+      "action_ms": [
+        677.79,
+        12.97,
+        12.21,
+        12.77,
+        66.7,
+        12.03,
+        12.13,
+        15.16,
+        11.69,
+        12.43,
+        12.23,
+        10.35,
+        11.92,
+        10.83,
+        13.05,
+        11.82,
+        9.98,
+        10.02
+      ],
+      "gc_collections": 1,
+      "gc_max_ms": 0.72,
+      "events_delivered": 18,
+      "excess_50_ms": 434.49,
+      "warm_excess_50_ms": 0,
+      "action_total_ms": 936.08,
+      "gc_slowest": [
+        {
+          "generation": 0,
+          "collected": 288,
+          "ms": 0.72
+        }
+      ]
+    },
+    {
+      "file": "reduction-toolbar-stack-reset-2.json",
+      "artifact_sha256": "7223311ddf0907040e2ed7849f31cac3120c95a41307da3940b31879f8afcdf5",
+      "valid": true,
+      "scenario": "reset",
+      "profiled": false,
+      "surface": "feed",
+      "activation_ms": 0.82,
+      "imports_ms": 670.64,
+      "constructor_ms": 6006.72,
+      "elapsed_seconds": 15.69,
+      "gc_enabled": true,
+      "heartbeat_samples": 1060,
+      "heartbeat_max_ms": 213.65,
+      "heartbeat_p99_ms": 135.17,
+      "heartbeat_over_50": 32,
+      "warm_max_ms": 213.65,
+      "action_ms": [
+        423.75,
+        463.81,
+        494.44,
+        447.39,
+        246.33,
+        276.25,
+        376.86,
+        264.48,
+        404.96,
+        476.61,
+        293.54,
+        373.22,
+        282.5,
+        274.04,
+        246.18,
+        266.65,
+        335.65,
+        272.35
+      ],
+      "gc_collections": 4,
+      "gc_max_ms": 3.23,
+      "events_delivered": 18,
+      "excess_50_ms": 2122.49,
+      "warm_excess_50_ms": 1799.43,
+      "action_total_ms": 6219.03,
+      "gc_slowest": [
+        {
+          "generation": 0,
+          "collected": 1795,
+          "ms": 3.23
+        },
+        {
+          "generation": 0,
+          "collected": 1578,
+          "ms": 0.84
+        },
+        {
+          "generation": 0,
+          "collected": 1740,
+          "ms": 0.78
+        },
+        {
+          "generation": 0,
+          "collected": 1801,
+          "ms": 0.61
+        }
+      ]
+    },
+    {
+      "file": "reduction-toolbar-stack-tools-2.json",
+      "artifact_sha256": "f993300bed8658ee231eed112f4ade2a610d69ee9f7d6f708b758cdd48624335",
+      "valid": true,
+      "scenario": "tools",
+      "profiled": false,
+      "surface": "feed",
+      "activation_ms": 1.09,
+      "imports_ms": 970.71,
+      "constructor_ms": 7858.16,
+      "elapsed_seconds": 12.16,
+      "gc_enabled": true,
+      "heartbeat_samples": 886,
+      "heartbeat_max_ms": 225.41,
+      "heartbeat_p99_ms": 81.13,
+      "heartbeat_over_50": 41,
+      "warm_max_ms": 123.2,
+      "action_ms": [
+        51.3,
+        68.09,
+        79.72,
+        68.28,
+        101.05,
+        380.09,
+        102.49,
+        420.97,
+        374.98,
+        66.3,
+        332.61,
+        110.07,
+        107.95,
+        67.86,
+        72.88,
+        105.5,
+        77.36,
+        96.5
+      ],
+      "gc_collections": 2,
+      "gc_max_ms": 0.85,
+      "events_delivered": 18,
+      "excess_50_ms": 1043.47,
+      "warm_excess_50_ms": 851.88,
+      "action_total_ms": 2684.01,
+      "gc_slowest": [
+        {
+          "generation": 0,
+          "collected": 1332,
+          "ms": 0.85
+        },
+        {
+          "generation": 0,
+          "collected": 876,
+          "ms": 0.78
+        }
+      ]
+    }
+  ],
+  "validation": {
+    "strict_runtime_files": [
+      "assistant/bar_surface.py",
+      "assistant/feed_triage.py",
+      "assistant/notifications.py",
+      "winapi/composition.py",
+      "winapi/composition_paths.py"
+    ],
+    "mypy": "passed with no Any enabled",
+    "pyright": "passed: zero errors and warnings, actual Windows development interpreter",
+    "ruff": "passed for all changed runtime/test/stub files",
+    "final_receipt": "%TEMP%/workspace-toolbar-final-check.json",
+    "mutations": [
+      {
+        "file": "workspace-toolbar-batching-mutations.json",
+        "sha256": "a424b73275a8bfe008d44bcec8869a82252b8a8306af445338828d9d0d31a9e8",
+        "source": "assistant/bar_surface.py",
+        "tests": [
+          "tests/test_windows_toolbar_geometry.py"
+        ],
+        "generated": 1,
+        "seed": 0,
+        "baseline_seconds": 8.067242300021462,
+        "baseline_tests": 4,
+        "results": [
+          {
+            "function": "seeded",
+            "line": 233,
+            "before": "if not self.glass_timer.isActive():\n                self.glass_timer.start(0)",
+            "after": "self.publish_glass()",
+            "start": 10299,
+            "end": 10376,
+            "status": "killed",
+            "seconds": 7.721,
+            "tests": 1,
+            "killed_by": [
+              "tests.test_windows_toolbar_geometry.test_toolbar_publishes_only_final_geometry_in_one_qt_turn"
+            ],
+            "detail": ""
+          }
+        ],
+        "source_sha256": "2dad562896fdd0c650cab0a045372f312ae3625753300e1e24b9141f95505ac0",
+        "snapshot_sha256": "ef0298e28ad8a908bbd93c0ac97f2d7e13fa70de51344c803b6d7155280f2319"
+      },
+      {
+        "file": "workspace-toolbar-native-mutations.json",
+        "sha256": "17f3d2875cc43022668bb7620f191d0b2f50c4073532af450b5861c68de77637",
+        "source": "winapi/composition.py",
+        "tests": [
+          "tests/test_windows_toolbar_geometry.py"
+        ],
+        "generated": 8,
+        "seed": 0,
+        "baseline_seconds": 8.270202899992,
+        "baseline_tests": 4,
+        "results": [
+          {
+            "function": "seeded",
+            "line": 146,
+            "before": "lru_cache(maxsize=8)(create_path)",
+            "after": "lru_cache(maxsize=0)(create_path)",
+            "start": 5890,
+            "end": 5923,
+            "status": "killed",
+            "seconds": 7.851,
+            "tests": 2,
+            "killed_by": [
+              "tests.test_windows_toolbar_geometry.test_toolbar_reuses_native_contours_and_releases_its_bounded_pool"
+            ],
+            "detail": ""
+          },
+          {
+            "function": "seeded",
+            "line": 235,
+            "before": "self.path_geometry.as_(ICompositionPathGeometry).Path = path",
+            "after": "pass",
+            "start": 11263,
+            "end": 11323,
+            "status": "killed",
+            "seconds": 7.422,
+            "tests": 4,
+            "killed_by": [
+              "tests.test_windows_toolbar_geometry.test_glass_updates_retained_geometry_and_clip_across_shape_and_dpi_changes"
+            ],
+            "detail": ""
+          },
+          {
+            "function": "seeded",
+            "line": 245,
+            "before": "self.clip.Geometry = self.geometry",
+            "after": "pass",
+            "start": 11906,
+            "end": 11940,
+            "status": "killed",
+            "seconds": 14.317,
+            "tests": 4,
+            "killed_by": [
+              "tests.test_windows_toolbar_geometry.test_glass_updates_retained_geometry_and_clip_across_shape_and_dpi_changes"
+            ],
+            "detail": ""
+          },
+          {
+            "function": "seeded",
+            "line": 246,
+            "before": "self.mask_shape.Geometry = self.geometry",
+            "after": "pass",
+            "start": 11957,
+            "end": 11997,
+            "status": "killed",
+            "seconds": 23.436,
+            "tests": 4,
+            "killed_by": [
+              "tests.test_windows_toolbar_geometry.test_glass_updates_retained_geometry_and_clip_across_shape_and_dpi_changes"
+            ],
+            "detail": ""
+          },
+          {
+            "function": "seeded",
+            "line": 249,
+            "before": "if resized:",
+            "after": "if previous is None:",
+            "start": 12163,
+            "end": 12174,
+            "status": "killed",
+            "seconds": 17.733,
+            "tests": 4,
+            "killed_by": [
+              "tests.test_windows_toolbar_geometry.test_glass_updates_retained_geometry_and_clip_across_shape_and_dpi_changes"
+            ],
+            "detail": ""
+          },
+          {
+            "function": "seeded",
+            "line": 270,
+            "before": "if GetWindow(foreground, 2) != self.handle:",
+            "after": "if True:",
+            "start": 13233,
+            "end": 13276,
+            "status": "killed",
+            "seconds": 12.962,
+            "tests": 3,
+            "killed_by": [
+              "tests.test_windows_toolbar_geometry.test_glass_stacks_only_when_real_window_order_needs_correction"
+            ],
+            "detail": ""
+          },
+          {
+            "function": "seeded",
+            "line": 270,
+            "before": "if GetWindow(foreground, 2) != self.handle:",
+            "after": "if not self.visible:",
+            "start": 13233,
+            "end": 13276,
+            "status": "killed",
+            "seconds": 13.11,
+            "tests": 3,
+            "killed_by": [
+              "tests.test_windows_toolbar_geometry.test_glass_stacks_only_when_real_window_order_needs_correction"
+            ],
+            "detail": ""
+          },
+          {
+            "function": "seeded",
+            "line": 282,
+            "before": "self.paths.cache_clear()",
+            "after": "pass",
+            "start": 13588,
+            "end": 13612,
+            "status": "killed",
+            "seconds": 15.141,
+            "tests": 2,
+            "killed_by": [
+              "tests.test_windows_toolbar_geometry.test_toolbar_reuses_native_contours_and_releases_its_bounded_pool"
+            ],
+            "detail": ""
+          }
+        ],
+        "source_sha256": "c4bc24502cb18284ff7540550b818c7c64ce4a44e15f46b1433034a7863b3688",
+        "snapshot_sha256": "ef0298e28ad8a908bbd93c0ac97f2d7e13fa70de51344c803b6d7155280f2319"
+      }
+    ],
+    "affected_check": {
+      "receipt": "%TEMP%/workspace-toolbar-affected-check.json",
+      "sha256": "2813882183e8ad2428729cef6447243c4b23197d3baece0e63fa6059732e5795",
+      "passed": 66,
+      "elapsed_seconds": 79.3292408999987,
+      "tests": [
+        "tests/test_bar_model.py",
+        "tests/test_feed_items.py",
+        "tests/test_feed_triage.py",
+        "tests/test_notifications.py",
+        "tests/test_windows_agent_toasts.py::test_glass_surface_accepts_transitional_frames_smaller_than_its_inset",
+        "tests/test_windows_agent_toasts.py::test_recording_stop_is_independent_and_shutdown_closes_every_native_layer",
+        "tests/test_windows_agent_toasts.py::test_repeating_a_frame_keeps_native_geometry_stable_after_dpi_rounding",
+        "tests/test_windows_agent_toasts.py::test_solid_and_high_contrast_materials_keep_all_content_readable",
+        "tests/test_windows_feed.py",
+        "tests/test_windows_toolbar_geometry.py"
+      ]
+    }
+  }
+}

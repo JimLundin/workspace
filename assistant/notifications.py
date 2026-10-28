@@ -342,6 +342,10 @@ def reading_seconds(content: Content) -> float:
     return min(MAX_SECONDS, max(minimum, 4 + len(text.split()) / 3))
 
 
+def work_order(item: WorkItem) -> tuple[int, float, str]:
+    return -priority(item), item.created_at, item.key.identity
+
+
 def advance(stack: Stack, session: Snapshot, now: float, *, query: Query = DEFAULT_QUERY, page: int = 0,
             reveal: bool = False, limit: int = MAX_VISIBLE) -> Stack:
     if stack.identity != session.identity:
@@ -353,7 +357,7 @@ def advance(stack: Stack, session: Snapshot, now: float, *, query: Query = DEFAU
     curated = session.triage.enabled and not query.history
     if curated:
         work = sorted((item for item in observed if isinstance(item, WorkItem)),
-                      key=lambda item: (-priority(item), item.created_at, item.key.identity))[:MAX_WORK_VISIBLE]
+                      key=work_order)[:MAX_WORK_VISIBLE]
         observed = (*(item for item in observed if not isinstance(item, WorkItem)), *work)
     current = next((content.request for content in reversed(observed) if isinstance(content, Turn)), None)
     remembered: list[Content] = []
@@ -402,8 +406,11 @@ def advance(stack: Stack, session: Snapshot, now: float, *, query: Query = DEFAU
     room = limit - keep
     pages = max(1, (len(ordinary) + room - 1) // room) if room else 1
     start = min(max(0, page), pages - 1) * room
+    def displayed(toast: Toast) -> tuple[int, float, int, int]:
+        return display_order(toast, curated=curated)
+
     visible = tuple(sorted((*pinned[:keep], *ordinary[start:start + room]),
-                           key=lambda toast: display_order(toast, curated=curated)))
+                           key=displayed))
     return Stack(session.identity, tuple(remembered), visible, serial, pages, stack.hidden)
 
 

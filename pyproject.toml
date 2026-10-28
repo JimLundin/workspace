@@ -44,7 +44,7 @@ disallow_any_explicit = false
 
 [[tool.mypy.overrides]]
 # Native panels share the typed Qt signal interface with the conversation.
-module = ["assistant.panel_controls", "assistant.widgets", "assistant.vector_icons", "assistant.meeting_panel", "assistant.desktop_bar", "assistant.bar_surface", "assistant.bar_button", "keeper_ui"]
+module = ["assistant.panel_controls", "assistant.widgets", "assistant.vector_icons", "assistant.meeting_panel", "assistant.desktop_bar", "assistant.bar_button", "keeper_ui"]
 disallow_any_expr = false
 disallow_any_explicit = false
 
@@ -52,6 +52,12 @@ disallow_any_explicit = false
 # Generated WinRT bindings are validated inside the native composition boundary.
 module = ["win32more", "win32more.*"]
 ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+# These owners now consume focused native stubs without typing escapes.
+module = ["winapi.composition", "winapi.composition_paths", "assistant.bar_surface"]
+disallow_any_expr = true
+disallow_any_explicit = true
 
 [tool.pyright]
 stubPath = "typings"
@@ -77,6 +83,8 @@ max-positional-args = 5
 "miryoku/layout.py" = ["E501"]
 # Win32 functions keep their Windows names, one prototype per line.
 "winapi/*.py" = ["E501", "N816", "PLR0917"]
+# Dependency stubs preserve the pinned SDK's actual method names.
+"typings/win32more/**/*.pyi" = ["N801", "N802"]
 
 [tool.setuptools]
 py-modules = ["config", "diagnostics", "keeper", "keeper_ui", "protocol", "runtime", "selfcheck", "usage"]
