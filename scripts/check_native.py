@@ -1,12 +1,14 @@
 """Run selected source tests with the checkout's Windows development interpreter.
 
-WSL owns source hashing and receipt binding. The native runner only imports the
-selected source tree and executes its tests sequentially, without installing or
-launching Workspace and without needing Git in the Downloads installation.
+The coordinator owns source hashing and receipt binding. The native runner
+imports the selected source tree and executes its reviewed plan, without
+installing or launching Workspace or needing Git in the Downloads installation.
 """
 
+import os
 import shutil
 import subprocess
+import sys
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
@@ -14,22 +16,22 @@ from pathlib import Path
 from pydantic import StrictFloat, StrictInt, StrictStr, TypeAdapter, ValidationError
 
 from scripts.deploy_files import write
-
-LIVE = Path('/mnt/c/Users/Jim.Lundin/Downloads/workspace-sdk/workspace')
-TEMP = Path('/mnt/c/Users/Jim.Lundin/AppData/Local/Temp')
+from scripts.development_paths import LIVE, TEMP
 
 RUNNER = '''import json, os, sys
 from pathlib import Path
-configuration = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
-root = Path(configuration["root"])
-os.environ["WORKSPACE_BUNDLED_RUNTIME"] = configuration["runtime"]
-sys.path.insert(0, str(root))
-from scripts.check import Selection, execute
-selection = Selection(tuple(configuration["tests"]), tuple(configuration["changed"]), configuration["reason"])
-passed, skipped, failures, timings = execute(selection, root)
-Path(configuration["output"]).write_text(json.dumps({"passed": passed, "skipped": skipped,
-    "failures": failures, "timings": timings}), encoding="utf-8")
-sys.exit(bool(failures))
+lazy from scripts.check import Selection, execute
+if __name__ == "__main__":
+    configuration = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+    root = Path(configuration["root"])
+    os.chdir(root)
+    os.environ["WORKSPACE_BUNDLED_RUNTIME"] = configuration["runtime"]
+    sys.path.insert(0, str(root))
+    selection = Selection(tuple(configuration["tests"]), tuple(configuration["changed"]), configuration["reason"])
+    passed, skipped, failures, timings = execute(selection, root)
+    Path(configuration["output"]).write_text(json.dumps({"passed": passed, "skipped": skipped,
+        "failures": failures, "timings": timings}), encoding="utf-8")
+    sys.exit(bool(failures))
 '''
 
 
@@ -45,6 +47,8 @@ NATIVE_RESULT = TypeAdapter[NativeResult](NativeResult)
 
 
 def windows_path(path: Path) -> str:
+    if os.name == 'nt':
+        return str(path.absolute())
     return subprocess.run(['wslpath', '-w', str(path.absolute())], capture_output=True, text=True, check=True).stdout.strip()
 
 
@@ -57,7 +61,8 @@ def execute_native(
         runner.write_text(RUNNER, encoding='utf-8')
         write(configuration, {'root': windows_path(root), 'tests': tests, 'changed': changed, 'reason': reason,
                               'output': windows_path(output), 'runtime': windows_path(LIVE / '.runtime')})
-        result = subprocess.run([str(root / '.venv' / 'Scripts' / 'python.exe'), '-B', windows_path(runner), windows_path(configuration)],
+        interpreter = sys.executable if os.name == 'nt' else str(root / '.venv' / 'Scripts' / 'python.exe')
+        result = subprocess.run([interpreter, '-B', windows_path(runner), windows_path(configuration)],
                                 cwd=scratch, check=False, timeout=600)
         if not output.exists():
             raise RuntimeError('The Windows test process did not write its result; no receipt can be produced.')

@@ -1,13 +1,17 @@
 """Our save/recheck and preview wiring on the native development runtime."""
 
 import importlib.util
-import json
+import os
 import shutil
 import subprocess
 import sys
 import time
 import unittest
+import uuid
 from pathlib import Path
+
+from scripts.install_inbox_hooks import configuration
+from tests.json_fixture import json_value
 
 if sys.platform != 'win32':
     raise unittest.SkipTest('Native development tools')
@@ -30,7 +34,7 @@ def wait_for(path: Path, condition: str, process: subprocess.Popen[bytes]) -> di
             raise AssertionError('Watch exited before ' + condition)
         if path.exists():
             try:
-                record: dict[str, object] = json.loads(path.read_text())
+                record: dict[str, object] = configuration(json_value(path.read_text()))
             except (OSError, ValueError):
                 pass
             else:
@@ -44,7 +48,7 @@ def write_watch_source(root: Path, output: Path) -> None:
     scripts.mkdir(parents=True)
     (scripts / '__init__.py').write_text('')
     for name in ('watch.py', 'check.py', 'source_analysis.py', 'architecture.py', 'quality.py',
-                 'deploy_files.py', 'development_paths.py', 'check_native.py'):
+                 'deploy_files.py', 'development_paths.py', 'check_native.py', 'native_desktop.py'):
         shutil.copyfile(ROOT / 'scripts' / name, scripts / name)
     shutil.copyfile(ROOT / 'runtime.py', root / 'runtime.py')
     (root / 'pyproject.toml').write_text('[tool.workspace.architecture]\nmodels=[]\n'
@@ -111,7 +115,49 @@ def test_watch_rechecks_fresh_source_and_retains_baseline_after_failed_edits(tmp
             except subprocess.TimeoutExpired:
                 process.terminate()
                 process.wait(timeout=5)
-        assert process.returncode == 0, log.read_text()
+        assert int(process.returncode or 0) == 0, log.read_text()
+
+
+def test_native_check_reviews_source_once_across_desktop_handoff(tmp_path: Path) -> None:
+    # A desktop relaunch must not repeat the coordinator's complete policy scan.
+    # The single reviewed snapshot must still bind the successful native result.
+    if importlib.util.find_spec('ruff') is None or shutil.which('git') is None:
+        raise unittest.SkipTest('The editing coordinator needs development-only Ruff and Git.')
+    root, output = tmp_path / 'source', tmp_path / 'observed.json'
+    write_watch_source(root, output)
+    for name in ('__init__.py', 'desktop_session.py'):
+        shutil.copyfile(ROOT / 'tests' / name, root / 'tests' / name)
+    (root / 'tests' / 'test_value.py').rename(root / 'tests' / 'test_windows_value.py')
+    # Two registered portable modules exercise the real spawned-worker handoff.
+    # A re-executed runner would recursively launch checks or append twice.
+    markers = tuple(tmp_path / (name + '.ran') for name in ('test_commands', 'test_llm'))
+    for marker in markers:
+        (root / 'tests' / (marker.stem + '.py')).write_text(
+            'import atexit\nfrom pathlib import Path\n'
+            f'atexit.register(Path({str(marker.with_suffix(".exited"))!r}).write_text, "closed")\n'
+            'def test_worker():\n'
+            f'    with Path({str(marker)!r}).open("a") as output:\n'
+            '        output.write("ran\\n")\n')
+    native = root / 'tests' / 'test_windows_value.py'
+    exited = tuple(str(marker.with_suffix('.exited')) for marker in markers)
+    native.write_text(native.read_text() +
+                      f'    assert all(Path(name).read_text() == "closed" for name in {exited!r})\n')
+    receipt = tmp_path / 'checked.json'
+    checked = subprocess.run(
+        (sys.executable, '-B', '-m', 'scripts.check', '--full', '--native', '--receipt', str(receipt)),
+        cwd=root, env=dict(os.environ, PYTHONPATH=str(ROOT), WORKSPACE_TEST_DESKTOP='workspace-tests-' + uuid.uuid4().hex),
+        capture_output=True, text=True, encoding='utf-8', timeout=45, check=False,
+    )
+    assert checked.returncode == 0, checked.stdout + checked.stderr
+    assert checked.stdout.count('Architecture: ') == 1, checked.stdout
+    assert json_value(output.read_text()) == {'value': 1}
+    assert all(marker.read_text() == 'ran\n' for marker in markers)
+    result: object = json_value(receipt.read_text())
+    match result:
+        case {'kind': 'workspace-edit-check-v1', 'passed': 3, 'skipped': 0}:
+            pass
+        case _:
+            raise AssertionError('The native result did not bind a successful source receipt')
 
 
 def test_preview_uses_real_views_without_starting_native_services_and_closes_cleanly(tmp_path: Path) -> None:
@@ -133,7 +179,7 @@ def test_preview_uses_real_views_without_starting_native_services_and_closes_cle
         assert not preview.bar.status.text() and preview.bar.status.processing
         preview.selector.setCurrentIndex(2)
         preview.root.processEvents()
-        assert preview.feed.cards and json.loads(files.state.read_text()) == {'scenario': 2}
+        assert preview.feed.cards and json_value(files.state.read_text()) == {'scenario': 2}
         assert preview.control.isVisible()
         assert all(pill.windowTitle().startswith('Workspace preview') for pill in preview.bar.pills)
         preview.bar.open_menu()

@@ -15,30 +15,20 @@ import uuid
 from collections.abc import Generator
 from contextlib import contextmanager
 
-from win32more import WinError
-from win32more.Windows.Win32.Foundation import CloseHandle, DuplicateHandle, GetLastError
-from win32more.Windows.Win32.System.Console import GetStdHandle
-from win32more.Windows.Win32.System.StationsAndDesktops import CloseDesktop, CreateDesktopW, GetThreadDesktop, GetUserObjectInformationW
-from win32more.Windows.Win32.System.Threading import (
+lazy from win32more import WinError
+lazy from win32more.Windows.Win32.Foundation import CloseHandle, DuplicateHandle, GetLastError
+lazy from win32more.Windows.Win32.System.Console import GetStdHandle
+lazy from win32more.Windows.Win32.System.StationsAndDesktops import CloseDesktop, CreateDesktopW
+lazy from win32more.Windows.Win32.System.Threading import (
     PROCESS_INFORMATION,
     STARTUPINFOW,
     CreateProcessW,
     GetCurrentProcess,
-    GetCurrentThreadId,
     ResumeThread,
 )
 
-from winapi.processes import Process, ProcessJob
-
-
-def current_name() -> str:
-    handle = GetThreadDesktop(GetCurrentThreadId())
-    if handle is None:
-        raise WinError(GetLastError())
-    buffer = ctypes.create_unicode_buffer(256)
-    if not GetUserObjectInformationW(handle, 2, ctypes.addressof(buffer), ctypes.sizeof(buffer), None):
-        raise WinError(GetLastError())
-    return buffer.value
+from scripts.native_desktop import current_name
+lazy from winapi.processes import Process, ProcessJob
 
 
 @contextmanager

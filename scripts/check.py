@@ -32,6 +32,7 @@ lazy import selfcheck
 lazy from runtime import activate
 lazy from scripts import quality
 lazy from scripts.check_native import execute_native
+lazy from scripts.native_desktop import current_name
 
 ROOT = Path(__file__).resolve().parent.parent
 BROAD = frozenset({'keeper.py', 'selfcheck.py', 'runtime.py', 'workspace.pyw', 'config.py', 'protocol.py', 'pyproject.toml'})
@@ -41,13 +42,26 @@ WINDOWS_IMPORTS = ('WinDLL', 'WINFUNCTYPE', 'windll', 'winreg', 'msvcrt', '_wina
 # and per-function temporary stores. These modules never use the shared desktop
 # or installed source. Explicit inventory, rather than filename inference, keeps
 # new/native tests sequential until their effects have been reviewed.
-# Heavier modules lead the queue. Two workers halved this exact group's measured
-# elapsed time (123.49 -> 60.86s), including SDK startup and worker shutdown.
+# Heavier modules lead the queue. Reuse SDK-initialized workers for
+# private journal/HTTP/process fixtures too; none acquire native UI or audio.
+# docs/test-execution-ownership.md records the reviewed resource owners.
 PORTABLE = (
     'tests/test_agent.py', 'tests/test_meeting_followup.py', 'tests/test_publishing.py',
     'tests/test_meeting_execution.py', 'tests/test_architecture.py', 'tests/test_meeting_workflow.py',
     'tests/test_quality.py', 'tests/test_work_store.py', 'tests/test_work_actions.py',
+    'tests/test_outlook.py', 'tests/test_meetings.py', 'tests/test_selfcheck.py',
+    'tests/test_computer_tools.py', 'tests/test_agent_runner.py',
+    'tests/test_work_execution.py', 'tests/test_feed_triage_service.py', 'tests/test_console_inbox.py',
+    'tests/test_commands.py', 'tests/test_meeting_events.py', 'tests/test_project_context.py',
+    'tests/test_llm.py', 'tests/test_routines.py', 'tests/test_background_agent.py',
+    'tests/test_keeper.py', 'tests/test_source_analysis.py', 'tests/test_workspace.py',
+    'tests/test_work_agent.py', 'tests/test_features.py', 'tests/test_work_submissions.py',
 )
+# Strict elapsed deadlines suffer under competing SDK/source work. All native
+# modules run after these workers exit too, keeping their fixture costs stable.
+AFTER_WORKERS = frozenset({
+    'tests/test_graph_http.py',
+})
 
 
 @dataclass(frozen=True, slots=True)
@@ -259,6 +273,8 @@ def execute_overlapped(tests: tuple[str, ...], root: Path) -> Results:
     plan = execution_plan(tests)
     if not plan.portable:
         return execute_tests(plan.sequential, root)
+    alongside = tuple(name for name in plan.sequential if not name.startswith('tests/test_windows_') and name.partition('::')[0] not in AFTER_WORKERS)
+    following = tuple(name for name in plan.sequential if name not in alongside)
     phases: list[tuple[float, str]] = []
     results: list[Results] = []
     # The coordinator owns futures and ledgers until all children exit. Only
@@ -266,11 +282,11 @@ def execute_overlapped(tests: tuple[str, ...], root: Path) -> Results:
     # submitted to it. Parent tests and each complete worker module keep their
     # ordinary executor, fixtures, assertions and failure protocol.
     with timed('phase:portable worker dispatch', phases):
-        pool = ProcessPoolExecutor(max_workers=2, initializer=prepare_worker, initargs=(root,))
+        pool = ProcessPoolExecutor(max_workers=4, initializer=prepare_worker, initargs=(root,))
     try:
         with timed('phase:portable worker submission', phases):
             pending = tuple((name, pool.submit(execute_tests, (name,), root)) for name in plan.portable)
-        results.append(execute_tests(plan.sequential, root))
+        results.append(execute_tests(alongside, root))
         with timed('phase:portable worker completion', phases):
             for name, future in pending:
                 try:
@@ -280,6 +296,7 @@ def execute_overlapped(tests: tuple[str, ...], root: Path) -> Results:
     finally:
         with timed('phase:portable worker shutdown', phases):
             pool.shutdown(wait=True, cancel_futures=True)
+    results.append(execute_tests(following, root))
     return combined_results(tuple(results), tuple(phases))
 
 
@@ -464,7 +481,11 @@ def main() -> None:
         selection = choose(args, current, parser)
     scope: dict[str, str | int] = {'profile': selection.reason, 'test_modules': len(selection.tests), 'changed_files': len(selection.changed)}
     print(json.dumps(scope), flush=True)
-    if args.native and os.name != 'nt':
+    # Desktop isolation may relaunch the executor. Keep policy review, source
+    # identity and receipt publication in this coordinator, outside that handoff.
+    if os.name == 'nt' and current_name() == os.environ.get('WORKSPACE_TEST_DESKTOP'):
+        passed, skipped, failures, timings = execute(selection, ROOT)
+    elif os.name == 'nt' or args.native:
         passed, skipped, failures, timings = execute_native(ROOT, selection.tests, selection.changed, selection.reason)
     else:
         passed, skipped, failures, timings = execute(selection, ROOT)

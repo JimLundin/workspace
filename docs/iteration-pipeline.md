@@ -61,8 +61,14 @@ Missing/damaged cached records are recomputed. The protected full selfcheck uses
 no disk cache; CI coverage and runtime pins are unchanged. Shared bounded AST
 parsing and grouping Ruff diagnostics also reduce work in the first analysis.
 
-Generated domain checks run before the editing runner's broad dependency import
-review. Hypothesis examines loaded modules for constants; loading the complete
+The native editing coordinator reviews source once, before handing test execution
+to a child that owns desktop isolation. The child can relaunch without repeating
+the policy gates; initial/final hashes and the validated result still bind the
+success receipt. A check already on the verified private desktop executes
+directly, so watcher checks avoid an extra executor startup. Generated domain checks run before the editing runner's broad
+dependency import review. The isolated desktop observer defers the native SDK
+until it is needed by the launcher. Hypothesis examines loaded modules for
+constants; loading the complete
 native SDK first also feeds bundled dependency sources into that work. Compilation,
 the complete broad import review and final source binding still run. This reduces
 one setup cost; native process/browser fixtures remain expensive.
@@ -83,11 +89,15 @@ Runner startup before its timer, report-writing cost, early preflight failures
 and interrupted processes are outside this accounting. See the [full-suite investigation](test-speed-investigation.md)
 for measured portable costs and the limits of current full-run attribution.
 
-Broad native editing checks run nine explicitly reviewed isolated test modules
-through two standard-library process workers, alongside the single sequential
+Broad native editing checks run twenty-nine explicitly reviewed isolated test modules
+through four standard-library process workers before the single sequential
 desktop-test lane. Their private files, localhost transports and fake desktop
-adapters allow that overlap; new modules stay sequential until reviewed.
-Properties still run first, before SDK/native imports, and narrow editing checks
+adapters allow that overlap; [execution ownership](test-execution-ownership.md)
+records the additional resource review; new modules stay sequential until reviewed.
+All native fixtures and the strict overall-deadline HTTP
+module run after the workers exit, avoiding contention during provider startup
+and short elapsed budgets. Properties still run first, before SDK/native imports,
+and narrow editing checks
 keep their existing executor without worker startup. Workers finish and exit
 before source validation and any deployment. The protected full gate is unchanged.
 
