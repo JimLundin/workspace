@@ -3,14 +3,37 @@
 from dataclasses import replace
 
 from assistant.agent_session import Begin, Said, Session, transition
-from assistant.communications import Update, WindowsNotice
+from assistant.communications import Feed, Update, WindowsNotice
 from assistant.console_requests import Provider, request
 from assistant.feed_items import WorkItem, action_spans, body_spans, expanded_spans, observed
+from assistant.feed_origin import FeedRequest
+from assistant.feed_triage import Assessment, Board, collect
 from assistant.inbox import Query, Source
-from assistant.notifications import MAX_VISIBLE, Stack, advance, body
+from assistant.notifications import MAX_VISIBLE, Stack, Turn, advance, body, observe
 from assistant.system_notices import NoticeKey
 
 from .test_console_inbox import event
+
+
+def test_notification_projection_shares_evidence_for_proposals_and_attached_turns() -> None:
+    # Defect: each proposal and attached turn rescans all source/handling records on Qt's thread.
+    feed = Feed(updates=tuple(Update(WindowsNotice(NoticeKey(index, 1), 'outlook'), f'Figures {index}',
+                                    f'Evidence {index}', 'Outlook', index + 1) for index in range(3)))
+    candidates = collect(feed, ())
+    proposals = tuple(Assessment(str(index), ((source.identity, source.revision),), source.title,
+                                 'Compare totals', 'Prepare a draft', '', 1, index + 1)
+                      for index, source in enumerate(candidates))
+    proposals = (proposals[0], replace(proposals[1], references=(*proposals[0].references, *proposals[1].references)), proposals[2])
+    session = Session(communications=feed, triage=Board(enabled=True, items=proposals))
+    session = transition(session, Begin('Review figures', 10, source=FeedRequest('0', proposals[0].title)))
+    items = observe(session)
+    turn = next(item for item in items if isinstance(item, Turn))
+    assert turn.origin is not None and turn.origin.item == proposals[0] and turn.origin.evidence == (candidates[0],)
+    rows = tuple(item for item in items if isinstance(item, WorkItem))
+    assert {row.item.identity for row in rows if isinstance(row.item, Assessment)} == {'1', '2'}
+    assert {source.identity for row in rows for source in row.evidence} == {source.identity for source in candidates}
+    shared = next(row for row in rows if isinstance(row.item, Assessment) and row.item.identity == '1')
+    assert turn.origin.evidence[0] is shared.evidence[0], 'A snapshot must reuse its validated evidence across all proposals.'
 
 
 def test_expansion_shows_only_matching_source_revisions_and_labels_missing_originals() -> None:

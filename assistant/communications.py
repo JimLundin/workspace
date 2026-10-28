@@ -169,7 +169,8 @@ class Feed:
                                            for mark in (*self.acknowledged, *self.handled))
 
     def pending_update(self, update: Update) -> bool:
-        return not any(mark.key == update.key and mark.fingerprint == update_fingerprint(update) for mark in self.handled)
+        key, revision = update.key, update_fingerprint(update)
+        return not any(mark.key == key and mark.fingerprint == revision for mark in self.handled)
 
     @property
     def unseen_chats(self) -> int:

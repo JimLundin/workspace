@@ -23,6 +23,12 @@ Extend a stub only when consuming another API. Check its signature against the
 pinned dependency's source and exercise our integration; stubs must not assert
 that external data already satisfies a domain schema.
 
+The [Python 3.15 typeshed override](.workspace-typeshed/README.md) retains Pyright 1.1.414's
+standard-library contracts and corrects its native `frozendict` constructor.
+Both checkers select it through their supported typeshed-directory settings;
+runtime uses the builtin directly. Python's frozen mapping implementation is
+trusted, without library tests.
+
 Watchdog's stubs expose its consumed event fields and observer lifecycle. The
 handler protocol records the actual dispatch call used by the native observer;
 Workspace owns filtering, batching, check sequencing and preview shutdown.

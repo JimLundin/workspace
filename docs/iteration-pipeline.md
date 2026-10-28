@@ -143,6 +143,8 @@ Feed-triage fixtures keep real worker threads, locks and authenticated HTTP
 requests. Tests explicitly release debounce steps instead of waiting 1.5 seconds
 per step; the local fixture server uses a short idle shutdown poll. The daily
 refresh case still exercises the real periodic wake without a new observation.
+The fixture supplies the real server adapter and cancellable wait dependency
+through `Triage` construction; it does not patch native events or module globals.
 Feed-tool cases use the registered tool boundary; the general SDK conversation
 scenarios remain in `tests/test_agent.py`.
 

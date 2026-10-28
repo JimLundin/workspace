@@ -7,10 +7,9 @@ delay after the test has supplied the observations for that step.
 
 import threading
 from collections.abc import Callable
-from http.server import ThreadingHTTPServer
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from queue import Queue
-from unittest.mock import patch
 
 from assistant.console_requests import Command
 from assistant.feed_triage import Board, Candidate
@@ -23,6 +22,10 @@ class LocalBridge(ThreadingHTTPServer):
         super().serve_forever(poll_interval=.02)
 
 
+def open_bridge(handler: type[BaseHTTPRequestHandler]) -> ThreadingHTTPServer:
+    return LocalBridge(('127.0.0.1', 0), handler)
+
+
 class TriageFixture(Triage):
     __slots__ = ('delays',)
 
@@ -30,23 +33,17 @@ class TriageFixture(Triage):
                  model: Callable[[tuple[Candidate, ...], tuple[str, ...]], str], console: Callable[[Command], bool], *,
                  submit: Callable[[str, str], None] | None = None) -> None:
         # Preserve the real owner's dependency interface rather than hide it in options.
-        self.delays: Queue[tuple[float | None, threading.Event]] = Queue()
-        with patch('assistant.feed_triage_service.ThreadingHTTPServer', LocalBridge):
-            super().__init__(endpoint, store, publish, model, console, submit=submit)
+        self.delays: Queue[tuple[float, threading.Event]] = Queue()
+        super().__init__(endpoint, store, publish, model, console, submit=submit,
+                         server_factory=open_bridge, wait=self.wait_for_stop)
 
-    def run(self) -> None:
-        closed_wait = self.closed.wait
-
-        def wait(timeout: float | None = None) -> bool:
-            released = threading.Event()
-            self.delays.put((timeout, released))
-            while not released.is_set():
-                if closed_wait(.01):
-                    return True
-            return self.closed.is_set()
-
-        with patch.object(self.closed, 'wait', wait):
-            super().run()
+    def wait_for_stop(self, stopped: threading.Event, timeout: float) -> bool:
+        released = threading.Event()
+        self.delays.put((timeout, released))
+        while not released.is_set():
+            if stopped.wait(.01):
+                return True
+        return stopped.is_set()
 
     def advance(self) -> None:
         timeout, released = self.delays.get(timeout=5)

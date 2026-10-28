@@ -1,7 +1,9 @@
 """Source work joins the existing floating conversation without becoming agent instructions."""
 
+from collections.abc import Mapping
 from dataclasses import dataclass, replace
 from enum import Enum, auto
+from typing import assert_never
 from urllib.parse import urlencode
 
 from .agent_session import Snapshot
@@ -45,7 +47,7 @@ class WorkItem:
         return isinstance(self.item, Request) and self.item.state is State.WAITING
 
 
-def origins(item: ChatTicket | Message | Update | Reply | Request | Assessment, session: Snapshot) -> tuple[Origin, ...]:
+def origins(item: ChatTicket | Message | Update | Reply | Request) -> tuple[Origin, ...]:
     match item:
         case ChatTicket() | Message() | Reply():
             return (Origin(App.TEAMS, App.TEAMS.value),)
@@ -55,26 +57,17 @@ def origins(item: ChatTicket | Message | Update | Reply | Request | Assessment, 
             return (Origin(App.TEAMS, App.TEAMS.value),)
         case Request(provider=provider):
             return (application(provider.value),)
-        case Assessment(references=references):
-            known = {identity(*update.key): origins(update, session)[0] for update in session.communications.updates}
-            known.update({identity('console', request.identity): origins(request, session)[0] for request in session.console_requests})
-            result: list[Origin] = []
-            for ref, _revision in references:
-                source = ref.partition(':')[0]
-                origin = known.get(ref, Origin(App.TEAMS, App.TEAMS.value) if source in ('chat', 'activity', 'reply')
-                                   else Origin(App.WINDOWS, App.WINDOWS.value) if source == 'windows'
-                                   else Origin(App.WORKSPACE, App.WORKSPACE.value))
-                if origin not in result:
-                    result.append(origin)
-            return tuple(result)
+        case _:
+            assert_never(item)
 
 
-def observed(session: Snapshot, query: Query = DEFAULT_QUERY) -> tuple[WorkItem, ...]:
+def observed(session: Snapshot, query: Query = DEFAULT_QUERY, *, proposals: Mapping[str, WorkItem] | None = None) -> tuple[WorkItem, ...]:
     if session.triage.enabled:
-        proposals = tuple(proposal(session, item) for item in session.triage.actions)
-        waiting = tuple(WorkItem(SourceKey('console', request.identity), request, request.provider.value)
+        indexed = proposal_index(session) if proposals is None else proposals
+        selected = tuple(indexed[item.identity] for item in session.triage.actions)
+        waiting = tuple(WorkItem(SourceKey('console', request.identity), request, request.provider.value, origins=origins(request))
                         for request in session.console_requests if request.state is State.WAITING)
-        return (*proposals, *(replace(row, origins=origins(row.item, session)) for row in waiting))
+        return (*selected, *waiting)
     feed = session.communications
     rows: list[WorkItem] = []
     if query.history:
@@ -98,7 +91,7 @@ def observed(session: Snapshot, query: Query = DEFAULT_QUERY) -> tuple[WorkItem,
         if query.history or request.state in (State.WAITING, State.INFORMATION):
             rows.append(WorkItem(SourceKey('console', request.identity), request, request.provider.value,
                                  WorkState.HANDLED if request.state in (State.ANSWERED, State.EXPIRED) else WorkState.PENDING))
-    return tuple(replace(row, origins=origins(row.item, session)) for row in rows if not isinstance(row.item, Assessment)
+    return tuple(replace(row, origins=origins(row.item)) for row in rows if not isinstance(row.item, Assessment)
                  and matches(row.item.latest if isinstance(row.item, ChatTicket) else row.item, query))
 
 
@@ -268,7 +261,38 @@ def action_spans(row: WorkItem) -> tuple[Span, ...]:
                  for value in ((Span('  ·  '), action) if index else (action,)))
 
 
-def proposal(session: Snapshot, item: Assessment) -> WorkItem:
-    evidence = {(source.identity, source.revision): source for source in collect(session.communications, session.console_requests)}
-    return WorkItem(SourceKey('triage', item.identity), item, item.title, origins=origins(item, session),
-                    evidence=tuple(evidence[ref] for ref in item.references if ref in evidence))
+@dataclass(frozen=True, slots=True)
+class ProposalSources:
+    evidence: frozendict[tuple[str, str], Candidate]
+    origins: frozendict[str, Origin]
+
+
+def proposal(item: Assessment, sources: ProposalSources) -> WorkItem:
+    def origin(ref: str) -> Origin:
+        if known := sources.origins.get(ref):
+            return known
+        match ref.partition(':')[0]:
+            case 'chat' | 'activity' | 'reply':
+                return Origin(App.TEAMS, App.TEAMS.value)
+            case 'windows':
+                return Origin(App.WINDOWS, App.WINDOWS.value)
+            case _:
+                return Origin(App.WORKSPACE, App.WORKSPACE.value)
+    return WorkItem(SourceKey('triage', item.identity), item, item.title,
+                    origins=tuple({origin(ref): None for ref, _revision in item.references}),
+                    evidence=tuple(sources.evidence[ref] for ref in item.references if ref in sources.evidence))
+
+
+def proposal_index(session: Snapshot) -> frozendict[str, WorkItem]:
+    """Build evidence once per snapshot, then pass the same projection to each consumer.
+
+    Native frozen dictionaries retain immutable candidates, origins and work items.
+    """
+    if not session.triage.items:
+        return frozendict({})
+    sources = ProposalSources(
+        frozendict({(source.identity, source.revision): source for source in collect(session.communications, session.console_requests)}),
+        frozendict({**{identity(*update.key): origins(update)[0] for update in session.communications.updates},
+                    **{identity('console', request.identity): origins(request)[0] for request in session.console_requests}}),
+    )
+    return frozendict({item.identity: proposal(item, sources) for item in session.triage.items})

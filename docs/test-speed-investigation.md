@@ -151,8 +151,10 @@ after the change. The real worker, locks, authenticated HTTP requests and respon
 files remain. The coalescing case now also rejects a model call before the test
 releases the debounce. The new-day case retains the real one-second periodic
 wake path, so refresh cannot silently depend on another notification. Fixture
-server shutdown polls at 20ms instead of the standard half second. Production
-timing and bridge code are unchanged. [22]
+server shutdown polls at 20ms instead of the standard half second. The integrated
+fixture supplies HTTP construction and cancellable waiting through `Triage`'s
+explicit dependencies. Production retains its original delay and server behavior;
+the fixture uses no patching. [22]
 
 That 20-case run exposed **20.067s** in the first SDK-using feed-tool case. The
 case now uses the existing registered-tool fixture, retaining real bridge reads,

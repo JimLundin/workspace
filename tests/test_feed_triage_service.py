@@ -101,6 +101,25 @@ def test_automatic_triage_coalesces_polls_and_voice_feedback_updates_the_live_pl
     assert not endpoint.exists()
 
 
+def test_shutdown_cancels_supplied_debounce_before_calling_model(tmp_path: Path) -> None:
+    # Defect: ignoring the supplied wait or its cancellation result lets work
+    # survive shutdown, or invokes the model after the owner was closed.
+    calls: list[tuple[Candidate, ...]] = []
+    def model(batch: tuple[Candidate, ...], rules: tuple[str, ...]) -> str:
+        calls.append(batch)
+        return output(([item.identity for item in batch], 'action'))
+    endpoint = tmp_path / 'cancelled.json'
+    triage = TriageFixture(endpoint, MemoryStore(), lambda _: None, model, lambda _: False)
+    try:
+        triage.observe(Feed(updates=(Update(TeamsActivity('cancelled'), 'Review', 'Please review.', 'Teams', 1),)), ())
+        timeout, _release = triage.delays.get(timeout=5)
+        assert timeout == 1.5
+    finally:
+        triage.close()
+    assert not calls and not triage.thread.is_alive()
+    assert not endpoint.exists()
+
+
 def test_inflight_model_cannot_overwrite_new_voice_feedback(tmp_path: Path) -> None:
     entered, release = threading.Event(), threading.Event()
     def model(batch: tuple[Candidate, ...], rules: tuple[str, ...]) -> str:

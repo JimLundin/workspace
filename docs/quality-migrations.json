@@ -607,15 +607,6 @@
     {
       "key": {
         "rule": "PLR0913",
-        "path": "assistant/feed_triage_service.py",
-        "scope": "Triage.__init__",
-        "signature": "ed8451c2720a216e2fcdf7f834058c890600d96036ef9ef51ae3f460e3f1b27f"
-      },
-      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
-    },
-    {
-      "key": {
-        "rule": "PLR0913",
         "path": "assistant/geometry.py",
         "scope": "half",
         "signature": "5b6febaa5129264ab8d93d6e9a9cf8cc43014d4430f5411b5a1946474ed6c517"

@@ -76,6 +76,14 @@ def classify(settings: Settings, batch: tuple[Candidate, ...], rules: tuple[str,
     return reply.text
 
 
+def open_bridge(handler: type[BaseHTTPRequestHandler]) -> ThreadingHTTPServer:
+    return ThreadingHTTPServer(('127.0.0.1', 0), handler)
+
+
+def wait_for_stop(stopped: threading.Event, seconds: float) -> bool:
+    return stopped.wait(seconds)
+
+
 class Triage:
     __slots__ = (
         'board',
@@ -96,13 +104,20 @@ class Triage:
         'submitted',
         'thread',
         'token',
+        'wait',
         'wake',
     )
 
     def __init__(self, endpoint: Path, store: Store, publish: Callable[[Board], None],
                  model: Callable[[tuple[Candidate, ...], tuple[str, ...]], str], console: Callable[[Command], bool], *,
-                 submit: Callable[[str, str], None] | None = None) -> None:
+                 submit: Callable[[str, str], None] | None = None,
+                 server_factory: Callable[[type[BaseHTTPRequestHandler]], ThreadingHTTPServer] = open_bridge,
+                 wait: Callable[[threading.Event, float], bool] = wait_for_stop) -> None:
+        # Compose the real storage, model, voice and HTTP effects here. Server
+        # construction and cancellable delays vary independently in native and
+        # deterministic adapters, so each is an explicit dependency.
         self.endpoint, self.store, self.publish, self.model, self.console = endpoint, store, publish, model, console
+        self.wait: Callable[[threading.Event, float], bool] = wait
         self.submit = submit
         self.submitted: set[str] = set()
         self.lock = threading.RLock()
@@ -148,7 +163,7 @@ class Triage:
                 with contextlib.suppress(BrokenPipeError, ConnectionResetError):
                     self.wfile.write(output)
 
-        self.server = ThreadingHTTPServer(('127.0.0.1', 0), Handler)
+        self.server = server_factory(Handler)
         self.server.daemon_threads = True
         address = cast(tuple[str, int], self.server.socket.getsockname())
         endpoint.parent.mkdir(parents=True, exist_ok=True)
@@ -290,7 +305,7 @@ class Triage:
                 if not self.wake.is_set() and not unassessed(self.board, self.candidates, today=today):
                     continue
             self.wake.clear()
-            if self.closed.wait(1.5):
+            if self.wait(self.closed, 1.5):
                 return
             with self.lock:
                 available = tuple(item for item in self.candidates if item.identity not in retry_without)
@@ -323,7 +338,7 @@ class Triage:
                     self.board = replace(self.board, status='Triage unavailable · new work awaits review')
                     self.publish(self.board)
                 # Existing proposals and exact console questions remain accessible.
-                if self.closed.wait(30):
+                if self.wait(self.closed, 30):
                     return
                 self.wake.set()
 

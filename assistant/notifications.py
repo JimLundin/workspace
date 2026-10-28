@@ -27,7 +27,7 @@ from .agent_session import (
     pending,
     presentation,
 )
-from .feed_items import DEFAULT_QUERY, SourceKey, WorkItem, WorkState, action_spans, proposal
+from .feed_items import DEFAULT_QUERY, SourceKey, WorkItem, WorkState, action_spans, proposal_index
 from .feed_items import heading as source_heading
 from .feed_items import observed as source_items
 from .feed_items import text as source_text
@@ -211,7 +211,7 @@ def can_stop(content: Content) -> bool:
 
 def observe(session: Snapshot, query: Query = DEFAULT_QUERY) -> tuple[Content, ...]:  # noqa: PLR0915
     result: list[Content] = []
-    proposals = {item.identity: proposal(session, item) for item in session.triage.items}
+    proposals = proposal_index(session)
     requests = tuple(index for index, message in enumerate(session.messages) if isinstance(message, ChatMessage) and message.speaker == "You")
     latest = requests[-1] if requests else -1
     initial_input = any(isinstance(message, (Question, Approval)) for message in session.messages[:requests[0] if requests else None])
@@ -283,7 +283,7 @@ def observe(session: Snapshot, query: Query = DEFAULT_QUERY) -> tuple[Content, .
             case _:
                 assert_never(item)
     attached = {item.origin.key for item in selected if isinstance(item, Turn) and item.origin is not None}
-    return (*selected, *(item for item in source_items(session, query) if item.key not in attached))
+    return (*selected, *(item for item in source_items(session, query, proposals=proposals) if item.key not in attached))
 
 
 def settled(entries: tuple[Entry | Response, ...]) -> Settled:
