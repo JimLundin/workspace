@@ -1,0 +1,662 @@
+{
+  "recorded_on": "2026-10-28",
+  "command": "python -B -m scripts.check --full --native --timings <report.json>",
+  "environment": "Native Windows Python 3.15, inherited installed runtime; private sequential native desktop.",
+  "before": {
+    "description": "Warmed unchanged e9544c6 checkout; original nine-module worker plan.",
+    "artifact": "workspace-speed-full-before-repeat.json",
+    "artifact_sha256": "8b1f4651123cc06b34d39ad7220e0f0a2d2e6e6b2a64fcaee4c7fcec1dfb5696",
+    "source_manifest_sha256": "d78c32c5c04e91ef783bce5839632345d9f73c5612c4bb6a3ee07758fa45fde6",
+    "source_file_count": 1178,
+    "selected_modules": 122,
+    "complete_python_seconds": 271.1741104000248,
+    "reported_seconds": 244.82112269999925,
+    "passed": 1121,
+    "failed": 0,
+    "skipped": 5,
+    "phases": {
+      "phase:initial source manifest": 0.5882719000219367,
+      "phase:architecture review": 2.704901599965524,
+      "phase:quality review": 0.5352671999717131,
+      "phase:baseline and test selection": 0.028266399982385337,
+      "phase:final source manifest": 0.7648428999818861,
+      "phase:runtime activation": 0.9974815999739803,
+      "phase:compile all source": 2.8762617000029422,
+      "phase:import all production modules": 6.601761999947485,
+      "phase:import changed source": 3.300025127828121e-06,
+      "phase:portable worker dispatch": 0.0885615999577567,
+      "phase:portable worker submission": 0.078087100002449,
+      "phase:portable worker completion": 0.00015760003589093685,
+      "phase:portable worker shutdown": 2.696717900049407
+    },
+    "sequential_native_body_seconds": 142.19054039986804,
+    "aggregate_worker_seconds": 87.68412250030087,
+    "unattributed_report_seconds": 0.09067920100642368,
+    "native_families": {
+      "test_windows_browser": 42.943546000053175,
+      "test_windows_computer": 30.14944629999809,
+      "test_windows_runtime": 21.729115699941758,
+      "test_windows_development": 8.09629319992382
+    },
+    "slowest_bodies": [
+      [
+        25.985749599989504,
+        "tests.test_windows_computer.test_uia_controls_are_inspected_and_operated_across_separate_processes"
+      ],
+      [
+        18.914052599982824,
+        "tests.test_windows_browser.test_managed_browser_dom_teams_persistence_and_cancellation"
+      ],
+      [
+        15.808233299991116,
+        "tests.test_windows_browser.test_attached_browser_dom_tabs_and_cancellation_share_a_personal_browser"
+      ],
+      [
+        12.160307799989823,
+        "worker:tests.test_architecture.test_current_working_tree_satisfies_declared_architecture"
+      ],
+      [
+        10.026729199977126,
+        "tests.test_windows_runtime.test_copied_source_starts_the_sdk_and_qt_with_the_inherited_bundle"
+      ],
+      [
+        7.082283999945503,
+        "tests.test_windows_development.test_watch_rechecks_fresh_source_and_retains_baseline_after_failed_edits"
+      ],
+      [
+        6.59467920003226,
+        "tests.test_windows_browser.test_visible_sign_in_handoff_reuses_only_the_dedicated_profile"
+      ],
+      [
+        4.976199999975506,
+        "tests.properties.test_agent_session.test_only_the_matching_pending_request_accepts_a_reply"
+      ],
+      [
+        4.275152399961371,
+        "tests.test_agent_runner.test_sdk_execution_keeps_history_until_a_new_conversation"
+      ],
+      [
+        4.159786499978509,
+        "tests.test_windows_computer.test_powershell_preserves_utf8_large_scripts_cwd_and_failure_status"
+      ],
+      [
+        4.139832800021395,
+        "worker:tests.test_publishing.test_durable_publication_records_before_candidate_code_and_remote_push"
+      ],
+      [
+        4.048507199971937,
+        "tests.test_windows_notification_observer.test_banner_failure_keeps_notice_delivery_and_repeated_read_failures_release_suppression"
+      ]
+    ]
+  },
+  "final_isolated": {
+    "description": "Same application snapshot with final runtime changes, four workers and restoration fix.",
+    "artifact": "workspace-speed-full-final.json",
+    "artifact_sha256": "4567b5bf974f8afa53e67258d15551a0ca61941ac831808b9392f21019fa0849",
+    "source_manifest_sha256": "aebc6e9ea775745284a1824f0bb23d7d8b175d01665dbadcbb2cd9a32729694d",
+    "source_file_count": 1180,
+    "selected_modules": 122,
+    "complete_python_seconds": 255.03027010004735,
+    "reported_seconds": 252.14064509997843,
+    "passed": 1122,
+    "failed": 0,
+    "skipped": 5,
+    "phases": {
+      "phase:initial source manifest": 1.0781001000432298,
+      "phase:architecture review": 4.556613399996422,
+      "phase:quality review": 0.7945390999666415,
+      "phase:baseline and test selection": 0.05458669998915866,
+      "phase:final source manifest": 1.138178599998355,
+      "phase:runtime activation": 0.051179700007196516,
+      "phase:compile all source": 3.9039028999977745,
+      "phase:import all production modules": 7.57054500002414,
+      "phase:import changed source": 0.08039499999722466,
+      "phase:portable worker dispatch": 0.014843199984170496,
+      "phase:portable worker submission": 0.10233690001768991,
+      "phase:portable worker completion": 30.047022600017954,
+      "phase:portable worker shutdown": 2.9369984999648295
+    },
+    "sequential_native_body_seconds": 163.14471249992494,
+    "aggregate_worker_seconds": 181.50123479985632,
+    "unattributed_report_seconds": 4.159676700539421,
+    "native_families": {
+      "test_windows_browser": 50.86070630000904,
+      "test_windows_computer": 32.814223999972455,
+      "test_windows_runtime": 25.074641500017606,
+      "test_windows_development": 13.664329599938355
+    },
+    "slowest_bodies": [
+      [
+        28.085554099990986,
+        "tests.test_windows_computer.test_uia_controls_are_inspected_and_operated_across_separate_processes"
+      ],
+      [
+        24.0921534000081,
+        "tests.test_windows_browser.test_managed_browser_dom_teams_persistence_and_cancellation"
+      ],
+      [
+        18.452496099984273,
+        "tests.test_windows_browser.test_attached_browser_dom_tabs_and_cancellation_share_a_personal_browser"
+      ],
+      [
+        13.858244200004265,
+        "worker:tests.test_architecture.test_current_working_tree_satisfies_declared_architecture"
+      ],
+      [
+        12.432291700039059,
+        "tests.test_windows_runtime.test_copied_source_starts_the_sdk_and_qt_with_the_inherited_bundle"
+      ],
+      [
+        6.704565100022592,
+        "tests.test_windows_browser.test_visible_sign_in_handoff_reuses_only_the_dedicated_profile"
+      ],
+      [
+        6.505084199947305,
+        "tests.test_windows_development.test_watch_rechecks_fresh_source_and_retains_baseline_after_failed_edits"
+      ],
+      [
+        6.091564900008962,
+        "worker:tests.test_publishing.test_durable_publication_records_before_candidate_code_and_remote_push"
+      ],
+      [
+        5.7762547000311315,
+        "tests.test_windows_development.test_native_check_reviews_source_once_across_desktop_handoff"
+      ],
+      [
+        5.33679359999951,
+        "worker:tests.test_publishing.test_reviewed_change_is_pushed_to_new_branch"
+      ],
+      [
+        5.272138300002553,
+        "worker:tests.test_publishing.test_declined_review_failed_checks_and_diverged_base_refuse_publication"
+      ],
+      [
+        4.7267448999919,
+        "tests.test_windows_computer.test_powershell_preserves_utf8_large_scripts_cwd_and_failure_status"
+      ]
+    ]
+  },
+  "combined": {
+    "description": "Warmed integrated ff530a6, including separate typing and Qt work.",
+    "artifact": "workspace-speed-combined-warm.json",
+    "artifact_sha256": "13da5a4923e44746dbacb09037c69645643b7d5f07c6c394a38f111d3b91cf97",
+    "source_manifest_sha256": "17fc9b3c9aa297551d6eed745f1094c0a4c7d84767c5401ebccd9253d6ccaca8",
+    "source_file_count": 1184,
+    "selected_modules": 122,
+    "complete_python_seconds": 230.67540520004695,
+    "reported_seconds": 228.11365449998993,
+    "passed": 1123,
+    "failed": 0,
+    "skipped": 5,
+    "phases": {
+      "phase:initial source manifest": 0.7478020000271499,
+      "phase:architecture review": 6.040824200026691,
+      "phase:quality review": 0.9387755999923684,
+      "phase:baseline and test selection": 0.025893200014252216,
+      "phase:final source manifest": 0.8004769999533892,
+      "phase:runtime activation": 0.02492949995212257,
+      "phase:compile all source": 2.4857323999749497,
+      "phase:import all production modules": 5.317102300003171,
+      "phase:import changed source": 0.4050031999940984,
+      "phase:portable worker dispatch": 0.008427099965047091,
+      "phase:portable worker submission": 0.0655846000299789,
+      "phase:portable worker completion": 30.440981500025373,
+      "phase:portable worker shutdown": 3.393693199963309
+    },
+    "sequential_native_body_seconds": 145.3696620996925,
+    "aggregate_worker_seconds": 179.62654660025146,
+    "unattributed_report_seconds": 3.2318287004018202,
+    "native_families": {
+      "test_windows_browser": 35.8547517999541,
+      "test_windows_computer": 35.04022490000352,
+      "test_windows_runtime": 21.27512459998252,
+      "test_windows_development": 13.460189100005664
+    },
+    "slowest_bodies": [
+      [
+        30.336542800010648,
+        "tests.test_windows_computer.test_uia_controls_are_inspected_and_operated_across_separate_processes"
+      ],
+      [
+        17.654225100006443,
+        "tests.test_windows_browser.test_managed_browser_dom_teams_persistence_and_cancellation"
+      ],
+      [
+        12.547543999971822,
+        "worker:tests.test_architecture.test_current_working_tree_satisfies_declared_architecture"
+      ],
+      [
+        9.632145899988245,
+        "tests.test_windows_browser.test_attached_browser_dom_tabs_and_cancellation_share_a_personal_browser"
+      ],
+      [
+        9.016627600009087,
+        "tests.test_windows_runtime.test_copied_source_starts_the_sdk_and_qt_with_the_inherited_bundle"
+      ],
+      [
+        6.959429100039415,
+        "tests.test_windows_browser.test_visible_sign_in_handoff_reuses_only_the_dedicated_profile"
+      ],
+      [
+        6.536412500019651,
+        "tests.test_windows_development.test_watch_rechecks_fresh_source_and_retains_baseline_after_failed_edits"
+      ],
+      [
+        6.176114200032316,
+        "worker:tests.test_publishing.test_durable_publication_records_before_candidate_code_and_remote_push"
+      ],
+      [
+        5.632675000000745,
+        "tests.test_windows_development.test_native_check_reviews_source_once_across_desktop_handoff"
+      ],
+      [
+        5.386813200020697,
+        "worker:tests.test_publishing.test_reviewed_change_is_pushed_to_new_branch"
+      ],
+      [
+        4.701903699955437,
+        "tests.test_windows_computer.test_powershell_preserves_utf8_large_scripts_cwd_and_failure_status"
+      ],
+      [
+        4.3966848000418395,
+        "worker:tests.test_publishing.test_declined_review_failed_checks_and_diverged_base_refuse_publication"
+      ]
+    ]
+  },
+  "combined_first_read": {
+    "description": "First-read integrated ff530a6, including separate typing and Qt work.",
+    "artifact": "workspace-speed-combined-full.json",
+    "artifact_sha256": "7f02083ca33d8f2229fe99e780ba026e9eb0f6ed8e9da4a154e1126350989e12",
+    "source_manifest_sha256": "17fc9b3c9aa297551d6eed745f1094c0a4c7d84767c5401ebccd9253d6ccaca8",
+    "source_file_count": 1184,
+    "selected_modules": 122,
+    "complete_python_seconds": 352.7316063999897,
+    "reported_seconds": 348.86693479999667,
+    "passed": 1123,
+    "failed": 0,
+    "skipped": 5,
+    "phases": {
+      "phase:initial source manifest": 37.87201210000785,
+      "phase:architecture review": 19.238190300005954,
+      "phase:quality review": 11.30443059996469,
+      "phase:baseline and test selection": 0.054414199956227094,
+      "phase:final source manifest": 0.7567626999807544,
+      "phase:runtime activation": 0.05284540000138804,
+      "phase:compile all source": 8.341664900013711,
+      "phase:import all production modules": 18.411790299986023,
+      "phase:import changed source": 0.8171716000069864,
+      "phase:portable worker dispatch": 0.016089899989310652,
+      "phase:portable worker submission": 0.12188880000030622,
+      "phase:portable worker completion": 40.01048370002536,
+      "phase:portable worker shutdown": 4.232161699968856
+    },
+    "sequential_native_body_seconds": 157.754474899848,
+    "aggregate_worker_seconds": 217.55618769995635,
+    "unattributed_report_seconds": 6.209275500732474,
+    "native_families": {
+      "test_windows_browser": 42.63517870003125,
+      "test_windows_computer": 31.543409799982328,
+      "test_windows_runtime": 22.18468689994188,
+      "test_windows_development": 15.605274300032761
+    },
+    "slowest_bodies": [
+      [
+        27.34602299996186,
+        "tests.test_windows_computer.test_uia_controls_are_inspected_and_operated_across_separate_processes"
+      ],
+      [
+        17.772389899997506,
+        "tests.test_windows_browser.test_managed_browser_dom_teams_persistence_and_cancellation"
+      ],
+      [
+        16.395625600009225,
+        "tests.test_windows_browser.test_attached_browser_dom_tabs_and_cancellation_share_a_personal_browser"
+      ],
+      [
+        14.63920119998511,
+        "worker:tests.test_architecture.test_current_working_tree_satisfies_declared_architecture"
+      ],
+      [
+        8.705825700017158,
+        "tests.test_windows_development.test_watch_rechecks_fresh_source_and_retains_baseline_after_failed_edits"
+      ],
+      [
+        8.676004400011152,
+        "tests.test_windows_runtime.test_copied_source_starts_the_sdk_and_qt_with_the_inherited_bundle"
+      ],
+      [
+        8.466850799974054,
+        "tests.properties.test_agent_session.test_only_the_matching_pending_request_accepts_a_reply"
+      ],
+      [
+        6.900068899965845,
+        "worker:tests.test_publishing.test_reviewed_change_is_pushed_to_new_branch"
+      ],
+      [
+        6.849670000025071,
+        "tests.test_windows_browser.test_visible_sign_in_handoff_reuses_only_the_dedicated_profile"
+      ],
+      [
+        6.68505670002196,
+        "worker:tests.test_publishing.test_durable_publication_records_before_candidate_code_and_remote_push"
+      ],
+      [
+        5.532929599983618,
+        "tests.test_windows_development.test_native_check_reviews_source_once_across_desktop_handoff"
+      ],
+      [
+        4.936180999968201,
+        "worker:tests.test_publishing.test_declined_review_failed_checks_and_diverged_base_refuse_publication"
+      ]
+    ]
+  },
+  "isolated_observed_saving_seconds": 16.143840299977455,
+  "isolated_observed_saving_percent": 5.95331179520151,
+  "intermediate_experiments": [
+    {
+      "description": "Two expanded workers overlapped native fixtures; strict HTTP deadline failed.",
+      "artifact": "workspace-speed-full-after.json",
+      "artifact_sha256": "0b761d3f20765a8d86fac3d218dbc5d270aa18c691895af14d7a4a81014034e5",
+      "source_manifest_sha256": "80cbf537e6f9eececda126b5cf06c1e36e66f7ca3fb8f889423707b28d2e434c",
+      "source_file_count": 1179,
+      "selected_modules": 122,
+      "complete_python_seconds": 240.9452423999901,
+      "reported_seconds": 238.12500030000228,
+      "passed": 1121,
+      "failed": 1,
+      "skipped": 5,
+      "phases": {
+        "phase:initial source manifest": 0.9501436999998987,
+        "phase:architecture review": 12.93604579998646,
+        "phase:quality review": 3.7480043999967165,
+        "phase:baseline and test selection": 0.029091799980960786,
+        "phase:final source manifest": 0.6608178000315093,
+        "phase:runtime activation": 0.02989430003799498,
+        "phase:compile all source": 2.964293099998031,
+        "phase:import all production modules": 6.744704699958675,
+        "phase:import changed source": 0.062779700034298,
+        "phase:portable worker dispatch": 0.011059000040404499,
+        "phase:portable worker submission": 0.03810790000716224,
+        "phase:portable worker completion": 0.00028279999969527125,
+        "phase:portable worker shutdown": 2.7761083000223152
+      },
+      "sequential_native_body_seconds": 183.6734802001156,
+      "aggregate_worker_seconds": 201.53816829953576,
+      "unattributed_report_seconds": 3.779683299420867,
+      "native_families": {
+        "test_windows_browser": 65.19236039998941,
+        "test_windows_computer": 36.788795300002676,
+        "test_windows_runtime": 19.47617680003168,
+        "test_windows_development": 17.17407120001735
+      },
+      "slowest_bodies": [
+        [
+          35.577401800022926,
+          "tests.test_windows_browser.test_managed_browser_dom_teams_persistence_and_cancellation"
+        ],
+        [
+          30.620673800003715,
+          "tests.test_windows_computer.test_uia_controls_are_inspected_and_operated_across_separate_processes"
+        ],
+        [
+          18.745429300004616,
+          "worker:tests.test_architecture.test_current_working_tree_satisfies_declared_architecture"
+        ],
+        [
+          17.89522029994987,
+          "tests.test_windows_browser.test_attached_browser_dom_tabs_and_cancellation_share_a_personal_browser"
+        ],
+        [
+          10.085602500010282,
+          "tests.test_windows_browser.test_visible_sign_in_handoff_reuses_only_the_dedicated_profile"
+        ],
+        [
+          9.905472100013867,
+          "tests.test_windows_development.test_watch_rechecks_fresh_source_and_retains_baseline_after_failed_edits"
+        ],
+        [
+          8.331272999988869,
+          "tests.test_windows_runtime.test_copied_source_starts_the_sdk_and_qt_with_the_inherited_bundle"
+        ],
+        [
+          7.04273500002455,
+          "worker:tests.test_meeting_workflow.test_saved_edits_survive_late_packages_and_conflicts_retain_exact_unsaved_content"
+        ],
+        [
+          6.5010459999903105,
+          "worker:tests.test_quality.test_explicit_test_scope_cannot_bypass_quality_or_write_a_receipt"
+        ],
+        [
+          6.355536300048698,
+          "worker:tests.test_publishing.test_durable_publication_records_before_candidate_code_and_remote_push"
+        ],
+        [
+          6.234835300012492,
+          "worker:tests.test_publishing.test_reviewed_change_is_pushed_to_new_branch"
+        ],
+        [
+          6.151277100027073,
+          "tests.test_windows_computer.test_powershell_preserves_utf8_large_scripts_cwd_and_failure_status"
+        ]
+      ]
+    },
+    {
+      "description": "Two expanded workers before heavy native tail; passed.",
+      "artifact": "workspace-speed-full-after-settled.json",
+      "artifact_sha256": "327da452b4a818caaa7bd96227e189c935db629937dc55440a4a98d5cb87ee06",
+      "source_manifest_sha256": "92e0ca0cf27c9934640663445b92c9f6914b5582d78541fa860adcd0d704519d",
+      "source_file_count": 1179,
+      "selected_modules": 122,
+      "complete_python_seconds": 233.20386449998477,
+      "reported_seconds": 229.8505953999702,
+      "passed": 1122,
+      "failed": 0,
+      "skipped": 5,
+      "phases": {
+        "phase:initial source manifest": 0.8070772999781184,
+        "phase:architecture review": 3.836538199975621,
+        "phase:quality review": 2.355799000011757,
+        "phase:baseline and test selection": 0.17194450000533834,
+        "phase:final source manifest": 1.3350692000240088,
+        "phase:runtime activation": 0.026611800014507025,
+        "phase:compile all source": 2.5095884000184014,
+        "phase:import all production modules": 7.5516943000257015,
+        "phase:import changed source": 0.0494749000063166,
+        "phase:portable worker dispatch": 0.011859200021717697,
+        "phase:portable worker submission": 0.036292699980549514,
+        "phase:portable worker completion": 0.00021269998978823423,
+        "phase:portable worker shutdown": 2.959372200013604
+      },
+      "sequential_native_body_seconds": 182.70812199951615,
+      "aggregate_worker_seconds": 157.08801569900243,
+      "unattributed_report_seconds": 4.192335599916987,
+      "native_families": {
+        "test_windows_browser": 39.36115429986967,
+        "test_windows_computer": 30.221873499976937,
+        "test_windows_runtime": 32.26820139994379,
+        "test_windows_development": 25.545441599970218
+      },
+      "slowest_bodies": [
+        [
+          26.334705399989616,
+          "tests.test_windows_computer.test_uia_controls_are_inspected_and_operated_across_separate_processes"
+        ],
+        [
+          17.207853099971544,
+          "tests.test_windows_browser.test_managed_browser_dom_teams_persistence_and_cancellation"
+        ],
+        [
+          16.03816379996715,
+          "tests.test_windows_runtime.test_copied_source_starts_the_sdk_and_qt_with_the_inherited_bundle"
+        ],
+        [
+          14.233402899990324,
+          "tests.test_windows_browser.test_attached_browser_dom_tabs_and_cancellation_share_a_personal_browser"
+        ],
+        [
+          13.869893399998546,
+          "worker:tests.test_architecture.test_current_working_tree_satisfies_declared_architecture"
+        ],
+        [
+          13.225267700036056,
+          "tests.test_windows_development.test_watch_rechecks_fresh_source_and_retains_baseline_after_failed_edits"
+        ],
+        [
+          10.680372199974954,
+          "tests.test_windows_development.test_native_check_reviews_source_once_across_desktop_handoff"
+        ],
+        [
+          6.315980799961835,
+          "tests.test_windows_browser.test_visible_sign_in_handoff_reuses_only_the_dedicated_profile"
+        ],
+        [
+          5.653340700024273,
+          "worker:tests.test_publishing.test_durable_publication_records_before_candidate_code_and_remote_push"
+        ],
+        [
+          5.047530599986203,
+          "worker:tests.test_publishing.test_reviewed_change_is_pushed_to_new_branch"
+        ],
+        [
+          4.712314900010824,
+          "tests.test_windows_runtime.test_qt_exit_first_still_closes_the_native_controller"
+        ],
+        [
+          4.707011100021191,
+          "tests.test_windows_runtime.test_native_controller_messages_and_qt_share_a_clean_process_lifetime"
+        ]
+      ]
+    },
+    {
+      "description": "Four workers before all native fixtures; restoration race failed, then fixed.",
+      "artifact": "workspace-speed-full-after-four.json",
+      "artifact_sha256": "8003ea7ce99dd6eb1f1ae5d8749c05795ba65ca8354674dde8aac1d3bf9e4246",
+      "source_manifest_sha256": "e01154b9a4ff6d58b3e2e0678c7e5fd2c16141b578aeee48e4aae2858a3f3a17",
+      "source_file_count": 1180,
+      "selected_modules": 122,
+      "complete_python_seconds": 226.97063520003576,
+      "reported_seconds": 224.46591960004298,
+      "passed": 1121,
+      "failed": 1,
+      "skipped": 5,
+      "phases": {
+        "phase:initial source manifest": 0.6148593999678269,
+        "phase:architecture review": 3.688282099959906,
+        "phase:quality review": 2.345859399996698,
+        "phase:baseline and test selection": 0.02717109996592626,
+        "phase:final source manifest": 0.7636073000030592,
+        "phase:runtime activation": 0.0350048000109382,
+        "phase:compile all source": 2.5195200000307523,
+        "phase:import all production modules": 5.68866149999667,
+        "phase:import changed source": 0.049631499976385385,
+        "phase:portable worker dispatch": 0.07618160004494712,
+        "phase:portable worker submission": 0.09540109999943525,
+        "phase:portable worker completion": 28.6081533000106,
+        "phase:portable worker shutdown": 3.1118839000118896
+      },
+      "sequential_native_body_seconds": 142.50478259962983,
+      "aggregate_worker_seconds": 183.18215200025588,
+      "unattributed_report_seconds": 3.104782499896828,
+      "native_families": {
+        "test_windows_browser": 39.65895489999093,
+        "test_windows_computer": 30.44680089992471,
+        "test_windows_runtime": 17.662884199991822,
+        "test_windows_development": 12.688835900044069
+      },
+      "slowest_bodies": [
+        [
+          26.465448699949775,
+          "tests.test_windows_computer.test_uia_controls_are_inspected_and_operated_across_separate_processes"
+        ],
+        [
+          16.62078029999975,
+          "tests.test_windows_browser.test_managed_browser_dom_teams_persistence_and_cancellation"
+        ],
+        [
+          14.723882800026331,
+          "tests.test_windows_browser.test_attached_browser_dom_tabs_and_cancellation_share_a_personal_browser"
+        ],
+        [
+          13.68406280002091,
+          "worker:tests.test_architecture.test_current_working_tree_satisfies_declared_architecture"
+        ],
+        [
+          7.395838199998252,
+          "tests.test_windows_runtime.test_copied_source_starts_the_sdk_and_qt_with_the_inherited_bundle"
+        ],
+        [
+          6.6950160000124015,
+          "tests.test_windows_browser.test_visible_sign_in_handoff_reuses_only_the_dedicated_profile"
+        ],
+        [
+          6.2549462000024505,
+          "tests.test_windows_development.test_watch_rechecks_fresh_source_and_retains_baseline_after_failed_edits"
+        ],
+        [
+          5.828356900019571,
+          "worker:tests.test_publishing.test_reviewed_change_is_pushed_to_new_branch"
+        ],
+        [
+          5.530918799981009,
+          "worker:tests.test_publishing.test_durable_publication_records_before_candidate_code_and_remote_push"
+        ],
+        [
+          5.168122400005814,
+          "tests.test_windows_development.test_native_check_reviews_source_once_across_desktop_handoff"
+        ],
+        [
+          4.971713200036902,
+          "tests.test_windows_agent_toasts.test_measured_previews_end_on_complete_lines_with_mixed_markdown_fonts"
+        ],
+        [
+          4.3042368000024,
+          "worker:tests.test_publishing.test_declined_review_failed_checks_and_diverged_base_refuse_publication"
+        ]
+      ]
+    }
+  ],
+  "focused_observations": [
+    {
+      "fixture": "Queue saturation",
+      "before_body_seconds": 2.563,
+      "after_body_seconds": 0.087,
+      "mechanism": "One durable task and 255 observations fill the same queue; all accepted observations and cancellation are checked."
+    },
+    {
+      "fixture": "Mixed-font complete-line fitting",
+      "before_body_seconds": 3.753,
+      "after_body_seconds": 0.646,
+      "mechanism": "Check each rendered boundary and both adjacent heights; QTextDocument.size calls 556 to 85."
+    }
+  ],
+  "uia_stage_probe": {
+    "whole_fixture_seconds": 27.185,
+    "initial_inspect_seconds": 2.269,
+    "action_batch_seconds": 20.343,
+    "final_inspect_seconds": 2.065,
+    "mutating_request_count": 8,
+    "mutating_request_seconds_range": [
+      2.1,
+      2.55
+    ],
+    "read_error_pagination_seconds_range": [
+      0.075,
+      0.33
+    ],
+    "retained_product_changes": false,
+    "conclusion": "Delay localized to mutating native requests. Property/pattern caches and MTA had insignificant benefit; no retry/focus cause established."
+  },
+  "limits": [
+    "Individual workstation observations have varying filesystem cache and system load; no stable median or causal minutes-level saving is established.",
+    "The final isolated comparison saved about 16 seconds; faster intermediate trials are not the final passing result.",
+    "Combined timing includes concurrent typing and Qt changes, so its whole delta cannot be attributed to this runtime patch.",
+    "The old runner omitted desktop relaunch from internal timing. Use complete Python command duration for comparison.",
+    "Worker durations overlap and are aggregate work, not elapsed time; never add them to parent elapsed phases.",
+    "Function counts change with consolidation/regression checks and are not a coverage score. Protected selfcheck/CI remain unchanged."
+  ],
+  "deployment_followup": {
+    "revision": "a41c9bd4938a3ccd8a3cf91b2cde7bbbd085e598",
+    "affected_test_module": "tests/test_deploy_pipeline.py",
+    "change": "Create native helper parent directories when staging a release. The full timing above precedes this staging-only fix."
+  }
+}

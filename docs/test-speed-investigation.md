@@ -1,8 +1,93 @@
 # Why the full Windows suite became slow
 
-The [current browser lifetime structure](browser-test-lifetimes.md) removes four
-more Edge launches and records the complete 7m 45s native cost budget. The
-observations below retain their original source snapshots and timing limits.
+## Current complete-command evidence, 2026-10-28
+
+The final isolated change saved **16.1 seconds
+(6.0%)** in the warmed full-command comparison.
+That is a modest improvement; it does not demonstrate a minutes-level solution.
+The current integrated checkout takes **230.7 seconds**
+in its warmed observation. Complete evidence, source-manifest identities and the
+intermediate experiments are in [test-speed-current.json](test-speed-current.json).
+Earlier sections below retain other snapshots and must not be used as this baseline.
+
+| Full native Python command | Complete elapsed | Result |
+| --- | ---: | --- |
+| Unchanged application baseline, warmed | 271.174s | 1121 passed, 0 failed, 5 skipped |
+| Same application plus final runtime changes | 255.030s | 1122 passed, 0 failed, 5 skipped |
+| Integrated typing/Qt/runtime code, first read | 352.732s | 1123 passed, 0 failed, 5 skipped |
+| Same integrated code, warmed | 230.675s | 1123 passed, 0 failed, 5 skipped |
+
+The baseline is a frozen `e9544c6` checkout; the isolated final run overlays only
+this task's changes. The integrated snapshot is `ff530a6`, including the other
+session's typing and Qt work. Its entire delta cannot be attributed to this patch.
+Deployment also retains the subsequent `a41c9bd` staging-directory fix, validated
+with its affected release tests. The full timing above precedes that staging-only
+change and its new regression case.
+The faster 233.204s two-worker trial was a different scheduling experiment;
+the 226.971s four-worker trial failed a fixture restoration race. Neither is the
+final passing comparison. Final restoration parks the journal observer through
+the existing hold interface until the original SQLite directory is restored.
+
+The old internal timer omitted desktop relaunch: its 244.821s report was a
+271.174s Python command. Both final comparisons time the complete subprocess,
+including startup and shutdown. Workstation cache/load varies; these observations
+do not establish a stable median. In the integrated first-read run, initial source
+hashing took 37.872s versus 0.757s for final hashing of the same files. That run
+also had slower policy, compilation and imports; no product algorithm saving is
+claimed from warming those reads.
+
+The retained structural changes are:
+
+- One coordinator owns policy review and source binding across desktop relaunch;
+  checks already on the verified private desktop avoid another executor startup.
+- Twenty-nine reviewed portable modules reuse four SDK-initialized interpreters.
+  All native fixtures and strict HTTP/streaming deadline modules run after worker
+  exit; native UI remains sequential. New modules require an effects review.
+- Queue saturation retains one durable submission and 255 accepted observations,
+  overflow, reserved Stop handling and complete cancellation/observation receipts.
+  The focused body changed from 2.563s to 0.087s.
+- Text fitting checks both sides of every complete rendered line boundary instead
+  of equivalent integer heights (3.753s to 0.646s). Copied SDK/Qt smoke retains a
+  fresh real process, copied production-source origins and inherited bundle origin.
+
+[Execution ownership](test-execution-ownership.md) records resource review and
+retained contracts. Protected selfcheck and full CI coverage remain unchanged.
+No application casts, `Any`, typing suppressions or disabled checks were added.
+
+## What still consumes the current warmed run
+
+Sequential native bodies consume **145.370s**, including setup and cleanup:
+
+| Native family | Bodies and fixtures |
+| --- | ---: |
+| Browser | 35.855s |
+| Computer / UI Automation | 35.040s |
+| Runtime subprocess integration | 21.275s |
+| Development watcher / desktop handoff / preview | 13.460s |
+
+Coordinator policy/manifests take 8.554s; compilation takes
+2.486s and broad production imports take
+5.317s. Portable completion waiting
+after the parent lane takes 30.441s.
+Worker durations are overlapping aggregate work; do not add them to elapsed time.
+The JSON retains every phase and the slowest bodies separately.
+
+A real UIA stage probe took 27.185s: initial inspect 2.269s, action batch 20.343s,
+final inspect 2.065s. Eight mutating requests each took roughly 2.1–2.55s, while
+reads/errors/pagination took 0.075–0.33s. Property/pattern caching and an MTA client
+made insignificant differences and were discarded. This localizes the cost to
+native mutation requests; it does not establish a focus/retry cause. The UIA
+product script and its regression fixture retain their previous behavior.
+
+Use Python directly for the iteration loop:
+
+```text
+python -m scripts.check --native --tests tests/test_work_submissions.py
+python -m scripts.check --full --native --timings <Windows-Temp-report.json>
+```
+
+Affected-test selection remains the ordinary editing path. Broad native checks
+remain appropriate for broad changes and do not replace the protected gate.
 
 ## Retained six-minute full result and Teams fixture consolidation
 
