@@ -200,188 +200,189 @@ document.addEventListener('keydown',e=>{if(e.key==='Escape')document.getElementB
 </script>"""
 
 
-def test_activity_identity_read_action_and_relative_clock_changes_are_verified_in_a_native_browser(tmp_path: Path) -> None:
-    installed()
-    cancel = threading.Event()
-    browser = Browser(tmp_path / "activity-profile")
-    web = TeamsWeb(tmp_path / "unused", browser=browser)
-    try:
-        with fixture(ACTIVITY_PAGE) as url:
-            opened = request(browser, "open", url=url)
-            web.target = cast(str, opened["target_id"])
-            first = web.activity(cancel)
-            assert len(first.items) == 2
-            assert isinstance(first.items[0].source, TeamsActivity)
-            assert first.items[0].source.identity == "123"
-            assert first.items[0].text == "Like\nReady **literal text** Åäö\nPlanning"
-            assert first.items[0].kind is UpdateKind.REACTION and first.items[1].kind is UpdateKind.INVITATION
-            assert first.items[0].source_time == SourceDate(datetime(2026, 10, 20, 7, 30, tzinfo=UTC).timestamp())
-            assert first.items[1].source_time is SourceDateStatus.UNKNOWN
-            web.evaluate("(() => {document.querySelector('[id^=activity-feed-item-timestamp]').textContent='Yesterday';return true})()",
-                         cancel, target=web.target)
-            changed = web.activity(cancel).items[0]
-            assert changed.text == first.items[0].text and changed.source_time == first.items[0].source_time
-            web.evaluate("(() => {document.querySelector('[id^=activity-feed-item-timestamp]').removeAttribute('datetime');return true})()",
-                         cancel, target=web.target)
-            relative = web.activity(cancel).items[0]
-            match relative.source_time:
-                case SourceDateHint('Yesterday', observed_on):
-                    assert observed_on == datetime.fromtimestamp(relative.created_at, UTC).astimezone().date()
-                case _:
-                    raise AssertionError('A relative Teams date must remain evidence rather than becoming collected today.')
-            assert web.activity_read("123", cancel)
-            assert web.evaluate("document.body.dataset.toggles", cancel, target=web.target) == "1"
-            assert web.activity_read("123", cancel)
-            assert web.evaluate("document.body.dataset.toggles", cancel, target=web.target) == "1"
-            assert not web.activity_read("999", cancel)
-    finally:
-        close_fixture(web, browser)
+ACTIVITY_CHAT_PAGE = PAGE + """<div data-tid="app-layout-area--nav"><button aria-label="Chat" id="restore-chats">Chat</button></div>
+        <script>
+        const chatRows=[...document.querySelectorAll('[role=treeitem]')];
+        for(const row of chatRows) row.remove();
+        let navigation=0;
+        document.querySelector('#restore-chats').onclick=()=>{
+          navigation++;document.body.dataset.navigation=String(navigation);
+          setTimeout(()=>{for(const row of chatRows)document.body.append(row);},300);
+        };
+        </script>"""
+EMPTY_CHAT_PAGE = PAGE + """<div data-tid="app-layout-area--nav"><button aria-label="Chat" id="chat-nav">Chat</button></div>
+        <script>
+        const sidebar=[...document.querySelectorAll('[role=treeitem]')];
+        for(const row of sidebar)row.remove();
+        editor.remove();send.setAttribute('data-track-thread-id','');document.querySelector('#messages').replaceChildren();
+        document.querySelector('#chat-nav').onclick=()=>setTimeout(()=>{
+          for(const row of sidebar)document.body.append(row);
+          document.body.append(editor);render();
+        },300);
+        </script>"""
+LAUNCHER_PAGE = PAGE + """<button id="openTeamsClientInBrowser">Continue in this browser</button><script>
+        if(location.pathname==='/dl/launcher/launcher.html'){
+          for(const row of document.querySelectorAll('[role=treeitem]'))row.remove();
+          editor.remove();send.setAttribute('data-track-thread-id','');document.querySelector('#messages').replaceChildren();
+          document.querySelector('#openTeamsClientInBrowser').onclick=()=>location.assign('/?chat=two');
+        }else if(new URLSearchParams(location.search).get('chat')==='two'){
+          current='19:two@thread.v2';render();
+          document.querySelector('#openTeamsClientInBrowser').remove();
+        }</script>"""
+DELAYED_CHAT_PAGE = PAGE.replace("editor.textContent=''; render();", "editor.textContent='';setTimeout(render,300);")
 
 
-def test_activity_source_opens_the_exact_saved_page_after_native_tab_metadata_is_lost(tmp_path: Path) -> None:
-    installed()
+def verify_activity_identity_dates_and_read_action(web: TeamsWeb, cancel: threading.Event) -> None:
+    first = web.activity(cancel)
+    assert len(first.items) == 2
+    assert isinstance(first.items[0].source, TeamsActivity)
+    assert first.items[0].source.identity == "123"
+    assert first.items[0].text == "Like\nReady **literal text** Åäö\nPlanning"
+    assert first.items[0].kind is UpdateKind.REACTION and first.items[1].kind is UpdateKind.INVITATION
+    assert first.items[0].source_time == SourceDate(datetime(2026, 10, 20, 7, 30, tzinfo=UTC).timestamp())
+    assert first.items[1].source_time is SourceDateStatus.UNKNOWN
+    web.evaluate("(() => {document.querySelector('[id^=activity-feed-item-timestamp]').textContent='Yesterday';return true})()",
+                 cancel, target=web.target)
+    changed = web.activity(cancel).items[0]
+    assert changed.text == first.items[0].text and changed.source_time == first.items[0].source_time
+    web.evaluate("(() => {document.querySelector('[id^=activity-feed-item-timestamp]').removeAttribute('datetime');return true})()",
+                 cancel, target=web.target)
+    relative = web.activity(cancel).items[0]
+    match relative.source_time:
+        case SourceDateHint('Yesterday', observed_on):
+            assert observed_on == datetime.fromtimestamp(relative.created_at, UTC).astimezone().date()
+        case _:
+            raise AssertionError('A relative Teams date must remain evidence rather than becoming collected today.')
+    assert web.activity_read("123", cancel)
+    assert web.evaluate("document.body.dataset.toggles", cancel, target=web.target) == "1"
+    assert web.activity_read("123", cancel)
+    assert web.evaluate("document.body.dataset.toggles", cancel, target=web.target) == "1"
+    assert not web.activity_read("999", cancel)
+
+
+def verify_saved_activity_activation(browser: Browser, web: TeamsWeb, trace: NativeTrace) -> None:
     cancel = threading.Event()
-    profile = tmp_path / "activity-reopen-profile"
+    assert browser.connection is not None
+    extra = browser.connection.call("Target.createTarget", {"url": "about:blank"}, cancel)
+    browser.native_targets.clear()
+    earlier = len(trace.commands)
+    web.open_activity("123", cancel)
+    assert ("Target.activateTarget", {"targetId": web.target}) in trace.commands[earlier:]
+    browser.connection.call("Target.closeTarget", {"targetId": extra["targetId"]}, cancel)
+
+
+def verify_exact_chat_observation_and_reply(web: TeamsWeb, cancel: threading.Event) -> None:
+    web.evaluate("(() => { const nodes=[...document.body.childNodes]; document.body.replaceChildren();"
+                 " setTimeout(()=>document.body.replaceChildren(...nodes),1000); return true; })()", cancel)
+    read = web.select("19:one@thread.v2", cancel)
+    assert len(read.conversations) == 2
+    assert read.messages[0].sender == "Anna"
+    assert read.messages[0].text == "First chat: **plain** source Åäö"
+    web.opening[web.target] = "19:unavailable@thread.v2"
+    second = web.select("19:two@thread.v2", cancel)
+    assert web.opening == {}
+    assert read.messages[0].identity == second.messages[0].identity
+    assert read.messages[0].key != second.messages[0].key
+    assert second.messages[0].sender == "Sam"
+    text = 'Exact reply Åäö "quoted"\nA second line.'
+    posted = web.send("19:two@thread.v2", text, cancel)
+    assert len(posted) == 1 and posted[0].text == text
+    assert posted[0].conversation == "19:two@thread.v2"
+    assert web.evaluate("JSON.parse(document.body.dataset.sent)", cancel) == [{"chat": "19:two@thread.v2", "text": text}]
+    assert web.browser.connection is not None
+    connection = web.browser.connection
+    web.read(cancel)
+    assert web.browser.connection is connection
+
+    # A nonempty source editor must never be replaced or posted.
+    web.evaluate("document.querySelector('[contenteditable]').textContent='Existing source draft'", cancel)
+    with unittest.TestCase().assertRaisesRegex(BrowserError, "draft"):
+        web.send("19:two@thread.v2", "Must not be sent", cancel)
+    assert web.evaluate("JSON.parse(document.body.dataset.sent).length", cancel) == 1
+
+    original_target = web.target
+    web.open("19:one@thread.v2", cancel)
+    assert web.target == original_target
+    assert web.read(cancel).current == "19:one@thread.v2"
+
+    # Changing the route while text is inserted must stop before Send.
+    web.evaluate("(() => { const editor=document.querySelector('[contenteditable]'); editor.textContent='';"
+                 " editor.addEventListener('input',()=>document.querySelector('button')"
+                 ".setAttribute('data-track-thread-id','19:one@thread.v2'),{once:true}); return true; })()", cancel)
+    with unittest.TestCase().assertRaisesRegex(BrowserError, "prepared"):
+        web.send("19:two@thread.v2", "Route changed", cancel)
+    assert web.evaluate("JSON.parse(document.body.dataset.sent).length", cancel) == 1
+
+
+def verify_chat_navigation_recovery(browser: Browser, web: TeamsWeb, adapter: FixtureBrowser) -> None:
+    cancel = threading.Event()
+    url = adapter.origin
+    opened = request(browser, "open", url=url + "activity", target_id=web.target)
+    web.target = cast(str, opened["target_id"])
+    assert len(web.read(cancel).conversations) == 1
+    second = web.select("19:two@thread.v2", cancel)
+    assert second.current == "19:two@thread.v2" and second.messages[0].sender == "Sam"
+    web.evaluate("(() => {for(const row of document.querySelectorAll('[role=treeitem]'))row.remove();return true;})()", cancel)
+    first = web.select("19:one@thread.v2", cancel)
+    assert first.current == "19:one@thread.v2"
+    assert web.evaluate("document.body.dataset.navigation", cancel) == "2"
+
+    opened = request(browser, "open", url=url + "delayed", target_id=web.target)
+    web.target = cast(str, opened["target_id"])
+    session = browser._session(web.target, cancel)  # pyright: ignore[reportPrivateUsage]
+    browser._call("Page.setWebLifecycleState", {"state": "frozen"}, cancel, session=session)  # pyright: ignore[reportPrivateUsage]
+    second = web.select("19:two@thread.v2", cancel)
+    assert second.current == "19:two@thread.v2" and second.messages[0].sender == "Sam"
+
+    opened = request(browser, "open", url=url + "empty", target_id=web.target)
+    web.target = cast(str, opened["target_id"])
+    assert web.read(cancel).current == ""
+    found = web.discover(cancel)
+    assert len(found.conversations) == 2 and found.current == "19:one@thread.v2"
+    assert web.select("19:two@thread.v2", cancel).messages[0].sender == "Sam"
+
+    opened = request(browser, "open", url=url, target_id=web.target)
+    web.target = cast(str, opened["target_id"])
+    with browser.awake(web.target, cancel):
+        restored = web._reopen("19:two@thread.v2", cancel)  # pyright: ignore[reportPrivateUsage]
+    assert ("open", {"target_id": web.target,
+                     "url": "https://teams.cloud.microsoft/l/chat/19:two@thread.v2/conversations?webjoin=true"}) in adapter.requests
+    assert restored.current == "19:two@thread.v2" and restored.messages[0].sender == "Sam"
+    assert web.opening == {}
+
+
+def test_activity_and_chat_contracts_share_an_isolated_browser_with_fresh_documents(tmp_path: Path) -> None:
+    installed()
+    profile = tmp_path / "communications-profile"
     trace = NativeTrace(profile)
     browser = Browser(profile, opener=trace)
     web = TeamsWeb(tmp_path / "unused", browser=browser)
+    pages = frozendict({"/activity-feed": ACTIVITY_PAGE, "/chats": PAGE,
+                        "/activity": ACTIVITY_CHAT_PAGE, "/delayed": DELAYED_CHAT_PAGE, "/empty": EMPTY_CHAT_PAGE})
+    # One owner retains the disposable process/server. Each scenario reloads a
+    # real document and constructs fresh Teams state; no signed-in pages are used.
+    # Browser persistence, cancellation and attach/detach have separate lifetimes
+    # in test_windows_browser.py and are deliberately not combined here.
     try:
-        with fixture(ACTIVITY_PAGE) as url:
-            opened = request(browser, "open", url=url)
+        with fixture(LAUNCHER_PAGE, pages=pages) as url:
+            opened = request(browser, "open", url=url + "activity-feed")
             web.target = cast(str, opened["target_id"])
-            assert browser.connection is not None
-            browser.connection.call("Target.createTarget", {"url": "about:blank"}, cancel)
-            browser.native_targets.clear()
-            web.open_activity("123", cancel)
-            assert ("Target.activateTarget", {"targetId": web.target}) in trace.commands
+            verify_activity_identity_dates_and_read_action(web, threading.Event())
+
+            opened = request(browser, "open", url=url + "activity-feed", target_id=web.target)
+            web = TeamsWeb(tmp_path / "unused", browser=browser)
+            web.target = cast(str, opened["target_id"])
+            verify_saved_activity_activation(browser, web, trace)
+
+            opened = request(browser, "open", url=url + "chats", target_id=web.target)
+            adapter = FixtureBrowser(browser, url)
+            web = TeamsWeb(tmp_path / "unused", browser=adapter)
+            web.target = cast(str, opened["target_id"])
+            verify_exact_chat_observation_and_reply(web, threading.Event())
+
+            target = web.target
+            web = TeamsWeb(tmp_path / "unused", browser=adapter)
+            web.target = target
+            verify_chat_navigation_recovery(browser, web, adapter)
     finally:
         close_fixture(web, browser)
-
-
-def test_observation_reply_binding_and_inspection_use_isolated_fictional_chats(tmp_path: Path) -> None:
-    installed()
-    cancel = threading.Event()
-    browser = Browser(tmp_path / "isolated-profile")
-    web = TeamsWeb(tmp_path / "unused", browser=FixtureBrowser(browser))
-    try:
-        with fixture(PAGE) as url:
-            first = request(browser, "open", url=url)
-            web.target = cast(str, first["target_id"])
-            web.evaluate("(() => { const nodes=[...document.body.childNodes]; document.body.replaceChildren();"
-                         " setTimeout(()=>document.body.replaceChildren(...nodes),1000); return true; })()", cancel)
-            read = web.select("19:one@thread.v2", cancel)
-            assert len(read.conversations) == 2
-            assert read.messages[0].sender == "Anna"
-            assert read.messages[0].text == "First chat: **plain** source Åäö"
-            web.opening[web.target] = "19:unavailable@thread.v2"
-            second = web.select("19:two@thread.v2", cancel)
-            assert web.opening == {}
-            assert read.messages[0].identity == second.messages[0].identity
-            assert read.messages[0].key != second.messages[0].key
-            assert second.messages[0].sender == "Sam"
-            text = 'Exact reply Åäö "quoted"\nA second line.'
-            posted = web.send("19:two@thread.v2", text, cancel)
-            assert len(posted) == 1 and posted[0].text == text
-            assert posted[0].conversation == "19:two@thread.v2"
-            assert web.evaluate("JSON.parse(document.body.dataset.sent)", cancel) == [{"chat": "19:two@thread.v2", "text": text}]
-            assert web.browser.connection is not None
-            connection = web.browser.connection
-            web.read(cancel)
-            assert web.browser.connection is connection
-
-            # A nonempty source editor must never be replaced or posted.
-            web.evaluate("document.querySelector('[contenteditable]').textContent='Existing source draft'", cancel)
-            with unittest.TestCase().assertRaisesRegex(BrowserError, "draft"):
-                web.send("19:two@thread.v2", "Must not be sent", cancel)
-            assert web.evaluate("JSON.parse(document.body.dataset.sent).length", cancel) == 1
-
-            original_target = web.target
-            web.open("19:one@thread.v2", cancel)
-            assert web.target == original_target
-            assert web.read(cancel).current == "19:one@thread.v2"
-
-            # Changing the route while text is inserted must stop before Send.
-            web.evaluate("(() => { const editor=document.querySelector('[contenteditable]'); editor.textContent='';"
-                         " editor.addEventListener('input',()=>document.querySelector('button')"
-                         ".setAttribute('data-track-thread-id','19:one@thread.v2'),{once:true}); return true; })()", cancel)
-            with unittest.TestCase().assertRaisesRegex(BrowserError, "prepared"):
-                web.send("19:two@thread.v2", "Route changed", cancel)
-            assert web.evaluate("JSON.parse(document.body.dataset.sent).length", cancel) == 1
-    finally:
-        close_fixture(web, browser)
-
-
-def test_chat_navigation_recovers_activity_frozen_pages_and_exact_launcher_destination(tmp_path: Path) -> None:
-    installed()
-    cancel = threading.Event()
-    browser = Browser(tmp_path / "isolated-profile")
-    activity = PAGE + """<div data-tid="app-layout-area--nav"><button aria-label="Chat" id="restore-chats">Chat</button></div>
-            <script>
-            const chatRows=[...document.querySelectorAll('[role=treeitem]')];
-            for(const row of chatRows) row.remove();
-            let navigation=0;
-            document.querySelector('#restore-chats').onclick=()=>{
-              navigation++;document.body.dataset.navigation=String(navigation);
-              setTimeout(()=>{for(const row of chatRows)document.body.append(row);},300);
-            };
-            </script>"""
-    empty = PAGE + """<div data-tid="app-layout-area--nav"><button aria-label="Chat" id="chat-nav">Chat</button></div>
-            <script>
-            const sidebar=[...document.querySelectorAll('[role=treeitem]')];
-            for(const row of sidebar)row.remove();
-            editor.remove();send.setAttribute('data-track-thread-id','');document.querySelector('#messages').replaceChildren();
-            document.querySelector('#chat-nav').onclick=()=>setTimeout(()=>{
-              for(const row of sidebar)document.body.append(row);
-              document.body.append(editor);render();
-            },300);
-            </script>"""
-    launcher = PAGE + """<button id="openTeamsClientInBrowser">Continue in this browser</button><script>
-            if(location.pathname==='/dl/launcher/launcher.html'){
-              for(const row of document.querySelectorAll('[role=treeitem]'))row.remove();
-              editor.remove();send.setAttribute('data-track-thread-id','');document.querySelector('#messages').replaceChildren();
-              document.querySelector('#openTeamsClientInBrowser').onclick=()=>location.assign('/?chat=two');
-            }else if(new URLSearchParams(location.search).get('chat')==='two'){
-              current='19:two@thread.v2';render();
-              document.querySelector('#openTeamsClientInBrowser').remove();
-            }</script>"""
-    delayed = PAGE.replace("editor.textContent=''; render();", "editor.textContent='';setTimeout(render,300);")
-    # Static routes give each navigation its own document while one native
-    # process and server retain ownership across the recovery scenarios.
-    with fixture(launcher, pages={"/activity": activity, "/delayed": delayed, "/empty": empty}) as url:
-        adapter = FixtureBrowser(browser, url)
-        web = TeamsWeb(tmp_path / "unused", browser=adapter)
-        try:
-            opened = request(browser, "open", url=url + "activity")
-            web.target = cast(str, opened["target_id"])
-            assert len(web.read(cancel).conversations) == 1
-            second = web.select("19:two@thread.v2", cancel)
-            assert second.current == "19:two@thread.v2" and second.messages[0].sender == "Sam"
-            web.evaluate("(() => {for(const row of document.querySelectorAll('[role=treeitem]'))row.remove();return true;})()", cancel)
-            first = web.select("19:one@thread.v2", cancel)
-            assert first.current == "19:one@thread.v2"
-            assert web.evaluate("document.body.dataset.navigation", cancel) == "2"
-
-            opened = request(browser, "open", url=url + "delayed", target_id=web.target)
-            web.target = cast(str, opened["target_id"])
-            session = browser._session(web.target, cancel)  # pyright: ignore[reportPrivateUsage]
-            browser._call("Page.setWebLifecycleState", {"state": "frozen"}, cancel, session=session)  # pyright: ignore[reportPrivateUsage]
-            second = web.select("19:two@thread.v2", cancel)
-            assert second.current == "19:two@thread.v2" and second.messages[0].sender == "Sam"
-
-            opened = request(browser, "open", url=url + "empty", target_id=web.target)
-            web.target = cast(str, opened["target_id"])
-            assert web.read(cancel).current == ""
-            found = web.discover(cancel)
-            assert len(found.conversations) == 2 and found.current == "19:one@thread.v2"
-            assert web.select("19:two@thread.v2", cancel).messages[0].sender == "Sam"
-
-            opened = request(browser, "open", url=url, target_id=web.target)
-            web.target = cast(str, opened["target_id"])
-            with browser.awake(web.target, cancel):
-                restored = web._reopen("19:two@thread.v2", cancel)  # pyright: ignore[reportPrivateUsage]
-            assert ("open", {"target_id": web.target,
-                             "url": "https://teams.cloud.microsoft/l/chat/19:two@thread.v2/conversations?webjoin=true"}) in adapter.requests
-            assert restored.current == "19:two@thread.v2" and restored.messages[0].sender == "Sam"
-            assert web.opening == {}
-        finally:
-            close_fixture(web, browser)

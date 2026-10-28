@@ -127,7 +127,10 @@ browser fixtures explicitly remove their profiles after closing the browser,
 with a short bounded retry for late native file release; persistent cleanup
 failures remain failures.
 Compatible DOM, screenshot and chat-navigation cases share explicitly owned
-isolated browser fixtures with page state reset between scenarios. Persistence,
+isolated browser fixtures with page state reset between scenarios. The Teams/activity
+scenarios also reuse one disposable process and server, with a fresh document
+and Teams state for each scenario; the native activation trace is scoped to its
+current call and extra fixture tabs are removed before continuing. Persistence,
 cancellation, attach/detach and native tab/group ownership checks remain. UIA
 truncation uses a boundary-sized quote-heavy value rather than 10,000 WPF lines;
 short multiline input and independent process readback remain. Pagination

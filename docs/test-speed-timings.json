@@ -8822,5 +8822,184 @@
       "ordinary_scenarios": 1115,
       "hypothesis_properties": 2
     }
+  },
+  "communications_fixture_consolidation": {
+    "description": "Sequential native original/shared/original observations on 2026-10-28. Same 43 assertions, with activation evidence subsequently limited to its current call and the extra native tab explicitly closed. Shared variant uses one browser/server and fresh documents and TeamsWeb owners. Command totals include different warmed policy costs; no current full-suite total is inferred.",
+    "latest_retained_full": {
+      "elapsed_seconds": 359.6859092999948,
+      "passed": 1109,
+      "failed": 0,
+      "skipped": 5,
+      "worker_seconds": 91.82663590001175
+    },
+    "latest_retained_full_browser_body_seconds": 88.41833060001954,
+    "before": {
+      "elapsed_seconds": 79.333200699999,
+      "body_seconds": 55.05174069997156,
+      "passed": 4,
+      "failed": 0,
+      "skipped": 0,
+      "test_source_sha256": "af222e2c25e84a561a76139ea1d9bb74f00d062ae794afc19569e56b11ed3564",
+      "durations": [
+        [
+          1.4752490000100806,
+          "phase:initial source manifest"
+        ],
+        [
+          12.355335399974138,
+          "phase:architecture review"
+        ],
+        [
+          7.127066300017759,
+          "phase:quality review"
+        ],
+        [
+          0.18584950000513345,
+          "phase:baseline and test selection"
+        ],
+        [
+          1.8184907999821007,
+          "phase:final source manifest"
+        ],
+        [
+          0.07992629997897893,
+          "phase:runtime activation"
+        ],
+        [
+          2.900022082030773e-06,
+          "phase:import changed source"
+        ],
+        [
+          1.0443486000294797,
+          "module:tests.test_windows_communications_browser"
+        ],
+        [
+          13.39655840001069,
+          "tests.test_windows_communications_browser.test_activity_identity_read_action_and_relative_clock_changes_are_verified_in_a_native_browser"
+        ],
+        [
+          9.918494800047483,
+          "tests.test_windows_communications_browser.test_activity_source_opens_the_exact_saved_page_after_native_tab_metadata_is_lost"
+        ],
+        [
+          19.736419299966656,
+          "tests.test_windows_communications_browser.test_chat_navigation_recovers_activity_frozen_pages_and_exact_launcher_destination"
+        ],
+        [
+          12.000268199946731,
+          "tests.test_windows_communications_browser.test_observation_reply_binding_and_inspection_use_isolated_fictional_chats"
+        ]
+      ]
+    },
+    "first_after": {
+      "elapsed_seconds": 41.09937399998307,
+      "body_seconds": 28.74921469995752,
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0,
+      "test_source_sha256": "707c818ec800e91cf8eea41312edfaf5e276df184175c832dc91bf8ebd5040bf",
+      "durations": [
+        [
+          1.0378479000064544,
+          "phase:initial source manifest"
+        ],
+        [
+          4.525309099990409,
+          "phase:architecture review"
+        ],
+        [
+          0.8209003999945708,
+          "phase:quality review"
+        ],
+        [
+          3.833775600010995,
+          "phase:baseline and test selection"
+        ],
+        [
+          1.6405233000405133,
+          "phase:final source manifest"
+        ],
+        [
+          0.054039500013459474,
+          "phase:runtime activation"
+        ],
+        [
+          0.02069029997801408,
+          "phase:import changed source"
+        ],
+        [
+          0.35147400002460927,
+          "module:tests.test_windows_communications_browser"
+        ],
+        [
+          28.74921469995752,
+          "tests.test_windows_communications_browser.test_activity_and_chat_contracts_share_an_isolated_browser_with_fresh_documents"
+        ]
+      ]
+    },
+    "original_repeat": {
+      "passed": 4,
+      "skipped": 0,
+      "failed": 0,
+      "elapsed_seconds": 62.787426199996844,
+      "durations": [
+        [
+          0.48941979999653995,
+          "module:tests.test_windows_communications_browser"
+        ],
+        [
+          14.481514000042807,
+          "tests.test_windows_communications_browser.test_activity_identity_read_action_and_relative_clock_changes_are_verified_in_a_native_browser"
+        ],
+        [
+          12.28618729999289,
+          "tests.test_windows_communications_browser.test_activity_source_opens_the_exact_saved_page_after_native_tab_metadata_is_lost"
+        ],
+        [
+          25.459702200023457,
+          "tests.test_windows_communications_browser.test_chat_navigation_recovers_activity_frozen_pages_and_exact_launcher_destination"
+        ],
+        [
+          10.070202600036282,
+          "tests.test_windows_communications_browser.test_observation_reply_binding_and_inspection_use_isolated_fictional_chats"
+        ]
+      ],
+      "body_seconds": 62.297606100095436
+    },
+    "activation_mutation": {
+      "source": "assistant/communications_browser.py",
+      "tests": [
+        "tests/test_windows_communications_browser.py"
+      ],
+      "generated": 1,
+      "seed": 0,
+      "baseline_seconds": 18.06815559999086,
+      "baseline_tests": 1,
+      "results": [
+        {
+          "function": "seeded",
+          "line": 329,
+          "before": "        self.browser.activate_page(self.target, cancel)\n\n    def evaluate",
+          "after": "        return\n\n    def evaluate",
+          "start": 17069,
+          "end": 17142,
+          "status": "killed",
+          "seconds": 9.842,
+          "tests": 1,
+          "killed_by": [
+            "tests.test_windows_communications_browser.test_activity_and_chat_contracts_share_an_isolated_browser_with_fresh_documents"
+          ],
+          "detail": ""
+        }
+      ],
+      "source_sha256": "95d6d8664f295c78ab4861b2ea4b10e3965a2c143184727f3bfae6dc53822c23",
+      "snapshot_sha256": "ab5a195f43b461c3efc7fe555b0dd10393728cd9c9ecf4572a07ae33a50a3d02"
+    },
+    "raw_artifacts": [
+      "%TEMP%/workspace-communications-cost-before.json",
+      "%TEMP%/workspace-communications-cost-after.json",
+      "%TEMP%/workspace-test-cost-probes/communications-original-repeat.json",
+      "%TEMP%/workspace-communications-activation-mutation.json"
+    ]
   }
 }

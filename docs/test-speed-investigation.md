@@ -1,5 +1,54 @@
 # Why the full Windows suite became slow
 
+## Retained six-minute full result and Teams fixture consolidation
+
+The completed worker-overlap report mentioned below actually records
+**359.686 seconds (6m 0s), 1109 passed, zero failed and five skips**.
+This is a retained earlier snapshot, not a new full run after the current edits.
+Its browser family consumed **88.418 seconds (24.6%)**. Broad production imports
+consumed 10.090s, compilation 3.685s, and the two properties with their imports
+5.227s (1.45%). The remaining cost is primarily real native fixtures and process,
+HTTP and storage work; trimming tiny pure checks cannot remove minutes.
+
+Four compatible Teams/activity browser scenarios now share one explicitly owned
+disposable Edge process and localhost server. Each scenario loads a fresh real
+document and constructs a new `TeamsWeb` owner. All **43 assertions** remain,
+including identity/date evidence, idempotent activity handling, exact replies,
+draft protection, stale routing, frozen-page recovery and launcher destinations.
+The native activation assertion only accepts commands emitted by its current
+call, and its extra native tab is closed before the next scenario. Independent
+browser persistence, cancellation and attach/detach lifetimes remain in their
+existing tests. Helper tracebacks identify the failing scenario; the executor
+now counts this fixture as one test function, so pass counts are not coverage.
+
+Sequential native observations from the same checkout:
+
+| Variant | Bodies and fixtures | Editing command | Result |
+| --- | ---: | ---: | --- |
+| Original four lifecycles | 55.052s | 79.333s | Four functions passed |
+| Shared lifecycle | 28.749s | 41.099s | All scenarios passed |
+| Original repeated after sharing | 62.298s | Executor only: 62.787s | Four functions passed |
+
+The first body comparison improved **47.8%**. Policy costs were also warmer in
+the second command, so its entire 38.234s reduction cannot be attributed to
+fixture sharing. The repeated original ran its unchanged source through the
+same executor in a fresh native interpreter with an explicit source loader;
+no imported functions or module globals were replaced. Removing
+`open_activity`'s native activation in a disposable mutation copy was detected:
+one mutation killed, zero survivors/timeouts/errors, with a passing baseline.
+
+Detailed observations are in [test-speed-timings.json](test-speed-timings.json),
+`communications_fixture_consolidation`. Raw reports and the repeated-original
+harness live in Windows Temp `workspace-test-cost-probes/`; final source-bound
+verification has a separate report. These workstation observations have variable
+filesystem caches and do not predict a new full-suite total.
+
+For iteration, use `Dev.cmd check` or `Dev.cmd watch` to select affected tests;
+use `--tests` for a narrow contract while editing. Reserve full native runs for
+broad changes and CI. The next largest retained costs are the runtime subprocess
+family (39.437s) and UI Automation/computer fixtures (33.720s). Profile their
+startup and native calls before changing their required isolation or assertions.
+
 ## Portable workers and the remaining browser cost
 
 The next authoritative full baseline was **576.819 seconds (9m 37s)**:
