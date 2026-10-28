@@ -41,7 +41,16 @@ def utf16_units(text: str) -> list[int]:
     return [int.from_bytes(data[i : i + 2], "little") for i in range(0, len(data), 2)]
 
 
+class InputRejectedError(OSError):
+    """Windows accepted only part of an input batch; retrying could duplicate it."""
+
+    def __init__(self, accepted: int, expected: int) -> None:
+        self.accepted = accepted
+        self.expected = expected
+        super().__init__(f"Windows accepted {accepted} of {expected} input events. Switch the layout off with § in elevated applications.")
+
+
 def require_input_count(sent: int, expected: int) -> None:
     """Reject partial input rather than silently losing keystrokes or clicks."""
     if sent != expected:
-        raise OSError(f"Windows accepted {sent} of {expected} input events. Switch the layout off with § in elevated applications.")
+        raise InputRejectedError(sent, expected)

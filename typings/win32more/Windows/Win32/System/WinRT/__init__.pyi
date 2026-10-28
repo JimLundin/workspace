@@ -1,0 +1,13 @@
+import ctypes
+
+from win32more.Windows.System import DispatcherQueueController
+
+RO_INIT_SINGLETHREADED: int
+RO_INIT_MULTITHREADED: int
+
+class DispatcherQueueOptions(ctypes.Structure):
+    def __init__(self, size: int, thread_type: int, apartment_type: int) -> None: ...
+
+def RoInitialize(init_type: int) -> int: ...
+def RoUninitialize() -> None: ...
+def CreateDispatcherQueueController(options: DispatcherQueueOptions, controller: DispatcherQueueController) -> int: ...

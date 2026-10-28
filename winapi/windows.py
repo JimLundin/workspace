@@ -122,18 +122,18 @@ def _cloaked(hwnd: int) -> bool:
     return _DwmGetWindowAttribute(hwnd, _DWMWA_CLOAKED, ctypes.byref(value), ctypes.sizeof(value)) == 0 and bool(value.value)
 
 
-def _on_taskbar(hwnd: int) -> bool:
-    if not _IsWindowVisible(hwnd) or _GetWindow(hwnd, _GW_OWNER) or _cloaked(hwnd):
+def _on_taskbar(hwnd: int, include_cloaked: bool = False) -> bool:
+    if not _IsWindowVisible(hwnd) or _GetWindow(hwnd, _GW_OWNER) or (not include_cloaked and _cloaked(hwnd)):
         return False
     return not (int(_GetWindowLongW(hwnd, _GWL_EXSTYLE)) & _WS_EX_TOOLWINDOW) and _GetWindowTextLengthW(hwnd) > 0
 
 
-def windows() -> list[Window]:
+def windows(*, include_cloaked: bool = False) -> list[Window]:
     """Top-level windows that would be on the taskbar, front to back."""
     handles: list[int] = []
 
     def each(hwnd: int, _data: int) -> bool:
-        if _on_taskbar(hwnd):
+        if _on_taskbar(hwnd, include_cloaked):
             handles.append(int(hwnd))
         return True
 
@@ -210,6 +210,10 @@ def is_minimized(hwnd: int) -> bool:
 
 def is_visible(hwnd: int) -> bool:
     return bool(_IsWindowVisible(hwnd))
+
+
+def is_cloaked(hwnd: int) -> bool:
+    return _cloaked(hwnd)
 
 
 def client_size(hwnd: int) -> tuple[int, int]:

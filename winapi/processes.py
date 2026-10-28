@@ -5,7 +5,7 @@ import subprocess
 import time
 from ctypes import wintypes
 
-from ._core import fn, kernel32, last_error
+from ._core import fn, kernel32, last_error, shell32
 
 
 class _Limits(ctypes.Structure):
@@ -68,6 +68,41 @@ _ResumeThread = fn(kernel32, "ResumeThread", wintypes.DWORD, wintypes.HANDLE)
 _WaitForSingleObject = fn(kernel32, "WaitForSingleObject", wintypes.DWORD, wintypes.HANDLE, wintypes.DWORD)
 _GetExitCodeProcess = fn(kernel32, "GetExitCodeProcess", wintypes.BOOL, wintypes.HANDLE, ctypes.POINTER(wintypes.DWORD))
 _TerminateProcess = fn(kernel32, "TerminateProcess", wintypes.BOOL, wintypes.HANDLE, wintypes.UINT)
+_GetProcessId = fn(kernel32, "GetProcessId", wintypes.DWORD, wintypes.HANDLE)
+
+
+class _ShellExecuteInfo(ctypes.Structure):
+    _fields_ = [
+        ("cbSize", wintypes.DWORD), ("fMask", wintypes.ULONG), ("hwnd", wintypes.HWND),
+        ("lpVerb", wintypes.LPCWSTR), ("lpFile", wintypes.LPCWSTR), ("lpParameters", wintypes.LPCWSTR),
+        ("lpDirectory", wintypes.LPCWSTR), ("nShow", ctypes.c_int), ("hInstApp", wintypes.HINSTANCE),
+        ("lpIDList", ctypes.c_void_p), ("lpClass", wintypes.LPCWSTR), ("hkeyClass", wintypes.HKEY),
+        ("dwHotKey", wintypes.DWORD), ("hIcon", wintypes.HANDLE), ("hProcess", wintypes.HANDLE),
+    ]
+
+
+_ShellExecuteEx = fn(shell32, "ShellExecuteExW", wintypes.BOOL, ctypes.POINTER(_ShellExecuteInfo))
+
+
+def shell_start(arguments: list[str]) -> Process:
+    """Launch a signed UIAccess program through the shell, retaining its exact process handle."""
+    info = _ShellExecuteInfo()
+    info.cbSize = ctypes.sizeof(info)
+    info.fMask = 0x0540  # NOCLOSEPROCESS | NOASYNC | FLAG_NO_UI; never use the runas verb.
+    info.lpVerb, info.lpFile = "open", arguments[0]
+    info.lpParameters = subprocess.list2cmdline(arguments[1:])
+    info.nShow = 1
+    if not _ShellExecuteEx(ctypes.byref(info)):
+        raise last_error()
+    handle = int(info.hProcess or 0)
+    if not handle:
+        raise OSError("The shell did not return an owned process handle.")
+    pid = int(_GetProcessId(handle))
+    if not pid:
+        error = last_error()
+        _CloseHandle(handle)
+        raise error
+    return Process(handle, pid)
 
 
 class Process:
