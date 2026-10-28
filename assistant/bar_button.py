@@ -48,7 +48,7 @@ class StatusView(QtWidgets.QLabel):
         return self.ambient is not None and isinstance(self.ambient.power, Battery) and self.ambient.power.powered
 
     def accessible(self) -> None:
-        facts = (self.text(), "Charger connected" if self.plugged_in else "", self.system.description)
+        facts = (self.text() or self.toolTip(), "Charger connected" if self.plugged_in else "", self.system.description)
         self.setAccessibleName(". ".join(value for value in facts if value))
 
     def facts(self, ambient: Ambient | None) -> None:
@@ -91,15 +91,15 @@ class StatusView(QtWidgets.QLabel):
             if self.ambient.weather is not None:
                 width += 14 + 14 + 5 + metrics.horizontalAdvance(self.ambient.weather.text)
         else:
-            width = 14 + 5 + metrics.horizontalAdvance(self.text()) + (81 if self.listening else 0)
-        return QtCore.QSize(width + 14 + (len(self.system.alerts) * 19 + 5 if self.system.alerts else 0), CONTROL_HEIGHT)
+            width = 14 + (5 + metrics.horizontalAdvance(self.text()) if self.text() else 0) + (81 if self.listening else 0)
+        return QtCore.QSize(width + 10 + len(self.system.alerts) * 19, CONTROL_HEIGHT)
 
     def paintEvent(self, event: QtGui.QPaintEvent) -> None:  # noqa: N802
         painter = QtGui.QPainter(self)
         painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
         painter.setFont(self.font())
         painter.setPen(QtGui.QColor(self.surface.ink.foreground))
-        x = 7
+        x = 5
         metrics = self.fontMetrics()
 
         def text(value: str) -> None:
@@ -111,7 +111,7 @@ class StatusView(QtWidgets.QLabel):
         def symbol(name: str) -> None:
             nonlocal x
             icon(name, self.surface.ink.foreground).paint(painter, QtCore.QRect(x, 5, 14, 14))
-            x += 19
+            x += 14
 
         if self.ambient is not None:
             text(self.ambient.clock)
@@ -120,6 +120,7 @@ class StatusView(QtWidgets.QLabel):
             if self.ambient.weather is not None:
                 x += 14
                 symbol(self.ambient.weather.icon)
+                x += 5
                 text(self.ambient.weather.text)
         else:
             if self.processing:
@@ -128,15 +129,17 @@ class StatusView(QtWidgets.QLabel):
                 painter.drawArc(QtCore.QRectF(x + 1, 6, 12, 12), round(self.spin_angle * 16), 240 * 16)
             else:
                 icon(self.symbol, self.surface.ink.foreground).paint(painter, QtCore.QRect(x, 5, 14, 14))
-            x += 19
-            text(self.text())
+            x += 14
+            if self.text():
+                x += 5
+                text(self.text())
             if self.listening:
                 x += 9
                 self.paint_wave(painter, x)
                 x += 72
         if self.system.alerts:
-            x += 5
             for name in self.system.alerts:
+                x += 5
                 symbol(name)
 
     def paint_wave(self, painter: QtGui.QPainter, x: int) -> None:

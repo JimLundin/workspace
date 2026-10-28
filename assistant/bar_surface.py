@@ -24,6 +24,29 @@ BAR_HEIGHT = 28
 CONTROL_HEIGHT = 24
 
 
+class Control(QtWidgets.QToolButton):
+    """Toolbar icons use square targets; captions earn their measured width."""
+
+    def __init__(self, parent: QtWidgets.QWidget) -> None:
+        super().__init__(parent)
+        self.setFixedHeight(CONTROL_HEIGHT)
+        self.setSizePolicy(QtWidgets.QSizePolicy.Policy.Fixed, QtWidgets.QSizePolicy.Policy.Fixed)
+
+    def setText(self, text: str) -> None:  # noqa: N802 -- Qt native interface
+        super().setText(text)
+        self.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon if text else Qt.ToolButtonStyle.ToolButtonIconOnly)
+        self.updateGeometry()
+
+    def sizeHint(self) -> QtCore.QSize:  # noqa: N802 -- Qt native interface
+        if not self.text():
+            return QtCore.QSize(CONTROL_HEIGHT, CONTROL_HEIGHT)
+        measured = super().sizeHint()
+        return QtCore.QSize(max(CONTROL_HEIGHT, measured.width()), CONTROL_HEIGHT)
+
+    def minimumSizeHint(self) -> QtCore.QSize:  # noqa: N802 -- Qt native interface
+        return self.sizeHint()
+
+
 def painter_path(contour: Contour) -> QtGui.QPainterPath:
     path = QtGui.QPainterPath()
     for node in contour:
@@ -102,13 +125,11 @@ class Pill(QtWidgets.QWidget):
             self.sync_glass()
 
     def button(self, name: str, text: str, tip: str, action: Callable[[], None]) -> QtWidgets.QToolButton:
-        button = QtWidgets.QToolButton(self)
+        button = Control(self)
         button.setText(text)
         button.setToolTip(tip)
         button.setAccessibleName(tip)
         button.setIconSize(QtCore.QSize(14, 14))
-        button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
-        button.setFixedHeight(CONTROL_HEIGHT)
         button.setCursor(Qt.CursorShape.PointingHandCursor)
         button.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         button.clicked.connect(lambda: action())  # noqa: PLW0108  # Retain slotted callback owners.
@@ -151,7 +172,7 @@ class Pill(QtWidgets.QWidget):
     def recolor(self) -> None:
         self.setStyleSheet(f"""
 QToolButton {{ background: transparent; color: {self.ink.foreground}; border: 1px solid transparent;
- border-radius: 10px; padding: 2px 5px; font: 500 12px 'Segoe UI'; }}
+ border-radius: 10px; padding: 0; font: 500 12px 'Segoe UI'; }}
 QToolButton:hover {{ background: rgba(150,145,180,28); }}
 QToolButton:pressed {{ background: rgba(150,145,180,54); }}
 QToolButton:focus {{ border-color: {self.colors.edge}; }}

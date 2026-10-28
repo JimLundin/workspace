@@ -295,7 +295,7 @@ QMenu::separator {{ height: 1px; background: {colors.edge}; margin: 4px 10px; }}
                 self.stop.hide()
             else:
                 self.status.facts(None)
-                self.status.setText(view.activity.title)
+                self.status.setText("" if self.status.listening or self.status.processing else view.activity.title)
                 self.status.setToolTip(view.activity.title)
                 self.status.accessible()
                 self.status.symbol = view.activity.icon

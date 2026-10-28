@@ -49,7 +49,7 @@ def test_floating_bar_shows_only_active_controls_and_retracts(tmp_path: Path) ->
         bar.stop.click()
         bar.recording_changed(RecordingState(phase="recording", seconds=125))
         bar.state(State.LISTENING)
-        assert bar.status.text() == "Listening" and bar.record.text() == "02:05"
+        assert not bar.status.text() and "Listening" in bar.status.accessibleName() and bar.record.text() == "02:05"
         assert not bar.record_stop.isHidden() and not bar.stop.isHidden()
         bar.record_stop.click()
         bar.layout(False)
@@ -107,11 +107,20 @@ def test_toolbar_groups_keep_their_actions_and_dividers_between_functions() -> N
         bar.recording_changed(RecordingState(phase='recording'))
         bar.record.click()
         bar.record_stop.click()
+        # Defect: the shared control reserves caption space for an empty label.
+        for button in (bar.menu_button, bar.stop, bar.record_stop):
+            assert button.width() == button.height() == 24
+            assert button.toolButtonStyle() is QtCore.Qt.ToolButtonStyle.ToolButtonIconOnly
+        for button in (bar.inbox, bar.record):
+            assert button.toolButtonStyle() is QtCore.Qt.ToolButtonStyle.ToolButtonTextBesideIcon
+            assert button.width() >= button.fontMetrics().horizontalAdvance(button.text()) + button.iconSize().width()
         bar.layer('NAV')
         bar.keyboard.click()
         assert invoked == ['stop', 'inbox', 'meeting', 'record-stop', 'keyboard']
         bar.inbox_changed(0)
         assert bar.inbox_divider.isHidden() and bar.inbox.isHidden()
+        assert bar.inbox.sizeHint().width() == 24
+        assert bar.inbox.toolButtonStyle() is QtCore.Qt.ToolButtonStyle.ToolButtonIconOnly
     finally:
         bar.close()
         app.processEvents()
@@ -355,7 +364,9 @@ def test_transcription_animates_a_compact_spinner_and_stops_after_completion() -
         angle = bar.status.spin_angle
         bar.paint_frames()
         assert bar.status.spin_angle == angle and not bar.loop.timer.isActive()
-        assert bool(bar.status.processing) and bar.status.text() == "Transcribing"
+        assert bool(bar.status.processing) and not bar.status.text()
+        assert bar.status.width() == bar.status.height() == 24
+        assert "Transcribing" in bar.status.accessibleName()
         motion[0] = True
         bar.state(State.READY)
         bar.paint_frames()

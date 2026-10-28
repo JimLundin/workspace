@@ -7,8 +7,8 @@ Windows' reduced-transparency and high-contrast settings retain solid fallbacks.
 | Situation | Visible controls |
 | --- | --- |
 | Idle | Workspace menu button and read-only local time, battery level and available local temperature |
-| Dictating | Microphone, Listening, live audio waveform and its Stop control |
-| Transcribing | Compact rotating spinner and Transcribing |
+| Dictating | Microphone, live audio waveform and its Stop control |
+| Transcribing | Compact rotating spinner |
 | Agent working | Activity label and Stop |
 | Agent needs input | Needs you; conversation access is in the capsule's menu |
 | Meeting recording | Separate microphone/timer capsule and its own Stop |
@@ -22,6 +22,13 @@ internal divider. Read-only ambient facts use spacing within their single group.
 Recording and keyboard capsules already establish their boundaries through their
 separate shapes, so their joins need no redundant divider. An absent inbox hides
 its divider too. Each action's hover text names its matching function.
+
+Icon-only toolbar controls use square 24-pixel targets around their 14-pixel
+icons. Adding a caption switches to icon-and-text layout with measured width;
+clearing it restores the square. Controls keep the same height and never stretch
+to fill extra space. Listening and transcription use their graphic indicators
+without visible state labels or reserved label width; tooltips and accessibility
+names retain the state descriptions.
 
 Agent, recording and keyboard state are independent. Finishing a recording
 removes its capsule without hiding an active agent or dictation. Routine Work,
@@ -88,7 +95,7 @@ making the UI wait. Silence remains flat; unavailable observations do not
 simulate activity. Stopping capture stops the meter and replaces the trace with a
 compact spinner while the transcription request runs. The existing frame loop
 rotates its arc at 300 degrees per second without sampling audio or measuring
-text. Reduced motion retains a stationary arc and the Transcribing label.
+text. Reduced motion retains a stationary arc and the accessible state name.
 Completion restores the ambient presentation and stops the frame timer.
 
 Windows `GetSystemPowerStatus` supplies battery percentage, charging and external
