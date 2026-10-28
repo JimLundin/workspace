@@ -9,6 +9,10 @@ from enum import Enum, auto
 from typing import Literal, assert_never
 
 from . import action_text
+from .communications import Feed
+from .console_requests import Request as ConsoleRequest
+from .feed_origin import FeedRequest
+from .feed_triage import Board
 from .recording_state import RecordingState
 
 type Decision = Literal["pending", "approved", "declined", "cancelled"]
@@ -38,6 +42,7 @@ class ChatMessage:
     speaker: Literal["You", "Workspace", "Error"]
     text: str
     created_at: float
+    source: FeedRequest | None = None
 
 
 class StreamState(Enum):
@@ -140,6 +145,7 @@ class Begin:
     text: str
     at: float
     queued: bool = False
+    source: FeedRequest | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -228,6 +234,10 @@ class Session:
     activity: tuple[str, ...] = ()
     phase: Literal["idle", "running", "stopping"] = "idle"
     status: str = "Ready"
+    triage: Board = field(default_factory=Board)
+    communications: Feed = field(default_factory=Feed)
+    console_requests: tuple[ConsoleRequest, ...] = ()
+    communication_drafts: tuple[tuple[str, str], ...] = ()
     last_said: str = ""
     result: Result = "Ready"
     recording: RecordingState = field(default_factory=RecordingState)
@@ -258,10 +268,10 @@ type Snapshot = Session
 
 def transition(state: Session, event: Event) -> Session:
     match event:
-        case Begin(text, at, queued):
+        case Begin(text, at, queued, source):
             return replace(state, generation=state.generation + 1, phase="running", status="Starting…", result="Ready", last_said="",
                            queued=state.queued[1:] if queued else state.queued,
-                           messages=(*state.messages, ChatMessage("You", text.strip(), at)))
+                           messages=(*state.messages, ChatMessage("You", text.strip(), at, source)))
         case Enqueued(text):
             return replace(state, queued=(*state.queued, text.strip()))
         case Progress(text):

@@ -20,7 +20,8 @@ if sys.platform != "win32":
 from assistant.agent_session import Answer, Begin, Failed, Question, ReasoningSummary, Said, Session, StreamState, Succeeded, ToolActivity, transition
 from assistant.agent_toasts import AgentToasts
 from assistant.agent_window import AgentWindow
-from assistant.notifications import MAX_VISIBLE, WIDTH, Kind, MessageKey, TurnKey
+from assistant.feed_desktop import NativeDesktop
+from assistant.notifications import MAX_VISIBLE, WIDTH, Kind, MessageKey, Toast, TurnKey
 from assistant.panel import PanelPreferences
 from assistant.qt import QFont, QImage, QPainter, QPoint, QRegion, Qt, QTest, QTextCursor, QWidget, shiboken6
 from assistant.qt_text import Document, TextView
@@ -34,14 +35,31 @@ from winapi.shapes import Rect
 from .test_agent_session import asking
 
 
-class Notifications:
-    __slots__ = ("agent", "animated", "jobs", "now", "recorded", "requested", "root", "view")
+class Desktop:
+    __slots__ = ("pointer", "bounds", "native")
 
-    def __init__(self, *, animated: bool) -> None:
+    def __init__(self) -> None:
+        self.pointer = (-100000, -100000)
+        self.bounds: Rect | None = None
+        self.native = NativeDesktop()
+
+    def cursor_position(self) -> tuple[int, int]:
+        return self.pointer
+
+    def work_area(self, preferred: Rect | None) -> Rect:
+        return self.bounds if self.bounds is not None else self.native.work_area(preferred)
+
+
+class Notifications:
+    __slots__ = ("agent", "animated", "create_card", "desktop", "jobs", "now", "recorded", "requested", "root", "view")
+
+    def __init__(self, *, animated: bool, create_card: Callable[[AgentToasts, Toast, int], Card] = Card) -> None:
         screen.use_physical_pixels()
         self.root = application()
         self.now = 100.0
         self.animated = animated
+        self.desktop = Desktop()
+        self.create_card = create_card
         self.jobs: deque[Callable[[], None]] = deque()
         self.requested = threading.Event()
         self.recorded: list[RecordingAction] = []
@@ -57,6 +75,8 @@ class Notifications:
         self.view = AgentToasts(
             self.root, agent, preferences=PanelPreferences(Rect(30, 30, 430, 790)), remember=False,
             clock=lambda: self.now, motion_enabled=lambda: self.animated,
+            desktop=self.desktop,
+            create_card=self.create_card,
         )
         return self.view
 
@@ -83,14 +103,14 @@ class Notifications:
 
 
 @contextmanager
-def notifications(*, animated: bool = False) -> Generator[Notifications]:
+def notifications(*, animated: bool = False, create_card: Callable[[AgentToasts, Toast, int], Card] = Card) -> Generator[Notifications]:
     # The user's actual pointer must not affect a deterministic expiry check.
-    with patch("assistant.agent_toasts.inputs.cursor_position", return_value=(-100000, -100000)):
-        panel = Notifications(animated=animated)
-        try:
-            yield panel
-        finally:
-            panel.close()
+    # Desktop observations enter through the view's explicit boundary.
+    panel = Notifications(animated=animated, create_card=create_card)
+    try:
+        yield panel
+    finally:
+        panel.close()
 
 
 def scroll_position(card: Card) -> int:
@@ -182,19 +202,19 @@ def test_wheel_pauses_reading_and_streaming_preserves_the_chosen_position() -> N
         card = panel.view.cards[TurnKey(0)]
         before = scroll_position(card)
         assert card.bounds is not None
-        with patch("assistant.agent_toasts.inputs.cursor_position", return_value=(card.bounds.left + 8, card.bounds.top + 8)):
-            card.scroll_delta(120)
-            panel.view.observe_pointer()
-            panel.pump()
-            assert scroll_position(card) < before and card.hovered
-            position = anchor(card.text)
-            panel.now += 20
-            panel.view.tick()
-            panel.pump()
-            assert anchor(card.text) == position
-            publish(Answer("stream", text + "\n\nMore details arrive.", 2))
-            panel.pump()
-            assert anchor(card.text) == position
+        panel.desktop.pointer = (card.bounds.left + 8, card.bounds.top + 8)
+        card.scroll_delta(120)
+        panel.view.observe_pointer()
+        panel.pump()
+        assert scroll_position(card) < before and card.hovered
+        position = anchor(card.text)
+        panel.now += 20
+        panel.view.tick()
+        panel.pump()
+        assert anchor(card.text) == position
+        publish(Answer("stream", text + "\n\nMore details arrive.", 2))
+        panel.pump()
+        assert anchor(card.text) == position
 
 
 def test_reduced_motion_keeps_the_whole_reply_and_advances_by_pages() -> None:
@@ -213,7 +233,7 @@ def test_reduced_motion_keeps_the_whole_reply_and_advances_by_pages() -> None:
 
 
 def test_wheel_over_empty_glass_reaches_text_without_focusing_other_apps() -> None:
-    with notifications() as panel, patch("assistant.agent_panel.windows.focus"):
+    with notifications() as panel:
         panel.agent.say("A useful detail. " * 220)
         panel.pump()
         card = panel.view.cards[MessageKey(0)]
@@ -228,9 +248,9 @@ def test_wheel_over_empty_glass_reaches_text_without_focusing_other_apps() -> No
             panel.pump()
             time.sleep(.005)
         assert scroll_position(card) > 0 and windows.foreground() == foreground
-        panel.view.show(focus=True)
+        panel.view.show_history()
         panel.pump()
-        assert not router.regions and not router.dispatch(bounds.left + 2, bounds.top + 2, -120)
+        assert panel.view.query.history
         panel.agent.close()
         panel.pump()
         assert router.thread is not None and not router.thread.is_alive() and not router.active
@@ -243,7 +263,7 @@ def test_compact_header_and_native_stop_padding_are_clickable_without_activation
         panel.pump()
         card = panel.view.cards[TurnKey(0)]
         bounds, stop = windows.outer_rect(card.handle), widget_rect(card.stop)
-        assert bounds.width == card.width < round(WIDTH * panel.view.scale * .65)
+        assert bounds.width == card.width <= round(WIDTH * panel.view.scale)
         assert stop.width >= 28 and stop.height >= 28 and bounds.left < stop.left < stop.right < bounds.right
         foreground = windows.foreground()
         # Check the native window under the icon's padding, then send the click
@@ -260,7 +280,9 @@ def test_compact_header_and_native_stop_padding_are_clickable_without_activation
         window_class = cast(WindowClass, ctypes.WinDLL("user32").GetClassNameW)
         window_class.argtypes, window_class.restype = (ctypes.c_void_p, ctypes.c_wchar_p, ctypes.c_int), ctypes.c_int
         window_class(observed, class_name, len(class_name))
-        if class_name.value == "LockScreenBackstopFrame":
+        if (class_name.value == "LockScreenBackstopFrame"
+                or (class_name.value == "Windows.UI.Core.CoreWindow" and windows._exe(observed) == "lockapp.exe")):
+            # New Windows builds expose LockApp's CoreWindow instead of the older backstop frame.
             raise unittest.SkipTest("Windows is locked; the lock screen covers the native click target.")
         assert int(hit(point) or 0) == card.handle, (card.handle, int(hit(point) or 0), bounds, stop, card.alpha, card.window.isVisible())
         if card.layer is not None:
@@ -379,8 +401,9 @@ def test_one_bubble_keeps_its_result_when_finished_and_when_steps_collapse() -> 
         publish(ToolActivity("check", "read_file", "forecast.xlsx", 2, Succeeded("The totals match.")))
         publish(Answer("answer", "The workbook is **ready**.", 3, StreamState.COMPLETE))
         panel.pump()
-        assert len(panel.view.cards) == 2 and panel.view.cards[TurnKey(0)] is card
-        assert card.details.isHidden() and card.text.toPlainText() == "The workbook is ready."
+        assert len(panel.view.cards) == 1 and panel.view.cards[TurnKey(0)] is card
+        assert card.details.isVisible() and card.text.toPlainText() == "The workbook is ready."
+        assert 'forecast.xlsx' in card.details.toPlainText() and 'budget.xlsx' not in card.details.toPlainText()
         compact, stop = windows.outer_rect(handle), widget_rect(card.stop)
         card.disclosure.click()
         panel.pump()
@@ -397,7 +420,7 @@ def test_one_bubble_keeps_its_result_when_finished_and_when_steps_collapse() -> 
         assert card.stop.isHidden() and card.text.document().find("ready").charFormat().fontWeight() >= QFont.Weight.DemiBold
         card.disclosure.click()
         panel.pump()
-        assert not bool(card.expanded) and card.details.isHidden()
+        assert not bool(card.expanded) and card.details.isVisible()
         assert card.text is text and card.text.toPlainText() == "The workbook is ready." and tail_visible(card.text)
         assert windows.outer_rect(handle).height < expanded.height
         assert windows.foreground() == foreground
@@ -433,7 +456,8 @@ def test_reversing_disclosure_preserves_selection_and_visible_attached_result() 
         panel.pump()
         assert windows.outer_rect(card.handle) == current
         panel.advance(.3)
-        assert not bool(card.motion) and card.frame.details == 0 and card.details.isHidden()
+        assert not bool(card.motion) and card.frame.details > 0 and card.details.isVisible()
+        assert 'sheet-3.xlsx' in card.details.toPlainText() and 'sheet-0.xlsx' not in card.details.toPlainText()
         assert card.text.textCursor().selectedText() == "result" and tail_visible(card.text)
 
 
@@ -516,10 +540,13 @@ def test_native_shadow_follows_the_foreground_after_fractional_dpi_rounding() ->
             bounds = windows.outer_rect(card.handle)
             padding = round(28 * panel.view.scale)
             assert card.bounds == bounds
-            assert card.layer.bounds == Rect(bounds.left - padding, bounds.top - padding, bounds.right + padding, bounds.bottom + padding)
+            surface = card.surface_bounds
+            assert surface.right == bounds.right and surface.bottom == bounds.bottom
+            assert card.layer.bounds == Rect(surface.left - padding, surface.top - padding, surface.right + padding, surface.bottom + padding)
 
 
-def test_short_replies_grow_horizontally_then_wrap_at_the_width_limit() -> None:
+def test_replies_keep_the_feed_width_and_grow_vertically_as_text_wraps() -> None:
+    # Defect: standalone replies retain the retired text-sized bubble width.
     with notifications() as panel:
         sizes: list[tuple[int, int]] = []
         for text in ("Ready.", "Ready to review.", "Ready to review the plan.", "Ready to review the plan. " * 4):
@@ -529,11 +556,12 @@ def test_short_replies_grow_horizontally_then_wrap_at_the_width_limit() -> None:
             sizes.append((card.width, card.height))
             assert windows.outer_rect(card.handle).width == card.width and tail_visible(card.text)
         cap = round(WIDTH * panel.view.scale)
-        assert sizes[0][0] < sizes[1][0] < sizes[2][0] < sizes[3][0] == cap
+        assert all(width == cap for width, _height in sizes)
         assert sizes[0][1] == sizes[1][1] == sizes[2][1] < sizes[3][1]
 
 
-def test_rendered_markdown_width_ignores_link_destinations_and_wraps_long_words() -> None:
+def test_feed_wraps_markdown_and_long_words_inside_its_fixed_width() -> None:
+    # Defect: our viewport/wrapping configuration lets text escape the feed column.
     with notifications() as panel:
         widths: list[int] = []
         for text in ("## A heading\n\n**Ready**\n\n- OK", "[Docs](https://example.org/" + "a" * 160 + ")", "W" * 80):
@@ -548,22 +576,23 @@ def test_rendered_markdown_width_ignores_link_destinations_and_wraps_long_words(
                     line = layout.lineAt(index)
                     assert line.x() + line.naturalTextWidth() <= card.text.width() + 1
                 block = block.next()
-        assert widths[1] < widths[0] < widths[2] == round(WIDTH * panel.view.scale)
+        assert widths == [round(WIDTH * panel.view.scale)] * 3
 
 
-def test_width_changes_retarget_from_current_bounds_with_right_edge_anchored() -> None:
+def test_reply_height_changes_retarget_from_current_bounds_with_right_edge_anchored() -> None:
+    # Defect: growing/shrinking content jumps to its target or moves the feed edge.
     with notifications(animated=True) as panel:
         panel.view.render(transition(Session(identity="width-probe"), Said("Ready.", 1)))
         panel.pump()
         panel.advance(.3)
         card = panel.view.cards[MessageKey(0)]
         right = windows.outer_rect(card.handle).right
-        for text in ("Ready to review.", "Ready to review the plan. " * 4, "**Done.**"):
+        for text in ("Ready to review the plan. " * 40, "**Done.**"):
             before = windows.outer_rect(card.handle)
             panel.view.render(transition(Session(identity="width-probe"), Said(text, 1)))
             panel.pump()
             assert windows.outer_rect(card.handle) == before
-            widths: list[int] = []
+            heights: list[int] = []
             for _ in range(4):
                 panel.now += .016
                 panel.view.tick()
@@ -571,15 +600,17 @@ def test_width_changes_retarget_from_current_bounds_with_right_edge_anchored() -
                 bounds = windows.outer_rect(card.handle)
                 # Qt maps integer logical pixels to physical pixels at 125%.
                 assert abs(bounds.right - right) <= 1
-                assert min(before.width, card.width) - 1 <= bounds.width <= max(before.width, card.width) + 1
-                widths.append(bounds.width)
-            assert len(set(widths)) > 1
+                assert abs(bounds.width - card.width) <= 1
+                assert min(before.height, card.height) - 1 <= bounds.height <= max(before.height, card.height) + 1
+                heights.append(bounds.height)
+            assert len(set(heights)) > 1
         panel.advance(.3)
-        assert windows.outer_rect(card.handle).width == card.width and card.motion is None
+        assert abs(windows.outer_rect(card.handle).height - card.height) <= 1 and card.motion is None
 
 
-def test_narrow_work_area_keeps_complete_question_lines_above_voice_hint() -> None:
-    with notifications() as panel, patch.object(AgentToasts, "area", return_value=Rect(40, 40, 290, 600)):
+def test_narrow_work_area_keeps_complete_question_lines_with_voice_tooltip() -> None:
+    with notifications() as panel:
+        panel.desktop.bounds = Rect(40, 40, 290, 600)
         state = transition(Session(identity="narrow-area"), Begin("Check the notes", 1))
         state = transition(state, Question("question", "Which workbook should I use?", "Please say the filename.", 2))
         panel.view.render(state)
@@ -588,9 +619,9 @@ def test_narrow_work_area_keeps_complete_question_lines_above_voice_hint() -> No
             assert abs(windows.outer_rect(card.handle).width - card.width) <= 1
             assert card.width <= 250 - 2 * round(16 * panel.view.scale)
         question = panel.view.cards[TurnKey(0)]
-        assert question.text.geometry().bottom() < question.hint.y()
-        assert question.hint.text() == "Hold N to reply by voice"
-        assert question.hint.height() >= question.hint.heightForWidth(question.hint.width())
+        assert question.text.isReadOnly() and question.hint.isHidden()
+        assert "agent voice-to-text button" in question.window.toolTip()
+        assert question.window.rect().contains(question.text.geometry())
         assert tail_visible(question.text)
 
 
@@ -709,9 +740,9 @@ def test_motion_timing_is_balanced_on_reduced_motion_history_and_close() -> None
             panel.agent.say("A reply.")
             panel.pump()
             assert panel.view.timing.active
-            panel.view.show(focus=True)
+            panel.view.clear_cards()
             assert not bool(panel.view.timing.active)
-            panel.view.resume()
+            panel.view.refresh()
             panel.pump()
             assert panel.view.timing.active
         assert calls == ["begin", "end"] * 3
@@ -741,15 +772,13 @@ def test_measured_previews_end_on_complete_lines_with_mixed_markdown_fonts() -> 
 def test_notifications_are_idle_until_needed_and_leave_focus_untouched() -> None:
     with notifications() as panel:
         view = panel.view
-        assert not view.cards and view.history is None and not view.loop.timer.isActive()
+        assert not view.cards and not view.loop.timer.isActive()
         foreground = windows.foreground()
         panel.agent.begin("Find my workbook", panel.stop)
         panel.pump()
-        work, request = view.cards[TurnKey(0)], view.cards[MessageKey(0)]
+        work = view.cards[TurnKey(0)]
         assert windows.is_visible(work.handle) and work.stop.isVisible()
-        assert request.hint.text() == "You" and request.text.toPlainText() == "Find my workbook"
-        assert not request.text.textCursor().hasSelection()
-        assert request.width < round(WIDTH * view.scale) and work.text.isHidden()
+        assert work.dismiss.isVisible() and work.text.isHidden()
         publish = panel.agent.updates()
         with patch.object(Document, "load", side_effect=AssertionError("Reasoning must not measure notification text")):
             publish(ReasoningSummary("thought", "Checking **recent files**.", 1))
@@ -760,18 +789,18 @@ def test_notifications_are_idle_until_needed_and_leave_focus_untouched() -> None
         panel.agent.done("Found **budget.xlsx**.")
         panel.agent.finish()
         panel.pump()
-        assert view.cards[TurnKey(0)] is work and len(view.cards) == 2 and work.stop.isHidden()
+        assert view.cards[TurnKey(0)] is work and len(view.cards) == 1 and work.stop.isHidden()
         assert work.height <= work.maximum and tail_visible(work.text)
         assert not work.text.textCursor().hasSelection()
         panel.advance(31)
         assert not view.cards and view.expiry_timer is None and not view.loop.timer.isActive()
         panel.agent.show()
         panel.pump()
-        assert not view.cards and view.history is None
+        assert not view.cards
         assert "Found **budget.xlsx**." in panel.agent.all_text() and windows.foreground() == foreground
 
 
-def test_stack_is_bounded_during_bursts_and_closes_retired_native_layers() -> None:
+def test_stack_is_bounded_during_bursts_and_retains_retired_native_layers() -> None:
     with notifications(animated=True) as panel:
         old_handles: list[int] = []
         for index in range(12):
@@ -779,6 +808,7 @@ def test_stack_is_bounded_during_bursts_and_closes_retired_native_layers() -> No
             panel.pump()
             old_handles.extend(card.layer.handle for card in panel.view.cards.values() if card.layer is not None)
             assert len(panel.view.cards) <= MAX_VISIBLE
+            assert len(panel.view.cards) + len(panel.view.spares) <= MAX_VISIBLE
         panel.advance(.5)
         assert all(card.motion is None for card in panel.view.cards.values())
         bounds = sorted((windows.outer_rect(card.handle) for card in panel.view.cards.values()), key=top)
@@ -786,7 +816,10 @@ def test_stack_is_bounded_during_bursts_and_closes_retired_native_layers() -> No
         assert all(first.bottom < second.top for first, second in pairwise(bounds))
         panel.advance(31)
         panel.advance(.3)
-        assert not panel.view.cards and all(not windows.exists(handle) for handle in old_handles)
+        assert not panel.view.cards and all(windows.exists(handle) and not windows.is_visible(handle) for handle in old_handles)
+        panel.agent.close()
+        panel.pump()
+        assert all(not windows.exists(handle) for handle in old_handles)
 
 
 def test_repeating_a_frame_keeps_native_geometry_stable_after_dpi_rounding() -> None:
@@ -837,7 +870,7 @@ def test_solid_and_high_contrast_materials_keep_all_content_readable() -> None:
         panel.agent.begin("Read the workbook", panel.stop)
         panel.pump()
         work = panel.view.cards[TurnKey(0)]
-        assert not work.glass and work.colors.surface != panel.view.cards[MessageKey(0)].colors.surface
+        assert not work.glass and work.dismiss.isVisible()
         publish = panel.agent.updates()
         publish(ToolActivity("tool", "read_file", "budget.xlsx", 1, Failed("Missing file")))
         panel.pump()
@@ -854,7 +887,7 @@ def test_solid_and_high_contrast_materials_keep_all_content_readable() -> None:
         panel.pump()
         assert not work.glass and work.colors.surface == "#ffffff"
         assert work.ink.foreground == work.ink.secondary == "#000000"
-        assert work.details.document().find("Missing file").charFormat().foreground().color().name() == "#000000"
+        assert work.details.calls[0].result.document().find("Missing file").charFormat().foreground().color().name() == "#000000"
 
 
 def test_hovering_glass_pauses_expiry_and_close_cancels_all_observation() -> None:
@@ -865,11 +898,12 @@ def test_hovering_glass_pauses_expiry_and_close_cancels_all_observation() -> Non
         bounds = windows.outer_rect(card.handle)
         assert panel.view.pointer_timer is not None
         panel.now += 5
-        with patch("assistant.agent_toasts.inputs.cursor_position", return_value=(bounds.right - 12, bounds.bottom - 12)):
-            panel.view.observe_pointer()
-            assert panel.view.expiry_timer is None
-            panel.advance(100)
-            assert card.key in panel.view.cards
+        panel.desktop.pointer = (bounds.right - 12, bounds.bottom - 12)
+        panel.view.observe_pointer()
+        assert panel.view.expiry_timer is None
+        panel.advance(100)
+        assert card.key in panel.view.cards
+        panel.desktop.pointer = (-100000, -100000)
         panel.view.observe_pointer()
         panel.advance(6)
         assert card.key in panel.view.cards
@@ -890,59 +924,38 @@ def test_questions_can_be_answered_or_stopped_by_voice_without_history() -> None
             panel.pump()
             panel.advance(3600)
             question = panel.view.cards[TurnKey(0)]
-            assert "Hold N" in question.hint.text() and question.hint.isVisible()
+            assert "agent voice-to-text button" in question.window.toolTip()
             assert "Open this?" in question.text.toPlainText()
             assert panel.agent.reply_by_voice("The revenue sheet.")
             assert pending.result() == "The revenue sheet."
         panel.pump()
-        assert panel.view.history is None and panel.view.cards[TurnKey(0)] is question
+        assert panel.view.cards[TurnKey(0)] is question
         assert "The revenue sheet." in question.text.toPlainText() and "Open this?" in question.text.toPlainText()
         panel.requested.clear()
         with asking(panel.agent.inputs) as pending:
             assert panel.requested.wait(timeout=2)
             panel.pump()
             approval = panel.view.cards[TurnKey(0)]
-            assert "approve" in approval.hint.text() and approval.hint.isVisible()
+            assert [button.text() for button in approval.choices] == ["Approve", "Decline"]
             approval.stop.click()
             assert pending.result() is None
         panel.pump()
-        assert not approval.stop.isEnabled() and panel.view.history is None
+        assert not approval.stop.isEnabled()
 
 
-def test_history_keeps_expired_results_and_returns_to_current_conversation() -> None:
-    with notifications() as panel, patch("assistant.agent_panel.windows.focus"):
-        panel.agent.begin("Find it", panel.stop)
-        panel.agent.say("## Result\n\n" + "A long response with **formatting**. " * 120)
-        panel.agent.finish()
+def test_history_uses_the_existing_feed_and_returns_to_current_work() -> None:
+    with notifications() as panel:
+        panel.agent.say('An earlier result worth retaining.')
         panel.pump()
-        reply = panel.view.cards[TurnKey(0)]
-        assert reply.height <= reply.maximum and reply.text.toPlainText().count("A long response") == 120
         panel.advance(10000)
-        panel.advance(31)
         assert not panel.view.cards
-        panel.agent.show(focus=True)
+        panel.view.show_history()
         panel.pump()
-        history = panel.view.history
-        assert history is not None and windows.is_visible(history.handle)
-        assert history.text.toPlainText().count("A long response") == 120
-        panel.agent.begin("Continue with that result", panel.stop)
+        assert panel.view.query.history and panel.view.cards
+        assert any('An earlier result worth retaining.' in card.text.toPlainText() for card in panel.view.cards.values())
+        panel.view.resume()
         panel.pump()
-        assert not panel.view.cards
-        history.hide()
-        panel.pump()
-        assert not windows.is_visible(history.handle) and TurnKey(2) in panel.view.cards
-        assert MessageKey(2) in panel.view.cards and MessageKey(0) not in panel.view.cards
-        panel.agent.say("The follow-up is done.")
-        panel.agent.finish()
-        panel.pump()
-        follow_up = next(iter(panel.view.cards.values()))
-        panel.view.set_hover(follow_up.key, True)
-        panel.view.show(focus=True)
-        panel.advance(31)
-        assert not panel.view.stack.toasts
-        history.hide()
-        panel.pump()
-        assert not panel.view.cards
+        assert not panel.view.query.history
 
 
 def test_recording_stop_is_independent_and_shutdown_closes_every_native_layer() -> None:
@@ -993,8 +1006,55 @@ def test_new_recording_interrupts_dismissal_and_follows_work_area_changes() -> N
         assert panel.view.work is not None
         work = panel.view.work
         before = windows.outer_rect(card.handle)
-        with patch.object(AgentToasts, "area", return_value=Rect(work.left + 30, work.top, work.right - 30, work.bottom)):
-            panel.view.refresh()
-            panel.pump()
+        panel.desktop.bounds = Rect(work.left + 30, work.top, work.right - 30, work.bottom)
+        panel.view.refresh()
+        panel.pump()
         after = windows.outer_rect(card.handle)
         assert after.right == before.right - 30 and after.top == before.top
+
+
+def test_wrapped_text_and_scroll_indicator_stay_inside_the_visible_card_while_it_resizes() -> None:
+    with notifications(animated=True) as panel:
+        panel.agent.say('Ready.')
+        panel.pump()
+        panel.advance(.3)
+        panel.view.render(transition(Session(identity=panel.agent.state.identity), Said(
+            'Please compare the forecast before replying. ' * 100, 1)))
+        panel.pump()
+        overflow_seen = False
+        for _ in range(20):
+            panel.now += .016
+            panel.view.tick()
+            panel.pump()
+            card = panel.view.cards[MessageKey(0)]
+            view = card.text
+            assert view.x() + view.width() <= card.window.width() - 12, (
+                view.geometry(), card.window.size(), card.frame.width)
+            assert view.document().textWidth() <= view.viewport().width() + 1, (
+                view.document().textWidth(), view.viewport().size())
+            assert view.viewport().width() == view.width()  # The hidden native scrollbar must consume no text space.
+            if view.verticalScrollBar().maximum():
+                overflow_seen = True
+                assert not view.verticalScrollBar().isVisible()
+                assert view.x() + view.width() < card.window.width() - 7  # Two-pixel painted indicator stays outside.
+            block = view.document().begin()
+            while block.isValid():
+                layout = block.layout()
+                for index in range(layout.lineCount()):
+                    line = layout.lineAt(index)
+                    assert line.x() + line.naturalTextWidth() <= view.viewport().width() + 1
+                block = block.next()
+        assert overflow_seen
+
+
+def test_glass_surface_accepts_transitional_frames_smaller_than_its_inset() -> None:
+    from assistant.notifications import Frame  # noqa: PLC0415
+    with notifications() as panel:
+        panel.agent.say('A fictional short answer.')
+        panel.pump()
+        card = panel.view.cards[MessageKey(0)]
+        assert card.bounds is not None
+        card.position(card.right, Frame(card.y, card.width, 1, 0))
+        assert card.surface_bounds.width >= 0 and card.surface_bounds.height >= 0
+        if card.layer is not None:
+            card.layer.position(card.surface_bounds, panel.view.scale, 0)

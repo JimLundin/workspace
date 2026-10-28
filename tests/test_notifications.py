@@ -33,7 +33,6 @@ from assistant.notifications import (
     Frame,
     Held,
     Kind,
-    MessageKey,
     Motion,
     Paused,
     Recording,
@@ -71,9 +70,9 @@ def bubble(stack: Stack, request: int = 0) -> Turn:
 def test_thinking_keeps_its_actions_in_one_stable_bubble_in_order() -> None:
     session = transition(Session(identity="one"), Begin("Find the workbook", 1))
     stack = advance(Stack(), session, 100)
-    assert [toast.key for toast in stack.toasts] == [MessageKey(0), TurnKey(0)]
-    request, work = stack.toasts
-    assert body(request.content) == "Find the workbook" and tone(request.content) is Tone.USER
+    assert [toast.key for toast in stack.toasts] == [TurnKey(0)]
+    work, = stack.toasts
+    assert work.content.entries[0].message.text == "Find the workbook"
     turn = bubble(stack)
     assert isinstance(turn.state, Working) and turn.state.phase is Busy.THINKING
     assert body(turn) == "" and spinning(turn)
@@ -81,8 +80,8 @@ def test_thinking_keeps_its_actions_in_one_stable_bubble_in_order() -> None:
     assert advance(stack, session, 2000) == stack
     session = transition(session, ToolActivity("tool", "read_file", "budget.xlsx", 3))
     stack = advance(stack, session, 8000)
-    assert [toast.key for toast in stack.toasts] == [MessageKey(0), TurnKey(0)]
-    assert stack.toasts[0] == request and stack.toasts[1].order == work.order
+    assert [toast.key for toast in stack.toasts] == [TurnKey(0)]
+    assert stack.toasts[0].order == work.order
     turn = bubble(stack)
     assert [entry.index for entry in steps(turn)] == [2]
     assert body(turn) == "" and "budget.xlsx" in "".join(span.text for span in details(turn))
@@ -105,11 +104,11 @@ def test_collapsing_steps_keeps_the_finished_result_attached_and_formatted() -> 
     session = transition(session, ToolActivity("tool", "read_file", '{"path":"budget.xlsx"}', 2, Succeeded('{"rows":24}')))
     session = transition(session, Said("The totals **match**. Revenue is 124,500 kr.", 3))
     stack = advance(Stack(), session, 10)
-    key, order = stack.toasts[1].key, stack.toasts[1].order
+    key, order = stack.toasts[0].key, stack.toasts[0].order
     session = transition(session, Finished())
     stack = advance(stack, session, 11)
     turn = bubble(stack)
-    assert len(stack.toasts) == 2 and (stack.toasts[1].key, stack.toasts[1].order) == (key, order)
+    assert len(stack.toasts) == 1 and (stack.toasts[0].key, stack.toasts[0].order) == (key, order)
     assert turn.state is Settled.FINISHED and heading(turn) == "Finished" and not spinning(turn)
     assert body(turn) == "The totals **match**. Revenue is 124,500 kr."
     assert "".join(span.text for span in spans(turn)) == "The totals match. Revenue is 124,500 kr."
@@ -130,7 +129,7 @@ def test_follow_up_turns_keep_their_own_steps_and_results() -> None:
     session = transition(session, Begin("The new request", 4))
     session = transition(session, ToolActivity("new", "read_file", "new.xlsx", 5))
     stack = advance(stack, session, 11)
-    assert [toast.key for toast in stack.toasts] == [MessageKey(0), TurnKey(0), MessageKey(3), TurnKey(3)]
+    assert [toast.key for toast in stack.toasts] == [TurnKey(0), TurnKey(3)]
     assert bubble(stack) == original
     assert body(bubble(stack)) == "The old workbook is missing."
     assert [entry.index for entry in steps(bubble(stack, 3))] == [4]
@@ -150,7 +149,7 @@ def test_expired_terminal_turns_without_output_do_not_revive_on_follow_up() -> N
         assert not stack.toasts
         session = transition(session, Begin("Try another file", 2))
         stack = advance(stack, session, 133)
-        assert [toast.key for toast in stack.toasts] == [MessageKey(1), TurnKey(1)]
+        assert [toast.key for toast in stack.toasts] == [TurnKey(1)]
 
 
 def test_unprompted_work_keeps_its_reply_and_later_requests_separate() -> None:
@@ -165,7 +164,8 @@ def test_unprompted_work_keeps_its_reply_and_later_requests_separate() -> None:
     assert any(body(toast.content) == "The background check is complete." for toast in stack.toasts)
     session = transition(session, Begin("Check the new workbook", 2))
     stack = advance(stack, session, 102)
-    assert not bubble(stack, 1).entries
+    assert len(bubble(stack, 1).entries) == 1
+    assert body(bubble(stack, 1)) == ""
 
 
 def test_earlier_replies_are_discoverable_as_steps_without_tool_calls() -> None:
@@ -195,13 +195,13 @@ def test_reading_timers_start_when_work_finishes_and_never_revive_expired_entrie
     session = transition(session, Answer("stream", "Reading", 2))
     stack = advance(Stack(), session, 10)
     stack = advance(stack, session, 1000)
-    assert len(stack.toasts) == 2 and all(toast.lifetime is Held.ACTIVE for toast in stack.toasts)
+    assert len(stack.toasts) == 1 and all(toast.lifetime is Held.ACTIVE for toast in stack.toasts)
     session = transition(session, Answer("stream", "Here is the answer.", 3, StreamState.COMPLETE))
     stack = advance(stack, session, 1500)
     assert all(toast.lifetime is Held.ACTIVE for toast in stack.toasts)
     session = transition(session, Finished())
     stack = advance(stack, session, 2000)
-    assert [toast.key for toast in stack.toasts] == [MessageKey(0), TurnKey(0)]
+    assert [toast.key for toast in stack.toasts] == [TurnKey(0)]
     assert all(toast.lifetime == Expires(2012) for toast in stack.toasts)
     assert advance(stack, session, 2011).toasts
     history = session.all_text()
@@ -210,7 +210,7 @@ def test_reading_timers_start_when_work_finishes_and_never_revive_expired_entrie
     session = transition(session, Progress("An unrelated status update"))
     assert not advance(stack, session, 9000).toasts and session.all_text() == history
     stack = advance(stack, transition(session, Begin("Continue", 4)), 9001)
-    assert [body(toast.content) for toast in stack.toasts] == ["Continue", ""]
+    assert [body(toast.content) for toast in stack.toasts] == [""]
 
 
 def test_bursts_keep_controls_and_all_steps_without_creating_more_windows() -> None:
@@ -220,7 +220,7 @@ def test_bursts_keep_controls_and_all_steps_without_creating_more_windows() -> N
     for number in range(100):
         session = transition(session, Said(f"Update {number}", 2))
         stack = advance(stack, session, number / 10)
-        assert len(stack.toasts) == 3
+        assert len(stack.toasts) == 2
     turn = bubble(stack)
     assert body(turn) == "Update 99" and len(steps(turn)) == 99
     assert stack.toasts[-1].key is Kind.RECORDING
@@ -248,7 +248,7 @@ def test_pending_question_stays_visible_when_the_steps_are_collapsed() -> None:
     assert stack.toasts[-1].lifetime is Held.ACTIVE
     assert "Which workbook?\n\nChoose a filename." in body(turn)
     assert "Which workbook?" in "".join(span.text for span in spans(turn))
-    assert tone(turn) is Tone.QUESTION and "Hold N" in hint(turn)
+    assert tone(turn) is Tone.QUESTION and "N" in hint(turn)
     assert not spinning(turn)
     stopping = advance(stack, transition(session, StopRequested()), 10001)
     assert spinning(bubble(stopping)) and heading(bubble(stopping)) == "Stopping…"
@@ -261,7 +261,7 @@ def test_voice_response_stays_with_its_question_then_moves_into_steps() -> None:
     session = transition(session, QuestionAnswered("question", "The revenue sheet"))
     stack = advance(stack, session, 101)
     turn = bubble(stack)
-    assert [toast.key for toast in stack.toasts] == [MessageKey(0), TurnKey(0)]
+    assert [toast.key for toast in stack.toasts] == [TurnKey(0)]
     assert body(turn) == "Which workbook?\n\nChoose a filename.\n\nThe revenue sheet"
     assert isinstance(turn.entries[-1], Response) and not hint(turn)
     assert spinning(turn) and advance(stack, session, 102).toasts == stack.toasts

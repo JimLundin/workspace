@@ -3,12 +3,12 @@
 from collections.abc import Callable
 from typing import ClassVar
 
-from winapi import screen
-from winapi.composition import DesktopComposition
-from winapi.shapes import Rect
+lazy from winapi import screen
+lazy from winapi.composition import DesktopComposition
+lazy from winapi.shapes import Rect
 
-from .agent_window import log_view
-from .qt import QApplication, QCoreApplication, QEvent, QtCore, shiboken6
+lazy from .agent_window import log_view
+lazy from .qt import QApplication, QCoreApplication, QEvent, QtCore, shiboken6
 
 
 def application() -> QApplication:

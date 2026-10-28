@@ -6,7 +6,7 @@ from collections.abc import Callable
 
 from winapi import windows
 
-from .canvas_widgets import STYLE
+from .panel_controls import STYLE
 from .qt import Qt, QtCore, QtGui, QtWidgets
 
 

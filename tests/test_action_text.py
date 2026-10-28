@@ -83,3 +83,12 @@ def test_payload_is_formatted_before_the_preview_is_shortened() -> None:
     text = readable('[' + ','.join(str(number) for number in range(1000)) + ']')
     assert text == "0, 1, 2, 3\n… 996 more items"
     assert readable('{"path":"budget.xlsx"}', limit=len("Path: budget.xlsx")) == "Path: budget.xlsx"
+
+
+def test_work_feed_previews_keep_rejection_reasons_and_omit_execution_metadata() -> None:
+    message = ToolActivity('feed', 'work_feed_update',
+                           '{"operation":"reject","text":"No, the figures are incomplete.","item":"opaque","revision":"secret"}', 1,
+                           Succeeded('{"accepted":false,"reason":"The proposal changed.","token":"secret"}'))
+    assert 'No, the figures are incomplete.' in message.text
+    assert 'No change was made.' in message.text and 'The proposal changed.' in message.text
+    assert 'opaque' not in message.text and 'secret' not in message.text

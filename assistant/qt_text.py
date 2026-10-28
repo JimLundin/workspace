@@ -45,7 +45,9 @@ def units(text: str) -> int:
 def character_style(span: Span, ink: Ink) -> QTextCharFormat:
     style = QTextCharFormat()
     size = 10.5
-    if "heading" in span.tags:
+    if 'feed_title' in span.tags or ('feed' in span.tags and 'heading' in span.tags):
+        size = 11.5
+    elif "heading" in span.tags:
         size = 15 if "h1" in span.tags else 13 if "h2" in span.tags else 11.5
     elif any(tag in span.tags for tag in ("step", "step_detail", "step_error")):
         size = 9.5
@@ -58,6 +60,9 @@ def character_style(span: Span, ink: Ink) -> QTextCharFormat:
         color = ink.secondary
     if "step_error" in span.tags:
         color = ink.error
+    if 'feed_question' in span.tags:
+        color = ink.link
+        style.setFontWeight(QFont.Weight.DemiBold)
     if span.link:
         color = ink.link
         style.setAnchor(True)
@@ -75,6 +80,10 @@ def paragraph_style(span: Span) -> QTextBlockFormat:
     style.setLeftMargin(min(span.indent, 6) * 16 + hanging + (4 if "codeblock" in span.tags else 0))
     style.setTextIndent(-hanging)
     style.setLineHeight(125, QTextBlockFormat.LineHeightTypes.ProportionalHeight.value)
+    if 'feed' in span.tags:
+        style.setBottomMargin(5 if 'feed_title' in span.tags else 4)
+        if 'feed_suggestion' in span.tags or 'feed_question' in span.tags:
+            style.setTopMargin(4)
     return style
 
 
@@ -180,7 +189,7 @@ class TextView(QTextBrowser):
         self.setDocument(self.content.qt)
         self.on_scroll, self.on_menu = on_scroll, on_menu
         self.setFrameShape(QFrame.Shape.NoFrame)
-        self.setStyleSheet("QTextBrowser { background: transparent; border: none; }")
+        self.setStyleSheet("QTextBrowser { background: transparent; border: none; padding: 0; margin: 0; border-radius: 0; }")
         self.viewport().setAutoFillBackground(False)
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
@@ -206,6 +215,10 @@ class TextView(QTextBrowser):
         cursor.setPosition(min(position, limit), QTextCursor.MoveMode.KeepAnchor)
         self.setTextCursor(cursor)
         self.verticalScrollBar().setValue(offset)
+
+    def fit_width(self) -> None:
+        """Use the actual viewport even when new content leaves widget geometry unchanged."""
+        self.content.load(self.content.spans, max(1, self.viewport().width()))
 
     def recolor(self, ink: Ink) -> None:
         offset = self.offset

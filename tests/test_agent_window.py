@@ -29,6 +29,9 @@ class RecordingView:
         self.shown.append(focus)
         self.threads.append(threading.get_ident())
 
+    def open_inbox(self) -> None:
+        self.show(focus=True)
+
     def close(self) -> None:
         self.closed = True
 
