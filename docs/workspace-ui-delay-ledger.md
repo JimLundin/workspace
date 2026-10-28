@@ -167,7 +167,15 @@ binds the source after converting the small test observation buffers to immutabl
 tuples; its receipt is `%TEMP%\workspace-toolbar-final-check.json`. This is an affected scope, with
 the protected full selfcheck and CI gates unchanged.
 
-This remains in `workspace-qt-stalls`, based on test-speed snapshot `1a1cafe`.
-The coordinating agent owns combined-source integration, checking and Downloads
-deployment. Apply the actual fix commits, preserve the source-snapshot commits
-as investigation history, and issue a new receipt for the receiving checkout.
+The measurements used test-speed snapshot `1a1cafe`. The isolated branch was
+subsequently rebased onto fresh snapshot `f067107`, containing thirteen newer
+test-speed files: portable-worker overlap, browser/UIA and storage fixture
+consolidation, and their reports. Both fixes replayed without conflicts as
+`2d30c13` and `e7f999c`. No application runtime source changed in this rebase;
+the earlier runtime/stub hashes and measurements remain applicable.
+
+The user authorized integration into local `main`. Preserve the other agent's
+pending source/index state when merging the UI diff, and issue a new receipt for
+the receiving checkout. Downloads deployment remains with the coordinating
+agent. The pre-rebase commits remain on
+`investigate/qt-stalls-before-latest-rebase` for reproducibility.

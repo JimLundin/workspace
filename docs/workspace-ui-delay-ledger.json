@@ -6355,5 +6355,20 @@
         "tests/test_windows_toolbar_geometry.py"
       ]
     }
+  },
+  "integration_rebase": {
+    "captured_base": "f067107d61e936d0b603f062cd92eff92fe41743",
+    "prior_test_speed_base": "1a1cafe",
+    "fix_commits": [
+      "2d30c13",
+      "e7f999c"
+    ],
+    "new_base_files": 13,
+    "application_runtime_changed": false,
+    "preserved_history_branch": "investigate/qt-stalls-before-latest-rebase",
+    "isolated_receipt": "%TEMP%/workspace-qt-latest-rebase-check.json",
+    "local_main_integration": "User authorized; preserve pending source/index state.",
+    "combined_receipt": "%TEMP%/workspace-qt-main-integration-check.json",
+    "deployment_owner": "coordinating agent"
   }
 }

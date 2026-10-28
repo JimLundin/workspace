@@ -170,6 +170,9 @@ original four projection/handling decision mutations remain documented in the
 This integration uses an affected source/native scope. It does not claim a new
 passing full suite; the previous full run's baseline/intermittent browser failures
 remain recorded in the feed report. Final source binding uses Windows Temp receipt
-`workspace-qt-stalls-rebased-check.json`. The shared checkout still matches the
-captured test-speed snapshot. Downloads deployment is left to the coordinating
-agent's combined-source check and deployment.
+`workspace-qt-stalls-rebased-check.json`. The subsequent rebase uses fresh
+test-speed snapshot `f067107`, containing thirteen newer test-speed files and
+portable-worker overlap. Both fix commits replayed cleanly; no application
+runtime files changed through that rebase. The user then authorized local-main
+integration. Downloads deployment remains with the coordinating agent's
+combined-source check and deployment.
