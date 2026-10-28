@@ -160,7 +160,7 @@ class Human:
     def agent_input(self, title, detail="", *, question=False, cancel=None):
         return None
 
-owner = windows.create_hidden("toolkit machine construction fixture")
+owner = windows.create_hidden("workspace machine construction fixture")
 try:
     machine = WinMachine(NativeDesktop(owner), Human())
     assert windows.process_id(owner) == os.getpid()

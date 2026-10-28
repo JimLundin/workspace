@@ -1,4 +1,4 @@
-"""Start with Toolkit's private Python and activate its matching dependencies."""
+"""Start with Workspace's private Python and activate its matching dependencies."""
 
 import json
 import os
@@ -55,7 +55,7 @@ def bootstrap_plan(
     if target == executable:
         return Continue.CURRENT
     if filename not in bundle.files:
-        return InvalidBundle("Toolkit's bundled Python is incomplete. Extract the complete Windows bundle again.")
+        return InvalidBundle("Workspace's bundled Python is incomplete. Extract the complete Windows bundle again.")
     clean = tuple((name, value) for name, value in environment.items() if name not in ("PYTHONHOME", "PYTHONPATH"))
     return Relaunch((str(target), *arguments[1:]), clean, mode)
 
@@ -94,7 +94,7 @@ def bundled() -> Path | None:
     folder = Path(__file__).resolve().parent / ".runtime"
     if folder.is_dir():
         return folder
-    inherited = os.environ.get("TOOLKIT_BUNDLED_RUNTIME")
+    inherited = os.environ.get("WORKSPACE_BUNDLED_RUNTIME")
     return Path(inherited) if inherited and Path(inherited).is_dir() else None
 
 
@@ -103,7 +103,7 @@ def validate_dependencies(metadata: object, platform: str, version: tuple[int, i
     if not isinstance(required, str) or len(parts := required.split(".")) != 2 or not all(part.isdecimal() for part in parts):
         raise RuntimeError("The bundled dependency manifest has no valid Python version. Extract the complete bundle again.")
     if platform != "win32" or version != (int(parts[0]), int(parts[1])) or pointer_bytes != 8:
-        raise RuntimeError(f"This bundle requires Windows x64 Python {required}. Run StartToolkit.cmd or .python\\python.exe.")
+        raise RuntimeError(f"This bundle requires Windows x64 Python {required}. Run StartWorkspace.cmd or .python\\python.exe.")
 
 
 def activate(folder: Path | None = None) -> None:
@@ -123,7 +123,7 @@ def activate(folder: Path | None = None) -> None:
             if entry not in preferred:
                 preferred.append(entry)
         sys.path[:] = preferred + [entry for entry in sys.path if entry not in preferred]
-        os.environ["TOOLKIT_BUNDLED_RUNTIME"] = str(folder)
+        os.environ["WORKSPACE_BUNDLED_RUNTIME"] = str(folder)
         previous = os.environ.get("PYTHONPATH", "").split(os.pathsep)
         os.environ["PYTHONPATH"] = os.pathsep.join([str(folder), *(entry for entry in previous if entry and entry != str(folder))])
         interpreter = folder.parent / ".python"

@@ -193,7 +193,7 @@ class WorkPanel:
         self.question_key: tuple[str, str] | None = None
         self.approval_position: int | None = None
         self.preview_painted = False
-        self.window = Window("Toolkit · Work", self.hide, width=1080, height=740)
+        self.window = Window("Workspace · Work", self.hide, width=1080, height=740)
         self.window.setMinimumSize(740, 500)
         layout = column(self.window)
         layout.setContentsMargins(22, 18, 22, 18)

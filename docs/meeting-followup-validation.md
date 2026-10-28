@@ -35,7 +35,7 @@ Tests exercise public interfaces with actual SQLite databases, files, a local
 HTTP model endpoint, and a local JSON-command child at the Outlook transport
 boundary. Concurrency uses public observations and events. Portable campaigns
 first establish a passing, nonempty baseline. Native batches collect both test
-modules through Toolkit's public `selfcheck.run_tests`, reject skips or missing
+modules through Workspace's public `selfcheck.run_tests`, reject skips or missing
 cases, and require a passing baseline before running mutants. All mutations use
 disposable frozen source copies; no working source was mutated.
 
@@ -125,10 +125,10 @@ The records retain the following unsuccessful attempts:
 The latest broader portable selfcheck passed **723 tests**, with zero failures
 and 22 native modules skipped, in **66.45 seconds**. Root recorded unchanged
 Python source hashes and exit code zero. Its evidence is
-`/tmp/toolkit-meeting-portable-release-1792757857561805508.json` and `.log`.
+`/tmp/workspace-meeting-portable-release-1792757857561805508.json` and `.log`.
 The earlier 721-pass portable gate remains in the machine-readable history.
 
-The first full Windows failure is retained at `/tmp/toolkit-qt-full-windows.log`:
+The first full Windows failure is retained at `/tmp/workspace-qt-full-windows.log`:
 866 passed, four failed, and three opt-in modules skipped. Its failures were
 `test_saved_mail_receipt_must_belong_to_the_selected_package_version`,
 `test_sdk_publishes_sourced_notes_complete_email_and_verified_durable_actions`,
@@ -140,8 +140,8 @@ fixture, with three opt-in modules skipped. The fixture sampled foreground 0
 after Hide. Only `tests/test_windows_work_panel.py` changed; root verified that
 production Python stayed unchanged and the revised fixture compiled. A deliberate
 forced-activation control was detected. The failed gate is retained in
-`/tmp/toolkit-qt-full-windows-focus-baseline.log`, and the control is in
-`/tmp/toolkit-qt-focus-negative-control.log`.
+`/tmp/workspace-qt-full-windows-focus-baseline.log`, and the control is in
+`/tmp/workspace-qt-focus-negative-control.log`.
 
 The final native gate passed **886/886 executed tests**, with three opt-in modules
 skipped, in **225.62 seconds**, and exited zero. Its 222-file code/pin manifest
@@ -150,8 +150,8 @@ stayed unchanged; its SHA-256 is
 Root also recorded Ruff passing and 210 files passing both Mypy and Pyright,
 with zero Pyright errors/warnings. The native UI navigation and responsiveness
 checks passed and their process exited zero. These are coordinator results,
-retained in `/tmp/toolkit-qt-final-validation.json` and
-`/tmp/toolkit-qt-full-windows-final.log`.
+retained in `/tmp/workspace-qt-final-validation.json` and
+`/tmp/workspace-qt-full-windows-final.log`.
 
 Root measured the Windows keyboard engine in **before / after / after / before**
 order with Python 3.15.1, affinity mask 4, GC enabled, and 100,000 events per
@@ -178,7 +178,7 @@ pair; the referenced changes were in `keeper.py` and `winapi/windows.py`.
 Traced peak measures live memory, not total allocation churn. The four
 `keyboard-windows-*.json` files and `keyboard-paired-summary.json` are in the
 coordinator's stage:
-`/mnt/c/Users/Jim.Lundin/AppData/Local/Temp/toolkit-meeting-final-1792758885965628692`.
+`/mnt/c/Users/Jim.Lundin/AppData/Local/Temp/workspace-meeting-final-1792758885965628692`.
 
 At this pre-deployment gate, root's prepare-import and read-only verify-import
 passed without a canonical import. `meeting-import-preview.json` in that stage
@@ -225,7 +225,7 @@ focused-suite and mutation commands, source/snapshot hashes, passing baseline
 counts, required failure sites,
 all earlier unsuccessful attempts, the receipt reproducer, and sanitized real-run
 evidence. The external evidence directory is
-`/tmp/toolkit-meeting-review-1792752568910866821`.
+`/tmp/workspace-meeting-review-1792752568910866821`.
 
 To repeat the focused portable suite with the project's Python 3.15 environment:
 

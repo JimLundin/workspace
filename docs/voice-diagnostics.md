@@ -5,7 +5,7 @@ transcription endpoint. Neither uses the cleanup prompt. B normalizes whitespace
 and removes control characters before submitting Unicode input; N queues the
 full returned transcript. Clean dictation is a separate tool.
 
-Each completed use in `%LOCALAPPDATA%\toolkit\usage.jsonl` records:
+Each completed use in `%LOCALAPPDATA%\workspace\usage.jsonl` records:
 
 | Field | Meaning |
 | --- | --- |

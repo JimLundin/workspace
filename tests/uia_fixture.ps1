@@ -4,7 +4,7 @@ Add-Type -AssemblyName PresentationFramework
 $window = [Windows.Markup.XamlReader]::Parse(@'
 <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Toolkit accessibility fixture" Width="420" Height="560"
+        Title="Workspace accessibility fixture" Width="420" Height="560"
         Left="40" Top="40" WindowStartupLocation="Manual" WindowStyle="ToolWindow"
         ShowActivated="False" ShowInTaskbar="False">
   <StackPanel Margin="12">

@@ -65,7 +65,7 @@ from .work_agent import WorkAgent
 from .work_window import WorkSnapshot
 
 ROOT: Final = Path(__file__).resolve().parent.parent
-LOCK_NAME: Final = "Local\\toolkit-assistant"
+LOCK_NAME: Final = "Local\\workspace-assistant"
 LOG: Final = DIRECTORY / "assistant.log"
 WM_TRAY: Final = system.WM_APP + 20
 
@@ -95,11 +95,11 @@ class Tray:
     def __init__(self, window: int) -> None:
         self._icons = {state: shell.Icon(32, dot(32, state.value)) for state in State}
         self._lock = threading.Lock()
-        self._icon = shell.TrayIcon(window, WM_TRAY, self._icons[State.READY], "Toolkit")
+        self._icon = shell.TrayIcon(window, WM_TRAY, self._icons[State.READY], "Workspace")
 
     def show(self, state: State) -> None:
         with self._lock:
-            self._icon.update(self._icons[state], f"Toolkit: {state.name.lower().replace('_', ' ')}")
+            self._icon.update(self._icons[state], f"Workspace: {state.name.lower().replace('_', ' ')}")
 
     def notify(self, title: str, text: str, *, warning: bool = False) -> None:
         with self._lock:
@@ -116,12 +116,12 @@ class Tray:
 
 
 def foreground_context() -> Observation:
-    """Keep Toolkit's own windows from replacing the app a request refers to."""
+    """Keep Workspace's own windows from replacing the app a request refers to."""
     handle = windows.foreground()
     if not handle:
         return "unavailable"
     if windows.process_id(handle) == os.getpid():
-        return "toolkit"
+        return "workspace"
     return Window(handle, windows.title(handle), windows.exe(handle), windows.is_minimized(handle))
 
 
@@ -216,7 +216,7 @@ class AssistantApp:
             on_update=self.recording_changed, on_recovery=events.recover, on_complete=events.completed,
         )
         self.activity = ActivityTracker(
-            foreground_context, self.agent.running, enabled=os.environ.get("TOOLKIT_AGENT_CONTEXT", "recent").lower() != "off",
+            foreground_context, self.agent.running, enabled=os.environ.get("WORKSPACE_AGENT_CONTEXT", "recent").lower() != "off",
         )
         self.assistant = Assistant(
             self.desktop,
@@ -232,7 +232,7 @@ class AssistantApp:
         """What the layout last said; None until it does."""
         self.worker = threading.Thread(target=self.work, name="worker", daemon=True)
         if missing is not None:
-            self.tray.notify("Toolkit", f"The AI tools need {', '.join(missing.names)}; the layout works without them.", warning=True)
+            self.tray.notify("Workspace", f"The AI tools need {', '.join(missing.names)}; the layout works without them.", warning=True)
 
     # ---- running -----------------------------------------------------------------------
 
@@ -242,7 +242,7 @@ class AssistantApp:
         self.agent.start_worker()
         self.followups.start()
         self.meetings.start_worker()
-        if os.environ.get("TOOLKIT_DESKTOP", "on").lower() != "off":
+        if os.environ.get("WORKSPACE_DESKTOP", "on").lower() != "off":
             self.ui.desktop(self.agent.submit_canvas, self.agent.command, self.agent.snapshot,
                             watch=self.agent.watch,
                             show_agent=self.agent.show, show_work=self.show_work, stop=self.agent.stop,
@@ -386,7 +386,7 @@ class AssistantApp:
     def problem(self, message: str) -> None:
         log(message)
         system.beep(system.MB_ICONEXCLAMATION)
-        self.tray.notify("Toolkit", message, warning=True)
+        self.tray.notify("Workspace", message, warning=True)
 
     def show_overlay(self, work: Rect) -> None:
         self.ui.show_keyboard_overlay(self.overlay.layer, self.overlay.title, work, visible=self.overlay.visible, pressed=self.overlay.pressed)
@@ -475,7 +475,7 @@ class AssistantApp:
             shell.MenuItem(_Menu.USAGE.value, "Usage report"),
             shell.MenuItem(_Menu.LOGS.value, "Open logs folder"),
             shell.MenuItem(0),
-            shell.MenuItem(_Menu.QUIT.value, "Quit toolkit"),
+            shell.MenuItem(_Menu.QUIT.value, "Quit workspace"),
         ]
         match shell.show_menu(self.window.handle, items):
             case _Menu.TOGGLE_LAYOUT.value:
@@ -558,4 +558,4 @@ def run(settings: Settings | Missing) -> Exit:
 
 
 def show_error(message: str) -> None:
-    system.message_box(message, "Toolkit", system.MB_ICONHAND)
+    system.message_box(message, "Workspace", system.MB_ICONHAND)

@@ -1,4 +1,4 @@
-"""Shared appearance for Toolkit's native windows."""
+"""Shared appearance for Workspace's native windows."""
 
 from typing import Final
 

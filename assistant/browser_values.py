@@ -246,7 +246,7 @@ def tab_state(value: Json) -> TabState:
 
 
 class DefaultGroup(Enum):
-    TOOLKIT = auto()
+    WORKSPACE = auto()
 
 
 class Ungrouped(Enum):
@@ -273,7 +273,7 @@ type Destination = DefaultGroup | Ungrouped | InGroup
 
 def destination(args: dict[str, Json]) -> Destination:
     if "group_id" not in args:
-        return DefaultGroup.TOOLKIT
+        return DefaultGroup.WORKSPACE
     identity = number(args, "group_id", -2, -1, MAX_ID)
     return Ungrouped.TABS if identity == -1 else InGroup(identity)
 
@@ -285,7 +285,7 @@ class Opening:
 
 
 def opening(state: TabState, requested: Destination, window: int | None) -> Opening:
-    """Prefer the existing Toolkit group; never re-collapse a group the user opened."""
+    """Prefer the existing Workspace group; never re-collapse a group the user opened."""
     if window is not None and window not in state.windows:
         raise BrowserError("That normal browser window is closed. Refresh browser_tabs with view=strip.")
     match requested:
@@ -296,15 +296,15 @@ def opening(state: TabState, requested: Destination, window: int | None) -> Open
             if window is not None and window != group.window_id:
                 raise BrowserError("window_id must match the selected group's window.")
             return Opening(group.window_id, requested)
-        case DefaultGroup.TOOLKIT:
+        case DefaultGroup.WORKSPACE:
             def priority(group: Group) -> tuple[bool, int]:
                 return group.window_id != state.last_window, group.id
 
-            groups = sorted((group for group in state.groups if group.title == "Toolkit" and not group.shared
+            groups = sorted((group for group in state.groups if group.title == "Workspace" and not group.shared
                              and (window is None or group.window_id == window)), key=priority)
             if groups:
                 return Opening(groups[0].window_id, InGroup(groups[0].id))
-            chosen: NewGroup | Ungrouped = NewGroup("Toolkit", "blue", True)
+            chosen: NewGroup | Ungrouped = NewGroup("Workspace", "blue", True)
         case Ungrouped.TABS:
             chosen = Ungrouped.TABS
         case _:
@@ -415,7 +415,7 @@ def group_request(args: dict[str, Json]) -> GroupRequest:
     if existing:
         return EditGroup(number(args, "group_id", -1, 0, MAX_ID), identities, GroupChanges(title, color, collapsed), move)
     window = number(args, "window_id", -1, 0, MAX_ID) if "window_id" in args else None
-    return CreateGroup(identities, NewGroup(title if title is not None else "Toolkit", color or "blue",
+    return CreateGroup(identities, NewGroup(title if title is not None else "Workspace", color or "blue",
                                           collapsed if collapsed is not None else True), window, move)
 
 

@@ -171,14 +171,14 @@ def timeout_detail(error: subprocess.TimeoutExpired) -> str:
 
 
 def run(root: Path, source: Path, content: bytes, tests: list[str], timeout: float) -> Result:
-    with tempfile.TemporaryDirectory(prefix="toolkit-mutation-") as scratch:
+    with tempfile.TemporaryDirectory(prefix="workspace-mutation-") as scratch:
         folder = Path(scratch)
         candidate = folder / "source"
         copy_source(root, candidate)
         (candidate / source).write_bytes(content)
         report = folder / "results.xml"
         environment = dict(os.environ, PYTHONPATH=str(candidate), PYTHONDONTWRITEBYTECODE="1", PYTEST_DISABLE_PLUGIN_AUTOLOAD="1")
-        environment.pop("TOOLKIT_E2E", None)
+        environment.pop("WORKSPACE_E2E", None)
         environment.pop("PYTEST_ADDOPTS", None)
         started = time.perf_counter()
         with subprocess.Popen(
@@ -214,7 +214,7 @@ def campaign(
     root: Path, source: Path, original: bytes, selected: list[Mutation], tests: list[str], *, timeout: float, workers: int,
 ) -> tuple[Result, list[Result], str]:
     # Freeze once: edits made during a long run must not change its test oracle.
-    with tempfile.TemporaryDirectory(prefix="toolkit-mutation-baseline-") as scratch:
+    with tempfile.TemporaryDirectory(prefix="workspace-mutation-baseline-") as scratch:
         snapshot = Path(scratch) / "source"
         copy_source(root, snapshot)
         (snapshot / source).write_bytes(original)

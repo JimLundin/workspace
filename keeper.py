@@ -1,4 +1,4 @@
-"""The keeper: the one part of the toolkit that never changes itself.
+"""The keeper: the one part of the workspace that never changes itself.
 
 It runs the layout, assistant, and automation worker, and installs changes to
 them: when the agent asks, it checks the change (selfcheck.py), keeps a copy of
@@ -8,11 +8,11 @@ or keeps crashing later is undone, back to the copy. During the trial a small wi
 usable with the mouse alone in case the change broke the keyboard.
 
 So that a change can never break what undoes it, the agent can't edit this file,
-selfcheck.py or toolkit.pyw (`PROTECTED`), and the keeper uses a protected Qt dialog module. Its bootstrap uses only the
+selfcheck.py or workspace.pyw (`PROTECTED`), and the keeper uses a protected Qt dialog module. Its bootstrap uses only the
 standard library. The other programs talk to it through files: requests in one
 folder, and a "ready" file each program writes once it's up.
 
-    pythonw keeper.py        (toolkit.pyw does this)
+    pythonw keeper.py        (workspace.pyw does this)
 """
 
 import contextlib
@@ -34,8 +34,8 @@ from pathlib import Path
 from typing import Final, Protocol, cast
 
 LIVE: Final = Path(__file__).resolve().parent
-"""The toolkit's own folder: the version that runs."""
-DIRECTORY: Final = Path(os.environ.get("LOCALAPPDATA") or tempfile.gettempdir()) / "toolkit"
+"""The workspace's own folder: the version that runs."""
+DIRECTORY: Final = Path(os.environ.get("LOCALAPPDATA") or tempfile.gettempdir()) / "workspace"
 STATE: Final = DIRECTORY / "keeper"
 REQUESTS: Final = STATE / "requests"
 WORKSPACE: Final = DIRECTORY / "workspace"
@@ -44,7 +44,7 @@ VERSIONS: Final = DIRECTORY / "versions"
 """A copy of each version replaced by an install, newest last."""
 KEPT_VERSIONS: Final = 20
 
-PROTECTED: Final = frozenset({"keeper.py", "selfcheck.py", "toolkit.pyw", "runtime.py", "keeper_ui.py"})
+PROTECTED: Final = frozenset({"keeper.py", "selfcheck.py", "workspace.pyw", "runtime.py", "keeper_ui.py"})
 """Files a change can't touch."""
 PROGRAMS: Final = {"layout": "miryoku", "assistant": "assistant", "automation": "automation"}
 """What the keeper runs, in startup order: name -> module.
@@ -53,9 +53,9 @@ Shutdown reverses this order so execution releases the desktop before its UI.
 
 # The window titles and messages that ask each program to quit cleanly (the layout
 # lets go of held keys first). Defined here, the stable side; protocol.py uses them.
-LAYOUT_WINDOW: Final = "toolkit layout"
-ASSISTANT_WINDOW: Final = "toolkit assistant"
-AUTOMATION_WINDOW: Final = "toolkit automation"
+LAYOUT_WINDOW: Final = "workspace layout"
+ASSISTANT_WINDOW: Final = "workspace assistant"
+AUTOMATION_WINDOW: Final = "workspace automation"
 WM_CLOSE: Final = 0x0010
 WM_QUIT_LAYOUT: Final = 0x8003
 
@@ -100,7 +100,7 @@ def take_requests(*, folder: Path = REQUESTS) -> list[tuple[str, str]]:
 
 def ready() -> None:
     """Called by a program the keeper runs, once it's up."""
-    if path := os.environ.get("TOOLKIT_READY"):
+    if path := os.environ.get("WORKSPACE_READY"):
         with contextlib.suppress(OSError):
             Path(path).write_text("ready", encoding="utf-8")
 
@@ -109,7 +109,7 @@ def ready() -> None:
 
 
 def source_files(root: Path) -> list[str]:
-    """The toolkit's own files under `root`, as relative paths: not caches or history."""
+    """The workspace's own files under `root`, as relative paths: not caches or history."""
     found: list[str] = []
     for folder, directories, files in os.walk(root):
         # Prune before descending: the bundled runtime contains thousands of non-source files.
@@ -419,7 +419,7 @@ class Keeper:
         if failed and self.fresh and self.undoable is not None:
             self.rollback("it didn't start", now)
         elif failed:
-            self.world.notify("The toolkit didn't start properly; see the logs.")
+            self.world.notify("The workspace didn't start properly; see the logs.")
             self.stage = Stage.RUNNING
         elif all(self.world.is_ready(name) for name in self.children):
             if self.fresh:
@@ -459,7 +459,7 @@ class Keeper:
             if version is not None:
                 self.world.restore(version)
         except OSError as error:
-            self.world.notify(f"Recovery needs another attempt: {error}. Restart Toolkit to retry.")
+            self.world.notify(f"Recovery needs another attempt: {error}. Restart Workspace to retry.")
             self.done = True  # durable pending state lets the next launch retry
             return
         self.undoable = None
@@ -574,7 +574,7 @@ def main() -> None:
         def start(self, name: str) -> Child:
             flag = STATE / f"ready-{name}"
             flag.unlink(missing_ok=True)
-            env = {**os.environ, "TOOLKIT_READY": str(flag)}
+            env = {**os.environ, "WORKSPACE_READY": str(flag)}
             with (DIRECTORY / f"{name}.log").open("ab") as errors:
                 process = subprocess.Popen([_pythonw(), "-m", PROGRAMS[name]], cwd=LIVE, env=env, stderr=errors, creationflags=0x0800_0000)
             _log(f"started {name}")
@@ -589,7 +589,7 @@ def main() -> None:
 
         def start_check(self) -> Check:
             _log("checking the workspace")
-            review = approve if os.environ.get("TOOLKIT_AGENT_APPROVALS", "never").lower() == "ask" else None
+            review = approve if os.environ.get("WORKSPACE_AGENT_APPROVALS", "never").lower() == "ask" else None
             if not prepare_candidate(WORKSPACE, LIVE, self.candidate, review):
                 return RefusedCheck()
             return _Check(self.candidate)

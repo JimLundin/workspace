@@ -333,7 +333,7 @@ def test_invalid_reasoning_effort_is_reported_without_a_request() -> None:
         rig = Rig(endpoint, says("unused"))
         rig.run(effort="typo")
         assert not endpoint.received
-        assert rig.window.log == ["problem Invalid TOOLKIT_AGENT_REASONING_EFFORT: 'typo'."]
+        assert rig.window.log == ["problem Invalid WORKSPACE_AGENT_REASONING_EFFORT: 'typo'."]
 
 
 def test_follow_up_keeps_the_prompt_answer_and_tool_results(tmp_path: Path) -> None:
@@ -637,7 +637,7 @@ def test_key_combinations() -> None:
     assert key_strokes("ctrl+banana") is None
 
 
-# ---- changing the toolkit itself -------------------------------------------------------
+# ---- changing the workspace itself -------------------------------------------------------
 
 
 def source(tmp_path: Path) -> Workspace:
@@ -657,7 +657,7 @@ def test_the_agent_edits_checks_and_applies_a_change(tmp_path: Path) -> None:
         assert rig.machine.log == ["install Say hello"]
         assert rig.machine.reviewed == []
         assert "1 passed, 0 failed" in rig.results(2)[0]
-        assert rig.window.log[-1] == "done Installing: Say hello. The toolkit restarts in a moment."
+        assert rig.window.log[-1] == "done Installing: Say hello. The workspace restarts in a moment."
         assert len(endpoint.received) == 3  # the task ends with the install
 
 

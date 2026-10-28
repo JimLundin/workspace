@@ -82,7 +82,7 @@ _MA_NOACTIVATE: Final = 3
 
 
 def overlay_message(hwnd: int, message: int, wparam: int, lparam: int, subclass: int, _data: int) -> int:
-    """Keep an interactive overlay from activating, even if its GUI toolkit asks to."""
+    """Keep an interactive overlay from activating, even if its GUI workspace asks to."""
     if message == _WM_MOUSEACTIVATE:
         return _MA_NOACTIVATE
     if message == _WM_NCDESTROY:
@@ -262,7 +262,7 @@ def show_quietly(hwnd: int, visible: bool, *, topmost: bool = True) -> None:
 
 
 def allow_activation(hwnd: int, allowed: bool) -> None:
-    """Temporarily prevent a GUI toolkit's Show call from taking the keyboard."""
+    """Temporarily prevent a GUI workspace's Show call from taking the keyboard."""
     style = int(_GetWindowLongW(hwnd, _GWL_EXSTYLE))
     style = style & ~_WS_EX_NOACTIVATE if allowed else style | _WS_EX_NOACTIVATE
     _SetWindowLongW(hwnd, _GWL_EXSTYLE, ctypes.c_long(style & 0xFFFF_FFFF).value)

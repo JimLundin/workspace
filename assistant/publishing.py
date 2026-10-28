@@ -11,7 +11,7 @@ from pathlib import Path
 
 from keeper import copy_source, source_diff, source_digest, source_files
 
-DEFAULT_REMOTE = "https://github.com/JimLundin/toolkit.git"
+DEFAULT_REMOTE = "https://github.com/JimLundin/workspace.git"
 
 
 class PublishError(Exception):
@@ -48,7 +48,7 @@ def publish_source(
     """Freeze, review, test, commit and push. No force push and no edits to live source."""
     if not summary.strip():
         raise PublishError("A commit summary is required.")
-    with tempfile.TemporaryDirectory(prefix="toolkit-publish-") as scratch:
+    with tempfile.TemporaryDirectory(prefix="workspace-publish-") as scratch:
         root = Path(scratch)
         candidate, checkout = root / "candidate", root / "checkout"
         copy_source(workspace, candidate)
@@ -56,10 +56,10 @@ def publish_source(
         diff = source_diff(live, candidate)
         if not diff:
             raise PublishError("There are no source changes to publish.")
-        destination = branch or f"toolkit/agent-{datetime.now():%Y%m%d-%H%M%S}-{uuid.uuid4().hex[:8]}"
+        destination = branch or f"workspace/agent-{datetime.now():%Y%m%d-%H%M%S}-{uuid.uuid4().hex[:8]}"
         detail = (f"Push to {remote}\nBase: {base}\nNew branch: {destination}\nCommit: {summary}\nSource SHA-256: {digest}"
                   f"\n\nRun this code and its tests before publishing?\n\n{diff}")
-        if not approve("Publish toolkit changes?", detail):
+        if not approve("Publish workspace changes?", detail):
             raise PublishError("Publishing cancelled; nothing was pushed.")
         if stopped():
             raise PublishError("Publishing stopped; nothing was pushed.")
@@ -70,7 +70,7 @@ def publish_source(
                 (checkout / name).read_bytes().replace(b"\r\n", b"\n") != (live / name).read_bytes().replace(b"\r\n", b"\n")
                 for name in remote_files
             ):
-                raise PublishError("The remote base differs from the running source. Update your local toolkit before publishing.")
+                raise PublishError("The remote base differs from the running source. Update your local workspace before publishing.")
             if source_digest(candidate) != digest:
                 raise PublishError("Source changed during review; review it again.")
             try:
@@ -89,8 +89,8 @@ def publish_source(
             copy_source(candidate, checkout)
             git(checkout, "add", "-A", "--", *names)
             git(
-                checkout, "-c", f"user.name={os.environ.get('TOOLKIT_GIT_AUTHOR_NAME', 'Toolkit Agent')}",
-                "-c", f"user.email={os.environ.get('TOOLKIT_GIT_AUTHOR_EMAIL', 'toolkit@localhost')}", "commit", "-m", summary,
+                checkout, "-c", f"user.name={os.environ.get('WORKSPACE_GIT_AUTHOR_NAME', 'Workspace Agent')}",
+                "-c", f"user.email={os.environ.get('WORKSPACE_GIT_AUTHOR_EMAIL', 'workspace@localhost')}", "commit", "-m", summary,
             )
             if stopped():
                 raise PublishError("Publishing stopped; nothing was pushed.")
@@ -99,6 +99,6 @@ def publish_source(
             actual = git(checkout, "ls-remote", "--exit-code", "origin", f"refs/heads/{destination}")
             if actual.split() != [commit, f"refs/heads/{destination}"]:
                 raise PublishError("The push returned but remote readback did not match. Inspect the branch before retrying.")
-            return f"Published {commit} to {remote}, branch {destination}. Main and the running toolkit were not changed."
+            return f"Published {commit} to {remote}, branch {destination}. Main and the running workspace were not changed."
 
         return publish() if execute is None else execute(publish)

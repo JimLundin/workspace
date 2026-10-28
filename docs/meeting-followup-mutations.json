@@ -2,17 +2,17 @@
   "format": 1,
   "status": "predeployment_gate_complete",
   "scope": "Independent public-interface validation of the meeting follow-up backend and retained real-run evidence.",
-  "evidence_directory": "/tmp/toolkit-meeting-review-1792752568910866821",
+  "evidence_directory": "/tmp/workspace-meeting-review-1792752568910866821",
   "snapshots": [
     {
       "phase": "initial",
       "created_at": 1792752568.9906178,
-      "root": "/home/jim/toolkit",
-      "snapshot": "/tmp/toolkit-meeting-review-1792752568910866821/source",
+      "root": "/home/jim/workspace",
+      "snapshot": "/tmp/workspace-meeting-review-1792752568910866821/source",
       "snapshot_sha256": "837b77574ecb4beeb551ba159abd9bca6b148405cac92b5931a63e5022aa94a0",
       "python": "3.15.1 (main, Oct 22 2026, 01:08:56) [GCC 9.4.0]",
       "command": [
-        "/home/jim/toolkit/.venv/bin/python",
+        "/home/jim/workspace/.venv/bin/python",
         "-B",
         "-m",
         "pytest",
@@ -20,15 +20,15 @@
         "--tb=short",
         "-o",
         "addopts=",
-        "--junitxml=/tmp/toolkit-meeting-review-1792752568910866821/baseline.xml",
+        "--junitxml=/tmp/workspace-meeting-review-1792752568910866821/baseline.xml",
         "tests/test_meeting_followup.py",
         "tests/test_meeting_requests.py",
         "tests/test_meeting_workflow.py",
         "tests/test_outlook.py"
       ],
-      "cwd": "/tmp/toolkit-meeting-review-1792752568910866821/source",
+      "cwd": "/tmp/workspace-meeting-review-1792752568910866821/source",
       "environment_overrides": {
-        "PYTHONPATH": "/tmp/toolkit-meeting-review-1792752568910866821/source",
+        "PYTHONPATH": "/tmp/workspace-meeting-review-1792752568910866821/source",
         "PYTHONDONTWRITEBYTECODE": "1",
         "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1"
       },
@@ -36,7 +36,7 @@
         "AGENTS.md": "4d1d3997bb19aff36c8a63f6951d0be692a35af0dc23f025f6a5f4265c453f52",
         "GLOSSARY.md": "b44f29a4dea8fe4072a770471d4471427d221f30b2dfb4dd3b47b4b7ca06aaa6",
         "README.md": "4538e954dba8fddd98e49f4dbeeae8b64a0a601acb05625dfc450ea42877e354",
-        "StartToolkit.cmd": "c2b79732b38326bdfdb430d59319b5f5fbfe715663ae840330fa585c0e5cd5d9",
+        "StartWorkspace.cmd": "c2b79732b38326bdfdb430d59319b5f5fbfe715663ae840330fa585c0e5cd5d9",
         "assistant/__init__.py": "374865178a2cc48f636a6bd135325fb8ba587e925d1922ae102ac31d3ecbb146",
         "assistant/__main__.py": "acf3c0528d247d61719e8f4c0d7c5b52e7ea6b038d89e187180760baaf977e68",
         "assistant/action_text.py": "753c3ef9709243d6a49d51b93611d882e654ca01de588498037c00d61d8bf4b0",
@@ -250,7 +250,7 @@
         "tests/test_work_window.py": "3f07a0c557c36df549e9d2f86ba1f78e182793a85c781ef7bb988b2c2ddaccae",
         "tests/test_workspace.py": "62f61b5795b852e0721db10e02cfa452f1d6ea5b3b5f81e74426dd581a05a126",
         "tests/uia_fixture.ps1": "abf8e7f71831babf61738f964475cd1b3c2ef0de989035ca914ba72cfbb16207",
-        "toolkit.pyw": "7c96e231cc50780f65e6f45373816f9053afabb189c55d26b2a0fd464cc63c5c",
+        "workspace.pyw": "7c96e231cc50780f65e6f45373816f9053afabb189c55d26b2a0fd464cc63c5c",
         "usage.py": "453e359c17a7208c3344b73f0b7b423dd8f25e5a14c51488979d32f0ec0c6938",
         "winapi/__init__.py": "f574eaeb8dc239e532fffc65d87a5840a51a5c182b3caede39788c6de9fc624f",
         "winapi/_core.py": "5e6003505de4f4eb958e4dc287a02e27b8a38c37af86b628d368e6b62ada8794",
@@ -274,13 +274,13 @@
     {
       "phase": "store-and-execution",
       "created_at": 1792753212.6614234,
-      "snapshot": "/tmp/toolkit-meeting-review-1792752568910866821/execution-source",
+      "snapshot": "/tmp/workspace-meeting-review-1792752568910866821/execution-source",
       "snapshot_sha256": "ba435b7f5427d3e1faec3bf2dbc74f2b14b9fed965f8c99bf44ed2410cbc06ae",
       "source_manifest": {
         "AGENTS.md": "4d1d3997bb19aff36c8a63f6951d0be692a35af0dc23f025f6a5f4265c453f52",
         "GLOSSARY.md": "b44f29a4dea8fe4072a770471d4471427d221f30b2dfb4dd3b47b4b7ca06aaa6",
         "README.md": "4538e954dba8fddd98e49f4dbeeae8b64a0a601acb05625dfc450ea42877e354",
-        "StartToolkit.cmd": "c2b79732b38326bdfdb430d59319b5f5fbfe715663ae840330fa585c0e5cd5d9",
+        "StartWorkspace.cmd": "c2b79732b38326bdfdb430d59319b5f5fbfe715663ae840330fa585c0e5cd5d9",
         "assistant/__init__.py": "374865178a2cc48f636a6bd135325fb8ba587e925d1922ae102ac31d3ecbb146",
         "assistant/__main__.py": "acf3c0528d247d61719e8f4c0d7c5b52e7ea6b038d89e187180760baaf977e68",
         "assistant/action_text.py": "753c3ef9709243d6a49d51b93611d882e654ca01de588498037c00d61d8bf4b0",
@@ -497,7 +497,7 @@
         "tests/test_work_window.py": "3f07a0c557c36df549e9d2f86ba1f78e182793a85c781ef7bb988b2c2ddaccae",
         "tests/test_workspace.py": "62f61b5795b852e0721db10e02cfa452f1d6ea5b3b5f81e74426dd581a05a126",
         "tests/uia_fixture.ps1": "abf8e7f71831babf61738f964475cd1b3c2ef0de989035ca914ba72cfbb16207",
-        "toolkit.pyw": "7c96e231cc50780f65e6f45373816f9053afabb189c55d26b2a0fd464cc63c5c",
+        "workspace.pyw": "7c96e231cc50780f65e6f45373816f9053afabb189c55d26b2a0fd464cc63c5c",
         "usage.py": "453e359c17a7208c3344b73f0b7b423dd8f25e5a14c51488979d32f0ec0c6938",
         "winapi/__init__.py": "f574eaeb8dc239e532fffc65d87a5840a51a5c182b3caede39788c6de9fc624f",
         "winapi/_core.py": "5e6003505de4f4eb958e4dc287a02e27b8a38c37af86b628d368e6b62ada8794",
@@ -532,13 +532,13 @@
     {
       "phase": "attempt-and-package-receipts",
       "created_at": 1792753752.2361677,
-      "snapshot": "/tmp/toolkit-meeting-review-1792752568910866821/attempt-source",
+      "snapshot": "/tmp/workspace-meeting-review-1792752568910866821/attempt-source",
       "snapshot_sha256": "c9739392d186a8ac8f485c5e64ab006a4e7040926ec73dbc2b0011c97407d3cb",
       "source_manifest": {
         "AGENTS.md": "4d1d3997bb19aff36c8a63f6951d0be692a35af0dc23f025f6a5f4265c453f52",
         "GLOSSARY.md": "b44f29a4dea8fe4072a770471d4471427d221f30b2dfb4dd3b47b4b7ca06aaa6",
         "README.md": "e3e22d80a6a780cb1edebe20481fff03ee1acb37c2807e487ec3d3545060152f",
-        "StartToolkit.cmd": "c2b79732b38326bdfdb430d59319b5f5fbfe715663ae840330fa585c0e5cd5d9",
+        "StartWorkspace.cmd": "c2b79732b38326bdfdb430d59319b5f5fbfe715663ae840330fa585c0e5cd5d9",
         "assistant/__init__.py": "374865178a2cc48f636a6bd135325fb8ba587e925d1922ae102ac31d3ecbb146",
         "assistant/__main__.py": "acf3c0528d247d61719e8f4c0d7c5b52e7ea6b038d89e187180760baaf977e68",
         "assistant/action_text.py": "753c3ef9709243d6a49d51b93611d882e654ca01de588498037c00d61d8bf4b0",
@@ -756,7 +756,7 @@
         "tests/test_work_window.py": "3f07a0c557c36df549e9d2f86ba1f78e182793a85c781ef7bb988b2c2ddaccae",
         "tests/test_workspace.py": "62f61b5795b852e0721db10e02cfa452f1d6ea5b3b5f81e74426dd581a05a126",
         "tests/uia_fixture.ps1": "abf8e7f71831babf61738f964475cd1b3c2ef0de989035ca914ba72cfbb16207",
-        "toolkit.pyw": "7c96e231cc50780f65e6f45373816f9053afabb189c55d26b2a0fd464cc63c5c",
+        "workspace.pyw": "7c96e231cc50780f65e6f45373816f9053afabb189c55d26b2a0fd464cc63c5c",
         "usage.py": "453e359c17a7208c3344b73f0b7b423dd8f25e5a14c51488979d32f0ec0c6938",
         "winapi/__init__.py": "f574eaeb8dc239e532fffc65d87a5840a51a5c182b3caede39788c6de9fc624f",
         "winapi/_core.py": "5e6003505de4f4eb958e4dc287a02e27b8a38c37af86b628d368e6b62ada8794",
@@ -784,13 +784,13 @@
     {
       "phase": "path-fix",
       "created_at": 1792755572.3710442,
-      "snapshot": "/tmp/toolkit-meeting-review-1792752568910866821/path-source",
+      "snapshot": "/tmp/workspace-meeting-review-1792752568910866821/path-source",
       "snapshot_sha256": "624a636b40767407016c13066c8325da3b26374927419e3c572a02528359bb06",
       "source_manifest": {
         "AGENTS.md": "4d1d3997bb19aff36c8a63f6951d0be692a35af0dc23f025f6a5f4265c453f52",
         "GLOSSARY.md": "b44f29a4dea8fe4072a770471d4471427d221f30b2dfb4dd3b47b4b7ca06aaa6",
         "README.md": "06e87bb782cd0c15ac70349f8e3c2be09f866e728c3384da34f2855219ba06f5",
-        "StartToolkit.cmd": "c2b79732b38326bdfdb430d59319b5f5fbfe715663ae840330fa585c0e5cd5d9",
+        "StartWorkspace.cmd": "c2b79732b38326bdfdb430d59319b5f5fbfe715663ae840330fa585c0e5cd5d9",
         "assistant/__init__.py": "374865178a2cc48f636a6bd135325fb8ba587e925d1922ae102ac31d3ecbb146",
         "assistant/__main__.py": "acf3c0528d247d61719e8f4c0d7c5b52e7ea6b038d89e187180760baaf977e68",
         "assistant/action_text.py": "753c3ef9709243d6a49d51b93611d882e654ca01de588498037c00d61d8bf4b0",
@@ -1014,7 +1014,7 @@
         "tests/test_work_window.py": "3f07a0c557c36df549e9d2f86ba1f78e182793a85c781ef7bb988b2c2ddaccae",
         "tests/test_workspace.py": "62f61b5795b852e0721db10e02cfa452f1d6ea5b3b5f81e74426dd581a05a126",
         "tests/uia_fixture.ps1": "abf8e7f71831babf61738f964475cd1b3c2ef0de989035ca914ba72cfbb16207",
-        "toolkit.pyw": "7c96e231cc50780f65e6f45373816f9053afabb189c55d26b2a0fd464cc63c5c",
+        "workspace.pyw": "7c96e231cc50780f65e6f45373816f9053afabb189c55d26b2a0fd464cc63c5c",
         "usage.py": "453e359c17a7208c3344b73f0b7b423dd8f25e5a14c51488979d32f0ec0c6938",
         "winapi/__init__.py": "f574eaeb8dc239e532fffc65d87a5840a51a5c182b3caede39788c6de9fc624f",
         "winapi/_core.py": "5e6003505de4f4eb958e4dc287a02e27b8a38c37af86b628d368e6b62ada8794",
@@ -1045,7 +1045,7 @@
     {
       "phase": "rename-retry",
       "created_at": 1792757288.7455482,
-      "snapshot": "/tmp/toolkit-meeting-review-1792752568910866821/retry-source",
+      "snapshot": "/tmp/workspace-meeting-review-1792752568910866821/retry-source",
       "snapshot_sha256": "a9265029a8b299e4834b8d958976bcd307f7b64be10cca9bd64a4836e655d46c",
       "snapshot_hash_method": "SHA256 of UTF-8 compact JSON source_manifest with sorted keys",
       "source_manifest": {
@@ -1250,7 +1250,7 @@
         "tests/test_work_window.py": "3f07a0c557c36df549e9d2f86ba1f78e182793a85c781ef7bb988b2c2ddaccae",
         "tests/test_workspace.py": "62f61b5795b852e0721db10e02cfa452f1d6ea5b3b5f81e74426dd581a05a126",
         "tests/uia_fixture.ps1": "abf8e7f71831babf61738f964475cd1b3c2ef0de989035ca914ba72cfbb16207",
-        "toolkit.pyw": "7c96e231cc50780f65e6f45373816f9053afabb189c55d26b2a0fd464cc63c5c",
+        "workspace.pyw": "7c96e231cc50780f65e6f45373816f9053afabb189c55d26b2a0fd464cc63c5c",
         "usage.py": "453e359c17a7208c3344b73f0b7b423dd8f25e5a14c51488979d32f0ec0c6938",
         "winapi/__init__.py": "f574eaeb8dc239e532fffc65d87a5840a51a5c182b3caede39788c6de9fc624f",
         "winapi/_core.py": "5e6003505de4f4eb958e4dc287a02e27b8a38c37af86b628d368e6b62ada8794",
@@ -1290,13 +1290,13 @@
       "errors": 0,
       "skipped": 0,
       "pytest_seconds": 8.54,
-      "log": "/tmp/toolkit-meeting-review-1792752568910866821/baseline.log",
-      "junit": "/tmp/toolkit-meeting-review-1792752568910866821/baseline.xml"
+      "log": "/tmp/workspace-meeting-review-1792752568910866821/baseline.log",
+      "junit": "/tmp/workspace-meeting-review-1792752568910866821/baseline.xml"
     },
     {
       "phase": "store-and-execution",
       "command": [
-        "/home/jim/toolkit/.venv/bin/python",
+        "/home/jim/workspace/.venv/bin/python",
         "-B",
         "-m",
         "pytest",
@@ -1304,16 +1304,16 @@
         "--tb=short",
         "-o",
         "addopts=",
-        "--junitxml=/tmp/toolkit-meeting-review-1792752568910866821/final-baseline.xml",
+        "--junitxml=/tmp/workspace-meeting-review-1792752568910866821/final-baseline.xml",
         "tests/test_meeting_followup.py",
         "tests/test_meeting_requests.py",
         "tests/test_meeting_workflow.py",
         "tests/test_outlook.py",
         "tests/test_meeting_execution.py"
       ],
-      "cwd": "/tmp/toolkit-meeting-review-1792752568910866821/execution-source",
+      "cwd": "/tmp/workspace-meeting-review-1792752568910866821/execution-source",
       "environment_overrides": {
-        "PYTHONPATH": "/tmp/toolkit-meeting-review-1792752568910866821/execution-source",
+        "PYTHONPATH": "/tmp/workspace-meeting-review-1792752568910866821/execution-source",
         "PYTHONDONTWRITEBYTECODE": "1",
         "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1"
       },
@@ -1325,13 +1325,13 @@
       "errors": 0,
       "skipped": 0,
       "pytest_seconds": 16.47,
-      "log": "/tmp/toolkit-meeting-review-1792752568910866821/final-baseline.log",
-      "junit": "/tmp/toolkit-meeting-review-1792752568910866821/final-baseline.xml"
+      "log": "/tmp/workspace-meeting-review-1792752568910866821/final-baseline.log",
+      "junit": "/tmp/workspace-meeting-review-1792752568910866821/final-baseline.xml"
     },
     {
       "phase": "final-portable",
       "command": [
-        "/home/jim/toolkit/.venv/bin/python",
+        "/home/jim/workspace/.venv/bin/python",
         "-B",
         "-m",
         "pytest",
@@ -1339,16 +1339,16 @@
         "--tb=short",
         "-o",
         "addopts=",
-        "--junitxml=/tmp/toolkit-meeting-review-1792752568910866821/acceptance-baseline.xml",
+        "--junitxml=/tmp/workspace-meeting-review-1792752568910866821/acceptance-baseline.xml",
         "tests/test_meeting_followup.py",
         "tests/test_meeting_requests.py",
         "tests/test_meeting_workflow.py",
         "tests/test_outlook.py",
         "tests/test_meeting_execution.py"
       ],
-      "cwd": "/tmp/toolkit-meeting-review-1792752568910866821/attempt-source",
+      "cwd": "/tmp/workspace-meeting-review-1792752568910866821/attempt-source",
       "environment_overrides": {
-        "PYTHONPATH": "/tmp/toolkit-meeting-review-1792752568910866821/attempt-source",
+        "PYTHONPATH": "/tmp/workspace-meeting-review-1792752568910866821/attempt-source",
         "PYTHONDONTWRITEBYTECODE": "1",
         "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1"
       },
@@ -1361,13 +1361,13 @@
       "skipped": 0,
       "passed": 63,
       "pytest_seconds": 25.64,
-      "log": "/tmp/toolkit-meeting-review-1792752568910866821/acceptance-baseline.log",
-      "junit": "/tmp/toolkit-meeting-review-1792752568910866821/acceptance-baseline.xml"
+      "log": "/tmp/workspace-meeting-review-1792752568910866821/acceptance-baseline.log",
+      "junit": "/tmp/workspace-meeting-review-1792752568910866821/acceptance-baseline.xml"
     },
     {
       "phase": "rename-retry-final",
       "command": [
-        "/home/jim/toolkit/.venv/bin/python",
+        "/home/jim/workspace/.venv/bin/python",
         "-B",
         "-u",
         "-m",
@@ -1379,16 +1379,16 @@
         "-o",
         "faulthandler_timeout=20",
         "--durations=12",
-        "--junitxml=/tmp/toolkit-meeting-review-1792752568910866821/retry-baseline.xml",
+        "--junitxml=/tmp/workspace-meeting-review-1792752568910866821/retry-baseline.xml",
         "tests/test_meeting_followup.py",
         "tests/test_meeting_requests.py",
         "tests/test_meeting_workflow.py",
         "tests/test_outlook.py",
         "tests/test_meeting_execution.py"
       ],
-      "cwd": "/tmp/toolkit-meeting-review-1792752568910866821/retry-source",
+      "cwd": "/tmp/workspace-meeting-review-1792752568910866821/retry-source",
       "environment_overrides": {
-        "PYTHONPATH": "/tmp/toolkit-meeting-review-1792752568910866821/retry-source",
+        "PYTHONPATH": "/tmp/workspace-meeting-review-1792752568910866821/retry-source",
         "PYTHONDONTWRITEBYTECODE": "1",
         "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1"
       },
@@ -1597,7 +1597,7 @@
         "tests/test_work_window.py": "3f07a0c557c36df549e9d2f86ba1f78e182793a85c781ef7bb988b2c2ddaccae",
         "tests/test_workspace.py": "62f61b5795b852e0721db10e02cfa452f1d6ea5b3b5f81e74426dd581a05a126",
         "tests/uia_fixture.ps1": "abf8e7f71831babf61738f964475cd1b3c2ef0de989035ca914ba72cfbb16207",
-        "toolkit.pyw": "7c96e231cc50780f65e6f45373816f9053afabb189c55d26b2a0fd464cc63c5c",
+        "workspace.pyw": "7c96e231cc50780f65e6f45373816f9053afabb189c55d26b2a0fd464cc63c5c",
         "usage.py": "453e359c17a7208c3344b73f0b7b423dd8f25e5a14c51488979d32f0ec0c6938",
         "winapi/__init__.py": "f574eaeb8dc239e532fffc65d87a5840a51a5c182b3caede39788c6de9fc624f",
         "winapi/_core.py": "5e6003505de4f4eb958e4dc287a02e27b8a38c37af86b628d368e6b62ada8794",
@@ -1617,8 +1617,8 @@
         "winapi/system.py": "a4a815fdfd07e7f438c52bea28aa521a8b88f3a93d4ba442c643eb9913edeabb",
         "winapi/windows.py": "ad8c57e8dd7629c8cc74a9e5cc90b6c896615fcbe74f6def7b9445388ca538b8"
       },
-      "log": "/tmp/toolkit-meeting-review-1792752568910866821/retry-baseline.log",
-      "junit": "/tmp/toolkit-meeting-review-1792752568910866821/retry-baseline.xml",
+      "log": "/tmp/workspace-meeting-review-1792752568910866821/retry-baseline.log",
+      "junit": "/tmp/workspace-meeting-review-1792752568910866821/retry-baseline.xml",
       "platform": "linux",
       "expected_collection": [
         "tests.test_meeting_execution.test_model_completion_without_a_published_and_selected_package_remains_blocked",
@@ -2476,16 +2476,16 @@
       "name": "requests",
       "workers": 2,
       "timeout_seconds": 45,
-      "report_path": "/tmp/toolkit-meeting-review-1792752568910866821/requests-mutations.json",
+      "report_path": "/tmp/workspace-meeting-review-1792752568910866821/requests-mutations.json",
       "execution": {
         "name": "requests",
         "command": [
-          "/home/jim/toolkit/.venv/bin/python",
+          "/home/jim/workspace/.venv/bin/python",
           "-B",
-          "/tmp/toolkit-meeting-review-1792752568910866821/source/scripts/mutate.py",
+          "/tmp/workspace-meeting-review-1792752568910866821/source/scripts/mutate.py",
           "assistant/meeting_requests.py",
           "--root",
-          "/tmp/toolkit-meeting-review-1792752568910866821/source",
+          "/tmp/workspace-meeting-review-1792752568910866821/source",
           "--tests",
           "tests/test_meeting_requests.py",
           "--workers",
@@ -2495,7 +2495,7 @@
           "--limit",
           "0",
           "--output",
-          "/tmp/toolkit-meeting-review-1792752568910866821/requests-mutations.json",
+          "/tmp/workspace-meeting-review-1792752568910866821/requests-mutations.json",
           "--replace",
           "existing.bundle != bundle or existing.prompt != prompt or existing.recipe_version != candidate.recipe_version",
           "existing.bundle != bundle or existing.recipe_version != candidate.recipe_version",
@@ -2509,8 +2509,8 @@
           "if bundle.fingerprint != digest(row[2], \"saved source fingerprint\"):",
           "if False:"
         ],
-        "cwd": "/tmp/toolkit-meeting-review-1792752568910866821/source",
-        "log": "/tmp/toolkit-meeting-review-1792752568910866821/requests-mutations.log",
+        "cwd": "/tmp/workspace-meeting-review-1792752568910866821/source",
+        "log": "/tmp/workspace-meeting-review-1792752568910866821/requests-mutations.log",
         "started_at": 1792752767.6861033,
         "returncode": 0,
         "elapsed_seconds": 2.8384230509982444,
@@ -2604,16 +2604,16 @@
       "name": "domain",
       "workers": 2,
       "timeout_seconds": 45,
-      "report_path": "/tmp/toolkit-meeting-review-1792752568910866821/domain-mutations.json",
+      "report_path": "/tmp/workspace-meeting-review-1792752568910866821/domain-mutations.json",
       "execution": {
         "name": "domain",
         "command": [
-          "/home/jim/toolkit/.venv/bin/python",
+          "/home/jim/workspace/.venv/bin/python",
           "-B",
-          "/tmp/toolkit-meeting-review-1792752568910866821/source/scripts/mutate.py",
+          "/tmp/workspace-meeting-review-1792752568910866821/source/scripts/mutate.py",
           "assistant/meeting_followup.py",
           "--root",
-          "/tmp/toolkit-meeting-review-1792752568910866821/source",
+          "/tmp/workspace-meeting-review-1792752568910866821/source",
           "--tests",
           "tests/test_meeting_followup.py",
           "--workers",
@@ -2623,7 +2623,7 @@
           "--limit",
           "0",
           "--output",
-          "/tmp/toolkit-meeting-review-1792752568910866821/domain-mutations.json",
+          "/tmp/workspace-meeting-review-1792752568910866821/domain-mutations.json",
           "--replace",
           "if hashlib.sha256(self.content).hexdigest() != self.source.sha256:",
           "if False:",
@@ -2649,8 +2649,8 @@
           "if isinstance(self.due, StatedDue) and self.due.evidence not in self.citations:",
           "if False:"
         ],
-        "cwd": "/tmp/toolkit-meeting-review-1792752568910866821/source",
-        "log": "/tmp/toolkit-meeting-review-1792752568910866821/domain-mutations.log",
+        "cwd": "/tmp/workspace-meeting-review-1792752568910866821/source",
+        "log": "/tmp/workspace-meeting-review-1792752568910866821/domain-mutations.log",
         "started_at": 1792752770.525588,
         "returncode": 1,
         "elapsed_seconds": 18.705649802985135,
@@ -2799,16 +2799,16 @@
       "name": "store",
       "workers": 2,
       "timeout_seconds": 45,
-      "report_path": "/tmp/toolkit-meeting-review-1792752568910866821/store-mutations.json",
+      "report_path": "/tmp/workspace-meeting-review-1792752568910866821/store-mutations.json",
       "execution": {
         "name": "store",
         "command": [
-          "/home/jim/toolkit/.venv/bin/python",
+          "/home/jim/workspace/.venv/bin/python",
           "-B",
-          "/tmp/toolkit-meeting-review-1792752568910866821/source/scripts/mutate.py",
+          "/tmp/workspace-meeting-review-1792752568910866821/source/scripts/mutate.py",
           "assistant/meeting_followup_store.py",
           "--root",
-          "/tmp/toolkit-meeting-review-1792752568910866821/source",
+          "/tmp/workspace-meeting-review-1792752568910866821/source",
           "--tests",
           "tests/test_meeting_followup.py",
           "--workers",
@@ -2818,7 +2818,7 @@
           "--limit",
           "0",
           "--output",
-          "/tmp/toolkit-meeting-review-1792752568910866821/store-mutations.json",
+          "/tmp/workspace-meeting-review-1792752568910866821/store-mutations.json",
           "--replace",
           "content = _read_file(store.transcript, MAX_TRANSCRIPT_BYTES)",
           "content = _read_file(store.transcript, MAX_TRANSCRIPT_BYTES).replace(b\"\\r\\n\", b\"\\n\")",
@@ -2838,8 +2838,8 @@
           "                    if row != committed:\n",
           "                    if False:\n"
         ],
-        "cwd": "/tmp/toolkit-meeting-review-1792752568910866821/source",
-        "log": "/tmp/toolkit-meeting-review-1792752568910866821/store-mutations.log",
+        "cwd": "/tmp/workspace-meeting-review-1792752568910866821/source",
+        "log": "/tmp/workspace-meeting-review-1792752568910866821/store-mutations.log",
         "started_at": 1792752789.23325,
         "returncode": 1,
         "elapsed_seconds": 13.743774838978425,
@@ -2960,16 +2960,16 @@
       "name": "workflow",
       "workers": 2,
       "timeout_seconds": 45,
-      "report_path": "/tmp/toolkit-meeting-review-1792752568910866821/workflow-mutations.json",
+      "report_path": "/tmp/workspace-meeting-review-1792752568910866821/workflow-mutations.json",
       "execution": {
         "name": "workflow",
         "command": [
-          "/home/jim/toolkit/.venv/bin/python",
+          "/home/jim/workspace/.venv/bin/python",
           "-B",
-          "/tmp/toolkit-meeting-review-1792752568910866821/source/scripts/mutate.py",
+          "/tmp/workspace-meeting-review-1792752568910866821/source/scripts/mutate.py",
           "assistant/meeting_workflow.py",
           "--root",
-          "/tmp/toolkit-meeting-review-1792752568910866821/source",
+          "/tmp/workspace-meeting-review-1792752568910866821/source",
           "--tests",
           "tests/test_meeting_workflow.py",
           "--workers",
@@ -2979,7 +2979,7 @@
           "--limit",
           "0",
           "--output",
-          "/tmp/toolkit-meeting-review-1792752568910866821/workflow-mutations.json",
+          "/tmp/workspace-meeting-review-1792752568910866821/workflow-mutations.json",
           "--replace",
           "                request = self.requests.prepare(identity, bundle, followup_prompt(bundle), at=self.clock())",
           "                self.submit_identified(identity, followup_prompt(bundle))\n                request = self.requests.prepare(identity, bundle, followup_prompt(bundle), at=self.clock())",
@@ -3008,8 +3008,8 @@
           "            while True:\n                observations: list[threading.Event] = []",
           "            while not self._closing.is_set():\n                observations: list[threading.Event] = []"
         ],
-        "cwd": "/tmp/toolkit-meeting-review-1792752568910866821/source",
-        "log": "/tmp/toolkit-meeting-review-1792752568910866821/workflow-mutations.log",
+        "cwd": "/tmp/workspace-meeting-review-1792752568910866821/source",
+        "log": "/tmp/workspace-meeting-review-1792752568910866821/workflow-mutations.log",
         "started_at": 1792752802.9779158,
         "returncode": 0,
         "elapsed_seconds": 22.445560319989454,
@@ -3184,16 +3184,16 @@
       "name": "outlook",
       "workers": 2,
       "timeout_seconds": 45,
-      "report_path": "/tmp/toolkit-meeting-review-1792752568910866821/outlook-mutations.json",
+      "report_path": "/tmp/workspace-meeting-review-1792752568910866821/outlook-mutations.json",
       "execution": {
         "name": "outlook",
         "command": [
-          "/home/jim/toolkit/.venv/bin/python",
+          "/home/jim/workspace/.venv/bin/python",
           "-B",
-          "/tmp/toolkit-meeting-review-1792752568910866821/source/scripts/mutate.py",
+          "/tmp/workspace-meeting-review-1792752568910866821/source/scripts/mutate.py",
           "assistant/outlook.py",
           "--root",
-          "/tmp/toolkit-meeting-review-1792752568910866821/source",
+          "/tmp/workspace-meeting-review-1792752568910866821/source",
           "--tests",
           "tests/test_outlook.py",
           "--workers",
@@ -3203,7 +3203,7 @@
           "--limit",
           "0",
           "--output",
-          "/tmp/toolkit-meeting-review-1792752568910866821/outlook-mutations.json",
+          "/tmp/workspace-meeting-review-1792752568910866821/outlook-mutations.json",
           "--replace",
           "            self._record(record)  # Persist identity and selected mailbox before any native Save.",
           "            pass  # Mutant omits the durable pre-effect binding.",
@@ -3232,8 +3232,8 @@
           "if result is Missing.DRAFT and isinstance(record.destination, ReadyOutlook):",
           "if False:"
         ],
-        "cwd": "/tmp/toolkit-meeting-review-1792752568910866821/source",
-        "log": "/tmp/toolkit-meeting-review-1792752568910866821/outlook-mutations.log",
+        "cwd": "/tmp/workspace-meeting-review-1792752568910866821/source",
+        "log": "/tmp/workspace-meeting-review-1792752568910866821/outlook-mutations.log",
         "started_at": 1792752825.4248166,
         "returncode": 0,
         "elapsed_seconds": 18.494252199016046,
@@ -3415,16 +3415,16 @@
       "name": "final-domain",
       "workers": 2,
       "timeout_seconds": 45,
-      "report_path": "/tmp/toolkit-meeting-review-1792752568910866821/final-domain-mutations.json",
+      "report_path": "/tmp/workspace-meeting-review-1792752568910866821/final-domain-mutations.json",
       "execution": {
         "name": "final-domain",
         "command": [
-          "/home/jim/toolkit/.venv/bin/python",
+          "/home/jim/workspace/.venv/bin/python",
           "-B",
-          "/tmp/toolkit-meeting-review-1792752568910866821/execution-source/scripts/mutate.py",
+          "/tmp/workspace-meeting-review-1792752568910866821/execution-source/scripts/mutate.py",
           "assistant/meeting_followup.py",
           "--root",
-          "/tmp/toolkit-meeting-review-1792752568910866821/execution-source",
+          "/tmp/workspace-meeting-review-1792752568910866821/execution-source",
           "--tests",
           "tests/test_meeting_followup.py",
           "--workers",
@@ -3434,7 +3434,7 @@
           "--limit",
           "0",
           "--output",
-          "/tmp/toolkit-meeting-review-1792752568910866821/final-domain-mutations.json",
+          "/tmp/workspace-meeting-review-1792752568910866821/final-domain-mutations.json",
           "--replace",
           "if hashlib.sha256(self.content).hexdigest() != self.source.sha256:",
           "if False:",
@@ -3460,8 +3460,8 @@
           "if isinstance(self.due, StatedDue) and self.due.evidence not in self.citations:",
           "if False:"
         ],
-        "cwd": "/tmp/toolkit-meeting-review-1792752568910866821/execution-source",
-        "log": "/tmp/toolkit-meeting-review-1792752568910866821/final-domain-mutations.log",
+        "cwd": "/tmp/workspace-meeting-review-1792752568910866821/execution-source",
+        "log": "/tmp/workspace-meeting-review-1792752568910866821/final-domain-mutations.log",
         "started_at": 1792753475.0345852,
         "returncode": 0,
         "elapsed_seconds": 43.51760951598408,
@@ -3618,16 +3618,16 @@
       "name": "final-store",
       "workers": 2,
       "timeout_seconds": 45,
-      "report_path": "/tmp/toolkit-meeting-review-1792752568910866821/final-store-mutations.json",
+      "report_path": "/tmp/workspace-meeting-review-1792752568910866821/final-store-mutations.json",
       "execution": {
         "name": "final-store",
         "command": [
-          "/home/jim/toolkit/.venv/bin/python",
+          "/home/jim/workspace/.venv/bin/python",
           "-B",
-          "/tmp/toolkit-meeting-review-1792752568910866821/execution-source/scripts/mutate.py",
+          "/tmp/workspace-meeting-review-1792752568910866821/execution-source/scripts/mutate.py",
           "assistant/meeting_followup_store.py",
           "--root",
-          "/tmp/toolkit-meeting-review-1792752568910866821/execution-source",
+          "/tmp/workspace-meeting-review-1792752568910866821/execution-source",
           "--tests",
           "tests/test_meeting_followup.py",
           "--workers",
@@ -3637,7 +3637,7 @@
           "--limit",
           "0",
           "--output",
-          "/tmp/toolkit-meeting-review-1792752568910866821/final-store-mutations.json",
+          "/tmp/workspace-meeting-review-1792752568910866821/final-store-mutations.json",
           "--replace",
           "content = _read_file(store.transcript, MAX_TRANSCRIPT_BYTES)",
           "content = _read_file(store.transcript, MAX_TRANSCRIPT_BYTES).replace(b\"\\r\\n\", b\"\\n\")",
@@ -3669,8 +3669,8 @@
           "                if committed != row:\n",
           "                if False:\n"
         ],
-        "cwd": "/tmp/toolkit-meeting-review-1792752568910866821/execution-source",
-        "log": "/tmp/toolkit-meeting-review-1792752568910866821/final-store-mutations.log",
+        "cwd": "/tmp/workspace-meeting-review-1792752568910866821/execution-source",
+        "log": "/tmp/workspace-meeting-review-1792752568910866821/final-store-mutations.log",
         "started_at": 1792753518.5540748,
         "returncode": 0,
         "elapsed_seconds": 76.94556584401289,
@@ -3864,16 +3864,16 @@
       "name": "execution-isolation",
       "workers": 2,
       "timeout_seconds": 45,
-      "report_path": "/tmp/toolkit-meeting-review-1792752568910866821/execution-isolation-mutations.json",
+      "report_path": "/tmp/workspace-meeting-review-1792752568910866821/execution-isolation-mutations.json",
       "execution": {
         "name": "execution-isolation",
         "command": [
-          "/home/jim/toolkit/.venv/bin/python",
+          "/home/jim/workspace/.venv/bin/python",
           "-B",
-          "/tmp/toolkit-meeting-review-1792752568910866821/execution-source/scripts/mutate.py",
+          "/tmp/workspace-meeting-review-1792752568910866821/execution-source/scripts/mutate.py",
           "assistant/agent_execution.py",
           "--root",
-          "/tmp/toolkit-meeting-review-1792752568910866821/execution-source",
+          "/tmp/workspace-meeting-review-1792752568910866821/execution-source",
           "--tests",
           "tests/test_meeting_execution.py",
           "--workers",
@@ -3883,7 +3883,7 @@
           "--limit",
           "0",
           "--output",
-          "/tmp/toolkit-meeting-review-1792752568910866821/execution-isolation-mutations.json",
+          "/tmp/workspace-meeting-review-1792752568910866821/execution-isolation-mutations.json",
           "--replace",
           "if self.meeting is None and claim.task.id.startswith(\"meeting-followup-\"):",
           "if False:",
@@ -3897,8 +3897,8 @@
           "return followup.completed(outcome) if followup is not None else outcome",
           "return outcome"
         ],
-        "cwd": "/tmp/toolkit-meeting-review-1792752568910866821/execution-source",
-        "log": "/tmp/toolkit-meeting-review-1792752568910866821/execution-isolation-mutations.log",
+        "cwd": "/tmp/workspace-meeting-review-1792752568910866821/execution-source",
+        "log": "/tmp/workspace-meeting-review-1792752568910866821/execution-isolation-mutations.log",
         "started_at": 1792753388.841569,
         "returncode": 0,
         "elapsed_seconds": 25.877402570971753,
@@ -3995,16 +3995,16 @@
       "name": "meeting-tool-isolation",
       "workers": 2,
       "timeout_seconds": 45,
-      "report_path": "/tmp/toolkit-meeting-review-1792752568910866821/meeting-tool-isolation-mutations.json",
+      "report_path": "/tmp/workspace-meeting-review-1792752568910866821/meeting-tool-isolation-mutations.json",
       "execution": {
         "name": "meeting-tool-isolation",
         "command": [
-          "/home/jim/toolkit/.venv/bin/python",
+          "/home/jim/workspace/.venv/bin/python",
           "-B",
-          "/tmp/toolkit-meeting-review-1792752568910866821/execution-source/scripts/mutate.py",
+          "/tmp/workspace-meeting-review-1792752568910866821/execution-source/scripts/mutate.py",
           "assistant/agent.py",
           "--root",
-          "/tmp/toolkit-meeting-review-1792752568910866821/execution-source",
+          "/tmp/workspace-meeting-review-1792752568910866821/execution-source",
           "--tests",
           "tests/test_meeting_execution.py",
           "--workers",
@@ -4014,7 +4014,7 @@
           "--limit",
           "0",
           "--output",
-          "/tmp/toolkit-meeting-review-1792752568910866821/meeting-tool-isolation-mutations.json",
+          "/tmp/workspace-meeting-review-1792752568910866821/meeting-tool-isolation-mutations.json",
           "--replace",
           "specs = (*meeting_tools.SPECS, *WORK_SPECS, *(spec for spec in SPECS if spec.name == \"ask_user\"))",
           "specs = (*meeting_tools.SPECS, *WORK_SPECS, *SPECS)",
@@ -4022,8 +4022,8 @@
           "elif self.followup is not None and call.name not in meeting_tools.ALLOWED:",
           "elif False:"
         ],
-        "cwd": "/tmp/toolkit-meeting-review-1792752568910866821/execution-source",
-        "log": "/tmp/toolkit-meeting-review-1792752568910866821/meeting-tool-isolation-mutations.log",
+        "cwd": "/tmp/workspace-meeting-review-1792752568910866821/execution-source",
+        "log": "/tmp/workspace-meeting-review-1792752568910866821/meeting-tool-isolation-mutations.log",
         "started_at": 1792753414.7196393,
         "returncode": 0,
         "elapsed_seconds": 16.913237027998548,
@@ -4084,16 +4084,16 @@
       "name": "meeting-delivery",
       "workers": 2,
       "timeout_seconds": 45,
-      "report_path": "/tmp/toolkit-meeting-review-1792752568910866821/meeting-delivery-mutations.json",
+      "report_path": "/tmp/workspace-meeting-review-1792752568910866821/meeting-delivery-mutations.json",
       "execution": {
         "name": "meeting-delivery",
         "command": [
-          "/home/jim/toolkit/.venv/bin/python",
+          "/home/jim/workspace/.venv/bin/python",
           "-B",
-          "/tmp/toolkit-meeting-review-1792752568910866821/execution-source/scripts/mutate.py",
+          "/tmp/workspace-meeting-review-1792752568910866821/execution-source/scripts/mutate.py",
           "assistant/meeting_execution.py",
           "--root",
-          "/tmp/toolkit-meeting-review-1792752568910866821/execution-source",
+          "/tmp/workspace-meeting-review-1792752568910866821/execution-source",
           "--tests",
           "tests/test_meeting_execution.py",
           "--workers",
@@ -4103,7 +4103,7 @@
           "--limit",
           "0",
           "--output",
-          "/tmp/toolkit-meeting-review-1792752568910866821/meeting-delivery-mutations.json",
+          "/tmp/workspace-meeting-review-1792752568910866821/meeting-delivery-mutations.json",
           "--replace",
           "content = self.packages.draft_revision(self.request.task_id, version, draft_id, revision).content",
           "content = next(value.content for value in self.packages.drafts(self.request.task_id, version) if value.id == draft_id)",
@@ -4126,8 +4126,8 @@
           "if target.version != package.version or not isinstance(result, (outlook.SavedOutlookDraft, outlook.SavedEmlDraft)):",
           "if not isinstance(result, (outlook.SavedOutlookDraft, outlook.SavedEmlDraft)):"
         ],
-        "cwd": "/tmp/toolkit-meeting-review-1792752568910866821/execution-source",
-        "log": "/tmp/toolkit-meeting-review-1792752568910866821/meeting-delivery-mutations.log",
+        "cwd": "/tmp/workspace-meeting-review-1792752568910866821/execution-source",
+        "log": "/tmp/workspace-meeting-review-1792752568910866821/meeting-delivery-mutations.log",
         "started_at": 1792753431.634608,
         "returncode": 1,
         "elapsed_seconds": 43.39756070100702,
@@ -4267,16 +4267,16 @@
       "name": "attempt-workflow",
       "workers": 2,
       "timeout_seconds": 45,
-      "report_path": "/tmp/toolkit-meeting-review-1792752568910866821/attempt-workflow-mutations.json",
+      "report_path": "/tmp/workspace-meeting-review-1792752568910866821/attempt-workflow-mutations.json",
       "execution": {
         "name": "attempt-workflow",
         "command": [
-          "/home/jim/toolkit/.venv/bin/python",
+          "/home/jim/workspace/.venv/bin/python",
           "-B",
-          "/tmp/toolkit-meeting-review-1792752568910866821/attempt-source/scripts/mutate.py",
+          "/tmp/workspace-meeting-review-1792752568910866821/attempt-source/scripts/mutate.py",
           "assistant/meeting_workflow.py",
           "--root",
-          "/tmp/toolkit-meeting-review-1792752568910866821/attempt-source",
+          "/tmp/workspace-meeting-review-1792752568910866821/attempt-source",
           "--tests",
           "tests/test_meeting_workflow.py",
           "--workers",
@@ -4286,7 +4286,7 @@
           "--limit",
           "0",
           "--output",
-          "/tmp/toolkit-meeting-review-1792752568910866821/attempt-workflow-mutations.json",
+          "/tmp/workspace-meeting-review-1792752568910866821/attempt-workflow-mutations.json",
           "--replace",
           "                request = self.requests.prepare(identity, bundle, followup_prompt(bundle), at=self.clock())",
           "                self.submit_identified(identity, followup_prompt(bundle))\n                request = self.requests.prepare(identity, bundle, followup_prompt(bundle), at=self.clock())",
@@ -4318,8 +4318,8 @@
           "            case DraftChange(task_id, version, draft_id):\n                key = \"draft\", task_id, version, draft_id, change.attempt_id\n            case ActionChange(task_id, version, action_id):\n                key = \"action\", task_id, version, action_id, change.attempt_id",
           "            case DraftChange(task_id, version, draft_id):\n                key = \"draft\", task_id, version, draft_id\n            case ActionChange(task_id, version, action_id):\n                key = \"action\", task_id, version, action_id"
         ],
-        "cwd": "/tmp/toolkit-meeting-review-1792752568910866821/attempt-source",
-        "log": "/tmp/toolkit-meeting-review-1792752568910866821/attempt-workflow-mutations.log",
+        "cwd": "/tmp/workspace-meeting-review-1792752568910866821/attempt-source",
+        "log": "/tmp/workspace-meeting-review-1792752568910866821/attempt-workflow-mutations.log",
         "started_at": 1792753817.6030529,
         "returncode": 0,
         "elapsed_seconds": 26.32635892299004,
@@ -4511,16 +4511,16 @@
       "name": "final-delivery-version",
       "workers": 2,
       "timeout_seconds": 45,
-      "report_path": "/tmp/toolkit-meeting-review-1792752568910866821/final-delivery-version-mutations.json",
+      "report_path": "/tmp/workspace-meeting-review-1792752568910866821/final-delivery-version-mutations.json",
       "execution": {
         "name": "final-delivery-version",
         "command": [
-          "/home/jim/toolkit/.venv/bin/python",
+          "/home/jim/workspace/.venv/bin/python",
           "-B",
-          "/tmp/toolkit-meeting-review-1792752568910866821/attempt-source/scripts/mutate.py",
+          "/tmp/workspace-meeting-review-1792752568910866821/attempt-source/scripts/mutate.py",
           "assistant/meeting_execution.py",
           "--root",
-          "/tmp/toolkit-meeting-review-1792752568910866821/attempt-source",
+          "/tmp/workspace-meeting-review-1792752568910866821/attempt-source",
           "--tests",
           "tests/test_meeting_execution.py",
           "--workers",
@@ -4530,13 +4530,13 @@
           "--limit",
           "0",
           "--output",
-          "/tmp/toolkit-meeting-review-1792752568910866821/final-delivery-version-mutations.json",
+          "/tmp/workspace-meeting-review-1792752568910866821/final-delivery-version-mutations.json",
           "--replace",
           "if target.version != package.version or not isinstance(result, (outlook.SavedOutlookDraft, outlook.SavedEmlDraft)):",
           "if not isinstance(result, (outlook.SavedOutlookDraft, outlook.SavedEmlDraft)):"
         ],
-        "cwd": "/tmp/toolkit-meeting-review-1792752568910866821/attempt-source",
-        "log": "/tmp/toolkit-meeting-review-1792752568910866821/final-delivery-version-mutations.log",
+        "cwd": "/tmp/workspace-meeting-review-1792752568910866821/attempt-source",
+        "log": "/tmp/workspace-meeting-review-1792752568910866821/final-delivery-version-mutations.log",
         "started_at": 1792753843.930219,
         "returncode": 0,
         "elapsed_seconds": 20.865379961032886,
@@ -4582,17 +4582,17 @@
       "name": "path-store",
       "workers": 2,
       "timeout_seconds": 60,
-      "report_path": "/tmp/toolkit-meeting-review-1792752568910866821/path-store-mutations.json",
+      "report_path": "/tmp/workspace-meeting-review-1792752568910866821/path-store-mutations.json",
       "report_sha256": "56d4be77b9604efa554def18e7fd1e4f1cf3edd19ba82931114e454b422bc7d4",
       "execution": {
         "name": "path-store",
         "command": [
-          "/home/jim/toolkit/.venv/bin/python",
+          "/home/jim/workspace/.venv/bin/python",
           "-B",
-          "/tmp/toolkit-meeting-review-1792752568910866821/path-source/scripts/mutate.py",
+          "/tmp/workspace-meeting-review-1792752568910866821/path-source/scripts/mutate.py",
           "assistant/meeting_followup_store.py",
           "--root",
-          "/tmp/toolkit-meeting-review-1792752568910866821/path-source",
+          "/tmp/workspace-meeting-review-1792752568910866821/path-source",
           "--tests",
           "tests/test_meeting_followup.py",
           "--workers",
@@ -4602,7 +4602,7 @@
           "--limit",
           "0",
           "--output",
-          "/tmp/toolkit-meeting-review-1792752568910866821/path-store-mutations.json",
+          "/tmp/workspace-meeting-review-1792752568910866821/path-store-mutations.json",
           "--replace",
           "content = _read_file(store.transcript, MAX_TRANSCRIPT_BYTES)",
           "content = _read_file(store.transcript, MAX_TRANSCRIPT_BYTES).replace(b\"\\r\\n\", b\"\\n\")",
@@ -4634,8 +4634,8 @@
           "                if committed != row:\n",
           "                if False:\n"
         ],
-        "cwd": "/tmp/toolkit-meeting-review-1792752568910866821/path-source",
-        "log": "/tmp/toolkit-meeting-review-1792752568910866821/path-store-mutations.log",
+        "cwd": "/tmp/workspace-meeting-review-1792752568910866821/path-source",
+        "log": "/tmp/workspace-meeting-review-1792752568910866821/path-store-mutations.log",
         "started_at": 1792755573.6593342,
         "returncode": 1,
         "elapsed_seconds": 360.0785387940123,
@@ -4809,11 +4809,11 @@
       "name": "native-path-contracts",
       "workers": 1,
       "timeout_seconds": 180,
-      "report_path": "/tmp/toolkit-meeting-review-1792752568910866821/native-path-validation/native-results.json",
+      "report_path": "/tmp/workspace-meeting-review-1792752568910866821/native-path-validation/native-results.json",
       "report_sha256": "26034b38173ca8b00686b5647e8df628bae78cf96281aea5a1d0f22dcb82a1d9",
       "execution": {
         "command": [
-          "/mnt/c/Users/Jim.Lundin/AppData/Local/Temp/toolkit-qt-migration-1792751468/toolkit/.python/python.exe",
+          "/mnt/c/Users/Jim.Lundin/AppData/Local/Temp/workspace-qt-migration-1792751468/workspace/.python/python.exe",
           "-B",
           "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\tk-mf-v-1792756160712796133\\native-mutation-master.py",
           "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\tk-mf-v-1792756160712796133\\native-plan.json"
@@ -4839,7 +4839,7 @@
       "baseline_tests": 22,
       "baseline_skipped_tests": 0,
       "baseline_skipped_modules": 0,
-      "baseline_report": "/tmp/toolkit-meeting-review-1792752568910866821/native-path-validation/baseline-tests.json",
+      "baseline_report": "/tmp/workspace-meeting-review-1792752568910866821/native-path-validation/baseline-tests.json",
       "baseline_report_sha256": "5454199cbaac2469a8934ae8693dec0362dc2a541d0bb099ec20f9bcffa24851",
       "snapshot_sha256": "624a636b40767407016c13066c8325da3b26374927419e3c572a02528359bb06",
       "driver_sha256": {
@@ -4876,7 +4876,7 @@
           ],
           "detail": "Both designated deep tests failed actual filesystem mkdir before cleanup with WinError 3/206 when Windows normalization was removed.",
           "command": [
-            "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\toolkit-qt-migration-1792751468\\toolkit\\.python\\python.exe",
+            "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\workspace-qt-migration-1792751468\\workspace\\.python\\python.exe",
             "-B",
             "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\tk-mf-v-1792756160712796133\\native-followup-check.py",
             "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\tk-mf-v-1792756160712796133\\normalization-removed-config.json"
@@ -4884,8 +4884,8 @@
           "cwd": "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\tk-mf-v-1792756160712796133",
           "returncode": 1,
           "source_unchanged": true,
-          "log": "/tmp/toolkit-meeting-review-1792752568910866821/native-path-validation/normalization-removed.log",
-          "report_path": "/tmp/toolkit-meeting-review-1792752568910866821/native-path-validation/normalization-removed-tests.json",
+          "log": "/tmp/workspace-meeting-review-1792752568910866821/native-path-validation/normalization-removed.log",
+          "report_path": "/tmp/workspace-meeting-review-1792752568910866821/native-path-validation/normalization-removed-tests.json",
           "report_sha256": "91d92f706e0cc683b9d8370c614d7c20d4a68bb3c2a275bb3b56c650a75ddf5d"
         },
         {
@@ -4910,7 +4910,7 @@
           ],
           "detail": "The designated deep publication test failed at an unrelated WinError 5 atomic rename before reaching the FileVerifier assertion. Raw runner classified by test name only; independent trace review rejects this as a mutation kill.",
           "command": [
-            "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\toolkit-qt-migration-1792751468\\toolkit\\.python\\python.exe",
+            "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\workspace-qt-migration-1792751468\\workspace\\.python\\python.exe",
             "-B",
             "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\tk-mf-v-1792756160712796133\\native-followup-check.py",
             "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\tk-mf-v-1792756160712796133\\file-verifier-bypassed-config.json"
@@ -4918,8 +4918,8 @@
           "cwd": "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\tk-mf-v-1792756160712796133",
           "returncode": 1,
           "source_unchanged": true,
-          "log": "/tmp/toolkit-meeting-review-1792752568910866821/native-path-validation/file-verifier-bypassed.log",
-          "report_path": "/tmp/toolkit-meeting-review-1792752568910866821/native-path-validation/file-verifier-bypassed-tests.json",
+          "log": "/tmp/workspace-meeting-review-1792752568910866821/native-path-validation/file-verifier-bypassed.log",
+          "report_path": "/tmp/workspace-meeting-review-1792752568910866821/native-path-validation/file-verifier-bypassed-tests.json",
           "report_sha256": "4fdd634f9c61be4e00338e631440cc005b69f81165fc43d434b0cd142cfafeff"
         }
       ]
@@ -4930,17 +4930,17 @@
       "name": "retry-store",
       "workers": 1,
       "timeout_seconds": 180,
-      "report_path": "/tmp/toolkit-meeting-review-1792752568910866821/retry-store-mutations.json",
+      "report_path": "/tmp/workspace-meeting-review-1792752568910866821/retry-store-mutations.json",
       "report_sha256": "3472ad888aa854826d8303272180a51d42f56f2e9b1cba99aafb660aac458c2f",
       "execution": {
         "name": "retry-store",
         "command": [
-          "/home/jim/toolkit/.venv/bin/python",
+          "/home/jim/workspace/.venv/bin/python",
           "-B",
-          "/tmp/toolkit-meeting-review-1792752568910866821/retry-source/scripts/mutate.py",
+          "/tmp/workspace-meeting-review-1792752568910866821/retry-source/scripts/mutate.py",
           "assistant/meeting_followup_store.py",
           "--root",
-          "/tmp/toolkit-meeting-review-1792752568910866821/retry-source",
+          "/tmp/workspace-meeting-review-1792752568910866821/retry-source",
           "--tests",
           "tests/test_meeting_followup.py",
           "--workers",
@@ -4950,7 +4950,7 @@
           "--limit",
           "0",
           "--output",
-          "/tmp/toolkit-meeting-review-1792752568910866821/retry-store-mutations.json",
+          "/tmp/workspace-meeting-review-1792752568910866821/retry-store-mutations.json",
           "--replace",
           "content = _read_file(store.transcript, MAX_TRANSCRIPT_BYTES)",
           "content = _read_file(store.transcript, MAX_TRANSCRIPT_BYTES).replace(b\"\\r\\n\", b\"\\n\")",
@@ -4976,8 +4976,8 @@
           "                if committed != row:\n",
           "                if False:\n"
         ],
-        "cwd": "/tmp/toolkit-meeting-review-1792752568910866821/retry-source",
-        "log": "/tmp/toolkit-meeting-review-1792752568910866821/retry-store-mutations.log",
+        "cwd": "/tmp/workspace-meeting-review-1792752568910866821/retry-source",
+        "log": "/tmp/workspace-meeting-review-1792752568910866821/retry-store-mutations.log",
         "started_at": 1792757407.0799155,
         "reason": "Serial retry of the eight earlier inconclusive 60s runs on the frozen bounded-retry fix.",
         "returncode": 0,
@@ -5140,12 +5140,12 @@
       "name": "native-path-and-retry-contracts",
       "workers": 1,
       "timeout_seconds": 180,
-      "report_path": "/tmp/toolkit-meeting-review-1792752568910866821/native-retry-validation/native-results.json",
+      "report_path": "/tmp/workspace-meeting-review-1792752568910866821/native-retry-validation/native-results.json",
       "report_sha256": "aad7af1d11a410710e2de656660d56f446ac5a93e3c57c7c768a0cb4463eeda2",
       "execution": {
         "name": "validation",
         "command": [
-          "/mnt/c/Users/Jim.Lundin/AppData/Local/Temp/toolkit-qt-migration-1792751468/toolkit/.python/python.exe",
+          "/mnt/c/Users/Jim.Lundin/AppData/Local/Temp/workspace-qt-migration-1792751468/workspace/.python/python.exe",
           "-B",
           "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\tk-mf-r-1792757502020613487\\native-mutation-master.py",
           "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\tk-mf-r-1792757502020613487\\native-plan.json"
@@ -5173,7 +5173,7 @@
       "baseline_tests": 26,
       "baseline_skipped_tests": 0,
       "baseline_skipped_modules": 0,
-      "baseline_report": "/tmp/toolkit-meeting-review-1792752568910866821/native-retry-validation/baseline-tests.json",
+      "baseline_report": "/tmp/workspace-meeting-review-1792752568910866821/native-retry-validation/baseline-tests.json",
       "baseline_report_sha256": "29f89e0f42653a1be5864950b2a5d4293ce29470833a38e1f443df87164c21fe",
       "snapshot_sha256": "a9265029a8b299e4834b8d958976bcd307f7b64be10cca9bd64a4836e655d46c",
       "driver_sha256": {
@@ -5222,7 +5222,7 @@
           ],
           "detail": "The recorded failures reached every required contract site; trace review confirmed the classification.",
           "command": [
-            "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\toolkit-qt-migration-1792751468\\toolkit\\.python\\python.exe",
+            "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\workspace-qt-migration-1792751468\\workspace\\.python\\python.exe",
             "-B",
             "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\tk-mf-r-1792757502020613487\\native-followup-check.py",
             "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\tk-mf-r-1792757502020613487\\normalization-removed-config.json"
@@ -5230,8 +5230,8 @@
           "cwd": "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\tk-mf-r-1792757502020613487",
           "returncode": 1,
           "source_unchanged": true,
-          "log": "/tmp/toolkit-meeting-review-1792752568910866821/native-retry-validation/normalization-removed.log",
-          "report_path": "/tmp/toolkit-meeting-review-1792752568910866821/native-retry-validation/normalization-removed-tests.json",
+          "log": "/tmp/workspace-meeting-review-1792752568910866821/native-retry-validation/normalization-removed.log",
+          "report_path": "/tmp/workspace-meeting-review-1792752568910866821/native-retry-validation/normalization-removed-tests.json",
           "report_sha256": "3275a08566e6686b8017f4d47ecde931cc6fe4aed8325c6b1584771ba4ad1d96"
         },
         {
@@ -5264,7 +5264,7 @@
           ],
           "detail": "The recorded failures reached every required contract site; trace review confirmed the classification.",
           "command": [
-            "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\toolkit-qt-migration-1792751468\\toolkit\\.python\\python.exe",
+            "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\workspace-qt-migration-1792751468\\workspace\\.python\\python.exe",
             "-B",
             "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\tk-mf-r-1792757502020613487\\native-followup-check.py",
             "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\tk-mf-r-1792757502020613487\\file-verifier-bypassed-config.json"
@@ -5272,8 +5272,8 @@
           "cwd": "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\tk-mf-r-1792757502020613487",
           "returncode": 1,
           "source_unchanged": true,
-          "log": "/tmp/toolkit-meeting-review-1792752568910866821/native-retry-validation/file-verifier-bypassed.log",
-          "report_path": "/tmp/toolkit-meeting-review-1792752568910866821/native-retry-validation/file-verifier-bypassed-tests.json",
+          "log": "/tmp/workspace-meeting-review-1792752568910866821/native-retry-validation/file-verifier-bypassed.log",
+          "report_path": "/tmp/workspace-meeting-review-1792752568910866821/native-retry-validation/file-verifier-bypassed-tests.json",
           "report_sha256": "ca5b4469094f93c6bbb7a5b21b217081337f7bada264ef4a6f7101f803a42760"
         },
         {
@@ -5317,7 +5317,7 @@
           ],
           "detail": "The recorded failures reached every required contract site; trace review confirmed the classification.",
           "command": [
-            "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\toolkit-qt-migration-1792751468\\toolkit\\.python\\python.exe",
+            "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\workspace-qt-migration-1792751468\\workspace\\.python\\python.exe",
             "-B",
             "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\tk-mf-r-1792757502020613487\\native-followup-check.py",
             "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\tk-mf-r-1792757502020613487\\sharing-retries-removed-config.json"
@@ -5325,8 +5325,8 @@
           "cwd": "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\tk-mf-r-1792757502020613487",
           "returncode": 1,
           "source_unchanged": true,
-          "log": "/tmp/toolkit-meeting-review-1792752568910866821/native-retry-validation/sharing-retries-removed.log",
-          "report_path": "/tmp/toolkit-meeting-review-1792752568910866821/native-retry-validation/sharing-retries-removed-tests.json",
+          "log": "/tmp/workspace-meeting-review-1792752568910866821/native-retry-validation/sharing-retries-removed.log",
+          "report_path": "/tmp/workspace-meeting-review-1792752568910866821/native-retry-validation/sharing-retries-removed-tests.json",
           "report_sha256": "cba6e44808ca158f618522a07eef3beb65c5629e0fac369216e055c5f700a7d5"
         },
         {
@@ -5359,7 +5359,7 @@
           ],
           "detail": "The recorded failures reached every required contract site; trace review confirmed the classification.",
           "command": [
-            "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\toolkit-qt-migration-1792751468\\toolkit\\.python\\python.exe",
+            "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\workspace-qt-migration-1792751468\\workspace\\.python\\python.exe",
             "-B",
             "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\tk-mf-r-1792757502020613487\\native-followup-check.py",
             "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\tk-mf-r-1792757502020613487\\all-errors-retried-config.json"
@@ -5367,8 +5367,8 @@
           "cwd": "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\tk-mf-r-1792757502020613487",
           "returncode": 1,
           "source_unchanged": true,
-          "log": "/tmp/toolkit-meeting-review-1792752568910866821/native-retry-validation/all-errors-retried.log",
-          "report_path": "/tmp/toolkit-meeting-review-1792752568910866821/native-retry-validation/all-errors-retried-tests.json",
+          "log": "/tmp/workspace-meeting-review-1792752568910866821/native-retry-validation/all-errors-retried.log",
+          "report_path": "/tmp/workspace-meeting-review-1792752568910866821/native-retry-validation/all-errors-retried-tests.json",
           "report_sha256": "c5efdae29aade2f27427d308882ed1eaa33d86f05beb90502d074388c4fd801d"
         },
         {
@@ -5401,7 +5401,7 @@
           ],
           "detail": "The recorded failures reached every required contract site; trace review confirmed the classification.",
           "command": [
-            "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\toolkit-qt-migration-1792751468\\toolkit\\.python\\python.exe",
+            "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\workspace-qt-migration-1792751468\\workspace\\.python\\python.exe",
             "-B",
             "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\tk-mf-r-1792757502020613487\\native-followup-check.py",
             "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\tk-mf-r-1792757502020613487\\access-denied-not-retried-config.json"
@@ -5409,8 +5409,8 @@
           "cwd": "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\tk-mf-r-1792757502020613487",
           "returncode": 1,
           "source_unchanged": true,
-          "log": "/tmp/toolkit-meeting-review-1792752568910866821/native-retry-validation/access-denied-not-retried.log",
-          "report_path": "/tmp/toolkit-meeting-review-1792752568910866821/native-retry-validation/access-denied-not-retried-tests.json",
+          "log": "/tmp/workspace-meeting-review-1792752568910866821/native-retry-validation/access-denied-not-retried.log",
+          "report_path": "/tmp/workspace-meeting-review-1792752568910866821/native-retry-validation/access-denied-not-retried-tests.json",
           "report_sha256": "d6c0cecd77ebd1b0d8905587163adea443266f6f183baad241893ba8bf93c7d7"
         }
       ]
@@ -5495,13 +5495,13 @@
   ],
   "receipt_history_reproducer": {
     "command": [
-      "/home/jim/toolkit/.venv/bin/python",
+      "/home/jim/workspace/.venv/bin/python",
       "-B",
-      "/tmp/toolkit-meeting-review-1792752568910866821/receipt-history-probe.py"
+      "/tmp/workspace-meeting-review-1792752568910866821/receipt-history-probe.py"
     ],
-    "cwd": "/tmp/toolkit-meeting-review-1792752568910866821/source",
+    "cwd": "/tmp/workspace-meeting-review-1792752568910866821/source",
     "environment_overrides": {
-      "PYTHONPATH": "/tmp/toolkit-meeting-review-1792752568910866821/source",
+      "PYTHONPATH": "/tmp/workspace-meeting-review-1792752568910866821/source",
       "PYTHONDONTWRITEBYTECODE": "1"
     },
     "returncode": 0,
@@ -5561,21 +5561,21 @@
   },
   "broader_portable_selfcheck": {
     "provenance": "Root release coordinator; metadata and final log summary inspected by validator. Log hash below is the digest recorded by root.",
-    "evidence_path": "/tmp/toolkit-meeting-portable-release-1792757857561805508.json",
+    "evidence_path": "/tmp/workspace-meeting-portable-release-1792757857561805508.json",
     "passed": 723,
     "failed": 0,
     "skipped_native_modules": 22,
     "changed_python_files": [],
     "command": [
-      "/home/jim/toolkit/.venv/bin/python",
+      "/home/jim/workspace/.venv/bin/python",
       "-B",
       "selfcheck.py",
       "--durations",
       "15"
     ],
-    "cwd": "/home/jim/toolkit",
+    "cwd": "/home/jim/workspace",
     "elapsed_seconds": 66.45328105002409,
-    "log": "/tmp/toolkit-meeting-portable-release-1792757857561805508.log",
+    "log": "/tmp/workspace-meeting-portable-release-1792757857561805508.log",
     "log_sha256": "34d6351853259b49b06cd214d42f4badac359c26c50446124cc6703c2750b210",
     "python_source_sha256": {
       "assistant/__init__.py": "374865178a2cc48f636a6bd135325fb8ba587e925d1922ae102ac31d3ecbb146",
@@ -5771,7 +5771,7 @@
       "tests/test_work_submissions.py": "d28ad8b22c9ce3519ebf76d1ab7f7404adf81dd3f064362431928262472511c3",
       "tests/test_work_window.py": "3f07a0c557c36df549e9d2f86ba1f78e182793a85c781ef7bb988b2c2ddaccae",
       "tests/test_workspace.py": "62f61b5795b852e0721db10e02cfa452f1d6ea5b3b5f81e74426dd581a05a126",
-      "toolkit.pyw": "7c96e231cc50780f65e6f45373816f9053afabb189c55d26b2a0fd464cc63c5c",
+      "workspace.pyw": "7c96e231cc50780f65e6f45373816f9053afabb189c55d26b2a0fd464cc63c5c",
       "usage.py": "453e359c17a7208c3344b73f0b7b423dd8f25e5a14c51488979d32f0ec0c6938",
       "winapi/__init__.py": "f574eaeb8dc239e532fffc65d87a5840a51a5c182b3caede39788c6de9fc624f",
       "winapi/_core.py": "5e6003505de4f4eb958e4dc287a02e27b8a38c37af86b628d368e6b62ada8794",
@@ -5796,11 +5796,11 @@
     "native_fixture_only_delta": true,
     "native_fixture_delta_evidence": {
       "evidence": {
-        "path": "/tmp/toolkit-meeting-portable-native-fixture-delta.json",
+        "path": "/tmp/workspace-meeting-portable-native-fixture-delta.json",
         "sha256": "4dd7303641d3531afb8a258ed9a0616c83c838343fad242f2c282304c8c008f0"
       },
       "observations": {
-        "portable_report": "/tmp/toolkit-meeting-portable-release-1792757857561805508.json",
+        "portable_report": "/tmp/workspace-meeting-portable-release-1792757857561805508.json",
         "changed_python_files": [
           "tests/test_windows_work_panel.py"
         ],
@@ -5814,7 +5814,7 @@
   },
   "real_windows_run": {
     "provenance": "Actual Windows and real-model run performed by execution_actions; sanitized retained evidence independently read by validation.",
-    "artifact_directory": "/mnt/c/Users/Jim.Lundin/AppData/Local/Temp/toolkit-meeting-real-20261023-125053-e0827929",
+    "artifact_directory": "/mnt/c/Users/Jim.Lundin/AppData/Local/Temp/workspace-meeting-real-20261023-125053-e0827929",
     "file_sha256": {
       "run.json": "b9d4c13624a8c4ec1c52f59f4f3d4fc0c4c5a365784a2c1e48c620c0fdb99288",
       "result.json": "d2d80ec558726e49f1357c8d1f8e71f0711969b2f12e8aa4fce4d3b5c33f53e2",
@@ -5962,7 +5962,7 @@
       "provenance": "Root ran four paired native Windows benchmark processes; validator inspected every result and checked its recorded digest.",
       "collector": "scripts/benchmark_keyboard.py",
       "summary_evidence": {
-        "path": "/mnt/c/Users/Jim.Lundin/AppData/Local/Temp/toolkit-meeting-final-1792758885965628692/keyboard-paired-summary.json",
+        "path": "/mnt/c/Users/Jim.Lundin/AppData/Local/Temp/workspace-meeting-final-1792758885965628692/keyboard-paired-summary.json",
         "sha256": "53ca34df95cc140f99f369cacd06210619f693087fd05d80bebd5253e4aa2d49"
       },
       "order": "before-after-after-before",
@@ -5973,7 +5973,7 @@
         {
           "label": "before",
           "evidence": {
-            "path": "/mnt/c/Users/Jim.Lundin/AppData/Local/Temp/toolkit-meeting-final-1792758885965628692/keyboard-windows-1-before.json",
+            "path": "/mnt/c/Users/Jim.Lundin/AppData/Local/Temp/workspace-meeting-final-1792758885965628692/keyboard-windows-1-before.json",
             "sha256": "a8df6d1bbee172203ea3c351b1f4a7105c6c9296abd3340047050c4a838fd843"
           },
           "summary": {
@@ -5996,7 +5996,7 @@
           },
           "observations": {
             "python": "3.15.1 (tags/v3.15.1:c37e74c, Oct 21 2026, 06:24:08) [MSC v.1951 64 bit (AMD64)]",
-            "root": "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\toolkit-meeting-final-1792758885965628692\\keyboard-baseline",
+            "root": "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\workspace-meeting-final-1792758885965628692\\keyboard-baseline",
             "events_per_round": 100000,
             "rounds": 5,
             "gc_enabled": true,
@@ -6071,7 +6071,7 @@
         {
           "label": "after",
           "evidence": {
-            "path": "/mnt/c/Users/Jim.Lundin/AppData/Local/Temp/toolkit-meeting-final-1792758885965628692/keyboard-windows-2-after.json",
+            "path": "/mnt/c/Users/Jim.Lundin/AppData/Local/Temp/workspace-meeting-final-1792758885965628692/keyboard-windows-2-after.json",
             "sha256": "afda6743eafa82ba7fbd88af769ffbfc05dcdf3cfa08f19d6b17d5ecefe97840"
           },
           "summary": {
@@ -6094,7 +6094,7 @@
           },
           "observations": {
             "python": "3.15.1 (tags/v3.15.1:c37e74c, Oct 21 2026, 06:24:08) [MSC v.1951 64 bit (AMD64)]",
-            "root": "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\toolkit-meeting-final-1792758885965628692\\toolkit",
+            "root": "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\workspace-meeting-final-1792758885965628692\\workspace",
             "events_per_round": 100000,
             "rounds": 5,
             "gc_enabled": true,
@@ -6169,7 +6169,7 @@
         {
           "label": "after",
           "evidence": {
-            "path": "/mnt/c/Users/Jim.Lundin/AppData/Local/Temp/toolkit-meeting-final-1792758885965628692/keyboard-windows-3-after.json",
+            "path": "/mnt/c/Users/Jim.Lundin/AppData/Local/Temp/workspace-meeting-final-1792758885965628692/keyboard-windows-3-after.json",
             "sha256": "8982f61b87f685f73bfd8a0418c03d218fc6765a1b287ec82ab67d9711160a86"
           },
           "summary": {
@@ -6192,7 +6192,7 @@
           },
           "observations": {
             "python": "3.15.1 (tags/v3.15.1:c37e74c, Oct 21 2026, 06:24:08) [MSC v.1951 64 bit (AMD64)]",
-            "root": "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\toolkit-meeting-final-1792758885965628692\\toolkit",
+            "root": "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\workspace-meeting-final-1792758885965628692\\workspace",
             "events_per_round": 100000,
             "rounds": 5,
             "gc_enabled": true,
@@ -6267,7 +6267,7 @@
         {
           "label": "before",
           "evidence": {
-            "path": "/mnt/c/Users/Jim.Lundin/AppData/Local/Temp/toolkit-meeting-final-1792758885965628692/keyboard-windows-4-before.json",
+            "path": "/mnt/c/Users/Jim.Lundin/AppData/Local/Temp/workspace-meeting-final-1792758885965628692/keyboard-windows-4-before.json",
             "sha256": "e547de0f4eb8a803294d82e7c8ca361d2a85084ad384d02521877fc322551ffe"
           },
           "summary": {
@@ -6290,7 +6290,7 @@
           },
           "observations": {
             "python": "3.15.1 (tags/v3.15.1:c37e74c, Oct 21 2026, 06:24:08) [MSC v.1951 64 bit (AMD64)]",
-            "root": "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\toolkit-meeting-final-1792758885965628692\\keyboard-baseline",
+            "root": "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\workspace-meeting-final-1792758885965628692\\keyboard-baseline",
             "events_per_round": 100000,
             "rounds": 5,
             "gc_enabled": true,
@@ -6384,14 +6384,14 @@
       "status": "prepared_and_verified_read_only",
       "provenance": "Root reports prepare-import and read-only verify-import passed without canonical changes; validator inspected the preview receipt.",
       "evidence": {
-        "path": "/mnt/c/Users/Jim.Lundin/AppData/Local/Temp/toolkit-meeting-final-1792758885965628692/meeting-import-preview.json",
+        "path": "/mnt/c/Users/Jim.Lundin/AppData/Local/Temp/workspace-meeting-final-1792758885965628692/meeting-import-preview.json",
         "sha256": "97cecf3d61bdc88c311983afa5a14666a6e8d9b184b46f7955946e0d367c10a8"
       },
       "observations": {
         "mail_sends": 0,
         "mail_writes": 0,
         "plan_sha256": "78f98100e363ebf4ca075190fdd11de230d75381fe6bacd5817427e4a17f64f4",
-        "release_id": "toolkit-meeting-final-1792758885965628692",
+        "release_id": "workspace-meeting-final-1792758885965628692",
         "source_sha256": "39550ffa3d864f3333a968b7872783cb8ea383b4bc296ea88b727c81d351ba06",
         "tasks": [
           {
@@ -6437,14 +6437,14 @@
     "skip_scope": "Three opt-in end-to-end modules.",
     "seconds": 225.62,
     "returncode": 0,
-    "log": "/tmp/toolkit-qt-full-windows-final.log",
+    "log": "/tmp/workspace-qt-full-windows-final.log",
     "log_sha256": "b8345c673cf044f4df0b52edb75f421bb37a9f56bc9e093cbdaa686b3e14b6db",
     "evidence": {
-      "path": "/tmp/toolkit-qt-final-validation.json",
+      "path": "/tmp/workspace-qt-final-validation.json",
       "sha256": "cc630ec5371b91b8a30aee88704be1bf336b8cfca48cf797d7c10886b442b154"
     },
     "code_manifest": {
-      "path": "/tmp/toolkit-qt-final-code.json",
+      "path": "/tmp/workspace-qt-final-code.json",
       "sha256": "d075de3a16fc1eefa84c5e38a0b5c1e6e5329eefdac91a5d54f3f1143ad3139c"
     },
     "code_files": 222,
@@ -6455,7 +6455,7 @@
         "failed": 0,
         "skipped_modules": 3,
         "seconds": 225.62,
-        "log": "/tmp/toolkit-qt-full-windows-final.log"
+        "log": "/tmp/workspace-qt-full-windows-final.log"
       },
       "portable": {
         "passed": 723,
@@ -6484,13 +6484,13 @@
     "status": "resolved_by_bounded_retry_and_verified_native_rechecks",
     "snapshot": {
       "created_at": 1792755572.3710442,
-      "snapshot": "/tmp/toolkit-meeting-review-1792752568910866821/path-source",
+      "snapshot": "/tmp/workspace-meeting-review-1792752568910866821/path-source",
       "snapshot_sha256": "624a636b40767407016c13066c8325da3b26374927419e3c572a02528359bb06",
       "source_manifest": {
         "AGENTS.md": "4d1d3997bb19aff36c8a63f6951d0be692a35af0dc23f025f6a5f4265c453f52",
         "GLOSSARY.md": "b44f29a4dea8fe4072a770471d4471427d221f30b2dfb4dd3b47b4b7ca06aaa6",
         "README.md": "06e87bb782cd0c15ac70349f8e3c2be09f866e728c3384da34f2855219ba06f5",
-        "StartToolkit.cmd": "c2b79732b38326bdfdb430d59319b5f5fbfe715663ae840330fa585c0e5cd5d9",
+        "StartWorkspace.cmd": "c2b79732b38326bdfdb430d59319b5f5fbfe715663ae840330fa585c0e5cd5d9",
         "assistant/__init__.py": "374865178a2cc48f636a6bd135325fb8ba587e925d1922ae102ac31d3ecbb146",
         "assistant/__main__.py": "acf3c0528d247d61719e8f4c0d7c5b52e7ea6b038d89e187180760baaf977e68",
         "assistant/action_text.py": "753c3ef9709243d6a49d51b93611d882e654ca01de588498037c00d61d8bf4b0",
@@ -6714,7 +6714,7 @@
         "tests/test_work_window.py": "3f07a0c557c36df549e9d2f86ba1f78e182793a85c781ef7bb988b2c2ddaccae",
         "tests/test_workspace.py": "62f61b5795b852e0721db10e02cfa452f1d6ea5b3b5f81e74426dd581a05a126",
         "tests/uia_fixture.ps1": "abf8e7f71831babf61738f964475cd1b3c2ef0de989035ca914ba72cfbb16207",
-        "toolkit.pyw": "7c96e231cc50780f65e6f45373816f9053afabb189c55d26b2a0fd464cc63c5c",
+        "workspace.pyw": "7c96e231cc50780f65e6f45373816f9053afabb189c55d26b2a0fd464cc63c5c",
         "usage.py": "453e359c17a7208c3344b73f0b7b423dd8f25e5a14c51488979d32f0ec0c6938",
         "winapi/__init__.py": "f574eaeb8dc239e532fffc65d87a5840a51a5c182b3caede39788c6de9fc624f",
         "winapi/_core.py": "5e6003505de4f4eb958e4dc287a02e27b8a38c37af86b628d368e6b62ada8794",
@@ -6744,7 +6744,7 @@
     },
     "portable_store_recheck": {
       "plan": {
-        "snapshot": "/tmp/toolkit-meeting-review-1792752568910866821/path-source",
+        "snapshot": "/tmp/workspace-meeting-review-1792752568910866821/path-source",
         "workers_per_campaign": 2,
         "timeout_seconds": 60,
         "campaigns": [
@@ -6813,12 +6813,12 @@
         {
           "name": "path-store",
           "command": [
-            "/home/jim/toolkit/.venv/bin/python",
+            "/home/jim/workspace/.venv/bin/python",
             "-B",
-            "/tmp/toolkit-meeting-review-1792752568910866821/path-source/scripts/mutate.py",
+            "/tmp/workspace-meeting-review-1792752568910866821/path-source/scripts/mutate.py",
             "assistant/meeting_followup_store.py",
             "--root",
-            "/tmp/toolkit-meeting-review-1792752568910866821/path-source",
+            "/tmp/workspace-meeting-review-1792752568910866821/path-source",
             "--tests",
             "tests/test_meeting_followup.py",
             "--workers",
@@ -6828,7 +6828,7 @@
             "--limit",
             "0",
             "--output",
-            "/tmp/toolkit-meeting-review-1792752568910866821/path-store-mutations.json",
+            "/tmp/workspace-meeting-review-1792752568910866821/path-store-mutations.json",
             "--replace",
             "content = _read_file(store.transcript, MAX_TRANSCRIPT_BYTES)",
             "content = _read_file(store.transcript, MAX_TRANSCRIPT_BYTES).replace(b\"\\r\\n\", b\"\\n\")",
@@ -6860,8 +6860,8 @@
             "                if committed != row:\n",
             "                if False:\n"
           ],
-          "cwd": "/tmp/toolkit-meeting-review-1792752568910866821/path-source",
-          "log": "/tmp/toolkit-meeting-review-1792752568910866821/path-store-mutations.log",
+          "cwd": "/tmp/workspace-meeting-review-1792752568910866821/path-source",
+          "log": "/tmp/workspace-meeting-review-1792752568910866821/path-store-mutations.log",
           "started_at": 1792755573.6593342,
           "returncode": 1,
           "elapsed_seconds": 360.0785387940123,
@@ -7024,7 +7024,7 @@
       "interpretation": "The baseline executed 21 tests in 56.58s with one Windows-only test skipped. Two receipt mutations were detected; eight exceeded the 60s limit after test execution had started. Timeouts are inconclusive, not mutation kills. These files and cwd were on Linux /tmp.",
       "retry": "Resolved: all eight formerly inconclusive mutations were detected in the serial retry-store campaign (21-test baseline, 3.334s; 33.612s total; one worker; 180s per subprocess)."
     },
-    "native_evidence_directory": "/tmp/toolkit-meeting-review-1792752568910866821/native-path-validation",
+    "native_evidence_directory": "/tmp/workspace-meeting-review-1792752568910866821/native-path-validation",
     "native_evidence_sha256": {
       "baseline-tests.json": "5454199cbaac2469a8934ae8693dec0362dc2a541d0bb099ec20f9bcffa24851",
       "normalization-removed-config.json": "b82e3a9e2adc774372ab2f2ebea9ee60f1df875c4bfa218047476b885d1ad131",
@@ -7059,7 +7059,7 @@
         "python": "3.15.1 (tags/v3.15.1:c37e74c, Oct 21 2026, 06:24:08) [MSC v.1951 64 bit (AMD64)]",
         "pid": 32180,
         "source": "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\tk-mf-v-1792756160712796133\\baseline",
-        "runtime": "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\toolkit-qt-migration-1792751468\\toolkit\\.runtime",
+        "runtime": "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\workspace-qt-migration-1792751468\\workspace\\.runtime",
         "collected": [
           "tests.test_meeting_followup.test_action_save_receipt_identifies_its_own_commit_after_a_newer_edit",
           "tests.test_meeting_followup.test_an_uncommitted_edit_directory_is_not_history_and_retry_commits_it_once",
@@ -7087,7 +7087,7 @@
         "passed": 21,
         "skipped_modules": 0,
         "problems": [
-          "FAILED tests.test_meeting_followup.test_missing_history_is_reported_and_never_reconstructed_by_a_read\nTraceback (most recent call last):\n  File \"C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\tk-mf-v-1792756160712796133\\baseline\\selfcheck.py\", line 117, in run_tests\n    _call(test)\n    ~~~~~^^^^^^\n  File \"C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\tk-mf-v-1792756160712796133\\baseline\\selfcheck.py\", line 90, in _call\n    test(**arguments)\n    ~~~~^^^^^^^^^^^^^\n  File \"C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\tk-mf-v-1792756160712796133\\baseline\\tests\\test_meeting_followup.py\", line 592, in test_missing_history_is_reported_and_never_reconstructed_by_a_read\n    published = store.publish(store.plan(\"release-task\", followup))\n  File \"C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\tk-mf-v-1792756160712796133\\baseline\\assistant\\meeting_followup_store.py\", line 479, in publish\n    self._publish(publication.directory, publication.artifacts)\n    ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\tk-mf-v-1792756160712796133\\baseline\\assistant\\meeting_followup_store.py\", line 459, in _publish\n    self.install(temporary, destination)\n    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\tk-mf-v-1792756160712796133\\baseline\\assistant\\meeting_followup_store.py\", line 395, in _install\n    filesystem_path(source).rename(filesystem_path(destination))\n    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\toolkit-qt-migration-1792751468\\toolkit\\.python\\Lib\\pathlib\\__init__.py\", line 1277, in rename\n    os.rename(self, target)\n    ~~~~~~~~~^^^^^^^^^^^^^^\nPermissionError: [WinError 5] Åtkomst nekad: '\\\\\\\\?\\\\C:\\\\Users\\\\Jim.Lundin\\\\AppData\\\\Local\\\\Temp\\\\tk-mf-v-1792756160712796133\\\\temp\\\\selfcheck-8jmcexty\\\\packages\\\\release-task\\\\versions\\\\.followup-bb651r0z' -> '\\\\\\\\?\\\\C:\\\\Users\\\\Jim.Lundin\\\\AppData\\\\Local\\\\Temp\\\\tk-mf-v-1792756160712796133\\\\temp\\\\selfcheck-8jmcexty\\\\packages\\\\release-task\\\\versions\\\\ca7032bf03b831f51871a9ad461139276b5386c7df7672deebf7279a95922df9'\n"
+          "FAILED tests.test_meeting_followup.test_missing_history_is_reported_and_never_reconstructed_by_a_read\nTraceback (most recent call last):\n  File \"C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\tk-mf-v-1792756160712796133\\baseline\\selfcheck.py\", line 117, in run_tests\n    _call(test)\n    ~~~~~^^^^^^\n  File \"C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\tk-mf-v-1792756160712796133\\baseline\\selfcheck.py\", line 90, in _call\n    test(**arguments)\n    ~~~~^^^^^^^^^^^^^\n  File \"C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\tk-mf-v-1792756160712796133\\baseline\\tests\\test_meeting_followup.py\", line 592, in test_missing_history_is_reported_and_never_reconstructed_by_a_read\n    published = store.publish(store.plan(\"release-task\", followup))\n  File \"C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\tk-mf-v-1792756160712796133\\baseline\\assistant\\meeting_followup_store.py\", line 479, in publish\n    self._publish(publication.directory, publication.artifacts)\n    ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\tk-mf-v-1792756160712796133\\baseline\\assistant\\meeting_followup_store.py\", line 459, in _publish\n    self.install(temporary, destination)\n    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\tk-mf-v-1792756160712796133\\baseline\\assistant\\meeting_followup_store.py\", line 395, in _install\n    filesystem_path(source).rename(filesystem_path(destination))\n    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\workspace-qt-migration-1792751468\\workspace\\.python\\Lib\\pathlib\\__init__.py\", line 1277, in rename\n    os.rename(self, target)\n    ~~~~~~~~~^^^^^^^^^^^^^^\nPermissionError: [WinError 5] Åtkomst nekad: '\\\\\\\\?\\\\C:\\\\Users\\\\Jim.Lundin\\\\AppData\\\\Local\\\\Temp\\\\tk-mf-v-1792756160712796133\\\\temp\\\\selfcheck-8jmcexty\\\\packages\\\\release-task\\\\versions\\\\.followup-bb651r0z' -> '\\\\\\\\?\\\\C:\\\\Users\\\\Jim.Lundin\\\\AppData\\\\Local\\\\Temp\\\\tk-mf-v-1792756160712796133\\\\temp\\\\selfcheck-8jmcexty\\\\packages\\\\release-task\\\\versions\\\\ca7032bf03b831f51871a9ad461139276b5386c7df7672deebf7279a95922df9'\n"
         ],
         "timings": [
           [
@@ -7188,7 +7188,7 @@
       },
       "launch": {
         "command": [
-          "/mnt/c/Users/Jim.Lundin/AppData/Local/Temp/toolkit-qt-migration-1792751468/toolkit/.python/python.exe",
+          "/mnt/c/Users/Jim.Lundin/AppData/Local/Temp/workspace-qt-migration-1792751468/workspace/.python/python.exe",
           "-B",
           "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\tk-mf-v-1792756160712796133\\native-mutation-master.py",
           "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\tk-mf-v-1792756160712796133\\native-plan.json"
@@ -7205,7 +7205,7 @@
     },
     "native_launch": {
       "command": [
-        "/mnt/c/Users/Jim.Lundin/AppData/Local/Temp/toolkit-qt-migration-1792751468/toolkit/.python/python.exe",
+        "/mnt/c/Users/Jim.Lundin/AppData/Local/Temp/workspace-qt-migration-1792751468/workspace/.python/python.exe",
         "-B",
         "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\tk-mf-v-1792756160712796133\\native-mutation-master.py",
         "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\tk-mf-v-1792756160712796133\\native-plan.json"
@@ -7248,7 +7248,7 @@
       {
         "name": "baseline",
         "command": [
-          "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\toolkit-qt-migration-1792751468\\toolkit\\.python\\python.exe",
+          "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\workspace-qt-migration-1792751468\\workspace\\.python\\python.exe",
           "-B",
           "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\tk-mf-v-1792756160712796133\\native-followup-check.py",
           "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\tk-mf-v-1792756160712796133\\baseline-config.json"
@@ -7258,7 +7258,7 @@
           "AGENTS.md": "4d1d3997bb19aff36c8a63f6951d0be692a35af0dc23f025f6a5f4265c453f52",
           "GLOSSARY.md": "b44f29a4dea8fe4072a770471d4471427d221f30b2dfb4dd3b47b4b7ca06aaa6",
           "README.md": "06e87bb782cd0c15ac70349f8e3c2be09f866e728c3384da34f2855219ba06f5",
-          "StartToolkit.cmd": "c2b79732b38326bdfdb430d59319b5f5fbfe715663ae840330fa585c0e5cd5d9",
+          "StartWorkspace.cmd": "c2b79732b38326bdfdb430d59319b5f5fbfe715663ae840330fa585c0e5cd5d9",
           "assistant/__init__.py": "374865178a2cc48f636a6bd135325fb8ba587e925d1922ae102ac31d3ecbb146",
           "assistant/__main__.py": "acf3c0528d247d61719e8f4c0d7c5b52e7ea6b038d89e187180760baaf977e68",
           "assistant/action_text.py": "753c3ef9709243d6a49d51b93611d882e654ca01de588498037c00d61d8bf4b0",
@@ -7482,7 +7482,7 @@
           "tests/test_work_window.py": "3f07a0c557c36df549e9d2f86ba1f78e182793a85c781ef7bb988b2c2ddaccae",
           "tests/test_workspace.py": "62f61b5795b852e0721db10e02cfa452f1d6ea5b3b5f81e74426dd581a05a126",
           "tests/uia_fixture.ps1": "abf8e7f71831babf61738f964475cd1b3c2ef0de989035ca914ba72cfbb16207",
-          "toolkit.pyw": "7c96e231cc50780f65e6f45373816f9053afabb189c55d26b2a0fd464cc63c5c",
+          "workspace.pyw": "7c96e231cc50780f65e6f45373816f9053afabb189c55d26b2a0fd464cc63c5c",
           "usage.py": "453e359c17a7208c3344b73f0b7b423dd8f25e5a14c51488979d32f0ec0c6938",
           "winapi/__init__.py": "f574eaeb8dc239e532fffc65d87a5840a51a5c182b3caede39788c6de9fc624f",
           "winapi/_core.py": "5e6003505de4f4eb958e4dc287a02e27b8a38c37af86b628d368e6b62ada8794",
@@ -7521,7 +7521,7 @@
           "python": "3.15.1 (tags/v3.15.1:c37e74c, Oct 21 2026, 06:24:08) [MSC v.1951 64 bit (AMD64)]",
           "pid": 25076,
           "source": "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\tk-mf-v-1792756160712796133\\baseline",
-          "runtime": "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\toolkit-qt-migration-1792751468\\toolkit\\.runtime",
+          "runtime": "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\workspace-qt-migration-1792751468\\workspace\\.runtime",
           "collected": [
             "tests.test_meeting_followup.test_action_save_receipt_identifies_its_own_commit_after_a_newer_edit",
             "tests.test_meeting_followup.test_an_uncommitted_edit_directory_is_not_history_and_retry_commits_it_once",
@@ -7649,7 +7649,7 @@
       {
         "name": "normalization-removed",
         "command": [
-          "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\toolkit-qt-migration-1792751468\\toolkit\\.python\\python.exe",
+          "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\workspace-qt-migration-1792751468\\workspace\\.python\\python.exe",
           "-B",
           "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\tk-mf-v-1792756160712796133\\native-followup-check.py",
           "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\tk-mf-v-1792756160712796133\\normalization-removed-config.json"
@@ -7659,7 +7659,7 @@
           "AGENTS.md": "4d1d3997bb19aff36c8a63f6951d0be692a35af0dc23f025f6a5f4265c453f52",
           "GLOSSARY.md": "b44f29a4dea8fe4072a770471d4471427d221f30b2dfb4dd3b47b4b7ca06aaa6",
           "README.md": "06e87bb782cd0c15ac70349f8e3c2be09f866e728c3384da34f2855219ba06f5",
-          "StartToolkit.cmd": "c2b79732b38326bdfdb430d59319b5f5fbfe715663ae840330fa585c0e5cd5d9",
+          "StartWorkspace.cmd": "c2b79732b38326bdfdb430d59319b5f5fbfe715663ae840330fa585c0e5cd5d9",
           "assistant/__init__.py": "374865178a2cc48f636a6bd135325fb8ba587e925d1922ae102ac31d3ecbb146",
           "assistant/__main__.py": "acf3c0528d247d61719e8f4c0d7c5b52e7ea6b038d89e187180760baaf977e68",
           "assistant/action_text.py": "753c3ef9709243d6a49d51b93611d882e654ca01de588498037c00d61d8bf4b0",
@@ -7883,7 +7883,7 @@
           "tests/test_work_window.py": "3f07a0c557c36df549e9d2f86ba1f78e182793a85c781ef7bb988b2c2ddaccae",
           "tests/test_workspace.py": "62f61b5795b852e0721db10e02cfa452f1d6ea5b3b5f81e74426dd581a05a126",
           "tests/uia_fixture.ps1": "abf8e7f71831babf61738f964475cd1b3c2ef0de989035ca914ba72cfbb16207",
-          "toolkit.pyw": "7c96e231cc50780f65e6f45373816f9053afabb189c55d26b2a0fd464cc63c5c",
+          "workspace.pyw": "7c96e231cc50780f65e6f45373816f9053afabb189c55d26b2a0fd464cc63c5c",
           "usage.py": "453e359c17a7208c3344b73f0b7b423dd8f25e5a14c51488979d32f0ec0c6938",
           "winapi/__init__.py": "f574eaeb8dc239e532fffc65d87a5840a51a5c182b3caede39788c6de9fc624f",
           "winapi/_core.py": "5e6003505de4f4eb958e4dc287a02e27b8a38c37af86b628d368e6b62ada8794",
@@ -7922,7 +7922,7 @@
           "python": "3.15.1 (tags/v3.15.1:c37e74c, Oct 21 2026, 06:24:08) [MSC v.1951 64 bit (AMD64)]",
           "pid": 7296,
           "source": "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\tk-mf-v-1792756160712796133\\normalization-removed",
-          "runtime": "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\toolkit-qt-migration-1792751468\\toolkit\\.runtime",
+          "runtime": "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\workspace-qt-migration-1792751468\\workspace\\.runtime",
           "collected": [
             "tests.test_meeting_followup.test_action_save_receipt_identifies_its_own_commit_after_a_newer_edit",
             "tests.test_meeting_followup.test_an_uncommitted_edit_directory_is_not_history_and_retry_commits_it_once",
@@ -7950,8 +7950,8 @@
           "passed": 19,
           "skipped_modules": 0,
           "problems": [
-            "FAILED tests.test_meeting_followup.test_deep_edit_journals_commit_exact_revisions_without_changing_generated_artifacts\nTraceback (most recent call last):\n  File \"C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\toolkit-qt-migration-1792751468\\toolkit\\.python\\Lib\\pathlib\\__init__.py\", line 1210, in mkdir\n    os.mkdir(self, mode)\n    ~~~~~~~~^^^^^^^^^^^^\nFileNotFoundError: [WinError 3] Det går inte att hitta sökvägen: 'C:\\\\Users\\\\Jim.Lundin\\\\AppData\\\\Local\\\\Temp\\\\tk-mf-v-1792756160712796133\\\\temp\\\\selfcheck-2001hwe6\\\\deep-packages\\\\nested-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\\\\nested-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\\\\nested-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\\\\nested-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\\\\nested-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\\\\release-task\\\\versions'\n\nDuring handling of the above exception, another exception occurred:\n\nTraceback (most recent call last):\n  File \"C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\toolkit-qt-migration-1792751468\\toolkit\\.python\\Lib\\pathlib\\__init__.py\", line 1210, in mkdir\n    os.mkdir(self, mode)\n    ~~~~~~~~^^^^^^^^^^^^\nFileNotFoundError: [WinError 3] Det går inte att hitta sökvägen: 'C:\\\\Users\\\\Jim.Lundin\\\\AppData\\\\Local\\\\Temp\\\\tk-mf-v-1792756160712796133\\\\temp\\\\selfcheck-2001hwe6\\\\deep-packages\\\\nested-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\\\\nested-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\\\\nested-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\\\\nested-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\\\\nested-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\\\\release-task'\n\nDuring handling of the above exception, another exception occurred:\n\nTraceback (most recent call last):\n  File \"C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\toolkit-qt-migration-1792751468\\toolkit\\.python\\Lib\\pathlib\\__init__.py\", line 1210, in mkdir\n    os.mkdir(self, mode)\n    ~~~~~~~~^^^^^^^^^^^^\nFileNotFoundError: [WinError 3] Det går inte att hitta sökvägen: 'C:\\\\Users\\\\Jim.Lundin\\\\AppData\\\\Local\\\\Temp\\\\tk-mf-v-1792756160712796133\\\\temp\\\\selfcheck-2001hwe6\\\\deep-packages\\\\nested-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\\\\nested-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\\\\nested-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\\\\nested-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\\\\nested-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'\n\nDuring handling of the above exception, another exception occurred:\n\nTraceback (most recent call last):\n  File \"C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\toolkit-qt-migration-1792751468\\toolkit\\.python\\Lib\\pathlib\\__init__.py\", line 1210, in mkdir\n    os.mkdir(self, mode)\n    ~~~~~~~~^^^^^^^^^^^^\nFileNotFoundError: [WinError 3] Det går inte att hitta sökvägen: 'C:\\\\Users\\\\Jim.Lundin\\\\AppData\\\\Local\\\\Temp\\\\tk-mf-v-1792756160712796133\\\\temp\\\\selfcheck-2001hwe6\\\\deep-packages\\\\nested-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\\\\nested-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\\\\nested-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\\\\nested-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'\n\nDuring handling of the above exception, another exception occurred:\n\nTraceback (most recent call last):\n  File \"C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\toolkit-qt-migration-1792751468\\toolkit\\.python\\Lib\\pathlib\\__init__.py\", line 1210, in mkdir\n    os.mkdir(self, mode)\n    ~~~~~~~~^^^^^^^^^^^^\nFileNotFoundError: [WinError 206] Filnamnet eller filnamnstillägget är för långt: 'C:\\\\Users\\\\Jim.Lundin\\\\AppData\\\\Local\\\\Temp\\\\tk-mf-v-1792756160712796133\\\\temp\\\\selfcheck-2001hwe6\\\\deep-packages\\\\nested-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\\\\nested-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\\\\nested-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'\n\nDuring handling of the above exception, another exception occurred:\n\nTraceback (most recent call last):\n  File \"C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\tk-mf-v-1792756160712796133\\normalization-removed\\selfcheck.py\", line 117, in run_tests\n    _call(test)\n    ~~~~~^^^^^^\n  File \"C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\tk-mf-v-1792756160712796133\\normalization-removed\\selfcheck.py\", line 90, in _call\n    test(**arguments)\n    ~~~~^^^^^^^^^^^^^\n  File \"C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\tk-mf-v-1792756160712796133\\normalization-removed\\tests\\test_meeting_followup.py\", line 367, in test_deep_edit_journals_commit_exact_revisions_without_changing_generated_artifacts\n    published = store.publish(store.plan(\"release-task\", followup))\n  File \"C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\tk-mf-v-1792756160712796133\\normalization-removed\\assistant\\meeting_followup_store.py\", line 479, in publish\n    self._publish(publication.directory, publication.artifacts)\n    ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\tk-mf-v-1792756160712796133\\normalization-removed\\assistant\\meeting_followup_store.py\", line 446, in _publish\n    parent.mkdir(parents=True, exist_ok=True)\n    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\toolkit-qt-migration-1792751468\\toolkit\\.python\\Lib\\pathlib\\__init__.py\", line 1218, in mkdir\n    self.parent.mkdir(parents=True, exist_ok=True)\n    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\toolkit-qt-migration-1792751468\\toolkit\\.python\\Lib\\pathlib\\__init__.py\", line 1218, in mkdir\n    self.parent.mkdir(parents=True, exist_ok=True)\n    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\toolkit-qt-migration-1792751468\\toolkit\\.python\\Lib\\pathlib\\__init__.py\", line 1218, in mkdir\n    self.parent.mkdir(parents=True, exist_ok=True)\n    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  [Previous line repeated 1 more time]\n  File \"C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\toolkit-qt-migration-1792751468\\toolkit\\.python\\Lib\\pathlib\\__init__.py\", line 1219, in mkdir\n    self.mkdir(mode, parents=False, exist_ok=exist_ok)\n    ~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\toolkit-qt-migration-1792751468\\toolkit\\.python\\Lib\\pathlib\\__init__.py\", line 1210, in mkdir\n    os.mkdir(self, mode)\n    ~~~~~~~~^^^^^^^^^^^^\nFileNotFoundError: [WinError 206] Filnamnet eller filnamnstillägget är för långt: 'C:\\\\Users\\\\Jim.Lundin\\\\AppData\\\\Local\\\\Temp\\\\tk-mf-v-1792756160712796133\\\\temp\\\\selfcheck-2001hwe6\\\\deep-packages\\\\nested-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\\\\nested-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\\\\nested-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'\n",
-            "FAILED tests.test_meeting_followup.test_deep_publications_preserve_paths_and_bytes_through_failure_retry_and_readback\nTraceback (most recent call last):\n  File \"C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\toolkit-qt-migration-1792751468\\toolkit\\.python\\Lib\\pathlib\\__init__.py\", line 1210, in mkdir\n    os.mkdir(self, mode)\n    ~~~~~~~~^^^^^^^^^^^^\nFileNotFoundError: [WinError 3] Det går inte att hitta sökvägen: 'C:\\\\Users\\\\Jim.Lundin\\\\AppData\\\\Local\\\\Temp\\\\tk-mf-v-1792756160712796133\\\\temp\\\\selfcheck-_44alb9v\\\\deep-packages\\\\nested-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\\\\nested-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\\\\nested-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\\\\nested-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\\\\nested-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\\\\release-task\\\\versions'\n\nDuring handling of the above exception, another exception occurred:\n\nTraceback (most recent call last):\n  File \"C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\toolkit-qt-migration-1792751468\\toolkit\\.python\\Lib\\pathlib\\__init__.py\", line 1210, in mkdir\n    os.mkdir(self, mode)\n    ~~~~~~~~^^^^^^^^^^^^\nFileNotFoundError: [WinError 3] Det går inte att hitta sökvägen: 'C:\\\\Users\\\\Jim.Lundin\\\\AppData\\\\Local\\\\Temp\\\\tk-mf-v-1792756160712796133\\\\temp\\\\selfcheck-_44alb9v\\\\deep-packages\\\\nested-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\\\\nested-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\\\\nested-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\\\\nested-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\\\\nested-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\\\\release-task'\n\nDuring handling of the above exception, another exception occurred:\n\nTraceback (most recent call last):\n  File \"C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\toolkit-qt-migration-1792751468\\toolkit\\.python\\Lib\\pathlib\\__init__.py\", line 1210, in mkdir\n    os.mkdir(self, mode)\n    ~~~~~~~~^^^^^^^^^^^^\nFileNotFoundError: [WinError 3] Det går inte att hitta sökvägen: 'C:\\\\Users\\\\Jim.Lundin\\\\AppData\\\\Local\\\\Temp\\\\tk-mf-v-1792756160712796133\\\\temp\\\\selfcheck-_44alb9v\\\\deep-packages\\\\nested-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\\\\nested-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\\\\nested-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\\\\nested-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\\\\nested-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'\n\nDuring handling of the above exception, another exception occurred:\n\nTraceback (most recent call last):\n  File \"C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\toolkit-qt-migration-1792751468\\toolkit\\.python\\Lib\\pathlib\\__init__.py\", line 1210, in mkdir\n    os.mkdir(self, mode)\n    ~~~~~~~~^^^^^^^^^^^^\nFileNotFoundError: [WinError 3] Det går inte att hitta sökvägen: 'C:\\\\Users\\\\Jim.Lundin\\\\AppData\\\\Local\\\\Temp\\\\tk-mf-v-1792756160712796133\\\\temp\\\\selfcheck-_44alb9v\\\\deep-packages\\\\nested-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\\\\nested-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\\\\nested-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\\\\nested-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'\n\nDuring handling of the above exception, another exception occurred:\n\nTraceback (most recent call last):\n  File \"C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\toolkit-qt-migration-1792751468\\toolkit\\.python\\Lib\\pathlib\\__init__.py\", line 1210, in mkdir\n    os.mkdir(self, mode)\n    ~~~~~~~~^^^^^^^^^^^^\nFileNotFoundError: [WinError 206] Filnamnet eller filnamnstillägget är för långt: 'C:\\\\Users\\\\Jim.Lundin\\\\AppData\\\\Local\\\\Temp\\\\tk-mf-v-1792756160712796133\\\\temp\\\\selfcheck-_44alb9v\\\\deep-packages\\\\nested-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\\\\nested-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\\\\nested-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'\n\nDuring handling of the above exception, another exception occurred:\n\nFileNotFoundError: [WinError 206] Filnamnet eller filnamnstillägget är för långt: 'C:\\\\Users\\\\Jim.Lundin\\\\AppData\\\\Local\\\\Temp\\\\tk-mf-v-1792756160712796133\\\\temp\\\\selfcheck-_44alb9v\\\\deep-packages\\\\nested-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\\\\nested-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\\\\nested-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'\n\nDuring handling of the above exception, another exception occurred:\n\nTraceback (most recent call last):\n  File \"C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\tk-mf-v-1792756160712796133\\normalization-removed\\selfcheck.py\", line 117, in run_tests\n    _call(test)\n    ~~~~~^^^^^^\n  File \"C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\tk-mf-v-1792756160712796133\\normalization-removed\\selfcheck.py\", line 90, in _call\n    test(**arguments)\n    ~~~~^^^^^^^^^^^^^\n  File \"C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\tk-mf-v-1792756160712796133\\normalization-removed\\tests\\test_meeting_followup.py\", line 340, in test_deep_publications_preserve_paths_and_bytes_through_failure_retry_and_readback\n    with TestCase().assertRaisesRegex(OSError, \"Fixture: directory publication failed\"):\n         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\toolkit-qt-migration-1792751468\\toolkit\\.python\\Lib\\unittest\\case.py\", line 283, in __exit__\n    self._raiseFailure('\"{}\" does not match \"{}\"'.format(\n    ~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n             expected_regex.pattern, str(exc_value)))\n             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\toolkit-qt-migration-1792751468\\toolkit\\.python\\Lib\\unittest\\case.py\", line 207, in _raiseFailure\n    raise self.test_case.failureException(msg)\nAssertionError: \"Fixture: directory publication failed\" does not match \"[WinError 206] Filnamnet eller filnamnstillägget är för långt: 'C:\\\\Users\\\\Jim.Lundin\\\\AppData\\\\Local\\\\Temp\\\\tk-mf-v-1792756160712796133\\\\temp\\\\selfcheck-_44alb9v\\\\deep-packages\\\\nested-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\\\\nested-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\\\\nested-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'\"\n",
+            "FAILED tests.test_meeting_followup.test_deep_edit_journals_commit_exact_revisions_without_changing_generated_artifacts\nTraceback (most recent call last):\n  File \"C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\workspace-qt-migration-1792751468\\workspace\\.python\\Lib\\pathlib\\__init__.py\", line 1210, in mkdir\n    os.mkdir(self, mode)\n    ~~~~~~~~^^^^^^^^^^^^\nFileNotFoundError: [WinError 3] Det går inte att hitta sökvägen: 'C:\\\\Users\\\\Jim.Lundin\\\\AppData\\\\Local\\\\Temp\\\\tk-mf-v-1792756160712796133\\\\temp\\\\selfcheck-2001hwe6\\\\deep-packages\\\\nested-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\\\\nested-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\\\\nested-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\\\\nested-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\\\\nested-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\\\\release-task\\\\versions'\n\nDuring handling of the above exception, another exception occurred:\n\nTraceback (most recent call last):\n  File \"C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\workspace-qt-migration-1792751468\\workspace\\.python\\Lib\\pathlib\\__init__.py\", line 1210, in mkdir\n    os.mkdir(self, mode)\n    ~~~~~~~~^^^^^^^^^^^^\nFileNotFoundError: [WinError 3] Det går inte att hitta sökvägen: 'C:\\\\Users\\\\Jim.Lundin\\\\AppData\\\\Local\\\\Temp\\\\tk-mf-v-1792756160712796133\\\\temp\\\\selfcheck-2001hwe6\\\\deep-packages\\\\nested-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\\\\nested-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\\\\nested-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\\\\nested-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\\\\nested-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\\\\release-task'\n\nDuring handling of the above exception, another exception occurred:\n\nTraceback (most recent call last):\n  File \"C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\workspace-qt-migration-1792751468\\workspace\\.python\\Lib\\pathlib\\__init__.py\", line 1210, in mkdir\n    os.mkdir(self, mode)\n    ~~~~~~~~^^^^^^^^^^^^\nFileNotFoundError: [WinError 3] Det går inte att hitta sökvägen: 'C:\\\\Users\\\\Jim.Lundin\\\\AppData\\\\Local\\\\Temp\\\\tk-mf-v-1792756160712796133\\\\temp\\\\selfcheck-2001hwe6\\\\deep-packages\\\\nested-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\\\\nested-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\\\\nested-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\\\\nested-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\\\\nested-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'\n\nDuring handling of the above exception, another exception occurred:\n\nTraceback (most recent call last):\n  File \"C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\workspace-qt-migration-1792751468\\workspace\\.python\\Lib\\pathlib\\__init__.py\", line 1210, in mkdir\n    os.mkdir(self, mode)\n    ~~~~~~~~^^^^^^^^^^^^\nFileNotFoundError: [WinError 3] Det går inte att hitta sökvägen: 'C:\\\\Users\\\\Jim.Lundin\\\\AppData\\\\Local\\\\Temp\\\\tk-mf-v-1792756160712796133\\\\temp\\\\selfcheck-2001hwe6\\\\deep-packages\\\\nested-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\\\\nested-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\\\\nested-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\\\\nested-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'\n\nDuring handling of the above exception, another exception occurred:\n\nTraceback (most recent call last):\n  File \"C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\workspace-qt-migration-1792751468\\workspace\\.python\\Lib\\pathlib\\__init__.py\", line 1210, in mkdir\n    os.mkdir(self, mode)\n    ~~~~~~~~^^^^^^^^^^^^\nFileNotFoundError: [WinError 206] Filnamnet eller filnamnstillägget är för långt: 'C:\\\\Users\\\\Jim.Lundin\\\\AppData\\\\Local\\\\Temp\\\\tk-mf-v-1792756160712796133\\\\temp\\\\selfcheck-2001hwe6\\\\deep-packages\\\\nested-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\\\\nested-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\\\\nested-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'\n\nDuring handling of the above exception, another exception occurred:\n\nTraceback (most recent call last):\n  File \"C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\tk-mf-v-1792756160712796133\\normalization-removed\\selfcheck.py\", line 117, in run_tests\n    _call(test)\n    ~~~~~^^^^^^\n  File \"C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\tk-mf-v-1792756160712796133\\normalization-removed\\selfcheck.py\", line 90, in _call\n    test(**arguments)\n    ~~~~^^^^^^^^^^^^^\n  File \"C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\tk-mf-v-1792756160712796133\\normalization-removed\\tests\\test_meeting_followup.py\", line 367, in test_deep_edit_journals_commit_exact_revisions_without_changing_generated_artifacts\n    published = store.publish(store.plan(\"release-task\", followup))\n  File \"C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\tk-mf-v-1792756160712796133\\normalization-removed\\assistant\\meeting_followup_store.py\", line 479, in publish\n    self._publish(publication.directory, publication.artifacts)\n    ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\tk-mf-v-1792756160712796133\\normalization-removed\\assistant\\meeting_followup_store.py\", line 446, in _publish\n    parent.mkdir(parents=True, exist_ok=True)\n    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\workspace-qt-migration-1792751468\\workspace\\.python\\Lib\\pathlib\\__init__.py\", line 1218, in mkdir\n    self.parent.mkdir(parents=True, exist_ok=True)\n    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\workspace-qt-migration-1792751468\\workspace\\.python\\Lib\\pathlib\\__init__.py\", line 1218, in mkdir\n    self.parent.mkdir(parents=True, exist_ok=True)\n    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\workspace-qt-migration-1792751468\\workspace\\.python\\Lib\\pathlib\\__init__.py\", line 1218, in mkdir\n    self.parent.mkdir(parents=True, exist_ok=True)\n    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  [Previous line repeated 1 more time]\n  File \"C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\workspace-qt-migration-1792751468\\workspace\\.python\\Lib\\pathlib\\__init__.py\", line 1219, in mkdir\n    self.mkdir(mode, parents=False, exist_ok=exist_ok)\n    ~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\workspace-qt-migration-1792751468\\workspace\\.python\\Lib\\pathlib\\__init__.py\", line 1210, in mkdir\n    os.mkdir(self, mode)\n    ~~~~~~~~^^^^^^^^^^^^\nFileNotFoundError: [WinError 206] Filnamnet eller filnamnstillägget är för långt: 'C:\\\\Users\\\\Jim.Lundin\\\\AppData\\\\Local\\\\Temp\\\\tk-mf-v-1792756160712796133\\\\temp\\\\selfcheck-2001hwe6\\\\deep-packages\\\\nested-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\\\\nested-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\\\\nested-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'\n",
+            "FAILED tests.test_meeting_followup.test_deep_publications_preserve_paths_and_bytes_through_failure_retry_and_readback\nTraceback (most recent call last):\n  File \"C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\workspace-qt-migration-1792751468\\workspace\\.python\\Lib\\pathlib\\__init__.py\", line 1210, in mkdir\n    os.mkdir(self, mode)\n    ~~~~~~~~^^^^^^^^^^^^\nFileNotFoundError: [WinError 3] Det går inte att hitta sökvägen: 'C:\\\\Users\\\\Jim.Lundin\\\\AppData\\\\Local\\\\Temp\\\\tk-mf-v-1792756160712796133\\\\temp\\\\selfcheck-_44alb9v\\\\deep-packages\\\\nested-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\\\\nested-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\\\\nested-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\\\\nested-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\\\\nested-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\\\\release-task\\\\versions'\n\nDuring handling of the above exception, another exception occurred:\n\nTraceback (most recent call last):\n  File \"C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\workspace-qt-migration-1792751468\\workspace\\.python\\Lib\\pathlib\\__init__.py\", line 1210, in mkdir\n    os.mkdir(self, mode)\n    ~~~~~~~~^^^^^^^^^^^^\nFileNotFoundError: [WinError 3] Det går inte att hitta sökvägen: 'C:\\\\Users\\\\Jim.Lundin\\\\AppData\\\\Local\\\\Temp\\\\tk-mf-v-1792756160712796133\\\\temp\\\\selfcheck-_44alb9v\\\\deep-packages\\\\nested-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\\\\nested-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\\\\nested-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\\\\nested-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\\\\nested-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\\\\release-task'\n\nDuring handling of the above exception, another exception occurred:\n\nTraceback (most recent call last):\n  File \"C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\workspace-qt-migration-1792751468\\workspace\\.python\\Lib\\pathlib\\__init__.py\", line 1210, in mkdir\n    os.mkdir(self, mode)\n    ~~~~~~~~^^^^^^^^^^^^\nFileNotFoundError: [WinError 3] Det går inte att hitta sökvägen: 'C:\\\\Users\\\\Jim.Lundin\\\\AppData\\\\Local\\\\Temp\\\\tk-mf-v-1792756160712796133\\\\temp\\\\selfcheck-_44alb9v\\\\deep-packages\\\\nested-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\\\\nested-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\\\\nested-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\\\\nested-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\\\\nested-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'\n\nDuring handling of the above exception, another exception occurred:\n\nTraceback (most recent call last):\n  File \"C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\workspace-qt-migration-1792751468\\workspace\\.python\\Lib\\pathlib\\__init__.py\", line 1210, in mkdir\n    os.mkdir(self, mode)\n    ~~~~~~~~^^^^^^^^^^^^\nFileNotFoundError: [WinError 3] Det går inte att hitta sökvägen: 'C:\\\\Users\\\\Jim.Lundin\\\\AppData\\\\Local\\\\Temp\\\\tk-mf-v-1792756160712796133\\\\temp\\\\selfcheck-_44alb9v\\\\deep-packages\\\\nested-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\\\\nested-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\\\\nested-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\\\\nested-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'\n\nDuring handling of the above exception, another exception occurred:\n\nTraceback (most recent call last):\n  File \"C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\workspace-qt-migration-1792751468\\workspace\\.python\\Lib\\pathlib\\__init__.py\", line 1210, in mkdir\n    os.mkdir(self, mode)\n    ~~~~~~~~^^^^^^^^^^^^\nFileNotFoundError: [WinError 206] Filnamnet eller filnamnstillägget är för långt: 'C:\\\\Users\\\\Jim.Lundin\\\\AppData\\\\Local\\\\Temp\\\\tk-mf-v-1792756160712796133\\\\temp\\\\selfcheck-_44alb9v\\\\deep-packages\\\\nested-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\\\\nested-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\\\\nested-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'\n\nDuring handling of the above exception, another exception occurred:\n\nFileNotFoundError: [WinError 206] Filnamnet eller filnamnstillägget är för långt: 'C:\\\\Users\\\\Jim.Lundin\\\\AppData\\\\Local\\\\Temp\\\\tk-mf-v-1792756160712796133\\\\temp\\\\selfcheck-_44alb9v\\\\deep-packages\\\\nested-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\\\\nested-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\\\\nested-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'\n\nDuring handling of the above exception, another exception occurred:\n\nTraceback (most recent call last):\n  File \"C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\tk-mf-v-1792756160712796133\\normalization-removed\\selfcheck.py\", line 117, in run_tests\n    _call(test)\n    ~~~~~^^^^^^\n  File \"C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\tk-mf-v-1792756160712796133\\normalization-removed\\selfcheck.py\", line 90, in _call\n    test(**arguments)\n    ~~~~^^^^^^^^^^^^^\n  File \"C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\tk-mf-v-1792756160712796133\\normalization-removed\\tests\\test_meeting_followup.py\", line 340, in test_deep_publications_preserve_paths_and_bytes_through_failure_retry_and_readback\n    with TestCase().assertRaisesRegex(OSError, \"Fixture: directory publication failed\"):\n         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\workspace-qt-migration-1792751468\\workspace\\.python\\Lib\\unittest\\case.py\", line 283, in __exit__\n    self._raiseFailure('\"{}\" does not match \"{}\"'.format(\n    ~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n             expected_regex.pattern, str(exc_value)))\n             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\workspace-qt-migration-1792751468\\workspace\\.python\\Lib\\unittest\\case.py\", line 207, in _raiseFailure\n    raise self.test_case.failureException(msg)\nAssertionError: \"Fixture: directory publication failed\" does not match \"[WinError 206] Filnamnet eller filnamnstillägget är för långt: 'C:\\\\Users\\\\Jim.Lundin\\\\AppData\\\\Local\\\\Temp\\\\tk-mf-v-1792756160712796133\\\\temp\\\\selfcheck-_44alb9v\\\\deep-packages\\\\nested-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\\\\nested-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\\\\nested-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'\"\n",
             "FAILED tests.test_meeting_followup.test_windows_filesystem_spelling_preserves_drive_unc_and_extended_targets\nTraceback (most recent call last):\n  File \"C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\tk-mf-v-1792756160712796133\\normalization-removed\\selfcheck.py\", line 117, in run_tests\n    _call(test)\n    ~~~~~^^^^^^\n  File \"C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\tk-mf-v-1792756160712796133\\normalization-removed\\selfcheck.py\", line 92, in _call\n    test(**arguments)\n    ~~~~^^^^^^^^^^^^^\n  File \"C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\tk-mf-v-1792756160712796133\\normalization-removed\\tests\\test_meeting_followup.py\", line 148, in test_windows_filesystem_spelling_preserves_drive_unc_and_extended_targets\n    assert str(filesystem_path(Path(original))) == expected\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError\n"
           ],
           "timings": [
@@ -8058,7 +8058,7 @@
       {
         "name": "file-verifier-bypassed",
         "command": [
-          "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\toolkit-qt-migration-1792751468\\toolkit\\.python\\python.exe",
+          "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\workspace-qt-migration-1792751468\\workspace\\.python\\python.exe",
           "-B",
           "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\tk-mf-v-1792756160712796133\\native-followup-check.py",
           "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\tk-mf-v-1792756160712796133\\file-verifier-bypassed-config.json"
@@ -8068,7 +8068,7 @@
           "AGENTS.md": "4d1d3997bb19aff36c8a63f6951d0be692a35af0dc23f025f6a5f4265c453f52",
           "GLOSSARY.md": "b44f29a4dea8fe4072a770471d4471427d221f30b2dfb4dd3b47b4b7ca06aaa6",
           "README.md": "06e87bb782cd0c15ac70349f8e3c2be09f866e728c3384da34f2855219ba06f5",
-          "StartToolkit.cmd": "c2b79732b38326bdfdb430d59319b5f5fbfe715663ae840330fa585c0e5cd5d9",
+          "StartWorkspace.cmd": "c2b79732b38326bdfdb430d59319b5f5fbfe715663ae840330fa585c0e5cd5d9",
           "assistant/__init__.py": "374865178a2cc48f636a6bd135325fb8ba587e925d1922ae102ac31d3ecbb146",
           "assistant/__main__.py": "acf3c0528d247d61719e8f4c0d7c5b52e7ea6b038d89e187180760baaf977e68",
           "assistant/action_text.py": "753c3ef9709243d6a49d51b93611d882e654ca01de588498037c00d61d8bf4b0",
@@ -8292,7 +8292,7 @@
           "tests/test_work_window.py": "3f07a0c557c36df549e9d2f86ba1f78e182793a85c781ef7bb988b2c2ddaccae",
           "tests/test_workspace.py": "62f61b5795b852e0721db10e02cfa452f1d6ea5b3b5f81e74426dd581a05a126",
           "tests/uia_fixture.ps1": "abf8e7f71831babf61738f964475cd1b3c2ef0de989035ca914ba72cfbb16207",
-          "toolkit.pyw": "7c96e231cc50780f65e6f45373816f9053afabb189c55d26b2a0fd464cc63c5c",
+          "workspace.pyw": "7c96e231cc50780f65e6f45373816f9053afabb189c55d26b2a0fd464cc63c5c",
           "usage.py": "453e359c17a7208c3344b73f0b7b423dd8f25e5a14c51488979d32f0ec0c6938",
           "winapi/__init__.py": "f574eaeb8dc239e532fffc65d87a5840a51a5c182b3caede39788c6de9fc624f",
           "winapi/_core.py": "5e6003505de4f4eb958e4dc287a02e27b8a38c37af86b628d368e6b62ada8794",
@@ -8331,7 +8331,7 @@
           "python": "3.15.1 (tags/v3.15.1:c37e74c, Oct 21 2026, 06:24:08) [MSC v.1951 64 bit (AMD64)]",
           "pid": 33676,
           "source": "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\tk-mf-v-1792756160712796133\\file-verifier-bypassed",
-          "runtime": "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\toolkit-qt-migration-1792751468\\toolkit\\.runtime",
+          "runtime": "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\workspace-qt-migration-1792751468\\workspace\\.runtime",
           "collected": [
             "tests.test_meeting_followup.test_action_save_receipt_identifies_its_own_commit_after_a_newer_edit",
             "tests.test_meeting_followup.test_an_uncommitted_edit_directory_is_not_history_and_retry_commits_it_once",
@@ -8359,7 +8359,7 @@
           "passed": 21,
           "skipped_modules": 0,
           "problems": [
-            "FAILED tests.test_meeting_followup.test_deep_publications_preserve_paths_and_bytes_through_failure_retry_and_readback\nTraceback (most recent call last):\n  File \"C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\tk-mf-v-1792756160712796133\\file-verifier-bypassed\\selfcheck.py\", line 117, in run_tests\n    _call(test)\n    ~~~~~^^^^^^\n  File \"C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\tk-mf-v-1792756160712796133\\file-verifier-bypassed\\selfcheck.py\", line 90, in _call\n    test(**arguments)\n    ~~~~^^^^^^^^^^^^^\n  File \"C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\tk-mf-v-1792756160712796133\\file-verifier-bypassed\\tests\\test_meeting_followup.py\", line 344, in test_deep_publications_preserve_paths_and_bytes_through_failure_retry_and_readback\n    published = store.publish(plan)\n  File \"C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\tk-mf-v-1792756160712796133\\file-verifier-bypassed\\assistant\\meeting_followup_store.py\", line 479, in publish\n    self._publish(publication.directory, publication.artifacts)\n    ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\tk-mf-v-1792756160712796133\\file-verifier-bypassed\\assistant\\meeting_followup_store.py\", line 459, in _publish\n    self.install(temporary, destination)\n    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\tk-mf-v-1792756160712796133\\file-verifier-bypassed\\assistant\\meeting_followup_store.py\", line 395, in _install\n    filesystem_path(source).rename(filesystem_path(destination))\n    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\toolkit-qt-migration-1792751468\\toolkit\\.python\\Lib\\pathlib\\__init__.py\", line 1277, in rename\n    os.rename(self, target)\n    ~~~~~~~~~^^^^^^^^^^^^^^\nPermissionError: [WinError 5] Åtkomst nekad: '\\\\\\\\?\\\\C:\\\\Users\\\\Jim.Lundin\\\\AppData\\\\Local\\\\Temp\\\\tk-mf-v-1792756160712796133\\\\temp\\\\selfcheck-zidjz1q1\\\\deep-packages\\\\nested-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\\\\nested-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\\\\nested-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\\\\nested-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\\\\nested-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\\\\release-task\\\\versions\\\\.followup-hh0xj1y4' -> '\\\\\\\\?\\\\C:\\\\Users\\\\Jim.Lundin\\\\AppData\\\\Local\\\\Temp\\\\tk-mf-v-1792756160712796133\\\\temp\\\\selfcheck-zidjz1q1\\\\deep-packages\\\\nested-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\\\\nested-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\\\\nested-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\\\\nested-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\\\\nested-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\\\\release-task\\\\versions\\\\4d0686578a1688188d5613d22c6f3789441ccd230fb99a18e782e75fbc49f6bc'\n"
+            "FAILED tests.test_meeting_followup.test_deep_publications_preserve_paths_and_bytes_through_failure_retry_and_readback\nTraceback (most recent call last):\n  File \"C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\tk-mf-v-1792756160712796133\\file-verifier-bypassed\\selfcheck.py\", line 117, in run_tests\n    _call(test)\n    ~~~~~^^^^^^\n  File \"C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\tk-mf-v-1792756160712796133\\file-verifier-bypassed\\selfcheck.py\", line 90, in _call\n    test(**arguments)\n    ~~~~^^^^^^^^^^^^^\n  File \"C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\tk-mf-v-1792756160712796133\\file-verifier-bypassed\\tests\\test_meeting_followup.py\", line 344, in test_deep_publications_preserve_paths_and_bytes_through_failure_retry_and_readback\n    published = store.publish(plan)\n  File \"C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\tk-mf-v-1792756160712796133\\file-verifier-bypassed\\assistant\\meeting_followup_store.py\", line 479, in publish\n    self._publish(publication.directory, publication.artifacts)\n    ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\tk-mf-v-1792756160712796133\\file-verifier-bypassed\\assistant\\meeting_followup_store.py\", line 459, in _publish\n    self.install(temporary, destination)\n    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\tk-mf-v-1792756160712796133\\file-verifier-bypassed\\assistant\\meeting_followup_store.py\", line 395, in _install\n    filesystem_path(source).rename(filesystem_path(destination))\n    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\workspace-qt-migration-1792751468\\workspace\\.python\\Lib\\pathlib\\__init__.py\", line 1277, in rename\n    os.rename(self, target)\n    ~~~~~~~~~^^^^^^^^^^^^^^\nPermissionError: [WinError 5] Åtkomst nekad: '\\\\\\\\?\\\\C:\\\\Users\\\\Jim.Lundin\\\\AppData\\\\Local\\\\Temp\\\\tk-mf-v-1792756160712796133\\\\temp\\\\selfcheck-zidjz1q1\\\\deep-packages\\\\nested-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\\\\nested-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\\\\nested-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\\\\nested-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\\\\nested-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\\\\release-task\\\\versions\\\\.followup-hh0xj1y4' -> '\\\\\\\\?\\\\C:\\\\Users\\\\Jim.Lundin\\\\AppData\\\\Local\\\\Temp\\\\tk-mf-v-1792756160712796133\\\\temp\\\\selfcheck-zidjz1q1\\\\deep-packages\\\\nested-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\\\\nested-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\\\\nested-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\\\\nested-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\\\\nested-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\\\\release-task\\\\versions\\\\4d0686578a1688188d5613d22c6f3789441ccd230fb99a18e782e75fbc49f6bc'\n"
           ],
           "timings": [
             [
@@ -8464,7 +8464,7 @@
     "native_interpretation": "The unchanged-source rerun passed all 22 tests without skips. Removing shared Windows path normalization failed both deep filesystem contracts with WinError 3/206 before fixture cleanup. The separate FileVerifier bypass failed an earlier atomic rename with WinError 5 before reaching verification, so independent trace review rejects the raw name-only classification as a kill. The final native-path-and-retry-contracts batch now independently detects both path mutations; the earlier excluded FileVerifier attempt remains in the history as error.",
     "native_execution_owner_selfcheck": {
       "provenance": "Reported by process_integration and raw log inspected by this validator.",
-      "log": "/tmp/toolkit-meeting-native-fixed-selfcheck.log",
+      "log": "/tmp/workspace-meeting-native-fixed-selfcheck.log",
       "log_sha256": "bca373ef7bc3c33ce27b116091bca93ac48c79573184998c1324b6de934f00c1",
       "passed": 9,
       "failed": 0,
@@ -8484,7 +8484,7 @@
     {
       "phase": "path-fix-first-attempt",
       "classification": "failed-baseline-no-mutants-run",
-      "report_path": "/tmp/toolkit-meeting-review-1792752568910866821/native-initial-baseline-failure/baseline-tests.json",
+      "report_path": "/tmp/workspace-meeting-review-1792752568910866821/native-initial-baseline-failure/baseline-tests.json",
       "report_sha256": "4de891b937337c8643f897fdbc578f64969c7ae519d80168594b16fec13e369f",
       "argv": [
         "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\tk-mf-v-1792756160712796133\\native-followup-check.py",
@@ -8498,7 +8498,7 @@
       "python": "3.15.1 (tags/v3.15.1:c37e74c, Oct 21 2026, 06:24:08) [MSC v.1951 64 bit (AMD64)]",
       "pid": 32180,
       "source": "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\tk-mf-v-1792756160712796133\\baseline",
-      "runtime": "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\toolkit-qt-migration-1792751468\\toolkit\\.runtime",
+      "runtime": "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\workspace-qt-migration-1792751468\\workspace\\.runtime",
       "collected": [
         "tests.test_meeting_followup.test_action_save_receipt_identifies_its_own_commit_after_a_newer_edit",
         "tests.test_meeting_followup.test_an_uncommitted_edit_directory_is_not_history_and_retry_commits_it_once",
@@ -8526,7 +8526,7 @@
       "passed": 21,
       "skipped_modules": 0,
       "problems": [
-        "FAILED tests.test_meeting_followup.test_missing_history_is_reported_and_never_reconstructed_by_a_read\nTraceback (most recent call last):\n  File \"C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\tk-mf-v-1792756160712796133\\baseline\\selfcheck.py\", line 117, in run_tests\n    _call(test)\n    ~~~~~^^^^^^\n  File \"C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\tk-mf-v-1792756160712796133\\baseline\\selfcheck.py\", line 90, in _call\n    test(**arguments)\n    ~~~~^^^^^^^^^^^^^\n  File \"C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\tk-mf-v-1792756160712796133\\baseline\\tests\\test_meeting_followup.py\", line 592, in test_missing_history_is_reported_and_never_reconstructed_by_a_read\n    published = store.publish(store.plan(\"release-task\", followup))\n  File \"C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\tk-mf-v-1792756160712796133\\baseline\\assistant\\meeting_followup_store.py\", line 479, in publish\n    self._publish(publication.directory, publication.artifacts)\n    ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\tk-mf-v-1792756160712796133\\baseline\\assistant\\meeting_followup_store.py\", line 459, in _publish\n    self.install(temporary, destination)\n    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\tk-mf-v-1792756160712796133\\baseline\\assistant\\meeting_followup_store.py\", line 395, in _install\n    filesystem_path(source).rename(filesystem_path(destination))\n    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\toolkit-qt-migration-1792751468\\toolkit\\.python\\Lib\\pathlib\\__init__.py\", line 1277, in rename\n    os.rename(self, target)\n    ~~~~~~~~~^^^^^^^^^^^^^^\nPermissionError: [WinError 5] Åtkomst nekad: '\\\\\\\\?\\\\C:\\\\Users\\\\Jim.Lundin\\\\AppData\\\\Local\\\\Temp\\\\tk-mf-v-1792756160712796133\\\\temp\\\\selfcheck-8jmcexty\\\\packages\\\\release-task\\\\versions\\\\.followup-bb651r0z' -> '\\\\\\\\?\\\\C:\\\\Users\\\\Jim.Lundin\\\\AppData\\\\Local\\\\Temp\\\\tk-mf-v-1792756160712796133\\\\temp\\\\selfcheck-8jmcexty\\\\packages\\\\release-task\\\\versions\\\\ca7032bf03b831f51871a9ad461139276b5386c7df7672deebf7279a95922df9'\n"
+        "FAILED tests.test_meeting_followup.test_missing_history_is_reported_and_never_reconstructed_by_a_read\nTraceback (most recent call last):\n  File \"C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\tk-mf-v-1792756160712796133\\baseline\\selfcheck.py\", line 117, in run_tests\n    _call(test)\n    ~~~~~^^^^^^\n  File \"C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\tk-mf-v-1792756160712796133\\baseline\\selfcheck.py\", line 90, in _call\n    test(**arguments)\n    ~~~~^^^^^^^^^^^^^\n  File \"C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\tk-mf-v-1792756160712796133\\baseline\\tests\\test_meeting_followup.py\", line 592, in test_missing_history_is_reported_and_never_reconstructed_by_a_read\n    published = store.publish(store.plan(\"release-task\", followup))\n  File \"C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\tk-mf-v-1792756160712796133\\baseline\\assistant\\meeting_followup_store.py\", line 479, in publish\n    self._publish(publication.directory, publication.artifacts)\n    ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\tk-mf-v-1792756160712796133\\baseline\\assistant\\meeting_followup_store.py\", line 459, in _publish\n    self.install(temporary, destination)\n    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\tk-mf-v-1792756160712796133\\baseline\\assistant\\meeting_followup_store.py\", line 395, in _install\n    filesystem_path(source).rename(filesystem_path(destination))\n    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\workspace-qt-migration-1792751468\\workspace\\.python\\Lib\\pathlib\\__init__.py\", line 1277, in rename\n    os.rename(self, target)\n    ~~~~~~~~~^^^^^^^^^^^^^^\nPermissionError: [WinError 5] Åtkomst nekad: '\\\\\\\\?\\\\C:\\\\Users\\\\Jim.Lundin\\\\AppData\\\\Local\\\\Temp\\\\tk-mf-v-1792756160712796133\\\\temp\\\\selfcheck-8jmcexty\\\\packages\\\\release-task\\\\versions\\\\.followup-bb651r0z' -> '\\\\\\\\?\\\\C:\\\\Users\\\\Jim.Lundin\\\\AppData\\\\Local\\\\Temp\\\\tk-mf-v-1792756160712796133\\\\temp\\\\selfcheck-8jmcexty\\\\packages\\\\release-task\\\\versions\\\\ca7032bf03b831f51871a9ad461139276b5386c7df7672deebf7279a95922df9'\n"
       ],
       "timings": [
         [
@@ -8627,7 +8627,7 @@
     },
     {
       "phase": "path-fix-unchanged-source-rerun",
-      "report_path": "/tmp/toolkit-meeting-review-1792752568910866821/native-path-validation/baseline-tests.json",
+      "report_path": "/tmp/workspace-meeting-review-1792752568910866821/native-path-validation/baseline-tests.json",
       "report_sha256": "5454199cbaac2469a8934ae8693dec0362dc2a541d0bb099ec20f9bcffa24851",
       "argv": [
         "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\tk-mf-v-1792756160712796133\\native-followup-check.py",
@@ -8641,7 +8641,7 @@
       "python": "3.15.1 (tags/v3.15.1:c37e74c, Oct 21 2026, 06:24:08) [MSC v.1951 64 bit (AMD64)]",
       "pid": 25076,
       "source": "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\tk-mf-v-1792756160712796133\\baseline",
-      "runtime": "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\toolkit-qt-migration-1792751468\\toolkit\\.runtime",
+      "runtime": "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\workspace-qt-migration-1792751468\\workspace\\.runtime",
       "collected": [
         "tests.test_meeting_followup.test_action_save_receipt_identifies_its_own_commit_after_a_newer_edit",
         "tests.test_meeting_followup.test_an_uncommitted_edit_directory_is_not_history_and_retry_commits_it_once",
@@ -8766,7 +8766,7 @@
     },
     {
       "phase": "rename-retry-final",
-      "report_path": "/tmp/toolkit-meeting-review-1792752568910866821/native-retry-validation/baseline-tests.json",
+      "report_path": "/tmp/workspace-meeting-review-1792752568910866821/native-retry-validation/baseline-tests.json",
       "report_sha256": "29f89e0f42653a1be5864950b2a5d4293ce29470833a38e1f443df87164c21fe",
       "argv": [
         "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\tk-mf-r-1792757502020613487\\native-followup-check.py",
@@ -8780,7 +8780,7 @@
       "python": "3.15.1 (tags/v3.15.1:c37e74c, Oct 21 2026, 06:24:08) [MSC v.1951 64 bit (AMD64)]",
       "pid": 33912,
       "source": "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\tk-mf-r-1792757502020613487\\baseline",
-      "runtime": "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\toolkit-qt-migration-1792751468\\toolkit\\.runtime",
+      "runtime": "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\workspace-qt-migration-1792751468\\workspace\\.runtime",
       "modules": [
         "tests.test_meeting_followup",
         "tests.test_windows_meeting_followup"
@@ -8934,14 +8934,14 @@
     "owner_evidence": {
       "initial_fixture": {
         "classification": "Fixture failure: access-0 metadata handle did not deny the rename; not accepted as production red.",
-        "report_path": "/tmp/toolkit-meeting-rename-1792756897655685071/rename-red.json",
+        "report_path": "/tmp/workspace-meeting-rename-1792756897655685071/rename-red.json",
         "report_sha256": "27c426422431b79146884e2f4e3f8ef9c31aa6d78e9495fb389570ecd11744a9",
-        "log": "/tmp/toolkit-meeting-rename-1792756897655685071/rename-red.log",
+        "log": "/tmp/workspace-meeting-rename-1792756897655685071/rename-red.log",
         "log_sha256": "ac1f6a3ea44125cf1b852f23313c05598293fa9b29f6f705e7d707d832e8d839",
         "observations": {
           "native_pid": 30716,
-          "cwd": "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\toolkit-qt-migration-1792751468\\toolkit",
-          "driver": "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\toolkit-meeting-rename-1792756897655685071\\native-module-check.py",
+          "cwd": "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\workspace-qt-migration-1792751468\\workspace",
+          "driver": "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\workspace-meeting-rename-1792756897655685071\\native-module-check.py",
           "module": "test_windows_meeting_followup",
           "collected": [
             "tests.test_windows_meeting_followup.test_nonsharing_windows_install_errors_propagate_without_retry",
@@ -8952,8 +8952,8 @@
           "failed": 2,
           "skipped": 0,
           "problems": [
-            "FAILED tests.test_windows_meeting_followup.test_persistent_directory_readers_exhaust_retries_without_losing_prior_versions\nTraceback (most recent call last):\n  File \"C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\toolkit-qt-migration-1792751468\\toolkit\\selfcheck.py\", line 117, in run_tests\n    _call(test)\n    ~~~~~^^^^^^\n  File \"C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\toolkit-qt-migration-1792751468\\toolkit\\selfcheck.py\", line 90, in _call\n    test(**arguments)\n    ~~~~^^^^^^^^^^^^^\n  File \"C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\toolkit-qt-migration-1792751468\\toolkit\\tests\\test_windows_meeting_followup.py\", line 97, in test_persistent_directory_readers_exhaust_retries_without_losing_prior_versions\n    store.publish(plan)\n    ~~~~~~~~~~~~~^^^^^^\n  File \"C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\toolkit-qt-migration-1792751468\\toolkit\\assistant\\meeting_followup_store.py\", line 479, in publish\n    self._publish(publication.directory, publication.artifacts)\n    ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\toolkit-qt-migration-1792751468\\toolkit\\assistant\\meeting_followup_store.py\", line 459, in _publish\n    self.install(temporary, destination)\n    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\toolkit-qt-migration-1792751468\\toolkit\\tests\\test_windows_meeting_followup.py\", line 92, in install\n    raise AssertionError(\"The real directory reader did not block the rename.\")\nAssertionError: The real directory reader did not block the rename.\n",
-            "FAILED tests.test_windows_meeting_followup.test_publication_recovers_after_a_directory_reader_releases_its_handle\nTraceback (most recent call last):\n  File \"C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\toolkit-qt-migration-1792751468\\toolkit\\selfcheck.py\", line 117, in run_tests\n    _call(test)\n    ~~~~~^^^^^^\n  File \"C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\toolkit-qt-migration-1792751468\\toolkit\\selfcheck.py\", line 90, in _call\n    test(**arguments)\n    ~~~~^^^^^^^^^^^^^\n  File \"C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\toolkit-qt-migration-1792751468\\toolkit\\tests\\test_windows_meeting_followup.py\", line 68, in test_publication_recovers_after_a_directory_reader_releases_its_handle\n    published = store.publish(plan)\n  File \"C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\toolkit-qt-migration-1792751468\\toolkit\\assistant\\meeting_followup_store.py\", line 479, in publish\n    self._publish(publication.directory, publication.artifacts)\n    ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\toolkit-qt-migration-1792751468\\toolkit\\assistant\\meeting_followup_store.py\", line 459, in _publish\n    self.install(temporary, destination)\n    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\toolkit-qt-migration-1792751468\\toolkit\\tests\\test_windows_meeting_followup.py\", line 63, in install\n    raise AssertionError(\"The real directory reader did not block the rename.\")\nAssertionError: The real directory reader did not block the rename.\n"
+            "FAILED tests.test_windows_meeting_followup.test_persistent_directory_readers_exhaust_retries_without_losing_prior_versions\nTraceback (most recent call last):\n  File \"C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\workspace-qt-migration-1792751468\\workspace\\selfcheck.py\", line 117, in run_tests\n    _call(test)\n    ~~~~~^^^^^^\n  File \"C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\workspace-qt-migration-1792751468\\workspace\\selfcheck.py\", line 90, in _call\n    test(**arguments)\n    ~~~~^^^^^^^^^^^^^\n  File \"C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\workspace-qt-migration-1792751468\\workspace\\tests\\test_windows_meeting_followup.py\", line 97, in test_persistent_directory_readers_exhaust_retries_without_losing_prior_versions\n    store.publish(plan)\n    ~~~~~~~~~~~~~^^^^^^\n  File \"C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\workspace-qt-migration-1792751468\\workspace\\assistant\\meeting_followup_store.py\", line 479, in publish\n    self._publish(publication.directory, publication.artifacts)\n    ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\workspace-qt-migration-1792751468\\workspace\\assistant\\meeting_followup_store.py\", line 459, in _publish\n    self.install(temporary, destination)\n    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\workspace-qt-migration-1792751468\\workspace\\tests\\test_windows_meeting_followup.py\", line 92, in install\n    raise AssertionError(\"The real directory reader did not block the rename.\")\nAssertionError: The real directory reader did not block the rename.\n",
+            "FAILED tests.test_windows_meeting_followup.test_publication_recovers_after_a_directory_reader_releases_its_handle\nTraceback (most recent call last):\n  File \"C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\workspace-qt-migration-1792751468\\workspace\\selfcheck.py\", line 117, in run_tests\n    _call(test)\n    ~~~~~^^^^^^\n  File \"C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\workspace-qt-migration-1792751468\\workspace\\selfcheck.py\", line 90, in _call\n    test(**arguments)\n    ~~~~^^^^^^^^^^^^^\n  File \"C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\workspace-qt-migration-1792751468\\workspace\\tests\\test_windows_meeting_followup.py\", line 68, in test_publication_recovers_after_a_directory_reader_releases_its_handle\n    published = store.publish(plan)\n  File \"C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\workspace-qt-migration-1792751468\\workspace\\assistant\\meeting_followup_store.py\", line 479, in publish\n    self._publish(publication.directory, publication.artifacts)\n    ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\workspace-qt-migration-1792751468\\workspace\\assistant\\meeting_followup_store.py\", line 459, in _publish\n    self.install(temporary, destination)\n    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\workspace-qt-migration-1792751468\\workspace\\tests\\test_windows_meeting_followup.py\", line 63, in install\n    raise AssertionError(\"The real directory reader did not block the rename.\")\nAssertionError: The real directory reader did not block the rename.\n"
           ],
           "timings": [
             [
@@ -8981,14 +8981,14 @@
       },
       "valid_red": {
         "classification": "GENERIC_READ without delete sharing produced native WinError 32; recovery and retry-count contracts failed before the fix.",
-        "report_path": "/tmp/toolkit-meeting-rename-1792756897655685071/rename-red-read.json",
+        "report_path": "/tmp/workspace-meeting-rename-1792756897655685071/rename-red-read.json",
         "report_sha256": "72d048391b7e826255c647e004608485d5f473ad7c7801b4834e4bee4259b94b",
-        "log": "/tmp/toolkit-meeting-rename-1792756897655685071/rename-red-read.log",
+        "log": "/tmp/workspace-meeting-rename-1792756897655685071/rename-red-read.log",
         "log_sha256": "803d5bd1dc4da503fca49a0851a4c20923f381573eca4cdcad16152d8064f844",
         "observations": {
           "native_pid": 28428,
-          "cwd": "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\toolkit-qt-migration-1792751468\\toolkit",
-          "driver": "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\toolkit-meeting-rename-1792756897655685071\\native-module-check.py",
+          "cwd": "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\workspace-qt-migration-1792751468\\workspace",
+          "driver": "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\workspace-meeting-rename-1792756897655685071\\native-module-check.py",
           "module": "test_windows_meeting_followup",
           "collected": [
             "tests.test_windows_meeting_followup.test_nonsharing_windows_install_errors_propagate_without_retry",
@@ -8999,8 +8999,8 @@
           "failed": 2,
           "skipped": 0,
           "problems": [
-            "FAILED tests.test_windows_meeting_followup.test_persistent_directory_readers_exhaust_retries_without_losing_prior_versions\nTraceback (most recent call last):\n  File \"C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\toolkit-qt-migration-1792751468\\toolkit\\selfcheck.py\", line 117, in run_tests\n    _call(test)\n    ~~~~~^^^^^^\n  File \"C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\toolkit-qt-migration-1792751468\\toolkit\\selfcheck.py\", line 90, in _call\n    test(**arguments)\n    ~~~~^^^^^^^^^^^^^\n  File \"C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\toolkit-qt-migration-1792751468\\toolkit\\tests\\test_windows_meeting_followup.py\", line 98, in test_persistent_directory_readers_exhaust_retries_without_losing_prior_versions\n    assert 2 <= len(failures) <= 6 and raised.exception is failures[-1]\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError\n",
-            "FAILED tests.test_windows_meeting_followup.test_publication_recovers_after_a_directory_reader_releases_its_handle\nTraceback (most recent call last):\n  File \"C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\toolkit-qt-migration-1792751468\\toolkit\\selfcheck.py\", line 117, in run_tests\n    _call(test)\n    ~~~~~^^^^^^\n  File \"C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\toolkit-qt-migration-1792751468\\toolkit\\selfcheck.py\", line 90, in _call\n    test(**arguments)\n    ~~~~^^^^^^^^^^^^^\n  File \"C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\toolkit-qt-migration-1792751468\\toolkit\\tests\\test_windows_meeting_followup.py\", line 68, in test_publication_recovers_after_a_directory_reader_releases_its_handle\n    published = store.publish(plan)\n  File \"C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\toolkit-qt-migration-1792751468\\toolkit\\assistant\\meeting_followup_store.py\", line 479, in publish\n    self._publish(publication.directory, publication.artifacts)\n    ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\toolkit-qt-migration-1792751468\\toolkit\\assistant\\meeting_followup_store.py\", line 459, in _publish\n    self.install(temporary, destination)\n    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\toolkit-qt-migration-1792751468\\toolkit\\tests\\test_windows_meeting_followup.py\", line 59, in install\n    filesystem_path(source).rename(filesystem_path(destination))\n    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\toolkit-qt-migration-1792751468\\toolkit\\.python\\Lib\\pathlib\\__init__.py\", line 1277, in rename\n    os.rename(self, target)\n    ~~~~~~~~~^^^^^^^^^^^^^^\nPermissionError: [WinError 32] Det går inte att komma åt filen eftersom den\r\nanvänds av en annan process: '\\\\\\\\?\\\\C:\\\\Users\\\\JIM~1.LUN\\\\AppData\\\\Local\\\\Temp\\\\selfcheck-wbaisqt4\\\\packages\\\\release-task\\\\versions\\\\.followup-w2zbja45' -> '\\\\\\\\?\\\\C:\\\\Users\\\\JIM~1.LUN\\\\AppData\\\\Local\\\\Temp\\\\selfcheck-wbaisqt4\\\\packages\\\\release-task\\\\versions\\\\0dc06ee686669f9feb61105cc64ba9dd91bbe26eb415c4a4bb998de08cfa3bd6'\n"
+            "FAILED tests.test_windows_meeting_followup.test_persistent_directory_readers_exhaust_retries_without_losing_prior_versions\nTraceback (most recent call last):\n  File \"C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\workspace-qt-migration-1792751468\\workspace\\selfcheck.py\", line 117, in run_tests\n    _call(test)\n    ~~~~~^^^^^^\n  File \"C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\workspace-qt-migration-1792751468\\workspace\\selfcheck.py\", line 90, in _call\n    test(**arguments)\n    ~~~~^^^^^^^^^^^^^\n  File \"C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\workspace-qt-migration-1792751468\\workspace\\tests\\test_windows_meeting_followup.py\", line 98, in test_persistent_directory_readers_exhaust_retries_without_losing_prior_versions\n    assert 2 <= len(failures) <= 6 and raised.exception is failures[-1]\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError\n",
+            "FAILED tests.test_windows_meeting_followup.test_publication_recovers_after_a_directory_reader_releases_its_handle\nTraceback (most recent call last):\n  File \"C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\workspace-qt-migration-1792751468\\workspace\\selfcheck.py\", line 117, in run_tests\n    _call(test)\n    ~~~~~^^^^^^\n  File \"C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\workspace-qt-migration-1792751468\\workspace\\selfcheck.py\", line 90, in _call\n    test(**arguments)\n    ~~~~^^^^^^^^^^^^^\n  File \"C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\workspace-qt-migration-1792751468\\workspace\\tests\\test_windows_meeting_followup.py\", line 68, in test_publication_recovers_after_a_directory_reader_releases_its_handle\n    published = store.publish(plan)\n  File \"C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\workspace-qt-migration-1792751468\\workspace\\assistant\\meeting_followup_store.py\", line 479, in publish\n    self._publish(publication.directory, publication.artifacts)\n    ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\workspace-qt-migration-1792751468\\workspace\\assistant\\meeting_followup_store.py\", line 459, in _publish\n    self.install(temporary, destination)\n    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\workspace-qt-migration-1792751468\\workspace\\tests\\test_windows_meeting_followup.py\", line 59, in install\n    filesystem_path(source).rename(filesystem_path(destination))\n    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\workspace-qt-migration-1792751468\\workspace\\.python\\Lib\\pathlib\\__init__.py\", line 1277, in rename\n    os.rename(self, target)\n    ~~~~~~~~~^^^^^^^^^^^^^^\nPermissionError: [WinError 32] Det går inte att komma åt filen eftersom den\r\nanvänds av en annan process: '\\\\\\\\?\\\\C:\\\\Users\\\\JIM~1.LUN\\\\AppData\\\\Local\\\\Temp\\\\selfcheck-wbaisqt4\\\\packages\\\\release-task\\\\versions\\\\.followup-w2zbja45' -> '\\\\\\\\?\\\\C:\\\\Users\\\\JIM~1.LUN\\\\AppData\\\\Local\\\\Temp\\\\selfcheck-wbaisqt4\\\\packages\\\\release-task\\\\versions\\\\0dc06ee686669f9feb61105cc64ba9dd91bbe26eb415c4a4bb998de08cfa3bd6'\n"
           ],
           "timings": [
             [
@@ -9028,14 +9028,14 @@
       },
       "green": {
         "classification": "All four native sharing/classification tests passed after the bounded retry fix.",
-        "report_path": "/tmp/toolkit-meeting-rename-1792756897655685071/rename-green-final.json",
+        "report_path": "/tmp/workspace-meeting-rename-1792756897655685071/rename-green-final.json",
         "report_sha256": "6e4f2079200f0c487dc91d3ce31fcc43213ec4d86fc5a868bd2bdeef16482a03",
-        "log": "/tmp/toolkit-meeting-rename-1792756897655685071/rename-green-final.log",
+        "log": "/tmp/workspace-meeting-rename-1792756897655685071/rename-green-final.log",
         "log_sha256": "1c24171e448afbcd1f0b46a95b544bd59b0e2b3b8af2d39b5d525e4d8bfae26f",
         "observations": {
           "native_pid": 26000,
-          "cwd": "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\toolkit-qt-migration-1792751468\\toolkit",
-          "driver": "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\toolkit-meeting-rename-1792756897655685071\\native-module-check.py",
+          "cwd": "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\workspace-qt-migration-1792751468\\workspace",
+          "driver": "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\workspace-meeting-rename-1792756897655685071\\native-module-check.py",
           "module": "test_windows_meeting_followup",
           "collected": [
             "tests.test_windows_meeting_followup.test_native_access_and_lock_errors_retry_the_same_atomic_publication",
@@ -9077,14 +9077,14 @@
       },
       "deep_after_retry": {
         "classification": "Both original deep path regressions passed after the retry change.",
-        "report_path": "/tmp/toolkit-meeting-rename-1792756897655685071/deep-after-retry.json",
+        "report_path": "/tmp/workspace-meeting-rename-1792756897655685071/deep-after-retry.json",
         "report_sha256": "3cc718f4dc95fc6a2deb1ba9e6a755e660d34e896d17925db07c25549a831cfb",
-        "log": "/tmp/toolkit-meeting-rename-1792756897655685071/deep-after-retry.log",
+        "log": "/tmp/workspace-meeting-rename-1792756897655685071/deep-after-retry.log",
         "log_sha256": "fae04040650ef36d8792bd0b40e28ee88002dd3cf7d25094630a40c736a24bbf",
         "observations": {
           "native_pid": 33504,
-          "cwd": "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\toolkit-qt-migration-1792751468\\toolkit",
-          "driver": "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\toolkit-meeting-rename-1792756897655685071\\native-selected-check.py",
+          "cwd": "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\workspace-qt-migration-1792751468\\workspace",
+          "driver": "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\workspace-meeting-rename-1792756897655685071\\native-selected-check.py",
           "collected": [
             "test_meeting_followup:test_deep_publications_preserve_paths_and_bytes_through_failure_retry_and_readback",
             "test_meeting_followup:test_deep_edit_journals_commit_exact_revisions_without_changing_generated_artifacts"
@@ -9105,7 +9105,7 @@
       }
     },
     "classification_scope": "The delete-sharing-denied real directory handle produces WinError 32. Separate WinError 5 and 33 instances are injected at the public installer seam, followed by an actual rename and readback; this tests the classification of the observed access-denied condition without claiming the native handle produces every code.",
-    "independent_native_evidence": "/tmp/toolkit-meeting-review-1792752568910866821/native-retry-validation",
+    "independent_native_evidence": "/tmp/workspace-meeting-review-1792752568910866821/native-retry-validation",
     "independent_native_manifest_sha256": {
       "baseline-tests.json": "29f89e0f42653a1be5864950b2a5d4293ce29470833a38e1f443df87164c21fe",
       "access-denied-not-retried-tests.trace.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -9146,7 +9146,7 @@
       {
         "name": "stage",
         "command": [
-          "/mnt/c/Users/Jim.Lundin/AppData/Local/Temp/toolkit-qt-migration-1792751468/toolkit/.python/python.exe",
+          "/mnt/c/Users/Jim.Lundin/AppData/Local/Temp/workspace-qt-migration-1792751468/workspace/.python/python.exe",
           "-B",
           "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\tk-mf-r-1792757502020613487\\native-stage.py",
           "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\tk-mf-r-1792757502020613487\\native-plan.json"
@@ -9163,7 +9163,7 @@
       {
         "name": "validation",
         "command": [
-          "/mnt/c/Users/Jim.Lundin/AppData/Local/Temp/toolkit-qt-migration-1792751468/toolkit/.python/python.exe",
+          "/mnt/c/Users/Jim.Lundin/AppData/Local/Temp/workspace-qt-migration-1792751468/workspace/.python/python.exe",
           "-B",
           "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\tk-mf-r-1792757502020613487\\native-mutation-master.py",
           "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\tk-mf-r-1792757502020613487\\native-plan.json"
@@ -9183,7 +9183,7 @@
     {
       "status": "failed",
       "provenance": "Executed by the UI/release session; root supplied the result and validation independently read the log.",
-      "log": "/tmp/toolkit-qt-full-windows.log",
+      "log": "/tmp/workspace-qt-full-windows.log",
       "log_sha256": "7f3f3e4181b18c92304c952ed0ef5431eeb8545a8290e9077b397f4f8f383ad8",
       "passed": 866,
       "failed": 4,
@@ -9204,7 +9204,7 @@
       "passed": 885,
       "failed": 1,
       "skipped_opt_in_modules": 3,
-      "log": "/tmp/toolkit-qt-full-windows-focus-baseline.log",
+      "log": "/tmp/workspace-qt-full-windows-focus-baseline.log",
       "log_sha256": "e6fe0dbd5f43b6d343b5ded4f37b39f1a879812fc020dde54d5a13e46181b35d",
       "failed_tests": [
         "tests.test_windows_work_panel.test_quiet_reopen_does_not_reactivate_a_previously_focused_work_window"
@@ -9212,11 +9212,11 @@
       "diagnosis": "The fixture sampled foreground 0 after Hide. Only the Windows work-panel test fixture changed; production Python stayed unchanged.",
       "fixture_delta": {
         "evidence": {
-          "path": "/tmp/toolkit-meeting-portable-native-fixture-delta.json",
+          "path": "/tmp/workspace-meeting-portable-native-fixture-delta.json",
           "sha256": "4dd7303641d3531afb8a258ed9a0616c83c838343fad242f2c282304c8c008f0"
         },
         "observations": {
-          "portable_report": "/tmp/toolkit-meeting-portable-release-1792757857561805508.json",
+          "portable_report": "/tmp/workspace-meeting-portable-release-1792757857561805508.json",
           "changed_python_files": [
             "tests/test_windows_work_panel.py"
           ],
@@ -9230,7 +9230,7 @@
       "forced_activation_negative_control": {
         "detected": true,
         "log": {
-          "path": "/tmp/toolkit-qt-focus-negative-control.log",
+          "path": "/tmp/workspace-qt-focus-negative-control.log",
           "sha256": "af01c8a9e4f310474d589d692ecd2f6bd8d7475bb09144aac9d855342d6ffa87"
         }
       }
@@ -9244,14 +9244,14 @@
       "skip_scope": "Three opt-in end-to-end modules.",
       "seconds": 225.62,
       "returncode": 0,
-      "log": "/tmp/toolkit-qt-full-windows-final.log",
+      "log": "/tmp/workspace-qt-full-windows-final.log",
       "log_sha256": "b8345c673cf044f4df0b52edb75f421bb37a9f56bc9e093cbdaa686b3e14b6db",
       "evidence": {
-        "path": "/tmp/toolkit-qt-final-validation.json",
+        "path": "/tmp/workspace-qt-final-validation.json",
         "sha256": "cc630ec5371b91b8a30aee88704be1bf336b8cfca48cf797d7c10886b442b154"
       },
       "code_manifest": {
-        "path": "/tmp/toolkit-qt-final-code.json",
+        "path": "/tmp/workspace-qt-final-code.json",
         "sha256": "d075de3a16fc1eefa84c5e38a0b5c1e6e5329eefdac91a5d54f3f1143ad3139c"
       },
       "code_files": 222,
@@ -9262,7 +9262,7 @@
           "failed": 0,
           "skipped_modules": 3,
           "seconds": 225.62,
-          "log": "/tmp/toolkit-qt-full-windows-final.log"
+          "log": "/tmp/workspace-qt-full-windows-final.log"
         },
         "portable": {
           "passed": 723,
@@ -9292,16 +9292,16 @@
   "broader_portable_selfcheck_attempts": [
     {
       "provenance": "Executed by root; JSON and summary log independently read by validation.",
-      "evidence_path": "/tmp/toolkit-meeting-portable-final.json",
+      "evidence_path": "/tmp/workspace-meeting-portable-final.json",
       "evidence_sha256": "b7929848feb06f0de3cbf9ceb5bc095b568b7facd4c29fe09b0cde1ea14b7e9c",
       "passed": 721,
       "failed": 0,
       "skipped_native_modules": 21,
       "command": [
-        "/home/jim/toolkit/.venv/bin/python",
+        "/home/jim/workspace/.venv/bin/python",
         "-B",
-        "/home/jim/toolkit/selfcheck.py",
-        "/home/jim/toolkit",
+        "/home/jim/workspace/selfcheck.py",
+        "/home/jim/workspace",
         "--durations",
         "12"
       ],
@@ -9500,7 +9500,7 @@
         "tests/test_work_submissions.py": "d28ad8b22c9ce3519ebf76d1ab7f7404adf81dd3f064362431928262472511c3",
         "tests/test_work_window.py": "3f07a0c557c36df549e9d2f86ba1f78e182793a85c781ef7bb988b2c2ddaccae",
         "tests/test_workspace.py": "62f61b5795b852e0721db10e02cfa452f1d6ea5b3b5f81e74426dd581a05a126",
-        "toolkit.pyw": "7c96e231cc50780f65e6f45373816f9053afabb189c55d26b2a0fd464cc63c5c",
+        "workspace.pyw": "7c96e231cc50780f65e6f45373816f9053afabb189c55d26b2a0fd464cc63c5c",
         "usage.py": "453e359c17a7208c3344b73f0b7b423dd8f25e5a14c51488979d32f0ec0c6938",
         "winapi/__init__.py": "f574eaeb8dc239e532fffc65d87a5840a51a5c182b3caede39788c6de9fc624f",
         "winapi/_core.py": "5e6003505de4f4eb958e4dc287a02e27b8a38c37af86b628d368e6b62ada8794",
@@ -9521,25 +9521,25 @@
         "winapi/windows.py": "ad8c57e8dd7629c8cc74a9e5cc90b6c896615fcbe74f6def7b9445388ca538b8"
       },
       "source_unchanged": true,
-      "log": "/tmp/toolkit-meeting-portable-final.log"
+      "log": "/tmp/workspace-meeting-portable-final.log"
     },
     {
       "provenance": "Root release coordinator; metadata and final log summary inspected by validator. Log hash below is the digest recorded by root.",
-      "evidence_path": "/tmp/toolkit-meeting-portable-release-1792757857561805508.json",
+      "evidence_path": "/tmp/workspace-meeting-portable-release-1792757857561805508.json",
       "passed": 723,
       "failed": 0,
       "skipped_native_modules": 22,
       "changed_python_files": [],
       "command": [
-        "/home/jim/toolkit/.venv/bin/python",
+        "/home/jim/workspace/.venv/bin/python",
         "-B",
         "selfcheck.py",
         "--durations",
         "15"
       ],
-      "cwd": "/home/jim/toolkit",
+      "cwd": "/home/jim/workspace",
       "elapsed_seconds": 66.45328105002409,
-      "log": "/tmp/toolkit-meeting-portable-release-1792757857561805508.log",
+      "log": "/tmp/workspace-meeting-portable-release-1792757857561805508.log",
       "log_sha256": "34d6351853259b49b06cd214d42f4badac359c26c50446124cc6703c2750b210",
       "python_source_sha256": {
         "assistant/__init__.py": "374865178a2cc48f636a6bd135325fb8ba587e925d1922ae102ac31d3ecbb146",
@@ -9735,7 +9735,7 @@
         "tests/test_work_submissions.py": "d28ad8b22c9ce3519ebf76d1ab7f7404adf81dd3f064362431928262472511c3",
         "tests/test_work_window.py": "3f07a0c557c36df549e9d2f86ba1f78e182793a85c781ef7bb988b2c2ddaccae",
         "tests/test_workspace.py": "62f61b5795b852e0721db10e02cfa452f1d6ea5b3b5f81e74426dd581a05a126",
-        "toolkit.pyw": "7c96e231cc50780f65e6f45373816f9053afabb189c55d26b2a0fd464cc63c5c",
+        "workspace.pyw": "7c96e231cc50780f65e6f45373816f9053afabb189c55d26b2a0fd464cc63c5c",
         "usage.py": "453e359c17a7208c3344b73f0b7b423dd8f25e5a14c51488979d32f0ec0c6938",
         "winapi/__init__.py": "f574eaeb8dc239e532fffc65d87a5840a51a5c182b3caede39788c6de9fc624f",
         "winapi/_core.py": "5e6003505de4f4eb958e4dc287a02e27b8a38c37af86b628d368e6b62ada8794",
@@ -9770,14 +9770,14 @@
       "skip_scope": "Three opt-in end-to-end modules.",
       "seconds": 225.62,
       "returncode": 0,
-      "log": "/tmp/toolkit-qt-full-windows-final.log",
+      "log": "/tmp/workspace-qt-full-windows-final.log",
       "log_sha256": "b8345c673cf044f4df0b52edb75f421bb37a9f56bc9e093cbdaa686b3e14b6db",
       "evidence": {
-        "path": "/tmp/toolkit-qt-final-validation.json",
+        "path": "/tmp/workspace-qt-final-validation.json",
         "sha256": "cc630ec5371b91b8a30aee88704be1bf336b8cfca48cf797d7c10886b442b154"
       },
       "code_manifest": {
-        "path": "/tmp/toolkit-qt-final-code.json",
+        "path": "/tmp/workspace-qt-final-code.json",
         "sha256": "d075de3a16fc1eefa84c5e38a0b5c1e6e5329eefdac91a5d54f3f1143ad3139c"
       },
       "code_files": 222,
@@ -9788,7 +9788,7 @@
           "failed": 0,
           "skipped_modules": 3,
           "seconds": 225.62,
-          "log": "/tmp/toolkit-qt-full-windows-final.log"
+          "log": "/tmp/workspace-qt-full-windows-final.log"
         },
         "portable": {
           "passed": 723,
@@ -9830,7 +9830,7 @@
       "provenance": "Root ran four paired native Windows benchmark processes; validator inspected every result and checked its recorded digest.",
       "collector": "scripts/benchmark_keyboard.py",
       "summary_evidence": {
-        "path": "/mnt/c/Users/Jim.Lundin/AppData/Local/Temp/toolkit-meeting-final-1792758885965628692/keyboard-paired-summary.json",
+        "path": "/mnt/c/Users/Jim.Lundin/AppData/Local/Temp/workspace-meeting-final-1792758885965628692/keyboard-paired-summary.json",
         "sha256": "53ca34df95cc140f99f369cacd06210619f693087fd05d80bebd5253e4aa2d49"
       },
       "order": "before-after-after-before",
@@ -9841,7 +9841,7 @@
         {
           "label": "before",
           "evidence": {
-            "path": "/mnt/c/Users/Jim.Lundin/AppData/Local/Temp/toolkit-meeting-final-1792758885965628692/keyboard-windows-1-before.json",
+            "path": "/mnt/c/Users/Jim.Lundin/AppData/Local/Temp/workspace-meeting-final-1792758885965628692/keyboard-windows-1-before.json",
             "sha256": "a8df6d1bbee172203ea3c351b1f4a7105c6c9296abd3340047050c4a838fd843"
           },
           "summary": {
@@ -9864,7 +9864,7 @@
           },
           "observations": {
             "python": "3.15.1 (tags/v3.15.1:c37e74c, Oct 21 2026, 06:24:08) [MSC v.1951 64 bit (AMD64)]",
-            "root": "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\toolkit-meeting-final-1792758885965628692\\keyboard-baseline",
+            "root": "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\workspace-meeting-final-1792758885965628692\\keyboard-baseline",
             "events_per_round": 100000,
             "rounds": 5,
             "gc_enabled": true,
@@ -9939,7 +9939,7 @@
         {
           "label": "after",
           "evidence": {
-            "path": "/mnt/c/Users/Jim.Lundin/AppData/Local/Temp/toolkit-meeting-final-1792758885965628692/keyboard-windows-2-after.json",
+            "path": "/mnt/c/Users/Jim.Lundin/AppData/Local/Temp/workspace-meeting-final-1792758885965628692/keyboard-windows-2-after.json",
             "sha256": "afda6743eafa82ba7fbd88af769ffbfc05dcdf3cfa08f19d6b17d5ecefe97840"
           },
           "summary": {
@@ -9962,7 +9962,7 @@
           },
           "observations": {
             "python": "3.15.1 (tags/v3.15.1:c37e74c, Oct 21 2026, 06:24:08) [MSC v.1951 64 bit (AMD64)]",
-            "root": "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\toolkit-meeting-final-1792758885965628692\\toolkit",
+            "root": "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\workspace-meeting-final-1792758885965628692\\workspace",
             "events_per_round": 100000,
             "rounds": 5,
             "gc_enabled": true,
@@ -10037,7 +10037,7 @@
         {
           "label": "after",
           "evidence": {
-            "path": "/mnt/c/Users/Jim.Lundin/AppData/Local/Temp/toolkit-meeting-final-1792758885965628692/keyboard-windows-3-after.json",
+            "path": "/mnt/c/Users/Jim.Lundin/AppData/Local/Temp/workspace-meeting-final-1792758885965628692/keyboard-windows-3-after.json",
             "sha256": "8982f61b87f685f73bfd8a0418c03d218fc6765a1b287ec82ab67d9711160a86"
           },
           "summary": {
@@ -10060,7 +10060,7 @@
           },
           "observations": {
             "python": "3.15.1 (tags/v3.15.1:c37e74c, Oct 21 2026, 06:24:08) [MSC v.1951 64 bit (AMD64)]",
-            "root": "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\toolkit-meeting-final-1792758885965628692\\toolkit",
+            "root": "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\workspace-meeting-final-1792758885965628692\\workspace",
             "events_per_round": 100000,
             "rounds": 5,
             "gc_enabled": true,
@@ -10135,7 +10135,7 @@
         {
           "label": "before",
           "evidence": {
-            "path": "/mnt/c/Users/Jim.Lundin/AppData/Local/Temp/toolkit-meeting-final-1792758885965628692/keyboard-windows-4-before.json",
+            "path": "/mnt/c/Users/Jim.Lundin/AppData/Local/Temp/workspace-meeting-final-1792758885965628692/keyboard-windows-4-before.json",
             "sha256": "e547de0f4eb8a803294d82e7c8ca361d2a85084ad384d02521877fc322551ffe"
           },
           "summary": {
@@ -10158,7 +10158,7 @@
           },
           "observations": {
             "python": "3.15.1 (tags/v3.15.1:c37e74c, Oct 21 2026, 06:24:08) [MSC v.1951 64 bit (AMD64)]",
-            "root": "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\toolkit-meeting-final-1792758885965628692\\keyboard-baseline",
+            "root": "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\workspace-meeting-final-1792758885965628692\\keyboard-baseline",
             "events_per_round": 100000,
             "rounds": 5,
             "gc_enabled": true,
@@ -10252,14 +10252,14 @@
       "status": "prepared_and_verified_read_only",
       "provenance": "Root reports prepare-import and read-only verify-import passed without canonical changes; validator inspected the preview receipt.",
       "evidence": {
-        "path": "/mnt/c/Users/Jim.Lundin/AppData/Local/Temp/toolkit-meeting-final-1792758885965628692/meeting-import-preview.json",
+        "path": "/mnt/c/Users/Jim.Lundin/AppData/Local/Temp/workspace-meeting-final-1792758885965628692/meeting-import-preview.json",
         "sha256": "97cecf3d61bdc88c311983afa5a14666a6e8d9b184b46f7955946e0d367c10a8"
       },
       "observations": {
         "mail_sends": 0,
         "mail_writes": 0,
         "plan_sha256": "78f98100e363ebf4ca075190fdd11de230d75381fe6bacd5817427e4a17f64f4",
-        "release_id": "toolkit-meeting-final-1792758885965628692",
+        "release_id": "workspace-meeting-final-1792758885965628692",
         "source_sha256": "39550ffa3d864f3333a968b7872783cb8ea383b4bc296ea88b727c81d351ba06",
         "tasks": [
           {

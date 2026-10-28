@@ -476,7 +476,7 @@ def test_routine_and_context_commands_persist_without_implicit_enablement(tmp_pa
     with work(tmp_path) as rig:
         rig.agent.command(CreateRoutine("Prepare notes", "Read the completed transcript", Once(1_000)))
         rig.agent.command(AddPreference("Tone", "Concise", "User"))
-        rig.agent.command(AddProjectNote("Toolkit", "Use the shared journal", "User", 3600))
+        rig.agent.command(AddProjectNote("Workspace", "Use the shared journal", "User", 3600))
         snapshot = rig.refresh()
         routine = snapshot.routines[0].routine
         preference = next(record for record in snapshot.context if isinstance(record, Preference))
@@ -485,7 +485,7 @@ def test_routine_and_context_commands_persist_without_implicit_enablement(tmp_pa
         rig.agent.command(UpdateRoutine(routine.id, routine.revision, "Prepare daily notes", "Summarize new work", Every(1_000, 3600)))
         rig.agent.command(EnableRoutine(routine.id))
         rig.agent.command(UpdatePreference(preference.id, "Tone", "Detailed", "User correction"))
-        rig.agent.command(UpdateProjectNote(note.id, "Toolkit", "Use the durable journal", "User correction", 7200))
+        rig.agent.command(UpdateProjectNote(note.id, "Workspace", "Use the durable journal", "User correction", 7200))
         snapshot = rig.refresh()
         updated = snapshot.routines[0].routine
         assert updated.enabled and updated.title == "Prepare daily notes"

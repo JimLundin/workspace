@@ -155,7 +155,7 @@ def test_visible_sign_in_handoff_reuses_only_the_dedicated_profile(tmp_path: Pat
             visible = request(browser, "sign_in", url=url)
             assert visible["mode"] == "sign_in"
             result = request(browser, "open", url=url, target_id=visible["target_id"])
-            assert result["title"] == "Toolkit browser fixture"
+            assert result["title"] == "Workspace browser fixture"
             assert request(browser, "tabs")["mode"] == "background"
     finally:
         browser.close()

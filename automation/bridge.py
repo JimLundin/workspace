@@ -140,7 +140,7 @@ class Discovery:
 
 def _address(folder: Path, epoch: str) -> str:
     profile = hashlib.sha256(str(folder.resolve()).encode("utf-8")).hexdigest()[:16]
-    name = f"toolkit-work-{profile}-{epoch}"
+    name = f"workspace-work-{profile}-{epoch}"
     return rf"\\.\pipe\{name}" if sys.platform == "win32" else str(Path(tempfile.gettempdir()) / f"{name}.sock")
 
 
@@ -230,7 +230,7 @@ def _deadline(channel: Channel, seconds: float) -> Generator[Channel]:
 
 def _server_auth(channel: Channel, key: bytes) -> None:
     nonce = secrets.token_bytes(32)
-    channel.send_bytes(b"Toolkit1:" + nonce)
+    channel.send_bytes(b"Workspace1:" + nonce)
     answer = channel.recv_bytes(128)
     if len(answer) != 64 or not hmac.compare_digest(answer[32:], hmac.digest(key, b"client:" + nonce + answer[:32], "sha256")):
         raise OSError("Work IPC authentication failed.")
@@ -239,7 +239,7 @@ def _server_auth(channel: Channel, key: bytes) -> None:
 
 def _client_auth(channel: Channel, key: bytes) -> None:
     challenge = channel.recv_bytes(128)
-    if len(challenge) != 41 or not challenge.startswith(b"Toolkit1:"):
+    if len(challenge) != 41 or not challenge.startswith(b"Workspace1:"):
         raise OSError("Work IPC authentication failed.")
     nonce = secrets.token_bytes(32)
     channel.send_bytes(nonce + hmac.digest(key, b"client:" + challenge[9:] + nonce, "sha256"))

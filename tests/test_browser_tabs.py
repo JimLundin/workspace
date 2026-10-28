@@ -27,13 +27,13 @@ from assistant.llm import Json
 from .test_browser import Channel, connected_browser, decoded
 
 
-def test_default_open_reuses_the_users_expanded_toolkit_group_without_changing_it() -> None:
-    first = Group(10, 1, "Toolkit", "blue", True, False)
-    expanded = Group(20, 2, "Toolkit", "purple", False, False)
+def test_default_open_reuses_the_users_expanded_workspace_group_without_changing_it() -> None:
+    first = Group(10, 1, "Workspace", "blue", True, False)
+    expanded = Group(20, 2, "Workspace", "purple", False, False)
     state = TabState((), (first, expanded), (1, 2), 2)
-    assert opening(state, DefaultGroup.TOOLKIT, None) == Opening(2, InGroup(20))
-    assert opening(state, DefaultGroup.TOOLKIT, 1) == Opening(1, InGroup(10))
-    assert expanded == Group(20, 2, "Toolkit", "purple", False, False)
+    assert opening(state, DefaultGroup.WORKSPACE, None) == Opening(2, InGroup(20))
+    assert opening(state, DefaultGroup.WORKSPACE, 1) == Opening(1, InGroup(10))
+    assert expanded == Group(20, 2, "Workspace", "purple", False, False)
     assert opening(state, Ungrouped.TABS, None) == Opening(2, Ungrouped.TABS)
     with TestCase().assertRaisesRegex(BrowserError, "match"):
         opening(state, InGroup(10), 2)
@@ -42,10 +42,10 @@ def test_default_open_reuses_the_users_expanded_toolkit_group_without_changing_i
 
 
 def test_default_open_does_not_add_work_to_other_or_shared_groups() -> None:
-    state = TabState((), (Group(10, 1, "Personal", "blue", False, False), Group(20, 1, "Toolkit", "blue", False, True)), (1,), 1)
-    assert opening(state, DefaultGroup.TOOLKIT, None) == Opening(1, NewGroup("Toolkit", "blue", True))
+    state = TabState((), (Group(10, 1, "Personal", "blue", False, False), Group(20, 1, "Workspace", "blue", False, True)), (1,), 1)
+    assert opening(state, DefaultGroup.WORKSPACE, None) == Opening(1, NewGroup("Workspace", "blue", True))
     with TestCase().assertRaisesRegex(BrowserError, "window is closed"):
-        opening(state, DefaultGroup.TOOLKIT, 2)
+        opening(state, DefaultGroup.WORKSPACE, 2)
 
 
 def test_invalid_tab_edits_do_not_create_a_controller_or_change_any_tabs(tmp_path: Path) -> None:
@@ -84,7 +84,7 @@ def test_native_observations_require_the_declared_field_types() -> None:
     source.pop("active")
     with TestCase().assertRaisesRegex(BrowserError, "incomplete"):
         tab_of(source)
-    group = decoded(json.dumps(Group(1, 2, "Toolkit", "blue", True, False).data()))
+    group = decoded(json.dumps(Group(1, 2, "Workspace", "blue", True, False).data()))
     with TestCase().assertRaises(BrowserError):
         group_of({**group, "collapsed": 1})
 

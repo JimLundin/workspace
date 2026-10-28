@@ -1,4 +1,4 @@
-"""How the toolkit's two programs talk. The layout (miryoku) owns the keyboard;
+"""How the workspace's two programs talk. The layout (miryoku) owns the keyboard;
 the assistant does everything slow. Keys on the layout send the assistant
 requests, as window messages: they are queued, ordered, cost the layout nothing
 to send, and need no admin rights. Plain Python: importable anywhere.
@@ -19,7 +19,7 @@ LAYOUT_MAGIC: Final = 0x4D49_5250
 """Layout output: bypass remapping without invalidating its own snippet history."""
 
 MAGIC: Final = 0x4D49_524F
-"""Tags input the toolkit sends, so the layout's hook lets it through untouched."""
+"""Tags input the workspace sends, so the layout's hook lets it through untouched."""
 
 
 _WM_APP: Final = 0x8000

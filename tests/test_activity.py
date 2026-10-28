@@ -1,4 +1,4 @@
-"""Work context is bounded, immutable, and does not mistake Toolkit for the task."""
+"""Work context is bounded, immutable, and does not mistake Workspace for the task."""
 
 import json
 import threading
@@ -26,11 +26,11 @@ def test_activity_tracks_app_and_document_changes_without_duplicate_poll_entries
     assert current.window == changed
 
 
-def test_toolkit_focus_retains_the_work_window_but_a_locked_desktop_is_unavailable() -> None:
+def test_workspace_focus_retains_the_work_window_but_a_locked_desktop_is_unavailable() -> None:
     history = tracker()
     window = Window(7, "Documentation - Chrome", "chrome.exe", False)
     history.observe(window, 10)
-    panel = history.observe('toolkit', 11)
+    panel = history.observe('workspace', 11)
     assert panel.window == window and len(panel.recent) == 1
     locked = history.observe('unavailable', 12)
     assert locked.window is None and len(locked.recent) == 1
@@ -43,7 +43,7 @@ def test_old_activity_expires_and_memory_stays_bounded() -> None:
     for number in range(3):
         current = history.observe(Window(number + 1, str(number), 'app.exe', False), number)
     assert [event.window.handle for event in current.recent] == [2, 3]
-    expired = history.observe('toolkit', 20)
+    expired = history.observe('workspace', 20)
     assert expired.recent == () and expired.window is None
 
 

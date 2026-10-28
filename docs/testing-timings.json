@@ -3,7 +3,7 @@
   "notes": [
     "The original Windows baseline had one Edge endpoint-lock failure. Final full Windows checks passed.",
     "The first changed full Windows run failed in transcript recovery; a public completion event replaced file polling. A fresh full run then passed.",
-    "Fast and full are different profiles. Fast defers 15 native modules; full retains them. Manual TOOLKIT_E2E desktop tests are separate.",
+    "Fast and full are different profiles. Fast defers 15 native modules; full retains them. Manual WORKSPACE_E2E desktop tests are separate.",
     "Final timing runs were sequential without mutation jobs. Concurrent UI source changes mean test counts are not constant.",
     "Fast phase totals were corrected from the first logged phase observation; nested compile calls in tests had overwritten the helper dictionary."
   ],
@@ -37,7 +37,7 @@
           7.160002132877707e-05
         ],
         [
-          "tests.test_activity.test_toolkit_focus_retains_the_work_window_but_a_locked_desktop_is_unavailable",
+          "tests.test_activity.test_workspace_focus_retains_the_work_window_but_a_locked_desktop_is_unavailable",
           7.369997911155224e-05
         ],
         [
@@ -2160,7 +2160,7 @@
           4.239997360855341e-05
         ],
         [
-          "tests.test_activity.test_toolkit_focus_retains_the_work_window_but_a_locked_desktop_is_unavailable",
+          "tests.test_activity.test_workspace_focus_retains_the_work_window_but_a_locked_desktop_is_unavailable",
           4.439998883754015e-05
         ],
         [
@@ -3905,7 +3905,7 @@
           6.059999577701092e-05
         ],
         [
-          "tests.test_activity.test_toolkit_focus_retains_the_work_window_but_a_locked_desktop_is_unavailable",
+          "tests.test_activity.test_workspace_focus_retains_the_work_window_but_a_locked_desktop_is_unavailable",
           0.00010800000745803118
         ],
         [

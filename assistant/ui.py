@@ -252,7 +252,7 @@ class Ui:
     def prompt(self, title: str) -> str | None:
         def build(root: QtWidgets.QApplication, done: Callable[[str | None], None]) -> None:
             dialog = QtWidgets.QInputDialog()
-            dialog.setWindowTitle("Toolkit")
+            dialog.setWindowTitle("Workspace")
             dialog.setLabelText(title)
             dialog.setInputMode(QtWidgets.QInputDialog.InputMode.TextInput)
             dialog.setStyleSheet(STYLE)
@@ -330,7 +330,7 @@ class Ui:
         self.post(lambda root: self._overlay(root).flash(text, work, seconds))
 
     def review(self, summary: str, diff: str) -> bool:
-        """Shows a change to the toolkit; True if the user chooses Install."""
+        """Shows a change to the workspace; True if the user chooses Install."""
 
         def build(root: QtWidgets.QApplication, done: Callable[[bool], None]) -> None:
             ReviewWindow(root, summary, diff, done)
@@ -706,7 +706,7 @@ class Indicator:
 
     def __init__(self, root: QtWidgets.QApplication) -> None:
         self._window = QtWidgets.QWidget()
-        self._window.setObjectName("toolkitWindow")
+        self._window.setObjectName("workspaceWindow")
         self._window.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Tool)
         self._window.setStyleSheet(STYLE)
         self._window.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
@@ -866,8 +866,8 @@ class KeymapOverlay:
 
     def __init__(self, root: QtWidgets.QApplication) -> None:
         self._window = QtWidgets.QWidget()
-        self._window.setObjectName("toolkitWindow")
-        self._window.setWindowTitle("Toolkit keyboard overlay")
+        self._window.setObjectName("workspaceWindow")
+        self._window.setWindowTitle("Workspace keyboard overlay")
         self._window.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Tool)
         self._window.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
         self._window.setStyleSheet(STYLE)
@@ -881,7 +881,7 @@ class KeymapOverlay:
         self._frame = int(self._window.winId())
         windows.make_overlay(self._frame)
         self._handle = OverlayHandle(self._start_drag, self._drag_to, self._finish_drag)
-        self._handle.setWindowTitle("Toolkit keyboard overlay handle")
+        self._handle.setWindowTitle("Workspace keyboard overlay handle")
         self._handle_frame = int(self._handle.winId())
         windows.make_overlay(self._handle_frame, click_through=False)
         self._position = load_position()
@@ -907,7 +907,7 @@ class KeymapOverlay:
             work = nearest_work_area(self._position, areas)
         density = self._window.devicePixelRatioF()
         scale = max(.2, min(.85, (work.width / density - 32) / (14 * _UNIT), (work.height / density - 180) / (4 * (_HEIGHT + _GAP))))
-        self._heading.setText(f"Toolkit keyboard · {title}")
+        self._heading.setText(f"Workspace keyboard · {title}")
         self._canvas.draw(layer, scale)
         self._view = view
         self.set_pressed(pressed)
@@ -982,7 +982,7 @@ class KeymapWindow:
     )
 
     def __init__(self, root: QtWidgets.QApplication) -> None:
-        self.window = Window("Toolkit key map", self.close, width=940, height=390)
+        self.window = Window("Workspace key map", self.close, width=940, height=390)
         layout = column(self.window)
         layout.setContentsMargins(20, 16, 20, 16)
         buttons = row()
@@ -1030,7 +1030,7 @@ class ReviewWindow:
 
     def __init__(self, root: QtWidgets.QApplication, summary: str, diff: str, done: Callable[[bool], None]) -> None:
         self.done, self.finished = done, False
-        self.window = Window("Change the toolkit?", lambda: self.finish(False), width=900, height=640)
+        self.window = Window("Change the workspace?", lambda: self.finish(False), width=900, height=640)
         layout = column(self.window)
         layout.setContentsMargins(20, 18, 20, 18)
         layout.addWidget(label(summary, "title"))

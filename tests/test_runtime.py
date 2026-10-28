@@ -23,12 +23,12 @@ from runtime import (
 def test_old_file_association_hands_off_before_loading_dependencies(tmp_path: Path) -> None:
     folder = tmp_path / ".python"
     executable = tmp_path / "old" / "pythonw.exe"
-    arguments: tuple[str, ...] = (str(executable), "-X", "utf8", str(tmp_path / "toolkit.pyw"), "an argument with spaces")
-    environment = {"PYTHONHOME": "old Python", "PYTHONPATH": "old dependencies", "PATH": "system tools", "TOOLKIT_SETTING": "preserved"}
+    arguments: tuple[str, ...] = (str(executable), "-X", "utf8", str(tmp_path / "workspace.pyw"), "an argument with spaces")
+    environment = {"PYTHONHOME": "old Python", "PYTHONPATH": "old dependencies", "PATH": "system tools", "WORKSPACE_SETTING": "preserved"}
     plan = bootstrap_plan("win32", executable, arguments, environment, PythonBundle(folder, frozenset({"pythonw.exe"})))
     assert isinstance(plan, Relaunch)
     assert plan.command == (str(folder / "pythonw.exe"), *arguments[1:]) and plan.mode is LaunchMode.WINDOWED
-    assert dict(plan.environment) == {"PATH": "system tools", "TOOLKIT_SETTING": "preserved"}
+    assert dict(plan.environment) == {"PATH": "system tools", "WORKSPACE_SETTING": "preserved"}
     assert environment["PYTHONHOME"] == "old Python", "Planning must not edit the caller's environment."
 
 
@@ -53,11 +53,11 @@ def test_console_handoff_preserves_the_childs_exit_code_and_environment(tmp_path
     result = tmp_path / "environment.json"
     code = (
         "import json,os,sys; from pathlib import Path; "
-        "Path(sys.argv[1]).write_text(json.dumps({'setting':os.environ['TOOLKIT_BOOTSTRAP_TEST'],'home':os.environ.get('PYTHONHOME')})); "
+        "Path(sys.argv[1]).write_text(json.dumps({'setting':os.environ['WORKSPACE_BOOTSTRAP_TEST'],'home':os.environ.get('PYTHONHOME')})); "
         "sys.exit(7)"
     )
     environment = {name: value for name, value in os.environ.items() if name not in ("PYTHONHOME", "PYTHONPATH")}
-    environment["TOOLKIT_BOOTSTRAP_TEST"] = "preserved"
+    environment["WORKSPACE_BOOTSTRAP_TEST"] = "preserved"
     plan = Relaunch((sys.executable, "-c", code, str(result)), tuple(environment.items()), LaunchMode.CONSOLE)
     with TestCase().assertRaises(SystemExit) as exited:
         execute_bootstrap(plan)
@@ -70,7 +70,7 @@ def test_dependency_abi_is_checked_before_native_modules_are_loaded(tmp_path: Pa
     dependencies.mkdir()
     (dependencies / "manifest.json").write_text('{"python": "3.99", "platform": "win_amd64"}')
     search_path, environment = tuple(sys.path), dict(os.environ)
-    with TestCase().assertRaisesRegex(RuntimeError, "Python 3.99.*StartToolkit.cmd"):
+    with TestCase().assertRaisesRegex(RuntimeError, "Python 3.99.*StartWorkspace.cmd"):
         activate(dependencies)
     assert tuple(sys.path) == search_path and dict(os.environ) == environment
 

@@ -1,6 +1,6 @@
-# Toolkit work
+# Workspace work
 
-Toolkit carries out requested outcomes and standing instructions across
+Workspace carries out requested outcomes and standing instructions across
 conversations and interruptions.
 
 Device connections and distributed workspace access are defined in the

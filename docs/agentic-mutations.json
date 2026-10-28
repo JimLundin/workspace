@@ -5,8 +5,8 @@
   "scope": "Durable work, execution/action recovery, routines/context, work views, local IPC and supervision. Canvas rendering/desktop-shell changes remain outside the main review; one saved-item deletion guard is recorded separately under canvas_addenda.",
   "interpretation": "Every listed mutation campaign first executed a passing pytest baseline. A timeout, collection error, skipped/empty baseline, or preparation error is not a kill. This is targeted regression evidence, not a whole-project mutation score.",
   "baseline": {
-    "baseline_snapshot": "/tmp/toolkit-agentic-baseline-1792739805",
-    "working_directory": "/home/jim/toolkit",
+    "baseline_snapshot": "/tmp/workspace-agentic-baseline-1792739805",
+    "working_directory": "/home/jim/workspace",
     "python": "3.15.1 (main, Oct 22 2026, 01:08:56) [GCC 9.4.0]",
     "checks": [
       {
@@ -21,7 +21,7 @@
         "exit_code": 0,
         "seconds": 18.925,
         "summary": "474 passed, 0 failed, 0 modules skipped, 15 native modules deferred",
-        "log": "/tmp/toolkit-validation-baseline-selfcheck.log",
+        "log": "/tmp/workspace-validation-baseline-selfcheck.log",
         "note": "Expected streaming-failure fixture diagnostics appear on stderr; no tests failed."
       },
       {
@@ -34,7 +34,7 @@
         "exit_code": 0,
         "seconds": 0.054,
         "summary": "All checks passed",
-        "log": "/tmp/toolkit-validation-baseline-ruff.log"
+        "log": "/tmp/workspace-validation-baseline-ruff.log"
       },
       {
         "name": "mypy",
@@ -45,7 +45,7 @@
         "exit_code": 0,
         "seconds": 2.848,
         "summary": "Success: no issues found in 142 source files",
-        "log": "/tmp/toolkit-validation-baseline-mypy.log"
+        "log": "/tmp/workspace-validation-baseline-mypy.log"
       },
       {
         "name": "pyright default interpreter",
@@ -56,7 +56,7 @@
         "seconds": 12.884,
         "summary": "1135 errors from unresolved project dependencies using the default interpreter",
         "classification": "environment selection; resolved by the explicit project interpreter check",
-        "log": "/tmp/toolkit-validation-baseline-pyright.log"
+        "log": "/tmp/workspace-validation-baseline-pyright.log"
       },
       {
         "name": "pyright project interpreter",
@@ -68,7 +68,7 @@
         "exit_code": 0,
         "seconds": 15.605,
         "summary": "0 errors, 0 warnings, 0 informations",
-        "log": "/tmp/toolkit-validation-baseline-pyright-project.log"
+        "log": "/tmp/workspace-validation-baseline-pyright-project.log"
       }
     ],
     "source_regressions_at_baseline": [],
@@ -78,7 +78,7 @@
       "Keeper fake-world readiness and start assertions currently assume exactly layout and assistant.",
       "tests/test_windows_assistant_e2e.py readiness helper currently checks only ready-layout and ready-assistant.",
       "selfcheck discovers new top-level packages with __init__.py automatically; new tests must use only supported tmp_path fixtures.",
-      "TOOLKIT_E2E tests use live foreground input and must stay excluded on the active desktop; selfcheck removes TOOLKIT_E2E."
+      "WORKSPACE_E2E tests use live foreground input and must stay excluded on the active desktop; selfcheck removes WORKSPACE_E2E."
     ],
     "acceptance_matrix": [
       {
@@ -148,11 +148,11 @@
     {
       "name": "native-machine",
       "command": [
-        "C:\\Users\\Jim.Lundin\\Downloads\\toolkit-sdk\\toolkit\\.python\\python.exe",
-        "\\\\wsl.localhost\\Ubuntu\\tmp\\toolkit-machine-review-1792740922\\scripts\\mutate.py",
+        "C:\\Users\\Jim.Lundin\\Downloads\\workspace-sdk\\workspace\\.python\\python.exe",
+        "\\\\wsl.localhost\\Ubuntu\\tmp\\workspace-machine-review-1792740922\\scripts\\mutate.py",
         "assistant/machine.py",
         "--root",
-        "\\\\wsl.localhost\\Ubuntu\\tmp\\toolkit-machine-review-1792740922",
+        "\\\\wsl.localhost\\Ubuntu\\tmp\\workspace-machine-review-1792740922",
         "--tests",
         "tests/test_windows_machine.py",
         "--replace",
@@ -169,14 +169,14 @@
         "--timeout",
         "45",
         "--output",
-        "\\\\wsl.localhost\\Ubuntu\\tmp\\toolkit-machine-mutations.json"
+        "\\\\wsl.localhost\\Ubuntu\\tmp\\workspace-machine-mutations.json"
       ],
       "environment": {
-        "PYTHONUSERBASE": "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\toolkit-validation-deps-1792740922",
-        "TOOLKIT_BUNDLED_RUNTIME": "C:\\Users\\Jim.Lundin\\Downloads\\toolkit-sdk\\toolkit\\.runtime",
-        "PYTHONPATH": "\\\\wsl.localhost\\Ubuntu\\tmp\\toolkit-machine-review-1792740922"
+        "PYTHONUSERBASE": "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\workspace-validation-deps-1792740922",
+        "WORKSPACE_BUNDLED_RUNTIME": "C:\\Users\\Jim.Lundin\\Downloads\\workspace-sdk\\workspace\\.runtime",
+        "PYTHONPATH": "\\\\wsl.localhost\\Ubuntu\\tmp\\workspace-machine-review-1792740922"
       },
-      "frozen_source": "/tmp/toolkit-machine-review-1792740922",
+      "frozen_source": "/tmp/workspace-machine-review-1792740922",
       "source_and_test_hashes": {
         "assistant/machine.py": "18707896af23a9786f01ba5f198c8058d76201a6cb5725ca01708554d2feae5d",
         "tests/test_windows_machine.py": "4e80532455e64abcfe2bfda23e796a51c8db69edcd1ac6aabd655005eb1a062b"
@@ -244,11 +244,11 @@
     {
       "name": "controller-initial-pytest",
       "command": [
-        "/home/jim/toolkit/.venv/bin/python",
-        "/tmp/toolkit-controller-review-1792741291/scripts/mutate.py",
+        "/home/jim/workspace/.venv/bin/python",
+        "/tmp/workspace-controller-review-1792741291/scripts/mutate.py",
         "automation/controller.py",
         "--root",
-        "/tmp/toolkit-controller-review-1792741291",
+        "/tmp/workspace-controller-review-1792741291",
         "--tests",
         "tests/test_work_controller.py",
         "--replace",
@@ -264,7 +264,7 @@
         "            try:\n                self._publish(status)",
         "            try:\n                self._finished.set()\n                self._publish(status)",
         "--replace",
-        "                    self.store.interrupt(\n                        flight.claim.run,\n                        \"The work controller stopped after an error.\" if reasons else \"Toolkit stopped before the task finished.\",\n                        at=self.now(),\n                    )",
+        "                    self.store.interrupt(\n                        flight.claim.run,\n                        \"The work controller stopped after an error.\" if reasons else \"Workspace stopped before the task finished.\",\n                        at=self.now(),\n                    )",
         "                    from .task import Control\n                    self.store.control(flight.claim.task.id, Control.CANCEL, at=self.now())",
         "--replace",
         "                    if task is None or not owns(task, flight.claim.run):\n                        flight.stop.set()",
@@ -274,10 +274,10 @@
         "--timeout",
         "45",
         "--output",
-        "/tmp/toolkit-controller-mutations.json"
+        "/tmp/workspace-controller-mutations.json"
       ],
       "environment": {},
-      "frozen_source": "/tmp/toolkit-controller-review-1792741291",
+      "frozen_source": "/tmp/workspace-controller-review-1792741291",
       "source_and_test_hashes": {
         "automation/controller.py": "c358247e42b3cb1e9e652a5ed8be1b6330abe9d97eacb1ef48e95c1883cbd638",
         "tests/test_work_controller.py": "70cf450eeb5c8b6989819ff04f2f47945761ea1c37ad34bd5127be536a7b28a5"
@@ -356,7 +356,7 @@
           {
             "function": "seeded",
             "line": 280,
-            "before": "                    self.store.interrupt(\n                        flight.claim.run,\n                        \"The work controller stopped after an error.\" if reasons else \"Toolkit stopped before the task finished.\",\n                        at=self.now(),\n                    )",
+            "before": "                    self.store.interrupt(\n                        flight.claim.run,\n                        \"The work controller stopped after an error.\" if reasons else \"Workspace stopped before the task finished.\",\n                        at=self.now(),\n                    )",
             "after": "                    from .task import Control\n                    self.store.control(flight.claim.task.id, Control.CANCEL, at=self.now())",
             "start": 10675,
             "end": 10950,
@@ -396,11 +396,11 @@
     {
       "name": "task-decisions",
       "command": [
-        "/home/jim/toolkit/.venv/bin/python",
-        "/tmp/toolkit-behavior-review-1792741747/scripts/mutate.py",
+        "/home/jim/workspace/.venv/bin/python",
+        "/tmp/workspace-behavior-review-1792741747/scripts/mutate.py",
         "automation/task.py",
         "--root",
-        "/tmp/toolkit-behavior-review-1792741747",
+        "/tmp/workspace-behavior-review-1792741747",
         "--tests",
         "tests/test_work_store.py::test_pause_resume_and_cancellation_fence_old_worker_updates",
         "tests/test_work_store.py::test_waiting_questions_survive_restart_and_only_the_exact_reply_resumes",
@@ -428,10 +428,10 @@
         "--timeout",
         "45",
         "--output",
-        "/tmp/toolkit-task-decisions-mutations.json"
+        "/tmp/workspace-task-decisions-mutations.json"
       ],
       "environment": {},
-      "frozen_source": "/tmp/toolkit-behavior-review-1792741747",
+      "frozen_source": "/tmp/workspace-behavior-review-1792741747",
       "source_and_test_hashes": {
         "automation/task.py": "83df9e9f1113aff6fc78d01e02de79c5134752d8ab623d7e82cb2f41a2e08e67",
         "tests/test_work_store.py": "91f08c10d667975f6c9204f7c8e916fff24761eaeeba2ca10bb9fe462ec3fe18"
@@ -763,11 +763,11 @@
     {
       "name": "routine-decisions",
       "command": [
-        "/home/jim/toolkit/.venv/bin/python",
-        "/tmp/toolkit-behavior-review-1792741747/scripts/mutate.py",
+        "/home/jim/workspace/.venv/bin/python",
+        "/tmp/workspace-behavior-review-1792741747/scripts/mutate.py",
         "automation/routines.py",
         "--root",
-        "/tmp/toolkit-behavior-review-1792741747",
+        "/tmp/workspace-behavior-review-1792741747",
         "--tests",
         "tests/test_routines.py",
         "--function",
@@ -781,10 +781,10 @@
         "--timeout",
         "45",
         "--output",
-        "/tmp/toolkit-routine-decisions-mutations.json"
+        "/tmp/workspace-routine-decisions-mutations.json"
       ],
       "environment": {},
-      "frozen_source": "/tmp/toolkit-behavior-review-1792741747",
+      "frozen_source": "/tmp/workspace-behavior-review-1792741747",
       "source_and_test_hashes": {
         "automation/routines.py": "9a3c6cb9ef8d21efb20b508e478e2589140f75b717b280dc8fb9a604f9116e80",
         "tests/test_routines.py": "9e5d972135cd85c8177bea28dfcf9b2273e75546d8188f3d83baf186d96e973c"
@@ -1167,11 +1167,11 @@
     {
       "name": "routine-handoff",
       "command": [
-        "/home/jim/toolkit/.venv/bin/python",
-        "/tmp/toolkit-behavior-review-1792741747/scripts/mutate.py",
+        "/home/jim/workspace/.venv/bin/python",
+        "/tmp/workspace-behavior-review-1792741747/scripts/mutate.py",
         "automation/routines.py",
         "--root",
-        "/tmp/toolkit-behavior-review-1792741747",
+        "/tmp/workspace-behavior-review-1792741747",
         "--tests",
         "tests/test_routines.py",
         "--replace",
@@ -1193,10 +1193,10 @@
         "--timeout",
         "45",
         "--output",
-        "/tmp/toolkit-routine-handoff-mutations.json"
+        "/tmp/workspace-routine-handoff-mutations.json"
       ],
       "environment": {},
-      "frozen_source": "/tmp/toolkit-behavior-review-1792741747",
+      "frozen_source": "/tmp/workspace-behavior-review-1792741747",
       "source_and_test_hashes": {
         "automation/routines.py": "9a3c6cb9ef8d21efb20b508e478e2589140f75b717b280dc8fb9a604f9116e80",
         "tests/test_routines.py": "9e5d972135cd85c8177bea28dfcf9b2273e75546d8188f3d83baf186d96e973c"
@@ -1285,11 +1285,11 @@
     {
       "name": "context-selection",
       "command": [
-        "/home/jim/toolkit/.venv/bin/python",
-        "/tmp/toolkit-behavior-review-1792741747/scripts/mutate.py",
+        "/home/jim/workspace/.venv/bin/python",
+        "/tmp/workspace-behavior-review-1792741747/scripts/mutate.py",
         "automation/context.py",
         "--root",
-        "/tmp/toolkit-behavior-review-1792741747",
+        "/tmp/workspace-behavior-review-1792741747",
         "--tests",
         "tests/test_project_context.py",
         "--replace",
@@ -1314,10 +1314,10 @@
         "--timeout",
         "45",
         "--output",
-        "/tmp/toolkit-context-selection-mutations.json"
+        "/tmp/workspace-context-selection-mutations.json"
       ],
       "environment": {},
-      "frozen_source": "/tmp/toolkit-behavior-review-1792741747",
+      "frozen_source": "/tmp/workspace-behavior-review-1792741747",
       "source_and_test_hashes": {
         "automation/context.py": "9fe639070e4ede998cf82f7a688fdd8925f986a67fc250c555988efa437f1161",
         "tests/test_project_context.py": "14d1ef1daaa64673e2596bc9b79355a17848cd849f40413e8e3fe75f605052a9"
@@ -1412,11 +1412,11 @@
     {
       "name": "keeper-supervision",
       "command": [
-        "/home/jim/toolkit/.venv/bin/python",
-        "/tmp/toolkit-behavior-review-1792741747/scripts/mutate.py",
+        "/home/jim/workspace/.venv/bin/python",
+        "/tmp/workspace-behavior-review-1792741747/scripts/mutate.py",
         "keeper.py",
         "--root",
-        "/tmp/toolkit-behavior-review-1792741747",
+        "/tmp/workspace-behavior-review-1792741747",
         "--tests",
         "tests/test_keeper.py",
         "--replace",
@@ -1438,10 +1438,10 @@
         "--timeout",
         "45",
         "--output",
-        "/tmp/toolkit-keeper-supervision-mutations.json"
+        "/tmp/workspace-keeper-supervision-mutations.json"
       ],
       "environment": {},
-      "frozen_source": "/tmp/toolkit-behavior-review-1792741747",
+      "frozen_source": "/tmp/workspace-behavior-review-1792741747",
       "source_and_test_hashes": {
         "keeper.py": "bb462c12692ca7ef809eddd1932973afe111c8731df6a237253ab92303528482",
         "tests/test_keeper.py": "0ae60a750f659452f9cf274179f431ad2a0a05cf11a842ed3d85890ce756559d"
@@ -1551,11 +1551,11 @@
     {
       "name": "transcript-events",
       "command": [
-        "/home/jim/toolkit/.venv/bin/python",
-        "/tmp/toolkit-behavior-review-1792741747/scripts/mutate.py",
+        "/home/jim/workspace/.venv/bin/python",
+        "/tmp/workspace-behavior-review-1792741747/scripts/mutate.py",
         "assistant/meeting_events.py",
         "--root",
-        "/tmp/toolkit-behavior-review-1792741747",
+        "/tmp/workspace-behavior-review-1792741747",
         "--tests",
         "tests/test_meeting_events.py",
         "--replace",
@@ -1574,10 +1574,10 @@
         "--timeout",
         "45",
         "--output",
-        "/tmp/toolkit-transcript-events-mutations.json"
+        "/tmp/workspace-transcript-events-mutations.json"
       ],
       "environment": {},
-      "frozen_source": "/tmp/toolkit-behavior-review-1792741747",
+      "frozen_source": "/tmp/workspace-behavior-review-1792741747",
       "source_and_test_hashes": {
         "assistant/meeting_events.py": "7d8a1d1d8d26ad707f31ec2f1daa8a3b815c4fc778e41ea5472442130cfb90e3",
         "tests/test_meeting_events.py": "5a7e4a65527b603046a053330c4991d2acbac17c5073f7056d6980b521800b09"
@@ -1647,11 +1647,11 @@
     {
       "name": "transcript-callback",
       "command": [
-        "/home/jim/toolkit/.venv/bin/python",
-        "/tmp/toolkit-behavior-review-1792741747/scripts/mutate.py",
+        "/home/jim/workspace/.venv/bin/python",
+        "/tmp/workspace-behavior-review-1792741747/scripts/mutate.py",
         "assistant/meetings.py",
         "--root",
-        "/tmp/toolkit-behavior-review-1792741747",
+        "/tmp/workspace-behavior-review-1792741747",
         "--tests",
         "tests/test_meeting_events.py",
         "--replace",
@@ -1664,10 +1664,10 @@
         "--timeout",
         "45",
         "--output",
-        "/tmp/toolkit-transcript-callback-mutations.json"
+        "/tmp/workspace-transcript-callback-mutations.json"
       ],
       "environment": {},
-      "frozen_source": "/tmp/toolkit-behavior-review-1792741747",
+      "frozen_source": "/tmp/workspace-behavior-review-1792741747",
       "source_and_test_hashes": {
         "assistant/meetings.py": "33bb61845d940b1a8120baddae4bbf526a62a7d10b14774cdaad93c080681f38",
         "tests/test_meeting_events.py": "5a7e4a65527b603046a053330c4991d2acbac17c5073f7056d6980b521800b09"
@@ -1707,11 +1707,11 @@
     {
       "name": "store-fences",
       "command": [
-        "/home/jim/toolkit/.venv/bin/python",
-        "/tmp/toolkit-behavior-review-1792741747/scripts/mutate.py",
+        "/home/jim/workspace/.venv/bin/python",
+        "/tmp/workspace-behavior-review-1792741747/scripts/mutate.py",
         "automation/store.py",
         "--root",
-        "/tmp/toolkit-behavior-review-1792741747",
+        "/tmp/workspace-behavior-review-1792741747",
         "--tests",
         "tests/test_work_store.py::test_claim_is_atomic_across_independent_connections_and_respects_priority",
         "tests/test_work_store.py::test_routine_occurrence_retry_deduplicates_without_changing_accepted_work",
@@ -1747,10 +1747,10 @@
         "--timeout",
         "45",
         "--output",
-        "/tmp/toolkit-store-fences-mutations.json"
+        "/tmp/workspace-store-fences-mutations.json"
       ],
       "environment": {},
-      "frozen_source": "/tmp/toolkit-behavior-review-1792741747",
+      "frozen_source": "/tmp/workspace-behavior-review-1792741747",
       "source_and_test_hashes": {
         "automation/store.py": "1352e7a5f29c02727fd58dce0dc131148c5bccc07cbdfe2abf2cf9a1a0de5c4e",
         "tests/test_work_store.py": "91f08c10d667975f6c9204f7c8e916fff24761eaeeba2ca10bb9fe462ec3fe18"
@@ -1885,11 +1885,11 @@
     {
       "name": "task-survivor-followup",
       "command": [
-        "/home/jim/toolkit/.venv/bin/python",
-        "/tmp/toolkit-followup-review-1792742116/scripts/mutate.py",
+        "/home/jim/workspace/.venv/bin/python",
+        "/tmp/workspace-followup-review-1792742116/scripts/mutate.py",
         "automation/task.py",
         "--root",
-        "/tmp/toolkit-followup-review-1792742116",
+        "/tmp/workspace-followup-review-1792742116",
         "--tests",
         "tests/test_work_store.py::test_pause_resume_and_cancellation_fence_old_worker_updates",
         "tests/test_work_store.py::test_waiting_questions_survive_restart_and_only_the_exact_reply_resumes",
@@ -1918,10 +1918,10 @@
         "--timeout",
         "60",
         "--output",
-        "/tmp/toolkit-task-survivor-followup-mutations.json"
+        "/tmp/workspace-task-survivor-followup-mutations.json"
       ],
       "environment": {},
-      "frozen_source": "/tmp/toolkit-followup-review-1792742116",
+      "frozen_source": "/tmp/workspace-followup-review-1792742116",
       "source_and_test_hashes": {
         "automation/task.py": "83df9e9f1113aff6fc78d01e02de79c5134752d8ab623d7e82cb2f41a2e08e67",
         "tests/test_work_store.py": "da43344e547833f7e60ba99f345454c01cb58de70432a3a639b44a21e557f8bf"
@@ -1999,11 +1999,11 @@
     {
       "name": "context-connectives",
       "command": [
-        "/home/jim/toolkit/.venv/bin/python",
-        "/tmp/toolkit-followup-review-1792742116/scripts/mutate.py",
+        "/home/jim/workspace/.venv/bin/python",
+        "/tmp/workspace-followup-review-1792742116/scripts/mutate.py",
         "automation/context.py",
         "--root",
-        "/tmp/toolkit-followup-review-1792742116",
+        "/tmp/workspace-followup-review-1792742116",
         "--tests",
         "tests/test_project_context.py",
         "--replace",
@@ -2016,10 +2016,10 @@
         "--timeout",
         "60",
         "--output",
-        "/tmp/toolkit-context-connectives-mutations.json"
+        "/tmp/workspace-context-connectives-mutations.json"
       ],
       "environment": {},
-      "frozen_source": "/tmp/toolkit-followup-review-1792742116",
+      "frozen_source": "/tmp/workspace-followup-review-1792742116",
       "source_and_test_hashes": {
         "automation/context.py": "9fe639070e4ede998cf82f7a688fdd8925f986a67fc250c555988efa437f1161",
         "tests/test_project_context.py": "14d1ef1daaa64673e2596bc9b79355a17848cd849f40413e8e3fe75f605052a9"
@@ -2057,11 +2057,11 @@
     {
       "name": "controller-selfcheck-compatible",
       "command": [
-        "/home/jim/toolkit/.venv/bin/python",
-        "/tmp/toolkit-followup-review-1792742116/scripts/mutate.py",
+        "/home/jim/workspace/.venv/bin/python",
+        "/tmp/workspace-followup-review-1792742116/scripts/mutate.py",
         "automation/controller.py",
         "--root",
-        "/tmp/toolkit-followup-review-1792742116",
+        "/tmp/workspace-followup-review-1792742116",
         "--tests",
         "tests/test_work_controller.py",
         "--replace",
@@ -2077,7 +2077,7 @@
         "            try:\n                self._publish(status)",
         "            try:\n                self._finished.set()\n                self._publish(status)",
         "--replace",
-        "                    self.store.interrupt(\n                        flight.claim.run,\n                        \"The work controller stopped after an error.\" if reasons else \"Toolkit stopped before the task finished.\",\n                        at=self.now(),\n                    )",
+        "                    self.store.interrupt(\n                        flight.claim.run,\n                        \"The work controller stopped after an error.\" if reasons else \"Workspace stopped before the task finished.\",\n                        at=self.now(),\n                    )",
         "                    from .task import Control\n                    self.store.control(flight.claim.task.id, Control.CANCEL, at=self.now())",
         "--replace",
         "                    if task is None or not owns(task, flight.claim.run):\n                        flight.stop.set()",
@@ -2089,10 +2089,10 @@
         "--timeout",
         "60",
         "--output",
-        "/tmp/toolkit-controller-selfcheck-compatible-mutations.json"
+        "/tmp/workspace-controller-selfcheck-compatible-mutations.json"
       ],
       "environment": {},
-      "frozen_source": "/tmp/toolkit-followup-review-1792742116",
+      "frozen_source": "/tmp/workspace-followup-review-1792742116",
       "source_and_test_hashes": {
         "automation/controller.py": "c358247e42b3cb1e9e652a5ed8be1b6330abe9d97eacb1ef48e95c1883cbd638",
         "tests/test_work_controller.py": "b4de0a5e2950afc1df42599892719e134c786d61bc2c993ab3e1375c2f3af9ed"
@@ -2171,7 +2171,7 @@
           {
             "function": "seeded",
             "line": 280,
-            "before": "                    self.store.interrupt(\n                        flight.claim.run,\n                        \"The work controller stopped after an error.\" if reasons else \"Toolkit stopped before the task finished.\",\n                        at=self.now(),\n                    )",
+            "before": "                    self.store.interrupt(\n                        flight.claim.run,\n                        \"The work controller stopped after an error.\" if reasons else \"Workspace stopped before the task finished.\",\n                        at=self.now(),\n                    )",
             "after": "                    from .task import Control\n                    self.store.control(flight.claim.task.id, Control.CANCEL, at=self.now())",
             "start": 10675,
             "end": 10950,
@@ -2211,11 +2211,11 @@
     {
       "name": "frontend-service",
       "command": [
-        "/home/jim/toolkit/.venv/bin/python",
-        "/tmp/toolkit-followup-review-1792742116/scripts/mutate.py",
+        "/home/jim/workspace/.venv/bin/python",
+        "/tmp/workspace-followup-review-1792742116/scripts/mutate.py",
         "assistant/work_service.py",
         "--root",
-        "/tmp/toolkit-followup-review-1792742116",
+        "/tmp/workspace-followup-review-1792742116",
         "--tests",
         "tests/test_work_agent.py",
         "--replace",
@@ -2237,10 +2237,10 @@
         "--timeout",
         "60",
         "--output",
-        "/tmp/toolkit-frontend-service-mutations.json"
+        "/tmp/workspace-frontend-service-mutations.json"
       ],
       "environment": {},
-      "frozen_source": "/tmp/toolkit-followup-review-1792742116",
+      "frozen_source": "/tmp/workspace-followup-review-1792742116",
       "source_and_test_hashes": {
         "assistant/work_service.py": "4703b3ea6e48c911052c5fa027570d7a89303c09c9dedb884274c222502acbc6",
         "tests/test_work_agent.py": "f93dfad2e4336b6a74dcfcd8fb5207d00b753e19d7864ed0e6fd007a8fa86ebb"
@@ -2323,11 +2323,11 @@
     {
       "name": "frontend-agent",
       "command": [
-        "/home/jim/toolkit/.venv/bin/python",
-        "/tmp/toolkit-followup-review-1792742116/scripts/mutate.py",
+        "/home/jim/workspace/.venv/bin/python",
+        "/tmp/workspace-followup-review-1792742116/scripts/mutate.py",
         "assistant/work_agent.py",
         "--root",
-        "/tmp/toolkit-followup-review-1792742116",
+        "/tmp/workspace-followup-review-1792742116",
         "--tests",
         "tests/test_work_agent.py",
         "--replace",
@@ -2346,10 +2346,10 @@
         "--timeout",
         "60",
         "--output",
-        "/tmp/toolkit-frontend-agent-mutations.json"
+        "/tmp/workspace-frontend-agent-mutations.json"
       ],
       "environment": {},
-      "frozen_source": "/tmp/toolkit-followup-review-1792742116",
+      "frozen_source": "/tmp/workspace-followup-review-1792742116",
       "source_and_test_hashes": {
         "assistant/work_agent.py": "fe991ca21624bca588e9e6c23b9d7e2261b803c5289e1dd4ffa0460aa31445a8",
         "tests/test_work_agent.py": "f93dfad2e4336b6a74dcfcd8fb5207d00b753e19d7864ed0e6fd007a8fa86ebb"
@@ -2416,11 +2416,11 @@
     {
       "name": "action-effects",
       "command": [
-        "/home/jim/toolkit/.venv/bin/python",
-        "/tmp/toolkit-final-portable-review-1792743145/scripts/mutate.py",
+        "/home/jim/workspace/.venv/bin/python",
+        "/tmp/workspace-final-portable-review-1792743145/scripts/mutate.py",
         "automation/actions.py",
         "--root",
-        "/tmp/toolkit-final-portable-review-1792743145",
+        "/tmp/workspace-final-portable-review-1792743145",
         "--tests",
         "tests/test_work_actions.py",
         "--replace",
@@ -2445,16 +2445,16 @@
         "--timeout",
         "45",
         "--output",
-        "/tmp/toolkit-action-effects-mutations.json"
+        "/tmp/workspace-action-effects-mutations.json"
       ],
       "environment": {},
-      "frozen_source": "/tmp/toolkit-final-portable-review-1792743145",
+      "frozen_source": "/tmp/workspace-final-portable-review-1792743145",
       "source_and_test_hashes": {
         "automation/actions.py": "0d7b76bbf153ea0c9b55488982df4b9e0ccab1a0ab78f473d4bf090930ac7916",
         "tests/test_work_actions.py": "7f902b546773a8928673b1db4f70c84cf5e0e01239cff846dab227a7e66d8c78"
       },
-      "plan": "/tmp/toolkit-final-portable-campaign-plan.json",
-      "log": "/tmp/toolkit-action-effects-mutation-run.log",
+      "plan": "/tmp/workspace-final-portable-campaign-plan.json",
+      "log": "/tmp/workspace-action-effects-mutation-run.log",
       "evidence": {
         "source": "automation/actions.py",
         "tests": [
@@ -2552,11 +2552,11 @@
     {
       "name": "execution-recovery",
       "command": [
-        "/home/jim/toolkit/.venv/bin/python",
-        "/tmp/toolkit-final-portable-review-1792743145/scripts/mutate.py",
+        "/home/jim/workspace/.venv/bin/python",
+        "/tmp/workspace-final-portable-review-1792743145/scripts/mutate.py",
         "automation/execution.py",
         "--root",
-        "/tmp/toolkit-final-portable-review-1792743145",
+        "/tmp/workspace-final-portable-review-1792743145",
         "--tests",
         "tests/test_work_actions.py",
         "--replace",
@@ -2584,16 +2584,16 @@
         "--timeout",
         "45",
         "--output",
-        "/tmp/toolkit-execution-recovery-mutations.json"
+        "/tmp/workspace-execution-recovery-mutations.json"
       ],
       "environment": {},
-      "frozen_source": "/tmp/toolkit-final-portable-review-1792743145",
+      "frozen_source": "/tmp/workspace-final-portable-review-1792743145",
       "source_and_test_hashes": {
         "automation/execution.py": "91c6bd360207128dbf23a9e7d9f8db70b2cb7ce17abbe89599d3b256beb198ad",
         "tests/test_work_actions.py": "7f902b546773a8928673b1db4f70c84cf5e0e01239cff846dab227a7e66d8c78"
       },
-      "plan": "/tmp/toolkit-final-portable-campaign-plan.json",
-      "log": "/tmp/toolkit-execution-recovery-mutation-run.log",
+      "plan": "/tmp/workspace-final-portable-campaign-plan.json",
+      "log": "/tmp/workspace-execution-recovery-mutation-run.log",
       "evidence": {
         "source": "automation/execution.py",
         "tests": [
@@ -2706,11 +2706,11 @@
     {
       "name": "sdk-history",
       "command": [
-        "/home/jim/toolkit/.venv/bin/python",
-        "/tmp/toolkit-final-portable-review-1792743145/scripts/mutate.py",
+        "/home/jim/workspace/.venv/bin/python",
+        "/tmp/workspace-final-portable-review-1792743145/scripts/mutate.py",
         "assistant/agent_execution.py",
         "--root",
-        "/tmp/toolkit-final-portable-review-1792743145",
+        "/tmp/workspace-final-portable-review-1792743145",
         "--tests",
         "tests/test_work_execution.py::test_sdk_history_and_source_drafts_are_scoped_to_the_conversation",
         "--replace",
@@ -2726,16 +2726,16 @@
         "--timeout",
         "45",
         "--output",
-        "/tmp/toolkit-sdk-history-mutations.json"
+        "/tmp/workspace-sdk-history-mutations.json"
       ],
       "environment": {},
-      "frozen_source": "/tmp/toolkit-final-portable-review-1792743145",
+      "frozen_source": "/tmp/workspace-final-portable-review-1792743145",
       "source_and_test_hashes": {
         "assistant/agent_execution.py": "df0f6c9ae0996a0a801b2509332f328e5518c39caebb4f9e2e0636c2c029f142",
         "tests/test_work_execution.py": "d0a548bb6914119e761136dbf5a09d5c507c40994f7f0fc23c8af297f3459a51"
       },
-      "plan": "/tmp/toolkit-final-portable-campaign-plan.json",
-      "log": "/tmp/toolkit-sdk-history-mutation-run.log",
+      "plan": "/tmp/workspace-final-portable-campaign-plan.json",
+      "log": "/tmp/workspace-sdk-history-mutation-run.log",
       "evidence": {
         "source": "assistant/agent_execution.py",
         "tests": [
@@ -2784,11 +2784,11 @@
     {
       "name": "work-view",
       "command": [
-        "/home/jim/toolkit/.venv/bin/python",
-        "/tmp/toolkit-final-portable-review-1792743145/scripts/mutate.py",
+        "/home/jim/workspace/.venv/bin/python",
+        "/tmp/workspace-final-portable-review-1792743145/scripts/mutate.py",
         "assistant/work_window.py",
         "--root",
-        "/tmp/toolkit-final-portable-review-1792743145",
+        "/tmp/workspace-final-portable-review-1792743145",
         "--tests",
         "tests/test_work_window.py",
         "--replace",
@@ -2810,16 +2810,16 @@
         "--timeout",
         "45",
         "--output",
-        "/tmp/toolkit-work-view-mutations.json"
+        "/tmp/workspace-work-view-mutations.json"
       ],
       "environment": {},
-      "frozen_source": "/tmp/toolkit-final-portable-review-1792743145",
+      "frozen_source": "/tmp/workspace-final-portable-review-1792743145",
       "source_and_test_hashes": {
         "assistant/work_window.py": "4c879a6643564c199d8ee3653ed2e0506a7a5938399115aa6ee7fee9d0b1191d",
         "tests/test_work_window.py": "3f07a0c557c36df549e9d2f86ba1f78e182793a85c781ef7bb988b2c2ddaccae"
       },
-      "plan": "/tmp/toolkit-final-portable-campaign-plan.json",
-      "log": "/tmp/toolkit-work-view-mutation-run.log",
+      "plan": "/tmp/workspace-final-portable-campaign-plan.json",
+      "log": "/tmp/workspace-work-view-mutation-run.log",
       "evidence": {
         "source": "assistant/work_window.py",
         "tests": [
@@ -2898,11 +2898,11 @@
     {
       "name": "ipc-codec",
       "command": [
-        "/home/jim/toolkit/.venv/bin/python",
-        "/tmp/toolkit-final-portable-review-1792743145/scripts/mutate.py",
+        "/home/jim/workspace/.venv/bin/python",
+        "/tmp/workspace-final-portable-review-1792743145/scripts/mutate.py",
         "automation/ipc.py",
         "--root",
-        "/tmp/toolkit-final-portable-review-1792743145",
+        "/tmp/workspace-final-portable-review-1792743145",
         "--tests",
         "tests/test_automation_ipc.py::test_codec_rejects_unknown_versions_invalid_scalars_and_stale_batches",
         "--replace",
@@ -2918,16 +2918,16 @@
         "--timeout",
         "45",
         "--output",
-        "/tmp/toolkit-ipc-codec-mutations.json"
+        "/tmp/workspace-ipc-codec-mutations.json"
       ],
       "environment": {},
-      "frozen_source": "/tmp/toolkit-final-portable-review-1792743145",
+      "frozen_source": "/tmp/workspace-final-portable-review-1792743145",
       "source_and_test_hashes": {
         "automation/ipc.py": "a985a629c2f83066448a9216ec44baa8aaad713f00a6120ef55ce21bd5ba9aa7",
         "tests/test_automation_ipc.py": "f05136b7ff9796c08fadef508bd74dce5256fd2ca041bdc87427d8f534bc1a87"
       },
-      "plan": "/tmp/toolkit-final-portable-campaign-plan.json",
-      "log": "/tmp/toolkit-ipc-codec-mutation-run.log",
+      "plan": "/tmp/workspace-final-portable-campaign-plan.json",
+      "log": "/tmp/workspace-ipc-codec-mutation-run.log",
       "evidence": {
         "source": "automation/ipc.py",
         "tests": [
@@ -2976,11 +2976,11 @@
     {
       "name": "ipc-bridge",
       "command": [
-        "/home/jim/toolkit/.venv/bin/python",
-        "/tmp/toolkit-final-portable-review-1792743145/scripts/mutate.py",
+        "/home/jim/workspace/.venv/bin/python",
+        "/tmp/workspace-final-portable-review-1792743145/scripts/mutate.py",
         "automation/bridge.py",
         "--root",
-        "/tmp/toolkit-final-portable-review-1792743145",
+        "/tmp/workspace-final-portable-review-1792743145",
         "--tests",
         "tests/test_automation_ipc.py",
         "--replace",
@@ -3005,16 +3005,16 @@
         "--timeout",
         "45",
         "--output",
-        "/tmp/toolkit-ipc-bridge-mutations.json"
+        "/tmp/workspace-ipc-bridge-mutations.json"
       ],
       "environment": {},
-      "frozen_source": "/tmp/toolkit-final-portable-review-1792743145",
+      "frozen_source": "/tmp/workspace-final-portable-review-1792743145",
       "source_and_test_hashes": {
         "automation/bridge.py": "15290544760b81c8480de59398df004c2fe1f6fa0ae6ee1c9d4972d73389ea37",
         "tests/test_automation_ipc.py": "f05136b7ff9796c08fadef508bd74dce5256fd2ca041bdc87427d8f534bc1a87"
       },
-      "plan": "/tmp/toolkit-final-portable-campaign-plan.json",
-      "log": "/tmp/toolkit-ipc-bridge-mutation-run.log",
+      "plan": "/tmp/workspace-final-portable-campaign-plan.json",
+      "log": "/tmp/workspace-ipc-bridge-mutation-run.log",
       "evidence": {
         "source": "automation/bridge.py",
         "tests": [
@@ -3108,11 +3108,11 @@
     {
       "name": "routine-one-shot-followup",
       "command": [
-        "/home/jim/toolkit/.venv/bin/python",
-        "/tmp/toolkit-final-portable-review-1792743145/scripts/mutate.py",
+        "/home/jim/workspace/.venv/bin/python",
+        "/tmp/workspace-final-portable-review-1792743145/scripts/mutate.py",
         "automation/routines.py",
         "--root",
-        "/tmp/toolkit-final-portable-review-1792743145",
+        "/tmp/workspace-final-portable-review-1792743145",
         "--tests",
         "tests/test_routines.py",
         "--replace",
@@ -3125,16 +3125,16 @@
         "--timeout",
         "45",
         "--output",
-        "/tmp/toolkit-routine-one-shot-followup-mutations.json"
+        "/tmp/workspace-routine-one-shot-followup-mutations.json"
       ],
       "environment": {},
-      "frozen_source": "/tmp/toolkit-final-portable-review-1792743145",
+      "frozen_source": "/tmp/workspace-final-portable-review-1792743145",
       "source_and_test_hashes": {
         "automation/routines.py": "9a3c6cb9ef8d21efb20b508e478e2589140f75b717b280dc8fb9a604f9116e80",
         "tests/test_routines.py": "804c660eecbc828b04ef0d307b1341ec9c9ed7ec4719156c6fd6d470be560d65"
       },
-      "plan": "/tmp/toolkit-final-portable-campaign-plan.json",
-      "log": "/tmp/toolkit-routine-one-shot-followup-mutation-run.log",
+      "plan": "/tmp/workspace-final-portable-campaign-plan.json",
+      "log": "/tmp/workspace-routine-one-shot-followup-mutation-run.log",
       "evidence": {
         "source": "automation/routines.py",
         "tests": [
@@ -3168,11 +3168,11 @@
     {
       "name": "native-worker",
       "command": [
-        "C:\\Users\\Jim.Lundin\\Downloads\\toolkit-sdk\\toolkit\\.python\\python.exe",
-        "\\\\wsl.localhost\\Ubuntu\\tmp\\toolkit-native-final-review-1792743475\\scripts\\mutate.py",
+        "C:\\Users\\Jim.Lundin\\Downloads\\workspace-sdk\\workspace\\.python\\python.exe",
+        "\\\\wsl.localhost\\Ubuntu\\tmp\\workspace-native-final-review-1792743475\\scripts\\mutate.py",
         "automation/app.py",
         "--root",
-        "\\\\wsl.localhost\\Ubuntu\\tmp\\toolkit-native-final-review-1792743475",
+        "\\\\wsl.localhost\\Ubuntu\\tmp\\workspace-native-final-review-1792743475",
         "--tests",
         "tests/test_windows_work_process.py",
         "tests/test_automation_ipc.py",
@@ -3192,30 +3192,30 @@
         "--timeout",
         "100",
         "--output",
-        "\\\\wsl.localhost\\Ubuntu\\tmp\\toolkit-native-worker-mutations.json"
+        "\\\\wsl.localhost\\Ubuntu\\tmp\\workspace-native-worker-mutations.json"
       ],
       "launch_command": [
-        "C:\\Users\\Jim.Lundin\\Downloads\\toolkit-sdk\\toolkit\\.python\\python.exe",
+        "C:\\Users\\Jim.Lundin\\Downloads\\workspace-sdk\\workspace\\.python\\python.exe",
         "-B",
-        "\\\\wsl.localhost\\Ubuntu\\tmp\\toolkit-machine-mutation-driver.py",
-        "\\\\wsl.localhost\\Ubuntu\\tmp\\toolkit-native-worker-mutation-argv.json"
+        "\\\\wsl.localhost\\Ubuntu\\tmp\\workspace-machine-mutation-driver.py",
+        "\\\\wsl.localhost\\Ubuntu\\tmp\\workspace-native-worker-mutation-argv.json"
       ],
       "environment": {
-        "PYTHONUSERBASE": "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\toolkit-validation-deps-1792740922",
-        "TOOLKIT_BUNDLED_RUNTIME": "C:\\Users\\Jim.Lundin\\Downloads\\toolkit-sdk\\toolkit\\.runtime",
-        "PYTHONPATH": "\\\\wsl.localhost\\Ubuntu\\tmp\\toolkit-native-final-review-1792743475",
+        "PYTHONUSERBASE": "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\workspace-validation-deps-1792740922",
+        "WORKSPACE_BUNDLED_RUNTIME": "C:\\Users\\Jim.Lundin\\Downloads\\workspace-sdk\\workspace\\.runtime",
+        "PYTHONPATH": "\\\\wsl.localhost\\Ubuntu\\tmp\\workspace-native-final-review-1792743475",
         "PYTHONDONTWRITEBYTECODE": "1",
         "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1",
-        "LOCALAPPDATA": "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\toolkit-validation-deps-1792740922\\native-final-profile"
+        "LOCALAPPDATA": "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\workspace-validation-deps-1792740922\\native-final-profile"
       },
-      "frozen_source": "/tmp/toolkit-native-final-review-1792743475",
+      "frozen_source": "/tmp/workspace-native-final-review-1792743475",
       "source_and_test_hashes": {
         "automation/app.py": "0c6c5787d58defe36f8e2a9a5e6c6d51ddd591e2443b355f0f71952eb9eb474e",
         "tests/test_windows_work_process.py": "cc741108915e999400c4b55fe088532b3582ca55cac2d419bee874e2021731bc",
         "tests/test_automation_ipc.py": "26e2e0d2d98121674b137116fa7fdbcf49401fe0a543c007719d424e6eacabe5"
       },
-      "plan": "/tmp/toolkit-native-final-campaign-plan.json",
-      "log": "/tmp/toolkit-native-worker-mutation-run.log",
+      "plan": "/tmp/workspace-native-final-campaign-plan.json",
+      "log": "/tmp/workspace-native-worker-mutation-run.log",
       "evidence": {
         "source": "automation/app.py",
         "tests": [
@@ -3282,11 +3282,11 @@
     {
       "name": "native-approval-paint",
       "command": [
-        "C:\\Users\\Jim.Lundin\\Downloads\\toolkit-sdk\\toolkit\\.python\\python.exe",
-        "\\\\wsl.localhost\\Ubuntu\\tmp\\toolkit-native-final-review-1792743475\\scripts\\mutate.py",
+        "C:\\Users\\Jim.Lundin\\Downloads\\workspace-sdk\\workspace\\.python\\python.exe",
+        "\\\\wsl.localhost\\Ubuntu\\tmp\\workspace-native-final-review-1792743475\\scripts\\mutate.py",
         "assistant/agent_toasts.py",
         "--root",
-        "\\\\wsl.localhost\\Ubuntu\\tmp\\toolkit-native-final-review-1792743475",
+        "\\\\wsl.localhost\\Ubuntu\\tmp\\workspace-native-final-review-1792743475",
         "--tests",
         "tests/test_windows_work_approvals.py::test_toast_approval_waits_for_a_visible_painted_card_and_a_fresh_request",
         "--replace",
@@ -3299,29 +3299,29 @@
         "--timeout",
         "100",
         "--output",
-        "\\\\wsl.localhost\\Ubuntu\\tmp\\toolkit-native-approval-paint-mutations.json"
+        "\\\\wsl.localhost\\Ubuntu\\tmp\\workspace-native-approval-paint-mutations.json"
       ],
       "launch_command": [
-        "C:\\Users\\Jim.Lundin\\Downloads\\toolkit-sdk\\toolkit\\.python\\python.exe",
+        "C:\\Users\\Jim.Lundin\\Downloads\\workspace-sdk\\workspace\\.python\\python.exe",
         "-B",
-        "\\\\wsl.localhost\\Ubuntu\\tmp\\toolkit-machine-mutation-driver.py",
-        "\\\\wsl.localhost\\Ubuntu\\tmp\\toolkit-native-approval-paint-mutation-argv.json"
+        "\\\\wsl.localhost\\Ubuntu\\tmp\\workspace-machine-mutation-driver.py",
+        "\\\\wsl.localhost\\Ubuntu\\tmp\\workspace-native-approval-paint-mutation-argv.json"
       ],
       "environment": {
-        "PYTHONUSERBASE": "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\toolkit-validation-deps-1792740922",
-        "TOOLKIT_BUNDLED_RUNTIME": "C:\\Users\\Jim.Lundin\\Downloads\\toolkit-sdk\\toolkit\\.runtime",
-        "PYTHONPATH": "\\\\wsl.localhost\\Ubuntu\\tmp\\toolkit-native-final-review-1792743475",
+        "PYTHONUSERBASE": "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\workspace-validation-deps-1792740922",
+        "WORKSPACE_BUNDLED_RUNTIME": "C:\\Users\\Jim.Lundin\\Downloads\\workspace-sdk\\workspace\\.runtime",
+        "PYTHONPATH": "\\\\wsl.localhost\\Ubuntu\\tmp\\workspace-native-final-review-1792743475",
         "PYTHONDONTWRITEBYTECODE": "1",
         "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1",
-        "LOCALAPPDATA": "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\toolkit-validation-deps-1792740922\\native-final-profile"
+        "LOCALAPPDATA": "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\workspace-validation-deps-1792740922\\native-final-profile"
       },
-      "frozen_source": "/tmp/toolkit-native-final-review-1792743475",
+      "frozen_source": "/tmp/workspace-native-final-review-1792743475",
       "source_and_test_hashes": {
         "assistant/agent_toasts.py": "e12dcad5ba9795e2dd3e71fbdd21edfb95facfaa29d090e70173da1100462775",
         "tests/test_windows_work_approvals.py": "8ca5802cf19a286aee598794176d8be6a2b335094e3b4cab9b36a348526226e3"
       },
-      "plan": "/tmp/toolkit-native-final-campaign-plan.json",
-      "log": "/tmp/toolkit-native-approval-paint-mutation-run.log",
+      "plan": "/tmp/workspace-native-final-campaign-plan.json",
+      "log": "/tmp/workspace-native-approval-paint-mutation-run.log",
       "evidence": {
         "source": "assistant/agent_toasts.py",
         "tests": [
@@ -3355,11 +3355,11 @@
     {
       "name": "store-batch-lookup",
       "command": [
-        "/home/jim/toolkit/.venv/bin/python",
-        "/tmp/toolkit-final-contract-review-1792743631/scripts/mutate.py",
+        "/home/jim/workspace/.venv/bin/python",
+        "/tmp/workspace-final-contract-review-1792743631/scripts/mutate.py",
         "automation/store.py",
         "--root",
-        "/tmp/toolkit-final-contract-review-1792743631",
+        "/tmp/workspace-final-contract-review-1792743631",
         "--tests",
         "tests/test_work_store.py::test_batch_reads_keep_requested_order_and_omit_missing_or_repeated_tasks",
         "tests/test_work_store.py::test_batch_reads_validate_the_requested_tasks_pending_input_relationships",
@@ -3389,16 +3389,16 @@
         "--timeout",
         "45",
         "--output",
-        "/tmp/toolkit-store-batch-lookup-mutations.json"
+        "/tmp/workspace-store-batch-lookup-mutations.json"
       ],
       "environment": {},
-      "frozen_source": "/tmp/toolkit-final-contract-review-1792743631",
+      "frozen_source": "/tmp/workspace-final-contract-review-1792743631",
       "source_and_test_hashes": {
         "automation/store.py": "81154f61fc104162cb1950cfef2e0168c70a300c9596ef163b853af20f405cd1",
         "tests/test_work_store.py": "bcaf556e7be9c0c756d9358677c9430ca48482527b1e452f0c1b4e4eaa0bfde1"
       },
-      "plan": "/tmp/toolkit-final-contract-campaign-plan.json",
-      "log": "/tmp/toolkit-store-batch-lookup-mutation-run.log",
+      "plan": "/tmp/workspace-final-contract-campaign-plan.json",
+      "log": "/tmp/workspace-store-batch-lookup-mutation-run.log",
       "evidence": {
         "source": "automation/store.py",
         "tests": [
@@ -3509,11 +3509,11 @@
     {
       "name": "routine-clock-followup",
       "command": [
-        "/home/jim/toolkit/.venv/bin/python",
-        "/tmp/toolkit-final-contract-review-1792743631/scripts/mutate.py",
+        "/home/jim/workspace/.venv/bin/python",
+        "/tmp/workspace-final-contract-review-1792743631/scripts/mutate.py",
         "automation/routines.py",
         "--root",
-        "/tmp/toolkit-final-contract-review-1792743631",
+        "/tmp/workspace-final-contract-review-1792743631",
         "--tests",
         "tests/test_routines.py::test_one_shot_waits_for_recorded_enablement_after_clock_moves_backward",
         "--replace",
@@ -3526,16 +3526,16 @@
         "--timeout",
         "45",
         "--output",
-        "/tmp/toolkit-routine-clock-followup-mutations.json"
+        "/tmp/workspace-routine-clock-followup-mutations.json"
       ],
       "environment": {},
-      "frozen_source": "/tmp/toolkit-final-contract-review-1792743631",
+      "frozen_source": "/tmp/workspace-final-contract-review-1792743631",
       "source_and_test_hashes": {
         "automation/routines.py": "9a3c6cb9ef8d21efb20b508e478e2589140f75b717b280dc8fb9a604f9116e80",
         "tests/test_routines.py": "772b2e83536e9a377ed5ad2d1ea949813fa852cdd1a7c84f6e696b54d43695fa"
       },
-      "plan": "/tmp/toolkit-final-contract-campaign-plan.json",
-      "log": "/tmp/toolkit-routine-clock-followup-mutation-run.log",
+      "plan": "/tmp/workspace-final-contract-campaign-plan.json",
+      "log": "/tmp/workspace-routine-clock-followup-mutation-run.log",
       "evidence": {
         "source": "automation/routines.py",
         "tests": [
@@ -3569,11 +3569,11 @@
     {
       "name": "action-unresolved-followup",
       "command": [
-        "/home/jim/toolkit/.venv/bin/python",
-        "/tmp/toolkit-final-contract-review-1792743631/scripts/mutate.py",
+        "/home/jim/workspace/.venv/bin/python",
+        "/tmp/workspace-final-contract-review-1792743631/scripts/mutate.py",
         "automation/actions.py",
         "--root",
-        "/tmp/toolkit-final-contract-review-1792743631",
+        "/tmp/workspace-final-contract-review-1792743631",
         "--tests",
         "tests/test_work_actions.py::test_mismatched_recovery_file_stays_uncertain_and_cannot_be_overwritten",
         "--replace",
@@ -3586,16 +3586,16 @@
         "--timeout",
         "45",
         "--output",
-        "/tmp/toolkit-action-unresolved-followup-mutations.json"
+        "/tmp/workspace-action-unresolved-followup-mutations.json"
       ],
       "environment": {},
-      "frozen_source": "/tmp/toolkit-final-contract-review-1792743631",
+      "frozen_source": "/tmp/workspace-final-contract-review-1792743631",
       "source_and_test_hashes": {
         "automation/actions.py": "0d7b76bbf153ea0c9b55488982df4b9e0ccab1a0ab78f473d4bf090930ac7916",
         "tests/test_work_actions.py": "21bf243e140e2c6a2ac5adf3f709e39412af3c3d68893d536da53c2e2586737d"
       },
-      "plan": "/tmp/toolkit-final-contract-campaign-plan.json",
-      "log": "/tmp/toolkit-action-unresolved-followup-mutation-run.log",
+      "plan": "/tmp/workspace-final-contract-campaign-plan.json",
+      "log": "/tmp/workspace-action-unresolved-followup-mutation-run.log",
       "evidence": {
         "source": "automation/actions.py",
         "tests": [
@@ -3629,11 +3629,11 @@
     {
       "name": "execution-truncated-followup",
       "command": [
-        "/home/jim/toolkit/.venv/bin/python",
-        "/tmp/toolkit-final-contract-review-1792743631/scripts/mutate.py",
+        "/home/jim/workspace/.venv/bin/python",
+        "/tmp/workspace-final-contract-review-1792743631/scripts/mutate.py",
         "automation/execution.py",
         "--root",
-        "/tmp/toolkit-final-contract-review-1792743631",
+        "/tmp/workspace-final-contract-review-1792743631",
         "--tests",
         "tests/test_work_actions.py::test_message_reconciliation_requires_same_chat_new_matching_complete_text",
         "--replace",
@@ -3646,16 +3646,16 @@
         "--timeout",
         "45",
         "--output",
-        "/tmp/toolkit-execution-truncated-followup-mutations.json"
+        "/tmp/workspace-execution-truncated-followup-mutations.json"
       ],
       "environment": {},
-      "frozen_source": "/tmp/toolkit-final-contract-review-1792743631",
+      "frozen_source": "/tmp/workspace-final-contract-review-1792743631",
       "source_and_test_hashes": {
         "automation/execution.py": "91c6bd360207128dbf23a9e7d9f8db70b2cb7ce17abbe89599d3b256beb198ad",
         "tests/test_work_actions.py": "21bf243e140e2c6a2ac5adf3f709e39412af3c3d68893d536da53c2e2586737d"
       },
-      "plan": "/tmp/toolkit-final-contract-campaign-plan.json",
-      "log": "/tmp/toolkit-execution-truncated-followup-mutation-run.log",
+      "plan": "/tmp/workspace-final-contract-campaign-plan.json",
+      "log": "/tmp/workspace-execution-truncated-followup-mutation-run.log",
       "evidence": {
         "source": "automation/execution.py",
         "tests": [
@@ -3689,11 +3689,11 @@
     {
       "name": "ipc-boundaries-followup",
       "command": [
-        "/home/jim/toolkit/.venv/bin/python",
-        "/tmp/toolkit-final-contract-review-1792743631/scripts/mutate.py",
+        "/home/jim/workspace/.venv/bin/python",
+        "/tmp/workspace-final-contract-review-1792743631/scripts/mutate.py",
         "automation/ipc.py",
         "--root",
-        "/tmp/toolkit-final-contract-review-1792743631",
+        "/tmp/workspace-final-contract-review-1792743631",
         "--tests",
         "tests/test_automation_ipc.py::test_codec_rejects_unknown_versions_invalid_scalars_and_stale_batches",
         "--replace",
@@ -3709,16 +3709,16 @@
         "--timeout",
         "45",
         "--output",
-        "/tmp/toolkit-ipc-boundaries-followup-mutations.json"
+        "/tmp/workspace-ipc-boundaries-followup-mutations.json"
       ],
       "environment": {},
-      "frozen_source": "/tmp/toolkit-final-contract-review-1792743631",
+      "frozen_source": "/tmp/workspace-final-contract-review-1792743631",
       "source_and_test_hashes": {
         "automation/ipc.py": "a985a629c2f83066448a9216ec44baa8aaad713f00a6120ef55ce21bd5ba9aa7",
         "tests/test_automation_ipc.py": "26e2e0d2d98121674b137116fa7fdbcf49401fe0a543c007719d424e6eacabe5"
       },
-      "plan": "/tmp/toolkit-final-contract-campaign-plan.json",
-      "log": "/tmp/toolkit-ipc-boundaries-followup-mutation-run.log",
+      "plan": "/tmp/workspace-final-contract-campaign-plan.json",
+      "log": "/tmp/workspace-ipc-boundaries-followup-mutation-run.log",
       "evidence": {
         "source": "automation/ipc.py",
         "tests": [
@@ -3767,11 +3767,11 @@
     {
       "name": "input-restoration",
       "command": [
-        "/home/jim/toolkit/.venv/bin/python",
-        "/tmp/toolkit-final-acceptance-review-1792743847/scripts/mutate.py",
+        "/home/jim/workspace/.venv/bin/python",
+        "/tmp/workspace-final-acceptance-review-1792743847/scripts/mutate.py",
         "assistant/agent_window.py",
         "--root",
-        "/tmp/toolkit-final-acceptance-review-1792743847",
+        "/tmp/workspace-final-acceptance-review-1792743847",
         "--tests",
         "tests/test_external_input.py",
         "--replace",
@@ -3787,16 +3787,16 @@
         "--timeout",
         "45",
         "--output",
-        "/tmp/toolkit-input-restoration-mutations.json"
+        "/tmp/workspace-input-restoration-mutations.json"
       ],
       "environment": {},
-      "frozen_source": "/tmp/toolkit-final-acceptance-review-1792743847",
+      "frozen_source": "/tmp/workspace-final-acceptance-review-1792743847",
       "source_and_test_hashes": {
         "assistant/agent_window.py": "6945b79d6d5c4914c6dfebcd254088fadc77ab029d5c541f3a724c567d96b67c",
         "tests/test_external_input.py": "14a0e74d71dac01d662138c30c69da0043d59c634a4e78c23f9622abe20f42d5"
       },
-      "plan": "/tmp/toolkit-input-restoration-campaign-plan.json",
-      "log": "/tmp/toolkit-input-restoration-mutation-run.log",
+      "plan": "/tmp/workspace-input-restoration-campaign-plan.json",
+      "log": "/tmp/workspace-input-restoration-mutation-run.log",
       "evidence": {
         "source": "assistant/agent_window.py",
         "tests": [
@@ -3845,11 +3845,11 @@
     {
       "name": "frontend-service-final",
       "command": [
-        "/home/jim/toolkit/.venv/bin/python",
-        "/tmp/toolkit-final-frontend-review-1792744347/scripts/mutate.py",
+        "/home/jim/workspace/.venv/bin/python",
+        "/tmp/workspace-final-frontend-review-1792744347/scripts/mutate.py",
         "assistant/work_service.py",
         "--root",
-        "/tmp/toolkit-final-frontend-review-1792744347",
+        "/tmp/workspace-final-frontend-review-1792744347",
         "--tests",
         "tests/test_work_agent.py",
         "--replace",
@@ -3871,16 +3871,16 @@
         "--timeout",
         "60",
         "--output",
-        "/tmp/toolkit-frontend-service-final-mutations.json"
+        "/tmp/workspace-frontend-service-final-mutations.json"
       ],
       "environment": {},
-      "frozen_source": "/tmp/toolkit-final-frontend-review-1792744347",
+      "frozen_source": "/tmp/workspace-final-frontend-review-1792744347",
       "source_and_test_hashes": {
         "assistant/work_service.py": "9dc731f947a9cbdaa9f4f740170e6c90184c4b10d69829751cb543cce43981fe",
         "tests/test_work_agent.py": "7474909fd5262a84557d14be1a6415fdc076439797a05c46bc0de722f9e8b5a8"
       },
-      "plan": "/tmp/toolkit-final-frontend-campaign-plan.json",
-      "log": "/tmp/toolkit-frontend-service-final-mutation-run.log",
+      "plan": "/tmp/workspace-final-frontend-campaign-plan.json",
+      "log": "/tmp/workspace-frontend-service-final-mutation-run.log",
       "evidence": {
         "source": "assistant/work_service.py",
         "tests": [
@@ -3963,11 +3963,11 @@
     {
       "name": "frontend-agent-final",
       "command": [
-        "/home/jim/toolkit/.venv/bin/python",
-        "/tmp/toolkit-final-frontend-review-1792744347/scripts/mutate.py",
+        "/home/jim/workspace/.venv/bin/python",
+        "/tmp/workspace-final-frontend-review-1792744347/scripts/mutate.py",
         "assistant/work_agent.py",
         "--root",
-        "/tmp/toolkit-final-frontend-review-1792744347",
+        "/tmp/workspace-final-frontend-review-1792744347",
         "--tests",
         "tests/test_work_agent.py",
         "--replace",
@@ -3986,16 +3986,16 @@
         "--timeout",
         "60",
         "--output",
-        "/tmp/toolkit-frontend-agent-final-mutations.json"
+        "/tmp/workspace-frontend-agent-final-mutations.json"
       ],
       "environment": {},
-      "frozen_source": "/tmp/toolkit-final-frontend-review-1792744347",
+      "frozen_source": "/tmp/workspace-final-frontend-review-1792744347",
       "source_and_test_hashes": {
         "assistant/work_agent.py": "80b1308ea5ca20f9142e0369e61ea25776124ea02b8ca665d83a629468dfe1c9",
         "tests/test_work_agent.py": "7474909fd5262a84557d14be1a6415fdc076439797a05c46bc0de722f9e8b5a8"
       },
-      "plan": "/tmp/toolkit-final-frontend-campaign-plan.json",
-      "log": "/tmp/toolkit-frontend-agent-final-mutation-run.log",
+      "plan": "/tmp/workspace-final-frontend-campaign-plan.json",
+      "log": "/tmp/workspace-frontend-agent-final-mutation-run.log",
       "evidence": {
         "source": "assistant/work_agent.py",
         "tests": [
@@ -4062,11 +4062,11 @@
     {
       "name": "frontend-receipts",
       "command": [
-        "/home/jim/toolkit/.venv/bin/python",
-        "/tmp/toolkit-final-frontend-review-1792744347/scripts/mutate.py",
+        "/home/jim/workspace/.venv/bin/python",
+        "/tmp/workspace-final-frontend-review-1792744347/scripts/mutate.py",
         "assistant/work_service.py",
         "--root",
-        "/tmp/toolkit-final-frontend-review-1792744347",
+        "/tmp/workspace-final-frontend-review-1792744347",
         "--tests",
         "tests/test_work_submissions.py::test_identified_duplicates_reuse_the_original_source_and_invocation_context_after_new_chat",
         "tests/test_work_submissions.py::test_an_identified_request_cannot_attach_a_routine_task_with_the_same_id_and_prompt",
@@ -4105,16 +4105,16 @@
         "--timeout",
         "60",
         "--output",
-        "/tmp/toolkit-frontend-receipts-mutations.json"
+        "/tmp/workspace-frontend-receipts-mutations.json"
       ],
       "environment": {},
-      "frozen_source": "/tmp/toolkit-final-frontend-review-1792744347",
+      "frozen_source": "/tmp/workspace-final-frontend-review-1792744347",
       "source_and_test_hashes": {
         "assistant/work_service.py": "9dc731f947a9cbdaa9f4f740170e6c90184c4b10d69829751cb543cce43981fe",
         "tests/test_work_submissions.py": "29ca30fb9d74739db36be4bab3df09991e273fc5432f98b06cd93abb3a91725b"
       },
-      "plan": "/tmp/toolkit-final-frontend-campaign-plan.json",
-      "log": "/tmp/toolkit-frontend-receipts-mutation-run.log",
+      "plan": "/tmp/workspace-final-frontend-campaign-plan.json",
+      "log": "/tmp/workspace-frontend-receipts-mutation-run.log",
       "evidence": {
         "source": "assistant/work_service.py",
         "tests": [
@@ -4257,11 +4257,11 @@
     {
       "name": "frontend-queue-replies",
       "command": [
-        "/home/jim/toolkit/.venv/bin/python",
-        "/tmp/toolkit-final-frontend-review-1792744347/scripts/mutate.py",
+        "/home/jim/workspace/.venv/bin/python",
+        "/tmp/workspace-final-frontend-review-1792744347/scripts/mutate.py",
         "assistant/work_agent.py",
         "--root",
-        "/tmp/toolkit-final-frontend-review-1792744347",
+        "/tmp/workspace-final-frontend-review-1792744347",
         "--tests",
         "tests/test_work_submissions.py::test_unconfirmed_submission_keeps_known_rows_and_later_matching_work_clears_only_its_problem",
         "tests/test_work_submissions.py::test_watching_a_missing_id_distinguishes_an_observed_absence_from_a_failed_read",
@@ -4295,16 +4295,16 @@
         "--timeout",
         "60",
         "--output",
-        "/tmp/toolkit-frontend-queue-replies-mutations.json"
+        "/tmp/workspace-frontend-queue-replies-mutations.json"
       ],
       "environment": {},
-      "frozen_source": "/tmp/toolkit-final-frontend-review-1792744347",
+      "frozen_source": "/tmp/workspace-final-frontend-review-1792744347",
       "source_and_test_hashes": {
         "assistant/work_agent.py": "80b1308ea5ca20f9142e0369e61ea25776124ea02b8ca665d83a629468dfe1c9",
         "tests/test_work_submissions.py": "29ca30fb9d74739db36be4bab3df09991e273fc5432f98b06cd93abb3a91725b"
       },
-      "plan": "/tmp/toolkit-final-frontend-campaign-plan.json",
-      "log": "/tmp/toolkit-frontend-queue-replies-mutation-run.log",
+      "plan": "/tmp/workspace-final-frontend-campaign-plan.json",
+      "log": "/tmp/workspace-frontend-queue-replies-mutation-run.log",
       "evidence": {
         "source": "assistant/work_agent.py",
         "tests": [
@@ -4421,11 +4421,11 @@
     {
       "name": "frontend-retry-status",
       "command": [
-        "/home/jim/toolkit/.venv/bin/python",
-        "/tmp/toolkit-final-reply-review-1792745126/scripts/mutate.py",
+        "/home/jim/workspace/.venv/bin/python",
+        "/tmp/workspace-final-reply-review-1792745126/scripts/mutate.py",
         "assistant/work_service.py",
         "--root",
-        "/tmp/toolkit-final-reply-review-1792745126",
+        "/tmp/workspace-final-reply-review-1792745126",
         "--tests",
         "tests/test_work_submissions.py::test_identified_duplicates_reuse_the_original_source_and_invocation_context_after_new_chat",
         "--replace",
@@ -4438,16 +4438,16 @@
         "--timeout",
         "45",
         "--output",
-        "/tmp/toolkit-frontend-retry-status-mutations.json"
+        "/tmp/workspace-frontend-retry-status-mutations.json"
       ],
       "environment": {},
-      "frozen_source": "/tmp/toolkit-final-reply-review-1792745126",
+      "frozen_source": "/tmp/workspace-final-reply-review-1792745126",
       "source_and_test_hashes": {
         "assistant/work_service.py": "f140793fb029769cbaac2491335f05985821948f7d1d3b16fae93f973a58f941",
         "tests/test_work_submissions.py": "aa5cdcc013e1a7fce84e8ac5a9f6ad89ec6e09aeac68971f0ccf120df30838ce"
       },
-      "plan": "/tmp/toolkit-final-reply-campaign-plan.json",
-      "log": "/tmp/toolkit-frontend-retry-status-mutation-run.log",
+      "plan": "/tmp/workspace-final-reply-campaign-plan.json",
+      "log": "/tmp/workspace-frontend-retry-status-mutation-run.log",
       "evidence": {
         "source": "assistant/work_service.py",
         "tests": [
@@ -4481,11 +4481,11 @@
     {
       "name": "frontend-reply-receipts",
       "command": [
-        "/home/jim/toolkit/.venv/bin/python",
-        "/tmp/toolkit-final-reply-review-1792745126/scripts/mutate.py",
+        "/home/jim/workspace/.venv/bin/python",
+        "/tmp/workspace-final-reply-review-1792745126/scripts/mutate.py",
         "assistant/work_service.py",
         "--root",
-        "/tmp/toolkit-final-reply-review-1792745126",
+        "/tmp/workspace-final-reply-review-1792745126",
         "--tests",
         "tests/test_work_reply_receipts.py::test_watched_canvas_reply_failures_have_distinct_exact_receipts_after_confirmed_reads",
         "--replace",
@@ -4507,16 +4507,16 @@
         "--timeout",
         "45",
         "--output",
-        "/tmp/toolkit-frontend-reply-receipts-mutations.json"
+        "/tmp/workspace-frontend-reply-receipts-mutations.json"
       ],
       "environment": {},
-      "frozen_source": "/tmp/toolkit-final-reply-review-1792745126",
+      "frozen_source": "/tmp/workspace-final-reply-review-1792745126",
       "source_and_test_hashes": {
         "assistant/work_service.py": "f140793fb029769cbaac2491335f05985821948f7d1d3b16fae93f973a58f941",
         "tests/test_work_reply_receipts.py": "675d8768cbc84b6c77a37557e9adc74ee293210d2fe30c142c99655e5d422029"
       },
-      "plan": "/tmp/toolkit-final-reply-campaign-plan.json",
-      "log": "/tmp/toolkit-frontend-reply-receipts-mutation-run.log",
+      "plan": "/tmp/workspace-final-reply-campaign-plan.json",
+      "log": "/tmp/workspace-frontend-reply-receipts-mutation-run.log",
       "evidence": {
         "source": "assistant/work_service.py",
         "tests": [
@@ -4595,11 +4595,11 @@
     {
       "name": "frontend-reply-handoff",
       "command": [
-        "/home/jim/toolkit/.venv/bin/python",
-        "/tmp/toolkit-final-reply-review-1792745126/scripts/mutate.py",
+        "/home/jim/workspace/.venv/bin/python",
+        "/tmp/workspace-final-reply-review-1792745126/scripts/mutate.py",
         "assistant/work_agent.py",
         "--root",
-        "/tmp/toolkit-final-reply-review-1792745126",
+        "/tmp/workspace-final-reply-review-1792745126",
         "--tests",
         "tests/test_work_reply_receipts.py::test_watched_canvas_reply_failures_have_distinct_exact_receipts_after_confirmed_reads",
         "--replace",
@@ -4612,16 +4612,16 @@
         "--timeout",
         "45",
         "--output",
-        "/tmp/toolkit-frontend-reply-handoff-mutations.json"
+        "/tmp/workspace-frontend-reply-handoff-mutations.json"
       ],
       "environment": {},
-      "frozen_source": "/tmp/toolkit-final-reply-review-1792745126",
+      "frozen_source": "/tmp/workspace-final-reply-review-1792745126",
       "source_and_test_hashes": {
         "assistant/work_agent.py": "aec5faad16488bf4ba031809cc85ad1c2f745050dfea466f3736b25889673fb4",
         "tests/test_work_reply_receipts.py": "675d8768cbc84b6c77a37557e9adc74ee293210d2fe30c142c99655e5d422029"
       },
-      "plan": "/tmp/toolkit-final-reply-campaign-plan.json",
-      "log": "/tmp/toolkit-frontend-reply-handoff-mutation-run.log",
+      "plan": "/tmp/workspace-final-reply-campaign-plan.json",
+      "log": "/tmp/workspace-frontend-reply-handoff-mutation-run.log",
       "evidence": {
         "source": "assistant/work_agent.py",
         "tests": [
@@ -4662,10 +4662,10 @@
   "native_ui_baselines": [
     {
       "plan": {
-        "slice_root": "/tmp/toolkit-work-ui-review-1792742436",
-        "slice_windows": "\\\\wsl.localhost\\Ubuntu\\tmp\\toolkit-work-ui-review-1792742436",
+        "slice_root": "/tmp/workspace-work-ui-review-1792742436",
+        "slice_windows": "\\\\wsl.localhost\\Ubuntu\\tmp\\workspace-work-ui-review-1792742436",
         "command": [
-          "C:\\Users\\Jim.Lundin\\Downloads\\toolkit-sdk\\toolkit\\.python\\python.exe",
+          "C:\\Users\\Jim.Lundin\\Downloads\\workspace-sdk\\workspace\\.python\\python.exe",
           "-B",
           "-m",
           "pytest",
@@ -4673,17 +4673,17 @@
           "--tb=short",
           "-o",
           "addopts=",
-          "--junitxml=\\\\wsl.localhost\\Ubuntu\\tmp\\toolkit-native-work-ui-baseline.xml",
+          "--junitxml=\\\\wsl.localhost\\Ubuntu\\tmp\\workspace-native-work-ui-baseline.xml",
           "tests/test_windows_work_panel.py",
           "tests/test_windows_work_approvals.py"
         ],
         "environment": {
-          "PYTHONUSERBASE": "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\toolkit-validation-deps-1792740922",
-          "TOOLKIT_BUNDLED_RUNTIME": "C:\\Users\\Jim.Lundin\\Downloads\\toolkit-sdk\\toolkit\\.runtime",
-          "PYTHONPATH": "\\\\wsl.localhost\\Ubuntu\\tmp\\toolkit-work-ui-review-1792742436",
+          "PYTHONUSERBASE": "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\workspace-validation-deps-1792740922",
+          "WORKSPACE_BUNDLED_RUNTIME": "C:\\Users\\Jim.Lundin\\Downloads\\workspace-sdk\\workspace\\.runtime",
+          "PYTHONPATH": "\\\\wsl.localhost\\Ubuntu\\tmp\\workspace-work-ui-review-1792742436",
           "PYTHONDONTWRITEBYTECODE": "1",
           "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1",
-          "LOCALAPPDATA": "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\toolkit-validation-deps-1792740922\\native-work-ui-profile"
+          "LOCALAPPDATA": "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\workspace-validation-deps-1792740922\\native-work-ui-profile"
         },
         "source_hashes": {
           "assistant/work_panel.py": "74e3537f71f12094e6bfd820304986b0dbe6cba79411e132e312e0398a3a6af5",
@@ -4694,7 +4694,7 @@
           "tests/test_windows_work_approvals.py": "8ca5802cf19a286aee598794176d8be6a2b335094e3b4cab9b36a348526226e3"
         },
         "started_at": 1792742436.3746674,
-        "log": "\\\\wsl.localhost\\Ubuntu\\tmp\\toolkit-native-work-ui-baseline.log"
+        "log": "\\\\wsl.localhost\\Ubuntu\\tmp\\workspace-native-work-ui-baseline.log"
       },
       "passed": 6,
       "failed": 2,
@@ -4709,12 +4709,12 @@
       "passed": 8,
       "failed": 0,
       "seconds": 51.35,
-      "plan": "/tmp/toolkit-native-work-ui-corrected-arguments.json",
+      "plan": "/tmp/workspace-native-work-ui-corrected-arguments.json",
       "arguments": {
-        "slice_root": "/tmp/toolkit-work-ui-corrected-1792742647",
-        "slice_windows": "\\\\wsl.localhost\\Ubuntu\\tmp\\toolkit-work-ui-corrected-1792742647",
+        "slice_root": "/tmp/workspace-work-ui-corrected-1792742647",
+        "slice_windows": "\\\\wsl.localhost\\Ubuntu\\tmp\\workspace-work-ui-corrected-1792742647",
         "command": [
-          "C:\\Users\\Jim.Lundin\\Downloads\\toolkit-sdk\\toolkit\\.python\\python.exe",
+          "C:\\Users\\Jim.Lundin\\Downloads\\workspace-sdk\\workspace\\.python\\python.exe",
           "-B",
           "-m",
           "pytest",
@@ -4725,17 +4725,17 @@
           "addopts=",
           "-o",
           "faulthandler_timeout=20",
-          "--junitxml=\\\\wsl.localhost\\Ubuntu\\tmp\\toolkit-native-work-ui-corrected.xml",
+          "--junitxml=\\\\wsl.localhost\\Ubuntu\\tmp\\workspace-native-work-ui-corrected.xml",
           "tests/test_windows_work_panel.py",
           "tests/test_windows_work_approvals.py"
         ],
         "environment": {
-          "PYTHONUSERBASE": "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\toolkit-validation-deps-1792740922",
-          "TOOLKIT_BUNDLED_RUNTIME": "C:\\Users\\Jim.Lundin\\Downloads\\toolkit-sdk\\toolkit\\.runtime",
-          "PYTHONPATH": "\\\\wsl.localhost\\Ubuntu\\tmp\\toolkit-work-ui-corrected-1792742647",
+          "PYTHONUSERBASE": "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\workspace-validation-deps-1792740922",
+          "WORKSPACE_BUNDLED_RUNTIME": "C:\\Users\\Jim.Lundin\\Downloads\\workspace-sdk\\workspace\\.runtime",
+          "PYTHONPATH": "\\\\wsl.localhost\\Ubuntu\\tmp\\workspace-work-ui-corrected-1792742647",
           "PYTHONDONTWRITEBYTECODE": "1",
           "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1",
-          "LOCALAPPDATA": "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\toolkit-validation-deps-1792740922\\native-work-ui-profile"
+          "LOCALAPPDATA": "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\workspace-validation-deps-1792740922\\native-work-ui-profile"
         },
         "source_hashes": {
           "assistant/work_panel.py": "74e3537f71f12094e6bfd820304986b0dbe6cba79411e132e312e0398a3a6af5",
@@ -4746,10 +4746,10 @@
           "tests/test_windows_work_approvals.py": "8ca5802cf19a286aee598794176d8be6a2b335094e3b4cab9b36a348526226e3"
         },
         "started_at": 1792742647.4401288,
-        "log": "\\\\wsl.localhost\\Ubuntu\\tmp\\toolkit-native-work-ui-corrected.log"
+        "log": "\\\\wsl.localhost\\Ubuntu\\tmp\\workspace-native-work-ui-corrected.log"
       },
-      "log": "/tmp/toolkit-native-work-ui-corrected.log",
-      "junit_xml": "/tmp/toolkit-native-work-ui-corrected.xml",
+      "log": "/tmp/workspace-native-work-ui-corrected.log",
+      "junit_xml": "/tmp/workspace-native-work-ui-corrected.xml",
       "note": "Test-only Tcl state inspection correction: ttk.instate replaces runtime-ineffective typing.cast. Production source unchanged. Longest actual test was 2.94 seconds; remaining elapsed time is startup/import overhead."
     }
   ],
@@ -4785,16 +4785,16 @@
       "results": [
         {
           "variant": "current",
-          "source_root": "/tmp/toolkit-final-frontend-review-1792744347",
+          "source_root": "/tmp/workspace-final-frontend-review-1792744347",
           "source_sha256": "9dc731f947a9cbdaa9f4f740170e6c90184c4b10d69829751cb543cce43981fe",
           "command": [
-            "/home/jim/toolkit/.venv/bin/python",
+            "/home/jim/workspace/.venv/bin/python",
             "-B",
             "-c",
             "import json,tempfile\nfrom pathlib import Path\nfrom tests.test_work_agent import WorkRig,invocation\nwith tempfile.TemporaryDirectory() as directory:\n current=invocation(\"Original workbook\")\n rig=WorkRig(Path(directory),context=lambda:current)\n try:\n  rig.agent.submit_identified(\"task\",\"Summarize this workbook\")\n  rig.refresh()\n  original=rig.tasks.get(\"task\")\n  current=invocation(\"Another workbook\")\n  assert rig.agent.new_conversation()\n  rig.agent.submit_identified(\"task\",\"Summarize this workbook\")\n  snapshot=rig.refresh()\n  print(json.dumps({\"retry_status\":snapshot.status,\"submission_problems\":len(snapshot.submission_problems),\"reported_errors\":len(rig.errors),\"same_task\":rig.tasks.get(\"task\")==original,\"registrations\":len(rig.bridge.registrations)}))\n finally:\n  rig.close()\n"
           ],
           "environment": {
-            "PYTHONPATH": "/tmp/toolkit-final-frontend-review-1792744347",
+            "PYTHONPATH": "/tmp/workspace-final-frontend-review-1792744347",
             "PYTHONDONTWRITEBYTECODE": "1"
           },
           "exit_code": 0,
@@ -4803,16 +4803,16 @@
         },
         {
           "variant": "wrong_retry_source",
-          "source_root": "/tmp/toolkit-retry-source-mutant-1792744575",
+          "source_root": "/tmp/workspace-retry-source-mutant-1792744575",
           "source_sha256": "a795e9c8d745197f6b42b2cfee8316ad278c7d12a23c0dd50ad150e00abc170d",
           "command": [
-            "/home/jim/toolkit/.venv/bin/python",
+            "/home/jim/workspace/.venv/bin/python",
             "-B",
             "-c",
             "import json,tempfile\nfrom pathlib import Path\nfrom tests.test_work_agent import WorkRig,invocation\nwith tempfile.TemporaryDirectory() as directory:\n current=invocation(\"Original workbook\")\n rig=WorkRig(Path(directory),context=lambda:current)\n try:\n  rig.agent.submit_identified(\"task\",\"Summarize this workbook\")\n  rig.refresh()\n  original=rig.tasks.get(\"task\")\n  current=invocation(\"Another workbook\")\n  assert rig.agent.new_conversation()\n  rig.agent.submit_identified(\"task\",\"Summarize this workbook\")\n  snapshot=rig.refresh()\n  print(json.dumps({\"retry_status\":snapshot.status,\"submission_problems\":len(snapshot.submission_problems),\"reported_errors\":len(rig.errors),\"same_task\":rig.tasks.get(\"task\")==original,\"registrations\":len(rig.bridge.registrations)}))\n finally:\n  rig.close()\n"
           ],
           "environment": {
-            "PYTHONPATH": "/tmp/toolkit-retry-source-mutant-1792744575",
+            "PYTHONPATH": "/tmp/workspace-retry-source-mutant-1792744575",
             "PYTHONDONTWRITEBYTECODE": "1"
           },
           "exit_code": 0,
@@ -4829,7 +4829,7 @@
     "scope": "Generated PCM through Meetings, real transcript/task/routine SQLite journals, local Responses endpoint, real file read/write, SHA-256 verification, Completed outcome and restart deduplication.",
     "earlier_observations": "Passed via pytest after initial implementation and after fixture extraction; direct Ruff, Mypy and Pyright now pass. Final selfcheck-compatible and native checks will be added.",
     "final_checks": {
-      "slice_root": "/tmp/toolkit-final-acceptance-review-1792743847",
+      "slice_root": "/tmp/workspace-final-acceptance-review-1792743847",
       "created_at": 1792743847.807134,
       "source_hashes": {
         "tests/test_work_acceptance.py": "4327e36ecc1af58e2ac7239e22e43872aeaf2397e73e1327e6946b8b59a64efe",
@@ -4850,44 +4850,44 @@
         {
           "name": "focused selfcheck acceptance and input restoration",
           "command": [
-            "/home/jim/toolkit/.venv/bin/python",
-            "/tmp/toolkit-final-acceptance-selfcheck.py",
-            "/tmp/toolkit-final-acceptance-review-1792743847"
+            "/home/jim/workspace/.venv/bin/python",
+            "/tmp/workspace-final-acceptance-selfcheck.py",
+            "/tmp/workspace-final-acceptance-review-1792743847"
           ],
-          "log": "/tmp/toolkit-final-acceptance-selfcheck.log",
+          "log": "/tmp/workspace-final-acceptance-selfcheck.log",
           "exit_code": 0,
           "output": "{\n  \"passed\": 8,\n  \"skipped_modules\": 0,\n  \"problems\": [],\n  \"seconds\": 12.475,\n  \"timings\": [\n    [\n      0.011755980958696455,\n      \"tests.test_external_input.test_a_new_request_during_reply_submission_remains_pending\"\n    ],\n    [\n      0.00044660200364887714,\n      \"tests.test_external_input.test_a_restored_request_stays_pending_when_the_prior_submission_returns\"\n    ],\n    [\n      0.0009359479881823063,\n      \"tests.test_external_input.test_approval_requires_its_exact_native_display_and_never_accepts_partial_voice_matches\"\n    ],\n    [\n      0.002197759982664138,\n      \"tests.test_external_input.test_duplicate_polling_and_simultaneous_replies_cannot_submit_twice\"\n    ],\n    [\n      0.0008863639668561518,\n      \"tests.test_external_input.test_durable_questions_share_typed_voice_and_button_routing_without_waiting_threads\"\n    ],\n    [\n      0.12883784098085016,\n      \"tests.test_external_input.test_failed_native_creation_never_authorizes_a_projected_approval\"\n    ],\n    [\n      0.0002550180070102215,\n      \"tests.test_external_input.test_rejected_replies_can_retry_without_resolving_or_reopening_the_request\"\n    ],\n    [\n      10.497420285013504,\n      \"tests.test_work_acceptance.test_finished_meeting_produces_one_verified_notes_file_and_survives_restart\"\n    ]\n  ],\n  \"pytest_imported\": false,\n  \"python\": \"3.15.1 (main, Oct 22 2026, 01:08:56) [GCC 9.4.0]\"\n}\n"
         },
         {
           "name": "acceptance Ruff",
           "command": [
-            "/home/jim/toolkit/.venv/bin/ruff",
+            "/home/jim/workspace/.venv/bin/ruff",
             "check",
             "tests/test_work_acceptance.py"
           ],
-          "log": "/tmp/toolkit-final-acceptance-ruff.log",
+          "log": "/tmp/workspace-final-acceptance-ruff.log",
           "exit_code": 0,
           "output": "All checks passed!\n"
         },
         {
           "name": "acceptance Mypy",
           "command": [
-            "/home/jim/toolkit/.venv/bin/mypy",
+            "/home/jim/workspace/.venv/bin/mypy",
             "tests/test_work_acceptance.py"
           ],
-          "log": "/tmp/toolkit-final-acceptance-mypy.log",
+          "log": "/tmp/workspace-final-acceptance-mypy.log",
           "exit_code": 0,
           "output": "Success: no issues found in 1 source file\n"
         },
         {
           "name": "acceptance Pyright",
           "command": [
-            "/home/jim/toolkit/.venv/bin/pyright",
+            "/home/jim/workspace/.venv/bin/pyright",
             "--pythonpath",
-            "/home/jim/toolkit/.venv/bin/python",
+            "/home/jim/workspace/.venv/bin/python",
             "tests/test_work_acceptance.py"
           ],
-          "log": "/tmp/toolkit-final-acceptance-pyright.log",
+          "log": "/tmp/workspace-final-acceptance-pyright.log",
           "exit_code": 0,
           "output": "0 errors, 0 warnings, 0 informations\n"
         }
@@ -4935,7 +4935,7 @@
         "pytest_imported": false,
         "python": "3.15.1 (main, Oct 22 2026, 01:08:56) [GCC 9.4.0]"
       },
-      "runner_source": "import hashlib, json, os, sys, tempfile, time\nfrom pathlib import Path\nroot=Path(sys.argv[1]).resolve()\nos.environ.pop(\"TOOLKIT_E2E\",None)\nsys.path.insert(0,str(root))\nos.chdir(root)\nfrom runtime import activate\nactivate()\nimport selfcheck\nproblems=[]\ntimings=[]\nstarted=time.perf_counter()\nwith tempfile.TemporaryDirectory(prefix=\"toolkit-focused-selfcheck-\") as directory:\n discovery=Path(directory)\n (discovery/\"tests\").mkdir()\n for name in (\"test_work_acceptance.py\",\"test_external_input.py\"):\n  (discovery/\"tests\"/name).touch()\n passed,skipped=selfcheck.run_tests(discovery,problems,timings=timings)\nresult={\"passed\":passed,\"skipped_modules\":skipped,\"problems\":problems,\"seconds\":round(time.perf_counter()-started,3),\"timings\":timings,\"pytest_imported\":\"pytest\" in sys.modules,\"python\":sys.version}\nprint(json.dumps(result,indent=2))\nraise SystemExit(0 if passed==8 and skipped==0 and not problems and \"pytest\" not in sys.modules else 1)\n",
+      "runner_source": "import hashlib, json, os, sys, tempfile, time\nfrom pathlib import Path\nroot=Path(sys.argv[1]).resolve()\nos.environ.pop(\"WORKSPACE_E2E\",None)\nsys.path.insert(0,str(root))\nos.chdir(root)\nfrom runtime import activate\nactivate()\nimport selfcheck\nproblems=[]\ntimings=[]\nstarted=time.perf_counter()\nwith tempfile.TemporaryDirectory(prefix=\"workspace-focused-selfcheck-\") as directory:\n discovery=Path(directory)\n (discovery/\"tests\").mkdir()\n for name in (\"test_work_acceptance.py\",\"test_external_input.py\"):\n  (discovery/\"tests\"/name).touch()\n passed,skipped=selfcheck.run_tests(discovery,problems,timings=timings)\nresult={\"passed\":passed,\"skipped_modules\":skipped,\"problems\":problems,\"seconds\":round(time.perf_counter()-started,3),\"timings\":timings,\"pytest_imported\":\"pytest\" in sys.modules,\"python\":sys.version}\nprint(json.dumps(result,indent=2))\nraise SystemExit(0 if passed==8 and skipped==0 and not problems and \"pytest\" not in sys.modules else 1)\n",
       "runner_sha256": "aa36585ff94c97b4b09e77111a635441c121219b58d9ab4ef2d9f02db5f1d612"
     }
   },
@@ -5162,11 +5162,11 @@
       "name": "canvas-delete-running-guard",
       "scope": "One saved-item deletion guard tested through one public Canvas workflow; no global Canvas mutation claim.",
       "command": [
-        "/home/jim/toolkit/.venv/bin/python",
-        "/tmp/toolkit-canvas-delete-review-1792745969/scripts/mutate.py",
+        "/home/jim/workspace/.venv/bin/python",
+        "/tmp/workspace-canvas-delete-review-1792745969/scripts/mutate.py",
         "assistant/canvas_model.py",
         "--root",
-        "/tmp/toolkit-canvas-delete-review-1792745969",
+        "/tmp/workspace-canvas-delete-review-1792745969",
         "--tests",
         "tests/test_canvas.py::test_deleting_saved_items_reclaims_capacity_and_keeps_embedded_evidence",
         "--replace",
@@ -5179,16 +5179,16 @@
         "--timeout",
         "45",
         "--output",
-        "/tmp/toolkit-canvas-delete-mutations.json"
+        "/tmp/workspace-canvas-delete-mutations.json"
       ],
       "environment": {},
-      "frozen_source": "/tmp/toolkit-canvas-delete-review-1792745969",
+      "frozen_source": "/tmp/workspace-canvas-delete-review-1792745969",
       "source_and_test_hashes": {
         "assistant/canvas_model.py": "58b59dcb1980f783bbe4ad41d7875eb6e942e4546677702a8f0dea47d037454a",
         "tests/test_canvas.py": "eed8fa9e163b698c61265fac7143855d0a37df6eb9f7b9232f8d9937f174faec"
       },
-      "plan": "/tmp/toolkit-canvas-delete-campaign-plan.json",
-      "log": "/tmp/toolkit-canvas-delete-mutation-run.log",
+      "plan": "/tmp/workspace-canvas-delete-campaign-plan.json",
+      "log": "/tmp/workspace-canvas-delete-mutation-run.log",
       "evidence": {
         "source": "assistant/canvas_model.py",
         "tests": [
@@ -5230,31 +5230,31 @@
       "seconds": 359.2968339920044,
       "exit_code": 1,
       "command": [
-        "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\toolkit-agentic-final-1792743371\\toolkit\\.python\\python.exe",
-        "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\toolkit-agentic-final-1792743371\\toolkit\\selfcheck.py",
-        "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\toolkit-agentic-final-1792743371\\toolkit",
+        "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\workspace-agentic-final-1792743371\\workspace\\.python\\python.exe",
+        "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\workspace-agentic-final-1792743371\\workspace\\selfcheck.py",
+        "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\workspace-agentic-final-1792743371\\workspace",
         "--durations",
         "20"
       ],
       "metadata": {
         "command": [
-          "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\toolkit-agentic-final-1792743371\\toolkit\\.python\\python.exe",
-          "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\toolkit-agentic-final-1792743371\\toolkit\\selfcheck.py",
-          "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\toolkit-agentic-final-1792743371\\toolkit",
+          "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\workspace-agentic-final-1792743371\\workspace\\.python\\python.exe",
+          "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\workspace-agentic-final-1792743371\\workspace\\selfcheck.py",
+          "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\workspace-agentic-final-1792743371\\workspace",
           "--durations",
           "20"
         ],
         "started_at": 1792745193.5632393,
         "seconds": 359.2968339920044,
         "returncode": 1,
-        "isolated_profile": "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\toolkit-agentic-final-1792743371\\check-profile",
-        "log": "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\toolkit-agentic-final-1792743371\\windows-selfcheck.log"
+        "isolated_profile": "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\workspace-agentic-final-1792743371\\check-profile",
+        "log": "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\workspace-agentic-final-1792743371\\windows-selfcheck.log"
       },
-      "metadata_path": "/mnt/c/Users/Jim.Lundin/AppData/Local/Temp/toolkit-agentic-final-1792743371/initial-integration/windows-selfcheck.json",
+      "metadata_path": "/mnt/c/Users/Jim.Lundin/AppData/Local/Temp/workspace-agentic-final-1792743371/initial-integration/windows-selfcheck.json",
       "metadata_sha256": "47408fb6cdc4da55b5b2ac8958f4e930bcacc16ff72f8a9a3d75a2f52831469a",
-      "preserved_log": "/mnt/c/Users/Jim.Lundin/AppData/Local/Temp/toolkit-agentic-final-1792743371/initial-integration/windows-selfcheck.log",
+      "preserved_log": "/mnt/c/Users/Jim.Lundin/AppData/Local/Temp/workspace-agentic-final-1792743371/initial-integration/windows-selfcheck.log",
       "log_sha256": "ea7619d63b497308d2a603f48a814a1cf9fab23a2d8e46c27d9b0f22d251665f",
-      "source_manifest": "/mnt/c/Users/Jim.Lundin/AppData/Local/Temp/toolkit-agentic-final-1792743371/initial-integration/source-manifest.json",
+      "source_manifest": "/mnt/c/Users/Jim.Lundin/AppData/Local/Temp/workspace-agentic-final-1792743371/initial-integration/source-manifest.json",
       "source_manifest_sha256": "8fe354688cc95a425d3799e265f2402a0b3e881c18973edb10b11df955a74fd6",
       "metadata_log_path_note": "The preserved metadata records its original log location; preserved_log points to the retained failed-gate copy.",
       "failures": [

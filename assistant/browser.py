@@ -1,4 +1,4 @@
-"""Background DOM automation in an attached browser or Toolkit's own Edge."""
+"""Background DOM automation in an attached browser or Workspace's own Edge."""
 
 import base64
 import binascii
@@ -166,7 +166,7 @@ class Browser:
             self._live = self._opener.open(self.source, cancel, visible=visible)
 
     def close(self) -> None:
-        """Detach personal browsers. Only terminate a process Toolkit launched."""
+        """Detach personal browsers. Only terminate a process Workspace launched."""
         with self.lock:
             live, self._live = self._live, None
             try:
@@ -221,7 +221,7 @@ class Browser:
         tree = mapping(self._call("Page.getFrameTree", {}, cancel, session=session).get("frameTree", {}))
         if not frame:
             frame = text(mapping(tree.get("frame", {})), "id")
-        world = self._call("Page.createIsolatedWorld", {"frameId": frame, "worldName": "toolkit"}, cancel, session=session)
+        world = self._call("Page.createIsolatedWorld", {"frameId": frame, "worldName": "workspace"}, cancel, session=session)
         return number(world, "executionContextId", 0, 1, 2**53), tree
 
     def _evaluate(self, expression: str, session: str, context: int, cancel: threading.Event, *, timeout: float = 15) -> Json:
@@ -283,7 +283,7 @@ class Browser:
     def _native_target(self, placement: Destination, window: int | None, cancel: threading.Event) -> str:
         self._require_strip()
         plan = opening(self.strip.snapshot(self._call, cancel), placement, window)
-        marker = "about:blank#toolkit-" + uuid.uuid4().hex
+        marker = "about:blank#workspace-" + uuid.uuid4().hex
         native = self.strip.open(self._call, marker, plan, cancel)
         deadline = time.monotonic() + 5
         while True:

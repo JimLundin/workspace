@@ -101,7 +101,7 @@ class NativeWorker:
 
 @contextlib.contextmanager
 def worker(folder: Path, *, mode: str) -> Generator[NativeWorker]:
-    title = "toolkit automation test " + uuid.uuid4().hex
+    title = "workspace automation test " + uuid.uuid4().hex
     with socket.create_server(("127.0.0.1", 0)) as server:
         server.settimeout(12)
         port = cast(tuple[str, int], server.getsockname())[1]
@@ -117,7 +117,7 @@ def worker(folder: Path, *, mode: str) -> Generator[NativeWorker]:
                 yield NativeWorker(process, peer, title)
         finally:
             if process.poll() is None:
-                process.kill()  # Only this isolated fixture child; never the desktop Toolkit.
+                process.kill()  # Only this isolated fixture child; never the desktop Workspace.
             stdout, stderr = process.communicate(timeout=10)
         assert process.wait(timeout=10) == 0, (stdout + stderr).decode("utf-8", errors="replace")
 

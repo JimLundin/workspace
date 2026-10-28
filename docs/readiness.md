@@ -6,7 +6,7 @@ injection, unapproved code execution, persistent Undo, partial installation and
 Git external-command findings.
 
 Updates compile and pass runtime checks before installation. With the default
-approval setting, a request to change Toolkit authorizes this workflow. Optional
+approval setting, a request to change Workspace authorizes this workflow. Optional
 approval mode displays the frozen candidate's full diff before executing it.
 Python code runs with the user's account permissions. A content digest rejects
 changes made during review or tests. Protected source aliases and escaping paths
@@ -27,7 +27,7 @@ GitHub Actions runs the full selfcheck once on Windows/Linux Python 3.15,
 checks the extracted Windows bundle, and runs Mypy, Pyright and Ruff. Editing
 uses `selfcheck.py --fast`; the keeper always uses the full Windows gate before
 installation. The manual desktop workflow requires an interactive,
-dedicated self-hosted Windows runner labelled toolkit-desktop. Do not run it on a
+dedicated self-hosted Windows runner labelled workspace-desktop. Do not run it on a
 workstation someone is using.
 
 The actual company endpoint, microphone, and physical ISO keyboard still require

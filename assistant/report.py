@@ -30,5 +30,5 @@ def write_report(days: int = 30) -> Path:
     summary = summarize(lines, since=datetime.now() - timedelta(days=days))
     path = DIRECTORY / "usage report.txt"
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(f"Toolkit usage, last {days} days\n\n" + report(summary, known_features()), encoding="utf-8")
+    path.write_text(f"Workspace usage, last {days} days\n\n" + report(summary, known_features()), encoding="utf-8")
     return path

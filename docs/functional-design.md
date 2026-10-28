@@ -1,6 +1,6 @@
 # Functional design
 
-Toolkit models domain alternatives like Rust enums: a union of frozen, slotted
+Workspace models domain alternatives like Rust enums: a union of frozen, slotted
 dataclasses for variants with payloads, and `Enum` for variants without payloads.
 `match` and `assert_never` make handlers explicit and let the type checkers find
 missing cases when a union grows. `Literal` describes fixed external values.
@@ -104,11 +104,11 @@ losing the request retires that control without closing the user's pages. A
 queued open is not proof of persistence: `browser_app_receipts.opened_card`
 requires a matching saved-card receipt, independently of page readiness.
 
-Capturing a live page creates a separate `BrowserKind.TOOLKIT` source with its
+Capturing a live page creates a separate `BrowserKind.WORKSPACE` source with its
 exact binding, document, URL, content version and UTF-16 coverage. Stored text
 must match that provenance; a partial excerpt cannot claim a whole document.
 Later live edits leave saved evidence unchanged. Captured-source tasks do not
-borrow app control, and refreshing a Toolkit capture cannot fall back to an
+borrow app control, and refreshing a Workspace capture cannot fall back to an
 external browser tab. A new observation requires another explicit capture.
 
 Canvas mail handoffs freeze the accepted draft revision and evidence before
@@ -269,7 +269,7 @@ window creation stay in the assistant process.
 External browser ownership is `Stopped | Managed | Attached`. A managed variant
 carries the process, optional Windows job and visibility. An attached variant
 identifies the borrowed browser; closing it only disconnects CDP. The source
-selection persists separately across disconnects. Toolkit-created target IDs are tracked
+selection persists separately across disconnects. Workspace-created target IDs are tracked
 apart from personal tabs for session metadata; navigation and explicit tab closure
 use the requested ID. Pending consent is a single WebSocket connection, whose
 socket is closed on cancellation. Status inspection never starts that connection.
@@ -289,7 +289,7 @@ projections can share the concrete state and response types. Group selection
 and pagination are pure functions of observations and arguments. The Edge tab
 controller owns one hidden Favorites page, whose API calls remain separate from
 ordinary page DOM evaluation. Only explicit activation brings a tab forward;
-default opens reuse Toolkit's group without changing its expanded state.
+default opens reuse Workspace's group without changing its expanded state.
 
 Recording state is a projection for the UI. The journal can still be absent
 while a capture starts. Publication decisions use immutable observations read

@@ -11,8 +11,8 @@ from winapi.shapes import Window
 
 from .llm import Json
 
-type ContextState = Literal["active", "toolkit", "unavailable", "disabled"]
-type Observation = Window | Literal["toolkit", "unavailable", "disabled"]
+type ContextState = Literal["active", "workspace", "unavailable", "disabled"]
+type Observation = Window | Literal["workspace", "unavailable", "disabled"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -37,7 +37,7 @@ class ContextSnapshot:
 
     @property
     def window(self) -> Window | None:
-        return self.recent[-1].window if self.recent and self.state in ("active", "toolkit") else None
+        return self.recent[-1].window if self.recent and self.state in ("active", "workspace") else None
 
     def describe(self, limit: int = 12) -> str:
         data: dict[str, Json] = {
@@ -67,7 +67,7 @@ def observed(
             else:
                 entries = (*entries, Activity(window, now, now, agent_active))
             return ContextSnapshot(now, "active", entries[-capacity:] if capacity else ())
-        case "toolkit" | "unavailable":
+        case "workspace" | "unavailable":
             return ContextSnapshot(now, observation, entries[-capacity:] if capacity else ())
         case "disabled":
             return ContextSnapshot(now, "disabled")

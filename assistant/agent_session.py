@@ -35,7 +35,7 @@ type Reply = Pending | Answered | Cancelled
 
 @dataclass(frozen=True, slots=True)
 class ChatMessage:
-    speaker: Literal["You", "Toolkit", "Error"]
+    speaker: Literal["You", "Workspace", "Error"]
     text: str
     created_at: float
 
@@ -270,10 +270,10 @@ def transition(state: Session, event: Event) -> Session:
             return replace(state, status=status, activity=state.activity if text == "Waiting for the model..." else (*state.activity, text))
         case Said(text, at):
             text = text.strip()
-            return replace(state, messages=(*state.messages, ChatMessage("Toolkit", text, at)), last_said=text) if text else state
+            return replace(state, messages=(*state.messages, ChatMessage("Workspace", text, at)), last_said=text) if text else state
         case Done(text, at):
             text = text.strip()
-            messages = (*state.messages, ChatMessage("Toolkit", text, at)) if text and text != state.last_said else state.messages
+            messages = (*state.messages, ChatMessage("Workspace", text, at)) if text and text != state.last_said else state.messages
             return replace(state, messages=messages, result="Stopped" if text.startswith("Stopped") else "Ready")
         case Problem(text, at):
             return replace(state, messages=(*state.messages, ChatMessage("Error", text.strip(), at)),
@@ -398,7 +398,7 @@ def message_text(message: Message) -> str:
         case ChatMessage(speaker, text):
             parts = (speaker, text)
         case Answer(text=text):
-            parts = ("Toolkit", text)
+            parts = ("Workspace", text)
         case ReasoningSummary(text=text):
             parts = ("Reasoning summary", text)
         case ToolActivity(name=name):

@@ -1,5 +1,5 @@
-"""The agent's workspace: a copy of the toolkit's source it may edit freely. Nothing
-it does here touches the running toolkit; the keeper installs the workspace, after
+"""The agent's workspace: a copy of the workspace's source it may edit freely. Nothing
+it does here touches the running workspace; the keeper installs the workspace, after
 checking it, when asked (see keeper.py)."""
 
 import difflib
@@ -39,7 +39,7 @@ class Workspace:
     def __init__(self, live: Path = LIVE, root: Path = WORKSPACE, *, resume: bool = False) -> None:
         self.live = live
         self.root = root
-        self.prepared = resume and (root / ".toolkit-workspace-ready").is_file()
+        self.prepared = resume and (root / ".workspace-workspace-ready").is_file()
 
     def ensure(self) -> None:
         """Copy source on the first source tool, then keep edits for follow-up requests."""
@@ -49,9 +49,9 @@ class Workspace:
     def reset(self) -> None:
         """Starts over from the running version."""
         self.prepared = False
-        (self.root / ".toolkit-workspace-ready").unlink(missing_ok=True)
+        (self.root / ".workspace-workspace-ready").unlink(missing_ok=True)
         copy_source(self.live, self.root)
-        (self.root / ".toolkit-workspace-ready").write_text("ready", encoding="utf-8")
+        (self.root / ".workspace-workspace-ready").write_text("ready", encoding="utf-8")
         self.prepared = True
 
     def files(self) -> list[str]:
@@ -60,10 +60,10 @@ class Workspace:
     def _path(self, name: str) -> Path:
         relative = PurePosixPath(name.replace("\\", "/"))
         if relative.is_absolute() or ".." in relative.parts or ":" in name or any(p.endswith((".", " ")) for p in relative.parts):
-            raise SourceError(f"{name} is outside the toolkit's source")
+            raise SourceError(f"{name} is outside the workspace's source")
         path = self.root / relative
         if not path.resolve().is_relative_to(self.root.resolve()):
-            raise SourceError(f"{name} is outside the toolkit's source")
+            raise SourceError(f"{name} is outside the workspace's source")
         return path
 
     def _writable(self, name: str) -> Path:
@@ -133,7 +133,7 @@ class Workspace:
         self, timeout_s: float = 300, *, fast: bool = False, cancel: threading.Event | None = None,
     ) -> CheckResult:
         """Run the stable selfcheck on a fresh copy so tests cannot leave stale bytecode in the draft."""
-        with tempfile.TemporaryDirectory(prefix="toolkit-check-") as scratch:
+        with tempfile.TemporaryDirectory(prefix="workspace-check-") as scratch:
             candidate = Path(scratch) / "source"
             copy_source(self.root, candidate)
             digest = source_digest(candidate)

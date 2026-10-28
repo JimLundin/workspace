@@ -42,7 +42,7 @@ def test_windowed_handoff_returns_while_the_child_is_still_running() -> None:
 
 
 def test_copied_source_starts_the_sdk_and_qt_with_the_inherited_bundle(tmp_path: Path) -> None:
-    if not (ROOT / ".runtime").is_dir() and not os.environ.get("TOOLKIT_BUNDLED_RUNTIME"):
+    if not (ROOT / ".runtime").is_dir() and not os.environ.get("WORKSPACE_BUNDLED_RUNTIME"):
         raise unittest.SkipTest("Windows bundle integration")
     activate()
     source = tmp_path / "source"
@@ -170,7 +170,7 @@ def _native_controller_lifetime(tmp_path: Path, *, qt_first: bool) -> None:
         from winapi import shell, system
 
         faulthandler.enable()
-        title = "Toolkit controller lifetime " + uuid.uuid4().hex
+        title = "Workspace controller lifetime " + uuid.uuid4().hex
         observed = []
 
         class OffscreenUi(Ui):
@@ -252,7 +252,7 @@ def test_controller_initialization_failure_closes_qt_and_propagates(tmp_path: Pa
         from assistant.llm import Missing
         from assistant.qt import QApplication
 
-        title = "Toolkit startup failure " + uuid.uuid4().hex
+        title = "Workspace startup failure " + uuid.uuid4().hex
         with patch.object(app, "AssistantApp", side_effect=RuntimeError("Fixture startup failed")), \\
              patch.object(app, "ASSISTANT_WINDOW", title), patch.object(app, "LOCK_NAME", "Local\\\\" + title):
             try:

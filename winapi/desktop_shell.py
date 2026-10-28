@@ -46,7 +46,7 @@ class AppBar:
         self._data = _AppBarData(cbSize=ctypes.sizeof(_AppBarData), hWnd=hwnd, uEdge=1)
         self._registered = bool(_AppBarMessage(0, ctypes.byref(self._data)))
         if not self._registered:
-            raise OSError("Windows could not reserve space for the Toolkit bar.")
+            raise OSError("Windows could not reserve space for the Workspace bar.")
 
     def place(self, monitor: Rect, height: int) -> Rect:
         self._data.rc = wintypes.RECT(monitor.left, monitor.top, monitor.right, monitor.bottom)

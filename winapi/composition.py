@@ -98,7 +98,7 @@ class Glass:
     def __init__(self, owner: DesktopComposition) -> None:
         # NOREDIRECTIONBITMAP lets composition supply the entire surface. It is
         # intentionally not a layered/color-keyed window.
-        self.handle = int(_CreateWindowExW(0x0820_00A0, "STATIC", "Toolkit · Glass", 0x8000_0000,
+        self.handle = int(_CreateWindowExW(0x0820_00A0, "STATIC", "Workspace · Glass", 0x8000_0000,
                                                   0, 0, 1, 1, None, None, _GetModuleHandleW(None), None) or 0)
         if not self.handle:
             raise ctypes.WinError(ctypes.get_last_error())

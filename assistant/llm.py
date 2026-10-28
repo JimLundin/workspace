@@ -59,17 +59,17 @@ def settings_from(env: Mapping[str, str]) -> Settings | Missing:
     required = ("OPENAI_BASE_URL", "OPENAI_API_KEY")
     if missing := tuple(name for name in required if not env.get(name)):
         return Missing(missing)
-    chat_model = env.get("TOOLKIT_CHAT_MODEL", "gpt-5.4-mini")
+    chat_model = env.get("WORKSPACE_CHAT_MODEL", "gpt-5.4-mini")
     return Settings(
         base_url=env["OPENAI_BASE_URL"].rstrip("/"),
         api_key=env["OPENAI_API_KEY"],
-        transcribe_model=env.get("TOOLKIT_TRANSCRIBE_MODEL", "gpt-4o-transcribe"),
+        transcribe_model=env.get("WORKSPACE_TRANSCRIBE_MODEL", "gpt-4o-transcribe"),
         chat_model=chat_model,
-        agent_model=env.get("TOOLKIT_AGENT_MODEL", "gpt-6.1-sol"),
-        vocabulary=env.get("TOOLKIT_VOCABULARY", ""),
-        language=env.get("TOOLKIT_LANGUAGE", ""),
-        agent_reasoning_effort=env.get("TOOLKIT_AGENT_REASONING_EFFORT", "low"),
-        agent_approvals=env.get("TOOLKIT_AGENT_APPROVALS", "never").lower() == "ask",
+        agent_model=env.get("WORKSPACE_AGENT_MODEL", "gpt-6.1-sol"),
+        vocabulary=env.get("WORKSPACE_VOCABULARY", ""),
+        language=env.get("WORKSPACE_LANGUAGE", ""),
+        agent_reasoning_effort=env.get("WORKSPACE_AGENT_REASONING_EFFORT", "low"),
+        agent_approvals=env.get("WORKSPACE_AGENT_APPROVALS", "never").lower() == "ask",
     )
 
 

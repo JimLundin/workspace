@@ -103,7 +103,7 @@ class RemoteMeetings:
 
 
 class DesktopContext:
-    """Fresh foreground observations exclude both Toolkit process owners."""
+    """Fresh foreground observations exclude both Workspace process owners."""
 
     __slots__ = ("bridge", "enabled")
 
@@ -118,7 +118,7 @@ class DesktopContext:
         try:
             handle = windows.foreground()
             if handle:
-                observation = ("toolkit" if windows.process_id(handle) in (os.getpid(), self.bridge.assistant_pid)
+                observation = ("workspace" if windows.process_id(handle) in (os.getpid(), self.bridge.assistant_pid)
                                else Window(handle, windows.title(handle), windows.exe(handle), windows.is_minimized(handle)))
         except OSError:
             pass
@@ -188,7 +188,7 @@ def _native_execution(settings: Settings | Missing, bridge: BridgeServer, hwnd: 
     apps = AppBrowserControl(bridge)
     browser = CompositeBrowser(Browser(DIRECTORY / "browser-profile", source=Product.EDGE), apps)
     machine = WinMachine(NativeDesktop(hwnd), DurableInput(), meetings=meetings, browser=browser)
-    context = DesktopContext(bridge, enabled=os.environ.get("TOOLKIT_AGENT_CONTEXT", "recent").lower() != "off")
+    context = DesktopContext(bridge, enabled=os.environ.get("WORKSPACE_AGENT_CONTEXT", "recent").lower() != "off")
     usable = settings if isinstance(settings, Settings) else Settings("", "", "", "", "", "", "")
     followups = bridge.folder / "meeting-followups"
     try:

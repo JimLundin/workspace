@@ -5,7 +5,7 @@ from collections.abc import Generator
 from contextlib import contextmanager
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-PAGE = """<!doctype html><meta charset="utf-8"><title>Toolkit browser fixture</title>
+PAGE = """<!doctype html><meta charset="utf-8"><title>Workspace browser fixture</title>
 <label>Name <input id="name"></label>
 <label>Password <input type="password" value="fixture-private-password"></label>
 <label>Code <input autocomplete="one-time-code" value="fixture-private-code"></label>

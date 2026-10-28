@@ -61,7 +61,7 @@ def user_data_root(product: Product) -> Path:
 
 def setup_message(product: Product) -> str:
     return (f"Open your signed-in {product.value.title()} and {product.value}://inspect/#remote-debugging, "
-            "enable 'Allow remote debugging for this browser instance', then approve its connection dialog when Toolkit connects. "
+            "enable 'Allow remote debugging for this browser instance', then approve its connection dialog when Workspace connects. "
             "If your organization disables this setting, its browser policy must be respected.")
 
 

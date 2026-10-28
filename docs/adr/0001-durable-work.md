@@ -1,6 +1,6 @@
 # Recover tasks from recorded outcomes
 
-Toolkit's accepted automation architecture gives tasks a lifetime independent
+Workspace's accepted automation architecture gives tasks a lifetime independent
 of conversation views and model requests. A transactional local task journal
 records goals, runs, checkpoints, user responses, and consequential action
 attempts. Run identities fence stale execution updates; action outcomes can be

@@ -284,7 +284,7 @@ def context_data(context: ContextSnapshot) -> dict[str, Json]:
 def decode_context(value: object) -> ContextSnapshot:
     data = record(value, "captured state recent")
     match data["state"]:
-        case "active" | "toolkit" | "unavailable" | "disabled" as state:
+        case "active" | "workspace" | "unavailable" | "disabled" as state:
             pass
         case _:
             raise ValueError("Invalid desktop context state.")

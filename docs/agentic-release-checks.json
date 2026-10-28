@@ -4,14 +4,14 @@
   "scope": "Combined durable-work and coordinated desktop/canvas integration checks. Deployment evidence is written separately after packaging; this document is not a deployment receipt.",
   "tested_source": {
     "manifest": {
-      "path": "/mnt/c/Users/Jim.Lundin/AppData/Local/Temp/toolkit-agentic-final-1792743371/tested-source-manifest.json",
+      "path": "/mnt/c/Users/Jim.Lundin/AppData/Local/Temp/workspace-agentic-final-1792743371/tested-source-manifest.json",
       "sha256": "7740eb3dbeda12b01c85c7e62f2bb0c8e538e83ff26415d178c729db103c2808",
       "bytes": 22194
     },
     "snapshot": {
       "created_at": 1792746861.5853598,
-      "root": "/home/jim/toolkit",
-      "candidate": "/mnt/c/Users/Jim.Lundin/AppData/Local/Temp/toolkit-agentic-final-1792743371/toolkit",
+      "root": "/home/jim/workspace",
+      "candidate": "/mnt/c/Users/Jim.Lundin/AppData/Local/Temp/workspace-agentic-final-1792743371/workspace",
       "files": {
         ".github/workflows/checks.yml": "d21d9ef3a58da5b92e9af5c75a28680c93ec626432ca353026dc3121d9b51679",
         ".github/workflows/desktop.yml": "72bbd84fba676cddce11660861de1093efea19dcefd888dd959c8fbc8b774ae8",
@@ -20,7 +20,7 @@
         "AGENTS.md": "4d1d3997bb19aff36c8a63f6951d0be692a35af0dc23f025f6a5f4265c453f52",
         "GLOSSARY.md": "b44f29a4dea8fe4072a770471d4471427d221f30b2dfb4dd3b47b4b7ca06aaa6",
         "README.md": "8c3ce7a48918b7255af7e57e2e188e24085c6eff6c0f3b877eb60dd8c6d86dfc",
-        "StartToolkit.cmd": "c2b79732b38326bdfdb430d59319b5f5fbfe715663ae840330fa585c0e5cd5d9",
+        "StartWorkspace.cmd": "c2b79732b38326bdfdb430d59319b5f5fbfe715663ae840330fa585c0e5cd5d9",
         "assistant/__init__.py": "374865178a2cc48f636a6bd135325fb8ba587e925d1922ae102ac31d3ecbb146",
         "assistant/__main__.py": "acf3c0528d247d61719e8f4c0d7c5b52e7ea6b038d89e187180760baaf977e68",
         "assistant/action_text.py": "753c3ef9709243d6a49d51b93611d882e654ca01de588498037c00d61d8bf4b0",
@@ -217,7 +217,7 @@
         "tests/test_work_window.py": "3f07a0c557c36df549e9d2f86ba1f78e182793a85c781ef7bb988b2c2ddaccae",
         "tests/test_workspace.py": "62f61b5795b852e0721db10e02cfa452f1d6ea5b3b5f81e74426dd581a05a126",
         "tests/uia_fixture.ps1": "abf8e7f71831babf61738f964475cd1b3c2ef0de989035ca914ba72cfbb16207",
-        "toolkit.pyw": "7c96e231cc50780f65e6f45373816f9053afabb189c55d26b2a0fd464cc63c5c",
+        "workspace.pyw": "7c96e231cc50780f65e6f45373816f9053afabb189c55d26b2a0fd464cc63c5c",
         "usage.py": "453e359c17a7208c3344b73f0b7b423dd8f25e5a14c51488979d32f0ec0c6938",
         "winapi/__init__.py": "f574eaeb8dc239e532fffc65d87a5840a51a5c182b3caede39788c6de9fc624f",
         "winapi/_core.py": "5e6003505de4f4eb958e4dc287a02e27b8a38c37af86b628d368e6b62ada8794",
@@ -250,9 +250,9 @@
       "returncode": 0,
       "started_at": 1792746876.1734655,
       "seconds": 0.03751826286315918,
-      "log": "/tmp/toolkit-agentic-final-ruff.log",
+      "log": "/tmp/workspace-agentic-final-ruff.log",
       "log_artifact": {
-        "path": "/tmp/toolkit-agentic-final-ruff.log",
+        "path": "/tmp/workspace-agentic-final-ruff.log",
         "sha256": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18",
         "bytes": 19
       }
@@ -265,9 +265,9 @@
       "returncode": 0,
       "started_at": 1792746876.1894336,
       "seconds": 29.86810040473938,
-      "log": "/tmp/toolkit-agentic-final-mypy.log",
+      "log": "/tmp/workspace-agentic-final-mypy.log",
       "log_artifact": {
-        "path": "/tmp/toolkit-agentic-final-mypy.log",
+        "path": "/tmp/workspace-agentic-final-mypy.log",
         "sha256": "c61493d6f0c358bd547e1850cf789b0dceeeff9d6f273ea7560a001519c74747",
         "bytes": 45
       }
@@ -281,9 +281,9 @@
       "returncode": 0,
       "started_at": 1792746876.1609514,
       "seconds": 59.582817792892456,
-      "log": "/tmp/toolkit-agentic-final-pyright.log",
+      "log": "/tmp/workspace-agentic-final-pyright.log",
       "log_artifact": {
-        "path": "/tmp/toolkit-agentic-final-pyright.log",
+        "path": "/tmp/workspace-agentic-final-pyright.log",
         "sha256": "6d88a1b220adb7a3d62092b6e38431f0b3fe8babe9864fab90e5849766260332",
         "bytes": 37
       }
@@ -299,9 +299,9 @@
       "returncode": 0,
       "started_at": 1792746876.1741023,
       "seconds": 80.22859382629395,
-      "log": "/tmp/toolkit-agentic-final-portable.log",
+      "log": "/tmp/workspace-agentic-final-portable.log",
       "log_artifact": {
-        "path": "/tmp/toolkit-agentic-final-portable.log",
+        "path": "/tmp/workspace-agentic-final-portable.log",
         "sha256": "fcf6114d979f1c21d4f43067881e7c5f499dbf6a1b397308e1f9da9ea3807a08",
         "bytes": 2023
       },
@@ -319,9 +319,9 @@
       "returncode": 0,
       "started_at": 1792745188.248075,
       "seconds": 0.27801084518432617,
-      "log": "/tmp/toolkit-agentic-final-bootstrap.log",
+      "log": "/tmp/workspace-agentic-final-bootstrap.log",
       "log_artifact": {
-        "path": "/tmp/toolkit-agentic-final-bootstrap.log",
+        "path": "/tmp/workspace-agentic-final-bootstrap.log",
         "sha256": "72e868f4c19c49dd0ab2d3db8d4c2c7f847595c7a83f84b4b7a1e1baefb6a8dc",
         "bytes": 74
       }
@@ -335,39 +335,39 @@
       "returncode": 0,
       "started_at": 1792746876.2158458,
       "seconds": 0.04915308952331543,
-      "log": "/tmp/toolkit-agentic-final-diff.log",
+      "log": "/tmp/workspace-agentic-final-diff.log",
       "log_artifact": {
-        "path": "/tmp/toolkit-agentic-final-diff.log",
+        "path": "/tmp/workspace-agentic-final-diff.log",
         "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
         "bytes": 0
       }
     },
     "windows_full": {
       "command": [
-        "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\toolkit-agentic-final-1792743371\\toolkit\\.python\\python.exe",
-        "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\toolkit-agentic-final-1792743371\\toolkit\\selfcheck.py",
-        "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\toolkit-agentic-final-1792743371\\toolkit",
+        "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\workspace-agentic-final-1792743371\\workspace\\.python\\python.exe",
+        "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\workspace-agentic-final-1792743371\\workspace\\selfcheck.py",
+        "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\workspace-agentic-final-1792743371\\workspace",
         "--durations",
         "20"
       ],
       "started_at": 1792746975.873305,
       "seconds": 419.6571681499481,
       "returncode": 0,
-      "isolated_profile": "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\toolkit-agentic-final-1792743371\\check-profile",
-      "log": "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\toolkit-agentic-final-1792743371\\windows-selfcheck.log",
+      "isolated_profile": "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\workspace-agentic-final-1792743371\\check-profile",
+      "log": "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\workspace-agentic-final-1792743371\\windows-selfcheck.log",
       "passed": 794,
       "failed": 0,
       "modules_skipped": 3,
       "log_artifact": {
-        "path": "/mnt/c/Users/Jim.Lundin/AppData/Local/Temp/toolkit-agentic-final-1792743371/windows-selfcheck.log",
+        "path": "/mnt/c/Users/Jim.Lundin/AppData/Local/Temp/workspace-agentic-final-1792743371/windows-selfcheck.log",
         "sha256": "ff0cbe31ec6369c8366cb6fb89012458c1112481c7cf10e32703a5ee2338b724",
         "bytes": 2775
       }
     },
     "windows_focused": {
       "command": [
-        "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\toolkit-agentic-final-1792743371\\toolkit\\.python\\python.exe",
-        "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\toolkit-agentic-final-1792743371\\focused_windows.py"
+        "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\workspace-agentic-final-1792743371\\workspace\\.python\\python.exe",
+        "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\workspace-agentic-final-1792743371\\focused_windows.py"
       ],
       "started_at": 1792746882.522359,
       "seconds": 23.8068585395813,
@@ -474,7 +474,7 @@
         "failed": 0
       },
       "log_artifact": {
-        "path": "/mnt/c/Users/Jim.Lundin/AppData/Local/Temp/toolkit-agentic-final-1792743371/windows-focused.log",
+        "path": "/mnt/c/Users/Jim.Lundin/AppData/Local/Temp/workspace-agentic-final-1792743371/windows-focused.log",
         "sha256": "ed8241366ee51879fa22def9877dbc2f6d8f35d036869eab515ee8d568b546ea",
         "bytes": 1908
       }
@@ -483,17 +483,17 @@
   "initial_windows_gate": {
     "metadata": {
       "command": [
-        "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\toolkit-agentic-final-1792743371\\toolkit\\.python\\python.exe",
-        "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\toolkit-agentic-final-1792743371\\toolkit\\selfcheck.py",
-        "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\toolkit-agentic-final-1792743371\\toolkit",
+        "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\workspace-agentic-final-1792743371\\workspace\\.python\\python.exe",
+        "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\workspace-agentic-final-1792743371\\workspace\\selfcheck.py",
+        "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\workspace-agentic-final-1792743371\\workspace",
         "--durations",
         "20"
       ],
       "started_at": 1792745193.5632393,
       "seconds": 359.2968339920044,
       "returncode": 1,
-      "isolated_profile": "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\toolkit-agentic-final-1792743371\\check-profile",
-      "log": "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\toolkit-agentic-final-1792743371\\windows-selfcheck.log"
+      "isolated_profile": "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\workspace-agentic-final-1792743371\\check-profile",
+      "log": "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\workspace-agentic-final-1792743371\\windows-selfcheck.log"
     },
     "counts": {
       "passed": 770,
@@ -501,7 +501,7 @@
       "modules_skipped": 3
     },
     "log": {
-      "path": "/mnt/c/Users/Jim.Lundin/AppData/Local/Temp/toolkit-agentic-final-1792743371/initial-integration/windows-selfcheck.log",
+      "path": "/mnt/c/Users/Jim.Lundin/AppData/Local/Temp/workspace-agentic-final-1792743371/initial-integration/windows-selfcheck.log",
       "sha256": "ea7619d63b497308d2a603f48a814a1cf9fab23a2d8e46c27d9b0f22d251665f",
       "bytes": 39472
     },
@@ -509,8 +509,8 @@
   },
   "native_focus": {
     "plan": {
-      "cwd": "\\\\wsl.localhost\\Ubuntu\\tmp\\toolkit-work-focus-1792746754077518828\\source",
-      "executable": "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\toolkit-agentic-final-1792743371\\toolkit\\.python\\python.exe",
+      "cwd": "\\\\wsl.localhost\\Ubuntu\\tmp\\workspace-work-focus-1792746754077518828\\source",
+      "executable": "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\workspace-agentic-final-1792743371\\workspace\\.python\\python.exe",
       "arguments": [
         "-B",
         "-m",
@@ -525,12 +525,12 @@
         "tests/test_windows_work_panel.py"
       ],
       "environment": {
-        "PYTHONUSERBASE": "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\toolkit-validation-deps-1792740922",
-        "TOOLKIT_BUNDLED_RUNTIME": "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\toolkit-agentic-final-1792743371\\toolkit\\.runtime",
-        "PYTHONPATH": "\\\\wsl.localhost\\Ubuntu\\tmp\\toolkit-work-focus-1792746754077518828\\source",
+        "PYTHONUSERBASE": "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\workspace-validation-deps-1792740922",
+        "WORKSPACE_BUNDLED_RUNTIME": "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\workspace-agentic-final-1792743371\\workspace\\.runtime",
+        "PYTHONPATH": "\\\\wsl.localhost\\Ubuntu\\tmp\\workspace-work-focus-1792746754077518828\\source",
         "PYTHONDONTWRITEBYTECODE": "1",
         "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1",
-        "LOCALAPPDATA": "\\\\wsl.localhost\\Ubuntu\\tmp\\toolkit-work-focus-1792746754077518828\\profile"
+        "LOCALAPPDATA": "\\\\wsl.localhost\\Ubuntu\\tmp\\workspace-work-focus-1792746754077518828\\profile"
       },
       "source_hashes": {
         "assistant/work_panel.py": "1fa13312260592b0bf5f3e01b423a6bfd6227faa3b182dcb3e931ac183acf1e2",
@@ -542,12 +542,12 @@
     "failed": 0,
     "seconds": 16.77,
     "log": {
-      "path": "/tmp/toolkit-work-focus-1792746754077518828/native.log",
+      "path": "/tmp/workspace-work-focus-1792746754077518828/native.log",
       "sha256": "7c862542dfcd20c4e0212ad3f6127c9f42bc64f98199ea98f7d9217153e3ff7c",
       "bytes": 607
     },
     "original_failure_log": {
-      "path": "/tmp/toolkit-work-focus-1792746651961826011/native.log",
+      "path": "/tmp/workspace-work-focus-1792746651961826011/native.log",
       "sha256": "393c351a38d6db7cfb3ecdb1b7a3b08820767d0299e1a28bd2623de3e177ee9e",
       "bytes": 1280
     },
@@ -555,7 +555,7 @@
   },
   "mutation_review": {
     "evidence": {
-      "path": "/home/jim/toolkit/docs/agentic-mutations.json",
+      "path": "/home/jim/workspace/docs/agentic-mutations.json",
       "sha256": "032160482e8feed021734b72e8aa76b05717c5d697f76f22e7c08c25e713872a",
       "bytes": 265088
     },
@@ -575,7 +575,7 @@
         "label": "Linux, earlier baseline and final unrestricted run",
         "before": {
           "python": "3.15.1 (main, Oct 22 2026, 01:08:56) [GCC 9.4.0]",
-          "root": "/tmp/toolkit-agentic-baseline-1792739805",
+          "root": "/tmp/workspace-agentic-baseline-1792739805",
           "events_per_round": 100000,
           "rounds": 5,
           "gc_enabled": true,
@@ -647,7 +647,7 @@
         },
         "after": {
           "python": "3.15.1 (main, Oct 22 2026, 01:08:56) [GCC 9.4.0]",
-          "root": "/home/jim/toolkit",
+          "root": "/home/jim/workspace",
           "events_per_round": 100000,
           "rounds": 5,
           "gc_enabled": true,
@@ -718,12 +718,12 @@
           "scope": "Synthetic engine events; no native input, capture, or agent work. Traced peak is live memory, not total allocation churn."
         },
         "before_artifact": {
-          "path": "/tmp/toolkit-agentic-keyboard-before.json",
+          "path": "/tmp/workspace-agentic-keyboard-before.json",
           "sha256": "c2cf53e9cd4c048443abbb4e4a4267171857200ada0740464af2ad55c64df2cb",
           "bytes": 2417
         },
         "after_artifact": {
-          "path": "/tmp/toolkit-agentic-keyboard-after.json",
+          "path": "/tmp/workspace-agentic-keyboard-after.json",
           "sha256": "f47e192e818c278bddf8a58795e60044ab3bc8a9b946755adeb3c8382a014648",
           "bytes": 2411
         },
@@ -736,12 +736,12 @@
             "--rounds",
             "5",
             "--output",
-            "/tmp/toolkit-agentic-keyboard-after.json"
+            "/tmp/workspace-agentic-keyboard-after.json"
           ],
           "started_at": 1792747426.8241043,
           "seconds": 5.96671724319458,
           "returncode": 0,
-          "log": "/tmp/toolkit-agentic-keyboard-after.log"
+          "log": "/tmp/workspace-agentic-keyboard-after.log"
         },
         "changed_measured_source": [
           "protocol.py",
@@ -756,7 +756,7 @@
         "label": "Windows, earlier baseline and final unrestricted run",
         "before": {
           "python": "3.15.1 (tags/v3.15.1:c37e74c, Oct 21 2026, 06:24:08) [MSC v.1951 64 bit (AMD64)]",
-          "root": "\\\\wsl.localhost\\Ubuntu\\tmp\\toolkit-agentic-baseline-1792739805",
+          "root": "\\\\wsl.localhost\\Ubuntu\\tmp\\workspace-agentic-baseline-1792739805",
           "events_per_round": 100000,
           "rounds": 5,
           "gc_enabled": true,
@@ -828,7 +828,7 @@
         },
         "after": {
           "python": "3.15.1 (tags/v3.15.1:c37e74c, Oct 21 2026, 06:24:08) [MSC v.1951 64 bit (AMD64)]",
-          "root": "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\toolkit-agentic-final-1792743371\\toolkit",
+          "root": "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\workspace-agentic-final-1792743371\\workspace",
           "events_per_round": 100000,
           "rounds": 5,
           "gc_enabled": true,
@@ -899,27 +899,27 @@
           "scope": "Synthetic engine events; no native input, capture, or agent work. Traced peak is live memory, not total allocation churn."
         },
         "before_artifact": {
-          "path": "/tmp/toolkit-agentic-keyboard-windows-before.json",
+          "path": "/tmp/workspace-agentic-keyboard-windows-before.json",
           "sha256": "dd15ab576b2c4f8fe84d939633641721fd6fa6ce28097d0bde849e006c95dffd",
           "bytes": 2489
         },
         "after_artifact": {
-          "path": "/mnt/c/Users/Jim.Lundin/AppData/Local/Temp/toolkit-agentic-final-1792743371/keyboard-windows-after.json",
+          "path": "/mnt/c/Users/Jim.Lundin/AppData/Local/Temp/workspace-agentic-final-1792743371/keyboard-windows-after.json",
           "sha256": "bd1e8eff5c7a278f1c4038d305a743721f89e756605c9e81e1d56d715890c090",
           "bytes": 2527
         },
         "commands": {
           "command": [
-            "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\toolkit-agentic-final-1792743371\\toolkit\\.python\\python.exe",
-            "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\toolkit-agentic-final-1792743371\\toolkit\\scripts\\benchmark_keyboard.py",
+            "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\workspace-agentic-final-1792743371\\workspace\\.python\\python.exe",
+            "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\workspace-agentic-final-1792743371\\workspace\\scripts\\benchmark_keyboard.py",
             "--root",
-            "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\toolkit-agentic-final-1792743371\\toolkit",
+            "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\workspace-agentic-final-1792743371\\workspace",
             "--events",
             "100000",
             "--rounds",
             "5",
             "--output",
-            "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\toolkit-agentic-final-1792743371\\keyboard-windows-after.json"
+            "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\workspace-agentic-final-1792743371\\keyboard-windows-after.json"
           ],
           "started_at": 1792747447.8691387,
           "seconds": 6.725762605667114,
@@ -938,7 +938,7 @@
         "label": "Linux, immediate baseline/current pair on logical processor 2",
         "before": {
           "python": "3.15.1 (main, Oct 22 2026, 01:08:56) [GCC 9.4.0]",
-          "root": "/tmp/toolkit-agentic-baseline-1792739805",
+          "root": "/tmp/workspace-agentic-baseline-1792739805",
           "events_per_round": 100000,
           "rounds": 5,
           "gc_enabled": true,
@@ -1010,7 +1010,7 @@
         },
         "after": {
           "python": "3.15.1 (main, Oct 22 2026, 01:08:56) [GCC 9.4.0]",
-          "root": "/home/jim/toolkit",
+          "root": "/home/jim/workspace",
           "events_per_round": 100000,
           "rounds": 5,
           "gc_enabled": true,
@@ -1081,12 +1081,12 @@
           "scope": "Synthetic engine events; no native input, capture, or agent work. Traced peak is live memory, not total allocation churn."
         },
         "before_artifact": {
-          "path": "/tmp/toolkit-agentic-keyboard-paired-linux-before.json",
+          "path": "/tmp/workspace-agentic-keyboard-paired-linux-before.json",
           "sha256": "1d835868dd9a3f141bf4013701a05e388562a33e580a3fa20028e2673babad7a",
           "bytes": 2434
         },
         "after_artifact": {
-          "path": "/tmp/toolkit-agentic-keyboard-paired-linux-after.json",
+          "path": "/tmp/workspace-agentic-keyboard-paired-linux-after.json",
           "sha256": "bb9b45bf3c0c7fd90fd721d5e20682fde8a86a97adb6169a453d16921df3790e",
           "bytes": 2411
         },
@@ -1094,16 +1094,16 @@
           {
             "label": "before",
             "command": [
-              "/home/jim/toolkit/.venv/bin/python",
-              "/home/jim/toolkit/scripts/benchmark_keyboard.py",
+              "/home/jim/workspace/.venv/bin/python",
+              "/home/jim/workspace/scripts/benchmark_keyboard.py",
               "--root",
-              "/tmp/toolkit-agentic-baseline-1792739805",
+              "/tmp/workspace-agentic-baseline-1792739805",
               "--events",
               "100000",
               "--rounds",
               "5",
               "--output",
-              "/tmp/toolkit-agentic-keyboard-paired-linux-before.json"
+              "/tmp/workspace-agentic-keyboard-paired-linux-before.json"
             ],
             "started_at": 1792747507.11313,
             "seconds": 7.207365274429321,
@@ -1113,16 +1113,16 @@
           {
             "label": "after",
             "command": [
-              "/home/jim/toolkit/.venv/bin/python",
-              "/home/jim/toolkit/scripts/benchmark_keyboard.py",
+              "/home/jim/workspace/.venv/bin/python",
+              "/home/jim/workspace/scripts/benchmark_keyboard.py",
               "--root",
-              "/home/jim/toolkit",
+              "/home/jim/workspace",
               "--events",
               "100000",
               "--rounds",
               "5",
               "--output",
-              "/tmp/toolkit-agentic-keyboard-paired-linux-after.json"
+              "/tmp/workspace-agentic-keyboard-paired-linux-after.json"
             ],
             "started_at": 1792747514.3213952,
             "seconds": 7.490505933761597,
@@ -1143,7 +1143,7 @@
         "label": "Windows, immediate baseline/current pair on logical processor 2",
         "before": {
           "python": "3.15.1 (tags/v3.15.1:c37e74c, Oct 21 2026, 06:24:08) [MSC v.1951 64 bit (AMD64)]",
-          "root": "\\\\wsl.localhost\\Ubuntu\\tmp\\toolkit-agentic-baseline-1792739805",
+          "root": "\\\\wsl.localhost\\Ubuntu\\tmp\\workspace-agentic-baseline-1792739805",
           "events_per_round": 100000,
           "rounds": 5,
           "gc_enabled": true,
@@ -1215,7 +1215,7 @@
         },
         "after": {
           "python": "3.15.1 (tags/v3.15.1:c37e74c, Oct 21 2026, 06:24:08) [MSC v.1951 64 bit (AMD64)]",
-          "root": "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\toolkit-agentic-final-1792743371\\toolkit",
+          "root": "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\workspace-agentic-final-1792743371\\workspace",
           "events_per_round": 100000,
           "rounds": 5,
           "gc_enabled": true,
@@ -1286,12 +1286,12 @@
           "scope": "Synthetic engine events; no native input, capture, or agent work. Traced peak is live memory, not total allocation churn."
         },
         "before_artifact": {
-          "path": "/mnt/c/Users/Jim.Lundin/AppData/Local/Temp/toolkit-agentic-final-1792743371/keyboard-paired-windows-before.json",
+          "path": "/mnt/c/Users/Jim.Lundin/AppData/Local/Temp/workspace-agentic-final-1792743371/keyboard-paired-windows-before.json",
           "sha256": "b21b577b65afc0ef5e8bd836b6abf808526bc0514e953d84456a8c77ed72805d",
           "bytes": 2521
         },
         "after_artifact": {
-          "path": "/mnt/c/Users/Jim.Lundin/AppData/Local/Temp/toolkit-agentic-final-1792743371/keyboard-paired-windows-after.json",
+          "path": "/mnt/c/Users/Jim.Lundin/AppData/Local/Temp/workspace-agentic-final-1792743371/keyboard-paired-windows-after.json",
           "sha256": "396e84ddc43f56fe844a6c646e532f3bc9a2975fe3efadc030a5860827c50978",
           "bytes": 2533
         },
@@ -1299,16 +1299,16 @@
           {
             "label": "before",
             "command": [
-              "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\toolkit-agentic-final-1792743371\\toolkit\\.python\\python.exe",
-              "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\toolkit-agentic-final-1792743371\\toolkit\\scripts\\benchmark_keyboard.py",
+              "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\workspace-agentic-final-1792743371\\workspace\\.python\\python.exe",
+              "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\workspace-agentic-final-1792743371\\workspace\\scripts\\benchmark_keyboard.py",
               "--root",
-              "\\\\wsl.localhost\\Ubuntu\\tmp\\toolkit-agentic-baseline-1792739805",
+              "\\\\wsl.localhost\\Ubuntu\\tmp\\workspace-agentic-baseline-1792739805",
               "--events",
               "100000",
               "--rounds",
               "5",
               "--output",
-              "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\toolkit-agentic-final-1792743371\\keyboard-paired-windows-before.json"
+              "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\workspace-agentic-final-1792743371\\keyboard-paired-windows-before.json"
             ],
             "started_at": 1792747536.3989272,
             "seconds": 15.386753797531128,
@@ -1319,16 +1319,16 @@
           {
             "label": "after",
             "command": [
-              "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\toolkit-agentic-final-1792743371\\toolkit\\.python\\python.exe",
-              "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\toolkit-agentic-final-1792743371\\toolkit\\scripts\\benchmark_keyboard.py",
+              "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\workspace-agentic-final-1792743371\\workspace\\.python\\python.exe",
+              "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\workspace-agentic-final-1792743371\\workspace\\scripts\\benchmark_keyboard.py",
               "--root",
-              "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\toolkit-agentic-final-1792743371\\toolkit",
+              "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\workspace-agentic-final-1792743371\\workspace",
               "--events",
               "100000",
               "--rounds",
               "5",
               "--output",
-              "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\toolkit-agentic-final-1792743371\\keyboard-paired-windows-after.json"
+              "C:\\Users\\Jim.Lundin\\AppData\\Local\\Temp\\workspace-agentic-final-1792743371\\keyboard-paired-windows-after.json"
             ],
             "started_at": 1792747551.8062968,
             "seconds": 8.10619306564331,
@@ -1352,7 +1352,7 @@
   "limits": {
     "opt_in_desktop_e2e": "Three modules remain skipped by ordinary full selfcheck; no company endpoint or foreground keyboard/mouse automation was enabled.",
     "full_log_diagnostics": "The passing full Windows log retains three Error streaming response lines and two Tcl cross-thread interpreter teardown RuntimeWarnings. They are not counted as mutation detections or suppressed from the evidence.",
-    "desktop_taskbar": "WSL launch prevents the independent taskbar-recovery helper from breaking away. Toolkit leaves Explorer visible and explains direct Windows launch; the desktop bar, canvas and launcher remain usable.",
+    "desktop_taskbar": "WSL launch prevents the independent taskbar-recovery helper from breaking away. Workspace leaves Explorer visible and explains direct Windows launch; the desktop bar, canvas and launcher remain usable.",
     "canvas_adapters": "Live windows, local file/table observations, Edge excerpts and local drafts are implemented. Dedicated Excel range writes, Teams projections and a verified Outlook object adapter remain adapter work.",
     "execution": "The durable worker executes one task at a time; waiting releases its slot, and cancellation waits for effect cleanup."
   },
@@ -1366,11 +1366,11 @@
       ".python",
       ".runtime"
     ],
-    "installed": "/mnt/c/Users/Jim.Lundin/Downloads/toolkit-sdk/toolkit",
-    "archive": "/mnt/c/Users/Jim.Lundin/Downloads/toolkit-sdk-python315-win64.zip"
+    "installed": "/mnt/c/Users/Jim.Lundin/Downloads/workspace-sdk/workspace",
+    "archive": "/mnt/c/Users/Jim.Lundin/Downloads/workspace-sdk-python315-win64.zip"
   },
   "deployment_records": {
-    "directory": "/mnt/c/Users/Jim.Lundin/AppData/Local/Temp/toolkit-agentic-final-1792743371",
+    "directory": "/mnt/c/Users/Jim.Lundin/AppData/Local/Temp/workspace-agentic-final-1792743371",
     "files": [
       "prepared-zip.json",
       "stopped.json",

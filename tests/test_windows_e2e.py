@@ -1,7 +1,7 @@
 """End to end on Windows: the real layout process, real key presses, a real window.
 
 It presses physical keys with SendInput, so it takes over the keyboard for a few
-seconds; that's why it only runs when asked: `TOOLKIT_E2E=1 pytest tests/test_windows_e2e.py`.
+seconds; that's why it only runs when asked: `WORKSPACE_E2E=1 pytest tests/test_windows_e2e.py`.
 """
 
 import os
@@ -15,8 +15,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 
-if sys.platform != "win32" or os.environ.get("TOOLKIT_E2E") != "1":
-    raise unittest.SkipTest("end-to-end tests run on Windows, with TOOLKIT_E2E=1")
+if sys.platform != "win32" or os.environ.get("WORKSPACE_E2E") != "1":
+    raise unittest.SkipTest("end-to-end tests run on Windows, with WORKSPACE_E2E=1")
 
 import ctypes  # noqa: E402
 

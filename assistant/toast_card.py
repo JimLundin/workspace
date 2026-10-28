@@ -229,7 +229,7 @@ class Bubble(QWidget):
         self.setWindowFlags(Qt.WindowType.Tool | Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
-        self.setWindowTitle("Toolkit · Agent notification")
+        self.setWindowTitle("Workspace · Agent notification")
 
     def paintEvent(self, event: QPaintEvent) -> None:  # noqa: N802
         card = self.card

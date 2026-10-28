@@ -2,7 +2,7 @@
 
 Capture journals one second at a time. A separate worker transcribes 20-30 second
 chunks, retries outages, and resumes pending text work after a restart. Restarting
-Toolkit never resumes microphone or computer-audio capture.
+Workspace never resumes microphone or computer-audio capture.
 """
 
 import contextlib
@@ -105,7 +105,7 @@ class Meetings:
             raise OSError("Set OPENAI_BASE_URL and OPENAI_API_KEY before recording a meeting.")
         with self._lock:
             if self._closing:
-                raise OSError("Toolkit is shutting down.")
+                raise OSError("Workspace is shutting down.")
             if self._state.capturing:
                 raise OSError("A meeting is already being recorded. Stop it before starting another.")
             self.start_worker()
@@ -235,7 +235,7 @@ class Meetings:
                 store = self.archive.open(path.parent)
                 state = store.state()
                 if not state.finished:
-                    store.finish_capture("Recording was interrupted when Toolkit closed. Saved audio has been recovered; capture was not restarted.")
+                    store.finish_capture("Recording was interrupted when Workspace closed. Saved audio has been recovered; capture was not restarted.")
                 if state.pending or not state.finished or state.revision != state.exported_revision or not store.transcript.is_file():
                     self._schedule(store)
             except (OSError, ValueError, sqlite3.Error):

@@ -2,7 +2,7 @@
 key presses and mouse drags, real windows; a fake AI endpoint plays the model.
 
 It takes over the keyboard and mouse for half a minute, so it only runs when
-asked: `TOOLKIT_E2E=1 pytest tests/test_windows_assistant_e2e.py`. The microphone
+asked: `WORKSPACE_E2E=1 pytest tests/test_windows_assistant_e2e.py`. The microphone
 isn't tested (test machines rarely have one).
 """
 
@@ -22,8 +22,8 @@ from assistant.llm import Json
 from .fake_endpoint import FakeEndpoint, Reply, fake_endpoint, sse
 from .test_agent import calls, says
 
-if sys.platform != "win32" or os.environ.get("TOOLKIT_E2E") != "1":
-    raise unittest.SkipTest("end-to-end tests run on Windows, with TOOLKIT_E2E=1")
+if sys.platform != "win32" or os.environ.get("WORKSPACE_E2E") != "1":
+    raise unittest.SkipTest("end-to-end tests run on Windows, with WORKSPACE_E2E=1")
 
 from assistant.qt import QtCore, QtWidgets
 from assistant.qt_ui import application
@@ -80,16 +80,16 @@ def type_ascii(text: str) -> None:
 
 
 @contextmanager
-def toolkit(endpoint: FakeEndpoint, home: Path, live: Path = ROOT) -> Generator[None]:
-    """The toolkit as the user starts it: the keeper, running layout, assistant, and automation
+def workspace(endpoint: FakeEndpoint, home: Path, live: Path = ROOT) -> Generator[None]:
+    """The workspace as the user starts it: the keeper, running layout, assistant, and automation
     from `live`. Logs and state go under `home` (it's LOCALAPPDATA)."""
     env = {
-        **os.environ, "OPENAI_BASE_URL": endpoint.url, "OPENAI_API_KEY": "k", "TOOLKIT_CHAT_MODEL": "chat",
-        "TOOLKIT_AGENT_APPROVALS": "never", "LOCALAPPDATA": str(home),
+        **os.environ, "OPENAI_BASE_URL": endpoint.url, "OPENAI_API_KEY": "k", "WORKSPACE_CHAT_MODEL": "chat",
+        "WORKSPACE_AGENT_APPROVALS": "never", "LOCALAPPDATA": str(home),
     }
     process = subprocess.Popen([sys.executable, str(live / "keeper.py")], cwd=live, env=env)
     try:
-        assert wait_for(lambda: both_ready(home), lambda: None, 30), "the toolkit didn't start"
+        assert wait_for(lambda: both_ready(home), lambda: None, 30), "the workspace didn't start"
         time.sleep(0.5)
         yield
     finally:
@@ -103,7 +103,7 @@ def toolkit(endpoint: FakeEndpoint, home: Path, live: Path = ROOT) -> Generator[
 
 
 def both_ready(home: Path) -> bool:
-    state = home / "toolkit" / "keeper"
+    state = home / "workspace" / "keeper"
     return (state / "ready-layout").exists() and (state / "ready-assistant").exists() and (state / "ready-automation").exists()
 
 
@@ -129,11 +129,11 @@ def text_box(text: str) -> Generator[tuple[QtWidgets.QWidget, QtWidgets.QLineEdi
 
 
 def logs(home: Path) -> str:
-    folder = home / "toolkit"
+    folder = home / "workspace"
     return "\n".join(f"--- {p.name}\n{p.read_text(encoding='utf-8', errors='replace')[-3000:]}" for p in sorted(folder.glob("*")) if p.is_file())
 
 
-def test_the_toolkit_end_to_end() -> None:
+def test_the_workspace_end_to_end() -> None:
     home = Path(tempfile.mkdtemp())
     try:
         run_everything(home)
@@ -144,12 +144,12 @@ def test_the_toolkit_end_to_end() -> None:
 
 def run_everything(home: Path) -> None:
     keeper = application()  # This process keeps answering native window messages.
-    with fake_endpoint() as endpoint, toolkit(endpoint, home):
+    with fake_endpoint() as endpoint, workspace(endpoint, home):
         in_a_text_box(endpoint)
         screen_text(endpoint, keeper.processEvents)
         ask(endpoint, keeper.processEvents)
         agent(endpoint, home, keeper.processEvents)
-    used = (home / "toolkit" / "usage.jsonl").read_text(encoding="utf-8")
+    used = (home / "workspace" / "usage.jsonl").read_text(encoding="utf-8")
     for feature in ('"fix"', '"snap_left"', '"screen_text"', '"ask"', '"agent_typed"'):
         assert feature in used, feature
 
@@ -213,9 +213,9 @@ def agent(endpoint: FakeEndpoint, home: Path, pump: Callable[[], None]) -> None:
     """A typed task, a tool call, a final answer, all in the journal."""
     endpoint.replies = [calls(("list_directory", {"path": "C:\\"})), says("C: has folders.")]
     chord(TAB, AGENT_TYPED)
-    assert wait_for(lambda: any(w.title == "Toolkit · Agent" for w in windows.windows()), pump)
+    assert wait_for(lambda: any(w.title == "Workspace · Agent" for w in windows.windows()), pump)
     wait_for(lambda: False, pump, 0.3)
     type_ascii("look at c")
-    journal = home / "toolkit" / "agent.jsonl"
+    journal = home / "workspace" / "agent.jsonl"
     assert wait_for(lambda: journal.exists() and "list_directory" in journal.read_text(encoding="utf-8"), pump), "no journal"
-    assert any(w.title == "Toolkit · Agent" for w in windows.windows())
+    assert any(w.title == "Workspace · Agent" for w in windows.windows())

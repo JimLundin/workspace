@@ -1,4 +1,4 @@
-"""selfcheck: is this copy of the toolkit sound? Uses installed or bundled SDK dependencies.
+"""selfcheck: is this copy of the workspace sound? Uses installed or bundled SDK dependencies.
 
     python selfcheck.py [FOLDER] [--fast] [--durations N]
 
@@ -129,7 +129,7 @@ def run_tests(root: Path, problems: list[str], *, fast: bool = False, timings: l
 def check(root: Path, *, fast: bool = False, durations: int = 0) -> tuple[bool, str]:
     """Whether the copy at `root` is sound, and a report. Imports from `root`, so run
     it in a process of its own (as `main` does)."""
-    os.environ.pop("TOOLKIT_E2E", None)  # never the end-to-end tests: they'd start a second toolkit
+    os.environ.pop("WORKSPACE_E2E", None)  # never the end-to-end tests: they'd start a second workspace
     sys.path.insert(0, str(root))
     os.chdir(root)
     from runtime import activate  # noqa: PLC0415

@@ -248,7 +248,7 @@ def settled(entries: tuple[Entry | Response, ...]) -> Settled:
                 return Settled.ATTENTION
             case Entry(message=Answer(state=StreamState.INTERRUPTED) | ToolActivity(outcome=ToolStatus.CANCELLED)):
                 return Settled.STOPPED
-            case Entry(message=ChatMessage(speaker="Toolkit", text=text)) if text.startswith("Stopped"):
+            case Entry(message=ChatMessage(speaker="Workspace", text=text)) if text.startswith("Stopped"):
                 return Settled.STOPPED
             case Entry(message=Question(reply=Cancelled()) | Approval(decision="cancelled")):
                 return Settled.STOPPED

@@ -212,7 +212,7 @@ def test_graceful_interruption_is_recoverable_but_cancellation_stays_terminal(tm
     store.control("cancelled", Control.CANCEL, at=3)
     run = store.claim("worker", "run", at=4)
     assert run is not None and run.task.id == "paused"
-    store.interrupt(run.run, "Toolkit is shutting down.", at=5)
+    store.interrupt(run.run, "Workspace is shutting down.", at=5)
     reopened = TaskStore(path)
     assert reopened.recover("new-worker", at=6) == ()
     later = reopened.claim("new-worker", "later-run", at=7)

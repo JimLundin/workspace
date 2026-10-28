@@ -1,4 +1,4 @@
-"""Keep an owned browser process tree tied to Toolkit's lifetime."""
+"""Keep an owned browser process tree tied to Workspace's lifetime."""
 
 import ctypes
 import subprocess
@@ -106,7 +106,7 @@ class Process:
 
 
 class ProcessJob:
-    """Closing this handle, including on a Toolkit crash, terminates owned children."""
+    """Closing this handle, including on a Workspace crash, terminates owned children."""
 
     __slots__ = ("handle",)
 

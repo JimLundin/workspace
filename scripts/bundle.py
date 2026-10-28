@@ -1,4 +1,4 @@
-"""Build Toolkit with pinned Windows Python, Qt, and agent dependencies."""
+"""Build Workspace with pinned Windows Python, Qt, and agent dependencies."""
 
 import argparse
 import hashlib
@@ -104,9 +104,9 @@ def extract(archive_path: Path, folder: Path, *, dependency: bool = False, exclu
 def build(output: Path, cache: Path) -> None:
     python = release()
     interpreter_archive = download_python(python, cache)
-    with tempfile.TemporaryDirectory(prefix="toolkit-bundle-") as scratch:
+    with tempfile.TemporaryDirectory(prefix="workspace-bundle-") as scratch:
         root = Path(scratch)
-        wheels, bundle = root / "wheels", root / "toolkit"
+        wheels, bundle = root / "wheels", root / "workspace"
         subprocess.run(
             [sys.executable, "-m", "pip", "download", "--no-deps", "--only-binary=:all:", "--platform", "win_amd64",
              "--python-version", python.tag, "--implementation", "cp", "--abi", f"cp{python.tag}", "--dest", str(wheels),

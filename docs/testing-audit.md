@@ -1,6 +1,6 @@
 # Test cost and mutation audit
 
-Toolkit now uses fast checks while editing and full Windows checks before
+Workspace now uses fast checks while editing and full Windows checks before
 installation. This follows the requested workflow: shorten the iteration loop,
 retain real integrations at the install gate, and improve assertions using
 mutation evidence. Remaining hard-coded dependencies are listed in the
@@ -36,7 +36,7 @@ invocation is unchanged. Tests seed a Windows-only failure to prove that fast
 editing can pass while the full installation gate refuses the candidate.
 
 The explicitly enabled desktop E2E suite remains separate. Selfcheck clears
-`TOOLKIT_E2E`; those tests start a second Toolkit and control the keyboard/mouse.
+`WORKSPACE_E2E`; those tests start a second Workspace and control the keyboard/mouse.
 This audit ran ordinary Windows integrations, not those manual desktop E2Es.
 
 ## Changes that removed work or improved its signal

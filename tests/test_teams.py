@@ -111,10 +111,10 @@ def test_teams_setup_is_offline_and_unconfigured_status_is_actionable(tmp_path: 
 
 
 def test_environment_overrides_cannot_silently_ignore_saved_configuration(tmp_path: Path) -> None:
-    overrides = {"TOOLKIT_GRAPH_CLIENT_ID": RECIPIENT}
+    overrides = {"WORKSPACE_GRAPH_CLIENT_ID": RECIPIENT}
     with integration(tmp_path) as (teams, http):
         overridden = Teams(teams.folder, store=teams.store, http=http, clock=http.clock, environment=overrides)
-        overrides["TOOLKIT_GRAPH_CLIENT_ID"] = CLIENT
+        overrides["WORKSPACE_GRAPH_CLIENT_ID"] = CLIENT
         with TestCase().assertRaisesRegex(GraphError, "overrides"):
             overridden.request("configure", CONFIG, threading.Event())
         assert not http.received

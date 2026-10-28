@@ -397,7 +397,7 @@ class TaskStore:
                 connection.execute(f"PRAGMA user_version={SCHEMA_VERSION}")
                 return
             if version != 0:
-                raise ValueError("This work database requires a different Toolkit schema version.")
+                raise ValueError("This work database requires a different Workspace schema version.")
             if connection.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'").fetchone() is not None:
                 raise ValueError("The unversioned work database already contains tables.")
             for statement in (

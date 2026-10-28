@@ -3,7 +3,7 @@
 Set the Windows keyboard to English (US). The key left of 1 (§) is the escape
 key: tap it to switch between this layout and your plain keyboard, hold it for
 2 seconds to quit. Between the thumb keys, hold B to dictate or N to speak a
-task for the agent. Both need the assistant, started by `toolkit.pyw`.
+task for the agent. Both need the assistant, started by `workspace.pyw`.
 """
 
 import sys

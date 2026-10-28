@@ -1,4 +1,4 @@
-"""The keeper: runs the toolkit, installs changes, and undoes the ones that fail.
+"""The keeper: runs the workspace, installs changes, and undoes the ones that fail.
 Its logic runs on fake processes and a fake clock; its file handling on real folders."""
 
 import os
@@ -462,7 +462,7 @@ def test_requests_arrive_in_order(tmp_path: Path) -> None:
 
 
 def test_the_keeper_and_its_checker_are_protected() -> None:
-    assert {"keeper.py", "selfcheck.py", "toolkit.pyw"} <= PROTECTED
+    assert {"keeper.py", "selfcheck.py", "workspace.pyw"} <= PROTECTED
 
 
 def test_install_failure_restores_and_restarts() -> None:
