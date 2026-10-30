@@ -16,15 +16,16 @@ import subprocess
 import sys
 import tempfile
 import time
-from collections.abc import Iterator, Mapping
+from collections.abc import Collection, Iterable, Iterator, Mapping
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import suppress
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
 from types import MappingProxyType
-from typing import cast
 from xml.etree import ElementTree
+
+from pydantic import TypeAdapter, ValidationError
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -130,7 +131,7 @@ def decisions(tree: ast.AST, function: str) -> Iterator[tuple[str, ast.expr, str
             pass
 
 
-def mutations(source: bytes, functions: list[str]) -> list[Mutation]:
+def mutations(source: bytes, functions: Collection[str]) -> list[Mutation]:
     offsets = [0]
     for line in source.splitlines(keepends=True):
         offsets.append(offsets[-1] + len(line))
@@ -159,7 +160,7 @@ def mutation_order(mutation: Mutation) -> tuple[int, int, str]:
     return mutation.line, mutation.start, mutation.after
 
 
-def replacements(source: bytes, changes: list[list[str]]) -> list[Mutation]:
+def replacements(source: bytes, changes: Iterable[tuple[str, str]]) -> list[Mutation]:
     found: list[Mutation] = []
     for before, after in changes:
         fragment = before.encode("utf-8")
@@ -293,6 +294,30 @@ def campaign(
         return baseline, results, digest.hexdigest()
 
 
+@dataclass(frozen=True, slots=True)
+class Options:
+    source: Path
+    root: Path
+    tests: tuple[str, ...]
+    function: tuple[str, ...] | None
+    replace: tuple[tuple[str, str], ...] | None
+    limit: int
+    seed: int
+    timeout: float
+    workers: int
+    output: Path
+
+
+OPTIONS = TypeAdapter(Options)
+
+
+def arguments(parser: argparse.ArgumentParser) -> Options:
+    try:
+        return OPTIONS.validate_python(vars(parser.parse_args()))
+    except ValidationError as error:
+        return parser.error(str(error))
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("source", type=Path, help="one source file, relative to --root")
@@ -305,13 +330,11 @@ def main() -> None:
     parser.add_argument("--timeout", type=float, default=30, help="seconds per subprocess; timeouts are reported separately")
     parser.add_argument("--workers", type=int, default=1, help="use 1 for tests sharing the Windows desktop")
     parser.add_argument("--output", type=Path, required=True, help="JSON evidence, preferably outside the source tree")
-    args = parser.parse_args()
-    root = cast(Path, args.root).resolve()
-    source = cast(Path, args.source)
-    output = cast(Path, args.output).resolve()
-    tests = cast(list[str], args.tests)
-    limit, seed, workers = cast(int, args.limit), cast(int, args.seed), cast(int, args.workers)
-    timeout = cast(float, args.timeout)
+    options = arguments(parser)
+    root = options.root.resolve()
+    source = options.source
+    output = options.output.resolve()
+    tests, limit, seed, workers, timeout = options.tests, options.limit, options.seed, options.workers, options.timeout
     if source.is_absolute() or ".." in source.parts or not (root / source).is_file():
         parser.error("source must be an existing file relative to --root")
     if output.is_relative_to(root) and not any(part.startswith(".") or part == "dist" for part in output.relative_to(root).parts):
@@ -319,12 +342,11 @@ def main() -> None:
     if limit < 0 or workers < 1 or timeout <= 0:
         parser.error("limit must be nonnegative; workers and timeout must be positive")
     original = (root / source).read_bytes()
-    changes = cast(list[list[str]] | None, args.replace)
-    functions = cast(list[str] | None, args.function)
+    changes, functions = options.replace, options.function
     if changes and functions:
         parser.error("choose either seeded replacements or function selection")
     try:
-        candidates = replacements(original, changes) if changes else mutations(original, functions or [])
+        candidates = replacements(original, changes) if changes else mutations(original, functions or ())
     except (ValueError, SyntaxError) as error:
         parser.error(str(error))
     if not candidates:
@@ -332,7 +354,7 @@ def main() -> None:
     selected = random.Random(seed).sample(candidates, limit) if 0 < limit < len(candidates) else candidates
     selected.sort(key=mutation_order)
     print(f"Testing {len(selected)} of {len(candidates)} decision mutations in {source}", flush=True)
-    baseline, outcomes, digest = campaign(root, source, original, selected, tests, timeout=timeout, workers=workers)
+    baseline, outcomes, digest = campaign(root, source, original, selected, list(tests), timeout=timeout, workers=workers)
     results: list[dict[str, object]] = [
         {
             "function": mutation.function,
