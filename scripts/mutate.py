@@ -16,12 +16,13 @@ import subprocess
 import sys
 import tempfile
 import time
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import suppress
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
+from types import MappingProxyType
 from typing import cast
 from xml.etree import ElementTree
 
@@ -57,64 +58,76 @@ class Result:
     detail: str = ""
 
 
+COMPARISON_SWAPS: Mapping[type[ast.cmpop], type[ast.cmpop]] = MappingProxyType(
+    {
+        ast.Lt: ast.LtE,
+        ast.LtE: ast.Lt,
+        ast.Gt: ast.GtE,
+        ast.GtE: ast.Gt,
+        ast.Eq: ast.NotEq,
+        ast.NotEq: ast.Eq,
+        ast.Is: ast.IsNot,
+        ast.IsNot: ast.Is,
+        ast.In: ast.NotIn,
+        ast.NotIn: ast.In,
+    }
+)
+ARITHMETIC_SWAPS: Mapping[type[ast.operator], type[ast.operator]] = MappingProxyType(
+    {
+        ast.Add: ast.Sub,
+        ast.Sub: ast.Add,
+        ast.Mult: ast.Div,
+        ast.Div: ast.Mult,
+        ast.FloorDiv: ast.Mult,
+    }
+)
+
+
 def expressions(tree: ast.AST, function: str = "") -> Iterator[tuple[str, ast.expr, str]]:
     """Mutate runtime decisions, not annotations, schemas, docstrings, or messages."""
-    if isinstance(tree, ast.ClassDef):
-        for statement in tree.body:
-            yield from expressions(statement, f"{function}.{tree.name}".strip("."))
-        return
-    if isinstance(tree, (ast.FunctionDef, ast.AsyncFunctionDef)):
-        name = f"{function}.{tree.name}".strip(".")
-        for statement in tree.body:
-            yield from expressions(statement, name)
-        return
-    if isinstance(tree, (ast.AnnAssign, ast.arg)):
-        if isinstance(tree, ast.AnnAssign) and tree.value is not None:
-            yield from expressions(tree.value, function)
-        return
+    match tree:
+        case ast.ClassDef(name=name, body=body):
+            for statement in body:
+                yield from expressions(statement, f"{function}.{name}".strip("."))
+            return
+        case ast.FunctionDef(name=name, body=body) | ast.AsyncFunctionDef(name=name, body=body):
+            for statement in body:
+                yield from expressions(statement, f"{function}.{name}".strip("."))
+            return
+        case ast.AnnAssign(value=value):
+            if value is not None:
+                yield from expressions(value, function)
+            return
+        case ast.arg():
+            return
+        case _:
+            pass
     if function:
-        changed: ast.expr
-        if isinstance(tree, (ast.If, ast.IfExp, ast.While)):
-            yield function, tree.test, f"(not ({ast.unparse(tree.test)}))"
-        elif isinstance(tree, ast.Compare):
-            swaps: dict[type[ast.cmpop], type[ast.cmpop]] = {
-                ast.Lt: ast.LtE,
-                ast.LtE: ast.Lt,
-                ast.Gt: ast.GtE,
-                ast.GtE: ast.Gt,
-                ast.Eq: ast.NotEq,
-                ast.NotEq: ast.Eq,
-                ast.Is: ast.IsNot,
-                ast.IsNot: ast.Is,
-                ast.In: ast.NotIn,
-                ast.NotIn: ast.In,
-            }
-            for index, operator in enumerate(tree.ops):
-                operators = list(tree.ops)
-                operators[index] = swaps[type(operator)]()
-                changed = ast.Compare(left=tree.left, ops=operators, comparators=tree.comparators)
-                yield function, tree, f"({ast.unparse(changed)})"
-        elif isinstance(tree, ast.BoolOp):
-            changed = ast.BoolOp(op=ast.Or() if isinstance(tree.op, ast.And) else ast.And(), values=tree.values)
-            yield function, tree, f"({ast.unparse(changed)})"
-        elif isinstance(tree, ast.BinOp):
-            arithmetic: dict[type[ast.operator], type[ast.operator]] = {
-                ast.Add: ast.Sub,
-                ast.Sub: ast.Add,
-                ast.Mult: ast.Div,
-                ast.Div: ast.Mult,
-                ast.FloorDiv: ast.Mult,
-            }
-            if replacement := arithmetic.get(type(tree.op)):
-                changed = ast.BinOp(left=tree.left, op=replacement(), right=tree.right)
-                yield function, tree, f"({ast.unparse(changed)})"
-        elif isinstance(tree, ast.Constant) and type(tree.value) in (int, float):
-            value = cast(int | float, tree.value)
-            yield function, tree, repr(value + 1)
-        elif isinstance(tree, ast.Constant) and isinstance(tree.value, bool):
-            yield function, tree, str(not tree.value)
+        yield from decisions(tree, function)
     for child in ast.iter_child_nodes(tree):
         yield from expressions(child, function)
+
+
+def decisions(tree: ast.AST, function: str) -> Iterator[tuple[str, ast.expr, str]]:
+    match tree:
+        case ast.If(test=test) | ast.IfExp(test=test) | ast.While(test=test):
+            yield function, test, f"(not ({ast.unparse(test)}))"
+        case ast.Compare(left=left, ops=operators, comparators=comparators):
+            for index, operator in enumerate(operators):
+                swapped = [*operators[:index], COMPARISON_SWAPS[type(operator)](), *operators[index + 1 :]]
+                yield function, tree, f"({ast.unparse(ast.Compare(left=left, ops=swapped, comparators=comparators))})"
+        case ast.BoolOp(op=ast.And(), values=values):
+            yield function, tree, f"({ast.unparse(ast.BoolOp(op=ast.Or(), values=values))})"
+        case ast.BoolOp(values=values):
+            yield function, tree, f"({ast.unparse(ast.BoolOp(op=ast.And(), values=values))})"
+        case ast.BinOp(left=left, op=operator, right=right) if (replacement := ARITHMETIC_SWAPS.get(type(operator))) is not None:
+            yield function, tree, f"({ast.unparse(ast.BinOp(left=left, op=replacement(), right=right))})"
+        case ast.Constant(value=bool() as value):
+            yield function, tree, str(not value)
+        case ast.Constant(value=int() | float() as value):
+            yield function, tree, repr(value + 1)
+        case _:
+            pass
 
 
 def mutations(source: bytes, functions: list[str]) -> list[Mutation]:
@@ -186,7 +199,13 @@ def stop_process_tree(process: subprocess.Popen[str]) -> None:
 
 def timeout_detail(error: subprocess.TimeoutExpired) -> str:
     def decoded(output: bytes | str | None) -> str:
-        return output.decode("utf-8", errors="replace") if isinstance(output, bytes) else output or ""
+        match output:
+            case bytes():
+                return output.decode("utf-8", errors="replace")
+            case str():
+                return output
+            case None:
+                return ""
 
     return (decoded(error.stdout) + decoded(error.stderr))[-4000:]
 
