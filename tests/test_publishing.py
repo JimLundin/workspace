@@ -145,7 +145,7 @@ def test_durable_publication_approval_is_bound_to_the_frozen_candidate_and_desti
     (workspace / "config.py").write_text("GREETING = 'changed after review'\n", encoding="utf-8")
     with TestCase().assertRaisesRegex(PublishError, "cancelled"):
         publish_source(live, workspace, "Update", approve, lambda: False, remote=str(remote), branch="workspace/agent-durable")
-    assert len(reviews) == 2 and reviews[0].fingerprint != reviews[1].fingerprint
+    assert len(reviews) == 2 and reviews[0].request.fingerprint != reviews[1].request.fingerprint
     assert "changed after review" in reviews[1].detail and str(remote) in reviews[1].detail
     assert not git(remote, "for-each-ref", "refs/heads/workspace/")
 

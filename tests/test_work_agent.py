@@ -242,13 +242,11 @@ def pending_approval(rig: WorkRig, prompt: str = "Send the reviewed draft") -> t
     rig.refresh()
     claim = rig.tasks.claim("worker-one", "approval-run", at=rig.clock())
     assert claim is not None
-    fingerprint = "a" * 64
-    request = Approval(f"approval:0:{fingerprint}:once", "Review the operation", "Sensitive operation; request its live preview.")
+    request = Approval("once", "Review the operation", "Sensitive operation; request its live preview.", "a" * 64)
     review = ApprovalReview(
         claim.task.id,
         0,
         request,
-        fingerprint,
         "Send the reviewed draft",
         "Exact recipient and complete draft: private preview text.",
     )

@@ -65,7 +65,8 @@ from automation.task import (
     variant,
 )
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
+_UNBOUND_APPROVAL = "This approval was saved before approvals recorded their operation. Resume the task to review it again."
 MAX_PAGE = 1_000
 _TASK_COLUMNS: tuple[str, ...] = (
     "id",
@@ -162,8 +163,8 @@ def _wait_data(reason: WaitReason) -> dict[str, object]:
     match reason:
         case Question(id, content, detail):
             return {"kind": "question", "id": id, "text": content, "detail": detail}
-        case Approval(id, title, detail):
-            return {"kind": "approval", "id": id, "title": title, "detail": detail}
+        case Approval(id, title, detail, fingerprint):
+            return {"kind": "approval", "id": id, "title": title, "detail": detail, "fingerprint": fingerprint}
         case Until(at, explanation):
             return {"kind": "until", "at": at, "reason": explanation}
         case Blocked(explanation):
@@ -183,11 +184,12 @@ def _wait(value: object) -> WaitReason:
                 text(data["detail"], "question detail", maximum=16_000, empty=True),
             )
         case "approval":
-            _fields(data, "kind", "id", "title", "detail")
+            _fields(data, "kind", "id", "title", "detail", "fingerprint")
             return Approval(
                 identifier(data["id"], "approval identity"),
                 text(data["title"], "approval title", maximum=240),
                 text(data["detail"], "approval detail", maximum=16_000, empty=True),
+                digest(data["fingerprint"], "approved operation"),
             )
         case "until":
             _fields(data, "kind", "at", "reason")
@@ -451,6 +453,9 @@ class TaskStore:
             version = integer(row[0], "work schema version") if row is not None else -1
             if version == SCHEMA_VERSION:
                 return
+            if version == 2:
+                self._migrate_unbound_approvals(connection)
+                return
             if version != 0:
                 raise ValueError("This work database requires a different Workspace schema version.")
             if connection.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'").fetchone() is not None:
@@ -478,6 +483,25 @@ class TaskStore:
                 f"PRAGMA user_version={SCHEMA_VERSION}",
             ):
                 connection.execute(statement)
+
+    @staticmethod
+    def _migrate_unbound_approvals(connection: _Connection) -> None:
+        """Version 2 packed an approval's operation into its identity.
+
+        Its pending approvals become blocked and its grants are dropped, so each
+        operation is reviewed again; nothing is approved without its fingerprint.
+        """
+        blocked = _dump(_state_data(Waiting(Blocked(_UNBOUND_APPROVAL))))
+        connection.execute(
+            "UPDATE requests SET closed_at=(SELECT updated_at FROM tasks WHERE tasks.id=requests.task_id) "
+            "WHERE closed_at IS NULL AND json_extract(request,'$.kind')='approval'"
+        )
+        connection.execute(
+            "UPDATE tasks SET revision=revision+1, state=? WHERE phase='waiting' AND json_extract(state,'$.reason.kind')='approval'",
+            (blocked,),
+        )
+        connection.execute("DELETE FROM responses WHERE json_extract(request,'$.kind')='approval'")
+        connection.execute(f"PRAGMA user_version={SCHEMA_VERSION}")
 
     @contextmanager
     def _connection(self, *, writing: bool = False) -> Generator[_Connection]:

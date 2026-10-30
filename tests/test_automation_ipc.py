@@ -151,10 +151,7 @@ def test_overflow_reports_loss_before_new_results_and_stays_within_frame_budget(
 
 
 def test_review_requires_a_connected_assistant_and_remains_volatile(tmp_path: Path) -> None:
-    fingerprint = "a" * 64
-    review = ApprovalReview(
-        "notes", 3, Approval(f"approval:3:{fingerprint}:nonce", "Save notes", "Redacted operation"), fingerprint, "Save notes", "Full private preview"
-    )
+    review = ApprovalReview("notes", 3, Approval("nonce", "Save notes", "Redacted operation", "a" * 64), "Save notes", "Full private preview")
     with ProfileLease(tmp_path):
         server = BridgeServer(tmp_path, epoch="a" * 32, wake=lambda: None, owns=lambda run: True)
         server.start()

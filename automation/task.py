@@ -102,6 +102,8 @@ class Checkpoint:
 
 @dataclass(frozen=True, slots=True)
 class Question:
+    """An agent request for missing information; its identity is a fresh nonce."""
+
     id: str
     text: str
     detail: str
@@ -114,14 +116,22 @@ class Question:
 
 @dataclass(frozen=True, slots=True)
 class Approval:
+    """An agent request to perform one exact operation; its identity is a fresh nonce.
+
+    `fingerprint` is the operation's: a grant covers only that operation, under
+    the goal revision its stored request and response rows record.
+    """
+
     id: str
     title: str
     detail: str
+    fingerprint: str
 
     def __post_init__(self) -> None:
         identifier(self.id, "approval identity")
         text(self.title, "approval title", maximum=240)
         text(self.detail, "approval detail", maximum=16_000, empty=True)
+        digest(self.fingerprint, "approved operation")
 
 
 @dataclass(frozen=True, slots=True)

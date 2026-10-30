@@ -277,7 +277,7 @@ def test_approval_requires_explicit_matching_decision_and_redirection_drops_its_
     store.submit("task", "Task", "Apply the requested change.", RequestSource("chat"), at=1)
     run = store.claim("worker", "run", at=2)
     assert run is not None
-    request = Approval("specific-action", "Apply this change?", "A redacted preview of this exact action.")
+    request = Approval("specific-action", "Apply this change?", "A redacted preview of this exact action.", "a" * 64)
     store.finish(run.run, Waiting(request), at=3)
     assert store.answer("task", request.id, TextAnswer("approve"), at=4) is None
     assert store.answer("task", "another-action", ApprovalDecision.APPROVED, at=4) is None
@@ -289,7 +289,7 @@ def test_approval_requires_explicit_matching_decision_and_redirection_drops_its_
     assert resumed is not None
     with TestCase().assertRaises(ValueError):
         store.finish(resumed.run, Waiting(request), at=8)
-    assert store.finish(resumed.run, Waiting(Approval("new-action", "Apply the new change?", "A new live preview.")), at=9) is not None
+    assert store.finish(resumed.run, Waiting(Approval("new-action", "Apply the new change?", "A new live preview.", "b" * 64)), at=9) is not None
 
 
 def test_refresh_approval_requires_exact_pending_approval_and_never_approves(tmp_path: Path) -> None:
@@ -299,7 +299,7 @@ def test_refresh_approval_requires_exact_pending_approval_and_never_approves(tmp
     run = store.claim("worker", "run", at=2)
     assert run is not None
     assert store.refresh_approval("task", "old-preview", at=3) is None
-    store.finish(run.run, Waiting(Approval("old-preview", "Apply?", "Old preview.")), at=4)
+    store.finish(run.run, Waiting(Approval("old-preview", "Apply?", "Old preview.", "a" * 64)), at=4)
     reopened = TaskStore(path)
     assert reopened.request_run("task", "old-preview") == run.run
     assert reopened.refresh_approval("task", "wrong-preview", at=5) is None
@@ -310,10 +310,35 @@ def test_refresh_approval_requires_exact_pending_approval_and_never_approves(tmp
     fresh = reopened.claim("new-worker", "fresh-run", at=8)
     assert fresh is not None
     with TestCase().assertRaises(ValueError):
-        reopened.finish(fresh.run, Waiting(Approval("old-preview", "Changed preview", "Cannot reuse this identity.")), at=9)
+        reopened.finish(fresh.run, Waiting(Approval("old-preview", "Changed preview", "Cannot reuse this identity.", "b" * 64)), at=9)
     reopened.finish(fresh.run, Waiting(Question("question", "Which project?", "")), at=10)
     assert reopened.refresh_approval("task", "question", at=11) is None
     assert reopened.answer("task", "question", TextAnswer("Project A"), at=12) is not None
+
+
+def test_version_two_approvals_reopen_blocked_and_their_grants_cannot_authorize(tmp_path: Path) -> None:
+    # Defect: a journal whose approvals packed their operation into the ID crashes
+    # recovery, or keeps a pending approval or grant without a recorded fingerprint.
+    path = tmp_path / "work.sqlite3"
+    store = TaskStore(path)
+    for task in ("granted", "pending"):
+        store.submit(task, "Task", "Apply the change.", RequestSource("chat"), at=1)
+        claim = store.claim("worker", task + "-run", at=2)
+        assert claim is not None
+        store.finish(claim.run, Waiting(Approval(task + "-request", "Apply?", "Preview.", "a" * 64)), at=3)
+    assert store.answer("granted", "granted-request", ApprovalDecision.APPROVED, at=4) is not None
+    legacy = '{"kind":"approval","id":"approval:0:' + "a" * 64 + ':nonce","title":"Apply?","detail":"Preview."}'
+    with closing(sqlite3.connect(path)) as database, database:
+        database.execute("UPDATE tasks SET state=json_object('kind','waiting','reason',json(?)) WHERE id='pending'", (legacy,))
+        database.execute("UPDATE requests SET request=?", (legacy,))
+        database.execute("UPDATE responses SET request=?", (legacy,))
+        database.execute("PRAGMA user_version=2")
+    reopened = TaskStore(path)
+    pending = reopened.get("pending")
+    assert pending is not None and isinstance(pending.state, Waiting) and isinstance(pending.state.reason, Blocked)
+    assert reopened.responses("granted") == () and reopened.request_run("pending", "pending-request") is None
+    assert reopened.control("pending", Control.RESUME, at=5) is not None
+    assert TaskStore(path).get("granted") is not None
 
 
 def test_timed_waits_wake_at_the_deadline_and_blocked_work_requires_explicit_resume(tmp_path: Path) -> None:

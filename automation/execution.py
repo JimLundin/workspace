@@ -1,6 +1,5 @@
 """Task execution dispositions, bounded recovery context, and transient human reviews."""
 
-import hashlib
 import json
 import threading
 import time
@@ -75,25 +74,12 @@ class ApprovalReview:
     task_id: str
     goal_revision: int
     request: Approval
-    fingerprint: str
     title: str
     detail: str
 
     def __post_init__(self) -> None:
         text(self.title, "live review title", maximum=240)
         text(self.detail, "live review detail", maximum=128_000)
-        if approval_binding(self.request) != (self.goal_revision, self.fingerprint):
-            raise ValueError("The live review does not match the durable approval.")
-
-
-def approval_binding(request: Approval) -> tuple[int, str] | None:
-    fields = request.id.split(":")
-    if len(fields) != 4 or fields[0] != "approval" or not fields[1].isdigit():
-        return None
-    digest = fields[2]
-    if len(digest) != 64 or any(char not in "0123456789abcdef" for char in digest):
-        return None
-    return int(fields[1]), digest
 
 
 def review_matches(task: Task, review: ApprovalReview) -> bool:
@@ -102,7 +88,6 @@ def review_matches(task: Task, review: ApprovalReview) -> bool:
         and task.goal_revision == review.goal_revision
         and isinstance(task.state, Waiting)
         and task.state.reason == review.request
-        and approval_binding(review.request) == (review.goal_revision, review.fingerprint)
     )
 
 
@@ -245,24 +230,24 @@ class WorkExecution:
 
     def approve(self, operation: Operation, title: str, detail: str) -> bool:
         """Only a shown, identical, current-goal operation can consume a grant."""
-        binding = operation.fingerprint
-        revision = self.claim.task.goal_revision
+        fingerprint = operation.fingerprint
         for response in reversed(self._responses()):
-            if not isinstance(response.request, Approval) or approval_binding(response.request) != (revision, binding):
+            if not isinstance(response.request, Approval) or response.request.fingerprint != fingerprint:
                 continue
             if response.reply is ApprovalDecision.DECLINED:
                 return False
             if response.reply is ApprovalDecision.APPROVED and not self.store.action_since(
                 self.claim.task.id,
-                binding,
+                fingerprint,
                 after=response.at,
             ):
                 return True
             break
         request = Approval(
-            f"approval:{revision}:{binding}:{uuid.uuid4().hex[:8]}",
+            uuid.uuid4().hex,
             title[:240],
             f"Approve the exact {operation.tool} operation shown in its live review. Its full content is kept only in memory.",
+            fingerprint,
         )
         exact = (
             detail
@@ -280,7 +265,7 @@ class WorkExecution:
         if self.review is None or len(exact) > 128_000:
             self.block("A live review is required for this operation. Open the work overview and resume to review its full content.")
             return False
-        review = ApprovalReview(self.claim.task.id, revision, request, binding, title[:240], exact)
+        review = ApprovalReview(self.claim.task.id, self.claim.task.goal_revision, request, title[:240], exact)
         if not self.review(review):
             self.block("The live review could not be displayed. Resume this task when its review view is available.")
             return False
@@ -288,12 +273,10 @@ class WorkExecution:
         return False
 
     def ask(self, question: str) -> str | None:
-        digest = hashlib.sha256(question.encode("utf-8")).hexdigest()
-        prefix = f"question:{self.claim.task.goal_revision}:{digest}:"
         for response in reversed(self._responses()):
-            if isinstance(response.request, Question) and response.request.id.startswith(prefix) and isinstance(response.reply, TextAnswer):
+            if isinstance(response.request, Question) and response.request.text == question and isinstance(response.reply, TextAnswer):
                 return response.reply.text
-        request = Question(prefix + uuid.uuid4().hex[:8], question, "")
+        request = Question(uuid.uuid4().hex, question, "")
         self.disposition = Waiting(request)
         return None
 

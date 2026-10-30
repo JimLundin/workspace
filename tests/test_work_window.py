@@ -40,10 +40,9 @@ def work_task(state: State = TaskStatus.READY, *, identity: str = "task-one") ->
 
 
 def approval_task(*, nonce: str = "one", detail: str = "Write the complete reviewed workbook.") -> tuple[Task, ApprovalReview]:
-    fingerprint = "a" * 64
-    request = Approval(f"approval:0:{fingerprint}:{nonce}", "Review the operation", "Persisted summary cannot authorize execution.")
+    request = Approval(nonce, "Review the operation", "Persisted summary cannot authorize execution.", "a" * 64)
     task = work_task(Waiting(request))
-    return task, ApprovalReview(task.id, 0, request, fingerprint, "Write the workbook", detail)
+    return task, ApprovalReview(task.id, 0, request, "Write the workbook", detail)
 
 
 class RecordingWorkView:

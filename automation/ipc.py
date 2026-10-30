@@ -420,8 +420,12 @@ def event_data(message: Envelope) -> dict[str, Json]:
                 "run": _run_data(run),
                 "task": review.task_id,
                 "revision": review.goal_revision,
-                "request": {"id": review.request.id, "title": review.request.title, "detail": review.request.detail},
-                "fingerprint": review.fingerprint,
+                "request": {
+                    "id": review.request.id,
+                    "title": review.request.title,
+                    "detail": review.request.detail,
+                    "fingerprint": review.request.fingerprint,
+                },
                 "title": review.title,
                 "detail": review.detail,
             }
@@ -443,14 +447,18 @@ def decode_event(value: object) -> Envelope:
             part = record(value, "kind run event")
             payload = LogEvent(_run(part["run"]), _presentation(part["event"]))
         case "review":
-            part = record(value, "kind run task revision request fingerprint title detail")
-            request = record(part["request"], "id title detail")
+            part = record(value, "kind run task revision request title detail")
+            request = record(part["request"], "id title detail fingerprint")
             run = _run(part["run"])
             review = ApprovalReview(
                 identifier(part["task"]),
                 integer(part["revision"], "goal revision"),
-                Approval(identifier(request["id"]), text(request["title"], "review title", maximum=240), _string(request["detail"], maximum=16_000)),
-                digest(part["fingerprint"]),
+                Approval(
+                    identifier(request["id"]),
+                    text(request["title"], "review title", maximum=240),
+                    _string(request["detail"], maximum=16_000),
+                    digest(request["fingerprint"], "approved operation"),
+                ),
                 text(part["title"], "review title", maximum=240),
                 text(part["detail"], "review detail", maximum=MAX_TEXT),
             )
