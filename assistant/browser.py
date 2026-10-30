@@ -75,10 +75,11 @@ from assistant.browser_values import (
     UngroupTabs,
     closure,
     destination,
+    evaluated,
     mapping,
     number,
     opening,
-    page_of,
+    pages_of,
     strip_page,
     strip_query,
     tab_edit,
@@ -183,11 +184,28 @@ class Browser:
 
     @property
     def process(self) -> Process | None:
-        return self.owner.process if isinstance(self.owner, Managed) else None
+        match self.owner:
+            case Managed(process=process):
+                return process
+            case _:
+                return None
 
     @property
     def visible(self) -> bool:
-        return isinstance(self.owner, Managed) and self.owner.visible
+        match self.owner:
+            case Managed(visible=visible):
+                return visible
+            case _:
+                return False
+
+    @property
+    def attached(self) -> bool:
+        """Workspace borrows the user's own browser rather than owning a process."""
+        match self.owner:
+            case Attached():
+                return True
+            case _:
+                return False
 
     def select(self, source: Source) -> None:
         if source != self.source:
@@ -218,9 +236,12 @@ class Browser:
         with self.lock:
             if cancel.is_set():
                 raise InterruptedError("Stopped before browser automation.")
-            if isinstance(self.source, Product):
-                self._attach(self.source, cancel)
-                return
+            match self.source:
+                case Product() as product:
+                    self._attach(product, cancel)
+                    return
+                case _:
+                    pass
             if self.process is not None and self.process.poll() is None and self.visible == visible and self.connection is not None:
                 return
             self.close()
@@ -242,10 +263,7 @@ class Browser:
     def _tabs(self, cancel: threading.Event) -> tuple[Page, ...]:
         if self.connection is None:
             return ()
-        targets = self._call("Target.getTargets", {}, cancel).get("targetInfos", [])
-        if not isinstance(targets, list):
-            raise BrowserError("Edge did not provide its page list.")
-        return tuple(page_of(item) for item in targets if isinstance(item, dict) and item.get("type") == "page")
+        return pages_of(self._call("Target.getTargets", {}, cancel))
 
     def _session(self, target: str, cancel: threading.Event) -> str:
         if not target or not any(tab.id == target for tab in self._tabs(cancel)):
@@ -318,12 +336,7 @@ class Browser:
             session=session,
             timeout=timeout,
         )
-        if "exceptionDetails" in result:
-            details = mapping(result["exceptionDetails"])
-            exception = details.get("exception")
-            message = text(exception, "description") if isinstance(exception, dict) else text(details, "text", "JavaScript failed.")
-            raise BrowserError(message[:700])
-        return mapping(result.get("result", {})).get("value")
+        return evaluated(result, "JavaScript failed.")
 
     def _snapshot(self, target: str, args: dict[str, Json], cancel: threading.Event) -> BrowserResult:
         session = self._session(target, cancel)
@@ -407,10 +420,14 @@ class Browser:
         tabs = self._tabs(cancel)
         self.created.intersection_update(tab.id for tab in tabs)
         if not target:
-            grouped = isinstance(self.owner, Attached) and self.owner.product is Product.EDGE and placement is not Ungrouped.TABS
-            if not visible and (grouped or isinstance(placement, InGroup) or window is not None):
+            match placement:
+                case InGroup():
+                    in_strip = True
+                case _:
+                    in_strip = self.owner == Attached(Product.EDGE) and placement is not Ungrouped.TABS
+            if not visible and (in_strip or window is not None):
                 target = self._native_target(placement, window, cancel)
-            elif isinstance(self.owner, Managed):
+            elif self.process is not None:
                 target = next((tab.id for tab in tabs if tab.url == "about:blank"), "")
             if not target:
                 target = text(self._call("Target.createTarget", {"url": "about:blank", "background": not visible}, cancel), "targetId")
@@ -483,7 +500,7 @@ class Browser:
         tabs = self._tabs(cancel)
         offset = number(args, "offset", 0, 0, 20000)
         limit = number(args, "limit", 20, 1, 40)
-        attached = isinstance(self.owner, Attached)
+        attached = self.attached
         rows = tuple(
             PageRow(tab.id, tab.title, tab.url, self.native_targets.get(tab.id), created_in_session=tab.id in self.created if attached else None)
             for tab in tabs[offset : offset + limit]
@@ -517,7 +534,7 @@ class Browser:
         result = strip_page(
             state,
             query,
-            "attached" if isinstance(self.owner, Attached) else "sign_in" if self.visible else "background",
+            "attached" if self.attached else "sign_in" if self.visible else "background",
             self.native_targets,
             maximum=MAX_OUTPUT,
         )
@@ -551,7 +568,7 @@ class Browser:
                         self.created.discard(target)
                 return BrowserResult(_CLOSED_TABS.dump_json(closed.data()).decode())
             case Disconnect.BROWSER:
-                attached = isinstance(self.owner, Attached)
+                attached = self.attached
                 self.close()
                 return BrowserResult(
                     "Disconnected. Your browser and its tabs remain open." if attached else "Closed. The dedicated sign-in profile is retained."
@@ -578,11 +595,17 @@ class Browser:
         return BrowserResult(_CLOSED_PAGE.dump_json(PageClosure(target, CloseState.CLOSED).data()).decode())
 
     def _attach_request(self, args: dict[str, Json], cancel: threading.Event) -> BrowserResult:
-        source = source_of(text(args, "browser", self.source.value if isinstance(self.source, Product) else "edge"))
-        if not isinstance(source, Product):
-            raise BrowserError("Choose edge or chrome to attach to your signed-in browser.")
-        self.select(source)
-        self._attach(source, cancel)
+        match self.source:
+            case Product() as current:
+                default = current.value
+            case _:
+                default = "edge"
+        match source_of(text(args, "browser", default)):
+            case Product() as product:
+                self.select(product)
+                self._attach(product, cancel)
+            case _:
+                raise BrowserError("Choose edge or chrome to attach to your signed-in browser.")
         return self._status(args, cancel)
 
     def _action(self, session: str, args: dict[str, Json], cancel: threading.Event) -> BrowserResult:

@@ -1,12 +1,11 @@
 """Validated browser observations and pure choices for the agent's tab group."""
 
-import json
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from enum import Enum, auto
-from typing import Annotated, Literal, NotRequired, TypedDict, assert_never, cast
+from typing import Annotated, Literal, NotRequired, TypedDict, assert_never
 
-from pydantic import Field
+from pydantic import Field, TypeAdapter, ValidationError
 
 from assistant.llm import Json
 
@@ -134,17 +133,23 @@ def boolean(data: dict[str, Json], name: str, *, default: bool = False) -> bool:
     return value
 
 
+type Identifier = Annotated[int, Field(strict=True, ge=0, le=MAX_ID)]
+_IDENTIFIERS = TypeAdapter(tuple[Identifier, ...])
+
+
+def identifiers(value: Json) -> tuple[int, ...] | None:
+    """Native tab or window IDs, or None when any entry is not one."""
+    try:
+        return _IDENTIFIERS.validate_python(value)
+    except ValidationError:
+        return None
+
+
 def tab_ids(data: dict[str, Json], *, required: bool = True, limit: int = 200) -> tuple[int, ...]:
-    values = data.get("tab_ids", [])
-    if (
-        not isinstance(values, list)
-        or len(values) > limit
-        or (required and not values)
-        or any(isinstance(value, bool) or not isinstance(value, int) or not 0 <= value <= MAX_ID for value in values)
-    ):
+    values = identifiers(data.get("tab_ids", []))
+    if values is None or len(values) > limit or (required and not values):
         raise BrowserError(f"tab_ids must contain 1 to {limit} integer tab IDs from browser_tabs with view=strip.")
-    unique: dict[int, None] = dict.fromkeys(cast(list[int], values))
-    return tuple(unique)
+    return tuple(dict.fromkeys(values))
 
 
 def color_of(value: str) -> Color:
@@ -291,12 +296,71 @@ class Point:
     y: float
 
 
-def page_of(value: Json) -> Page:
-    data = mapping(value)
-    identity = text(data, "targetId")
-    if not identity or len(identity) > 128:
-        raise BrowserError("The browser returned an invalid page ID.")
-    return Page(identity, text(data, "title")[:300], text(data, "url")[:1000])
+@dataclass(frozen=True, slots=True)
+class TargetInfo:
+    type: str
+    target_id: Annotated[str, Field(alias="targetId", min_length=1, max_length=128)]
+    title: str = ""
+    url: str = ""
+
+
+@dataclass(frozen=True, slots=True)
+class TargetList:
+    targets: Annotated[tuple[TargetInfo, ...], Field(alias="targetInfos")]
+
+
+_TARGETS = TypeAdapter(TargetList)
+
+
+def pages_of(reply: Json) -> tuple[Page, ...]:
+    """The browser's pages from a Target.getTargets reply; other target types are ignored."""
+    try:
+        targets = _TARGETS.validate_python(reply).targets
+    except ValidationError as error:
+        raise BrowserError("The browser did not provide a valid page list.") from error
+    return tuple(Page(item.target_id, item.title[:300], item.url[:1000]) for item in targets if item.type == "page")
+
+
+@dataclass(frozen=True, slots=True)
+class Thrown:
+    description: str
+
+
+@dataclass(frozen=True, slots=True)
+class ExceptionDetails:
+    text: str = ""
+    exception: Thrown | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class RemoteObject:
+    value: Json = None
+
+
+@dataclass(frozen=True, slots=True)
+class Evaluation:
+    """A Runtime.evaluate reply: the returned value, or the script's exception."""
+
+    result: RemoteObject = RemoteObject()
+    failure: Annotated[ExceptionDetails | None, Field(alias="exceptionDetails")] = None
+
+
+_EVALUATION = TypeAdapter(Evaluation)
+
+
+def evaluated(reply: Json, failed: str) -> Json:
+    """The script's value; its exception, or `failed` without a description, becomes a BrowserError."""
+    try:
+        evaluation = _EVALUATION.validate_python(reply)
+    except ValidationError as error:
+        raise BrowserError("The browser returned an invalid script result.") from error
+    match evaluation.failure:
+        case ExceptionDetails(exception=Thrown(description)):
+            raise BrowserError(description[:700])
+        case ExceptionDetails(text=message):
+            raise BrowserError((message or failed)[:700])
+        case None:
+            return evaluation.result.value
 
 
 @dataclass(frozen=True, slots=True)
@@ -397,18 +461,15 @@ class TabState:
 
 def tab_state(value: Json) -> TabState:
     data = mapping(value)
-    tabs, groups, windows = data.get("tabs"), data.get("groups"), data.get("windows")
-    if not isinstance(tabs, list) or not isinstance(groups, list) or not isinstance(windows, list):
-        raise BrowserError("The browser did not provide its tabs, groups and windows.")
-    if (
-        len(tabs) > 20000
-        or len(groups) > 20000
-        or len(windows) > 20000
-        or any(isinstance(item, bool) or not isinstance(item, int) or not 0 <= item <= MAX_ID for item in windows)
-    ):
+    match data.get("tabs"), data.get("groups"), identifiers(data.get("windows")):
+        case list() as tabs, list() as groups, tuple() as windows:
+            pass
+        case _:
+            raise BrowserError("The browser did not provide its tabs, groups and windows.")
+    if len(tabs) > 20000 or len(groups) > 20000 or len(windows) > 20000:
         raise BrowserError("The browser returned an invalid tab list.")
     last = None if data.get("last_window") is None else number(data, "last_window", -1, 0, MAX_ID)
-    return TabState(tuple(tab_of(tab) for tab in tabs), tuple(group_of(group) for group in groups), tuple(cast(list[int], windows)), last)
+    return TabState(tuple(tab_of(tab) for tab in tabs), tuple(group_of(group) for group in groups), windows, last)
 
 
 class DefaultGroup(Enum):
@@ -507,6 +568,9 @@ def strip_query(args: dict[str, Json]) -> StripQuery:
     )
 
 
+_STRIP = TypeAdapter(StripData)
+
+
 def strip_page(
     state: TabState,
     query: StripQuery,
@@ -542,7 +606,7 @@ def strip_page(
         }
         if query.offset + len(page) < len(tabs):
             result["next_offset"] = query.offset + len(page)
-        if len(json.dumps(result, ensure_ascii=False)) <= maximum:
+        if len(_STRIP.dump_json(result).decode()) <= maximum:
             return result
         if len(page) <= 1:
             raise BrowserError("The browser tab summary exceeded its output limit.")

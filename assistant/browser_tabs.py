@@ -1,12 +1,13 @@
 """Edge's tab APIs, reached through a hidden, connection-owned Favorites page."""
 
 import contextlib
-import json
 import threading
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Literal, NotRequired, Protocol, TypedDict, assert_never
+
+from pydantic import TypeAdapter
 
 from assistant.browser_values import (
     BrowserError,
@@ -34,6 +35,7 @@ from assistant.browser_values import (
     Ungrouped,
     UngroupResult,
     boolean,
+    evaluated,
     group_of,
     mapping,
     tab_ids,
@@ -230,6 +232,7 @@ type NativeCommand = (
     | CloseTabsCommand
     | CloseGroupCommand
 )
+_COMMANDS = TypeAdapter[NativeCommand](NativeCommand)
 
 
 def move_data(move: Move) -> MoveData:
@@ -279,12 +282,10 @@ class TabStrip:
     @staticmethod
     def _evaluate(call: Call, session: str, expression: str, cancel: threading.Event) -> Json:
         result = call("Runtime.evaluate", {"expression": expression, "awaitPromise": True, "returnByValue": True}, cancel, session=session)
-        if "exceptionDetails" in result:
-            details = mapping(result["exceptionDetails"])
-            exception = details.get("exception")
-            message = text(exception, "description") if isinstance(exception, dict) else text(details, "text", "Tab operation failed.")
-            raise BrowserError(message[:700] + " Inspect browser_tabs with view=strip before repeating a change.")
-        return mapping(result.get("result", {})).get("value")
+        try:
+            return evaluated(result, "Tab operation failed.")
+        except BrowserError as error:
+            raise BrowserError(f"{error} Inspect browser_tabs with view=strip before repeating a change.") from error
 
     def _ensure(self, call: Call, cancel: threading.Event) -> Control:
         if self.control is not None:
@@ -321,7 +322,7 @@ class TabStrip:
 
     def _command(self, call: Call, request: NativeCommand, cancel: threading.Event) -> Json:
         control = self._ensure(call, cancel)
-        return self._evaluate(call, control.session, f"({_COMMAND})({json.dumps(request)})", cancel)
+        return self._evaluate(call, control.session, f"({_COMMAND})({_COMMANDS.dump_json(request).decode()})", cancel)
 
     def snapshot(self, call: Call, cancel: threading.Event) -> TabState:
         return tab_state(self._command(call, ListCommand(operation="list"), cancel))
