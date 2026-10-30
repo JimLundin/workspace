@@ -31,6 +31,7 @@ from assistant.meeting_followup import (
     AssignedDue,
     AssignedOwner,
     CaptureNotice,
+    CitedText,
     DraftContent,
     EmailAddress,
     Followup,
@@ -211,6 +212,11 @@ def test_repeated_quotes_need_disambiguation_and_cannot_switch_sources(tmp_path:
         resolve_citation(current, observed.source.id, "Please follow up.")
     selected = resolve_citation(current, observed.source.id, "Please follow up.", occurrence=1)
     assert selected.line == 5 and selected.start == 32 and selected.end == 49
+    # A saved package stores claims; a repeated quote must keep the occurrence that resolves to its own citation.
+    repeated = Followup(current, "Repeated request", (CitedText("A follow-up was requested twice.", (selected,)),), (), (), ())
+    claims = followup_claims(repeated)
+    assert claims.notes[0].citations[0].occurrence == 1
+    assert resolve_followup(current, claims) == repeated
     with TestCase().assertRaisesRegex(ValueError, "does not occur"):
         resolve_citation(current, bundle.transcripts[1].source.id, "Please follow up.")
     with TestCase().assertRaisesRegex(ValueError, "does not exist"):
