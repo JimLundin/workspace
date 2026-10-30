@@ -143,14 +143,14 @@ class WorkCanvas:
             document = _loaded(connection)
         return result_document(document)
 
-    def save(self, document: CanvasDocument) -> None:
+    def _save(self, document: CanvasDocument) -> None:
         checked = result_document(DOCUMENT.validate_python(document))
         with self._connection() as connection:
             connection.execute("UPDATE canvas SET payload=? WHERE id=1", (DOCUMENT.dump_json(checked),))
 
     def _persist(self, previous: CanvasDocument, current: CanvasDocument) -> CanvasDocument:
         if previous != current:
-            self.save(current)
+            self._save(current)
         return current
 
     def observe_session(self, session: Snapshot) -> CanvasDocument | None:
@@ -195,13 +195,13 @@ class WorkCanvas:
         document = self._persist(previous, retained(previous, self._tasks))
         for run in pending(self._catalog, document, self._tasks):
             document = replace(document, runs=(*document.runs, run))
-            self.save(document)
+            self._save(document)
             try:
                 self._queue(run)
             except ValueError:
                 # Queue refusal must not mark this evidence as investigated.
                 document = replace(document, runs=tuple(binding for binding in document.runs if binding.task_id != run.task_id))
-                self.save(document)
+                self._save(document)
                 break
         return document
 
@@ -238,7 +238,7 @@ class WorkCanvas:
                     current = edited(document, request, self._observed_catalog())
                 except ValueError as error:
                     return CanvasRefused(str(error))
-                self.save(current)
+                self._save(current)
                 return CanvasUpdated(request.expected_revision, revision(current), changed=current != document)
 
     def commit(self, edit: UserEdit) -> CanvasDocument:

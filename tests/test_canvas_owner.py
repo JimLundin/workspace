@@ -26,7 +26,7 @@ from assistant.work_window import WorkSnapshot
 from automation.personal_work import DismissedWork, WorkState
 from automation.task import Blocked, Completed, Waiting
 from tests.agent_requests import asked
-from tests.test_work_canvas import catalog, local_canvas, nested_bubbles
+from tests.test_work_canvas import catalog, local_canvas, nested_bubbles, seeded
 from tests.test_work_window import work_task
 
 
@@ -56,7 +56,7 @@ def test_attention_is_announced_once_and_never_from_dismissed_work(tmp_path: Pat
     active, dismissed = data.works
     research, late = work_task(identity="research"), work_task(identity="late")
     canvas = local_canvas(tmp_path)
-    canvas.save(CanvasDocument(runs=(CanvasRun(research.id, active.id), CanvasRun(late.id, dismissed.id))))
+    seeded(canvas, CanvasDocument(runs=(CanvasRun(research.id, active.id), CanvasRun(late.id, dismissed.id))))
     shown = replace(data, works=(active,), dismissed=(DismissedWork(dismissed, "Wrong owner"),))
     assert canvas.observe_catalog(shown).notice is None
     assert canvas.observe_work(WorkSnapshot(tasks=(research, late))).notice is None
@@ -77,7 +77,7 @@ def test_answers_reach_only_visible_waiting_questions_and_record_one_reply(tmp_p
     current = work_task(Waiting(automation.task.Question("current", "Current question", "")), identity="current-task")
     hidden = work_task(Waiting(automation.task.Question("hidden", "Hidden question", "")), identity="hidden-task")
     finding = CanvasUpdate("result:finding", "Finding", "Version two is approved.", 5, (active.id,))
-    canvas.save(CanvasDocument(runs=(CanvasRun(current.id, active.id), CanvasRun(hidden.id, dismissed.id)), activity=(finding,)))
+    seeded(canvas, CanvasDocument(runs=(CanvasRun(current.id, active.id), CanvasRun(hidden.id, dismissed.id)), activity=(finding,)))
     canvas.observe_session(Session(identity="session", messages=(asked("chat", "Which supplier?", "", 10),)))
     document = canvas.observe_work(WorkSnapshot(tasks=(current, hidden))).document
     assert [question.id for question in canvas.waiting()] == ["question:chat", "question:current"]
@@ -141,7 +141,7 @@ def test_continue_resumes_or_reports_existing_work_before_queueing_another(tmp_p
     queued: list[CanvasRun] = []
     canvas = WorkCanvas(tmp_path / "canvas.sqlite3", queued.append, autonomous=False)
     blocked = work_task(Waiting(Blocked("Needs recovery")))
-    canvas.save(CanvasDocument(runs=(CanvasRun(blocked.id, "work:one"),)))
+    seeded(canvas, CanvasDocument(runs=(CanvasRun(blocked.id, "work:one"),)))
     canvas.observe_work(WorkSnapshot(tasks=(blocked,)))
     assert canvas.continue_work("work:one") == ResumeTask(blocked.id)
     canvas.observe_work(WorkSnapshot(tasks=(work_task(),)))
@@ -157,7 +157,7 @@ def test_released_gestures_commit_placement_and_nesting_or_save_nothing(tmp_path
     # it back, a moved bubble is not pinned, or the new parent stays collapsed.
     data, document = nested_bubbles()
     canvas = local_canvas(tmp_path)
-    canvas.save(replace(document, placements=(Placement("note:annotation", 5, 5),), pinned=frozenset(("note:annotation",))))
+    seeded(canvas, replace(document, placements=(Placement("note:annotation", 5, 5),), pinned=frozenset(("note:annotation",))))
     canvas.observe_catalog(data)
     before = canvas.read()
     parent = data.sources[0].id
@@ -177,7 +177,7 @@ def test_user_edits_apply_to_the_latest_document_and_keep_bridge_updates(tmp_pat
     # Defect: a user edit saves the panel's rendered copy, or a layout measured
     # before an agent's arrangement replaces that arrangement.
     canvas = local_canvas(tmp_path)
-    canvas.save(CanvasDocument(collections=(CanvasCollection("group:drafts", "Drafts"),)))
+    seeded(canvas, CanvasDocument(collections=(CanvasCollection("group:drafts", "Drafts"),)))
     canvas.observe_catalog(catalog())
     rendered = canvas.read()
     finding = CanvasNote("note:finding", "Finding", "Version two is approved.")

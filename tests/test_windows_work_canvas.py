@@ -79,7 +79,7 @@ from tests.test_agent import ToolRig
 from tests.test_feed_triage_service import MemoryStore
 from tests.test_windows_inbox_attention import InboxUi
 from tests.test_work_actions import claimed
-from tests.test_work_canvas import local_canvas, nested_bubbles
+from tests.test_work_canvas import local_canvas, nested_bubbles, seeded
 from tests.test_work_window import work_task
 from winapi import windows
 
@@ -213,7 +213,7 @@ def test_unchanged_canvas_reopening_and_resize_reuse_native_groups(tmp_path: Pat
     # blocking interaction despite unchanged content and discarding widget state.
     store = local_canvas(tmp_path)
     data, document = nested_bubbles()
-    store.save(document)
+    seeded(store, document)
     with native_canvas(store) as native:
         native.publish(WorkSnapshot(personal=PersonalView(data)))
         panel = native.view.personal
@@ -236,7 +236,7 @@ def test_unopened_nested_bubbles_are_created_when_found_or_redirected(tmp_path: 
     # or deferring those widgets makes search and agent redirects lose their target.
     data, document = nested_bubbles()
     store = local_canvas(tmp_path)
-    store.save(document)
+    seeded(store, document)
     with native_canvas(store) as native:
         native.publish(WorkSnapshot(personal=PersonalView(data)))
         canvas = native.view.personal
@@ -264,7 +264,7 @@ def test_attention_redirect_reveals_its_question_in_a_collapsed_work_context(tmp
         "question:attention", "Which owner?", "Choose the right owner.", 11, TaskRequest("task", "attention"), Attention.WAITING, (work.id,)
     )
     store = local_canvas(tmp_path)
-    store.save(CanvasDocument(activity=(question,), collapsed=frozenset((work.id,))))
+    seeded(store, CanvasDocument(activity=(question,), collapsed=frozenset((work.id,))))
     task = work_task(automation.task.Waiting(automation.task.Question("attention", "Which owner?", "Choose the right owner.")), identity="task")
     with native_canvas(store) as native:
         native.publish(WorkSnapshot(tasks=(task,), personal=PersonalView(Catalog(works=(work,)))))
@@ -309,7 +309,7 @@ def test_startup_prepared_canvas_remains_hidden_and_keeps_its_native_scene(tmp_p
     # focus, or throws away prepared bubbles when the toolbar opens the canvas.
     data, document = nested_bubbles()
     store = local_canvas(tmp_path)
-    store.save(document)
+    seeded(store, document)
     ui = InboxUi()
     try:
         ui.configure_canvas(store, lambda _title, _target: None)
@@ -336,7 +336,7 @@ def test_first_canvas_open_shows_native_loading_before_building_and_releases_it(
     root = application()
     data, document = nested_bubbles()
     store = local_canvas(tmp_path)
-    store.save(document)
+    seeded(store, document)
     jobs: deque[Callable[[], None]] = deque()
     loading = CanvasLoading(root)
     openings: list[CanvasLoading] = []
@@ -436,14 +436,15 @@ def test_native_drag_and_drop_puts_an_existing_bubble_inside_another(tmp_path: P
     note = CanvasNote("note:drop", "Evidence", "Collected evidence")
     target = CanvasCollection("group:drop", "Collect here")
     store = local_canvas(tmp_path)
-    store.save(
+    seeded(
+        store,
         CanvasDocument(
             notes=(note,),
             collections=(target,),
             placements=(Placement(note.id, 0, 64), Placement(target.id, 520, 64)),
             pinned=frozenset((note.id, target.id)),
             collapsed=frozenset((target.id,)),
-        )
+        ),
     )
     with native_canvas(store) as native:
         canvas = native.view.personal
@@ -557,7 +558,7 @@ def test_escape_unwinds_bubbles_and_search_keeps_drafts_then_exits(tmp_path: Pat
     # parent camera or unsent clarification, or root Escape cannot close it.
     data, document = nested_bubbles()
     store = local_canvas(tmp_path)
-    store.save(save_note(document, CanvasNote("note:standalone", "Context", "Original context")))
+    seeded(store, save_note(document, CanvasNote("note:standalone", "Context", "Original context")))
     with native_canvas(store) as native:
         native.publish(WorkSnapshot(personal=PersonalView(data)))
         canvas = native.view.personal
@@ -595,7 +596,7 @@ def test_shared_connections_move_highlight_and_disappear_with_their_reference(tm
     # stay visible after removing the factual connection.
     data, document = nested_bubbles()
     store = local_canvas(tmp_path)
-    store.save(document)
+    seeded(store, document)
     with native_canvas(store) as native:
         native.publish(WorkSnapshot(personal=PersonalView(data)))
         canvas = native.view.personal
@@ -664,7 +665,7 @@ def test_canvas_toolbar_keeps_search_and_center_accessible_in_a_small_window(tmp
     # changing the saved bubble arrangement.
     personal, document = nested_scene(tmp_path)
     store = local_canvas(tmp_path)
-    store.save(document)
+    seeded(store, document)
     with native_canvas(store) as native:
         native.publish(WorkSnapshot(personal=personal))
         native.view.window.showNormal()
@@ -725,7 +726,7 @@ def test_canvas_gestures_pan_and_zoom_without_moving_saved_bubbles(tmp_path: Pat
     # counts its wheel deltas, or stops recognizing pinch/Control-wheel zoom.
     data, document = nested_bubbles()
     store = local_canvas(tmp_path)
-    store.save(document)
+    seeded(store, document)
     with native_canvas(store) as native:
         native.publish(WorkSnapshot(personal=PersonalView(data)))
         canvas = native.view.personal
@@ -993,7 +994,7 @@ def test_canvas_spoken_reply_keeps_transcript_on_rejection_and_continue_stays_bo
     personal = PersonalStore(tmp_path / "work.sqlite3")
     saved = personal.handle(SaveWork(WorkDefinition("Atlas", "Deploy Atlas")), 20)
     assert isinstance(saved, WorkSaved)
-    store.save(replace(store.read(), runs=(CanvasRun(task.id, saved.work.id),)))
+    seeded(store, replace(store.read(), runs=(CanvasRun(task.id, saved.work.id),)))
     snapshot = WorkSnapshot(tasks=(task,), personal=PersonalView(personal.read()))
     work.publish(snapshot)
     ui.observe_canvas_work(snapshot)
@@ -1044,7 +1045,7 @@ def test_canvas_attention_reaches_the_desktop_and_redirects_to_its_bubble(tmp_pa
     old = work_task(automation.task.Waiting(automation.task.Question("old", "Old question", "")), identity="old-task")
     current = work_task(automation.task.Waiting(automation.task.Question("current", "Current question", "")), identity="current-task")
     research = work_task(identity="research-task")
-    store.save(replace(store.read(), runs=(CanvasRun(old.id, dismissed.id), CanvasRun(current.id, active.id), CanvasRun(research.id, active.id))))
+    seeded(store, replace(store.read(), runs=(CanvasRun(old.id, dismissed.id), CanvasRun(current.id, active.id), CanvasRun(research.id, active.id))))
     notices: list[tuple[str, str]] = []
 
     def notify(title: str, target: str) -> None:
@@ -1114,7 +1115,7 @@ def test_nested_bubbles_reveal_on_one_canvas_and_retain_reading_and_pins(tmp_pat
     assert isinstance(question, CanvasQuestion)
     group = document.collections[0]
     store = local_canvas(tmp_path)
-    store.save(document)
+    seeded(store, document)
     with native_canvas(store) as panel:
         panel.publish(WorkSnapshot(personal=personal))
         canvas = panel.view.personal
@@ -1183,7 +1184,7 @@ def test_nested_document_and_conversation_controls_keep_routes_and_drafts(tmp_pa
     # shared-source navigation jumps to the other work, or documents use Edge's badge.
     data, document = nested_bubbles()
     store = local_canvas(tmp_path)
-    store.save(document)
+    seeded(store, document)
     with native_canvas(store) as native:
         native.publish(WorkSnapshot(personal=PersonalView(data)))
         canvas = native.view.personal
@@ -1244,14 +1245,15 @@ def test_native_connector_relationships_and_menus_work_for_cards_and_containers(
     note = CanvasNote("note:connect", "Evidence", "Useful finding")
     group = CanvasCollection("group:connect", "Decision")
     store = local_canvas(tmp_path)
-    store.save(
+    seeded(
+        store,
         CanvasDocument(
             notes=(note,),
             collections=(group,),
             placements=(Placement(note.id, 0, 64), Placement(group.id, 520, 64)),
             pinned=frozenset((note.id, group.id)),
             collapsed=frozenset((group.id,)),
-        )
+        ),
     )
     with native_canvas(store) as native:
         canvas = native.view.personal
