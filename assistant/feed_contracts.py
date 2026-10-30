@@ -1,15 +1,18 @@
-"""Pydantic contracts for feed model requests, recommendations and user replies."""
+"""Pydantic contracts for feed model requests, recommendations and typed user commands."""
 
 from dataclasses import dataclass, field
 from typing import Annotated, Literal, Protocol
 
-from pydantic import Field, StringConstraints, TypeAdapter
+from pydantic import AfterValidator, Field, StringConstraints, TypeAdapter
 
 from assistant.feed_history import Decision, Identity
 from assistant.llm import Json
 
 type Label = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=32)]
 type Detail = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=1200)]
+type Priority = Annotated[int, Field(strict=True, ge=0, le=2)]
+type ItemIdentity = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=128)]
+type Choice = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=32)]
 
 
 @dataclass(frozen=True, slots=True)
@@ -19,6 +22,15 @@ class ProposedSolution:
     detail: Detail
 
 
+def _distinct(solutions: tuple[ProposedSolution, ...]) -> tuple[ProposedSolution, ...]:
+    if len({option.label.casefold() for option in solutions}) != len(solutions):
+        raise ValueError("Solutions need distinct concise labels.")
+    return solutions
+
+
+type ProposedSolutions = Annotated[tuple[ProposedSolution, ...], Field(max_length=3), AfterValidator(_distinct)]
+
+
 @dataclass(frozen=True, slots=True)
 class ProposedItem:
     sources: Annotated[tuple[Identity, ...], Field(min_length=1, max_length=20)]
@@ -26,8 +38,8 @@ class ProposedItem:
     title: Annotated[str, Field(max_length=160)]
     summary: Annotated[str, Field(max_length=1800)]
     suggestion: Annotated[str, Field(max_length=1200)]
-    solutions: Annotated[tuple[ProposedSolution, ...], Field(max_length=3)]
-    priority: Annotated[int, Field(strict=True, ge=0, le=2)]
+    solutions: ProposedSolutions
+    priority: Priority
 
 
 @dataclass(frozen=True, slots=True)
@@ -64,6 +76,90 @@ class FeedReply:
 
 
 @dataclass(frozen=True, slots=True)
+class ReadFeed:
+    operation: Literal["read"] = "read"
+
+
+@dataclass(frozen=True, slots=True)
+class ChooseSolution:
+    item: ItemIdentity
+    revision: ItemIdentity
+    choice: Choice
+    operation: Literal["choose"] = "choose"
+
+
+@dataclass(frozen=True, slots=True)
+class AnswerConsole:
+    request_id: ItemIdentity
+    question_index: Annotated[int, Field(strict=True, ge=0, lt=32)]
+    text: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=4096)]
+    operation: Literal["console_answer"] = "console_answer"
+
+
+@dataclass(frozen=True, slots=True)
+class SaveRule:
+    text: Detail
+    operation: Literal["rule"] = "rule"
+
+
+@dataclass(frozen=True, slots=True)
+class ForgetRule:
+    text: Detail
+    operation: Literal["forget_rule"] = "forget_rule"
+
+
+@dataclass(frozen=True, slots=True)
+class ClearRules:
+    operation: Literal["clear_rules"] = "clear_rules"
+
+
+@dataclass(frozen=True, slots=True)
+class CompleteItem:
+    item: ItemIdentity
+    operation: Literal["done"] = "done"
+
+
+@dataclass(frozen=True, slots=True)
+class QuietItem:
+    item: ItemIdentity
+    operation: Literal["quiet"] = "quiet"
+
+
+@dataclass(frozen=True, slots=True)
+class DismissItem:
+    item: ItemIdentity
+    operation: Literal["dismiss"] = "dismiss"
+
+
+@dataclass(frozen=True, slots=True)
+class RejectProposal:
+    item: ItemIdentity
+    revision: ItemIdentity
+    text: Detail
+    operation: Literal["reject"] = "reject"
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class ReviseProposal:
+    """The user's correction; omitted priority keeps the current one, omitted solutions plan the suggestion."""
+
+    item: ItemIdentity
+    text: Detail
+    question: Annotated[str, StringConstraints(strip_whitespace=True, max_length=600)] = ""
+    priority: Priority | None = None
+    solutions: Annotated[ProposedSolutions, Field(min_length=1)] | None = None
+    operation: Literal["propose"] = "propose"
+
+
+type ItemEdit = CompleteItem | QuietItem | DismissItem | RejectProposal | ReviseProposal
+type BoardEdit = Annotated[
+    SaveRule | ForgetRule | ClearRules | CompleteItem | QuietItem | DismissItem | RejectProposal | ReviseProposal,
+    Field(discriminator="operation"),
+]
+type FeedCommand = Annotated[ReadFeed | ChooseSolution | AnswerConsole | FeedReply | BoardEdit, Field(discriminator="operation")]
+
+
+@dataclass(frozen=True, slots=True)
 class SolutionContext:
     item: str
     title: str
@@ -73,11 +169,12 @@ class SolutionContext:
     source_revisions: tuple[tuple[str, str], ...]
 
 
-SOLUTIONS = TypeAdapter(Annotated[tuple[ProposedSolution, ...], Field(max_length=3)])
 REVIEW_OUTPUT = TypeAdapter(ReviewOutput)
 REVIEW_INPUT = TypeAdapter(ReviewInput)
 SOURCE_EVIDENCE = TypeAdapter(SourceEvidence)
 FEED_REPLY = TypeAdapter(FeedReply)
+BOARD_EDIT = TypeAdapter(BoardEdit)
+FEED_COMMAND = TypeAdapter(FeedCommand)
 _SCHEMA = TypeAdapter(dict[str, Json])
 
 

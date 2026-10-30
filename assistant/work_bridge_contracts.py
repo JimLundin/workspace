@@ -4,14 +4,15 @@ Canvas activity consumes feed decisions. This IO owner joins their responses
 without making the feed domain depend on the canvas's activity model.
 """
 
-from collections.abc import Mapping
+from typing import Annotated
 
-from pydantic import TypeAdapter
+from pydantic import Field, TypeAdapter
 
-from assistant.feed_contracts import ChosenHandoff, ConsoleAnswered, FeedRejected, FeedReply, FeedSnapshot, QueuedHandoff
+from assistant.feed_contracts import ChosenHandoff, ConsoleAnswered, FeedCommand, FeedRejected, FeedSnapshot, QueuedHandoff
 from assistant.work_canvas_commands import CanvasCommand, CanvasResponse
 from automation.personal_work import PersonalRequest, PersonalResponse
 
-type BridgeCommand = Mapping[str, object] | FeedReply | PersonalRequest | CanvasCommand
+type BridgeCommand = Annotated[FeedCommand | PersonalRequest | CanvasCommand, Field(discriminator="operation")]
 type BridgeResponse = FeedSnapshot | QueuedHandoff | ChosenHandoff | ConsoleAnswered | FeedRejected | PersonalResponse | CanvasResponse
+BRIDGE_COMMAND = TypeAdapter(BridgeCommand)
 BRIDGE_RESPONSE = TypeAdapter(BridgeResponse)

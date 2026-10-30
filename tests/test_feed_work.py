@@ -9,7 +9,7 @@ from pydantic import TypeAdapter
 
 from assistant.activity import Activity, ContextSnapshot
 from assistant.feed_agent_tools import request
-from assistant.feed_contracts import REVIEW_INPUT, StoredBoard
+from assistant.feed_contracts import REVIEW_INPUT, FeedReply, StoredBoard
 from assistant.feed_history import Decision, Handoff
 from assistant.feed_triage import Board, Disposition, candidate, decode, proposal_revision, request_context, restored, saved, unassessed
 from assistant.feed_triage_service import classify
@@ -136,7 +136,8 @@ def test_registered_reply_tool_saves_instruction_before_handoff_and_reuses_it_af
     endpoint = tmp_path / "bridge.json"
     triage = TriageFixture(endpoint, feed_store, lambda _: None, lambda _batch, _rules: "{}", lambda _: False, submit=queue)
     rig = ToolRig(work=WorkExecution(claim, tasks, Resources(), clock=clock), feed_request=lambda data: request(data, endpoint))
-    arguments = {"item": item.identity, "revision": proposal_revision(item), "reply_id": "user-turn-one", "text": words}
+    reply = FeedReply(item.identity, proposal_revision(item), "user-turn-one", words)
+    arguments = {"item": reply.item, "revision": reply.revision, "reply_id": reply.reply_id, "text": reply.text}
     try:
         wrong = rig.call("work_feed_reply", **{**arguments, "revision": "stale"})
         assert not wrong.ok and not submitted and not triage.board.history
@@ -152,15 +153,15 @@ def test_registered_reply_tool_saves_instruction_before_handoff_and_reuses_it_af
         triage.close()
     restarted = TriageFixture(endpoint, feed_store, lambda _: None, lambda _batch, _rules: "{}", lambda _: False, submit=queue)
     try:
-        restarted.command({"operation": "reply", **arguments})
+        restarted.command(reply)
         assert len(submitted) == 2 and submitted[0] == submitted[1]
         assert len(restarted.board.history) == 1 and tasks.get(task_id) is not None
         # Acknowledgment retries remain bound to the saved instruction even after re-triage.
         restarted.board = replace(restarted.board, items=(replace(item, summary="New reading"),))
-        restarted.command({"operation": "reply", **arguments})
+        restarted.command(reply)
         assert len(submitted) == 2
         with TestCase().assertRaises(ValueError):
-            restarted.command({"operation": "reply", **{**arguments, "text": "A different instruction."}})
+            restarted.command(replace(reply, text="A different instruction."))
         assert len(restarted.board.history) == 1
     finally:
         restarted.close()
@@ -179,7 +180,7 @@ def test_failed_feed_save_cannot_start_reply_work_and_failed_queue_keeps_retryab
     broken = FailedStore()
     broken.data = saved(Board(enabled=True, items=(item,)))
     submitted: list[str] = []
-    command = {"operation": "reply", "item": item.identity, "revision": proposal_revision(item), "reply_id": "reply", "text": "Check the totals."}
+    command = FeedReply(item.identity, proposal_revision(item), "reply", "Check the totals.")
     failed = TriageFixture(
         tmp_path / "failed.json",
         broken,
