@@ -138,28 +138,25 @@ def _strings(value: object, name: str, *, maximum: int, count: int) -> tuple[str
 def _profile_data(profile: Profile) -> dict[str, object]:
     match profile:
         case RequestKind.GENERAL:
-            return {"kind": "general"}
+            return {"profile": "general"}
         case RequestKind.MEETING_FOLLOWUP:
-            return {"kind": "meeting_followup"}
+            return {"profile": "meeting_followup"}
         case FeedHandoff(item, title):
-            return {"kind": "feed", "item": item, "title": title}
+            return {"profile": "feed", "item": item, "title": title}
         case _:
             assert_never(profile)
 
 
-def _profile(value: object) -> Profile:
-    if not isinstance(value, dict):
-        raise ValueError("Invalid stored request profile.")
-    data = cast(dict[str, object], value)
-    match data.get("kind"):
+def _profile(data: dict[str, object]) -> Profile:
+    match data.get("profile"):
         case "general":
-            _fields(data, "kind")
+            _fields(data, "kind", "conversation_id", "profile")
             return RequestKind.GENERAL
         case "meeting_followup":
-            _fields(data, "kind")
+            _fields(data, "kind", "conversation_id", "profile")
             return RequestKind.MEETING_FOLLOWUP
         case "feed":
-            _fields(data, "kind", "item", "title")
+            _fields(data, "kind", "conversation_id", "profile", "item", "title")
             return FeedHandoff(identifier(data["item"], "feed item identity"), text(data["title"], "feed item title", maximum=240))
         case _:
             raise ValueError("Invalid stored request profile.")
@@ -168,7 +165,7 @@ def _profile(value: object) -> Profile:
 def _source_data(source: Source) -> dict[str, object]:
     match source:
         case RequestSource(conversation_id, profile):
-            return {"kind": "request", "conversation_id": conversation_id, "profile": _profile_data(profile)}
+            return {"kind": "request", "conversation_id": conversation_id, **_profile_data(profile)}
         case RoutineSource(routine_id, revision, occurrence_id):
             return {"kind": "routine", "routine_id": routine_id, "revision": revision, "occurrence_id": occurrence_id}
         case _:
@@ -179,8 +176,7 @@ def _source(value: object) -> Source:
     data = _load(value)
     match data.get("kind"):
         case "request":
-            _fields(data, "kind", "conversation_id", "profile")
-            return RequestSource(identifier(data["conversation_id"], "conversation identity"), _profile(data["profile"]))
+            return RequestSource(identifier(data["conversation_id"], "conversation identity"), _profile(data))
         case "routine":
             _fields(data, "kind", "routine_id", "revision", "occurrence_id")
             return RoutineSource(
@@ -487,7 +483,7 @@ class TaskStore:
             if version == SCHEMA_VERSION:
                 return
             if version == 2:
-                self._migrate_unbound_approvals(connection)
+                self._migrate_from_version_2(connection)
                 return
             if version != 0:
                 raise ValueError("This work database requires a different Workspace schema version.")
@@ -518,7 +514,7 @@ class TaskStore:
                 connection.execute(statement)
 
     @staticmethod
-    def _migrate_unbound_approvals(connection: _Connection) -> None:
+    def _migrate_from_version_2(connection: _Connection) -> None:
         """Version 2 packed an approval's operation into its identity and recorded no request profiles.
 
         Its pending approvals become blocked and its grants are dropped, so each
@@ -537,14 +533,12 @@ class TaskStore:
         connection.execute("DELETE FROM responses WHERE json_extract(request,'$.kind')='approval'")
         # Before profiles, the meeting workflow reserved this task identity namespace.
         connection.execute(
-            "UPDATE tasks SET source=json_set(source,'$.profile',json(?)) "
-            "WHERE json_extract(source,'$.kind')='request' AND id LIKE 'meeting-followup-%'",
-            (_dump(_profile_data(RequestKind.MEETING_FOLLOWUP)),),
+            "UPDATE tasks SET source=json_set(source,'$.profile','meeting_followup') "
+            "WHERE json_extract(source,'$.kind')='request' AND id LIKE 'meeting-followup-%'"
         )
         connection.execute(
-            "UPDATE tasks SET source=json_set(source,'$.profile',json(?)) "
-            "WHERE json_extract(source,'$.kind')='request' AND json_extract(source,'$.profile') IS NULL",
-            (_dump(_profile_data(RequestKind.GENERAL)),),
+            "UPDATE tasks SET source=json_set(source,'$.profile','general') "
+            "WHERE json_extract(source,'$.kind')='request' AND json_extract(source,'$.profile') IS NULL"
         )
         connection.execute(f"PRAGMA user_version={SCHEMA_VERSION}")
 

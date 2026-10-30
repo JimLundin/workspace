@@ -271,7 +271,8 @@ class WorkService:
                 original = self.tasks.get(task_id)
                 if original is None:
                     raise ValueError("The task for this follow-up no longer exists.")
-                source = original.source if isinstance(original.source, RequestSource) else issued.source
+                # A follow-up is the person's own request in the original conversation, whatever the original's profile.
+                source = issued.source if not isinstance(original.source, RequestSource) else RequestSource(original.source.conversation_id)
                 self._submit(issued.identity, follow_up_prompt(original, prompt), source, issued.context, at=at)
             case Redirect(task_id, prompt):
                 original = self.tasks.get(task_id)

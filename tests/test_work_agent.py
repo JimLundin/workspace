@@ -51,6 +51,7 @@ from automation.task import (
     Completed,
     Control,
     Question,
+    RequestKind,
     RequestSource,
     Running,
     RunRef,
@@ -516,8 +517,10 @@ def test_routine_and_context_commands_persist_without_implicit_enablement(tmp_pa
 
 
 def test_follow_up_retains_related_context_and_user_controls_survive_reopening(tmp_path: Path) -> None:
+    # Defect: a follow-up inherits a meeting follow-up's constrained profile,
+    # so it cannot open a preparation of its own.
     with work(tmp_path) as rig:
-        rig.agent.start("Prepare the original report")
+        rig.agent.submit_identified("original-report", "Prepare the original report", RequestKind.MEETING_FOLLOWUP)
         rig.refresh()
         claim = rig.tasks.claim("worker-one", "report-run", at=rig.clock())
         assert claim is not None
@@ -525,7 +528,8 @@ def test_follow_up_retains_related_context_and_user_controls_survive_reopening(t
         rig.agent.command(FollowUp(claim.task.id, "Add a one-page summary"))
         rig.refresh()
         follow_up = next(task for task in rig.tasks.list_tasks() if task.id != claim.task.id)
-        assert follow_up.source == claim.task.source and "output/report.md" in follow_up.prompt
+        assert isinstance(claim.task.source, RequestSource) and claim.task.source.profile is RequestKind.MEETING_FOLLOWUP
+        assert follow_up.source == RequestSource(claim.task.source.conversation_id) and "output/report.md" in follow_up.prompt
         assert "Add a one-page summary" in follow_up.prompt
         rig.agent.command(ControlTask(follow_up.id, Control.PAUSE))
         rig.refresh()
