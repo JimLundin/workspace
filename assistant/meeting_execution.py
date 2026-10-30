@@ -1,8 +1,9 @@
 """Prepared meeting execution and exact artifact/mail recovery, outside the UI."""
 
-import json
 import threading
 from typing import Protocol, assert_never
+
+from pydantic import ConfigDict, TypeAdapter
 
 from assistant import outlook
 from assistant.llm import Json
@@ -30,8 +31,11 @@ from automation.task import (
 SOURCE_PAGE = 32_000
 
 
+_JSON = TypeAdapter(Json, config=ConfigDict(allow_inf_nan=False))
+
+
 def encoded(data: dict[str, Json]) -> str:
-    return json.dumps(data, ensure_ascii=False, allow_nan=False)
+    return _JSON.dump_json(data).decode()
 
 
 class Drafts(Protocol):
@@ -119,10 +123,9 @@ class MeetingRun:
             "next_offset": end if end < len(selected.text) else None,
         }
 
-    def publication(self, value: object) -> Publication:
+    def publication(self, value: Json) -> Publication:
         # Validation precedes action registration and any artifact writes.
-        encoded_value = json.dumps(value, ensure_ascii=False, allow_nan=False)
-        result = parse_followup(self.request.bundle, encoded_value)
+        result = parse_followup(self.request.bundle, _JSON.dump_json(value).decode())
         return self.packages.plan(self.request.task_id, result)
 
     def publish(self, publication: Publication) -> dict[str, Json]:

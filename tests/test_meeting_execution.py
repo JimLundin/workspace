@@ -189,7 +189,7 @@ def test_sdk_publishes_sourced_notes_complete_email_and_verified_durable_actions
         outcome = rig.execution(endpoint, meeting=rig.meeting).run_work(claim, rig.tasks, FakeWindow(), threading.Event())
         assert isinstance(outcome, Completed), (outcome, rig.errors)
         assert len(endpoint.received) == 7
-        assert b'"destination": "email_file"' in endpoint.received[-1].body.replace(b'\\"', b'"')
+        assert b'"destination":"email_file"' in endpoint.received[-1].body.replace(b'\\"', b'"')
     assert not rig.errors and not rig.machine.log and not rig.command.files()
     saved = rig.tasks.finish(claim.run, outcome, at=time.time())
     assert saved is not None
