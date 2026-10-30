@@ -556,14 +556,13 @@ def test_output_paths_remain_task_owned_and_spreadsheet_cells_remain_text(tmp_pa
     bundle, _ = followup_sources(tmp_path)
     followup = parse_followup(bundle, json.dumps(followup_response(bundle)))
     store = FollowupStore(tmp_path / "packages")
-    with TestCase().assertRaises(ValueError):
-        store.plan("../escape", followup)
+    assert store.plan("../escape", followup).directory.parent.parent.parent == store.root
     generated = store.publish(store.plan("release-task", followup))
     content = ActionContent('=HYPERLINK("https://fixture.invalid")', Unspecified.NOT_STATED, Unspecified.NOT_STATED, ActionStatus.OPEN)
     saved = store.save_action("release-task", generated.version, "review", content, expected_revision=0, at=10)
     rows = list(csv.reader(io.StringIO(saved.path.read_text(encoding="utf-8-sig"))))
     assert rows[1][1] == '\'=HYPERLINK("https://fixture.invalid")'
-    assert saved.path.is_relative_to(store.root / "release-task")
+    assert saved.path.is_relative_to(generated.directory.parent.parent)
 
 
 class CommittedReadGate(FollowupStore):
@@ -651,7 +650,7 @@ def test_missing_history_is_reported_and_never_reconstructed_by_a_read(tmp_path:
     published = store.publish(store.plan("release-task", followup))
     content = DraftContent("Committed subject", "Committed message.", ())
     store.save_draft(published.task_id, published.version, "follow-up", content, expected_revision=0, at=10)
-    database = store.root / published.task_id / "edits.sqlite3"
+    database = published.directory.parent.parent / "edits.sqlite3"
     with closing(sqlite3.connect(database)) as connection, connection:
         connection.execute("DELETE FROM edit_history WHERE version=? AND kind='draft' AND id='follow-up' AND revision=1", (published.version,))
     with TestCase().assertRaisesRegex(ValueError, "committed history"):
@@ -669,7 +668,7 @@ def test_current_edit_state_must_agree_with_its_immutable_committed_history(tmp_
     published = store.publish(store.plan("release-task", followup))
     draft = store.save_draft(published.task_id, published.version, "follow-up", DraftContent("Saved", "Saved body.", ()), expected_revision=0, at=10)
     action = store.save_action(published.task_id, published.version, "review", published.followup.actions[1].content, expected_revision=0, at=10)
-    database = store.root / published.task_id / "edits.sqlite3"
+    database = published.directory.parent.parent / "edits.sqlite3"
     with closing(sqlite3.connect(database)) as connection, connection:
         connection.execute("UPDATE edits SET at=11 WHERE version=?", (published.version,))
     with TestCase().assertRaisesRegex(ValueError, "committed history"):
