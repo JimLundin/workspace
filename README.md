@@ -349,9 +349,11 @@ context, and a rejected submission keeps your text available for retry.
 
 Floating bubbles use the existing Windows glass, contrast and motion treatment.
 They present clarification redirects, important canvas additions or state changes,
-and guarded action approvals. Routine app arrivals and agent progress remain
-quiet. Important-change prompts expire normally; clarification redirects remain
-until answered or closed. If approval mode is enabled, the existing exact-preview
+and guarded action approvals. Routine app arrivals stay quiet. While the agent
+works, its progress forms a short trail: each public update opens a phase that
+collects its tool calls. The newest phase stays opaque and expanded while up to
+two earlier phases fade behind it, and each expires after a reading delay. Important-change prompts expire
+normally; clarification redirects remain until answered or closed. If approval mode is enabled, the existing exact-preview
 and explicit approve/decline rules still apply. Meeting recording retains its own
 control. **Hold V + L** or **Agent session** opens explicit conversation history.
 
