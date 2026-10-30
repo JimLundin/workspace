@@ -904,15 +904,6 @@
     {
       "key": {
         "rule": "PLR0913",
-        "path": "automation/store.py",
-        "scope": "_strings",
-        "signature": "d9c139a41925efbd5e3267d20e1f6bfff1d79936cf6088271250162b0470bf4c"
-      },
-      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
-    },
-    {
-      "key": {
-        "rule": "PLR0913",
         "path": "automation/task.py",
         "scope": "answered",
         "signature": "85593ed093a05911861f5a2ba000591d3cc5ef9836ced4d4baf2c397d38b76ed"

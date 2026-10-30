@@ -1,4 +1,8 @@
-"""Immutable work values and pure decisions; storage and execution own effects."""
+"""Immutable work values and pure decisions; storage and execution own effects.
+
+Each variant record carries a `kind` tag and each payload-free variant a string
+value, so the journal and the process bridge store these records directly.
+"""
 
 import math
 import re
@@ -58,7 +62,7 @@ def strings(value: object, field: str, *, maximum: int, count: int) -> None:
 
 
 class RequestKind(Enum):
-    GENERAL = auto()
+    GENERAL = "general"
     """The person's own request, worked with the general toolset."""
 
 
@@ -68,6 +72,7 @@ class FeedHandoff:
 
     item: str
     title: str
+    kind: Literal["feed"] = "feed"
 
     def __post_init__(self) -> None:
         identifier(self.item, "feed item identity")
@@ -79,6 +84,7 @@ class MeetingFollowup:
     """A prepared meeting follow-up: `bundle` is the content digest of its saved recordings."""
 
     bundle: str
+    kind: Literal["meeting_followup"] = "meeting_followup"
 
     def __post_init__(self) -> None:
         digest(self.bundle, "meeting bundle digest")
@@ -92,6 +98,7 @@ type Profile = RequestKind | FeedHandoff | MeetingFollowup
 class RequestSource:
     conversation_id: str
     profile: Profile = RequestKind.GENERAL
+    kind: Literal["request"] = "request"
 
     def __post_init__(self) -> None:
         identifier(self.conversation_id, "conversation identity")
@@ -103,6 +110,7 @@ class RoutineSource:
     routine_id: str
     revision: int
     occurrence_id: str
+    kind: Literal["routine"] = "routine"
 
     def __post_init__(self) -> None:
         identifier(self.routine_id, "routine identity")
@@ -151,6 +159,7 @@ class Question:
     id: str
     text: str
     detail: str
+    kind: Literal["question"] = "question"
 
     def __post_init__(self) -> None:
         identifier(self.id, "question identity")
@@ -170,6 +179,7 @@ class Approval:
     title: str
     detail: str
     fingerprint: str
+    kind: Literal["approval"] = "approval"
 
     def __post_init__(self) -> None:
         identifier(self.id, "approval identity")
@@ -182,6 +192,7 @@ class Approval:
 class Until:
     at: float
     reason: str
+    kind: Literal["until"] = "until"
 
     def __post_init__(self) -> None:
         timestamp(self.at, "wake time")
@@ -191,6 +202,7 @@ class Until:
 @dataclass(frozen=True, slots=True)
 class Blocked:
     reason: str
+    kind: Literal["blocked"] = "blocked"
 
     def __post_init__(self) -> None:
         text(self.reason, "blocking reason", maximum=8_000)
@@ -202,14 +214,15 @@ type WaitReason = Question | Approval | Until | Blocked
 @dataclass(frozen=True, slots=True)
 class TextAnswer:
     text: str
+    kind: Literal["answer"] = "answer"
 
     def __post_init__(self) -> None:
         text(self.text, "answer", maximum=16_000)
 
 
 class ApprovalDecision(Enum):
-    APPROVED = auto()
-    DECLINED = auto()
+    APPROVED = "approved"
+    DECLINED = "declined"
 
 
 type Reply = TextAnswer | ApprovalDecision
@@ -233,9 +246,9 @@ class Response:
 
 
 class TaskStatus(Enum):
-    READY = auto()
-    PAUSED = auto()
-    CANCELLED = auto()
+    READY = "ready"
+    PAUSED = "paused"
+    CANCELLED = "cancelled"
 
 
 class Control(Enum):
@@ -249,6 +262,7 @@ class Running:
     run: RunRef
     owner: str
     started_at: float
+    kind: Literal["running"] = "running"
 
     def __post_init__(self) -> None:
         variant(self.run, RunRef, "run identity")
@@ -259,6 +273,7 @@ class Running:
 @dataclass(frozen=True, slots=True)
 class Waiting:
     reason: WaitReason
+    kind: Literal["waiting"] = "waiting"
 
     def __post_init__(self) -> None:
         variant(self.reason, (Question, Approval, Until, Blocked), "waiting reason")
@@ -268,6 +283,7 @@ class Waiting:
 class Interrupted:
     run: RunRef
     reason: str
+    kind: Literal["interrupted"] = "interrupted"
 
     def __post_init__(self) -> None:
         variant(self.run, RunRef, "run identity")
@@ -278,6 +294,7 @@ class Interrupted:
 class Completed:
     result: str
     evidence: tuple[str, ...]
+    kind: Literal["completed"] = "completed"
 
     def __post_init__(self) -> None:
         text(self.result, "task result")
@@ -287,6 +304,7 @@ class Completed:
 @dataclass(frozen=True, slots=True)
 class Failed:
     reason: str
+    kind: Literal["failed"] = "failed"
 
     def __post_init__(self) -> None:
         text(self.reason, "failure reason", maximum=8_000)
@@ -358,13 +376,14 @@ class GoalRevision:
 
 
 class NoVerification(Enum):
-    NONE = auto()
+    NONE = "none"
 
 
 @dataclass(frozen=True, slots=True)
 class FileDigest:
     path: str
     sha256: str
+    kind: Literal["file_digest"] = "file_digest"
 
     def __post_init__(self) -> None:
         text(self.path, "verification path", maximum=32_768)
@@ -379,6 +398,7 @@ class MailTarget:
     draft_id: str
     revision: int
     fingerprint: str
+    kind: Literal["mail_target"] = "mail_target"
 
     def __post_init__(self) -> None:
         digest(self.version, "meeting package version")
@@ -407,12 +427,13 @@ class ActionSpec:
 
 
 class ActionPending(Enum):
-    RUNNING = auto()
+    RUNNING = "running"
 
 
 @dataclass(frozen=True, slots=True)
 class ActionReturned:
     summary: str
+    kind: Literal["returned"] = "returned"
 
     def __post_init__(self) -> None:
         text(self.summary, "action summary", maximum=8_000)
@@ -421,6 +442,7 @@ class ActionReturned:
 @dataclass(frozen=True, slots=True)
 class ActionVerified:
     evidence: str
+    kind: Literal["verified"] = "verified"
 
     def __post_init__(self) -> None:
         text(self.evidence, "action evidence", maximum=8_000)
@@ -429,6 +451,7 @@ class ActionVerified:
 @dataclass(frozen=True, slots=True)
 class ActionNotApplied:
     reason: str
+    kind: Literal["not_applied"] = "not_applied"
 
     def __post_init__(self) -> None:
         text(self.reason, "action rejection", maximum=8_000)
@@ -437,6 +460,7 @@ class ActionNotApplied:
 @dataclass(frozen=True, slots=True)
 class ActionUncertain:
     reason: str
+    kind: Literal["uncertain"] = "uncertain"
 
     def __post_init__(self) -> None:
         text(self.reason, "action uncertainty", maximum=8_000)
