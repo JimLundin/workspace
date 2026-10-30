@@ -58,18 +58,28 @@ lazy import assistant.system_notices
 lazy from assistant.agent_session import Session, Snapshot
 lazy from assistant.agent_toasts import AgentToasts
 lazy from assistant.agent_window import AgentWindow
-lazy from assistant.communications import HandleNotice, WindowsObserved
 lazy from assistant.desktop_bar import BarActions, DesktopBar
+lazy from assistant.feed_items import SourceAction
 lazy from assistant.feed_triage import Board
 lazy from assistant.geometry import region
 lazy from assistant.icons import State
 lazy from assistant.keymap import PHYSICAL_NAMES, Cap, Kind, keymap
 lazy from assistant.meeting_panel import MeetingPanel
 lazy from assistant.meeting_workflow import MeetingSnapshot, MeetingWorkflow
-lazy from assistant.native_feed import NativeFeed, acted, forward, observed, project
+lazy from assistant.notification_sources import (
+    HandleNotice,
+    Notices,
+    NotificationSources,
+    NotificationState,
+    OpenApp,
+    ReopenNotice,
+    ToggleApp,
+    joined,
+)
 lazy from assistant.overlay_desktop import NativeOverlayDesktop, OverlayDesktop
 lazy from assistant.qt_ui import application, cancel, later
 lazy from assistant.recording_state import RecordingAction, RecordingState
+lazy from assistant.state_store import SavedState
 lazy from assistant.system_notices import NoticeKey
 lazy from assistant.theme import ACCENT, BACKGROUND, FOREGROUND, MUTED
 lazy from assistant.ui_components.canvas_loading import CanvasLoading
@@ -178,13 +188,14 @@ class Ui:
         "_keyboard_overlay",
         "_keymap",
         "_meetings",
-        "_native_feed",
         "_notice_dismissal",
+        "_notifications",
         "_pending_inputs",
         "_poll_timer",
         "_recording",
         "_root",
         "_switcher",
+        "_teams_feed",
         "_thread",
         "_triage",
         "_triage_observe",
@@ -217,9 +228,9 @@ class Ui:
         # exists, so opening it during a held speech key starts in that state.
         self._agent_speaking: bool = False
         self._communication_action: Callable[[assistant.communications.Command], bool] | None = None
-        self._communication_feed = assistant.communications.Feed()
+        self._communication_feed = self._teams_feed = assistant.communications.Feed()
         self._communication_drafts: dict[str, str] = {}
-        self._native_feed = NativeFeed()
+        self._notifications: NotificationSources | None = None
         self._console_action: Callable[[assistant.console_requests.Command], bool] | None = None
         self._console_requests: tuple[assistant.console_requests.Request, ...] = ()
         self._triage = Board()
@@ -543,51 +554,48 @@ class Ui:
         if self._triage_observe is not None:
             self._triage_observe(self._communication_feed, self._console_requests)
 
-    def configure_communications(self, action: Callable[[assistant.communications.Command], bool]) -> None:
-        self._communication_action = action
+    def configure_communications(
+        self, action: Callable[[assistant.communications.Command], bool], notifications: SavedState[NotificationState]
+    ) -> None:
+        """Connect the Teams worker and the Windows notice owner whose work this feed joins."""
+        owner = NotificationSources(notifications, self.dismiss_system_notice)
+        owner.load()
+        self._communication_action, self._notifications = action, owner
         if self._agent is not None:
             self._agent.on_communication = self.communicate
 
-    def communicate(self, command: assistant.communications.Command) -> bool:
-        if self._communication_action is None:
-            return False
-        accepted = [self._communication_action(item) for item in forward(self._communication_feed, command)]
-        if not accepted or not all(accepted):
-            return False
-        change = acted(self._native_feed, self._communication_feed, command)
-        if change.state != self._native_feed:
-            self._native_feed = change.state
-            self._communication_feed = project(self._native_feed, self._communication_feed)
-            self.observe_triage()
-            if self._agent is not None:
-                self._agent.communications(self._communication_feed, self._communication_drafts)
-            self.refresh_inbox()
-        for key in change.dismiss:
-            self.dismiss_system_notice(key)
-        return True
+    def communicate(self, command: SourceAction) -> bool:
+        match command:
+            case HandleNotice() | ReopenNotice() | OpenApp() | ToggleApp():
+                if self._notifications is None or not self._notifications.command(command):
+                    return False
+                self.publish_feed()
+                return True
+            case _:
+                return self._communication_action is not None and self._communication_action(command)
+
+    def publish_feed(self) -> None:
+        """Join Teams work and Windows notices on Qt's thread, where both observations arrive."""
+        notices = self._notifications.state if self._notifications is not None else Notices()
+        self._communication_feed = joined(self._teams_feed, notices)
+        self.observe_triage()
+        if self._agent is not None:
+            self._agent.communications(self._communication_feed, self._communication_drafts)
+        self.refresh_inbox()
 
     def communications_changed(self, feed: assistant.communications.Feed, drafts: dict[str, str]) -> None:
         def update(_: QtWidgets.QApplication) -> None:
-            self._communication_feed, self._communication_drafts = project(self._native_feed, feed), drafts
-            self.observe_triage()
-            if self._agent is not None:
-                self._agent.communications(self._communication_feed, drafts)
-            self.refresh_inbox()
+            self._teams_feed, self._communication_drafts = feed, drafts
+            self.publish_feed()
 
         self.post(update)
 
     def system_notices(self, observation: assistant.system_notices.Observed) -> None:
         def update(_: QtWidgets.QApplication) -> None:
-            self._native_feed = observed(self._native_feed, observation)
-            self._communication_feed = project(self._native_feed, self._communication_feed)
-            self.observe_triage()
-            if self._agent is not None:
-                self._agent.communications(self._communication_feed, self._communication_drafts)
-            self.refresh_inbox()
+            if self._notifications is not None and self._notifications.observe(observation):
+                self.publish_feed()
 
         self.post(update)
-        if self._communication_action is not None:
-            self._communication_action(WindowsObserved(observation))
 
     def configure_console(self, action: Callable[[assistant.console_requests.Command], bool]) -> None:
         self._console_action = action
@@ -628,7 +636,7 @@ class Ui:
             self.post(lambda _: self._desktop.remove_notification(key) if self._desktop is not None else None)
 
     def handle_system_notice(self, key: NoticeKey) -> bool:
-        if self._communication_action is None or self._desktop is None or self._desktop.notification_observation is None:
+        if self._desktop is None or self._desktop.notification_observation is None:
             return False
         notice = next((item for item in self._desktop.notification_observation.notices if item.key == key), None)
         return notice is not None and self.communicate(HandleNotice(notice))

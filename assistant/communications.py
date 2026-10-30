@@ -6,8 +6,7 @@ from datetime import date
 from enum import Enum, auto
 from typing import Literal
 
-import assistant.system_notices
-from assistant.system_notices import Banners, Notice, NoticeKey
+from assistant.system_notices import NoticeKey
 
 MAX_MESSAGES = 300
 MAX_FOLLOWED = 8
@@ -139,6 +138,23 @@ def update_fingerprint(update: Update) -> str:
 
 
 @dataclass(frozen=True, slots=True)
+class NotificationFilter:
+    """Windows apps the person keeps out of pending work; hiding never handles their notices."""
+
+    hidden: frozenset[str] = frozenset()
+
+    def hides(self, update: Update) -> bool:
+        match update.source:
+            case WindowsNotice(_, app_id):
+                return app_id in self.hidden
+            case TeamsActivity():
+                return False
+
+    def toggled(self, app_id: str) -> NotificationFilter:
+        return NotificationFilter(self.hidden ^ {app_id})
+
+
+@dataclass(frozen=True, slots=True)
 class UnavailableChat:
     conversation: str
     reason: Literal["missing", "loading"]
@@ -151,7 +167,6 @@ class Feed:
     conversations: tuple[Conversation, ...] = ()
     followed: tuple[str, ...] = ()
     messages: tuple[Message, ...] = ()
-    muted_apps: tuple[str, ...] = ()
     replies: tuple[Reply, ...] = ()
     acknowledged: tuple[Acknowledgement, ...] = ()
     unavailable: tuple[UnavailableChat, ...] = ()
@@ -159,7 +174,7 @@ class Feed:
     updates: tuple[Update, ...] = ()
     handled: tuple[Acknowledgement, ...] = ()
     activity_detail: str = ""
-    notice_detail: str = ""
+    notification_filter: NotificationFilter = field(default_factory=NotificationFilter)
 
     def conversation(self, identity: str) -> Conversation | None:
         return next((chat for chat in self.conversations if chat.identity == identity), None)
@@ -172,6 +187,10 @@ class Feed:
     def pending_update(self, update: Update) -> bool:
         key, revision = update.key, update_fingerprint(update)
         return not any(mark.key == key and mark.fingerprint == revision for mark in self.handled)
+
+    def needs_attention(self, update: Update) -> bool:
+        """The one pending-work test for updates: unhandled and not hidden by the notification filter."""
+        return self.pending_update(update) and not self.notification_filter.hides(update)
 
     @property
     def unseen_chats(self) -> int:
@@ -227,23 +246,6 @@ def updates_observed(feed: Feed, updates: tuple[Update, ...]) -> Feed:
 
 def update_order(update: Update) -> float:
     return update.created_at
-
-
-def notices_observed(feed: Feed, notices: assistant.system_notices.Observed) -> Feed:
-    # Windows retains delivery and dismissal ownership. An unavailable read never removes history.
-    updated = updates_observed(feed, tuple(notice_update(item) for item in notices.notices))
-    detail = {
-        Banners.SUPPRESSED: "Windows banners are suppressed while Workspace receives notifications.",
-        Banners.PARTIAL: "Some Windows banners could not be suppressed. Notification delivery is still enabled.",
-        Banners.UNMANAGED: "Windows notifications are available.",
-    }[notices.banners]
-    return replace(updated, notice_detail=detail)
-
-
-def notice_update(notice: Notice) -> Update:
-    return Update(
-        WindowsNotice(notice.key, notice.app_id), notice.title, notice.body, notice.app_name, (notice.key.created / 10_000_000) - 11_644_473_600
-    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -333,35 +335,4 @@ class OpenUpdate:
     key: tuple[str, str]
 
 
-@dataclass(frozen=True, slots=True)
-class WindowsObserved:
-    observation: assistant.system_notices.Observed
-
-
-@dataclass(frozen=True, slots=True)
-class HandleNotice:
-    notice: Notice
-
-
-@dataclass(frozen=True, slots=True)
-class NotificationFilters:
-    muted_apps: tuple[str, ...]
-
-
-type Command = (
-    Connect
-    | Disconnect
-    | Refresh
-    | Follow
-    | Seen
-    | Send
-    | SaveDraft
-    | OpenChat
-    | ResolveAttempt
-    | Handle
-    | Reopen
-    | OpenUpdate
-    | WindowsObserved
-    | HandleNotice
-    | NotificationFilters
-)
+type Command = Connect | Disconnect | Refresh | Follow | Seen | Send | SaveDraft | OpenChat | ResolveAttempt | Handle | Reopen | OpenUpdate

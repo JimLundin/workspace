@@ -3,6 +3,7 @@
 import sys
 import unittest
 from dataclasses import replace
+from pathlib import Path
 
 if sys.platform != "win32":
     raise unittest.SkipTest("Windows floating work feed")
@@ -11,18 +12,21 @@ lazy from PySide6.QtCore import QPoint, QRectF, Qt
 lazy from PySide6.QtGui import QPainterPath
 lazy from PySide6.QtTest import QTest
 
-from assistant.communications import Handle, Update, WindowsNotice, handle
+from assistant.communications import Acknowledgement, Update, WindowsNotice, handle, update_fingerprint
 from assistant.feed_items import WorkItem, action_spans
 from assistant.feed_origin import App
 from assistant.feed_triage import Assessment, Board, Solution, SolutionKind, candidate, collect, decode, proposal_revision
+from assistant.notification_sources import NOTIFICATION_STATE, HandleNotice
 from assistant.notifications import MAX_VISIBLE
 from assistant.qt_runtime import prepare
 from assistant.qt_ui import application
+from assistant.state_store import SavedState
 from assistant.system_notices import Notice, NoticeKey, Observed
 from assistant.toast_card import Card
 from assistant.ui_components.controls import STYLE
 from assistant.ui_components.heading import TITLE_SIZE
 from tests.communications_fixture import communication_feed
+from tests.test_communications_service import LocalCipher
 from tests.test_feed_triage import output
 from tests.test_windows_agent_toasts import notifications, widget_rect
 from tests.test_windows_inbox_attention import InboxUi
@@ -178,9 +182,8 @@ def test_windows_notifications_use_the_chat_renderer_and_handling_removes_only_t
         assert isinstance(card.content, WorkItem)
         action = next(span.link for span in action_spans(card.content) if span.link.startswith("workspace://done?"))
         panel.view.action_link(action)
-        command = commands[-1]
-        assert isinstance(command, Handle) and command.marks[0].key == first.key
-        panel.agent.communications(handle(feed, command.marks), {})
+        assert commands[-1] == HandleNotice(Notice(NoticeKey(91, 100), "owned", "Outlook", "Review the figures", "A fictional notice"))
+        panel.agent.communications(handle(feed, (Acknowledgement(first.key, update_fingerprint(first)),)), {})
         panel.pump()
         assert any(isinstance(card.content, WorkItem) and card.content.item == second for card in panel.view.cards.values())
         assert not any(isinstance(card.content, WorkItem) and card.content.item == first and not card.retiring for card in panel.view.cards.values())
@@ -214,11 +217,12 @@ def test_short_screen_keeps_every_work_item_reachable_through_the_bubble_paginat
         panel.pump()
 
 
-def test_native_notices_are_available_as_agent_context_without_creating_floating_alerts() -> None:
+def test_native_notices_are_available_as_agent_context_without_creating_floating_alerts(tmp_path: Path) -> None:
     # Defect: the production Ui still turns app observations into floating
     # cards, or suppressing presentation drops the underlying source context.
     original_style = application().styleSheet()
     ui = InboxUi()
+    ui.configure_communications(lambda _: True, SavedState(tmp_path / "notifications.bin", NOTIFICATION_STATE, cipher=LocalCipher()))
     try:
         agent = ui.agent(None, lambda: None, reveal=False)
         agent.show(focus=False)

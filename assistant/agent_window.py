@@ -37,7 +37,8 @@ from assistant.agent_session import (
     pending,
     transition,
 )
-from assistant.communications import Command, Feed
+from assistant.communications import Feed
+from assistant.feed_items import SourceAction
 from assistant.feed_origin import FeedRequest
 from assistant.feed_triage import Board
 from assistant.recording_state import RecordingAction, RecordingState
@@ -116,7 +117,7 @@ class AgentWindow:
         on_waiting: Callable[[bool], None] | None = None,
         on_recording: Callable[[RecordingAction], None] | None = None,
         on_work: Callable[[], None] | None = None,
-        on_communication: Callable[[Command], bool] | None = None,
+        on_communication: Callable[[SourceAction], bool] | None = None,
         on_console: Callable[[assistant.console_requests.Command], bool] | None = None,
         on_snapshot: Callable[[Snapshot], None] | None = None,
         on_choose_work: Callable[[str, str, str], bool] | None = None,

@@ -6,16 +6,31 @@ import assistant.notification_text
 from assistant.agent_session import Begin, Said, Session, transition
 from assistant.communications import Update, WindowsNotice
 from assistant.console_requests import Provider, request
-from assistant.feed_items import WorkItem, action_spans, body_spans, expanded_spans, observed
+from assistant.feed_items import Verb, WorkItem, act, action_spans, body_spans, expanded_spans, observed
 from assistant.feed_origin import FeedRequest
 from assistant.inbox import Query, Source
 from assistant.notifications import MAX_VISIBLE, Stack, Turn, advance, body, observe
 from assistant.system_notices import NoticeKey
 from tests.test_console_inbox import event
-lazy from assistant.communications import Acknowledgement, Conversation, Feed, Message, Status, TeamsActivity, UpdateKind, handle, update_fingerprint
+lazy from assistant.communications import (
+    Acknowledgement,
+    Conversation,
+    Feed,
+    Handle,
+    Message,
+    NotificationFilter,
+    Status,
+    TeamsActivity,
+    UpdateKind,
+    fingerprint,
+    handle,
+    update_fingerprint,
+)
 lazy from assistant.feed_items import reactions
 lazy from assistant.feed_origin import App
 lazy from assistant.feed_triage import Assessment, Board, collect
+lazy from assistant.notification_sources import HandleNotice
+lazy from assistant.system_notices import Notice
 
 
 def test_notification_projection_shares_evidence_for_proposals_and_attached_turns() -> None:
@@ -121,13 +136,33 @@ def test_windows_teams_and_console_requests_join_agent_bubbles_with_exact_source
     assert any("Here is the plan." in body(toast.content) for toast in stack.toasts)
     assert {item.key.source for item in source} == {"chat", "windows", "console"}
     assert any(span.link.startswith("workspace://console-option?") for row in source for span in action_spans(row) if span.link)
-    assert any(span.link.startswith("workspace://help?chat=chat") for row in source for span in action_spans(row) if span.link)
+    assert any(span.link.startswith("workspace://help?source=chat&item=chat") for row in source for span in action_spans(row) if span.link)
     assert len(observed(state, Query(Source.MAIL))) == 2  # Mail plus the pending console question.
     question = next(row for row in source if row.key.source == "console")
     assert "Which sheet?" in "".join(span.text for span in body_spans(question))
     assert any("Revenue" in span.text for span in action_spans(question))
     assert "".join(span.text for span in action_spans(question)) == "Revenue"
     assert not "".join(span.text for span in body_spans(question)).endswith("\n")
+
+
+def test_done_handles_the_revisions_a_card_rendered_and_never_a_later_arrival() -> None:
+    # Defect: the click rebuilds handling marks from the live feed, so work that
+    # arrived after the card rendered is marked handled without being seen.
+    original = Message("chat", "one", "Anna", "Review the figures", 2, 2)
+    notice = Notice(NoticeKey(4, 5), "owned", "Outlook", "Friday review", "Please review")
+    rendered = Feed(
+        conversations=(Conversation("chat", "Planning"),),
+        followed=("chat",),
+        messages=(original,),
+        updates=(Update(WindowsNotice(notice.key, notice.app_id), notice.title, notice.body, notice.app_name, 3),),
+    )
+    rows = {row.key.source: row for row in observed(Session(communications=rendered))}
+    arrival = Message("chat", "two", "Anna", "Also the budget", 4, 4)
+    captured = (Acknowledgement(original.key, fingerprint(original.text)),)
+    assert act(rows["chat"], Verb.DONE) == Handle(captured)
+    live = handle(replace(rendered, messages=(original, arrival)), captured)
+    assert not live.unseen(original) and live.unseen(arrival)
+    assert act(rows["windows"], Verb.DONE) == HandleNotice(notice)
 
 
 def test_pending_sources_remain_reachable_after_overflow_filtering_and_agent_reset() -> None:
@@ -145,7 +180,7 @@ def test_pending_sources_remain_reachable_after_overflow_filtering_and_agent_res
     assert {item.key for item in later.toasts} == {item.key for item in first.toasts}
     reset = advance(later, replace(state, identity="two"), 4000)
     assert {item.key for item in reset.toasts} == {item.key for item in first.toasts}
-    muted = advance(reset, replace(state, communications=replace(feed, muted_apps=("owned",))), 5000)
+    muted = advance(reset, replace(state, communications=replace(feed, notification_filter=NotificationFilter(frozenset({"owned"})))), 5000)
     assert not muted.toasts
 
 

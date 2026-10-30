@@ -61,7 +61,6 @@ class StoredAcknowledgement:
 class CommunicationsState:
     target: ConversationId = ""
     followed: Annotated[tuple[ConversationId, ...], Field(max_length=MAX_FOLLOWED)] = ()
-    muted_apps: Annotated[tuple[ConversationId, ...], Field(max_length=256)] = ()
     drafts: Annotated[
         tuple[tuple[ConversationId, DraftText], ...],
         BeforeValidator(draft_pairs),

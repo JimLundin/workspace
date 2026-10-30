@@ -254,7 +254,7 @@ models = [
     "assistant.agent_session",
     "assistant.communications",
     "assistant.feed_triage",
-    "assistant.native_feed",
+    "assistant.notification_sources",
     "assistant.recording_state",
     "assistant.system_notices",
     "automation.task",

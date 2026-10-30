@@ -25,9 +25,9 @@ lazy from PySide6.QtWidgets import QWidget
 from assistant.agent_session import Answer, Begin, Failed, Question, ReasoningSummary, Said, Session, StreamState, Succeeded, ToolActivity, transition
 from assistant.agent_toasts import AgentToasts
 from assistant.agent_window import AgentWindow
-from assistant.communications import Command
 from assistant.feed_contracts import DismissItem
 from assistant.feed_desktop import NativeDesktop
+from assistant.feed_items import SourceAction
 from assistant.feed_triage import EditObservation, edited
 from assistant.notifications import MAX_VISIBLE, WIDTH, Kind, MessageKey, PhaseKey, Toast, TurnKey
 from assistant.panel import PanelPreferences
@@ -93,7 +93,7 @@ class Notifications:
         # These observations belong to the fixture's concrete feed-action adapter.
         self.dismiss_allowed = self.choose_allowed = True
         self.choices: list[tuple[str, str, str]] = []
-        self.commands: list[Command] = []
+        self.commands: list[SourceAction] = []
         self.jobs: deque[Callable[[], None]] = deque()
         self.requested = threading.Event()
         self.recorded: list[RecordingAction] = []
@@ -142,7 +142,7 @@ class Notifications:
         self.choices.append((identity, revision, choice))
         return True
 
-    def communicate(self, command: Command) -> bool:
+    def communicate(self, command: SourceAction) -> bool:
         self.commands.append(command)
         return True
 

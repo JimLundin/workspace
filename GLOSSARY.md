@@ -91,7 +91,9 @@ _Avoid_: Notification, task, chat message
 
 **Notification filter**:
 A personal choice about which sources appear in the pending feed and interrupt
-the person. Filtering a source does not mean its work was handled.
+the person. Filtering a source does not mean its work was handled. The
+notification sources owner keeps it with Windows notices; every consumer asks
+the feed whether an update needs attention: pending and not filtered.
 _Avoid_: Dismissal, completed work
 
 **Feed review**:
