@@ -18,7 +18,7 @@ import tests.test_outlook
 from assistant import outlook
 from assistant.activity import Activity, ContextSnapshot
 from assistant.agent import Agent
-from assistant.agent_execution import AgentExecution
+from assistant.agent_execution import AgentExecution, unseen
 from assistant.agent_tools import Output
 from assistant.agent_toolsets import MeetingFollowupTools
 from assistant.llm import Json, Settings, ToolCall
@@ -27,12 +27,13 @@ from assistant.meeting_followup import parse_followup
 from assistant.meeting_followup_store import FollowupStore
 from assistant.meeting_requests import MeetingRequests, followup_prompt, task_identity
 from assistant.outlook import OutlookDrafts, PowerShellOutlook, read_eml
+from assistant.task_profiles import RequestContext
 from assistant.workspace import Workspace
 from automation.actions import Resources
 from automation.execution import WorkExecution
 from automation.files import filesystem_path
 from automation.store import TaskStore
-from automation.task import ActionUncertain, ActionVerified, Blocked, Claim, Completed, Control, FileDigest, RequestKind, RequestSource, Waiting
+from automation.task import ActionUncertain, ActionVerified, Blocked, Claim, Completed, Control, FileDigest, RequestKind, RequestSource, Task, Waiting
 from tests.fake_endpoint import FakeEndpoint, fake_endpoint
 from tests.test_agent import FakeMachine, FakeWindow, calls, says
 from tests.test_meeting_followup import BODY, NOTICE, followup_response, followup_sources, response_item
@@ -88,7 +89,7 @@ class MeetingRig:
         endpoint: FakeEndpoint,
         *,
         meeting: MeetingWork | None,
-        context: Callable[[], ContextSnapshot] | None = None,
+        context: Callable[[Task], RequestContext] = unseen,
     ) -> AgentExecution:
         return AgentExecution(
             Settings(endpoint.url, "fixture", "transcribe", "chat", "gpt-6-astra", "", ""),
@@ -324,6 +325,8 @@ def test_reserved_preparation_fails_closed_before_sdk_for_missing_or_changed_bin
 
 
 def test_reserved_workflow_omits_unrelated_history_context_and_general_tools(tmp_path: Path) -> None:
+    # Defect: a meeting follow-up admits the request's desktop context, the shared
+    # conversation's history or the general toolset that a general request receives.
     rig = MeetingRig(tmp_path)
     context_reads: list[str] = []
 
@@ -333,25 +336,31 @@ def test_reserved_workflow_omits_unrelated_history_context_and_general_tools(tmp
             10, "active", (Activity(Window(41, "UNRELATED-DESKTOP-SECRET", "editor.exe", minimized=False), 1, 10, agent_active=False),)
         )
 
+    def request(task: Task) -> RequestContext:
+        context_reads.append(task.id)
+        return RequestContext(context(), "UNRELATED-PROJECT-SECRET", context)
+
     with fake_endpoint() as endpoint:
-        adapter = rig.execution(endpoint, meeting=rig.meeting, context=context)
+        adapter = rig.execution(endpoint, meeting=rig.meeting, context=request)
         rig.tasks.submit("earlier-chat-task", "A different project", "Remember the other project.", RequestSource("shared-chat"), at=time.time())
         earlier = rig.tasks.claim("worker", "earlier-run", at=time.time())
         assert earlier is not None
         endpoint.replies = [says("UNRELATED-CONVERSATION-SECRET")]
         previous = adapter.run_work(earlier, rig.tasks, FakeWindow(), threading.Event())
         assert isinstance(previous, Completed) and rig.tasks.finish(earlier.run, previous, at=time.time()) is not None
+        admitted = endpoint.received[0].body
+        assert b"UNRELATED-PROJECT-SECRET" in admitted and b"UNRELATED-DESKTOP-SECRET" in admitted
         claim = rig.claim()
         start = len(endpoint.received)
         endpoint.replies = [says("The selected meeting needs a saved package.")]
-        private_context = context()
         context_reads.clear()
-        result = adapter.run_work(claim, rig.tasks, FakeWindow(), threading.Event(), context=private_context, context_text="UNRELATED-PROJECT-SECRET")
-        assert isinstance(result, Waiting)
-        request = endpoint.received[start].body
+        rig.machine.log.clear()
+        result = adapter.run_work(claim, rig.tasks, FakeWindow(), threading.Event())
+        assert result == Waiting(Blocked("A meeting result must be published and inspected before this task is complete. Resume to finish it."))
+        request_body = endpoint.received[start].body
         for secret in (b"UNRELATED-CONVERSATION-SECRET", b"UNRELATED-DESKTOP-SECRET", b"UNRELATED-PROJECT-SECRET"):
-            assert secret not in request
-        payload = cast("dict[str, object]", json.loads(request))
+            assert secret not in request_body
+        payload = cast("dict[str, object]", json.loads(request_body))
         tools = cast("list[dict[str, object]]", payload["tools"])
         assert {tool["name"] for tool in tools} == {
             "meeting_read_sources",
