@@ -6,13 +6,10 @@ Replaying the same events against a session always gives the same result.
 
 from dataclasses import dataclass, field, replace
 from typing import Literal, assert_never
-from urllib.parse import urlencode
 
-import assistant.console_requests
 from assistant import action_text
-from assistant.communications import Feed
+from assistant.card_actions import OpenCanvas, encode
 from assistant.feed_origin import FeedRequest
-from assistant.feed_triage import Board
 from assistant.recording_state import RecordingState
 from automation.presentation import (
     Answer,
@@ -176,10 +173,6 @@ class Session:
     activity: tuple[str, ...] = ()
     phase: Literal["idle", "running", "stopping"] = "idle"
     status: str = "Ready"
-    triage: Board = field(default_factory=Board)
-    communications: Feed = field(default_factory=Feed)
-    console_requests: tuple[assistant.console_requests.Request, ...] = ()
-    communication_drafts: tuple[tuple[str, str], ...] = ()
     last_said: str = ""
     result: Result = "Ready"
     recording: RecordingState = field(default_factory=RecordingState)
@@ -216,7 +209,7 @@ type Snapshot = Session
 
 
 def notice_text(title: str, target: str) -> str:
-    return title + "\n\n[Open on canvas](workspace://canvas?" + urlencode({"target": target}) + ")"
+    return title + "\n\n[Open on canvas](" + encode(OpenCanvas(target)) + ")"
 
 
 def transition(state: Session, event: Event) -> Session:

@@ -526,15 +526,6 @@
     {
       "key": {
         "rule": "PLR0913",
-        "path": "assistant/notifications.py",
-        "scope": "advance",
-        "signature": "5f8258c21010969b894a161e19a568a919b1f036152116f795ccd5a805095fd9"
-      },
-      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
-    },
-    {
-      "key": {
-        "rule": "PLR0913",
         "path": "assistant/outlook.py",
         "scope": "_text",
         "signature": "3ecc38dcc213e22500d408ef43d331da904ec99967d6261a0f0f271691f78cf0"

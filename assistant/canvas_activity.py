@@ -12,9 +12,7 @@ from pydantic import Field
 
 import assistant.agent_session
 import automation.task
-from assistant.communications import Feed
 from assistant.feed_origin import App, FeedRequest, Origin
-from assistant.feed_triage import Board
 from automation.personal_work import Catalog, Identity, Title
 
 type Body = Annotated[str, Field(max_length=32000)]
@@ -296,9 +294,4 @@ def redirect_session(session: assistant.agent_session.Snapshot) -> assistant.age
                 messages = (*messages, message)
             case _:
                 pass
-    return replace(session, phase="idle", messages=messages, communications=Feed(), triage=Board(), console_requests=())
-
-
-def history_session(session: assistant.agent_session.Snapshot) -> assistant.agent_session.Snapshot:
-    """Explicit history retains agent work without turning app context into cards."""
-    return replace(session, communications=Feed(), triage=Board(), console_requests=())
+    return replace(session, phase="idle", messages=messages)

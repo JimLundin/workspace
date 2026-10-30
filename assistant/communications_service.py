@@ -93,7 +93,7 @@ class Communications:
         "web",
     )
 
-    def __init__(self, web: Teams, store: SavedState[CommunicationsState], publish: Callable[[Feed, dict[str, str]], None]) -> None:
+    def __init__(self, web: Teams, store: SavedState[CommunicationsState], publish: Callable[[Feed], None]) -> None:
         self.web, self.store, self.publish = web, store, publish
         self.feed = Feed()
         self.drafts: dict[str, str] = {}
@@ -136,7 +136,7 @@ class Communications:
             self.dirty = True
 
     def changed(self) -> None:
-        self.publish(self.feed, dict(self.drafts))
+        self.publish(self.feed)
 
     def load(self) -> None:
         state = self.store.read()

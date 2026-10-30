@@ -63,13 +63,9 @@ the duration of an individual stall. The capture contains stack locations only.
 
 ## Change and ownership
 
-`feed_items.proposal_index` creates one immutable snapshot of evidence and
-projected work items. `proposal` consumes that explicit evidence mapping; origins
-are captured on the assessment itself. `notifications.observe` passes its projected work items into the source
-feed observation, so attached agent turns and side-feed cards share the same
-validated candidate objects. Direct source-feed observation builds its own index
-once when no projection is supplied. Indexes use Python 3.15's native `frozendict`.
-There is no cross-snapshot cache or shared mutable state.
+The side-feed cards this projection served were later retired: routine arrivals
+no longer render as floating bubbles, so the shared proposal index is gone with
+them.
 
 `Feed.pending_update` computes the current update's identity and revision once
 before examining handling records. Exact source identity and revision remain

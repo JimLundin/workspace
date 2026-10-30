@@ -21,6 +21,7 @@ prepare()
 def test_expired_bubble_reuses_its_windows_without_retaining_content() -> None:
     # Defects: rebuilding retired windows, or showing old content in a reused card.
     with notifications() as panel:
+        panel.view.resume()
         panel.agent.say("First fictional reply.")
         panel.pump()
         card = next(iter(panel.view.cards.values()))
