@@ -30,18 +30,11 @@ direct answer and triage cannot hide it. A reply still sending is settling. The
 feed shows every source that is not resolved.
 _Avoid_: Source string, identity prefix
 
-**Feed snapshot**:
-The one view of the personal work feed that every reader shares: Teams work and
-Windows notices joined under the notification filter, console requests and the
-triage board. Each observer reports its own part; a report never replaces
-another observer's part.
-_Avoid_: Cached feed, inbox state
-
 **Card action**:
-What a rendered card's link or button does: open the canvas at a target, decide
-a pending approval, answer a console question, or act on one rendered feed item
-by its key. A link that is not exactly one card action does nothing.
-_Avoid_: Action URL, link string
+What a floating bubble's link or button does: open the canvas at a target or
+decide the agent's pending approval. Bubbles direct the person; app arrivals
+never become cards. A link that is not exactly one card action does nothing.
+_Avoid_: Action URL, link string, feed card
 
 **Work thread**:
 The context for an ongoing outcome or responsibility, containing its related

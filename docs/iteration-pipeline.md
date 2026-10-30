@@ -211,7 +211,7 @@ check results are tuples, including the validated native handoff.
    including relative imports, package initialization, static dynamic imports,
    test fixtures and deleted modules. Bootstrap/configuration/pin changes,
    application assets and a missing baseline fall back to the full source suite.
-2. During implementation, narrow further with `--tests tests/test_feed_items.py`
+2. During implementation, narrow further with `--tests tests/test_feed_triage.py`
    (or multiple files). A specific check can be selected with
    `tests/test_windows_runtime.py::test_shutdown_resolves_pending_and_late_ui_requests`.
    This is an explicit editing scope; it does not claim a
