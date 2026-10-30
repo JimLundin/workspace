@@ -487,7 +487,8 @@ collections cannot stop the keyboard interpreter, although both processes still
 share CPU and other operating-system resources.
 
 The keeper owns independent child restarts. Its protected event loop consumes
-typed pause/resume commands through `keeper_control.py`; source replacement
+typed keeper requests (install, undo, keep, restart) and pause/resume commands
+through `keeper_control.py`, refusing unreadable requests visibly; source replacement
 keeps the keeper and unaffected children alive. The protected, standard-library
 `components.py` catalogue names each child once, with its entry module, control
 window, quit message, shutdown budget and readiness marker; the keeper, the

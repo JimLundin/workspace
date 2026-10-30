@@ -195,6 +195,13 @@ automation. Each entry names its entry module, control window, quit message,
 shutdown budget and readiness marker.
 _Avoid_: Program, role, miryoku (as a component name)
 
+**Keeper request**:
+A typed ask in the keeper's inbox folder: install a checked change, undo the
+last install, keep the change on trial, or restart one catalogue component.
+The keeper takes each once, oldest first, and refuses one it can't read with a
+visible notice. Deployment pause and resume are separate component commands.
+_Avoid_: Action, agent request (the user's ask of the agent)
+
 **Readiness marker**:
 The file a component writes once it is up. It names its writer by process id
 and creation time, so a reader accepts it only from the process it observed.

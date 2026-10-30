@@ -15,7 +15,8 @@ if sys.platform != "win32" or os.environ.get("WORKSPACE_E2E") != "1":
     raise unittest.SkipTest("end-to-end tests run on Windows, with WORKSPACE_E2E=1")
 
 from assistant.workspace import Workspace
-from keeper import ask, copy_source
+from keeper import copy_source
+from keeper_control import Install, ask
 from tests.fake_endpoint import fake_endpoint
 from tests.test_windows_assistant_e2e import ROOT, both_ready, logs, wait_for, workspace
 from winapi import windows
@@ -31,7 +32,7 @@ def change(live: Path, home: Path, summary: str, edit: str, old: str, *, new: st
     workspace = Workspace(live, home / "workspace" / "workspace")
     workspace.reset()
     workspace.replace(edit, old, new)
-    ask("install", summary, folder=home / "workspace" / "keeper" / "requests")
+    ask(home / "workspace" / "keeper" / "requests", Install(summary))
 
 
 def no_review() -> None:

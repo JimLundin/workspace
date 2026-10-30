@@ -8,9 +8,9 @@ or keeps crashing later is undone, back to the copy. During the trial a small wi
 usable with the mouse alone in case the change broke the keyboard.
 
 So that a change can never break what undoes it, the agent can't edit this file,
-selfcheck.py or workspace.pyw (`PROTECTED`), and the keeper uses a protected Qt dialog module. Its coordination uses only the
-standard library. What it runs is listed in the protected components.py. The other
-programs talk to it through files: requests in one folder, and a readiness marker
+selfcheck.py or workspace.pyw (`PROTECTED`), and the keeper uses a protected Qt dialog module. What it runs is listed in the
+protected components.py. The other programs talk to it through files: typed
+requests in its inbox (the protected keeper_control.py), and a readiness marker
 each program writes once it's up.
 
     pythonw keeper.py        (workspace.pyw does this)
@@ -33,9 +33,12 @@ from ctypes import wintypes
 from datetime import datetime
 from enum import Enum, auto
 from pathlib import Path
-from typing import Final, Protocol, TypedDict
+from typing import Final, Protocol, TypedDict, assert_never
 
 from components import CATALOGUE, Component, Entry, read_marker
+
+# Bundled dependencies load only after `keeper.py` activates the runtime.
+lazy from keeper_control import Install, Keep, Malformed, Request, Restart, Undo, take
 
 LIVE: Final = Path(__file__).resolve().parent
 """Workspace's own folder: the version that runs."""
@@ -60,48 +63,13 @@ MAX_CRASHES: Final = 3
 """Restarts allowed within `CRASH_WINDOW_S`; one more crash and the keeper stops trying."""
 
 
-# Standard-library codecs keep protected request/recovery IO usable without
-# loading bundled dependencies. Typed wire fields are validated structurally.
-
-
-class RequestData(TypedDict):
-    action: str
-    summary: str
+# Standard-library codecs keep protected recovery IO usable without loading
+# bundled dependencies. Typed wire fields are validated structurally.
 
 
 class RecoveryData(TypedDict):
     version: str | None
     pending: bool
-
-
-# ---- requests and readiness ------------------------------------------------------------
-
-
-def ask(action: str, summary: str = "", *, folder: Path = REQUESTS) -> None:
-    """Asks the keeper to `install` the workspace, `undo` the last install, `keep` a
-    change on trial, or `restart_layout`."""
-    folder.mkdir(parents=True, exist_ok=True)
-    name = f"{time.time_ns():020d}"
-    temporary = folder / f"{name}.tmp"
-    request: RequestData = {"action": action, "summary": summary}
-    temporary.write_text(json.dumps(request), encoding="utf-8")
-    temporary.replace(folder / f"{name}.json")  # appears whole, never half-written
-
-
-def take_requests(*, folder: Path = REQUESTS) -> tuple[tuple[str, str], ...]:
-    """Requests waiting, oldest first; each is taken once."""
-    taken: list[tuple[str, str]] = []
-    for path in sorted(folder.glob("*.json")) if folder.exists() else []:
-        with contextlib.suppress(OSError, ValueError):
-            data: object = json.loads(path.read_text(encoding="utf-8"))
-            match data:
-                case {"action": str() as action, "summary": str() as summary}:
-                    taken.append((action, summary))
-                case _:
-                    pass
-        with contextlib.suppress(OSError):
-            path.unlink()
-    return tuple(taken)
 
 
 # ---- versions on disk ------------------------------------------------------------------
@@ -243,11 +211,6 @@ class Stage(Enum):
     PAUSED = auto()
 
 
-def restarted(action: str) -> Component | None:
-    """The component a `restart_<name>` request names."""
-    return next((name for name in CATALOGUE if action == f"restart_{name}"), None)
-
-
 def unexpected_exit(name: str, code: int | None) -> bool:
     """Only the layout and assistant have a user-requested normal exit."""
     return code is not None and (code != 0 or name == "automation")
@@ -342,12 +305,13 @@ class Keeper:
                 child.stop()
         self.children = {}
 
-    def request(self, action: str, summary: str, now: float) -> None:
-        if self.stage is Stage.PAUSED:
-            self.world.notify("Source replacement is in progress; try again after the reload.")
-            return
-        match action:
-            case "install":
+    def request(self, request: Request | Malformed, now: float) -> None:
+        match request:
+            case Malformed(file=file, reason=reason):
+                self.world.notify(f"Refused a request the keeper doesn't recognise ({file}).\n\n{reason}")
+            case _ if self.stage is Stage.PAUSED:
+                self.world.notify("Source replacement is in progress; try again after the reload.")
+            case Install(summary=summary):
                 if self.stage in (Stage.CHECKING, Stage.STARTING):
                     self.world.notify("Busy installing; try again in a moment.")
                     return
@@ -356,17 +320,17 @@ class Keeper:
                     self.world.show_trial(None)
                 self.check, self.summary = self.world.start_check(), summary
                 self.stage, self.deadline = Stage.CHECKING, now + CHECK_S
-            case "keep":
+            case Keep():
                 if self.stage is Stage.TRIAL:
                     self.persist(pending=False)
                     self.stage = Stage.RUNNING
                     self.world.show_trial(None)
-            case "undo":
+            case Undo():
                 if self.undoable is None:
                     self.world.notify("There's no update to undo.")
                 else:
                     self.rollback("you undid it", now)
-            case _ if (name := restarted(action)) is not None:
+            case Restart(component=name):
                 if self.stage is not Stage.RUNNING:
                     self.world.notify("Workspace is starting or updating; try the restart again in a moment.")
                     return
@@ -375,7 +339,7 @@ class Keeper:
                 self.children[name] = self.world.start(name)
                 self.stage, self.deadline = Stage.STARTING, now + START_S
             case _:
-                pass
+                assert_never(request)
 
     def suspend(self, components: tuple[Component, ...]) -> bool:
         """Stop only selected children; retain supervision ownership during IO."""
@@ -551,7 +515,7 @@ class WindowsUser32:
 class Ui(Protocol):
     def approve(self, diff: str) -> bool: ...
     def notify(self, message: str) -> None: ...
-    def show_trial(self, summary: str | None, choose: Callable[[str], None]) -> None: ...
+    def show_trial(self, summary: str | None, choose: Callable[[Keep | Undo], None]) -> None: ...
     def poll_components(self, supervisor: Keeper, now: float) -> None: ...
     def run(self, tick: Callable[[], bool]) -> None: ...
 
@@ -626,7 +590,7 @@ class _Check:
 
 def main(ui: Ui) -> None:
     user32 = WindowsUser32()
-    choices: list[str] = []
+    choices: list[Request] = []
 
     def approve(candidate: Path) -> bool:
         return ui.approve(source_diff(LIVE, candidate))
@@ -688,10 +652,10 @@ def main(ui: Ui) -> None:
             ui.poll_components(keeper, now)
         except OSError as error:
             _log(f"component control error: {error}")
-        for action, summary in [*((c, "") for c in choices), *take_requests()]:
-            _log(f"request {action} {summary}")
+        for request in (*choices, *take(REQUESTS)):
+            _log(f"request {request}")
             try:
-                keeper.request(action, summary, now)
+                keeper.request(request, now)
             except OSError as error:
                 keeper.world.notify(f"Request failed: {error}")
         choices.clear()
