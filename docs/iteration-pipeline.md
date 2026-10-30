@@ -235,7 +235,7 @@ check results are tuples, including the validated native handoff.
 
 Retired standalone notification, manual-inbox/history and native canvas UI
 implementations, embedded canvas assets and their UI tests are removed. History uses the same floating
-feed; console answers and approvals are tested through that feed. Shared panel controls and vector icons have independent modules. Current
+feed; approvals are tested through that feed. Shared panel controls and vector icons have independent modules. Current
 work/meeting tools and their domain checks remain. Ordinary Windows tests attach
 to a private desktop before their fixtures import, so real Qt/WPF/browser windows
 do not flash on the user's screen. Native children share that desktop. The
@@ -304,10 +304,7 @@ requests normal WM_CLOSE and checks every core process's clean exit.
 Windows readers can briefly deny command deletion or acknowledgment replacement.
 The protected control owner retries on later ticks and retains committed
 acknowledgments, so retries never repeat a pause or restart.
-It preserves the separately owned Edge connection host and exact installed
-console-hook command. Normal inbox closure expires pending hook requests and
-restores the original console prompt without approving them; the external client
-finishes through that transport and does not belong to the keeper's process tree.
+It preserves the separately owned Edge connection host.
 Windows venv launchers
 can report their shared base interpreter's executable path. The native CLI runs
 one coordinator inside the verified staging cwd, with source checks before and
