@@ -12,7 +12,7 @@ import traceback
 from collections.abc import Callable
 from dataclasses import dataclass, replace
 from enum import Enum, auto
-from typing import assert_never, cast
+from typing import assert_never
 
 from assistant.meeting_followup import MAX_SOURCES, ActionContent, DraftContent, Transcript, TranscriptBundle, TranscriptSource
 from assistant.meeting_followup_store import (
@@ -244,16 +244,12 @@ def _created(task: Task) -> tuple[float, str]:
     return task.created_at, task.id
 
 
-def _selection(value: object) -> tuple[TranscriptSource, ...]:
-    if not isinstance(value, tuple):
-        raise ValueError("Select one or more completed recording segments.")
-    selected = cast(tuple[object, ...], value)
-    if not 1 <= len(selected) <= MAX_SOURCES or any(not isinstance(item, TranscriptSource) for item in selected):
+def _selection(selected: tuple[TranscriptSource, ...]) -> tuple[TranscriptSource, ...]:
+    if not 1 <= len(selected) <= MAX_SOURCES:
         raise ValueError(f"Select between one and {MAX_SOURCES} completed recording segments.")
-    sources = cast(tuple[TranscriptSource, ...], selected)
-    if len({source.id for source in sources}) != len(sources):
+    if len({source.id for source in selected}) != len(selected):
         raise ValueError("A recording segment can only be selected once.")
-    return sources
+    return selected
 
 
 @dataclass(frozen=True, slots=True)
