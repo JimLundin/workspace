@@ -122,18 +122,29 @@ def test_interruption_releases_only_its_exact_console_session(tmp_path: Path) ->
         inbox.close()
 
 
-def test_transport_rejects_unauthenticated_requests_and_close_restores_native_prompt(tmp_path: Path) -> None:
+def status(endpoint: Path, body: bytes, *, authenticated: bool = True) -> int:
+    data = cast(dict[str, str], json_object(endpoint.read_text()))
+    headers = {"Authorization": "Bearer " + data["token"]} if authenticated else {}
+    try:
+        with cast(HTTPResponse, urlopen(urllib.request.Request(data["url"], data=body, headers=headers), timeout=2)) as response:
+            return response.status
+    except HTTPError as error:
+        return error.code
+
+
+def test_hook_transport_refuses_unauthenticated_or_unsupported_deliveries_and_close_restores_native_prompt(tmp_path: Path) -> None:
+    # Defects: the hook route accepts a delivery without the published token,
+    # accepts a provider or event the inbox cannot answer, or keeps a hook
+    # waiting after Workspace closes instead of returning the native prompt.
     arrived = threading.Event()
     endpoint = tmp_path / "bridge.json"
     inbox = ConsoleInbox(endpoint, lambda _: arrived.set(), timeout=3)
     try:
-        location = json_text(json_object(endpoint.read_text())["url"])
-        try:
-            urlopen(urllib.request.Request(location, data=b"{}"), timeout=2)
-        except HTTPError as error:
-            assert error.code == 403
-        else:
-            raise AssertionError("An unauthenticated request was accepted.")
+        delivery = json.dumps({"provider": Provider.CODEX.value, "event": event(Provider.CODEX)}).encode()
+        assert status(endpoint, delivery, authenticated=False) == 403
+        assert status(endpoint, json.dumps({"provider": "Other CLI", "event": event(Provider.CODEX)}).encode()) == 400
+        assert status(endpoint, json.dumps({"provider": Provider.CODEX.value, "event": {"hook_event_name": "PostToolUse"}}).encode()) == 400
+        assert not arrived.is_set()
         with ThreadPoolExecutor(max_workers=1) as worker:
             waiting = worker.submit(post, endpoint, Provider.CODEX, event(Provider.CODEX))
             assert arrived.wait(2)
@@ -142,6 +153,7 @@ def test_transport_rejects_unauthenticated_requests_and_close_restores_native_pr
     finally:
         if not inbox.closed.is_set():
             inbox.close()
+    assert not endpoint.exists()
 
 
 def test_multi_question_answering_retains_prior_answers_and_rejects_an_unrelated_request() -> None:

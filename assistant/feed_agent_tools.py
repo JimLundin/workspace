@@ -9,9 +9,10 @@ from pathlib import Path
 from typing import Final, override
 
 from assistant.agent_tools import NUMBER, TEXT, Args, Display, Output, Session, Tool, fixed, schema
-from assistant.feed_contracts import BOARD_EDIT, BRIDGE_ENDPOINT, FEED_COMMAND, FeedCommand, FeedRejected, reply_schema
+from assistant.feed_contracts import BOARD_EDIT, FEED_COMMAND, FeedCommand, FeedRejected, reply_schema
 from assistant.llm import Json, tool_spec
-from assistant.work_bridge_contracts import BRIDGE_COMMAND, BRIDGE_RESPONSE, BridgeCommand
+from assistant.local_bridge import ENDPOINT
+from assistant.work_bridge_contracts import BRIDGE_COMMAND, BRIDGE_RESPONSE, WORK_BRIDGE, BridgeCommand
 from automation.actions import Change, Observation
 from automation.task import ActionNotApplied, ActionVerified
 
@@ -60,10 +61,10 @@ Outlook and Teams browser tools read signed-in rendered pages. Never claim full 
 
 def request(data: BridgeCommand, endpoint: Path | None = None) -> str:
     path = endpoint or Path(os.environ.get("LOCALAPPDATA", ".")) / "workspace" / "work-feed-bridge.json"
-    configuration = BRIDGE_ENDPOINT.validate_json(path.read_bytes())
+    configuration = ENDPOINT.validate_json(path.read_bytes())
     url, token = configuration.url, configuration.token
     parsed = urllib.parse.urlsplit(url)
-    if parsed.scheme != "http" or parsed.hostname != "127.0.0.1" or parsed.path != "/feed" or parsed.username or parsed.password:
+    if parsed.scheme != "http" or parsed.hostname != "127.0.0.1" or parsed.path != WORK_BRIDGE.path or parsed.username or parsed.password:
         raise ValueError("Invalid local work-feed endpoint.")
     call = urllib.request.Request(
         url, data=BRIDGE_COMMAND.dump_json(data), headers={"Authorization": "Bearer " + token, "Content-Type": "application/json"}

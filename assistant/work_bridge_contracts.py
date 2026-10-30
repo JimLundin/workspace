@@ -9,10 +9,13 @@ from typing import Annotated
 from pydantic import Field, TypeAdapter
 
 from assistant.feed_contracts import ChosenHandoff, ConsoleAnswered, FeedCommand, FeedRejected, FeedSnapshot, QueuedHandoff
+from assistant.local_bridge import Contract
 from assistant.work_canvas_commands import CanvasCommand, CanvasResponse
 from automation.personal_work import PersonalRequest, PersonalResponse
 
 type BridgeCommand = Annotated[FeedCommand | PersonalRequest | CanvasCommand, Field(discriminator="operation")]
-type BridgeResponse = FeedSnapshot | QueuedHandoff | ChosenHandoff | ConsoleAnswered | FeedRejected | PersonalResponse | CanvasResponse
+type FeedResponse = FeedSnapshot | QueuedHandoff | ChosenHandoff | ConsoleAnswered | FeedRejected
+type BridgeResponse = FeedResponse | PersonalResponse | CanvasResponse
 BRIDGE_COMMAND = TypeAdapter(BridgeCommand)
 BRIDGE_RESPONSE = TypeAdapter(BridgeResponse)
+WORK_BRIDGE: Contract[BridgeCommand, BridgeResponse] = Contract("/feed", BRIDGE_COMMAND, BRIDGE_RESPONSE)

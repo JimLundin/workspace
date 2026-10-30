@@ -201,6 +201,14 @@ automation. Each entry names its entry module, control window, quit message,
 shutdown budget and readiness marker.
 _Avoid_: Program, role, miryoku (as a component name)
 
+**Local bridge**:
+The authenticated loopback listener through which a local client reaches
+Workspace owners. The work bridge carries the agents' feed, work and canvas
+tool requests; the hook bridge carries console CLI hook events. Each bridge
+publishes an endpoint file with its address and token. An owner's refusal is a
+typed reply, not a transport error.
+_Avoid_: Feed bridge, console server
+
 **Readiness marker**:
 The file a component writes once it is up. It names its writer by process id
 and creation time, so a reader accepts it only from the process it observed.

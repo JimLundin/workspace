@@ -8,11 +8,13 @@ from unittest import TestCase
 
 from assistant.browser_values import BrowserError
 from assistant.feed_agent_tools import request
-from assistant.feed_triage_service import Triage
 from assistant.llm import Json, Settings
+from assistant.local_bridge import LocalBridge
 from assistant.personal_work_model import Correlator
 from assistant.personal_work_service import PersonalWork, correlation_input
 from assistant.personal_work_sources import BrowserSources, Message, Outlook, SelectedMail, Tab, outlook_sources
+from assistant.work_bridge import WorkOwners
+from assistant.work_bridge_contracts import WORK_BRIDGE
 from assistant.work_canvas_model import caption
 from automation.actions import Resources
 from automation.execution import WorkExecution
@@ -45,9 +47,8 @@ from automation.personal_work import (
 from automation.task import ActionNotApplied, ActionVerified
 from automation.work_documents import LocalDocument, WebDocument
 from tests.fake_endpoint import Reply, fake_endpoint
-from tests.feed_fixture import open_bridge
+from tests.feed_fixture import feed_unavailable, no_canvas
 from tests.personal_work_fixture import WIRE, CapturedBrowser, CapturedSources, source
-from tests.test_feed_triage_service import MemoryStore
 from tests.test_work_actions import claimed
 lazy from tests.test_agent import ToolRig, message
 
@@ -379,9 +380,7 @@ def test_agent_tools_use_the_live_bridge_and_record_confirmed_edits(tmp_path: Pa
     store.observe((evidence,))
     service = PersonalWork(store, CapturedSources(), lambda _: None)
     endpoint = tmp_path / "feed-bridge.json"
-    triage = Triage(
-        endpoint, MemoryStore(), lambda _: None, lambda _batch, _rules: "{}", lambda _: False, server_factory=open_bridge, personal=service
-    )
+    bridge = LocalBridge(endpoint, WORK_BRIDGE, WorkOwners(feed_unavailable, service.handle, no_canvas).handle)
     rig = ToolRig(work=WorkExecution(claim, tasks, Resources(), clock=clock), feed_request=lambda data: request(data, endpoint))
     try:
         sources = rig.call("work_items_sources")
@@ -436,7 +435,7 @@ def test_agent_tools_use_the_live_bridge_and_record_confirmed_edits(tmp_path: Pa
         assert any(link.source_id == captured.source.id for link in store.read().works[0].links)
         assert isinstance(tasks.actions(claim.task.id)[-1].outcome, ActionVerified)
     finally:
-        triage.close()
+        bridge.close()
         service.close()
 
 

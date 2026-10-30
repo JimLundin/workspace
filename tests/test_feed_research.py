@@ -51,7 +51,6 @@ def test_background_research_reads_topic_memory_full_thread_and_file_before_publ
     batch = collect(feed, ())
     assert len(batch) == 1
     triage = TriageFixture(
-        tmp_path / "feed.json",
         MemoryStore(),
         lambda _: None,
         lambda _batch, _rules: "{}",
@@ -101,7 +100,7 @@ def test_own_reply_reconsiders_cached_work_and_cannot_be_overwritten_by_old_rese
     item = decode(output(([batch[0].identity], "action")), batch)[0]
     store = MemoryStore()
     store.data = saved(Board(enabled=True, items=(item,)))
-    triage = TriageFixture(tmp_path / "feed.json", store, lambda _: None, lambda _batch, _rules: "{}", lambda _: False)
+    triage = TriageFixture(store, lambda _: None, lambda _batch, _rules: "{}", lambda _: False)
     try:
         triage.observe(feed, ())
         # Simulate a current committed review through the actual immutable board contract.
