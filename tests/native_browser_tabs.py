@@ -95,6 +95,16 @@ def identical_urls(attached: Browser, before: dict[int, Tab]) -> None:
     group = group_of(request(attached, "group", tab_ids=[first_id, second_id], title="Review", collapsed=True))
     renamed = group_of(request(attached, "group", group_id=group.id, title="Ready", color="green", index=-1))
     assert renamed.title == "Ready" and renamed.color == "green" and renamed.collapsed
+    # Defect: an explicit group_id is ignored, page status attributes Workspace's
+    # pages to the user (or the reverse), or page status stops paginating.
+    extra = request(attached, "open", url="about:blank", group_id=group.id)
+    assert strip(attached)[0][cast(int, extra["tab_id"])].group_id == group.id
+    rows = request(attached, "tabs", limit=40)["tabs"]
+    assert isinstance(rows, list)
+    created = {row["id"]: row["created_in_session"] for row in rows if isinstance(row, dict)}
+    assert created[extra["target_id"]] is True and created[first["target_id"]] is True and False in created.values()
+    assert request(attached, "tabs", limit=1)["next_offset"] == 1
+    attached.request("close", {"target_id": extra["target_id"]}, cancel)
 
     # Explicit group operations also accept tabs that Workspace did not create.
     user_id = next(tab.id for tab in before.values() if tab.active)
