@@ -626,7 +626,10 @@ change, either select its published branch as the base or merge it first.
 Workspace uses the [OpenAI Agents SDK](https://developers.openai.com/api/docs/guides/agents/quickstart)
 through `assistant/sdk.py`. Its `Runner` owns model turns and tool execution;
 `assistant/agent.py` dispatches Workspace's tools; each tool family
-(`assistant/*_tools.py`) owns its tools' schemas, permissions and evidence. The supervised
+(`assistant/*_tools.py`) owns its tools' schemas, permissions and evidence.
+A task's profile selects its toolset in `assistant/agent_toolsets.py`: a
+general request offers the whole desktop, and a prepared meeting follow-up
+offers only its selected recordings, notes and unsent drafts. The supervised
 automation process owns execution, browser sessions, and the durable action
 journal; the assistant owns views, human input, and audio capture. The SDK
 uses your configured OpenAI-compatible
@@ -726,6 +729,7 @@ automation/     task.py and store.py (durable work), controller.py (execution),
                 ipc.py, bridge.py, app.py (the supervised worker)
 assistant/      llm.py (the endpoint), features.py (what each key does), agent.py,
                 agent_tools.py and *_tools.py (the agent's tool families),
+                agent_toolsets.py (each task profile's families and instructions),
                 workspace.py (the agent's copy of the source), keymap.py;
                 agent_session.py, agent_window.py (conversation and UI scheduling),
                 agent_toasts.py, toast_stack.py, toast_card.py, qt_text.py, qt_ui.py

@@ -13,6 +13,7 @@ from unittest import TestCase
 
 from assistant.agent import Agent
 from assistant.agent_tools import Output
+from assistant.agent_toolsets import General
 from assistant.llm import Json, Settings
 from automation.actions import ActionCancelledError, Actions, Change, LostRunError, Operation, Resources, UncertainEffectError
 from automation.execution import ApprovalReview, Reconciliation, Reported, WorkExecution
@@ -63,7 +64,7 @@ def written(arguments: Mapping[str, Json], verification: FileDigest | None = Non
 
 def families(work: WorkExecution) -> Agent:
     """The registered tool families classify operations and decide what observations prove."""
-    return Agent(Settings("", "", "", "", "", "", ""), FakeMachine(), FakeWindow(), threading.Event(), work=work)
+    return Agent(Settings("", "", "", "", "", "", ""), FakeMachine(), FakeWindow(), threading.Event(), work=work, toolset=General)
 
 
 def attempt(agent: Agent, tool: str, arguments: Mapping[str, Json]) -> None:

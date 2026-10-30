@@ -11,9 +11,10 @@ from dataclasses import dataclass
 from typing import assert_never
 
 from assistant.activity import ContextSnapshot
-from assistant.agent import Agent, Log
+from assistant.agent import Agent, Log, Toolset
 from assistant.agent_history import History
 from assistant.agent_tools import Machine
+from assistant.agent_toolsets import General, MeetingFollowupTools
 from assistant.llm import Settings
 from assistant.meeting_execution import MeetingRun, MeetingWork
 from assistant.self_change_tools import verified_installation
@@ -114,18 +115,22 @@ class AgentExecution:
         selected = followup is not None
         work = WorkExecution(claim, store, self.resources, context_text="" if selected else context_text, review=review)
         session = self._conversation("task:" + claim.task.id) if selected else self.conversation(claim)
+
+        def toolset(agent: Agent) -> Toolset:
+            if followup is not None:
+                return MeetingFollowupTools(agent, followup)
+            return General(agent, workspace=session.workspace, install_root=self.workspace.root)
+
         agent = Agent(
             self.settings,
             self.machine,
             log,
             stop,
             work=work,
-            workspace=session.workspace,
+            toolset=toolset,
             history=session.history,
             context=None if selected else context,
             context_reader=None if selected else self.context,
-            install_root=self.workspace.root,
-            followup=followup,
         )
         try:
             if stop.is_set():

@@ -9,6 +9,7 @@ from pathlib import Path
 
 from assistant.agent import Agent
 from assistant.agent_session import Answer, LiveMessage, ReasoningSummary, StreamState, Succeeded, ToolActivity, ToolStatus
+from assistant.agent_toolsets import General
 from assistant.llm import Json, Settings
 from automation.execution import WorkExecution
 from tests.fake_endpoint import FakeEndpoint, Received, fake_endpoint
@@ -49,7 +50,7 @@ def make_agent(
 ) -> Agent:
     window.begin("Read the workbook", stop.set)
     settings = Settings(endpoint.url, "k", "transcribe", "chat", "gpt-6-astra", "", "")
-    return Agent(settings, machine if machine is not None else FakeMachine(), window, stop, work=work)
+    return Agent(settings, machine if machine is not None else FakeMachine(), window, stop, work=work, toolset=General)
 
 
 @contextmanager
@@ -237,7 +238,7 @@ def test_stop_closes_a_stalled_stream_and_preserves_earlier_tool_results(tmp_pat
                 release.set()
         endpoint.stream = None
         endpoint.replies = [says("It said clipped.")]
-        follow_up = Agent(agent.settings, agent.machine, FakeWindow(), threading.Event(), work=agent.work, history=agent.history)
+        follow_up = Agent(agent.settings, agent.machine, FakeWindow(), threading.Event(), work=agent.work, toolset=General, history=agent.history)
         assert follow_up.run("What did it say?")
         assert b'"output":"clipped\\n[observation_id: ' in endpoint.last.body
         assert b"Too late." not in endpoint.last.body and b"The workbook" not in endpoint.last.body

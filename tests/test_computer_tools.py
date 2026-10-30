@@ -7,6 +7,7 @@ from pathlib import Path
 
 from assistant.activity import Activity, ContextSnapshot
 from assistant.agent import Agent
+from assistant.agent_toolsets import General
 from assistant.geometry import Shot
 from assistant.llm import Json, Settings, ToolCall
 from tests.fake_endpoint import fake_endpoint
@@ -58,7 +59,7 @@ class StoppingMouse(FakeMachine):
 def test_stopping_a_drag_releases_its_button_and_modifiers(tmp_path: Path) -> None:
     stop = threading.Event()
     machine = StoppingMouse(stop)
-    agent = Agent(Settings("", "", "", "", "", "", ""), machine, FakeWindow(), stop, work=durable(tmp_path))
+    agent = Agent(Settings("", "", "", "", "", "", ""), machine, FakeWindow(), stop, work=durable(tmp_path), toolset=General)
     agent.screen.shot = Shot(Rect(-1920, 0, 0, 1080), 960, 540)
     arguments: dict[str, object] = {
         "x": 10,
@@ -77,7 +78,7 @@ def test_stopping_a_drag_releases_its_button_and_modifiers(tmp_path: Path) -> No
 
 def test_bad_coordinates_and_action_arguments_do_not_produce_input(tmp_path: Path) -> None:
     machine = FakeMachine()
-    agent = Agent(Settings("", "", "", "", "", "", ""), machine, FakeWindow(), threading.Event(), work=durable(tmp_path))
+    agent = Agent(Settings("", "", "", "", "", "", ""), machine, FakeWindow(), threading.Event(), work=durable(tmp_path), toolset=General)
     agent.screen.shot = Shot(Rect(0, 0, 100, 100), 100, 100)
     for name, arguments in (
         ("click", {"x": -1, "y": 10}),
@@ -101,7 +102,7 @@ def test_request_context_includes_the_work_window_and_one_current_screenshot(tmp
     with fake_endpoint() as endpoint:
         rig = Rig(endpoint, says("I see the workbook."), work=durable(tmp_path))
         settings = Settings(endpoint.url, "fixture", "transcribe", "chat", "agent", "", "")
-        agent = Agent(settings, rig.machine, rig.window, rig.stop, work=durable(tmp_path), history=rig.history, context=context())
+        agent = Agent(settings, rig.machine, rig.window, rig.stop, work=durable(tmp_path), toolset=General, history=rig.history, context=context())
         assert agent.run("Summarize this")
         request = rig.sent(0)[0]
         assert request["role"] == "user"
@@ -117,7 +118,9 @@ def test_automatic_and_explicit_screenshots_share_the_same_history_limit(tmp_pat
         settings = Settings(endpoint.url, "fixture", "transcribe", "chat", "agent", "", "")
         for _ in range(3):
             endpoint.replies = [calls(("screenshot", {})), says("I see it.")]
-            agent = Agent(settings, rig.machine, rig.window, rig.stop, work=durable(tmp_path), history=rig.history, context=context())
+            agent = Agent(
+                settings, rig.machine, rig.window, rig.stop, work=durable(tmp_path), toolset=General, history=rig.history, context=context()
+            )
             assert agent.run("Check this")
         assert rig.history.encoded().decode().count("data:image/png;base64,") == 2
         assert json.dumps(rig.sent()).count("data:image/png;base64,") == 2
@@ -133,6 +136,7 @@ def test_disabled_context_does_not_capture_or_add_observations_to_the_request(tm
             rig.window,
             rig.stop,
             work=durable(tmp_path),
+            toolset=General,
             context=ContextSnapshot(time.time(), "disabled"),
         )
         assert agent.run("Do the task")
@@ -153,6 +157,7 @@ def test_unavailable_screen_context_keeps_the_request_and_activity_usable(tmp_pa
             rig.window,
             rig.stop,
             work=durable(tmp_path),
+            toolset=General,
             context=context(),
         )
         assert agent.run("Find this workbook")
@@ -170,6 +175,7 @@ def test_context_tool_refreshes_the_current_app_without_taking_a_screenshot(tmp_
         FakeWindow(),
         threading.Event(),
         work=durable(tmp_path),
+        toolset=General,
         context=context(),
         context_reader=lambda: context("Report.docx - Word"),
     )

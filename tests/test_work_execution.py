@@ -12,6 +12,7 @@ from typing import cast
 
 from assistant.agent import Agent
 from assistant.agent_execution import AgentExecution
+from assistant.agent_toolsets import General
 from assistant.llm import Settings, ToolCall
 from assistant.workspace import CheckInterrupted, Workspace
 from automation.actions import Change, Operation, Resources
@@ -166,7 +167,7 @@ def test_endpoint_failure_and_step_limit_never_report_completion(tmp_path: Path)
         work = WorkExecution(second, store, Resources())
         endpoint.replies = [calls(("get_clipboard", {}))]
         stop = threading.Event()
-        agent = Agent(settings, FakeMachine(), FakeWindow(), stop, work=work, max_steps=1)
+        agent = Agent(settings, FakeMachine(), FakeWindow(), stop, work=work, toolset=General, max_steps=1)
         assert not agent.run(second.task.prompt)
         result = work.outcome(agent.report, stop)
         assert isinstance(result, Waiting) and isinstance(result.reason, Blocked)
@@ -194,7 +195,7 @@ def test_runtime_checks_are_recorded_before_candidate_import_and_failures_remain
         FakeWindow(),
         threading.Event(),
         work=work,
-        workspace=workspace,
+        toolset=lambda agent: General(agent, workspace=workspace),
     )
     with closing(sqlite3.connect(tmp_path / "work.sqlite3")) as database, database:
         database.execute("CREATE TRIGGER refuse_execution BEFORE INSERT ON actions BEGIN SELECT RAISE(ABORT,'cannot record'); END")
@@ -250,7 +251,7 @@ def test_nonfinite_tool_arguments_never_enter_effect_storage(tmp_path: Path) -> 
     destination = tmp_path / "forbidden.txt"
     payload: dict[str, object] = {"path": str(destination), "content": "not written", "unexpected": float("nan")}
     args = json.dumps(payload)
-    agent = Agent(Settings("", "", "", "", "", "", ""), FakeMachine(), FakeWindow(), threading.Event(), work=work)
+    agent = Agent(Settings("", "", "", "", "", "", ""), FakeMachine(), FakeWindow(), threading.Event(), work=work, toolset=General)
     result = agent.call(ToolCall("invalid", "write_file", args))
     assert not result.ok and not destination.exists() and not store.actions("task")
 
@@ -270,7 +271,7 @@ def test_installation_resumes_only_after_running_source_matches_the_requested_di
         FakeWindow(),
         threading.Event(),
         work=WorkExecution(claim, store, Resources()),
-        workspace=workspace,
+        toolset=lambda agent: General(agent, workspace=workspace),
     )
     classified = agent.tools["apply_changes"].classify(installation.arguments)
     assert isinstance(classified, Change)

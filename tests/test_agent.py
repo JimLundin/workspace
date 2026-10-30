@@ -13,6 +13,7 @@ from assistant.agent import Agent
 from assistant.agent_history import History
 from assistant.agent_session import LiveMessage, Succeeded, ToolActivity, ToolStatus
 from assistant.agent_tools import Output
+from assistant.agent_toolsets import General
 from assistant.desktop_tools import allowed, key_strokes
 from assistant.feed_agent_tools import request
 from assistant.geometry import Shot
@@ -266,9 +267,9 @@ class Rig:
             self.window,
             self.stop,
             work=self.work,
+            toolset=lambda agent: General(agent, workspace=self.workspace),
             max_steps=max_steps,
             after_step=after_step,
-            workspace=self.workspace,
             history=self.history,
         )
         agent.run(task)
@@ -308,9 +309,7 @@ class ToolRig:
             self.window,
             threading.Event(),
             work=work,
-            workspace=workspace,
-            clock=clock,
-            feed_request=feed_request,
+            toolset=lambda agent: General(agent, workspace=workspace, clock=clock, feed_request=feed_request),
         )
 
     def call(self, name: str, **arguments: Json) -> Output:
@@ -377,7 +376,7 @@ def test_default_agent_uses_sol_with_low_reasoning_across_tool_turns(tmp_path: P
         rig = Rig(endpoint, calls(("get_clipboard", {})), says("Read it."), work=durable(tmp_path))
         settings = settings_from({"OPENAI_BASE_URL": endpoint.url, "OPENAI_API_KEY": "k"})
         assert isinstance(settings, Settings)
-        agent = Agent(settings, rig.machine, rig.window, rig.stop, work=durable(tmp_path))
+        agent = Agent(settings, rig.machine, rig.window, rig.stop, work=durable(tmp_path), toolset=General)
         agent.run("Read the clipboard.")
         assert len(endpoint.received) == 2
         for request in endpoint.received:
@@ -670,7 +669,7 @@ def test_stop_prevents_actions_even_with_approvals_disabled(tmp_path: Path) -> N
     stopped = threading.Event()
     stopped.set()
     machine = FakeMachine()
-    agent = Agent(Settings("", "", "", "", "", "", ""), machine, FakeWindow(), stopped, work=durable(tmp_path))
+    agent = Agent(Settings("", "", "", "", "", "", ""), machine, FakeWindow(), stopped, work=durable(tmp_path), toolset=General)
     target = tmp_path / "not-written.txt"
     for name, args in (
         ("write_file", {"path": str(target), "content": "no"}),

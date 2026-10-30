@@ -20,6 +20,7 @@ from assistant.activity import Activity, ContextSnapshot
 from assistant.agent import Agent
 from assistant.agent_execution import AgentExecution
 from assistant.agent_tools import Output
+from assistant.agent_toolsets import MeetingFollowupTools
 from assistant.llm import Json, Settings, ToolCall
 from assistant.meeting_execution import MeetingWork, mail_target
 from assistant.meeting_followup import parse_followup
@@ -107,10 +108,9 @@ class MeetingRig:
             self.machine,
             FakeWindow(),
             threading.Event(),
-            workspace=self.workspace,
             context_reader=context,
             work=WorkExecution(claim, self.tasks, Resources()),
-            followup=selected,
+            toolset=lambda agent: MeetingFollowupTools(agent, selected),
         )
 
 
