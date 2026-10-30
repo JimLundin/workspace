@@ -1312,15 +1312,6 @@
     {
       "key": {
         "rule": "PLR0913",
-        "path": "tests/test_work_actions.py",
-        "scope": "test_message_reconciliation_requires_same_chat_new_matching_complete_text.inspect",
-        "signature": "e694bd035086d400ec9499ed066119cabe48d0bc2f7c6228efb59f461101441f"
-      },
-      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
-    },
-    {
-      "key": {
-        "rule": "PLR0913",
         "path": "tests/test_work_agent.py",
         "scope": "RecordingBridge.__init__",
         "signature": "72584923d52acdff6f80598c80a2f12d2f53f81e6083b5e20e1b56d81ee39ad9"

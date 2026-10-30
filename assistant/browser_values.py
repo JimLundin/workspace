@@ -4,31 +4,15 @@ import json
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from enum import Enum, auto
-from typing import Literal, NotRequired, TypedDict, assert_never, cast
+from typing import Annotated, Literal, NotRequired, TypedDict, assert_never, cast
+
+from pydantic import Field
 
 from assistant.llm import Json
 
 MAX_ID = 2**31 - 1
 type Color = Literal["grey", "blue", "red", "yellow", "green", "pink", "purple", "cyan", "orange"]
 COLORS: tuple[Color, ...] = ("grey", "blue", "red", "yellow", "green", "pink", "purple", "cyan", "orange")
-
-
-class PageData(TypedDict):
-    id: str
-    title: str
-    url: str
-    tab_id: NotRequired[int]
-    created_in_session: NotRequired[bool]
-
-
-class BrowserStatus(TypedDict):
-    mode: Literal["stopped", "attached", "sign_in", "background"]
-    tabs: list[PageData]
-    browser: NotRequired[Literal["edge", "chrome"]]
-    setup: NotRequired[str]
-    total: NotRequired[int]
-    offset: NotRequired[int]
-    next_offset: NotRequired[int]
 
 
 class TabData(TypedDict):
@@ -176,8 +160,135 @@ class Page:
     title: str
     url: str
 
-    def data(self) -> PageData:
-        return {"id": self.id, "title": self.title, "url": self.url}
+
+# The browser tool's results are typed records; optional fields left as None
+# are omitted from the model's JSON.
+
+
+@dataclass(frozen=True, slots=True)
+class PageRow:
+    id: str
+    title: str
+    url: str
+    tab_id: int | None = None
+    created_in_session: bool | None = field(default=None, kw_only=True)
+
+
+@dataclass(frozen=True, slots=True)
+class BrowserStatus:
+    mode: Literal["stopped", "attached", "sign_in", "background"]
+    tabs: tuple[PageRow, ...]
+    browser: Literal["edge", "chrome"] | None = None
+    setup: str | None = None
+    total: int | None = None
+    offset: int | None = None
+    next_offset: int | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class SignInPage:
+    target_id: str
+    url: str
+    message: str
+    mode: Literal["sign_in"] = "sign_in"
+
+
+@dataclass(frozen=True, slots=True)
+class SnapshotOptions:
+    prefix: str
+    offset: int
+    limit: int
+    text_offset: int
+
+
+@dataclass(frozen=True, slots=True)
+class Control:
+    id: str
+    tag: str
+    role: str
+    type: str
+    name: str
+    value: str
+    href: str
+    disabled: bool = field(kw_only=True)
+    checked: bool = field(kw_only=True)
+
+
+@dataclass(frozen=True, slots=True)
+class Rendered:
+    """The snapshot script's observation of one frame."""
+
+    title: str
+    url: str
+    text: str
+    text_offset: int
+    text_total: int
+    controls: tuple[Control, ...]
+    offset: int
+    total: int
+    more_controls: bool = field(kw_only=True)
+    scan_limited: bool = field(kw_only=True)
+
+
+@dataclass(frozen=True, slots=True)
+class FrameInfo:
+    id: str
+    url: str = ""
+    name: str = ""
+
+
+@dataclass(frozen=True, slots=True)
+class FrameTree:
+    frame: FrameInfo
+    children: Annotated[tuple[FrameTree, ...], Field(alias="childFrames")] = ()
+
+
+@dataclass(frozen=True, slots=True)
+class Frame:
+    id: str
+    url: str
+    name: str
+
+
+@dataclass(frozen=True, slots=True)
+class Snapshot:
+    """A bounded page observation with its frame list and continuation offsets."""
+
+    target_id: str
+    tab_id: int | None
+    title: str
+    url: str
+    text: str
+    text_offset: int
+    text_total: int
+    controls: tuple[Control, ...]
+    offset: int
+    total: int
+    frames: tuple[Frame, ...]
+    frame_offset: int
+    frame_total: int
+    next_frame_offset: int | None = None
+    next_control_offset: int | None = None
+    next_text_offset: int | None = None
+    more_controls: bool = field(kw_only=True)
+    scan_limited: bool = field(kw_only=True)
+
+
+@dataclass(frozen=True, slots=True)
+class ActionOptions:
+    id: str
+    action: Literal["click", "fill", "select", "check"]
+    value: str
+    checked: bool = field(kw_only=True)
+    dom_click: bool = field(kw_only=True)
+
+
+@dataclass(frozen=True, slots=True)
+class Point:
+    """Where a click action found its control, in viewport coordinates."""
+
+    x: float
+    y: float
 
 
 def page_of(value: Json) -> Page:

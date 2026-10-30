@@ -2,17 +2,18 @@
 
 import base64
 import binascii
-import json
 import sys
 import threading
 import time
 import uuid
 from collections.abc import Generator
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import assert_never
+from typing import Literal, assert_never
 from urllib.parse import urlsplit
+
+from pydantic import TypeAdapter, ValidationError
 
 from assistant import browser_dom
 from assistant.browser_documents import Download, Downloaded, download
@@ -35,9 +36,11 @@ from assistant.browser_session import (
 from assistant.browser_tabs import TabStrip
 from assistant.browser_values import (
     MAX_ID,
+    ActionOptions,
     BrowserError,
     BrowserStatus,
     ChangeTab,
+    ClosedTabsData,
     CloseGroup,
     ClosePage,
     CloseState,
@@ -48,6 +51,8 @@ from assistant.browser_values import (
     Disconnect,
     DisconnectedError,
     EditGroup,
+    Frame,
+    FrameTree,
     GroupData,
     InGroup,
     InterruptedError,
@@ -55,6 +60,14 @@ from assistant.browser_values import (
     NavigationLoadingError,
     Page,
     PageClosure,
+    PageClosureData,
+    PageRow,
+    Point,
+    Rendered,
+    SignInPage,
+    Snapshot,
+    SnapshotOptions,
+    StripData,
     TabData,
     TabEdit,
     Ungrouped,
@@ -75,6 +88,47 @@ from assistant.llm import Json
 lazy from assistant.web_apps import Located, WebAppOperation, WebApps
 
 MAX_OUTPUT = 20_000
+
+
+_SNAPSHOT_OPTIONS = TypeAdapter(SnapshotOptions)
+_ACTION_OPTIONS = TypeAdapter(ActionOptions)
+_RENDERED = TypeAdapter(Rendered)
+_FRAME_TREE = TypeAdapter(FrameTree)
+_POINT = TypeAdapter(Point)
+_SNAPSHOT = TypeAdapter(Snapshot)
+_SIGN_IN = TypeAdapter(SignInPage)
+_STATUS = TypeAdapter(BrowserStatus)
+_STRIP = TypeAdapter(StripData)
+_EDITED = TypeAdapter[GroupData | TabData | UngroupedData](GroupData | TabData | UngroupedData)
+_CLOSED_TABS = TypeAdapter(ClosedTabsData)
+_CLOSED_PAGE = TypeAdapter(PageClosureData)
+
+
+def _decoded[T](shape: TypeAdapter[T], value: Json) -> T:
+    """Validate a browser observation before any later step relies on it."""
+    try:
+        return shape.validate_python(value)
+    except ValidationError as error:
+        raise BrowserError("The browser returned an unexpected page observation.") from error
+
+
+def _dumped[T](shape: TypeAdapter[T], value: T) -> str:
+    return shape.dump_json(value, exclude_none=True).decode()
+
+
+def _size[T](shape: TypeAdapter[T], value: T) -> int:
+    return len(_dumped(shape, value))
+
+
+def _frames(tree: FrameTree) -> tuple[Frame, ...]:
+    """The first 40 frames, breadth first."""
+    frames: tuple[Frame, ...] = ()
+    pending: tuple[FrameTree, ...] = (tree,)
+    while pending and len(frames) < 40:
+        branch = pending[0]
+        pending = (*pending[1:], *branch.children)
+        frames = (*frames, Frame(branch.frame.id, branch.frame.url[:300], branch.frame.name[:100]))
+    return frames
 
 
 def web_url(value: str) -> str:
@@ -274,49 +328,47 @@ class Browser:
     def _snapshot(self, target: str, args: dict[str, Json], cancel: threading.Event) -> BrowserResult:
         session = self._session(target, cancel)
         context, tree = self._world(session, text(args, "frame_id"), cancel)
-        options: dict[str, Json] = {
-            "prefix": uuid.uuid4().hex[:10],
-            "offset": number(args, "offset", 0, 0, 20000),
-            "limit": number(args, "limit", 60, 1, 100),
-            "text_offset": number(args, "text_offset", 0, 0, 10_000_000),
-        }
-        result = mapping(self._evaluate(f"{browser_dom.SNAPSHOT}({json.dumps(options)})", session, context, cancel))
-        result["target_id"] = target
-        if target in self.native_targets:
-            result["tab_id"] = self.native_targets[target]
-        frames: list[Json] = []
-        pending = [tree]
-        while pending and len(frames) < 40:
-            branch = pending.pop(0)
-            frame = mapping(branch.get("frame", {}))
-            frames.append({"id": frame.get("id"), "url": text(frame, "url")[:300], "name": text(frame, "name")[:100]})
-            children = branch.get("childFrames", [])
-            if isinstance(children, list):
-                pending.extend(child for child in children if isinstance(child, dict))
+        options = SnapshotOptions(
+            uuid.uuid4().hex[:10],
+            number(args, "offset", 0, 0, 20000),
+            number(args, "limit", 60, 1, 100),
+            number(args, "text_offset", 0, 0, 10_000_000),
+        )
+        script = f"{browser_dom.SNAPSHOT}({_SNAPSHOT_OPTIONS.dump_json(options).decode()})"
+        rendered = _decoded(_RENDERED, self._evaluate(script, session, context, cancel))
+        frames = _frames(_decoded(_FRAME_TREE, tree))
         frame_offset = number(args, "frame_offset", 0, 0, 20000)
-        result["frames"] = frames[frame_offset : frame_offset + 8]
-        result["frame_offset"] = frame_offset
-        result["frame_total"] = len(frames)
-        if frame_offset + 8 < len(frames):
-            result["next_frame_offset"] = frame_offset + 8
-        controls = result.get("controls", [])
-        encoded = json.dumps(result, ensure_ascii=False)
-        while len(encoded) > MAX_OUTPUT - 200 and isinstance(controls, list) and len(controls) > 1:
-            controls.pop()
-            result["more_controls"] = True
-            encoded = json.dumps(result, ensure_ascii=False)
-        while len(encoded) > MAX_OUTPUT - 200:
-            page_text = text(result, "text")
-            if not page_text:
+        snapshot = Snapshot(
+            target,
+            self.native_targets.get(target),
+            rendered.title,
+            rendered.url,
+            rendered.text,
+            rendered.text_offset,
+            rendered.text_total,
+            rendered.controls,
+            rendered.offset,
+            rendered.total,
+            frames[frame_offset : frame_offset + 8],
+            frame_offset,
+            len(frames),
+            frame_offset + 8 if frame_offset + 8 < len(frames) else None,
+            more_controls=rendered.more_controls,
+            scan_limited=rendered.scan_limited,
+        )
+        while _size(_SNAPSHOT, snapshot) > MAX_OUTPUT - 200 and len(snapshot.controls) > 1:
+            snapshot = replace(snapshot, controls=snapshot.controls[:-1], more_controls=True)
+        while _size(_SNAPSHOT, snapshot) > MAX_OUTPUT - 200:
+            if not snapshot.text:
                 raise BrowserError("The page snapshot exceeded the output limit. Request a smaller page section.")
-            result["text"] = page_text[: len(page_text) // 2]
-            encoded = json.dumps(result, ensure_ascii=False)
-        if isinstance(controls, list) and result.get("more_controls"):
-            result["next_control_offset"] = options["offset"] + len(controls) if isinstance(options["offset"], int) else len(controls)
-        next_text = number(args, "text_offset", 0, 0, 10_000_000) + len(text(result, "text"))
-        if isinstance(total := result.get("text_total"), int) and next_text < total:
-            result["next_text_offset"] = next_text
-        return BrowserResult(json.dumps(result, ensure_ascii=False))
+            snapshot = replace(snapshot, text=snapshot.text[: len(snapshot.text) // 2])
+        next_text = options.text_offset + len(snapshot.text)
+        snapshot = replace(
+            snapshot,
+            next_control_offset=options.offset + len(snapshot.controls) if snapshot.more_controls else None,
+            next_text_offset=next_text if next_text < snapshot.text_total else None,
+        )
+        return BrowserResult(_dumped(_SNAPSHOT, snapshot))
 
     def _native_target(self, placement: Destination, window: int | None, cancel: threading.Event) -> str:
         self._require_strip()
@@ -368,13 +420,8 @@ class Browser:
         if navigation.get("errorText"):
             raise BrowserError(text(navigation, "errorText"))
         if visible:
-            result: dict[str, Json] = {
-                "target_id": target,
-                "mode": "sign_in",
-                "url": url,
-                "message": "Sign in in the separate Edge window. After the user finishes, browser_open resumes background work with this profile.",
-            }
-            return BrowserResult(json.dumps(result))
+            message = "Sign in in the separate Edge window. After the user finishes, browser_open resumes background work with this profile."
+            return BrowserResult(_dumped(_SIGN_IN, SignInPage(target, url, message)))
         deadline = time.monotonic() + 15
         while time.monotonic() < deadline:
             if cancel.wait(0.1):
@@ -436,34 +483,26 @@ class Browser:
         tabs = self._tabs(cancel)
         offset = number(args, "offset", 0, 0, 20000)
         limit = number(args, "limit", 20, 1, 40)
-        page = [tab.data() for tab in tabs[offset : offset + limit]]
-        for row in page:
-            if isinstance(self.owner, Attached):
-                row["created_in_session"] = row["id"] in self.created
-            if row["id"] in self.native_targets:
-                row["tab_id"] = self.native_targets[row["id"]]
-        state: BrowserStatus = {
-            "mode": "stopped"
-            if self.connection is None
-            else "attached"
-            if isinstance(self.owner, Attached)
-            else "sign_in"
-            if self.visible
-            else "background",
-            "tabs": page,
-        }
-        if isinstance(self.source, Product):
-            state["browser"] = self.source.value
-            if self.connection is None:
+        attached = isinstance(self.owner, Attached)
+        rows = tuple(
+            PageRow(tab.id, tab.title, tab.url, self.native_targets.get(tab.id), created_in_session=tab.id in self.created if attached else None)
+            for tab in tabs[offset : offset + limit]
+        )
+        mode: Literal["stopped", "attached", "sign_in", "background"] = (
+            "stopped" if self.connection is None else "attached" if attached else "sign_in" if self.visible else "background"
+        )
+        match self.source:
+            case Product() as product:
                 # Reading status never connects or triggers browser permission.
-                state["setup"] = setup_message(self.source)
-            state["total"] = len(tabs)
-            state["offset"] = offset
-        while len(json.dumps(state, ensure_ascii=False)) > MAX_OUTPUT - 100 and len(page) > 1:
-            page.pop()
-        if offset + len(page) < len(tabs):
-            state["next_offset"] = offset + len(page)
-        return BrowserResult(json.dumps(state, ensure_ascii=False))
+                setup = setup_message(product) if self.connection is None else None
+                state = BrowserStatus(mode, rows, product.value, setup, len(tabs), offset)
+            case _:
+                state = BrowserStatus(mode, rows)
+        while _size(_STATUS, state) > MAX_OUTPUT - 100 and len(state.tabs) > 1:
+            state = replace(state, tabs=state.tabs[:-1])
+        if offset + len(state.tabs) < len(tabs):
+            state = replace(state, next_offset=offset + len(state.tabs))
+        return BrowserResult(_dumped(_STATUS, state))
 
     def _require_strip(self) -> None:
         if self.connection is None:
@@ -482,7 +521,7 @@ class Browser:
             self.native_targets,
             maximum=MAX_OUTPUT,
         )
-        return BrowserResult(json.dumps(result, ensure_ascii=False))
+        return BrowserResult(_STRIP.dump_json(result).decode())
 
     def _tab_operation(self, request: TabEdit, cancel: threading.Event) -> BrowserResult:
         self._require_strip()
@@ -496,7 +535,7 @@ class Browser:
                 value = self.strip.ungroup(self._call, identities, cancel).data()
             case _:
                 assert_never(request)
-        return BrowserResult(json.dumps(value, ensure_ascii=False))
+        return BrowserResult(_EDITED.dump_json(value).decode())
 
     def _close(self, request: Closure, cancel: threading.Event) -> BrowserResult:
         match request:
@@ -510,7 +549,7 @@ class Browser:
                         self.native_targets.pop(target)
                         self.sessions.pop(target, None)
                         self.created.discard(target)
-                return BrowserResult(json.dumps(closed.data()))
+                return BrowserResult(_CLOSED_TABS.dump_json(closed.data()).decode())
             case Disconnect.BROWSER:
                 attached = isinstance(self.owner, Attached)
                 self.close()
@@ -530,13 +569,13 @@ class Browser:
         deadline = time.monotonic() + 3
         while any(tab.id == target for tab in self._tabs(cancel)):
             if time.monotonic() >= deadline:
-                return BrowserResult(json.dumps(PageClosure(target, CloseState.REQUESTED).data()))
+                return BrowserResult(_CLOSED_PAGE.dump_json(PageClosure(target, CloseState.REQUESTED).data()).decode())
             if cancel.wait(0.05):
                 raise InterruptedError("Stopped while waiting for the tab to close. Inspect browser_tabs before retrying.")
         self.sessions.pop(target, None)
         self.created.discard(target)
         self.native_targets.pop(target, None)
-        return BrowserResult(json.dumps(PageClosure(target, CloseState.CLOSED).data()))
+        return BrowserResult(_CLOSED_PAGE.dump_json(PageClosure(target, CloseState.CLOSED).data()).decode())
 
     def _attach_request(self, args: dict[str, Json], cancel: threading.Event) -> BrowserResult:
         source = source_of(text(args, "browser", self.source.value if isinstance(self.source, Product) else "edge"))
@@ -545,6 +584,32 @@ class Browser:
         self.select(source)
         self._attach(source, cancel)
         return self._status(args, cancel)
+
+    def _action(self, session: str, args: dict[str, Json], cancel: threading.Event) -> BrowserResult:
+        context, _tree = self._world(session, text(args, "frame_id"), cancel)
+        match text(args, "action"):
+            case "click" | "fill" | "select" | "check" as action:
+                pass
+            case _:
+                raise BrowserError("Use click, fill, select or check with an id from the latest browser snapshot.")
+        match args.get("checked", True):
+            case bool() as checked if len(text(args, "value")) <= 60_000:
+                pass
+            case _:
+                raise BrowserError("checked must be a boolean and field values may contain at most 60,000 characters.")
+        dom_click = bool(text(args, "frame_id"))
+        options = ActionOptions(text(args, "id"), action, text(args, "value"), checked=checked, dom_click=dom_click)
+        result = self._evaluate(f"{browser_dom.ACTION}({_ACTION_OPTIONS.dump_json(options).decode()})", session, context, cancel)
+        if action == "click" and not dom_click:
+            point = _decoded(_POINT, result)
+            for kind in ("mousePressed", "mouseReleased"):
+                self._call(
+                    "Input.dispatchMouseEvent",
+                    {"type": kind, "x": point.x, "y": point.y, "button": "left", "clickCount": 1},
+                    cancel,
+                    session=session,
+                )
+        return BrowserResult("Browser action completed. Read a fresh browser_snapshot to verify the result.")
 
     def _request(self, operation: str, args: dict[str, Json], cancel: threading.Event) -> BrowserResult:
         if cancel.is_set():
@@ -581,6 +646,8 @@ class Browser:
             except (binascii.Error, ValueError) as error:
                 raise BrowserError("Edge returned an invalid or oversized viewport image.") from error
             return BrowserResult("Browser viewport screenshot. Use browser controls; these are not desktop mouse coordinates.", image)
+        if operation == "action":
+            return self._action(session, args, cancel)
         context, _tree = self._world(session, text(args, "frame_id"), cancel)
         if operation == "evaluate":
             expression = text(args, "expression")
@@ -590,35 +657,10 @@ class Browser:
                 "(async () => { const value = await (" + expression + "); const text = JSON.stringify(value ?? null) ?? String(value); "
                 f"return text.length > {MAX_OUTPUT} ? text.slice(0, {MAX_OUTPUT - 30}) + '\\n[output truncated]' : text;" + "})()"
             )
-            value = self._evaluate(wrapped, session, context, cancel, timeout=number(args, "timeout_seconds", 15, 1, 30))
-            return BrowserResult(value if isinstance(value, str) else json.dumps(value))
-        if operation == "action":
-            action = text(args, "action")
-            if action not in ("click", "fill", "select", "check"):
-                raise BrowserError("Use click, fill, select or check with an id from the latest browser snapshot.")
-            options: dict[str, Json] = {
-                "id": text(args, "id"),
-                "action": action,
-                "value": text(args, "value"),
-                "checked": args.get("checked", True),
-                "dom_click": bool(text(args, "frame_id")),
-            }
-            if not isinstance(options["checked"], bool) or len(text(options, "value")) > 60_000:
-                raise BrowserError("checked must be a boolean and field values may contain at most 60,000 characters.")
-            result = mapping(self._evaluate(f"{browser_dom.ACTION}({json.dumps(options)})", session, context, cancel))
-            if action == "click" and not options["dom_click"]:
-                for kind in ("mousePressed", "mouseReleased"):
-                    self._call(
-                        "Input.dispatchMouseEvent",
-                        {
-                            "type": kind,
-                            "x": result.get("x"),
-                            "y": result.get("y"),
-                            "button": "left",
-                            "clickCount": 1,
-                        },
-                        cancel,
-                        session=session,
-                    )
-            return BrowserResult("Browser action completed. Read a fresh browser_snapshot to verify the result.")
+            # The wrapper always returns its value's bounded JSON text.
+            match self._evaluate(wrapped, session, context, cancel, timeout=number(args, "timeout_seconds", 15, 1, 30)):
+                case str() as value:
+                    return BrowserResult(value)
+                case _:
+                    raise BrowserError("The page did not return its evaluated value as text.")
         raise BrowserError("Unknown browser operation.")
