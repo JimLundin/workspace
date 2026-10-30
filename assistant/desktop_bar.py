@@ -7,6 +7,7 @@ from collections.abc import Callable
 from contextlib import suppress
 from dataclasses import dataclass, field
 from datetime import datetime
+from typing import assert_never
 lazy import os
 
 lazy from PySide6 import QtCore, QtGui, QtWidgets
@@ -18,7 +19,7 @@ lazy from assistant.ambient import Ambient, Power, PowerUnavailable, Weather
 lazy from assistant.audio_meter import AudioMeter
 lazy from assistant.bar_button import Divider, StatusView
 lazy from assistant.bar_geometry import OVERLAP
-lazy from assistant.bar_model import Resting, Toolbar, toolbar
+lazy from assistant.bar_model import Activity, Resting, Toolbar, toolbar
 lazy from assistant.bar_status import StatusObserver
 lazy from assistant.bar_surface import Pill
 lazy from assistant.bar_weather import LocalWeather
@@ -313,19 +314,20 @@ QMenu::separator {{ height: 1px; background: {colors.edge}; margin: 4px 10px; }}
         if view != self.view:
             self.view = view
             self.status.capture(listening=self.activity is State.LISTENING, processing=self.activity in (State.WORKING, State.AGENT))
-            if isinstance(view.activity, Resting):
-                self.status.facts(self.ambient)
-                self.stop.hide()
-            else:
-                self.status.facts(None)
-                self.status.symbol = view.activity.icon
-                self.stop.setVisible(view.activity.can_stop)
-                self.stop.setToolTip("Stop speech capture" if self.activity is State.LISTENING else "Stop agent work")
-                self.status.describe(
-                    "Transcribing captured audio"
-                    if self.activity is State.WORKING
-                    else view.activity.title + (" · use Stop to finish" if view.activity.can_stop else "")
-                )
+            match view.activity:
+                case Resting():
+                    self.status.facts(self.ambient)
+                    self.stop.hide()
+                case Activity(title=title, icon=symbol, can_stop=can_stop):
+                    self.status.facts(None)
+                    self.status.symbol = symbol
+                    self.stop.setVisible(can_stop)
+                    self.stop.setToolTip("Stop speech capture" if self.activity is State.LISTENING else "Stop agent work")
+                    self.status.describe(
+                        "Transcribing captured audio" if self.activity is State.WORKING else title + (" · use Stop to finish" if can_stop else "")
+                    )
+                case _:
+                    assert_never(view.activity)
             if self.activity is State.LISTENING:
                 self.audio_timer.start()
             else:
@@ -407,9 +409,12 @@ QMenu::separator {{ height: 1px; background: {colors.edge}; margin: 4px 10px; }}
         ambient = Ambient(self.observations.local_time().strftime("%H:%M"), self.power, self.weather)
         if ambient != self.ambient:
             self.ambient = ambient
-            if self.view is not None and isinstance(self.view.activity, Resting):
-                self.status.facts(ambient)
-                self.window.fit()
+            match self.view.activity if self.view is not None else None:
+                case Resting():
+                    self.status.facts(ambient)
+                    self.window.fit()
+                case Activity() | None:
+                    pass
         visible_bounds = tuple(pill.bounds for pill in self.pills if pill.isVisible() and pill.bounds is not None)
         self.sample_bounds = (
             Rect(
