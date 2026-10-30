@@ -5,19 +5,19 @@ import json
 import threading
 import time
 import uuid
-from collections.abc import Callable, Mapping
-from dataclasses import dataclass
-from datetime import datetime
+from collections.abc import Callable
+from dataclasses import dataclass, field
 from enum import Enum, auto
-from typing import Protocol, assert_never, cast
+from typing import Protocol, assert_never
 
 from assistant.agent_session import LiveMessage
 from assistant.llm import Json
-from automation.actions import Actions, Observation, Resources, evidence_matches, fingerprint, observed_resources, plan
+from automation.actions import Actions, Evidence, Observation, Operation, Resources
 from automation.store import TaskStore
 from automation.task import (
     ActionNotApplied,
     ActionReturned,
+    ActionSpec,
     ActionUncertain,
     ActionVerified,
     Approval,
@@ -120,36 +120,43 @@ class MessageEvidence:
     at: float
 
 
-def message_evidence(result: str, arguments: Mapping[str, object]) -> tuple[MessageEvidence, ...]:
-    """Retain only message body digests and dates from an exact-chat readback."""
-    try:
-        raw: object = json.loads(result)
-    except ValueError:
-        return ()
-    if not isinstance(raw, dict):
-        return ()
-    data = cast("dict[str, object]", raw)
-    if data.get("chat_id") != arguments.get("chat_id") or not isinstance(data.get("messages"), list):
-        return ()
-    values = cast("list[object]", data["messages"])
-    evidence: list[MessageEvidence] = []
-    for value in values[:20]:
-        if not isinstance(value, dict):
-            continue
-        message = cast("dict[str, object]", value)
-        content, created = message.get("content"), message.get("created_at")
-        if not isinstance(content, str) or not isinstance(created, str) or message.get("content_type") != "text" or message.get("content_truncated"):
-            continue
-        if arguments.get("message_id") and message.get("message_id") != arguments["message_id"]:
-            continue
-        try:
-            at = datetime.fromisoformat(created)
-            if at.tzinfo is None:
-                continue
-            evidence.append(MessageEvidence(hashlib.sha256(content.encode("utf-8")).hexdigest(), at.timestamp()))
-        except ValueError, OverflowError, OSError:
-            continue
-    return tuple(evidence)
+@dataclass(frozen=True, slots=True)
+class Readback:
+    """Evidence a tool family derives from one inspection's result, beyond its resources."""
+
+    resources: tuple[str, ...] = ()
+    messages: tuple[MessageEvidence, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
+class Targets:
+    """A later inspection covers every target marker of the action.
+
+    `listing` names a target kind whose complete listing (an `all:` marker)
+    covers each target of that kind, as a full window list covers a closed window.
+    """
+
+    listing: str = ""
+
+
+class ProofRule(Enum):
+    INSPECTION = auto()
+    """An arbitrary script has no inferred target: any targeted inspection the agent chooses."""
+    ADAPTER = auto()
+    """Only the adapter's own exact readback verifies it; no other observation can."""
+    MESSAGE = auto()
+    """The exact message body read back in its chat, created after the attempt."""
+
+
+type Proof = Targets | ProofRule
+"""How an observation can reconcile a pending action, decided by its tool family."""
+
+
+@dataclass(frozen=True, slots=True)
+class Reconciliation:
+    action_id: str
+    observation_id: str
+    applied: bool = field(kw_only=True)
 
 
 @dataclass(frozen=True, slots=True)
@@ -158,7 +165,28 @@ class Observed:
     tool: str
     resources: tuple[str, ...]
     at: float
+    evidence: Evidence
     messages: tuple[MessageEvidence, ...] = ()
+
+
+def covers(proof: Proof, pending: ActionSpec, observed: Observed) -> bool:
+    """A lock category is never sufficient proof for an operation with a target."""
+    match proof:
+        case ProofRule.ADAPTER:
+            return False
+        case ProofRule.INSPECTION:
+            return observed.evidence is Evidence.TARGETED
+        case Targets(listing):
+            pass
+        case ProofRule.MESSAGE:
+            listing = ""
+        case _:
+            assert_never(proof)
+    expected = tuple(item for item in pending.resources if item.startswith("target:"))
+    if not expected:
+        return bool(set(pending.resources).intersection(observed.resources))
+    complete = bool(listing) and "all:" + listing in observed.resources
+    return all(item in observed.resources or (complete and item.startswith(f"target:{listing}:")) for item in expected)
 
 
 class WorkExecution:
@@ -166,7 +194,6 @@ class WorkExecution:
 
     __slots__ = (
         "actions",
-        "arguments",
         "claim",
         "clock",
         "context_text",
@@ -174,7 +201,6 @@ class WorkExecution:
         "observations",
         "review",
         "store",
-        "tool",
     )
 
     def __init__(
@@ -192,13 +218,7 @@ class WorkExecution:
         self.context_text = context_text[:16_000]
         self.review = review
         self.disposition: Waiting | None = None
-        self.tool = ""
-        self.arguments: Mapping[str, object] = {}
         self.observations: list[Observed] = []
-
-    def bind(self, tool: str, arguments: Mapping[str, object]) -> None:
-        fingerprint(tool, arguments)  # Reject non-finite or non-JSON arguments before dispatch.
-        self.tool, self.arguments = tool, arguments
 
     def block(self, reason: str) -> None:
         self.disposition = Waiting(Blocked(reason[:8_000] or "The task needs attention."))
@@ -223,9 +243,9 @@ class WorkExecution:
     def _responses(self) -> tuple[Response, ...]:
         return self.store.responses(self.claim.task.id)
 
-    def approve(self, title: str, detail: str) -> bool:
+    def approve(self, operation: Operation, title: str, detail: str) -> bool:
         """Only a shown, identical, current-goal operation can consume a grant."""
-        binding = fingerprint(self.tool, self.arguments)
+        binding = operation.fingerprint
         revision = self.claim.task.goal_revision
         for response in reversed(self._responses()):
             if not isinstance(response.request, Approval) or approval_binding(response.request) != (revision, binding):
@@ -242,16 +262,15 @@ class WorkExecution:
         request = Approval(
             f"approval:{revision}:{binding}:{uuid.uuid4().hex[:8]}",
             title[:240],
-            f"Approve the exact {self.tool} operation shown in its live review. Its full content is kept only in memory.",
+            f"Approve the exact {operation.tool} operation shown in its live review. Its full content is kept only in memory.",
         )
-        arguments: dict[str, object] = dict(self.arguments)
         exact = (
             detail
             + "\n\nExact operation: "
-            + self.tool
+            + operation.tool
             + "\n"
             + json.dumps(
-                arguments,
+                operation.arguments,
                 ensure_ascii=False,
                 sort_keys=True,
                 indent=2,
@@ -278,27 +297,17 @@ class WorkExecution:
         self.disposition = Waiting(request)
         return None
 
-    def observed(self, tool: str, arguments: Mapping[str, object], *, successful: bool, result: str = "") -> str:
-        selected = plan(tool, arguments)
-        if (
-            not successful
-            or not isinstance(selected, Observation)
-            or tool
-            in (
-                "wait",
-                "ask_user",
-                "get_context",
-                "work_actions",
-                "reconcile_action",
-            )
-        ):
+    def observed(self, tool: str, observation: Observation, readback: Readback) -> str:
+        """Retain a successful inspection that a later reconciliation can cite."""
+        if observation.evidence is Evidence.NONE:
             return ""
         observed = Observed(
             uuid.uuid4().hex,
             tool,
-            observed_resources(tool, arguments, result),
+            (*observation.resources, *readback.resources),
             self.clock(),
-            message_evidence(result, arguments) if tool == "teams_read_messages" else (),
+            observation.evidence,
+            readback.messages,
         )
         self.observations.append(observed)
         self.observations[:] = self.observations[-64:]
@@ -323,16 +332,19 @@ class WorkExecution:
             values.append(item)
         return json.dumps(values, ensure_ascii=False)
 
-    def reconcile(self, action_id: str, observation_id: str, *, applied: bool) -> str:
+    def reconcile(self, request: Reconciliation, proof: Callable[[str], Proof]) -> str:
+        """`proof` is the tool families' rule for the pending action's tool."""
+        action_id, applied = request.action_id, request.applied
         pending = next((action for action in self.store.unverified_actions(self.claim.task.id) if action.id == action_id), None)
-        observation = next((item for item in self.observations if item.id == observation_id), None)
+        observation = next((item for item in self.observations if item.id == request.observation_id), None)
         if pending is None:
             raise ValueError("That action is not awaiting reconciliation.")
         if observation is None or observation.at <= max(self.claim.task.updated_at, pending.updated_at):
             raise ValueError("Reconciliation needs a successful observation after this action's latest attempt, in this run.")
-        if not evidence_matches(pending.specification, observation.tool, observation.resources):
+        rule = proof(pending.specification.tool)
+        if not covers(rule, pending.specification, observation):
             raise ValueError("The observation did not inspect this action's target. Inspect the same file, tab, chat or window.")
-        if pending.specification.tool == "teams_send_message":
+        if rule is ProofRule.MESSAGE:
             matching = any(
                 "message-body:" + item.digest in pending.specification.resources and item.at >= pending.started_at for item in observation.messages
             )

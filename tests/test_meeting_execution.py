@@ -17,8 +17,9 @@ from typing import cast
 import tests.test_outlook
 from assistant import outlook
 from assistant.activity import Activity, ContextSnapshot
-from assistant.agent import Agent, Output
+from assistant.agent import Agent
 from assistant.agent_execution import AgentExecution
+from assistant.agent_tools import Output
 from assistant.llm import Json, Settings, ToolCall
 from assistant.meeting_execution import MeetingWork, mail_target
 from assistant.meeting_followup import parse_followup

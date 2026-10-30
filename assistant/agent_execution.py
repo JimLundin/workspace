@@ -10,17 +10,18 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 
 from assistant.activity import ContextSnapshot
-from assistant.agent import Agent, Log, Machine
+from assistant.agent import Agent, Log
 from assistant.agent_history import History
+from assistant.agent_tools import Machine
 from assistant.llm import Settings
 from assistant.meeting_execution import MeetingWork
+from assistant.self_change_tools import verified_installation
 from assistant.workspace import Workspace
-from automation.actions import ActionError, Resources, target
+from automation.actions import ActionError, Resources
 from automation.execution import ApprovalReview, Incomplete, Outcome, WorkExecution
 from automation.store import TaskStore
-from automation.task import ActionVerified, Blocked, Claim, RequestSource, Waiting
+from automation.task import Blocked, Claim, RequestSource, Waiting
 from diagnostics import failure_info
-from keeper import source_digest
 from usage import Detail
 
 
@@ -122,26 +123,8 @@ class AgentExecution:
             work.actions.reconcile(stop)
             if followup is not None:
                 followup.recover(work, stop)
-            for action in store.unverified_actions(claim.task.id):
-                if action.specification.tool != "apply_changes":
-                    continue
-                expected = "source-digest:" + source_digest(session.workspace.live)
-                location = target("installed-root", str(session.workspace.live.absolute()))
-                if expected not in action.specification.resources or location not in action.specification.resources:
-                    return Waiting(
-                        Blocked(
-                            "The keeper's installed source does not match the requested update. Inspect its installation result before retrying.",
-                        )
-                    )
-                if (
-                    store.finish_action(
-                        action.id,
-                        ActionVerified("The running source matches the checked installation's SHA-256 digest."),
-                        at=time.time(),
-                    )
-                    is None
-                ):
-                    return Waiting(Blocked("The installed source matched, but verification could not be recorded. Resume to inspect it again."))
+            if (installation := verified_installation(store, claim, session.workspace.live)) is not None:
+                return installation
             agent.run(claim.task.prompt)
             outcome = work.outcome(agent.report, stop)
             return followup.completed(outcome) if followup is not None else outcome

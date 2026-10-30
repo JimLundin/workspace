@@ -1,9 +1,13 @@
 """Agent contracts for the persistent My work catalog."""
 
+from collections.abc import Callable, Mapping
 from typing import Final
 
+from assistant.agent_tools import Args, Display, Output, Session, Tool
 from assistant.business_tools import spec
-from assistant.llm import Json
+from assistant.llm import Json, ToolSpec
+from assistant.work_bridge_contracts import BridgeCommand
+from automation.actions import Change, Classification, Observation, target
 from automation.personal_work import (
     PERSONAL_REQUEST,
     PERSONAL_RESPONSE,
@@ -108,3 +112,42 @@ def verified(output: str) -> ActionVerified | ActionUncertain | ActionNotApplied
             return ActionNotApplied(reason)
         case _:
             return ActionUncertain("The work catalog did not confirm the change.")
+
+
+def _resources(arguments: Mapping[str, Json]) -> tuple[str, ...]:
+    match arguments.get("work_id"):
+        case str() as work_id:
+            return ("personal-work", target("personal-work", work_id))
+        case _:
+            return ("personal-work",)
+
+
+def _classify(spec: ToolSpec) -> Callable[[Mapping[str, Json]], Classification]:
+    match spec.name:
+        case "work_items_list" | "work_items_sources":
+            return lambda arguments: Observation(_resources(arguments))
+        case (
+            "work_items_add_web_page"
+            | "work_items_dismiss"
+            | "work_items_restore"
+            | "work_items_add_document"
+            | "work_items_save"
+            | "work_items_unlink"
+        ):
+            return lambda arguments: Change(_resources(arguments))
+        case _:
+            raise ValueError(f"The personal work tool {spec.name} has no classification.")
+
+
+class PersonalWork:
+    __slots__ = ("request", "session")
+
+    def __init__(self, session: Session, request: Callable[[BridgeCommand], str]) -> None:
+        self.session, self.request = session, request
+
+    def tools(self) -> tuple[Tool, ...]:
+        return tuple(Tool(spec, self.catalog, _classify(spec), Display.PRIVATE) for spec in SPECS)
+
+    def catalog(self, args: Args) -> Output:
+        request = validated(args.tool, args.values)
+        return self.session.effect(args.operation, lambda: Output(self.request(request)), lambda output: verified(output.text))

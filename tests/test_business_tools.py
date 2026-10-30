@@ -7,7 +7,7 @@ from pathlib import Path
 
 from assistant.business_tools import WEB_SPECS, verified_outcome
 from assistant.llm import Json
-from automation.actions import Observation, Resources, plan, resources
+from automation.actions import Change, Observation, Resources
 from automation.execution import WorkExecution
 from automation.task import ActionUncertain, ActionVerified
 from tests.test_agent import FakeMachine, ToolRig, durable
@@ -81,11 +81,17 @@ def test_business_tools_dispatch_privately_and_stop_before_effects(tmp_path: Pat
     assert tuple(rig.machine.log) == before
 
 
-def test_business_reads_and_mutations_have_exact_resource_markers() -> None:
+def test_business_reads_and_mutations_have_exact_resource_markers(tmp_path: Path) -> None:
     # Defect: a read creates a pending effect, or evidence from another card,
     # conversation or mailbox could resolve an uncertain mutation.
+    tools = ToolRig(work=durable(tmp_path)).agent.tools
+
+    def resources(name: str, arguments: Mapping[str, Json]) -> tuple[str, ...]:
+        return tools[name].classify(arguments).resources
+
     for name in ("kanban_board", "kanban_read_task", "teams_web_read", "outlook_web_search", "outlook_web_read", "outlook_web_documents"):
-        assert isinstance(plan(name, {}), Observation)
+        assert isinstance(tools[name].classify({}), Observation)
+    assert isinstance(tools["kanban_update_task"].classify({}), Change)
     first = resources("kanban_update_task", {"target_id": "page-1", "task_id": "task-1"})
     second = resources("kanban_read_task", {"target_id": "page-1", "task_id": "task-2"})
     assert "browser" in first and first[-1] != second[-1]

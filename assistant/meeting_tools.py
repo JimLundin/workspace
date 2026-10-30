@@ -1,8 +1,16 @@
-"""The bounded tools offered to a prepared meeting follow-through task."""
+"""The meeting tool family: capture by voice, and the bounded tools of a prepared follow-through task."""
 
+from collections.abc import Callable, Mapping
 from typing import Final
 
-from assistant.llm import Json, tool_spec
+from pydantic import ConfigDict, TypeAdapter
+
+from assistant import outlook
+from assistant.agent_tools import DECLINED, TEXT, Args, ArgumentError, Display, Output, Session, Tool, fixed, schema
+from assistant.llm import Json, ToolSpec, tool_spec
+from assistant.meeting_execution import MeetingRun, encoded, verified_mail
+from automation.actions import Change, Evidence, Observation, Operation, target
+from automation.execution import ProofRule
 
 
 def _object(properties: dict[str, Json], required: tuple[str, ...]) -> dict[str, Json]:
@@ -13,6 +21,7 @@ def _array(items: dict[str, Json], maximum: int, *, minimum: int = 0) -> dict[st
     return {"type": "array", "items": items, "minItems": minimum, "maxItems": maximum}
 
 
+_VALUE = TypeAdapter(Json, config=ConfigDict(allow_inf_nan=False))
 _TEXT: Final[dict[str, Json]] = {"type": "string"}
 _CITATION: Final = _object(
     {
@@ -78,6 +87,21 @@ _FOLLOWUP: Final = _object(
     ("source_digest", "title", "notes", "decisions", "actions", "drafts"),
 )
 
+CAPTURE_SPECS: Final = (
+    tool_spec(
+        "meeting_start",
+        "Start a long meeting transcript when the user asks to record or transcribe a meeting. "
+        "source=both includes the microphone and default computer playback, including remote participants; "
+        "source=microphone records only the room. Text is saved progressively; audio is deleted after transcription. "
+        "Capture continues until meeting_stop or Workspace exits, independently of this agent task.",
+        schema({"source": {"type": "string", "enum": ["both", "microphone"]}, "title": TEXT}, ()),
+    ),
+    tool_spec("meeting_stop", "Stop meeting capture and finish the pending transcript. Does not discard saved audio or text.", schema({}, ())),
+    tool_spec("meeting_status", "Get recording state, elapsed time, pending audio duration and the local transcript path.", schema({}, ())),
+    tool_spec("meeting_list", "List recent saved meeting transcript paths. Read the requested transcript before summarizing it.", schema({}, ())),
+    tool_spec("meeting_retry", "Retry pending transcription from the local journal without starting audio capture.", schema({}, ())),
+)
+
 SPECS: Final = (
     tool_spec(
         "meeting_read_sources",
@@ -111,7 +135,6 @@ SPECS: Final = (
         _object({"version": _TEXT, "draft_id": _TEXT, "revision": {"type": "integer", "minimum": 0}}, ("version", "draft_id", "revision")),
     ),
 )
-ALLOWED: Final = frozenset((*tuple(spec.name for spec in SPECS), "ask_user", "get_current_time", "work_actions", "reconcile_action"))
 INSTRUCTIONS: Final = (
     "Prepare factual meeting notes, recorded decisions, source-linked action items and reviewable follow-up drafts from "
     "the recordings explicitly selected for this task. Read each selected recording completely with meeting_read_sources. "
@@ -129,3 +152,127 @@ INSTRUCTIONS: Final = (
     "overwrite a person's edits. Report completion only after saved artifacts have been verified. Do not use desktop, browser, "
     "Teams, arbitrary scripts, or source-editing tools for this workflow."
 )
+
+
+def _capture_tool(spec: ToolSpec, run: Callable[[Args], Output]) -> Tool:
+    match spec.name:
+        case "meeting_status":
+            return Tool(spec, run, fixed(Observation(("meeting",))), Display.PRIVATE)
+        case "meeting_list":
+            return Tool(spec, run, fixed(Observation(("meeting",), Evidence.GENERAL)), Display.PRIVATE)
+        case "meeting_start" | "meeting_stop" | "meeting_retry":
+            return Tool(spec, run, fixed(Change(("meeting",))), Display.PRIVATE)
+        case _:
+            raise ValueError(f"The meeting tool {spec.name} has no classification.")
+
+
+class MeetingCapture:
+    __slots__ = ("session",)
+
+    def __init__(self, session: Session) -> None:
+        self.session = session
+
+    def tools(self) -> tuple[Tool, ...]:
+        return tuple(_capture_tool(spec, self.capture) for spec in CAPTURE_SPECS)
+
+    def capture(self, args: Args) -> Output:
+        operation = args.tool.removeprefix("meeting_")
+        source = args.text("source", "both")
+        if source not in ("both", "microphone"):
+            raise ArgumentError("source must be both or microphone.")
+        if operation == "start" and not self.session.approve(
+            args.operation, "Record this meeting?", "Microphone and selected computer audio until Stop."
+        ):
+            return Output(DECLINED, ok=False)
+        title = args.text("title", "Meeting")
+        return self.session.effect(args.operation, lambda: Output(self.session.machine.meeting(operation, source, title)))
+
+
+def _package(arguments: Mapping[str, Json]) -> tuple[str, ...]:
+    match arguments.get("task_id"), arguments.get("version"):
+        case str() as task_id, str() as version if version:
+            return (target("meeting-package", (task_id, version)),)
+        case _:
+            return ()
+
+
+def _mail(arguments: Mapping[str, Json]) -> tuple[str, ...]:
+    match arguments.get("task_id"), arguments.get("draft_id"), arguments.get("mail_target"):
+        case str() as task_id, str() as draft_id, str() as marker:
+            return (target("meeting-mail", (task_id, draft_id)), marker)
+        case _:
+            return ()
+
+
+class MeetingFollowup:
+    """Tools of one prepared follow-up run; operations bind the run's selected recordings."""
+
+    __slots__ = ("run", "session")
+
+    def __init__(self, session: Session, run: MeetingRun) -> None:
+        self.session, self.run = session, run
+
+    def tools(self) -> tuple[Tool, ...]:
+        read_sources, publish, result, save = SPECS
+        return (
+            Tool(read_sources, self.read_sources, fixed(Observation(("filesystem",))), Display.PRIVATE),
+            Tool(publish, self.publish, lambda arguments: Change(("filesystem", *_package(arguments))), Display.PRIVATE),
+            Tool(result, self.result, lambda arguments: Observation(("filesystem", *_package(arguments))), Display.PRIVATE),
+            # The adapter verifies the exact saved revision and original mailbox.
+            # A model assertion about another observation cannot replace that proof.
+            Tool(
+                save,
+                self.save_draft,
+                lambda arguments: Change(("outlook", "filesystem", *_mail(arguments))),
+                Display.PRIVATE,
+                proof=ProofRule.ADAPTER,
+            ),
+        )
+
+    def read_sources(self, args: Args) -> Output:
+        result = self.run.sources(args.text("source_id", ""), args.integer("offset", 0))
+        operation = Operation.of(args.tool, {"task_id": self.run.request.task_id, "source_digest": self.run.request.bundle.fingerprint})
+        return self.session.effect(operation, lambda: Output(encoded(result)))
+
+    def publish(self, args: Args) -> Output:
+        publication = self.run.publication(args.values.get("followup"))
+        operation = Operation.of(
+            args.tool, {"task_id": self.run.request.task_id, "version": publication.version, "path": publication.verification.path}
+        )
+        preview = _VALUE.dump_json(args.values.get("followup"), indent=2).decode()
+        if not self.session.approve(operation, "Save this meeting follow-up?", preview):
+            return Output(DECLINED, ok=False)
+        return self.session.effect(operation, lambda: Output(encoded(self.run.publish(publication))), publication.verification)
+
+    def result(self, args: Args) -> Output:
+        version = args.text("version", "")
+        result = self.run.result(version)
+        operation = Operation.of(args.tool, {"task_id": self.run.request.task_id, "version": version})
+        return self.session.effect(operation, lambda: Output(encoded(result)))
+
+    def save_draft(self, args: Args) -> Output:
+        target, request = self.run.prepare_mail(args.text("version"), args.text("draft_id"), args.integer("revision"))
+        operation = Operation.of(
+            args.tool,
+            {
+                "task_id": self.run.request.task_id,
+                "version": target.version,
+                "draft_id": target.draft_id,
+                "revision": target.revision,
+                "mail_fingerprint": target.fingerprint,
+                "mail_target": target.resource,
+            },
+        )
+        content = _VALUE.validate_python(outlook.content_data(request.content))
+        preview = _VALUE.dump_json(content, indent=2).decode()
+        if not self.session.approve(operation, "Save this unsent mail draft?", preview):
+            return Output(DECLINED, ok=False)
+        saved: outlook.DraftResult = outlook.Cancelled.BEFORE_EFFECT
+
+        def save() -> Output:
+            nonlocal saved
+            saved = self.run.save_mail(target, request, self.session.stop)
+            verified = isinstance(saved, (outlook.SavedOutlookDraft, outlook.SavedEmlDraft))
+            return Output(encoded(self.run.mail_result(target, saved)), ok=verified)
+
+        return self.session.effect(operation, save, lambda _: verified_mail(request, saved))

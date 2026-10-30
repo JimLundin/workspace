@@ -5,7 +5,8 @@ import threading
 from pathlib import Path
 from typing import cast
 
-from assistant.agent import BROWSER_SPECS, MEETING_SPECS, TEAMS_SPECS, Agent
+from assistant import browser_tools, business_tools, meeting_tools
+from assistant.agent import Agent
 from assistant.agent_session import ToolActivity
 from assistant.geometry import Shot
 from assistant.llm import Json, Settings, ToolCall
@@ -30,7 +31,7 @@ def test_meeting_voice_commands_use_the_recording_service_without_default_approv
         assert all("Private planning" not in item.text for item in rig.window.live if isinstance(item, ToolActivity))
         request = cast(dict[str, Json], json.loads(endpoint.received[0].body))
         specs = cast(list[dict[str, Json]], request["tools"])
-        assert {spec.name for spec in MEETING_SPECS} <= {spec["name"] for spec in specs if isinstance(spec["name"], str)}
+        assert {spec.name for spec in meeting_tools.CAPTURE_SPECS} <= {spec["name"] for spec in specs if isinstance(spec["name"], str)}
 
 
 def test_stopped_agent_cannot_start_recording_and_explicit_approval_mode_is_preserved(tmp_path: Path) -> None:
@@ -61,7 +62,7 @@ def test_background_tools_are_exposed_to_the_model_and_run_without_default_promp
         request = cast(dict[str, Json], json.loads(endpoint.received[0].body))
         specs = cast(list[dict[str, Json]], request["tools"])
         names = {spec["name"] for spec in specs if isinstance(spec["name"], str)}
-        assert {spec.name for spec in (*BROWSER_SPECS, *TEAMS_SPECS)} <= names
+        assert {spec.name for spec in (*browser_tools.SPECS, *business_tools.TEAMS_SPECS)} <= names
         assert not any("fixture-private" in line for line in rig.window.log)
         activities = [item for item in rig.window.live if isinstance(item, ToolActivity)]
         assert activities and all(item.detail == "" for item in activities)
@@ -91,7 +92,7 @@ def test_explicit_approval_mode_can_decline_browser_changes_and_teams_sends(tmp_
 def test_browser_images_invalidate_desktop_coordinates(tmp_path: Path) -> None:
     machine = FakeMachine()
     agent = Agent(Settings("", "", "", "", "", "", ""), machine, FakeWindow(), threading.Event(), work=durable(tmp_path))
-    agent.shot = Shot(Rect(0, 0, 1920, 1080), 960, 540)
+    agent.screen.shot = Shot(Rect(0, 0, 1920, 1080), 960, 540)
     result = agent.call(ToolCall("browser", "browser_screenshot", '{"target_id":"page"}'))
     assert result.image is not None
     click = agent.call(ToolCall("desktop", "click", '{"x":10,"y":10}'))
@@ -114,7 +115,7 @@ def test_agent_can_manage_tabs_and_groups_without_default_approval_prompts(tmp_p
         result = agent.call(ToolCall("tabs", name, json.dumps(arguments)))
         assert result.ok, (name, result.text)
     assert len(machine.log) == 7 and all(line.startswith("browser ") for line in machine.log)
-    assert {"browser_group", "browser_ungroup", "browser_tab"} <= {spec.name for spec in BROWSER_SPECS}
+    assert {"browser_group", "browser_ungroup", "browser_tab"} <= {spec.name for spec in browser_tools.SPECS}
 
 
 def test_stopped_agent_does_not_start_background_tools_or_show_their_arguments(tmp_path: Path) -> None:
