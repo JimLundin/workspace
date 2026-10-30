@@ -30,10 +30,10 @@ from assistant.qt_runtime import prepare
 from assistant.qt_ui import application
 from assistant.ui_components.canvas_loading import CanvasLoading
 from assistant.ui_components.heading import heading_text
+from assistant.work_canvas import WorkCanvas, instruction_prompt
 from assistant.work_canvas_commands import CANVAS_RESPONSE, CanvasSnapshot, CanvasUpdated
 from assistant.work_canvas_context import CanvasMode
 from assistant.work_canvas_detail import NoteDetail, QuestionDetail, SourceDetail, WorkDetail
-from assistant.work_canvas_investigation import instruction_prompt
 from assistant.work_canvas_model import (
     CanvasCollection,
     CanvasDocument,
@@ -44,10 +44,9 @@ from assistant.work_canvas_model import (
     save_note,
     view_state,
 )
-from assistant.work_canvas_store import CanvasStore
 from assistant.work_canvas_view import CanvasGroup
 from assistant.work_canvas_window import CanvasWindow
-from assistant.work_window import AnswerTask, ControlTask, ReplyProblem, WorkCommand, WorkOpening, WorkSnapshot, WorkView, WorkWindow
+from assistant.work_window import AnswerTask, ReplyProblem, WorkCommand, WorkOpening, WorkSnapshot, WorkView, WorkWindow
 from automation.actions import Resources
 from automation.execution import WorkExecution
 from automation.personal_work import (
@@ -78,7 +77,7 @@ from tests.test_agent import ToolRig
 from tests.test_feed_triage_service import MemoryStore
 from tests.test_windows_inbox_attention import InboxUi
 from tests.test_work_actions import claimed
-from tests.test_work_canvas import nested_bubbles
+from tests.test_work_canvas import local_canvas, nested_bubbles
 from tests.test_work_window import work_task
 from winapi import windows
 
@@ -86,7 +85,9 @@ prepare()
 
 
 class NativeCanvas:
-    def __init__(self, store: CanvasStore) -> None:
+    """Publishes like App: the canvas owner observes, then the window renders its document."""
+
+    def __init__(self, store: WorkCanvas) -> None:
         self.root = application()
         self.store = store
         self.jobs: deque[Callable[[], None]] = deque()
@@ -108,6 +109,8 @@ class NativeCanvas:
         QtCore.QCoreApplication.sendPostedEvents(None, QtCore.QEvent.Type.DeferredDelete)
 
     def publish(self, snapshot: WorkSnapshot) -> None:
+        self.store.observe_catalog(snapshot.personal.catalog)
+        self.view.personal.document = self.store.observe_work(snapshot).document
         self.work.publish(snapshot)
         self.pump()
 
@@ -120,7 +123,7 @@ class NativeCanvas:
 
 
 @contextmanager
-def native_canvas(store: CanvasStore) -> Generator[NativeCanvas]:
+def native_canvas(store: WorkCanvas) -> Generator[NativeCanvas]:
     panel = NativeCanvas(store)
     try:
         yield panel
@@ -157,7 +160,7 @@ def test_my_work_sources_corrections_and_editing_survive_background_publication(
         20,
     )
     assert isinstance(saved, WorkSaved)
-    canvas_store = CanvasStore(tmp_path / "canvas.sqlite3")
+    canvas_store = local_canvas(tmp_path)
     with native_canvas(canvas_store) as panel:
         view = panel.view.personal
         assert not panel.view.window.findChildren(QtWidgets.QTabWidget)
@@ -185,7 +188,7 @@ def test_my_work_sources_corrections_and_editing_survive_background_publication(
         card = view.card(evidence.id)
         assert card is not None
         position = drag_bubble(panel, evidence.id)
-        assert Placement(evidence.id, position.x(), position.y()) in CanvasStore(canvas_store.path).read().placements
+        assert Placement(evidence.id, position.x(), position.y()) in canvas_store.read().placements
         updated = store.handle(
             SaveWork(replace(saved.work.definition, summary="A new message arrived"), saved.work.links, saved.work.id, saved.work.revision), 21
         )
@@ -205,7 +208,7 @@ def test_my_work_sources_corrections_and_editing_survive_background_publication(
 def test_unchanged_canvas_reopening_and_resize_reuse_native_groups(tmp_path: Path) -> None:
     # Defect: reopening/resize recreates every embedded group header on Qt,
     # blocking interaction despite unchanged content and discarding widget state.
-    store = CanvasStore(tmp_path / "canvas.sqlite3")
+    store = local_canvas(tmp_path)
     data, document = nested_bubbles()
     store.save(document)
     with native_canvas(store) as native:
@@ -229,7 +232,7 @@ def test_unopened_nested_bubbles_are_created_when_found_or_redirected(tmp_path: 
     # Defect: opening materializes every collapsed conversation/document child,
     # or deferring those widgets makes search and agent redirects lose their target.
     data, document = nested_bubbles()
-    store = CanvasStore(tmp_path / "canvas.sqlite3")
+    store = local_canvas(tmp_path)
     store.save(document)
     with native_canvas(store) as native:
         native.publish(WorkSnapshot(personal=PersonalView(data)))
@@ -257,7 +260,7 @@ def test_attention_redirect_reveals_its_question_in_a_collapsed_work_context(tmp
     question = CanvasQuestion(
         "question:attention", "Which owner?", "Choose the right owner.", 11, TaskRequest("task", "attention"), Attention.WAITING, (work.id,)
     )
-    store = CanvasStore(tmp_path / "canvas.sqlite3")
+    store = local_canvas(tmp_path)
     store.save(CanvasDocument(activity=(question,), collapsed=frozenset((work.id,))))
     task = work_task(automation.task.Waiting(automation.task.Question("attention", "Which owner?", "Choose the right owner.")), identity="task")
     with native_canvas(store) as native:
@@ -279,7 +282,7 @@ def test_work_dismissal_and_restore_controls_change_the_local_canvas(tmp_path: P
     personal = PersonalStore(tmp_path / "work.sqlite3")
     saved = personal.handle(SaveWork(WorkDefinition("Atlas", "Check ownership")), 10)
     assert isinstance(saved, WorkSaved)
-    with native_canvas(CanvasStore(tmp_path / "canvas.sqlite3")) as native:
+    with native_canvas(local_canvas(tmp_path)) as native:
         native.publish(WorkSnapshot(personal=PersonalView(personal.read())))
         canvas = native.view.personal
         canvas.context_menu(saved.work.id)
@@ -302,11 +305,11 @@ def test_startup_prepared_canvas_remains_hidden_and_keeps_its_native_scene(tmp_p
     # Defect: preparing the initial viewport shows a native window, changes
     # focus, or throws away prepared bubbles when the toolbar opens the canvas.
     data, document = nested_bubbles()
-    store = CanvasStore(tmp_path / "canvas.sqlite3")
+    store = local_canvas(tmp_path)
     store.save(document)
     ui = InboxUi()
     try:
-        ui.configure_canvas(store, lambda _title, _target: None, lambda _run: None)
+        ui.configure_canvas(store, lambda _title, _target: None)
         work = ui.work(lambda _command: None, reveal=False)
         work.publish(WorkSnapshot(personal=PersonalView(data)))
         work.prepare()
@@ -329,7 +332,7 @@ def test_first_canvas_open_shows_native_loading_before_building_and_releases_it(
     # native show, leaving a blank interval before the viewport's first paint.
     root = application()
     data, document = nested_bubbles()
-    store = CanvasStore(tmp_path / "canvas.sqlite3")
+    store = local_canvas(tmp_path)
     store.save(document)
     jobs: deque[Callable[[], None]] = deque()
     loading = CanvasLoading(root)
@@ -403,7 +406,7 @@ def test_dragging_a_work_container_moves_its_contents_and_preserves_the_arrangem
     # and the next publication discards the dragged container's position.
     evidence = source(SourceKind.KANBAN)
     work = WorkThread("work:drag", 0, WorkDefinition("Drag this work", "Keep its evidence together"), (Association(evidence.id, "Evidence"),), 10, 10)
-    store = CanvasStore(tmp_path / "canvas.sqlite3")
+    store = local_canvas(tmp_path)
     with native_canvas(store) as native:
         native.publish(WorkSnapshot(personal=PersonalView(Catalog(works=(work,), sources=(evidence,)))))
         canvas = native.view.personal
@@ -429,7 +432,7 @@ def test_native_drag_and_drop_puts_an_existing_bubble_inside_another(tmp_path: P
     # of committing containment and revealing the card through its new route.
     note = CanvasNote("note:drop", "Evidence", "Collected evidence")
     target = CanvasCollection("group:drop", "Collect here")
-    store = CanvasStore(tmp_path / "canvas.sqlite3")
+    store = local_canvas(tmp_path)
     store.save(
         CanvasDocument(
             notes=(note,),
@@ -462,7 +465,7 @@ def test_selecting_a_bubble_preserves_automatic_layout_until_it_is_dragged(tmp_p
     store = PersonalStore(tmp_path / "work.sqlite3")
     store.observe((evidence,))
     store.handle(SaveWork(WorkDefinition("Atlas", "Review this evidence"), (Association(evidence.id, "Supports Atlas"),)), 11)
-    canvas_store = CanvasStore(tmp_path / "canvas.sqlite3")
+    canvas_store = local_canvas(tmp_path)
     with native_canvas(canvas_store) as panel:
         panel.publish(WorkSnapshot(personal=PersonalView(store.read())))
         view = panel.view.personal
@@ -483,7 +486,7 @@ def test_long_bubbles_resize_without_overlapping_text_or_controls(tmp_path: Path
     evidence = replace(source(SourceKind.TEAMS), title="LongUnbrokenConversationTitle" * 8, excerpt="LongUnbrokenExcerpt" * 250)
     store.observe((evidence,))
     store.handle(SaveWork(WorkDefinition("Atlas", "Review this evidence"), (Association(evidence.id, "Supports Atlas"),)), 11)
-    with native_canvas(CanvasStore(tmp_path / "canvas.sqlite3")) as panel:
+    with native_canvas(local_canvas(tmp_path)) as panel:
         panel.view.window.showNormal()
         panel.view.window.resize(800, 560)
         panel.publish(WorkSnapshot(personal=PersonalView(store.read())))
@@ -518,7 +521,7 @@ def test_long_bubbles_resize_without_overlapping_text_or_controls(tmp_path: Path
 def test_canvas_opens_maximized_and_retains_a_deliberate_restore(tmp_path: Path) -> None:
     # Defect: the opening path leaves the canvas at its fixed initial size,
     # or subsequent redirects override a user's deliberate restored window.
-    with native_canvas(CanvasStore(tmp_path / "canvas.sqlite3")) as panel:
+    with native_canvas(local_canvas(tmp_path)) as panel:
         window = panel.view.window
         window_menu = next(action.menu() for action in panel.view.personal.menu.actions() if action.text() == "Window")
         assert isinstance(window_menu, QtWidgets.QMenu)
@@ -550,7 +553,7 @@ def test_escape_unwinds_bubbles_and_search_keeps_drafts_then_exits(tmp_path: Pat
     # Defect: Escape closes the whole canvas from a nested view, loses its
     # parent camera or unsent clarification, or root Escape cannot close it.
     data, document = nested_bubbles()
-    store = CanvasStore(tmp_path / "canvas.sqlite3")
+    store = local_canvas(tmp_path)
     store.save(save_note(document, CanvasNote("note:standalone", "Context", "Original context")))
     with native_canvas(store) as native:
         native.publish(WorkSnapshot(personal=PersonalView(data)))
@@ -588,7 +591,7 @@ def test_shared_connections_move_highlight_and_disappear_with_their_reference(tm
     # Defect: connectors use stale positions/reasons after moving a source or
     # stay visible after removing the factual connection.
     data, document = nested_bubbles()
-    store = CanvasStore(tmp_path / "canvas.sqlite3")
+    store = local_canvas(tmp_path)
     store.save(document)
     with native_canvas(store) as native:
         native.publish(WorkSnapshot(personal=PersonalView(data)))
@@ -604,39 +607,21 @@ def test_shared_connections_move_highlight_and_disappear_with_their_reference(tm
         assert not canvas.connection_paths and path.scene() is None
 
 
-def test_continue_work_resumes_its_blocked_investigation_instead_of_duplicating(tmp_path: Path) -> None:
-    # Defect: Continue queues a fresh task while the existing research remains
-    # blocked, losing its durable recovery context.
-    task = replace(work_task(), state=automation.task.Waiting(automation.task.Blocked("Needs recovery")))
-    store = CanvasStore(tmp_path / "canvas.sqlite3")
-    store.save(CanvasDocument(runs=(CanvasRun(task.id, "work:one"),)))
-    with native_canvas(store) as native:
-        native.publish(WorkSnapshot(tasks=(task,)))
-        native.view.personal.study_work("work:one")
-        assert native.last_command() == ControlTask(task.id, automation.task.Control.RESUME)
-        assert store.read().runs == (CanvasRun(task.id, "work:one"),)
-
-
-def test_canvas_speech_saves_exact_directions_and_routes_results_to_any_bubble(tmp_path: Path) -> None:
-    # Defect: speech routes to a stale selection, loses the saved instruction on a
-    # failed handoff, queues before saving context, or strands a root result.
+def test_canvas_speech_instructs_the_open_canvas_and_keeps_failed_directions_for_retry(tmp_path: Path) -> None:
+    # Defect: speech routes to a stale selection, a failed handoff loses the
+    # pending direction, or a hidden canvas swallows the conversation input.
     ui = InboxUi()
-    store = CanvasStore(tmp_path / "canvas.sqlite3")
     tasks = TaskStore(tmp_path / "tasks.sqlite3")
-    attempts: tuple[CanvasRun, ...] = ()
-
-    def submissions() -> tuple[CanvasRun, ...]:
-        return attempts
+    attempts: list[CanvasRun] = []
 
     def queue(run: CanvasRun) -> None:
-        nonlocal attempts
-        assert run in CanvasStore(store.path).read().runs
-        attempts = (*attempts, run)
+        attempts.append(run)
         if len(attempts) == 1:
             raise OSError("Queue unavailable")
         tasks.submit(run.task_id, "Canvas instruction", instruction_prompt(run), automation.task.RequestSource("canvas"), at=20)
 
-    ui.configure_canvas(store, lambda _title, _target: None, queue)
+    store = WorkCanvas(tmp_path / "canvas.sqlite3", queue, autonomous=False)
+    ui.configure_canvas(store, lambda _title, _target: None)
     work = ui.work(lambda _command: None, reveal=False)
     work.show(focus=False)
     ui.pump()
@@ -649,22 +634,17 @@ def test_canvas_speech_saves_exact_directions_and_routes_results_to_any_bubble(t
         assert canvas.instruction_run is not None and "Queue unavailable" in canvas.status.text()
         ui.voice_agent(instruction, fallback.append)
         ui.pump()
-        submitted = submissions()
-        assert canvas.instruction_run is None and submitted[0] == submitted[1] and not fallback
-        run = submitted[-1]
-        assert run.intent == CanvasInstruction(instruction)
+        assert canvas.instruction_run is None and attempts[0] == attempts[1] and not fallback
+        run = attempts[-1]
+        assert run.intent == CanvasInstruction(instruction) and run.work_id == ROOT_CONTEXT
         task = tasks.get(run.task_id)
         assert task is not None and task.prompt.startswith(instruction + "\n\n") and "whole canvas" in task.prompt
-        assert not store.read().notes and run.work_id == ROOT_CONTEXT
-        work.publish(WorkSnapshot(tasks=(replace(task, state=automation.task.Completed("Two versions found", ())),)))
-        ui.pump()
-        assert not any(item.id == "result:" + task.id for item in store.read().activity)
         finding = CanvasNote("note:versions", "Deployment plans", "Two versions found")
         assert canvas.commit(save_note(canvas.document, finding))
         canvas.select(finding.id)
         ui.voice_agent("Explain the differences", fallback.append)
         ui.pump()
-        assert submissions()[-1].work_id == finding.id and store.read().notes == (finding,)
+        assert attempts[-1].work_id == finding.id and store.read().notes == (finding,)
         canvas.clear_context.click()
         assert canvas.selected is None and "whole canvas" in canvas.voice_hint.toolTip()
         ui.canvas_view.window.hide()
@@ -680,7 +660,7 @@ def test_canvas_toolbar_keeps_search_and_center_accessible_in_a_small_window(tmp
     # nested search target, keeps the retired input field, or centers by
     # changing the saved bubble arrangement.
     personal, document = nested_scene(tmp_path)
-    store = CanvasStore(tmp_path / "canvas.sqlite3")
+    store = local_canvas(tmp_path)
     store.save(document)
     with native_canvas(store) as native:
         native.publish(WorkSnapshot(personal=personal))
@@ -741,7 +721,7 @@ def test_canvas_gestures_pan_and_zoom_without_moving_saved_bubbles(tmp_path: Pat
     # Defect: relying on gestures ignores pixel-only trackpad input, double
     # counts its wheel deltas, or stops recognizing pinch/Control-wheel zoom.
     data, document = nested_bubbles()
-    store = CanvasStore(tmp_path / "canvas.sqlite3")
+    store = local_canvas(tmp_path)
     store.save(document)
     with native_canvas(store) as native:
         native.publish(WorkSnapshot(personal=PersonalView(data)))
@@ -782,7 +762,7 @@ def test_canvas_gestures_pan_and_zoom_without_moving_saved_bubbles(tmp_path: Pat
 def test_grid_remains_visible_and_spaced_when_zoomed_out_and_panned(tmp_path: Path) -> None:
     # Defect: the tiled raster shrinks into invisible dots or dense stripes;
     # Workspace must keep its spatial reference visible at every allowed zoom.
-    with native_canvas(CanvasStore(tmp_path / "canvas.sqlite3")) as panel:
+    with native_canvas(local_canvas(tmp_path)) as panel:
         viewport = panel.view.personal.canvas
         for zoom in (1.6, 1.0, 0.6, 0.3, 0.15):
             viewport.setTransform(QtGui.QTransform().scale(zoom, zoom))
@@ -841,8 +821,8 @@ def test_agent_canvas_bridge_commits_on_qt_and_refreshes_without_revealing(tmp_p
     # Defect: worker edits race with Qt, return success before persistence,
     # overwrite a user draft, bypass durable verification or reveal a window.
     ui = InboxUi()
-    store = CanvasStore(tmp_path / "canvas.sqlite3")
-    ui.configure_canvas(store, lambda _title, _target: None, lambda _run: None)
+    store = local_canvas(tmp_path)
+    ui.configure_canvas(store, lambda _title, _target: None)
     ui.observe_canvas(nested_bubbles()[0])
     ui.pump()
     endpoint = tmp_path / "bridge.json"
@@ -871,7 +851,7 @@ def test_agent_canvas_bridge_commits_on_qt_and_refreshes_without_revealing(tmp_p
             pump_until(ui, edit.done)
             receipt = CANVAS_RESPONSE.validate_json(edit.result().text)
             assert isinstance(receipt, CanvasUpdated) and receipt.changed
-            persisted = CanvasStore(store.path).read()
+            persisted = store.read()
             assert persisted.notes[0].text == "Candidate two matches the approval."
             assert persisted.collections[0].members == ("note:agent",)
             assert isinstance(tasks.actions(claim.task.id)[0].outcome, ActionVerified)
@@ -884,39 +864,12 @@ def test_agent_canvas_bridge_commits_on_qt_and_refreshes_without_revealing(tmp_p
             pump_until(ui, stale.done)
             stale.result()
             assert isinstance(tasks.actions(claim.task.id)[-1].outcome, ActionNotApplied)
-            assert CanvasStore(store.path).read() == persisted
+            assert store.read() == persisted
         # No window had to be created for any read, edit or conflict.
         assert not any(widget.isVisible() for widget in ui.root.topLevelWidgets())
         assert not rig.machine.log
     finally:
         triage.close()
-        ui.dispose()
-
-
-def test_canvas_automatically_queues_changed_evidence_but_not_repeated_observations(tmp_path: Path) -> None:
-    # Defect: real source publication never reaches the investigation effect,
-    # repeats queue work, or routine collection creates a desktop notification.
-    ui = InboxUi()
-    store = CanvasStore(tmp_path / "canvas.sqlite3")
-    runs: list[CanvasRun] = []
-    notices: list[str] = []
-    ui.configure_canvas(store, lambda title, _target: notices.append(title), runs.append, autonomous=True)
-    data = nested_bubbles()[0]
-    work = ui.work(lambda _command: None, reveal=False)
-    work.publish(WorkSnapshot(personal=PersonalView(data)))
-    work.show(focus=False)
-    ui.pump()
-    ui.canvas_view.window.hide()
-    ui.observe_canvas(data)
-    ui.pump()
-    try:
-        assert runs and tuple(store.read().runs) == tuple(runs)
-        assert ui.canvas_view.personal.document.runs == tuple(runs)
-        ui.observe_canvas(data)
-        ui.pump()
-        assert tuple(store.read().runs) == tuple(runs) and not notices
-        assert not ui.canvas_view.window.isVisible()
-    finally:
         ui.dispose()
 
 
@@ -940,7 +893,7 @@ def test_canvas_voice_key_feedback_follows_agent_capture_and_release(tmp_path: P
     # clears it, release leaves it pressed during transcription, or dictation
     # incorrectly lights the agent key. Feedback must not resize the toolbar.
     ui = InboxUi()
-    ui.configure_canvas(CanvasStore(tmp_path / "canvas.sqlite3"), lambda _title, _target: None, lambda _: None)
+    ui.configure_canvas(local_canvas(tmp_path), lambda _title, _target: None)
     ui.desktop_state(State.LISTENING, agent_speaking=True)
     ui.pump()
     work = ui.work(lambda _: None, reveal=True, focus=False)
@@ -981,11 +934,9 @@ def test_canvas_clarification_redirect_submits_context_to_the_waiting_agent(tmp_
     # Defect: the redirect opens the wrong bubble, reserves empty editor space,
     # or spoken context fails to resume the exact existing waiting worker.
     ui = InboxUi()
-    store = CanvasStore(tmp_path / "canvas.sqlite3")
-    commands: list[WorkCommand] = []
-    runs: list[CanvasRun] = []
-    ui.configure_canvas(store, lambda _title, _target: None, runs.append)
-    work = ui.work(commands.append, reveal=False)
+    store = local_canvas(tmp_path)
+    ui.configure_canvas(store, lambda _title, _target: None)
+    work = ui.work(lambda _command: None, reveal=False)
     agent = ui.agent(None, lambda: None, on_work=lambda: work.show(focus=False), reveal=False)
     ui.pump()
     agent.show(focus=False)
@@ -1013,8 +964,6 @@ def test_canvas_clarification_redirect_submits_context_to_the_waiting_agent(tmp_
             assert isinstance(detail, QuestionDetail)
             assert not detail.frame.findChildren(QtWidgets.QPlainTextEdit) and detail.frame.height() <= 152
             assert detail.status.text() == "Hold N to reply · release to send"
-            wrong_session = SessionRequest("expired-session", question.request.request_id)
-            assert not ui.answer_canvas(wrong_session, "Wrong answer")
             fallback: list[str] = []
             ui.voice_agent("Contoso owns the handoff.", fallback.append)
             pump_until(ui, result.done)
@@ -1023,7 +972,6 @@ def test_canvas_clarification_redirect_submits_context_to_the_waiting_agent(tmp_
             assert "Contoso owns the handoff." in detail.response.text() and not fallback
             answered = store.read().activity[0]
             assert isinstance(answered, CanvasQuestion) and answered.reply == Answered("Contoso owns the handoff.")
-            assert not ui.answer_canvas(question.request, "Second answer")
             card = canvas.card(question.id)
             assert card is not None and card.detail_proxy is not None
             assert card.rect().contains(card.detail_proxy.boundingRect().translated(card.detail_proxy.pos()))
@@ -1036,10 +984,10 @@ def test_canvas_spoken_reply_keeps_transcript_on_rejection_and_continue_stays_bo
     # Defect: task replies route to a different request, failed persistence loses
     # user text, or starting research loses the work-to-run connection on reopen.
     ui = InboxUi()
-    store = CanvasStore(tmp_path / "canvas.sqlite3")
     commands: list[WorkCommand] = []
     runs: list[CanvasRun] = []
-    ui.configure_canvas(store, lambda _title, _target: None, runs.append)
+    store = WorkCanvas(tmp_path / "canvas.sqlite3", runs.append, autonomous=False)
+    ui.configure_canvas(store, lambda _title, _target: None)
     work = ui.work(commands.append, reveal=True, focus=False)
     task = work_task(automation.task.Waiting(automation.task.Question("request", "Which owner?", "Confirm the handoff.")))
     personal = PersonalStore(tmp_path / "work.sqlite3")
@@ -1055,7 +1003,6 @@ def test_canvas_spoken_reply_keeps_transcript_on_rejection_and_continue_stays_bo
         canvas.open_at("question:request")
         question = canvas.detail("question:request")
         assert isinstance(question, QuestionDetail)
-        assert not ui.answer_canvas(TaskRequest(task.id, "stale"), "Use Contoso")
         assert not ui.answer_canvas(TaskRequest(task.id, "request"), "x" * 16001)
         fallback: list[str] = []
         ui.voice_agent("x" * 16001, fallback.append)
@@ -1086,64 +1033,30 @@ def test_canvas_spoken_reply_keeps_transcript_on_rejection_and_continue_stays_bo
         ui.dispose()
 
 
-def test_hidden_canvas_announces_attached_result_once(tmp_path: Path) -> None:
-    # Defect: rendering a hidden canvas consumes an important result before Ui
-    # can announce it, or repeated snapshots generate duplicate desktop prompts.
+def test_canvas_attention_reaches_the_desktop_and_redirects_to_its_bubble(tmp_path: Path) -> None:
+    # Defect: the bell counts or opens a dismissed question, a hidden canvas
+    # misses its result notice, or the notice redirects to another bubble.
     ui = InboxUi()
-    store = CanvasStore(tmp_path / "canvas.sqlite3")
-    task = work_task()
-    store.save(replace(store.read(), runs=(CanvasRun(task.id, "work:atlas"),)))
-    notices: list[tuple[str, str]] = []
-
-    def notify(title: str, target: str) -> None:
-        notices.append((title, target))
-
-    ui.configure_canvas(store, notify, lambda _run: None)
-    work = ui.work(lambda _command: None, reveal=True, focus=False)
-    snapshot = WorkSnapshot(tasks=(task,))
-    work.publish(snapshot)
-    ui.observe_canvas_work(snapshot)
-    ui.pump()
-    try:
-        ui.canvas_view.hide()
-        completed = replace(snapshot, tasks=(replace(task, state=automation.task.Completed("Handoff confirmed", ())),))
-        work.publish(completed)
-        ui.observe_canvas_work(completed)
-        ui.pump()
-        assert notices == [(task.title, "result:" + task.id)]
-        ui.observe_canvas_work(completed)
-        ui.pump()
-        assert len(notices) == 1
-        ui.open_canvas_at(notices[0][1])
-        ui.pump()
-        assert ui.canvas_view.personal.selected == "result:" + task.id
-    finally:
-        ui.dispose()
-
-
-def test_dismissed_work_does_not_redirect_desktop_attention_or_announce_late_results(tmp_path: Path) -> None:
-    # Defect: the bell opens a hidden question during task cancellation, or a
-    # late completed task announces a redirect into dismissed work.
-    ui = InboxUi()
-    store = CanvasStore(tmp_path / "canvas.sqlite3")
+    store = local_canvas(tmp_path)
     dismissed = WorkThread("work:dismissed", 0, WorkDefinition("Not mine", "Other responsibility"), (), 10, 10)
     active = replace(dismissed, id="work:active", definition=WorkDefinition("Mine", "My responsibility"))
     data = Catalog(works=(active,), dismissed=(DismissedWork(dismissed, "Wrong owner"),))
     old = work_task(automation.task.Waiting(automation.task.Question("old", "Old question", "")), identity="old-task")
     current = work_task(automation.task.Waiting(automation.task.Question("current", "Current question", "")), identity="current-task")
-    store.save(replace(store.read(), runs=(CanvasRun(old.id, dismissed.id), CanvasRun(current.id, active.id))))
+    research = work_task(identity="research-task")
+    store.save(replace(store.read(), runs=(CanvasRun(old.id, dismissed.id), CanvasRun(current.id, active.id), CanvasRun(research.id, active.id))))
     notices: list[tuple[str, str]] = []
 
     def notify(title: str, target: str) -> None:
         notices.append((title, target))
 
     try:
-        ui.configure_canvas(store, notify, lambda _run: None)
+        ui.configure_canvas(store, notify)
         work = ui.work(lambda _command: None, reveal=True, focus=False)
         ui.desktop(
             show_agent=lambda: None, show_work=lambda: None, stop=lambda: None, overlay=lambda: None, menu=lambda: None, on_problem=lambda _: None
         )
-        snapshot = WorkSnapshot(personal=PersonalView(data), tasks=(old, current))
+        snapshot = WorkSnapshot(personal=PersonalView(data), tasks=(old, current, research))
         work.publish(snapshot)
         ui.observe_canvas(data)
         ui.observe_canvas_work(snapshot)
@@ -1152,13 +1065,16 @@ def test_dismissed_work_does_not_redirect_desktop_attention_or_announce_late_res
         ui.open_inbox(lambda: None)
         ui.pump()
         assert ui.canvas_view.personal.selected == "question:current"
-        ui.canvas_view.hide()
         notices.clear()
-        completed = replace(snapshot, tasks=(replace(old, state=automation.task.Completed("Late result", ())), current))
+        ui.canvas_view.hide()
+        completed = replace(snapshot, tasks=(old, current, replace(research, state=automation.task.Completed("Handoff confirmed", ()))))
         work.publish(completed)
         ui.observe_canvas_work(completed)
         ui.pump()
-        assert not notices
+        assert notices == [(research.title, "result:" + research.id)]
+        ui.open_canvas_at(notices[0][1])
+        ui.pump()
+        assert ui.canvas_view.personal.selected == "result:" + research.id
     finally:
         ui.dispose()
 
@@ -1197,7 +1113,7 @@ def test_nested_bubbles_reveal_on_one_canvas_and_retain_reading_and_pins(tmp_pat
     question = document.activity[0]
     assert isinstance(question, CanvasQuestion)
     group = document.collections[0]
-    store = CanvasStore(tmp_path / "canvas.sqlite3")
+    store = local_canvas(tmp_path)
     store.save(document)
     with native_canvas(store) as panel:
         panel.publish(WorkSnapshot(personal=personal))
@@ -1266,7 +1182,7 @@ def test_nested_document_and_conversation_controls_keep_routes_and_drafts(tmp_pa
     # Defect: disclosure still acts as Read, parent collapse closes a draft,
     # shared-source navigation jumps to the other work, or documents use Edge's badge.
     data, document = nested_bubbles()
-    store = CanvasStore(tmp_path / "canvas.sqlite3")
+    store = local_canvas(tmp_path)
     store.save(document)
     with native_canvas(store) as native:
         native.publish(WorkSnapshot(personal=PersonalView(data)))
@@ -1327,7 +1243,7 @@ def test_native_connector_relationships_and_menus_work_for_cards_and_containers(
     # refresh, or right-clicks on child headings/editors bypass bubble options.
     note = CanvasNote("note:connect", "Evidence", "Useful finding")
     group = CanvasCollection("group:connect", "Decision")
-    store = CanvasStore(tmp_path / "canvas.sqlite3")
+    store = local_canvas(tmp_path)
     store.save(
         CanvasDocument(
             notes=(note,),

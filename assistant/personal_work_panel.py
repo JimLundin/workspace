@@ -22,6 +22,7 @@ from assistant.ui_components.canvas_connection import ConnectionPath
 from assistant.ui_components.controls import button, label
 from assistant.ui_components.voice_legend import VoiceLegend
 from assistant.ui_components.widgets import column, row
+from assistant.work_canvas import Investigating, NotQueued, Queued, ResumeTask, WorkCanvas
 from assistant.work_canvas_commands import PutRelation, RemoveRelation, UpdateCanvas, edited, revision
 from assistant.work_canvas_connections import connections
 from assistant.work_canvas_context import (
@@ -40,18 +41,28 @@ from assistant.work_canvas_context import (
     visible_groups,
 )
 from assistant.work_canvas_gestures import (
+    BubbleDrag,
     BubbleTarget,
+    CancelGesture,
     ClickBubble,
     ConnectBubbles,
+    DrawingRelation,
+    Gesture,
     GestureEffect,
     GestureScene,
+    Idle,
     MovePreview,
     NestBubble,
     NoChange,
     PlaceBubbles,
+    PointerMoved,
+    PointerReleased,
+    PressBubble,
+    PressConnector,
     RelationPreview,
+    ScenePoint,
+    transition,
 )
-from assistant.work_canvas_interaction import CanvasInteraction
 from assistant.work_canvas_layout import Box, Measurements, Size, layout
 from assistant.work_canvas_model import (
     CanvasCollection,
@@ -69,7 +80,6 @@ from assistant.work_canvas_model import (
     toggle_expansion,
     view_state,
 )
-from assistant.work_canvas_store import CanvasStore
 from assistant.work_canvas_view import CanvasCard, CanvasGroup, CanvasViewport
 from assistant.work_window import ControlTask, WorkWindow
 from automation.personal_work import (
@@ -87,17 +97,17 @@ from automation.personal_work import (
     WorkThread,
     source_id,
 )
-from automation.task import Blocked, Control, Waiting, phase
+from automation.task import Control
 from automation.work_documents import LocalDocument, WebDocument, document_identity
 from miryoku.layout import AGENT
 lazy from assistant.work_canvas_detail import CardDetail, NoteDetail, QuestionDetail, SourceDetail, UpdateDetail, WorkDetail
 
 
 class PersonalPanel:
-    def __init__(self, parent: QtWidgets.QWidget, work: WorkWindow, store: CanvasStore | None = None) -> None:
+    def __init__(self, parent: QtWidgets.QWidget, work: WorkWindow, canvas: WorkCanvas) -> None:
         self.work: WorkWindow = work
-        self.store: CanvasStore | None = store
-        self.document: CanvasDocument = store.read() if store else CanvasDocument()
+        self.work_canvas: WorkCanvas = canvas
+        self.document: CanvasDocument = canvas.read()
         self.view: PersonalView = PersonalView()
         self.scope: CanvasScope = CanvasScope()
         self.projection: CanvasScene = project(self.view.catalog, self.document, self.scope)
@@ -116,7 +126,6 @@ class PersonalPanel:
         self.draft_known: frozenset[str] = frozenset()
         self.positioned: bool = False
         self.focus_timer: QtCore.QTimer | None = None
-        self.study: Callable[[CanvasRun], None] | None = None
         self.instruction_run: CanvasRun | None = None
         self.frame: CanvasSurface = CanvasSurface(parent)
         self.frame.setStyleSheet(CANVAS_STYLE)
@@ -218,24 +227,25 @@ class PersonalPanel:
         except ValueError as error:
             self.status.setText(str(error))
             return False
-        if self.study is None:
-            self.status.setText("The agent is not available yet. Your transcript is available with Copy latest transcript.")
-            return False
         pending = self.instruction_run
         if pending is None or pending.intent != intent:
-            identity = uuid4().hex
-            pending = CanvasRun("canvas:instruction:" + identity, self.selected or ROOT_CONTEXT, intent)
-            if not self.commit(replace(self.document, runs=(*self.document.runs, pending))):
-                return False
-            self.instruction_run = pending
+            pending = CanvasRun("canvas:instruction:" + uuid4().hex, self.selected or ROOT_CONTEXT, intent)
         try:
-            self.study(pending)
-        except (OSError, ValueError) as error:
-            self.status.setText("Could not queue the instruction: " + str(error))
+            started = self.work_canvas.start(pending)
+        except (OSError, ValueError, sqlite3.Error) as error:
+            self.work.problem("The local canvas could not be saved: " + str(error))
             return False
-        self.instruction_run = None
-        self.status.setText("Instruction queued. The agent will build on this canvas.")
-        return True
+        self.document = started.document
+        match started:
+            case NotQueued(reason=reason):
+                # Retrying reuses this saved binding instead of adding another.
+                self.instruction_run = pending
+                self.status.setText("Could not queue the instruction: " + reason)
+                return False
+            case Queued():
+                self.instruction_run = None
+                self.status.setText("Instruction queued. The agent will build on this canvas.")
+                return True
 
     def position_chrome(self) -> None:
         self.contents_action.setText("Show group contents" if self.scope.mode is CanvasMode.CONTEXTS else "Collapse containers")
@@ -295,12 +305,11 @@ class PersonalPanel:
     def commit(self, document: CanvasDocument) -> bool:
         if document == self.document:
             return True
-        if self.store is not None:
-            try:
-                self.store.save(document)
-            except (OSError, ValueError, sqlite3.Error) as error:
-                self.work.problem("The local canvas could not be saved: " + str(error))
-                return False
+        try:
+            self.work_canvas.save(document)
+        except (OSError, ValueError, sqlite3.Error) as error:
+            self.work.problem("The local canvas could not be saved: " + str(error))
+            return False
         self.document = document
         return True
 
@@ -545,30 +554,22 @@ class PersonalPanel:
                 pass
             case ClickBubble(id=identity):
                 self.click_bubble(identity)
-            case PlaceBubbles(id=identity, positions=positions):
-                state = view_state(self.document, self.scope.identity)
-                replacements = frozendict((position.id, position) for position in positions)
-                updated = replace(state, placements=tuple(replacements.get(p.id, p) for p in state.placements), pinned=state.pinned | {identity})
-                self.commit(save_view(self.document, updated))
-                self.reflow()
-            case NestBubble(id=identity, parent_id=parent, positions=positions):
+            case PlaceBubbles() | NestBubble() as released:
                 try:
-                    document = nest(self.document, parent, identity)
-                    project(self.view.catalog, document, self.scope)
+                    self.document = self.work_canvas.commit_gesture(self.scope, released)
                 except ValueError as error:
                     self.work.problem(str(error))
                     self.reflow()
                     return
-                members = next(bubble.members for bubble in self.interaction.gesture_scene.bubbles if bubble.id == identity)
-                document = release_subtree(document, members)
-                state = view_state(document, self.scope.identity)
-                if parent is None:
-                    state = replace(state, placements=(*state.placements, *positions), pinned=state.pinned | {identity})
-                document = save_view(document, state)
-                if parent is not None and parent != self.scope.identity:
-                    document = toggle_expansion(document, self.scope.identity, parent, expanded=True)
-                self.commit(document)
-                self.render(self.view)
+                except (OSError, sqlite3.Error) as error:
+                    self.work.problem("The local canvas could not be saved: " + str(error))
+                    self.reflow()
+                    return
+                match released:
+                    case PlaceBubbles():
+                        self.reflow()
+                    case NestBubble():
+                        self.render(self.view)
             case ConnectBubbles(start=start, end=end):
                 self.save_relation(CanvasRelation(start, end))
             case MovePreview() | RelationPreview():
@@ -844,27 +845,21 @@ class PersonalPanel:
                 self.locate(identity)
 
     def study_work(self, identity: str) -> None:
-        binding = next(
-            (
-                run
-                for run in reversed(self.document.runs)
-                if run.work_id == identity
-                and any(task.id == run.task_id and phase(task.state) not in ("completed", "failed", "cancelled") for task in self.work.state.tasks)
-            ),
-            None,
-        )
-        if binding is not None:
-            task = next(task for task in self.work.state.tasks if task.id == binding.task_id)
-            match task.state:
-                case Waiting(reason=Blocked()):
-                    self.work.send(ControlTask(task.id, Control.RESUME))
-                case _:
-                    self.status.setText("This work already has an investigation; open Agent tasks to inspect its progress or required input.")
+        try:
+            continued = self.work_canvas.continue_work(identity)
+        except (OSError, ValueError, sqlite3.Error) as error:
+            self.work.problem("The local canvas could not be saved: " + str(error))
             return
-        if self.study is not None:
-            run = CanvasRun("canvas:" + uuid4().hex, identity)
-            self.commit(replace(self.document, runs=(*self.document.runs, run)))
-            self.study(run)
+        match continued:
+            case ResumeTask(task_id=task):
+                self.work.send(ControlTask(task, Control.RESUME))
+            case Investigating.ALREADY:
+                self.status.setText("This work already has an investigation; open Agent tasks to inspect its progress or required input.")
+            case Queued(document=document):
+                self.document = document
+            case NotQueued(document=document, reason=reason):
+                self.document = document
+                self.status.setText("Could not queue the investigation: " + reason)
 
     def start_connection(self) -> None:
         work = next((work for work in self.view.catalog.works if work.id == self.selected), None)
@@ -1006,3 +1001,107 @@ class PersonalPanel:
                     kind = SourceKind.DOCUMENT
             identity = source_id(kind, document_identity(command.reference.url))
             self.commit(nest(self.document, self.selected, identity))
+
+
+# Qt owns pointer capture and previews; immutable decisions own the gestures.
+# No document/layout work occurs during pointer movement. The panel applies
+# the single immutable commit effect on release.
+class CanvasInteraction:
+    def __init__(self, owner: PersonalPanel) -> None:
+        self.owner: PersonalPanel = owner
+        self.gesture: Gesture = Idle.READY
+        self.gesture_scene: GestureScene = GestureScene((), None)
+        self.relation_preview: QtWidgets.QGraphicsPathItem | None = None
+
+    def press_bubble(self, identity: str, point: ScenePoint) -> None:
+        match self.gesture:
+            case DrawingRelation():
+                return
+            case _:
+                self.gesture_scene = self.owner.capture_gesture_scene()
+        target = next(bubble for bubble in self.gesture_scene.bubbles if bubble.id == identity)
+        state = self.owner.gesture_placements()
+        positions = tuple(position for position in state if position.id in target.members)
+        drag = BubbleDrag(identity, point, positions, target.parent_id, target.members)
+        self.gesture = transition(self.gesture, PressBubble(drag), self.gesture_scene).state
+
+    def pointer(self, event: PointerMoved | PointerReleased | PressConnector) -> None:
+        match event:
+            case PressConnector():
+                self.gesture_scene = self.owner.capture_gesture_scene()
+            case PointerMoved(point=point):
+                event = PointerMoved(point, QtWidgets.QApplication.startDragDistance() / self.owner.canvas.transform().m11())
+            case _:
+                pass
+        result = transition(self.gesture, event, self.gesture_scene)
+        self.gesture = result.state
+        match result.effect:
+            case MovePreview(positions=positions, target_id=target):
+                indexed = frozendict((position.id, position) for position in positions)
+                for bubble in self.owner.bubbles():
+                    position = indexed.get(bubble.identity)
+                    if position is not None:
+                        bubble.setPos(position.x, position.y)
+                    bubble.highlight_drop(active=bubble.identity == target)
+                self.owner.update_connection_geometry()
+            case RelationPreview(source_id=identity, point=point, target_id=target):
+                self.preview_relation(identity, point)
+                for bubble in self.owner.bubbles():
+                    bubble.highlight_drop(active=bubble.identity == target)
+            case _ as effect:
+                self.owner.apply_gesture(effect)
+        match result.state:
+            case Idle():
+                self.clear_gesture_preview()
+            case _:
+                pass
+
+    def clear_gesture_preview(self) -> None:
+        if self.relation_preview is not None:
+            self.owner.scene.removeItem(self.relation_preview)
+            self.relation_preview = None
+        for bubble in self.owner.bubbles():
+            bubble.highlight_drop(active=False)
+
+    def preview_relation(self, identity: str, point: ScenePoint) -> None:
+        source = next(bubble for bubble in self.owner.bubbles() if bubble.identity == identity)
+        first = source.mapToScene(source.connector.pos())
+        if self.relation_preview is None:
+            self.relation_preview = QtWidgets.QGraphicsPathItem()
+            pen = QtGui.QPen(QtGui.QColor("#c4a5e8"), 2, Qt.PenStyle.DashLine)
+            pen.setCosmetic(True)
+            self.relation_preview.setPen(pen)
+            self.relation_preview.setZValue(30)
+            self.relation_preview.setAcceptedMouseButtons(Qt.MouseButton.NoButton)
+            self.owner.scene.addItem(self.relation_preview)
+        path = QtGui.QPainterPath(first)
+        path.lineTo(point.x, point.y)
+        self.relation_preview.setPath(path)
+
+    def start_relation(self, identity: str) -> None:
+        self.clear_gesture_preview()
+        source = next(bubble for bubble in self.owner.bubbles() if bubble.identity == identity)
+        point = source.mapToScene(source.connector.pos())
+        self.pointer(PressConnector(identity, ScenePoint(point.x(), point.y())))
+        self.owner.gesture_status("Click another bubble to connect; Escape cancels.")
+
+    def cancel(self) -> bool:
+        match self.gesture:
+            case Idle():
+                return False
+            case _:
+                result = transition(self.gesture, CancelGesture.CANCEL, self.gesture_scene)
+                self.gesture = result.state
+                match result.effect:
+                    case MovePreview(positions=positions):
+                        indexed = frozendict((position.id, position) for position in positions)
+                        for bubble in self.owner.bubbles():
+                            position = indexed.get(bubble.identity)
+                            if position is not None:
+                                bubble.setPos(position.x, position.y)
+                        self.owner.update_connection_geometry()
+                    case _:
+                        pass
+                self.clear_gesture_preview()
+                self.owner.gesture_status("")
+                return True

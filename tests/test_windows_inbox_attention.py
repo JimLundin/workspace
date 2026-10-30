@@ -25,6 +25,7 @@ from assistant.qt_ui import application
 from assistant.system_notices import Notice, NoticeKey, Observed
 from assistant.ui import Ui
 from assistant.work_canvas_window import CanvasWindow
+from tests.test_work_canvas import local_canvas
 
 prepare()
 
@@ -140,12 +141,13 @@ def test_bell_opens_inbox_keeps_exact_accessible_count_and_survives_activity(tmp
         app.processEvents()
 
 
-def test_app_context_stays_quiet_and_only_agent_questions_change_toolbar_attention() -> None:
+def test_app_context_stays_quiet_and_only_agent_questions_change_toolbar_attention(tmp_path: Path) -> None:
     # Defect: routine app/feed arrivals still count as user attention, or the
     # question count depends on a floating view already being created.
     app, original_style = application(), application().styleSheet()
     ui = InboxUi()
     try:
+        ui.configure_canvas(local_canvas(tmp_path), lambda _title, _target: None)
         ui.desktop(
             show_agent=lambda: None, show_work=lambda: None, stop=lambda: None, overlay=lambda: None, menu=lambda: None, on_problem=lambda _: None
         )

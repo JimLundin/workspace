@@ -161,6 +161,8 @@ def test_work_window_closes_with_its_ui_owner_in_a_fresh_process(tmp_path: Path)
         from PySide6.QtWidgets import QApplication
         from assistant.qt_ui import later
         from assistant.ui import Ui
+        from assistant.work_canvas import WorkCanvas
+        from usage import DIRECTORY
 
         faulthandler.enable()
 
@@ -173,6 +175,7 @@ def test_work_window_closes_with_its_ui_owner_in_a_fresh_process(tmp_path: Path)
                 return view
 
         ui = OffscreenUi()
+        ui.configure_canvas(WorkCanvas(DIRECTORY / "work" / "canvas.sqlite3", lambda run: None, autonomous=False), lambda title, target: None)
         failures = []
         owners = []
 
@@ -229,6 +232,8 @@ def _native_controller_lifetime(tmp_path: Path, *, qt_first: bool) -> None:
         prepare()
         from PySide6.QtWidgets import QApplication
         from assistant.ui import Ui
+        from assistant.work_canvas import WorkCanvas
+        from usage import DIRECTORY
         from winapi import shell, system
 
         faulthandler.enable()
@@ -254,6 +259,8 @@ def _native_controller_lifetime(tmp_path: Path, *, qt_first: bool) -> None:
 
             def run(self):
                 self.ui.agent(None, lambda: None, reveal=False)
+                canvas = WorkCanvas(DIRECTORY / "work" / "canvas.sqlite3", lambda run: None, autonomous=False)
+                self.ui.configure_canvas(canvas, lambda title, target: None)
                 self.ui.work(lambda command: None, focus=False)
                 self.ui.post(self.ready)
                 system.run_message_loop()

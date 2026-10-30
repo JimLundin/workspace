@@ -57,8 +57,7 @@ lazy from assistant.state_store import windows_store
 lazy from assistant.tiling import GlazeWM
 lazy from assistant.ui import Ui
 lazy from assistant.work_agent import WorkAgent
-lazy from assistant.work_canvas_investigation import instruction_prompt
-lazy from assistant.work_canvas_store import CanvasStore
+lazy from assistant.work_canvas import WorkCanvas, instruction_prompt
 lazy from assistant.work_window import ControlTask, WorkCommand, WorkSnapshot
 lazy from automation.bridge import BridgeClient
 lazy from automation.context import ContextStore
@@ -193,6 +192,7 @@ class AssistantApp:
         "activity",
         "agent",
         "assistant",
+        "canvas",
         "capture_timer",
         "communications",
         "consoles",
@@ -239,8 +239,7 @@ class AssistantApp:
         )
         self.timings.mark("control window and microphone")
         missing = settings if isinstance(settings, Missing) else None
-        usable = settings if isinstance(settings, Settings) else Settings("", "", "", "", "", "", "")
-        self.settings = usable
+        self.settings = settings if isinstance(settings, Settings) else Settings("", "", "", "", "", "", "")
         self.activity: ActivityTracker
 
         def context() -> ContextSnapshot:
@@ -287,6 +286,9 @@ class AssistantApp:
         self.ui.configure_communications(self.communications.submit)
         self.consoles = ConsoleInbox(DIRECTORY / "inbox-bridge.json", self.ui.console_changed)
         self.ui.configure_console(self.consoles.command)
+        self.canvas: WorkCanvas = WorkCanvas(
+            work_folder / "canvas.sqlite3", self.continue_thread, autonomous=bool(self.settings.api_key and self.settings.base_url)
+        )
         self.personal = self.create_personal(tasks)
         self.triage = Triage(
             DIRECTORY / "work-feed-bridge.json",
@@ -316,7 +318,7 @@ class AssistantApp:
         self.ui.configure_meetings(self.followups, self.open_meeting_file)
         events = TranscriptEvents(archive, routines, on_error=log, on_change=self.refresh_work)
         self.meetings = Meetings(
-            usable,
+            self.settings,
             lambda source: recording.MeetingAudio(computer_audio=source == "both"),
             archive=archive,
             on_update=self.recording_changed,
@@ -326,7 +328,7 @@ class AssistantApp:
         self.timings.mark("meeting services")
         self.assistant = Assistant(
             self.desktop,
-            usable,
+            self.settings,
             record=self.record,
             submit=self.jobs.put,
             run_agent=self.voice_agent,
@@ -356,20 +358,14 @@ class AssistantApp:
     # ---- running -----------------------------------------------------------------------
 
     def create_personal(self, tasks: TaskStore) -> PersonalWork:
-        canvas = CanvasStore(tasks.path.parent / "canvas.sqlite3")
-        self.ui.configure_canvas(
-            canvas,
-            self.agent.notify_canvas,
-            lambda run: self.continue_thread(canvas, run),
-            autonomous=bool(self.settings.api_key and self.settings.base_url),
-        )
-        self.agent.watch(tuple(run.task_id for run in canvas.read().runs), owner="canvas")
+        self.ui.configure_canvas(self.canvas, self.agent.notify_canvas)
+        self.agent.watch(tuple(run.task_id for run in self.canvas.read().runs), owner="canvas")
         if self.settings.api_key and self.settings.base_url:
             # Recover only the crash window between binding and task commit.
             # Existing task prompts may have been redirected by the user.
-            for run in canvas.read().runs:
+            for run in self.canvas.read().runs:
                 if (run.evidence is not None or isinstance(run.intent, CanvasInstruction)) and tasks.get(run.task_id) is None:
-                    self.ui.post(self.canvas_recovery(canvas, run))
+                    self.ui.post(self.canvas_recovery(run))
         return PersonalWork(
             PersonalStore(tasks.path),
             BrowserSources(Browser(DIRECTORY / "browser-profile", source=Product.EDGE)),
@@ -380,14 +376,13 @@ class AssistantApp:
 
     def stop_dismissed_work(self, work: WorkThread) -> None:
         """The committed user dismissal owns cancellation of only its research."""
-        canvas = CanvasStore(DIRECTORY / "work" / "canvas.sqlite3")
-        for run in canvas.read().runs:
+        for run in self.canvas.read().runs:
             if run.work_id == work.id:
                 self.agent.command(ControlTask(run.task_id, Control.CANCEL))
 
-    def canvas_recovery(self, canvas: CanvasStore, run: CanvasRun) -> Callable[[object], None]:
+    def canvas_recovery(self, run: CanvasRun) -> Callable[[object], None]:
         def recover(_root: object) -> None:
-            self.continue_thread(canvas, run)
+            self.continue_thread(run)
 
         return recover
 
@@ -582,8 +577,8 @@ class AssistantApp:
         self.ui.work(self.work_command, on_problem=self.problem, reveal=False).publish(replace(self.agent.snapshot(), personal=view))
         self.ui.observe_canvas(view.catalog)
 
-    def continue_thread(self, canvas: CanvasStore, run: CanvasRun) -> None:
-        self.agent.watch(tuple(binding.task_id for binding in canvas.read().runs), owner="canvas")
+    def continue_thread(self, run: CanvasRun) -> None:
+        self.agent.watch(tuple(binding.task_id for binding in self.canvas.read().runs), owner="canvas")
         match run.intent:
             case CanvasInstruction():
                 self.agent.submit_identified(run.task_id, instruction_prompt(run))

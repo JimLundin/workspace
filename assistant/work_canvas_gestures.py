@@ -123,6 +123,7 @@ class NestBubble:
     id: str
     parent_id: str | None
     positions: tuple[Placement, ...]
+    members: frozenset[str]
 
 
 @dataclass(frozen=True, slots=True)
@@ -213,7 +214,7 @@ def release(state: Gesture, point: ScenePoint, scene: GestureScene) -> GestureRe
             target = hit(scene, point, drag.members)
             parent = target.id if target else drag.parent_id if drag.id == scene.scope_id else scene.scope_id
             positions = translated(drag, point)
-            effect = PlaceBubbles(drag.id, positions) if parent == drag.parent_id else NestBubble(drag.id, parent, positions)
+            effect = PlaceBubbles(drag.id, positions) if parent == drag.parent_id else NestBubble(drag.id, parent, positions, drag.members)
             return GestureResult(Idle.READY, effect)
         case DrawingRelation(source_id=source):
             target = hit(scene, point, frozenset((source,)))
