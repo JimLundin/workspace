@@ -178,20 +178,24 @@ class Pill(QtWidgets.QWidget):
         if self.look == look:
             return
         self.look = look
-        self.colors, self.ink = palette(tone), Ink()
-        if isinstance(preference, appearance.Contrast):
-            self.colors = Palette(preference.background, preference.foreground, preference.foreground, preference.background)
-            self.ink = Ink(*(preference.foreground for _ in range(4)))
-        elif preference is appearance.Material.GLASS and self.frost is appearance.Frost.BRIGHT:
-            self.ink = Ink("#202435", "#3b3d50", "#234782", "#8e3144")
-        if preference is appearance.Material.GLASS and self.layer is None and self.loop.composition is not None:
-            try:
-                self.layer = self.loop.composition.glass()
-            except OSError as error:
-                log_view(f"Toolbar glass unavailable; using solid material: {error}")
-        self.glass = preference is appearance.Material.GLASS and self.layer is not None
-        if not self.glass and not isinstance(preference, appearance.Contrast):
-            self.ink = Ink()
+        self.colors, self.ink, self.glass = palette(tone), Ink(), False
+        match preference:
+            case appearance.Contrast(background=background, foreground=foreground):
+                self.colors = Palette(background, foreground, foreground, background)
+                self.ink = Ink(*(foreground for _ in range(4)))
+            case appearance.Material.GLASS:
+                if self.layer is None and self.loop.composition is not None:
+                    try:
+                        self.layer = self.loop.composition.glass()
+                    except OSError as error:
+                        log_view(f"Toolbar glass unavailable; using solid material: {error}")
+                self.glass = self.layer is not None
+                if self.glass and self.frost is appearance.Frost.BRIGHT:
+                    self.ink = Ink("#202435", "#3b3d50", "#234782", "#8e3144")
+            case appearance.Material.SOLID:
+                pass
+            case _:
+                assert_never(preference)
         if self.layer is not None:
             self.layer.color(self.colors.tint, 0.82 if self.frost is appearance.Frost.SMOKED else 0.22)
             if not self.glass:
