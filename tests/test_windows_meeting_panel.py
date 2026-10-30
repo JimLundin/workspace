@@ -44,8 +44,10 @@ from assistant.meeting_workflow import (
     DraftSaveProblem,
     FollowupPackage,
     FollowupProgress,
+    ListedFollowup,
     MeetingSnapshot,
     MeetingWorkflow,
+    OpenedFollowup,
     WorkPending,
 )
 from assistant.qt_runtime import prepare
@@ -87,15 +89,18 @@ def package_fixture(folder: Path, version: str = "a" * 64) -> FollowupPackage:
 
 
 class WorkflowFixture(MeetingWorkflow):
-    __slots__ = ("actions", "drafts", "prepared", "refreshes", "value")
+    __slots__ = ("actions", "drafts", "opens", "prepared", "refreshes", "value")
 
     def __init__(self, packages: tuple[FollowupPackage, ...]) -> None:
         bundle = packages[0].publication.followup.sources
-        request = PreparedFollowup("meeting-task", MeetingFollowup("a" * 64), bundle)
+        profile = MeetingFollowup("a" * 64)
+        listed = ListedFollowup("meeting-task", profile, "Meeting follow-up: Release planning")
         self.value = MeetingSnapshot(
             tuple(reversed(tuple(item.source for item in bundle.transcripts))),
-            (FollowupProgress(request, WorkPending.OBSERVATION, AvailablePackages(packages)),),
+            (FollowupProgress(listed, WorkPending.OBSERVATION),),
+            opened=OpenedFollowup(PreparedFollowup("meeting-task", profile, bundle), AvailablePackages(packages)),
         )
+        self.opens: list[str] = []
         self.prepared: list[tuple[TranscriptSource, ...]] = []
         self.drafts: list[DraftChange] = []
         self.actions: list[ActionChange] = []
@@ -106,6 +111,9 @@ class WorkflowFixture(MeetingWorkflow):
 
     def prepare(self, selected: tuple[TranscriptSource, ...]) -> None:
         self.prepared.append(selected)
+
+    def open(self, task_id: str) -> None:
+        self.opens.append(task_id)
 
     def save_draft(self, change: DraftChange) -> None:
         self.drafts.append(change)
@@ -142,8 +150,8 @@ class NativeMeetings:
         self.root.processEvents()
 
     def with_package(self, package: FollowupPackage) -> MeetingSnapshot:
-        progress = replace(self.workflow.value.preparations[0], packages=AvailablePackages((package,)))
-        return replace(self.workflow.value, preparations=(progress,))
+        assert isinstance(self.workflow.value.opened, OpenedFollowup)
+        return replace(self.workflow.value, opened=replace(self.workflow.value.opened, packages=AvailablePackages((package,))))
 
     def close(self) -> None:
         self.view.close()
@@ -164,6 +172,7 @@ def test_selected_segments_submit_only_on_request_in_chronological_order(tmp_pat
     with native_meetings(tmp_path) as panel:
         view = panel.view
         assert not view.prepare_button.isEnabled() and not panel.workflow.prepared
+        assert panel.workflow.opens == ["meeting-task"], "The panel must open the selected follow-up to show its package."
         for index in (0, 2):
             item = view.recordings.topLevelItem(index)
             assert item is not None

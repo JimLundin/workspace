@@ -266,8 +266,11 @@ UI uses Qt; no GUI objects cross the keyboard process boundary.
 Meeting follow-through shares the work journal and selected saved transcript
 versions. A follow-up task's profile carries the content digest of its saved
 bundle, so the journal alone lists follow-ups and each run opens exactly its
-recordings. Its owner queues catalog reads, preparation and revision-checked edits
-off the UI thread, and closes before WorkAgent. The Meetings view retains raw
+recordings. The Meetings view lists the 100 newest by task title and says when
+older ones exist; only the follow-up it opens loads its recordings and packages,
+so listing holds no transcript content. Its owner queues catalog reads,
+preparation, opening and revision-checked edits off the UI thread, and closes
+before WorkAgent. The Meetings view retains raw
 editor buffers by task, package version and artifact. Only the matching save
 receipt clears a submitted edit; newer typing remains against the acknowledged
 revision. Multiple saved packages require an explicit choice when no selection
