@@ -4,16 +4,21 @@ import time
 import webbrowser
 from collections.abc import Callable
 from dataclasses import replace
+from pathlib import Path
+from typing import Annotated, Final, TypedDict
 from urllib.parse import parse_qs, urlsplit
 
+from pydantic import Field, StrictInt, TypeAdapter
 lazy from PySide6 import QtCore
 lazy from PySide6.QtCore import Qt
 lazy from PySide6.QtGui import QFontMetricsF
 lazy from PySide6.QtWidgets import QApplication
 
-from assistant.agent_progress import TRAIL_ALPHA, Progress, advance_progress, compact, retain_lifetimes, visible
+from assistant.agent_progress import Progress, advance_progress, compact, retain_lifetimes, visible
 from assistant.canvas_activity import history_session, redirect_session
 from assistant.qt_runtime import prepare
+from assistant.toast_stack import Active, Column, Measured, Preview, Retiring, Stacking, Viewport, fit, frames, reservable
+from usage import DIRECTORY
 from winapi import appearance, windows
 from winapi.shapes import Rect
 lazy from assistant import console_requests, notification_reading
@@ -25,19 +30,16 @@ lazy from assistant.feed_triage import Assessment
 lazy from assistant.inbox import Query, review_prompt
 lazy from assistant.notifications import (
     MAX_VISIBLE,
-    WIDTH,
     Content,
     Entry,
     Frame,
     Key,
     PhaseKey,
     Recording,
-    Space,
     Stack,
     Toast,
     Turn,
     advance,
-    allocate,
     display_order,
     hide,
     hover,
@@ -48,13 +50,33 @@ lazy from assistant.notifications import (
     results,
     spinning,
 )
-lazy from assistant.panel import PanelPreferences, load_preferences
 lazy from assistant.qt_ui import EventLoop, cancel, later
 lazy from assistant.toast_card import Card, Measure
 lazy from assistant.ui_components.text import font
 lazy from winapi.notification_input import Region, WheelRouter
 
 prepare()
+
+MONITOR: Final = DIRECTORY / "agent-panel.json"
+
+
+class SavedBounds(TypedDict):
+    x: StrictInt
+    y: StrictInt
+    width: Annotated[StrictInt, Field(gt=0)]
+    height: Annotated[StrictInt, Field(gt=0)]
+
+
+_BOUNDS = TypeAdapter(SavedBounds)
+
+
+def saved_monitor(path: Path = MONITOR) -> Rect | None:
+    """The stack's monitor hint, in physical screen pixels; invalid data uses the default monitor."""
+    try:
+        values = _BOUNDS.validate_json(path.read_bytes())
+    except OSError, ValueError:
+        return None
+    return Rect(values["x"], values["y"], values["x"] + values["width"], values["y"] + values["height"])
 
 
 class AgentToasts:
@@ -74,11 +96,11 @@ class AgentToasts:
         "material_preference",
         "materials",
         "measure",
+        "monitor",
         "motion_enabled",
         "next_material",
         "page",
         "pointer_timer",
-        "preferences",
         "progress",
         "progress_head",
         "query",
@@ -99,7 +121,7 @@ class AgentToasts:
         root: QApplication,
         agent: AgentWindow,
         *,
-        preferences: PanelPreferences | None = None,
+        monitor: Rect | None = None,
         clock: Callable[[], float] = time.monotonic,
         motion_enabled: Callable[[], bool] = appearance.animations_enabled,
         material_preference: Callable[[], appearance.Preference] = appearance.preference,
@@ -108,14 +130,14 @@ class AgentToasts:
         timing: appearance.TimerResolution | None = None,
     ) -> None:
         # One view owns cards, desktop observation and motion timer lifetimes.
-        # Independent preferences, clock and native adapters enter at construction
+        # Independent monitor hint, clock and native adapters enter at construction
         # so every card shares that ownership; tests consume the same contracts.
         self.root, self.agent, self.clock, self.motion_enabled = root, agent, clock, motion_enabled
         self.desktop: Desktop = NativeDesktop() if desktop is None else desktop
         self.create_card = Card if create_card is None else create_card
         self.material_preference = material_preference
         self.materials = appearance.FrostSampler()
-        self.preferences = preferences if preferences is not None else load_preferences()
+        self.monitor = monitor if monitor is not None else saved_monitor()
         self.session = Session()
         self.stack = Stack()
         self.progress = Progress()
@@ -133,7 +155,7 @@ class AgentToasts:
         self.canvas_open: Callable[[str], None] | None = None
         self.page = 0
         self.capacity = MAX_VISIBLE
-        self.viewport: tuple[Rect, float, int] | None = None
+        self.viewport: Viewport | None = None
         self.reveal = False
         self.work: Rect | None = None
         self.scale = 0.0
@@ -260,23 +282,18 @@ class AgentToasts:
         if self.work is not None:
             work = self.work
             return self.desktop.work_area(Rect(work.right - 1, work.bottom - 1, work.right, work.bottom))
-        return self.desktop.work_area(self.preferences.bounds)
+        return self.desktop.work_area(self.monitor)
 
-    def height_limits(self, width: int, scale: float, available: int) -> dict[Key, int]:
-        line_height = round(QFontMetricsF(font()).height() * scale * 1.38)
-        spaces: list[Space] = []
-        for toast in self.stack.toasts:
-            prepared = self.cards[toast.key].measure(self.content_for(toast), width)
-            rank = priority(toast.content)
-            preferred = min(prepared.preferred, round((480 if rank == 2 else 360) * scale))
-            card = self.cards[toast.key]
-            complete_title = isinstance(toast.content, WorkItem) and isinstance(toast.content.item, Assessment) and not card.expanded
-            if complete_title:
-                preferred = prepared.preferred
-            preview = prepared.body_height if complete_title else min(prepared.body_height, line_height * 2 + 16)
-            minimum = min(preferred, prepared.header_height + preview + prepared.hint_height + prepared.padding)
-            spaces.append(Space(minimum, preferred, rank))
-        return dict(zip((toast.key for toast in self.stack.toasts), allocate(tuple(spaces), available), strict=True))
+    def measured(self, toast: Toast, width: int) -> Measured:
+        card = self.cards[toast.key]
+        prepared = card.measure(self.content_for(toast), width)
+        match toast.content:
+            case WorkItem(item=Assessment()) if not card.expanded:
+                preview = Preview.COMPLETE
+            case _:
+                preview = Preview.LINES
+        chrome = prepared.header_height + prepared.hint_height + prepared.padding
+        return Measured(prepared.preferred, chrome, prepared.body_height, priority(toast.content), preview)
 
     def sync_layers(self) -> None:
         # Qt rounds device-independent bounds during its layered paint. Align
@@ -325,35 +342,33 @@ class AgentToasts:
             card.expanded = toast.key == self.progress_head
         return card
 
-    def fit_viewport(self, work: Rect, width: int, scale: float, reserve: int, now: float) -> tuple[dict[Key, int], set[Key]]:
-        margin, gap = round(16 * scale), round(10 * scale)
+    def retiring(self) -> tuple[Card, ...]:
+        """Cards outside the projected stack, newest first."""
+        desired = {toast.key for toast in self.stack.toasts}
+        return tuple(sorted((card for key, card in self.cards.items() if key not in desired), key=card_order, reverse=True))
+
+    def fit_viewport(self, viewport: Viewport, now: float) -> tuple[dict[Key, int], set[Key]]:
         created: set[Key] = set()
         # Create and measure before changing any visible card's contents/size.
         limits: dict[Key, int] = {}
         for _attempt in range(MAX_VISIBLE):
-            desired = {toast.key for toast in self.stack.toasts}
-            retiring = sorted((card for key, card in self.cards.items() if key not in desired), key=card_order, reverse=True)
             # Reclaim surplus exits before acquiring arrivals. Active and spare
             # windows together stay bounded, even when a whole page is replaced.
-            for card in retiring[max(0, MAX_VISIBLE - len(desired)) :]:
+            for card in self.retiring()[reservable(len(self.stack.toasts)) :]:
                 self.release(card)
             for toast in self.stack.toasts:
                 if toast.key not in self.cards:
-                    self.cards[toast.key] = self.acquire(toast, width)
+                    self.cards[toast.key] = self.acquire(toast, viewport.width)
                     created.add(toast.key)
-            retiring = sorted((card for key, card in self.cards.items() if key not in desired), key=card_order, reverse=True)
-            reserved = retiring[: max(0, MAX_VISIBLE - len(desired))]
-            available = work.height - margin * 2 - reserve - gap * max(0, len(desired) + len(reserved) - 1) - sum(card.height for card in reserved)
-            limits = self.height_limits(width, scale, available)
-            if any(height == 0 for height in limits.values()) and reserved:
-                # Retiring bubbles cannot consume space needed by the next page.
-                for card in retiring:
-                    self.release(card)
-                available = work.height - margin * 2 - reserve - gap * max(0, len(desired) - 1)
-                limits = self.height_limits(width, scale, available)
-            if all(limits.values()) or self.capacity == 1:
+            retiring = self.retiring()
+            measured = tuple(self.measured(toast, viewport.width) for toast in self.stack.toasts)
+            fitted = fit(Column(measured, tuple(card.height for card in retiring), self.capacity), viewport)
+            for card in retiring[fitted.reserved :]:
+                self.release(card)
+            limits = dict(zip((toast.key for toast in self.stack.toasts), fitted.heights, strict=True))
+            if fitted.capacity == self.capacity:
                 break
-            self.capacity = max(1, min(self.capacity - 1, sum(height > 0 for height in limits.values())))
+            self.capacity = fitted.capacity
             self.project(now, reveal=True)
             self.page = min(self.page, self.stack.pages - 1)
         return limits, created
@@ -369,15 +384,12 @@ class AgentToasts:
         immediate = self.work is not None and (self.work != work or self.scale != scale)
         self.work, self.scale = work, scale
         self.measure.scale = scale
-        margin = round(16 * scale)
-        width = min(round(WIDTH * scale), max(1, self.work.width - margin * 2))
-        reserve = 0
-        viewport = work, scale, reserve
+        viewport = Viewport(work, scale, round(QFontMetricsF(font()).height() * scale * 1.38))
         if self.viewport != viewport:
             self.viewport = viewport
             self.capacity, self.page = MAX_VISIBLE, 0
             self.project(now, reveal=True)
-        limits, created = self.fit_viewport(work, width, scale, reserve, now)
+        limits, created = self.fit_viewport(viewport, now)
         self.stack = replace(self.stack, toasts=tuple(toast for toast in self.stack.toasts if limits[toast.key]))
         desired = {toast.key for toast in self.stack.toasts}
         exits: tuple[Card, ...] = ()
@@ -395,12 +407,12 @@ class AgentToasts:
                     card.motion = None
                     exits = (*exits, card)
         retiring = sorted((card for card in self.cards.values() if card.retiring), key=card_order, reverse=True)
-        for card in retiring[max(0, MAX_VISIBLE - len(desired)) :]:
+        for card in retiring[reservable(len(desired)) :]:
             self.release(card)
         for toast in self.stack.toasts:
             current = self.cards[toast.key]
             before = current.width, current.height
-            current.render(self.content_for(toast), width, limits[toast.key], preference)
+            current.render(self.content_for(toast), viewport.width, limits[toast.key], preference)
             # A resumed recording must restore usable controls immediately,
             # even when its fixed-width geometry matches the fading saved card.
             resized = before != (current.width, current.height)
@@ -413,9 +425,9 @@ class AgentToasts:
             )
             if toast.key in created:
                 current.position(
-                    self.work.right - margin,
+                    work.right - viewport.margin,
                     Frame(
-                        self.work.bottom - margin - current.height + round(16 * scale),
+                        work.bottom - viewport.margin - current.height + viewport.rise,
                         current.width,
                         current.height,
                         0,
@@ -430,7 +442,7 @@ class AgentToasts:
         presented = self.clock()
         for card in exits:
             if card in self.cards.values():
-                card.target(card.y - round(16 * scale), 0, presented, animate=animate)
+                card.target(card.y - viewport.rise, 0, presented, animate=animate)
         self.layout(presented, animate=animate and not immediate, pushing=bool(created) and self.live_progress)
         self.tick()
         self.loop.watch(visible=bool(self.cards))
@@ -450,28 +462,23 @@ class AgentToasts:
         return order
 
     def layout(self, now: float, *, animate: bool, pushing: bool = False) -> None:
-        if self.work is None:
+        if self.work is None or self.viewport is None:
             return
-        scale = self.scale
-        margin, gap = round(16 * scale), round(10 * scale)
-        bottom = self.work.bottom - margin
-        targets: list[tuple[Card, Frame]] = []
-        rank = 0
-        for card in sorted(self.cards.values(), key=card_order, reverse=True):
-            if self.live_progress and card.retiring:
-                continue
-            bottom -= card.height
-            right = self.work.right - margin
+        viewport = self.viewport
+        right = viewport.area.right - viewport.margin
+        cards = tuple(card for card in sorted(self.cards.values(), key=card_order, reverse=True) if not (self.live_progress and card.retiring))
+        for card in cards:
             if card.right != right:
                 card.position(right, card.frame)
-            if not card.retiring:
-                if self.live_progress and rank:
-                    prior_top = card.motion.end.y if card.motion is not None else card.y
-                    bottom = min(bottom, prior_top - (round(16 * scale) if pushing else 0))
-                alpha = TRAIL_ALPHA[min(rank, len(TRAIL_ALPHA) - 1)] if self.live_progress else 1.0
-                targets.append((card, Frame(bottom, card.width, card.height, alpha, card.layout.details_height if card.layout is not None else 0)))
-                rank += 1
-            bottom -= gap
+        stacking = Stacking.FEED if not self.live_progress else Stacking.PUSH if pushing else Stacking.TRAIL
+        slots = tuple(
+            Retiring(card.height) if card.retiring else Active(card.height, card.motion.end.y if card.motion is not None else card.y)
+            for card in cards
+        )
+        targets = tuple(
+            (card, Frame(placement.y, card.width, card.height, placement.alpha, card.layout.details_height if card.layout is not None else 0))
+            for card, placement in zip((card for card in cards if not card.retiring), frames(slots, viewport, stacking), strict=True)
+        )
         changed = any(target != (card.motion.end if card.motion is not None else card.frame) for card, target in targets)
         # All active rectangles retarget on the same clock. Interpolating top
         # and bottom together preserves the gap between neighboring cards;

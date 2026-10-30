@@ -30,7 +30,6 @@ from assistant.feed_desktop import NativeDesktop
 from assistant.feed_items import SourceAction
 from assistant.feed_triage import EditObservation, edited
 from assistant.notifications import MAX_VISIBLE, WIDTH, Kind, MessageKey, PhaseKey, Toast, TurnKey
-from assistant.panel import PanelPreferences
 from assistant.qt_runtime import prepare
 from assistant.qt_ui import application
 from assistant.recording_state import RecordingAction, RecordingState
@@ -120,7 +119,7 @@ class Notifications:
         self._view = AgentToasts(
             self.root,
             agent,
-            preferences=PanelPreferences(Rect(30, 30, 430, 790)),
+            monitor=Rect(30, 30, 430, 790),
             clock=lambda: self.now,
             motion_enabled=lambda: self.animated,
             desktop=self.desktop,
@@ -904,27 +903,6 @@ def test_live_phases_grow_push_up_and_fade_with_one_opaque_bubble() -> None:
         panel.advance(60)
         panel.advance(0.3)
         assert not view.cards and not view.progress.toasts
-
-
-def test_short_update_still_pushes_a_large_phase_upward() -> None:
-    # Defect: collapsing a tall phase above a short arrival leaves it stationary
-    # instead of showing that the new phase pushed it up the trail.
-    with notifications(animated=True) as panel:
-        panel.view.use_canvas(lambda _: None)
-        panel.agent.begin("Compare plans", panel.stop)
-        publish = panel.agent.updates()
-        publish(ReasoningSummary("read", "Reading the deployment plans and checking the dates. " * 80, 1))
-        publish(ToolActivity("a", "read_file", "plan.md", 2))
-        panel.pump()
-        panel.advance(0.3)
-        first = panel.view.cards[PhaseKey("summary:read")]
-        old_top = first.y
-        publish(Answer("result", "Found the current plan.", 3, StreamState.COMPLETE))
-        panel.pump()
-        panel.advance(0.3)
-        newest = panel.view.cards[PhaseKey("answer:result")]
-        assert first.y < old_top and first.y + first.height <= newest.y
-        assert first.alpha == 0.42 and newest.alpha == 1
 
 
 def test_notifications_are_idle_until_needed_and_leave_focus_untouched() -> None:

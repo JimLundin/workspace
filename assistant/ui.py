@@ -57,9 +57,9 @@ lazy from assistant.qt_ui import application, cancel, later
 lazy from assistant.recording_state import RecordingAction, RecordingState
 lazy from assistant.state_store import SavedState
 lazy from assistant.system_notices import NoticeKey
-lazy from assistant.theme import ACCENT, BACKGROUND, FOREGROUND, MUTED
+lazy from assistant.ui_components.appearance import CONTROL_STYLE, OVERLAY_ACCENT, OVERLAY_BACKGROUND, OVERLAY_INK, OVERLAY_MUTED, OVERLAY_SURFACE
 lazy from assistant.ui_components.canvas_loading import CanvasLoading
-lazy from assistant.ui_components.controls import STYLE, button, label
+lazy from assistant.ui_components.controls import button, label
 lazy from assistant.ui_components.widgets import Editor, Window, column, row, show_window
 lazy from assistant.vector_icons import icon
 lazy from assistant.window_switcher import WindowSwitcher
@@ -228,7 +228,7 @@ class Ui:
         self._dialogs: list[QtWidgets.QWidget] = []
         self._thread = threading.current_thread()
         self._root = application()
-        self._root.setStyleSheet(STYLE)
+        self._root.setStyleSheet(CONTROL_STYLE)
         self._poll_timer = QtCore.QTimer(self._root)
         self._poll_timer.setInterval(20)
         self._poll_timer.timeout.connect(lambda: self._poll(self._root))
@@ -365,7 +365,7 @@ class Ui:
             dialog.setWindowTitle("Workspace")
             dialog.setLabelText(title)
             dialog.setInputMode(QtWidgets.QInputDialog.InputMode.TextInput)
-            dialog.setStyleSheet(STYLE)
+            dialog.setStyleSheet(CONTROL_STYLE)
             self._dialogs.append(dialog)
 
             def finish(result: int) -> None:
@@ -1105,7 +1105,7 @@ class Indicator:
         self._window = QtWidgets.QWidget()
         self._window.setObjectName("workspaceWindow")
         self._window.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Tool)
-        self._window.setStyleSheet(STYLE)
+        self._window.setStyleSheet(CONTROL_STYLE)
         self._window.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
         self._window.setWindowOpacity(0.9)
         layout = row(self._window)
@@ -1117,7 +1117,7 @@ class Indicator:
         self._steady: tuple[str | None, Rect] | None = None
         self._flash: QtCore.QTimer | None = None
 
-    def _show(self, text: str | None, work: Rect, colour: str = FOREGROUND) -> None:
+    def _show(self, text: str | None, work: Rect, colour: str = OVERLAY_INK) -> None:
         if text is None:
             self._window.hide()
             return
@@ -1138,7 +1138,7 @@ class Indicator:
 
     def flash(self, text: str, work: Rect, seconds: float) -> None:
         cancel(self._flash)
-        self._show(text, work, ACCENT)
+        self._show(text, work, OVERLAY_ACCENT)
         self._flash = later(self._window, round(seconds * 1000), self._end_flash)
 
     def _end_flash(self) -> None:
@@ -1150,14 +1150,14 @@ class Indicator:
 
 
 _COLOURS: Final = {
-    Kind.KEY: ("#2b2e33", FOREGROUND),
+    Kind.KEY: (OVERLAY_SURFACE, OVERLAY_INK),
     Kind.MOD: ("#21403a", "#8fe3c6"),
     Kind.LAYER: ("#22324d", "#9cc3ff"),
     Kind.TOOL: ("#47381c", "#ffcf7a"),
     Kind.APP: ("#2c3f23", "#b6e39a"),
     Kind.SPECIAL: ("#3b2948", "#d7b4ff"),
-    Kind.HELD: (ACCENT, BACKGROUND),
-    Kind.BLANK: ("#191b1e", MUTED),
+    Kind.HELD: (OVERLAY_ACCENT, OVERLAY_BACKGROUND),
+    Kind.BLANK: ("#191b1e", OVERLAY_MUTED),
 }
 _LAYERS: Final[tuple[tuple[str, Layer | None], ...]] = (("Base", None), *((layer.name.title(), layer) for layer in Layer))
 _ROW_START: Final = (0.0, 1.5, 0.0, 1.25, 3.5)
@@ -1189,7 +1189,7 @@ class KeymapCanvas(QtWidgets.QWidget):
         self.update()
 
     def colors(self, name: str) -> tuple[str, str]:
-        return ("#ffcf7a", BACKGROUND) if name in self.highlighted else _COLOURS[self.caps[name].kind]
+        return ("#ffcf7a", OVERLAY_BACKGROUND) if name in self.highlighted else _COLOURS[self.caps[name].kind]
 
     def press(self, names: frozenset[str]) -> None:
         changed = names ^ self.highlighted
@@ -1210,7 +1210,7 @@ class KeymapCanvas(QtWidgets.QWidget):
             face = QtGui.QFont("Segoe UI")
             face.setPixelSize(max(8, round(10 * self.scale)))
             painter.setFont(face)
-            painter.setPen(QtGui.QColor(ink if name in self.highlighted else MUTED))
+            painter.setPen(QtGui.QColor(ink if name in self.highlighted else OVERLAY_MUTED))
             painter.drawText(bounds.adjusted(5 * self.scale, 3 * self.scale, -3, -3), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop, name)
             face.setPixelSize(max(8, round((15 if len(cap.label) <= 5 else 11) * self.scale)))
             face.setWeight(QtGui.QFont.Weight.DemiBold)
@@ -1279,7 +1279,7 @@ class KeymapOverlay:
         self._window.setWindowTitle("Workspace keyboard overlay")
         self._window.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Tool)
         self._window.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
-        self._window.setStyleSheet(STYLE)
+        self._window.setStyleSheet(CONTROL_STYLE)
         self._window.setWindowOpacity(0.55)
         layout = column(self._window)
         layout.setContentsMargins(8, 8, 8, 8)

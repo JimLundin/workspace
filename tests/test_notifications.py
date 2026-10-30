@@ -40,14 +40,12 @@ from assistant.notifications import (
     Recording,
     Response,
     Settled,
-    Space,
     Stack,
     Tone,
     Turn,
     TurnKey,
     Working,
     advance,
-    allocate,
     body,
     caption,
     heading,
@@ -377,18 +375,6 @@ def test_unread_content_stays_through_updates_then_gets_a_full_expiry_delay() ->
     stack = hover(stack, key, inside=False, now=20000)
     assert next_expiry(stack) == 20012
     assert not advance(stack, session, 20012).toasts
-
-
-def test_space_allocation_reserves_previews_and_prioritizes_pending_input() -> None:
-    spaces = (Space(80, 250, 0), Space(80, 300, 2), Space(80, 250, 0), Space(40, 40, 3))
-    assert allocate(spaces, 650) == (80, 300, 230, 40)
-    assert allocate(spaces, 1000) == (250, 300, 250, 40)
-    assert allocate(spaces, 200) == (0, 80, 80, 40)
-    assert allocate(spaces, 120) == (0, 80, 0, 40)
-    for available in range(1001):
-        heights = allocate(spaces, available)
-        assert sum(heights) <= available
-        assert all(height == 0 or space.minimum <= height <= space.preferred for height, space in zip(heights, spaces, strict=True))
 
 
 def test_interrupted_motion_retargets_from_the_visible_position_without_overshoot() -> None:

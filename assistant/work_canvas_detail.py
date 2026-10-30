@@ -9,7 +9,7 @@ lazy from PySide6.QtCore import Qt
 from assistant.agent_session import Answered
 from assistant.canvas_activity import Attention, CanvasAction, CanvasQuestion, CanvasUpdate
 from assistant.keymap import PHYSICAL_NAMES
-from assistant.ui_components.canvas_chrome import CANVAS_STYLE
+from assistant.ui_components.appearance import ACCENT, CANVAS_STYLE
 from assistant.ui_components.controls import button, label
 from assistant.ui_components.widgets import Editor, column, replace_text, row
 from assistant.work_canvas_context import context_path
@@ -323,7 +323,7 @@ class QuestionDetail:
         layout.addWidget(self.response)
         self.status: QtWidgets.QLabel = label("", "muted")
         self.status.setWordWrap(True)
-        self.status.setStyleSheet("QLabel { color: #d9c8f3; font-size: 11px; }")
+        self.status.setStyleSheet(f"QLabel {{ color: {ACCENT}; font-size: 11px; }}")
         layout.addWidget(self.status)
         self.frame.ensurePolished()
         self.refresh(content)

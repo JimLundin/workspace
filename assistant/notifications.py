@@ -483,39 +483,6 @@ def display_order(toast: Toast, *, curated: bool) -> tuple[int, float, int, int]
     return (-priority(toast.content) if curated else 0, *order_of(toast))
 
 
-@dataclass(frozen=True, slots=True)
-class Space:
-    minimum: int
-    preferred: int
-    priority: int
-
-
-def allocate(spaces: tuple[Space, ...], available: int) -> tuple[int, ...]:
-    """Reserve readable previews, then give pending input and recent entries room.
-
-    If even the previews cannot fit, the oldest low-priority entry leaves the
-    viewport. Returning zero lets the owner retire it without reviving it later.
-    """
-    heights = [space.minimum for space in spaces]
-    remaining = max(0, available) - sum(heights)
-
-    def rank(index: int) -> tuple[int, int]:
-        return spaces[index].priority, index
-
-    ranked = sorted(range(len(spaces)), key=rank)
-    for index in ranked:
-        if remaining >= 0:
-            break
-        remaining += heights[index]
-        heights[index] = 0
-    for index in reversed(ranked):
-        if heights[index]:
-            extra = min(remaining, max(0, spaces[index].preferred - heights[index]))
-            heights[index] += extra
-            remaining -= extra
-    return tuple(heights)
-
-
 def hover(stack: Stack, key: Key, *, inside: bool, now: float) -> Stack:
     # The current stack, toast target and timed pointer direction form one
     # lifetime transition. Passing the clock observation keeps that decision pure.

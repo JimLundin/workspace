@@ -56,12 +56,19 @@ from assistant.notifications import (
 )
 from assistant.qt_runtime import prepare
 from assistant.rich_text import Span
-from assistant.ui_components.bubble_style import Ink, Palette, palette
-from assistant.ui_components.bubble_surface import BubbleAppearance, paint_surface
+from assistant.ui_components.appearance import INK, Ink, Palette, palette
+from assistant.ui_components.bubble import (
+    TITLE_SIZE,
+    BubbleAppearance,
+    FeedTitle,
+    badge_origins,
+    badge_width,
+    heading_width,
+    paint_origins,
+    paint_surface,
+)
 from assistant.ui_components.canvas_jump import CanvasJumpButton
-from assistant.ui_components.heading import TITLE_SIZE, FeedTitle, heading_width
 from assistant.ui_components.press_feedback import paint_feedback
-from assistant.ui_components.source_badge import paint_origins
 from assistant.ui_components.text import INSET, TEXT_PADDING, Document, TextView, font, units
 from winapi import appearance, windows
 from winapi.composition import DesktopComposition, Glass
@@ -152,7 +159,7 @@ class Measure:
         if isinstance(content, (Entry, Turn)):
             # Agent questions use the bubble's voice tooltip, with no input footer.
             footer = ""
-        badge_width = 28 + 18 * (min(3, len(source.origins)) - 1) if source is not None and source.origins else 28
+        badge = badge_width(content_origins(content))
         controls = (26 if not user else 0) + (26 if notification_text.expandable(content) and not curated else 0) + (32 if can_stop(content) else 0)
         label = notification_text.title_text(content) if isinstance(content, Turn) or curated else "" if compact else heading(content)
         body_padding = INSET * 2 + 8
@@ -161,7 +168,7 @@ class Measure:
         width = maximum_width
         if user:
             body_width = self.body.intrinsic_width(spans, max(1, maximum_width - body_padding))
-            width = min(maximum_width, max(100, badge_width + INSET * 2, body_width + body_padding))
+            width = min(maximum_width, max(100, badge + INSET * 2, body_width + body_padding))
         labels = (
             tuple(option.label for option in solutions_for(content.item))
             if isinstance(content, WorkItem) and isinstance(content.item, Assessment)
@@ -170,11 +177,11 @@ class Measure:
         text_width = max(1, round(math.ceil(width * scale) / scale) - body_padding)
         body_height = self.body.load(spans, text_width) + TEXT_PADDING * 2 if spans else 0
         details_height = self.details.total(details, text_width) + TEXT_PADDING * 2 if details else 0
-        label_width: float = max(1, round(math.ceil(width * scale) / scale) - controls - badge_width - INSET * 2)
+        label_width: float = max(1, round(math.ceil(width * scale) / scale) - controls - badge - INSET * 2)
         if curated or isinstance(content, Turn):
             label_width = heading_width(
                 round(math.ceil(width * scale) / scale),
-                badge_width,
+                badge,
                 stopping=can_stop(content),
                 disclosing=notification_text.expandable(content) and not curated,
             )
@@ -250,7 +257,7 @@ class IconButton(QAbstractButton):
         self.kind = icon
         self.key_click = key_click
         self.expanded = False
-        self.ink = "#f6f3ff"
+        self.ink = INK
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self.setAccessibleName("Dismiss item" if icon is Icon.DISMISS else "Stop agent" if icon is Icon.STOP else "Show steps")
@@ -313,27 +320,29 @@ class SourceBadge(QWidget):
         self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
 
     def source(self, content: Content) -> None:
-        source = origin_item(content)
-        sources = source.origins if source is not None and source.origins else (Origin(App.WORKSPACE, App.WORKSPACE.value),)
+        sources = content_origins(content)
         names = ", ".join(origin.name for origin in sources)
         names += " · You" if tone(content) is Tone.USER else ""
         self.setAccessibleName("From " + names)
         self.setToolTip(escape(names))
-        self.setGeometry(0, 0, 28 + 18 * (min(3, len(sources)) - 1), 28)
+        self.setGeometry(0, 0, badge_width(sources), 28)
         self.show()
         self.raise_()
         self.update()
 
     def paintEvent(self, event: QPaintEvent) -> None:
         content = self.card.content
-        source = origin_item(content)
-        sources = source.origins if source is not None and source.origins else (Origin(App.WORKSPACE, App.WORKSPACE.value),)
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        paint_origins(painter, sources, self.card.colors)
+        paint_origins(painter, content_origins(content), self.card.colors)
         if content is not None and spinning(content):
             painter.setPen(QPen(QColor(self.card.ink.foreground), 1.6))
             painter.drawArc(QRectF(1.5, 1.5, 25, 25), round(self.card.spin_angle * 16), 240 * 16)
+
+
+def content_origins(content: Content | None) -> tuple[Origin, ...]:
+    source = origin_item(content)
+    return badge_origins(source.origins if source is not None else ())
 
 
 class Bubble(QWidget):

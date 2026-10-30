@@ -11,7 +11,7 @@ from typing import override
 lazy from PySide6 import QtCore, QtGui, QtWidgets
 lazy from PySide6.QtCore import Qt
 
-from assistant.ui_components.bubble_style import Ink
+from assistant.ui_components.appearance import Ink
 from assistant.ui_components.text import font
 from assistant.vector_icons import icon
 

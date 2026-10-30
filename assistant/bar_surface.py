@@ -11,7 +11,7 @@ from assistant.bar_geometry import SHOULDER, Segment, segment
 from assistant.notifications import REVEAL_SECONDS, Tone, ease_out
 from assistant.qt_runtime import prepare
 from assistant.qt_ui import EventLoop
-from assistant.ui_components.bubble_style import Ink, Palette, palette
+from assistant.ui_components.appearance import Ink, Palette, palette
 from assistant.ui_components.press_feedback import paint_feedback
 from assistant.vector_icons import icon
 from winapi import appearance, windows

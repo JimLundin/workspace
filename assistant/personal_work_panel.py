@@ -16,8 +16,9 @@ lazy from PySide6.QtCore import Qt
 from assistant.canvas_activity import ROOT_CONTEXT, Attention, CanvasAction, CanvasInstruction, CanvasQuestion, CanvasRun, CanvasUpdate
 from assistant.keymap import PHYSICAL_NAMES
 from assistant.qt_ui import cancel, later
+from assistant.ui_components.appearance import CANVAS_STYLE, SURFACE
 from assistant.ui_components.canvas_bubble import CanvasBubble
-from assistant.ui_components.canvas_chrome import CANVAS_STYLE, CanvasSurface, CanvasToolbar, icon_button
+from assistant.ui_components.canvas_chrome import CanvasSurface, CanvasToolbar, icon_button
 from assistant.ui_components.canvas_connection import ConnectionPath
 from assistant.ui_components.controls import button, label
 from assistant.ui_components.voice_legend import VoiceLegend
@@ -501,7 +502,7 @@ class PersonalPanel:
             self.details = (*self.details, (work.id, detail))
             dialog = QtWidgets.QDialog(self.frame)
             dialog.setWindowTitle("Work context · " + work.definition.title)
-            dialog.setStyleSheet(CANVAS_STYLE + "QDialog { background: #262337; }")
+            dialog.setStyleSheet(CANVAS_STYLE + f"QDialog {{ background: {SURFACE}; }}")
             dialog.resize(520, 540)
             layout = column(dialog)
             layout.setContentsMargins(20, 20, 20, 20)
@@ -893,7 +894,7 @@ class PersonalPanel:
         self.draft_known = frozenset(item.id for item in self.view.catalog.works)
         self.draft = WorkDetail(self.work, WorkDefinition("New work", "Describe the outcome you are working towards."))
         frame = QtWidgets.QWidget()
-        frame.setStyleSheet(CANVAS_STYLE + "QWidget { background: #262337; }")
+        frame.setStyleSheet(CANVAS_STYLE + f"QWidget {{ background: {SURFACE}; }}")
         frame.setFixedWidth(400)
         layout = column(frame)
         layout.setContentsMargins(16, 16, 16, 16)

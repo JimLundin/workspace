@@ -17,7 +17,7 @@ lazy from PySide6.QtGui import QWheelEvent
 from assistant import notification_text, tool_call_view, tool_text
 from assistant.notifications import Content
 from assistant.qt_runtime import prepare
-from assistant.ui_components.bubble_style import Ink
+from assistant.ui_components.appearance import Ink
 from assistant.ui_components.text import Document, TextView
 
 prepare()

@@ -8,7 +8,7 @@ lazy from PySide6.QtCore import Qt
 import winapi.shapes
 from assistant.notifications import Tone
 from assistant.qt_runtime import prepare
-from assistant.ui_components.bubble_style import Ink, palette
+from assistant.ui_components.appearance import Ink, palette
 
 prepare()
 

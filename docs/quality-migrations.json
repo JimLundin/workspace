@@ -58,15 +58,6 @@
     {
       "key": {
         "rule": "PLR0913",
-        "path": "assistant/agent_toasts.py",
-        "scope": "AgentToasts.fit_viewport",
-        "signature": "921b50681ff2e15eae08c0f26ed49513c4887e862827ff0025ad5e65461df775"
-      },
-      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
-    },
-    {
-      "key": {
-        "rule": "PLR0913",
         "path": "assistant/agent_window.py",
         "scope": "AgentWindow.begin",
         "signature": "c603826b6901d73b7b120508da22e30c141e47ab811886cb1c3a243ad8684f6f"
@@ -301,7 +292,7 @@
     {
       "key": {
         "rule": "PLR0913",
-        "path": "assistant/ui_components/heading.py",
+        "path": "assistant/ui_components/bubble.py",
         "scope": "heading_width",
         "signature": "09b8251c69d514e2e9582db2b46a92bb926aa40d582fd999a3c13ef91bbc3ecc"
       },

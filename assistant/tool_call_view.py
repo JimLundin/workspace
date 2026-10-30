@@ -15,7 +15,7 @@ lazy from PySide6.QtGui import QColor, QPainter, QPaintEvent, QPen
 from assistant.action_text import shortened
 from assistant.qt_runtime import prepare
 from assistant.tool_text import Call, State
-from assistant.ui_components.bubble_style import Ink
+from assistant.ui_components.appearance import Ink
 from assistant.ui_components.text import font
 
 prepare()

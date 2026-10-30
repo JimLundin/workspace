@@ -28,8 +28,8 @@ from assistant.notifications import body
 from assistant.personal_work_panel import PersonalPanel
 from assistant.qt_runtime import prepare
 from assistant.qt_ui import application
+from assistant.ui_components.bubble import heading_text
 from assistant.ui_components.canvas_loading import CanvasLoading
-from assistant.ui_components.heading import heading_text
 from assistant.work_canvas import WorkCanvas, instruction_prompt
 from assistant.work_canvas_commands import CANVAS_RESPONSE, CanvasSnapshot, CanvasUpdated
 from assistant.work_canvas_context import CanvasMode

@@ -23,8 +23,8 @@ from assistant.qt_ui import application
 from assistant.state_store import SavedState
 from assistant.system_notices import Notice, NoticeKey, Observed
 from assistant.toast_card import Card
-from assistant.ui_components.controls import STYLE
-from assistant.ui_components.heading import TITLE_SIZE
+from assistant.ui_components.appearance import CONTROL_STYLE
+from assistant.ui_components.bubble import TITLE_SIZE
 from tests.communications_fixture import communication_feed
 from tests.test_communications_service import LocalCipher
 from tests.test_feed_triage import output
@@ -401,7 +401,7 @@ def test_production_theme_does_not_shrink_or_scroll_collapsed_feed_titles() -> N
     with notifications() as panel:
         previous_style = panel.root.styleSheet()
         try:
-            panel.root.setStyleSheet(STYLE)
+            panel.root.setStyleSheet(CONTROL_STYLE)
             item = Assessment("styled-title", (), "Review the forecast", "A fictional review.", "Prepare a recommendation.", "", 1, 1)
             panel.agent.triage(Board(enabled=True, items=(item,)))
             panel.pump()
