@@ -7,7 +7,6 @@ The checkout is never modified. Timeouts and collection errors are not kills.
 import argparse
 import ast
 import hashlib
-import json
 import os
 import random
 import shutil
@@ -315,6 +314,55 @@ def announced(campaign: Campaign, mutation: Mutation, result: Result) -> Result:
 
 
 @dataclass(frozen=True, slots=True)
+class MutationEvidence:
+    function: str
+    line: int
+    before: str
+    after: str
+    start: int
+    end: int
+    status: Status
+    seconds: float
+    tests: int
+    killed_by: tuple[str, ...]
+    detail: str
+
+
+@dataclass(frozen=True, slots=True)
+class Evidence:
+    """The --output report; field order is its JSON shape."""
+
+    source: str
+    tests: tuple[str, ...]
+    generated: int
+    seed: int
+    baseline_seconds: float
+    baseline_tests: int
+    results: tuple[MutationEvidence, ...]
+    source_sha256: str
+    snapshot_sha256: str
+
+
+EVIDENCE = TypeAdapter(Evidence)
+
+
+def observed(mutation: Mutation, result: Result) -> MutationEvidence:
+    return MutationEvidence(
+        mutation.function,
+        mutation.line,
+        mutation.before,
+        mutation.after,
+        mutation.start,
+        mutation.end,
+        result.status,
+        round(result.seconds, 3),
+        result.tests,
+        result.killed_by,
+        result.detail,
+    )
+
+
+@dataclass(frozen=True, slots=True)
 class Options:
     source: Path
     root: Path
@@ -374,35 +422,19 @@ def main() -> None:
     selected = tuple(sorted(random.Random(seed).sample(candidates, limit) if 0 < limit < len(candidates) else candidates, key=mutation_order))
     print(f"Testing {len(selected)} of {len(candidates)} decision mutations in {source}", flush=True)
     baseline, outcomes, digest = run_campaign(root, Campaign(source, original, selected, tests, timeout, workers))
-    results: list[dict[str, object]] = [
-        {
-            "function": mutation.function,
-            "line": mutation.line,
-            "before": mutation.before,
-            "after": mutation.after,
-            "start": mutation.start,
-            "end": mutation.end,
-            "status": result.status.value,
-            "seconds": round(result.seconds, 3),
-            "tests": result.tests,
-            "killed_by": result.killed_by,
-            "detail": result.detail,
-        }
-        for mutation, result in zip(selected, outcomes, strict=True)
-    ]
     output.parent.mkdir(parents=True, exist_ok=True)
-    report: dict[str, object] = {
-        "source": source.as_posix(),
-        "tests": tests,
-        "generated": len(candidates),
-        "seed": seed,
-        "baseline_seconds": baseline.seconds,
-        "baseline_tests": baseline.tests,
-        "results": results,
-        "source_sha256": hashlib.sha256(original).hexdigest(),
-        "snapshot_sha256": digest,
-    }
-    output.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
+    evidence = Evidence(
+        source=source.as_posix(),
+        tests=tests,
+        generated=len(candidates),
+        seed=seed,
+        baseline_seconds=baseline.seconds,
+        baseline_tests=baseline.tests,
+        results=tuple(map(observed, selected, outcomes, strict=True)),
+        source_sha256=hashlib.sha256(original).hexdigest(),
+        snapshot_sha256=digest,
+    )
+    output.write_bytes(EVIDENCE.dump_json(evidence, indent=2) + b"\n")
     counts = {status: sum(result.status is status for result in outcomes) for status in Status}
     print(", ".join(f"{count} {status.value}" for status, count in counts.items()), flush=True)
     print(f"Evidence: {output}", flush=True)
