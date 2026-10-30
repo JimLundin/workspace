@@ -48,6 +48,7 @@ lazy from assistant.meeting_store import MeetingArchive
 lazy from assistant.meeting_workflow import MeetingWorkflow
 lazy from assistant.meetings import Meetings
 lazy from assistant.monitor_layout import MonitorLayout
+lazy from assistant.notification_sources import NOTIFICATION_STATE
 lazy from assistant.overlay import OverlayState, load_enabled, save_enabled
 lazy from assistant.personal_work_model import Correlator
 lazy from assistant.personal_work_service import PersonalWork
@@ -281,9 +282,8 @@ class AssistantApp:
             TeamsWeb(DIRECTORY / "browser-profile"),
             windows_store(DIRECTORY / "communications.bin", COMMUNICATIONS_STATE),
             self.ui.communications_changed,
-            self.ui.dismiss_system_notice,
         )
-        self.ui.configure_communications(self.communications.submit)
+        self.ui.configure_communications(self.communications.submit, windows_store(DIRECTORY / "notifications.bin", NOTIFICATION_STATE))
         self.consoles = ConsoleInbox(DIRECTORY / "inbox-bridge.json", self.ui.console_changed)
         self.ui.configure_console(self.consoles.command)
         self.canvas: WorkCanvas = WorkCanvas(

@@ -14,9 +14,7 @@ from assistant.communications import (
     Delivery,
     Feed,
     Handle,
-    HandleNotice,
     Message,
-    NotificationFilters,
     Reply,
     ResolveAttempt,
     SaveDraft,
@@ -24,7 +22,6 @@ from assistant.communications import (
     Status,
     TeamsActivity,
     Update,
-    WindowsObserved,
     fingerprint,
     update_fingerprint,
 )
@@ -33,7 +30,6 @@ from assistant.communications_service import Communications
 from assistant.communications_state import COMMUNICATIONS_STATE
 from assistant.llm import Json
 from assistant.state_store import SavedState
-from assistant.system_notices import Notice, NoticeKey, Observed
 from tests.teams_fixture import Browser
 
 _WIRE = TypeAdapter(dict[str, Json])
@@ -111,10 +107,10 @@ class LocalCipher:
         return data[8:][::-1]
 
 
-def service(path: Path, *, dismiss_notice: Callable[[NoticeKey], None] = lambda _: None) -> tuple[Communications, Web]:
+def service(path: Path) -> tuple[Communications, Web]:
     web = Web()
     store = SavedState(path, COMMUNICATIONS_STATE, cipher=LocalCipher())
-    controller = Communications(web, store, lambda feed, drafts: None, dismiss_notice)
+    controller = Communications(web, store, lambda feed, drafts: None)
     controller.feed = Feed(status=Status.CONNECTED, conversations=(Conversation("19:one@thread.v2", "Anna"),), followed=("19:one@thread.v2",))
     return controller, web
 
@@ -140,36 +136,6 @@ def test_handled_chat_revisions_survive_reload_without_saving_incoming_bodies(tm
     assert restarted.feed.unseen(replace(message, text="Revised private content"))
 
 
-def test_windows_delivery_enters_the_same_inbox_and_dismissal_follows_saved_handling(tmp_path: Path) -> None:
-    dismissed: list[NoticeKey] = []
-
-    def dismiss(key: NoticeKey) -> None:
-        assert controller.store.read().handled
-        dismissed.append(key)
-
-    controller, _web = service(tmp_path / "saved.bin", dismiss_notice=dismiss)
-    notice = Notice(NoticeKey(7, 11_644_473_601_0000000), "Mail", "Mail", "Invitation", "Review this meeting")
-    controller.submit(WindowsObserved(Observed((notice,))))
-    controller.drain_drafts()
-    assert len(controller.feed.updates) == 1
-    update = controller.feed.updates[0]
-    controller.command(Handle((Acknowledgement(update.key, update_fingerprint(update)),)))
-    assert dismissed == [notice.key]
-    assert not controller.feed.pending_update(update)
-    controller.submit(WindowsObserved(Observed((notice,))))
-    controller.drain_drafts()
-    assert len(controller.feed.updates) == 1 and not controller.feed.pending_update(controller.feed.updates[0])
-
-
-def test_notification_filters_survive_reload_without_marking_source_work_handled(tmp_path: Path) -> None:
-    controller, _ = service(tmp_path / "saved.bin")
-    controller.command(NotificationFilters(("Mail", "Security")))
-    restarted, _ = service(tmp_path / "saved.bin")
-    restarted.load()
-    assert restarted.feed.muted_apps == ("Mail", "Security")
-    assert not restarted.feed.handled
-
-
 def test_failed_teams_read_confirmation_does_not_claim_native_acknowledgement(tmp_path: Path) -> None:
     controller, _web = service(tmp_path / "saved.bin")
     update = Update(TeamsActivity("123"), "Reaction", "Someone reacted", "Teams", 1)
@@ -177,16 +143,6 @@ def test_failed_teams_read_confirmation_does_not_claim_native_acknowledgement(tm
     controller.command(Handle((Acknowledgement(update.key, update_fingerprint(update)),)))
     assert not controller.feed.pending_update(update)
     assert "could not be confirmed" in controller.feed.activity_detail
-
-
-def test_dismissing_a_glass_card_before_the_inbox_paints_still_saves_handling(tmp_path: Path) -> None:
-    notice = Notice(NoticeKey(8, 11_644_473_602_0000000), "Mail", "Mail", "New update", "Check it")
-    dismissed: list[NoticeKey] = []
-    controller, _web = service(tmp_path / "saved.bin", dismiss_notice=dismissed.append)
-    controller.command(HandleNotice(notice))
-    assert dismissed == [notice.key]
-    assert len(controller.feed.updates) == 1 and not controller.feed.pending_update(controller.feed.updates[0])
-    assert controller.store.read().handled
 
 
 def test_only_a_verified_reply_handles_its_captured_ticket_and_never_a_new_arrival(tmp_path: Path) -> None:

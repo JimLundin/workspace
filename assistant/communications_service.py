@@ -1,6 +1,5 @@
 """A cancellable Teams collector; browser, encrypted drafts and effects stay off Qt."""
 
-import os
 import queue
 import threading
 import time
@@ -8,7 +7,6 @@ from collections.abc import Callable
 from dataclasses import replace
 from typing import Protocol
 
-import assistant.system_notices
 from assistant.communications import (
     MAX_FOLLOWED,
     Acknowledgement,
@@ -19,9 +17,7 @@ from assistant.communications import (
     Feed,
     Follow,
     Handle,
-    HandleNotice,
     Message,
-    NotificationFilters,
     OpenChat,
     OpenUpdate,
     Refresh,
@@ -35,21 +31,16 @@ from assistant.communications import (
     TeamsActivity,
     UnavailableChat,
     WindowsNotice,
-    WindowsObserved,
     acknowledge,
     handle,
-    notice_update,
-    notices_observed,
     observed,
     reopen,
     reply_changed,
-    update_fingerprint,
     updates_observed,
 )
 from assistant.communications_browser import ActivityObservation, ChatUnavailableError, Observation
 from assistant.communications_state import CommunicationsState, StoredAcknowledgement, StoredReply
 from assistant.state_store import SavedState
-from assistant.system_notices import NoticeKey
 
 
 class Teams(Protocol):
@@ -86,7 +77,6 @@ class Communications:
         "commands",
         "cursor",
         "dirty",
-        "dismiss_notice",
         "draft_lock",
         "drafts",
         "enabled",
@@ -94,7 +84,6 @@ class Communications:
         "next_activity",
         "next_poll",
         "pending_drafts",
-        "pending_notices",
         "publish",
         "saved_target",
         "started",
@@ -104,21 +93,11 @@ class Communications:
         "web",
     )
 
-    def __init__(
-        self,
-        web: Teams,
-        store: SavedState[CommunicationsState],
-        publish: Callable[[Feed, dict[str, str]], None],
-        dismiss_notice: Callable[[NoticeKey], None] = lambda _: None,
-    ) -> None:
-        # These four dependencies compose browser work, durable storage, Qt
-        # publication and native dismissal; none shares an effect owner.
+    def __init__(self, web: Teams, store: SavedState[CommunicationsState], publish: Callable[[Feed, dict[str, str]], None]) -> None:
         self.web, self.store, self.publish = web, store, publish
-        self.dismiss_notice = dismiss_notice
         self.feed = Feed()
         self.drafts: dict[str, str] = {}
         self.pending_drafts: dict[str, str] = {}
-        self.pending_notices: assistant.system_notices.Observed | None = None
         self.draft_lock = threading.Lock()
         self.enabled = self.dirty = self.started = False
         self.saved_target = ""
@@ -137,10 +116,6 @@ class Communications:
     def submit(self, command: Command) -> bool:
         if self.stop.is_set():
             return False
-        if isinstance(command, WindowsObserved):
-            with self.draft_lock:
-                self.pending_notices = command.observation
-            return True
         if isinstance(command, SaveDraft):
             if len(command.text) > 32_000 or len(command.conversation) > 512:
                 return False
@@ -156,15 +131,9 @@ class Communications:
     def drain_drafts(self) -> None:
         with self.draft_lock:
             pending, self.pending_drafts = self.pending_drafts, {}
-            notices, self.pending_notices = self.pending_notices, None
         if pending:
             self.drafts.update(pending)
             self.dirty = True
-        if notices is not None:
-            before = self.feed
-            self.feed = notices_observed(self.feed, notices)
-            if self.feed != before:
-                self.changed()
 
     def changed(self) -> None:
         self.publish(self.feed, dict(self.drafts))
@@ -177,7 +146,6 @@ class Communications:
         self.feed = replace(
             self.feed,
             followed=state.followed,
-            muted_apps=state.muted_apps,
             replies=tuple(
                 Reply(
                     row.identity,
@@ -198,7 +166,6 @@ class Communications:
             CommunicationsState(
                 target=self.saved_target,
                 followed=self.feed.followed,
-                muted_apps=self.feed.muted_apps,
                 drafts=tuple(self.drafts.items()),
                 replies=tuple(
                     StoredReply(item.identity, item.conversation, item.title, item.text, item.created_at, item.delivery, item.detail)
@@ -349,8 +316,6 @@ class Communications:
             if update.key not in accepted:
                 continue
             match update.source:
-                case WindowsNotice(key, _):
-                    self.dismiss_notice(key)
                 case TeamsActivity(identity):
                     try:
                         confirmed = self.web.activity_read(identity, self.stop)
@@ -365,6 +330,8 @@ class Communications:
                         ),
                     )
                     self.changed()
+                case WindowsNotice():
+                    pass  # notification_sources owns Windows notices.
 
     def command(self, command: Command) -> None:
         match command:
@@ -377,27 +344,14 @@ class Communications:
                 self.next_activity = 0
             case Follow(identities):
                 self.follow(identities)
-            case NotificationFilters(apps):
-                if len(apps) <= 256 and all(app and len(app) <= 512 for app in apps):
-                    self.feed = replace(self.feed, muted_apps=tuple(dict.fromkeys(apps, True)))
-                    self.save()
-                    self.changed()
             case Seen(key):
                 self.feed = acknowledge(self.feed, key)
                 self.changed()
             case Handle():
                 self.handled(command)
-            case HandleNotice(notice):
-                captured = notice_update(notice)
-                if not any(item.key == captured.key for item in self.feed.updates):
-                    self.feed = updates_observed(self.feed, (captured,))
-                self.handled(Handle((Acknowledgement(captured.key, update_fingerprint(captured)),)))
             case Reopen(key):
                 self.feed = reopen(self.feed, key)
                 self.save()
-                self.changed()
-            case WindowsObserved(notices):
-                self.feed = notices_observed(self.feed, notices)
                 self.changed()
             case OpenUpdate(key):
                 self.open_update(key)
@@ -418,9 +372,8 @@ class Communications:
             match update.source:
                 case TeamsActivity(identity):
                     self.web.open_activity(identity, self.stop)
-                case WindowsNotice(_, app_id):
-                    if app_id:
-                        os.startfile("shell:AppsFolder\\" + app_id)
+                case WindowsNotice():
+                    pass
 
     def resolve_attempt(self, identity: str) -> None:
         reply = next((item for item in self.feed.replies if item.identity == identity), None)

@@ -138,7 +138,7 @@ def collect(feed: Feed, requests: tuple[Request, ...]) -> tuple[Candidate, ...]:
             key = _CHAT_KEY.dump_json((message.conversation, message.identity)).decode()
             result.append(candidate("chat", key, (chat.title if chat else "Chat") + " · " + message.sender, message.text, message.created_at))
     for update in feed.updates:
-        if not feed.pending_update(update) or (isinstance(update.source, WindowsNotice) and update.source.app_id in feed.muted_apps):
+        if not feed.needs_attention(update):
             continue
         captured = candidate(
             update.key[0],
