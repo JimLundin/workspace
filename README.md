@@ -724,8 +724,9 @@ automation/     task.py and store.py (durable work), controller.py (execution),
 assistant/      llm.py (the endpoint), features.py (what each key does), agent.py,
                 workspace.py (the agent's copy of the source), keymap.py;
                 agent_session.py, agent_window.py (conversation and UI scheduling),
-                agent_toasts.py, toast_card.py, qt_text.py, qt_ui.py (Qt bubbles),
-                agent_panel.py, ui.py, theme.py, rich_text.py (the shared Qt UI);
+                agent_toasts.py, toast_stack.py, toast_card.py, qt_text.py, qt_ui.py
+                (Qt bubbles), ui.py, ui_components/appearance.py, rich_text.py
+                (the shared Qt UI);
                 desktop.py and app.py on Windows
 ```
 

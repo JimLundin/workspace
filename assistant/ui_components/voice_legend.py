@@ -3,6 +3,7 @@
 lazy from PySide6 import QtCore, QtWidgets
 lazy from PySide6.QtCore import Qt
 
+from assistant.ui_components.appearance import ACCENT
 from assistant.ui_components.widgets import row
 from assistant.vector_icons import icon
 
@@ -20,7 +21,7 @@ class VoiceLegend(QtWidgets.QFrame):
         layout.setContentsMargins(7, 0, 7, 0)
         layout.setSpacing(7)
         self.microphone: QtWidgets.QLabel = QtWidgets.QLabel(self)
-        self.microphone.setPixmap(icon("mic", "#d9c8f3").pixmap(QtCore.QSize(16, 16)))
+        self.microphone.setPixmap(icon("mic", ACCENT).pixmap(QtCore.QSize(16, 16)))
         self.microphone.setFixedSize(16, 16)
         self.keycap: QtWidgets.QLabel = QtWidgets.QLabel(key, self)
         self.keycap.setObjectName("voiceKeycap")
@@ -48,5 +49,5 @@ class VoiceLegend(QtWidgets.QFrame):
             widget.style().unpolish(widget)
             widget.style().polish(widget)
             widget.update()
-        self.microphone.setPixmap(icon("mic", "#ebd8ff" if pressed else "#d9c8f3").pixmap(QtCore.QSize(16, 16)))
+        self.microphone.setPixmap(icon("mic", "#ebd8ff" if pressed else ACCENT).pixmap(QtCore.QSize(16, 16)))
         self.setAccessibleDescription("Listening to agent speech" if pressed else "Hold the key to speak; release to send")

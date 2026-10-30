@@ -25,7 +25,7 @@ lazy from PySide6.QtWidgets import QFrame, QMenu, QTextBrowser, QWidget
 
 from assistant.qt_runtime import prepare
 from assistant.rich_text import Span, changed_tail
-from assistant.ui_components.bubble_style import Ink
+from assistant.ui_components.appearance import Ink
 
 prepare()
 

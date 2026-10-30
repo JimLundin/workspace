@@ -50,7 +50,7 @@ from assistant.meeting_workflow import (
 )
 from assistant.qt_runtime import prepare
 from assistant.qt_ui import application
-from assistant.ui_components.controls import STYLE
+from assistant.ui_components.appearance import CONTROL_STYLE
 
 prepare()
 
@@ -129,7 +129,7 @@ class NativeMeetings:
         self.workflow = WorkflowFixture(packages)
         self.opened: list[Path] = []
         self.view = MeetingPanel(self.workflow, open_file=self.opened.append)
-        self.view.setStyleSheet(STYLE)
+        self.view.setStyleSheet(CONTROL_STYLE)
         self.view.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
         self.view.setGeometry(-4000, -3000, 1150, 760)
         self.view.show()

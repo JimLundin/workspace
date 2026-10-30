@@ -7,7 +7,7 @@ lazy from PySide6 import QtCore, QtGui, QtWidgets
 lazy from PySide6.QtCore import Qt
 
 from assistant.qt_runtime import prepare
-from assistant.ui_components.controls import STYLE
+from assistant.ui_components.appearance import CONTROL_STYLE
 from winapi import windows
 
 prepare()
@@ -21,7 +21,7 @@ class Window(QtWidgets.QWidget):
         self.on_close = close
         self.setObjectName("workspaceWindow")
         self.setWindowTitle(title)
-        self.setStyleSheet(STYLE)
+        self.setStyleSheet(CONTROL_STYLE)
         self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
         self.resize(width, height)
         self.escape = QtGui.QShortcut(QtGui.QKeySequence("Escape"), self)

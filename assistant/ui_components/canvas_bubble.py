@@ -5,6 +5,7 @@ from typing import Protocol, override
 lazy from PySide6 import QtGui, QtWidgets
 lazy from PySide6.QtCore import Qt
 
+from assistant.ui_components.appearance import SURFACE
 from assistant.ui_components.canvas_controls import CanvasControl, ControlAction
 from assistant.work_canvas_gestures import PointerMoved, PointerReleased, PressConnector, ScenePoint
 
@@ -42,7 +43,7 @@ class CanvasBubble(QtWidgets.QGraphicsRectItem):
         self.connector: QtWidgets.QGraphicsEllipseItem = QtWidgets.QGraphicsEllipseItem(self)
         self.connector.setRect(-6, -6, 12, 12)
         self.connector.setPen(QtGui.QPen(QtGui.QColor("#ba9de3"), 1.5))
-        self.connector.setBrush(QtGui.QColor("#262337"))
+        self.connector.setBrush(QtGui.QColor(SURFACE))
         self.connector.setAcceptedMouseButtons(Qt.MouseButton.NoButton)
         self.connector.setCursor(Qt.CursorShape.CrossCursor)
         self.connector.setToolTip("Drag to another bubble to create a relationship")

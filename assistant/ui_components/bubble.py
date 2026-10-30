@@ -11,7 +11,7 @@ lazy from PySide6.QtWidgets import QGraphicsItem, QGraphicsRectItem, QLabel, QSt
 import assistant.feed_icons
 from assistant.feed_origin import App, Origin
 from assistant.qt_runtime import prepare
-from assistant.ui_components.bubble_style import Palette
+from assistant.ui_components.appearance import INK, Palette
 from assistant.ui_components.text import INSET, font
 
 prepare()
@@ -113,7 +113,7 @@ class CanvasHeading(QGraphicsRectItem):
     def paint(self, painter: QPainter, option: QStyleOptionGraphicsItem, widget: QWidget | None = None) -> None:
         painter.save()
         painter.setClipRect(self.rect())
-        painter.setPen(QColor("#f6f3ff"))
+        painter.setPen(QColor(INK))
         paint_heading(painter, self.rect(), self.value, expanded=self.expanded)
         painter.restore()
 

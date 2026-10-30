@@ -56,6 +56,7 @@ from assistant.notifications import (
 )
 from assistant.qt_runtime import prepare
 from assistant.rich_text import Span
+from assistant.ui_components.appearance import INK, Ink, Palette, palette
 from assistant.ui_components.bubble import (
     TITLE_SIZE,
     BubbleAppearance,
@@ -66,7 +67,6 @@ from assistant.ui_components.bubble import (
     paint_origins,
     paint_surface,
 )
-from assistant.ui_components.bubble_style import Ink, Palette, palette
 from assistant.ui_components.canvas_jump import CanvasJumpButton
 from assistant.ui_components.press_feedback import paint_feedback
 from assistant.ui_components.text import INSET, TEXT_PADDING, Document, TextView, font, units
@@ -257,7 +257,7 @@ class IconButton(QAbstractButton):
         self.kind = icon
         self.key_click = key_click
         self.expanded = False
-        self.ink = "#f6f3ff"
+        self.ink = INK
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self.setAccessibleName("Dismiss item" if icon is Icon.DISMISS else "Stop agent" if icon is Icon.STOP else "Show steps")

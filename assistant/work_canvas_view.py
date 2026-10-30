@@ -13,8 +13,8 @@ lazy from PySide6.QtCore import Qt
 from assistant.canvas_activity import Attention, CanvasAction, CanvasQuestion, CanvasUpdate
 from assistant.feed_origin import App, Origin
 from assistant.notifications import Tone
+from assistant.ui_components.appearance import Palette, palette
 from assistant.ui_components.bubble import BubbleAppearance, CanvasHeading, badge_origins, badge_width, paint_origins, paint_surface
-from assistant.ui_components.bubble_style import Palette, palette
 from assistant.ui_components.canvas_bubble import CanvasBubble, CanvasEvents
 from assistant.ui_components.canvas_controls import CanvasControl, ControlAction
 from assistant.ui_components.text import PlainLayout, font
