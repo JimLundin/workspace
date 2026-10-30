@@ -4,36 +4,9 @@
     {
       "key": {
         "rule": "PLR0913",
-        "path": "assistant/activity.py",
-        "scope": "ActivityTracker.__init__",
-        "signature": "dd5bf52ff6bf1e68d1eb56ee2f7b9bc22374fada3270a34b6fab56ac14610e9d"
-      },
-      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
-    },
-    {
-      "key": {
-        "rule": "PLR0913",
-        "path": "assistant/activity.py",
-        "scope": "observed",
-        "signature": "9cac2bd8b001c296937089e482897fb161fbca5054b6186c020f251472d38009"
-      },
-      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
-    },
-    {
-      "key": {
-        "rule": "PLR0913",
         "path": "assistant/agent.py",
         "scope": "Agent.effect",
         "signature": "b18fec5190f0015e745e60d5a140a79a562f35544a1a6c819506c7688695cde5"
-      },
-      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
-    },
-    {
-      "key": {
-        "rule": "PLR0913",
-        "path": "assistant/agent.py",
-        "scope": "Args.bounded",
-        "signature": "8546e3d3e30e3bf68c01b61cc0f8c73c1520a8cceaccc7dc1eb1ad070e1a80f7"
       },
       "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
     },
@@ -45,15 +18,6 @@
         "signature": "e46675a3fa8d7c2003a0627dc80d6a899e20efffcfc3abb427f17c822fcd4c09"
       },
       "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
-    },
-    {
-      "key": {
-        "rule": "FBT001",
-        "path": "assistant/agent.py",
-        "scope": "Machine.mouse_button.down",
-        "signature": "97539690c2e1def12788f7419609f0213bf6a4bd8e67a65f70032f1bc46e121c"
-      },
-      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
     },
     {
       "key": {
@@ -147,15 +111,6 @@
     },
     {
       "key": {
-        "rule": "FBT001",
-        "path": "assistant/agent_toasts.py",
-        "scope": "AgentToasts.set_hover.inside",
-        "signature": "92cab3b5e62a1086b4006a2abe4870644f6e69be4ad436faea5177b82a9e26f5"
-      },
-      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
-    },
-    {
-      "key": {
         "rule": "PLR0913",
         "path": "assistant/agent_window.py",
         "scope": "AgentWindow.begin",
@@ -201,30 +156,12 @@
     },
     {
       "key": {
-        "rule": "FBT001",
-        "path": "assistant/bar_surface.py",
-        "scope": "Pill.attach.attached",
-        "signature": "67b0015666ba111710870658c573c045578cf79cc58c6ac494a83bcfa6e0500b"
-      },
-      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
-    },
-    {
-      "key": {
         "rule": "PLR0913",
         "path": "assistant/bar_surface.py",
         "scope": "Pill.button",
         "signature": "ecf7c8950358fd455892f0b8ae0d99e7bff1b09c3ad536ac267e3b135be91349"
       },
       "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
-    },
-    {
-      "key": {
-        "rule": "FBT001",
-        "path": "assistant/bar_surface.py",
-        "scope": "Pill.show_activity.visible",
-        "signature": "15ae5127d86fb3e3434b2ed62831a8f22bd376ab1b2692d6dcfd447a0380b742"
-      },
-      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
     },
     {
       "key": {
@@ -327,24 +264,6 @@
     },
     {
       "key": {
-        "rule": "FBT001",
-        "path": "assistant/browser_values.py",
-        "scope": "boolean.default",
-        "signature": "150cac38cefb7a3a8ad82a6df444a115c505d70bc0752f2ac15ddb252b08e4d4"
-      },
-      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
-    },
-    {
-      "key": {
-        "rule": "FBT002",
-        "path": "assistant/browser_values.py",
-        "scope": "boolean.default",
-        "signature": "150cac38cefb7a3a8ad82a6df444a115c505d70bc0752f2ac15ddb252b08e4d4"
-      },
-      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
-    },
-    {
-      "key": {
         "rule": "PLR0913",
         "path": "assistant/browser_values.py",
         "scope": "number",
@@ -399,15 +318,6 @@
     },
     {
       "key": {
-        "rule": "FBT001",
-        "path": "assistant/desktop_bar.py",
-        "scope": "DesktopBar.layout.enabled",
-        "signature": "7b174362c1286a56c781ba421bebb950a571fae821cccba1dc1ed5186a886942"
-      },
-      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
-    },
-    {
-      "key": {
         "rule": "PLR0913",
         "path": "assistant/desktop_bar.py",
         "scope": "DesktopBar.message",
@@ -426,24 +336,6 @@
     },
     {
       "key": {
-        "rule": "FBT001",
-        "path": "assistant/features.py",
-        "scope": "Assistant.handle.down",
-        "signature": "992a51e4971347d1634e5e0c4216de14be3d2606e22cbfa6a432d9c7d379a97c"
-      },
-      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
-    },
-    {
-      "key": {
-        "rule": "FBT001",
-        "path": "assistant/features.py",
-        "scope": "Assistant.hold.down",
-        "signature": "735e176f99333da90922bd0cbd15b31a6cc5e88ad032403b6cae42717806260b"
-      },
-      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
-    },
-    {
-      "key": {
         "rule": "PLR0913",
         "path": "assistant/features.py",
         "scope": "Conversation.__init__",
@@ -454,7 +346,7 @@
     {
       "key": {
         "rule": "PLR0913",
-        "path": "assistant/feed_title.py",
+        "path": "assistant/ui_components/heading.py",
         "scope": "heading_width",
         "signature": "09b8251c69d514e2e9582db2b46a92bb926aa40d582fd999a3c13ef91bbc3ecc"
       },
@@ -490,47 +382,11 @@
     {
       "key": {
         "rule": "PLR0913",
-        "path": "assistant/graph_http.py",
-        "scope": "Http._request",
-        "signature": "3d840bc448f5668a2e2611b0a6a8c0ae53b67c81b4637115f9b2c013b183405f"
-      },
-      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
-    },
-    {
-      "key": {
-        "rule": "PLR0913",
-        "path": "assistant/graph_http.py",
-        "scope": "Http.request",
-        "signature": "3d840bc448f5668a2e2611b0a6a8c0ae53b67c81b4637115f9b2c013b183405f"
-      },
-      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
-    },
-    {
-      "key": {
-        "rule": "PLR0913",
         "path": "assistant/inbox.py",
         "scope": "review_prompt",
         "signature": "5a2c0d8fa6e9d8575b07792468f939e06344748ddf52e9e9ada545ca5b1ec1ec"
       },
       "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
-    },
-    {
-      "key": {
-        "rule": "PLR0913",
-        "path": "assistant/llm.py",
-        "scope": "_chat_body",
-        "signature": "4326e818bdcecafeff4c33ac0ccc7231fea7394afef4c7e43c59da286d1b7f65"
-      },
-      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
-    },
-    {
-      "key": {
-        "rule": "FBT001",
-        "path": "assistant/llm.py",
-        "scope": "_chat_body.streaming",
-        "signature": "4326e818bdcecafeff4c33ac0ccc7231fea7394afef4c7e43c59da286d1b7f65"
-      },
-      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
     },
     {
       "key": {
@@ -594,15 +450,6 @@
         "signature": "e46675a3fa8d7c2003a0627dc80d6a899e20efffcfc3abb427f17c822fcd4c09"
       },
       "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
-    },
-    {
-      "key": {
-        "rule": "FBT001",
-        "path": "assistant/machine.py",
-        "scope": "WinMachine.mouse_button.down",
-        "signature": "97539690c2e1def12788f7419609f0213bf6a4bd8e67a65f70032f1bc46e121c"
-      },
-      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
     },
     {
       "key": {
@@ -823,42 +670,6 @@
     {
       "key": {
         "rule": "PLR0913",
-        "path": "assistant/notifications.py",
-        "scope": "hover",
-        "signature": "09ae5145e9babf6e207c8faf9be3e43d37432c04c9d5165870fd7b8952be8230"
-      },
-      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
-    },
-    {
-      "key": {
-        "rule": "FBT001",
-        "path": "assistant/notifications.py",
-        "scope": "hover.inside",
-        "signature": "09ae5145e9babf6e207c8faf9be3e43d37432c04c9d5165870fd7b8952be8230"
-      },
-      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
-    },
-    {
-      "key": {
-        "rule": "PLR0913",
-        "path": "assistant/notifications.py",
-        "scope": "reading_hold",
-        "signature": "dc68593350710137597de7f1c69944d7297e5f98f19d3d03fdcf603ac16d94f1"
-      },
-      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
-    },
-    {
-      "key": {
-        "rule": "FBT001",
-        "path": "assistant/notifications.py",
-        "scope": "reading_hold.reading",
-        "signature": "dc68593350710137597de7f1c69944d7297e5f98f19d3d03fdcf603ac16d94f1"
-      },
-      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
-    },
-    {
-      "key": {
-        "rule": "PLR0913",
         "path": "assistant/outlook.py",
         "scope": "_text",
         "signature": "3ecc38dcc213e22500d408ef43d331da904ec99967d6261a0f0f271691f78cf0"
@@ -867,62 +678,8 @@
     },
     {
       "key": {
-        "rule": "FBT001",
-        "path": "assistant/overlay.py",
-        "scope": "OverlayState.key.down",
-        "signature": "e24ac2aaad6790b3a7daf82d65de76f6cfa6cd1ac7253eaf9073b5ff18b93070"
-      },
-      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
-    },
-    {
-      "key": {
-        "rule": "FBT001",
-        "path": "assistant/overlay.py",
-        "scope": "OverlayState.set_layout.on",
-        "signature": "0ecd8c262d2ff9e5b885ecb6deb12af6b64eed3bb5ac1458bd3624260c5bdaab"
-      },
-      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
-    },
-    {
-      "key": {
         "rule": "PLR0913",
-        "path": "assistant/overlay.py",
-        "scope": "fit_position",
-        "signature": "deab981d04b16bf83ef37a0b6359b5cc655134c09a677443d9f615d4ad02f3aa"
-      },
-      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
-    },
-    {
-      "key": {
-        "rule": "FBT001",
-        "path": "assistant/overlay.py",
-        "scope": "save_enabled.enabled",
-        "signature": "39cdb09971205afa58328bbec1a78ed60af91d565ae118a3300f2d9b4b183630"
-      },
-      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
-    },
-    {
-      "key": {
-        "rule": "PLR0913",
-        "path": "assistant/panel.py",
-        "scope": "fit_panel",
-        "signature": "0623de819a13dcced2ec08ea6f7e5e979c4616b9609cd755ed5fb560516818a0"
-      },
-      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
-    },
-    {
-      "key": {
-        "rule": "PLR0913",
-        "path": "assistant/panel.py",
-        "scope": "snap_panel",
-        "signature": "72ab44586b38f8b37f61c4d93061c644d5e36793a43b77adbd55179acd84a616"
-      },
-      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
-    },
-    {
-      "key": {
-        "rule": "PLR0913",
-        "path": "assistant/panel_controls.py",
+        "path": "assistant/ui_components/controls.py",
         "scope": "button",
         "signature": "99b44bc87de3b64925d42e62bdada33300962fab8ddd938985dd924e4e2ddc4a"
       },
@@ -936,15 +693,6 @@
         "signature": "03d5da46404536343919318d9d607cc6cba23335d0109c6d092135a56c5c9ffa"
       },
       "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
-    },
-    {
-      "key": {
-        "rule": "FBT001",
-        "path": "assistant/qt_ui.py",
-        "scope": "EventLoop.watch.visible",
-        "signature": "6ed3d0b73769b674456e002fd5022fa251d464888f34898f6a3692f315a8ea88"
-      },
-      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
     },
     {
       "key": {
@@ -975,37 +723,10 @@
     },
     {
       "key": {
-        "rule": "FBT001",
-        "path": "assistant/shell_state.py",
-        "scope": "WindowsKeyTap.key.down",
-        "signature": "1304c23592a458e90ec8564b3a238af9e2a80b5a9e2706f5d9d6f9268ffefc79"
-      },
-      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
-    },
-    {
-      "key": {
         "rule": "PLR0913",
         "path": "assistant/teams.py",
         "scope": "Teams.__init__",
         "signature": "797b3ea80cb24ad2c3df22666abbcb5485bc280ef038a5aa59ac01426a5ec168"
-      },
-      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
-    },
-    {
-      "key": {
-        "rule": "PLR0913",
-        "path": "assistant/teams.py",
-        "scope": "Teams._api",
-        "signature": "5f9c7bea7c8b0b151c93e47a82402ae8c29f9a2627142c79db1788f0f93e88d9"
-      },
-      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
-    },
-    {
-      "key": {
-        "rule": "PLR0913",
-        "path": "assistant/teams.py",
-        "scope": "Transport.request",
-        "signature": "3d840bc448f5668a2e2611b0a6a8c0ae53b67c81b4637115f9b2c013b183405f"
       },
       "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
     },
@@ -1128,15 +849,6 @@
     },
     {
       "key": {
-        "rule": "FBT001",
-        "path": "assistant/ui.py",
-        "scope": "Ui.desktop_layout.enabled",
-        "signature": "7b174362c1286a56c781ba421bebb950a571fae821cccba1dc1ed5186a886942"
-      },
-      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
-    },
-    {
-      "key": {
         "rule": "PLR0913",
         "path": "assistant/ui.py",
         "scope": "Ui.show_keyboard_overlay",
@@ -1156,16 +868,7 @@
     {
       "key": {
         "rule": "PLR0913",
-        "path": "assistant/widgets.py",
-        "scope": "GestureHandle.__init__",
-        "signature": "7e1b43aa4479aecb6c196ba2a2285b16763ee4fb0a893431cdec5c6b0c972d04"
-      },
-      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
-    },
-    {
-      "key": {
-        "rule": "PLR0913",
-        "path": "assistant/widgets.py",
+        "path": "assistant/ui_components/widgets.py",
         "scope": "Window.__init__",
         "signature": "8de0fae46999b094bf9a4745867e8cbe7b77f2011517ef4eb86a575947badd63"
       },
@@ -1174,7 +877,7 @@
     {
       "key": {
         "rule": "PLR0913",
-        "path": "assistant/widgets.py",
+        "path": "assistant/ui_components/widgets.py",
         "scope": "show_window",
         "signature": "1511fe276d563219222e381e26ffe2d07a29e6ade880be9b8aeafc0b32c8af1b"
       },
@@ -1213,15 +916,6 @@
         "path": "assistant/work_service.py",
         "scope": "WorkService._submit",
         "signature": "7f2dfc246051cfc433218f2ac6ef5eb061d059d30c282f09bb14a678bd8a6190"
-      },
-      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
-    },
-    {
-      "key": {
-        "rule": "PLR0913",
-        "path": "assistant/work_window.py",
-        "scope": "WorkWindow.__init__",
-        "signature": "8a534caf730322c75daf4f0689adf1e293be68d5c1eacbcb58992db87c14e625"
       },
       "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
     },
@@ -1359,15 +1053,6 @@
         "signature": "b59e04dc903cbfcf4ce941f304f12992d6edc914f3bfdc53d2851f35bdaee49c"
       },
       "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
-    },
-    {
-      "key": {
-        "rule": "FBT001",
-        "path": "automation/execution.py",
-        "scope": "WorkExecution.reconcile.applied",
-        "signature": "b156a90170de7d8e1c8a8089f819170d2ee68cce74961ef82049854386fcd112"
-      },
-      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
     },
     {
       "key": {
@@ -1515,39 +1200,23 @@
     },
     {
       "key": {
-        "rule": "FBT001",
-        "path": "keeper.py",
-        "scope": "Keeper.persist.pending",
-        "signature": "d0844993137c3963b1fb239a94d53c96c79da49dd966be9c5b9e92398bb3bc4e"
-      },
-      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
-    },
-    {
-      "key": {
-        "rule": "FBT001",
-        "path": "keeper.py",
-        "scope": "Recovery.write.pending",
-        "signature": "bc1bff898b42d8cbd9319aeb852e399f8285d4d380de2e6b1260032723a44567"
-      },
-      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
-    },
-    {
-      "key": {
-        "rule": "PLR0913",
-        "path": "keeper.py",
-        "scope": "_Process.__init__",
-        "signature": "f2c7f52a52c4ce5784cb7c9ae5c251d84195e5c8dda0af199a11519b7ccc7759"
-      },
-      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
-    },
-    {
-      "key": {
         "rule": "PLR0913",
         "path": "keeper.py",
         "scope": "_User32.PostMessageW",
         "signature": "6b1c2637d86e2001144e8c96c9e112fc4668ab84bac3391b3c9b685cf66bf5bd"
       },
-      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+      "reason": "The Win32 message ABI requires a window handle, message ID and two pointer-sized payload words; the protocol preserves that fixed call shape.",
+      "kind": "interface"
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "keeper.py",
+        "scope": "WindowsUser32.PostMessageW",
+        "signature": "6b1c2637d86e2001144e8c96c9e112fc4668ab84bac3391b3c9b685cf66bf5bd"
+      },
+      "reason": "The native adapter preserves Win32's window/message/two-payload ABI, with pointer-sized WPARAM and LPARAM prototypes.",
+      "kind": "interface"
     },
     {
       "key": {
@@ -1555,168 +1224,6 @@
         "path": "keeper.py",
         "scope": "prepare_candidate",
         "signature": "9bcf223b3dd5db50cacab5822cef29d42c052fd4d5bb4a9223ab45fb47f3deac"
-      },
-      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
-    },
-    {
-      "key": {
-        "rule": "PLR0913",
-        "path": "miryoku/engine.py",
-        "scope": "Engine.key",
-        "signature": "0614e4e89f2040aacc059e8f231b31b3126feb7d1cf2662346c3135db9131823"
-      },
-      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
-    },
-    {
-      "key": {
-        "rule": "FBT001",
-        "path": "miryoku/engine.py",
-        "scope": "Engine.key.down",
-        "signature": "0614e4e89f2040aacc059e8f231b31b3126feb7d1cf2662346c3135db9131823"
-      },
-      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
-    },
-    {
-      "key": {
-        "rule": "PLR0913",
-        "path": "miryoku/engine.py",
-        "scope": "Engine.native_direction",
-        "signature": "9ee5368dbc1e2f40296a395a5615f012b4e397a6949b860f154fda2b3e1b5bca"
-      },
-      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
-    },
-    {
-      "key": {
-        "rule": "FBT001",
-        "path": "miryoku/engine.py",
-        "scope": "Engine.native_direction.down",
-        "signature": "9ee5368dbc1e2f40296a395a5615f012b4e397a6949b860f154fda2b3e1b5bca"
-      },
-      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
-    },
-    {
-      "key": {
-        "rule": "PLR0913",
-        "path": "miryoku/engine.py",
-        "scope": "Engine.on_key",
-        "signature": "0614e4e89f2040aacc059e8f231b31b3126feb7d1cf2662346c3135db9131823"
-      },
-      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
-    },
-    {
-      "key": {
-        "rule": "FBT001",
-        "path": "miryoku/engine.py",
-        "scope": "Engine.on_key.down",
-        "signature": "0614e4e89f2040aacc059e8f231b31b3126feb7d1cf2662346c3135db9131823"
-      },
-      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
-    },
-    {
-      "key": {
-        "rule": "FBT001",
-        "path": "miryoku/engine.py",
-        "scope": "Host.request.down",
-        "signature": "992a51e4971347d1634e5e0c4216de14be3d2606e22cbfa6a432d9c7d379a97c"
-      },
-      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
-    },
-    {
-      "key": {
-        "rule": "FBT001",
-        "path": "miryoku/engine.py",
-        "scope": "Host.send.down",
-        "signature": "5c6e8cb17ec813e17c2f1c65c1127a157cd61cc1a1d665821ec7f8a3cc083b7a"
-      },
-      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
-    },
-    {
-      "key": {
-        "rule": "FBT001",
-        "path": "miryoku/layout.py",
-        "scope": "character.shifted",
-        "signature": "00c59be191f19a88b7f04503eeeb7cadf32370eb505c0cc2760aa46b98004af8"
-      },
-      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
-    },
-    {
-      "key": {
-        "rule": "FBT001",
-        "path": "miryoku/win.py",
-        "scope": "Keyboard.desktop_direction.down",
-        "signature": "9958bbb06154a7dc388044e72cdaa9813781816c854472d52b2def7b6f5c7c6a"
-      },
-      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
-    },
-    {
-      "key": {
-        "rule": "FBT001",
-        "path": "miryoku/win.py",
-        "scope": "Keyboard.show_key.down",
-        "signature": "e24ac2aaad6790b3a7daf82d65de76f6cfa6cd1ac7253eaf9073b5ff18b93070"
-      },
-      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
-    },
-    {
-      "key": {
-        "rule": "FBT001",
-        "path": "miryoku/win.py",
-        "scope": "Keyboard.swallow.down",
-        "signature": "9958bbb06154a7dc388044e72cdaa9813781816c854472d52b2def7b6f5c7c6a"
-      },
-      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
-    },
-    {
-      "key": {
-        "rule": "FBT001",
-        "path": "miryoku/win.py",
-        "scope": "WinHost.request.down",
-        "signature": "992a51e4971347d1634e5e0c4216de14be3d2606e22cbfa6a432d9c7d379a97c"
-      },
-      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
-    },
-    {
-      "key": {
-        "rule": "FBT001",
-        "path": "miryoku/win.py",
-        "scope": "WinHost.send.down",
-        "signature": "5c6e8cb17ec813e17c2f1c65c1127a157cd61cc1a1d665821ec7f8a3cc083b7a"
-      },
-      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
-    },
-    {
-      "key": {
-        "rule": "FBT001",
-        "path": "protocol.py",
-        "scope": "encode_indicator.caps_word",
-        "signature": "fe1d90cc71a9ef46eeb596bd6b4ea1a3669e567bbe76e50fc34d6b33dad635fa"
-      },
-      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
-    },
-    {
-      "key": {
-        "rule": "FBT001",
-        "path": "protocol.py",
-        "scope": "encode_indicator.locked",
-        "signature": "fe1d90cc71a9ef46eeb596bd6b4ea1a3669e567bbe76e50fc34d6b33dad635fa"
-      },
-      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
-    },
-    {
-      "key": {
-        "rule": "PLR0913",
-        "path": "runtime.py",
-        "scope": "bootstrap_plan",
-        "signature": "b58ad2393be887710c8a40f2ef8c0b2cc816efdecbc82594cefbfe511b9e88be"
-      },
-      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
-    },
-    {
-      "key": {
-        "rule": "PLR0913",
-        "path": "runtime.py",
-        "scope": "validate_dependencies",
-        "signature": "77161eb3ee0456e0a3dba055fea7d773029d10ce8ce9b1efd416e3be58faafd3"
       },
       "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
     },
@@ -1735,15 +1242,6 @@
         "path": "scripts/benchmark_keyboard.py",
         "scope": "run",
         "signature": "2fd68e6cee02fc927d2c802bce507eff4e4afb1d28556b9151bea1c1be6ff2c4"
-      },
-      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
-    },
-    {
-      "key": {
-        "rule": "PLR0913",
-        "path": "scripts/bundle.py",
-        "scope": "extract",
-        "signature": "7d9623b038856798b1f9618e1fe6e97d88d583b35f41207e4ef809e270c5eb30"
       },
       "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
     },
@@ -1830,15 +1328,6 @@
     },
     {
       "key": {
-        "rule": "FBT001",
-        "path": "tests/test_agent.py",
-        "scope": "FakeMachine.mouse_button.down",
-        "signature": "97539690c2e1def12788f7419609f0213bf6a4bd8e67a65f70032f1bc46e121c"
-      },
-      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
-    },
-    {
-      "key": {
         "rule": "PLR0913",
         "path": "tests/test_agent.py",
         "scope": "FakeMachine.run_powershell",
@@ -1920,66 +1409,12 @@
     },
     {
       "key": {
-        "rule": "FBT001",
-        "path": "tests/test_computer_tools.py",
-        "scope": "StoppingMouse.mouse_button.down",
-        "signature": "97539690c2e1def12788f7419609f0213bf6a4bd8e67a65f70032f1bc46e121c"
-      },
-      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
-    },
-    {
-      "key": {
         "rule": "PLR0913",
         "path": "tests/test_computer_tools.py",
         "scope": "test_unavailable_screen_context_keeps_the_request_and_activity_usable.LockedDesktop.screenshot",
         "signature": "7545a4b3932df79cbe6212d953ae6424246b13328321f15dc9a3dd7676d2afae"
       },
       "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
-    },
-    {
-      "key": {
-        "rule": "FBT001",
-        "path": "tests/test_engine.py",
-        "scope": "FakeHost.request.down",
-        "signature": "992a51e4971347d1634e5e0c4216de14be3d2606e22cbfa6a432d9c7d379a97c"
-      },
-      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
-    },
-    {
-      "key": {
-        "rule": "FBT001",
-        "path": "tests/test_engine.py",
-        "scope": "FakeHost.send.down",
-        "signature": "5c6e8cb17ec813e17c2f1c65c1127a157cd61cc1a1d665821ec7f8a3cc083b7a"
-      },
-      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
-    },
-    {
-      "key": {
-        "rule": "FBT001",
-        "path": "tests/test_engine.py",
-        "scope": "Harness.key.down",
-        "signature": "13c50bd2b5b411a99f3a1a2551161c66d9566f330fdf44db280efeba7c1674d6"
-      },
-      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
-    },
-    {
-      "key": {
-        "rule": "FBT001",
-        "path": "tests/test_engine.py",
-        "scope": "test_rejected_modifier_release_does_not_skip_remaining_modifiers.RejectedModifier.send.down",
-        "signature": "5c6e8cb17ec813e17c2f1c65c1127a157cd61cc1a1d665821ec7f8a3cc083b7a"
-      },
-      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
-    },
-    {
-      "key": {
-        "rule": "FBT001",
-        "path": "tests/test_engine.py",
-        "scope": "test_rejected_release_does_not_leave_other_keys_modifiers_or_voice_held.RejectedRelease.send.down",
-        "signature": "5c6e8cb17ec813e17c2f1c65c1127a157cd61cc1a1d665821ec7f8a3cc083b7a"
-      },
-      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
     },
     {
       "key": {
@@ -2020,24 +1455,6 @@
     {
       "key": {
         "rule": "PLR0913",
-        "path": "tests/test_teams.py",
-        "scope": "Http.request",
-        "signature": "3d840bc448f5668a2e2611b0a6a8c0ae53b67c81b4637115f9b2c013b183405f"
-      },
-      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
-    },
-    {
-      "key": {
-        "rule": "FBT001",
-        "path": "tests/test_textio.py",
-        "scope": "Clipboard.__init__.accept",
-        "signature": "457b275af3134e252d73e31340693652f4ad8c81c7beeec904c947e6e29e6678"
-      },
-      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
-    },
-    {
-      "key": {
-        "rule": "PLR0913",
         "path": "tests/test_windows_agent_approvals.py",
         "scope": "InlineUi.agent_input",
         "signature": "7b6108f8b54e5499c69b3e97c26508d63f28ab83d721979d8a90eb226c84d506"
@@ -2052,6 +1469,16 @@
         "signature": "7b6108f8b54e5499c69b3e97c26508d63f28ab83d721979d8a90eb226c84d506"
       },
       "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "tests/test_windows_bindings.py",
+        "scope": "test_keeper_native_messages_preserve_pointer_sized_payloads.serve.observe",
+        "signature": "7789d3b6bf40d8fe5317753345674f7b2466fdca90fbc0ff1ee0950a6df4e4f8"
+      },
+      "reason": "The concrete window callback retains Win32's fixed window/message/two-payload ABI to verify pointer-sized delivery through the keeper boundary.",
+      "kind": "interface"
     },
     {
       "key": {
@@ -2199,15 +1626,6 @@
     },
     {
       "key": {
-        "rule": "FBT001",
-        "path": "winapi/appearance.py",
-        "scope": "TimerResolution.update.active",
-        "signature": "74d74e52435bb9072b2cdae607b39106ffbdfe06ef6cdfbca0a34929ad4c64e8"
-      },
-      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
-    },
-    {
-      "key": {
         "rule": "PLR0913",
         "path": "winapi/composition.py",
         "scope": "Glass.position",
@@ -2262,15 +1680,6 @@
     },
     {
       "key": {
-        "rule": "FBT001",
-        "path": "winapi/keyboard_language.py",
-        "scope": "KeyboardLanguages.enforce.enabled",
-        "signature": "7b174362c1286a56c781ba421bebb950a571fae821cccba1dc1ed5186a886942"
-      },
-      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
-    },
-    {
-      "key": {
         "rule": "PLR0913",
         "path": "winapi/recording.py",
         "scope": "MeetingAudio._capture",
@@ -2316,75 +1725,12 @@
     },
     {
       "key": {
-        "rule": "FBT001",
-        "path": "winapi/windows.py",
-        "scope": "_on_taskbar.include_cloaked",
-        "signature": "6687d21e63ea4852f4ba9e91379a66f9b7adc48d2c5c19d6a17020f5189019e8"
-      },
-      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
-    },
-    {
-      "key": {
-        "rule": "FBT002",
-        "path": "winapi/windows.py",
-        "scope": "_on_taskbar.include_cloaked",
-        "signature": "6687d21e63ea4852f4ba9e91379a66f9b7adc48d2c5c19d6a17020f5189019e8"
-      },
-      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
-    },
-    {
-      "key": {
-        "rule": "FBT001",
-        "path": "winapi/windows.py",
-        "scope": "allow_activation.allowed",
-        "signature": "688c785409612feea24d6ed099bcf4d5aaa79829b0872fc63de1657de01eb4f0"
-      },
-      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
-    },
-    {
-      "key": {
         "rule": "PLR0913",
         "path": "winapi/windows.py",
         "scope": "overlay_message",
         "signature": "930051080330bcfbbc1ad2e911eed00c3cb3ef2dc6fe3fff558c0cac482aacde"
       },
       "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
-    },
-    {
-      "key": {
-        "rule": "FBT001",
-        "path": "winapi/windows.py",
-        "scope": "show_quietly.visible",
-        "signature": "a2d850d075365f3cc1b890136e8fafc56e1f5d61ebf171ad171c0f11f3912bed"
-      },
-      "reason": "Existing positional Boolean signature; make it keyword-only with its callers."
-    },
-    {
-      "key": {
-        "rule": "inline-import",
-        "path": "keeper.py",
-        "scope": "main",
-        "signature": "028a967c4e81370dc9c27c71e4dd00b69ad56d06b836ec89bc368dfc403f7c5e"
-      },
-      "reason": "Existing inline dependency declaration awaits migration to its module owner; use module-level lazy imports when deferred loading is required."
-    },
-    {
-      "key": {
-        "rule": "inline-import",
-        "path": "keeper.py",
-        "scope": "main",
-        "signature": "20dbba336af9b114b78453237df89f5736920a248b0b729095cb73ea82628acd"
-      },
-      "reason": "Existing inline dependency declaration awaits migration to its module owner; use module-level lazy imports when deferred loading is required."
-    },
-    {
-      "key": {
-        "rule": "inline-import",
-        "path": "selfcheck.py",
-        "scope": "check",
-        "signature": "c0e5646f11d3bafc22d1798b833924d312f2b700f12d098c8e10818f3b0829d2"
-      },
-      "reason": "Existing inline dependency declaration awaits migration to its module owner; use module-level lazy imports when deferred loading is required."
     }
   ]
 }

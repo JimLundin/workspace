@@ -68,6 +68,7 @@ def button(text: str, callback: Callable[[], None], *, tip: str = "", name: str 
     widget.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
     if name:
         widget.setObjectName(name)
+
     # Plain slotted controllers need not support weak references just because a
     # Qt signal owns a callback. Qt retains this small closure with the button.
     def clicked() -> None:

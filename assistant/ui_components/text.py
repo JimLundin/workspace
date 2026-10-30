@@ -4,17 +4,20 @@ import math
 from collections.abc import Callable
 
 lazy import shiboken6
-lazy from PySide6.QtCore import QPoint, Qt
+lazy from PySide6.QtCore import QPoint, QPointF, Qt
 lazy from PySide6.QtGui import (
     QColor,
     QContextMenuEvent,
     QFont,
     QFontMetricsF,
+    QPainter,
     QPalette,
     QTextBlockFormat,
     QTextCharFormat,
     QTextCursor,
     QTextDocument,
+    QTextLayout,
+    QTextLine,
     QTextOption,
     QWheelEvent,
 )
@@ -22,7 +25,7 @@ lazy from PySide6.QtWidgets import QFrame, QMenu, QTextBrowser, QWidget
 
 from assistant.qt_runtime import prepare
 from assistant.rich_text import Span, changed_tail
-from assistant.toast_style import Ink
+from assistant.ui_components.bubble_style import Ink
 
 prepare()
 
@@ -45,7 +48,7 @@ def units(text: str) -> int:
 def character_style(span: Span, ink: Ink) -> QTextCharFormat:
     style = QTextCharFormat()
     size = 10.5
-    if 'feed_title' in span.tags or ('feed' in span.tags and 'heading' in span.tags):
+    if "feed_title" in span.tags or ("feed" in span.tags and "heading" in span.tags):
         size = 11.5
     elif "heading" in span.tags:
         size = 15 if "h1" in span.tags else 13 if "h2" in span.tags else 11.5
@@ -60,7 +63,7 @@ def character_style(span: Span, ink: Ink) -> QTextCharFormat:
         color = ink.secondary
     if "step_error" in span.tags:
         color = ink.error
-    if 'feed_question' in span.tags:
+    if "feed_question" in span.tags:
         color = ink.link
         style.setFontWeight(QFont.Weight.DemiBold)
     if span.link:
@@ -80,11 +83,60 @@ def paragraph_style(span: Span) -> QTextBlockFormat:
     style.setLeftMargin(min(span.indent, 6) * 16 + hanging + (4 if "codeblock" in span.tags else 0))
     style.setTextIndent(-hanging)
     style.setLineHeight(125, QTextBlockFormat.LineHeightTypes.ProportionalHeight.value)
-    if 'feed' in span.tags:
-        style.setBottomMargin(5 if 'feed_title' in span.tags else 4)
-        if 'feed_suggestion' in span.tags or 'feed_question' in span.tags:
+    if "feed" in span.tags:
+        style.setBottomMargin(5 if "feed_title" in span.tags else 4)
+        if "feed_suggestion" in span.tags or "feed_question" in span.tags:
             style.setTopMargin(4)
     return style
+
+
+class PlainLayout:
+    """Qt lays out only the visible lines of a bounded plain-text preview.
+
+    This native owner keeps its QTextLayout and line handles; large source
+    excerpts stay in the domain/detail editor instead of a full preview document.
+    """
+
+    def __init__(self) -> None:
+        self.qt: QTextLayout = QTextLayout()
+        self.qt.setFont(font())
+        option = QTextOption()
+        option.setWrapMode(QTextOption.WrapMode.WrapAtWordBoundaryOrAnywhere)
+        self.qt.setTextOption(option)
+        self.lines: tuple[QTextLine, ...] = ()
+        self.observed: tuple[str, float, float] | None = None
+        self.height: float = 0
+
+    def load(self, text: str, width: float, maximum: float) -> float:
+        observed = text, width, maximum
+        if observed == self.observed:
+            return self.height
+        self.qt.clearLayout()
+        self.qt.setText(text.replace("\n", "\u2028"))
+        self.qt.beginLayout()
+        self.lines = ()
+        height = 0.0
+        try:
+            while True:
+                line = self.qt.createLine()
+                if not line.isValid():
+                    break
+                line.setLineWidth(max(1, width))
+                bottom = height + line.height() * 1.25
+                if math.ceil(bottom) > maximum:
+                    break
+                line.setPosition(QPointF(0, height))
+                self.lines = (*self.lines, line)
+                height = bottom
+        finally:
+            self.qt.endLayout()
+        self.observed, self.height = observed, math.ceil(height)
+        return self.height
+
+    def draw(self, painter: QPainter) -> None:
+        painter.setPen(QColor(Ink().foreground))
+        for line in self.lines:
+            line.draw(painter, QPointF())
 
 
 class Document:
@@ -107,7 +159,7 @@ class Document:
             previous = "".join(span.text for span in self.spans)
             self.spans = spans
             cursor = QTextCursor(self.qt)
-            cursor.setPosition(units(previous[:tail.offset]))
+            cursor.setPosition(units(previous[: tail.offset]))
             cursor.movePosition(QTextCursor.MoveOperation.End, QTextCursor.MoveMode.KeepAnchor)
             cursor.beginEditBlock()
             cursor.removeSelectedText()

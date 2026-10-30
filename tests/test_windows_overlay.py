@@ -96,16 +96,23 @@ def test_overlay_drag_retains_physical_pixels_at_fractional_display_scale() -> N
             (QtCore.QEvent.Type.MouseMove, (820, 500), (1025, 625), Qt.MouseButton.LeftButton),
             (QtCore.QEvent.Type.MouseButtonRelease, (820, 500), (1025, 625), Qt.MouseButton.NoButton),
         ):
-            event = QtGui.QMouseEvent(kind, QtCore.QPointF(5, 5), QtCore.QPointF(*logical),
-                                     Qt.MouseButton.LeftButton, pressed, Qt.KeyboardModifier.NoModifier)
+            event = QtGui.QMouseEvent(
+                kind, QtCore.QPointF(5, 5), QtCore.QPointF(*logical), Qt.MouseButton.LeftButton, pressed, Qt.KeyboardModifier.NoModifier
+            )
             desktop.point = physical
             QtWidgets.QApplication.sendEvent(desktop.windows[1], event)
         assert desktop.position == (1025, 625)
         assert all(not window.isVisible() for window in desktop.windows)
         released = desktop.moves
         desktop.point = (1050, 650)
-        event = QtGui.QMouseEvent(QtCore.QEvent.Type.MouseMove, QtCore.QPointF(5, 5), QtCore.QPointF(840, 520),
-                                 Qt.MouseButton.NoButton, Qt.MouseButton.NoButton, Qt.KeyboardModifier.NoModifier)
+        event = QtGui.QMouseEvent(
+            QtCore.QEvent.Type.MouseMove,
+            QtCore.QPointF(5, 5),
+            QtCore.QPointF(840, 520),
+            Qt.MouseButton.NoButton,
+            Qt.MouseButton.NoButton,
+            Qt.KeyboardModifier.NoModifier,
+        )
         QtWidgets.QApplication.sendEvent(desktop.windows[1], event)
         assert desktop.moves == released
 

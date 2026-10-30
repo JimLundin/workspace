@@ -30,6 +30,7 @@ class GeometryOutput(Protocol):
 
 class GeometrySource(ComClass, IGeometrySource2D, IGeometrySource2DInterop):
     """Author the SDK's COM descriptors with callbacks, inside the native boundary."""
+
     def __init__(self, geometry: ID2D1Geometry) -> None:
         super().__init__()
         self.geometry: ID2D1Geometry = geometry
@@ -58,8 +59,11 @@ def composition_path(contour: Contour, scale: float) -> CompositionPath:
             case Line(x, y):
                 sink.AddLine(D2D_POINT_2F(x * scale, y * scale))
             case Curve(ax, ay, bx, by, x, y):
-                sink.AddBezier(D2D1_BEZIER_SEGMENT(D2D_POINT_2F(ax * scale, ay * scale),
-                                                 D2D_POINT_2F(bx * scale, by * scale), D2D_POINT_2F(x * scale, y * scale)))
+                sink.AddBezier(
+                    D2D1_BEZIER_SEGMENT(
+                        D2D_POINT_2F(ax * scale, ay * scale), D2D_POINT_2F(bx * scale, by * scale), D2D_POINT_2F(x * scale, y * scale)
+                    )
+                )
             case End.CLOSE:
                 sink.EndFigure(1)
             case _:

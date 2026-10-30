@@ -38,7 +38,7 @@ class Mutation:
     after: str
 
     def apply(self, source: bytes) -> bytes:
-        return source[:self.start] + self.after.encode("utf-8") + source[self.end:]
+        return source[: self.start] + self.after.encode("utf-8") + source[self.end :]
 
 
 @dataclass(frozen=True, slots=True)
@@ -71,9 +71,16 @@ def expressions(tree: ast.AST, function: str = "") -> Iterator[tuple[str, ast.ex
             yield function, tree.test, f"(not ({ast.unparse(tree.test)}))"
         elif isinstance(tree, ast.Compare):
             swaps: dict[type[ast.cmpop], type[ast.cmpop]] = {
-                ast.Lt: ast.LtE, ast.LtE: ast.Lt, ast.Gt: ast.GtE, ast.GtE: ast.Gt,
-                ast.Eq: ast.NotEq, ast.NotEq: ast.Eq, ast.Is: ast.IsNot, ast.IsNot: ast.Is,
-                ast.In: ast.NotIn, ast.NotIn: ast.In,
+                ast.Lt: ast.LtE,
+                ast.LtE: ast.Lt,
+                ast.Gt: ast.GtE,
+                ast.GtE: ast.Gt,
+                ast.Eq: ast.NotEq,
+                ast.NotEq: ast.Eq,
+                ast.Is: ast.IsNot,
+                ast.IsNot: ast.Is,
+                ast.In: ast.NotIn,
+                ast.NotIn: ast.In,
             }
             for index, operator in enumerate(tree.ops):
                 operators = list(tree.ops)
@@ -85,7 +92,11 @@ def expressions(tree: ast.AST, function: str = "") -> Iterator[tuple[str, ast.ex
             yield function, tree, f"({ast.unparse(changed)})"
         elif isinstance(tree, ast.BinOp):
             arithmetic: dict[type[ast.operator], type[ast.operator]] = {
-                ast.Add: ast.Sub, ast.Sub: ast.Add, ast.Mult: ast.Div, ast.Div: ast.Mult, ast.FloorDiv: ast.Mult,
+                ast.Add: ast.Sub,
+                ast.Sub: ast.Add,
+                ast.Mult: ast.Div,
+                ast.Div: ast.Mult,
+                ast.FloorDiv: ast.Mult,
             }
             if replacement := arithmetic.get(type(tree.op)):
                 changed = ast.BinOp(left=tree.left, op=replacement(), right=tree.right)
@@ -143,6 +154,7 @@ def replacements(source: bytes, changes: list[list[str]]) -> list[Mutation]:
 
 def copy_source(source: Path, target: Path) -> None:
     """Prune dependencies and generated artifacts before descending."""
+
     def ignored(_folder: str, names: list[str]) -> set[str]:
         return {name for name in names if name.startswith(".") or name in ("__pycache__", "dist") or name.endswith(".egg-info")}
 
@@ -154,7 +166,9 @@ def stop_process_tree(process: subprocess.Popen[str]) -> None:
     if sys.platform == "win32":
         subprocess.run(
             ["taskkill", "/PID", str(process.pid), "/T", "/F"],
-            capture_output=True, timeout=10, check=False,
+            capture_output=True,
+            timeout=10,
+            check=False,
         )
     else:
         with suppress(ProcessLookupError):
@@ -183,8 +197,14 @@ def run(root: Path, source: Path, content: bytes, tests: list[str], timeout: flo
         started = time.perf_counter()
         with subprocess.Popen(
             [sys.executable, "-B", "-m", "pytest", "-q", "-x", "--tb=short", "-o", "addopts=", f"--junitxml={report}", *tests],
-            cwd=candidate, env=environment, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-            text=True, encoding="utf-8", errors="replace", start_new_session=sys.platform != "win32",
+            cwd=candidate,
+            env=environment,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            start_new_session=sys.platform != "win32",
         ) as process:
             try:
                 stdout, stderr = process.communicate(timeout=timeout)
@@ -211,7 +231,14 @@ def run(root: Path, source: Path, content: bytes, tests: list[str], timeout: flo
 
 
 def campaign(
-    root: Path, source: Path, original: bytes, selected: list[Mutation], tests: list[str], *, timeout: float, workers: int,
+    root: Path,
+    source: Path,
+    original: bytes,
+    selected: list[Mutation],
+    tests: list[str],
+    *,
+    timeout: float,
+    workers: int,
 ) -> tuple[Result, list[Result], str]:
     # Freeze once: edits made during a long run must not change its test oracle.
     with tempfile.TemporaryDirectory(prefix="workspace-mutation-baseline-") as scratch:
@@ -280,17 +307,33 @@ def main() -> None:
     selected.sort(key=mutation_order)
     print(f"Testing {len(selected)} of {len(candidates)} decision mutations in {source}", flush=True)
     baseline, outcomes, digest = campaign(root, source, original, selected, tests, timeout=timeout, workers=workers)
-    results: list[dict[str, object]] = [{
-        "function": mutation.function, "line": mutation.line, "before": mutation.before, "after": mutation.after,
-        "start": mutation.start, "end": mutation.end,
-        "status": result.status, "seconds": round(result.seconds, 3), "tests": result.tests,
-        "killed_by": result.killed_by, "detail": result.detail,
-    } for mutation, result in zip(selected, outcomes, strict=True)]
+    results: list[dict[str, object]] = [
+        {
+            "function": mutation.function,
+            "line": mutation.line,
+            "before": mutation.before,
+            "after": mutation.after,
+            "start": mutation.start,
+            "end": mutation.end,
+            "status": result.status,
+            "seconds": round(result.seconds, 3),
+            "tests": result.tests,
+            "killed_by": result.killed_by,
+            "detail": result.detail,
+        }
+        for mutation, result in zip(selected, outcomes, strict=True)
+    ]
     output.parent.mkdir(parents=True, exist_ok=True)
     report: dict[str, object] = {
-        "source": source.as_posix(), "tests": tests, "generated": len(candidates), "seed": seed,
-        "baseline_seconds": baseline.seconds, "baseline_tests": baseline.tests, "results": results,
-        "source_sha256": hashlib.sha256(original).hexdigest(), "snapshot_sha256": digest,
+        "source": source.as_posix(),
+        "tests": tests,
+        "generated": len(candidates),
+        "seed": seed,
+        "baseline_seconds": baseline.seconds,
+        "baseline_tests": baseline.tests,
+        "results": results,
+        "source_sha256": hashlib.sha256(original).hexdigest(),
+        "snapshot_sha256": digest,
     }
     output.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
     counts = {status: sum(result["status"] == status for result in results) for status in ("killed", "survived", "timeout", "error")}

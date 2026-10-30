@@ -5,4 +5,3 @@ class FileSystemEvent:
 
 class FileSystemMovedEvent(FileSystemEvent):
     dest_path: str | bytes
-

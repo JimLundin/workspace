@@ -11,8 +11,8 @@ def test_action_arguments_and_results_are_readable_through_the_conversation_view
         message = ToolActivity("read", "read_file", detail, 1, outcome)
         text = body(Entry(0, message))
         assert text == message.text
-        assert 'Path: C:\\Documents\\budget.xlsx\nRead only: Yes' in text
-        assert '{"' not in text and 'false' not in text
+        assert "Path: C:\\Documents\\budget.xlsx\nRead only: Yes" in text
+        assert '{"' not in text and "false" not in text
         if isinstance(outcome, Succeeded):
             assert "Rows: 24\nSaved: No" in text
         elif isinstance(outcome, Failed):
@@ -22,14 +22,15 @@ def test_action_arguments_and_results_are_readable_through_the_conversation_view
 def test_nested_results_show_labeled_values_and_list_items() -> None:
     text = readable('{"controls":[{"name":"Save","actions":["invoke","focus"]}],"next":null}')
     assert "Controls:" in text and "• Name: Save" in text and "Actions: invoke, focus" in text and "Next: Not set" in text
-    assert readable('{}') == "" and readable('[]') == "No items"
+    assert readable("{}") == "" and readable("[]") == "No items"
     assert readable("A normal result with **literal Markdown**.") == "A normal result with **literal Markdown**."
     assert readable('{"unfinished":') == '{"unfinished":'
 
 
 def test_control_actions_explain_the_target_without_exposing_transport_details() -> None:
-    message = ToolActivity("inspect", "inspect_ui", '{"handle":42,"depth":3}', 1,
-                           Succeeded('{"controls":[{"name":"Save","id":"1.2.3","actions":["invoke"]}]}'))
+    message = ToolActivity(
+        "inspect", "inspect_ui", '{"handle":42,"depth":3}', 1, Succeeded('{"controls":[{"name":"Save","id":"1.2.3","actions":["invoke"]}]}')
+    )
     assert message.text == "Inspect the selected window.\nControls found:\n• Save"
     assert "1.2.3" not in message.text and "42" not in message.text and "invoke" not in message.text
 
@@ -80,15 +81,19 @@ def test_payload_is_formatted_before_the_preview_is_shortened() -> None:
     text = readable('{"query":"' + "å" * 400 + '"}', limit=80)
     assert text.startswith("Query: å") and text.endswith("…") and len(text) == 80
     assert "{" not in text and "\\u" not in text
-    text = readable('[' + ','.join(str(number) for number in range(1000)) + ']')
+    text = readable("[" + ",".join(str(number) for number in range(1000)) + "]")
     assert text == "0, 1, 2, 3\n… 996 more items"
     assert readable('{"path":"budget.xlsx"}', limit=len("Path: budget.xlsx")) == "Path: budget.xlsx"
 
 
 def test_work_feed_previews_keep_rejection_reasons_and_omit_execution_metadata() -> None:
-    message = ToolActivity('feed', 'work_feed_update',
-                           '{"operation":"reject","text":"No, the figures are incomplete.","item":"opaque","revision":"secret"}', 1,
-                           Succeeded('{"accepted":false,"reason":"The proposal changed.","token":"secret"}'))
-    assert 'No, the figures are incomplete.' in message.text
-    assert 'No change was made.' in message.text and 'The proposal changed.' in message.text
-    assert 'opaque' not in message.text and 'secret' not in message.text
+    message = ToolActivity(
+        "feed",
+        "work_feed_update",
+        '{"operation":"reject","text":"No, the figures are incomplete.","item":"opaque","revision":"secret"}',
+        1,
+        Succeeded('{"accepted":false,"reason":"The proposal changed.","token":"secret"}'),
+    )
+    assert "No, the figures are incomplete." in message.text
+    assert "No change was made." in message.text and "The proposal changed." in message.text
+    assert "opaque" not in message.text and "secret" not in message.text

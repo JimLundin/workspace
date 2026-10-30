@@ -4,13 +4,13 @@ import threading
 import time
 import uuid
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import assert_never
 
 from assistant.agent_session import Approval, ApprovalDecided, Event, InputCancelled, Question, QuestionAnswered, Resolution
 
 
-@dataclass(slots=True)
+@dataclass(frozen=True, slots=True)
 class _Input:
     request: Question | Approval
     ready: threading.Event = field(default_factory=threading.Event)
@@ -40,7 +40,12 @@ def resolution(request: Question | Approval, answer: str | None) -> Resolution:
 
 
 class Inputs:
-    """Only an explicit response to this exact request can approve it."""
+    """Only an explicit response to this exact request can approve it.
+
+    This owner replaces immutable pending records under its lock. The shared
+    event only wakes the waiting thread; answers are read from the owned map
+    under the same lock, never from a previously captured record.
+    """
 
     __slots__ = ("lock", "pending", "publish")
 
@@ -62,7 +67,8 @@ class Inputs:
             while not request.ready.wait(0.05):
                 if cancel is not None and cancel.is_set():
                     break
-            answer = None if cancel is not None and cancel.is_set() else request.answer
+            with self.lock:
+                answer = None if cancel is not None and cancel.is_set() else self.pending[identity].answer
             self.publish(resolution(message, answer))
             return answer
         finally:
@@ -74,18 +80,18 @@ class Inputs:
             request = self.pending.get(identity)
             if request is None or request.ready.is_set() or not acceptable(request.request, answer):
                 return False
-            request.answer = answer
+            self.pending[identity] = replace(request, answer=answer)
             request.ready.set()
             return True
 
     def cancel_all(self) -> None:
         with self.lock:
-            for request in self.pending.values():
-                request.answer = None
+            for identity, request in self.pending.items():
+                self.pending[identity] = replace(request, answer=None)
                 request.ready.set()
 
     def cancel(self, identity: str) -> None:
         with self.lock:
             if (request := self.pending.get(identity)) is not None:
-                request.answer = None
+                self.pending[identity] = replace(request, answer=None)
                 request.ready.set()

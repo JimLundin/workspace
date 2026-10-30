@@ -14,12 +14,75 @@ Each item keeps its source and reply destination. The feed is one view across
 conversations and tasks; opening it does not change their identities.
 _Avoid_: One Teams chat, task list
 
-**Work item**:
+**Feed item**:
 A pending source update to deal with. Messages in one followed chat share a
 ticket; activity and Windows notifications retain their exact source identities.
 Handling a ticket records the observed revisions, so a later arrival or edit can
 remain pending. A ticket is independent of any agent task requested from it.
 _Avoid_: Teams unread badge, agent task
+
+**Work thread**:
+The context for an ongoing outcome or responsibility, containing its related
+sources, questions, research and actions. It organizes these contributions
+without itself being another contribution.
+_Avoid_: Work card, workflow card, feed item, agent task, Kanban ticket
+
+**Canvas group**:
+A named collection of related work contexts or contributions. Groups can be
+nested, and a contribution can be relevant to several contexts.
+_Avoid_: Execution task, copied source
+
+**Focused canvas**:
+A view of one work context, group or bubble and the contributions within it. Opening
+that view retains the same sources, questions and actions shown in the overview.
+_Avoid_: New task, separate copy
+
+**Canvas bubble**:
+A piece of context such as a source, document, note, question or recorded action.
+A bubble may contain further pieces while remaining a reference in its own right.
+_Avoid_: Work classification, duplicated source
+
+**Work dismissal**:
+A remembered decision that a work context is irrelevant or is not the person's
+responsibility. Dismissed work can be restored without losing its context.
+_Avoid_: Work completion, source deletion
+
+**Web reference**:
+A researched web page's original location and captured evidence within a work
+context. A saved page document may accompany the reference.
+_Avoid_: Browser attempt, complete archive
+
+**Unconnected references**:
+Collected evidence that has not yet been connected to a work context.
+_Avoid_: Assigned work, agent finding
+
+**Canvas relationship**:
+An explicit connection between two bubbles, describing how their context relates.
+It remains attached to those pieces when their containers are opened or collapsed.
+_Avoid_: Containment, source assignment
+
+**Bubble contents**:
+The pieces collected inside a bubble, such as individual emails within an email
+conversation. Containment is distinct from that bubble's connections to work.
+_Avoid_: Source connection, copied thread
+
+**Document reference**:
+A document's place in the work context, pointing to its local file or web location.
+Its annotations and connections belong to the work alongside it.
+_Avoid_: Uploaded copy, attachment preview
+
+**Canvas investigation**:
+Agent research that extends a work thread from changed source evidence. It
+collects and arranges context, investigates document candidates, and asks the
+user when a consequential choice remains unresolved. Its clarification resumes
+the same execution within the same work context.
+_Avoid_: Per-app notification, manual canvas population, duplicate work thread
+
+**Source connection**:
+A recorded relationship between a work thread and an observed email conversation,
+Teams conversation, Kanban ticket, document or individual message, with the reason they belong together.
+One source can contribute to several work threads.
+_Avoid_: Duplicate task, copied conversation
 
 **Agent request**:
 A question or approval that an agent needs the person to answer before work can

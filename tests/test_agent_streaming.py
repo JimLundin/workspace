@@ -70,12 +70,16 @@ def test_summaries_and_answers_are_visible_before_the_response_finishes() -> Non
     release, stop = threading.Event(), threading.Event()
     panel = ObservedWindow(stop.set)
     summary: Json = {"type": "reasoning", "id": "rs_live", "summary": [{"type": "summary_text", "text": "Checking **the workbook**."}]}
-    answer: Json = {"type": "message", "id": "msg_live", "role": "assistant", "status": "completed",
-                    "content": [{"type": "output_text", "text": "Found **budget.xlsx**.", "annotations": []}]}
+    answer: Json = {
+        "type": "message",
+        "id": "msg_live",
+        "role": "assistant",
+        "status": "completed",
+        "content": [{"type": "output_text", "text": "Found **budget.xlsx**.", "annotations": []}],
+    }
 
     def stream(_: Received) -> Generator[bytes]:
-        yield event("response.reasoning_summary_text.delta", item_id="rs_live", output_index=0, summary_index=0,
-                    delta="Checking **the workbook**.")
+        yield event("response.reasoning_summary_text.delta", item_id="rs_live", output_index=0, summary_index=0, delta="Checking **the workbook**.")
         yield event("response.output_text.delta", item_id="msg_live", output_index=1, content_index=0, delta="Found **budget")
         release.wait(timeout=5)
         yield event("response.output_text.delta", item_id="msg_live", output_index=1, content_index=0, delta=".xlsx**.")
@@ -111,14 +115,22 @@ def test_summary_parts_stay_separate_and_private_reasoning_never_reaches_the_vie
     stop = threading.Event()
     panel = ObservedWindow(stop.set)
     summary: Json = {
-        "type": "reasoning", "id": "rs_parts", "status": "completed", "encrypted_content": "opaque-private-payload",
+        "type": "reasoning",
+        "id": "rs_parts",
+        "status": "completed",
+        "encrypted_content": "opaque-private-payload",
         "content": [{"type": "reasoning_text", "text": "private-reasoning-content"}],
         "summary": [{"type": "summary_text", "text": "First check."}, {"type": "summary_text", "text": "Second check."}],
     }
     answer: Json = {
-        "type": "message", "id": "msg_parts", "role": "assistant", "status": "completed",
-        "content": [{"type": "output_text", "text": "First paragraph.\n\n", "annotations": []},
-                    {"type": "output_text", "text": "Second paragraph.", "annotations": []}],
+        "type": "message",
+        "id": "msg_parts",
+        "role": "assistant",
+        "status": "completed",
+        "content": [
+            {"type": "output_text", "text": "First paragraph.\n\n", "annotations": []},
+            {"type": "output_text", "text": "Second paragraph.", "annotations": []},
+        ],
     }
 
     def stream(_: Received) -> Generator[bytes]:
@@ -140,12 +152,14 @@ def test_summary_parts_stay_separate_and_private_reasoning_never_reaches_the_vie
         agent.run("Read the workbook")
         panel.finish()
         assert [item.text for item in panel.state.messages] == [
-            "Read the workbook", "First check.\n\nSecond check.", "First paragraph.\n\nSecond paragraph.",
+            "Read the workbook",
+            "First check.\n\nSecond check.",
+            "First paragraph.\n\nSecond paragraph.",
         ]
         while not panel.events.empty():
             value = panel.events.get_nowait()
             assert "private" not in value.text and "duplicate" not in value.text and "late delta" not in value.text
-        assert "opaque-private-payload" in json.dumps(agent.history), "Model history still needs the opaque reasoning item."
+        assert "opaque-private-payload" in agent.history.encoded().decode(), "Model history still needs the opaque reasoning item."
         assert not panel.state.activity
 
 

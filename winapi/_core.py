@@ -40,7 +40,10 @@ def fn(dll: ctypes.WinDLL, name: str, restype: None, *argtypes: type[object]) ->
 
 
 def fn[T](
-    dll: ctypes.WinDLL, name: str, restype: type[Scalar[T]] | None, *argtypes: type[object],
+    dll: ctypes.WinDLL,
+    name: str,
+    restype: type[Scalar[T]] | None,
+    *argtypes: type[object],
 ) -> NativeFunction[T] | NativeFunction[None]:
     """A typed foreign function: `fn(user32, "GetForegroundWindow", HWND)`."""
     prototype = ctypes.WINFUNCTYPE(restype, *argtypes, use_last_error=True)
@@ -48,7 +51,10 @@ def fn[T](
 
 
 def optional_fn[T](
-    dll: ctypes.WinDLL, name: str, restype: type[Scalar[T]], *argtypes: type[object],
+    dll: ctypes.WinDLL,
+    name: str,
+    restype: type[Scalar[T]],
+    *argtypes: type[object],
 ) -> NativeFunction[T] | None:
     """Like `fn`, for functions older Windows versions don't have; None if missing."""
     try:

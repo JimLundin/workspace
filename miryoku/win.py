@@ -8,7 +8,7 @@ import gc
 import traceback
 from collections.abc import Mapping
 from enum import Enum, auto
-from typing import Final, Protocol
+from typing import Final, Protocol, assert_never
 
 import keeper
 import usage
@@ -16,6 +16,7 @@ from config import APPS
 from diagnostics import FailureInfo, failure_info
 from keeper import ASSISTANT_WINDOW, LAYOUT_WINDOW, WM_QUIT_LAYOUT
 from miryoku.engine import QUIET, Engine, Indicator, Signal, Verdict
+from miryoku.firmware import CapturedKey, ConsumedKey, FirmwareKeyboard, VoiceShortcut, connected, voice_tool
 from miryoku.layout import ESCAPE, SLOTS, TAPPING_TERM_MS, VOICE_KEYS, Key, Mod, Scancode, Unmapped, native_control
 from protocol import (
     LAYOUT_MAGIC,
@@ -32,7 +33,7 @@ from protocol import (
     encode_indicator,
 )
 from usage import Detail
-from winapi import inputs, keyboard_language, system, windows
+from winapi import inputs, keyboard_devices, keyboard_language, system, windows
 
 LOCK_NAME: Final = "Local\\miryoku"
 """Name of the lock that stops a second copy from running in this Windows session."""
@@ -45,6 +46,7 @@ class KeyboardSystem(Protocol):
 
     def send_key(self, key: Key | Mod, *, down: bool) -> None: ...
     def cursor_position(self) -> tuple[int, int]: ...
+    def keyboard_devices(self) -> tuple[str, ...]: ...
     def foreground(self) -> int: ...
     def title(self, hwnd: int) -> str: ...
     def read_key_event(self, lparam: int) -> inputs.KeyEvent: ...
@@ -74,6 +76,7 @@ class NativeKeyboardSystem:
     # Bind native observations directly: the hook avoids extra Python forwarding
     # calls while callers still depend on KeyboardSystem, never module globals.
     cursor_position = staticmethod(inputs.cursor_position)
+    keyboard_devices = staticmethod(keyboard_devices.names)
     foreground = staticmethod(windows.foreground)
     title = staticmethod(windows.title)
     read_key_event = staticmethod(inputs.read_key_event)
@@ -116,7 +119,7 @@ class WinHost:
         """Attempted Workspace output, retained until Windows accepts its key-up."""
         """Feature uses since the last flush."""
 
-    def send(self, key: Key | Mod, down: bool) -> None:
+    def send(self, key: Key | Mod, *, down: bool) -> None:
         if down:
             self.owned.add(key)
         self.platform.send_key(key, down=down)
@@ -127,7 +130,7 @@ class WinHost:
         """Retry only our outputs, including a chord interrupted before engine ownership."""
         for key in tuple(self.owned):
             with contextlib.suppress(Exception):
-                self.send(key, False)
+                self.send(key, down=False)
 
     def start_timer(self) -> int:
         return self.platform.set_timer(TAPPING_TERM_MS)
@@ -146,9 +149,11 @@ class WinHost:
             case Signal.CAPS_WORD:
                 self.platform.beep(system.MB_ICONASTERISK)
 
-    def request(self, request: Request, down: bool) -> None:
-        if not self.tell_assistant(WM_REQUEST, encode(request, APPS), int(down)):
-            raise OSError("The assistant could not receive a tool request. Layout disabled; restart Workspace to restore tools.")
+    def request(self, request: Request, *, down: bool) -> None:
+        # Assistant availability does not own remapping. Never replay a missed
+        # press after reconnecting: it could start an unwanted action.
+        if not self.tell_assistant(WM_REQUEST, encode(request, APPS), int(down)) and down:
+            self.platform.beep(system.MB_ICONHAND)
 
     def type_text(self, text: str) -> None:
         self.platform.type_text(text)
@@ -158,7 +163,7 @@ class WinHost:
 
     def indicate(self, indicator: Indicator) -> None:
         layer: int = indicator.layer.value if indicator.layer else 0
-        self.tell_assistant(WM_INDICATOR, encode_indicator(layer, indicator.locked, indicator.caps_word), 0)
+        self.tell_assistant(WM_INDICATOR, encode_indicator(layer, locked=indicator.locked, caps_word=indicator.caps_word), 0)
 
     def tell_assistant(self, message: int, wparam: int, lparam: int) -> bool:
         """Posts to the assistant's window; nothing happens if it isn't running."""
@@ -190,8 +195,21 @@ class Keyboard:
     """The engine, plus what the hook callback needs around it."""
 
     __slots__ = (
-        "busy", "engine", "fault", "fault_phase", "foreground", "host", "native_releases",
-        "picker_active", "platform", "pointer", "pressed", "recovery_errors", "recovery_ticks",
+        "busy",
+        "engine",
+        "fault",
+        "fault_phase",
+        "firmware",
+        "foreground",
+        "host",
+        "native_releases",
+        "picker_active",
+        "platform",
+        "pointer",
+        "pressed",
+        "recovery_errors",
+        "recovery_ticks",
+        "voice_shortcuts",
     )
 
     def __init__(self, platform: KeyboardSystem | None = None) -> None:
@@ -204,9 +222,13 @@ class Keyboard:
         self.pressed: set[Scancode] = set()
         """Physical keys for the overlay, independent of delayed tap/hold decisions."""
         self.native_releases: set[int] = set()
+        self.voice_shortcuts: tuple[CapturedKey, ...] = ()
+        """Immutable ownership of voice voice key presses, including ups after unplug."""
         self.busy = False
         self.fault: FailureInfo | None = None
         self.fault_phase = "key"
+        self.firmware: FirmwareKeyboard | None = None
+        """The message-loop owner replaces this immutable suspension observation."""
         self.recovery_errors = 0
         self.recovery_ticks = 0
         """Set while the engine runs; a re-entrant call lets its key through."""
@@ -220,7 +242,7 @@ class Keyboard:
             self.host.tell_assistant(WM_KEY_STATE, 0, 0)
             for scancode in sorted(self.pressed):
                 self.host.tell_assistant(WM_KEY_STATE, scancode, 1)
-        if message != WM_TOGGLE_LAYOUT:
+        if message != WM_TOGGLE_LAYOUT or self.firmware is not None:
             return
         self.busy = True
         try:
@@ -233,6 +255,51 @@ class Keyboard:
         finally:
             self.busy = False
 
+    def update_devices(self) -> None:
+        """Observe hotplug outside the hook, release outputs, and restore prior intent."""
+        attached = connected(self.platform.keyboard_devices())
+        if attached == (self.firmware is not None):
+            return
+        if attached:
+            self.firmware = FirmwareKeyboard(resume_layout=self.engine.enabled)
+            self.busy = True
+            try:
+                if self.engine.enabled:
+                    self.engine.toggle(self.host)
+                self.clear_pressed()
+            except Exception as error:
+                self.input_failed(error, phase="firmware_keyboard")
+            finally:
+                self.busy = False
+        else:
+            previous, self.firmware = self.firmware, None
+            try:
+                self.release_voice_shortcuts()
+            except Exception as error:
+                self.input_failed(error, phase="firmware_voice")
+                return
+            if previous is not None and previous.resume_layout:
+                self.on_message(WM_TOGGLE_LAYOUT)
+
+    def release_voice_shortcuts(self) -> None:
+        """End capture on unplug/failure/shutdown while retaining swallowed key-ups."""
+        held = self.voice_shortcuts
+        self.voice_shortcuts = tuple(ConsumedKey(key.identity) for key in held)
+        failures = 0
+        for key in held:
+            match key:
+                case VoiceShortcut(tool=tool):
+                    try:
+                        self.host.request(tool, down=False)
+                    except Exception:
+                        failures += 1
+                case ConsumedKey():
+                    pass
+                case _:
+                    assert_never(key)
+        if failures:
+            raise OSError(f"Failed to finish {failures} external keyboard voice requests.")
+
     def prepare_enable(self) -> None:
         """Do not resume remapping while a rejected Workspace key-up is outstanding."""
         self.host.release_owned()
@@ -242,6 +309,8 @@ class Keyboard:
     def input_failed(self, error: Exception, *, phase: str = "key") -> None:
         """Fail open, without logging or retaining traceback objects inside the hook."""
         self.engine.enabled = False
+        if self.firmware is not None:
+            self.firmware = FirmwareKeyboard(resume_layout=False)
         self.engine.typed = ""
         self.engine.escape_down_at = None
         self.pressed.clear()
@@ -250,6 +319,8 @@ class Keyboard:
         self.recovery_ticks = 5
         self.busy = True
         try:
+            with contextlib.suppress(Exception):
+                self.release_voice_shortcuts()
             try:
                 self.engine.release_all(self.host)
             except Exception:
@@ -280,13 +351,19 @@ class Keyboard:
         fault, self.fault = self.fault, None
         if fault is not None:
             with contextlib.suppress(Exception):
-                self.platform.record_recovery({
-                    **fault.details(), "phase": self.fault_phase, "ok": False, "layout_disabled": True,
-                    "cleanup_failures": self.recovery_errors, "pending_releases": len(self.host.owned),
-                })
+                self.platform.record_recovery(
+                    {
+                        **fault.details(),
+                        "phase": self.fault_phase,
+                        "ok": False,
+                        "layout_disabled": True,
+                        "cleanup_failures": self.recovery_errors,
+                        "pending_releases": len(self.host.owned),
+                    }
+                )
         self.recovery_errors = 0
 
-    def show_key(self, scancode: Scancode, down: bool) -> None:
+    def show_key(self, scancode: Scancode, *, down: bool) -> None:
         """Send each physical transition once; repeats and unpictured keys add nothing."""
         if scancode != ESCAPE and scancode not in VOICE_KEYS and SLOTS.get(scancode, Unmapped.FREE) is Unmapped.FREE:
             return
@@ -307,7 +384,7 @@ class Keyboard:
         if code == 0 and wparam in (system.WM_KEYDOWN, system.WM_SYSKEYDOWN, system.WM_KEYUP, system.WM_SYSKEYUP):
             down = wparam in (system.WM_KEYDOWN, system.WM_SYSKEYDOWN)
             try:
-                if self.swallow(self.platform.read_key_event(lparam), down):
+                if self.swallow(self.platform.read_key_event(lparam), down=down):
                     return 1
             except Exception as error:
                 # A bug must never eat the keyboard: report it and let the key through.
@@ -315,17 +392,63 @@ class Keyboard:
                     self.input_failed(error)
         return self.platform.call_next_hook(code, wparam, lparam)
 
-    def desktop_direction(self, key: inputs.KeyEvent, down: bool) -> bool:
+    def desktop_direction(self, key: inputs.KeyEvent, *, down: bool) -> bool:
         self.busy = True
         try:
-            return self.engine.native_direction(self.host, Key(key.vk), down, key.time)
+            return self.engine.native_direction(self.host, Key(key.vk), down=down, now=key.time)
         finally:
             self.busy = False
 
-    def swallow(self, key: inputs.KeyEvent, down: bool) -> bool:
+    def firmware_voice(self, key: inputs.KeyEvent, *, down: bool) -> bool:
+        """Own only explicit voice key presses and their paired physical releases."""
+        identity = key.scancode | (0x100 if key.flags & inputs.LLKHF_EXTENDED else 0)
+        for held in self.voice_shortcuts:
+            if held.identity == identity:
+                if not down:
+                    self.voice_shortcuts = tuple(item for item in self.voice_shortcuts if item.identity != identity)
+                    match held:
+                        case VoiceShortcut(tool=tool):
+                            self.host.request(tool, down=False)
+                        case ConsumedKey():
+                            pass
+                        case _:
+                            assert_never(held)
+                return True
+        # A native voice key already held stays native even if modifiers arrive
+        # during its repeat. Only a fresh Ctrl+Alt letter press starts capture.
+        if (
+            self.firmware is not None
+            and down
+            and identity not in self.native_releases
+            and (tool := voice_tool(key.vk, self.native_releases)) is not None
+        ):
+            self.voice_shortcuts = (*self.voice_shortcuts, VoiceShortcut(identity, tool))
+            self.host.request(tool, down=True)
+            return True
+        return False
+
+    def swallow(self, key: inputs.KeyEvent, *, down: bool) -> bool:
         """Runs the engine on one key; True if the original key should be blocked."""
         # Workspace's generated output must reach applications unchanged.
         if self.busy or key.extra == LAYOUT_MAGIC:
+            return False
+        if (
+            (self.firmware is not None or self.voice_shortcuts)
+            and not key.flags & inputs.LLKHF_INJECTED
+            and key.extra != MAGIC
+            and self.firmware_voice(key, down=down)
+        ):
+            return True
+        if self.firmware is not None:
+            # Firmware owns ordinary keys and the layout toggle. Only explicit
+            # Ctrl+Alt letter shortcuts above reach Workspace's voice commands.
+            # Remember native downs so their releases still pass after unplugging.
+            if not key.flags & inputs.LLKHF_INJECTED and key.extra != MAGIC:
+                identity = key.scancode | (0x100 if key.flags & inputs.LLKHF_EXTENDED else 0)
+                if down:
+                    self.native_releases.add(identity)
+                else:
+                    self.native_releases.discard(identity)
             return False
         foreground = self.platform.foreground()
         if foreground != self.foreground:
@@ -350,7 +473,7 @@ class Keyboard:
             if down and not key.flags & inputs.LLKHF_INJECTED:
                 self.native_releases.add(key.scancode | (0x100 if key.flags & inputs.LLKHF_EXTENDED else 0))
             return False
-        if 0x25 <= key.vk <= 0x28 and not key.flags & inputs.LLKHF_INJECTED and self.desktop_direction(key, down):
+        if 0x25 <= key.vk <= 0x28 and not key.flags & inputs.LLKHF_INJECTED and self.desktop_direction(key, down=down):
             return True
         if native_control(key.vk):
             self.engine.typed = ""
@@ -365,8 +488,8 @@ class Keyboard:
             if not was_enabled and key.scancode == ESCAPE and not down:
                 self.prepare_enable()
             if was_enabled and not key.flags & inputs.LLKHF_INJECTED:
-                self.show_key(Scancode(key.scancode), down)
-            verdict = self.engine.on_key(self.host, Scancode(key.scancode), down, key.time)
+                self.show_key(Scancode(key.scancode), down=down)
+            verdict = self.engine.on_key(self.host, Scancode(key.scancode), down=down, now=key.time)
             if self.engine.enabled != was_enabled or verdict is Verdict.QUIT:
                 self.clear_pressed()
         finally:
@@ -389,14 +512,16 @@ def run() -> Exit:
     window = windows.create_hidden(LAYOUT_WINDOW)  # receives control requests from the assistant and keeper
     try:
         keyboard = Keyboard()
+        keyboard.update_devices()
         hook = inputs.set_keyboard_hook(keyboard.hook_proc)
         if hook is None:
             return Exit.HOOK_REFUSED
-        languages = open_languages()
+        languages = open_languages(firmware_connected=keyboard.firmware is not None)
         language_timer = system.set_timer(200)
         flush_timer = system.set_timer(USAGE_FLUSH_MS)
         keeper.ready()  # tells the keeper this version came up
-        keyboard.host.tell_assistant(WM_LAYOUT_STATE, LayoutState.ON.value, 0)
+        layout_state: LayoutState = LayoutState.ON if keyboard.engine.enabled else LayoutState.OFF
+        keyboard.host.tell_assistant(WM_LAYOUT_STATE, layout_state.value, 0)
         # Nothing here creates reference cycles, so the cycle collector has nothing to
         # do; turning it off means it can never pause the hook mid-keypress.
         gc.collect()
@@ -407,11 +532,7 @@ def run() -> Exit:
             for message in system.messages():
                 if message.message == system.WM_TIMER:
                     if message.wparam == language_timer:
-                        keyboard.maintenance()
-                        if languages is not None:
-                            # Elevated windows may refuse this request. Keep the hook independent.
-                            with contextlib.suppress(OSError):
-                                languages.enforce(keyboard.engine.enabled)
+                        maintain_keyboard(keyboard, languages)
                     elif message.wparam == flush_timer:
                         keyboard.host.flush_usage()
                     else:
@@ -438,6 +559,17 @@ def run() -> Exit:
         system.release_lock(lock)
 
 
+def maintain_keyboard(keyboard: Keyboard, languages: keyboard_language.KeyboardLanguages | None) -> None:
+    """Refresh device policy before applying the foreground language, outside hooks."""
+    keyboard.maintenance()
+    with contextlib.suppress(OSError):
+        keyboard.update_devices()
+    if languages is not None:
+        # Elevated windows may refuse this request. Keep the hook independent.
+        with contextlib.suppress(OSError):
+            languages.enforce(enabled=keyboard.engine.enabled, firmware_connected=keyboard.firmware is not None)
+
+
 def show_error(message: str) -> None:
     system.message_box(message, "Miryoku", system.MB_ICONHAND)
 
@@ -445,6 +577,7 @@ def show_error(message: str) -> None:
 def release_keyboard(keyboard: Keyboard) -> None:
     keyboard.clear_pressed()
     try:
+        keyboard.release_voice_shortcuts()
         keyboard.engine.release_all(keyboard.host)
     except Exception as error:
         keyboard.input_failed(error, phase="shutdown")
@@ -454,11 +587,11 @@ def release_keyboard(keyboard: Keyboard) -> None:
     keyboard.host.tell_assistant(WM_LAYOUT_STATE, LayoutState.QUIT.value, 0)
 
 
-def open_languages() -> keyboard_language.KeyboardLanguages | None:
+def open_languages(*, firmware_connected: bool = False) -> keyboard_language.KeyboardLanguages | None:
     languages: keyboard_language.KeyboardLanguages | None = None
     try:
         languages = keyboard_language.KeyboardLanguages()
-        languages.enforce(True)
+        languages.enforce(enabled=True, firmware_connected=firmware_connected)
     except OSError:
         traceback.print_exc()
     return languages

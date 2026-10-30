@@ -18,7 +18,7 @@ from pydantic import StrictFloat, StrictInt, StrictStr, TypeAdapter, ValidationE
 from scripts.deploy_files import write
 from scripts.development_paths import LIVE, TEMP
 
-RUNNER = '''import json, os, sys
+RUNNER = """import json, os, sys
 from pathlib import Path
 lazy from scripts.check import Selection, execute
 if __name__ == "__main__":
@@ -32,7 +32,7 @@ if __name__ == "__main__":
     Path(configuration["output"]).write_text(json.dumps({"passed": passed, "skipped": skipped,
         "failures": failures, "timings": timings}), encoding="utf-8")
     sys.exit(bool(failures))
-'''
+"""
 
 
 @dataclass(frozen=True, slots=True)
@@ -47,31 +47,42 @@ NATIVE_RESULT = TypeAdapter[NativeResult](NativeResult)
 
 
 def windows_path(path: Path) -> str:
-    if os.name == 'nt':
+    if os.name == "nt":
         return str(path.absolute())
-    return subprocess.run(['wslpath', '-w', str(path.absolute())], capture_output=True, text=True, check=True).stdout.strip()
+    return subprocess.run(["wslpath", "-w", str(path.absolute())], capture_output=True, text=True, check=True).stdout.strip()
 
 
 def execute_native(
-    root: Path, tests: tuple[str, ...], changed: tuple[str, ...], reason: str,
+    root: Path,
+    tests: tuple[str, ...],
+    changed: tuple[str, ...],
+    reason: str,
 ) -> tuple[int, int, tuple[str, ...], tuple[tuple[float, str], ...]]:
-    scratch = Path(tempfile.mkdtemp(prefix='workspace-native-check-', dir=TEMP))
+    scratch = Path(tempfile.mkdtemp(prefix="workspace-native-check-", dir=TEMP))
     try:
-        runner, configuration, output = scratch / 'run.py', scratch / 'configuration.json', scratch / 'result.json'
-        runner.write_text(RUNNER, encoding='utf-8')
-        write(configuration, {'root': windows_path(root), 'tests': tests, 'changed': changed, 'reason': reason,
-                              'output': windows_path(output), 'runtime': windows_path(LIVE / '.runtime')})
-        interpreter = sys.executable if os.name == 'nt' else str(root / '.venv' / 'Scripts' / 'python.exe')
-        result = subprocess.run([interpreter, '-B', windows_path(runner), windows_path(configuration)],
-                                cwd=scratch, check=False, timeout=600)
+        runner, configuration, output = scratch / "run.py", scratch / "configuration.json", scratch / "result.json"
+        runner.write_text(RUNNER, encoding="utf-8")
+        write(
+            configuration,
+            {
+                "root": windows_path(root),
+                "tests": tests,
+                "changed": changed,
+                "reason": reason,
+                "output": windows_path(output),
+                "runtime": windows_path(LIVE / ".runtime"),
+            },
+        )
+        interpreter = sys.executable if os.name == "nt" else str(root / ".venv" / "Scripts" / "python.exe")
+        result = subprocess.run([interpreter, "-B", windows_path(runner), windows_path(configuration)], cwd=scratch, check=False, timeout=600)
         if not output.exists():
-            raise RuntimeError('The Windows test process did not write its result; no receipt can be produced.')
+            raise RuntimeError("The Windows test process did not write its result; no receipt can be produced.")
         try:
             record = NATIVE_RESULT.validate_json(output.read_bytes())
         except ValidationError as error:
-            raise ValueError('Invalid Windows check result.') from error
+            raise ValueError("Invalid Windows check result.") from error
         if result.returncode and not record.failures:
-            raise RuntimeError('Windows checks exited unsuccessfully; no success receipt can be produced.')
+            raise RuntimeError("Windows checks exited unsuccessfully; no success receipt can be produced.")
         return record.passed, record.skipped, record.failures, record.timings
     finally:
         shutil.rmtree(scratch)

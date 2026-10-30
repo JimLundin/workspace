@@ -2,7 +2,7 @@
 
 import ctypes
 from ctypes import wintypes
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Final
 
 from winapi._core import fn, gdi32, last_error, optional_fn, rect, user32
@@ -106,7 +106,7 @@ class Monitor:
     area: Rect
     work: Rect
     """The area windows are placed in: without the taskbar."""
-    primary: bool
+    primary: bool = field(kw_only=True)
 
 
 def use_physical_pixels() -> None:
@@ -126,7 +126,7 @@ def _monitor(handle: int) -> Monitor:
     info = MONITORINFO()
     info.cbSize = ctypes.sizeof(MONITORINFO)
     _GetMonitorInfoW(handle, ctypes.byref(info))
-    return Monitor(rect(info.rcMonitor), rect(info.rcWork), bool(info.dwFlags & _MONITORINFOF_PRIMARY))
+    return Monitor(rect(info.rcMonitor), rect(info.rcWork), primary=bool(info.dwFlags & _MONITORINFOF_PRIMARY))
 
 
 def monitors() -> list[Monitor]:

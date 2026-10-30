@@ -8,7 +8,7 @@ or keeps crashing later is undone, back to the copy. During the trial a small wi
 usable with the mouse alone in case the change broke the keyboard.
 
 So that a change can never break what undoes it, the agent can't edit this file,
-selfcheck.py or workspace.pyw (`PROTECTED`), and the keeper uses a protected Qt dialog module. Its bootstrap uses only the
+selfcheck.py or workspace.pyw (`PROTECTED`), and the keeper uses a protected Qt dialog module. Its coordination uses only the
 standard library. The other programs talk to it through files: requests in one
 folder, and a "ready" file each program writes once it's up.
 
@@ -28,10 +28,15 @@ import tempfile
 import time
 import uuid
 from collections.abc import Callable
+from ctypes import wintypes
+from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum, auto
 from pathlib import Path
-from typing import Final, Protocol, cast
+from types import MappingProxyType
+from typing import Final, Literal, Protocol, TypedDict
+
+type Program = Literal["layout", "assistant", "automation"]
 
 LIVE: Final = Path(__file__).resolve().parent
 """Workspace's own folder: the version that runs."""
@@ -44,9 +49,9 @@ VERSIONS: Final = DIRECTORY / "versions"
 """A copy of each version replaced by an install, newest last."""
 KEPT_VERSIONS: Final = 20
 
-PROTECTED: Final = frozenset({"keeper.py", "selfcheck.py", "workspace.pyw", "runtime.py", "keeper_ui.py"})
+PROTECTED: Final = frozenset({"keeper.py", "selfcheck.py", "workspace.pyw", "runtime.py", "keeper_ui.py", "keeper_control.py"})
 """Files a change can't touch."""
-PROGRAMS: Final = {"layout": "miryoku", "assistant": "assistant", "automation": "automation"}
+PROGRAMS: Final = MappingProxyType({"layout": "miryoku", "assistant": "assistant", "automation": "automation"})
 """What the keeper runs, in startup order: name -> module.
 Shutdown reverses this order so execution releases the desktop before its UI.
 """
@@ -68,6 +73,20 @@ MAX_CRASHES: Final = 3
 """Restarts allowed within `CRASH_WINDOW_S`; one more crash and the keeper stops trying."""
 
 
+# Standard-library codecs keep protected request/recovery IO usable without
+# loading bundled dependencies. Typed wire fields are validated structurally.
+
+
+class RequestData(TypedDict):
+    action: str
+    summary: str
+
+
+class RecoveryData(TypedDict):
+    version: str | None
+    pending: bool
+
+
 # ---- requests and readiness ------------------------------------------------------------
 
 
@@ -77,25 +96,25 @@ def ask(action: str, summary: str = "", *, folder: Path = REQUESTS) -> None:
     folder.mkdir(parents=True, exist_ok=True)
     name = f"{time.time_ns():020d}"
     temporary = folder / f"{name}.tmp"
-    request: dict[str, str] = {"action": action, "summary": summary}
+    request: RequestData = {"action": action, "summary": summary}
     temporary.write_text(json.dumps(request), encoding="utf-8")
     temporary.replace(folder / f"{name}.json")  # appears whole, never half-written
 
 
-def take_requests(*, folder: Path = REQUESTS) -> list[tuple[str, str]]:
+def take_requests(*, folder: Path = REQUESTS) -> tuple[tuple[str, str], ...]:
     """Requests waiting, oldest first; each is taken once."""
     taken: list[tuple[str, str]] = []
     for path in sorted(folder.glob("*.json")) if folder.exists() else []:
         with contextlib.suppress(OSError, ValueError):
             data: object = json.loads(path.read_text(encoding="utf-8"))
-            if isinstance(data, dict):
-                fields = cast("dict[str, object]", data)
-                action, summary = fields.get("action"), fields.get("summary")
-                if isinstance(action, str) and isinstance(summary, str):
+            match data:
+                case {"action": str() as action, "summary": str() as summary}:
                     taken.append((action, summary))
+                case _:
+                    pass
         with contextlib.suppress(OSError):
             path.unlink()
-    return taken
+    return tuple(taken)
 
 
 def ready() -> None:
@@ -241,6 +260,7 @@ class Stage(Enum):
     RUNNING = auto()
     CHECKING = auto()
     TRIAL = auto()
+    PAUSED = auto()
 
 
 def unexpected_exit(name: str, code: int | None) -> bool:
@@ -270,20 +290,20 @@ class Recovery:
         if not self.path.exists():
             return None, False
         raw: object = json.loads(self.path.read_text(encoding="utf-8"))
-        if not isinstance(raw, dict):
-            raise ValueError("Invalid update recovery state")
-        data = cast("dict[str, object]", raw)
-        version, pending = data.get("version"), data.get("pending")
-        if version is not None and (not isinstance(version, str) or not version or Path(version).name != version or version in (".", "..")):
-            raise ValueError("Invalid rollback version")
-        if not isinstance(pending, bool):
-            raise ValueError("Invalid trial state")
-        return version, pending
+        match raw:
+            case {"version": str() as version, "pending": bool() as pending}:
+                if not version or Path(version).name != version or version in (".", ".."):
+                    raise ValueError("Invalid rollback version")
+                return version, pending
+            case {"version": None, "pending": bool() as pending}:
+                return None, pending
+            case _:
+                raise ValueError("Invalid update recovery state")
 
-    def write(self, version: str | None, pending: bool) -> None:
+    def write(self, version: str | None, *, pending: bool) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         temporary = self.path.with_suffix(".tmp")
-        data: dict[str, str | bool | None] = {"version": version, "pending": pending}
+        data: RecoveryData = {"version": version, "pending": pending}
         temporary.write_text(json.dumps(data), encoding="utf-8")
         temporary.replace(self.path)
 
@@ -291,7 +311,7 @@ class Recovery:
 class Keeper:
     """Everything the keeper decides, driven by `request` and a regular `tick`."""
 
-    __slots__ = ("check", "children", "crashes", "deadline", "done", "fresh", "recovery", "stage", "summary", "undoable", "world")
+    __slots__ = ("check", "children", "crashes", "deadline", "done", "fresh", "recovery", "stage", "summary", "suspended", "undoable", "world")
 
     def __init__(self, world: World, recovery: Recovery | None = None) -> None:
         self.recovery = recovery
@@ -307,6 +327,7 @@ class Keeper:
         """Starting a just-installed change (so failing to start undoes it)."""
         self.crashes: list[float] = []
         self.done = False
+        self.suspended: tuple[Program, ...] = ()
         """The assistant was quit: the keeper should exit."""
 
     def recover(self) -> None:
@@ -318,12 +339,12 @@ class Keeper:
         if pending and version is not None:
             self.world.restore(version)
             self.undoable = None
-            self.persist(False)
+            self.persist(pending=False)
             self.world.notify("Update undone: the previous trial or installation was interrupted.")
 
-    def persist(self, pending: bool) -> None:
+    def persist(self, *, pending: bool) -> None:
         if self.recovery is not None:
-            self.recovery.write(self.undoable, pending)
+            self.recovery.write(self.undoable, pending=pending)
 
     def start(self, now: float) -> None:
         for name in PROGRAMS:
@@ -337,19 +358,22 @@ class Keeper:
         self.children = {}
 
     def request(self, action: str, summary: str, now: float) -> None:
+        if self.stage is Stage.PAUSED:
+            self.world.notify("Source replacement is in progress; try again after the reload.")
+            return
         match action:
             case "install":
                 if self.stage in (Stage.CHECKING, Stage.STARTING):
                     self.world.notify("Busy installing; try again in a moment.")
                     return
                 if self.stage is Stage.TRIAL:
-                    self.persist(False)
+                    self.persist(pending=False)
                     self.world.show_trial(None)
                 self.check, self.summary = self.world.start_check(), summary
                 self.stage, self.deadline = Stage.CHECKING, now + CHECK_S
             case "keep":
                 if self.stage is Stage.TRIAL:
-                    self.persist(False)
+                    self.persist(pending=False)
                     self.stage = Stage.RUNNING
                     self.world.show_trial(None)
             case "undo":
@@ -357,15 +381,47 @@ class Keeper:
                     self.world.notify("There's no update to undo.")
                 else:
                     self.rollback("you undid it", now)
-            case "restart_layout":
-                if (layout := self.children.pop("layout", None)) is not None and layout.poll() is None:
-                    layout.stop()
-                self.children["layout"] = self.world.start("layout")
+            case "restart_layout" | "restart_assistant" | "restart_automation":
+                if self.stage is not Stage.RUNNING:
+                    self.world.notify("Workspace is starting or updating; try the restart again in a moment.")
+                    return
+                name = action.removeprefix("restart_")
+                if (child := self.children.pop(name, None)) is not None and child.poll() is None:
+                    child.stop()
+                self.children[name] = self.world.start(name)
+                self.stage, self.deadline = Stage.STARTING, now + START_S
             case _:
                 pass
 
+    def suspend(self, components: tuple[Program, ...]) -> bool:
+        """Stop only selected children; retain supervision ownership during IO."""
+        if self.stage is not Stage.RUNNING or len(set(components)) != len(components):
+            return False
+        if any(name not in PROGRAMS or name not in self.children for name in components):
+            return False
+        self.suspended = components
+        self.stage = Stage.PAUSED
+        for name in reversed(PROGRAMS):
+            if name in components:
+                child = self.children.pop(name)
+                if child.poll() is None:
+                    child.stop()
+        return True
+
+    def resume(self, now: float) -> None:
+        """Start paused children only after the coordinator verified replacement."""
+        for name in PROGRAMS:
+            if name in self.suspended:
+                self.children[name] = self.world.start(name)
+        self.suspended = ()
+        self.stage, self.deadline = Stage.STARTING, now + START_S
+
     def tick(self, now: float) -> None:
         match self.stage:
+            case Stage.PAUSED:
+                if (assistant := self.children.get("assistant")) is not None and assistant.poll() == 0:
+                    self.stop_all()
+                    self.done = True
             case Stage.CHECKING:
                 self.checking(now)
             case Stage.STARTING:
@@ -376,7 +432,7 @@ class Keeper:
                     return
                 self.running(now)  # quitting on purpose is handled as usual
                 if now > self.deadline and not self.done:
-                    self.persist(False)
+                    self.persist(pending=False)
                     self.stage = Stage.RUNNING
                     self.world.show_trial(None)
             case Stage.RUNNING:
@@ -400,7 +456,7 @@ class Keeper:
         try:
             version = self.world.snapshot()
             self.undoable = version
-            self.persist(True)  # write before stopping or changing any live file
+            self.persist(pending=True)  # write before stopping or changing any live file
         except OSError as error:
             self.undoable = previous
             self.world.notify(f"Not installed: couldn't save the rollback version. {error}")
@@ -453,7 +509,7 @@ class Keeper:
     def rollback(self, why: str, now: float) -> None:
         on_trial = self.stage is Stage.TRIAL
         version = self.undoable
-        self.persist(True)
+        self.persist(pending=True)
         self.stop_all()
         try:
             if version is not None:
@@ -463,7 +519,7 @@ class Keeper:
             self.done = True  # durable pending state lets the next launch retry
             return
         self.undoable = None
-        self.persist(False)
+        self.persist(pending=False)
         self.fresh = False
         self.start(now)
         self.crashes = []
@@ -477,7 +533,43 @@ class Keeper:
 
 class _User32(Protocol):
     def FindWindowW(self, cls: None, title: str) -> int: ...
-    def PostMessageW(self, hwnd: int, message: int, wparam: int, lparam: int) -> int: ...
+    def PostMessageW(self, hwnd: int, message: int, wparam: int, lparam: int) -> int:
+        """The Win32 message ABI requires a window, message and two payload words."""
+        ...
+
+
+class _Function[T](Protocol):
+    """The stdcall prototype validates ABI arguments and fixes the scalar result."""
+
+    def __call__(self, *args: object) -> T: ...
+
+
+class WindowsUser32:
+    """Keep pointer-sized handles at the native boundary, before Qt owns the loop."""
+
+    __slots__ = ("find", "post")
+
+    def __init__(self) -> None:
+        library = ctypes.WinDLL("user32", use_last_error=True)
+        self.find: _Function[int | None] = ctypes.WINFUNCTYPE(wintypes.HWND, wintypes.LPCWSTR, wintypes.LPCWSTR)(("FindWindowW", library))
+        self.post: _Function[int] = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM)(
+            ("PostMessageW", library)
+        )
+
+    def FindWindowW(self, cls: None, title: str) -> int:
+        return self.find(cls, title) or 0
+
+    def PostMessageW(self, hwnd: int, message: int, wparam: int, lparam: int) -> int:
+        """The Win32 message ABI requires the window, message and two payload words."""
+        return self.post(hwnd, message, wparam, lparam)
+
+
+class Ui(Protocol):
+    def approve(self, diff: str) -> bool: ...
+    def notify(self, message: str) -> None: ...
+    def show_trial(self, summary: str | None, choose: Callable[[str], None]) -> None: ...
+    def poll_components(self, supervisor: Keeper, now: float) -> None: ...
+    def run(self, tick: Callable[[], bool]) -> None: ...
 
 
 def _log(text: str) -> None:
@@ -492,23 +584,43 @@ def _pythonw() -> str:
     return str(candidate) if candidate.exists() else sys.executable
 
 
-class _Process:
+@dataclass(frozen=True, slots=True)
+class WindowTarget:
+    title: str
+    quit_message: int
+
+
+def shutdown_seconds(target: WindowTarget) -> float:
+    # Assistant cleanup includes a 20-second personal-work join, and automation
+    # must park ongoing work and close its browser. Give these effect owners a
+    # bounded minute before force termination. Input keeps its short stop budget.
+    # The deployment coordinator independently requires zero exit codes.
+    match target:
+        case WindowTarget(quit_message=0x0010):
+            return 60.0
+        case _:
+            return 5.0
+
+
+class Process:
     """A program the keeper started. Stopping asks it to quit (so the layout lets go
     of held keys) and only then ends it."""
 
-    __slots__ = ("process", "quit_message", "title", "user32")
+    __slots__ = ("process", "target", "user32")
 
-    def __init__(self, process: subprocess.Popen[bytes], title: str, quit_message: int, user32: _User32) -> None:
-        self.process, self.title, self.quit_message, self.user32 = process, title, quit_message, user32
+    def __init__(self, process: subprocess.Popen[bytes], target: WindowTarget, user32: _User32) -> None:
+        self.process: subprocess.Popen[bytes] = process
+        self.target: WindowTarget = target
+        self.user32: _User32 = user32
 
     def poll(self) -> int | None:
         return self.process.poll()
 
     def stop(self) -> None:
-        if hwnd := self.user32.FindWindowW(None, self.title):
-            self.user32.PostMessageW(hwnd, self.quit_message, 0, 0)
+        if hwnd := self.user32.FindWindowW(None, self.target.title):
+            self.user32.PostMessageW(hwnd, self.target.quit_message, 0, 0)
         try:
-            self.process.wait(timeout=5)
+            self.process.wait(timeout=shutdown_seconds(self.target))
         except subprocess.TimeoutExpired:
             self.process.kill()
             self.process.wait()
@@ -545,21 +657,8 @@ class _Check:
         return code == 0, self.output.read_text(encoding="utf-8", errors="replace")
 
 
-def main() -> None:
-    if sys.platform != "win32":
-        sys.exit("the keeper runs on Windows")
-    import msvcrt
-
-    from keeper_ui import KeeperUi
-
-    STATE.mkdir(parents=True, exist_ok=True)
-    lock_file = (STATE / "keeper.lock").open("a+b")
-    try:
-        msvcrt.locking(lock_file.fileno(), msvcrt.LK_NBLCK, 1)
-    except OSError:
-        sys.exit(0)  # already running
-    user32 = cast("_User32", ctypes.WinDLL("user32"))
-    ui = KeeperUi()
+def main(ui: Ui) -> None:
+    user32 = WindowsUser32()
     choices: list[str] = []
 
     def approve(candidate: Path) -> bool:
@@ -579,10 +678,10 @@ def main() -> None:
                 process = subprocess.Popen([_pythonw(), "-m", PROGRAMS[name]], cwd=LIVE, env=env, stderr=errors, creationflags=0x0800_0000)
             _log(f"started {name}")
             if name == "layout":
-                return _Process(process, LAYOUT_WINDOW, WM_QUIT_LAYOUT, user32)
+                return Process(process, WindowTarget(LAYOUT_WINDOW, WM_QUIT_LAYOUT), user32)
             if name == "automation":
-                return _Process(process, AUTOMATION_WINDOW, WM_CLOSE, user32)
-            return _Process(process, ASSISTANT_WINDOW, WM_CLOSE, user32)
+                return Process(process, WindowTarget(AUTOMATION_WINDOW, WM_CLOSE), user32)
+            return Process(process, WindowTarget(ASSISTANT_WINDOW, WM_CLOSE), user32)
 
         def is_ready(self, name: str) -> bool:
             return (STATE / f"ready-{name}").exists()
@@ -619,6 +718,10 @@ def main() -> None:
 
     def loop() -> bool:
         now = time.monotonic()
+        try:
+            ui.poll_components(keeper, now)
+        except OSError as error:
+            _log(f"component control error: {error}")
         for action, summary in [*((c, "") for c in choices), *take_requests()]:
             _log(f"request {action} {summary}")
             try:
@@ -636,4 +739,13 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    if sys.platform != "win32":
+        sys.exit("the keeper runs on Windows")
+
+    from runtime import activate
+
+    activate()
+
+    from keeper_ui import launch
+
+    launch(STATE, main)

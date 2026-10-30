@@ -131,7 +131,13 @@ _COMMAND = r"""async request => {
 
 class Call(Protocol):
     def __call__(
-        self, method: str, params: dict[str, Json], cancel: threading.Event, *, session: str = "", timeout: float = 15,
+        self,
+        method: str,
+        params: dict[str, Json],
+        cancel: threading.Event,
+        *,
+        session: str = "",
+        timeout: float = 15,
     ) -> dict[str, Json]: ...
 
 
@@ -211,8 +217,19 @@ class CloseGroupCommand(TypedDict):
     group_id: int
 
 
-type NativeCommand = (ListCommand | OpenCommand | OpenInGroupCommand | OpenNewGroupCommand | CreateGroupCommand | EditGroupCommand
-                      | ChangeTabCommand | MoveTabCommand | UngroupCommand | CloseTabsCommand | CloseGroupCommand)
+type NativeCommand = (
+    ListCommand
+    | OpenCommand
+    | OpenInGroupCommand
+    | OpenNewGroupCommand
+    | CreateGroupCommand
+    | EditGroupCommand
+    | ChangeTabCommand
+    | MoveTabCommand
+    | UngroupCommand
+    | CloseTabsCommand
+    | CloseGroupCommand
+)
 
 
 def move_data(move: Move) -> MoveData:
@@ -286,14 +303,16 @@ class TabStrip:
                     if boolean(result, "ready"):
                         self.control = Control(target, session)
                         return self.control
-                except (InterruptedError, DisconnectedError):
+                except InterruptedError, DisconnectedError:
                     raise
                 except BrowserError:
                     pass  # Only this read-only probe retries while the initial context loads.
                 if self.clock() >= deadline:
-                    raise BrowserError("This Edge version does not expose its native tab/group APIs. "
-                                       "Use browser_open with group_id=-1 for an ordinary background tab.")
-                if cancel.wait(.05):
+                    raise BrowserError(
+                        "This Edge version does not expose its native tab/group APIs. "
+                        "Use browser_open with group_id=-1 for an ordinary background tab."
+                    )
+                if cancel.wait(0.05):
                     raise InterruptedError("Stopped while preparing Edge tab controls.")
         except BaseException:
             with contextlib.suppress(OSError):

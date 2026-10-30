@@ -6,8 +6,8 @@ from collections.abc import Callable
 lazy from PySide6 import QtCore, QtGui, QtWidgets
 lazy from PySide6.QtCore import Qt
 
-from assistant.panel_controls import STYLE
 from assistant.qt_runtime import prepare
+from assistant.ui_components.controls import STYLE
 from winapi import windows
 
 prepare()
@@ -25,10 +25,11 @@ class Window(QtWidgets.QWidget):
         self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
         self.resize(width, height)
         self.escape = QtGui.QShortcut(QtGui.QKeySequence("Escape"), self)
-        def escaped() -> None:
-            self.on_close()
 
-        self.escape.activated.connect(escaped)
+        self.escape.activated.connect(self.escaped)
+
+    def escaped(self) -> None:
+        self.on_close()
 
     def closeEvent(self, event: QtGui.QCloseEvent) -> None:
         event.ignore()
@@ -39,41 +40,19 @@ class Window(QtWidgets.QWidget):
         self.geometry_changed.emit()
 
 
-class GestureHandle(QtWidgets.QFrame):
-    """One native pointer capture, released even when the gesture is cancelled."""
-
-    def __init__(self, parent: QtWidgets.QWidget, start: Callable[[QtGui.QMouseEvent], None],
-                 move: Callable[[QtGui.QMouseEvent], None], finish: Callable[[QtGui.QMouseEvent], None]) -> None:
-        super().__init__(parent)
-        self.start, self.move_pointer, self.finish = start, move, finish
-
-    def mousePressEvent(self, event: QtGui.QMouseEvent) -> None:
-        if event.button() == Qt.MouseButton.LeftButton:
-            self.start(event)
-            self.grabMouse()
-            event.accept()
-
-    def mouseMoveEvent(self, event: QtGui.QMouseEvent) -> None:
-        if event.buttons() & Qt.MouseButton.LeftButton:
-            self.move_pointer(event)
-            event.accept()
-
-    def mouseReleaseEvent(self, event: QtGui.QMouseEvent) -> None:
-        if event.button() == Qt.MouseButton.LeftButton:
-            self.releaseMouse()
-            self.finish(event)
-            event.accept()
-
-
 def show_window(window: QtWidgets.QWidget, *, focus: bool, target: QtWidgets.QWidget | None = None, topmost: bool = False) -> None:
     handle = int(window.winId())
-    windows.allow_activation(handle, False)
+    windows.allow_activation(handle, allowed=False)
     try:
         window.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
         window.show()
         windows.show_quietly(handle, visible=True, topmost=topmost)
+        # Qt's first quiet show can leave a maximized widget at normal native
+        # geometry. Apply its requested state while activation is still blocked.
+        if window.isMaximized() and not windows.is_maximized(handle):
+            windows.show(handle, windows.SW_MAXIMIZE)
     finally:
-        windows.allow_activation(handle, True)
+        windows.allow_activation(handle, allowed=True)
     if focus:
         threading.Thread(target=lambda: windows.focus(handle), name="focus workspace", daemon=True).start()
         (target or window).setFocus(Qt.FocusReason.OtherFocusReason)
@@ -92,8 +71,10 @@ class Editor(QtWidgets.QPlainTextEdit):
 
     def keyPressEvent(self, event: QtGui.QKeyEvent) -> None:
         enter = event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter)
-        send = not bool(event.modifiers() & Qt.KeyboardModifier.ShiftModifier) if self.enter_sends else bool(
-            event.modifiers() & Qt.KeyboardModifier.ControlModifier
+        send = (
+            not bool(event.modifiers() & Qt.KeyboardModifier.ShiftModifier)
+            if self.enter_sends
+            else bool(event.modifiers() & Qt.KeyboardModifier.ControlModifier)
         )
         if enter and send and not self.isReadOnly():
             self.submitted.emit()

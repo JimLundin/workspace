@@ -106,8 +106,11 @@ def _prepared(row: tuple[object, ...]) -> PreparedFollowup:
     if bundle.fingerprint != digest(row[2], "saved source fingerprint"):
         raise ValueError("The saved meeting sources do not match their request.")
     return PreparedFollowup(
-        identifier(row[0], "saved meeting task identity"), bundle, text(row[3], "saved meeting prompt"),
-        timestamp(row[4], "saved preparation time"), integer(row[1], "saved meeting recipe", minimum=1),
+        identifier(row[0], "saved meeting task identity"),
+        bundle,
+        text(row[3], "saved meeting prompt"),
+        timestamp(row[4], "saved preparation time"),
+        integer(row[1], "saved meeting recipe", minimum=1),
     )
 
 
@@ -184,6 +187,7 @@ class MeetingRequests:
             return ()
         with self._connection() as connection:
             rows = connection.execute(
-                f"SELECT {_COLUMNS} FROM meeting_requests ORDER BY prepared_at DESC, task_id DESC LIMIT ?", (limit,),
+                f"SELECT {_COLUMNS} FROM meeting_requests ORDER BY prepared_at DESC, task_id DESC LIMIT ?",
+                (limit,),
             ).fetchall()
         return tuple(_prepared(row) for row in rows)

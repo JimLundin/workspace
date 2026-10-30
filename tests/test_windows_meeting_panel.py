@@ -48,9 +48,9 @@ from assistant.meeting_workflow import (
     MeetingWorkflow,
     WorkPending,
 )
-from assistant.panel_controls import STYLE
 from assistant.qt_runtime import prepare
 from assistant.qt_ui import application
+from assistant.ui_components.controls import STYLE
 
 prepare()
 
@@ -60,8 +60,14 @@ def package_fixture(folder: Path, version: str = "a" * 64) -> FollowupPackage:
     for index in range(1, 4):
         content = f"# Recording part {index}\n\nAda will follow up.\n".encode()
         source = TranscriptSource(
-            f"segment-{index}", "Meeting", str(folder / f"source-{index}.md"), hashlib.sha256(content).hexdigest(),
-            1792659600 + index * 60, 60, "both", CaptureNotice("Microphone gap in this part.") if index == 2 else NoCaptureNotice.NONE,
+            f"segment-{index}",
+            "Meeting",
+            str(folder / f"source-{index}.md"),
+            hashlib.sha256(content).hexdigest(),
+            1792659600 + index * 60,
+            60,
+            "both",
+            CaptureNotice("Microphone gap in this part.") if index == 2 else NoCaptureNotice.NONE,
         )
         transcripts.append(Transcript(source, content))
     sources = TranscriptBundle(tuple(transcripts))
@@ -72,8 +78,11 @@ def package_fixture(folder: Path, version: str = "a" * 64) -> FollowupPackage:
     directory = folder / version
     files = DraftFiles(draft.id, directory / "draft.eml", directory / "draft.md")
     publication = PublishedFollowup("meeting-task", version, directory, followup, (files,))
-    return FollowupPackage(publication, (DraftRevision(draft.id, draft.content, Original.GENERATED, files),),
-                           (ActionRevision(action.id, action.content, Original.GENERATED, directory / "actions.csv"),))
+    return FollowupPackage(
+        publication,
+        (DraftRevision(draft.id, draft.content, Original.GENERATED, files),),
+        (ActionRevision(action.id, action.content, Original.GENERATED, directory / "actions.csv"),),
+    )
 
 
 class WorkflowFixture(MeetingWorkflow):
@@ -82,8 +91,10 @@ class WorkflowFixture(MeetingWorkflow):
     def __init__(self, packages: tuple[FollowupPackage, ...]) -> None:
         bundle = packages[0].publication.followup.sources
         request = PreparedFollowup("meeting-task", bundle, "Prepare this saved meeting", 1792660000)
-        self.value = MeetingSnapshot(tuple(reversed(tuple(item.source for item in bundle.transcripts))),
-                                     (FollowupProgress(request, WorkPending.OBSERVATION, AvailablePackages(packages)),))
+        self.value = MeetingSnapshot(
+            tuple(reversed(tuple(item.source for item in bundle.transcripts))),
+            (FollowupProgress(request, WorkPending.OBSERVATION, AvailablePackages(packages)),),
+        )
         self.prepared: list[tuple[TranscriptSource, ...]] = []
         self.drafts: list[DraftChange] = []
         self.actions: list[ActionChange] = []
@@ -198,8 +209,16 @@ def test_draft_recipients_preserve_full_names_and_reject_malformed_nonempty_inpu
     assert content.subject == "  Next discussion  " and content.body == "\n Hi Ada,\n\nThanks. \n"
     assert content.recipients[0].name == "Ada Lovelace" and content.recipients[0].email is Unspecified.NOT_STATED
     assert content.recipients[1].name == "Doe, Jane" and content.recipients[1].email == EmailAddress("jane@example.test")
-    for invalid in ('bad@@example.test', 'Ada <', 'Ada <>', 'Ada <oops>', 'Ada <ada@example.test>,',
-                    'Ada <ada@example.test>, nonsense@', '"Unclosed name', 'Ada; Bo'):
+    for invalid in (
+        "bad@@example.test",
+        "Ada <",
+        "Ada <>",
+        "Ada <oops>",
+        "Ada <ada@example.test>,",
+        "Ada <ada@example.test>, nonsense@",
+        '"Unclosed name',
+        "Ada; Bo",
+    ):
         with unittest.TestCase().assertRaises(ValueError, msg=invalid):
             DraftEdit("Subject", "Body", invalid, 0).content()
 

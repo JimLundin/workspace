@@ -193,8 +193,18 @@ class Assistant:
     """Turns requests from the layout's tool and app keys into actions."""
 
     __slots__ = (
-        "capture", "capture_id", "desktop", "latest_transcription", "layout_on", "missing", "record",
-        "run_agent", "settings", "show_agent", "stop_agent", "submit",
+        "capture",
+        "capture_id",
+        "desktop",
+        "latest_transcription",
+        "layout_on",
+        "missing",
+        "record",
+        "run_agent",
+        "settings",
+        "show_agent",
+        "stop_agent",
+        "submit",
     )
 
     def __init__(
@@ -230,7 +240,7 @@ class Assistant:
     def listening(self) -> Tool | None:
         return self.capture.tool if self.capture is not None else None
 
-    def handle(self, request: Request, down: bool) -> None:
+    def handle(self, request: Request, *, down: bool) -> None:
         """A tool or app key went down or up. Returns quickly; slow work is submitted."""
         if self.missing is not None and isinstance(request, Tool) and request not in LOCAL_TOOLS:
             if down:
@@ -251,12 +261,12 @@ class Assistant:
                     if self.listening is not None:
                         self.stop_capture(reason="toggle")
                     else:
-                        self.hold(request, True)
+                        self.hold(request, down=True)
             case Tool.COPY_TRANSCRIPT:
                 if down:
                     self.submit(self.copy_transcript)
             case Tool() if request in HOLD_TOOLS:
-                self.hold(request, down)
+                self.hold(request, down=down)
             case Tool() if request in WINDOW_TOOLS:
                 if down:
                     self.submit(lambda: self.timed(request.name.lower(), lambda: self.arrange(request)))
@@ -279,12 +289,17 @@ class Assistant:
             phase = (extra or {}).get("phase", "working")
             message = f"{feature.replace('_', ' ').title()} failed while {phase}. Please try again; diagnostic details are in Workspace's usage log."
             if phase == "submitting" and self.latest_transcription is not None:
-                message = "Text submission failed. Your transcript is saved in Workspace and was copied to the clipboard if available. " \
-                          "Use Copy latest transcript in Workspace controls; check for partial text before pasting."
+                message = (
+                    "Text submission failed. Your transcript is saved in Workspace and was copied to the clipboard if available. "
+                    "Use Copy latest transcript in Workspace controls; check for partial text before pasting."
+                )
             outcome = Failure(message)
         finally:
             details: dict[str, Detail] = {
-                **(extra or {}), **evidence, "ok": not isinstance(outcome, Failure), "seconds": round(time.monotonic() - started, 2),
+                **(extra or {}),
+                **evidence,
+                "ok": not isinstance(outcome, Failure),
+                "seconds": round(time.monotonic() - started, 2),
             }
             if isinstance(outcome, Failure):
                 details["error"] = outcome.message[:120]
@@ -295,7 +310,7 @@ class Assistant:
             if self.listening is None:
                 self.idle()
 
-    def hold(self, tool: Tool, down: bool) -> None:
+    def hold(self, tool: Tool, *, down: bool) -> None:
         if down:
             if self.capture is not None:
                 return
@@ -324,15 +339,24 @@ class Assistant:
             self.stop_capture()
 
     def capture_problem(self, capture: Capture, phase: str, error: Exception) -> None:
-        self.record(capture.tool.name.lower(), {
-            "capture_id": capture.identity, "phase": phase, "ok": False, **failure_info(error).details(),
-        })
+        self.record(
+            capture.tool.name.lower(),
+            {
+                "capture_id": capture.identity,
+                "phase": phase,
+                "ok": False,
+                **failure_info(error).details(),
+            },
+        )
         message = str(error) if isinstance(error, OSError) else f"Voice capture failed while {phase}. Please try again; see Workspace's usage log."
         self.desktop.problem(message)
 
     def stop_capture(
-        self, *, discard: bool = False,
-        reason: Literal["released", "stop", "toggle", "layout_off", "shutdown", "limit"] = "released", now: float | None = None,
+        self,
+        *,
+        discard: bool = False,
+        reason: Literal["released", "stop", "toggle", "layout_off", "shutdown", "limit"] = "released",
+        now: float | None = None,
     ) -> bool:
         capture, self.capture = self.capture, None
         if capture is None:
@@ -345,8 +369,11 @@ class Assistant:
             self.idle()
             return False
         lengths: dict[str, Detail] = {
-            "capture_id": capture.identity, "source": capture.source.name.lower(), "stop_reason": reason,
-            "held_seconds": round(held_seconds, 2), "audio_seconds": round(len(pcm) / (RATE * 2), 2),
+            "capture_id": capture.identity,
+            "source": capture.source.name.lower(),
+            "stop_reason": reason,
+            "held_seconds": round(held_seconds, 2),
+            "audio_seconds": round(len(pcm) / (RATE * 2), 2),
         }
         if discard or not long_enough(pcm):
             self.record("voice_capture", {**lengths, "phase": "cancelled" if discard else "too_short"})

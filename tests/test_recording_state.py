@@ -21,7 +21,13 @@ from assistant.recording_state import (
 def test_transcription_retries_back_off_while_capturing_and_pause_after_capture() -> None:
     policy = RetryPolicy()
     assert [policy.failed(count, finished=False) for count in range(7)] == [
-        Retry(1, 2), Retry(2, 4), Retry(3, 8), Retry(4, 16), Retry(5, 30), Retry(6, 30), Retry(7, 30),
+        Retry(1, 2),
+        Retry(2, 4),
+        Retry(3, 8),
+        Retry(4, 16),
+        Retry(5, 30),
+        Retry(6, 30),
+        Retry(7, 30),
     ]
     assert policy.failed(0, finished=True) == Retry(1, 2)
     assert policy.failed(1, finished=True) == Retry(2, 4)
@@ -30,7 +36,12 @@ def test_transcription_retries_back_off_while_capturing_and_pause_after_capture(
 
 
 def observation() -> Publication:
-    return Publication("meeting-1", "meeting-1/transcript.md", StoredState("Meeting", "both", 0, RATE * 10, RATE * 2, False, "", 10, 8), "Words")
+    return Publication(
+        "meeting-1",
+        "meeting-1/transcript.md",
+        StoredState("Meeting", "both", 0, RATE * 10, RATE * 2, finished=False, problem="", revision=10, exported_revision=8),
+        "Words",
+    )
 
 
 def test_completion_waits_for_pending_audio_and_the_latest_export() -> None:
@@ -84,13 +95,24 @@ def test_recording_controls_and_elapsed_labels_follow_capture_progress() -> None
     initial = RecordingState()
     assert not initial.visible and not initial.capturing and initial.control == "open"
     phases: tuple[tuple[Phase, bool, str], ...] = (
-        ("starting", True, "stop"), ("recording", True, "stop"), ("stopping", True, "stop"),
-        ("finishing", False, "open"), ("paused", False, "retry"), ("saved", False, "open"), ("interrupted", False, "open"),
+        ("starting", True, "stop"),
+        ("recording", True, "stop"),
+        ("stopping", True, "stop"),
+        ("finishing", False, "open"),
+        ("paused", False, "retry"),
+        ("saved", False, "open"),
+        ("interrupted", False, "open"),
     )
     for phase, capturing, control in phases:
         state = replace(initial, phase=phase)
         assert state.visible and state.capturing == capturing and state.control == control
     assert Batch(10, b"\x00\x00\x01\x00").end == 12
     assert [duration(seconds) for seconds in (-1, 0, 59.9, 60, 3599, 3600, 3661)] == [
-        "00:00:00", "00:00:00", "00:00:59", "00:01:00", "00:59:59", "01:00:00", "01:01:01",
+        "00:00:00",
+        "00:00:00",
+        "00:00:59",
+        "00:01:00",
+        "00:59:59",
+        "01:00:00",
+        "01:01:01",
     ]

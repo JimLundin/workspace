@@ -53,7 +53,7 @@ class FakeHost:
         self.used_features: list[str] = []
         self.indicated: list[str] = []
 
-    def send(self, key: Key | Mod, down: bool) -> None:
+    def send(self, key: Key | Mod, *, down: bool) -> None:
         vk = key.vk
         if vk in NAMES:
             name = NAMES[vk]
@@ -73,7 +73,7 @@ class FakeHost:
     def signal(self, signal: Signal) -> None:
         self.log.append(f"!{signal.name}")
 
-    def request(self, request: Request, down: bool) -> None:
+    def request(self, request: Request, *, down: bool) -> None:
         name = request.name.lower() if isinstance(request, Tool) else f"app:{request.name}"
         self.log.append(f"?{name}{'+' if down else '-'}")
 
@@ -97,18 +97,18 @@ class Harness:
         self.h = FakeHost()
         self.now = 0
 
-    def key(self, scancode: Scancode, down: bool, now: int) -> Verdict:
-        return self.e.on_key(self.h, scancode, down, now)
+    def key(self, scancode: Scancode, *, down: bool, now: int) -> Verdict:
+        return self.e.on_key(self.h, scancode, down=down, now=now)
 
     def at(self, ms: int) -> Harness:
         self.now = ms
         return self
 
     def d(self, name: str) -> None:
-        self.key(sc(name), True, self.now)
+        self.key(sc(name), down=True, now=self.now)
 
     def u(self, name: str) -> None:
-        self.key(sc(name), False, self.now)
+        self.key(sc(name), down=False, now=self.now)
 
     def tap(self, name: str) -> None:
         self.d(name)
@@ -228,8 +228,8 @@ def test_release_all_lets_go() -> None:
 
 def test_rejected_release_does_not_leave_other_keys_modifiers_or_voice_held() -> None:
     class RejectedRelease(FakeHost):
-        def send(self, key: Key | Mod, down: bool) -> None:
-            super().send(key, down)
+        def send(self, key: Key | Mod, *, down: bool) -> None:
+            super().send(key, down=down)
             if not down and key is Key.A:
                 raise OSError("Rejected release")
 
@@ -249,8 +249,8 @@ def test_rejected_release_does_not_leave_other_keys_modifiers_or_voice_held() ->
 
 def test_rejected_modifier_release_does_not_skip_remaining_modifiers() -> None:
     class RejectedModifier(FakeHost):
-        def send(self, key: Key | Mod, down: bool) -> None:
-            super().send(key, down)
+        def send(self, key: Key | Mod, *, down: bool) -> None:
+            super().send(key, down=down)
             if key is Mod.SHIFT:
                 raise OSError("Rejected modifier")
 
@@ -265,56 +265,56 @@ def test_rejected_modifier_release_does_not_skip_remaining_modifiers() -> None:
 def test_unbound_keys_cannot_type_or_trigger_physical_shortcuts() -> None:
     t = Harness()
     for code in (0x01, 0x0F, 0x1C, 0x0E, 0x2A, 0x36, 0x1D, 0x38, 0x4B, 0x5D):
-        assert t.key(Scancode(code), True, 0) == Verdict.SWALLOW
-        assert t.key(Scancode(code), True, 1) == Verdict.SWALLOW
-        assert t.key(Scancode(code), False, 2) == Verdict.SWALLOW
+        assert t.key(Scancode(code), down=True, now=0) == Verdict.SWALLOW
+        assert t.key(Scancode(code), down=True, now=1) == Verdict.SWALLOW
+        assert t.key(Scancode(code), down=False, now=2) == Verdict.SWALLOW
     assert t.take() == ""
 
 
 def test_function_row_passes_and_disabled_layout_restores_unbound_keys() -> None:
     t = Harness()
     for function in FUNCTION_KEYS:
-        assert t.key(function, True, 0) == Verdict.PASS
-        assert t.key(function, False, 1) == Verdict.PASS
+        assert t.key(function, down=True, now=0) == Verdict.PASS
+        assert t.key(function, down=False, now=1) == Verdict.PASS
     t.e.enabled = False
     for code in (0x01, 0x0F, 0x1C, 0x0E, 0x2A, 0x36, 0x1D, 0x38, 0x4B, 0x5D):
-        assert t.key(Scancode(code), True, 2) == Verdict.PASS
-        assert t.key(Scancode(code), False, 3) == Verdict.PASS
+        assert t.key(Scancode(code), down=True, now=2) == Verdict.PASS
+        assert t.key(Scancode(code), down=False, now=3) == Verdict.PASS
     assert t.take() == ""
 
 
 def test_unused_keys_are_blocked() -> None:
     t = Harness()
     for scancode in (0x23, 0x35):  # QWERTY H and the retired rightmost thumb key
-        assert t.key(Scancode(scancode), True, 0) == Verdict.SWALLOW
-        assert t.key(Scancode(scancode), False, 1) == Verdict.SWALLOW
+        assert t.key(Scancode(scancode), down=True, now=0) == Verdict.SWALLOW
+        assert t.key(Scancode(scancode), down=False, now=1) == Verdict.SWALLOW
     assert t.take() == ""
 
 
 # ---- escape key ------------------------------------------------------------
 def test_escape_tap_toggles_off_and_on() -> None:
     t = Harness()
-    assert t.key(ESC, True, 100) == Verdict.SWALLOW
-    assert t.key(ESC, False, 150) == Verdict.SWALLOW
-    assert t.key(sc("q"), True, 200) == Verdict.PASS  # off: plain keyboard
-    assert t.key(sc("q"), False, 210) == Verdict.PASS
-    t.key(ESC, True, 300)
-    t.key(ESC, False, 350)
+    assert t.key(ESC, down=True, now=100) == Verdict.SWALLOW
+    assert t.key(ESC, down=False, now=150) == Verdict.SWALLOW
+    assert t.key(sc("q"), down=True, now=200) == Verdict.PASS  # off: plain keyboard
+    assert t.key(sc("q"), down=False, now=210) == Verdict.PASS
+    t.key(ESC, down=True, now=300)
+    t.key(ESC, down=False, now=350)
     t.tap("q")  # on again: Colemak-DH
     assert t.take() == "!OFF !ON +a -a"
 
 
 def test_escape_hold_quits() -> None:
     t = Harness()
-    t.key(ESC, True, 1000)
-    t.key(ESC, True, 1000 + QUIT_HOLD_MS // 2)  # auto-repeat doesn't restart the clock
-    assert t.key(ESC, False, 1000 + QUIT_HOLD_MS) == Verdict.QUIT
+    t.key(ESC, down=True, now=1000)
+    t.key(ESC, down=True, now=1000 + QUIT_HOLD_MS // 2)  # auto-repeat doesn't restart the clock
+    assert t.key(ESC, down=False, now=1000 + QUIT_HOLD_MS) == Verdict.QUIT
 
 
 def test_escape_survives_timer_wraparound() -> None:
     t = Harness()
-    t.key(ESC, True, 0xFFFF_FFFF - 100)
-    assert t.key(ESC, False, 50) == Verdict.SWALLOW  # 151 ms: a tap
+    t.key(ESC, down=True, now=0xFFFF_FFFF - 100)
+    assert t.key(ESC, down=False, now=50) == Verdict.SWALLOW  # 151 ms: a tap
 
 
 def test_escape_switching_off_releases_held_mods() -> None:
@@ -322,8 +322,8 @@ def test_escape_switching_off_releases_held_mods() -> None:
     t.d("r")
     t.tap("8")
     t.take()  # Shift is now held
-    t.key(ESC, True, 0)
-    t.key(ESC, False, 10)
+    t.key(ESC, down=True, now=0)
+    t.key(ESC, down=False, now=10)
     assert t.take() == "-SFT !OFF"
 
 
@@ -335,15 +335,15 @@ def test_tray_toggle_releases_input_and_clears_the_locked_layer() -> None:
     t.u("c")
     t.d("r")  # Shift
     t.d("o")  # left arrow
-    t.key(TALK, True, 10)
+    t.key(TALK, down=True, now=10)
     t.take()
 
     t.e.toggle(t.h)
     assert t.take() == "-SFT -left ?dictate- !OFF"
     assert t.h.indicated[-1] == "-"
     assert t.h.used_features[-1] == "switch_off"
-    assert t.key(sc("q"), True, 20) is Verdict.PASS
-    assert t.key(sc("q"), False, 30) is Verdict.PASS
+    assert t.key(sc("q"), down=True, now=20) is Verdict.PASS
+    assert t.key(sc("q"), down=False, now=30) is Verdict.PASS
     t.e.toggle(t.h)
     t.tap("q")
     assert t.take() == "!ON +a -a"  # back to the base layout, not locked Nav
@@ -363,10 +363,10 @@ def test_tray_toggle_discards_pending_input_and_its_timer() -> None:
 
 def test_tray_toggle_cancels_an_escape_key_already_held() -> None:
     t = Harness()
-    t.key(ESC, True, 0)
+    t.key(ESC, down=True, now=0)
     t.e.toggle(t.h)
-    assert t.key(ESC, False, QUIT_HOLD_MS) is Verdict.SWALLOW
-    assert t.key(sc("q"), True, QUIT_HOLD_MS + 1) is Verdict.PASS
+    assert t.key(ESC, down=False, now=QUIT_HOLD_MS) is Verdict.SWALLOW
+    assert t.key(sc("q"), down=True, now=QUIT_HOLD_MS + 1) is Verdict.PASS
     assert t.take() == "!OFF"
 
 
@@ -410,8 +410,8 @@ def test_each_engine_uses_its_configured_timing_boundaries() -> None:
     t.timeout_last()
     t.u("r")
     assert t.take() == "+SFT -SFT"
-    t.key(ESC, True, 0)
-    assert t.key(ESC, False, 1) is Verdict.QUIT
+    t.key(ESC, down=True, now=0)
+    assert t.key(ESC, down=False, now=1) is Verdict.QUIT
 
 
 def test_streak_never_blocks_shift() -> None:
@@ -531,10 +531,10 @@ def test_caps_word_toggles_off_and_clears_on_switch_off() -> None:
     t.tap("2")
     assert t.take() == "+q -q"
     both_shifts(t)
-    t.key(ESC, True, 0)
-    t.key(ESC, False, 10)  # off
-    t.key(ESC, True, 20)
-    t.key(ESC, False, 30)  # on: caps word is gone
+    t.key(ESC, down=True, now=0)
+    t.key(ESC, down=False, now=10)  # off
+    t.key(ESC, down=True, now=20)
+    t.key(ESC, down=False, now=30)  # on: caps word is gone
     t.tap("2")
     assert t.take() == "!OFF !ON +q -q"
 
@@ -568,10 +568,10 @@ def test_layer_lock_on_num_and_cleared_by_escape() -> None:
     t.u(",")  # hold Backspace thumb, tap lock (right pinky)
     t.tap("w")  # still Num: 4
     assert t.take() == "+4 -4"
-    t.key(ESC, True, 0)
-    t.key(ESC, False, 10)  # off
-    t.key(ESC, True, 20)
-    t.key(ESC, False, 30)  # on: lock is gone
+    t.key(ESC, down=True, now=0)
+    t.key(ESC, down=False, now=10)  # off
+    t.key(ESC, down=True, now=20)
+    t.key(ESC, down=False, now=30)  # on: lock is gone
     t.tap("w")
     assert t.take() == "!OFF !ON +r -r"
 
@@ -730,16 +730,16 @@ def test_held_undo_repeats_like_any_key() -> None:
 
 
 def test_voice_buttons_request_their_tool_once_per_press_with_any_modifier() -> None:
-    for scancode, tool in ((TALK, "dictate"), (DICTATE_TOGGLE, "dictate_toggle"), (AGENT, "agent_voice_toggle")):
+    for scancode, tool in ((TALK, "dictate"), (DICTATE_TOGGLE, "dictate_toggle"), (AGENT, "agent_voice")):
         for mods in ((), (Mod.CTRL,), (Mod.SHIFT,), (Mod.GUI,), (Mod.CTRL, Mod.SHIFT)):
             t = Harness()
             t.e.mods.counts.update(dict.fromkeys(mods, 1))
-            assert t.key(scancode, True, 0) is Verdict.SWALLOW
+            assert t.key(scancode, down=True, now=0) is Verdict.SWALLOW
             assert t.take() == f"?{tool}+"
-            assert t.key(scancode, True, 30) is Verdict.SWALLOW
+            assert t.key(scancode, down=True, now=30) is Verdict.SWALLOW
             assert t.take() == ""
-            assert t.key(scancode, False, 900) is Verdict.SWALLOW
-            assert t.key(scancode, False, 901) is Verdict.SWALLOW
+            assert t.key(scancode, down=False, now=900) is Verdict.SWALLOW
+            assert t.key(scancode, down=False, now=901) is Verdict.SWALLOW
             assert t.take() == f"?{tool}-"
 
 
@@ -747,20 +747,20 @@ def test_voice_keys_are_plain_when_disabled() -> None:
     t = Harness()
     t.e.enabled = False
     for key in (TALK, DICTATE_TOGGLE, AGENT):
-        assert t.key(key, True, 20) is Verdict.PASS
-        assert t.key(key, False, 30) is Verdict.PASS
+        assert t.key(key, down=True, now=20) is Verdict.PASS
+        assert t.key(key, down=False, now=30) is Verdict.PASS
 
 
 def test_switching_off_and_quitting_release_every_voice_request() -> None:
     for quitting in (False, True):
         t = Harness()
         for key in (TALK, DICTATE_TOGGLE, AGENT):
-            t.key(key, True, 0)
+            t.key(key, down=True, now=0)
         t.take()
-        t.key(ESC, True, 10)
-        verdict = t.key(ESC, False, 10 + (QUIT_HOLD_MS if quitting else 10))
+        t.key(ESC, down=True, now=10)
+        verdict = t.key(ESC, down=False, now=10 + (QUIT_HOLD_MS if quitting else 10))
         assert verdict is (Verdict.QUIT if quitting else Verdict.SWALLOW)
-        assert t.take() == "?dictate- ?dictate_toggle- ?agent_voice_toggle-" + ("" if quitting else " !OFF")
+        assert t.take() == "?dictate- ?dictate_toggle- ?agent_voice-" + ("" if quitting else " !OFF")
         t.e.release_all(t.h)
         assert t.take() == ""
 
@@ -770,10 +770,10 @@ def test_voice_preserves_a_pending_modifier_or_layer_without_sending_it_to_the_a
         t = Harness()
         t.d(physical)
         pending = t.e.pending
-        t.key(TALK, True, 1)
+        t.key(TALK, down=True, now=1)
         assert t.take() == "?dictate+"
         assert t.e.pending is pending
-        t.key(TALK, False, 10)
+        t.key(TALK, down=False, now=10)
         assert t.take() == "?dictate-"
         t.u(physical)
         assert t.take() == ("+s -s" if physical == "e" else "+0xd -0xd")
@@ -782,63 +782,62 @@ def test_voice_preserves_a_pending_modifier_or_layer_without_sending_it_to_the_a
 def test_dedicated_voice_buttons_work_on_every_layer() -> None:
     layers: list[Layer | None] = [None, *list(Layer)]
     for layer in layers:
-        for key, tool in ((TALK, "dictate"), (DICTATE_TOGGLE, "dictate_toggle"), (AGENT, "agent_voice_toggle")):
+        for key, tool in ((TALK, "dictate"), (DICTATE_TOGGLE, "dictate_toggle"), (AGENT, "agent_voice")):
             t = Harness()
             t.e.locked = layer
-            t.key(key, True, 0)
+            t.key(key, down=True, now=0)
             assert t.take() == f"?{tool}+"
             t.e.locked = None
-            t.key(key, False, 300)
+            t.key(key, down=False, now=300)
             assert t.take() == f"?{tool}-"
 
 
 def test_f6_remains_a_native_laptop_function() -> None:
     t = Harness()
-    t.key(Scancode(0x40), True, 0)
-    t.key(Scancode(0x40), True, 10)
-    t.key(Scancode(0x40), False, 20)
+    t.key(Scancode(0x40), down=True, now=0)
+    t.key(Scancode(0x40), down=True, now=10)
+    t.key(Scancode(0x40), down=False, now=20)
     assert t.take() == ""
 
 
 def test_apps_directions_keep_ordinary_tiling_focus_with_modifiers() -> None:
-    for modifier in ('p', 'o'):
-        for direction, tool in (('8', Tool.TILE_FOCUS_LEFT), ('9', Tool.TILE_FOCUS_DOWN),
-                                ('0', Tool.TILE_FOCUS_UP), ('-', Tool.TILE_FOCUS_RIGHT)):
+    for modifier in ("p", "o"):
+        for direction, tool in (("8", Tool.TILE_FOCUS_LEFT), ("9", Tool.TILE_FOCUS_DOWN), ("0", Tool.TILE_FOCUS_UP), ("-", Tool.TILE_FOCUS_RIGHT)):
             t = Harness()
-            t.d('.')
+            t.d(".")
             t.timeout_last()
             t.d(modifier)
             t.tap(direction)
             t.u(modifier)
-            t.u('.')
-            requests = [line for line in t.h.log if line.startswith('?')]
-            assert requests == [f'?{tool.name.lower()}+', f'?{tool.name.lower()}-']
+            t.u(".")
+            requests = [line for line in t.h.log if line.startswith("?")]
+            assert requests == [f"?{tool.name.lower()}+", f"?{tool.name.lower()}-"]
             assert t.e.layer() is None and not t.e.mods.counts
 
 
 def test_apps_search_is_available_without_the_function_row() -> None:
     t = Harness()
-    t.d('.')
+    t.d(".")
     t.timeout_last()
-    t.tap('x')
-    t.u('.')
-    assert t.take() == '?window_switcher+ ?window_switcher-'
+    t.tap("x")
+    t.u(".")
+    assert t.take() == "?window_switcher+ ?window_switcher-"
 
 
 def test_physical_arrows_compose_with_pending_apps_and_pair_release_after_layer_exit() -> None:
     t = Harness()
-    assert not t.e.native_direction(t.h, Key.LEFT, True, 0)
-    t.d('.')
-    assert t.e.native_direction(t.h, Key.RIGHT, True, 10)
-    assert t.e.native_direction(t.h, Key.RIGHT, True, 20)
-    t.u('.')
-    assert t.e.native_direction(t.h, Key.RIGHT, False, 30)
-    assert t.take() == '?tile_focus_right+ ?tile_focus_right-'
+    assert not t.e.native_direction(t.h, Key.LEFT, down=True, now=0)
+    t.d(".")
+    assert t.e.native_direction(t.h, Key.RIGHT, down=True, now=10)
+    assert t.e.native_direction(t.h, Key.RIGHT, down=True, now=20)
+    t.u(".")
+    assert t.e.native_direction(t.h, Key.RIGHT, down=False, now=30)
+    assert t.take() == "?tile_focus_right+ ?tile_focus_right-"
     assert not t.e.desktop_held and t.e.layer() is None
-    t.d('.')
-    assert t.e.native_direction(t.h, Key.DOWN, True, 40)
+    t.d(".")
+    assert t.e.native_direction(t.h, Key.DOWN, down=True, now=40)
     t.e.toggle(t.h)
-    assert t.take() == '?tile_focus_down+ ?tile_focus_down- !OFF'
+    assert t.take() == "?tile_focus_down+ ?tile_focus_down- !OFF"
     assert not t.e.desktop_held
 
 
@@ -1000,17 +999,17 @@ def test_switching_off_clears_the_indicator() -> None:
     t = Harness()
     t.d("c")
     t.timeout_last()
-    t.key(ESC, True, 0)
-    t.key(ESC, False, 10)
+    t.key(ESC, down=True, now=0)
+    t.key(ESC, down=False, now=10)
     assert t.h.indicated == ["nav", "-"]
 
 
 def test_native_function_key_invalidates_partial_snippets() -> None:
     t = Harness()
-    for name in (';', ';', 'r'):
+    for name in (";", ";", "r"):
         t.tap(name)
-    assert t.e.typed == ',,t'
-    assert t.key(Scancode(0x3B), True, 1) is Verdict.PASS  # F1 can change focus or open application help.
-    for name in ('l', 'a'):
+    assert t.e.typed == ",,t"
+    assert t.key(Scancode(0x3B), down=True, now=1) is Verdict.PASS  # F1 can change focus or open application help.
+    for name in ("l", "a"):
         t.tap(name)
-    assert '~Thanks!' not in t.take()
+    assert "~Thanks!" not in t.take()

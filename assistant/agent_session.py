@@ -7,6 +7,7 @@ broker. Replaying the same events against a session always gives the same result
 from dataclasses import dataclass, field, replace
 from enum import Enum, auto
 from typing import Literal, assert_never
+from urllib.parse import urlencode
 
 import assistant.console_requests
 from assistant import action_text
@@ -144,7 +145,7 @@ type Message = ChatMessage | MeetingMessage | Question | Approval | LiveMessage
 class Begin:
     text: str
     at: float
-    queued: bool = False
+    queued: bool = field(default=False, kw_only=True)
     source: FeedRequest | None = None
 
 
@@ -162,6 +163,18 @@ class Progress:
 class Said:
     text: str
     at: float
+
+
+@dataclass(frozen=True, slots=True)
+class CanvasNotice:
+    title: str
+    target: str
+    at: float
+
+
+@dataclass(frozen=True, slots=True)
+class CanvasSettled:
+    targets: frozenset[str]
 
 
 @dataclass(frozen=True, slots=True)
@@ -211,7 +224,21 @@ class RecordingUpdated:
 
 type Resolution = QuestionAnswered | ApprovalDecided | InputCancelled
 type Event = (
-    Begin | Enqueued | Progress | Said | Done | Problem | Finished | StopRequested | Question | Approval | Resolution | RecordingUpdated | LiveMessage
+    Begin
+    | Enqueued
+    | Progress
+    | Said
+    | CanvasNotice
+    | CanvasSettled
+    | Done
+    | Problem
+    | Finished
+    | StopRequested
+    | Question
+    | Approval
+    | Resolution
+    | RecordingUpdated
+    | LiveMessage
 )
 
 
@@ -266,12 +293,36 @@ class Session:
 type Snapshot = Session
 
 
+def notice_text(title: str, target: str) -> str:
+    return title + "\n\n[Open on canvas](workspace://canvas?" + urlencode({"target": target}) + ")"
+
+
 def transition(state: Session, event: Event) -> Session:
     match event:
-        case Begin(text, at, queued, source):
-            return replace(state, generation=state.generation + 1, phase="running", status="Starting…", result="Ready", last_said="",
-                           queued=state.queued[1:] if queued else state.queued,
-                           messages=(*state.messages, ChatMessage("You", text.strip(), at, source)))
+        case CanvasSettled(targets):
+            identities = frozenset("canvas:" + target for target in targets)
+            return replace(
+                state,
+                messages=tuple(
+                    message
+                    for message in state.messages
+                    if not (isinstance(message, ChatMessage) and message.source is not None and message.source.identity in identities)
+                ),
+            )
+        case CanvasNotice(title, target, at):
+            text = notice_text(title, target)
+            return replace(state, messages=(*state.messages, ChatMessage("Workspace", text, at, FeedRequest("canvas:" + target, title))))
+        case Begin(text, at, queued=queued, source=source):
+            return replace(
+                state,
+                generation=state.generation + 1,
+                phase="running",
+                status="Starting…",
+                result="Ready",
+                last_said="",
+                queued=state.queued[1:] if queued else state.queued,
+                messages=(*state.messages, ChatMessage("You", text.strip(), at, source)),
+            )
         case Enqueued(text):
             return replace(state, queued=(*state.queued, text.strip()))
         case Progress(text):
@@ -286,15 +337,17 @@ def transition(state: Session, event: Event) -> Session:
             messages = (*state.messages, ChatMessage("Workspace", text, at)) if text and text != state.last_said else state.messages
             return replace(state, messages=messages, result="Stopped" if text.startswith("Stopped") else "Ready")
         case Problem(text, at):
-            return replace(state, messages=(*state.messages, ChatMessage("Error", text.strip(), at)),
-                           status="Needs attention", result="Needs attention")
+            return replace(
+                state, messages=(*state.messages, ChatMessage("Error", text.strip(), at)), status="Needs attention", result="Needs attention"
+            )
         case Finished():
             return replace(state, phase="idle", queued=(), status=state.result, messages=tuple(interrupt(message) for message in state.messages))
         case StopRequested():
             return replace(state, queued=(), phase="stopping" if state.busy else state.phase, status="Stopping…" if state.busy else state.status)
         case Question() | Approval():
-            return replace(state, messages=(*state.messages, event),
-                           status="Waiting for your reply" if isinstance(event, Question) else "Needs your approval")
+            return replace(
+                state, messages=(*state.messages, event), status="Waiting for your reply" if isinstance(event, Question) else "Needs your approval"
+            )
         case QuestionAnswered() | ApprovalDecided() | InputCancelled():
             return resolve(state, event)
         case RecordingUpdated(recording, at):
@@ -322,12 +375,16 @@ def update_live(state: Session, event: LiveMessage) -> Session:
     if state.stopping and isinstance(event, ToolActivity) and event.outcome is ToolStatus.RUNNING:
         return state
     for index, message in enumerate(state.messages):
-        if (not isinstance(message, (Answer, ReasoningSummary, ToolActivity))
-                or message.identity != event.identity or type(message) is not type(event)):
+        if (
+            not isinstance(message, (Answer, ReasoningSummary, ToolActivity))
+            or message.identity != event.identity
+            or type(message) is not type(event)
+        ):
             continue
         match message:
-            case (Answer(state=StreamState.COMPLETE | StreamState.INTERRUPTED)
-                  | ReasoningSummary(state=StreamState.COMPLETE | StreamState.INTERRUPTED)):
+            case (
+                Answer(state=StreamState.COMPLETE | StreamState.INTERRUPTED) | ReasoningSummary(state=StreamState.COMPLETE | StreamState.INTERRUPTED)
+            ):
                 return state
             case ToolActivity(outcome=Succeeded() | Failed() | ToolStatus.CANCELLED):
                 return state
@@ -336,7 +393,7 @@ def update_live(state: Session, event: LiveMessage) -> Session:
         updated = replace(event, created_at=message.created_at)
         if updated == message:
             return state
-        messages = (*state.messages[:index], updated, *state.messages[index + 1:])
+        messages = (*state.messages[:index], updated, *state.messages[index + 1 :])
         break
     else:
         if state.stopping:
@@ -362,8 +419,9 @@ def resolve(state: Session, event: Resolution) -> Session:
                 updated = replace(message, decision="cancelled")
             case _:
                 return state  # a response for another kind of input cannot resolve this one
-        return replace(state, messages=(*state.messages[:index], updated, *state.messages[index + 1:]),
-                       status="Stopping…" if state.stopping else "Working…")
+        return replace(
+            state, messages=(*state.messages[:index], updated, *state.messages[index + 1 :]), status="Stopping…" if state.stopping else "Working…"
+        )
     return state
 
 
@@ -385,7 +443,9 @@ def update_recording(state: Session, recording: RecordingState, at: float) -> Se
             assert_never(recording.phase)
     for index, message in enumerate(state.messages):
         if isinstance(message, MeetingMessage) and message.recording_id == recording.identity:
-            messages = state.messages if message.text == text else (*state.messages[:index], replace(message, text=text), *state.messages[index + 1:])
+            messages = (
+                state.messages if message.text == text else (*state.messages[:index], replace(message, text=text), *state.messages[index + 1 :])
+            )
             return replace(state, recording=recording, messages=messages)
     return replace(state, recording=recording, messages=(*state.messages, MeetingMessage(recording.identity, text, at)))
 
@@ -440,7 +500,7 @@ class Presentation:
     style: Literal["plain", "error", "markdown"] = "markdown"
     detail: str = ""
     response: ApprovalControls | ResponseText | None = None
-    muted: bool = False
+    muted: bool = field(default=False, kw_only=True)
 
 
 def question_presentation(detail: str, reply: Reply) -> Presentation:

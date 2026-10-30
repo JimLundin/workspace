@@ -79,8 +79,12 @@ class RecordingBridge:
     """Only replace the process boundary; SQLite and session transitions are real."""
 
     def __init__(
-        self, *, on_register: Callable[[str], None] | None = None, on_poll: Callable[[], None] | None = None,
-        on_wake: Callable[[], None] | None = None, accept_meeting: bool = True,
+        self,
+        *,
+        on_register: Callable[[str], None] | None = None,
+        on_poll: Callable[[], None] | None = None,
+        on_wake: Callable[[], None] | None = None,
+        accept_meeting: bool = True,
     ) -> None:
         self.epoch = "worker-one"
         self.sequence = 0
@@ -151,8 +155,14 @@ class RecordingBridge:
 
 class WorkRig:
     def __init__(
-        self, folder: Path, *, bridge: RecordingBridge | None = None, context: Callable[[], ContextSnapshot] | None = None,
-        start: bool = True, meeting: MeetingControl | None = None, on_snapshot: Callable[[WorkSnapshot], None] | None = None,
+        self,
+        folder: Path,
+        *,
+        bridge: RecordingBridge | None = None,
+        context: Callable[[], ContextSnapshot] | None = None,
+        start: bool = True,
+        meeting: MeetingControl | None = None,
+        on_snapshot: Callable[[WorkSnapshot], None] | None = None,
     ) -> None:
         self.tasks = TaskStore(folder / "tasks.sqlite3")
         self.routines = RoutineStore(folder / "routines.sqlite3")
@@ -166,10 +176,19 @@ class WorkRig:
         self.started: list[bool] = []
         self.finished: list[bool] = []
         self.agent = WorkAgent(
-            self.tasks, self.routines, self.saved_context, self.bridge, self.create_window,
-            on_snapshot=self.publish, on_done=lambda: self.finished.append(self.agent.running()),
-            report_error=self.errors.append, on_start=lambda: self.started.append(self.agent.running()),
-            context=context, clock=self.clock, assistant_pid=1234, meeting=meeting,
+            self.tasks,
+            self.routines,
+            self.saved_context,
+            self.bridge,
+            self.create_window,
+            on_snapshot=self.publish,
+            on_done=lambda: self.finished.append(self.agent.running()),
+            report_error=self.errors.append,
+            on_start=lambda: self.started.append(self.agent.running()),
+            context=context,
+            clock=self.clock,
+            assistant_pid=1234,
+            meeting=meeting,
         )
         if start:
             self.agent.start_worker()
@@ -214,8 +233,8 @@ def work(folder: Path) -> Generator[WorkRig]:
 
 
 def invocation(title: str) -> ContextSnapshot:
-    window = Window(42, title, "workbook.exe", False)
-    return ContextSnapshot(90, "active", (Activity(window, 80, 90, False),))
+    window = Window(42, title, "workbook.exe", minimized=False)
+    return ContextSnapshot(90, "active", (Activity(window, 80, 90, agent_active=False),))
 
 
 def pending_approval(rig: WorkRig, prompt: str = "Send the reviewed draft") -> tuple[Task, RunRef, ApprovalReview]:
@@ -226,7 +245,12 @@ def pending_approval(rig: WorkRig, prompt: str = "Send the reviewed draft") -> t
     fingerprint = "a" * 64
     request = Approval(f"approval:0:{fingerprint}:once", "Review the operation", "Sensitive operation; request its live preview.")
     review = ApprovalReview(
-        claim.task.id, 0, request, fingerprint, "Send the reviewed draft", "Exact recipient and complete draft: private preview text.",
+        claim.task.id,
+        0,
+        request,
+        fingerprint,
+        "Send the reviewed draft",
+        "Exact recipient and complete draft: private preview text.",
     )
     task = rig.tasks.finish(claim.run, Waiting(request), at=rig.clock())
     assert task is not None
@@ -234,6 +258,8 @@ def pending_approval(rig: WorkRig, prompt: str = "Send the reviewed draft") -> t
 
 
 def test_queued_requests_persist_with_their_invocation_context_without_reopening_the_panel(tmp_path: Path) -> None:
+    # Defect: an agent voice request is dropped while another task is running,
+    # or queues under stale invocation context instead of preserving both tasks.
     current = invocation("First workbook")
     rig = WorkRig(tmp_path, context=lambda: current)
     try:
@@ -241,12 +267,13 @@ def test_queued_requests_persist_with_their_invocation_context_without_reopening
         rig.refresh()
         first = rig.task("Summarize this")
         current = invocation("Second workbook")
-        rig.agent.start("And this one")
+        rig.agent.voice("And this one")
         rig.refresh()
         second = rig.task("And this one")
         assert first.source == second.source and isinstance(first.source, RequestSource)
         assert rig.bridge.registrations == [
-            (first.id, invocation("First workbook"), 1234), (second.id, invocation("Second workbook"), 1234),
+            (first.id, invocation("First workbook"), 1234),
+            (second.id, invocation("Second workbook"), 1234),
         ]
         assert rig.panel.state.queued == ("And this one",)
         rig.panel.paint()
@@ -604,9 +631,18 @@ def test_real_bridge_delivers_context_live_output_and_meeting_results_to_the_fro
 
     server = BridgeServer(folder, epoch="1" * 32, wake=lambda: None, owns=current_run)
     agent = WorkAgent(
-        tasks, RoutineStore(tmp_path / "routines.sqlite3"), ContextStore(tmp_path / "context.sqlite3"),
-        BridgeClient(folder), window, on_snapshot=lambda _: None, on_done=lambda: None, report_error=errors.append,
-        context=lambda: invocation("Shared workbook"), meeting=meeting, clock=clock, assistant_pid=1234,
+        tasks,
+        RoutineStore(tmp_path / "routines.sqlite3"),
+        ContextStore(tmp_path / "context.sqlite3"),
+        BridgeClient(folder),
+        window,
+        on_snapshot=lambda _: None,
+        on_done=lambda: None,
+        report_error=errors.append,
+        context=lambda: invocation("Shared workbook"),
+        meeting=meeting,
+        clock=clock,
+        assistant_pid=1234,
     )
     server.start()
     agent.start_worker()

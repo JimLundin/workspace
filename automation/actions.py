@@ -67,17 +67,61 @@ class Observation:
 type Plan = Observation | ActionSpec
 
 
-_READS = frozenset({
-    "list_directory", "read_file", "find_files", "get_clipboard", "list_windows", "desktop_state", "get_context", "get_current_time",
-    "inspect_ui", "screenshot", "wait", "ask_user", "list_source", "read_source", "show_changes",
-    "work_actions", "reconcile_action", "work_feed",
-    "browser_tabs", "browser_snapshot", "browser_screenshot",
-    "teams_status", "teams_find_users", "teams_list_chats", "teams_read_messages", "meeting_status", "meeting_list",
-    "meeting_read_sources", "meeting_followup_result",
-})
-_FOREGROUND = frozenset({
-    "focus_window", "manage_window", "click", "move_mouse", "drag", "type_text", "paste_text", "press_keys", "scroll",
-})
+_READS = frozenset(
+    {
+        "list_directory",
+        "read_file",
+        "find_files",
+        "get_clipboard",
+        "list_windows",
+        "desktop_state",
+        "get_context",
+        "get_current_time",
+        "inspect_ui",
+        "screenshot",
+        "wait",
+        "ask_user",
+        "list_source",
+        "read_source",
+        "show_changes",
+        "work_actions",
+        "reconcile_action",
+        "work_feed",
+        "work_items_list",
+        "work_items_sources",
+        "work_canvas_read",
+        "browser_tabs",
+        "browser_snapshot",
+        "browser_screenshot",
+        "teams_status",
+        "teams_find_users",
+        "teams_list_chats",
+        "teams_read_messages",
+        "teams_web_read",
+        "outlook_web_read",
+        "outlook_web_search",
+        "outlook_web_documents",
+        "kanban_board",
+        "kanban_read_task",
+        "meeting_status",
+        "meeting_list",
+        "meeting_read_sources",
+        "meeting_followup_result",
+    }
+)
+_FOREGROUND = frozenset(
+    {
+        "focus_window",
+        "manage_window",
+        "click",
+        "move_mouse",
+        "drag",
+        "type_text",
+        "paste_text",
+        "press_keys",
+        "scroll",
+    }
+)
 
 
 def fingerprint(tool: str, arguments: Mapping[str, object]) -> str:
@@ -88,6 +132,8 @@ def fingerprint(tool: str, arguments: Mapping[str, object]) -> str:
 
 
 def ownership(tool: str, arguments: Mapping[str, object]) -> tuple[str, ...]:
+    if tool == "outlook_web_download_document":
+        return ("browser", "filesystem")
     if tool == "meeting_save_draft":
         return ("outlook", "filesystem")
     if tool in ("meeting_read_sources", "meeting_publish_followup", "meeting_followup_result"):
@@ -99,11 +145,19 @@ def ownership(tool: str, arguments: Mapping[str, object]) -> tuple[str, ...]:
     if tool in ("get_clipboard", "set_clipboard"):
         return ("clipboard",)
     if tool.startswith("browser_"):
-        return ("browser", "foreground") if tool == "browser_sign_in" or (
-            tool == "browser_tab" and arguments.get("action") == "activate"
-        ) else ("browser",)
+        return (
+            ("browser", "foreground")
+            if tool == "browser_sign_in" or (tool == "browser_tab" and arguments.get("action") == "activate")
+            else ("browser",)
+        )
+    if tool.startswith("work_items_"):
+        return ("personal-work",)
+    if tool.startswith("work_canvas_"):
+        return ("work-canvas",)
     if tool.startswith("work_feed"):
         return ("work-feed",)
+    if tool.startswith(("kanban_", "teams_web_", "outlook_web_")):
+        return ("browser",)
     if tool.startswith("teams_"):
         return ("teams",)
     if tool.startswith("meeting_"):
@@ -141,6 +195,21 @@ def resources(tool: str, arguments: Mapping[str, object]) -> tuple[str, ...]:
         digest, destination = arguments.get("source_digest"), arguments.get("destination")
         if isinstance(digest, str) and len(digest) == 64 and isinstance(destination, str):
             return (*selected, target("installed-root", destination), "source-digest:" + digest)
+    if tool.startswith("work_items_") and isinstance(work_id := arguments.get("work_id"), str):
+        return (*selected, target("personal-work", work_id))
+    if tool.startswith(("kanban_", "teams_web_", "outlook_web_")):
+        markers = tuple(
+            target(kind, value)
+            for name, kind in (
+                ("target_id", "browser-page"),
+                ("task_id", "kanban-task"),
+                ("chat_id", "teams-chat"),
+                ("conversation_id", "outlook-conversation"),
+                ("attachment_id", "outlook-attachment"),
+            )
+            if isinstance(value := arguments.get(name), str) and value
+        )
+        return (*selected, *markers)
     if tool.startswith("browser_"):
         if isinstance(page := arguments.get("target_id"), str) and page:
             return (*selected, target("browser-page", page))
@@ -203,10 +272,7 @@ def observed_resources(tool: str, arguments: Mapping[str, object], result: str) 
             if isinstance(group := row.get("group_id"), int) and not isinstance(group, bool):
                 selected += (target("browser-group", group),)
     # A paged or filtered list cannot establish that a target was closed.
-    complete = (
-        arguments.get("offset", 0) == 0 and "next_offset" not in data
-        and "window_id" not in arguments and "group_id" not in arguments
-    )
+    complete = arguments.get("offset", 0) == 0 and "next_offset" not in data and "window_id" not in arguments and "group_id" not in arguments
     if complete and isinstance(data.get("tabs"), list):
         selected += (target("browser-strip", "tabs"),) if data.get("view") == "strip" else ("all:browser-page",)
     return selected
@@ -225,12 +291,9 @@ def evidence_matches(specification: ActionSpec, tool: str, observed: tuple[str, 
     expected = tuple(item for item in specification.resources if item.startswith("target:"))
     if expected:
         broad = (
-            "window" if specification.tool in ("focus_window", "manage_window")
-            else "browser-page" if specification.tool == "browser_close" else ""
+            "window" if specification.tool in ("focus_window", "manage_window") else "browser-page" if specification.tool == "browser_close" else ""
         )
-        return all(item in observed or (
-            item.startswith("target:" + broad + ":") and "all:" + broad in observed
-        ) for item in expected)
+        return all(item in observed or (item.startswith("target:" + broad + ":") and "all:" + broad in observed) for item in expected)
     return bool(set(specification.resources).intersection(observed))
 
 
@@ -262,7 +325,7 @@ class Resources:
         if not selected:
             yield
             return
-        while not self._gate.acquire(timeout=.05):
+        while not self._gate.acquire(timeout=0.05):
             if cancel.is_set():
                 raise ActionCancelledError("Stopped while waiting for execution resources.")
         try:
@@ -304,8 +367,13 @@ class Actions:
     __slots__ = ("clock", "identity", "journal", "resources", "run", "verifier")
 
     def __init__(
-        self, journal: ActionJournal, run: RunRef, resources: Resources, *,
-        clock: Callable[[], float] = time.time, identity: Callable[[], str] = lambda: uuid.uuid4().hex,
+        self,
+        journal: ActionJournal,
+        run: RunRef,
+        resources: Resources,
+        *,
+        clock: Callable[[], float] = time.time,
+        identity: Callable[[], str] = lambda: uuid.uuid4().hex,
         verifier: FileVerifier | None = None,
     ) -> None:
         self.journal, self.run, self.resources = journal, run, resources
@@ -326,8 +394,13 @@ class Actions:
         return self.unresolved()
 
     def execute[T](
-        self, specification: Plan, perform: Callable[[], T], succeeded: Callable[[T], bool], cancel: threading.Event,
-        *, verify: Callable[[T], ActionVerified | ActionUncertain | ActionNotApplied] | None = None,
+        self,
+        specification: Plan,
+        perform: Callable[[], T],
+        succeeded: Callable[[T], bool],
+        cancel: threading.Event,
+        *,
+        verify: Callable[[T], ActionVerified | ActionUncertain | ActionNotApplied] | None = None,
     ) -> T:
         with self.resources.hold(specification.resources, cancel):
             if isinstance(specification, Observation):
@@ -350,7 +423,9 @@ class Actions:
                 # into a retry. Its durable pending record remains sufficient.
                 with contextlib.suppress(OSError, sqlite3.Error):
                     self.journal.finish_action(
-                        action.id, ActionUncertain("The effect did not return a conclusive result."), at=self.clock(),
+                        action.id,
+                        ActionUncertain("The effect did not return a conclusive result."),
+                        at=self.clock(),
                     )
                 raise
             outcome: ActionOutcome

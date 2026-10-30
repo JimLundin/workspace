@@ -5,17 +5,16 @@ raise for network or server problems."""
 
 import base64
 import io
-import json
 import urllib.error
 import urllib.request
 import uuid
 import wave
 from collections.abc import Callable, Iterator, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from http.client import HTTPException, HTTPResponse
-from typing import Final, assert_never
+from typing import Final, Literal, NotRequired, TypedDict, assert_never
 
-from pydantic import TypeAdapter
+from pydantic import ConfigDict, TypeAdapter
 
 RATE: Final = 16_000
 """Samples per second. Speech models work at 16 kHz; more only makes uploads bigger."""
@@ -27,6 +26,7 @@ MIN_SECONDS: Final = 0.3
 type Json = str | int | float | bool | list[Json] | dict[str, Json] | None
 
 _JSON = TypeAdapter(Json)
+_SCHEMA = TypeAdapter(dict[str, Json], config=ConfigDict(allow_inf_nan=False))
 
 
 # ---- Settings --------------------------------------------------------------------------
@@ -47,7 +47,7 @@ class Settings:
     """An ISO code such as `sv` or `en` for transcription. Empty: detected."""
     agent_reasoning_effort: str = "low"
     """Reasoning effort for agent tasks; independent of quick chat."""
-    agent_approvals: bool = False
+    agent_approvals: bool = field(default=False, kw_only=True)
     """Opt in to tool and self-update approval prompts."""
 
 
@@ -167,8 +167,14 @@ class ToolSpec:
 
     name: str
     description: str
-    parameters: dict[str, Json]
-    """A JSON schema for the arguments."""
+    parameters: bytes
+    """Validated schema wire bytes; adapters parse their own fresh SDK/HTTP values."""
+
+
+def tool_spec(name: str, description: str, parameters: Mapping[str, Json]) -> ToolSpec:
+    """Snapshot a tool schema at its declaration boundary without retaining aliases."""
+    schema = _SCHEMA.validate_python(parameters)
+    return ToolSpec(name, description, _SCHEMA.dump_json(schema))
 
 
 @dataclass(frozen=True, slots=True)
@@ -182,7 +188,91 @@ class Failure:
     message: str
 
 
-def _part(part: Part) -> Json:
+@dataclass(frozen=True, slots=True)
+class CompletionRequest:
+    """One immutable chat exchange: messages, model, tools and response mode."""
+
+    messages: tuple[Message, ...]
+    model: str | None = None
+    tools: tuple[ToolSpec, ...] = ()
+    streaming: bool = field(default=False, kw_only=True)
+
+
+class WireText(TypedDict):
+    type: Literal["text"]
+    text: str
+
+
+class ImageLocation(TypedDict):
+    url: str
+
+
+class WireImage(TypedDict):
+    type: Literal["image_url"]
+    image_url: ImageLocation
+
+
+type WirePart = WireText | WireImage
+
+
+class WireCallFunction(TypedDict):
+    name: str
+    arguments: str
+
+
+class WireCall(TypedDict):
+    id: str
+    type: Literal["function"]
+    function: WireCallFunction
+
+
+class WireSystem(TypedDict):
+    role: Literal["system"]
+    content: str
+
+
+class WireUser(TypedDict):
+    role: Literal["user"]
+    content: str | tuple[WirePart, ...]
+
+
+class WireAssistant(TypedDict):
+    role: Literal["assistant"]
+    content: str | None
+    tool_calls: NotRequired[tuple[WireCall, ...]]
+
+
+class WireResult(TypedDict):
+    role: Literal["tool"]
+    tool_call_id: str
+    content: str
+
+
+type WireMessage = WireSystem | WireUser | WireAssistant | WireResult
+
+
+class WireFunction(TypedDict):
+    name: str
+    description: str
+    parameters: dict[str, Json]
+
+
+class WireTool(TypedDict):
+    type: Literal["function"]
+    function: WireFunction
+
+
+class WireCompletion(TypedDict):
+    model: str
+    messages: tuple[WireMessage, ...]
+    tools: NotRequired[tuple[WireTool, ...]]
+    stream: NotRequired[Literal[True]]
+
+
+_COMPLETION = TypeAdapter(WireCompletion)
+
+
+def _part(part: Part) -> WirePart:
     match part:
         case Text(text):
             return {"type": "text", "text": text}
@@ -192,18 +282,21 @@ def _part(part: Part) -> Json:
             assert_never(part)
 
 
-def _message(message: Message) -> Json:
+def _call(call: ToolCall) -> WireCall:
+    return {"id": call.id, "type": "function", "function": {"name": call.name, "arguments": call.arguments}}
+
+
+def _message(message: Message) -> WireMessage:
     match message:
         case SystemMessage(text):
             return {"role": "system", "content": text}
         case UserMessage(content):
-            return {"role": "user", "content": content if isinstance(content, str) else [_part(part) for part in content]}
+            return {"role": "user", "content": content if isinstance(content, str) else tuple(_part(part) for part in content)}
         case AssistantMessage(text, calls):
-            out: dict[str, Json] = {"role": "assistant", "content": text}
+            out: WireAssistant = {"role": "assistant", "content": text}
             if calls:
                 out["content"] = text or None
-                out["tool_calls"] = [{"id": call.id, "type": "function", "function": {"name": call.name, "arguments": call.arguments}}
-                                     for call in calls]
+                out["tool_calls"] = tuple(_call(call) for call in calls)
             return out
         case ToolResult(call_id, text):
             return {"role": "tool", "tool_call_id": call_id, "content": text}
@@ -211,8 +304,11 @@ def _message(message: Message) -> Json:
             assert_never(message)
 
 
-def _tool(spec: ToolSpec) -> Json:
-    return {"type": "function", "function": {"name": spec.name, "description": spec.description, "parameters": spec.parameters}}
+def _tool(spec: ToolSpec) -> WireTool:
+    return {
+        "type": "function",
+        "function": {"name": spec.name, "description": spec.description, "parameters": _SCHEMA.validate_json(spec.parameters)},
+    }
 
 
 # ---- Reading JSON replies --------------------------------------------------------------
@@ -272,7 +368,7 @@ def _open(request: urllib.request.Request, timeout_s: float) -> HTTPResponse | F
         try:
             with error:
                 detail = _get(_json(error.read()), "error", "message")
-        except (OSError, HTTPException):
+        except OSError, HTTPException:
             detail = None
         return Failure(f"HTTP {error.code}: {detail if isinstance(detail, str) else error.reason}")
     except urllib.error.URLError as error:
@@ -322,13 +418,13 @@ def transcribe(settings: Settings, audio: bytes, *, timeout_s: float = 60, conte
     return text if isinstance(text, str) else _unexpected(reply)
 
 
-def _chat_body(settings: Settings, messages: Sequence[Message], model: str | None, tools: Sequence[ToolSpec], streaming: bool) -> bytes:
-    body: dict[str, Json] = {"model": model or settings.chat_model, "messages": [_message(m) for m in messages]}
-    if tools:
-        body["tools"] = [_tool(t) for t in tools]
-    if streaming:
+def _chat_body(settings: Settings, request: CompletionRequest) -> bytes:
+    body: WireCompletion = {"model": request.model or settings.chat_model, "messages": tuple(_message(message) for message in request.messages)}
+    if request.tools:
+        body["tools"] = tuple(_tool(tool) for tool in request.tools)
+    if request.streaming:
         body["stream"] = True
-    return json.dumps(body).encode()
+    return _COMPLETION.dump_json(body)
 
 
 def chat(
@@ -340,7 +436,7 @@ def chat(
     timeout_s: float = 120,
 ) -> Reply | Failure:
     """The model's answer: text, or calls to the tools it was offered."""
-    body = _chat_body(settings, messages, model, tools, streaming=False)
+    body = _chat_body(settings, CompletionRequest(tuple(messages), model, tuple(tools)))
     reply = _post(_request(settings, "/chat/completions", body, "application/json"), timeout_s)
     if isinstance(reply, Failure):
         return reply
@@ -372,7 +468,7 @@ def stream(
     timeout_s: float = 120,
 ) -> str | Failure:
     """The model's answer, passed to `on_text` piece by piece as it's written; all of it at the end."""
-    body = _chat_body(settings, messages, model, (), streaming=True)
+    body = _chat_body(settings, CompletionRequest(tuple(messages), model, streaming=True))
     response = _open(_request(settings, "/chat/completions", body, "application/json"), timeout_s)
     if isinstance(response, Failure):
         return response

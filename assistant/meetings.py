@@ -40,8 +40,8 @@ class _Writer:
             raise ValueError("The capture device returned an invalid audio block.")
         self.buffer.extend(pcm)
         while len(self.buffer) >= RATE * 2:
-            block = bytes(self.buffer[:RATE * 2])
-            del self.buffer[:RATE * 2]
+            block = bytes(self.buffer[: RATE * 2])
+            del self.buffer[: RATE * 2]
             self.store.append(block)
             self.changed()
 
@@ -54,18 +54,44 @@ class _Writer:
 
 class Meetings:
     __slots__ = (
-        "_capture", "_closing", "_lock", "_paused", "_queue", "_quit", "_recovery", "_retry_pending", "_scheduled", "_state", "_stop", "_wake",
-        "_worker", "archive", "factory", "on_complete", "on_recovery", "on_update", "retry_policy", "settings", "transcribe_audio",
+        "_capture",
+        "_closing",
+        "_lock",
+        "_paused",
+        "_queue",
+        "_quit",
+        "_recovery",
+        "_retry_pending",
+        "_scheduled",
+        "_state",
+        "_stop",
+        "_wake",
+        "_worker",
+        "archive",
+        "factory",
+        "on_complete",
+        "on_recovery",
+        "on_update",
+        "retry_policy",
+        "settings",
+        "transcribe_audio",
     )
 
     def __init__(
-        self, settings: Settings, factory: Callable[[AudioSource], Capture], *, archive: MeetingArchive | None = None,
-        on_update: Callable[[RecordingState], None] | None = None, transcribe_audio: Transcriber | None = None,
-        retry_policy: RetryPolicy | None = None, on_complete: Callable[[MeetingStore], None] | None = None,
+        self,
+        settings: Settings,
+        factory: Callable[[AudioSource], Capture],
+        *,
+        archive: MeetingArchive | None = None,
+        on_update: Callable[[RecordingState], None] | None = None,
+        transcribe_audio: Transcriber | None = None,
+        retry_policy: RetryPolicy | None = None,
+        on_complete: Callable[[MeetingStore], None] | None = None,
         on_recovery: Callable[[tuple[Path, ...]], None] | None = None,
     ) -> None:
         self.settings, self.factory = settings, factory
         self.archive = archive if archive is not None else MeetingArchive(DIRECTORY / "meetings")
+
         def configured_transcriber(audio: bytes, *, context: str) -> str | Failure:
             return transcribe(settings, audio, context=context)
 
@@ -172,8 +198,9 @@ class Meetings:
     def _publish(self, store: MeetingStore, *, detail: str | None = None, phase: Phase | None = None) -> None:
         incoming = Publication(store.folder.name, str(store.transcript), store.state(), store.preview())
         with self._lock:
-            updated = published(self._state, incoming, stopping=self._stop.is_set(), paused=self._paused.get(store.folder),
-                                phase=phase, detail=detail)
+            updated = published(
+                self._state, incoming, stopping=self._stop.is_set(), paused=self._paused.get(store.folder), phase=phase, detail=detail
+            )
             if updated is None:
                 return
             self._state = updated
@@ -215,7 +242,7 @@ class Meetings:
                             problem = problem or str(error)
                     store.finish_capture(problem)
                     self._publish(store)
-                except (OSError, ValueError, sqlite3.Error):
+                except OSError, ValueError, sqlite3.Error:
                     # In particular, never claim that a disk-full write succeeded.
                     with self._lock:
                         self._state = replace(self._state, phase="interrupted", detail=problem or "Recording stopped: local storage is unavailable.")
@@ -234,16 +261,20 @@ class Meetings:
                 store = self.archive.open(path.parent)
                 state = store.state()
                 if not state.finished:
-                    store.finish_capture("Recording was interrupted when Workspace closed. "
-                                         "Saved audio has been recovered; capture was not restarted.")
+                    store.finish_capture(
+                        "Recording was interrupted when Workspace closed. Saved audio has been recovered; capture was not restarted."
+                    )
                 if state.pending or not state.finished or state.revision != state.exported_revision or not store.transcript.is_file():
                     self._schedule(store)
-            except (OSError, ValueError, sqlite3.Error):
+            except OSError, ValueError, sqlite3.Error:
                 # Keep damaged journals for recovery rather than deleting them.
                 with self._lock:
                     if not self._state.visible:
-                        self._state = RecordingState(phase="paused", path=str(path.parent / "transcript.md"),
-                                                     detail="A saved meeting could not be recovered. Its journal is still in the meetings folder.")
+                        self._state = RecordingState(
+                            phase="paused",
+                            path=str(path.parent / "transcript.md"),
+                            detail="A saved meeting could not be recovered. Its journal is still in the meetings folder.",
+                        )
                 self._emit()
 
     def _work(self) -> None:
@@ -267,7 +298,9 @@ class Meetings:
                     if self._state.identity == store.folder.name:
                         self._stop.set()
                         self._state = replace(
-                            self._state, phase="stopping" if self._state.capturing else "paused", detail=detail,
+                            self._state,
+                            phase="stopping" if self._state.capturing else "paused",
+                            detail=detail,
                         )
                 self._emit()
             finally:

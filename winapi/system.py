@@ -17,10 +17,8 @@ WM_KEYDOWN, WM_KEYUP, WM_SYSKEYDOWN, WM_SYSKEYUP = 0x0100, 0x0101, 0x0104, 0x010
 WM_LBUTTONUP, WM_RBUTTONUP = 0x0202, 0x0205
 WM_APP: Final = 0x8000
 
-MB_OK, MB_YESNO = 0x00, 0x04
-MB_ICONHAND, MB_ICONQUESTION, MB_ICONEXCLAMATION, MB_ICONASTERISK = 0x10, 0x20, 0x30, 0x40
-MB_SETFOREGROUND, MB_TOPMOST = 0x0001_0000, 0x0004_0000
-IDYES: Final = 6
+MB_OK: Final = 0x00
+MB_ICONHAND, MB_ICONEXCLAMATION, MB_ICONASTERISK = 0x10, 0x30, 0x40
 
 _ERROR_ALREADY_EXISTS: Final = 183
 _INFINITE: Final = 0xFFFF_FFFF
@@ -39,7 +37,6 @@ _GetCurrentThreadId = fn(kernel32, "GetCurrentThreadId", wintypes.DWORD)
 _CreateMutexW = fn(kernel32, "CreateMutexW", wintypes.HANDLE, ctypes.c_void_p, wintypes.BOOL, wintypes.LPCWSTR)
 _CloseHandle = fn(kernel32, "CloseHandle", wintypes.BOOL, wintypes.HANDLE)
 _CreateEventW = fn(kernel32, "CreateEventW", wintypes.HANDLE, ctypes.c_void_p, wintypes.BOOL, wintypes.BOOL, wintypes.LPCWSTR)
-_SetEvent = fn(kernel32, "SetEvent", wintypes.BOOL, wintypes.HANDLE)
 _WaitForMultipleObjects = fn(
     kernel32, "WaitForMultipleObjects", wintypes.DWORD, wintypes.DWORD, ctypes.POINTER(wintypes.HANDLE), wintypes.BOOL, wintypes.DWORD
 )
@@ -116,14 +113,8 @@ def beep(sound: int) -> None:
 
 
 def message_box(text: str, title: str, style: int) -> int:
-    """Blocks until dismissed; returns the button pressed (IDYES...)."""
+    """Blocks until dismissed; returns the native button identifier."""
     return int(_MessageBoxW(None, text, title, style))
-
-
-def ask_yes_no(text: str, title: str) -> bool:
-    """A Yes/No question on top of everything; Yes is True."""
-    style = MB_YESNO | MB_ICONQUESTION | MB_TOPMOST | MB_SETFOREGROUND
-    return message_box(text, title, style) == IDYES
 
 
 def create_lock(name: str) -> Lock | None:
@@ -145,10 +136,6 @@ def create_event() -> EventHandle:
     if not handle:
         raise last_error()
     return EventHandle(handle)
-
-
-def set_event(event: EventHandle) -> None:
-    _SetEvent(event)
 
 
 def close_event(event: EventHandle) -> None:

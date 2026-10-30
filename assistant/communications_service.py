@@ -1,20 +1,16 @@
 """A cancellable Teams collector; browser, encrypted drafts and effects stay off Qt."""
 
-import json
 import os
 import queue
 import threading
 import time
 from collections.abc import Callable
 from dataclasses import replace
-from pathlib import Path
-from typing import Protocol, cast
+from typing import Protocol
 
 import assistant.system_notices
-from assistant.browser_values import BrowserError
 from assistant.communications import (
     MAX_FOLLOWED,
-    MAX_HANDLED,
     Acknowledgement,
     Command,
     Connect,
@@ -50,10 +46,10 @@ from assistant.communications import (
     update_fingerprint,
     updates_observed,
 )
-from assistant.communications_browser import ActivityObservation, ChatUnavailableError, Observation, obj, string
-from assistant.llm import Json
+from assistant.communications_browser import ActivityObservation, ChatUnavailableError, Observation
+from assistant.communications_state import CommunicationsState, StoredAcknowledgement, StoredReply
+from assistant.state_store import SavedState
 from assistant.system_notices import NoticeKey
-lazy from winapi.protection import protect, unprotect
 
 
 class Teams(Protocol):
@@ -85,45 +81,34 @@ class Teams(Protocol):
     def close(self) -> None: ...
 
 
-class SavedState:
-    """Save the user's drafts/settings/outgoing attempts; incoming bodies stay in memory."""
-
-    __slots__ = ("path", "protect", "unprotect")
-
-    def __init__(
-        self, path: Path, *, protect: Callable[[bytes], bytes], unprotect: Callable[[bytes], bytes],
-    ) -> None:
-        self.path, self.protect, self.unprotect = path, protect, unprotect
-
-    def read(self) -> dict[str, Json]:
-        if not self.path.exists():
-            return {}
-        return obj(cast(Json, json.loads(self.unprotect(self.path.read_bytes()))))
-
-    def write(self, state: dict[str, Json]) -> None:
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        candidate = self.path.with_suffix(".tmp")
-        try:
-            candidate.write_bytes(self.protect(json.dumps(state, ensure_ascii=False).encode("utf-8")))
-            candidate.replace(self.path)
-        finally:
-            candidate.unlink(missing_ok=True)
-
-
-def windows_store(path: Path) -> SavedState:
-
-    return SavedState(path, protect=protect, unprotect=unprotect)
-
-
 class Communications:
     __slots__ = (
-        "commands", "cursor", "dirty", "dismiss_notice", "draft_lock", "drafts", "enabled", "feed", "next_activity", "next_poll",
-        "pending_drafts", "pending_notices", "publish", "saved_target",
-        "started", "stop", "store", "thread", "web",
+        "commands",
+        "cursor",
+        "dirty",
+        "dismiss_notice",
+        "draft_lock",
+        "drafts",
+        "enabled",
+        "feed",
+        "next_activity",
+        "next_poll",
+        "pending_drafts",
+        "pending_notices",
+        "publish",
+        "saved_target",
+        "started",
+        "stop",
+        "store",
+        "thread",
+        "web",
     )
 
     def __init__(
-        self, web: Teams, store: SavedState, publish: Callable[[Feed, dict[str, str]], None],
+        self,
+        web: Teams,
+        store: SavedState[CommunicationsState],
+        publish: Callable[[Feed, dict[str, str]], None],
         dismiss_notice: Callable[[NoticeKey], None] = lambda _: None,
     ) -> None:
         # These four dependencies compose browser work, durable storage, Qt
@@ -186,56 +171,43 @@ class Communications:
 
     def load(self) -> None:
         state = self.store.read()
-        self.enabled = state.get("enabled") is True
-        self.saved_target = string(state.get("target", ""), limit=512)
-        watches = state.get("followed", [])
-        drafts = state.get("drafts", {})
-        if not isinstance(watches, list) or len(watches) > MAX_FOLLOWED or not isinstance(drafts, dict) or len(drafts) > 150:
-            raise BrowserError("Saved Teams preferences are invalid.")
-        self.feed = replace(self.feed, followed=tuple(string(item, limit=512) for item in watches))
-        muted = state.get("muted_apps", [])
-        if not isinstance(muted, list) or len(muted) > 256:
-            raise BrowserError("Saved notification filters are invalid.")
-        self.feed = replace(self.feed, muted_apps=tuple(string(app, limit=512, required=True) for app in muted))
-        self.drafts = {key: string(value, limit=32_000) for key, value in drafts.items()}
-        replies = state.get("replies", [])
-        if not isinstance(replies, list) or len(replies) > 50:
-            raise BrowserError("Saved Teams reply evidence is invalid.")
-        recovered: list[Reply] = []
-        for value in replies:
-            row = obj(value)
-            stamp = row.get("created_at")
-            if isinstance(stamp, bool) or not isinstance(stamp, (float, int)):
-                raise BrowserError("Saved Teams reply timestamp is invalid.")
-            delivery = Delivery[string(row.get("delivery"), limit=32)]
-            if delivery in (Delivery.QUEUED, Delivery.SENDING):
-                delivery = Delivery.UNKNOWN
-            recovered.append(Reply(string(row.get("identity"), limit=512), string(row.get("conversation"), limit=512),
-                                   string(row.get("title"), limit=300), string(row.get("text"), limit=32_000), float(stamp),
-                                   delivery, string(row.get("detail", ""), limit=1000)))
-        self.feed = replace(self.feed, replies=tuple(recovered))
-        handled = state.get("handled", [])
-        if not isinstance(handled, list) or len(handled) > MAX_HANDLED:
-            raise BrowserError("Saved inbox handling state is invalid.")
-        marks: list[Acknowledgement] = []
-        for raw in handled:
-            row = obj(raw)
-            first, second = string(row.get("source"), limit=512, required=True), string(row.get("identity"), limit=512, required=True)
-            digest = string(row.get("fingerprint"), limit=64, required=True)
-            if len(digest) != 64 or any(char not in "0123456789abcdef" for char in digest):
-                raise BrowserError("Saved inbox revision is invalid.")
-            marks.append(Acknowledgement((first, second), digest))
-        self.feed = replace(self.feed, handled=tuple(marks))
+        self.enabled = state.enabled
+        self.saved_target = state.target
+        self.drafts = dict(state.drafts)
+        self.feed = replace(
+            self.feed,
+            followed=state.followed,
+            muted_apps=state.muted_apps,
+            replies=tuple(
+                Reply(
+                    row.identity,
+                    row.conversation,
+                    row.title,
+                    row.text,
+                    row.created_at,
+                    Delivery.UNKNOWN if row.delivery in (Delivery.QUEUED, Delivery.SENDING) else row.delivery,
+                    row.detail,
+                )
+                for row in state.replies
+            ),
+            handled=tuple(Acknowledgement((mark.source, mark.identity), mark.fingerprint) for mark in state.handled),
+        )
 
     def save(self) -> None:
-        replies: list[Json] = [{"identity": item.identity, "conversation": item.conversation, "title": item.title, "text": item.text,
-                               "created_at": item.created_at, "delivery": item.delivery.name, "detail": item.detail}
-                              for item in self.feed.replies]
-        self.store.write({"enabled": self.enabled, "target": self.saved_target, "followed": list(self.feed.followed),
-                          "muted_apps": list(self.feed.muted_apps),
-                          "drafts": dict(self.drafts), "replies": replies,
-                          "handled": [{"source": mark.key[0], "identity": mark.key[1], "fingerprint": mark.fingerprint}
-                                      for mark in self.feed.handled]})
+        self.store.write(
+            CommunicationsState(
+                target=self.saved_target,
+                followed=self.feed.followed,
+                muted_apps=self.feed.muted_apps,
+                drafts=tuple(self.drafts.items()),
+                replies=tuple(
+                    StoredReply(item.identity, item.conversation, item.title, item.text, item.created_at, item.delivery, item.detail)
+                    for item in self.feed.replies
+                ),
+                handled=tuple(StoredAcknowledgement(mark.key[0], mark.key[1], mark.fingerprint) for mark in self.feed.handled),
+                enabled=self.enabled,
+            )
+        )
         self.dirty = False
 
     def connect(self) -> None:
@@ -263,8 +235,9 @@ class Communications:
 
     def collect(self) -> None:
         if not self.web.available(self.stop):
-            self.feed = replace(self.feed, status=Status.STALE,
-                                detail="Teams collection paused while its browser tab is visible. Switch away to resume.")
+            self.feed = replace(
+                self.feed, status=Status.STALE, detail="Teams collection paused while its browser tab is visible. Switch away to resume."
+            )
             self.changed()
             return
         try:
@@ -307,8 +280,12 @@ class Communications:
         detail = f"Teams · following {len(followed)} chats"
         if unavailable:
             detail += f" · {len(unavailable)} chat{'s' if len(unavailable) != 1 else ''} unavailable; retrying automatically"
-        self.feed = replace(self.feed, unavailable=tuple(unavailable.values()),
-                            status=Status.STALE if followed and len(unavailable) == len(followed) else Status.CONNECTED, detail=detail)
+        self.feed = replace(
+            self.feed,
+            unavailable=tuple(unavailable.values()),
+            status=Status.STALE if followed and len(unavailable) == len(followed) else Status.CONNECTED,
+            detail=detail,
+        )
         self.changed()
 
     def send(self, command: Send) -> None:
@@ -321,8 +298,9 @@ class Communications:
         if self.feed.status is not Status.CONNECTED or chat.identity not in self.feed.followed:
             reply = replace(reply, delivery=Delivery.FAILED, detail="Reconnect and follow this chat before sending. Your text is retained below.")
         elif any(item.conversation == chat.identity and item.delivery is Delivery.UNKNOWN for item in self.feed.replies):
-            reply = replace(reply, delivery=Delivery.FAILED,
-                            detail="An earlier send has an uncertain outcome. Inspect it in Teams before sending again.")
+            reply = replace(
+                reply, delivery=Delivery.FAILED, detail="An earlier send has an uncertain outcome. Inspect it in Teams before sending again."
+            )
         else:
             reply = replace(reply, delivery=Delivery.SENDING)
         self.feed = reply_changed(self.feed, reply)
@@ -342,8 +320,11 @@ class Communications:
                 if self.drafts.get(chat.identity) == command.text:
                     self.drafts[chat.identity] = ""
             else:
-                reply = replace(reply, delivery=Delivery.UNKNOWN,
-                                detail="Teams did not provide reply readback. Inspect the chat; nothing will be resent automatically.")
+                reply = replace(
+                    reply,
+                    delivery=Delivery.UNKNOWN,
+                    detail="Teams did not provide reply readback. Inspect the chat; nothing will be resent automatically.",
+                )
         except Exception:
             # A failure after entering the effect may already have posted. Never expose page content in diagnostics.
             reply = replace(reply, delivery=Delivery.UNKNOWN, detail="The send outcome is uncertain. Your text is saved; inspect this chat in Teams.")
@@ -375,8 +356,14 @@ class Communications:
                         confirmed = self.web.activity_read(identity, self.stop)
                     except Exception:
                         confirmed = False
-                    self.feed = replace(self.feed, activity_detail=("Handled here · Teams read state confirmed." if confirmed else
-                                        "Handled here · Teams read state could not be confirmed. Open Teams to check it."))
+                    self.feed = replace(
+                        self.feed,
+                        activity_detail=(
+                            "Handled here · Teams read state confirmed."
+                            if confirmed
+                            else "Handled here · Teams read state could not be confirmed. Open Teams to check it."
+                        ),
+                    )
                     self.changed()
 
     def command(self, command: Command) -> None:
@@ -425,7 +412,6 @@ class Communications:
             case ResolveAttempt(identity):
                 self.resolve_attempt(identity)
 
-
     def open_update(self, key: tuple[str, str]) -> None:
         update = next((item for item in self.feed.updates if item.key == key), None)
         if update is not None:
@@ -439,17 +425,21 @@ class Communications:
     def resolve_attempt(self, identity: str) -> None:
         reply = next((item for item in self.feed.replies if item.identity == identity), None)
         if reply is not None and reply.delivery is Delivery.UNKNOWN:
-            self.feed = reply_changed(self.feed, replace(reply, delivery=Delivery.REVIEWED,
-                                      detail="You checked this attempt in Teams. Delivery remains unverified; future replies are enabled."))
+            self.feed = reply_changed(
+                self.feed,
+                replace(
+                    reply,
+                    delivery=Delivery.REVIEWED,
+                    detail="You checked this attempt in Teams. Delivery remains unverified; future replies are enabled.",
+                ),
+            )
             self.save()
             self.changed()
-
 
     def disconnect(self) -> None:
         self.enabled = False
         self.web.close()
-        self.feed = replace(self.feed, status=Status.DISCONNECTED,
-                            detail="Teams disconnected. Saved drafts and observed messages remain available.")
+        self.feed = replace(self.feed, status=Status.DISCONNECTED, detail="Teams disconnected. Saved drafts and observed messages remain available.")
         self.save()
         self.changed()
 
@@ -481,20 +471,24 @@ class Communications:
             while not self.stop.is_set():
                 self.drain_drafts()
                 try:
-                    command = self.commands.get(timeout=.4)
+                    command = self.commands.get(timeout=0.4)
                     self.command(command)
                 except queue.Empty:
                     pass
                 except Exception:
-                    self.feed = replace(self.feed, status=Status.STALE,
-                                        detail="Teams is unavailable. Your drafts are retained; reconnect or refresh to retry.")
+                    self.feed = replace(
+                        self.feed, status=Status.STALE, detail="Teams is unavailable. Your drafts are retained; reconnect or refresh to retry."
+                    )
                     self.changed()
                 if self.enabled and self.web.target and time.monotonic() >= self.next_poll:
                     try:
                         self.collect()
                     except Exception:
-                        self.feed = replace(self.feed, status=Status.STALE,
-                                            detail="Teams updates are incomplete. Refresh or reconnect; saved content is still available.")
+                        self.feed = replace(
+                            self.feed,
+                            status=Status.STALE,
+                            detail="Teams updates are incomplete. Refresh or reconnect; saved content is still available.",
+                        )
                         self.changed()
                     self.next_poll = time.monotonic() + 4
                 if self.enabled and self.web.target and time.monotonic() >= self.next_activity:

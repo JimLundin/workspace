@@ -22,8 +22,14 @@ class PowerStatus(ctypes.Structure):
     saver: int
     seconds: int
     full_seconds: int
-    _fields_ = (("ac", ctypes.c_ubyte), ("flags", ctypes.c_ubyte), ("percent", ctypes.c_ubyte),
-               ("saver", ctypes.c_ubyte), ("seconds", wintypes.DWORD), ("full_seconds", wintypes.DWORD))
+    _fields_ = (
+        ("ac", ctypes.c_ubyte),
+        ("flags", ctypes.c_ubyte),
+        ("percent", ctypes.c_ubyte),
+        ("saver", ctypes.c_ubyte),
+        ("seconds", wintypes.DWORD),
+        ("full_seconds", wintypes.DWORD),
+    )
 
 
 _GetSystemPowerStatus = fn(kernel32, "GetSystemPowerStatus", wintypes.BOOL, ctypes.POINTER(PowerStatus))
@@ -42,7 +48,7 @@ def power_from_status(status: PowerStatus | None) -> Power:
         return PowerUnavailable.NO_BATTERY
     if not 0 <= status.percent <= 100:
         return PowerUnavailable.UNKNOWN
-    return Battery(int(status.percent), status.ac == 1, bool(status.flags & 8))
+    return Battery(int(status.percent), powered=status.ac == 1, charging=bool(status.flags & 8))
 
 
 def location(cancelled: threading.Event) -> tuple[float, float] | None:
@@ -61,7 +67,7 @@ def location(cancelled: threading.Event) -> tuple[float, float] | None:
         info = operation.as_(IAsyncInfo)
         deadline = time.monotonic() + 9
         while info.Status == 0:
-            if cancelled.wait(.05) or time.monotonic() >= deadline:
+            if cancelled.wait(0.05) or time.monotonic() >= deadline:
                 info.Cancel()
                 return None
         if info.Status != 1:
@@ -71,7 +77,7 @@ def location(cancelled: threading.Event) -> tuple[float, float] | None:
         if math.isfinite(latitude) and math.isfinite(longitude) and -90 <= latitude <= 90 and -180 <= longitude <= 180:
             return latitude, longitude
         return None
-    except (OSError, ValueError):
+    except OSError, ValueError:
         return None
     finally:
         position = info = operation = locator = None

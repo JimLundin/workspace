@@ -5,7 +5,7 @@ import re
 import sqlite3
 from collections.abc import Generator, Sequence
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from math import isfinite
 from pathlib import Path
 from typing import Protocol, assert_never, cast
@@ -17,9 +17,48 @@ MAX_RECORDS = 200
 MAX_CONTENT = 4000
 MAX_SOURCE = 1000
 _CONNECTIVES = frozenset(
-    ("a", "an", "and", "are", "as", "at", "be", "by", "for", "from", "i", "in", "is", "it", "my", "of", "on",
-     "or", "our", "please", "the", "this", "to", "with", "you", "your",
-     "att", "av", "den", "det", "en", "ett", "för", "med", "och", "om", "på", "som", "till", "vi"),
+    (
+        "a",
+        "an",
+        "and",
+        "are",
+        "as",
+        "at",
+        "be",
+        "by",
+        "for",
+        "from",
+        "i",
+        "in",
+        "is",
+        "it",
+        "my",
+        "of",
+        "on",
+        "or",
+        "our",
+        "please",
+        "the",
+        "this",
+        "to",
+        "with",
+        "you",
+        "your",
+        "att",
+        "av",
+        "den",
+        "det",
+        "en",
+        "ett",
+        "för",
+        "med",
+        "och",
+        "om",
+        "på",
+        "som",
+        "till",
+        "vi",
+    ),
 )
 
 
@@ -92,11 +131,15 @@ def _record_text(record: ContextRecord, *, stale: bool = False) -> str:
     data: dict[str, str | float]
     match record:
         case Preference():
-            data = {"kind": "user_preference", "name": record.name, "value": record.value,
-                    "source": record.source, "updated_at": record.updated_at}
+            data = {"kind": "user_preference", "name": record.name, "value": record.value, "source": record.source, "updated_at": record.updated_at}
         case ProjectNote():
-            data = {"kind": "stale_reference" if stale else "project_observation", "project": record.project,
-                    "source": record.source, "observed_at": record.observed_at, "valid_until": record.valid_until}
+            data = {
+                "kind": "stale_reference" if stale else "project_observation",
+                "project": record.project,
+                "source": record.source,
+                "observed_at": record.observed_at,
+                "valid_until": record.valid_until,
+            }
             if not stale:
                 data["text"] = record.text
         case _:
@@ -108,7 +151,7 @@ def _record_text(record: ContextRecord, *, stale: bool = False) -> str:
 class ContextSelection:
     records: tuple[ContextRecord, ...] = ()
     stale: tuple[ProjectNote, ...] = ()
-    truncated: bool = False
+    truncated: bool = field(default=False, kw_only=True)
 
     def describe(self) -> str:
         if not self.records and not self.stale and not self.truncated:
@@ -125,7 +168,12 @@ class ContextSelection:
 
 
 def select_context(
-    records: tuple[ContextRecord, ...], query: str, now: float, *, limit: int = 12, max_chars: int = 12_000,
+    records: tuple[ContextRecord, ...],
+    query: str,
+    now: float,
+    *,
+    limit: int = 12,
+    max_chars: int = 12_000,
 ) -> ContextSelection:
     """Choose relevant fresh facts; expose stale sources without their old text."""
     _time(now)
@@ -139,8 +187,7 @@ def select_context(
     for record in records:
         if isinstance(record, ProjectNote):
             project_words = _terms(record.project)
-            if ((project_words and project_words <= words)
-                    or (not project_words and record.project.casefold() in query.casefold())):
+            if (project_words and project_words <= words) or (not project_words and record.project.casefold() in query.casefold()):
                 named_projects.add(record.project.casefold())
     ranked: list[tuple[int, float, str, ContextRecord]] = []
     for record in records:
@@ -174,7 +221,7 @@ def select_context(
             stale.append(record)
         else:
             chosen.append(record)
-    return ContextSelection(tuple(chosen), tuple(stale), truncated)
+    return ContextSelection(tuple(chosen), tuple(stale), truncated=truncated)
 
 
 class _Cursor(Protocol):
@@ -252,7 +299,8 @@ class ContextStore:
                 assert_never(record)
         with self._connection(writing=True) as connection:
             existing = connection.execute(
-                "SELECT id,kind,label,content,source,observed,expires FROM project_context WHERE id=?", (record.id,),
+                "SELECT id,kind,label,content,source,observed,expires FROM project_context WHERE id=?",
+                (record.id,),
             ).fetchone()
             if existing is not None and _updated(_decode(existing)) > _updated(record):
                 raise ValueError("A newer saved context record already exists.")
@@ -271,7 +319,8 @@ class ContextStore:
         _text(identity, "Context identity", 128)
         with self._connection() as connection:
             row = connection.execute(
-                "SELECT id,kind,label,content,source,observed,expires FROM project_context WHERE id=?", (identity,),
+                "SELECT id,kind,label,content,source,observed,expires FROM project_context WHERE id=?",
+                (identity,),
             ).fetchone()
         return _decode(row) if row is not None else None
 
@@ -287,8 +336,7 @@ class ContextStore:
             raise ValueError("Saved context exceeds its supported capacity.")
         records = tuple(_decode(row) for row in rows)
         return tuple(
-            record for record in records
-            if project is None or isinstance(record, Preference) or record.project.casefold() == project.casefold()
+            record for record in records if project is None or isinstance(record, Preference) or record.project.casefold() == project.casefold()
         )
 
     def remove(self, identity: str) -> bool:

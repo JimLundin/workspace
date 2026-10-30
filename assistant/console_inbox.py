@@ -53,7 +53,7 @@ class ConsoleInbox:
                         answer = owner.receive(current)
                         result = hook_output(provider, raw, answer)
                     output = json.dumps(result).encode("utf-8")
-                except (ValueError, TypeError):
+                except ValueError, TypeError:
                     self.send_error(400)
                     return
                 self.send_response(200)

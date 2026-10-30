@@ -13,13 +13,25 @@ from pathlib import Path, PurePosixPath
 
 from pydantic import TypeAdapter, ValidationError
 
-RUNTIME = frozenset({".python", ".runtime"})
+RUNTIME = frozenset({".runtime"})
 RESERVED = frozenset({"CON", "PRN", "AUX", "NUL", *(f"COM{i}" for i in range(1, 10)), *(f"LPT{i}" for i in range(1, 10))})
-PINS = ("requirements/python-win64.json", "requirements/windows-py315.lock")
+PINS = (".python-version", "requirements/windows-py315.lock")
 HELPERS = (
-    "scripts/deploy.py", "scripts/deploy_files.py", "scripts/deploy_windows.py",
-    "scripts/deploy_archive.py", "scripts/deploy_processes.py", "scripts/deploy_values.py",
-    "scripts/development_paths.py", "winapi/__init__.py", "winapi/_core.py", "winapi/shapes.py",
+    "scripts/deploy.py",
+    "scripts/deploy_files.py",
+    "scripts/deploy_windows.py",
+    "scripts/deploy_archive.py",
+    "scripts/deploy_processes.py",
+    "scripts/deploy_values.py",
+    "scripts/deploy_policy.py",
+    "scripts/architecture.py",
+    "scripts/source_analysis.py",
+    "scripts/development_paths.py",
+    "winapi/__init__.py",
+    "winapi/_core.py",
+    "winapi/shapes.py",
+    "keeper_control.py",
+    "keeper.py",
 )
 RECORD = TypeAdapter[dict[str, object]](dict[str, object])
 SOURCE_HASHES = TypeAdapter[dict[str, str]](dict[str, str])
@@ -53,12 +65,10 @@ def member(name: str) -> str:
     if not name or "\\" in name:
         raise ValueError("A release member must be a relative POSIX path.")
     path = PurePosixPath(name)
-    if (path == PurePosixPath(".") or path.is_absolute() or path.as_posix() != name
-            or any(part in (".", "..") for part in path.parts)):
+    if path == PurePosixPath(".") or path.is_absolute() or path.as_posix() != name or any(part in (".", "..") for part in path.parts):
         raise ValueError("A release member escapes or aliases its destination.")
     for part in path.parts:
-        if (part.endswith((" ", ".")) or any(char in '<>:"|?*' or ord(char) < 32 for char in part)
-                or part.split(".")[0].upper() in RESERVED):
+        if part.endswith((" ", ".")) or any(char in '<>:"|?*' or ord(char) < 32 for char in part) or part.split(".")[0].upper() in RESERVED:
             raise ValueError("A release member is not a regular Windows file path.")
     return name
 
@@ -144,7 +154,7 @@ def zip_files(path: Path, root: str = "workspace", *, source_only: bool = False)
                 continue
             if not info.filename.startswith(prefix) or info.flag_bits & 1 or stat.S_ISLNK(info.external_attr >> 16):
                 raise ValueError("A release ZIP contains an unexpected, encrypted, or linked member.")
-            name = member(info.filename[len(prefix):])
+            name = member(info.filename[len(prefix) :])
             if name in seen:
                 raise ValueError("A release ZIP contains duplicate members.")
             seen.add(name)
@@ -170,7 +180,7 @@ def source_map(value: object) -> dict[str, str]:
     names(result)
     if any(re.fullmatch(r"[0-9a-f]{64}", value) is None for value in result.values()):
         raise ValueError("A source manifest contains an invalid SHA-256.")
-    if any(PurePosixPath(name).parts[0] in RUNTIME or bytecode(name) for name in result):
+    if any(PurePosixPath(name).parts[0] in RUNTIME | {".python"} or bytecode(name) for name in result):
         raise ValueError("This release accepts source files only, without private runtimes or bytecode.")
     if any(name not in result for name in PINS):
         raise ValueError("The frozen source manifest is missing a runtime pin.")

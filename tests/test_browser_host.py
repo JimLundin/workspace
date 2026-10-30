@@ -20,7 +20,13 @@ class Connection:
         self.cancelled = threading.Event()
 
     def call(
-        self, method: str, params: dict[str, Json], cancel: threading.Event, *, session: str = "", timeout: float = 15,
+        self,
+        method: str,
+        params: dict[str, Json],
+        cancel: threading.Event,
+        *,
+        session: str = "",
+        timeout: float = 15,
     ) -> dict[str, Json]:
         self.calls.append(method)
         if method == "Target.attachToTarget":
@@ -94,11 +100,13 @@ def test_timeout_and_cancel_do_not_disconnect_the_shared_browser(tmp_path: Path)
         connection = client(server)
         with TestCase().assertRaisesRegex(BrowserError, "timed out"):
             connection.call("slow", {}, threading.Event())
+
         def wait() -> None:
             try:
                 connection.call("wait", {}, cancelled)
             except Exception as error:
                 failures.append(error)
+
         thread = threading.Thread(target=wait)
         thread.start()
         assert opener.connection.started.wait(1)
@@ -160,17 +168,19 @@ def test_cancelling_a_queued_request_never_runs_it(tmp_path: Path) -> None:
     try:
         connection = client(server)
         server.host.lock.acquire()
+
         def queued() -> None:
             try:
                 connection.call("must-not-run", {}, cancelled)
             except Exception as error:
                 errors.append(error)
+
         thread = threading.Thread(target=queued)
         thread.start()
-        time.sleep(.1)
+        time.sleep(0.1)
         cancelled.set()
         thread.join(timeout=1)
-        time.sleep(.2)
+        time.sleep(0.2)
         server.host.lock.release()
         assert errors and isinstance(errors[0], InterruptedError)
         assert "must-not-run" not in opener.connection.calls

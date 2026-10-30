@@ -1,6 +1,7 @@
 """The answer and optional steps of a conversation bubble, without UI effects."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
+from textwrap import shorten
 
 from assistant import feed_items, tool_text
 from assistant.action_text import readable
@@ -29,18 +30,43 @@ def spans(content: Content, *, expanded: bool = True) -> tuple[Span, ...]:
     if isinstance(content, WorkItem):
         if isinstance(content.item, Assessment):
             if not expanded:
-                return (Span(content.title, ('bold', 'feed', 'feed_title')),)
+                preview = shorten(content.item.suggestion, width=280, placeholder="…")
+                return (Span(content.title + "\n", ("bold", "feed", "feed_title")), *formatted(preview))
             return expanded_spans(content)
         return feed_items.body_spans(content)
     if isinstance(content, Turn):
-        parts = [spans(entry) for entry in results(content)
-                 if not (content.origin is not None and isinstance(entry, Entry) and isinstance(entry.message, ChatMessage)
-                         and entry.message.speaker == "You")]
+        parts = [
+            spans(entry)
+            for entry in results(content)
+            if not (
+                content.origin is not None and isinstance(entry, Entry) and isinstance(entry.message, ChatMessage) and entry.message.speaker == "You"
+            )
+        ]
         return tuple(span for index, part in enumerate(parts) for span in ((Span("\n\n"),) if index else ()) + part)
     text = body(content)
     if not (isinstance(content, Entry) and isinstance(content.message, ChatMessage) and content.message.speaker == "You"):
         text = readable(text)
     return ((Span(text),) if plain(content) else tuple(formatted(text))) if text else ()
+
+
+@dataclass(frozen=True, slots=True)
+class BubbleText:
+    body: tuple[Span, ...]
+    canvas_actions: tuple[Span, ...]
+
+
+def bubble_text(values: tuple[Span, ...]) -> BubbleText:
+    """Workspace's canvas redirects are persistent controls beside the text."""
+    actions = tuple(
+        frozendict((span.link, span) for span in values if span.text == "Open on canvas" and span.link.startswith("workspace://canvas?")).values()
+    )
+    if not actions:
+        return BubbleText(values, ())
+    links = frozenset(span.link for span in actions)
+    body = tuple(span for span in values if span.link not in links)
+    last = next((index for index in reversed(range(len(body))) if body[index].text.rstrip()), None)
+    body = (*body[:last], replace(body[last], text=body[last].text.rstrip())) if last is not None else ()
+    return BubbleText(body, actions)
 
 
 @dataclass(frozen=True, slots=True)
@@ -75,7 +101,7 @@ def step_blocks(content: Content, *, expanded: bool = True) -> tuple[Step, ...]:
 
 def details(content: Content, *, expanded: bool = True) -> tuple[Span, ...]:
     parts = tuple(block_spans(block) for block in step_blocks(content, expanded=expanded))
-    return tuple(span for index, part in enumerate(parts) for span in ((Span('\n\n'),) if index else ()) + part)
+    return tuple(span for index, part in enumerate(parts) for span in ((Span("\n\n"),) if index else ()) + part)
 
 
 def step_block(entry: Entry | Response, *, expanded: bool) -> Step:
@@ -83,7 +109,7 @@ def step_block(entry: Entry | Response, *, expanded: bool) -> Step:
         case Entry(message=ToolActivity() as activity):
             return tool_text.presentation(activity, expanded=expanded)
         case Entry(index=index) | Response(index=index):
-            return HistoryStep(f'{heading(entry)}:{index}', (Span(heading(entry) + '\n', ('bold', 'step')), *spans(entry)))
+            return HistoryStep(f"{heading(entry)}:{index}", (Span(heading(entry) + "\n", ("bold", "step")), *spans(entry)))
 
 
 def block_spans(block: Step) -> tuple[Span, ...]:
@@ -100,8 +126,9 @@ def options(content: Content) -> tuple[Span, ...]:
     entries = results(content) if isinstance(content, Turn) else (content,) if isinstance(content, Entry) else ()
     for entry in entries:
         if isinstance(entry, Entry) and isinstance(entry.message, Approval) and pending(entry.message):
-            return tuple(link('agent-option', label, {'request': entry.message.request_id, 'answer': label.casefold()})
-                         for label in ('Approve', 'Decline'))
+            return tuple(
+                link("agent-option", label, {"request": entry.message.request_id, "answer": label.casefold()}) for label in ("Approve", "Decline")
+            )
     return ()
 
 
@@ -110,6 +137,6 @@ def title_text(content: Content) -> str:
         if content.origin is not None:
             return content.origin.title
         for entry in content.entries:
-            if isinstance(entry, Entry) and isinstance(entry.message, ChatMessage) and entry.message.speaker == 'You':
+            if isinstance(entry, Entry) and isinstance(entry.message, ChatMessage) and entry.message.speaker == "You":
                 return entry.message.text
     return heading(content)

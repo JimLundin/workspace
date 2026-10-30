@@ -42,8 +42,21 @@ class InputDevice:
     no application objects or module bindings are replaced.
     """
 
-    __slots__ = ("completion", "failure", "header", "now", "opened", "position_bytes", "positions", "release",
-                 "reset_entered", "speech", "spoken_at", "started_at", "waits")
+    __slots__ = (
+        "completion",
+        "failure",
+        "header",
+        "now",
+        "opened",
+        "position_bytes",
+        "positions",
+        "release",
+        "reset_entered",
+        "speech",
+        "spoken_at",
+        "started_at",
+        "waits",
+    )
 
     def __init__(self) -> None:
         self.now = 0.0
@@ -259,7 +272,7 @@ def test_live_meter_reads_recorded_pcm_without_trusting_the_unfinished_header() 
     ctypes.memmove(cast("int", device.header.lpData), pcm, len(pcm))
     assert device.header.dwBytesRecorded == 0
     device.position_bytes = len(pcm)
-    assert mic.level() == .5
+    assert mic.level() == 0.5
     assert mic.level() == 0  # No new data: don't invent continued activity.
     device.failure = Failure.POSITION
     assert mic.level() is None

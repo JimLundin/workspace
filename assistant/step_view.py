@@ -17,8 +17,8 @@ lazy from PySide6.QtGui import QWheelEvent
 from assistant import notification_text, tool_call_view, tool_text
 from assistant.notifications import Content
 from assistant.qt_runtime import prepare
-from assistant.qt_text import Document, TextView
-from assistant.toast_style import Ink
+from assistant.ui_components.bubble_style import Ink
+from assistant.ui_components.text import Document, TextView
 
 prepare()
 
@@ -33,7 +33,7 @@ class Callbacks:
 
 
 class Measure:
-    __slots__ = ('history',)
+    __slots__ = ("history",)
 
     def __init__(self) -> None:
         self.history = Document()
@@ -56,13 +56,13 @@ class Measure:
 
 
 class HistoryView(QtWidgets.QWidget):
-    __slots__ = ('callbacks', 'identity', 'text')
+    __slots__ = ("callbacks", "identity", "text")
 
     def __init__(self, parent: QtWidgets.QWidget, block: notification_text.HistoryStep, callbacks: Callbacks) -> None:
         super().__init__(parent)
         self.callbacks, self.identity = callbacks, block.identity
         self.text = TextView(self, callbacks.scroll, self.menu)
-        self.setAccessibleName('Earlier conversation reply')
+        self.setAccessibleName("Earlier conversation reply")
 
     def menu(self, point: QPoint) -> None:
         self.text.copy_menu(point, self.callbacks.history)
@@ -86,7 +86,7 @@ type Element = tool_call_view.ToolCall | HistoryView
 
 
 class StepsView(QtWidgets.QScrollArea):
-    __slots__ = ('callbacks', 'canvas', 'elements', 'ink', 'visible_blocks')
+    __slots__ = ("callbacks", "canvas", "elements", "ink", "visible_blocks")
 
     def __init__(self, parent: QtWidgets.QWidget, scroll: Callable[[int], None], history: Callable[[], None]) -> None:
         super().__init__(parent)
@@ -94,9 +94,9 @@ class StepsView(QtWidgets.QScrollArea):
         self.ink = Ink()
         self.elements: tuple[Element, ...] = ()
         self.visible_blocks: tuple[notification_text.Step, ...] = ()
-        self.setObjectName('agentSteps')
+        self.setObjectName("agentSteps")
         self.setFrameShape(QtWidgets.QFrame.Shape.NoFrame)
-        self.setStyleSheet('QScrollArea#agentSteps { background: transparent; border: none; }')
+        self.setStyleSheet("QScrollArea#agentSteps { background: transparent; border: none; }")
         self.viewport().setAutoFillBackground(False)
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
@@ -104,7 +104,7 @@ class StepsView(QtWidgets.QScrollArea):
         self.canvas = QtWidgets.QWidget(self)
         self.canvas.setAutoFillBackground(False)
         self.setWidget(self.canvas)
-        self.setAccessibleName('Agent tool calls and steps')
+        self.setAccessibleName("Agent tool calls and steps")
 
     @property
     def offset(self) -> int:
@@ -157,7 +157,7 @@ class StepsView(QtWidgets.QScrollArea):
                 case notification_text.HistoryStep(), HistoryView():
                     element.present(block, max(1, round(width)))
                 case _:
-                    raise RuntimeError('A step identity changed its presentation variant.')
+                    raise RuntimeError("A step identity changed its presentation variant.")
         self.visible_blocks = notification_text.step_blocks(content, expanded=expanded)
         self.place(max(1, round(width)))
 
@@ -177,7 +177,7 @@ class StepsView(QtWidgets.QScrollArea):
                 case notification_text.HistoryStep(), HistoryView():
                     height = element.present(block, width)
                 case _:
-                    raise RuntimeError('A step identity changed its presentation variant.')
+                    raise RuntimeError("A step identity changed its presentation variant.")
             element.recolor(self.ink)
             element.move(0, top)
             element.show()
@@ -206,7 +206,7 @@ class StepsView(QtWidgets.QScrollArea):
 
     def toPlainText(self) -> str:
         visible = tuple(block.identity for block in self.visible_blocks)
-        return '\n\n'.join(element.toPlainText() for element in self.elements if element.identity in visible)
+        return "\n\n".join(element.toPlainText() for element in self.elements if element.identity in visible)
 
     def wheelEvent(self, event: QWheelEvent) -> None:
         self.callbacks.scroll(event.angleDelta().y())

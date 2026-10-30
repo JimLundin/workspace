@@ -2,4 +2,4 @@
 setlocal
 set "PYTHONHOME="
 set "PYTHONPATH="
-start "" /d "%~dp0" "%~dp0.python\pythonw.exe" "%~dp0workspace.pyw"
+start "" /d "%~dp0" pyw -3.15 "%~dp0workspace.pyw"

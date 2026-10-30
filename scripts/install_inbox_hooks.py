@@ -54,8 +54,12 @@ def entries(value: object) -> Iterable[object]:
 def merged(original: dict[str, object], command: str, *, codex: bool) -> dict[str, object]:
     result = copy.deepcopy(original)
     hooks = configuration(result.get("hooks", {}))
-    events = [("PreToolUse", r"(?:^|\.)(?:request_user_input|request_user_input_async)$" if codex else "^AskUserQuestion$", 600),
-              ("PermissionRequest", "", 600), ("Stop", "", 10), ("SessionEnd", "", 3)]
+    events = [
+        ("PreToolUse", r"(?:^|\.)(?:request_user_input|request_user_input_async)$" if codex else "^AskUserQuestion$", 600),
+        ("PermissionRequest", "", 600),
+        ("Stop", "", 10),
+        ("SessionEnd", "", 3),
+    ]
     if codex:
         events.append(("Interrupt", "", 3))
     else:
@@ -116,8 +120,10 @@ def main() -> None:
             parser.error("Invalid hook installation arguments.")
     parts = (interpreter, "-B", script)
     command = subprocess.list2cmdline(parts) if os.name == "nt" else shlex.join(parts)
-    changes = {"codex": install(home / ".codex" / "hooks.json", command, codex=True),
-               "claude": install(home / ".claude" / "settings.json", command + " --claude", codex=False)}
+    changes = {
+        "codex": install(home / ".codex" / "hooks.json", command, codex=True),
+        "claude": install(home / ".claude" / "settings.json", command + " --claude", codex=False),
+    }
     result: dict[str, object] = {"workspace_hooks_updated": changes}
     print(json.dumps(result))
 

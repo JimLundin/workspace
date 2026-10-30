@@ -8,8 +8,8 @@ def current_name() -> str:
     # The child only needs three handle observations to verify its inherited
     # desktop. Loading the complete native SDK here makes Hypothesis inspect
     # those dependency sources before its pure generated cases can run.
-    user = ctypes.WinDLL('user32', use_last_error=True)
-    kernel = ctypes.WinDLL('kernel32', use_last_error=True)
+    user = ctypes.WinDLL("user32", use_last_error=True)
+    kernel = ctypes.WinDLL("kernel32", use_last_error=True)
     thread = kernel.GetCurrentThreadId
     thread.argtypes, thread.restype = (), wintypes.DWORD
     desktop = user.GetThreadDesktop

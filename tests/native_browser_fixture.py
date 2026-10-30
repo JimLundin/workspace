@@ -28,7 +28,7 @@ def dispose(browser: Browser, remove: Callable[[Path], None] = shutil.rmtree) ->
     browser.close()
     # Windows can briefly retain a dictionary mapping after browser exit.
     # This bounded fixture policy never hides persistent access failures.
-    delays = (0, .02, .05, .1, .2, .4, .8)
+    delays = (0, 0.02, 0.05, 0.1, 0.2, 0.4, 0.8)
     for attempt, delay in enumerate(delays):
         if delay:
             time.sleep(delay)
@@ -72,8 +72,7 @@ def disposable(browser: Browser) -> Generator[Browser]:
 def borrowed(personal: Browser) -> Generator[Browser]:
     """Fresh client state per scenario; detaching leaves the owner's tabs alive."""
     unused = personal.profile.parent / "unused-attached-profile"
-    browser = Browser(unused, source=Product.EDGE,
-                      opener=NativeSessions(unused, profiles=lambda _: personal.profile))
+    browser = Browser(unused, source=Product.EDGE, opener=NativeSessions(unused, profiles=lambda _: personal.profile))
     try:
         yield browser
     finally:

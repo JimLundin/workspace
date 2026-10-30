@@ -75,7 +75,11 @@ class MeetingStore:
     __slots__ = ("connect", "folder", "max_pending_bytes", "publish")
 
     def __init__(
-        self, folder: Path, *, max_pending_bytes: int = MAX_PENDING_BYTES, publish: Callable[[Path, Path], None] = _replace_transcript,
+        self,
+        folder: Path,
+        *,
+        max_pending_bytes: int = MAX_PENDING_BYTES,
+        publish: Callable[[Path, Path], None] = _replace_transcript,
         connect: Callable[[Path], _Connection] = _connect_journal,
     ) -> None:
         # Location, storage bound, publication and connection lifetime are the
@@ -111,7 +115,12 @@ class MeetingStore:
 
     @classmethod
     def create(
-        cls, root: Path, source: AudioSource, title: str = "Meeting", *, max_pending_bytes: int = MAX_PENDING_BYTES,
+        cls,
+        root: Path,
+        source: AudioSource,
+        title: str = "Meeting",
+        *,
+        max_pending_bytes: int = MAX_PENDING_BYTES,
         publish: Callable[[Path, Path], None] = _replace_transcript,
     ) -> MeetingStore:
         now = time.time()
@@ -128,8 +137,9 @@ class MeetingStore:
                 CREATE TABLE audio (start INTEGER PRIMARY KEY, frames INTEGER NOT NULL, quiet INTEGER NOT NULL, pcm BLOB NOT NULL);
                 CREATE TABLE segments (start INTEGER PRIMARY KEY, end INTEGER NOT NULL, text TEXT NOT NULL);
             """)
-            connection.execute("INSERT INTO meeting (id, title, source, started) VALUES (1, ?, ?, ?)",
-                               (" ".join(title.split())[:160] or "Meeting", source, now))
+            connection.execute(
+                "INSERT INTO meeting (id, title, source, started) VALUES (1, ?, ?, ?)", (" ".join(title.split())[:160] or "Meeting", source, now)
+            )
         store.export()
         return store
 
@@ -140,8 +150,17 @@ class MeetingStore:
             ).fetchone()
         if row is None or row[1] not in ("both", "microphone") or not isinstance(row[2], (int, float)):
             raise ValueError("The local meeting journal is incomplete.")
-        return StoredState(_text(row[0]), row[1], float(row[2]), _integer(row[3]), _integer(row[4]),
-                           bool(row[5]), _text(row[6]), _integer(row[7]), _integer(row[8]))
+        return StoredState(
+            _text(row[0]),
+            row[1],
+            float(row[2]),
+            _integer(row[3]),
+            _integer(row[4]),
+            finished=bool(row[5]),
+            problem=_text(row[6]),
+            revision=_integer(row[7]),
+            exported_revision=_integer(row[8]),
+        )
 
     def append(self, pcm: bytes) -> None:
         if not pcm:
@@ -153,8 +172,9 @@ class MeetingStore:
             row = connection.execute("SELECT frames, finished FROM meeting WHERE id=1").fetchone()
             if row is None or row[1]:
                 raise ValueError("Cannot append audio to a finished meeting.")
-            connection.execute("INSERT INTO audio (start, frames, quiet, pcm) VALUES (?, ?, ?, ?)",
-                               (_integer(row[0]), frames, int(quiet_tail(pcm)), pcm))
+            connection.execute(
+                "INSERT INTO audio (start, frames, quiet, pcm) VALUES (?, ?, ?, ?)", (_integer(row[0]), frames, int(quiet_tail(pcm)), pcm)
+            )
             connection.execute("UPDATE meeting SET frames=frames+?, pending=pending+?, revision=revision+1 WHERE id=1", (frames, frames))
             pending = connection.execute("SELECT pending FROM meeting WHERE id=1").fetchone()
         if pending is not None and _integer(pending[0]) * 2 >= self.max_pending_bytes:
@@ -239,7 +259,11 @@ class MeetingArchive:
     __slots__ = ("max_pending_bytes", "publish", "root")
 
     def __init__(
-        self, root: Path, *, max_pending_bytes: int = MAX_PENDING_BYTES, publish: Callable[[Path, Path], None] = _replace_transcript,
+        self,
+        root: Path,
+        *,
+        max_pending_bytes: int = MAX_PENDING_BYTES,
+        publish: Callable[[Path, Path], None] = _replace_transcript,
     ) -> None:
         self.root, self.max_pending_bytes, self.publish = root, max_pending_bytes, publish
 

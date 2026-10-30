@@ -96,7 +96,6 @@ class Tool(Enum):
     TILE_BALANCE = 59
 
 
-
 @dataclass(frozen=True, slots=True)
 class App:
     """A program an app key brings to the front, starting it if it isn't running.
@@ -136,7 +135,7 @@ def decode(code: int, apps: Sequence[App]) -> Request | None:
         return None
 
 
-def encode_indicator(layer: int, locked: bool, caps_word: bool) -> int:
+def encode_indicator(layer: int, *, locked: bool, caps_word: bool) -> int:
     """The indicator's state as a message's wparam. `layer`: the layer's value, 0 for the base layer."""
     return layer | locked << 4 | caps_word << 5
 

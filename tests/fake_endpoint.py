@@ -60,7 +60,7 @@ def fake_endpoint() -> Generator[FakeEndpoint]:
                     for chunk in endpoint.stream(request):
                         self.wfile.write(chunk)
                         self.wfile.flush()
-                except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
+                except BrokenPipeError, ConnectionResetError, ConnectionAbortedError:
                     pass  # Stopping a streamed request closes its socket.
                 return
             if endpoint.respond is not None:

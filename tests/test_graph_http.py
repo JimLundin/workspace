@@ -9,7 +9,7 @@ from contextlib import contextmanager
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from unittest import TestCase
 
-from assistant.graph_http import GraphError, Http
+from assistant.graph_http import GraphError, Http, Request
 
 
 @contextmanager
@@ -36,7 +36,7 @@ def endpoint(body: bytes, *, status: int = 200, release: threading.Event | None 
             pass
 
     server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
-    thread = threading.Thread(target=lambda: server.serve_forever(poll_interval=.02), daemon=True)
+    thread = threading.Thread(target=lambda: server.serve_forever(poll_interval=0.02), daemon=True)
     thread.start()
     try:
         yield f"http://127.0.0.1:{server.server_port}/fixture", started, requests
@@ -50,14 +50,14 @@ def endpoint(body: bytes, *, status: int = 200, release: threading.Event | None 
 
 def test_http_decodes_json_without_following_redirects_or_retrying_posts() -> None:
     with endpoint(b'{"result":42}', status=302) as (url, _started, requests):
-        assert Http().request("POST", url, {}, b"{}", threading.Event()) == (302, {"result": 42})
+        assert Http().request(Request("POST", url, (), b"{}"), threading.Event()) == (302, {"result": 42})
         assert requests == ["/fixture"]
 
 
 def test_http_bounds_responses_and_keeps_credentials_out_of_errors() -> None:
-    for body, reason in ((b'x' * 1_000_001, "size limit"), (b'fixture-token-secret malformed', "failed"), (b'[]', "unexpected")):
+    for body, reason in ((b"x" * 1_000_001, "size limit"), (b"fixture-token-secret malformed", "failed"), (b"[]", "unexpected")):
         with endpoint(body) as (url, _started, requests), TestCase().assertRaisesRegex(GraphError, reason) as failed:
-            Http().request("POST", url, {"Authorization": "Bearer fixture-header-secret"}, None, threading.Event())
+            Http().request(Request("POST", url, (("Authorization", "Bearer fixture-header-secret"),), None), threading.Event())
         assert "fixture-token-secret" not in str(failed.exception) and "fixture-header-secret" not in str(failed.exception)
         assert len(requests) == 1
 
@@ -65,8 +65,8 @@ def test_http_bounds_responses_and_keeps_credentials_out_of_errors() -> None:
 def test_http_stop_interrupts_a_stalled_request_and_does_not_repeat_it() -> None:
     release = threading.Event()
     cancel = threading.Event()
-    with endpoint(b'{}', release=release) as (url, started, requests), ThreadPoolExecutor(max_workers=1) as worker:
-        pending = worker.submit(Http().request, "POST", url, {}, b'{}', cancel)
+    with endpoint(b"{}", release=release) as (url, started, requests), ThreadPoolExecutor(max_workers=1) as worker:
+        pending = worker.submit(Http().request, Request("POST", url, (), b"{}"), cancel)
         try:
             assert started.wait(5)
             before = time.monotonic()
@@ -82,16 +82,16 @@ def test_http_stop_interrupts_a_stalled_request_and_does_not_repeat_it() -> None
 def test_cancelled_http_never_starts_a_request() -> None:
     cancel = threading.Event()
     cancel.set()
-    with endpoint(b'{}') as (url, _started, requests), TestCase().assertRaisesRegex(GraphError, "Stopped"):
-        Http().request("POST", url, {}, None, cancel)
+    with endpoint(b"{}") as (url, _started, requests), TestCase().assertRaisesRegex(GraphError, "Stopped"):
+        Http().request(Request("POST", url, (), None), cancel)
     assert not requests
 
 
 def test_http_has_an_overall_deadline_in_addition_to_socket_timeouts() -> None:
     release = threading.Event()
     with (
-        endpoint(b'{}', release=release) as (url, _started, requests),
+        endpoint(b"{}", release=release) as (url, _started, requests),
         TestCase().assertRaisesRegex(GraphError, "timed out"),
     ):
-        Http(timeout=.5).request("POST", url, {}, None, threading.Event())
+        Http(timeout=0.5).request(Request("POST", url, (), None), threading.Event())
     assert len(requests) == 1

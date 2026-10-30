@@ -16,10 +16,10 @@ def test_stopped_capture_cannot_publish_into_the_next_waveform() -> None:
         if calls == 1:
             first.set()
             release_first.wait(1)
-            return .9
+            return 0.9
         second.set()
         release_second.wait(1)
-        return .2
+        return 0.2
 
     meter = AudioMeter(read)
     try:
@@ -35,8 +35,8 @@ def test_stopped_capture_cannot_publish_into_the_next_waveform() -> None:
         release_second.set()
         deadline = time.monotonic() + 1
         while meter.level() is None and time.monotonic() < deadline:
-            time.sleep(.005)
-        assert meter.level() == .2
+            time.sleep(0.005)
+        assert meter.level() == 0.2
         meter.listen(enabled=False)
         assert meter.level() is None
     finally:
@@ -58,14 +58,14 @@ def test_blocked_observer_does_not_keep_old_audio_alive_or_read_after_close() ->
         else:
             blocked.set()
             release.wait(1)
-        return .5
+        return 0.5
 
     meter = AudioMeter(read, clock=lambda: now[0])
     try:
         meter.listen(enabled=True)
         assert first.wait(1) and blocked.wait(1)
-        assert meter.level() == .5
-        now[0] += .3
+        assert meter.level() == 0.5
+        now[0] += 0.3
         assert meter.level() is None, "A stalled driver must not show stale speech as current."
         meter.close()
         release.set()

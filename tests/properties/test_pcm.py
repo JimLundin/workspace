@@ -22,7 +22,7 @@ def audio_cases(draw: strategies.DrawFn) -> AudioCase:
     rate = draw(strategies.one_of(strategies.sampled_from((8_000, RATE, 44_100, 48_000, 384_000)), strategies.integers(8_000, 384_000)))
     channels = draw(strategies.integers(1, 8))
     bits, floating = draw(strategies.sampled_from(((16, False), (24, False), (32, False), (32, True))))
-    format = PcmFormat(rate, channels, bits, floating)
+    format = PcmFormat(rate, channels, bits, floating=floating)
     frames = draw(strategies.integers(0, 64))
     count = frames * channels
     if floating:
@@ -34,7 +34,7 @@ def audio_cases(draw: strategies.DrawFn) -> AudioCase:
         pcm = b"".join(sample.to_bytes(bits // 8, "little", signed=True) for sample in integers)
     # Duplicate cuts include empty packets; every cut remains on a whole frame.
     cuts = tuple(sorted(draw(strategies.lists(strategies.integers(0, frames), max_size=16))))
-    packets = tuple(pcm[start * format.frame_bytes:end * format.frame_bytes] for start, end in pairwise((0, *cuts, frames)))
+    packets = tuple(pcm[start * format.frame_bytes : end * format.frame_bytes] for start, end in pairwise((0, *cuts, frames)))
     return AudioCase(format, pcm, packets)
 
 

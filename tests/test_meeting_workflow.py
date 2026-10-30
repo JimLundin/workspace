@@ -52,8 +52,13 @@ class WorkflowRig:
     __slots__ = ("archive", "errors", "followups", "requests", "snapshots", "work", "workflow")
 
     def __init__(
-        self, folder: Path, *, work: WorkRig | None = None, submit: Callable[[str, str], None] | None = None,
-        read_work: Callable[[], WorkSnapshot] | None = None, start: bool = True,
+        self,
+        folder: Path,
+        *,
+        work: WorkRig | None = None,
+        submit: Callable[[str, str], None] | None = None,
+        read_work: Callable[[], WorkSnapshot] | None = None,
+        start: bool = True,
     ) -> None:
         self.archive = MeetingArchive(folder / "meetings")
         self.requests = MeetingRequests(folder / "followups")
@@ -62,9 +67,15 @@ class WorkflowRig:
         self.errors: list[str] = []
         self.snapshots: list[MeetingSnapshot] = []
         self.workflow = MeetingWorkflow(
-            self.archive, self.requests, self.followups, submit_identified=submit or self.work.agent.submit_identified,
-            read_work=read_work or self.work.agent.snapshot, retain_work=self.retain, publish=self.snapshots.append,
-            report_error=self.errors.append, clock=self.work.clock,
+            self.archive,
+            self.requests,
+            self.followups,
+            submit_identified=submit or self.work.agent.submit_identified,
+            read_work=read_work or self.work.agent.snapshot,
+            retain_work=self.retain,
+            publish=self.snapshots.append,
+            report_error=self.errors.append,
+            clock=self.work.clock,
         )
         if start:
             self.workflow.start()
@@ -117,7 +128,10 @@ def followup_for(bundle: TranscriptBundle, *, title: str = "Shipping review") ->
     quote = "The team decided to ship on Friday."
     citation = resolve_citation(bundle, bundle.transcripts[0].source.id, quote)
     return Followup(
-        bundle, title, (CitedText(quote, (citation,)),), (),
+        bundle,
+        title,
+        (CitedText(quote, (citation,)),),
+        (),
         (ActionItem("ship", "Ship the reviewed release.", (citation,), Unspecified.NOT_STATED, Unspecified.NOT_STATED),),
         (EmailDraft("followup", "Shipping follow-up", quote, (), (citation,), ("ship",)),),
     )
@@ -284,7 +298,9 @@ def test_progress_is_observed_by_task_and_narrative_completion_does_not_create_a
         assert isinstance(progress.work, ObservedWork) and isinstance(progress.work.task.state, Running)
         assert progress.work.task.checkpoint is not None and progress.work.task.checkpoint.summary == "Read the selected recording."
         rig.work.tasks.finish(
-            claim.run, Completed("The notes are ready in a claimed path, and the email draft is complete.", ()), at=rig.work.clock(),
+            claim.run,
+            Completed("The notes are ready in a claimed path, and the email draft is complete.", ()),
+            at=rig.work.clock(),
         )
         finished = rig.settle().preparations[0]
         assert isinstance(finished.packages, PackagesUnavailable) and not finished.packages.previous
@@ -338,12 +354,20 @@ def test_saved_edits_survive_late_packages_and_conflicts_retain_exact_unsaved_co
         assert any(isinstance(item, DraftSaved) and item.change == draft_change and item.revision.revision == 1 for item in saved.changes)
         assert any(isinstance(item, ActionSaved) and item.change == action_change and item.revision.revision == 1 for item in saved.changes)
         competing = rig.followups.save_draft(
-            prepared.request.task_id, published.version, "followup", replace(content, body="A newer saved edit."),
-            expected_revision=1, at=rig.work.clock(),
+            prepared.request.task_id,
+            published.version,
+            "followup",
+            replace(content, body="A newer saved edit."),
+            expected_revision=1,
+            at=rig.work.clock(),
         )
         unsaved = DraftChange(
-            prepared.request.task_id, published.version, "followup", replace(content, body="Keep my unsaved draft intact."),
-            1, "conflicting-draft-edit",
+            prepared.request.task_id,
+            published.version,
+            "followup",
+            replace(content, body="Keep my unsaved draft intact."),
+            1,
+            "conflicting-draft-edit",
         )
         rig.workflow.save_draft(unsaved)
         conflict = rig.refresh()
@@ -374,7 +398,12 @@ def test_missing_package_files_keep_previous_artifacts_and_a_failed_edit_for_rec
         published.directory.rename(retained)
         try:
             change = DraftChange(
-                prepared.request.task_id, published.version, "followup", DraftContent("My subject", "My unsaved body.", ()), 0, "missing-draft-edit",
+                prepared.request.task_id,
+                published.version,
+                "followup",
+                DraftContent("My subject", "My unsaved body.", ()),
+                0,
+                "missing-draft-edit",
             )
             rig.workflow.save_draft(change)
             unavailable = rig.refresh()
@@ -399,11 +428,20 @@ def test_repeated_failed_saves_publish_distinct_attempts_and_keep_queued_outcome
         published = publish_package(rig, prepared.request)
         rig.refresh()
         first_draft = DraftChange(
-            prepared.request.task_id, published.version, "followup", DraftContent("My subject", "Keep this draft intact.", ()), 0, "draft-first",
+            prepared.request.task_id,
+            published.version,
+            "followup",
+            DraftContent("My subject", "Keep this draft intact.", ()),
+            0,
+            "draft-first",
         )
         first_action = ActionChange(
-            prepared.request.task_id, published.version, "ship",
-            ActionContent("Ship the release.", Unspecified.NOT_STATED, Unspecified.NOT_STATED, ActionStatus.OPEN), 0, "action-first",
+            prepared.request.task_id,
+            published.version,
+            "ship",
+            ActionContent("Ship the release.", Unspecified.NOT_STATED, Unspecified.NOT_STATED, ActionStatus.OPEN),
+            0,
+            "action-first",
         )
         retained = published.directory.with_name(".persistent-save-failure")
         published.directory.rename(retained)
@@ -433,7 +471,12 @@ def test_repeated_failed_saves_publish_distinct_attempts_and_keep_queued_outcome
             hold.release.set()
             assert completed.wait(10)
             expected: tuple[DraftChange | ActionChange, ...] = (
-                first_draft, first_action, second_draft, third_draft, second_action, third_action,
+                first_draft,
+                first_action,
+                second_draft,
+                third_draft,
+                second_action,
+                third_action,
             )
             current = rig.workflow.snapshot()
             assert tuple(item.change for item in current.changes) == expected
@@ -442,8 +485,7 @@ def test_repeated_failed_saves_publish_distinct_attempts_and_keep_queued_outcome
             assert {item.reason for item in current.changes if isinstance(item, ActionSaveProblem)} == {action_failure.reason}
             retry_ids = {item.attempt_id for item in expected[2:]}
             updates = tuple(
-                snapshot for snapshot in rig.snapshots[published_count:]
-                if any(item.change.attempt_id in retry_ids for item in snapshot.changes)
+                snapshot for snapshot in rig.snapshots[published_count:] if any(item.change.attempt_id in retry_ids for item in snapshot.changes)
             )
             assert updates and all(tuple(item.change for item in snapshot.changes) == expected for snapshot in updates)
         finally:
@@ -459,7 +501,12 @@ def test_save_attempt_identity_is_required_for_drafts_and_actions() -> None:
         DraftChange("task", "a" * 64, "draft", DraftContent("Subject", "Body", ()), 0, "")
     with TestCase().assertRaisesRegex(ValueError, "action save attempt identity"):
         ActionChange(
-            "task", "a" * 64, "action", ActionContent("Finish it.", Unspecified.NOT_STATED, Unspecified.NOT_STATED, ActionStatus.OPEN), 0, "",
+            "task",
+            "a" * 64,
+            "action",
+            ActionContent("Finish it.", Unspecified.NOT_STATED, Unspecified.NOT_STATED, ActionStatus.OPEN),
+            0,
+            "",
         )
 
 

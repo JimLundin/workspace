@@ -30,7 +30,7 @@ class WindowsKeyEffects:
 class WindowsKeyDispatch:
     """Own tap recognition while the hook adapter owns input observation and delivery."""
 
-    __slots__ = ('effects', 'hwnd', 'state')
+    __slots__ = ("effects", "hwnd", "state")
 
     def __init__(self, hwnd: int, effects: WindowsKeyEffects | None = None) -> None:
         self.hwnd = hwnd
@@ -42,7 +42,8 @@ class WindowsKeyDispatch:
             key = self.effects.read(lparam)
             if not key.flags & inputs.LLKHF_INJECTED or key.extra == LAYOUT_MAGIC:
                 down = wparam in (system.WM_KEYDOWN, system.WM_SYSKEYDOWN)
-                if self.state.key(key.vk, down):
+                self.state, toggle = self.state.key(key.vk, down=down)
+                if toggle:
                     self.effects.toggle(self.hwnd)
         return self.effects.forward(code, wparam, lparam)
 
@@ -115,7 +116,7 @@ class RecoveryGuard(Protocol):
 class NativeRecoveryGuard:
     """Own the recovery subprocess and its bounded readiness read."""
 
-    __slots__ = ('process',)
+    __slots__ = ("process",)
 
     def __init__(self, process: subprocess.Popen[bytes]) -> None:
         self.process = process
@@ -148,11 +149,16 @@ class NativeRecoveryGuard:
 
 def launch_recovery_guard() -> RecoveryGuard:
     python = Path(sys.executable).with_name("python.exe")
-    return NativeRecoveryGuard(subprocess.Popen(
-        [str(python), "-m", "assistant.taskbar_guard", str(os.getpid())],
-        cwd=Path(__file__).resolve().parent.parent, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
-        creationflags=subprocess.CREATE_NO_WINDOW | subprocess.CREATE_BREAKAWAY_FROM_JOB,
-    ))
+    return NativeRecoveryGuard(
+        subprocess.Popen(
+            [str(python), "-m", "assistant.taskbar_guard", str(os.getpid())],
+            cwd=Path(__file__).resolve().parent.parent,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            creationflags=subprocess.CREATE_NO_WINDOW | subprocess.CREATE_BREAKAWAY_FROM_JOB,
+        )
+    )
 
 
 class TaskbarControl:
@@ -160,8 +166,7 @@ class TaskbarControl:
 
     __slots__ = ("closed", "desktop", "guard", "launch", "lock", "ready", "revealed")
 
-    def __init__(self, desktop: TaskbarDesktop = desktop_shell,
-                 launch: Callable[[], RecoveryGuard] = launch_recovery_guard) -> None:
+    def __init__(self, desktop: TaskbarDesktop = desktop_shell, launch: Callable[[], RecoveryGuard] = launch_recovery_guard) -> None:
         self.closed = False
         self.desktop = desktop
         self.launch = launch

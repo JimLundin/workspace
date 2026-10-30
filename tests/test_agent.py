@@ -10,10 +10,12 @@ from pathlib import Path
 from typing import Final, cast
 
 from assistant.agent import Agent, Output, allowed, key_strokes
+from assistant.agent_history import History
 from assistant.agent_session import LiveMessage, Succeeded, ToolActivity, ToolStatus
 from assistant.feed_agent_tools import request
 from assistant.geometry import Shot
 from assistant.llm import Json, Settings, ToolCall, settings_from
+from assistant.work_bridge_contracts import BridgeCommand
 from assistant.workspace import Workspace
 from automation.execution import WorkExecution
 from tests.fake_endpoint import FakeEndpoint, Received, Reply, fake_endpoint, sse
@@ -27,16 +29,31 @@ def dumps(value: Json) -> str:
 
 def response(*output: Json) -> Reply:
     """A complete Responses SSE event; quick chat fixtures use Chat Completions."""
-    return sse(dumps({"type": "response.completed", "sequence_number": 0, "response": {
-        "id": f"resp_{uuid.uuid4().hex}", "object": "response", "created_at": 1,
-        "model": "gpt-6-astra", "status": "completed", "output": list(output),
-        "usage": {"input_tokens": 10, "output_tokens": 10, "total_tokens": 20},
-    }}))
+    return sse(
+        dumps(
+            {
+                "type": "response.completed",
+                "sequence_number": 0,
+                "response": {
+                    "id": f"resp_{uuid.uuid4().hex}",
+                    "object": "response",
+                    "created_at": 1,
+                    "model": "gpt-6-astra",
+                    "status": "completed",
+                    "output": list(output),
+                    "usage": {"input_tokens": 10, "output_tokens": 10, "total_tokens": 20},
+                },
+            }
+        )
+    )
 
 
 def message(text: str) -> Json:
     return {
-        "id": f"msg_{uuid.uuid4().hex}", "type": "message", "role": "assistant", "status": "completed",
+        "id": f"msg_{uuid.uuid4().hex}",
+        "type": "message",
+        "role": "assistant",
+        "status": "completed",
         "content": [{"type": "output_text", "text": text, "annotations": []}],
     }
 
@@ -44,8 +61,14 @@ def message(text: str) -> Json:
 def calls(*tools: tuple[str, Mapping[str, Json]]) -> Reply:
     """The model asking for tools."""
     tool_calls: list[Json] = [
-        {"id": f"fc_{uuid.uuid4().hex}", "call_id": f"call_{uuid.uuid4().hex}_{i}", "type": "function_call",
-         "name": name, "arguments": dumps(dict(args)), "status": "completed"}
+        {
+            "id": f"fc_{uuid.uuid4().hex}",
+            "call_id": f"call_{uuid.uuid4().hex}_{i}",
+            "type": "function_call",
+            "name": name,
+            "arguments": dumps(dict(args)),
+            "status": "completed",
+        }
         for i, (name, args) in enumerate(tools)
     ]
     return response(message("On it."), *tool_calls)
@@ -68,7 +91,12 @@ class FakeMachine:
         self.executed: list[tuple[str, float, str | None, threading.Event | None]] = []
 
     def run_powershell(
-        self, command: str, timeout_s: float, *, cwd: str | None = None, cancel: threading.Event | None = None,
+        self,
+        command: str,
+        timeout_s: float,
+        *,
+        cwd: str | None = None,
+        cancel: threading.Event | None = None,
     ) -> tuple[int, str]:
         self.log.append(f"ran {command}")
         self.executed.append((command, timeout_s, cwd, cancel))
@@ -110,7 +138,7 @@ class FakeMachine:
     def move_mouse(self, x: int, y: int) -> None:
         self.log.append(f"move {x},{y}")
 
-    def mouse_button(self, button: str, down: bool) -> None:
+    def mouse_button(self, button: str, *, down: bool) -> None:
         self.log.append(f"button {button} {down}")
 
     def type_text(self, text: str) -> None:
@@ -205,14 +233,27 @@ class Rig:
         self.window = FakeWindow()
         self.stop = threading.Event()
         self.journal: list[dict[str, Json]] = []
-        self.history: list[Json] = []
+        self.history = History()
 
     def run(
-        self, task: str = "do it", max_steps: int = 10, *, after_step: Callable[[], None] | None = None,
-        approvals: bool = False, effort: str = "max",
+        self,
+        task: str = "do it",
+        max_steps: int = 10,
+        *,
+        after_step: Callable[[], None] | None = None,
+        approvals: bool = False,
+        effort: str = "max",
     ) -> None:
         settings = Settings(
-            self.endpoint.url, "k", "transcribe", "chat", "gpt-6-astra", "", "", agent_reasoning_effort=effort, agent_approvals=approvals,
+            self.endpoint.url,
+            "k",
+            "transcribe",
+            "chat",
+            "gpt-6-astra",
+            "",
+            "",
+            agent_reasoning_effort=effort,
+            agent_approvals=approvals,
         )
         agent = Agent(
             settings,
@@ -245,18 +286,28 @@ class ToolRig:
     __slots__ = ("agent", "journal", "machine", "window")
 
     def __init__(
-        self, *, approvals: bool = False, workspace: Workspace | None = None, machine: FakeMachine | None = None,
+        self,
+        *,
+        approvals: bool = False,
+        workspace: Workspace | None = None,
+        machine: FakeMachine | None = None,
         work: WorkExecution | None = None,
         clock: Callable[[], datetime] = datetime.now,
-        feed_request: Callable[[dict[str, object]], str] = request,
+        feed_request: Callable[[BridgeCommand], str] = request,
     ) -> None:
         self.machine = machine if machine is not None else FakeMachine()
         self.window = FakeWindow()
         self.journal: list[dict[str, Json]] = []
         self.agent = Agent(
-            Settings("", "", "", "", "", "", "", agent_approvals=approvals), self.machine, self.window,
-            threading.Event(), journal=self.journal.append, workspace=workspace, work=work,
-            clock=clock, feed_request=feed_request,
+            Settings("", "", "", "", "", "", "", agent_approvals=approvals),
+            self.machine,
+            self.window,
+            threading.Event(),
+            journal=self.journal.append,
+            workspace=workspace,
+            work=work,
+            clock=clock,
+            feed_request=feed_request,
         )
 
     def call(self, name: str, **arguments: Json) -> Output:
@@ -275,6 +326,45 @@ def test_the_agent_uses_tools_then_answers(tmp_path: Path) -> None:
         assert rig.window.log[-1] == "done There is one file: notes.txt."
         assert rig.sent(0)[0] == {"role": "user", "content": "what's in my folder?"}
         assert cast(dict[str, Json], json.loads(endpoint.received[0].body))["model"] == "gpt-6-astra"
+
+
+def test_tool_replay_omits_absent_namespace_and_retains_reasoning_across_follow_ups() -> None:
+    # Workspace must adapt nullable output metadata before validating replay input;
+    # otherwise the second model turn and subsequent requests fail before research.
+    reasoning: Json = {
+        "id": "rs_namespace",
+        "type": "reasoning",
+        "summary": [],
+        "encrypted_content": "opaque-test-reasoning",
+    }
+    call: Json = {
+        "id": "fc_namespace",
+        "call_id": "call_namespace",
+        "type": "function_call",
+        "name": "get_clipboard",
+        "arguments": "{}",
+        "namespace": None,
+        "status": "completed",
+    }
+    with fake_endpoint() as endpoint:
+        rig = Rig(endpoint, response(reasoning, call), says("Read the clipboard."))
+        rig.run()
+        assert rig.window.log[-1] == "done Read the clipboard."
+        endpoint.replies = [says("The earlier result is retained.")]
+        rig.run("What did you find?")
+        assert rig.window.log[-1] == "done The earlier result is retained."
+        for index in (1, 2):
+            replay = rig.sent(index)
+            assert next(item for item in replay if item.get("id") == "rs_namespace") == reasoning
+            assert next(item for item in replay if item.get("id") == "fc_namespace") == {
+                "id": "fc_namespace",
+                "call_id": "call_namespace",
+                "type": "function_call",
+                "name": "get_clipboard",
+                "arguments": "{}",
+                "status": "completed",
+            }
+            assert any(item.get("call_id") == "call_namespace" and item.get("output") == "clipped" for item in replay)
 
 
 def test_default_agent_uses_sol_with_low_reasoning_across_tool_turns() -> None:
@@ -527,7 +617,7 @@ def test_follow_ups_keep_only_recent_screenshots_in_memory_and_in_requests() -> 
         rig.run("Look at the screen.")
         endpoint.replies = [calls(("screenshot", {})), says("It changed.")]
         rig.run("Look again.")
-        assert json.dumps(rig.history).count("data:image/png") == 2
+        assert rig.history.encoded().decode().count("data:image/png") == 2
         assert len([m for m in rig.sent() if "input_image" in json.dumps(m.get("output"))]) == 2
         tool_calls = [item["call_id"] for item in rig.sent() if item.get("type") == "function_call"]
         results = [item["call_id"] for item in rig.sent() if item.get("type") == "function_call_output"]
@@ -613,8 +703,10 @@ def test_stop_prevents_actions_even_with_approvals_disabled(tmp_path: Path) -> N
     target = tmp_path / "not-written.txt"
     for name, args in (
         ("write_file", {"path": str(target), "content": "no"}),
-        ("run_powershell", {"command": "Get-Date"}), ("open", {"target": str(target)}),
-        ("type_text", {"text": "no"}), ("set_clipboard", {"text": "no"}),
+        ("run_powershell", {"command": "Get-Date"}),
+        ("open", {"target": str(target)}),
+        ("type_text", {"text": "no"}),
+        ("set_clipboard", {"text": "no"}),
     ):
         result = agent.call(ToolCall("stopped", name, json.dumps(args)))
         assert not result.ok and result.text == "Stopped by the user."
@@ -743,18 +835,18 @@ def test_without_a_workspace_there_are_no_source_tools() -> None:
 
 
 def test_git_external_execution_options_require_confirmation() -> None:
-    for command in ('git diff --ext-diff', 'git log --textconv', 'git diff --output=out.txt', 'git diff --o=out.txt'):
+    for command in ("git diff --ext-diff", "git log --textconv", "git diff --output=out.txt", "git diff --o=out.txt"):
         assert not allowed(command), command
 
 
 def test_approval_mode_defers_runtime_checks_until_keeper_review(tmp_path: Path) -> None:
     workspace = source(tmp_path)
-    marker = tmp_path / 'outside-workspace'
+    marker = tmp_path / "outside-workspace"
     content = f'from pathlib import Path\nPath({str(marker)!r}).write_text("executed")\n'
     rig = ToolRig(approvals=True, workspace=workspace)
     assert rig.call("write_source", path="candidate.py", content=content).ok
     assert rig.call("check_changes").ok
-    assert not marker.exists(), 'unapproved code executed during checks'
+    assert not marker.exists(), "unapproved code executed during checks"
 
 
 def test_fast_editing_checks_leave_native_failures_for_the_full_install_gate(tmp_path: Path) -> None:
@@ -789,10 +881,14 @@ def test_runtime_failure_returns_to_the_agent_to_fix_before_installing(tmp_path:
     apply = ("apply_changes", {"summary": "Fix greeting"})
     with fake_endpoint() as endpoint:
         rig = Rig(
-            endpoint, calls(("write_source", {"path": "config.py", "content": "GREETING = ''\n"})),
-            calls(check), calls(apply),
+            endpoint,
+            calls(("write_source", {"path": "config.py", "content": "GREETING = ''\n"})),
+            calls(check),
+            calls(apply),
             calls(("write_source", {"path": "config.py", "content": "GREETING = 'hello'\n"})),
-            calls(check), calls(apply), workspace=workspace,
+            calls(check),
+            calls(apply),
+            workspace=workspace,
         )
         rig.run("Fix the greeting")
         assert "FAILED tests.test_config.test_greeting" in rig.results(2)[0]

@@ -89,20 +89,35 @@ def followup_response(bundle: TranscriptBundle) -> dict[str, Json]:
     decision: Json = {"source_id": first, "quote": DECISION}
     unassigned: Json = {"source_id": second, "quote": UNASSIGNED}
     return {
-        "source_digest": bundle.fingerprint, "title": "Release planning follow-through",
+        "source_digest": bundle.fingerprint,
+        "title": "Release planning follow-through",
         "notes": [{"text": "The meeting covered release notes and a customer review.", "citations": [assignment, unassigned]}],
         "decisions": [{"text": "Ship on Friday.", "citations": [decision]}],
         "actions": [
-            {"id": "notes", "text": "Send the release notes.", "citations": [assignment],
-             "owner": {"kind": "named", "name": "Ada", "evidence": assignment},
-             "due": {"kind": "stated", "text": "Thursday", "evidence": assignment}},
-            {"id": "review", "text": "Arrange a customer review.", "citations": [unassigned],
-             "owner": {"kind": "unspecified"}, "due": {"kind": "unspecified"}},
+            {
+                "id": "notes",
+                "text": "Send the release notes.",
+                "citations": [assignment],
+                "owner": {"kind": "named", "name": "Ada", "evidence": assignment},
+                "due": {"kind": "stated", "text": "Thursday", "evidence": assignment},
+            },
+            {
+                "id": "review",
+                "text": "Arrange a customer review.",
+                "citations": [unassigned],
+                "owner": {"kind": "unspecified"},
+                "due": {"kind": "unspecified"},
+            },
         ],
         "drafts": [
-            {"id": "follow-up", "subject": "Release planning follow-up", "body": BODY,
-             "recipients": [{"name": "Ada", "email": "ada@example.test", "citations": [address]}],
-             "citations": [assignment, address, unassigned], "action_ids": ["notes", "review"]},
+            {
+                "id": "follow-up",
+                "subject": "Release planning follow-up",
+                "body": BODY,
+                "recipients": [{"name": "Ada", "email": "ada@example.test", "citations": [address]}],
+                "citations": [assignment, address, unassigned],
+                "action_ids": ["notes", "review"],
+            },
         ],
     }
 
@@ -213,12 +228,16 @@ def test_model_cannot_invent_assignments_addresses_sources_or_unattached_evidenc
         invalid.append(candidate)
     candidate = deepcopy(source)
     response_item(candidate, "actions")["due"] = {
-        "kind": "stated", "text": "Friday", "evidence": {"source_id": bundle.transcripts[0].source.id, "quote": ASSIGNMENT},
+        "kind": "stated",
+        "text": "Friday",
+        "evidence": {"source_id": bundle.transcripts[0].source.id, "quote": ASSIGNMENT},
     }
     invalid.append(candidate)
     candidate = deepcopy(source)
     response_item(candidate, "actions")["due"] = {
-        "kind": "stated", "text": "Friday", "evidence": {"source_id": bundle.transcripts[0].source.id, "quote": DECISION},
+        "kind": "stated",
+        "text": "Friday",
+        "evidence": {"source_id": bundle.transcripts[0].source.id, "quote": DECISION},
     }
     invalid.append(candidate)
     for email in ("invented@example.test", "da@example.test"):
@@ -516,7 +535,11 @@ class CommittedReadGate(FollowupStore):
     __slots__ = ("entered", "kind", "observer", "release")
 
     def __init__(
-        self, observer: FollowupStore, kind: Literal["draft", "action"], entered: threading.Event, release: threading.Event,
+        self,
+        observer: FollowupStore,
+        kind: Literal["draft", "action"],
+        entered: threading.Event,
+        release: threading.Event,
     ) -> None:
         super().__init__(observer.root)
         self.observer, self.kind, self.entered, self.release = observer, kind, entered, release
@@ -607,10 +630,8 @@ def test_current_edit_state_must_agree_with_its_immutable_committed_history(tmp_
     followup = parse_followup(bundle, json.dumps(followup_response(bundle)))
     store = FollowupStore(tmp_path / "packages")
     published = store.publish(store.plan("release-task", followup))
-    draft = store.save_draft(published.task_id, published.version, "follow-up", DraftContent("Saved", "Saved body.", ()),
-                             expected_revision=0, at=10)
-    action = store.save_action(published.task_id, published.version, "review", published.followup.actions[1].content,
-                               expected_revision=0, at=10)
+    draft = store.save_draft(published.task_id, published.version, "follow-up", DraftContent("Saved", "Saved body.", ()), expected_revision=0, at=10)
+    action = store.save_action(published.task_id, published.version, "review", published.followup.actions[1].content, expected_revision=0, at=10)
     database = store.root / published.task_id / "edits.sqlite3"
     with closing(sqlite3.connect(database)) as connection, connection:
         connection.execute("UPDATE edits SET at=11 WHERE version=?", (published.version,))
@@ -619,10 +640,10 @@ def test_current_edit_state_must_agree_with_its_immutable_committed_history(tmp_
     with TestCase().assertRaisesRegex(ValueError, "committed history"):
         store.actions(published.task_id, published.version)
     with TestCase().assertRaisesRegex(ValueError, "committed history"):
-        store.save_draft(published.task_id, published.version, "follow-up", replace(draft.content, body="A new edit."),
-                         expected_revision=1, at=20)
+        store.save_draft(published.task_id, published.version, "follow-up", replace(draft.content, body="A new edit."), expected_revision=1, at=20)
     with TestCase().assertRaisesRegex(ValueError, "committed history"):
-        store.save_action(published.task_id, published.version, "review", replace(action.content, status=ActionStatus.DONE),
-                          expected_revision=1, at=20)
+        store.save_action(
+            published.task_id, published.version, "review", replace(action.content, status=ActionStatus.DONE), expected_revision=1, at=20
+        )
     assert store.draft_revision(published.task_id, published.version, "follow-up", 1) == draft
     assert store.action_revision(published.task_id, published.version, "review", 1) == action

@@ -147,14 +147,14 @@ def activity_time(created: Json, hint: Json, observed_at: float) -> SourceTime:
     label = string(hint, limit=256).strip()
     match created:
         case bool():
-            raise BrowserError('Teams returned an invalid activity date.')
+            raise BrowserError("Teams returned an invalid activity date.")
         case None | 0:
             day = datetime.fromtimestamp(observed_at, UTC).astimezone().date()
             return SourceDateHint(label, day) if label else SourceDateStatus.UNKNOWN
         case int() | float() as stamp if 0 < stamp < 100_000_000_000:
             return SourceDate(float(stamp))
         case _:
-            raise BrowserError('Teams returned an invalid activity date.')
+            raise BrowserError("Teams returned an invalid activity date.")
 
 
 def activity_observation(value: Json, at: float) -> ActivityObservation:
@@ -170,9 +170,17 @@ def activity_observation(value: Json, at: float) -> ActivityObservation:
         kind = string(row.get("kind"), limit=32)
         if not identity.isascii() or not identity.isdecimal() or kind not in kinds:
             raise BrowserError("Teams did not expose an exact activity identity.")
-        updates.append(Update(TeamsActivity(identity), string(row.get("title"), limit=512, required=True),
-                              string(row.get("text"), limit=4000, required=True), "Teams", at, kinds[kind],
-                              source_time=activity_time(row.get('created_at'), row.get('date_hint', ''), at)))
+        updates.append(
+            Update(
+                TeamsActivity(identity),
+                string(row.get("title"), limit=512, required=True),
+                string(row.get("text"), limit=4000, required=True),
+                "Teams",
+                at,
+                kinds[kind],
+                source_time=activity_time(row.get("created_at"), row.get("date_hint", ""), at),
+            )
+        )
     return ActivityObservation(tuple(updates), ready=ready)
 
 
@@ -201,7 +209,7 @@ class Observation:
     title: str
     conversations: tuple[Conversation, ...]
     messages: tuple[Message, ...]
-    editor_ready: bool
+    editor_ready: bool = field(kw_only=True)
 
 
 def observation(value: Json, at: float) -> Observation:
@@ -218,8 +226,11 @@ def observation(value: Json, at: float) -> Observation:
         kind = row.get("kind")
         if kind not in ("chat", "meeting"):
             raise BrowserError("Teams returned an invalid conversation kind.")
-        chats.append(Conversation(chat_identity(row.get("identity")), string(row.get("title"), limit=300, required=True),
-                                  "meeting" if kind == "meeting" else "chat"))
+        chats.append(
+            Conversation(
+                chat_identity(row.get("identity")), string(row.get("title"), limit=300, required=True), "meeting" if kind == "meeting" else "chat"
+            )
+        )
     messages: list[Message] = []
     for raw in raw_messages:
         row = obj(raw)
@@ -229,13 +240,22 @@ def observation(value: Json, at: float) -> Observation:
         if not isinstance(reactions, list) or len(reactions) > 20:
             raise BrowserError("Teams returned invalid reactions.")
         if current:
-            messages.append(Message(current, string(row.get("identity"), limit=512, required=True),
-                                    string(row.get("sender"), limit=300, required=True), string(row.get("text"), required=True),
-                                    float(stamp), at, tuple(string(item, limit=1000) for item in reactions), own=row.get("own") is True))
+            messages.append(
+                Message(
+                    current,
+                    string(row.get("identity"), limit=512, required=True),
+                    string(row.get("sender"), limit=300, required=True),
+                    string(row.get("text"), required=True),
+                    float(stamp),
+                    at,
+                    tuple(string(item, limit=1000) for item in reactions),
+                    own=row.get("own") is True,
+                )
+            )
     ready = data.get("editor_ready")
     if not isinstance(ready, bool):
         raise BrowserError("Teams returned an invalid editor state.")
-    return Observation(current, string(data.get("title", ""), limit=300), tuple(chats), tuple(messages), ready)
+    return Observation(current, string(data.get("title", ""), limit=300), tuple(chats), tuple(messages), editor_ready=ready)
 
 
 class TeamsWeb:
@@ -260,13 +280,17 @@ class TeamsWeb:
                     found = activity_observation(self.evaluate(ACTIVITY_OBSERVE, cancel, target=self.target), time.time())
                     if found.ready:
                         return found
-                    self.evaluate("""(() => {
+                    self.evaluate(
+                        """(() => {
                       const button=document.querySelector('[data-tid="app-layout-area--nav"] button[aria-label="Activity"]');
                       if(!button)return false;button.click();return true;
-                    })()""", cancel, target=self.target)
+                    })()""",
+                        cancel,
+                        target=self.target,
+                    )
                 except NavigationContextError:
                     pass
-                if time.monotonic() >= deadline or cancel.wait(.4):
+                if time.monotonic() >= deadline or cancel.wait(0.4):
                     break
         raise ChatUnavailableError("loading")
 
@@ -274,56 +298,83 @@ class TeamsWeb:
         """Use the exact activity menu, and verify its resulting read action label."""
         self.activity(cancel)
         with self.browser.awake(self.target, cancel):
-            opened = self.evaluate("""(() => {
-              const wrap=document.getElementById(""" + json.dumps(identity) + """);
+            opened = self.evaluate(
+                """(() => {
+              const wrap=document.getElementById("""
+                + json.dumps(identity)
+                + """);
               if(wrap?.getAttribute('data-tid')!=='activity-feed-list-item-wrap')return false;
               const row=wrap.querySelector('[data-tid="activity-feed-list-item"]');
               if(!row)return false;row.dispatchEvent(new MouseEvent('mouseover',{bubbles:true}));
               const button=row.querySelector('button[id^="activity-feed-item-context-menu-"]');
               if(!button)return false;button.click();return true;
-            })()""", cancel, target=self.target)
-            if opened is not True or cancel.wait(.2):
+            })()""",
+                cancel,
+                target=self.target,
+            )
+            if opened is not True or cancel.wait(0.2):
                 return False
-            label = self.evaluate("document.querySelector('[data-tid=\"toggleActivityRead\"]')?.innerText || ''", cancel,
-                                  target=self.target)
+            label = self.evaluate("document.querySelector('[data-tid=\"toggleActivityRead\"]')?.innerText || ''", cancel, target=self.target)
             if label == "Mark as unread":
                 self.dismiss_activity_menu(cancel)
                 return True
             if label != "Mark as read":
                 self.dismiss_activity_menu(cancel)
                 return False
-            self.evaluate("""(() => {
+            self.evaluate(
+                """(() => {
               const item=document.querySelector('[data-tid="toggleActivityRead"]');
               if(item?.innerText!=='Mark as read')return false;item.click();return true;
-            })()""", cancel, target=self.target)
-            if cancel.wait(.4):
+            })()""",
+                cancel,
+                target=self.target,
+            )
+            if cancel.wait(0.4):
                 return False
             # Reopen that same menu. A disappeared item or unchanged label is not confirmation.
-            self.evaluate("""(() => {
-              document.getElementById(""" + json.dumps(identity) + """)
+            self.evaluate(
+                """(() => {
+              document.getElementById("""
+                + json.dumps(identity)
+                + """)
                 ?.querySelector('button[id^="activity-feed-item-context-menu-"]')?.click();return true;
-            })()""", cancel, target=self.target)
-            if cancel.wait(.2):
+            })()""",
+                cancel,
+                target=self.target,
+            )
+            if cancel.wait(0.2):
                 return False
-            verified = self.evaluate("document.querySelector('[data-tid=\"toggleActivityRead\"]')?.innerText || ''", cancel,
-                                      target=self.target) == "Mark as unread"
+            verified = (
+                self.evaluate("document.querySelector('[data-tid=\"toggleActivityRead\"]')?.innerText || ''", cancel, target=self.target)
+                == "Mark as unread"
+            )
             self.dismiss_activity_menu(cancel)
             return verified
 
     def dismiss_activity_menu(self, cancel: threading.Event) -> None:
-        self.evaluate("""(() => {
+        self.evaluate(
+            """(() => {
           document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',code:'Escape',bubbles:true}));return true;
-        })()""", cancel, target=self.target)
+        })()""",
+            cancel,
+            target=self.target,
+        )
 
     def open_activity(self, identity: str, cancel: threading.Event) -> None:
         self.activity(cancel)
         with self.browser.awake(self.target, cancel):
-            result = self.evaluate("""(() => {
-              const wrap=document.getElementById(""" + json.dumps(identity) + """);
+            result = self.evaluate(
+                """(() => {
+              const wrap=document.getElementById("""
+                + json.dumps(identity)
+                + """);
               if(wrap?.getAttribute('data-tid')!=='activity-feed-list-item-wrap')return false;
               const row=wrap.querySelector('[data-tid="activity-feed-list-item"]');
               if(!row)return false;row.click();return true;
-            })()""", cancel, target=self.target)
+            })()""",
+                cancel,
+                target=self.target,
+            )
             if result is not True:
                 raise BrowserError("That Teams activity is no longer rendered. Refresh before opening it.")
         self.browser.activate_page(self.target, cancel)
@@ -354,8 +405,9 @@ class TeamsWeb:
         if connection is None:
             raise BrowserError("The Teams browser connection is unavailable.")
         for host in sorted(HOSTS):
-            connection.call("Browser.setPermission", {"permission": {"name": "notifications"},
-                                                     "setting": "denied", "origin": "https://" + host}, cancel)
+            connection.call(
+                "Browser.setPermission", {"permission": {"name": "notifications"}, "setting": "denied", "origin": "https://" + host}, cancel
+            )
         rows = self.pages(cancel)
         teams = tuple(page for page in rows if urlsplit(string(page.get("url"))).hostname in HOSTS)
         if not teams:
@@ -375,17 +427,24 @@ class TeamsWeb:
             try:
                 return observation(self.evaluate(OBSERVE, cancel, target=target), time.time())
             except NavigationContextError:
-                if cancel.wait(.15):
+                if cancel.wait(0.15):
                     raise InterruptedError("Stopped while Teams was navigating.") from None
         raise ChatUnavailableError("loading")
 
     def show_chats(self, cancel: threading.Event, *, target: str = "") -> bool:
-        return self.evaluate("""(() => {
+        return (
+            self.evaluate(
+                """(() => {
           if(document.querySelector('[role="treeitem"][data-fui-tree-item-value]'))return false;
           const chat=document.querySelector('[data-tid="app-layout-area--nav"] button[aria-label="Chat"]');
           if(!chat)return false;
           chat.click();return true;
-        })()""", cancel, target=target) is True
+        })()""",
+                cancel,
+                target=target,
+            )
+            is True
+        )
 
     def discover(self, cancel: threading.Event) -> Observation:
         """Restore Chat before the first collection, including an empty Activity pane."""
@@ -398,7 +457,7 @@ class TeamsWeb:
             while not current.current and not current.conversations and time.monotonic() < deadline:
                 if not opened:
                     opened = self.show_chats(cancel)
-                if cancel.wait(.3):
+                if cancel.wait(0.3):
                     raise BrowserError("Stopped while Teams was loading.")
                 current = self.read(cancel)
             return current
@@ -419,7 +478,7 @@ class TeamsWeb:
         while not current.current and not current.conversations and time.monotonic() < deadline:
             if not opened:
                 opened = self.show_chats(cancel, target=target)
-            if cancel.wait(.3):
+            if cancel.wait(0.3):
                 raise BrowserError("Stopped while Teams was loading.")
             current = self.read(cancel, target=target)
         if current.current == identity and current.editor_ready:
@@ -440,7 +499,7 @@ class TeamsWeb:
             opened = self.show_chats(cancel, target=target)
             if opened:
                 deadline = time.monotonic() + 15
-                while not cancel.wait(.3):
+                while not cancel.wait(0.3):
                     current = self.read(cancel, target=target)
                     if current.current == identity and current.editor_ready:
                         self.opening.pop(target or self.target, None)
@@ -451,7 +510,7 @@ class TeamsWeb:
         if result is not True:
             return self._reopen(identity, cancel, target=target)
         deadline = time.monotonic() + 15
-        while not cancel.wait(.3):
+        while not cancel.wait(0.3):
             current = self.read(cancel, target=target)
             if current.current == identity and current.editor_ready:
                 self.opening.pop(target or self.target, None)
@@ -475,14 +534,18 @@ class TeamsWeb:
             with contextlib.suppress(NavigationLoadingError):
                 self.browser.request("open", {"url": url, "target_id": selected}, cancel)
         deadline = time.monotonic() + 20
-        while not cancel.wait(.3):
+        while not cancel.wait(0.3):
             try:
-                self.evaluate("""(() => {
+                self.evaluate(
+                    """(() => {
                   if(location.pathname!=='/dl/launcher/launcher.html')return false;
                   const web=document.querySelector('#openTeamsClientInBrowser');
                   if(!web || web.disabled)return false;
                   web.click();return true;
-                })()""", cancel, target=target)
+                })()""",
+                    cancel,
+                    target=target,
+                )
                 current = self.read(cancel, target=target)
                 if current.current == identity and current.editor_ready:
                     self.opening.pop(selected, None)
@@ -503,32 +566,38 @@ class TeamsWeb:
         before = self._select(identity, cancel)
         known = {message.identity for message in before.messages}
         encoded, content = json.dumps(identity), json.dumps(text)
-        prepared = self.evaluate(f"""(() => {{
+        prepared = self.evaluate(
+            f"""(() => {{
           const send=document.querySelector('[data-tid="sendMessageCommands-send"]');
           const editor=document.querySelector('[data-tid="ckeditor"][contenteditable="true"]');
           if(send?.getAttribute('data-track-thread-id')!=={encoded} || !editor || editor.innerText.trim()) return false;
           editor.focus();
           return document.execCommand('insertText', false, {content});
-        }})()""", cancel)
+        }})()""",
+            cancel,
+        )
         if prepared is not True:
             raise BrowserError("The Teams reply editor is unavailable or already contains a draft. Nothing was sent.")
-        sent = self.evaluate(f"""(() => {{
+        sent = self.evaluate(
+            f"""(() => {{
           const send=document.querySelector('[data-tid="sendMessageCommands-send"]');
           const editor=document.querySelector('[data-tid="ckeditor"][contenteditable="true"]');
           if(send?.getAttribute('data-track-thread-id')!=={encoded} || !editor ||
              editor.innerText.replace(/\\u00a0/g,' ').trim()!=={content}.trim() || send.disabled ||
              send.getAttribute('aria-disabled')==='true') return false;
           send.click(); return true;
-        }})()""", cancel)
+        }})()""",
+            cancel,
+        )
         if sent is not True:
             raise BrowserError("Teams did not accept the prepared reply. Inspect its editor before trying again.")
         deadline = time.monotonic() + 12
-        while not cancel.wait(.4):
+        while not cancel.wait(0.4):
             after = self.read(cancel)
             if after.current != identity:
                 break
             candidates = tuple(message for message in after.messages if message.identity not in known and message.text.strip() == text.strip())
-            cleared = self.evaluate("!document.querySelector('[data-tid=\"ckeditor\"][contenteditable=\"true\"]')?.innerText.trim()", cancel)
+            cleared = self.evaluate('!document.querySelector(\'[data-tid="ckeditor"][contenteditable="true"]\')?.innerText.trim()', cancel)
             if len(candidates) == 1 and cleared is True:
                 return candidates
             if time.monotonic() >= deadline:

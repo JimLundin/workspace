@@ -61,8 +61,9 @@ def run_isolated(name: str) -> int:
     job = ProcessJob()
     try:
         with inherited_stream(-10) as stdin, inherited_stream(-11) as stdout, inherited_stream(-12) as stderr:
-            startup = STARTUPINFOW(cb=ctypes.sizeof(STARTUPINFOW), lpDesktop=name, dwFlags=0x100,
-                                  hStdInput=stdin, hStdOutput=stdout, hStdError=stderr)
+            startup = STARTUPINFOW(
+                cb=ctypes.sizeof(STARTUPINFOW), lpDesktop=name, dwFlags=0x100, hStdInput=stdin, hStdOutput=stdout, hStdError=stderr
+            )
             if not CreateProcessW(sys.executable, command, None, None, 1, 0x08000004, None, None, startup, info):
                 raise WinError(GetLastError())
         process = Process(info.hProcess, info.dwProcessId)
@@ -71,7 +72,7 @@ def run_isolated(name: str) -> int:
             if ResumeThread(info.hThread) == 0xFFFFFFFF:
                 raise WinError(GetLastError())
             while (code := process.poll()) is None:
-                time.sleep(.05)
+                time.sleep(0.05)
             return code
         finally:
             CloseHandle(info.hThread)

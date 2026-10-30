@@ -1,4 +1,5 @@
 """Bounded, local Notification Center reads and explicit individual dismissal."""
+
 import asyncio
 import queue
 import threading
@@ -46,7 +47,7 @@ class NativeNotifications:
             if index >= 256:
                 break
             try:
-                binding = row.Notification.Visual.GetBinding('ToastGeneric')
+                binding = row.Notification.Visual.GetBinding("ToastGeneric")
                 if not binding:
                     continue
                 texts = tuple(str(text.Text).strip()[:4096] for text in islice(binding.GetTextElements(), 16))
@@ -56,8 +57,15 @@ class NativeNotifications:
                 if identity < 0 or created < 0:
                     continue
                 info = row.AppInfo
-                found.append(Notice(NoticeKey(identity, created), str(info.AppUserModelId)[:512],
-                                    str(info.DisplayInfo.DisplayName)[:256], texts[0][:512], '\n'.join(texts[1:])[:8192]))
+                found.append(
+                    Notice(
+                        NoticeKey(identity, created),
+                        str(info.AppUserModelId)[:512],
+                        str(info.DisplayInfo.DisplayName)[:256],
+                        texts[0][:512],
+                        "\n".join(texts[1:])[:8192],
+                    )
+                )
             except OSError:
                 continue  # The source can disappear between enumeration and reading.
         return Observed(tuple(sorted(found, key=notice_created, reverse=True)))
@@ -75,7 +83,7 @@ class NativeNotifications:
 class NotificationObserver:
     """WinRT lives on one MTA worker; no notification content is logged or saved."""
 
-    __slots__ = ('banner_policy', 'dismissals', 'results', 'source', 'stopped', 'thread')
+    __slots__ = ("banner_policy", "dismissals", "results", "source", "stopped", "thread")
 
     def __init__(self, *, source: NotificationSource | None = None, banner_policy: BannerLease | None = None) -> None:
         self.results: queue.Queue[Observation] = queue.Queue(maxsize=1)
@@ -83,7 +91,7 @@ class NotificationObserver:
         self.banner_policy: BannerLease = BannerPolicy() if banner_policy is None else banner_policy
         self.dismissals: queue.Queue[NoticeKey] = queue.Queue(maxsize=64)
         self.stopped = threading.Event()
-        self.thread = threading.Thread(target=self.run, name='Windows notifications', daemon=True)
+        self.thread = threading.Thread(target=self.run, name="Windows notifications", daemon=True)
         self.thread.start()
 
     def publish(self, value: Observation) -> None:
@@ -122,7 +130,7 @@ class NotificationObserver:
                                 if access is Access.DENIED or failures >= 3:
                                     self.banner_policy.close()
                         self.publish(observation)
-                    except (OSError, TimeoutError):
+                    except OSError, TimeoutError:
                         failures += 1
                         if failures >= 3:
                             with suppress(OSError):

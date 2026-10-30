@@ -1,6 +1,6 @@
 """Replies resolve exactly their pending request; stale and retired replies do nothing."""
 
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from typing import Literal
 
 from hypothesis import strategies
@@ -24,15 +24,20 @@ from tests.properties.generation import cases, property_test
 class ReplyCase:
     identity: str
     text: str
-    question: bool
+    question: bool = field(kw_only=True)
     decision: Literal["approved", "declined"]
-    stopping: bool
+    stopping: bool = field(kw_only=True)
 
 
 def reply_cases(draw: strategies.DrawFn) -> ReplyCase:
     decisions: tuple[Literal["approved", "declined"], ...] = ("approved", "declined")
-    return ReplyCase(draw(strategies.text(min_size=1, max_size=32)), draw(strategies.text(max_size=96)), draw(strategies.booleans()),
-                     draw(strategies.sampled_from(decisions)), draw(strategies.booleans()))
+    return ReplyCase(
+        draw(strategies.text(min_size=1, max_size=32)),
+        draw(strategies.text(max_size=96)),
+        question=draw(strategies.booleans()),
+        decision=draw(strategies.sampled_from(decisions)),
+        stopping=draw(strategies.booleans()),
+    )
 
 
 @property_test(cases(reply_cases))
@@ -58,7 +63,9 @@ def test_only_the_matching_pending_request_accepts_a_reply(case: ReplyCase) -> N
     updated = transition(session, reply)
     assert updated == replace(session, messages=(other, resolved), status="Stopping…" if case.stopping else "Working…")
     retired_events: tuple[Resolution, ...] = (
-        QuestionAnswered(current, case.text + " later"), ApprovalDecided(current, case.decision), InputCancelled(current),
+        QuestionAnswered(current, case.text + " later"),
+        ApprovalDecided(current, case.decision),
+        InputCancelled(current),
     )
     for event in retired_events:
         assert transition(updated, event) == updated

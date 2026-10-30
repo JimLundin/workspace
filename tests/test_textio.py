@@ -7,7 +7,7 @@ from winapi.shapes import require_input_count
 class Clipboard:
     __slots__ = ("accept", "text")
 
-    def __init__(self, accept: bool) -> None:
+    def __init__(self, *, accept: bool) -> None:
         self.accept = accept
         self.text = "old contents"
 
@@ -21,7 +21,7 @@ class Clipboard:
 
 
 def test_failed_clipboard_write_never_pastes() -> None:
-    clipboard = Clipboard(False)
+    clipboard = Clipboard(accept=False)
     pasted: list[str] = []
     try:
         paste_text(1, "replacement", clipboard, lambda: pasted.append(clipboard.text), lambda: None)
@@ -34,7 +34,7 @@ def test_failed_clipboard_write_never_pastes() -> None:
 
 
 def test_successful_paste_restores_previous_text() -> None:
-    clipboard = Clipboard(True)
+    clipboard = Clipboard(accept=True)
     pasted: list[str] = []
     paste_text(1, "replacement", clipboard, lambda: pasted.append(clipboard.text), lambda: None)
     assert pasted == ["replacement"]

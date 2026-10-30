@@ -4,9 +4,32 @@ Its logic runs on fake processes and a fake clock; its file handling on real fol
 from collections.abc import Callable
 from pathlib import Path
 
-from keeper import PROTECTED, Keeper, Recovery, Stage, ask, install, prepare_candidate, restore, snapshot, source_files, take_requests
+from keeper import (
+    LAYOUT_WINDOW,
+    PROTECTED,
+    WM_QUIT_LAYOUT,
+    Keeper,
+    Recovery,
+    Stage,
+    WindowTarget,
+    ask,
+    install,
+    prepare_candidate,
+    restore,
+    shutdown_seconds,
+    snapshot,
+    source_files,
+    take_requests,
+)
+from keeper_control import STATUS, Control, Pause, Paused, Refused, Resume, Resumed, submit
 
 # ---- a fake world for the keeper's logic -----------------------------------------------
+
+
+def test_input_retains_its_short_shutdown_deadline() -> None:
+    # Defect: allowing lengthy assistant cleanup also delays recovery from a
+    # stuck input process, which has no network work to drain.
+    assert shutdown_seconds(WindowTarget(LAYOUT_WINDOW, WM_QUIT_LAYOUT)) == 5
 
 
 class FakeChild:
@@ -170,6 +193,67 @@ def test_layout_restart_preserves_the_worker_and_assistant() -> None:
     assert world.children["assistant"] is assistant and not assistant.stopped
 
 
+def test_independent_restart_preserves_other_children_and_waits_for_fresh_readiness() -> None:
+    # Detect treating an intentional assistant restart as Quit Workspace, or
+    # accepting its old readiness marker before the replacement is ready.
+    for name in ("assistant", "automation"):
+        world = World()
+        keeper = running(world)
+        original = tuple(world.children.items())
+        keeper.request("restart_" + name, "", now=5)
+        assert world.take() == ["stop " + name, "start " + name]
+        for other, child in original:
+            if other != name:
+                assert world.children[other] is child and not child.stopped
+        keeper.tick(now=6)
+        waiting = keeper.stage
+        assert waiting is Stage.STARTING and not keeper.done
+        world.ready.add(name)
+        keeper.tick(now=7)
+        assert keeper.stage is Stage.RUNNING
+
+
+def test_deployment_pause_requires_matching_resume_and_keeps_keyboard_alive(tmp_path: Path) -> None:
+    # Detect supervision restarting paused children during source replacement,
+    # a second sender stealing the pause, or resume replacing retained children.
+    world = World()
+    keeper = running(world)
+    layout, automation = world.children["layout"], world.children["automation"]
+    control = Control(tmp_path)
+    submit(tmp_path, Pause("deployment", ("assistant",)))
+    control.poll(keeper, 5)
+    assert STATUS.validate_json((tmp_path / "component-status.json").read_bytes(), strict=True) == Paused("deployment", ("assistant",))
+    keeper.tick(now=6)
+    keeper.request("restart_layout", "", now=7)
+    paused_stage = keeper.stage
+    assert paused_stage is Stage.PAUSED and not layout.stopped
+    submit(tmp_path, Resume("different-deployment"))
+    control.poll(keeper, 8)
+    assert isinstance(STATUS.validate_json((tmp_path / "component-status.json").read_bytes(), strict=True), Refused)
+    assert "assistant" not in keeper.children
+    submit(tmp_path, Resume("deployment"))
+    control.poll(keeper, 9)
+    assert STATUS.validate_json((tmp_path / "component-status.json").read_bytes(), strict=True) == Resumed("deployment")
+    assert keeper.children["layout"] is layout and keeper.children["automation"] is automation
+    assert not layout.stopped and not automation.stopped and not keeper.done
+    assert keeper.stage is Stage.STARTING
+
+
+def test_pause_refuses_update_and_duplicate_selections_and_allows_no_restart() -> None:
+    world = World()
+    keeper = running(world)
+    assert not keeper.suspend(("assistant", "assistant"))
+    keeper.request("install", "", now=5)
+    assert not keeper.suspend(("assistant",))
+    other = World()
+    paused = running(other)
+    assert paused.suspend(())
+    paused.tick(now=6)
+    assert other.take() == [] and paused.stage is Stage.PAUSED
+    paused.resume(now=7)
+    assert other.take() == [] and set(paused.children) == {"layout", "assistant", "automation"}
+
+
 def test_quitting_the_layout_on_purpose_leaves_it_stopped_until_asked() -> None:
     world = World()
     keeper = running(world)
@@ -216,7 +300,9 @@ def test_repeated_zero_exits_exhaust_the_automation_restart_budget() -> None:
         world.children["automation"].code = 0
         keeper.tick(now=at)
     assert world.take() == [
-        "start automation", "start automation", "start automation",
+        "start automation",
+        "start automation",
+        "start automation",
         "notify The automation keeps crashing, so it's stopped. See automation.log.",
     ]
     assert not world.children["layout"].stopped
@@ -232,8 +318,16 @@ def test_an_install_is_checked_snapshotted_installed_and_tried() -> None:
     keeper = running(world)
     installed(world, keeper)
     assert world.take() == [
-        "check", "snapshot v1", "stop automation", "stop assistant", "stop layout", "install",
-        "start layout", "start assistant", "start automation", "trial a new snippet",
+        "check",
+        "snapshot v1",
+        "stop automation",
+        "stop assistant",
+        "stop layout",
+        "install",
+        "start layout",
+        "start assistant",
+        "start automation",
+        "trial a new snippet",
     ]
     assert keeper.stage is Stage.TRIAL
 
@@ -258,8 +352,14 @@ def test_a_change_that_doesnt_come_up_is_undone() -> None:
     world.take()
     keeper.tick(now=20 + 31)  # never ready
     assert world.take() == [
-        "stop automation", "stop assistant", "stop layout", "restore v1",
-        "start layout", "start assistant", "start automation", "notify Update undone: it didn't start.",
+        "stop automation",
+        "stop assistant",
+        "stop layout",
+        "restore v1",
+        "start layout",
+        "start assistant",
+        "start automation",
+        "notify Update undone: it didn't start.",
     ]
 
 
@@ -275,8 +375,14 @@ def test_update_is_undone_when_only_automation_never_becomes_ready() -> None:
     assert keeper.stage is Stage.STARTING
     keeper.tick(now=51)
     assert world.take() == [
-        "stop automation", "stop assistant", "stop layout", "restore v1",
-        "start layout", "start assistant", "start automation", "notify Update undone: it didn't start.",
+        "stop automation",
+        "stop assistant",
+        "stop layout",
+        "restore v1",
+        "start layout",
+        "start assistant",
+        "start automation",
+        "notify Update undone: it didn't start.",
     ]
 
 
@@ -291,7 +397,12 @@ def test_update_is_undone_when_automation_exits_before_readiness() -> None:
     world.children["automation"].code = 0
     keeper.tick(now=21)
     assert world.take() == [
-        "stop assistant", "stop layout", "restore v1", "start layout", "start assistant", "start automation",
+        "stop assistant",
+        "stop layout",
+        "restore v1",
+        "start layout",
+        "start assistant",
+        "start automation",
         "notify Update undone: it didn't start.",
     ]
 
@@ -306,7 +417,12 @@ def test_a_change_that_exits_while_starting_is_undone_at_once() -> None:
     world.children["assistant"].code = 1
     keeper.tick(now=21)
     assert world.take() == [
-        "stop automation", "stop layout", "restore v1", "start layout", "start assistant", "start automation",
+        "stop automation",
+        "stop layout",
+        "restore v1",
+        "start layout",
+        "start assistant",
+        "start automation",
         "notify Update undone: it didn't start.",
     ]
 
@@ -319,8 +435,14 @@ def test_a_crash_during_the_trial_undoes_the_change() -> None:
     world.children["layout"].code = 1
     keeper.tick(now=100)
     assert world.take() == [
-        "stop automation", "stop assistant", "restore v1", "start layout", "start assistant", "start automation",
-        "notify Update undone: it crashed during its trial.", "trial over",
+        "stop automation",
+        "stop assistant",
+        "restore v1",
+        "start layout",
+        "start assistant",
+        "start automation",
+        "notify Update undone: it crashed during its trial.",
+        "trial over",
     ]
 
 
@@ -333,8 +455,14 @@ def test_automation_exit_during_trial_undoes_the_update_even_when_exit_code_is_z
         world.children["automation"].code = code
         keeper.tick(now=100)
         assert world.take() == [
-            "stop assistant", "stop layout", "restore v1", "start layout", "start assistant", "start automation",
-            "notify Update undone: it crashed during its trial.", "trial over",
+            "stop assistant",
+            "stop layout",
+            "restore v1",
+            "start layout",
+            "start assistant",
+            "start automation",
+            "notify Update undone: it crashed during its trial.",
+            "trial over",
         ]
 
 
@@ -368,8 +496,14 @@ def test_keep_ends_the_trial_and_undo_rolls_back() -> None:
     world.take()
     keeper.request("undo", "", now=40)  # undo works after the trial too
     assert world.take() == [
-        "stop automation", "stop assistant", "stop layout", "restore v1",
-        "start layout", "start assistant", "start automation", "notify Update undone: you undid it.",
+        "stop automation",
+        "stop assistant",
+        "stop layout",
+        "restore v1",
+        "start layout",
+        "start assistant",
+        "start automation",
+        "notify Update undone: you undid it.",
     ]
 
 
@@ -403,17 +537,33 @@ def write(root: Path, files: dict[str, str]) -> None:
 
 
 def test_source_files_leave_out_caches_and_history(tmp_path: Path) -> None:
-    write(tmp_path, {"a.py": "", "pkg/b.py": "", "pkg/__pycache__/b.pyc": "", ".git/HEAD": "", "README.md": "", ".mypy_cache/x": "",
-                     ".runtime/dependency.py": "", ".python/Lib/asyncio/__init__.py": ""})
+    write(
+        tmp_path,
+        {
+            "a.py": "",
+            "pkg/b.py": "",
+            "pkg/__pycache__/b.pyc": "",
+            ".git/HEAD": "",
+            "README.md": "",
+            ".mypy_cache/x": "",
+            ".runtime/dependency.py": "",
+            ".python/Lib/asyncio/__init__.py": "",
+        },
+    )
     assert source_files(tmp_path) == ["README.md", "a.py", "pkg/b.py"]
 
 
 def test_snapshot_restore_and_install(tmp_path: Path) -> None:
     live, versions, workspace = tmp_path / "live", tmp_path / "versions", tmp_path / "workspace"
-    write(live, {
-        "config.py": "OLD", "gone.py": "x", "keeper.py": "KEEPER",
-        ".python/pythonw.exe": "PYTHON", ".runtime/dependency.pyd": "SDK",
-    })
+    write(
+        live,
+        {
+            "config.py": "OLD",
+            "gone.py": "x",
+            "keeper.py": "KEEPER",
+            ".runtime/dependency.pyd": "SDK",
+        },
+    )
     version = snapshot(live, versions)
     write(workspace, {"config.py": "NEW", "added.py": "y", "keeper.py": "HACKED"})
     install(workspace, live)
@@ -421,13 +571,11 @@ def test_snapshot_restore_and_install(tmp_path: Path) -> None:
     assert (live / "added.py").exists()
     assert not (live / "gone.py").exists()
     assert (live / "keeper.py").read_text() == "KEEPER"  # protected: never replaced
-    assert (live / ".python/pythonw.exe").read_text() == "PYTHON"
     assert (live / ".runtime/dependency.pyd").read_text() == "SDK"
     restore(versions / version, live)
     assert (live / "config.py").read_text() == "OLD"
     assert (live / "gone.py").exists()
     assert not (live / "added.py").exists()
-    assert (live / ".python/pythonw.exe").read_text() == "PYTHON"
 
 
 def test_snapshots_keep_the_last_twenty(tmp_path: Path) -> None:
@@ -441,8 +589,8 @@ def test_snapshots_keep_the_last_twenty(tmp_path: Path) -> None:
 def test_requests_arrive_in_order(tmp_path: Path) -> None:
     ask("install", "first", folder=tmp_path)
     ask("undo", "", folder=tmp_path)
-    assert take_requests(folder=tmp_path) == [("install", "first"), ("undo", "")]
-    assert take_requests(folder=tmp_path) == []
+    assert take_requests(folder=tmp_path) == (("install", "first"), ("undo", ""))
+    assert take_requests(folder=tmp_path) == ()
 
 
 def test_the_keeper_and_its_checker_are_protected() -> None:
@@ -454,16 +602,15 @@ def test_install_failure_restores_and_restarts() -> None:
         __slots__ = ()
 
         def install(self) -> None:
-            raise PermissionError('locked file')
+            raise PermissionError("locked file")
 
     world = FailingWorld()
     keeper = running(world)
-    keeper.request('install', 'change', 10)
-    world.check.outcome = (True, 'ok')
+    keeper.request("install", "change", 10)
+    world.check.outcome = (True, "ok")
     keeper.tick(20)
-    assert 'restore v1' in world.log
-    assert set(keeper.children) == {'layout', 'assistant', 'automation'}
-
+    assert "restore v1" in world.log
+    assert set(keeper.children) == {"layout", "assistant", "automation"}
 
 
 def test_undo_survives_keeper_restart(tmp_path: Path) -> None:
@@ -483,7 +630,7 @@ def test_undo_survives_keeper_restart(tmp_path: Path) -> None:
 
 def test_interrupted_trial_is_restored_before_starting(tmp_path: Path) -> None:
     recovery = Recovery(tmp_path / "recovery.json")
-    recovery.write("v1", True)
+    recovery.write("v1", pending=True)
     world = World()
     keeper = Keeper(world, recovery)
     keeper.recover()
@@ -500,7 +647,7 @@ def test_recovery_failure_preserves_retry_state(tmp_path: Path) -> None:
             raise PermissionError("locked backup")
 
     recovery = Recovery(tmp_path / "recovery.json")
-    recovery.write("v1", True)
+    recovery.write("v1", pending=True)
     keeper = Keeper(FailingRestore(), recovery)
     keeper.undoable = "v1"
     keeper.rollback("failed", 0)
@@ -518,7 +665,6 @@ def test_completed_trial_persists_undo_target(tmp_path: Path) -> None:
     installed(world, keeper)
     keeper.tick(700)
     assert recovery.read() == ("v1", False)
-
 
 
 def test_candidate_review_does_not_execute_code_and_is_frozen(tmp_path: Path) -> None:
@@ -559,7 +705,6 @@ def test_changed_candidate_during_review_is_refused(tmp_path: Path) -> None:
         pass
     else:
         raise AssertionError("changed source must be reviewed again")
-
 
 
 def test_failed_second_update_keeps_first_update_undoable_after_restart(tmp_path: Path) -> None:

@@ -1,7 +1,7 @@
 """Validated observations for the toolbar's quiet resting presentation."""
 
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum, auto
 from typing import Literal, assert_never
 
@@ -31,21 +31,22 @@ class SystemStatus:
 
     @property
     def alerts(self) -> tuple[str, ...]:
-        return (*(("speaker-on",) if self.speakers is Speakers.AUDIBLE else ()),
-                *(("wifi-off",) if self.wifi is Wifi.DISCONNECTED else ()))
+        return (*(("speaker-on",) if self.speakers is Speakers.AUDIBLE else ()), *(("wifi-off",) if self.wifi is Wifi.DISCONNECTED else ()))
 
     @property
     def description(self) -> str:
-        observations = ("Speakers unmuted" if self.speakers is Speakers.AUDIBLE else "",
-                        "Wi-Fi disconnected" if self.wifi is Wifi.DISCONNECTED else "")
+        observations = (
+            "Speakers unmuted" if self.speakers is Speakers.AUDIBLE else "",
+            "Wi-Fi disconnected" if self.wifi is Wifi.DISCONNECTED else "",
+        )
         return ". ".join(value for value in observations if value)
 
 
 @dataclass(frozen=True, slots=True)
 class Battery:
     percent: int
-    powered: bool
-    charging: bool
+    powered: bool = field(kw_only=True)
+    charging: bool = field(kw_only=True)
 
     def __post_init__(self) -> None:
         if not 0 <= self.percent <= 100:
@@ -60,7 +61,7 @@ type WeatherIcon = Literal["sun", "moon", "cloud", "rain", "snow", "storm"]
 class Weather:
     celsius: float
     code: int
-    daytime: bool
+    daytime: bool = field(kw_only=True)
 
     def __post_init__(self) -> None:
         if not math.isfinite(self.celsius) or not -100 <= self.celsius <= 70 or not 0 <= self.code <= 99:

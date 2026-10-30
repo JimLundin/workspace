@@ -12,6 +12,7 @@ from dataclasses import dataclass
 
 from assistant.activity import ContextSnapshot
 from assistant.agent import Agent, Log, Machine
+from assistant.agent_history import History
 from assistant.agent_runner import Task
 from assistant.llm import Json, Settings
 from assistant.meeting_execution import MeetingWork
@@ -20,32 +21,50 @@ from automation.actions import ActionError, Resources, target
 from automation.execution import ApprovalReview, Incomplete, Outcome, WorkExecution
 from automation.store import TaskStore
 from automation.task import ActionVerified, Blocked, Claim, RequestSource, Waiting
+from diagnostics import failure_info
 from keeper import source_digest
 from usage import Detail
 
 
 @dataclass(frozen=True, slots=True)
 class Conversation:
-    history: list[Json]
+    history: History
     workspace: Workspace
 
 
 class AgentExecution:
     __slots__ = (
-        "close_background", "context", "conversations", "history", "journal", "machine", "meeting", "record",
-        "report_error", "resources", "settings", "workspace",
+        "close_background",
+        "context",
+        "conversations",
+        "history",
+        "journal",
+        "machine",
+        "meeting",
+        "record",
+        "report_error",
+        "resources",
+        "settings",
+        "workspace",
     )
 
     def __init__(
-        self, settings: Settings, machine: Machine, *, journal: Callable[[dict[str, Json]], None],
-        record: Callable[[Mapping[str, Detail]], None], report_error: Callable[[str], None], close_background: Callable[[], None],
+        self,
+        settings: Settings,
+        machine: Machine,
+        *,
+        journal: Callable[[dict[str, Json]], None],
+        record: Callable[[Mapping[str, Detail]], None],
+        report_error: Callable[[str], None],
+        close_background: Callable[[], None],
         context: Callable[[], ContextSnapshot] | None = None,
-        workspace: Workspace | None = None, resources: Resources | None = None,
+        workspace: Workspace | None = None,
+        resources: Resources | None = None,
         meeting: MeetingWork | None = None,
     ) -> None:
         self.settings, self.machine, self.context = settings, machine, context
         self.journal, self.record, self.report_error, self.close_background = journal, record, report_error, close_background
-        self.history: list[Json] = []
+        self.history = History()
         self.workspace = workspace if workspace is not None else Workspace()
         self.resources = resources if resources is not None else Resources()
         self.meeting = meeting
@@ -55,8 +74,15 @@ class AgentExecution:
         started = time.monotonic()
         finished = False
         agent = Agent(
-            self.settings, self.machine, log, stop, journal=self.journal, workspace=self.workspace, history=self.history,
-            context=task.context, context_reader=self.context,
+            self.settings,
+            self.machine,
+            log,
+            stop,
+            journal=self.journal,
+            workspace=self.workspace,
+            history=self.history,
+            context=task.context,
+            context_reader=self.context,
         )
         try:
             finished = agent.run(task.text)
@@ -82,15 +108,22 @@ class AgentExecution:
         key = hashlib.sha256(name.encode("utf-8")).hexdigest()
         if key not in self.conversations:
             draft = self.workspace.root.parent / "workspaces" / key
-            self.conversations[key] = Conversation([], Workspace(self.workspace.live, draft, resume=True))
+            self.conversations[key] = Conversation(History(), Workspace(self.workspace.live, draft, resume=True))
         self.conversations.move_to_end(key)
         while len(self.conversations) > 8:
             self.conversations.popitem(last=False)
         return self.conversations[key]
 
     def run_work(
-        self, claim: Claim, store: TaskStore, log: Log, stop: threading.Event, *,
-        context: ContextSnapshot | None = None, context_text: str = "", review: Callable[[ApprovalReview], bool] | None = None,
+        self,
+        claim: Claim,
+        store: TaskStore,
+        log: Log,
+        stop: threading.Event,
+        *,
+        context: ContextSnapshot | None = None,
+        context_text: str = "",
+        review: Callable[[ApprovalReview], bool] | None = None,
     ) -> Outcome:
         """Execute one durable claim; the controller commits the returned disposition."""
         started = time.monotonic()
@@ -106,9 +139,18 @@ class AgentExecution:
         work = WorkExecution(claim, store, self.resources, context_text="" if selected else context_text, review=review)
         session = self._conversation("task:" + claim.task.id) if selected else self.conversation(claim)
         agent = Agent(
-            self.settings, self.machine, log, stop, journal=self.journal, workspace=session.workspace, history=session.history,
-            context=None if selected else context, context_reader=None if selected else self.context,
-            work=work, install_root=self.workspace.root, followup=followup,
+            self.settings,
+            self.machine,
+            log,
+            stop,
+            journal=self.journal,
+            workspace=session.workspace,
+            history=session.history,
+            context=None if selected else context,
+            context_reader=None if selected else self.context,
+            work=work,
+            install_root=self.workspace.root,
+            followup=followup,
         )
         try:
             if stop.is_set():
@@ -122,24 +164,33 @@ class AgentExecution:
                 expected = "source-digest:" + source_digest(session.workspace.live)
                 location = target("installed-root", str(session.workspace.live.absolute()))
                 if expected not in action.specification.resources or location not in action.specification.resources:
-                    return Waiting(Blocked(
-                        "The keeper's installed source does not match the requested update. Inspect its installation result before retrying.",
-                    ))
-                if store.finish_action(
-                    action.id, ActionVerified("The running source matches the checked installation's SHA-256 digest."), at=time.time(),
-                ) is None:
+                    return Waiting(
+                        Blocked(
+                            "The keeper's installed source does not match the requested update. Inspect its installation result before retrying.",
+                        )
+                    )
+                if (
+                    store.finish_action(
+                        action.id,
+                        ActionVerified("The running source matches the checked installation's SHA-256 digest."),
+                        at=time.time(),
+                    )
+                    is None
+                ):
                     return Waiting(Blocked("The installed source matched, but verification could not be recorded. Resume to inspect it again."))
             agent.run(claim.task.prompt)
             outcome = work.outcome(agent.report, stop)
             return followup.completed(outcome) if followup is not None else outcome
         except (ActionError, OSError, ValueError) as error:
-            self.report_error(traceback.format_exc())
+            fault = failure_info(error)
+            self.report_error(f"Agent execution failed: {fault.kind}; {' > '.join(fault.locations)}")
             reason = "Execution could not establish a durable result. Resume to inspect its state."
             log.problem(reason)
             agent.report = Incomplete(str(error))
             return Waiting(Blocked(reason))
-        except Exception:
-            self.report_error(traceback.format_exc())
+        except Exception as error:
+            fault = failure_info(error)
+            self.report_error(f"Agent execution failed: {fault.kind}; {' > '.join(fault.locations)}")
             log.problem("Something went wrong; it's in the assistant's log.")
             return Waiting(Blocked("Execution failed before a verified result. Resume to inspect its state."))
         finally:

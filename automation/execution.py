@@ -98,8 +98,10 @@ def approval_binding(request: Approval) -> tuple[int, str] | None:
 
 def review_matches(task: Task, review: ApprovalReview) -> bool:
     return (
-        task.id == review.task_id and task.goal_revision == review.goal_revision
-        and isinstance(task.state, Waiting) and task.state.reason == review.request
+        task.id == review.task_id
+        and task.goal_revision == review.goal_revision
+        and isinstance(task.state, Waiting)
+        and task.state.reason == review.request
         and approval_binding(review.request) == (review.goal_revision, review.fingerprint)
     )
 
@@ -145,7 +147,7 @@ def message_evidence(result: str, arguments: Mapping[str, object]) -> tuple[Mess
             if at.tzinfo is None:
                 continue
             evidence.append(MessageEvidence(hashlib.sha256(content.encode("utf-8")).hexdigest(), at.timestamp()))
-        except (ValueError, OverflowError, OSError):
+        except ValueError, OverflowError, OSError:
             continue
     return tuple(evidence)
 
@@ -163,13 +165,27 @@ class WorkExecution:
     """One claimed run; effects are fenced by the store, UI data stays volatile."""
 
     __slots__ = (
-        "actions", "arguments", "claim", "clock", "context_text", "disposition", "observations", "review",
-        "store", "tool",
+        "actions",
+        "arguments",
+        "claim",
+        "clock",
+        "context_text",
+        "disposition",
+        "observations",
+        "review",
+        "store",
+        "tool",
     )
 
     def __init__(
-        self, claim: Claim, store: TaskStore, resources: Resources, *, context_text: str = "",
-        review: Callable[[ApprovalReview], bool] | None = None, clock: Callable[[], float] = time.time,
+        self,
+        claim: Claim,
+        store: TaskStore,
+        resources: Resources,
+        *,
+        context_text: str = "",
+        review: Callable[[ApprovalReview], bool] | None = None,
+        clock: Callable[[], float] = time.time,
     ) -> None:
         self.claim, self.store, self.clock = claim, store, clock
         self.actions = Actions(store, claim.run, resources, clock=clock)
@@ -191,8 +207,13 @@ class WorkExecution:
         """Checkpoint structural progress, never raw SDK or integration payloads."""
         names: list[str] = []
         for item in items[-100:]:
-            if (isinstance(item, dict) and item.get("type") == "function_call" and isinstance(name := item.get("name"), str)
-                    and len(name) <= 128 and name not in names):
+            if (
+                isinstance(item, dict)
+                and item.get("type") == "function_call"
+                and isinstance(name := item.get("name"), str)
+                and len(name) <= 128
+                and name not in names
+            ):
                 names.append(name)
         summary = "Conversation checkpoint; requested tools"
         if names:
@@ -212,7 +233,9 @@ class WorkExecution:
             if response.reply is ApprovalDecision.DECLINED:
                 return False
             if response.reply is ApprovalDecision.APPROVED and not self.store.action_since(
-                self.claim.task.id, binding, after=response.at,
+                self.claim.task.id,
+                binding,
+                after=response.at,
             ):
                 return True
             break
@@ -222,8 +245,18 @@ class WorkExecution:
             f"Approve the exact {self.tool} operation shown in its live review. Its full content is kept only in memory.",
         )
         arguments: dict[str, object] = dict(self.arguments)
-        exact = detail + "\n\nExact operation: " + self.tool + "\n" + json.dumps(
-            arguments, ensure_ascii=False, sort_keys=True, indent=2, allow_nan=False,
+        exact = (
+            detail
+            + "\n\nExact operation: "
+            + self.tool
+            + "\n"
+            + json.dumps(
+                arguments,
+                ensure_ascii=False,
+                sort_keys=True,
+                indent=2,
+                allow_nan=False,
+            )
         )
         if self.review is None or len(exact) > 128_000:
             self.block("A live review is required for this operation. Open the work overview and resume to review its full content.")
@@ -247,12 +280,24 @@ class WorkExecution:
 
     def observed(self, tool: str, arguments: Mapping[str, object], *, successful: bool, result: str = "") -> str:
         selected = plan(tool, arguments)
-        if not successful or not isinstance(selected, Observation) or tool in (
-            "wait", "ask_user", "get_context", "work_actions", "reconcile_action",
+        if (
+            not successful
+            or not isinstance(selected, Observation)
+            or tool
+            in (
+                "wait",
+                "ask_user",
+                "get_context",
+                "work_actions",
+                "reconcile_action",
+            )
         ):
             return ""
         observed = Observed(
-            uuid.uuid4().hex, tool, observed_resources(tool, arguments, result), self.clock(),
+            uuid.uuid4().hex,
+            tool,
+            observed_resources(tool, arguments, result),
+            self.clock(),
             message_evidence(result, arguments) if tool == "teams_read_messages" else (),
         )
         self.observations.append(observed)
@@ -266,8 +311,11 @@ class WorkExecution:
         ordered = {action.id: action for action in (*unverified, *recent)}
         for action in tuple(ordered.values())[:100]:
             item: dict[str, Json] = {
-                "id": action.id, "tool": action.specification.tool, "outcome": type(action.outcome).__name__,
-                "started_at": action.started_at, "updated_at": action.updated_at,
+                "id": action.id,
+                "tool": action.specification.tool,
+                "outcome": type(action.outcome).__name__,
+                "started_at": action.started_at,
+                "updated_at": action.updated_at,
             }
             if isinstance(action.specification.verification, FileDigest):
                 item["file"] = action.specification.verification.path
@@ -275,7 +323,7 @@ class WorkExecution:
             values.append(item)
         return json.dumps(values, ensure_ascii=False)
 
-    def reconcile(self, action_id: str, observation_id: str, applied: bool) -> str:
+    def reconcile(self, action_id: str, observation_id: str, *, applied: bool) -> str:
         pending = next((action for action in self.store.unverified_actions(self.claim.task.id) if action.id == action_id), None)
         observation = next((item for item in self.observations if item.id == observation_id), None)
         if pending is None:
@@ -286,8 +334,7 @@ class WorkExecution:
             raise ValueError("The observation did not inspect this action's target. Inspect the same file, tab, chat or window.")
         if pending.specification.tool == "teams_send_message":
             matching = any(
-                "message-body:" + item.digest in pending.specification.resources and item.at >= pending.started_at
-                for item in observation.messages
+                "message-body:" + item.digest in pending.specification.resources and item.at >= pending.started_at for item in observation.messages
             )
             if not applied or not matching:
                 raise ValueError(
@@ -303,10 +350,16 @@ class WorkExecution:
             outcome = ActionVerified(f"Inspected {observation.tool} in this run; the agent verified the action's result.")
         else:
             outcome = ActionNotApplied(f"Inspected {observation.tool} in this run; the agent verified that the action was not applied.")
-        if (isinstance(pending.outcome, ActionReturned) and isinstance(outcome, ActionNotApplied)
-                and self.store.finish_action(
-                    action_id, ActionUncertain("Fresh inspection contradicted the adapter's result."), at=self.clock(),
-                ) is None):
+        if (
+            isinstance(pending.outcome, ActionReturned)
+            and isinstance(outcome, ActionNotApplied)
+            and self.store.finish_action(
+                action_id,
+                ActionUncertain("Fresh inspection contradicted the adapter's result."),
+                at=self.clock(),
+            )
+            is None
+        ):
             raise ValueError("The reconciliation could not be recorded; inspect the action again.")
         if self.store.finish_action(action_id, outcome, at=self.clock()) is None:
             raise ValueError("The reconciliation could not be recorded; inspect the action again.")
@@ -366,12 +419,16 @@ class WorkExecution:
                 return Failed(reason[:8_000])
             case InstallationRequested(summary):
                 self.store.progress(
-                    self.claim.run, "Installation requested; verify the running source after the keeper finishes. " + summary[:4_000],
+                    self.claim.run,
+                    "Installation requested; verify the running source after the keeper finishes. " + summary[:4_000],
                     at=self.clock(),
                 )
-                return Waiting(Until(
-                    self.clock() + 120, "Waiting for the keeper's checked installation; verify the running source before completion.",
-                ))
+                return Waiting(
+                    Until(
+                        self.clock() + 120,
+                        "Waiting for the keeper's checked installation; verify the running source before completion.",
+                    )
+                )
             case ReportStatus.STARTING:
                 return Waiting(Blocked("Execution ended before a result was reported."))
             case _:

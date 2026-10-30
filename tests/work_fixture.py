@@ -37,6 +37,5 @@ def seed_verified_actions(store: TaskStore, sample: Action, identities: Sequence
         database.executemany(
             "INSERT INTO actions(id,task_id,run_id,specification,started_at,updated_at,outcome,outcome_kind,fingerprint) "
             "SELECT ?,task_id,run_id,specification,?,?,outcome,outcome_kind,fingerprint FROM actions WHERE id=?",
-            ((identity, sample.started_at + index * 2, sample.updated_at + index * 2, sample.id)
-             for index, identity in enumerate(identities, 1)),
+            ((identity, sample.started_at + index * 2, sample.updated_at + index * 2, sample.id) for index, identity in enumerate(identities, 1)),
         )

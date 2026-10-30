@@ -28,7 +28,7 @@ RUN = RunRef("notes", "first-run")
 @contextlib.contextmanager
 def bridge(folder: Path, *, owns: Callable[[RunRef], bool] | None = None) -> Generator[tuple[BridgeServer, BridgeClient]]:
     with ProfileLease(folder):
-        server = BridgeServer(folder, epoch="a" * 32, wake=lambda: None, owns=owns or (lambda run: run == RUN), timeout_s=.5)
+        server = BridgeServer(folder, epoch="a" * 32, wake=lambda: None, owns=owns or (lambda run: run == RUN), timeout_s=0.5)
         client = BridgeClient(folder, timeout_s=1)
         server.start()
         try:
@@ -79,15 +79,17 @@ def disconnected(read: Future[bytes]) -> None:
         read.result(timeout=3)
     except TimeoutError as error:
         raise AssertionError("The peer did not disconnect before the test deadline.") from error
-    except (EOFError, OSError, ValueError, RuntimeError):
+    except EOFError, OSError, ValueError, RuntimeError:
         pass
     else:
         raise AssertionError("The peer returned data after a rejected exchange.")
 
 
 def test_unavailable_worker_retains_invocation_and_replays_after_restart(tmp_path: Path) -> None:
-    context = ContextSnapshot(12, "active", (Activity(Window(41, "Private project context", "editor.exe", False), 10, 12, False),))
-    client = BridgeClient(tmp_path, timeout_s=.5)
+    context = ContextSnapshot(
+        12, "active", (Activity(Window(41, "Private project context", "editor.exe", minimized=False), 10, 12, agent_active=False),)
+    )
+    client = BridgeClient(tmp_path, timeout_s=0.5)
     with TestCase().assertRaises(OSError):
         client.register("notes", context, assistant_pid=os.getpid())
     with TestCase().assertRaises(OSError):
@@ -150,8 +152,9 @@ def test_overflow_reports_loss_before_new_results_and_stays_within_frame_budget(
 
 def test_review_requires_a_connected_assistant_and_remains_volatile(tmp_path: Path) -> None:
     fingerprint = "a" * 64
-    review = ApprovalReview("notes", 3, Approval(f"approval:3:{fingerprint}:nonce", "Save notes", "Redacted operation"),
-                            fingerprint, "Save notes", "Full private preview")
+    review = ApprovalReview(
+        "notes", 3, Approval(f"approval:3:{fingerprint}:nonce", "Save notes", "Redacted operation"), fingerprint, "Save notes", "Full private preview"
+    )
     with ProfileLease(tmp_path):
         server = BridgeServer(tmp_path, epoch="a" * 32, wake=lambda: None, owns=lambda run: True)
         server.start()
@@ -176,10 +179,12 @@ def test_meeting_response_must_match_worker_run_and_request(tmp_path: Path) -> N
         request = read_until(client, lambda item: isinstance(item.payload, ipc.MeetingRequest))
         assert isinstance(request.payload, ipc.MeetingRequest)
         assert not client.respond(replace(request, epoch="b" * 32), ipc.MeetingSucceeded("stale worker"))
-        assert not client.respond(replace(request, payload=replace(request.payload, run=RunRef("notes", "old-run"))),
-                                  ipc.MeetingSucceeded("stale run"))
-        assert not client.respond(replace(request, payload=replace(request.payload, request_id="different-request")),
-                                  ipc.MeetingSucceeded("stale request"))
+        assert not client.respond(
+            replace(request, payload=replace(request.payload, run=RunRef("notes", "old-run"))), ipc.MeetingSucceeded("stale run")
+        )
+        assert not client.respond(
+            replace(request, payload=replace(request.payload, request_id="different-request")), ipc.MeetingSucceeded("stale request")
+        )
         assert client.respond(request, ipc.MeetingSucceeded("Recording Planning from the microphone."))
         assert result.result(timeout=3) == "Recording Planning from the microphone."
         assert not client.respond(request, ipc.MeetingSucceeded("duplicate"))
@@ -227,7 +232,7 @@ def test_shutdown_releases_stalled_authentication_and_pending_meeting(tmp_path: 
 def test_wrong_authentication_is_rejected_before_commands_are_read(tmp_path: Path) -> None:
     wake = threading.Event()
     with ProfileLease(tmp_path), ThreadPoolExecutor(max_workers=1) as pool:
-        server = BridgeServer(tmp_path, epoch="a" * 32, wake=wake.set, owns=lambda run: True, timeout_s=.5)
+        server = BridgeServer(tmp_path, epoch="a" * 32, wake=wake.set, owns=lambda run: True, timeout_s=0.5)
         server.start()
         peer = raw_peer(server)
         client = BridgeClient(tmp_path)
@@ -293,10 +298,13 @@ def test_codec_rejects_unknown_versions_invalid_scalars_and_stale_batches() -> N
     ):
         with TestCase().assertRaises(ValueError):
             ipc.decode_reply(broken)
-    ordered = ipc.Batch("worker", (
-        ipc.Envelope("worker", 2, ipc.LogEvent(RUN, Progress("Reading the transcript."))),
-        ipc.Envelope("worker", 3, ipc.LogEvent(RUN, Done("Notes saved and checked.", 21))),
-    ))
+    ordered = ipc.Batch(
+        "worker",
+        (
+            ipc.Envelope("worker", 2, ipc.LogEvent(RUN, Progress("Reading the transcript."))),
+            ipc.Envelope("worker", 3, ipc.LogEvent(RUN, Done("Notes saved and checked.", 21))),
+        ),
+    )
     paired = ipc.encode_reply(ordered)
     assert ipc.decode_reply(paired) == ordered
     for replacement in (b'"sequence":2', b'"sequence":1'):

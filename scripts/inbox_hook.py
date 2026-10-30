@@ -41,8 +41,7 @@ def main() -> None:
             return
         message: dict[str, object] = {"provider": provider, "event": event}
         payload = json.dumps(message).encode("utf-8")
-        request = Request(url, data=payload, headers={"Authorization": "Bearer " + token,
-                                                               "Content-Type": "application/json"})
+        request = Request(url, data=payload, headers={"Authorization": "Bearer " + token, "Content-Type": "application/json"})
         response: object = urlopen(request, timeout=575)
         match response:
             case HTTPResponse():
@@ -53,7 +52,7 @@ def main() -> None:
         if len(output) <= 128_000:
             destination.write(output)
             destination.flush()
-    except (OSError, ValueError, KeyError):
+    except OSError, ValueError, KeyError:
         pass  # Never add a broken prompt, log private data, or approve by default.
 
 

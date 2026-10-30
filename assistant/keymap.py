@@ -132,6 +132,8 @@ def describe(a: Action) -> tuple[str, Kind]:
 
 
 _HOLD_TO_TALK: Final = frozenset({Tool.DICTATE, Tool.DICTATE_CLEAN, Tool.DICTATE_COMMAND, Tool.REWRITE_VOICE, Tool.AGENT_VOICE})
+
+
 def _hold(a: Action) -> str:
     if a in _HOLD_TO_TALK:
         return "hold"
@@ -155,7 +157,7 @@ def keymap(layer: Layer | None) -> list[list[Cap]]:
             if scancode == ESCAPE:
                 caps.append(Cap(name, "On/off", "hold: quit", Kind.SPECIAL))
             elif (tool := VOICE_KEYS.get(scancode)) is not None:
-                caps.append(Cap(name, TOOL_NAMES[tool], "hold" if tool is Tool.DICTATE else "toggle", Kind.TOOL))
+                caps.append(Cap(name, TOOL_NAMES[tool], "hold" if tool in _HOLD_TO_TALK else "toggle", Kind.TOOL))
             else:
                 match slot(scancode):
                     case Unmapped():

@@ -13,10 +13,30 @@ class _Blob(ctypes.Structure):
 
 
 _crypt32 = ctypes.WinDLL("crypt32", use_last_error=True)
-_Protect = fn(_crypt32, "CryptProtectData", wintypes.BOOL, ctypes.POINTER(_Blob), wintypes.LPCWSTR, ctypes.c_void_p,
-              ctypes.c_void_p, ctypes.c_void_p, wintypes.DWORD, ctypes.POINTER(_Blob))
-_Unprotect = fn(_crypt32, "CryptUnprotectData", wintypes.BOOL, ctypes.POINTER(_Blob), ctypes.c_void_p, ctypes.c_void_p,
-                ctypes.c_void_p, ctypes.c_void_p, wintypes.DWORD, ctypes.POINTER(_Blob))
+_Protect = fn(
+    _crypt32,
+    "CryptProtectData",
+    wintypes.BOOL,
+    ctypes.POINTER(_Blob),
+    wintypes.LPCWSTR,
+    ctypes.c_void_p,
+    ctypes.c_void_p,
+    ctypes.c_void_p,
+    wintypes.DWORD,
+    ctypes.POINTER(_Blob),
+)
+_Unprotect = fn(
+    _crypt32,
+    "CryptUnprotectData",
+    wintypes.BOOL,
+    ctypes.POINTER(_Blob),
+    ctypes.c_void_p,
+    ctypes.c_void_p,
+    ctypes.c_void_p,
+    ctypes.c_void_p,
+    wintypes.DWORD,
+    ctypes.POINTER(_Blob),
+)
 _LocalFree = fn(kernel32, "LocalFree", ctypes.c_void_p, ctypes.c_void_p)
 
 

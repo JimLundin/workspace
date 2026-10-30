@@ -49,9 +49,35 @@ def request(store: TaskStore, identity: str, prompt: str, source: Source | None 
 def execution(settings: Settings, workspace: Workspace, errors: list[str]) -> AgentExecution:
     machine = FakeMachine()
     return AgentExecution(
-        settings, machine, journal=lambda record: None, record=lambda record: None,
-        report_error=errors.append, close_background=machine.close_background, workspace=workspace,
+        settings,
+        machine,
+        journal=lambda record: None,
+        record=lambda record: None,
+        report_error=errors.append,
+        close_background=machine.close_background,
+        workspace=workspace,
     )
+
+
+class BrokenResultLog(FakeWindow):
+    def done(self, text: str, /) -> None:
+        raise ValueError("Private mail content must stay out of operational diagnostics")
+
+
+def test_durable_execution_failure_preserves_safe_fault_locations(tmp_path: Path) -> None:
+    # Defect: the execution owner discards the actionable fault location or
+    # writes private source/exception content into the automation worker log.
+    store = TaskStore(tmp_path / "work.sqlite3")
+    errors: list[str] = []
+    workspace = Workspace(live_tree(tmp_path / "live"), tmp_path / "workspace")
+    with fake_endpoint() as endpoint:
+        endpoint.replies = [says("Result")]
+        settings = Settings(endpoint.url, "fixture", "transcribe", "chat", "gpt-6-astra", "", "")
+        claim = request(store, "task", "Research this work")
+        result = execution(settings, workspace, errors).run_work(claim, store, BrokenResultLog(), threading.Event())
+    assert isinstance(result, Waiting) and isinstance(result.reason, Blocked)
+    assert len(errors) == 1 and "ValueError" in errors[0] and "test_work_execution.py:" in errors[0]
+    assert "Private mail" not in errors[0] and "raise ValueError" not in errors[0]
 
 
 def test_question_suspends_and_recorded_answer_survives_a_fresh_sdk_process_owner(tmp_path: Path) -> None:
@@ -72,7 +98,11 @@ def test_question_suspends_and_recorded_answer_survives_a_fresh_sdk_process_owne
         assert resumed is not None
         endpoint.replies = [calls(("ask_user", {"question": "Which report folder?"})), says("The report folder is resolved.")]
         result = execution(settings, source, errors).run_work(
-            resumed, reopened, FakeWindow(), threading.Event(), context_text="The latest project context is Finance.",
+            resumed,
+            reopened,
+            FakeWindow(),
+            threading.Event(),
+            context_text="The latest project context is Finance.",
         )
         assert isinstance(result, Completed), (result, errors)
         body = endpoint.received[-1].body.decode("utf-8")
@@ -149,15 +179,25 @@ def test_runtime_checks_are_recorded_before_candidate_import_and_failures_remain
     workspace = Workspace(live_tree(tmp_path / "live"), tmp_path / "workspace")
     workspace.ensure()
     marker = tmp_path / "candidate-imported"
-    workspace.write("probe.py", (
-        "import sqlite3\nfrom contextlib import closing\nfrom pathlib import Path\n"
-        f"with closing(sqlite3.connect({str(tmp_path / 'work.sqlite3')!r})) as database, database:\n"
-        "    assert database.execute(\"SELECT count(*) FROM actions WHERE outcome_kind='running'\").fetchone()[0] == 1\n"
-        f"Path({str(marker)!r}).touch()\n"
-    ))
+    workspace.write(
+        "probe.py",
+        (
+            "import sqlite3\nfrom contextlib import closing\nfrom pathlib import Path\n"
+            f"with closing(sqlite3.connect({str(tmp_path / 'work.sqlite3')!r})) as database, database:\n"
+            "    assert database.execute(\"SELECT count(*) FROM actions WHERE outcome_kind='running'\").fetchone()[0] == 1\n"
+            f"Path({str(marker)!r}).touch()\n"
+        ),
+    )
     work = WorkExecution(claim, store, Resources())
-    agent = Agent(Settings("", "", "", "", "", "", ""), FakeMachine(), FakeWindow(), threading.Event(),
-                  journal=lambda entry: None, work=work, workspace=workspace)
+    agent = Agent(
+        Settings("", "", "", "", "", "", ""),
+        FakeMachine(),
+        FakeWindow(),
+        threading.Event(),
+        journal=lambda entry: None,
+        work=work,
+        workspace=workspace,
+    )
     with closing(sqlite3.connect(tmp_path / "work.sqlite3")) as database, database:
         database.execute("CREATE TRIGGER refuse_execution BEFORE INSERT ON actions BEGIN SELECT RAISE(ABORT,'cannot record'); END")
     result = agent.call(ToolCall("refused", "check_changes", "{}"))
@@ -185,11 +225,9 @@ def test_cancelling_a_check_terminates_its_candidate_process(tmp_path: Path) -> 
         listener.listen(1)
         listener.settimeout(10)
         port = cast("tuple[str, int]", listener.getsockname())[1]
-        workspace.write("waiting_candidate.py", (
-            "import socket\n"
-            f"with socket.create_connection(('127.0.0.1', {port})) as connection:\n"
-            "    connection.recv(1)\n"
-        ))
+        workspace.write(
+            "waiting_candidate.py", (f"import socket\nwith socket.create_connection(('127.0.0.1', {port})) as connection:\n    connection.recv(1)\n")
+        )
         with ThreadPoolExecutor(max_workers=1) as pool:
             pending = pool.submit(workspace.inspect_check, fast=True, cancel=stopped)
             try:
@@ -214,8 +252,7 @@ def test_nonfinite_tool_arguments_never_enter_effect_storage(tmp_path: Path) -> 
     destination = tmp_path / "forbidden.txt"
     payload: dict[str, object] = {"path": str(destination), "content": "not written", "unexpected": float("nan")}
     args = json.dumps(payload)
-    agent = Agent(Settings("", "", "", "", "", "", ""), FakeMachine(), FakeWindow(), threading.Event(),
-                  journal=lambda entry: None, work=work)
+    agent = Agent(Settings("", "", "", "", "", "", ""), FakeMachine(), FakeWindow(), threading.Event(), journal=lambda entry: None, work=work)
     result = agent.call(ToolCall("invalid", "write_file", args))
     assert not result.ok and not destination.exists() and not store.actions("task")
 
@@ -225,9 +262,14 @@ def test_installation_resumes_only_after_running_source_matches_the_requested_di
     workspace = Workspace(live_tree(tmp_path / "live"), tmp_path / "workspace")
     workspace.ensure()
     workspace.write("config.py", "GREETING = 'installed update'\n")
-    specification = plan("apply_changes", {
-        "summary": "Updated greeting", "source_digest": source_digest(workspace.root), "destination": str(workspace.live.absolute()),
-    })
+    specification = plan(
+        "apply_changes",
+        {
+            "summary": "Updated greeting",
+            "source_digest": source_digest(workspace.root),
+            "destination": str(workspace.live.absolute()),
+        },
+    )
     assert isinstance(specification, ActionSpec)
     assert store.begin_action(claim.run, "install", specification, at=clock()) is not None
     store.finish_action("install", ActionReturned("Keeper installation requested."), at=clock())

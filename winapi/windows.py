@@ -23,7 +23,6 @@ _GetWindowLongW = fn(user32, "GetWindowLongW", wintypes.LONG, wintypes.HWND, cty
 _SetWindowLongW = fn(user32, "SetWindowLongW", wintypes.LONG, wintypes.HWND, ctypes.c_int, wintypes.LONG)
 _GetWindow = fn(user32, "GetWindow", wintypes.HWND, wintypes.HWND, wintypes.UINT)
 _GetWindowRect = fn(user32, "GetWindowRect", wintypes.BOOL, wintypes.HWND, ctypes.POINTER(wintypes.RECT))
-_GetClientRect = fn(user32, "GetClientRect", wintypes.BOOL, wintypes.HWND, ctypes.POINTER(wintypes.RECT))
 _GetDpiForWindow = fn(user32, "GetDpiForWindow", wintypes.UINT, wintypes.HWND)
 _GetForegroundWindow = fn(user32, "GetForegroundWindow", wintypes.HWND)
 _SetForegroundWindow = fn(user32, "SetForegroundWindow", wintypes.BOOL, wintypes.HWND)
@@ -60,7 +59,6 @@ _QueryFullProcessImageNameW = fn(
 )
 _CloseHandle = fn(kernel32, "CloseHandle", wintypes.BOOL, wintypes.HANDLE)
 _DwmGetWindowAttribute = fn(dwmapi, "DwmGetWindowAttribute", ctypes.c_long, wintypes.HWND, wintypes.DWORD, ctypes.c_void_p, wintypes.DWORD)
-_DwmSetWindowAttribute = fn(dwmapi, "DwmSetWindowAttribute", ctypes.c_long, wintypes.HWND, wintypes.DWORD, ctypes.c_void_p, wintypes.DWORD)
 _SUBCLASSPROC = ctypes.WINFUNCTYPE(LRESULT, wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM, ULONG_PTR, ULONG_PTR)
 _SetWindowSubclass = fn(comctl32, "SetWindowSubclass", wintypes.BOOL, wintypes.HWND, _SUBCLASSPROC, ULONG_PTR, ULONG_PTR)
 _RemoveWindowSubclass = fn(comctl32, "RemoveWindowSubclass", wintypes.BOOL, wintypes.HWND, _SUBCLASSPROC, ULONG_PTR)
@@ -75,7 +73,7 @@ _GW_OWNER: Final = 4
 _PROCESS_QUERY_LIMITED_INFORMATION: Final = 0x1000
 _DWMWA_EXTENDED_FRAME_BOUNDS, _DWMWA_CLOAKED = 9, 14
 _SWP_NOSIZE, _SWP_NOMOVE, _SWP_NOZORDER, _SWP_NOACTIVATE = 0x0001, 0x0002, 0x0004, 0x0010
-_SW_HIDE, _SW_SHOWNOACTIVATE = 0, 4
+_SW_HIDE, _SW_SHOWNA = 0, 8
 _HWND_TOPMOST: Final = -1
 _WM_MOUSEACTIVATE, _WM_NCDESTROY = 0x0021, 0x0082
 _MA_NOACTIVATE: Final = 3
@@ -122,7 +120,7 @@ def _cloaked(hwnd: int) -> bool:
     return _DwmGetWindowAttribute(hwnd, _DWMWA_CLOAKED, ctypes.byref(value), ctypes.sizeof(value)) == 0 and bool(value.value)
 
 
-def _on_taskbar(hwnd: int, include_cloaked: bool = False) -> bool:
+def _on_taskbar(hwnd: int, *, include_cloaked: bool = False) -> bool:
     if not _IsWindowVisible(hwnd) or _GetWindow(hwnd, _GW_OWNER) or (not include_cloaked and _cloaked(hwnd)):
         return False
     return not (int(_GetWindowLongW(hwnd, _GWL_EXSTYLE)) & _WS_EX_TOOLWINDOW) and _GetWindowTextLengthW(hwnd) > 0
@@ -133,12 +131,12 @@ def windows(*, include_cloaked: bool = False) -> list[Window]:
     handles: list[int] = []
 
     def each(hwnd: int, _data: int) -> bool:
-        if _on_taskbar(hwnd, include_cloaked):
+        if _on_taskbar(hwnd, include_cloaked=include_cloaked):
             handles.append(int(hwnd))
         return True
 
     _EnumWindows(WNDENUMPROC(each), 0)
-    return [Window(h, _title(h), _exe(h), bool(_IsIconic(h))) for h in handles]
+    return [Window(h, _title(h), _exe(h), minimized=bool(_IsIconic(h))) for h in handles]
 
 
 def exists(hwnd: int) -> bool:
@@ -212,16 +210,6 @@ def is_visible(hwnd: int) -> bool:
     return bool(_IsWindowVisible(hwnd))
 
 
-def is_cloaked(hwnd: int) -> bool:
-    return _cloaked(hwnd)
-
-
-def client_size(hwnd: int) -> tuple[int, int]:
-    r = wintypes.RECT()
-    _GetClientRect(hwnd, ctypes.byref(r))
-    return int(r.right - r.left), int(r.bottom - r.top)
-
-
 def scale(hwnd: int) -> float:
     return float(_GetDpiForWindow(hwnd) or 96) / 96
 
@@ -256,27 +244,24 @@ def make_overlay(hwnd: int, *, click_through: bool = True) -> None:
         raise OSError("Could not keep the overlay handle from taking keyboard focus.")
 
 
-def show_quietly(hwnd: int, visible: bool, *, topmost: bool = True) -> None:
-    """Shows or hides without activating. Overlays stay on top by default."""
+def show_quietly(hwnd: int, *, visible: bool, topmost: bool = True) -> None:
+    """Keep the current size/state when revealing without activation.
+
+    SW_SHOWNOACTIVATE restores normal geometry, undoing Qt's maximization.
+    SW_SHOWNA preserves it. Overlays stay on top by default.
+    """
     if visible:
-        _ShowWindow(hwnd, _SW_SHOWNOACTIVATE)
+        _ShowWindow(hwnd, _SW_SHOWNA)
         _SetWindowPos(hwnd, _HWND_TOPMOST if topmost else -2, 0, 0, 0, 0, _SWP_NOMOVE | _SWP_NOSIZE | _SWP_NOACTIVATE)
     else:
         _ShowWindow(hwnd, _SW_HIDE)
 
 
-def allow_activation(hwnd: int, allowed: bool) -> None:
+def allow_activation(hwnd: int, *, allowed: bool) -> None:
     """Temporarily prevent a GUI workspace's Show call from taking the keyboard."""
     style = int(_GetWindowLongW(hwnd, _GWL_EXSTYLE))
     style = style & ~_WS_EX_NOACTIVATE if allowed else style | _WS_EX_NOACTIVATE
     _SetWindowLongW(hwnd, _GWL_EXSTYLE, ctypes.c_long(style & 0xFFFF_FFFF).value)
-
-
-def dark_titlebar(hwnd: int) -> None:
-    """Match a dark client area on Windows 10/11; older versions keep their default."""
-    enabled = wintypes.BOOL(True)
-    if _DwmSetWindowAttribute(hwnd, 20, ctypes.byref(enabled), ctypes.sizeof(enabled)) != 0:
-        _DwmSetWindowAttribute(hwnd, 19, ctypes.byref(enabled), ctypes.sizeof(enabled))
 
 
 def find(title: str) -> int | None:

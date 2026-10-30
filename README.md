@@ -24,19 +24,24 @@ The project, launcher, installation directory and bundle are named Workspace.
 The agent uses **OpenAI Agents SDK 0.24.0**. Every interface uses **Qt 6.12**:
 the floating bar, conversation bubbles, History, Work, prompts,
 keyboard overlays, and keeper dialogs. The assistant has one Qt event loop;
-the keeper owns its own protected Qt UI. Tkinter and Tcl/Tk are excluded from
-the bundled interpreter. The keyboard process uses only the standard library
+the keeper owns its own protected Qt UI. Workspace runs directly on installed Windows Python 3.15. The keyboard process uses only the standard library
 and our typed Win32 bindings (`winapi/`), independently of the assistant.
 
 ## Start
 
 1. Extract **`workspace-sdk-python315-win64.zip`** into a folder you can write to.
-   It includes **Windows x64 Python 3.15.1** in `.python`, with
-   matching agent and Qt dependencies in `.runtime`. Keep both folders beside
-   `StartWorkspace.cmd` and `workspace.pyw`. Python, Qt and the dependencies require
-   no installer or separate downloads on the laptop.
+   Install **Windows x64 Python 3.15.1** once using the official installer, with
+   the Python launcher enabled. It is already installed on this laptop. The ZIP
+   includes matching agent and Qt dependencies in `.runtime`; keep that folder
+   beside `StartWorkspace.cmd` and `workspace.pyw`. It contains no Python interpreter.
    Workspace requests **English (US)** while its layout is enabled and your configured
-   **Colemak** layout when disabled or stopped. It rechecks the foreground app every
+   **Colemak** layout when disabled or stopped. While the Charybdis Nano (3x5)
+   Splinky firmware keyboard is connected, Workspace automatically pauses its
+   remapping and keeps **English (US)**, including when Workspace exits. Unplugging
+   it restores the previous laptop layout state. The device is identified by
+   USB vendor/product ID (`A8F8:1832`), so changing USB ports works; other keyboards
+   and the YubiKey do not trigger switching. Both keyboards use the selected mode.
+   It rechecks attached keyboards and the foreground app every
    200 ms. Elevated applications may refuse the request. `WORKSPACE_COLEMAK_LAYOUT`
    can select a specific installed Windows layout ID; by default Workspace resolves
    the Colemak entry in your Windows input-language list.
@@ -66,9 +71,9 @@ and our typed Win32 bindings (`winapi/`), independently of the assistant.
    put a shortcut to it in `shell:startup` (Win+R).
 
 Existing `workspace.pyw` shortcuts still work when Windows has a Python file
-association: the launcher hands off to the bundled interpreter. The bundle
+association, which must select Python 3.15. The bundle
 does not change the system Python installation or file associations.
-`.python\pythonw.exe miryoku.pyw` runs the layout alone, without the assistant
+`pyw -3.15 miryoku.pyw` runs the layout alone, without the assistant
 or keeper.
 
 ## What you see
@@ -94,9 +99,10 @@ or keeper.
   taskbar toggle. Taskbars are restored when Workspace exits, including by an
   independent recovery helper if its process is terminated.
 
-The canvas and embedded workspace browser are maintained in
-[Shared Workspace](https://github.com/JimLundin/shared-workspace). Workspace
-owns the Windows keyboard, dictation, assistant, floating bar and automation.
+Workspace now represents personal work on a local Qt canvas using its conversation
+bubble components. Edge supplies access to business resources. The separate
+[Shared Workspace](https://github.com/JimLundin/shared-workspace) project and its
+embedded browser are paused; Workspace retains its Windows desktop runtime.
 
 - **The tray dot**: green: running, layout on · grey: layout off or not running ·
   red: listening · amber: working or waiting for your reply · blue: the agent is on a task. Hover for words;
@@ -106,6 +112,18 @@ owns the Windows keyboard, dictation, assistant, floating bar and automation.
 - **Layout: on/off** (tray menu): the status is also a toggle. Click it or tap
   **§** to switch; a checkmark means the layout is on. If the layout has quit,
   choose **Start layout** first.
+  While the firmware keyboard is connected, the layout stays off and the toggle
+  is ignored. Ordinary firmware output passes through; **Ctrl+Alt+D** holds
+  dictation and **Ctrl+Alt+G** holds agent speech. Hold the right hand's
+  home-row Ctrl+Alt modifiers, then hold D (dictation) or G (agent) while speaking.
+  These are ordinary Miryoku keys; Space/Enter thumbs change layers when held.
+  Releasing D or G finishes dictation or sends to the agent, even if the
+  modifiers were released first. No firmware update is needed.
+- **Restart assistant** keeps the keyboard layout and automation running while
+  the assistant and floating bar reload. Dictation stops with the assistant;
+  unavailable shortcuts give a warning sound, and ordinary typing continues.
+  **Restart automation** reloads that worker independently. **Quit Workspace**
+  closes all components.
 - **Keyboard overlay**: a faded, click-through key map near the bottom of the
   main screen. It stays visible while the layout is on and follows held or
   locked layers. Small labels identify the printed keycaps; large labels show
@@ -132,7 +150,7 @@ Physical keys are named by their Nordic keycaps.
 | **§** | tap: layout on/off · hold 2 s: quit the layout |
 | **Spacebar** | push-to-talk dictation, typed where the cursor is on release |
 | **B** | toggle dictation; press again to stop and insert |
-| **N** | toggle agent speech; press again to stop and send |
+| **N** | hold to speak to the agent; release to send |
 | hold **`.`** + **X** | open the searchable window switcher (Apps + Esc) |
 | thumbs **X C V** | Esc · Space/**Nav** · Tab/**Tools** |
 | thumbs **M , .** | Enter/**Sym** · Backspace/**Num** · Delete/**Apps** |
@@ -170,8 +188,8 @@ it. A failed or incomplete buffer is reported instead of sending partial audio.
 
 **Tools** (hold the Tab thumb, then the right hand):
 
-**Hold V + T** opens the inbox, just like the notification bell, even when there
-are no items awaiting attention. The shortcut uses the physical keycaps with
+**Hold V + T** opens the pending agent clarification on the canvas, just like
+the toolbar bell. Without a pending question it opens the canvas. The shortcut uses the physical keycaps with
 Workspace's layout enabled.
 
 | | | | | | |
@@ -248,10 +266,10 @@ all tiling workspaces, retaining their current positions. See the
 
 ## Windows notifications
 
-Workspace reads Notification Center locally and routes Windows notifications
-into the same floating **work feed** as Teams, console requests and agent replies.
-The bar forwards observations without creating another notification stack. The
-agent evaluates new arrivals automatically and keeps routine activity quiet.
+Workspace reads Notification Center locally as context for the agent. Teams,
+Outlook and other app arrivals do not create floating alerts or increase the
+clarification count. The agent collects related information on the native canvas.
+Desktop prompts ask for your input or point to an important canvas change.
 Raw notification bodies stay in memory and are supplied to your configured AI
 endpoint for triage. Preferences, source revision hashes and proposed work are
 stored with Windows DPAPI encryption; notification bodies are not logged.
@@ -319,63 +337,25 @@ saved versions, editing and Outlook handoff.
 
 ## The agent
 
-Press **N** to start an agent request; press it again to stop and send. This works on every
-layer. The agent appears as up to five narrow smoked-glass notification bubbles at the
-bottom-right of the screen. New bubbles move earlier ones upward; the desktop
-between them remains visible and clickable. There is no standing toolbar or
-message field, and notifications never take keyboard focus.
-Windows supplies the background blur, rounded glass edges and soft shadows;
-text remains opaque. Your requests have a subtle blue tint; assistant bubbles
-use lilac. Uniform dark and light backgrounds keep the glass highly transparent,
-with light or dark text to match. Mixed backgrounds use a stronger tint for
-legibility. Captions stay inside the glass, with the same adaptive contrast.
-Disabling Windows transparency uses solid surfaces; high-contrast mode uses the
-system's foreground and background colors.
+Press **N** to start an agent request; press it again to stop and send. Voice
+and typed requests use the existing saved work journal. **Hold V + Ö** stops the
+agent and clears queued follow-ups. The toolbar's Canvas button opens your local
+work surface; the agent collects evidence, maintains connections and builds on
+work threads there.
 
-The current conversation stays visible while the task runs. Your request comes
-first, followed by one assistant bubble with a compact **Thinking** heading and
-an **×** stop button inside it. Click the heading to expand the steps in order.
-Collapsing hides only those steps: the latest reply or question stays attached
-inside the same bubble, including after the task finishes. The stop icon shares
-the surrounding glass, including when pressed. Meeting recording has its own control.
-Replies stream with Markdown, a brief reveal for new text, and smooth bubble
-growth: short text expands sideways up to the width limit, then wraps downward.
-Text and glass move together. Long replies retain all their text and scroll
-upward automatically at a reading pace after a short pause. Overflowing replies
-take turns; each stays until its ending has been shown. Hover to pause scrolling
-and expiry; the mouse wheel lets you move through the text, including over the
-glass background. Leaving resumes after a short pause. Short replies, and the
-end of long replies, stay for another 12–30 seconds after the task finishes,
-then fade upward and disappear. Reduced motion advances overlapping pages.
-The stack disappears completely when idle. **Hold V + Ö** also stops the agent and
-clears queued follow-ups. The recording bubble's **×** ends only the recording.
+Clarification bubbles live on the canvas. A short desktop prompt links to the
+exact question. Open it, supply your context and choose **Send context**; the same
+agent work resumes with your answer. The toolbar bell counts pending
+clarifications. **Hold V + T** opens one directly. Answered questions retain your
+context, and a rejected submission keeps your text available for retry.
 
-Each follow-up request starts its own turn. Replies, questions, voice answers,
-and tool activities retain their history within that turn. Thinking appears as a small spinner,
-without a stream of reasoning text; reduced motion keeps the indicator static. Public reasoning
-summaries remain available in the full history; private reasoning is not shown.
-Actions show readable targets and result summaries instead of JSON payloads.
-Expanded steps and the attached reply scroll independently, with a small
-scroll indicator when their content overflows.
-Questions stay visible until answered or cancelled: press **N** to start and stop your spoken
-reply. If you opt in to approval mode, say exactly **approve** or **decline**
-with the same hotkey. Other speech does not decide an approval. When it is
-working without a pending question, another voice request queues a follow-up.
-
-**Hold V + L** or **Agent session** in the tray opens the complete, selectable
-timeline, including expired bubbles, tool results and interrupted replies.
-Its **⋯** menu contains **Write a message…**, **Show activity**, **New chat**,
-and recording controls. **Enter** sends a typed message; **Shift+Enter** adds a
-line. Closing history returns to any active notifications. Voice and typed
-requests share the same conversation until **New chat** or Workspace exits.
-
-The bar's **Your work feed** opens the floating agent conversation and its
-composer. The agent automatically groups incoming work, summarizes what needs
-attention, suggests next steps and asks short questions you can answer by voice.
-Reactions appear only as a compact quiet count. Routine acknowledgements and
-updates stay out of the bubble stack. There are no visible filter boxes or
-repetitive source-action rows. Earlier/Newer browse the flow; right-click a
-bubble to open the optional full conversation history.
+Floating bubbles use the existing Windows glass, contrast and motion treatment.
+They present clarification redirects, important canvas additions or state changes,
+and guarded action approvals. Routine app arrivals and agent progress remain
+quiet. Important-change prompts expire normally; clarification redirects remain
+until answered or closed. If approval mode is enabled, the existing exact-preview
+and explicit approve/decline rules still apply. Meeting recording retains its own
+control. **Hold V + L** or **Agent session** opens explicit conversation history.
 
 Workspace reuses one existing Teams tab on the approved Edge connection for
 chat collection, Activity and opening conversations. Collection pauses while
@@ -385,15 +365,12 @@ The first connection follows four chats; an unavailable chat keeps its place
 while others continue updating. Complete account-scoped synchronization still
 needs a supported API adapter.
 
-Speak naturally to Workspace: “What needs my attention?”, “Help me draft a
-reply”, or “Keep those routine updates quiet.” The main voice agent reads the
-current plan and exact source context, maintains proposals, and persists your
-explicit filtering feedback. Handling a plan item only changes your list; it
-does not perform the underlying work. Incoming content never authorizes sends
-or command approvals. Console answers use the originating request identity.
-Source reply drafts retain their existing exact-destination and uncertain-send
-protections. Outlook currently contributes Windows notification previews;
-full mailbox synchronization remains a later adapter.
+Speak naturally to Workspace: “Continue the Atlas handoff” or “Find the emails
+related to this migration.” The agent reads the saved work representation and
+its exact source context before researching and updating it. Incoming content
+is evidence; it does not authorize sends or command approvals. Outlook, Teams
+and Kanban tools use their signed-in Edge pages and preserve existing drafts.
+Rendered pages and active filters bound source coverage.
 
 Both Codex CLI and Claude Code have installed hooks for questions, permission
 requests and turn attention. Answers stay attached to the exact provider,
@@ -482,6 +459,12 @@ Entra public application's client and tenant IDs are available, ask the agent to
 configure Teams and sign in. It can then find recipients, list chats, get or
 create a one-to-one chat and send a requested plain-text message. Sign-in uses
 Microsoft's device flow, and saved tokens are encrypted for your Windows account.
+Teams and Outlook web have dedicated tools that reuse the signed-in Edge tabs,
+with no Entra app setup. The agent can read/select Teams conversations, search/read
+Outlook conversations and prepare unsent replies while preserving existing drafts
+and Outlook signatures. The internal AIP Kanban tools read tasks, edit fields,
+post comments and move cards with stale-state checks and saved readback, using the
+app's existing validation and board filters.
 See [background automation and Teams setup](docs/background-automation.md) for
 permissions, tool details and current limitations.
 
@@ -516,10 +499,33 @@ journals and activity details, including form values and sign-in codes.
 ## Durable work
 
 Open **Work…** from the tray or conversation menu. Voice requests, typed
-requests, and standing instructions use the same saved task journal. The Work
-window has three tabs:
+requests, and standing instructions use the same saved task journal. The
+**Canvas** button beside the floating-toolbar menu opens a dedicated native
+window for ongoing outcomes and responsibilities. Workspace automatically
+connects related emails, Teams conversations and Kanban tickets, with a current summary, suggested next step
+and an explanation for every connection. One source can support several pieces
+of work. Create or edit work, mark it done, open its original sources, or remove
+a wrong connection; automatic reviews remember removed connections. Work,
+sources and personal notes share the canvas. Drag bubbles to arrange them, drag
+empty space to pan, and use Control + wheel or the zoom controls to navigate.
+Each bubble’s small expand control opens its details. **Continue with agent**
+starts research attached to that work thread. Questions and results keep that
+connection across reopening. Arrange groups connected work and evidence using
+actual bubble sizes, including expanded details. Dragging pins a bubble; ordinary
+reflow preserves it. The + menu also provides **Arrange all, including moved
+bubbles**. Notes and positions are saved locally.
 
-- **Tasks** shows instructions, progress, questions, results, and verification
+Collection reads the signed-in Edge pages without changing searches, board
+filters, chat selection or drafts. Coverage follows rendered content; sources
+that disappear from view keep their saved connections. Content changes trigger
+bounded reviews using the configured agent model. **Refresh sources** requests
+a fresh review. Canvas edits update the personal representation; source controls
+open the corresponding resource in Edge.
+
+Choose **Agent tasks and settings** in the canvas’s **+** menu to open a separate
+window for execution and supporting context:
+
+- **Agent tasks** shows instructions, progress, questions, results, and verification
   evidence. Pause, resume, cancel, redirect a task, or create a follow-up.
 - **Standing instructions** runs saved instructions once, at an interval, when
   a selected file changes, or after a transcript finishes. New instructions
@@ -578,9 +584,10 @@ edits stay available for follow-up requests in the same conversation, then:
    Repeated crashes restore the previous version too.
 
 The last 20 versions are kept in `%LOCALAPPDATA%\workspace\versions`. The agent
-can't change `keeper.py`, `selfcheck.py`, `runtime.py` or `workspace.pyw`, and the keeper uses
-nothing but Python's standard library, so the normal source-edit tools cannot
-replace the updater. The private `.python` and `.runtime` directories are also
+can't change the protected keeper, runtime activation, checker, dialogs or component-control
+modules. The keeper's coordination uses Python's standard library; its protected
+dialogs and typed component-control transport use the pinned Qt and Pydantic
+dependencies. The `.runtime` dependency directory is also
 protected and stay outside source snapshots and updates. Code and tests run with
 your account permissions.
 
@@ -666,19 +673,16 @@ There is no browser runtime, local UI server or separate agent UI process.
 Automation API through PowerShell/.NET, scoped to a window with stable runtime
 control identifiers. This adds no Python packages or browser dependencies.
 
-The full Python distribution and its SHA-256 are pinned in
-`requirements/python-win64.json`; matching dependency artifacts are pinned in
-`requirements/windows-py315.lock`. `.runtime/manifest.json` records both the
-Python version, included wheels, and excluded interpreter paths. The bundle
-uses the official full Python archive with the pinned exclusions applied:
-Tkinter, Tcl/Tk DLLs, IDLE, and Turtle are omitted.
-The runtime contains the Agents SDK, `markdown-it-py`, PySide6 Essentials,
+The installed Python version is declared in `.python-version`; matching
+Windows dependency artifacts are pinned in `requirements/windows-py315.lock`.
+`.runtime/manifest.json` records the Python ABI and included dependency wheels.
+The archive contains the Agents SDK, `markdown-it-py`, PySide6 Essentials,
 Shiboken and the win32more Windows composition bindings, with their dependencies.
-Updating either pin requires rebuilding the bundle. The protected
-bootstrap selects the bundled interpreter and checks the dependency ABI before
-loading native modules. Child commands use the same private Python.
-Workspace checks reuse that installed bundle, including
-its Windows import hooks, so a source copy can run the same checks as the live app.
+It contains no Python executable or standard library. `StartWorkspace.cmd` uses
+`pyw -3.15` to start the installed interpreter directly. Runtime activation checks
+the dependency ABI before loading native modules; children use the same installed
+Python. Checks reuse the dependency folder and its Windows import hooks.
+Changing either dependency pin requires rebuilding with `scripts/bundle.py`.
 
 ## Logs
 
@@ -756,9 +760,11 @@ Development tools are optional locally and required by CI.
 The [functional design notes](docs/functional-design.md) explain the domain
 models, effect owners, and keyboard performance measurements.
 The source uses deferred annotations directly, `type` aliases and scoped generic
-type parameters. It does not need `from __future__ import annotations`. The small
-launcher bootstrap remains readable by older Python associations so they can
-hand off to the bundled 3.15 interpreter before importing the application.
+type parameters. It does not need `from __future__ import annotations`. Launchers
+also require Python 3.15 and run in that interpreter without a handoff. On this
+laptop, Windows `python`, `py` and double-clicked `.pyw` files use the user-installed
+Python 3.15.1; the development `.venv` uses that installation and shares only
+application dependencies with the Downloads bundle.
 
 GitHub Actions checks Python 3.15 on Windows and Linux, plus Mypy,
 Pyright and Ruff on Windows with the native UI dependencies. Desktop end-to-end tests are available through the manual
@@ -775,7 +781,7 @@ to re-enable the layout when you return to a normal application.
 python selfcheck.py --fast --durations 10 # editing: defer Windows integration modules
 python selfcheck.py --durations 10        # full gate, required before install
 python -m pytest -q tests/test_pcm.py     # one area, with optional pytest installed
-mypy . && pyright && ruff check .         # if you have them
+mypy . && pyright && ruff check . && ruff format --check .
 WORKSPACE_E2E=1 pytest tests/test_windows_*e2e.py
 python scripts/bundle.py dist/workspace-sdk-python315-win64.zip
 ```
@@ -800,9 +806,9 @@ See the [test audit](docs/testing-audit.md) for measurements and surviving
 mutations, and the [dependency inventory](docs/testing-dependencies.md) for the
 implemented interfaces, replacement tests, and remaining native instrumentation.
 
-Inside an extracted Windows bundle, use `.python\python.exe selfcheck.py` to run
-checks with its matching interpreter. The bundle builder can run on Windows or
-Linux and accepts `--cache FOLDER` to reuse a verified Python download.
+Inside an extracted Windows bundle, use `py -3.15 selfcheck.py` to run
+checks with the installed interpreter. The bundle builder runs on Windows or
+Linux and packages dependencies without downloading or embedding Python.
 
 The `WORKSPACE_E2E=1` command runs on Windows only: it starts the real workspace, presses real
 keys and drags the real mouse, and has the keeper install, undo and refuse

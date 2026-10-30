@@ -7,18 +7,17 @@ from assistant.bar_weather import weather_response
 
 
 def test_idle_facts_have_time_and_real_battery_or_explicit_unavailability() -> None:
-    assert Ambient("09:41", Battery(73, False, False)).text == "09:41  ·  73%"
+    assert Ambient("09:41", Battery(73, powered=False, charging=False)).text == "09:41  ·  73%"
     assert Ambient("09:41", PowerUnavailable.NO_BATTERY).battery_text == "AC"
     assert Ambient("09:41", PowerUnavailable.UNKNOWN).battery_text == "—"
-    assert Ambient("09:41", Battery(100, True, False), Weather(-3.2, 71, True)).text == "09:41  ·  -3°"
+    assert Ambient("09:41", Battery(100, powered=True, charging=False), Weather(-3.2, 71, daytime=True)).text == "09:41  ·  -3°"
 
 
 def test_only_plugged_in_batteries_above_95_hide_the_percentage() -> None:
     # Defects: hiding at 95%, using charging instead of external power, or hiding
     # a full battery after unplugging; empty facts must not leave a separator.
-    for percent, powered, charging, expected in ((95, True, True, "95%"), (96, True, True, ""),
-                                                (100, True, False, ""), (100, False, False, "100%")):
-        ambient = Ambient("09:41", Battery(percent, powered, charging))
+    for percent, powered, charging, expected in ((95, True, True, "95%"), (96, True, True, ""), (100, True, False, ""), (100, False, False, "100%")):
+        ambient = Ambient("09:41", Battery(percent, powered=powered, charging=charging))
         assert ambient.battery_text == expected
         assert ambient.text == "09:41" + ("  ·  " + expected if expected else "")
 
@@ -26,23 +25,28 @@ def test_only_plugged_in_batteries_above_95_hide_the_percentage() -> None:
 def test_weather_uses_current_temperature_and_day_or_night_conditions() -> None:
     weather = weather_response({"current": {"temperature_2m": 12.4, "weather_code": 0, "is_day": 0}})
     assert weather.text == "12°" and weather.icon == "moon"
-    assert Weather(12, 0, True).icon == "sun"
-    assert Weather(12, 3, True).icon == "cloud"
-    assert Weather(12, 61, True).icon == "rain"
-    assert Weather(12, 95, True).icon == "storm"
+    assert Weather(12, 0, daytime=True).icon == "sun"
+    assert Weather(12, 3, daytime=True).icon == "cloud"
+    assert Weather(12, 61, daytime=True).icon == "rain"
+    assert Weather(12, 95, daytime=True).icon == "storm"
 
 
 def test_invalid_weather_and_battery_are_not_presented_as_real_observations() -> None:
-    invalid: tuple[object, ...] = (None, [], {}, {"current": {}},
-                                {"current": {"temperature_2m": True, "weather_code": 0, "is_day": 1}},
-                                {"current": {"temperature_2m": float("nan"), "weather_code": 0, "is_day": 1}},
-                                {"current": {"temperature_2m": 12, "weather_code": 0, "is_day": 2}})
+    invalid: tuple[object, ...] = (
+        None,
+        [],
+        {},
+        {"current": {}},
+        {"current": {"temperature_2m": True, "weather_code": 0, "is_day": 1}},
+        {"current": {"temperature_2m": float("nan"), "weather_code": 0, "is_day": 1}},
+        {"current": {"temperature_2m": 12, "weather_code": 0, "is_day": 2}},
+    )
     for raw in invalid:
         with unittest.TestCase().assertRaises(ValueError):
             weather_response(raw)
     for percent in (-1, 101, 255):
         with unittest.TestCase().assertRaises(ValueError):
-            Battery(percent, False, False)
+            Battery(percent, powered=False, charging=False)
 
 
 def test_only_unmuted_speakers_and_disconnected_wifi_create_status_icons() -> None:

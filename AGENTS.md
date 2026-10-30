@@ -77,6 +77,12 @@ paths, environment variables, control-window identifiers and new artifacts.
   calls, and UI updates in the modules that own those effects.
 - Validate external data when it enters a typed interface. Use the variant's
   fields to express required data instead of unrelated flags and empty defaults.
+- Application code works with typed domain values. Prefer Pydantic `TypeAdapter`
+  over existing typed shapes for serialization, deserialization and validation
+  at IO boundaries; introduce a model class only when it owns a real contract.
+  JSON is a wire/storage format only; hand-built JSON contracts and direct
+  `json.loads`/`json.dumps` in application code are forbidden. Existing uses are
+  migration debt; replace them when changing their boundary.
 - Use explicitly typed attributes and direct attribute access. Initialize fields
   in `__init__` and model optional state with typed unions. Do not use `hasattr`,
   `getattr`, or other string-based attribute access to work around missing types.
@@ -119,8 +125,7 @@ paths, environment variables, control-window identifiers and new artifacts.
 - Declare imports at module level. Use Python 3.15's `lazy import` and
   `lazy from` when loading must wait for first use; inline imports inside
   functions or classes are forbidden. Keep required initialization order
-  explicit at the effect owner. Bootstrap modules that must parse on Python 3.12
-  use ordinary module-level imports.
+  explicit at the effect owner. Launchers run directly on Python 3.15.
 - Prefer generators and lazy pipelines when callers can consume values
   incrementally. Return `Iterator[T]` from generators. Materialize when the
   owner needs indexing, repeated traversal or an immutable snapshot; measure
@@ -133,8 +138,8 @@ paths, environment variables, control-window identifiers and new artifacts.
   changing the hook, engine, or their shared dependencies. Keep GC enabled during
   measurement and keep event data acyclic: the live hook disables cyclic GC.
   Apply the same care to audio sample loops and buffer copying.
-- Prefer Python 3.15's native annotation and type-alias syntax. Keep the runtime
-  bootstrap importable on the system Python 3.12 interpreter.
+- Prefer Python 3.15's native annotation and type-alias syntax throughout,
+  including launchers and runtime activation.
 - When changing domain models or profiling input, read
   [docs/functional-design.md](docs/functional-design.md) for the module map and
   measurement scope.
@@ -161,12 +166,16 @@ running; no separate confirmation is needed.
   `C:\Users\Jim.Lundin\Downloads\workspace-sdk\workspace`
   (`/mnt/c/Users/Jim.Lundin/Downloads/workspace-sdk/workspace` from WSL).
 - Refresh `C:\Users\Jim.Lundin\Downloads\workspace-sdk-python315-win64.zip` too.
-  Preserve `.python` and `.runtime` when their pins in `requirements/` are
-  unchanged; rebuild with `scripts/bundle.py` when either pin changes.
-- If that copy is running, close its `workspace assistant` window with `WM_CLOSE`
-  and wait for its keeper and layout to exit cleanly before replacing files.
-  Relaunch `workspace.pyw` using that copy's `.python\pythonw.exe` and folder.
-  Leave a stopped copy stopped.
+  Use the installed Windows Python 3.15; the archive contains no interpreter.
+  Preserve `.runtime` when `.python-version` and the dependency lock in
+  `requirements/` are unchanged; rebuild dependencies with `scripts/bundle.py`
+  when either pin changes.
+- Use the deployment coordinator's component plan and pause/resume handshake
+  when that copy is running. Preserve unchanged children and the keeper; require
+  clean exits from selected children before replacing their source. Supervisor,
+  implicit asset or bootstrap changes use full `WM_CLOSE` shutdown and relaunch
+  `workspace.pyw` with the installed Python's `pythonw.exe`. Leave a stopped copy stopped.
 - Clear replaced modules' bytecode caches. Verify the deployed files and ZIP
-  match the working tree, and verify fresh readiness markers and running child
-  processes after a reload. Report any deployment or reload failure explicitly.
+  match the working tree. Verify fresh markers for restarted children and exact
+  retained identities/markers for preserved children. Report any deployment or
+  reload failure explicitly.

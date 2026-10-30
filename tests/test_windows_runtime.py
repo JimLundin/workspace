@@ -2,43 +2,94 @@
 
 import os
 import shutil
-import socket
 import subprocess
 import sys
 import textwrap
+import time
 import unittest
-from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from typing import cast
 
 if sys.platform != "win32":
     raise unittest.SkipTest("Windows bundle integration")
 
-from runtime import LaunchMode, Relaunch, activate, execute_bootstrap
+from keeper import Process, WindowsUser32, WindowTarget
+from runtime import activate
+from scripts.deploy_processes import inventory
 
 ROOT = Path(__file__).resolve().parent.parent
 
 
-def test_windowed_handoff_returns_while_the_child_is_still_running() -> None:
-    code = (
-        "import socket,sys; "
-        "channel=socket.create_connection(('127.0.0.1',int(sys.argv[1])),timeout=5); channel.recv(1); channel.close()"
+def test_keeper_allows_owned_cleanup_longer_than_five_seconds(tmp_path: Path) -> None:
+    # Defect: the keeper kills a responsive assistant/automation child while
+    # its legitimate cleanup is still running, blocking checked deployment.
+    ready = tmp_path / "ready"
+    title = "workspace delayed cleanup " + tmp_path.name
+    script = tmp_path / "cleanup_child.py"
+    script.write_text(
+        "from pathlib import Path\n"
+        "import time\n"
+        "from winapi import windows, system\n"
+        f"title = {title!r}\n"
+        "hwnd = windows.create_hidden(title)\n"
+        f"Path({str(ready)!r}).touch()\n"
+        "for message in system.messages():\n"
+        "    if message.hwnd == hwnd and message.message == system.WM_CLOSE:\n"
+        "        time.sleep(6)\n"
+        "        break\n"
+        "windows.destroy(hwnd)\n",
+        encoding="utf-8",
     )
-    with socket.create_server(("127.0.0.1", 0)) as server, ThreadPoolExecutor(max_workers=1) as worker:
-        server.settimeout(5)
-        port = cast(tuple[str, int], server.getsockname())[1]
-        plan = Relaunch((sys.executable, "-c", code, str(port)), tuple(os.environ.items()), LaunchMode.WINDOWED)
-        pending = worker.submit(execute_bootstrap, plan)
-        channel, _peer = server.accept()
-        with channel:
-            channel.settimeout(5)
-            try:
-                with unittest.TestCase().assertRaises(SystemExit) as exited:
-                    pending.result(timeout=2)
-                assert exited.exception.code == 0
-            finally:
-                channel.sendall(b"x")
-            assert channel.recv(1) == b"", "The child must exit after its work is released."
+    with subprocess.Popen([sys.executable, str(script)], env={**os.environ, "PYTHONPATH": str(ROOT)}) as process:
+        boundary = WindowsUser32()
+        try:
+            deadline = time.monotonic() + 15
+            while not ready.exists():
+                if process.poll() is not None or time.monotonic() >= deadline:
+                    raise AssertionError("The cleanup fixture did not become ready")
+                time.sleep(0.01)
+            child = Process(process, WindowTarget(title, 0x0010), boundary)
+            child.stop()
+            assert process.returncode == 0, "The keeper terminated a responsive child before cleanup finished"
+        finally:
+            if process.poll() is None:
+                if handle := boundary.FindWindowW(None, title):
+                    boundary.PostMessageW(handle, 0x0010, 0, 0)
+                process.wait(timeout=15)
+
+
+def test_shared_installed_python_processes_are_bound_to_workspace_ownership(tmp_path: Path) -> None:
+    # Detect missing native children after removing .python, or including an
+    # unrelated process that happens to use the same installed interpreter.
+    python = Path(sys.base_prefix) / "pythonw.exe"
+    stop = tmp_path / "stop"
+    ready = tmp_path / "ready"
+    wait = "from pathlib import Path; import time\nwhile not Path('stop').exists(): time.sleep(0.01)\n"
+    (tmp_path / "child_fixture.py").write_text(wait)
+    script = tmp_path / "workspace.pyw"
+    script.write_text(
+        "from pathlib import Path; import subprocess,sys\n"
+        "child=subprocess.Popen([sys.executable,'-m','child_fixture'])\n"
+        "Path('ready.tmp').write_text(str(child.pid)); Path('ready.tmp').replace('ready')\nchild.wait()\n"
+    )
+    with (
+        subprocess.Popen([str(python), str(script)], cwd=tmp_path) as parent,
+        subprocess.Popen([str(python), "-c", wait, str(script)], cwd=tmp_path) as unrelated,
+    ):
+        try:
+            deadline = time.monotonic() + 10
+            while not ready.is_file():
+                if time.monotonic() >= deadline:
+                    raise AssertionError("The installed-interpreter fixture did not start")
+                time.sleep(0.01)
+            child = int(ready.read_text())
+            rows = inventory(tmp_path)
+            assert {row.pid for row in rows} == {parent.pid, child}
+            assert unrelated.pid not in {row.pid for row in rows}
+            assert all(Path(row.executable) == python for row in rows)
+        finally:
+            stop.write_text("stop")
+            parent.wait(timeout=10)
+            unrelated.wait(timeout=10)
 
 
 def test_copied_source_starts_the_sdk_and_qt_with_the_inherited_bundle(tmp_path: Path) -> None:
@@ -50,6 +101,7 @@ def test_copied_source_starts_the_sdk_and_qt_with_the_inherited_bundle(tmp_path:
     # policy. Keeper's tests cover that policy; docs/tests/tooling are not needed
     # to initialize the SDK and native UI in this fresh process.
     source.mkdir()
+
     def ignore_bytecode(_folder: str, names: list[str]) -> set[str]:
         return set(names) & {"__pycache__"}
 
@@ -68,8 +120,12 @@ def test_copied_source_starts_the_sdk_and_qt_with_the_inherited_bundle(tmp_path:
         "loop=EventLoop(root, lambda: None); loop.pump(); loop.close(); root.processEvents(); print('Copied SDK and Qt passed')"
     )
     checked = subprocess.run(
-        [sys.executable, "-S", "-c", script], cwd=source, env=dict(os.environ, PYTHONUTF8="1"),
-        capture_output=True, timeout=75, check=False,
+        [sys.executable, "-S", "-c", script],
+        cwd=source,
+        env=dict(os.environ, PYTHONUTF8="1"),
+        capture_output=True,
+        timeout=75,
+        check=False,
     )
     assert checked.returncode == 0, (checked.stdout + checked.stderr).decode("utf-8", errors="replace")
     assert b"Copied SDK and Qt passed" in checked.stdout
@@ -79,32 +135,19 @@ def test_qt_import_keeps_asyncio_workers_usable_in_a_fresh_interpreter() -> None
     activate()
     script = (
         "from runtime import activate; activate(); import asyncio; "
-        "import assistant.qt_text; "
+        "import assistant.ui_components.text; "
         "assert asyncio.run(asyncio.to_thread(lambda: 42)) == 42; print('Qt and async workers passed')"
     )
     checked = subprocess.run(
-        [sys.executable, "-S", "-c", script], cwd=ROOT, env=dict(os.environ, PYTHONUTF8="1"),
-        capture_output=True, timeout=30, check=False,
+        [sys.executable, "-S", "-c", script],
+        cwd=ROOT,
+        env=dict(os.environ, PYTHONUTF8="1"),
+        capture_output=True,
+        timeout=30,
+        check=False,
     )
     assert checked.returncode == 0, (checked.stdout + checked.stderr).decode("utf-8", errors="replace")
     assert b"Qt and async workers passed" in checked.stdout
-
-
-def test_bundled_interpreter_cannot_import_tkinter_and_owns_the_ui_loop() -> None:
-    if not (ROOT / ".python").is_dir():
-        raise unittest.SkipTest("Requires the rebuilt Windows bundle")
-    script = (
-        "from runtime import activate; activate(); import importlib.util,threading; "
-        "assert importlib.util.find_spec('tkinter') is None; assert importlib.util.find_spec('_tkinter') is None; "
-        "from assistant.ui import Ui; ui=Ui(); ready=threading.Event(); "
-        "ui.post(lambda app: (ready.set(),ui.close())); ui.run(); assert ready.is_set(); print('Qt lifetime without Tk passed')"
-    )
-    checked = subprocess.run(
-        [sys.executable, "-S", "-c", script], cwd=ROOT, env=dict(os.environ, PYTHONUTF8="1"),
-        capture_output=True, timeout=45, check=False,
-    )
-    assert checked.returncode == 0, (checked.stdout + checked.stderr).decode("utf-8", errors="replace")
-    assert b"Qt lifetime without Tk passed" in checked.stdout
 
 
 def test_work_window_closes_with_its_ui_owner_in_a_fresh_process(tmp_path: Path) -> None:
@@ -160,12 +203,15 @@ def test_work_window_closes_with_its_ui_owner_in_a_fresh_process(tmp_path: Path)
         print("Work and UI owner closed")
         """)
     checked = subprocess.run(
-        [sys.executable, "-S", "-c", script], cwd=ROOT,
+        [sys.executable, "-S", "-c", script],
+        cwd=ROOT,
         env=dict(os.environ, PYTHONUTF8="1", LOCALAPPDATA=str(tmp_path)),
-        capture_output=True, timeout=60, check=False,
+        capture_output=True,
+        timeout=60,
+        check=False,
     )
     output = (checked.stdout + checked.stderr).decode("utf-8", errors="replace")
-    assert checked.returncode == 0, f"Native exit {checked.returncode & 0xffffffff:#x}: {output}"
+    assert checked.returncode == 0, f"Native exit {checked.returncode & 0xFFFFFFFF:#x}: {output}"
     assert "Work and UI owner closed" in output
 
 
@@ -239,12 +285,15 @@ def _native_controller_lifetime(tmp_path: Path, *, qt_first: bool) -> None:
         print("Native controller and Qt closed")
         """)
     checked = subprocess.run(
-        [sys.executable, "-S", "-c", script, "qt-first" if qt_first else "controller-first"], cwd=ROOT,
+        [sys.executable, "-S", "-c", script, "qt-first" if qt_first else "controller-first"],
+        cwd=ROOT,
         env=dict(os.environ, PYTHONUTF8="1", LOCALAPPDATA=str(tmp_path)),
-        capture_output=True, timeout=60, check=False,
+        capture_output=True,
+        timeout=60,
+        check=False,
     )
     output = (checked.stdout + checked.stderr).decode("utf-8", errors="replace")
-    assert checked.returncode == 0, f"Native exit {checked.returncode & 0xffffffff:#x}: {output}"
+    assert checked.returncode == 0, f"Native exit {checked.returncode & 0xFFFFFFFF:#x}: {output}"
     assert "Native controller and Qt closed" in output
 
 
@@ -284,12 +333,15 @@ def test_controller_initialization_failure_closes_qt_and_propagates(tmp_path: Pa
         print("Controller failure closed Qt")
         """)
     checked = subprocess.run(
-        [sys.executable, "-S", "-c", script], cwd=ROOT,
+        [sys.executable, "-S", "-c", script],
+        cwd=ROOT,
         env=dict(os.environ, PYTHONUTF8="1", LOCALAPPDATA=str(tmp_path)),
-        capture_output=True, timeout=60, check=False,
+        capture_output=True,
+        timeout=60,
+        check=False,
     )
     output = (checked.stdout + checked.stderr).decode("utf-8", errors="replace")
-    assert checked.returncode == 0, f"Native exit {checked.returncode & 0xffffffff:#x}: {output}"
+    assert checked.returncode == 0, f"Native exit {checked.returncode & 0xFFFFFFFF:#x}: {output}"
     assert "Controller failure closed Qt" in output
 
 
@@ -354,10 +406,13 @@ def test_shutdown_resolves_pending_and_late_ui_requests(tmp_path: Path) -> None:
         print("Pending and late UI requests resolved")
         """)
     checked = subprocess.run(
-        [sys.executable, "-S", "-c", script], cwd=ROOT,
+        [sys.executable, "-S", "-c", script],
+        cwd=ROOT,
         env=dict(os.environ, PYTHONUTF8="1", LOCALAPPDATA=str(tmp_path)),
-        capture_output=True, timeout=60, check=False,
+        capture_output=True,
+        timeout=60,
+        check=False,
     )
     output = (checked.stdout + checked.stderr).decode("utf-8", errors="replace")
-    assert checked.returncode == 0, f"Native exit {checked.returncode & 0xffffffff:#x}: {output}"
+    assert checked.returncode == 0, f"Native exit {checked.returncode & 0xFFFFFFFF:#x}: {output}"
     assert "Pending and late UI requests resolved" in output

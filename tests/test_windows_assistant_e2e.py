@@ -79,8 +79,8 @@ def type_ascii(text: str) -> None:
     """Plain letters and spaces as virtual keys, tagged so the layout passes them through."""
     for c in text:
         vk = 0x20 if c == " " else ord(c.upper())
-        inputs.send_keys([inputs.KeyStroke(vk, True), inputs.KeyStroke(vk, False)], MAGIC)
-    inputs.send_keys([inputs.KeyStroke(0x0D, True), inputs.KeyStroke(0x0D, False)], MAGIC)
+        inputs.send_keys([inputs.KeyStroke(vk, down=True), inputs.KeyStroke(vk, down=False)], MAGIC)
+    inputs.send_keys([inputs.KeyStroke(0x0D, down=True), inputs.KeyStroke(0x0D, down=False)], MAGIC)
 
 
 @contextmanager
@@ -88,8 +88,12 @@ def workspace(endpoint: FakeEndpoint, home: Path, live: Path = ROOT) -> Generato
     """Workspace as the user starts it: the keeper, running layout, assistant, and automation
     from `live`. Logs and state go under `home` (it's LOCALAPPDATA)."""
     env = {
-        **os.environ, "OPENAI_BASE_URL": endpoint.url, "OPENAI_API_KEY": "k", "WORKSPACE_CHAT_MODEL": "chat",
-        "WORKSPACE_AGENT_APPROVALS": "never", "LOCALAPPDATA": str(home),
+        **os.environ,
+        "OPENAI_BASE_URL": endpoint.url,
+        "OPENAI_API_KEY": "k",
+        "WORKSPACE_CHAT_MODEL": "chat",
+        "WORKSPACE_AGENT_APPROVALS": "never",
+        "LOCALAPPDATA": str(home),
     }
     process = subprocess.Popen([sys.executable, str(live / "keeper.py")], cwd=live, env=env)
     try:
@@ -129,7 +133,6 @@ def text_box(text: str) -> Generator[tuple[QtWidgets.QWidget, QtWidgets.QLineEdi
         root.hide()
         root.deleteLater()
         QtCore.QCoreApplication.sendPostedEvents(None, QtCore.QEvent.Type.DeferredDelete)
-
 
 
 def logs(home: Path) -> str:
@@ -182,8 +185,10 @@ def in_a_text_box(endpoint: FakeEndpoint) -> None:
         # Window keys: snap the window to the left half of the screen.
         chord(DELETE, SNAP_LEFT)
         work = screen.monitor_of(frame).work
-        assert wait_for(lambda: abs(windows.outer_rect(frame).left - work.left) < 20 and windows.outer_rect(frame).width > work.width // 2 - 40,
-                        QtWidgets.QApplication.processEvents), root.geometry()
+        assert wait_for(
+            lambda: abs(windows.outer_rect(frame).left - work.left) < 20 and windows.outer_rect(frame).width > work.width // 2 - 40,
+            QtWidgets.QApplication.processEvents,
+        ), root.geometry()
 
 
 def screen_text(endpoint: FakeEndpoint, pump: Callable[[], None]) -> None:

@@ -10,7 +10,7 @@ import sys
 import threading
 import time
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum, auto
 from pathlib import Path
 from typing import Protocol, assert_never, cast
@@ -74,9 +74,11 @@ def user_data_root(product: Product) -> Path:
 
 
 def setup_message(product: Product) -> str:
-    return (f"Open your signed-in {product.value.title()} and {product.value}://inspect/#remote-debugging, "
-            "enable 'Allow remote debugging for this browser instance', then approve its connection dialog when Workspace connects. "
-            "If your organization disables this setting, its browser policy must be respected.")
+    return (
+        f"Open your signed-in {product.value.title()} and {product.value}://inspect/#remote-debugging, "
+        "enable 'Allow remote debugging for this browser instance', then approve its connection dialog when Workspace connects. "
+        "If your organization disables this setting, its browser policy must be respected."
+    )
 
 
 def endpoint(data: bytes) -> str:
@@ -87,8 +89,12 @@ def endpoint(data: bytes) -> str:
         lines = data.decode("ascii").splitlines()
     except UnicodeDecodeError as error:
         raise BrowserError("The browser published an invalid debugging endpoint.") from error
-    if (len(lines) != 2 or re.fullmatch(r"[0-9]{1,5}", lines[0]) is None
-            or not 1 <= int(lines[0]) <= 65535 or re.fullmatch(r"/devtools/browser/[a-zA-Z0-9-]{1,128}", lines[1]) is None):
+    if (
+        len(lines) != 2
+        or re.fullmatch(r"[0-9]{1,5}", lines[0]) is None
+        or not 1 <= int(lines[0]) <= 65535
+        or re.fullmatch(r"/devtools/browser/[a-zA-Z0-9-]{1,128}", lines[1]) is None
+    ):
         raise BrowserError("The browser published an invalid debugging endpoint.")
     return f"ws://127.0.0.1:{int(lines[0])}{lines[1]}"
 
@@ -117,7 +123,13 @@ class Channel(Protocol):
 
 class BrowserConnection(Protocol):
     def call(
-        self, method: str, params: dict[str, Json], cancel: threading.Event, *, session: str = "", timeout: float = 15,
+        self,
+        method: str,
+        params: dict[str, Json],
+        cancel: threading.Event,
+        *,
+        session: str = "",
+        timeout: float = 15,
     ) -> dict[str, Json]: ...
 
     def close(self) -> None: ...
@@ -154,7 +166,11 @@ class Cdp:
 
     @classmethod
     def connect(
-        cls, uri: str, cancel: threading.Event | None = None, *, timeout: float = 2,
+        cls,
+        uri: str,
+        cancel: threading.Event | None = None,
+        *,
+        timeout: float = 2,
         sockets: SocketConnector = connect_socket,
     ) -> Cdp:
         # The opening deadline and TCP acquisition are separate dependencies:
@@ -182,8 +198,7 @@ class Cdp:
                 transport.settimeout(None)
                 watcher = threading.Thread(target=cancel_connection, args=(transport, cancel, done), name="browser connection", daemon=True)
                 watcher.start()
-            channel = connect(uri, sock=transport, proxy=None, open_timeout=timeout, close_timeout=.5,
-                              max_size=MAX_RESPONSE, ping_interval=None)
+            channel = connect(uri, sock=transport, proxy=None, open_timeout=timeout, close_timeout=0.5, max_size=MAX_RESPONSE, ping_interval=None)
             if cancel is not None and cancel.is_set():
                 channel.close()
                 raise InterruptedError("Stopped while waiting for the browser connection.")
@@ -200,11 +215,17 @@ class Cdp:
         finally:
             done.set()
             if watcher is not None:
-                watcher.join(timeout=.5)
+                watcher.join(timeout=0.5)
         return cls(channel)
 
     def call(
-        self, method: str, params: dict[str, Json], cancel: threading.Event, *, session: str = "", timeout: float = 15,
+        self,
+        method: str,
+        params: dict[str, Json],
+        cancel: threading.Event,
+        *,
+        session: str = "",
+        timeout: float = 15,
     ) -> dict[str, Json]:
         if cancel.is_set():
             raise InterruptedError("Stopped. Inspect the page before retrying an action that may already have completed.")
@@ -222,7 +243,7 @@ class Cdp:
                 if self.clock() >= deadline:
                     raise BrowserError("Browser operation timed out. Inspect its result before retrying; it may already have completed.")
                 try:
-                    raw = self.channel.recv(timeout=min(.1, max(.001, deadline - self.clock())))
+                    raw = self.channel.recv(timeout=min(0.1, max(0.001, deadline - self.clock())))
                 except TimeoutError:
                     continue
                 if len(raw) > MAX_RESPONSE:
@@ -239,8 +260,9 @@ class Cdp:
         except BrowserError:
             raise
         except (WebSocketException, OSError) as error:
-            raise DisconnectedError("The browser connection ended. Inspect the page before retrying; "
-                                    "the action may already have completed.") from error
+            raise DisconnectedError(
+                "The browser connection ended. Inspect the page before retrying; the action may already have completed."
+            ) from error
         except ValueError as error:
             raise BrowserError("The browser returned invalid data.") from error
 
@@ -249,7 +271,7 @@ class Cdp:
 
 
 def cancel_connection(transport: socket.socket, cancel: threading.Event, done: threading.Event) -> None:
-    while not done.wait(.05):
+    while not done.wait(0.05):
         if cancel.is_set():
             with contextlib.suppress(OSError):
                 transport.shutdown(socket.SHUT_RDWR)
@@ -265,7 +287,7 @@ class Stopped(Enum):
 class Managed:
     process: Process
     job: Job | None
-    visible: bool
+    visible: bool = field(kw_only=True)
 
 
 @dataclass(frozen=True, slots=True)
@@ -324,8 +346,13 @@ class NativeSessions:
     __slots__ = ("connect", "executable", "persistent", "profile", "profiles")
 
     def __init__(
-        self, profile: Path, *, executable: Path | None = None, profiles: Callable[[Product], Path] = user_data_root,
-        connect: Connector = Cdp.connect, persistent: bool = False,
+        self,
+        profile: Path,
+        *,
+        executable: Path | None = None,
+        profiles: Callable[[Product], Path] = user_data_root,
+        connect: Connector = Cdp.connect,
+        persistent: bool = False,
     ) -> None:
         self.profile, self.executable, self.profiles, self.connect = profile, executable, profiles, connect
         self.persistent = persistent
@@ -357,8 +384,14 @@ class NativeSessions:
         port_file = self.profile / "DevToolsActivePort"
         port_file.unlink(missing_ok=True)
         arguments = [
-            str(executable), f"--user-data-dir={self.profile}", "--remote-debugging-address=127.0.0.1", "--remote-debugging-port=0",
-            "--no-first-run", "--no-default-browser-check", "--disable-background-mode", "--window-size=1280,900",
+            str(executable),
+            f"--user-data-dir={self.profile}",
+            "--remote-debugging-address=127.0.0.1",
+            "--remote-debugging-port=0",
+            "--no-first-run",
+            "--no-default-browser-check",
+            "--disable-background-mode",
+            "--window-size=1280,900",
         ]
         if not visible:
             arguments.append("--headless=new")
@@ -370,15 +403,14 @@ class NativeSessions:
         owner: Managed | None = None
         try:
             if sys.platform == "win32":
-
                 job = ProcessJob()
                 process: Process = job.start(arguments)
             else:
                 process = subprocess.Popen(arguments, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            owner = Managed(process, job, visible)
+            owner = Managed(process, job, visible=visible)
             deadline = time.monotonic() + 20
             while time.monotonic() < deadline:
-                if cancel.wait(.05):
+                if cancel.wait(0.05):
                     raise InterruptedError("Stopped while starting the browser.")
                 if process.poll() is not None:
                     raise BrowserError("Edge exited before automation started. Its dedicated profile may already be open or blocked by policy.")
@@ -394,4 +426,3 @@ class NativeSessions:
             elif job is not None:
                 job.close()
             raise
-

@@ -47,7 +47,7 @@ class MailTarget:
 
 def mail_target(specification: ActionSpec) -> MailTarget:
     """Only bounded non-content identities are retained in action metadata."""
-    values = tuple(value[len(_MAIL_RESOURCE):] for value in specification.resources if value.startswith(_MAIL_RESOURCE))
+    values = tuple(value[len(_MAIL_RESOURCE) :] for value in specification.resources if value.startswith(_MAIL_RESOURCE))
     if specification.tool != "meeting_save_draft" or len(values) != 1:
         raise ValueError("The saved mail action has no exact draft revision.")
     value: object = json.loads(values[0])
@@ -119,9 +119,17 @@ class MeetingRun:
                         capture_notice = None
                     case _:
                         assert_never(source.notice)
-                sources.append({"source_id": source.id, "title": source.title, "sha256": source.sha256,
-                                "started_at": source.started_at, "duration_seconds": source.duration_seconds,
-                                "capture_notice": capture_notice, "characters": len(transcript.text)})
+                sources.append(
+                    {
+                        "source_id": source.id,
+                        "title": source.title,
+                        "sha256": source.sha256,
+                        "started_at": source.started_at,
+                        "duration_seconds": source.duration_seconds,
+                        "capture_notice": capture_notice,
+                        "characters": len(transcript.text),
+                    }
+                )
             return {"source_digest": bundle.fingerprint, "sources": sources}
         source_id = identifier(source_id, "selected recording identity")
         selected = next((value for value in bundle.transcripts if value.source.id == source_id), None)
@@ -130,8 +138,14 @@ class MeetingRun:
         if offset > len(selected.text):
             raise ValueError("The requested text offset is outside the selected recording.")
         end = min(len(selected.text), offset + SOURCE_PAGE)
-        return {"source_digest": bundle.fingerprint, "source_id": source_id, "sha256": selected.source.sha256,
-                "offset": offset, "text": selected.text[offset:end], "next_offset": end if end < len(selected.text) else None}
+        return {
+            "source_digest": bundle.fingerprint,
+            "source_id": source_id,
+            "sha256": selected.source.sha256,
+            "offset": offset,
+            "text": selected.text[offset:end],
+            "next_offset": end if end < len(selected.text) else None,
+        }
 
     def publication(self, value: object) -> Publication:
         # Validation precedes action registration and any artifact writes.
@@ -153,19 +167,29 @@ class MeetingRun:
 
     def _package(self, package: PublishedFollowup) -> dict[str, Json]:
         drafts: list[Json] = [
-            {"draft_id": value.id, "revision": value.revision, "content": draft_data(value.content),
-             "email_file": str(value.files.eml), "markdown_file": str(value.files.markdown)}
+            {
+                "draft_id": value.id,
+                "revision": value.revision,
+                "content": draft_data(value.content),
+                "email_file": str(value.files.eml),
+                "markdown_file": str(value.files.markdown),
+            }
             for value in self.packages.drafts(package.task_id, package.version)
         ]
-        return {"version": package.version, "source_digest": package.followup.sources.fingerprint,
-                "notes_path": str(package.notes_path), "actions_path": str(package.actions_path),
-                "followup": followup_data(package.followup), "drafts": drafts, "verified": True}
+        return {
+            "version": package.version,
+            "source_digest": package.followup.sources.fingerprint,
+            "notes_path": str(package.notes_path),
+            "actions_path": str(package.actions_path),
+            "followup": followup_data(package.followup),
+            "drafts": drafts,
+            "verified": True,
+        }
 
     def result(self, version: str = "") -> dict[str, Json]:
         if not version:
             versions: list[Json] = [
-                {"version": package.version, "title": package.followup.title,
-                 "source_digest": package.followup.sources.fingerprint}
+                {"version": package.version, "title": package.followup.title, "source_digest": package.followup.sources.fingerprint}
                 for package in self.packages.versions(self.request.task_id)
             ]
             return {"versions": versions, "source_digest": self.request.bundle.fingerprint}
@@ -230,7 +254,8 @@ class MeetingRun:
                     self.mail_results[target] = result
 
     def _deliveries(
-        self, package: PublishedFollowup,
+        self,
+        package: PublishedFollowup,
     ) -> dict[str, tuple[MailTarget, outlook.SavedOutlookDraft | outlook.SavedEmlDraft]]:
         delivered: dict[str, tuple[MailTarget, outlook.SavedOutlookDraft | outlook.SavedEmlDraft]] = {}
         for target, result in self.mail_results.items():
@@ -272,6 +297,9 @@ class MeetingRun:
         if native:
             result += f"\nVerified unsent Outlook drafts: {native}."
         result += "\nNo follow-up messages were sent."
-        evidence = (*outcome.evidence, f"Verified meeting package SHA-256 {package.version}.",
-                    f"Selected recording bundle SHA-256 {self.request.bundle.fingerprint}.")
+        evidence = (
+            *outcome.evidence,
+            f"Verified meeting package SHA-256 {package.version}.",
+            f"Selected recording bundle SHA-256 {self.request.bundle.fingerprint}.",
+        )
         return Completed(result, evidence[-64:])

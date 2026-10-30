@@ -200,8 +200,12 @@ def test_delivery_failure_leaves_the_recording_saved_and_restart_recovers_it(tmp
         completed.set()
 
     service = Meetings(
-        settings("https://fixture.invalid/v1"), lambda source: GeneratedCapture(1), archive=archive,
-        transcribe_audio=transcribe, on_recovery=events.recover, on_complete=complete,
+        settings("https://fixture.invalid/v1"),
+        lambda source: GeneratedCapture(1),
+        archive=archive,
+        transcribe_audio=transcribe,
+        on_recovery=events.recover,
+        on_complete=complete,
     )
     try:
         service.start(title="Delivered after restart")
@@ -250,8 +254,13 @@ def test_first_baseline_uses_the_startup_archive_while_a_new_capture_finishes(tm
         return "A new meeting, not historical content."
 
     service = Meetings(
-        settings("https://fixture.invalid/v1"), lambda source: GeneratedCapture(1), archive=archive,
-        transcribe_audio=transcribe, on_update=changed, on_recovery=recover, on_complete=complete,
+        settings("https://fixture.invalid/v1"),
+        lambda source: GeneratedCapture(1),
+        archive=archive,
+        transcribe_audio=transcribe,
+        on_update=changed,
+        on_recovery=recover,
+        on_complete=complete,
     )
     try:
         service.start(title="Captured during startup")
@@ -307,8 +316,13 @@ def test_an_older_meeting_delivers_while_a_new_capture_owns_the_ui(tmp_path: Pat
             delivered.set()
 
     service = Meetings(
-        settings("https://fixture.invalid/v1"), lambda source: GeneratedCapture(1), archive=archive,
-        transcribe_audio=transcribe, on_update=changed, on_recovery=events.recover, on_complete=complete,
+        settings("https://fixture.invalid/v1"),
+        lambda source: GeneratedCapture(1),
+        archive=archive,
+        transcribe_audio=transcribe,
+        on_update=changed,
+        on_recovery=events.recover,
+        on_complete=complete,
     )
     try:
         service.start(title="First")

@@ -26,6 +26,7 @@ from assistant.qt_runtime import prepare
 from tests.browser_fixture import fixture
 from tests.native_browser_fixture import borrowed, disposable, dispose, request
 from tests.native_browser_tabs import verify_native_tabs
+from tests.native_business_apps import verify_business_apps
 from tests.native_communications_browser import NativeTrace, verify_communications
 from tests.test_browser import decoded
 
@@ -44,9 +45,9 @@ def act(browser: Browser, target: str, page: dict[str, Json], name: str, action:
 
 
 def test_disposable_browser_fixture_waits_for_late_native_profile_release(tmp_path: Path) -> None:
-    browser = Browser(tmp_path / 'profile')
+    browser = Browser(tmp_path / "profile")
     browser.profile.mkdir()
-    stream = (browser.profile / 'dictionary.bdic').open('wb')
+    stream = (browser.profile / "dictionary.bdic").open("wb")
     denied = threading.Event()
     remove = shutil.rmtree
 
@@ -73,15 +74,15 @@ def test_disposable_browser_fixture_waits_for_late_native_profile_release(tmp_pa
 
 
 def test_disposable_browser_fixture_reports_persistent_cleanup_failure(tmp_path: Path) -> None:
-    browser = Browser(tmp_path / 'profile')
+    browser = Browser(tmp_path / "profile")
     attempts: tuple[Path, ...] = ()
 
     def refuse(path: Path) -> None:
         nonlocal attempts
         attempts += (path,)
-        raise PermissionError('Fixture profile remains inaccessible.')
+        raise PermissionError("Fixture profile remains inaccessible.")
 
-    with TestCase().assertRaisesRegex(PermissionError, 'remains inaccessible'):
+    with TestCase().assertRaisesRegex(PermissionError, "remains inaccessible"):
         dispose(browser, refuse)
     assert attempts == (browser.profile,) * 7
 
@@ -105,11 +106,15 @@ def verify_dom_and_saved_profile(browser: Browser, url: str) -> None:
     page = request(browser, "open", url=url)
     target = cast(str, page["target_id"])
     # Opening returns at main-document readiness; iframe controls need the full load event.
-    browser.request("evaluate", {
-        "target_id": target,
-        "expression": "new Promise(resolve => document.readyState === 'complete' ? resolve(true) : "
-                      "window.addEventListener('load', () => resolve(true), {once: true}))",
-    }, threading.Event())
+    browser.request(
+        "evaluate",
+        {
+            "target_id": target,
+            "expression": "new Promise(resolve => document.readyState === 'complete' ? resolve(true) : "
+            "window.addEventListener('load', () => resolve(true), {once: true}))",
+        },
+        threading.Event(),
+    )
     assert "fixture-private" not in json.dumps(page)
     act(browser, target, page, "Name", "fill", value='Åäö "literal"')
     act(browser, target, page, "Choice", "select", value="beta")
@@ -164,7 +169,7 @@ def verify_managed_cancellation(browser: Browser) -> None:
         process = browser.process
         with ThreadPoolExecutor(max_workers=1) as worker:
             pending = worker.submit(browser.request, "evaluate", {"target_id": page["target_id"], "expression": "new Promise(() => {})"}, cancel)
-            time.sleep(.15)
+            time.sleep(0.15)
             started = time.monotonic()
             cancel.set()
             with TestCase().assertRaises(InterruptedError):
@@ -182,6 +187,7 @@ def test_managed_browser_dom_teams_persistence_and_cancellation(tmp_path: Path) 
         with fixture() as url:
             verify_dom_and_saved_profile(browser, url)
         verify_communications(browser, trace)
+        verify_business_apps(browser)
         # Cancellation terminates the shared process, so it must run last.
         verify_managed_cancellation(browser)
 
@@ -197,6 +203,7 @@ def test_visible_sign_in_handoff_reuses_only_the_dedicated_profile(tmp_path: Pat
 
 def verify_inactive_screenshots(browser: Browser, target: str, identity: int) -> None:
     """Check real repaint and native selection/group restoration on an attached tab."""
+
     def state() -> tuple[frozenset[int], Tab, Group]:
         view = request(browser, "tabs", view="strip", limit=40)
         rows, groups = view["tabs"], view["groups"]
@@ -237,8 +244,11 @@ def verify_inactive_screenshots(browser: Browser, target: str, identity: int) ->
 
 def verify_attached_dom(personal: Browser, attached: Browser, url: str) -> None:
     original = request(personal, "open", url=url)
-    personal.request("evaluate", {"target_id": original["target_id"],
-                                  "expression": "localStorage.setItem('fixture-session', 'already-signed-in')"}, threading.Event())
+    personal.request(
+        "evaluate",
+        {"target_id": original["target_id"], "expression": "localStorage.setItem('fixture-session', 'already-signed-in')"},
+        threading.Event(),
+    )
     blank = request(personal, "open", url="about:blank")
     assert request(attached, "attach")["mode"] == "attached"
     connection = attached.connection
@@ -280,9 +290,8 @@ def verify_attached_cancellation(personal: Browser, attached: Browser) -> None:
         page = request(personal, "snapshot", target_id=blank["id"])
         request(attached, "attach")
         with ThreadPoolExecutor(max_workers=1) as worker:
-            pending = worker.submit(attached.request, "evaluate",
-                                    {"target_id": page["target_id"], "expression": "new Promise(() => {})"}, cancel)
-            time.sleep(.15)
+            pending = worker.submit(attached.request, "evaluate", {"target_id": page["target_id"], "expression": "new Promise(() => {})"}, cancel)
+            time.sleep(0.15)
             cancel.set()
             with TestCase().assertRaises(InterruptedError):
                 pending.result(timeout=3)

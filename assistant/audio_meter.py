@@ -47,11 +47,11 @@ class AudioMeter:
             sample = self._sample
             if self.stopped.is_set() or not self.enabled.is_set() or sample is None:
                 return None
-        return sample.level if self.clock() - sample.at <= .25 else None
+        return sample.level if self.clock() - sample.at <= 0.25 else None
 
     def run(self) -> None:
         while not self.stopped.is_set():
-            if not self.enabled.wait(.05):
+            if not self.enabled.wait(0.05):
                 continue
             if self.stopped.is_set():
                 return
@@ -62,9 +62,9 @@ class AudioMeter:
             with self._lock:
                 if revision == self._revision and self.enabled.is_set():
                     self._sample = sample
-            self.stopped.wait(.05)
+            self.stopped.wait(0.05)
 
     def close(self) -> None:
         self.stopped.set()
         self.enabled.set()
-        self.worker.join(timeout=.1)
+        self.worker.join(timeout=0.1)

@@ -56,8 +56,7 @@ class BannerPolicy:
         return Coverage(count, unavailable)
 
     def suppress(self, source: str, journal: winreg.HKEYType) -> int:
-        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, self.settings_path + "\\" + source,
-                            0, winreg.KEY_READ | winreg.KEY_SET_VALUE) as app:
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, self.settings_path + "\\" + source, 0, winreg.KEY_READ | winreg.KEY_SET_VALUE) as app:
             current = setting(app, "ShowBanner")
             if current == 0:
                 return 0
@@ -78,8 +77,10 @@ class BannerPolicy:
             for source in names(journal):
                 with winreg.OpenKey(journal, source) as saved:
                     original = setting(saved, "Original")
-                with suppress(FileNotFoundError), winreg.OpenKey(winreg.HKEY_CURRENT_USER, self.settings_path + "\\" + source,
-                                    0, winreg.KEY_READ | winreg.KEY_SET_VALUE) as app:
+                with (
+                    suppress(FileNotFoundError),
+                    winreg.OpenKey(winreg.HKEY_CURRENT_USER, self.settings_path + "\\" + source, 0, winreg.KEY_READ | winreg.KEY_SET_VALUE) as app,
+                ):
                     if setting(app, "ShowBanner") == 0:
                         if original == ABSENT:
                             winreg.DeleteValue(app, "ShowBanner")

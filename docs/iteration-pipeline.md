@@ -3,9 +3,9 @@
 The active checkout is `C:\Users\Jim.Lundin\Projects\workspace`. Run native
 commands from that directory in PowerShell. `Dev.cmd` uses the Windows `.venv`,
 adds native Git to PATH and activates the installed dependencies. The virtual
-environment uses the existing Python 3.15.1 interpreter; development tools live
+environment uses the user-installed Python 3.15.1 interpreter; development tools live
 in its own site-packages. Qt 6.12 and application dependencies are reused from
-the installed `.runtime` through a local `.pth` file. Neither runtime folder is
+the installed `.runtime` through a local `.pth` file. The dependency folder is not
 copied or rebuilt for development. Keep the Downloads client separate so edits
 and test execution do not replace files in a running application.
 
@@ -18,10 +18,22 @@ and 13.3 seconds from identical Windows-local source in a paired measurement.
 .\Dev.cmd check --tests tests/test_feed_triage.py tests/test_windows_feed.py --receipt "$env:TEMP\workspace-check.json"
 .\Dev.cmd deploy --check-receipt "$env:TEMP\workspace-check.json"
 .\Dev.cmd lint assistant/feed_triage.py
+.\Dev.cmd format assistant/feed_triage.py
+.\Dev.cmd format --check .
 .\Dev.cmd typecheck assistant/feed_triage.py
 ```
 
 ## Edit loop
+
+Ruff owns Python formatting as well as linting. Run `Dev.cmd lint --fix .` for
+safe lint fixes and `Dev.cmd format .` for repository-wide formatting; CI checks
+both. VS Code uses the Ruff extension for Python format-on-save. Existing
+`fmt: off`/`fmt: skip` regions preserve keyboard grids and intentional tables;
+vendored typeshed remains excluded by the shared Ruff configuration.
+Launchers and runtime activation use the same Python 3.15 Ruff target as the
+application. Windows `python`, `py` and `.pyw` associations select the user-installed
+3.15 interpreter; `StartWorkspace.cmd` selects it with `pyw -3.15`.
+The Downloads installation and ZIP contain no private interpreter. No launcher starts an older Python and hands off to another process.
 
 For continuous feedback, install the small development-only watcher once:
 
@@ -164,6 +176,10 @@ per step; the local fixture server uses a short idle shutdown poll. The daily
 refresh case still exercises the real periodic wake without a new observation.
 The fixture supplies the real server adapter and cancellable wait dependency
 through `Triage` construction; it does not patch native events or module globals.
+Feed context/reply checks use the existing task and context stores, real local
+HTTP and the registered agent tools. They verify saved-before-queue ownership,
+exact reply retries after restart, stale-item rejection, contextual model wiring
+and outcome/answer retrieval. Pydantic's own parsing algorithms are trusted.
 Feed-tool cases use the registered tool boundary; the general SDK conversation
 scenarios remain in `tests/test_agent.py`.
 
@@ -247,7 +263,7 @@ already-covered creation transactions.
 ## Source deployment
 
 The coordinator creates a fresh `workspace-source-*` directory in Windows Temp.
-It stages all source and validates hashes, unchanged runtime pins and ZIP paths.
+It stages all source and validates hashes, unchanged Python/dependency pins and ZIP paths.
 It builds verified source/ZIP backups and a new ZIP while Workspace keeps running.
 The new ZIP copies compressed runtime records byte-for-byte and writes a fresh
 central directory. It replaces source records rather than accumulating stale
@@ -258,10 +274,31 @@ audit only when the complete bundle SHA-256 and every runtime file's membership,
 size and stat timestamps match the saved audit. A
 changed observation forces another byte audit; pins changing require bundle.py.
 This is a local performance cache, not a defense against deliberately forged
-filesystem timestamps. Runtime folder identities are checked and never replaced.
+filesystem timestamps. The dependency folder identity is checked and never replaced.
 
-After preparation, the native watcher proves the installed keeper/child group,
-retains exact process handles, requests normal WM_CLOSE and checks clean exits.
+After preparation, the coordinator computes affected components from both source
+versions' transitive imports, including package initialization. Selection compares
+managed source: preserved unrelated files such as pytest/Ruff caches do not count
+as removed application assets. Assistant-only changes preserve the keyboard and
+automation. Shared dependencies restart every
+consumer; supervisor/bootstrap and implicit application asset changes require a
+full stop. A running keeper without the component-control capability also uses
+the full stop, so the first deployment of this feature restarts all components.
+
+The keeper allows assistant and automation up to 60 seconds after WM_CLOSE to
+release their owned resources. Assistant cleanup includes a personal-work join
+bounded at 20 seconds; a five-second keeper deadline could terminate it before
+cleanup completed. Input retains its five-second stop allowance. Deployment
+still requires zero exit codes and blocks source replacement after a forced stop.
+
+The native watcher proves the installed keeper/child group and retains exact
+process handles. Selective deployment asks the keeper to pause selected children
+and verifies their clean exits while retained processes stay unchanged. The keeper
+blocks competing update/restart requests until a matching resume. Full deployment
+requests normal WM_CLOSE and checks every core process's clean exit.
+Windows readers can briefly deny command deletion or acknowledgment replacement.
+The protected control owner retries on later ticks and retains committed
+acknowledgments, so retries never repeat a pause or restart.
 It preserves the separately owned Edge connection host and exact installed
 console-hook command. Normal inbox closure expires pending hook requests and
 restores the original console prompt without approving them; the external client
@@ -272,9 +309,12 @@ one coordinator inside the verified staging cwd, with source checks before and
 after. Only the exact Workspace development venv's VS Code Black language-server
 command under the user's installed extension directory is also exempt from the
 production process group; unrelated Python commands remain blocked. There is no PowerShell
-startup per poll. With replacement locks held, it rechecks the baseline, replaces
+startup per poll. With replacement locks for stopped owners held, it rechecks the baseline, replaces
 only changed managed files, removes retired managed files, clears their bytecode
-and verifies the replaced source. It launches immediately afterward. The prepared
+and verifies the replaced source. It resumes selected children or relaunches the
+full group immediately afterward. Only restarted children require fresh readiness
+markers; retained children must keep their exact process identities and marker
+timestamps. The prepared
 ZIP is rechecked and atomically published after fresh visible readiness, keeping
 archive I/O outside the interruption; final ZIP/runtime verification follows.
 Installed-source receipts explicitly mark the ZIP as pending until publication.
@@ -287,9 +327,14 @@ inspect its receipts/backups rather than blindly rerunning it.
 
 Receipts include clean exits, changed/removed files, fresh readiness markers,
 child identities, content-free lifecycle phase timings, runtime preservation, archive hash and per-phase timings.
-`timings.json` measures outage from WM_CLOSE to verified readiness. A completed
+`timings.json` measures interruption from the close/pause request to verified
+readiness, and records zero keyboard outage when its process is preserved. A completed
 stage can be reverified with `scripts.deploy verify --stage <WSL stage path>`.
-Use `scripts/bundle.py` for runtime pin changes, not routine source edits.
+Use `scripts/bundle.py` for dependency pin changes, not routine source edits.
+Removing the retired `.python` installation uses the same full clean shutdown,
+verified before-images, managed removal and ZIP publication as a source release.
+The coordinator finds installed script roots and descendants even though their
+Python executable lives outside Downloads; unrelated Python apps are excluded.
 
 ## Measured baseline
 

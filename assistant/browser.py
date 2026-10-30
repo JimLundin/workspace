@@ -15,6 +15,7 @@ from typing import assert_never
 from urllib.parse import urlsplit
 
 from assistant import browser_dom
+from assistant.browser_documents import Download, Downloaded, download
 from assistant.browser_session import (
     Attached,
     BrowserConnection,
@@ -71,9 +72,9 @@ from assistant.browser_values import (
     text,
 )
 from assistant.llm import Json
+lazy from assistant.web_apps import OPERATIONS, WebApps
 
 MAX_OUTPUT = 20_000
-
 
 
 def web_url(value: str) -> str:
@@ -100,7 +101,12 @@ class Browser:
     __slots__ = ("_live", "_opener", "created", "lock", "native_targets", "profile", "sessions", "source", "strip")
 
     def __init__(
-        self, profile: Path, *, source: Source = Separate.PROFILE, executable: Path | None = None, opener: SessionOpener | None = None,
+        self,
+        profile: Path,
+        *,
+        source: Source = Separate.PROFILE,
+        executable: Path | None = None,
+        opener: SessionOpener | None = None,
         strip: TabStrip | None = None,
     ) -> None:
         self.profile = profile
@@ -141,7 +147,13 @@ class Browser:
         self._live = self._opener.open(product, cancel)
 
     def _call(
-        self, method: str, params: dict[str, Json], cancel: threading.Event, *, session: str = "", timeout: float = 15,
+        self,
+        method: str,
+        params: dict[str, Json],
+        cancel: threading.Event,
+        *,
+        session: str = "",
+        timeout: float = 15,
     ) -> dict[str, Json]:
         if self.connection is None:
             raise BrowserError("The automation browser is stopped. Use browser_open first.")
@@ -240,9 +252,18 @@ class Browser:
         return number(world, "executionContextId", 0, 1, 2**53), tree
 
     def _evaluate(self, expression: str, session: str, context: int, cancel: threading.Event, *, timeout: float = 15) -> Json:
-        result = self._call("Runtime.evaluate", {
-            "expression": expression, "contextId": context, "awaitPromise": True, "returnByValue": True,
-        }, cancel, session=session, timeout=timeout)
+        result = self._call(
+            "Runtime.evaluate",
+            {
+                "expression": expression,
+                "contextId": context,
+                "awaitPromise": True,
+                "returnByValue": True,
+            },
+            cancel,
+            session=session,
+            timeout=timeout,
+        )
         if "exceptionDetails" in result:
             details = mapping(result["exceptionDetails"])
             exception = details.get("exception")
@@ -254,8 +275,10 @@ class Browser:
         session = self._session(target, cancel)
         context, tree = self._world(session, text(args, "frame_id"), cancel)
         options: dict[str, Json] = {
-            "prefix": uuid.uuid4().hex[:10], "offset": number(args, "offset", 0, 0, 20000),
-            "limit": number(args, "limit", 60, 1, 100), "text_offset": number(args, "text_offset", 0, 0, 10_000_000),
+            "prefix": uuid.uuid4().hex[:10],
+            "offset": number(args, "offset", 0, 0, 20000),
+            "limit": number(args, "limit", 60, 1, 100),
+            "text_offset": number(args, "text_offset", 0, 0, 10_000_000),
         }
         result = mapping(self._evaluate(f"{browser_dom.SNAPSHOT}({json.dumps(options)})", session, context, cancel))
         result["target_id"] = target
@@ -271,7 +294,7 @@ class Browser:
             if isinstance(children, list):
                 pending.extend(child for child in children if isinstance(child, dict))
         frame_offset = number(args, "frame_offset", 0, 0, 20000)
-        result["frames"] = frames[frame_offset:frame_offset + 8]
+        result["frames"] = frames[frame_offset : frame_offset + 8]
         result["frame_offset"] = frame_offset
         result["frame_total"] = len(frames)
         if frame_offset + 8 < len(frames):
@@ -286,7 +309,7 @@ class Browser:
             page_text = text(result, "text")
             if not page_text:
                 raise BrowserError("The page snapshot exceeded the output limit. Request a smaller page section.")
-            result["text"] = page_text[:len(page_text) // 2]
+            result["text"] = page_text[: len(page_text) // 2]
             encoded = json.dumps(result, ensure_ascii=False)
         if isinstance(controls, list) and result.get("more_controls"):
             result["next_control_offset"] = options["offset"] + len(controls) if isinstance(options["offset"], int) else len(controls)
@@ -308,9 +331,10 @@ class Browser:
                 self.created.add(target)
                 return target
             if time.monotonic() >= deadline:
-                raise BrowserError(f"Created tab {native.id}, but its page is not available yet. "
-                                   "Inspect browser_tabs with view=strip before opening another tab.")
-            if cancel.wait(.05):
+                raise BrowserError(
+                    f"Created tab {native.id}, but its page is not available yet. Inspect browser_tabs with view=strip before opening another tab."
+                )
+            if cancel.wait(0.05):
                 raise InterruptedError(f"Stopped after creating tab {native.id}. The tab remains in its group.")
 
     def _open(self, args: dict[str, Json], cancel: threading.Event, *, visible: bool) -> BrowserResult:
@@ -345,13 +369,15 @@ class Browser:
             raise BrowserError(text(navigation, "errorText"))
         if visible:
             result: dict[str, Json] = {
-                "target_id": target, "mode": "sign_in", "url": url,
+                "target_id": target,
+                "mode": "sign_in",
+                "url": url,
                 "message": "Sign in in the separate Edge window. After the user finishes, browser_open resumes background work with this profile.",
             }
             return BrowserResult(json.dumps(result))
         deadline = time.monotonic() + 15
         while time.monotonic() < deadline:
-            if cancel.wait(.1):
+            if cancel.wait(0.1):
                 raise InterruptedError("Stopped while navigating. The page may already have loaded.")
             try:
                 context, tree = self._world(session, "", cancel)
@@ -368,10 +394,25 @@ class Browser:
     def request(self, operation: str, args: dict[str, Json], cancel: threading.Event) -> BrowserResult:
         with self.lock:
             try:
+                if operation in OPERATIONS:
+                    return BrowserResult(WebApps(self).request(operation, args, cancel))
                 return self._request(operation, args, cancel)
-            except (InterruptedError, DisconnectedError):
+            except InterruptedError, DisconnectedError:
                 self.close()
                 raise
+
+    def download_document(self, request: Download, cancel: threading.Event) -> Downloaded:
+        with self.lock, self.awake(request.target_id, cancel):
+            web_url(request.url)
+            session = self._session(request.target_id, cancel)
+            tree = mapping(self._call("Page.getFrameTree", {}, cancel, session=session).get("frameTree"))
+            frame = text(mapping(tree.get("frame")), "id")
+
+            def transport(method: str, arguments: dict[str, Json]) -> dict[str, Json]:
+                options = {**arguments, "frameId": frame} if method == "Network.loadNetworkResource" else arguments
+                return self._call(method, options, threading.Event() if method == "IO.close" else cancel, session=session)
+
+            return download(request, cancel, transport)
 
     def activate_page(self, target: str, cancel: threading.Event) -> None:
         """Bring forward an exact CDP page without requiring session-local native tab metadata."""
@@ -388,15 +429,20 @@ class Browser:
         tabs = self._tabs(cancel)
         offset = number(args, "offset", 0, 0, 20000)
         limit = number(args, "limit", 20, 1, 40)
-        page = [tab.data() for tab in tabs[offset:offset + limit]]
+        page = [tab.data() for tab in tabs[offset : offset + limit]]
         for row in page:
             if isinstance(self.owner, Attached):
                 row["created_in_session"] = row["id"] in self.created
             if row["id"] in self.native_targets:
                 row["tab_id"] = self.native_targets[row["id"]]
         state: BrowserStatus = {
-            "mode": "stopped" if self.connection is None else "attached" if isinstance(self.owner, Attached)
-            else "sign_in" if self.visible else "background",
+            "mode": "stopped"
+            if self.connection is None
+            else "attached"
+            if isinstance(self.owner, Attached)
+            else "sign_in"
+            if self.visible
+            else "background",
             "tabs": page,
         }
         if isinstance(self.source, Product):
@@ -422,8 +468,13 @@ class Browser:
         query = strip_query(args)
         self._require_strip()
         state = self.strip.snapshot(self._call, cancel)
-        result = strip_page(state, query, "attached" if isinstance(self.owner, Attached) else "sign_in" if self.visible else "background",
-                            self.native_targets, maximum=MAX_OUTPUT)
+        result = strip_page(
+            state,
+            query,
+            "attached" if isinstance(self.owner, Attached) else "sign_in" if self.visible else "background",
+            self.native_targets,
+            maximum=MAX_OUTPUT,
+        )
         return BrowserResult(json.dumps(result, ensure_ascii=False))
 
     def _tab_operation(self, request: TabEdit, cancel: threading.Event) -> BrowserResult:
@@ -456,8 +507,9 @@ class Browser:
             case Disconnect.BROWSER:
                 attached = isinstance(self.owner, Attached)
                 self.close()
-                return BrowserResult("Disconnected. Your browser and its tabs remain open." if attached
-                                     else "Closed. The dedicated sign-in profile is retained.")
+                return BrowserResult(
+                    "Disconnected. Your browser and its tabs remain open." if attached else "Closed. The dedicated sign-in profile is retained."
+                )
             case _:
                 assert_never(request)
 
@@ -472,7 +524,7 @@ class Browser:
         while any(tab.id == target for tab in self._tabs(cancel)):
             if time.monotonic() >= deadline:
                 return BrowserResult(json.dumps(PageClosure(target, CloseState.REQUESTED).data()))
-            if cancel.wait(.05):
+            if cancel.wait(0.05):
                 raise InterruptedError("Stopped while waiting for the tab to close. Inspect browser_tabs before retrying.")
         self.sessions.pop(target, None)
         self.created.discard(target)
@@ -538,7 +590,10 @@ class Browser:
             if action not in ("click", "fill", "select", "check"):
                 raise BrowserError("Use click, fill, select or check with an id from the latest browser snapshot.")
             options: dict[str, Json] = {
-                "id": text(args, "id"), "action": action, "value": text(args, "value"), "checked": args.get("checked", True),
+                "id": text(args, "id"),
+                "action": action,
+                "value": text(args, "value"),
+                "checked": args.get("checked", True),
                 "dom_click": bool(text(args, "frame_id")),
             }
             if not isinstance(options["checked"], bool) or len(text(options, "value")) > 60_000:
@@ -546,8 +601,17 @@ class Browser:
             result = mapping(self._evaluate(f"{browser_dom.ACTION}({json.dumps(options)})", session, context, cancel))
             if action == "click" and not options["dom_click"]:
                 for kind in ("mousePressed", "mouseReleased"):
-                    self._call("Input.dispatchMouseEvent", {
-                        "type": kind, "x": result.get("x"), "y": result.get("y"), "button": "left", "clickCount": 1,
-                    }, cancel, session=session)
+                    self._call(
+                        "Input.dispatchMouseEvent",
+                        {
+                            "type": kind,
+                            "x": result.get("x"),
+                            "y": result.get("y"),
+                            "button": "left",
+                            "clickCount": 1,
+                        },
+                        cancel,
+                        session=session,
+                    )
             return BrowserResult("Browser action completed. Read a fresh browser_snapshot to verify the result.")
         raise BrowserError("Unknown browser operation.")

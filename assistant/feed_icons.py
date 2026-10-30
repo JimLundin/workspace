@@ -12,20 +12,27 @@ from assistant.qt_runtime import prepare
 prepare()
 
 _MARKS = {
+    App.WEB_PAGE: '<circle cx="12" cy="12" r="10" fill="#b9d5e4"/>'
+    '<g fill="none" stroke="#35596c" stroke-width="1.4"><ellipse cx="12" cy="12" rx="4" ry="10"/>'
+    '<path d="M2 12h20M4 7h16M4 17h16"/></g>',
     App.TEAMS: '<circle cx="17" cy="6" r="3" fill="#b8b5ff"/><circle cx="22" cy="9" r="2" fill="#8f8be5"/>'
-               '<rect x="13" y="10" width="10" height="12" rx="4" fill="#8f8be5"/>'
-               '<rect x="2" y="6" width="14" height="15" rx="2" fill="#6264ce"/>'
-               '<path d="M6 10h6m-3 0v7" stroke="white" stroke-width="2"/>',
+    '<rect x="13" y="10" width="10" height="12" rx="4" fill="#8f8be5"/>'
+    '<rect x="2" y="6" width="14" height="15" rx="2" fill="#6264ce"/>'
+    '<path d="M6 10h6m-3 0v7" stroke="white" stroke-width="2"/>',
     App.OUTLOOK: '<rect x="9" y="4" width="14" height="17" rx="2" fill="#28a8ea"/>'
-                '<path d="m10 11 6 5 7-5v11H10z" fill="#0078d4"/>'
-                '<rect x="1" y="7" width="13" height="14" rx="2" fill="#106ebe"/>'
-                '<ellipse cx="7.5" cy="14" rx="3" ry="4" fill="none" stroke="white" stroke-width="1.8"/>',
+    '<path d="m10 11 6 5 7-5v11H10z" fill="#0078d4"/>'
+    '<rect x="1" y="7" width="13" height="14" rx="2" fill="#106ebe"/>'
+    '<ellipse cx="7.5" cy="14" rx="3" ry="4" fill="none" stroke="white" stroke-width="1.8"/>',
     App.CODEX: '<rect x="2" y="3" width="20" height="18" rx="4" fill="#e7edf4"/>'
-              '<path d="m6 8 4 4-4 4m7 0h5" fill="none" stroke="#273440" stroke-width="2" stroke-linecap="round"/>',
+    '<path d="m6 8 4 4-4 4m7 0h5" fill="none" stroke="#273440" stroke-width="2" stroke-linecap="round"/>',
     App.CLAUDE: '<g stroke="#e4a38b" stroke-width="2.2" stroke-linecap="round">'
-               '<path d="M12 2v20M2 12h20M5 5l14 14M5 19 19 5M8 3l8 18M3 8l18 8M3 16l18-8M8 21l8-18"/></g>',
+    '<path d="M12 2v20M2 12h20M5 5l14 14M5 19 19 5M8 3l8 18M3 8l18 8M3 16l18-8M8 21l8-18"/></g>',
     App.EDGE: '<path d="M22 15a10 10 0 1 1-2-10C12 1 6 8 8 13c3 6 10 6 14 2" fill="#2ac5bb"/>'
-              '<path d="M22 15a10 10 0 0 1-18 3c2 1 6 1 7-1-4-6 1-11 6-9 5 2 5 5 5 7" fill="#2585da"/>',
+    '<path d="M22 15a10 10 0 0 1-18 3c2 1 6 1 7-1-4-6 1-11 6-9 5 2 5 5 5 7" fill="#2585da"/>',
+    App.DOCUMENT: '<path d="M5 2h9l5 5v15H5z" fill="#c8dbc6"/><path d="M14 2v6h5M8 12h8M8 16h8" fill="none" stroke="#416647" stroke-width="1.5"/>',
+    App.KANBAN: '<rect x="2" y="3" width="20" height="18" rx="3" fill="#e4b86b"/>'
+    '<path d="M8.5 6v12m7-12v12" stroke="#654c2b" stroke-width="1.2"/>'
+    '<path d="M4.5 7h2v5h-2zm7 0h2v8h-2zm7 0h2v3h-2z" fill="#654c2b"/>',
     App.WINDOWS: '<path d="M2 4l9-1v9H2zm11-1 9-1v10h-9zM2 14h9v9l-9-1zm11 0h9v10l-9-1z" fill="#79bafa"/>',
 }
 
@@ -33,8 +40,8 @@ _MARKS = {
 @lru_cache(maxsize=16)
 def icon(app: App) -> QtGui.QIcon:
     if app is App.WORKSPACE:
-        return assistant.vector_icons.icon('agent', '#d7c8ff', 20)
-    source = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">' + _MARKS[app] + '</svg>'
+        return assistant.vector_icons.icon("agent", "#d7c8ff", 20)
+    source = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">' + _MARKS[app] + "</svg>"
     renderer = QtSvg.QSvgRenderer(QtCore.QByteArray(source.encode()))
     pixmap = QtGui.QPixmap(48, 48)
     pixmap.fill(Qt.GlobalColor.transparent)

@@ -406,7 +406,7 @@ class Followup:
             if transcript is None or transcript.source.sha256 != citation.source_sha256:
                 raise ValueError("A citation is bound to a different transcript observation.")
             content = transcript.text
-            if content[citation.start:citation.end] != citation.quote or content.count("\n", 0, citation.start) + 1 != citation.line:
+            if content[citation.start : citation.end] != citation.quote or content.count("\n", 0, citation.start) + 1 != citation.line:
                 raise ValueError("A citation does not resolve against the observed source text.")
 
 
@@ -432,7 +432,9 @@ def _array(value: object, field: str, maximum: int, *, empty: bool = True) -> li
 def _citation(bundle: TranscriptBundle, value: object) -> Citation:
     data = _object(value, {"source_id", "quote"}, frozenset({"occurrence"}))
     return resolve_citation(
-        bundle, identifier(data["source_id"], "citation source"), _text(data["quote"], "source quote", 4000),
+        bundle,
+        identifier(data["source_id"], "citation source"),
+        _text(data["quote"], "source quote", 4000),
         occurrence=integer(data["occurrence"], "quote occurrence", maximum=MAX_QUOTE_OCCURRENCES - 1) if "occurrence" in data else None,
     )
 
@@ -467,8 +469,11 @@ def _due(bundle: TranscriptBundle, value: object) -> Due:
 def _action(bundle: TranscriptBundle, value: object) -> ActionItem:
     data = _object(value, {"id", "text", "citations", "owner", "due"})
     return ActionItem(
-        identifier(data["id"], "action identity"), _text(data["text"], "action text", 4000), _evidence(bundle, data["citations"]),
-        _owner(bundle, data["owner"]), _due(bundle, data["due"]),
+        identifier(data["id"], "action identity"),
+        _text(data["text"], "action text", 4000),
+        _evidence(bundle, data["citations"]),
+        _owner(bundle, data["owner"]),
+        _due(bundle, data["due"]),
     )
 
 
@@ -481,7 +486,9 @@ def _recipient(bundle: TranscriptBundle, value: object) -> SourceRecipient:
 def _draft(bundle: TranscriptBundle, value: object) -> EmailDraft:
     data = _object(value, {"id", "subject", "body", "recipients", "citations", "action_ids"})
     return EmailDraft(
-        identifier(data["id"], "draft identity"), _header(data["subject"], "draft subject", 500), _text(data["body"], "draft body", MAX_BODY),
+        identifier(data["id"], "draft identity"),
+        _header(data["subject"], "draft subject", 500),
+        _text(data["body"], "draft body", MAX_BODY),
         tuple(_recipient(bundle, item) for item in _array(data["recipients"], "draft recipients", 30)),
         _evidence(bundle, data["citations"]),
         tuple(identifier(item, "draft action reference") for item in _array(data["action_ids"], "draft action references", MAX_ACTIONS)),
@@ -514,7 +521,8 @@ def parse_followup(bundle: TranscriptBundle, model_json: str) -> Followup:
     if digest(data["source_digest"], "selected source digest") != bundle.fingerprint:
         raise ValueError("The follow-through response belongs to a different source selection.")
     return Followup(
-        bundle, _header(data["title"], "follow-through title", 240),
+        bundle,
+        _header(data["title"], "follow-through title", 240),
         tuple(_statement(bundle, item) for item in _array(data["notes"], "meeting notes", 64, empty=False)),
         tuple(_statement(bundle, item) for item in _array(data["decisions"], "meeting decisions", 64)),
         tuple(_action(bundle, item) for item in _array(data["actions"], "meeting actions", MAX_ACTIONS)),
@@ -534,11 +542,19 @@ def bundle_data(bundle: TranscriptBundle) -> dict[str, Json]:
                 capture_notice = None
             case _:
                 assert_never(source.notice)
-        values.append({
-            "id": source.id, "title": source.title, "path": source.path, "sha256": source.sha256,
-            "started_at": source.started_at, "duration_seconds": source.duration_seconds, "capture": source.capture,
-            "notice": capture_notice, "text": transcript.text,
-        })
+        values.append(
+            {
+                "id": source.id,
+                "title": source.title,
+                "path": source.path,
+                "sha256": source.sha256,
+                "started_at": source.started_at,
+                "duration_seconds": source.duration_seconds,
+                "capture": source.capture,
+                "notice": capture_notice,
+                "text": transcript.text,
+            }
+        )
     return {"version": 1, "sources": values}
 
 
@@ -555,10 +571,14 @@ def bundle_of(value: object) -> TranscriptBundle:
             raise ValueError("Invalid recording source.")
         notice = NoCaptureNotice.NONE if row["notice"] is None else CaptureNotice(_text(row["notice"], "capture notice", 4000))
         source = TranscriptSource(
-            identifier(row["id"], "transcript identity"), _header(row["title"], "transcript title", 240),
-            _text(row["path"], "transcript path", 4096), digest(row["sha256"], "transcript digest"),
-            timestamp(row["started_at"], "recording start"), timestamp(row["duration_seconds"], "recording duration"),
-            "both" if capture == "both" else "microphone", notice,
+            identifier(row["id"], "transcript identity"),
+            _header(row["title"], "transcript title", 240),
+            _text(row["path"], "transcript path", 4096),
+            digest(row["sha256"], "transcript digest"),
+            timestamp(row["started_at"], "recording start"),
+            timestamp(row["duration_seconds"], "recording duration"),
+            "both" if capture == "both" else "microphone",
+            notice,
         )
         content = _text(row["text"], "source snapshot text", MAX_TRANSCRIPT_BYTES).encode("utf-8")
         sources.append(Transcript(source, content))
@@ -616,17 +636,30 @@ def followup_data(followup: Followup) -> dict[str, Json]:
         recipients: list[Json] = []
         for recipient in draft.recipients:
             email = recipient.addressee.email
-            recipients.append({
-                "name": recipient.addressee.name, "email": email.value if isinstance(email, EmailAddress) else None,
-                "citations": evidence(recipient.citations),
-            })
-        drafts.append({
-            "id": draft.id, "subject": draft.subject, "body": draft.body, "recipients": recipients,
-            "citations": evidence(draft.citations), "action_ids": list(draft.action_ids),
-        })
+            recipients.append(
+                {
+                    "name": recipient.addressee.name,
+                    "email": email.value if isinstance(email, EmailAddress) else None,
+                    "citations": evidence(recipient.citations),
+                }
+            )
+        drafts.append(
+            {
+                "id": draft.id,
+                "subject": draft.subject,
+                "body": draft.body,
+                "recipients": recipients,
+                "citations": evidence(draft.citations),
+                "action_ids": list(draft.action_ids),
+            }
+        )
     return {
-        "source_digest": bundle.fingerprint, "title": followup.title, "notes": [statement(item) for item in followup.notes],
-        "decisions": [statement(item) for item in followup.decisions], "actions": actions, "drafts": drafts,
+        "source_digest": bundle.fingerprint,
+        "title": followup.title,
+        "notes": [statement(item) for item in followup.notes],
+        "decisions": [statement(item) for item in followup.decisions],
+        "actions": actions,
+        "drafts": drafts,
     }
 
 
@@ -650,7 +683,8 @@ def draft_of(value: object) -> DraftContent:
 
 def action_data(content: ActionContent) -> dict[str, Json]:
     return {
-        "text": content.text, "owner": content.owner.name if isinstance(content.owner, AssignedOwner) else None,
+        "text": content.text,
+        "owner": content.owner.name if isinstance(content.owner, AssignedOwner) else None,
         "due": content.due.text if isinstance(content.due, AssignedDue) else None,
         "status": "done" if content.status is ActionStatus.DONE else "open",
     }
@@ -662,5 +696,6 @@ def action_of(value: object) -> ActionContent:
     due = Unspecified.NOT_STATED if data["due"] is None else AssignedDue(_header(data["due"], "assigned due text", 240))
     if data["status"] not in ("open", "done"):
         raise ValueError("Invalid action completion state.")
-    return ActionContent(_text(data["text"], "edited action text", 4000), owner, due,
-                         ActionStatus.DONE if data["status"] == "done" else ActionStatus.OPEN)
+    return ActionContent(
+        _text(data["text"], "edited action text", 4000), owner, due, ActionStatus.DONE if data["status"] == "done" else ActionStatus.OPEN
+    )

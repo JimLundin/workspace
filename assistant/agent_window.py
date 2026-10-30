@@ -18,6 +18,8 @@ from assistant.agent_input import Inputs, acceptable, resolution
 from assistant.agent_session import (
     Approval,
     Begin,
+    CanvasNotice,
+    CanvasSettled,
     Done,
     Enqueued,
     Event,
@@ -103,9 +105,15 @@ class AgentWindow:
     )
 
     def __init__(
-        self, stop: Callable[[], None], *, post: Callable[[Callable[[], None]], None], create_view: Callable[[AgentWindow], View],
-        on_problem: Callable[[str], None] | None = None, on_reset: Callable[[], bool] | None = None,
-        on_submit: Callable[[str], None] | None = None, on_waiting: Callable[[bool], None] | None = None,
+        self,
+        stop: Callable[[], None],
+        *,
+        post: Callable[[Callable[[], None]], None],
+        create_view: Callable[[AgentWindow], View],
+        on_problem: Callable[[str], None] | None = None,
+        on_reset: Callable[[], bool] | None = None,
+        on_submit: Callable[[str], None] | None = None,
+        on_waiting: Callable[[bool], None] | None = None,
         on_recording: Callable[[RecordingAction], None] | None = None,
         on_work: Callable[[], None] | None = None,
         on_communication: Callable[[Command], bool] | None = None,
@@ -201,6 +209,7 @@ class AgentWindow:
 
     def open_inbox(self) -> None:
         """Schedule current inbox access with native view creation on the UI thread."""
+
         def reveal() -> None:
             if not self.closed:
                 self._create()
@@ -243,7 +252,7 @@ class AgentWindow:
                 if answer in ("approve", "decline"):
                     self.respond(identity, answer)
                 else:
-                    self.say("Approval is still waiting. Toggle N and say just “approve” or “decline”.")
+                    self.say("Approval is still waiting. Hold N and say just “approve” or “decline”, then release to send.")
         return True
 
     def request_input(self, message: Question | Approval, respond: Callable[[str], bool]) -> None:
@@ -336,6 +345,12 @@ class AgentWindow:
         if self.on_work is not None:
             self.on_work()
 
+    def notify_canvas(self, title: str, target: str) -> None:
+        self._event(CanvasNotice(title, target, time.time()))
+
+    def settle_canvas(self, targets: frozenset[str]) -> None:
+        self._event(CanvasSettled(targets))
+
     def new(self) -> bool:
         with self.lock:
             if self.closed or self.state.busy:
@@ -344,7 +359,7 @@ class AgentWindow:
 
     def begin(self, task: str, stop: Callable[[], None], *, queued: bool = False, source: FeedRequest | None = None) -> None:
         self.stop = stop
-        self._event(Begin(task, time.time(), queued, source))
+        self._event(Begin(task, time.time(), queued=queued, source=source))
 
     def queued(self, task: str) -> None:
         self._event(Enqueued(task))
@@ -383,8 +398,13 @@ class AgentWindow:
             self._external = None
             self._presented = None
             recording = self.state.recording
-            self.state = Session(identity=uuid.uuid4().hex, communications=self.state.communications, console_requests=self.state.console_requests,
-                                 communication_drafts=self.state.communication_drafts, triage=self.state.triage)
+            self.state = Session(
+                identity=uuid.uuid4().hex,
+                communications=self.state.communications,
+                console_requests=self.state.console_requests,
+                communication_drafts=self.state.communication_drafts,
+                triage=self.state.triage,
+            )
             if recording.phase not in ("idle", "saved", "interrupted"):
                 self.state = transition(self.state, RecordingUpdated(recording, time.time()))
             self._changed()

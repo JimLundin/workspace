@@ -124,7 +124,7 @@ class DesktopComposition:
             pump()
             if time.monotonic() >= deadline:
                 raise RuntimeError("The desktop composition dispatcher did not finish shutting down.")
-            time.sleep(.001)
+            time.sleep(0.001)
         if shutdown.Status != 1:
             raise OSError("The desktop composition dispatcher could not shut down cleanly.")
         RoUninitialize()
@@ -132,12 +132,41 @@ class DesktopComposition:
 
 class Glass:
     __slots__ = (
-        "backdrop", "bindings", "bounds", "clip", "closed", "compositor", "geometry", "group", "handle", "mask", "mask_shape", "mask_surface", "mask_visual",
-        "opacity", "path_geometry", "paths", "root", "rounded_geometry", "shadow", "shadow_visual", "size", "stack", "target", "tint", "tint_brush", "visible",
+        "backdrop",
+        "bindings",
+        "bounds",
+        "clip",
+        "closed",
+        "compositor",
+        "geometry",
+        "group",
+        "handle",
+        "mask",
+        "mask_shape",
+        "mask_surface",
+        "mask_visual",
+        "opacity",
+        "path_geometry",
+        "paths",
+        "root",
+        "rounded_geometry",
+        "shadow",
+        "shadow_visual",
+        "size",
+        "stack",
+        "target",
+        "tint",
+        "tint_brush",
+        "visible",
     )
 
-    def __init__(self, owner: DesktopComposition, *, create_path: Callable[[Contour, float], CompositionPath] = composition_path,
-                 stack: Callable[[int, int], None] = stack_behind) -> None:
+    def __init__(
+        self,
+        owner: DesktopComposition,
+        *,
+        create_path: Callable[[Contour, float], CompositionPath] = composition_path,
+        stack: Callable[[int, int], None] = stack_behind,
+    ) -> None:
         # Native paths contain COM-owned callback bindings. Retain at most eight
         # recent shape/scale variants per glass owner to avoid rebuilding those
         # bindings on common toolbar reversals. The standard library owns cache
@@ -147,8 +176,9 @@ class Glass:
         self.stack = stack
         # NOREDIRECTIONBITMAP lets composition supply the entire surface. It is
         # intentionally not a layered/color-keyed window.
-        self.handle = CreateWindowExW(0x0820_00A0, "STATIC", "Workspace · Glass", 0x8000_0000,
-                                     0, 0, 1, 1, None, None, GetModuleHandleW(None), None) or 0
+        self.handle = (
+            CreateWindowExW(0x0820_00A0, "STATIC", "Workspace · Glass", 0x8000_0000, 0, 0, 1, 1, None, None, GetModuleHandleW(None), None) or 0
+        )
         if not self.handle:
             raise ctypes.WinError(GetLastError())
         self.closed = self.visible = False
@@ -185,7 +215,7 @@ class Glass:
             self.mask = compositor.CreateSurfaceBrushWithSurface(self.mask_surface)
             self.shadow = compositor.CreateDropShadow()
             self.shadow.Color = _color("#000000", 1)
-            self.shadow.Opacity = .28
+            self.shadow.Opacity = 0.28
             self.shadow.Mask = self.mask
             self.shadow_visual = compositor.CreateSpriteVisual()
             self.shadow_visual.Shadow = self.shadow
@@ -203,7 +233,7 @@ class Glass:
             windows.destroy(self.handle)
             raise
 
-    def color(self, tint: str, opacity: float = .22) -> None:
+    def color(self, tint: str, opacity: float = 0.22) -> None:
         self.tint_brush.Color = _color(tint, opacity)
 
     def bind_visuals(self) -> VisualBindings:
@@ -212,9 +242,13 @@ class Glass:
         # versus 0.13 ms through the regular native interface. Retain native
         # bindings inside this scene's owning UI thread/dispatcher lifetime.
         group, shadow = self.group.as_(IVisual), self.shadow_visual.as_(IVisual)
-        return VisualBindings(self.root.as_(IVisual), group, shadow,
-                              self.rounded_geometry.as_(ICompositionRoundedRectangleGeometry),
-                              (group, self.backdrop.as_(IVisual), self.tint.as_(IVisual), self.mask_visual.as_(IVisual), shadow))
+        return VisualBindings(
+            self.root.as_(IVisual),
+            group,
+            shadow,
+            self.rounded_geometry.as_(ICompositionRoundedRectangleGeometry),
+            (group, self.backdrop.as_(IVisual), self.tint.as_(IVisual), self.mask_visual.as_(IVisual), shadow),
+        )
 
     def position(self, bounds: Rect, scale: float, opacity: float, *, attached: bool = False, contour: Contour | None = None) -> None:
         padding = round(28 * scale)
@@ -262,7 +296,7 @@ class Glass:
 
     def show(self, foreground: int) -> None:
         if not self.visible:
-            windows.show_quietly(self.handle, True)
+            windows.show_quietly(self.handle, visible=True)
             self.visible = True
         # Keep the native blur below the corresponding text, including after a
         # new bubble or a context menu changes the topmost window order.
@@ -272,7 +306,7 @@ class Glass:
 
     def hide(self) -> None:
         if self.visible:
-            windows.show_quietly(self.handle, False)
+            windows.show_quietly(self.handle, visible=False)
             self.visible = False
 
     def close(self) -> None:

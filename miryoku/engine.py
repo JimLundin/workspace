@@ -40,13 +40,13 @@ from protocol import App, Request, Tool
 class Host(Protocol):
     """What the engine needs from Windows."""
 
-    def send(self, key: Key | Mod, down: bool) -> None: ...
+    def send(self, key: Key | Mod, *, down: bool) -> None: ...
     def start_timer(self) -> int: ...
     def stop_timer(self, timer: int) -> None: ...
     def signal(self, signal: Signal) -> None:
         """Let the user know about a change they can't otherwise see."""
 
-    def request(self, request: Request, down: bool) -> None:
+    def request(self, request: Request, *, down: bool) -> None:
         """A tool or app key went down or up: pass it on to the assistant."""
 
     def type_text(self, text: str) -> None:
@@ -134,8 +134,8 @@ class Indicator:
     """State the user can't see on the keys: the layer keys come from, and caps word."""
 
     layer: Layer | None
-    locked: bool
-    caps_word: bool
+    locked: bool = field(kw_only=True)
+    caps_word: bool = field(kw_only=True)
 
 
 QUIET: Final = Indicator(None, locked=False, caps_word=False)
@@ -199,7 +199,7 @@ class Modifiers:
     def hold(self, host: Host, mod: Mod) -> None:
         count = self.counts.get(mod, 0)
         if count == 0:
-            host.send(mod, True)
+            host.send(mod, down=True)
         self.counts[mod] = count + 1
 
     def release(self, host: Host, mod: Mod) -> None:
@@ -207,24 +207,24 @@ class Modifiers:
         if count > 1:
             self.counts[mod] = count - 1
         elif count == 1:
-            host.send(mod, False)
+            host.send(mod, down=False)
 
     def chord(self, host: Host, chord: Chord) -> None:
         """The chord's key goes down with its modifiers around it. Modifiers already
         held are left alone; the ones added are released right after."""
         added = [mod for mod in Mod if mod in chord.mods and mod not in self.counts]  # in a fixed order
         for mod in added:
-            host.send(mod, True)
-        host.send(chord.key, True)
+            host.send(mod, down=True)
+        host.send(chord.key, down=True)
         for mod in reversed(added):
-            host.send(mod, False)
+            host.send(mod, down=False)
 
     def release_all(self, host: Host) -> None:
         held, self.counts = self.counts, {}
         failures = 0
         for mod in held:
             try:
-                host.send(mod, False)
+                host.send(mod, down=False)
             except Exception:
                 failures += 1
         if failures:
@@ -253,7 +253,7 @@ class Engine:
     capitalised until something that isn't part of a word: a space, punctuation,
     Enter, an arrow... Digits, `_`, Backspace and Delete keep it going.
 
-    Spacebar holds dictation; B toggles dictation; N toggles agent speech.
+    Spacebar holds dictation; B toggles dictation; N holds agent speech.
     A second toggle press stops speech, as does disabling the layout.
     Hold-to-talk tools on the Tools layer retain their press/release behavior.
 
@@ -267,7 +267,7 @@ class Engine:
     configuration: Configuration = field(default=DEFAULT_CONFIGURATION, kw_only=True)
     escape_down_at: int | None = None
     """When the escape key went down, if it is down."""
-    enabled: bool = True
+    enabled: bool = field(default=True, kw_only=True)
     """False while switched off with the escape key or tray toggle."""
     pressed: list[Action | None] = field(default_factory=no_keys)
     """What each held layout key turned into, by cell."""
@@ -279,7 +279,7 @@ class Engine:
     """When the last character was typed (for the typing streak)."""
     last_tap: LastTap | None = None
     """The last tap-hold key tapped, and when (for quick tap)."""
-    caps_word: bool = False
+    caps_word: bool = field(default=False, kw_only=True)
     locked: Layer | None = None
     mods: Modifiers = field(default_factory=Modifiers)
     voice_held: dict[Scancode, Tool] = field(default_factory=dict[Scancode, Tool])
@@ -291,16 +291,19 @@ class Engine:
     shown: Indicator = QUIET
     """What the indicator was last told."""
 
-    def on_key(self, host: Host, scancode: Scancode, down: bool, now: int) -> Verdict:
+    def on_key(self, host: Host, scancode: Scancode, *, down: bool, now: int) -> Verdict:
         """Decode native key fields; mapped keys become KeyDown or KeyUp once.
-        `now` is the event's timestamp in ms (it may wrap around)."""
-        verdict = self.key(host, scancode, down, now)
+        `now` is the event's timestamp in ms (it may wrap around).
+        The output owner and three native fields avoid allocating another input
+        record before mapping in the measured keyboard path.
+        """
+        verdict = self.key(host, scancode, down=down, now=now)
         self.refresh(host)
         return verdict
 
     def refresh(self, host: Host) -> None:
         """Tells the indicator if what it should show has changed."""
-        now = Indicator(self.layer(), self.locked is not None, self.caps_word)
+        now = Indicator(self.layer(), locked=self.locked is not None, caps_word=self.caps_word)
         if now != self.shown:
             self.shown = now
             host.indicate(now)
@@ -315,7 +318,9 @@ class Engine:
         host.signal(Signal.ON if self.enabled else Signal.OFF)
         self.refresh(host)
 
-    def key(self, host: Host, scancode: Scancode, down: bool, now: int) -> Verdict:
+    def key(self, host: Host, scancode: Scancode, *, down: bool, now: int) -> Verdict:
+        # Keep the output owner and native fields explicit until the mapping
+        # decision creates the single buffered event used by this measured path.
         # Escape key: tap = on/off, hold = quit. Checked first, works in both states.
         if scancode == ESCAPE:
             if down:
@@ -335,10 +340,10 @@ class Engine:
             if down and scancode not in self.voice_held:
                 tool = VOICE_KEYS[scancode]
                 self.voice_held[scancode] = tool
-                host.request(tool, True)
+                host.request(tool, down=True)
             elif not down and scancode in self.voice_held:
                 tool = self.voice_held.pop(scancode)
-                host.request(tool, False)
+                host.request(tool, down=False)
             return Verdict.SWALLOW
         match slot(scancode):
             case Unmapped.FREE:
@@ -350,11 +355,15 @@ class Engine:
                 self.event(host, KeyDown(cell, now) if down else KeyUp(cell, now))
                 return Verdict.SWALLOW
 
-    def native_direction(self, host: Host, key: Key, down: bool, now: int) -> bool:
-        """Physical arrows compose with Apps; their release stays paired after leaving the layer."""
+    def native_direction(self, host: Host, key: Key, *, down: bool, now: int) -> bool:
+        """Physical arrows compose with Apps; their release stays paired after leaving the layer.
+
+        The native key fields and output owner preserve this measured callback's
+        allocation scope; the timestamp also resolves a pending Apps hold.
+        """
         if key in self.desktop_held:
             if not down:
-                host.request(self.desktop_held.pop(key), False)
+                host.request(self.desktop_held.pop(key), down=False)
             return True
         if not self.enabled or not down:
             return False
@@ -375,8 +384,8 @@ class Engine:
             case _:
                 return False
         self.desktop_held[key] = action
-        self.typed = ''
-        host.request(action, True)
+        self.typed = ""
+        host.request(action, down=True)
         return True
 
     def in_streak(self, now: int) -> bool:
@@ -526,12 +535,12 @@ class Engine:
         self.typed = ""
         for tool in held_voice.values():
             try:
-                host.request(tool, False)
+                host.request(tool, down=False)
             except Exception:
                 failures += 1
         for tool in held_desktop.values():
             try:
-                host.request(tool, False)
+                host.request(tool, down=False)
             except Exception:
                 failures += 1
         if failures:
@@ -564,17 +573,17 @@ class Engine:
         if key is Key.BACKSPACE and not held:
             self.typed = self.typed[:-1]
             return
-        typed = character(key, Mod.SHIFT in held) if held <= SHIFT_ONLY else None
+        typed = character(key, shifted=Mod.SHIFT in held) if held <= SHIFT_ONLY else None
         if typed is None:
             self.typed = ""
             return
-        self.typed = (self.typed + typed)[-self.configuration.max_trigger:]
+        self.typed = (self.typed + typed)[-self.configuration.max_trigger :]
         for trigger, text in self.configuration.snippets:
             if self.typed.endswith(trigger):
                 self.typed = ""
                 for _ in trigger:
-                    host.send(Key.BACKSPACE, True)
-                    host.send(Key.BACKSPACE, False)
+                    host.send(Key.BACKSPACE, down=True)
+                    host.send(Key.BACKSPACE, down=False)
                 host.type_text(text() if callable(text) else text)
                 host.used(f"snippet:{trigger}")
                 return
@@ -589,7 +598,7 @@ class Engine:
         a = self.apply_caps_word(a)
         match a:
             case Key():
-                host.send(a, True)
+                host.send(a, down=True)
                 self.remember(host, a)
             case Chord():
                 self.mods.chord(host, a)
@@ -608,7 +617,7 @@ class Engine:
                     host.used("layer_lock")
             case Tool() | App():
                 self.typed = ""
-                host.request(a, True)
+                host.request(a, down=True)
             case Command.NOTHING | TapHold():
                 pass
             case _:
@@ -619,9 +628,9 @@ class Engine:
     def release(self, host: Host, a: Action) -> None:
         match a:
             case Key():
-                host.send(a, False)
+                host.send(a, down=False)
             case Chord():
-                host.send(a.key, False)
+                host.send(a.key, down=False)
             case Mod():
                 self.mods.release(host, a)
             case Layer():
@@ -630,7 +639,7 @@ class Engine:
                     index = len(self.active_layers) - 1 - self.active_layers[::-1].index(a)
                     del self.active_layers[index]
             case Tool() | App():
-                host.request(a, False)
+                host.request(a, down=False)
             case TapHold() | Command():
                 pass
             case _:

@@ -35,7 +35,7 @@ def test_indicator_round_trips() -> None:
     for layer in range(6):
         for locked in (False, True):
             for caps in (False, True):
-                assert decode_indicator(encode_indicator(layer, locked, caps)) == (layer, locked, caps)
+                assert decode_indicator(encode_indicator(layer, locked=locked, caps_word=caps)) == (layer, locked, caps)
 
 
 # ---- usage log -------------------------------------------------------------------------

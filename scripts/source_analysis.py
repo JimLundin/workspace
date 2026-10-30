@@ -36,27 +36,27 @@ def parse(source: Source) -> ast.Module:
 class Cache:
     """Optional storage of immutable observations, bound to the analysis engine."""
 
-    __slots__ = ('folder',)
+    __slots__ = ("folder",)
 
-    def __init__(self, root: Path, *, folder: Path = PROFILE / 'development' / 'analysis') -> None:
+    def __init__(self, root: Path, *, folder: Path = PROFILE / "development" / "analysis") -> None:
         engine = Path(__file__).resolve().parent
         digest = hashlib.sha256(sys.version.encode())
-        digest.update(importlib.metadata.version('pydantic').encode())
+        digest.update(importlib.metadata.version("pydantic").encode())
         digest.update(str(root.resolve()).encode())
-        for name in ('source_analysis.py', 'architecture.py', 'quality.py', 'check.py'):
+        for name in ("source_analysis.py", "architecture.py", "quality.py", "check.py"):
             digest.update((engine / name).read_bytes())
-        digest.update((root / 'pyproject.toml').read_bytes())
+        digest.update((root / "pyproject.toml").read_bytes())
         self.folder = folder / digest.hexdigest()
 
-    def key(self, namespace: str, source: Source, *, extra: bytes = b'') -> str:
-        digest = hashlib.sha256(namespace.encode() + b'\0' + source.name.encode() + b'\0' + source.text.encode())
+    def key(self, namespace: str, source: Source, *, extra: bytes = b"") -> str:
+        digest = hashlib.sha256(namespace.encode() + b"\0" + source.name.encode() + b"\0" + source.text.encode())
         digest.update(extra)
         return digest.hexdigest()
 
     def read[T](self, key: str, adapter: TypeAdapter[T]) -> T | None:
         try:
-            return adapter.validate_json((self.folder / (key + '.json')).read_bytes(), strict=True)
-        except (OSError, ValidationError):
+            return adapter.validate_json((self.folder / (key + ".json")).read_bytes(), strict=True)
+        except OSError, ValidationError:
             return None
 
     def write[T](self, key: str, value: T, adapter: TypeAdapter[T]) -> None:
@@ -68,7 +68,7 @@ class Cache:
             with tempfile.NamedTemporaryFile(dir=self.folder, delete=False) as output:
                 temporary = Path(output.name)
                 output.write(adapter.dump_json(value))
-            os.replace(temporary, self.folder / (key + '.json'))
+            os.replace(temporary, self.folder / (key + ".json"))
         except OSError:
             pass
         finally:

@@ -3,15 +3,27 @@
 import threading
 import traceback
 from collections.abc import Callable
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from datetime import datetime
 from typing import Protocol, assert_never
 
 from assistant.agent_window import log_view
 from automation.context import ContextRecord
 from automation.execution import ApprovalReview, review_matches
+from automation.personal_work import (
+    AddDocument,
+    AddWebPage,
+    DismissWork,
+    OpenWorkSource,
+    PersonalView,
+    RefreshPersonalWork,
+    RestoreWork,
+    SaveWork,
+    UnlinkWork,
+)
 from automation.routines import EventTrigger, Every, FileChanged, Once, RoutineSummary, Trigger
 from automation.task import (
+    Action,
     Approval,
     ApprovalDecision,
     Blocked,
@@ -134,9 +146,29 @@ class RemoveContext:
 
 
 type WorkCommand = (
-    Submit | FollowUp | Redirect | ControlTask | AnswerTask | RefreshApproval
-    | CreateRoutine | UpdateRoutine | EnableRoutine | DisableRoutine
-    | AddPreference | UpdatePreference | AddProjectNote | UpdateProjectNote | RemoveContext
+    Submit
+    | FollowUp
+    | Redirect
+    | ControlTask
+    | AnswerTask
+    | RefreshApproval
+    | CreateRoutine
+    | UpdateRoutine
+    | EnableRoutine
+    | DisableRoutine
+    | AddPreference
+    | UpdatePreference
+    | AddProjectNote
+    | UpdateProjectNote
+    | RemoveContext
+    | AddDocument
+    | AddWebPage
+    | DismissWork
+    | RestoreWork
+    | SaveWork
+    | UnlinkWork
+    | OpenWorkSource
+    | RefreshPersonalWork
 )
 
 
@@ -173,6 +205,8 @@ class WorkSnapshot:
     reviews: tuple[ApprovalReview, ...] = ()
     submission_problems: tuple[SubmissionProblem, ...] = ()
     reply_problems: tuple[ReplyProblem, ...] = ()
+    personal: PersonalView = field(default_factory=PersonalView)
+    actions: tuple[Action, ...] = ()
 
 
 def when(at: float | None) -> str:
@@ -180,7 +214,7 @@ def when(at: float | None) -> str:
         return "—"
     try:
         return datetime.fromtimestamp(at).strftime("%Y-%m-%d %H:%M")
-    except (OverflowError, OSError, ValueError):
+    except OverflowError, OSError, ValueError:
         return "Outside the local calendar"
 
 
@@ -268,7 +302,14 @@ class WorkView(Protocol):
     """Widgets are created and called only through the owning UI thread."""
 
     def render(self, snapshot: WorkSnapshot) -> None: ...
-    def show(self, *, focus: bool = True) -> None: ...
+    def show(self, *, focus: bool = True, on_presented: Callable[[], None] | None = None) -> None: ...
+    def close(self) -> None: ...
+
+
+class WorkOpening(Protocol):
+    """A native loading presentation, owned and released on the UI thread."""
+
+    def show(self) -> None: ...
     def close(self) -> None: ...
 
 
@@ -276,18 +317,42 @@ class WorkWindow:
     """Own immutable view state and enqueue rendering without waiting for it."""
 
     __slots__ = (
-        "_create_view", "_lock", "_pending", "_post", "_presented", "_view", "closed", "closed_ready",
-        "on_command", "on_problem", "state",
+        "_create_loading",
+        "_create_view",
+        "_loading",
+        "_lock",
+        "_opening",
+        "_pending",
+        "_post",
+        "_presented",
+        "_shown",
+        "_view",
+        "closed",
+        "closed_ready",
+        "on_command",
+        "on_problem",
+        "state",
     )
 
     def __init__(
-        self, on_command: Callable[[WorkCommand], None], *, post: Callable[[Callable[[], None]], None],
-        create_view: Callable[[WorkWindow], WorkView], on_problem: Callable[[str], None] | None = None,
+        self,
+        on_command: Callable[[WorkCommand], None],
+        *,
+        post: Callable[[Callable[[], None]], None],
+        create_view: Callable[[WorkWindow], WorkView],
+        on_problem: Callable[[str], None] | None = None,
+        create_loading: Callable[[], WorkOpening] | None = None,
     ) -> None:
+        # Commands, dispatch, the durable view, failure reporting and transient
+        # loading have independent effect owners; each enters at composition.
         self.on_command, self.on_problem = on_command, on_problem
         self._post, self._create_view = post, create_view
+        self._create_loading: Callable[[], WorkOpening] | None = create_loading
         self._lock = threading.Lock()
         self._pending = self.closed = False
+        self._opening: bool = False
+        self._shown: bool = False
+        self._loading: WorkOpening | None = None
         self._view: WorkView | None = None
         self._presented: ApprovalReview | None = None
         self.state = WorkSnapshot()
@@ -298,9 +363,7 @@ class WorkWindow:
             if self.closed or snapshot == self.state:
                 return
             self.state = snapshot
-            if self._presented is not None and not any(
-                current_review(task, snapshot.reviews) == self._presented for task in snapshot.tasks
-            ):
+            if self._presented is not None and not any(current_review(task, snapshot.reviews) == self._presented for task in snapshot.tasks):
                 self._presented = None
             if self._pending or self._view is None:
                 return
@@ -314,26 +377,78 @@ class WorkWindow:
         if view is not None and not closed:
             view.render(snapshot)
 
+    def _prepare(self) -> WorkView | None:
+        with self._lock:
+            if self.closed:
+                return None
+            view = self._view
+        if view is None:
+            try:
+                view = self._create_view(self)
+            except Exception:
+                log_view(traceback.format_exc())
+                self.problem("The work overview could not open. Try Work again; details are in agent-ui.log.")
+                return None
+            if not self._attach(view):
+                view.close()
+                return None
+        self._render()
+        return view
+
+    def prepare(self) -> None:
+        """Prepare the native view on its owner thread without showing/focusing it."""
+
+        def prepare() -> None:
+            self._prepare()
+
+        self._post(prepare)
+
     def show(self, *, focus: bool = True) -> None:
         def reveal() -> None:
             with self._lock:
-                if self.closed:
+                if self.closed or self._opening:
                     return
-                view = self._view
-            if view is None:
-                try:
-                    view = self._create_view(self)
-                except Exception:
-                    log_view(traceback.format_exc())
-                    self.problem("The work overview could not open. Try Work again; details are in agent-ui.log.")
-                    return
-                if not self._attach(view):
-                    view.close()
-                    return
-            self._render()
-            view.show(focus=focus)
+                self._opening = True
+                first_open = not self._shown
+            try:
+                loading = self._create_loading() if first_open and self._create_loading is not None else None
+                with self._lock:
+                    self._loading = loading
+                if loading is not None:
+                    loading.show()
+                view = self._prepare()
+                if view is not None:
+                    # Native show schedules painting; the presentation owns
+                    # loading until its viewport has actually drawn a frame.
+                    view.show(focus=focus, on_presented=self._presented_view)
+                else:
+                    self.cancel_show()
+            except BaseException:
+                self.cancel_show()
+                raise
 
         self._post(reveal)
+
+    def _presented_view(self) -> None:
+        with self._lock:
+            if not self.closed:
+                self._shown = True
+        self.cancel_show()
+
+    def cancel_show(self, view: WorkView | None = None) -> None:
+        """Release transient presentation on its UI thread, including cancellation."""
+        with self._lock:
+            if view is not None and view is not self._view:
+                return
+            loading, self._loading = self._loading, None
+        try:
+            if loading is not None:
+                loading.close()
+        finally:
+            # Dispatcher shutdown can pump native events. Keep the reveal
+            # guard until its transient surface has finished closing.
+            with self._lock:
+                self._opening = False
 
     def _attach(self, view: WorkView) -> bool:
         with self._lock:
@@ -400,6 +515,7 @@ class WorkWindow:
 
         def destroy() -> None:
             try:
+                self.cancel_show()
                 with self._lock:
                     view, self._view = self._view, None
                 if view is not None:

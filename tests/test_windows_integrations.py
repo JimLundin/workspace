@@ -21,7 +21,7 @@ def test_dpapi_roundtrip_and_tamper_rejection(tmp_path: Path) -> None:
     encrypted = protect(secret)
     assert secret not in encrypted and unprotect(encrypted) == secret
     with TestCase().assertRaises(OSError):
-        unprotect(encrypted[:len(encrypted) // 2])
+        unprotect(encrypted[: len(encrypted) // 2])
     store = TokenStore(tmp_path / "tokens.bin")
     store.write({"access_token": secret.decode()})
     assert secret not in store.path.read_bytes() and store.read()["access_token"] == secret.decode()
@@ -46,7 +46,7 @@ def test_job_closure_stops_an_owned_process_and_its_child(tmp_path: Path) -> Non
         gate.touch()
         deadline = time.monotonic() + 5
         while not child_ready.exists() and time.monotonic() < deadline:
-            time.sleep(.02)
+            time.sleep(0.02)
         assert ready.exists() and child_ready.exists()
         job.close()
         process.wait(timeout=3)

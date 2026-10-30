@@ -31,6 +31,7 @@ def test_transcript_refresh_waits_for_a_real_windows_reader_to_release_the_file(
     assert batch is not None
     store.complete(batch, "The complete transcript.")
     with store.transcript.open("r", encoding="utf-8") as reader:
+
         def release() -> None:
             time.sleep(0.15)
             reader.close()
@@ -60,7 +61,19 @@ class Wasapi:
     """Own the synthetic native buffers, packet cursors and capture clock."""
 
     __slots__ = (
-        "buffer", "calls", "delivered", "discontinuous", "dropouts", "fail", "flags", "format", "now", "origin", "packet_frames", "stop_at", "ticks",
+        "buffer",
+        "calls",
+        "delivered",
+        "discontinuous",
+        "dropouts",
+        "fail",
+        "flags",
+        "format",
+        "now",
+        "origin",
+        "packet_frames",
+        "stop_at",
+        "ticks",
     )
 
     def __init__(self) -> None:

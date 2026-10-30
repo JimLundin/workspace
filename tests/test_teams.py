@@ -10,6 +10,7 @@ from typing import cast
 from unittest import TestCase
 from urllib.parse import parse_qs, urlsplit
 
+from assistant import graph_http
 from assistant.graph_http import GraphError
 from assistant.llm import Json
 from assistant.teams import GRAPH, MAX_OUTPUT, SCOPES, DeviceFlow, Poll, Teams, TokenStore, WaitForPoll, defer_poll, sign_in_action
@@ -46,7 +47,7 @@ class ManualClock:
 class Request:
     method: str
     url: str
-    headers: dict[str, str]
+    headers: frozendict[str, str]
     body: bytes | None
     at: float
 
@@ -56,12 +57,14 @@ class Http:
     clock: ManualClock = field(default_factory=ManualClock)
     replies: list[Reply] = field(default_factory=list[Reply])
     received: list[Request] = field(default_factory=list[Request])
-    stop_during_request: bool = False
+    stop_during_request: bool = field(default=False, kw_only=True)
 
     def request(
-        self, method: str, url: str, headers: dict[str, str], body: bytes | None, cancel: threading.Event,
+        self,
+        request: graph_http.Request,
+        cancel: threading.Event,
     ) -> tuple[int, dict[str, Json]]:
-        self.received.append(Request(method, url, headers, body, self.clock.monotonic()))
+        self.received.append(Request(request.method, request.url, frozendict(request.headers), request.body, self.clock.monotonic()))
         if self.stop_during_request:
             cancel.set()
             raise GraphError("Stopped during the request.")
@@ -80,17 +83,30 @@ def integration(folder: Path, *, signed_in: bool = False) -> Generator[tuple[Tea
     teams = Teams(folder, store=store, http=http, clock=http.clock)
     teams.request("configure", CONFIG, threading.Event())
     if signed_in:
-        store.write({
-            **CONFIG, "access_token": "fixture-access-secret", "refresh_token": "fixture-refresh-secret", "expires_at": http.clock.time() + 3600,
-        })
+        store.write(
+            {
+                **CONFIG,
+                "access_token": "fixture-access-secret",
+                "refresh_token": "fixture-refresh-secret",
+                "expires_at": http.clock.time() + 3600,
+            }
+        )
     yield teams, http
 
 
 def begin(teams: Teams, http: Http) -> str:
-    http.replies.append((200, {
-        "device_code": "fixture-device-secret", "user_code": "ABCD-EFGH", "verification_uri": "https://microsoft.com/devicelogin",
-        "expires_in": 900, "interval": 1,
-    }))
+    http.replies.append(
+        (
+            200,
+            {
+                "device_code": "fixture-device-secret",
+                "user_code": "ABCD-EFGH",
+                "verification_uri": "https://microsoft.com/devicelogin",
+                "expires_in": 900,
+                "interval": 1,
+            },
+        )
+    )
     result = teams.request("sign_in", {}, threading.Event())
     assert teams.flow is not None
     http.clock.advance(1)
@@ -121,7 +137,7 @@ def test_environment_overrides_cannot_silently_ignore_saved_configuration(tmp_pa
 
 def test_device_flow_deadlines_and_poll_intervals_are_pure_observations() -> None:
     flow = DeviceFlow("secret", "CODE", "https://microsoft.com/devicelogin", 10, 2, 3)
-    assert sign_in_action(flow, 2, 8, stopped=False) == WaitForPoll(.05)
+    assert sign_in_action(flow, 2, 8, stopped=False) == WaitForPoll(0.05)
     assert sign_in_action(flow, 3, 8, stopped=False) is Poll.REQUEST
     assert sign_in_action(flow, 3, 3, stopped=False) is Poll.PENDING
     assert sign_in_action(flow, 10, 20, stopped=False) is Poll.EXPIRED
@@ -135,10 +151,13 @@ def test_device_flow_deadlines_and_poll_intervals_are_pure_observations() -> Non
 def test_device_flow_polls_on_schedule_after_pending_and_slow_down(tmp_path: Path) -> None:
     with integration(tmp_path) as (teams, http):
         begin(teams, http)
-        http.replies.extend([
-            (400, {"error": "authorization_pending"}), (400, {"error": "slow_down"}),
-            (200, {"access_token": "fixture-access-secret", "expires_in": 3600}),
-        ])
+        http.replies.extend(
+            [
+                (400, {"error": "authorization_pending"}),
+                (400, {"error": "slow_down"}),
+                (200, {"access_token": "fixture-access-secret", "expires_in": 3600}),
+            ]
+        )
         result = decoded(teams.request("finish_sign_in", {"timeout_seconds": 10}, threading.Event()))
         assert result["state"] == "signed_in"
         assert [round(request.at, 3) for request in http.received] == [0, 1, 2, 8]
@@ -208,8 +227,7 @@ def test_expired_tokens_refresh_and_invalid_grants_remove_the_saved_sign_in(tmp_
 
 def test_user_lookup_escapes_filter_literals_and_uses_opaque_checked_page_cursors(tmp_path: Path) -> None:
     with integration(tmp_path, signed_in=True) as (teams, http):
-        http.replies.append((200, {"value": [{"id": RECIPIENT, "displayName": "O'Brien"}],
-                                  "@odata.nextLink": GRAPH + "/users?$skiptoken=opaque"}))
+        http.replies.append((200, {"value": [{"id": RECIPIENT, "displayName": "O'Brien"}], "@odata.nextLink": GRAPH + "/users?$skiptoken=opaque"}))
         first = decoded(teams.request("find_users", {"query": "O'Brien"}, threading.Event()))
         query = parse_qs(urlsplit(http.received[0].url).query)
         assert "O''Brien" in query["$filter"][0]
@@ -231,9 +249,15 @@ def test_pagination_never_forwards_tokens_to_an_unexpected_host_or_route(tmp_pat
 
 def test_large_chat_pages_remain_bounded_and_keep_all_results_reachable(tmp_path: Path) -> None:
     with integration(tmp_path, signed_in=True) as (teams, http):
-        rows: list[Json] = [{"id": f"chat-{i}", "topic": "x" * 500, "chatType": "group",
-                             "members": [{"userId": f"user-{n}", "displayName": "n" * 200, "email": "e" * 200} for n in range(20)]}
-                            for i in range(20)]
+        rows: list[Json] = [
+            {
+                "id": f"chat-{i}",
+                "topic": "x" * 500,
+                "chatType": "group",
+                "members": [{"userId": f"user-{n}", "displayName": "n" * 200, "email": "e" * 200} for n in range(20)],
+            }
+            for i in range(20)
+        ]
         http.replies.append((200, {"value": rows}))
         seen: list[Json] = []
         arguments: dict[str, Json] = {}
@@ -294,10 +318,16 @@ def test_consent_denial_does_not_leak_graph_diagnostics_and_stop_prevents_sends(
 def test_message_readback_binds_chat_and_message_ids_without_retaining_content(tmp_path: Path) -> None:
     with integration(tmp_path, signed_in=True) as (teams, http):
         before = {file.name: file.read_bytes() for file in tmp_path.iterdir() if file.is_file()}
-        http.replies.append((200, {
-            "id": "message/one?", "createdDateTime": "2026-10-23T12:00:00Z",
-            "body": {"contentType": "text", "content": "private sent message"},
-        }))
+        http.replies.append(
+            (
+                200,
+                {
+                    "id": "message/one?",
+                    "createdDateTime": "2026-10-23T12:00:00Z",
+                    "body": {"contentType": "text", "content": "private sent message"},
+                },
+            )
+        )
         result = decoded(teams.request("read_messages", {"chat_id": "chat/one?", "message_id": "message/one?"}, threading.Event()))
         sent = http.received[-1]
         assert sent.method == "GET" and sent.body is None
@@ -312,8 +342,10 @@ def test_message_readback_binds_chat_and_message_ids_without_retaining_content(t
 
 def test_recent_message_readback_is_bounded_validated_and_cancellable(tmp_path: Path) -> None:
     with integration(tmp_path, signed_in=True) as (teams, http):
-        values: list[Json] = [{"id": str(index), "createdDateTime": "2026-10-23T12:00:00Z",
-                               "body": {"contentType": "text", "content": "x" * 11_000}} for index in range(30)]
+        values: list[Json] = [
+            {"id": str(index), "createdDateTime": "2026-10-23T12:00:00Z", "body": {"contentType": "text", "content": "x" * 11_000}}
+            for index in range(30)
+        ]
         http.replies.append((200, {"value": values, "@odata.nextLink": "https://untrusted.invalid/never-followed"}))
         output = teams.request("read_messages", {"chat_id": "release-chat", "limit": 20}, threading.Event())
         result = decoded(output)
@@ -321,7 +353,9 @@ def test_recent_message_readback_is_bounded_validated_and_cancellable(tmp_path: 
         assert len(http.received) == 1 and http.received[0].method == "GET"
         assert parse_qs(urlsplit(http.received[0].url).query)["$top"] == ["20"]
         invalid_inputs: tuple[dict[str, Json], ...] = (
-            {"chat_id": ""}, {"chat_id": "release-chat", "limit": 21}, {"chat_id": "release-chat", "limit": True},
+            {"chat_id": ""},
+            {"chat_id": "release-chat", "limit": 21},
+            {"chat_id": "release-chat", "limit": True},
         )
         for invalid in invalid_inputs:
             with TestCase().assertRaises(GraphError):

@@ -24,8 +24,11 @@ lexical declaration and hash of the parameter structure. Moving lines does not
 change a key. Changing a signature or adding a declaration cannot inherit its
 entry. Removing an old violation requires removing its stale entry. These entries
 are migration debt, not permission to add more positional Booleans or unrelated
-parameters. An intentional fixed interface needs a reviewed exact entry and its
-actual reason, plus the explanation at its owner; do not suppress whole files.
+parameters. An intentional fixed interface needs an exact entry with `kind: "interface"`,
+its specific reviewed reason, and the explanation at its owner. The gate reports
+these separately from `kind: "migration"` debt. Interface status is valid only
+for PLR0913; it cannot excuse positional Booleans or import violations. Both
+kinds become stale when their exact signatures change. Do not suppress whole files.
 
 Ruff detects ordinary function annotations, including evident Boolean unions,
 and Boolean defaults. Keyword-only declarations make both literal and variable
@@ -62,6 +65,6 @@ it exports no Qt symbols. Native startup coverage checks the SDK/Qt ordering.
 Declare dependencies at module level. Use Python 3.15's `lazy import` or
 `lazy from` to defer loading until first use. This preserves visible module
 dependencies and native initialization order without imports inside methods.
-The Python 3.12 bootstrap keeps ordinary module-level imports. The editing
-runner lazily loads its test/native dependencies after both policy gates pass;
+Launchers run directly on Python 3.15 and lazily resolve product imports after
+runtime activation. The editing runner lazily loads its test/native dependencies after both policy gates pass;
 the staged native deployment driver can avoid loading test machinery entirely.

@@ -121,8 +121,8 @@ def test_window_identity_uses_the_captured_handle_and_validates_external_ids() -
 
 
 def test_managed_handles_validate_the_catalog_boundary() -> None:
-    assert window_handles({'windows': [{'handle': 1}, {'handle': 2}]}) == frozenset({1, 2})
-    for bad in (None, {}, {'windows': [None]}, {'windows': [{'handle': True}]}, {'windows': [{'handle': 0}]}):
+    assert window_handles({"windows": [{"handle": 1}, {"handle": 2}]}) == frozenset({1, 2})
+    for bad in (None, {}, {"windows": [None]}, {"windows": [{"handle": True}]}, {"windows": [{"handle": 0}]}):
         with TestCase().assertRaises(OSError):
             window_handles(bad)
 
@@ -130,8 +130,7 @@ def test_managed_handles_validate_the_catalog_boundary() -> None:
 def test_existing_manager_is_borrowed_and_its_config_and_lifetime_are_preserved(tmp_path: Path) -> None:
     peer = ManagerPeer(paused=True)
     wm = manager(tmp_path, peer)
-    original = ("window_rules:\n  - commands: ['ignore']\n    match:\n"
-                "      - window_title: { regex: '(?i)^workspace(?:\\b| ·)' }\n").encode()
+    original = ("window_rules:\n  - commands: ['ignore']\n    match:\n      - window_title: { regex: '(?i)^workspace(?:\\b| ·)' }\n").encode()
     wm.config.write_bytes(original)
     wm.start()
     wm.close()
@@ -146,7 +145,7 @@ def test_owned_paused_manager_is_resumed_before_exit_and_keeps_user_config(tmp_p
     wm.config.write_text("personal tiling preferences\n")
     wm.start()
     assert wm.process is peer.process and wm.config.read_text() == "personal tiling preferences\n"
-    assert peer.starts == [(str(wm.binary), 'start', '--config', str(wm.config))]
+    assert peer.starts == [(str(wm.binary), "start", "--config", str(wm.config))]
     peer.pause_state = True
     wm.close()
     assert peer.commands == [("command", "wm-toggle-pause"), ("command", "wm-exit")]
@@ -235,10 +234,10 @@ def test_cli_timeout_is_bounded_and_missing_binary_never_launches(tmp_path: Path
 
 def test_window_switcher_focuses_the_exact_container_including_a_hidden_workspace(tmp_path: Path) -> None:
     peer = ManagerPeer()
-    peer.windows = {'windows': [{'id': IDENTITY, 'handle': 42, 'displayState': 'hidden'}]}
+    peer.windows = {"windows": [{"id": IDENTITY, "handle": 42, "displayState": "hidden"}]}
     wm = manager(tmp_path, peer)
     assert wm.focus(42)
-    assert peer.commands == [('command', 'focus', '--container-id', IDENTITY)]
+    assert peer.commands == [("command", "focus", "--container-id", IDENTITY)]
 
 
 def process_of(wm: GlazeWM) -> object:

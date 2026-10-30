@@ -13,8 +13,9 @@ from assistant.ambient import Speakers, Wifi
 from winapi._core import fn
 
 _wlan = ctypes.WinDLL("wlanapi", use_last_error=True)
-_WlanOpenHandle = fn(_wlan, "WlanOpenHandle", wintypes.DWORD, wintypes.DWORD, ctypes.c_void_p,
-                     ctypes.POINTER(wintypes.DWORD), ctypes.POINTER(wintypes.HANDLE))
+_WlanOpenHandle = fn(
+    _wlan, "WlanOpenHandle", wintypes.DWORD, wintypes.DWORD, ctypes.c_void_p, ctypes.POINTER(wintypes.DWORD), ctypes.POINTER(wintypes.HANDLE)
+)
 _WlanEnumInterfaces = fn(_wlan, "WlanEnumInterfaces", wintypes.DWORD, wintypes.HANDLE, ctypes.c_void_p, ctypes.POINTER(ctypes.c_void_p))
 _WlanFreeMemory = fn(_wlan, "WlanFreeMemory", None, ctypes.c_void_p)
 _WlanCloseHandle = fn(_wlan, "WlanCloseHandle", wintypes.DWORD, wintypes.HANDLE, ctypes.c_void_p)

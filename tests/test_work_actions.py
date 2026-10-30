@@ -110,8 +110,11 @@ def test_lost_result_commit_recovers_by_readback_without_replaying(tmp_path: Pat
 def test_mismatched_recovery_file_stays_uncertain_and_cannot_be_overwritten(tmp_path: Path) -> None:
     store, claim, clock = claimed(tmp_path)
     destination = tmp_path / "notes.txt"
-    spec = plan("write_file", {"path": str(destination), "content": "desired"},
-                verification=FileDigest(str(destination), hashlib.sha256(b"desired").hexdigest()))
+    spec = plan(
+        "write_file",
+        {"path": str(destination), "content": "desired"},
+        verification=FileDigest(str(destination), hashlib.sha256(b"desired").hexdigest()),
+    )
     actions = Actions(store, claim.run, Resources(), clock=clock)
 
     def interrupted_write() -> bool:
@@ -122,8 +125,9 @@ def test_mismatched_recovery_file_stays_uncertain_and_cannot_be_overwritten(tmp_
         actions.execute(spec, interrupted_write, bool, threading.Event())
     other = tmp_path / "another-project.txt"
     other.write_text("untouched", encoding="utf-8")
-    different = plan("write_file", {"path": str(other), "content": "new notes"},
-                     verification=FileDigest(str(other), hashlib.sha256(b"new notes").hexdigest()))
+    different = plan(
+        "write_file", {"path": str(other), "content": "new notes"}, verification=FileDigest(str(other), hashlib.sha256(b"new notes").hexdigest())
+    )
     with TestCase().assertRaises(UncertainEffectError):
         actions.execute(different, lambda: other.write_text("new notes", encoding="utf-8"), bool, threading.Event())
     assert other.read_text(encoding="utf-8") == "untouched" and len(store.actions("task")) == 1
@@ -145,8 +149,9 @@ def test_stop_cancels_resource_wait_and_releases_the_next_owner(tmp_path: Path) 
 
     def waiting() -> None:
         entered.set()
-        actions.execute(plan("write_file", {"path": str(destination), "content": "no"}),
-                        lambda: destination.write_text("no", encoding="utf-8"), bool, stopped)
+        actions.execute(
+            plan("write_file", {"path": str(destination), "content": "no"}), lambda: destination.write_text("no", encoding="utf-8"), bool, stopped
+        )
 
     with ThreadPoolExecutor(max_workers=1) as pool:
         with resources.hold(("foreground",), threading.Event()):
@@ -184,13 +189,19 @@ def test_stale_run_and_stop_after_commit_cannot_enter_the_effect(tmp_path: Path)
     assert later is not None
     with TestCase().assertRaises(LostRunError):
         Actions(store, claim.run, Resources(), clock=clock).execute(
-            spec, lambda: destination.write_text("no", encoding="utf-8"), bool, threading.Event(),
+            spec,
+            lambda: destination.write_text("no", encoding="utf-8"),
+            bool,
+            threading.Event(),
         )
     stop = threading.Event()
     cancelling = StoppingStore(tmp_path / "work.sqlite3", stop)
     with TestCase().assertRaises(ActionCancelledError):
         Actions(cancelling, later.run, Resources(), clock=clock).execute(
-            spec, lambda: destination.write_text("no", encoding="utf-8"), bool, stop,
+            spec,
+            lambda: destination.write_text("no", encoding="utf-8"),
+            bool,
+            stop,
         )
     assert not destination.exists() and isinstance(store.actions("task")[0].outcome, ActionNotApplied)
 
@@ -210,13 +221,13 @@ def test_reconciliation_requires_post_attempt_same_target_and_is_durable(tmp_pat
         work.actions.execute(spec, interrupted_save, bool, threading.Event())
     action = store.actions("task")[0]
     with TestCase().assertRaisesRegex(ValueError, "after this action"):
-        work.reconcile(action.id, before, True)
+        work.reconcile(action.id, before, applied=True)
     wrong = work.observed("browser_snapshot", {"target_id": "other-tab"}, successful=True, result=pages["other-tab"])
     with TestCase().assertRaisesRegex(ValueError, "target"):
-        work.reconcile(action.id, wrong, True)
+        work.reconcile(action.id, wrong, applied=True)
     fresh = work.observed("browser_snapshot", {"target_id": "target-tab"}, successful=True, result=pages["target-tab"])
     assert "Saved" in pages["target-tab"]
-    work.reconcile(action.id, fresh, True)
+    work.reconcile(action.id, fresh, applied=True)
     assert isinstance(work.outcome(Reported("Saved."), threading.Event()), Completed)
     assert isinstance(TaskStore(tmp_path / "work.sqlite3").actions("task")[0].outcome, ActionVerified)
 
@@ -225,13 +236,17 @@ def test_script_result_requires_explicit_inspection_and_reconciliation(tmp_path:
     store, claim, clock = claimed(tmp_path)
     work = WorkExecution(claim, store, Resources(), clock=clock)
     destination = tmp_path / "script-output.txt"
-    work.actions.execute(plan("run_powershell", {"command": "script writes requested output"}),
-                         lambda: destination.write_text("complete", encoding="utf-8"), bool, threading.Event())
+    work.actions.execute(
+        plan("run_powershell", {"command": "script writes requested output"}),
+        lambda: destination.write_text("complete", encoding="utf-8"),
+        bool,
+        threading.Event(),
+    )
     assert isinstance(work.outcome(Reported("Done"), threading.Event()), Waiting)
     content = destination.read_text(encoding="utf-8")
     observed = work.observed("read_file", {"path": str(destination)}, successful=True, result=content)
     assert content == "complete"
-    work.reconcile(store.actions("task")[0].id, observed, True)
+    work.reconcile(store.actions("task")[0].id, observed, applied=True)
     assert isinstance(work.outcome(Reported("The output was inspected."), threading.Event()), Completed)
 
 
@@ -241,16 +256,20 @@ def test_native_tab_verification_uses_the_listed_target_even_when_the_strip_is_p
     work.actions.execute(plan("browser_tab", {"tab_id": 17, "action": "pin"}), lambda: True, bool, threading.Event())
     action = store.actions("task")[0]
     wrong = work.observed(
-        "browser_tabs", {"view": "strip"}, successful=True,
+        "browser_tabs",
+        {"view": "strip"},
+        successful=True,
         result='{"view":"strip","tabs":[{"tab_id":18,"pinned":true}],"next_offset":1}',
     )
     with TestCase().assertRaisesRegex(ValueError, "target"):
-        work.reconcile(action.id, wrong, True)
+        work.reconcile(action.id, wrong, applied=True)
     correct = work.observed(
-        "browser_tabs", {"view": "strip", "offset": 1}, successful=True,
+        "browser_tabs",
+        {"view": "strip", "offset": 1},
+        successful=True,
         result='{"view":"strip","tabs":[{"tab_id":17,"pinned":true}],"next_offset":2}',
     )
-    work.reconcile(action.id, correct, True)
+    work.reconcile(action.id, correct, applied=True)
     assert isinstance(work.outcome(Reported("Pinned the requested tab."), threading.Event()), Completed)
 
 
@@ -261,16 +280,17 @@ def test_open_chat_requires_matching_one_to_one_membership_not_account_status(tm
     action = store.actions("task")[0]
     for evidence in (
         work.observed("teams_status", {}, successful=True, result='{"configured":true,"saved_sign_in":true}'),
-        work.observed("teams_list_chats", {}, successful=True,
-                      result='{"chats":[{"chatType":"oneOnOne","members":[{"userId":"someone-else"}]}]}'),
-        work.observed("teams_list_chats", {}, successful=True,
-                      result='{"chats":[{"chatType":"group","members":[{"userId":"requested-recipient"}]}]}'),
+        work.observed("teams_list_chats", {}, successful=True, result='{"chats":[{"chatType":"oneOnOne","members":[{"userId":"someone-else"}]}]}'),
+        work.observed(
+            "teams_list_chats", {}, successful=True, result='{"chats":[{"chatType":"group","members":[{"userId":"requested-recipient"}]}]}'
+        ),
     ):
         with TestCase().assertRaisesRegex(ValueError, "target"):
-            work.reconcile(action.id, evidence, True)
-    correct = work.observed("teams_list_chats", {}, successful=True,
-                            result='{"chats":[{"chatType":"oneOnOne","members":[{"userId":"requested-recipient"}]}]}')
-    work.reconcile(action.id, correct, True)
+            work.reconcile(action.id, evidence, applied=True)
+    correct = work.observed(
+        "teams_list_chats", {}, successful=True, result='{"chats":[{"chatType":"oneOnOne","members":[{"userId":"requested-recipient"}]}]}'
+    )
+    work.reconcile(action.id, correct, applied=True)
     assert isinstance(work.outcome(Reported("The recipient's chat exists."), threading.Event()), Completed)
 
 
@@ -316,8 +336,12 @@ def test_exact_approval_is_once_only_and_private_review_never_enters_storage(tmp
     work.actions.execute(plan("browser_action", arguments), lambda: True, bool, threading.Event())
     assert not work.approve("Fill this control?", "private-full-browser-review")
     assert len(reviews) == 2 and reviews[0].request.id != reviews[1].request.id
-    work.checkpoint([{"type": "reasoning", "encrypted_content": "private-reasoning"},
-                     {"type": "function_call", "name": "browser_action", "arguments": json.dumps(arguments)}])
+    work.checkpoint(
+        [
+            {"type": "reasoning", "encrypted_content": "private-reasoning"},
+            {"type": "function_call", "name": "browser_action", "arguments": json.dumps(arguments)},
+        ]
+    )
     with closing(sqlite3.connect(tmp_path / "work.sqlite3")) as database, database:
         persisted = "\n".join(database.iterdump())
     assert all(secret not in persisted for secret in ("secret-tab", "private-message-content", "private-full-browser-review", "private-reasoning"))
@@ -358,14 +382,16 @@ def test_approval_needs_live_preview_and_cannot_authorize_changed_arguments_or_g
 def test_message_reconciliation_requires_same_chat_new_matching_complete_text(tmp_path: Path) -> None:
     store, claim, clock = claimed(tmp_path)
     work = WorkExecution(claim, store, Resources(), clock=clock)
-    work.actions.execute(plan("teams_send_message", {"chat_id": "release-chat", "text": "Ship Friday"}),
-                         lambda: True, bool, threading.Event())
+    work.actions.execute(plan("teams_send_message", {"chat_id": "release-chat", "text": "Ship Friday"}), lambda: True, bool, threading.Event())
     action = store.actions("task")[0]
 
     def inspect(chat: str, content: str, created: str, *, truncated: bool = False) -> str:
         message: dict[str, object] = {
-            "message_id": "sent-message", "content": content, "created_at": created,
-            "content_type": "text", "content_truncated": truncated,
+            "message_id": "sent-message",
+            "content": content,
+            "created_at": created,
+            "content_type": "text",
+            "content_truncated": truncated,
         }
         payload: dict[str, object] = {"chat_id": chat, "messages": [message]}
         result = json.dumps(payload)
@@ -378,9 +404,9 @@ def test_message_reconciliation_requires_same_chat_new_matching_complete_text(tm
         inspect("release-chat", "Ship Friday", "1970-01-01T00:00:10+00:00", truncated=True),
     ):
         with TestCase().assertRaises(ValueError):
-            work.reconcile(action.id, evidence, True)
+            work.reconcile(action.id, evidence, applied=True)
     correct = inspect("release-chat", "Ship Friday", "1970-01-01T00:00:10+00:00")
     with TestCase().assertRaisesRegex(ValueError, "Absence"):
-        work.reconcile(action.id, correct, False)
-    work.reconcile(action.id, correct, True)
+        work.reconcile(action.id, correct, applied=False)
+    work.reconcile(action.id, correct, applied=True)
     assert isinstance(work.outcome(Reported("Message sent and read back."), threading.Event()), Completed)

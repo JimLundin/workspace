@@ -18,8 +18,13 @@ class TranscriptEvents:
     __slots__ = ("archive", "clock", "on_change", "on_error", "routines")
 
     def __init__(
-        self, archive: MeetingArchive, routines: RoutineStore, *, on_error: Callable[[str], None],
-        on_change: Callable[[], None] | None = None, clock: Callable[[], float] = time.time,
+        self,
+        archive: MeetingArchive,
+        routines: RoutineStore,
+        *,
+        on_error: Callable[[str], None],
+        on_change: Callable[[], None] | None = None,
+        clock: Callable[[], float] = time.time,
     ) -> None:
         self.archive, self.routines = archive, routines
         self.on_error, self.on_change, self.clock = on_error, on_change, clock
@@ -35,8 +40,13 @@ class TranscriptEvents:
         # Recovery observes the file's publication time, not the restart time.
         # Otherwise a later routine enable could retroactively select an event.
         return transcript_ready(
-            store.folder.name, state.title, str(store.transcript.absolute()), finished=state.finished, pending=state.pending,
-            revision=state.revision, exported_revision=state.exported_revision,
+            store.folder.name,
+            state.title,
+            str(store.transcript.absolute()),
+            finished=state.finished,
+            pending=state.pending,
+            revision=state.revision,
+            exported_revision=state.exported_revision,
             completed_at=published_file.st_mtime if completed_at is None else completed_at,
         )
 

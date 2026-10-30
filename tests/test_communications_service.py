@@ -2,6 +2,9 @@ import threading
 from collections.abc import Callable
 from dataclasses import replace
 from pathlib import Path
+from unittest import TestCase
+
+from pydantic import TypeAdapter
 
 from assistant.browser_values import NavigationLoadingError
 from assistant.communications import (
@@ -26,10 +29,14 @@ from assistant.communications import (
     update_fingerprint,
 )
 from assistant.communications_browser import ActivityObservation, ChatUnavailableError, Observation, TeamsWeb
-from assistant.communications_service import Communications, SavedState
+from assistant.communications_service import Communications
+from assistant.communications_state import COMMUNICATIONS_STATE
 from assistant.llm import Json
+from assistant.state_store import SavedState
 from assistant.system_notices import Notice, NoticeKey, Observed
 from tests.teams_fixture import Browser
+
+_WIRE = TypeAdapter(dict[str, Json])
 
 
 class Web:
@@ -45,7 +52,7 @@ class Web:
         self.sends: list[tuple[str, str]] = []
         self.after_send: Callable[[], None] = lambda: None
         self.result: tuple[Message, ...] = ()
-        self.current = Observation("19:one@thread.v2", "Anna", (Conversation("19:one@thread.v2", "Anna"),), (), True)
+        self.current = Observation("19:one@thread.v2", "Anna", (Conversation("19:one@thread.v2", "Anna"),), (), editor_ready=True)
         self.discovered: Observation | None = None
         self.selected: Observation | None = None
         self.unavailable: frozenset[str] = frozenset()
@@ -94,12 +101,21 @@ class Web:
         pass
 
 
+class LocalCipher:
+    """Concrete byte adapter so the collector exercises its real atomic file store."""
+
+    def protect(self, data: bytes) -> bytes:
+        return b"fixture:" + data[::-1]
+
+    def unprotect(self, data: bytes) -> bytes:
+        return data[8:][::-1]
+
+
 def service(path: Path, *, dismiss_notice: Callable[[NoticeKey], None] = lambda _: None) -> tuple[Communications, Web]:
     web = Web()
-    store = SavedState(path, protect=lambda data: b"fixture:" + data[::-1], unprotect=lambda data: data[8:][::-1])
+    store = SavedState(path, COMMUNICATIONS_STATE, cipher=LocalCipher())
     controller = Communications(web, store, lambda feed, drafts: None, dismiss_notice)
-    controller.feed = Feed(status=Status.CONNECTED, conversations=(Conversation("19:one@thread.v2", "Anna"),),
-                           followed=("19:one@thread.v2",))
+    controller.feed = Feed(status=Status.CONNECTED, conversations=(Conversation("19:one@thread.v2", "Anna"),), followed=("19:one@thread.v2",))
     return controller, web
 
 
@@ -126,9 +142,11 @@ def test_handled_chat_revisions_survive_reload_without_saving_incoming_bodies(tm
 
 def test_windows_delivery_enters_the_same_inbox_and_dismissal_follows_saved_handling(tmp_path: Path) -> None:
     dismissed: list[NoticeKey] = []
+
     def dismiss(key: NoticeKey) -> None:
-        assert controller.store.read()["handled"]
+        assert controller.store.read().handled
         dismissed.append(key)
+
     controller, _web = service(tmp_path / "saved.bin", dismiss_notice=dismiss)
     notice = Notice(NoticeKey(7, 11_644_473_601_0000000), "Mail", "Mail", "Invitation", "Review this meeting")
     controller.submit(WindowsObserved(Observed((notice,))))
@@ -168,7 +186,7 @@ def test_dismissing_a_glass_card_before_the_inbox_paints_still_saves_handling(tm
     controller.command(HandleNotice(notice))
     assert dismissed == [notice.key]
     assert len(controller.feed.updates) == 1 and not controller.feed.pending_update(controller.feed.updates[0])
-    assert controller.store.read()["handled"]
+    assert controller.store.read().handled
 
 
 def test_only_a_verified_reply_handles_its_captured_ticket_and_never_a_new_arrival(tmp_path: Path) -> None:
@@ -187,7 +205,7 @@ def test_one_unavailable_chat_does_not_drop_other_chats_observed_updates(tmp_pat
     controller, web = service(tmp_path / "saved.bin")
     controller.feed = replace(controller.feed, followed=("19:one@thread.v2", "19:missing@thread.v2"))
     message = Message("19:one@thread.v2", "old", "Anna", "Updated while another chat is unavailable", 1, 2)
-    current = Observation("19:one@thread.v2", "Anna", (Conversation("19:one@thread.v2", "Anna"),), (message,), True)
+    current = Observation("19:one@thread.v2", "Anna", (Conversation("19:one@thread.v2", "Anna"),), (message,), editor_ready=True)
     web.current = current
     web.unavailable = frozenset({"19:missing@thread.v2"})
     controller.collect()
@@ -205,9 +223,9 @@ def test_one_unavailable_chat_does_not_drop_other_chats_observed_updates(tmp_pat
 
 def test_saved_followed_chat_recovers_when_no_conversation_pane_is_open(tmp_path: Path) -> None:
     controller, web = service(tmp_path / "saved.bin")
-    empty = Observation("", "", (), (), False)
+    empty = Observation("", "", (), (), editor_ready=False)
     message = Message("19:one@thread.v2", "loaded", "Anna", "Back from Activity", 1, 2)
-    current = Observation("19:one@thread.v2", "Anna", controller.feed.conversations, (message,), True)
+    current = Observation("19:one@thread.v2", "Anna", controller.feed.conversations, (message,), editor_ready=True)
     web.current, web.selected = empty, current
     controller.collect()
     assert web.selections == ("19:one@thread.v2",)
@@ -218,8 +236,8 @@ def test_saved_followed_chat_recovers_when_no_conversation_pane_is_open(tmp_path
 def test_first_collection_discovers_chat_navigation_before_choosing_chats(tmp_path: Path) -> None:
     controller, web = service(tmp_path / "saved.bin")
     controller.feed = Feed()
-    empty = Observation("", "", (), (), False)
-    current = Observation("19:one@thread.v2", "Anna", (Conversation("19:one@thread.v2", "Anna"),), (), True)
+    empty = Observation("", "", (), (), editor_ready=False)
+    current = Observation("19:one@thread.v2", "Anna", (Conversation("19:one@thread.v2", "Anna"),), (), editor_ready=True)
     web.current, web.discovered = empty, current
     controller.collect()
     assert web.discoveries == 1
@@ -230,8 +248,8 @@ def test_first_collection_discovers_chat_navigation_before_choosing_chats(tmp_pa
 def test_first_collection_opens_a_discovered_chat_when_teams_has_no_current_chat(tmp_path: Path) -> None:
     controller, web = service(tmp_path / "saved.bin")
     controller.feed = Feed()
-    landing = Observation("", "", (Conversation("19:one@thread.v2", "Anna"),), (), False)
-    current = Observation("19:one@thread.v2", "Anna", landing.conversations, (), True)
+    landing = Observation("", "", (Conversation("19:one@thread.v2", "Anna"),), (), editor_ready=False)
+    current = Observation("19:one@thread.v2", "Anna", landing.conversations, (), editor_ready=True)
     web.current, web.discovered, web.selected = landing, landing, current
     controller.collect()
     assert web.selections == ("19:one@thread.v2",)
@@ -282,8 +300,10 @@ def test_next_chat_waits_for_pending_navigation_instead_of_restarting_teams(tmp_
 def test_send_freezes_destination_and_does_not_erase_a_newer_draft(tmp_path: Path) -> None:
     controller, web = service(tmp_path / "saved.bin")
     web.result = (Message("19:one@thread.v2", "posted-id", "You", "Original reply", 1, 2),)
+
     def next_draft() -> None:
         assert controller.submit(SaveDraft("19:one@thread.v2", "Next draft"))
+
     web.after_send = next_draft
     controller.send(Send("19:one@thread.v2", "Original reply", "original"))
     assert web.sends == [("19:one@thread.v2", "Original reply")]
@@ -349,3 +369,30 @@ def test_latest_draft_survives_a_full_action_queue(tmp_path: Path) -> None:
     restored, _next_web = service(controller.store.path)
     restored.load()
     assert restored.drafts == {"19:one@thread.v2": "999"}
+
+
+def test_invalid_saved_contract_cannot_partially_enable_communications(tmp_path: Path) -> None:
+    # Defect: a generic serializer accepts non-Boolean activation or a Boolean
+    # timestamp, or load applies activation before validating all saved evidence.
+    controller, _ = service(tmp_path / "invalid.bin")
+    invalid_states: tuple[dict[str, Json], ...] = (
+        {"enabled": "true"},
+        {
+            "enabled": True,
+            "replies": [
+                {
+                    "identity": "reply",
+                    "conversation": "chat",
+                    "title": "Atlas",
+                    "text": "The requested draft",
+                    "created_at": True,
+                    "delivery": "UNKNOWN",
+                }
+            ],
+        },
+    )
+    for state in invalid_states:
+        controller.store.path.write_bytes(controller.store.cipher.protect(_WIRE.dump_json(state)))
+        with TestCase().assertRaises(ValueError):
+            controller.load()
+        assert not controller.enabled

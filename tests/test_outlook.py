@@ -52,7 +52,10 @@ class LocalOutlookCommand:
 
     def run(self, request: Mapping[str, object], response: Path, cancel: threading.Event) -> tuple[int, str]:
         payload: dict[str, object] = {
-            "request": dict(request), "response": str(response), "fixture": str(self.root), "index": str(self.index),
+            "request": dict(request),
+            "response": str(response),
+            "fixture": str(self.root),
+            "index": str(self.index),
         }
         if cancel.is_set():
             return -1, "Stopped by the user."
@@ -81,10 +84,14 @@ class ProcessOutlookCommand(LocalOutlookCommand):
 
     def run(self, request: Mapping[str, object], response: Path, cancel: threading.Event) -> tuple[int, str]:
         payload: dict[str, object] = {
-            "request": dict(request), "response": str(response), "fixture": str(self.root), "index": str(self.index),
+            "request": dict(request),
+            "response": str(response),
+            "fixture": str(self.root),
+            "index": str(self.index),
         }
-        return commands.run([sys.executable, "-S", str(Path(__file__).with_name("outlook_fixture.py"))],
-                            input_text=json.dumps(payload), timeout_s=10, cancel=cancel)
+        return commands.run(
+            [sys.executable, "-S", str(Path(__file__).with_name("outlook_fixture.py"))], input_text=json.dumps(payload), timeout_s=10, cancel=cancel
+        )
 
 
 def request(body: str = "Factual notes\n\nPlease review the assigned actions.\n") -> DraftRequest:
@@ -113,7 +120,10 @@ def test_content_identity_retains_whitespace_recipient_roles_and_explicit_revisi
 
 def test_external_addresses_and_header_injection_are_rejected_before_saving() -> None:
     for address in (
-        "guessed name", "a@example.invalid\nBcc: other@example.invalid", "a@example.invalid, b@example.invalid", "Ada <a@example.invalid>",
+        "guessed name",
+        "a@example.invalid\nBcc: other@example.invalid",
+        "a@example.invalid, b@example.invalid",
+        "Ada <a@example.invalid>",
     ):
         with TestCase().assertRaises(ValueError):
             Recipient(address)
@@ -127,9 +137,17 @@ def test_external_addresses_and_header_injection_are_rejected_before_saving() ->
 
 def test_eml_roundtrip_keeps_complete_unicode_body_and_all_recipient_roles() -> None:
     body = 'Åäö, quoted "text", $script and `literal`.\n' * 10_000 + "last character"
-    original = DraftRequest("workflow", "draft", DraftContent(
-        "Réunion — full notes", body, (Recipient("ada@example.invalid"),), (Recipient("lee@example.invalid"),), (Recipient("audit@example.invalid"),),
-    ))
+    original = DraftRequest(
+        "workflow",
+        "draft",
+        DraftContent(
+            "Réunion — full notes",
+            body,
+            (Recipient("ada@example.invalid"),),
+            (Recipient("lee@example.invalid"),),
+            (Recipient("audit@example.invalid"),),
+        ),
+    )
     encoded = eml_bytes(original)
     native_policy = cast("policy.EmailPolicy[EmailMessage[str, str]]", policy.default)
     parsed = BytesParser(policy=native_policy).parsebytes(encoded)
@@ -225,8 +243,15 @@ def test_verified_retries_keep_the_readable_binding_and_still_check_edited_or_mi
 def test_native_save_has_durable_mailbox_binding_and_preserves_body_beyond_command_output_limit(tmp_path: Path) -> None:
     drafts, command = adapter(tmp_path, command_type=ProcessOutlookCommand)
     original = request("Private complete draft content.\n" * 5_000 + "verified ending")
-    original = replace(original, content=replace(original.content,
-                       to=(Recipient("ada@example.invalid"),), cc=(Recipient("lee@example.invalid"),), bcc=(Recipient("audit@example.invalid"),)))
+    original = replace(
+        original,
+        content=replace(
+            original.content,
+            to=(Recipient("ada@example.invalid"),),
+            cc=(Recipient("lee@example.invalid"),),
+            bcc=(Recipient("audit@example.invalid"),),
+        ),
+    )
     saved = drafts.save(original, threading.Event())
     assert isinstance(saved, SavedOutlookDraft), saved
     assert saved.location.folder.store_id == "store-a" and len(command.files()) == 1
@@ -275,11 +300,17 @@ def test_failed_identity_publication_prevents_native_save_or_fallback(tmp_path: 
 def test_malformed_existing_identity_fails_closed_without_probing_or_mutating_drafts(tmp_path: Path) -> None:
     original = request()
     value: dict[str, object] = {
-        "version": 1, "kind": "pending_outlook", "key": draft_key(original), "fingerprint": fingerprint(original),
+        "version": 1,
+        "kind": "pending_outlook",
+        "key": draft_key(original),
+        "fingerprint": fingerprint(original),
         "folder": {"entry_id": "drafts-a", "store_id": "store-a"},
     }
     changes: tuple[dict[str, object], ...] = (
-        {"version": True}, {"kind": "unknown"}, {"fingerprint": "invalid"}, {"key": "0" * 64},
+        {"version": True},
+        {"kind": "unknown"},
+        {"fingerprint": "invalid"},
+        {"key": "0" * 64},
         {"folder": {"entry_id": "drafts-a", "store_id": None}},
     )
     invalid = [b"{"]

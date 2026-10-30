@@ -32,7 +32,7 @@ lazy from winapi.shapes import Rect
 
 prepare()
 
-SCENARIOS = ('Idle', 'Agent working', 'Recording', 'Keyboard mode', 'Needs input', 'Transcribing', 'Dictating')
+SCENARIOS = ("Idle", "Agent working", "Recording", "Keyboard mode", "Needs input", "Transcribing", "Dictating")
 
 
 @dataclass(frozen=True, slots=True)
@@ -41,7 +41,7 @@ class Choice:
 
     def __post_init__(self) -> None:
         if not 0 <= self.scenario < len(SCENARIOS):
-            raise ValueError('Choose a known preview scenario.')
+            raise ValueError("Choose a known preview scenario.")
 
 
 @dataclass(frozen=True, slots=True)
@@ -52,7 +52,7 @@ class Files:
 
 @dataclass(frozen=True, slots=True)
 class Options:
-    surface: Literal['toolbar', 'feed', 'both'] = 'both'
+    surface: Literal["toolbar", "feed", "both"] = "both"
     session: Path | None = None
     state: Path | None = None
     duration: float | None = None
@@ -68,34 +68,34 @@ class PreviewBar(DesktopBar):
     __slots__ = ()
 
     def toggle_taskbar(self) -> None:
-        self.actions.problem('Windows taskbar')
+        self.actions.problem("Windows taskbar")
 
     def notification_settings(self) -> None:
-        self.actions.problem('Windows notification settings')
+        self.actions.problem("Windows notification settings")
 
 
 class Preview:
     """UI-thread owner. Sample actions never reach production effect owners."""
 
-    __slots__ = ('agent', 'bar', 'closed', 'control', 'feed', 'files', 'jobs', 'root', 'selector', 'status', 'timer')
+    __slots__ = ("agent", "bar", "closed", "control", "feed", "files", "jobs", "root", "selector", "status", "timer")
 
-    def __init__(self, surface: Literal['toolbar', 'feed', 'both'], files: Files) -> None:
+    def __init__(self, surface: Literal["toolbar", "feed", "both"], files: Files) -> None:
         screen.use_physical_pixels()
         self.closed = False
         self.files = files
         self.root = application()
         self.control = QtWidgets.QDialog()
-        self.control.setWindowTitle('Workspace UI preview · sample data')
+        self.control.setWindowTitle("Workspace UI preview · sample data")
         self.control.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, True)
         self.control.finished.connect(self.root.quit)
         layout = QtWidgets.QVBoxLayout(self.control)
-        layout.addWidget(QtWidgets.QLabel('Sample data · saves restart these views automatically'))
+        layout.addWidget(QtWidgets.QLabel("Sample data · saves restart these views automatically"))
         self.selector = QtWidgets.QComboBox()
         self.selector.addItems(SCENARIOS)
         layout.addWidget(self.selector)
-        self.status = QtWidgets.QLabel('Actions stay in this preview.')
+        self.status = QtWidgets.QLabel("Actions stay in this preview.")
         layout.addWidget(self.status)
-        close = QtWidgets.QPushButton('Close preview')
+        close = QtWidgets.QPushButton("Close preview")
         close.clicked.connect(self.root.quit)
         layout.addWidget(close)
         self.control.resize(440, 160)
@@ -107,24 +107,32 @@ class Preview:
         self.timer.setInterval(50)
         self.timer.timeout.connect(self.tick)
         try:
-            if surface in ('feed', 'both'):
-                self.agent = AgentWindow(lambda: self.action('Stop'), post=self.jobs.put, create_view=self.build_feed,
-                                         on_submit=self.submitted, on_problem=self.action)
+            if surface in ("feed", "both"):
+                self.agent = AgentWindow(
+                    lambda: self.action("Stop"), post=self.jobs.put, create_view=self.build_feed, on_submit=self.submitted, on_problem=self.action
+                )
                 self.drain()
                 if not self.agent.ready.is_set():
-                    raise RuntimeError('The preview feed did not initialize.')
-            if surface in ('toolbar', 'both'):
-                actions = BarActions(lambda: self.action('Agent'), lambda: self.action('Work'), lambda: self.action('Stop'),
-                                     lambda action: self.action('Recording: ' + action), lambda: self.action('Keyboard'),
-                                     lambda: self.action('Overlay'), lambda: self.action('Menu'), self.action,
-                                     inbox=lambda: self.action('Inbox'))
+                    raise RuntimeError("The preview feed did not initialize.")
+            if surface in ("toolbar", "both"):
+                actions = BarActions(
+                    lambda: self.action("Agent"),
+                    lambda: self.action("Work"),
+                    lambda: self.action("Stop"),
+                    lambda action: self.action("Recording: " + action),
+                    lambda: self.action("Keyboard"),
+                    lambda: self.action("Overlay"),
+                    lambda: self.action("Menu"),
+                    self.action,
+                    inbox=lambda: self.action("Inbox"),
+                )
                 self.bar = PreviewBar(actions, native_shell=False)
                 self.bar.visible = True
                 for index, pill in enumerate(self.bar.pills):
-                    pill.setWindowTitle(f'Workspace preview toolbar {index}')
+                    pill.setWindowTitle(f"Workspace preview toolbar {index}")
             try:
                 choice = CHOICE.validate_json(files.state.read_bytes())
-            except (OSError, ValidationError):
+            except OSError, ValidationError:
                 choice = Choice()
             self.selector.setCurrentIndex(choice.scenario)
             self.selector.currentIndexChanged.connect(self.select)
@@ -136,14 +144,14 @@ class Preview:
             raise
 
     def build_feed(self, agent: AgentWindow) -> AgentToasts:
-        self.feed = AgentToasts(self.root, agent, preferences=PanelPreferences(Rect(40, 200, 440, 900)), remember=False)
+        self.feed = AgentToasts(self.root, agent, preferences=PanelPreferences(Rect(40, 200, 440, 900)))
         return self.feed
 
     def action(self, text: str) -> None:
-        self.status.setText('Preview action: ' + text)
+        self.status.setText("Preview action: " + text)
 
     def submitted(self, text: str) -> None:
-        self.action('Sample reply: ' + text)
+        self.action("Sample reply: " + text)
 
     def drain(self) -> None:
         while True:
@@ -156,35 +164,59 @@ class Preview:
         if self.closed:
             return
         self.files.state.write_bytes(CHOICE.dump_json(Choice(index)))
-        recording = RecordingState(phase='recording', seconds=125) if index == 2 else RecordingState()
+        recording = RecordingState(phase="recording", seconds=125) if index == 2 else RecordingState()
         if self.bar is not None:
             self.bar.recording_changed(recording)
-            self.bar.layout(index != 3)
+            self.bar.layout(enabled=index != 3)
             states = (State.READY, State.AGENT, State.READY, State.READY, State.NEEDS_INPUT, State.WORKING, State.LISTENING)
             self.bar.state(states[index])
         if self.agent is not None:
             self.agent.reset()
-            self.agent.triage(Board(enabled=True, items=(
-                Assessment('preview-budget', (), 'Review the sample budget', 'Check **the totals** in `FY27`.',
-                           'Compare the two sample sheets.', '', 2, time.time()),
-                Assessment('preview-brief', (), 'Prepare the Friday brief', 'A fictional teammate asks for a short summary.',
-                           'Draft three points for review.', '', 1, time.time()),
-            )))
-            self.agent.begin('Review the sample workbook', lambda: self.action('Stop'))
+            self.agent.triage(
+                Board(
+                    enabled=True,
+                    items=(
+                        Assessment(
+                            "preview-budget",
+                            (),
+                            "Review the sample budget",
+                            "Check **the totals** in `FY27`.",
+                            "Compare the two sample sheets.",
+                            "",
+                            2,
+                            time.time(),
+                        ),
+                        Assessment(
+                            "preview-brief",
+                            (),
+                            "Prepare the Friday brief",
+                            "A fictional teammate asks for a short summary.",
+                            "Draft three points for review.",
+                            "",
+                            1,
+                            time.time(),
+                        ),
+                    ),
+                )
+            )
+            self.agent.begin("Review the sample workbook", lambda: self.action("Stop"))
             publish = self.agent.updates()
-            publish(ToolActivity('preview-tool', 'run_powershell', 'Write-Output "sample result"', time.time(),
-                                 Succeeded('The sample workbook has 12 rows.')))
-            publish(Answer('preview-reply', 'The **sample totals** are ready for review.', time.time(), StreamState.COMPLETE))
+            publish(
+                ToolActivity(
+                    "preview-tool", "run_powershell", 'Write-Output "sample result"', time.time(), Succeeded("The sample workbook has 12 rows.")
+                )
+            )
+            publish(Answer("preview-reply", "The **sample totals** are ready for review.", time.time(), StreamState.COMPLETE))
             self.agent.finish()
             self.agent.show(focus=False)
             self.drain()
-        self.status.setText('Sample state: ' + SCENARIOS[index])
+        self.status.setText("Sample state: " + SCENARIOS[index])
 
     def tick(self) -> None:
         if self.closed:
             return
         self.drain()
-        if (self.files.session / 'stop').exists():
+        if (self.files.session / "stop").exists():
             self.root.quit()
 
     def close(self) -> None:
@@ -207,31 +239,31 @@ def run(options: Options, files: Files) -> None:
     preview = Preview(options.surface, files)
     try:
         preview.root.processEvents()
-        ready: dict[str, int | str] = {'pid': os.getpid(), 'surface': options.surface}
-        (files.session / 'ready.json').write_text(json.dumps(ready), encoding='utf-8')
+        ready: dict[str, int | str] = {"pid": os.getpid(), "surface": options.surface}
+        (files.session / "ready.json").write_text(json.dumps(ready), encoding="utf-8")
         if options.duration is not None:
             QtCore.QTimer.singleShot(round(options.duration * 1000), preview.root.quit)
         preview.root.exec()
     finally:
         preview.close()
-        (files.session / 'closed').touch()
+        (files.session / "closed").touch()
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--surface', choices=('toolbar', 'feed', 'both'), default='both')
-    parser.add_argument('--session', type=Path)
-    parser.add_argument('--state', type=Path)
-    parser.add_argument('--duration', type=float, help='bounded smoke run in seconds')
+    parser.add_argument("--surface", choices=("toolbar", "feed", "both"), default="both")
+    parser.add_argument("--session", type=Path)
+    parser.add_argument("--state", type=Path)
+    parser.add_argument("--duration", type=float, help="bounded smoke run in seconds")
     observed: dict[str, object] = dict(inspect.getmembers(parser.parse_args()))
     options = OPTIONS.validate_python(observed)
     if options.duration is not None and options.duration <= 0:
-        parser.error('--duration must be positive')
+        parser.error("--duration must be positive")
     activate()
-    with tempfile.TemporaryDirectory(prefix='workspace-preview-') as folder:
+    with tempfile.TemporaryDirectory(prefix="workspace-preview-") as folder:
         session = options.session if options.session is not None else Path(folder)
-        run(options, Files(session, options.state if options.state is not None else session / 'state.json'))
+        run(options, Files(session, options.state if options.state is not None else session / "state.json"))
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

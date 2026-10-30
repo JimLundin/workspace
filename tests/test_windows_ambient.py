@@ -13,7 +13,7 @@ from winapi import ambient, system_status
 def test_native_power_validates_missing_and_unknown_batteries() -> None:
     status = ambient.PowerStatus()
     status.ac, status.flags, status.percent = 1, 8, 73
-    assert ambient.power_from_status(status) == Battery(73, True, True)
+    assert ambient.power_from_status(status) == Battery(73, powered=True, charging=True)
     status.flags = 128
     assert ambient.power_from_status(status) is PowerUnavailable.NO_BATTERY
     status.flags = 255

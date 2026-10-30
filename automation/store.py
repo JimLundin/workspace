@@ -68,8 +68,22 @@ from automation.task import (
 SCHEMA_VERSION = 2
 MAX_PAGE = 1_000
 _TASK_COLUMNS: tuple[str, ...] = (
-    "id", "title", "prompt", "source", "priority", "created_at", "updated_at", "revision", "state", "checkpoint",
-    "goal_revision", "phase", "routine_id", "routine_revision", "occurrence_id", "wake_at",
+    "id",
+    "title",
+    "prompt",
+    "source",
+    "priority",
+    "created_at",
+    "updated_at",
+    "revision",
+    "state",
+    "checkpoint",
+    "goal_revision",
+    "phase",
+    "routine_id",
+    "routine_revision",
+    "occurrence_id",
+    "wake_at",
 )
 _TASK_SELECT = ", ".join(_TASK_COLUMNS)
 _ACTION_COLUMNS = "id, task_id, run_id, specification, started_at, updated_at, outcome, outcome_kind, fingerprint"
@@ -135,8 +149,11 @@ def _source(value: object) -> Source:
             return RequestSource(identifier(data["conversation_id"], "conversation identity"))
         case "routine":
             _fields(data, "kind", "routine_id", "revision", "occurrence_id")
-            return RoutineSource(identifier(data["routine_id"], "routine identity"), integer(data["revision"], "routine revision"),
-                                 text(data["occurrence_id"], "routine occurrence", maximum=512))
+            return RoutineSource(
+                identifier(data["routine_id"], "routine identity"),
+                integer(data["revision"], "routine revision"),
+                text(data["occurrence_id"], "routine occurrence", maximum=512),
+            )
         case _:
             raise ValueError("Invalid stored task source.")
 
@@ -160,12 +177,18 @@ def _wait(value: object) -> WaitReason:
     match data.get("kind"):
         case "question":
             _fields(data, "kind", "id", "text", "detail")
-            return Question(identifier(data["id"], "question identity"), text(data["text"], "question", maximum=8_000),
-                            text(data["detail"], "question detail", maximum=16_000, empty=True))
+            return Question(
+                identifier(data["id"], "question identity"),
+                text(data["text"], "question", maximum=8_000),
+                text(data["detail"], "question detail", maximum=16_000, empty=True),
+            )
         case "approval":
             _fields(data, "kind", "id", "title", "detail")
-            return Approval(identifier(data["id"], "approval identity"), text(data["title"], "approval title", maximum=240),
-                            text(data["detail"], "approval detail", maximum=16_000, empty=True))
+            return Approval(
+                identifier(data["id"], "approval identity"),
+                text(data["title"], "approval title", maximum=240),
+                text(data["detail"], "approval detail", maximum=16_000, empty=True),
+            )
         case "until":
             _fields(data, "kind", "at", "reason")
             return Until(timestamp(data["at"]), text(data["reason"], "waiting reason", maximum=8_000))
@@ -202,8 +225,11 @@ def _state(value: object, task_id: str) -> State:
             return {"ready": TaskStatus.READY, "paused": TaskStatus.PAUSED, "cancelled": TaskStatus.CANCELLED}[text(status, "task status")]
         case "running":
             _fields(data, "kind", "run_id", "owner", "started_at")
-            return Running(RunRef(task_id, identifier(data["run_id"], "run identity")), identifier(data["owner"], "worker owner"),
-                           timestamp(data["started_at"], "run start"))
+            return Running(
+                RunRef(task_id, identifier(data["run_id"], "run identity")),
+                identifier(data["owner"], "worker owner"),
+                timestamp(data["started_at"], "run start"),
+            )
         case "waiting":
             _fields(data, "kind", "reason")
             if not isinstance(data["reason"], dict):
@@ -211,8 +237,9 @@ def _state(value: object, task_id: str) -> State:
             return Waiting(_wait(_dump(cast(dict[str, object], data["reason"]))))
         case "interrupted":
             _fields(data, "kind", "run_id", "reason")
-            return Interrupted(RunRef(task_id, identifier(data["run_id"], "run identity")),
-                               text(data["reason"], "interruption reason", maximum=8_000))
+            return Interrupted(
+                RunRef(task_id, identifier(data["run_id"], "run identity")), text(data["reason"], "interruption reason", maximum=8_000)
+            )
         case "completed":
             _fields(data, "kind", "result", "evidence")
             return Completed(text(data["result"], "task result"), _strings(data["evidence"], "completion evidence", maximum=8_000, count=64))
@@ -236,10 +263,22 @@ def _task_values(task: Task) -> tuple[object, ...]:
     wake = task.state.reason.at if isinstance(task.state, Waiting) and isinstance(task.state.reason, Until) else None
     checkpoint = _dump({"summary": task.checkpoint.summary, "at": task.checkpoint.at}) if task.checkpoint is not None else None
     return (
-        task.id, task.title, task.prompt, _dump(_source_data(task.source)), task.priority, task.created_at, task.updated_at,
-        task.revision, _dump(_state_data(task.state)), checkpoint, task.goal_revision, phase(task.state),
-        routine.routine_id if routine is not None else None, routine.revision if routine is not None else None,
-        routine.occurrence_id if routine is not None else None, wake,
+        task.id,
+        task.title,
+        task.prompt,
+        _dump(_source_data(task.source)),
+        task.priority,
+        task.created_at,
+        task.updated_at,
+        task.revision,
+        _dump(_state_data(task.state)),
+        checkpoint,
+        task.goal_revision,
+        phase(task.state),
+        routine.routine_id if routine is not None else None,
+        routine.revision if routine is not None else None,
+        routine.occurrence_id if routine is not None else None,
+        wake,
     )
 
 
@@ -247,9 +286,19 @@ def _task(row: tuple[object, ...]) -> Task:
     if len(row) != len(_TASK_COLUMNS):
         raise ValueError("Incomplete stored task.")
     identity = identifier(row[0], "task identity")
-    task = Task(identity, text(row[1], "task title", maximum=240), text(row[2], "task prompt"), _source(row[3]),
-                integer(row[4], "task priority", minimum=-10_000, maximum=10_000), timestamp(row[5]), timestamp(row[6]),
-                integer(row[7], "task revision"), _state(row[8], identity), _checkpoint(row[9]), integer(row[10], "goal revision"))
+    task = Task(
+        identity,
+        text(row[1], "task title", maximum=240),
+        text(row[2], "task prompt"),
+        _source(row[3]),
+        integer(row[4], "task priority", minimum=-10_000, maximum=10_000),
+        timestamp(row[5]),
+        timestamp(row[6]),
+        integer(row[7], "task revision"),
+        _state(row[8], identity),
+        _checkpoint(row[9]),
+        integer(row[10], "goal revision"),
+    )
     expected = _task_values(task)
     if row[11:] != expected[11:]:
         raise ValueError("Stored task indexes disagree with task state.")
@@ -292,8 +341,13 @@ def _verification_data(verification: Verification) -> dict[str, object]:
 
 
 def _specification_data(specification: ActionSpec) -> dict[str, object]:
-    return {"tool": specification.tool, "label": specification.label, "fingerprint": specification.fingerprint,
-            "resources": specification.resources, "verification": _verification_data(specification.verification)}
+    return {
+        "tool": specification.tool,
+        "label": specification.label,
+        "fingerprint": specification.fingerprint,
+        "resources": specification.resources,
+        "verification": _verification_data(specification.verification),
+    }
 
 
 def _specification(value: object) -> ActionSpec:
@@ -313,8 +367,13 @@ def _specification(value: object) -> ActionSpec:
             verification = FileDigest(text(check["path"], "verification path", maximum=32_768), digest(check["sha256"], "file digest"))
         case _:
             raise ValueError("Invalid stored action verification.")
-    return ActionSpec(text(data["tool"], "action tool", maximum=128), text(data["label"], "action label", maximum=1_024),
-                      digest(data["fingerprint"]), _strings(data["resources"], "action resource", maximum=1_024, count=32), verification)
+    return ActionSpec(
+        text(data["tool"], "action tool", maximum=128),
+        text(data["label"], "action label", maximum=1_024),
+        digest(data["fingerprint"]),
+        _strings(data["resources"], "action resource", maximum=1_024, count=32),
+        verification,
+    )
 
 
 def _outcome_data(outcome: ActionOutcome) -> dict[str, object]:
@@ -358,8 +417,15 @@ def _outcome(value: object) -> ActionOutcome:
 def _action(row: tuple[object, ...]) -> Action:
     if len(row) != 9:
         raise ValueError("Incomplete stored action.")
-    action = Action(identifier(row[0], "action identity"), identifier(row[1], "task identity"), identifier(row[2], "run identity"),
-                    _specification(row[3]), timestamp(row[4]), timestamp(row[5]), _outcome(row[6]))
+    action = Action(
+        identifier(row[0], "action identity"),
+        identifier(row[1], "task identity"),
+        identifier(row[2], "run identity"),
+        _specification(row[3]),
+        timestamp(row[4]),
+        timestamp(row[5]),
+        _outcome(row[6]),
+    )
     if row[7] != _outcome_data(action.outcome)["kind"] or row[8] != action.specification.fingerprint:
         raise ValueError("Stored action indexes disagree with the action.")
     return action
@@ -440,8 +506,9 @@ class TaskStore:
             if isinstance(task.state, Running) and (task.state.owner != owner or task.state.started_at != at):
                 raise ValueError("The stored task disagrees with its execution.")
         if isinstance(task.state, Waiting) and isinstance(task.state.reason, (Question, Approval)):
-            request = connection.execute("SELECT goal_revision,request,at,closed_at,run_id FROM requests WHERE task_id=? AND id=?",
-                                         (task.id, task.state.reason.id)).fetchone()
+            request = connection.execute(
+                "SELECT goal_revision,request,at,closed_at,run_id FROM requests WHERE task_id=? AND id=?", (task.id, task.state.reason.id)
+            ).fetchone()
             if request is None or len(request) != 5 or integer(request[0], "goal revision") != task.goal_revision:
                 raise ValueError("The task references a missing input request.")
             if _wait(request[1]) != task.state.reason or request[3] is not None:
@@ -463,11 +530,9 @@ class TaskStore:
         if cursor.rowcount != 1:
             raise RuntimeError("The task changed during its write transaction.")
         if isinstance(previous.state, Running) and not owns(task, previous.state.run):
-            connection.execute("UPDATE runs SET ended_at=?,disposition=? WHERE id=?",
-                               (task.updated_at, phase(task.state), previous.state.run.run_id))
+            connection.execute("UPDATE runs SET ended_at=?,disposition=? WHERE id=?", (task.updated_at, phase(task.state), previous.state.run.run_id))
         if isinstance(previous.state, Waiting) and isinstance(previous.state.reason, (Question, Approval)) and task.state != previous.state:
-            connection.execute("UPDATE requests SET closed_at=? WHERE task_id=? AND id=?",
-                               (task.updated_at, task.id, previous.state.reason.id))
+            connection.execute("UPDATE requests SET closed_at=? WHERE task_id=? AND id=?", (task.updated_at, task.id, previous.state.reason.id))
 
     def submit(self, id: str, title: str, prompt: str, source: Source, *, at: float, priority: int = 0) -> Task:
         task = Task(id, title, prompt, source, priority, at, at, 0, TaskStatus.READY, None)
@@ -478,8 +543,10 @@ class TaskStore:
                     raise ValueError("That task identity already belongs to a different submission.")
                 return existing
             if isinstance(source, RoutineSource):
-                row = connection.execute(f"SELECT {_TASK_SELECT} FROM tasks WHERE routine_id=? AND routine_revision=? AND occurrence_id=?",
-                                         (source.routine_id, source.revision, source.occurrence_id)).fetchone()
+                row = connection.execute(
+                    f"SELECT {_TASK_SELECT} FROM tasks WHERE routine_id=? AND routine_revision=? AND occurrence_id=?",
+                    (source.routine_id, source.revision, source.occurrence_id),
+                ).fetchone()
                 if row is not None:
                     return self._read_task(connection, row)
             marks = ",".join("?" for _ in _TASK_COLUMNS)
@@ -520,7 +587,8 @@ class TaskStore:
         with self._connection() as connection:
             row = connection.execute(
                 f"SELECT {_TASK_SELECT} FROM tasks WHERE routine_id=? AND phase NOT IN ('completed','failed','cancelled') "
-                "ORDER BY created_at,id LIMIT 1", (routine_id,),
+                "ORDER BY created_at,id LIMIT 1",
+                (routine_id,),
             ).fetchone()
             return self._read_task(connection, row) if row is not None else None
 
@@ -535,7 +603,8 @@ class TaskStore:
                 return None
             row = connection.execute(
                 f"SELECT {_TASK_SELECT} FROM tasks WHERE phase IN ('ready','interrupted') OR (phase='waiting' AND wake_at<=?) "
-                "ORDER BY priority DESC,created_at,id LIMIT 1", (at,),
+                "ORDER BY priority DESC,created_at,id LIMIT 1",
+                (at,),
             ).fetchone()
             if row is None:
                 return None
@@ -553,8 +622,10 @@ class TaskStore:
             running = started(task, run, owner, at=at)
             if running is None:
                 return None
-            connection.execute("INSERT INTO runs(id,task_id,owner,started_at,previous_state) VALUES (?,?,?,?,?)",
-                               (run_id, task.id, owner, at, _dump(_state_data(previous))))
+            connection.execute(
+                "INSERT INTO runs(id,task_id,owner,started_at,previous_state) VALUES (?,?,?,?,?)",
+                (run_id, task.id, owner, at, _dump(_state_data(previous))),
+            )
             self._put(connection, task, running)
             return Claim(running, run, previous)
 
@@ -575,15 +646,22 @@ class TaskStore:
             result = finished(task, run, outcome, at=at) if task is not None else None
             if result is None or task is None:
                 return None
-            if isinstance(outcome, Completed) and connection.execute(
-                "SELECT id FROM actions WHERE task_id=? AND outcome_kind IN ('running','uncertain','returned') LIMIT 1", (task.id,),
-            ).fetchone() is not None:
+            if (
+                isinstance(outcome, Completed)
+                and connection.execute(
+                    "SELECT id FROM actions WHERE task_id=? AND outcome_kind IN ('running','uncertain','returned') LIMIT 1",
+                    (task.id,),
+                ).fetchone()
+                is not None
+            ):
                 return None
             if isinstance(outcome, Waiting) and isinstance(outcome.reason, (Question, Approval)):
                 if connection.execute("SELECT id FROM requests WHERE task_id=? AND id=?", (task.id, outcome.reason.id)).fetchone() is not None:
                     raise ValueError("An input request identity cannot be reused.")
-                connection.execute("INSERT INTO requests(task_id,id,goal_revision,run_id,request,at) VALUES (?,?,?,?,?,?)",
-                                   (task.id, outcome.reason.id, task.goal_revision, run.run_id, _dump(_wait_data(outcome.reason)), at))
+                connection.execute(
+                    "INSERT INTO requests(task_id,id,goal_revision,run_id,request,at) VALUES (?,?,?,?,?,?)",
+                    (task.id, outcome.reason.id, task.goal_revision, run.run_id, _dump(_wait_data(outcome.reason)), at),
+                )
             self._put(connection, task, result)
             return result
 
@@ -619,7 +697,8 @@ class TaskStore:
                 rows = connection.execute(
                     f"SELECT {_TASK_SELECT} FROM tasks WHERE id>? AND phase NOT IN ('completed','cancelled') "
                     "AND json_extract(source,'$.kind')='request' AND json_extract(source,'$.conversation_id')=? "
-                    "ORDER BY id LIMIT 100", (cursor, conversation_id),
+                    "ORDER BY id LIMIT 100",
+                    (cursor, conversation_id),
                 ).fetchall()
                 if not rows:
                     return count
@@ -643,8 +722,7 @@ class TaskStore:
                 return None
             result = redirected(task, prompt, at=at)
             self._put(connection, task, result)
-            connection.execute("INSERT INTO goals(task_id,revision,prompt,at) VALUES (?,?,?,?)",
-                               (task.id, result.goal_revision, prompt, at))
+            connection.execute("INSERT INTO goals(task_id,revision,prompt,at) VALUES (?,?,?,?)", (task.id, result.goal_revision, prompt, at))
             return result
 
     def answer(self, id: str, request_id: str, reply: Reply, *, at: float) -> Task | None:
@@ -658,8 +736,10 @@ class TaskStore:
             if update is None or task is None:
                 return None
             result, response = update
-            connection.execute("INSERT INTO responses(task_id,request_id,goal_revision,request,reply,at) VALUES (?,?,?,?,?,?)",
-                               (task.id, request_id, task.goal_revision, _dump(_wait_data(response.request)), _dump(_reply_data(reply)), at))
+            connection.execute(
+                "INSERT INTO responses(task_id,request_id,goal_revision,request,reply,at) VALUES (?,?,?,?,?,?)",
+                (task.id, request_id, task.goal_revision, _dump(_wait_data(response.request)), _dump(_reply_data(reply)), at),
+            )
             self._put(connection, task, result)
             return result
 
@@ -717,8 +797,9 @@ class TaskStore:
         identifier(task_id, "task identity")
         integer(limit, "goal page size", minimum=1, maximum=MAX_PAGE)
         with self._connection() as connection:
-            rows = connection.execute("SELECT revision,prompt,at FROM goals WHERE task_id=? ORDER BY revision DESC LIMIT ?",
-                                      (task_id, limit)).fetchall()
+            rows = connection.execute(
+                "SELECT revision,prompt,at FROM goals WHERE task_id=? ORDER BY revision DESC LIMIT ?", (task_id, limit)
+            ).fetchall()
         return tuple(GoalRevision(integer(row[0], "goal revision"), text(row[1], "goal prompt"), timestamp(row[2])) for row in reversed(rows))
 
     def recover(self, owner: str, *, at: float) -> tuple[Task, ...]:
@@ -759,16 +840,28 @@ class TaskStore:
                 return None
             if connection.execute("SELECT id FROM actions WHERE id=?", (action_id,)).fetchone() is not None:
                 return None
-            if connection.execute(
-                "SELECT id FROM actions WHERE task_id=? AND fingerprint=? AND outcome_kind IN ('running','uncertain') LIMIT 1",
-                (run.task_id, specification.fingerprint),
-            ).fetchone() is not None:
+            if (
+                connection.execute(
+                    "SELECT id FROM actions WHERE task_id=? AND fingerprint=? AND outcome_kind IN ('running','uncertain') LIMIT 1",
+                    (run.task_id, specification.fingerprint),
+                ).fetchone()
+                is not None
+            ):
                 return None
             connection.execute(
                 "INSERT INTO actions(id,task_id,run_id,specification,started_at,updated_at,outcome,outcome_kind,fingerprint) "
                 "VALUES (?,?,?,?,?,?,?,?,?)",
-                (action_id, run.task_id, run.run_id, _dump(_specification_data(specification)), at, at,
-                 _dump(_outcome_data(action.outcome)), "running", specification.fingerprint),
+                (
+                    action_id,
+                    run.task_id,
+                    run.run_id,
+                    _dump(_specification_data(specification)),
+                    at,
+                    at,
+                    _dump(_outcome_data(action.outcome)),
+                    "running",
+                    specification.fingerprint,
+                ),
             )
         return action
 
@@ -785,24 +878,26 @@ class TaskStore:
             if result is None:
                 return None
             data = _outcome_data(result.outcome)
-            connection.execute("UPDATE actions SET updated_at=?,outcome=?,outcome_kind=? WHERE id=?",
-                               (result.updated_at, _dump(data), data["kind"], action_id))
+            connection.execute(
+                "UPDATE actions SET updated_at=?,outcome=?,outcome_kind=? WHERE id=?", (result.updated_at, _dump(data), data["kind"], action_id)
+            )
             return result
 
     def actions(self, task_id: str, *, limit: int = 100) -> tuple[Action, ...]:
         identifier(task_id, "task identity")
         integer(limit, "action page size", minimum=1, maximum=MAX_PAGE)
         with self._connection() as connection:
-            rows = connection.execute(f"SELECT {_ACTION_COLUMNS} FROM actions WHERE task_id=? ORDER BY started_at DESC,id DESC LIMIT ?",
-                                      (task_id, limit)).fetchall()
+            rows = connection.execute(
+                f"SELECT {_ACTION_COLUMNS} FROM actions WHERE task_id=? ORDER BY started_at DESC,id DESC LIMIT ?", (task_id, limit)
+            ).fetchall()
             return tuple(self._read_action(connection, row) for row in reversed(rows))
 
     def unresolved_actions(self, task_id: str) -> tuple[Action, ...]:
         identifier(task_id, "task identity")
         with self._connection() as connection:
             rows = connection.execute(
-                f"SELECT {_ACTION_COLUMNS} FROM actions WHERE task_id=? AND outcome_kind IN ('running','uncertain') "
-                "ORDER BY started_at,id LIMIT ?", (task_id, MAX_PAGE + 1),
+                f"SELECT {_ACTION_COLUMNS} FROM actions WHERE task_id=? AND outcome_kind IN ('running','uncertain') ORDER BY started_at,id LIMIT ?",
+                (task_id, MAX_PAGE + 1),
             ).fetchall()
             if len(rows) > MAX_PAGE:
                 raise ValueError("Too many uncertain actions to recover this task.")
@@ -814,7 +909,8 @@ class TaskStore:
         with self._connection() as connection:
             rows = connection.execute(
                 f"SELECT {_ACTION_COLUMNS} FROM actions WHERE task_id=? AND outcome_kind IN ('running','uncertain','returned') "
-                "ORDER BY started_at,id LIMIT ?", (task_id, MAX_PAGE + 1),
+                "ORDER BY started_at,id LIMIT ?",
+                (task_id, MAX_PAGE + 1),
             ).fetchall()
             if len(rows) > MAX_PAGE:
                 raise ValueError("Too many unverified actions to complete this task.")

@@ -2,6 +2,7 @@
 
 from collections.abc import Callable
 from dataclasses import dataclass, replace
+from itertools import islice
 from typing import Protocol, assert_never
 
 from assistant.activity import ContextSnapshot
@@ -37,6 +38,7 @@ from automation.ipc import (
     Resync,
     ReviewEvent,
 )
+from automation.personal_work import AddDocument, AddWebPage, DismissWork, OpenWorkSource, RefreshPersonalWork, RestoreWork, SaveWork, UnlinkWork
 from automation.routines import RoutineStore
 from automation.store import TaskStore
 from automation.task import (
@@ -111,13 +113,29 @@ def follow_up_prompt(task: Task, prompt: str) -> str:
 
 class WorkService:
     __slots__ = (
-        "_epoch", "_pending_inputs", "_replies", "_reviews", "_sequence", "_submissions",
-        "assistant_pid", "bridge",
-        "connection_status", "context", "problem", "routines", "tasks",
+        "_epoch",
+        "_pending_inputs",
+        "_replies",
+        "_reviews",
+        "_sequence",
+        "_submissions",
+        "assistant_pid",
+        "bridge",
+        "connection_status",
+        "context",
+        "problem",
+        "routines",
+        "tasks",
     )
 
     def __init__(
-        self, tasks: TaskStore, routines: RoutineStore, context: ContextStore, bridge: WorkBridge, *, assistant_pid: int,
+        self,
+        tasks: TaskStore,
+        routines: RoutineStore,
+        context: ContextStore,
+        bridge: WorkBridge,
+        *,
+        assistant_pid: int,
     ) -> None:
         self.tasks, self.routines, self.context, self.bridge = tasks, routines, context, bridge
         self.assistant_pid = assistant_pid
@@ -132,7 +150,7 @@ class WorkService:
     def _transport(self, operation: Callable[[], None]) -> None:
         try:
             operation()
-        except (OSError, ValueError):
+        except OSError, ValueError:
             self._disconnected()
 
     def _disconnected(self) -> None:
@@ -166,7 +184,7 @@ class WorkService:
     def _limit_submissions(self, watched: frozenset[str]) -> None:
         # Keep watched submission failures plus a bounded recent history.
         unwatched = tuple(identity for identity in self._submissions if identity not in watched)
-        for identity in unwatched[:max(0, len(unwatched) - 256)]:
+        for identity in unwatched[: max(0, len(unwatched) - 256)]:
             self._submissions.pop(identity)
 
     def submission_failed(self, issued: WorkRequest, reason: str, *, watched: frozenset[str]) -> None:
@@ -187,7 +205,7 @@ class WorkService:
 
     def _limit_replies(self, watched: frozenset[str]) -> None:
         recent = tuple(key for key in self._replies if key[0] not in watched or key not in self._pending_inputs)
-        for key in recent[:max(0, len(recent) - 256)]:
+        for key in recent[: max(0, len(recent) - 256)]:
             self._replies.pop(key)
 
     def reply_failed(self, issued: Issued, reason: str, *, watched: frozenset[str]) -> None:
@@ -196,7 +214,9 @@ class WorkService:
         command = issued.command
         key = command.task_id, command.request_id
         problem = ReplyProblem(
-            task_id=command.task_id, request_id=command.request_id, receipt_id=issued.identity,
+            task_id=command.task_id,
+            request_id=command.request_id,
+            receipt_id=issued.identity,
             reason=f"This reply was not saved: {reason[:4_000]}".replace("\0", "�"),
         )
         self._replies.pop(key, None)
@@ -223,6 +243,8 @@ class WorkService:
                 self._routine_command(issued.identity, command, at=at)
             case AddPreference() | UpdatePreference() | AddProjectNote() | UpdateProjectNote() | RemoveContext():
                 self._context_command(issued.identity, command, at=at)
+            case AddDocument() | AddWebPage() | DismissWork() | RestoreWork() | SaveWork() | UnlinkWork() | OpenWorkSource() | RefreshPersonalWork():
+                raise ValueError("Personal work commands belong to the My work owner.")
             case _:
                 assert_never(command)
         self.problem = ""
@@ -257,7 +279,7 @@ class WorkService:
                     try:
                         if self.bridge.connect() != self._epoch:
                             self._disconnected()
-                    except (OSError, ValueError):
+                    except OSError, ValueError:
                         self._disconnected()
                 task = self.tasks.get(task_id)
                 review = self._reviews.get(task_id)
@@ -317,7 +339,7 @@ class WorkService:
                 self._epoch, self._sequence = epoch, 0
                 self._reviews.clear()
             messages = self.bridge.poll()
-        except (OSError, ValueError):
+        except OSError, ValueError:
             self._disconnected()
             return ()
         self.connection_status = ""
@@ -331,8 +353,11 @@ class WorkService:
                     self._reviews.clear()
                 case ReviewEvent(run, review):
                     task = self.tasks.get(run.task_id)
-                    if task is not None and task.id == review.task_id and task.goal_revision == review.goal_revision and (
-                        owns(task, run) or (review_matches(task, review) and self.tasks.request_run(task.id, review.request.id) == run)
+                    if (
+                        task is not None
+                        and task.id == review.task_id
+                        and task.goal_revision == review.goal_revision
+                        and (owns(task, run) or (review_matches(task, review) and self.tasks.request_run(task.id, review.request.id) == run))
                     ):
                         if len(self._reviews) >= 1_000:
                             self._reviews.pop(next(iter(self._reviews)))
@@ -344,7 +369,12 @@ class WorkService:
         return tuple(accepted)
 
     def _submission_problems(
-        self, current: dict[str, Task], watched: frozenset[str], pending: frozenset[str], *, confirmed: bool,
+        self,
+        current: dict[str, Task],
+        watched: frozenset[str],
+        pending: frozenset[str],
+        *,
+        confirmed: bool,
     ) -> tuple[SubmissionProblem, ...]:
         for identity, submission in tuple(self._submissions.items()):
             task = current.get(identity)
@@ -353,7 +383,8 @@ class WorkService:
         problems = {identity: submission.problem for identity, submission in self._submissions.items()}
         missing_reason = (
             "No saved task was found for this request. Submit it again if you want to retry."
-            if confirmed else "Could not confirm this request while the work journal is unavailable."
+            if confirmed
+            else "Could not confirm this request while the work journal is unavailable."
         )
         for identity in sorted(watched - current.keys() - pending):
             if identity not in problems:
@@ -366,12 +397,18 @@ class WorkService:
         self._limit_submissions(watched)
         self._limit_replies(watched)
         current = {task.id: task for task in previous.tasks}
-        return replace(previous, status=self.problem or "The work journal is unavailable.", reviews=(),
-                       submission_problems=self._submission_problems(current, watched, pending, confirmed=False), reply_problems=())
+        return replace(
+            previous,
+            status=self.problem or "The work journal is unavailable.",
+            reviews=(),
+            submission_problems=self._submission_problems(current, watched, pending, confirmed=False),
+            reply_problems=(),
+        )
 
     def _confirmed_reply_problems(self, current: dict[str, Task], watched: frozenset[str]) -> tuple[ReplyProblem, ...]:
         self._pending_inputs = frozenset(
-            (task.id, task.state.reason.id) for task in current.values()
+            (task.id, task.state.reason.id)
+            for task in current.values()
             if isinstance(task.state, Waiting) and isinstance(task.state.reason, (Question, Approval))
         )
         for key in tuple(self._replies):
@@ -398,4 +435,9 @@ class WorkService:
         routines, context = self.routines.summaries(at), self.context.list()
         problems = self._submission_problems(current, watched, pending, confirmed=True)
         reply_problems = self._confirmed_reply_problems(current, watched)
-        return WorkSnapshot(tasks, routines, context, self.problem or self.connection_status, tuple(reviews), problems, reply_problems)
+        # Only watched tasks need an action timeline. Bound journal reads and
+        # publication size; the task journal retains the complete ledger.
+        actions = tuple(islice((action for task in tasks if task.id in watched for action in self.tasks.actions(task.id, limit=16)), 256))
+        return WorkSnapshot(
+            tasks, routines, context, self.problem or self.connection_status, tuple(reviews), problems, reply_problems, actions=actions
+        )

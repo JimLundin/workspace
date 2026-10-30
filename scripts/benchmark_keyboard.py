@@ -40,11 +40,10 @@ def main() -> None:
     parser.add_argument("--output", type=Path)
     parsed = dict(inspect.getmembers(parser.parse_args()))
     match parsed:
-        case {'root': Path() as source_root, 'events': int() as events, 'rounds': int() as repetitions,
-              'output': (Path() | None) as output}:
+        case {"root": Path() as source_root, "events": int() as events, "rounds": int() as repetitions, "output": (Path() | None) as output}:
             options = Options(source_root, events, repetitions, output)
         case _:
-            parser.error('Invalid benchmark arguments.')
+            parser.error("Invalid benchmark arguments.")
     root = options.root.resolve()
     count, rounds = options.events, options.rounds
     if count < 1000 or rounds < 1:
@@ -59,14 +58,36 @@ def run(root: Path, count: int, rounds: int, output: Path | None) -> None:
     # Plain typing, home-row rolls, modifiers, layers, repeat, voice, and timers.
     # Zero is a timer callback; other values are physical keyboard scancodes.
     pattern = (
-        (0x05, True), (0x05, False), (0x14, True), (0x14, False),
-        (0x13, True), (0x17, True), (0x13, False), (0x17, False),
-        (0x13, True), (0x09, True), (0x09, False), (0x13, False),
-        (0x2F, True), (0, False), (0x26, True), (0x26, False), (0x2F, False),
-        (0x05, True), (0x05, True), (0x05, True), (0x05, False),
-        (0x30, True), (0x30, False), (0x31, True), (0x31, False),
-        (0x13, True), (0, False), (0x13, False),
-        (0x39, True), (0x39, False),
+        (0x05, True),
+        (0x05, False),
+        (0x14, True),
+        (0x14, False),
+        (0x13, True),
+        (0x17, True),
+        (0x13, False),
+        (0x17, False),
+        (0x13, True),
+        (0x09, True),
+        (0x09, False),
+        (0x13, False),
+        (0x2F, True),
+        (0, False),
+        (0x26, True),
+        (0x26, False),
+        (0x2F, False),
+        (0x05, True),
+        (0x05, True),
+        (0x05, True),
+        (0x05, False),
+        (0x30, True),
+        (0x30, False),
+        (0x31, True),
+        (0x31, False),
+        (0x13, True),
+        (0, False),
+        (0x13, False),
+        (0x39, True),
+        (0x39, False),
     )
     events = tuple((Scancode(key), down, index * 20) for index in range(count) for key, down in (pattern[index % len(pattern)],))
     host = Host()
@@ -80,17 +101,33 @@ def run(root: Path, count: int, rounds: int, output: Path | None) -> None:
     finally:
         tracemalloc.stop()
     names = (
-        "miryoku/engine.py", "miryoku/layout.py", "miryoku/win.py", "miryoku/__main__.py", "miryoku.pyw",
-        "protocol.py", "config.py", "keeper.py", "runtime.py", "winapi/inputs.py", "winapi/windows.py", "winapi/_core.py",
+        "miryoku/engine.py",
+        "miryoku/layout.py",
+        "miryoku/win.py",
+        "miryoku/__main__.py",
+        "miryoku.pyw",
+        "protocol.py",
+        "config.py",
+        "keeper.py",
+        "runtime.py",
+        "winapi/inputs.py",
+        "winapi/windows.py",
+        "winapi/_core.py",
     )
     report = {
-        "python": sys.version, "root": str(root), "events_per_round": count, "rounds": rounds, "gc_enabled": gc.isenabled(),
+        "python": sys.version,
+        "root": str(root),
+        "events_per_round": count,
+        "rounds": rounds,
+        "gc_enabled": gc.isenabled(),
         "assistant_imported": any(name == "assistant" or name.startswith("assistant.") for name in sys.modules),
         "latency_rounds": measurements,
         "median": {name: statistics.median(row[name] for row in measurements) for name in measurements[0]},
-        "gc_collections_during_latency": len(collections), "gc_generations": collections,
+        "gc_collections_during_latency": len(collections),
+        "gc_generations": collections,
         "longest_observed_gc_us": max(pauses, default=0) / 1000,
-        "traced_peak_bytes": peak, "traced_retained_bytes": retained,
+        "traced_peak_bytes": peak,
+        "traced_retained_bytes": retained,
         "source": {name: hashlib.sha256((root / name).read_bytes()).hexdigest() for name in names},
         "scope": "Synthetic engine events; no native input, capture, or agent work. Traced peak is live memory, not total allocation churn.",
     }
@@ -104,14 +141,12 @@ def percentile(values: Sequence[int], fraction: float) -> float:
     return values[min(len(values) - 1, int(len(values) * fraction))] / 1000
 
 
-
-
 class Host:
     """No output log or OS calls whose allocations could obscure the engine."""
 
     __slots__ = ()
 
-    def send(self, key: Key | Mod, down: object) -> None:
+    def send(self, key: Key | Mod, *, down: object) -> None:
         pass
 
     def start_timer(self) -> int:
@@ -123,7 +158,7 @@ class Host:
     def signal(self, signal: Signal) -> None:
         pass
 
-    def request(self, request: Request, down: object) -> None:
+    def request(self, request: Request, *, down: object) -> None:
         pass
 
     def type_text(self, text: str) -> None:
@@ -136,9 +171,10 @@ class Host:
         pass
 
 
-
 def measure_latencies(
-    host: Host, events: Sequence[tuple[Scancode, bool, int]], rounds: int,
+    host: Host,
+    events: Sequence[tuple[Scancode, bool, int]],
+    rounds: int,
 ) -> tuple[tuple[frozendict[str, float], ...], tuple[int, ...], tuple[int, ...]]:
     count = len(events)
     latencies = array("Q", [0]) * count
@@ -159,7 +195,7 @@ def measure_latencies(
     warm = Engine()
     for key, down, now in events[:1000]:
         if key:
-            warm.on_key(host, key, down, now)
+            warm.on_key(host, key, down=down, now=now)
         else:
             warm.timeout(host, 1)
     del warm
@@ -172,27 +208,31 @@ def measure_latencies(
             for index, (key, down, now) in enumerate(events):
                 started = perf_counter_ns()
                 if key:
-                    engine.on_key(host, key, down, now)
+                    engine.on_key(host, key, down=down, now=now)
                 else:
                     engine.timeout(host, 1)
                 latencies[index] = perf_counter_ns() - started
         finally:
             gc.callbacks.remove(observe_gc)
         values = sorted(latencies)
-        measurements.append({
-            "p50_us": percentile(values, .5), "p95_us": percentile(values, .95),
-            "p99_us": percentile(values, .99), "p999_us": percentile(values, .999), "max_us": max(values) / 1000,
-        })
+        measurements.append(
+            {
+                "p50_us": percentile(values, 0.5),
+                "p95_us": percentile(values, 0.95),
+                "p99_us": percentile(values, 0.99),
+                "p999_us": percentile(values, 0.999),
+                "max_us": max(values) / 1000,
+            }
+        )
     return tuple(frozendict(row) for row in measurements), tuple(collections), tuple(pauses)
 
 
 def play(engine: Engine, host: Host, events: Sequence[tuple[Scancode, bool, int]]) -> None:
     for key, down, now in events:
         if key:
-            engine.on_key(host, key, down, now)
+            engine.on_key(host, key, down=down, now=now)
         else:
             engine.timeout(host, 1)
-
 
 
 if __name__ == "__main__":

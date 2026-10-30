@@ -134,7 +134,11 @@ def test_unconfirmed_submission_keeps_known_rows_and_later_matching_work_clears_
         # A successful later observation can confirm an earlier committed ID,
         # including its original conversation after the frontend started anew.
         rig.tasks.submit(
-            "unconfirmed", "A request whose commit is unconfirmed", "A request whose commit is unconfirmed", original.source, at=rig.clock(),
+            "unconfirmed",
+            "A request whose commit is unconfirmed",
+            "A request whose commit is unconfirmed",
+            original.source,
+            at=rig.clock(),
         )
         snapshot = rig.refresh()
         assert any(task.id == "unconfirmed" for task in snapshot.tasks)
@@ -333,8 +337,13 @@ def test_ordinary_unconfirmed_submission_requires_its_original_prompt_and_conver
                 pending = rig.agent.snapshot().submission_problems
                 assert len(pending) == 1
                 identity = pending[0].task_id
-            source = (RequestSource("another-conversation") if mismatch == "conversation" else
-                      RoutineSource("routine", 0, "occurrence") if mismatch == "routine" else original.source)
+            source = (
+                RequestSource("another-conversation")
+                if mismatch == "conversation"
+                else RoutineSource("routine", 0, "occurrence")
+                if mismatch == "routine"
+                else original.source
+            )
             prompt = "A different request" if mismatch == "prompt" else "The unconfirmed ordinary request"
             rig.tasks.submit(identity, "Externally committed work", prompt, source, at=rig.clock())
             assert [problem.task_id for problem in rig.refresh().submission_problems] == [identity]

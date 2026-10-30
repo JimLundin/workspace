@@ -28,21 +28,27 @@ from tests.test_browser import Channel, connected_browser, decoded
 
 def test_default_open_reuses_the_users_expanded_workspace_group_without_changing_it() -> None:
     title = "Workspace"
-    first = Group(10, 1, title, "blue", True, False)
-    expanded = Group(20, 2, title, "purple", False, False)
+    first = Group(10, 1, title, "blue", collapsed=True, shared=False)
+    expanded = Group(20, 2, title, "purple", collapsed=False, shared=False)
     state = TabState((), (first, expanded), (1, 2), 2)
     assert opening(state, DefaultGroup.WORKSPACE, None) == Opening(2, InGroup(20))
     assert opening(state, DefaultGroup.WORKSPACE, 1) == Opening(1, InGroup(10))
-    assert expanded == Group(20, 2, title, "purple", False, False)
+    assert expanded == Group(20, 2, title, "purple", collapsed=False, shared=False)
     assert opening(state, Ungrouped.TABS, None) == Opening(2, Ungrouped.TABS)
     with TestCase().assertRaisesRegex(BrowserError, "match"):
         opening(state, InGroup(10), 2)
     with TestCase().assertRaisesRegex(BrowserError, "group is closed"):
         opening(state, InGroup(30), None)
 
+
 def test_default_open_does_not_add_work_to_other_or_shared_groups() -> None:
-    state = TabState((), (Group(10, 1, "Personal", "blue", False, False), Group(20, 1, "Workspace", "blue", False, True)), (1,), 1)
-    assert opening(state, DefaultGroup.WORKSPACE, None) == Opening(1, NewGroup("Workspace", "blue", True))
+    state = TabState(
+        (),
+        (Group(10, 1, "Personal", "blue", collapsed=False, shared=False), Group(20, 1, "Workspace", "blue", collapsed=False, shared=True)),
+        (1,),
+        1,
+    )
+    assert opening(state, DefaultGroup.WORKSPACE, None) == Opening(1, NewGroup("Workspace", "blue", collapsed=True))
     with TestCase().assertRaisesRegex(BrowserError, "window is closed"):
         opening(state, DefaultGroup.WORKSPACE, 2)
 
@@ -51,15 +57,22 @@ def test_invalid_tab_edits_do_not_create_a_controller_or_change_any_tabs(tmp_pat
     channel = Channel()
     browser = connected_browser(tmp_path / "unused", channel)
     cases: tuple[tuple[str, dict[str, Json]], ...] = (
-        ("group", {}), ("group", {"tab_ids": [True]}), ("group", {"tab_ids": ["1"]}),
-        ("group", {"tab_ids": [1], "collapsed": "yes"}), ("group", {"tab_ids": [1], "color": "invisible"}),
-        ("group", {"group_id": True}), ("group", {"tab_ids": [1], "window_id": -1}),
+        ("group", {}),
+        ("group", {"tab_ids": [True]}),
+        ("group", {"tab_ids": ["1"]}),
+        ("group", {"tab_ids": [1], "collapsed": "yes"}),
+        ("group", {"tab_ids": [1], "color": "invisible"}),
+        ("group", {"group_id": True}),
+        ("group", {"tab_ids": [1], "window_id": -1}),
         ("group", {"tab_ids": [1], "title": "x" * 301}),
-        ("ungroup", {"tab_ids": []}), ("tab", {"tab_id": 1, "action": "move"}),
+        ("ungroup", {"tab_ids": []}),
+        ("tab", {"tab_id": 1, "action": "move"}),
         ("tab", {"tab_id": 1, "action": "pin", "index": 0}),
         # The WebUI mute API dereferences a missing extension and crashes Edge.
-        ("tab", {"tab_id": 1, "action": "mute"}), ("tab", {"tab_id": 1, "action": "unmute"}),
-        ("close", {"tab_ids": []}), ("close", {"group_id": -1}),
+        ("tab", {"tab_id": 1, "action": "mute"}),
+        ("tab", {"tab_id": 1, "action": "unmute"}),
+        ("close", {"tab_ids": []}),
+        ("close", {"group_id": -1}),
         ("close", {"target_id": "page", "tab_ids": [1]}),
         ("open", {"url": "about:blank", "group_id": "1"}),
         ("open", {"url": "about:blank", "target_id": "page", "group_id": 1}),
@@ -74,7 +87,7 @@ def test_invalid_tab_edits_do_not_create_a_controller_or_change_any_tabs(tmp_pat
 
 
 def test_native_observations_require_the_declared_field_types() -> None:
-    tab = Tab(1, 2, 0, Ungrouped.TABS, "Page", "https://example.com", False, False, False)
+    tab = Tab(1, 2, 0, Ungrouped.TABS, "Page", "https://example.com", active=False, pinned=False, muted=False)
     source = decoded(json.dumps(tab.data()))
     assert tab_of(source) == tab
     for name, value in (("tab_id", True), ("active", "false"), ("group_id", -2), ("url", None)):
@@ -83,7 +96,7 @@ def test_native_observations_require_the_declared_field_types() -> None:
     source.pop("active")
     with TestCase().assertRaisesRegex(BrowserError, "incomplete"):
         tab_of(source)
-    group = decoded(json.dumps(Group(1, 2, "Workspace", "blue", True, False).data()))
+    group = decoded(json.dumps(Group(1, 2, "Workspace", "blue", collapsed=True, shared=False).data()))
     with TestCase().assertRaises(BrowserError):
         group_of({**group, "collapsed": 1})
 
@@ -100,9 +113,11 @@ class FixedStrip(TabStrip):
 
 
 def test_native_tab_pagination_keeps_ids_and_group_details_with_escaped_long_titles(tmp_path: Path) -> None:
-    tabs = tuple(Tab(index, 1, index, InGroup(index // 2), "\x00" * 300, "https://example.com/" + "\x00" * 970,
-                     False, False, False) for index in range(65))
-    groups = tuple(Group(index, 1, "\x00" * 300, "blue", True, False) for index in range(33))
+    tabs = tuple(
+        Tab(index, 1, index, InGroup(index // 2), "\x00" * 300, "https://example.com/" + "\x00" * 970, active=False, pinned=False, muted=False)
+        for index in range(65)
+    )
+    groups = tuple(Group(index, 1, "\x00" * 300, "blue", collapsed=True, shared=False) for index in range(33))
     browser = connected_browser(tmp_path / "unused", Channel(), strip=FixedStrip(TabState(tabs, groups, (1,), 1)))
     browser.native_targets["last-page"] = 64
     offset = 0
@@ -134,8 +149,10 @@ def test_unavailable_native_apis_close_only_the_hidden_controller() -> None:
     def call(method: str, params: dict[str, Json], cancel: threading.Event, *, session: str = "", timeout: float = 15) -> dict[str, Json]:
         commands.append((method, params))
         responses: dict[str, dict[str, Json]] = {
-            "Target.createTarget": {"targetId": "hidden"}, "Target.attachToTarget": {"sessionId": "control"},
-            "Runtime.evaluate": {"result": {"value": {"ready": False}}}, "Target.closeTarget": {"success": True},
+            "Target.createTarget": {"targetId": "hidden"},
+            "Target.attachToTarget": {"sessionId": "control"},
+            "Runtime.evaluate": {"result": {"value": {"ready": False}}},
+            "Target.closeTarget": {"success": True},
         }
         return responses[method]
 

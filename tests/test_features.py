@@ -18,10 +18,10 @@ SPEECH = bytes(2 * RATE)  # a second of silence: long enough to send
 
 
 def test_window_list_keeps_hidden_managed_windows_and_excludes_cloaked_shell_hosts() -> None:
-    current = Window(1, 'Editor', 'editor.exe', False)
-    hidden = Window(2, 'Other workspace', 'terminal.exe', False)
-    shell = Window(3, 'Settings background host', 'systemsettings.exe', False)
-    visible = Window(4, 'Settings', 'applicationframehost.exe', False)
+    current = Window(1, "Editor", "editor.exe", minimized=False)
+    hidden = Window(2, "Other workspace", "terminal.exe", minimized=False)
+    shell = Window(3, "Settings background host", "systemsettings.exe", minimized=False)
+    visible = Window(4, "Settings", "applicationframehost.exe", minimized=False)
     assert switcher_windows((current, hidden, shell, visible), frozenset({1, 4}), frozenset({1, 2})) == (current, hidden, visible)
 
 
@@ -158,13 +158,13 @@ class Rig:
         )
 
     def press(self, request: Tool | App) -> None:
-        self.assistant.handle(request, True)
-        self.assistant.handle(request, False)
+        self.assistant.handle(request, down=True)
+        self.assistant.handle(request, down=False)
 
     def hold(self, tool: Tool) -> None:
         """Down, speak, up."""
-        self.assistant.handle(tool, True)
-        self.assistant.handle(tool, False)
+        self.assistant.handle(tool, down=True)
+        self.assistant.handle(tool, down=False)
 
     def take(self) -> list[str]:
         log, self.desktop.log = self.desktop.log, []
@@ -194,36 +194,39 @@ def test_dictate_types_what_was_said() -> None:
 
 def test_clipboard_failure_keeps_a_recoverable_transcript_and_still_types() -> None:
     class BusyClipboard(FakeDesktop):
-        __slots__ = ('busy',)
+        __slots__ = ("busy",)
+
         def __init__(self) -> None:
             super().__init__()
             self.busy = True
+
         def set_clipboard(self, text: str) -> None:
             if self.busy:
-                raise OSError('Busy')
+                raise OSError("Busy")
             super().set_clipboard(text)
+
     desktop = BusyClipboard()
     with fake_endpoint() as endpoint:
-        endpoint.replies = [said('The complete transcript.')]
+        endpoint.replies = [said("The complete transcript.")]
         rig = Rig(endpoint, desktop=desktop)
         rig.hold(Tool.DICTATE)
-        assert rig.assistant.latest_transcription == 'The complete transcript.'
+        assert rig.assistant.latest_transcription == "The complete transcript."
         assert "type 'The complete transcript. '" in desktop.log
         desktop.busy = False
-        rig.assistant.handle(Tool.COPY_TRANSCRIPT, True)
-        assert desktop.log[-1] == 'clipboard The complete transcript.'
+        rig.assistant.handle(Tool.COPY_TRANSCRIPT, down=True)
+        assert desktop.log[-1] == "clipboard The complete transcript."
 
 
 def test_agent_capture_toggle_ignores_releases_and_stops_on_the_second_press() -> None:
     with fake_endpoint() as endpoint:
-        endpoint.replies = [said('Please do this.')]
+        endpoint.replies = [said("Please do this.")]
         rig = Rig(endpoint)
-        rig.assistant.handle(Tool.AGENT_VOICE_TOGGLE, True)
-        rig.assistant.handle(Tool.AGENT_VOICE_TOGGLE, False)
-        assert rig.take() == ['listen']
-        rig.assistant.handle(Tool.AGENT_VOICE_TOGGLE, True)
-        rig.assistant.handle(Tool.AGENT_VOICE_TOGGLE, False)
-        assert rig.assistant.listening is None and rig.agent == ['Please do this.']
+        rig.assistant.handle(Tool.AGENT_VOICE_TOGGLE, down=True)
+        rig.assistant.handle(Tool.AGENT_VOICE_TOGGLE, down=False)
+        assert rig.take() == ["listen"]
+        rig.assistant.handle(Tool.AGENT_VOICE_TOGGLE, down=True)
+        rig.assistant.handle(Tool.AGENT_VOICE_TOGGLE, down=False)
+        assert rig.assistant.listening is None and rig.agent == ["Please do this."]
 
 
 def test_space_release_does_not_stop_dictation_started_with_the_toggle() -> None:
@@ -276,7 +279,7 @@ def test_lost_voice_release_finishes_at_the_existing_microphone_limit() -> None:
     with fake_endpoint() as endpoint:
         endpoint.replies = [said("Full limited recording")]
         rig = Rig(endpoint)
-        rig.assistant.handle(Tool.DICTATE, True)
+        rig.assistant.handle(Tool.DICTATE, down=True)
         capture = rig.assistant.capture
         assert capture is not None
         rig.assistant.expire_capture(capture.started + MAX_SECONDS - 0.01)
@@ -284,7 +287,7 @@ def test_lost_voice_release_finishes_at_the_existing_microphone_limit() -> None:
         rig.assistant.expire_capture(capture.started + MAX_SECONDS)
         assert rig.assistant.listening is None
         assert dict(rig.used)["dictate"]["stop_reason"] == "limit"
-        rig.assistant.handle(Tool.DICTATE, False)
+        rig.assistant.handle(Tool.DICTATE, down=False)
         assert len(endpoint.received) == 1
 
 
@@ -419,10 +422,10 @@ def test_a_second_talk_key_while_listening_is_ignored() -> None:
     with fake_endpoint() as endpoint:
         endpoint.replies = [said("one")]
         rig = Rig(endpoint)
-        rig.assistant.handle(Tool.DICTATE, True)
-        rig.assistant.handle(Tool.DICTATE_CLEAN, True)
-        rig.assistant.handle(Tool.DICTATE_CLEAN, False)
-        rig.assistant.handle(Tool.DICTATE, False)
+        rig.assistant.handle(Tool.DICTATE, down=True)
+        rig.assistant.handle(Tool.DICTATE_CLEAN, down=True)
+        rig.assistant.handle(Tool.DICTATE_CLEAN, down=False)
+        rig.assistant.handle(Tool.DICTATE, down=False)
         assert rig.take() == ["listen", "stop listening", "clipboard one", "type 'one '"]
 
 
@@ -647,9 +650,9 @@ def test_tiling_commands_use_worker_without_ai_credentials() -> None:
 
 def test_voice_limit_uses_the_deadline_across_a_float_precision_boundary() -> None:
     with fake_endpoint() as endpoint:
-        endpoint.replies = [said('Full limited recording')]
+        endpoint.replies = [said("Full limited recording")]
         rig = Rig(endpoint)
-        rig.assistant.handle(Tool.DICTATE, True)
+        rig.assistant.handle(Tool.DICTATE, down=True)
         capture = rig.assistant.capture
         assert capture is not None
         started = 2**20 - 100 + 2**-33
@@ -657,4 +660,4 @@ def test_voice_limit_uses_the_deadline_across_a_float_precision_boundary() -> No
         rig.assistant.capture = replace(capture, started=started)
         rig.assistant.expire_capture(started + MAX_SECONDS)
         assert rig.assistant.listening is None
-        assert dict(rig.used)['dictate']['stop_reason'] == 'limit'
+        assert dict(rig.used)["dictate"]["stop_reason"] == "limit"

@@ -1,6 +1,6 @@
 """Only active work earns space in the desktop toolbar."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Literal
 
 from assistant.icons import State
@@ -18,14 +18,14 @@ class Activity:
     title: str
     icon: str
     tone: Tone
-    can_stop: bool = False
+    can_stop: bool = field(default=False, kw_only=True)
 
 
 @dataclass(frozen=True, slots=True)
 class Capture:
     title: str
     action: Literal["stop", "open"]
-    can_stop: bool
+    can_stop: bool = field(kw_only=True)
 
 
 @dataclass(frozen=True, slots=True)
@@ -50,15 +50,15 @@ def toolbar(state: State, recording: RecordingState, *, enabled: bool, layer: st
     seconds = max(0, int(recording.seconds))
     match recording.phase:
         case "starting":
-            capture = Capture("Starting…", "stop", True)
+            capture = Capture("Starting…", "stop", can_stop=True)
         case "recording":
-            capture = Capture(f"{seconds // 60:02}:{seconds % 60:02}", "stop", True)
+            capture = Capture(f"{seconds // 60:02}:{seconds % 60:02}", "stop", can_stop=True)
         case "stopping":
-            capture = Capture("Stopping…", "open", False)
+            capture = Capture("Stopping…", "open", can_stop=False)
         case "finishing":
-            capture = Capture("Saving…", "open", False)
+            capture = Capture("Saving…", "open", can_stop=False)
         case "paused" | "interrupted":
-            capture = Capture("Check recording", "open", False)
+            capture = Capture("Check recording", "open", can_stop=False)
         case "idle" | "saved":
             pass
     return Toolbar(activity, capture, "Colemak" if not enabled else layer)

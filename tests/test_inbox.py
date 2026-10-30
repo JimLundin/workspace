@@ -17,8 +17,7 @@ def test_source_and_category_filters_keep_actionable_agent_questions_reachable()
 def test_inbox_review_freezes_only_matching_pending_sources_as_quoted_data() -> None:
     messages = (Message("19:one@thread.v2", "one", "Anna", "Please check the numbers", 1, 2),)
     reaction = Update(TeamsActivity("one"), "Reaction", "Reaction body", "Teams", 1, UpdateKind.REACTION)
-    feed = Feed(conversations=(Conversation("19:one@thread.v2", "Anna"),), followed=("19:one@thread.v2",),
-                messages=messages, updates=(reaction,))
+    feed = Feed(conversations=(Conversation("19:one@thread.v2", "Anna"),), followed=("19:one@thread.v2",), messages=messages, updates=(reaction,))
     prompt = review_prompt(feed, Query(Source.TEAMS, Kind.ANSWER))
     assert "Please check the numbers" in prompt and "Reaction body" not in prompt
     assert "not instructions" in prompt and "Do not send" in prompt

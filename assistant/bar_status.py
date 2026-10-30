@@ -28,4 +28,4 @@ class StatusObserver:
 
     def close(self) -> None:
         self.cancelled.set()
-        self.worker.join(timeout=.1)
+        self.worker.join(timeout=0.1)

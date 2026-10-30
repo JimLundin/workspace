@@ -15,8 +15,13 @@ from winapi.shapes import Rect
 
 def test_meeting_voice_commands_use_the_recording_service_without_default_approvals() -> None:
     with fake_endpoint() as endpoint:
-        rig = Rig(endpoint, calls(("meeting_start", {"source": "both", "title": "Private planning"})),
-                  calls(("meeting_status", {})), calls(("meeting_stop", {})), says("The transcript is saved."))
+        rig = Rig(
+            endpoint,
+            calls(("meeting_start", {"source": "both", "title": "Private planning"})),
+            calls(("meeting_status", {})),
+            calls(("meeting_stop", {})),
+            says("The transcript is saved."),
+        )
         rig.run("Record this meeting, check its progress, and then stop it.")
         assert "meeting start both Private planning" in rig.machine.log
         assert any(line.startswith("meeting stop") for line in rig.machine.log)
@@ -31,20 +36,24 @@ def test_meeting_voice_commands_use_the_recording_service_without_default_approv
 def test_stopped_agent_cannot_start_recording_and_explicit_approval_mode_is_preserved() -> None:
     machine, cancel = FakeMachine(), threading.Event()
     agent = Agent(Settings("", "", "", "", "", "", "", agent_approvals=True), machine, FakeWindow(), cancel, journal=lambda _: None)
-    assert not agent.call(ToolCall("record", "meeting_start", '{}')).ok
+    assert not agent.call(ToolCall("record", "meeting_start", "{}")).ok
     assert not any(line.startswith("meeting") for line in machine.log)
     cancel.set()
-    assert not agent.call(ToolCall("stopped", "meeting_start", '{}')).ok
+    assert not agent.call(ToolCall("stopped", "meeting_start", "{}")).ok
     assert not any(line.startswith("meeting") for line in machine.log)
 
 
 def test_background_tools_are_exposed_to_the_model_and_run_without_default_prompts() -> None:
     with fake_endpoint() as endpoint:
-        rig = Rig(endpoint,
-                  calls(("browser_attach", {"browser": "edge"})),
-                  calls(("browser_open", {"url": "https://example.com"})),
-                  calls(("browser_action", {"target_id": "page", "id": "field", "action": "fill", "value": "fixture-private"})),
-                  calls(("teams_status", {})), calls(("teams_send_message", {"chat_id": "chat", "text": "requested message"})), says("Done."))
+        rig = Rig(
+            endpoint,
+            calls(("browser_attach", {"browser": "edge"})),
+            calls(("browser_open", {"url": "https://example.com"})),
+            calls(("browser_action", {"target_id": "page", "id": "field", "action": "fill", "value": "fixture-private"})),
+            calls(("teams_status", {})),
+            calls(("teams_send_message", {"chat_id": "chat", "text": "requested message"})),
+            says("Done."),
+        )
         rig.run("Fill the fixture form and send the specified Teams message.")
         assert any(line.startswith("browser action") for line in rig.machine.log)
         assert any(line.startswith("teams send_message") for line in rig.machine.log)

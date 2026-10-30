@@ -71,13 +71,28 @@ class Execution(Protocol):
 
 class AgentRunner:
     __slots__ = (
-        "_create_window", "_execution", "_finished", "_lock", "_state", "_stop", "_window_lock",
-        "context", "on_done", "on_start", "report_error", "window",
+        "_create_window",
+        "_execution",
+        "_finished",
+        "_lock",
+        "_state",
+        "_stop",
+        "_window_lock",
+        "context",
+        "on_done",
+        "on_start",
+        "report_error",
+        "window",
     )
 
     def __init__(
-        self, execution: Execution, create_window: Callable[[AgentRunner], AgentWindow], *,
-        on_done: Callable[[], None], report_error: Callable[[str], None], on_start: Callable[[], None] | None = None,
+        self,
+        execution: Execution,
+        create_window: Callable[[AgentRunner], AgentWindow],
+        *,
+        on_done: Callable[[], None],
+        report_error: Callable[[str], None],
+        on_start: Callable[[], None] | None = None,
         context: Callable[[], ContextSnapshot] | None = None,
     ) -> None:
         self._execution, self._create_window = execution, create_window

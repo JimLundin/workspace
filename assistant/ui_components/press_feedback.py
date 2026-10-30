@@ -13,7 +13,7 @@ def paint_feedback(button: QAbstractButton, painter: QPainter, ink: str) -> None
     # Qt owns pointer, press, focus and enabled state. Paint from those current
     # observations without adding UI state or changing the button's geometry.
     painter.save()
-    bounds = QRectF(button.rect()).adjusted(.5, .5, -.5, -.5)
+    bounds = QRectF(button.rect()).adjusted(0.5, 0.5, -0.5, -0.5)
     if button.isEnabled() and (button.underMouse() or button.isDown()):
         fill = QColor(ink)
         fill.setAlpha(54 if button.isDown() else 28)

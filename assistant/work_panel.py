@@ -2,21 +2,22 @@
 
 import math
 import time
-from collections.abc import Callable, Sequence
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum, auto
 from typing import assert_never
 
 lazy from PySide6 import QtGui, QtWidgets
-lazy from PySide6.QtCore import Qt
 
 from assistant.qt_runtime import prepare
 from winapi import windows
+lazy from assistant import work_tree
 lazy from assistant.meeting_panel import MeetingPanel
-lazy from assistant.panel_controls import button, label
-lazy from assistant.qt_text import units
-lazy from assistant.widgets import Editor, Window, column, replace_text, row, show_window
+lazy from assistant.ui_components.controls import button, label
+lazy from assistant.ui_components.paint_ready import PaintReady
+lazy from assistant.ui_components.text import units
+lazy from assistant.ui_components.widgets import Editor, Window, column, replace_text, row, show_window
 lazy from assistant.work_window import (
     AddPreference,
     AddProjectNote,
@@ -57,54 +58,6 @@ lazy from automation.task import (
 )
 
 prepare()
-
-
-def _tree(title: str) -> QtWidgets.QTreeWidget:
-    tree = QtWidgets.QTreeWidget()
-    tree.setHeaderLabels(["Name", title])
-    tree.setRootIsDecorated(False)
-    tree.setAlternatingRowColors(False)
-    tree.setColumnWidth(0, 230)
-    tree.setSelectionMode(QtWidgets.QAbstractItemView.SelectionMode.SingleSelection)
-    tree.setAccessibleName(title)
-    return tree
-
-
-def _identity(item: QtWidgets.QTreeWidgetItem) -> str | None:
-    value: object = item.data(0, Qt.ItemDataRole.UserRole)
-    return value if isinstance(value, str) else None
-
-
-def _selected(tree: QtWidgets.QTreeWidget) -> str | None:
-    item = tree.currentItem()
-    return _identity(item) if item is not None else None
-
-
-def _rows(tree: QtWidgets.QTreeWidget, rows: Sequence[tuple[str, str, tuple[str, ...]]]) -> None:
-    selected, scroll = _selected(tree), tree.verticalScrollBar().value()
-    previous = {_identity(item): item for i in range(tree.topLevelItemCount())
-                if (item := tree.topLevelItem(i)) is not None}
-    tree.blockSignals(True)
-    try:
-        wanted = {identity for identity, _, _ in rows}
-        for identity, item in previous.items():
-            if identity not in wanted:
-                tree.takeTopLevelItem(tree.indexOfTopLevelItem(item))
-        for index, (identity, title, values) in enumerate(rows):
-            item = previous.get(identity)
-            if item is None:
-                item = QtWidgets.QTreeWidgetItem()
-                item.setData(0, Qt.ItemDataRole.UserRole, identity)
-            else:
-                tree.takeTopLevelItem(tree.indexOfTopLevelItem(item))
-            for column_index, text in enumerate((title, *values)):
-                item.setText(column_index, text)
-            tree.insertTopLevelItem(index, item)
-            if identity == selected or (selected not in wanted and index == 0):
-                tree.setCurrentItem(item)
-        tree.verticalScrollBar().setValue(scroll)
-    finally:
-        tree.blockSignals(False)
 
 
 def _form(layout: QtWidgets.QVBoxLayout, title: str, widget: QtWidgets.QWidget) -> QtWidgets.QLabel:
@@ -153,6 +106,7 @@ type Draft = NewDraft | FollowDraft | RedirectDraft
 
 class WorkPanel:
     """Qt owns presentation; WorkWindow owns command validation and durable work."""
+
     __slots__ = (
         "__weakref__",
         "answer",
@@ -170,6 +124,7 @@ class WorkPanel:
         "meetings",
         "notebook",
         "pause",
+        "presentation",
         "preview_painted",
         "prompt",
         "prompt_frame",
@@ -189,7 +144,6 @@ class WorkPanel:
         "work",
     )
 
-
     def __init__(self, root: QtWidgets.QApplication, work: WorkWindow, *, clock: Callable[[], float] = time.time) -> None:
         self.work = work
         self.meetings: MeetingPanel | None = None
@@ -200,10 +154,11 @@ class WorkPanel:
         self.approval_position: int | None = None
         self.preview_painted = False
         self.window, self.status, self.notebook = panel_frame(self)
+        self.presentation: PaintReady | None = None
         tasks = QtWidgets.QWidget()
-        self.notebook.addTab(tasks, "Tasks")
+        self.notebook.addTab(tasks, "Agent tasks")
         task_layout = row(tasks)
-        self.tasks = _tree("State")
+        self.tasks = work_tree.tree("State")
         task_layout.addWidget(self.tasks, 2)
         right = QtWidgets.QWidget()
         content = column(right)
@@ -243,13 +198,13 @@ class WorkPanel:
         self.render(self.snapshot)
 
     def selected_task(self) -> Task | None:
-        identity = _selected(self.tasks)
+        identity = work_tree.selected_identity(self.tasks)
         return next((task for task in self.snapshot.tasks if task.id == identity), None)
 
     def render(self, snapshot: WorkSnapshot) -> None:
         self.snapshot = snapshot
         self.status.setText(snapshot.status or "Tasks stay with you across conversations and restarts.")
-        _rows(self.tasks, tuple((task.id, task.title, (task_label(task),)) for task in snapshot.tasks))
+        work_tree.rows(self.tasks, tuple((task.id, task.title, (task_label(task),)) for task in snapshot.tasks))
         self.render_task()
         self.routines.render(snapshot.routines)
         self.context.render(snapshot.context)
@@ -260,13 +215,12 @@ class WorkPanel:
         self.preview_painted = False
         replace_text(self.detail, detail)
         review = current_review(task, self.snapshot.reviews) if task is not None else None
-        self.approval_position = units(detail[:-len(f"Approval\n{review.title}\n\n{review.detail}")]) if review is not None else None
+        self.approval_position = units(detail[: -len(f"Approval\n{review.title}\n\n{review.detail}")]) if review is not None else None
         allowed = allowed_controls(task.state) if task is not None else ()
         for widget, control in ((self.pause, Control.PAUSE), (self.resume, Control.RESUME), (self.cancel, Control.CANCEL)):
             widget.setEnabled(control in allowed)
         self.follow.setEnabled(task is not None)
-        self.redirect.setEnabled(task is not None and not isinstance(task.state, Completed)
-                                 and task.state is not TaskStatus.CANCELLED)
+        self.redirect.setEnabled(task is not None and not isinstance(task.state, Completed) and task.state is not TaskStatus.CANCELLED)
         request = task.state.reason if task is not None and isinstance(task.state, Waiting) else None
         key = (task.id, request.id) if task is not None and isinstance(request, (Question, Approval)) else None
         if key != self.question_key:
@@ -299,8 +253,13 @@ class WorkPanel:
     def acknowledge_approval(self) -> None:
         task = self.selected_task()
         review = current_review(task, self.snapshot.reviews) if task is not None else None
-        if (not self.preview_painted or review is None or self.approval_position is None
-                or not self.detail.isVisible() or not windows.is_visible(self.handle)):
+        if (
+            not self.preview_painted
+            or review is None
+            or self.approval_position is None
+            or not self.detail.isVisible()
+            or not windows.is_visible(self.handle)
+        ):
             return
         cursor = QtGui.QTextCursor(self.detail.document())
         cursor.setPosition(min(self.approval_position, self.detail.document().characterCount() - 1))
@@ -388,9 +347,13 @@ class WorkPanel:
                 self.detail.ensureCursorVisible()
                 self.detail.viewport().update()
 
-    def show(self, *, focus: bool = True) -> None:
+    def show(self, *, focus: bool = True, on_presented: Callable[[], None] | None = None) -> None:
+        if self.presentation is not None:
+            self.presentation.cancel()
+        self.presentation = PaintReady(self.window, on_presented) if on_presented is not None else None
         show_window(self.window, focus=focus, target=self.tasks)
         self.meeting_changed()
+        self.window.update()
 
     def attach_meetings(self, meetings: MeetingPanel) -> None:
         if self.meetings is None:
@@ -407,10 +370,13 @@ class WorkPanel:
             self.meetings.refresh()
 
     def hide(self) -> None:
+        if self.presentation is not None:
+            self.presentation.cancel()
         self.window.hide()
+        self.work.cancel_show(self)
 
     def close(self) -> None:
-        self.window.hide()
+        self.hide()
         self.window.deleteLater()
 
 
@@ -452,7 +418,7 @@ class RoutinesPanel:
         layout.addLayout(toolbar)
         body = row()
         layout.addLayout(body, 1)
-        self.listing = _tree("State")
+        self.listing = work_tree.tree("State")
         body.addWidget(self.listing, 2)
         right = QtWidgets.QWidget()
         content = column(right)
@@ -484,12 +450,14 @@ class RoutinesPanel:
         self.trigger.currentIndexChanged.connect(self.trigger_changed)
 
     def selected(self) -> RoutineSummary | None:
-        identity = _selected(self.listing)
+        identity = work_tree.selected_identity(self.listing)
         return next((item for item in self.records if item.routine.id == identity), None)
 
     def render(self, records: tuple[RoutineSummary, ...]) -> None:
         self.records = records
-        _rows(self.listing, tuple((item.routine.id, item.routine.title, ("Enabled" if item.routine.enabled else "Disabled",)) for item in records))
+        work_tree.rows(
+            self.listing, tuple((item.routine.id, item.routine.title, ("Enabled" if item.routine.enabled else "Disabled",)) for item in records)
+        )
         self.render_selection()
 
     def render_selection(self) -> None:
@@ -500,8 +468,10 @@ class RoutinesPanel:
             detail = "Standing instructions start work when their trigger occurs.\n\nSave an instruction, then enable it when ready."
         else:
             routine = item.routine
-            detail = (f"{routine.title}\n\n{'Enabled' if routine.enabled else 'Disabled'} · {trigger_label(routine.trigger)}"
-                      f"\nNext due: {when(item.next_due)}\n\nInstruction\n{routine.instruction}")
+            detail = (
+                f"{routine.title}\n\n{'Enabled' if routine.enabled else 'Disabled'} · {trigger_label(routine.trigger)}"
+                f"\nNext due: {when(item.next_due)}\n\nInstruction\n{routine.instruction}"
+            )
             if item.last_firing is not None:
                 detail += "\n\nLast run\n" + (item.last_firing.task_id or "Preparing a task")
         replace_text(self.summary, detail)
@@ -538,7 +508,7 @@ class RoutinesPanel:
                 self.trigger.setCurrentIndex(1)
                 try:
                     self.parameter.setText(datetime.fromtimestamp(at).isoformat(sep=" ", timespec="seconds"))
-                except (ValueError, OverflowError, OSError):
+                except ValueError, OverflowError, OSError:
                     message = "This saved date is outside the local calendar. Choose a date and time before saving."
             case Every(seconds=seconds):
                 self.trigger.setCurrentIndex(2)
@@ -585,8 +555,11 @@ class RoutinesPanel:
                     trigger = FileChanged(_required(parameter, "File path", 4096))
                 case _:
                     raise ValueError("Choose a trigger.")
-            command = (UpdateRoutine(self.editing.id, self.editing.revision, title, instruction, trigger)
-                       if self.editing is not None else CreateRoutine(title, instruction, trigger))
+            command = (
+                UpdateRoutine(self.editing.id, self.editing.revision, title, instruction, trigger)
+                if self.editing is not None
+                else CreateRoutine(title, instruction, trigger)
+            )
         except ValueError as error:
             self.message.setText(str(error))
             return
@@ -635,7 +608,7 @@ class ContextPanel:
         layout.addLayout(toolbar)
         body = row()
         layout.addLayout(body, 1)
-        self.listing = _tree("Kind")
+        self.listing = work_tree.tree("Kind")
         body.addWidget(self.listing, 2)
         right = QtWidgets.QWidget()
         content = column(right)
@@ -669,13 +642,18 @@ class ContextPanel:
         self.kind.currentIndexChanged.connect(self.kind_changed)
 
     def selected(self) -> ContextRecord | None:
-        identity = _selected(self.listing)
+        identity = work_tree.selected_identity(self.listing)
         return next((item for item in self.records if item.id == identity), None)
 
     def render(self, records: tuple[ContextRecord, ...]) -> None:
         self.records = records
-        _rows(self.listing, tuple((item.id, item.name, ("Preference",)) if isinstance(item, Preference)
-                                 else (item.id, item.project, ("Project note",)) for item in records))
+        work_tree.rows(
+            self.listing,
+            tuple(
+                (item.id, item.name, ("Preference",)) if isinstance(item, Preference) else (item.id, item.project, ("Project note",))
+                for item in records
+            ),
+        )
         self.render_selection()
 
     def render_selection(self) -> None:
@@ -748,11 +726,13 @@ class ContextPanel:
             command: AddPreference | UpdatePreference | AddProjectNote | UpdateProjectNote
             if self.kind.currentIndex() == 1:
                 valid_for = _seconds(self.expires.text(), "Refresh interval")
-                command = (UpdateProjectNote(self.editing.id, name, value, source, valid_for)
-                           if self.editing is not None else AddProjectNote(name, value, source, valid_for))
+                command = (
+                    UpdateProjectNote(self.editing.id, name, value, source, valid_for)
+                    if self.editing is not None
+                    else AddProjectNote(name, value, source, valid_for)
+                )
             elif self.kind.currentIndex() == 0:
-                command = (UpdatePreference(self.editing.id, name, value, source)
-                           if self.editing is not None else AddPreference(name, value, source))
+                command = UpdatePreference(self.editing.id, name, value, source) if self.editing is not None else AddPreference(name, value, source)
             else:
                 raise ValueError("Choose a context kind.")
         except ValueError as error:
@@ -769,8 +749,16 @@ class ContextPanel:
         self.message.clear()
 
 
-def question_widgets(owner: WorkPanel) -> tuple[
-    QtWidgets.QFrame, QtWidgets.QLabel, Editor, QtWidgets.QToolButton, QtWidgets.QToolButton, QtWidgets.QToolButton, QtWidgets.QToolButton,
+def question_widgets(
+    owner: WorkPanel,
+) -> tuple[
+    QtWidgets.QFrame,
+    QtWidgets.QLabel,
+    Editor,
+    QtWidgets.QToolButton,
+    QtWidgets.QToolButton,
+    QtWidgets.QToolButton,
+    QtWidgets.QToolButton,
 ]:
     question_frame = QtWidgets.QFrame()
     question_layout = column(question_frame)
@@ -833,4 +821,5 @@ def panel_frame(owner: WorkPanel) -> tuple[Window, QtWidgets.QLabel, QtWidgets.Q
 def task_activation(owner: WorkPanel) -> Callable[[QtWidgets.QTreeWidgetItem, int], None]:
     def activated(_item: QtWidgets.QTreeWidgetItem, _column: int) -> None:
         owner.compose_selected()
+
     return activated

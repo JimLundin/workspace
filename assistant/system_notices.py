@@ -49,7 +49,7 @@ type Observation = Observed | Unavailable
 def creation_time(value: object) -> int:
     """The pinned WinRT projection returns an aware Python datetime."""
     if not isinstance(value, datetime) or value.tzinfo is None:
-        raise OSError('Windows returned an invalid notification timestamp.')
+        raise OSError("Windows returned an invalid notification timestamp.")
     return (value - datetime(1601, 1, 1, tzinfo=UTC)) // timedelta(microseconds=1) * 10
 
 

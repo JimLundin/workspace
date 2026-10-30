@@ -142,7 +142,8 @@ def draft_key(request: DraftRequest) -> str:
 
 def content_data(content: DraftContent) -> dict[str, object]:
     return {
-        "subject": content.subject, "body": canonical_body(content.body),
+        "subject": content.subject,
+        "body": canonical_body(content.body),
         "to": sorted(canonical_address(item) for item in content.to),
         "cc": sorted(canonical_address(item) for item in content.cc),
         "bcc": sorted(canonical_address(item) for item in content.bcc),
@@ -293,7 +294,9 @@ def _content(data: object) -> DraftContent:
     return DraftContent(
         _text(value.get("subject"), "draft subject", 998, empty=True, header=True),
         _text(value.get("body"), "draft body", MAX_BODY_BYTES, empty=True),
-        _addresses(value.get("to")), _addresses(value.get("cc")), _addresses(value.get("bcc")),
+        _addresses(value.get("to")),
+        _addresses(value.get("cc")),
+        _addresses(value.get("bcc")),
     )
 
 
@@ -319,7 +322,7 @@ class PowerShellOutlook:
                     return DraftUncertain("Outlook returned an oversized response; the draft is not verified.")
                 raw: object = json.loads(data)
                 return _object(raw)
-        except (OSError, ValueError):
+        except OSError, ValueError:
             return DraftUncertain("The Outlook result could not be read completely; the draft is not verified.")
 
     def status(self, cancel: threading.Event) -> Availability:
@@ -352,7 +355,9 @@ class PowerShellOutlook:
                         return DraftConflict("The identified Outlook item is no longer an unchanged saved draft.")
                     return DraftReadback(
                         OutlookLocation(_text(result.get("entry_id"), "item identity", 16_384), _folder(result.get("folder"))),
-                        _digest(result.get("key")), _digest(result.get("fingerprint")), _content(result.get("content")),
+                        _digest(result.get("key")),
+                        _digest(result.get("fingerprint")),
+                        _content(result.get("content")),
                     )
                 case "missing":
                     return Missing.DRAFT
@@ -369,18 +374,32 @@ class PowerShellOutlook:
         return DraftUncertain("Outlook returned an invalid or incomplete draft readback.")
 
     def ensure(self, request: DraftRequest, folder: DraftFolder, cancel: threading.Event) -> NativeResult:
-        return self._native({
-            "operation": "ensure", "key": draft_key(request), "fingerprint": fingerprint(request),
-            "folder": {"entry_id": folder.entry_id, "store_id": folder.store_id}, "content": content_data(request.content),
-        }, cancel)
+        return self._native(
+            {
+                "operation": "ensure",
+                "key": draft_key(request),
+                "fingerprint": fingerprint(request),
+                "folder": {"entry_id": folder.entry_id, "store_id": folder.store_id},
+                "content": content_data(request.content),
+            },
+            cancel,
+        )
 
     def find(self, request: DraftRequest, folder: DraftFolder, cancel: threading.Event) -> NativeResult:
-        return self._native({"operation": "find", "key": draft_key(request),
-                             "folder": {"entry_id": folder.entry_id, "store_id": folder.store_id}}, cancel)
+        return self._native(
+            {"operation": "find", "key": draft_key(request), "folder": {"entry_id": folder.entry_id, "store_id": folder.store_id}}, cancel
+        )
 
     def read(self, request: DraftRequest, location: OutlookLocation, cancel: threading.Event) -> NativeResult:
-        return self._native({"operation": "read", "key": draft_key(request), "entry_id": location.entry_id,
-                             "folder": {"entry_id": location.folder.entry_id, "store_id": location.folder.store_id}}, cancel)
+        return self._native(
+            {
+                "operation": "read",
+                "key": draft_key(request),
+                "entry_id": location.entry_id,
+                "folder": {"entry_id": location.folder.entry_id, "store_id": location.folder.store_id},
+            },
+            cancel,
+        )
 
 
 def eml_bytes(request: DraftRequest) -> bytes:
@@ -471,8 +490,9 @@ def record_data(record: DraftRecord) -> dict[str, object]:
         case PendingOutlook(folder):
             value.update(kind="pending_outlook", folder={"entry_id": folder.entry_id, "store_id": folder.store_id})
         case ReadyOutlook(location):
-            value.update(kind="outlook", entry_id=location.entry_id,
-                         folder={"entry_id": location.folder.entry_id, "store_id": location.folder.store_id})
+            value.update(
+                kind="outlook", entry_id=location.entry_id, folder={"entry_id": location.folder.entry_id, "store_id": location.folder.store_id}
+            )
         case PendingEml(unavailable):
             value.update(kind="pending_eml", reason=unavailable.reason)
         case ReadyEml(unavailable):
@@ -544,7 +564,7 @@ def _hold(path: Path, cancel: threading.Event) -> Generator[None]:
             except OSError:
                 if time.monotonic() >= deadline:
                     raise TimeoutError("Another process still owns this draft.") from None
-                cancel.wait(.05)
+                cancel.wait(0.05)
         try:
             yield
         finally:
@@ -625,8 +645,10 @@ class OutlookDrafts:
     def _verified(self, request: DraftRequest, record: DraftRecord, result: NativeResult) -> DraftResult:
         if isinstance(result, DraftReadback):
             destination = record.destination
-            folder = destination.folder if isinstance(destination, PendingOutlook) else (
-                destination.location.folder if isinstance(destination, ReadyOutlook) else None
+            folder = (
+                destination.folder
+                if isinstance(destination, PendingOutlook)
+                else (destination.location.folder if isinstance(destination, ReadyOutlook) else None)
             )
             if (result.key, result.fingerprint) != (record.key, record.fingerprint) or result.location.folder != folder:
                 return DraftConflict("The Outlook readback has a different draft or mailbox identity; nothing was overwritten.")
@@ -684,7 +706,7 @@ class OutlookDrafts:
                 return self._save(request, cancel)
         except InterruptedError:
             return Cancelled.BEFORE_EFFECT
-        except (OSError, ValueError):
+        except OSError, ValueError:
             return DraftUncertain("The draft could not be saved and verified durably. Its original identity must be inspected before retrying.")
 
     def inspect(self, request: DraftRequest, cancel: threading.Event) -> DraftResult | Missing:
@@ -707,5 +729,5 @@ class OutlookDrafts:
                     return self._read_eml(request, record)
                 case _:
                     assert_never(record.destination)
-        except (OSError, ValueError):
+        except OSError, ValueError:
             return DraftUncertain("The recorded draft could not be read completely; its outcome remains uncertain.")

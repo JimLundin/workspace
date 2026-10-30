@@ -4,7 +4,7 @@ import threading
 from collections import deque
 from collections.abc import Callable
 
-from assistant.agent_session import Answer, Snapshot, StreamState
+from assistant.agent_session import Answer, Question, Snapshot, StreamState, pending
 from assistant.agent_window import AgentWindow, View
 from assistant.recording_state import RecordingAction
 from tests.test_agent_session import asking
@@ -40,16 +40,29 @@ class RecordingWindow(AgentWindow):
     __slots__ = ("jobs", "view")
 
     def __init__(
-        self, stop: Callable[[], None], *, post: Callable[[Callable[[], None]], None] | None = None,
-        create_view: Callable[[AgentWindow], View] | None = None, on_problem: Callable[[str], None] | None = None,
-        on_reset: Callable[[], bool] | None = None, on_submit: Callable[[str], None] | None = None,
+        self,
+        stop: Callable[[], None],
+        *,
+        post: Callable[[Callable[[], None]], None] | None = None,
+        create_view: Callable[[AgentWindow], View] | None = None,
+        on_problem: Callable[[str], None] | None = None,
+        on_reset: Callable[[], bool] | None = None,
+        on_submit: Callable[[str], None] | None = None,
         on_waiting: Callable[[bool], None] | None = None,
         on_recording: Callable[[RecordingAction], None] | None = None,
     ) -> None:
         self.view = RecordingView()
         self.jobs: deque[Callable[[], None]] = deque()
-        super().__init__(stop, post=self.jobs.append, create_view=lambda agent: self.view, on_problem=on_problem,
-                         on_reset=on_reset, on_submit=on_submit, on_waiting=on_waiting, on_recording=on_recording)
+        super().__init__(
+            stop,
+            post=self.jobs.append,
+            create_view=lambda agent: self.view,
+            on_problem=on_problem,
+            on_reset=on_reset,
+            on_submit=on_submit,
+            on_waiting=on_waiting,
+            on_recording=on_recording,
+        )
 
     def paint(self) -> None:
         while self.jobs:
@@ -240,3 +253,39 @@ def test_failed_widget_startup_reports_the_problem_and_can_be_retried() -> None:
     panel.close()
     while jobs:
         jobs.popleft()()
+
+
+def test_snapshot_callbacks_follow_the_ui_queue_and_stop_after_close() -> None:
+    # Defect: snapshot publication bypasses the UI queue or runs after close.
+    # The fixture owns the event-loop FIFO while callbacks enqueue work.
+    jobs: deque[Callable[[], None]] = deque()
+    counts: tuple[int, ...] = ()
+    view = RecordingView()
+
+    def publish(state: Snapshot) -> None:
+        nonlocal counts
+        counts = (*counts, sum(pending(message) for message in state.messages))
+
+    def observed_counts() -> tuple[int, ...]:
+        return counts
+
+    panel = AgentWindow(lambda: None, post=jobs.append, create_view=lambda _: view, on_snapshot=publish)
+    try:
+        while jobs:
+            jobs.popleft()()
+        assert observed_counts() == (0,)
+        panel.request_input(Question("owned", "Which sheet?", "", 1), lambda _: True)
+        assert observed_counts() == (0,)
+        while jobs:
+            jobs.popleft()()
+        assert observed_counts() == (0, 1)
+        assert panel.respond("owned", "Revenue")
+        while jobs:
+            jobs.popleft()()
+        assert observed_counts() == (0, 1, 0)
+        panel.request_input(Question("late", "Another sheet?", "", 2), lambda _: True)
+    finally:
+        panel.close()
+        while jobs:
+            jobs.popleft()()
+    assert observed_counts() == (0, 1, 0)

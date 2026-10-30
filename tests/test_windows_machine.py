@@ -40,7 +40,12 @@ class Human:
         self.requests: list[tuple[str, str, bool, threading.Event | None]] = []
 
     def agent_input(
-        self, title: str, detail: str = "", *, question: bool = False, cancel: threading.Event | None = None,
+        self,
+        title: str,
+        detail: str = "",
+        *,
+        question: bool = False,
+        cancel: threading.Event | None = None,
     ) -> str | None:
         self.requests.append((title, detail, question, cancel))
         return next(self.answers)
@@ -175,8 +180,12 @@ assert not windows.exists(owner)
 print("Constructed without UI or audio.")
 """
     result = subprocess.run(
-        [sys.executable, "-c", program], cwd=Path(__file__).resolve().parent.parent,
-        capture_output=True, text=True, timeout=20, check=False,
+        [sys.executable, "-c", program],
+        cwd=Path(__file__).resolve().parent.parent,
+        capture_output=True,
+        text=True,
+        timeout=20,
+        check=False,
     )
     assert result.returncode == 0, result.stderr
     assert result.stdout.strip() == "Constructed without UI or audio."

@@ -5,7 +5,7 @@ Payloads remain volatile; SDK objects and pickles never cross the boundary.
 """
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum, auto
 from typing import Final, assert_never, cast
 
@@ -153,7 +153,7 @@ class Request:
 @dataclass(frozen=True, slots=True)
 class Accepted:
     epoch: str
-    accepted: bool
+    accepted: bool = field(kw_only=True)
 
 
 @dataclass(frozen=True, slots=True)
@@ -235,12 +235,20 @@ def _run(value: object) -> RunRef:
 
 def context_data(context: ContextSnapshot) -> dict[str, Json]:
     return {
-        "captured": context.captured, "state": context.state,
-        "recent": [{
-            "handle": activity.window.handle, "title": activity.window.title[:1000], "exe": activity.window.exe[:256],
-            "minimized": activity.window.minimized, "started": activity.started, "seen": activity.seen,
-            "agent_active": activity.agent_active,
-        } for activity in context.recent[-MAX_CONTEXT:]],
+        "captured": context.captured,
+        "state": context.state,
+        "recent": [
+            {
+                "handle": activity.window.handle,
+                "title": activity.window.title[:1000],
+                "exe": activity.window.exe[:256],
+                "minimized": activity.window.minimized,
+                "started": activity.started,
+                "seen": activity.seen,
+                "agent_active": activity.agent_active,
+            }
+            for activity in context.recent[-MAX_CONTEXT:]
+        ],
     }
 
 
@@ -258,10 +266,19 @@ def decode_context(value: object) -> ContextSnapshot:
         started, seen = timestamp(entry["started"]), timestamp(entry["seen"])
         if started > seen or seen > captured:
             raise ValueError("Invalid context time ordering.")
-        entries.append(Activity(Window(
-            integer(entry["handle"], "window handle", maximum=2**64 - 1), _string(entry["title"], maximum=1000),
-            _string(entry["exe"], maximum=256), _boolean(entry["minimized"]),
-        ), started, seen, _boolean(entry["agent_active"])))
+        entries.append(
+            Activity(
+                Window(
+                    integer(entry["handle"], "window handle", maximum=2**64 - 1),
+                    _string(entry["title"], maximum=1000),
+                    _string(entry["exe"], maximum=256),
+                    minimized=_boolean(entry["minimized"]),
+                ),
+                started,
+                seen,
+                agent_active=_boolean(entry["agent_active"]),
+            )
+        )
     return ContextSnapshot(captured, state, tuple(entries))
 
 
@@ -307,7 +324,7 @@ def _outcome(value: object) -> ToolOutcome:
 
 def _presentation_data(event: PresentationEvent) -> dict[str, Json]:
     match event:
-        case Begin(message, at, queued):
+        case Begin(message, at, queued=queued):
             return {"kind": "begin", "text": message, "at": at, "queued": queued}
         case Progress(message):
             return {"kind": "progress", "text": message}
@@ -316,8 +333,13 @@ def _presentation_data(event: PresentationEvent) -> dict[str, Json]:
         case Finished():
             return {"kind": "finished"}
         case Answer(identity, message, at, state) | ReasoningSummary(identity, message, at, state):
-            return {"kind": "answer" if isinstance(event, Answer) else "reasoning", "id": identity,
-                    "text": message, "at": at, "state": state.name.lower()}
+            return {
+                "kind": "answer" if isinstance(event, Answer) else "reasoning",
+                "id": identity,
+                "text": message,
+                "at": at,
+                "state": state.name.lower(),
+            }
         case ToolActivity(identity, name, detail, at, outcome):
             return {"kind": "tool", "id": identity, "name": name, "detail": detail, "at": at, "outcome": _outcome_data(outcome)}
         case _:
@@ -329,7 +351,7 @@ def _presentation(value: object) -> PresentationEvent:
     match kind:
         case "begin":
             data = record(value, "kind text at queued")
-            return Begin(_string(data["text"]), timestamp(data["at"]), _boolean(data["queued"]))
+            return Begin(_string(data["text"]), timestamp(data["at"]), queued=_boolean(data["queued"]))
         case "progress":
             data = record(value, "kind text")
             return Progress(_string(data["text"]))
@@ -347,8 +369,9 @@ def _presentation(value: object) -> PresentationEvent:
             return Answer(identity, message, at, state) if kind == "answer" else ReasoningSummary(identity, message, at, state)
         case "tool":
             data = record(value, "kind id name detail at outcome")
-            return ToolActivity(identifier(data["id"]), _string(data["name"], maximum=240), _string(data["detail"]),
-                                timestamp(data["at"]), _outcome(data["outcome"]))
+            return ToolActivity(
+                identifier(data["id"]), _string(data["name"], maximum=240), _string(data["detail"]), timestamp(data["at"]), _outcome(data["outcome"])
+            )
         case _:
             raise ValueError("Unknown presentation event.")
 
@@ -392,9 +415,16 @@ def event_data(message: Envelope) -> dict[str, Json]:
         case LogEvent(run, event):
             payload = {"kind": "log", "run": _run_data(run), "event": _presentation_data(event)}
         case ReviewEvent(run, review):
-            payload = {"kind": "review", "run": _run_data(run), "task": review.task_id, "revision": review.goal_revision,
-                       "request": {"id": review.request.id, "title": review.request.title, "detail": review.request.detail},
-                       "fingerprint": review.fingerprint, "title": review.title, "detail": review.detail}
+            payload = {
+                "kind": "review",
+                "run": _run_data(run),
+                "task": review.task_id,
+                "revision": review.goal_revision,
+                "request": {"id": review.request.id, "title": review.request.title, "detail": review.request.detail},
+                "fingerprint": review.fingerprint,
+                "title": review.title,
+                "detail": review.detail,
+            }
         case MeetingRequest(run, request_id, operation):
             payload = {"kind": "meeting", "run": _run_data(run), "request": request_id, "operation": _meeting_data(operation)}
         case Resync(reason):
@@ -416,11 +446,14 @@ def decode_event(value: object) -> Envelope:
             part = record(value, "kind run task revision request fingerprint title detail")
             request = record(part["request"], "id title detail")
             run = _run(part["run"])
-            review = ApprovalReview(identifier(part["task"]), integer(part["revision"], "goal revision"),
-                                    Approval(identifier(request["id"]), text(request["title"], "review title", maximum=240),
-                                             _string(request["detail"], maximum=16_000)),
-                                    digest(part["fingerprint"]), text(part["title"], "review title", maximum=240),
-                                    text(part["detail"], "review detail", maximum=MAX_TEXT))
+            review = ApprovalReview(
+                identifier(part["task"]),
+                integer(part["revision"], "goal revision"),
+                Approval(identifier(request["id"]), text(request["title"], "review title", maximum=240), _string(request["detail"], maximum=16_000)),
+                digest(part["fingerprint"]),
+                text(part["title"], "review title", maximum=240),
+                text(part["detail"], "review detail", maximum=MAX_TEXT),
+            )
             if run.task_id != review.task_id:
                 raise ValueError("Review does not belong to its run.")
             payload = ReviewEvent(run, review)
@@ -485,8 +518,11 @@ def _operation(value: object) -> Operation:
             return Poll(integer(data["after"], "event cursor"), integer(data["limit"], "poll limit", minimum=1, maximum=MAX_EVENTS))
         case "register":
             data = record(value, "kind task context pid")
-            return Register(identifier(data["task"]), decode_context(data["context"]) if data["context"] is not None else None,
-                            integer(data["pid"], "assistant PID", minimum=1, maximum=2**32 - 1))
+            return Register(
+                identifier(data["task"]),
+                decode_context(data["context"]) if data["context"] is not None else None,
+                integer(data["pid"], "assistant PID", minimum=1, maximum=2**32 - 1),
+            )
         case "context":
             data = record(value, "kind context pid")
             return PublishContext(decode_context(data["context"]), integer(data["pid"], "assistant PID", minimum=1, maximum=2**32 - 1))
@@ -501,8 +537,7 @@ def _operation(value: object) -> Operation:
 
 
 def encode_request(request: Request) -> bytes:
-    data: dict[str, Json] = {"version": VERSION, "epoch": request.epoch, "client": request.client,
-                             "operation": _operation_data(request.operation)}
+    data: dict[str, Json] = {"version": VERSION, "epoch": request.epoch, "client": request.client, "operation": _operation_data(request.operation)}
     frame = pack(data)
     decode_request(frame)
     return frame
@@ -517,7 +552,7 @@ def decode_request(frame: bytes) -> Request:
 def encode_reply(reply: Reply) -> bytes:
     data: dict[str, Json]
     match reply:
-        case Accepted(epoch, accepted):
+        case Accepted(epoch, accepted=accepted):
             data = {"version": VERSION, "kind": "accepted", "epoch": epoch, "accepted": accepted}
         case Batch(epoch, events):
             data = {"version": VERSION, "kind": "batch", "epoch": epoch, "events": [event_data(event) for event in events]}
@@ -536,7 +571,7 @@ def decode_reply(frame: bytes) -> Reply:
         case "accepted":
             data = record(value, "version kind epoch accepted")
             _version(data["version"])
-            return Accepted(identifier(data["epoch"]), _boolean(data["accepted"]))
+            return Accepted(identifier(data["epoch"]), accepted=_boolean(data["accepted"]))
         case "batch":
             data = record(value, "version kind epoch events")
             _version(data["version"])

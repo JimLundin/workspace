@@ -95,8 +95,13 @@ class Execution:
 
 class Rig:
     def __init__(
-        self, path: Path, execution: Execution | None = None, *, owner: str = "owner",
-        store: TaskStore | None = None, on_change: Callable[[ControllerSnapshot], None] | None = None,
+        self,
+        path: Path,
+        execution: Execution | None = None,
+        *,
+        owner: str = "owner",
+        store: TaskStore | None = None,
+        on_change: Callable[[ControllerSnapshot], None] | None = None,
     ) -> None:
         self.store = store if store is not None else TaskStore(path)
         self.execution = execution if execution is not None else Execution()
@@ -104,8 +109,13 @@ class Rig:
         self.errors: list[str] = []
         counter = itertools.count()
         self.controller = WorkController(
-            self.store, self.execution, owner=owner, log=lambda claim: QuietLog(), now=self.clock.now,
-            new_run_id=lambda: f"{owner}-{next(counter)}", on_change=on_change or self.observations.publish,
+            self.store,
+            self.execution,
+            owner=owner,
+            log=lambda claim: QuietLog(),
+            now=self.clock.now,
+            new_run_id=lambda: f"{owner}-{next(counter)}",
+            on_change=on_change or self.observations.publish,
             on_error=self.errors.append,
         )
 

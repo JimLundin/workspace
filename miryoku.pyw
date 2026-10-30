@@ -1,8 +1,4 @@
-"""Double-click launcher: runs the `miryoku` package with the bundled Python."""
-
-from runtime import bootstrap
-
-bootstrap()
+"""Run the `miryoku` package directly with Python 3.15."""
 
 from miryoku.__main__ import main
 

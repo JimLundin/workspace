@@ -50,7 +50,7 @@ def changed_tail(previous: tuple[Span, ...], current: tuple[Span, ...]) -> Tail:
                 if left != right:
                     break
                 shared += 1
-        return Tail(offset + shared, index, (replace(after, text=after.text[shared:]), *current[index + 1:]))
+        return Tail(offset + shared, index, (replace(after, text=after.text[shared:]), *current[index + 1 :]))
     index = min(len(previous), len(current))
     return Tail(offset, index, current[index:])
 
@@ -73,7 +73,11 @@ def _web_link(target: object) -> str:
         return ""
     try:
         url = urlsplit(target)
-        return target if url.scheme.lower() in ("http", "https") and url.netloc else ""
+        if url.scheme.lower() in ("http", "https") and url.netloc:
+            return target
+        if url.scheme == "workspace" and url.netloc == "canvas" and not url.path and not url.fragment:
+            return target
+        return ""
     except ValueError:
         return ""
 
@@ -125,8 +129,11 @@ def _list(node: SyntaxTreeNode, indent: int, tags: tuple[str, ...]) -> Iterator[
         first = blocks[0]
         paragraph = item.children[0]
         tight = paragraph.type == "paragraph" and paragraph.hidden
-        if (paragraph.type == "paragraph" and _TASK.match(paragraph.children[0].content)
-                and (task := _TASK.match("".join(span.text for span in first.spans)))):
+        if (
+            paragraph.type == "paragraph"
+            and _TASK.match(paragraph.children[0].content)
+            and (task := _TASK.match("".join(span.text for span in first.spans)))
+        ):
             prefix = (prefix if node.type == "ordered_list" else "") + ("☐ " if task.string[1] == " " else "☑ ")
             first = replace(first, spans=tuple(_skip(first.spans, task.end())))
         gap = 1 if indent or (index > start and tight) else 2
@@ -166,7 +173,7 @@ def formatted(text: str) -> Iterator[Span]:
     """CommonMark plus tables, strikethrough and task lists, with native layout.
 
     Soft line breaks flow with the window width. Code is literal, including
-    unfinished fences. Only HTTP(S) destinations become clickable links.
+    unfinished fences. Web destinations and Workspace canvas redirects are clickable.
     """
     tree = SyntaxTreeNode(_MARKDOWN.parse(text))
     trailing = 0

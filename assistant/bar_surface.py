@@ -8,11 +8,11 @@ lazy from PySide6.QtCore import Qt
 
 from assistant.agent_window import log_view
 from assistant.bar_geometry import SHOULDER, Segment, segment
-from assistant.control_feedback import paint_feedback
 from assistant.notifications import REVEAL_SECONDS, Tone, ease_out
 from assistant.qt_runtime import prepare
 from assistant.qt_ui import EventLoop
-from assistant.toast_style import Ink, Palette, palette
+from assistant.ui_components.bubble_style import Ink, Palette, palette
+from assistant.ui_components.press_feedback import paint_feedback
 from assistant.vector_icons import icon
 from winapi import appearance, windows
 from winapi.composition import Glass, borderless
@@ -53,14 +53,17 @@ class Control(QtWidgets.QToolButton):
         painter = QtGui.QPainter(self)
         painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
         paint_feedback(self, painter, self.surface.ink.foreground)
-        painter.setOpacity(1 if self.isEnabled() else .45)
+        painter.setOpacity(1 if self.isEnabled() else 0.45)
         size = self.iconSize()
         left = (CONTROL_HEIGHT - size.width()) // 2
         self.icon().paint(painter, QtCore.QRect(left, (self.height() - size.height()) // 2, size.width(), size.height()))
         if self.text():
             painter.setPen(QtGui.QColor(self.surface.ink.foreground))
-            painter.drawText(QtCore.QRect(CONTROL_HEIGHT - left + 4, 0, max(1, self.width() - CONTROL_HEIGHT - 4), self.height()),
-                             Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, self.text())
+            painter.drawText(
+                QtCore.QRect(CONTROL_HEIGHT - left + 4, 0, max(1, self.width() - CONTROL_HEIGHT - 4), self.height()),
+                Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft,
+                self.text(),
+            )
 
     def enterEvent(self, event: QtGui.QEnterEvent) -> None:
         super().enterEvent(event)
@@ -156,6 +159,7 @@ class Pill(QtWidgets.QWidget):
         button.setIconSize(QtCore.QSize(14, 14))
         button.setCursor(Qt.CursorShape.PointingHandCursor)
         button.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+
         def clicked() -> None:
             action()
 
@@ -189,7 +193,7 @@ class Pill(QtWidgets.QWidget):
         if not self.glass and not isinstance(preference, appearance.Contrast):
             self.ink = Ink()
         if self.layer is not None:
-            self.layer.color(self.colors.tint, .82 if self.frost is appearance.Frost.SMOKED else .22)
+            self.layer.color(self.colors.tint, 0.82 if self.frost is appearance.Frost.SMOKED else 0.22)
             if not self.glass:
                 self.layer.hide()
         self.recolor()
@@ -213,7 +217,7 @@ QToolTip {{ background: {self.colors.surface}; color: {self.ink.foreground}; bor
         outline = painter_path(shape.fill) if shape is not None else QtGui.QPainterPath()
         if shape is None:
             radius = self.height() / 2
-            outline.addRoundedRect(QtCore.QRectF(self.rect()).adjusted(.5, .5, -.5, -.5), radius, radius)
+            outline.addRoundedRect(QtCore.QRectF(self.rect()).adjusted(0.5, 0.5, -0.5, -0.5), radius, radius)
         painter.fillPath(outline, QtGui.QColor(1, 1, 1, 1) if self.glass else QtGui.QColor(self.colors.surface))
         edge = QtGui.QColor(self.colors.edge)
         edge.setAlpha(85 if self.glass else 255)
@@ -233,7 +237,7 @@ QToolTip {{ background: {self.colors.surface}; color: {self.ink.foreground}; bor
         self.move(self.anchor.x(), y)
         self.sync_glass()
 
-    def attach(self, attached: bool) -> None:
+    def attach(self, *, attached: bool) -> None:
         if self.attached != attached:
             self.attached = attached
             self.margins()
@@ -241,7 +245,7 @@ QToolTip {{ background: {self.colors.surface}; color: {self.ink.foreground}; bor
             self.update()
             self.sync_glass()
 
-    def show_activity(self, visible: bool, now: float, *, animate: bool) -> None:
+    def show_activity(self, *, visible: bool, now: float, animate: bool) -> None:
         if visible == self.presented and self.fade_to == float(visible):
             return
         self.advance(now)
@@ -279,8 +283,9 @@ QToolTip {{ background: {self.colors.surface}; color: {self.ink.foreground}; bor
             self.bounds = windows.outer_rect(int(self.winId()))
             if self.glass and self.layer is not None:
                 shape = self.shape()
-                self.layer.position(self.bounds, self.devicePixelRatioF(), self.alpha, attached=self.attached,
-                                    contour=shape.fill if shape is not None else None)
+                self.layer.position(
+                    self.bounds, self.devicePixelRatioF(), self.alpha, attached=self.attached, contour=shape.fill if shape is not None else None
+                )
                 self.layer.show(int(self.winId()))
 
     def dispose(self) -> None:

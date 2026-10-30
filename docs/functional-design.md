@@ -1,9 +1,13 @@
 # Functional design
 
-A work interaction stays in one floating bubble: its source title and badge, thinking,
-questions, pill options and final reply share the same card. Bubbles remain read-only;
-a tooltip directs replies to the agent voice-to-text button. Only one bubble expands
-at a time.
+Live agent activity appears in a bounded lower-right trail. Each public update starts
+a phase bubble, which grows with its tool calls. The newest phase expands and stays
+opaque; earlier phases collapse, move upward and fade. Full history retains the
+complete interaction. Clarification redirects take precedence over transient steps.
+Bubbles remain read-only; a tooltip directs replies to the agent voice button.
+The canvas retains useful findings, sources, documents, drafts and clarifications.
+Requests and execution history do not create work bubbles. Arrangement instructions
+edit the existing canvas directly; substantive new work gets a meaningful context.
 Closing the bubble hides it without stopping its worker; stopping is a separate action.
 There is no standalone feed composer or manual filter window.
 
@@ -17,6 +21,14 @@ The main places to read are:
 
 | Module | Pure model and decisions | Effect owner |
 | --- | --- | --- |
+| `miryoku/firmware.py` | Firmware keyboard identity, immutable prior-layout intent and Ctrl+Alt letter voice-shortcut decisions | `winapi/keyboard_devices.py` observes attached device names; the keyboard message loop pauses remapping and restores prior intent outside key callbacks; `keyboard_language.py` keeps firmware output on English (US); `Keyboard` owns paired voice requests and immutable captured-key observations |
+| `automation/personal_work.py`, `assistant/personal_work_service.py` | Work threads, source identity, bounded associations, remembered corrections, stale-edit rejection and model-plan reconciliation | `PersonalStore` validates transactional SQLite snapshots; `PersonalWork` owns polling, review scheduling, queued edits and immutable publication |
+| `assistant/personal_work_sources.py`, `personal_work_model.py`, `personal_work_tools.py` | Validated observed browser evidence, bounded review input and agent work-catalog contracts | `BrowserSources` owns read-only Edge collection; `Correlator` owns a cancellable structured model request without action tools; `personal_work_panel.py` composes the native local canvas; `work_canvas_detail.py` owns revision-bound in-place drafts |
+| `assistant/work_canvas_model.py`, `work_canvas_context.py`, `work_canvas_layout.py`, `work_canvas_gestures.py`, `canvas_activity.py` | Work as context, canonical contributions, arbitrary nested groups, shared source identity, nested bubbles on one native scene, arrangements/pins, substantive results, exact clarification routes, reply reconciliation and quiet attention policy | `CanvasStore` owns validated local SQLite documents; `Ui` serializes activity and placement updates on Qt; `work_canvas_interaction.py` owns native pointer capture and previews, shared `ui_components/canvas_bubble.py` controls handle both containers and contributions; existing input/work handlers own continuation |
+| `assistant/ui_components/` | Shared bubble outline, palette/ink, text presentation, headings and controls | Native component owners paint Qt surfaces and adapt Windows window behavior; feature controllers consume components directly |
+| `assistant/work_canvas_commands.py`, `work_canvas_tools.py`, `work_canvas_investigation.py` | Atomic structural edits, paged reads, editable fingerprints, bounded evidence-driven scheduling and durable run retention | `Ui` marshals bridge commands to Qt, confirms persistence and refreshes the native panel before another gesture; `App` submits identified research or exact saved user instructions and recovers uncommitted bindings |
+| `assistant/work_bridge_contracts.py`, `browser_documents.py` | Validated desktop bridge variants and document stream contracts | The bridge joins feed, catalog and canvas wire contracts without a feed-to-canvas import cycle; `Browser` owns authenticated CDP streams and exclusive bounded file collection |
+| `assistant/work_window.py`, `work_canvas_window.py`, `ui_components/heading.py`, `ui_components/text.py` | Current observations and bounded preview presentation | Desktop startup prepares the hidden native canvas; Qt retains group/header identities, materializes visible nested bubbles and shapes previews during viewport painting |
 | `assistant/llm.py` | System, user, assistant, and tool-result message variants; request serialization | HTTP client functions |
 | `assistant/agent_session.py` | Typed events, messages, questions, approvals, session transitions, and presentation | `agent_window.py`, `agent_input.py`, `agent_toasts.py`, `toast_card.py` |
 | `assistant/agent_runner.py` | Tasks, FIFO queueing, completion, and stopping transitions | `AgentRunner` owns threads and views; `agent_execution.py` owns SDK history and turn cleanup |
@@ -32,18 +44,26 @@ The main places to read are:
 | `assistant/meeting_followup.py`, `meeting_requests.py` | Frozen transcript bundles, exact citations, sourced actions and drafts, preparation identity | `meeting_followup_store.py` owns verified publications and revision-checked edits; `MeetingRequests` owns saved preparations |
 | `assistant/meeting_workflow.py` | Catalog, work and package observations; identified edit commands and receipts | `MeetingWorkflow` owns background I/O; `meeting_panel.py` owns Qt selection, local edits and explicit handoff |
 | `assistant/meeting_execution.py`, `meeting_tools.py`, `outlook.py` | Constrained meeting execution, bounded source reads and verified draft outcomes | The work process owns generation; `outlook.ps1` owns Outlook COM observation and draft operations |
-| `assistant/teams.py` | Frozen device flow, polling deadlines, and retry intervals from clock observations | `Teams`, `SystemClock`, `TokenStore`, and `graph_http.Http` |
-| `runtime.py` | Bootstrap handoff plan and dependency ABI validation | `execute_bootstrap`, `bootstrap`, and `activate` |
+| `assistant/teams.py` | Frozen device flow, polling deadlines, retry intervals and read/write requests | `Teams` owns the shared delegated Microsoft session; `SystemClock`, `TokenStore`, and `graph_http.Http` own clock, encrypted credentials and bounded transport |
+| `assistant/web_apps.py`, `business_tools.py` | Typed app commands, exact task/chat/mail conversation identities, expected-value checks, private tool schemas and readback | `WebApps` uses the existing browser's wake/evaluate lifecycle and the applications' own controls; native browser fixtures verify task/chat/mail selection and draft preservation |
+| `runtime.py` | Dependency ABI validation | `activate` |
 | `assistant/control_policy.py` | Immutable native message actions and tray observations, menu projection, press-only control routing, startup ordering and queued file handoff | `AssistantApp` owns native interpretation, layout transport, UI feedback and worker lifetime |
 | `assistant/activity.py` | Bounded window history reduced from a window or desktop-state observation | `ActivityTracker` and the Windows foreground reader |
-| `assistant/communications.py` | Source identities, grouped pending chat tickets, captured handling revisions and reply evidence | `communications_service.py` owns encrypted settings/drafts/handling, collection and effects; `communications_browser.py` owns exact-chat and Activity DOM boundaries; `agent_toasts.py` owns the personal work feed |
+| `assistant/communications.py` | Source identities, grouped pending chat tickets, captured handling revisions and reply evidence | `communications_service.py` owns encrypted settings/drafts/handling, collection and effects; `communications_browser.py` owns exact-chat and Activity DOM boundaries; `Ui` supplies source observations as agent context; canvas activity owns user attention |
 | `assistant/inbox.py`, `feed_items.py`, `notifications.py`, `console_requests.py` | Optional history selection, shared agent/proposal bubble projection, bounded console requests and exact answer transitions | `agent_toasts.py` and `toast_card.py` own the read-only floating feed, history and action buttons; `console_inbox.py` owns the local hook transport and pending lifetime; `scripts/inbox_hook.py` returns supported CLI hook responses |
-| `assistant/feed_triage.py` | Bounded source candidates, revision-bound grouped assessments, quiet/action/completed/dismissed dispositions, explicit feedback and stale-result rejection | `feed_triage_service.py` owns coalesced background model calls, DPAPI plan/preferences and authenticated local transport, with explicit server-construction and cancellable-wait dependencies; `feed_agent_tools.py` lets the main voice agent inspect and maintain the same plan; `Ui` publishes immutable boards to the floating conversation |
+| `assistant/feed_triage.py` | Bounded source candidates, revision-bound grouped assessments, quiet/action/completed/dismissed dispositions, explicit feedback and stale-result rejection | `feed_triage_service.py` owns coalesced background model calls, DPAPI plan/preferences and authenticated local transport, with explicit server-construction and cancellable-wait dependencies; `feed_agent_tools.py` lets the main voice agent inspect and maintain the same plan; `Ui` retains immutable boards as agent context; ordinary arrivals do not become floating cards |
 | `assistant/feed_origin.py`, `feed_items.py` | Source application identity, grouped provenance, formatted body spans and compact reaction counts | `feed_icons.py` owns native vector marks; `toast_card.py` anchors badges over the upper-left glass edge; the triage board keeps reaction counts quiet |
 | `assistant/system_notices.py` | Native notification identities, quiet history baselines, banner coverage and validated timestamps | `winapi/notifications.py` owns observations and native dismissal; `notification_banners.py` owns the recoverable banner-setting lease; `desktop_bar.py` forwards observations; `native_feed.py` projects arrivals and local handling immediately while the Teams worker is occupied |
 | `assistant/monitor_layout.py`, `tiling.py`, `tiling_commands.py` | Monitor observations, window distribution and native window command mapping | `MonitorLayout` owns automatic redistribution; `GlazeWM` owns manager startup and ordinary window tiling |
 | `assistant/shell_state.py` | Windows-key tap decisions | `shell_controls.py` owns taskbar recovery and a dedicated Windows-key message thread; keyboard callbacks post toggles and pass other input through |
 | `assistant/geometry.py`, `panel.py`, `rich_text.py` | Geometry, preferences, and Markdown values | Qt views and preference files |
+
+Feed context refresh and source-date corrections reconsider automatic action and
+quiet assessments. Explicit user quieting is a separate disposition and remains
+handled across context, date and filtering changes. `feed_contracts.py` separates
+public snapshots and handoff receipts from stored retry prompts;
+`communications_state.py` owns saved communication contracts and `state_store.py`
+serializes their immutable values at encrypted IO.
 
 The curated side feed exposes at most three source work items, chosen by
 importance and laid out with the highest priority at the top. Equal priorities
@@ -72,8 +92,8 @@ The full title remains available to accessibility and in a tooltip.
 The title font explicitly overrides the global theme and matches measurement.
 Clicking the bubble reveals details without a separate expand button; suggested
 actions and the corner-aligned dismiss button keep their independent behavior.
-Collapsed cards show the header and one to three concrete agent
-solutions, with the recommendation first. Native buttons and voice selection use
+Collapsed cards show the header, a bounded recommendation preview and one to
+three concrete agent solutions, with the recommendation first. Native buttons and voice selection use
 the same exact proposal revision and choice identity. Selecting a solution queues
 an identified investigation or preparation task; repeated selection reuses that
 identity. Source and model text cannot extend the fixed preparation scope into
@@ -90,6 +110,40 @@ chat merely because the request came from it. Request and suggested approach hav
 separate formatting. Meaningful rejection records the user's reason against the
 captured proposal revision, distinct from dismissal and without sending a reply.
 The agent considers refusals, corrections and no action as well as agreement.
+
+The feed is a work queue with accumulated context. `feed_work.py` reads relevant
+fresh project notes and explicit preferences from the existing context store,
+recent and linked tasks from the task journal, recorded task answers, and
+short-lived app/title activity. Matching project history takes priority over
+unrelated recent tasks within the context budget. `feed_triage_service.py` supplies that bounded
+context to the configured agent model. `feed_research.py` uses the existing Agents
+SDK for a bounded background investigation before options appear. Its tools can
+retrieve topic-specific saved context, captured conversation history including own
+and handled replies, relevant local text files/directories, and public web research.
+It has no general agent, desktop control, write, send or console-answer tools.
+Hosted web research runs only when requested; a provider failure returns an explicit
+access limitation to the investigation rather than discarding local work. Binary
+and Office documents are explicitly unavailable through the text-file adapter.
+The SDK owns tool orchestration; no new runtime dependencies are needed.
+Suggestions include verified findings, source references, prepared content and
+meaningful tradeoffs, while identifying inaccessible or uncertain evidence.
+The run stops on shutdown and has a twelve-turn/three-minute overall limit.
+Task state, saved context or captured conversation changes invalidate open
+recommendations; handled work stays handled. A changed review recipe refreshes
+cached recommendations when their sources are available.
+
+`feed_history.py` owns immutable scoped decisions and exact handoffs. A selected
+pill retains its preparation scope. `work_feed_reply` saves the user's actual
+instruction before queueing a task that can act within that instruction's scope.
+An instruction to draft still authorizes a draft. Each reply identity belongs to
+one exact item, captured revision and text; retries reuse its original prompt.
+A failed save starts no work, while a failed queue retains the retryable decision.
+The latest 200 feed decisions are retained in encrypted feed storage; durable task
+requests, replies, effects and results remain in the existing task journal.
+Future feed reviews read these outcomes without converting one-off choices into
+standing preferences. Queue acknowledgment is distinct from task completion.
+`feed_contracts.py` defines immutable IO shapes, validated and serialized with
+Pydantic `TypeAdapter`; application decisions operate on typed values.
 History stays in the same floating feed; the separate legacy panel is removed.
 Source work never scrolls automatically; expanded overflow uses manual scrolling.
 Typed input is available on explicit request and closes after submitting to Workspace.
@@ -199,7 +253,7 @@ assistant windows. A separate control thread creates the hidden Windows message
 window and runs its message loop. `assistant/qt_ui.py` shares Windows composition
 across assistant views without tying the application lifetime to a view.
 `keeper_ui.py` owns the keeper's separate protected Qt event loop. The bundled
-interpreter excludes Tcl/Tk; no GUI objects cross the keyboard process boundary.
+UI uses Qt; no GUI objects cross the keyboard process boundary.
 
 Meeting follow-through shares the work journal and selected saved transcript
 versions. Its owner queues catalog reads, preparation and revision-checked edits
@@ -244,7 +298,40 @@ fast duration with `cubic-bezier(0.32, 0.72, 0, 1)`. Keyboard disclosure is imme
 The frame timer accounts for drawing time and requests Windows' finer timer
 resolution only while movement, text reveals or smooth reading run. Reduced
 motion, opening history and closing release that request. A shared callback
-rotates existing spinner shapes without measuring text again.
+rotates existing spinner shapes without measuring text again. The desktop bar
+uses that same loop for agent work and transcription. Static busy frames do not
+reposition unchanged capsules, and Windows reduced motion retains a static arc.
+
+The native canvas keeps one scene. Focusing a bubble expands its ancestors and
+centers that bubble without replacing neighboring work or maintaining a second
+camera history. Its bottom toolbar contains canvas controls and a microphone/N
+keycap legend; hold/release instructions and the selected context live in its tooltip.
+There is no agent text editor or typing shortcut. CanvasResearch and CanvasInstruction
+are immutable intent variants stored with the run binding. Instructions save before
+queueing; retries reuse the saved identity and startup preserves the exact direction.
+Results and clarification requests can belong to any bubble, including a root
+instruction, through the same containment projection.
+
+Clarification details use measured, selectable labels and a Hold N voice hint.
+Qt owns their compact height and the previous visible spoken reply when a task
+receipt rejects submission. Ui routes speech to the selected waiting question on
+the visible canvas before the conversation handler; failed replies cannot become
+new work. Dictation retains its independent capture and transcription path while
+the durable agent runs or queues instructions.
+
+First canvas reveal presents an 80-logical-pixel nonactivating indicator before
+creating or rendering the view. `ui_components/canvas_loading.py` owns its
+transient lifetime. `winapi/composition_spinner.py` uses the same top-level
+NOREDIRECTIONBITMAP host as desktop glass; Windows supplies the rounded surface
+and rotates the wheel independently of Qt. Reduced motion retains a static mark;
+unavailable composition uses the native wait cursor. Ui pauses its job timer
+during initial native frame delivery, keeping redirects outside construction.
+WorkWindow retains loading after native show returns. `ui_components/paint_ready.py`
+acknowledges the viewport's actual first paint on the following event turn, after
+the backing store has flushed. Presentation, cancellation and failure release
+the native target before its dispatcher. Later reveals reuse the canvas without
+another indicator. Hidden preparation stays hidden. Wheel animation requires no
+timer-driven Qt painting or background thread.
 
 Qt supplies a per-pixel transparent foreground. `winapi.composition` uses
 win32more bindings to create a separate, nonactivating, input-transparent HWND
@@ -338,9 +425,9 @@ an exact exception. Configuration records a rule, module, declaration, expressio
 and reason. Exceptions match normalized expressions, not shifting line numbers;
 obsolete entries fail. A necessity is distinct from existing migration debt.
 The measured keyboard engine buffers and private SDK fragment accumulators have
-specific necessities. The remaining mailbox, overlay, Windows-key state, tool
-arguments, volatile history and schema entries are explicit migration work, not
-general permissions to introduce mutable data.
+specific necessities. The former mailbox, overlay, Windows-key state, tool
+arguments, volatile history and schema migration entries are resolved: decisions
+and observations are immutable, with mutation retained at their effect owners.
 
 Synchronization handles remain with their effect owners. Frozen records can hold
 those handles without mutable record fields. The task execution-flight and
@@ -349,6 +436,18 @@ now follow that pattern. Deeply immutable payloads still need review: an alias
 or opaque object can hide mutation beyond what the syntax check recognizes.
 
 ## Keyboard variants
+
+With the Charybdis attached, Ctrl+Alt+D holds dictation and Ctrl+Alt+G
+holds agent speech, using Miryoku's right-hand home-row modifiers and plain left-hand letters.
+Layer thumbs and home-row tap-hold letters cannot reliably stay down for speech.
+Native modifier observations reuse the keyboard owner's existing bounded
+`native_releases` set; captured voice keys are immutable `VoiceShortcut | ConsumedKey`
+variants. Repeats never restart voice, releasing modifiers first does not end it,
+and a voice key already typing stays native. Unplug, hook recovery and shutdown finish
+owned voice requests while retaining swallowed physical releases. Generated input
+cannot arm or finish these shortcuts. Ordinary firmware keys remain native.
+Python's frozen records and tuple behavior are trusted; tests exercise this
+Workspace-owned routing and lifecycle policy through `KeyboardSystem`.
 
 The keyboard uses the same data definitions. Layout actions are an `Action`
 union; the engine's mapped key events are `KeyDown | KeyUp`, each carrying a
@@ -380,6 +479,17 @@ the assistant process, with a separate Python heap and garbage collector. Agent
 collections cannot stop the keyboard interpreter, although both processes still
 share CPU and other operating-system resources.
 
+The keeper owns independent child restarts. Its protected event loop consumes
+typed pause/resume commands through `keeper_control.py`; source replacement
+keeps the keeper and unaffected children alive. `scripts/deploy_policy.py` makes
+the restart selection from immutable manifests and both versions' import graphs.
+The release owner verifies clean selected exits and retained process identities,
+then verifies fresh selected readiness and unchanged retained markers. Failed
+replacement restores only changed source before resuming. The protected full
+selfcheck and trial-based agent update path keep their full checks and rollback.
+Assistant unavailability produces shortcut feedback without disabling the keyboard
+engine or replaying missed actions. Dictation still belongs to the assistant.
+
 The taskbar's additional Windows-key hook has its own message thread too. A hook
 on Qt's thread can delay all key delivery while that thread is busy: a native
 regression reproduced a 316 ms wait before Windows skipped the unresponsive hook.
@@ -389,7 +499,7 @@ text field receives input; another check reads mapped typing and complete Unicod
 dictation back from a disposable console. Readiness markers alone do not verify
 that applications received input.
 
-Physical Space now holds dictation, B toggles dictation, and N toggles agent
+Physical Space now holds dictation, B toggles dictation, and N holds agent
 speech on every layer. A frozen capture records its initiating request, tool,
 identity and timestamp, so a Space release cannot end B's capture. The assistant
 owns a one-second window-message watchdog at the existing five-minute audio
@@ -425,8 +535,8 @@ Run the keyboard benchmark in a fresh process using the same Python build for
 both revisions:
 
 ```powershell
-.python\python.exe scripts\benchmark_keyboard.py --root C:\path\to\baseline --output before.json
-.python\python.exe scripts\benchmark_keyboard.py --output after.json
+.venv\Scripts\python.exe scripts\benchmark_keyboard.py --root C:\path\to\baseline --output before.json
+.venv\Scripts\python.exe scripts\benchmark_keyboard.py --output after.json
 ```
 
 The workload covers plain typing, home-row rolls, modifiers, layers, repeat,
@@ -440,6 +550,18 @@ Compare the distributions over multiple rounds and retain the worst observed
 latency. The benchmark also records source hashes and whether the engine imported
 the assistant. It measures engine decisions with a silent host; native hook,
 `SendInput`, and operating-system scheduling require separate desktop evidence.
+
+For the 2026-10-29 firmware-keyboard change, three native Python 3.15.1
+10,000-event rounds measured median/p99 engine latency of 12.9/61.1 µs before
+and 8.4/47.8 µs after, with the same 2,191-byte traced peak, no GC collections,
+and no assistant imports. The engine is unchanged; desktop load prevents a
+speedup claim. Reports are `workspace-keyboard-before.json` and
+`workspace-keyboard-after.json` in Windows Temp. A separate 200-observation run
+with the connected Charybdis measured a 79.1 µs median and 1,358.6 µs maximum
+for device enumeration and identity selection with GC enabled. This runs on
+the 200 ms message-loop timer, outside key callbacks. Win32 owns enumeration;
+tests cover Workspace's device selection, suspension, output releases, language
+selection, and restoration policy rather than the OS enumeration algorithm.
 
 For the 2026-10-28 import-ownership cleanup, paired native Windows Python 3.15.1
 runs used five 100,000-event rounds against the original and current engine.
@@ -468,3 +590,37 @@ After group removal, the same synthetic workload measured 2.925 µs median
 latency and 9.071 µs median p99, with the same 1,943-byte peak and zero GC
 collections. Tiling startup now belongs to `MonitorLayout`, independently of
 any tab-group controller.
+
+
+## Bootstrap and request-boundary migration
+
+The activated launcher composes `keeper_ui.launch` with `keeper.main`. The UI
+owner acquires the singleton file lock before creating Qt, then retains that
+lock through the keeper loop. The keeper imports only standard-library modules
+when imported by the keyboard. Its direct executable entry activates the runtime
+before module-level guarded UI imports. All launchers run directly on Python
+3.15; Windows associations use the installed interpreter, while the portable
+command launcher uses `pyw -3.15` without a Python handoff. No interpreter is
+embedded in the installation or ZIP.
+
+`selfcheck.check` passes the selected candidate root to runtime activation. An
+adjacent candidate runtime takes precedence over the inherited runtime, even
+when selfcheck itself was launched from another source tree. Dependency manifest
+and recovery parsing use standard-library JSON and structural validation because
+they must remain usable before loading or trusting bundled Pydantic/Qt. Unknown
+manifest fields stay objects; ABI fields are validated before activation. The
+keeper's native function prototypes preserve pointer-sized handles and message
+payloads, replacing the former unprototyped DLL assertion.
+
+Graph transport accepts one immutable HTTP request and an independently owned
+cancellation event. Its bounded generic JSON-object responses stay at the
+transport boundary; Teams validates the fields it consumes. Graph reads and
+writes are explicit immutable alternatives. Chat creation and message bodies
+have distinct typed Pydantic wire shapes; neither retains mutable request data.
+
+Panel storage validates the saved bounds used to select the conversation monitor.
+Retired pin/display options, preference saving and unused panel fitting/docking
+helpers are removed; native toast placement remains with its active view.
+Activity `Sample` binds the observation, time and agent state;
+`Policy` owns retention and whether collection is enabled. Public activity
+context has an immutable typed projection until its JSON serialization boundary.

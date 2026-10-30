@@ -46,7 +46,7 @@ def fixture(folder: Path) -> Generator[int]:
             while not (folder / "ready").exists():
                 assert not running.done(), running.result() if running.done() else "Fixture exited."
                 assert time.monotonic() < deadline, "The fixture window did not start."
-                time.sleep(.05)
+                time.sleep(0.05)
             handle = decoded((folder / "window.json").read_text())["handle"]
             assert isinstance(handle, int)
             yield handle
@@ -84,8 +84,9 @@ def batch(folder: Path, requests: list[dict[str, Json]]) -> list[tuple[bool, str
     """
     destination = folder / "uia-results.json"
     blocks = [
-        "try { $response = & {\n" + uia.script(request) +
-        "\n}; @{ok=$true; text=[string]$response} } catch { @{ok=$false; text=$_.Exception.Message} }\n"
+        "try { $response = & {\n"
+        + uia.script(request)
+        + "\n}; @{ok=$true; text=[string]$response} } catch { @{ok=$false; text=$_.Exception.Message} }\n"
         for request in requests
     ]
     script = "$results = @(\n" + "".join(blocks) + ")\n"
@@ -118,7 +119,7 @@ def test_powershell_preserves_utf8_large_scripts_cwd_and_failure_status(tmp_path
     assert code == 7, output
     code, output = commands.powershell("Write-Warning 'Fixture warning'; Write-Output 'Result'")
     assert code == 0 and "Fixture warning" in output and "Result" in output and "CLIXML" not in output
-    code, output = commands.powershell("Start-Sleep -Seconds 60", timeout_s=.2)
+    code, output = commands.powershell("Start-Sleep -Seconds 60", timeout_s=0.2)
     assert code != 0 and "Timed out" in output
 
 
@@ -126,6 +127,7 @@ def test_screenshot_sources_use_physical_bounds_and_scale_only_the_image() -> No
     desktop = Rect(-1920, 0, 1920, 1080)
     left = Rect(-1920, 0, 0, 1080)
     work = Rect(-1700, 100, -900, 700)
+
     class CaptureDesktop(Desktop):
         def capture(self, area: Rect, longest: int) -> tuple[bytes, Shot]:
             return b"fixture", Shot(area, *fit(area.width, area.height, longest))
@@ -170,18 +172,28 @@ def test_uia_controls_are_inspected_and_operated_across_separate_processes(tmp_p
         def action(row: dict[str, Json], operation: str, text: str = "") -> dict[str, Json]:
             return {"operation": "act", "handle": handle, "id": row["id"], "action": operation, "value": text}
 
-        results = batch(tmp_path, [
-            action(editor, "set_value", value), action(editor, "read"), action(button, "invoke"),
-            action(checkbox, "toggle"), action(slider, "set_range", "65"), action(control(page, "beta"), "select"),
-            action(control(page, "choices"), "expand"), action(control(page, "choices"), "collapse"),
-            action(password, "read"), action(control(page, "disabled"), "invoke"),
-            action({"id": "42.2147483647.2147483646"}, "invoke"),
-            {"operation": "inspect", "handle": handle, "limit": 2, "offset": 0, "depth": 10},
-            {"operation": "inspect", "handle": handle, "limit": 2, "offset": 2, "depth": 10},
-            # Exceed both the text and encoded-JSON caps without asking WPF to
-            # lay out 10,000 lines. The earlier value retains multiline/UTF-8.
-            action(editor, "set_value", '"' * 12001), action(editor, "read"),
-        ])
+        results = batch(
+            tmp_path,
+            [
+                action(editor, "set_value", value),
+                action(editor, "read"),
+                action(button, "invoke"),
+                action(checkbox, "toggle"),
+                action(slider, "set_range", "65"),
+                action(control(page, "beta"), "select"),
+                action(control(page, "choices"), "expand"),
+                action(control(page, "choices"), "collapse"),
+                action(password, "read"),
+                action(control(page, "disabled"), "invoke"),
+                action({"id": "42.2147483647.2147483646"}, "invoke"),
+                {"operation": "inspect", "handle": handle, "limit": 2, "offset": 0, "depth": 10},
+                {"operation": "inspect", "handle": handle, "limit": 2, "offset": 2, "depth": 10},
+                # Exceed both the text and encoded-JSON caps without asking WPF to
+                # lay out 10,000 lines. The earlier value retains multiline/UTF-8.
+                action(editor, "set_value", '"' * 12001),
+                action(editor, "read"),
+            ],
+        )
         assert [ok for ok, _text in results] == [True] * 8 + [False] * 3 + [True] * 4, results
         assert decoded(results[1][1])["text"] == value
         selected = decoded(results[5][1])["control"]

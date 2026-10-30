@@ -22,7 +22,7 @@ from keeper import AUTOMATION_WINDOW
 from usage import DIRECTORY
 from winapi import screen, system, windows
 from winapi.shapes import Window
-lazy from assistant.activity import ContextSnapshot, Observation, observed
+lazy from assistant.activity import ContextSnapshot, Observation, Sample, observed
 lazy from assistant.agent_execution import AgentExecution
 lazy from assistant.agent_session import Begin, Done, Finished, LiveMessage, Problem, Progress, Said
 lazy from assistant.browser import Browser
@@ -58,7 +58,12 @@ class DurableInput:
     __slots__ = ()
 
     def agent_input(
-        self, title: str, detail: str = "", *, question: bool = False, cancel: threading.Event | None = None,
+        self,
+        title: str,
+        detail: str = "",
+        *,
+        question: bool = False,
+        cancel: threading.Event | None = None,
     ) -> str | None:
         raise OSError("This work requires a durable question or approval in the work overview.")
 
@@ -115,11 +120,14 @@ class DesktopContext:
         try:
             handle = windows.foreground()
             if handle:
-                observation = ("workspace" if windows.process_id(handle) in (os.getpid(), self.bridge.assistant_pid)
-                               else Window(handle, windows.title(handle), windows.exe(handle), windows.is_minimized(handle)))
+                observation = (
+                    "workspace"
+                    if windows.process_id(handle) in (os.getpid(), self.bridge.assistant_pid)
+                    else Window(handle, windows.title(handle), windows.exe(handle), minimized=windows.is_minimized(handle))
+                )
         except OSError:
             pass
-        return observed(self.bridge.context(), observation, now, agent_active=True)
+        return observed(self.bridge.context(), Sample(observation, now, agent_active=True))
 
 
 class VolatileLog:
@@ -154,7 +162,11 @@ class NativeExecution:
     __slots__ = ("bridge", "contexts", "execution", "meetings")
 
     def __init__(
-        self, execution: AgentExecution, bridge: BridgeServer, meetings: RemoteMeetings, contexts: ContextStore,
+        self,
+        execution: AgentExecution,
+        bridge: BridgeServer,
+        meetings: RemoteMeetings,
+        contexts: ContextStore,
     ) -> None:
         self.execution, self.bridge, self.meetings, self.contexts = execution, bridge, meetings, contexts
 
@@ -184,10 +196,13 @@ def _native_execution(settings: Settings | Missing, bridge: BridgeServer, hwnd: 
     followups = bridge.folder / "meeting-followups"
     try:
         execution = AgentExecution(
-            usable, machine, journal=lambda entry: None,
+            usable,
+            machine,
+            journal=lambda entry: None,
             record=lambda details: usage.record("automation", "agent", details),
-            report_error=lambda detail: report("Agent execution failed; its durable task contains the recovery state.", folder=bridge.folder),
-            close_background=machine.close_background, context=context.snapshot,
+            report_error=lambda detail: report(detail, folder=bridge.folder),
+            close_background=machine.close_background,
+            context=context.snapshot,
             meeting=MeetingWork(MeetingRequests(followups), FollowupStore(followups / "packages"), OutlookDrafts(followups / "mail")),
         )
     except BaseException:
@@ -197,8 +212,12 @@ def _native_execution(settings: Settings | Missing, bridge: BridgeServer, hwnd: 
 
 
 def run(
-    settings: Settings | Missing, *, folder: Path = DIRECTORY / "work", execution: WorkExecution | None = None,
-    ready: Callable[[], None] = keeper.ready, title: str = AUTOMATION_WINDOW,
+    settings: Settings | Missing,
+    *,
+    folder: Path = DIRECTORY / "work",
+    execution: WorkExecution | None = None,
+    ready: Callable[[], None] = keeper.ready,
+    title: str = AUTOMATION_WINDOW,
 ) -> None:
     """Own one profile until all work is parked and native resources are released.
 
@@ -228,8 +247,16 @@ def run(
             execution, machine = _native_execution(settings, bridge, hwnd, contexts)
             cleanup.callback(machine.close_background)
         events = WorkEvents(bridge, folder, hwnd)
-        controller = WorkController(tasks, execution, owner=bridge.discovery.epoch, log=events.log, now=time.time,
-                                    new_run_id=lambda: uuid.uuid4().hex, on_change=events.changed, on_error=events.problem)
+        controller = WorkController(
+            tasks,
+            execution,
+            owner=bridge.discovery.epoch,
+            log=events.log,
+            now=time.time,
+            new_run_id=lambda: uuid.uuid4().hex,
+            on_change=events.changed,
+            on_error=events.problem,
+        )
 
         cleanup.callback(stop_work, controller, bridge)
 
@@ -237,8 +264,11 @@ def run(
         controller.start()  # Synchronous exclusive-owner recovery precedes readiness.
         worker_options: dict[str, object] = {"problem": events.problem}
         thread = threading.Thread(
-            target=maintain_routines, args=(bridge, routines, tasks, controller, shutdown), kwargs=worker_options,
-            name="standing work", daemon=True,
+            target=maintain_routines,
+            args=(bridge, routines, tasks, controller, shutdown),
+            kwargs=worker_options,
+            name="standing work",
+            daemon=True,
         )
         thread.start()
         warmup: threading.Thread | None = None
@@ -268,7 +298,7 @@ class WorkEvents:
     Finished event when the controller leaves a run. Callers see native/log effects.
     """
 
-    __slots__ = ('bridge', 'failed', 'folder', 'hwnd', 'previous')
+    __slots__ = ("bridge", "failed", "folder", "hwnd", "previous")
 
     def __init__(self, bridge: BridgeServer, folder: Path, hwnd: int) -> None:
         self.bridge, self.folder, self.hwnd = bridge, folder, hwnd
@@ -304,7 +334,6 @@ class WorkEvents:
         return result
 
 
-
 def stop_work(controller: WorkController, bridge: BridgeServer) -> None:
     controller.shutdown()
     try:
@@ -321,8 +350,13 @@ def warm_sdk(folder: Path) -> None:
 
 
 def maintain_routines(
-    bridge: BridgeServer, routines: RoutineStore, tasks: TaskStore, controller: WorkController,
-    shutdown: threading.Event, *, problem: Callable[[str], None],
+    bridge: BridgeServer,
+    routines: RoutineStore,
+    tasks: TaskStore,
+    controller: WorkController,
+    shutdown: threading.Event,
+    *,
+    problem: Callable[[str], None],
 ) -> None:
     """Poll this process's transport/store, waking its controller until shutdown.
 

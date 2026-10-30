@@ -60,17 +60,17 @@ def test_pending_question_points_to_agent_voice_without_an_editor() -> None:
     # Defects: creating an editable reply widget, or losing the voice handoff hint.
     with notifications() as panel:
         replies: list[str] = []
+
         def record_reply(answer: str) -> bool:
             replies.append(answer)
             return True
-        panel.agent.request_input(
-            Question("owned-question", "Which figures should I check?", "Only the project totals.", 1), record_reply
-        )
+
+        panel.agent.request_input(Question("owned-question", "Which figures should I check?", "Only the project totals.", 1), record_reply)
         panel.pump()
         card = next(c for c in panel.view.cards.values() if not c.retiring)
         assert not card.window.findChildren(QtWidgets.QPlainTextEdit)
         assert card.text.isReadOnly() and card.hint.isHidden()
-        assert card.window.toolTip() == "Press the agent voice-to-text button (N) to reply."
+        assert card.window.toolTip() == "Hold the agent voice-to-text button (N) to reply; release to send."
         assert card.text.toolTip() == card.window.toolTip()
         assert panel.agent.reply_by_voice("Use the revised totals.")
         panel.pump()
@@ -149,8 +149,7 @@ def test_proposal_thinking_question_and_reply_keep_the_same_source_bubble() -> N
 def test_expanding_a_bubble_collapses_the_previous_one() -> None:
     # Defect: two independently expanded cards keep consuming the viewport.
     with notifications() as panel:
-        first = Assessment("first", (), "First request", "A fictional summary. " * 8,
-                           "Compare the totals.", "", 1, 1)
+        first = Assessment("first", (), "First request", "A fictional summary. " * 8, "Compare the totals.", "", 1, 1)
         second = replace(first, identity="second", title="Second request", created_at=2)
         panel.agent.triage(Board(enabled=True, items=(first, second)))
         panel.pump()

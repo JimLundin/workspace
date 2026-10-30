@@ -44,7 +44,7 @@ class Channel:
         self.sent.append(decoded(message))
 
     def recv(self, timeout: float) -> str | bytes:
-        assert 0 < timeout <= .1
+        assert 0 < timeout <= 0.1
         if self.cancel is not None:
             self.cancel.set()
         result = self.replies.pop(0)
@@ -74,7 +74,11 @@ class ScriptedSessions:
 
 
 def connected_browser(
-    path: Path, channel: Channel, *, owner: Attached | Managed | None = None, strip: TabStrip | None = None,
+    path: Path,
+    channel: Channel,
+    *,
+    owner: Attached | Managed | None = None,
+    strip: TabStrip | None = None,
     clock: Callable[[], float] = time.monotonic,
 ) -> Browser:
     owner = owner if owner is not None else Attached(Product.EDGE)
@@ -86,8 +90,11 @@ def connected_browser(
 
 def screenshot_channel() -> Channel:
     return Channel.results(
-        {"targetInfos": [{"type": "page", "targetId": "fixture"}]}, {"sessionId": "page-session"}, {},
-        {"data": base64.b64encode(VIEWPORT_PNG).decode("ascii")}, {},
+        {"targetInfos": [{"type": "page", "targetId": "fixture"}]},
+        {"sessionId": "page-session"},
+        {},
+        {"data": base64.b64encode(VIEWPORT_PNG).decode("ascii")},
+        {},
     )
 
 
@@ -108,14 +115,21 @@ def test_background_activity_restores_focus_even_when_the_action_is_cancelled(tm
 
 def test_background_activity_resumes_a_frozen_page_before_running_work(tmp_path: Path) -> None:
     """Detect focus emulation being used without resuming the page's lifecycle."""
+
     class FrozenPage(Channel):
         # This native-page adapter owns its lifecycle observation for one test.
         __slots__ = ("running",)
 
         def __init__(self) -> None:
-            super().__init__(*Channel.results(
-                {"targetInfos": [{"type": "page", "targetId": "fixture"}]}, {"sessionId": "page-session"}, {}, {}, {},
-            ).replies)
+            super().__init__(
+                *Channel.results(
+                    {"targetInfos": [{"type": "page", "targetId": "fixture"}]},
+                    {"sessionId": "page-session"},
+                    {},
+                    {},
+                    {},
+                ).replies
+            )
             self.running = False
 
         def send(self, message: str) -> None:
@@ -160,12 +174,17 @@ def test_cdp_cancellation_and_timeout_never_repeat_an_action() -> None:
 
 def test_slow_page_keeps_the_connection_and_accepts_the_next_response(tmp_path: Path) -> None:
     channel = Channel.results(
-        {"targetInfos": [{"type": "page", "targetId": "fixture"}]}, {"sessionId": "page-session"},
-        {"frameTree": {"frame": {"id": "main"}}}, {"executionContextId": 1}, {"result": {"value": "late reply"}},
+        {"targetInfos": [{"type": "page", "targetId": "fixture"}]},
+        {"sessionId": "page-session"},
+        {"frameTree": {"frame": {"id": "main"}}},
+        {"executionContextId": 1},
+        {"result": {"value": "late reply"}},
         {"targetInfos": [{"type": "page", "targetId": "fixture"}]},
     )
+
     def clock() -> float:
         return 20.0 if channel.sent and channel.sent[-1]["method"] == "Runtime.evaluate" else 0.0
+
     browser = connected_browser(tmp_path, channel, clock=clock)
     connection = browser.connection
     try:
@@ -181,7 +200,8 @@ def test_slow_page_keeps_the_connection_and_accepts_the_next_response(tmp_path: 
 
 def test_cdp_rejects_malformed_oversized_and_error_replies() -> None:
     for response, message in (
-        ("not JSON", "invalid data"), ("[]", "unexpected response"),
+        ("not JSON", "invalid data"),
+        ("[]", "unexpected response"),
         ('{"id":1,"error":{"message":"Page is closed"}}', "Page is closed"),
         ("x" * (MAX_RESPONSE + 1), "size limit"),
     ):
@@ -215,14 +235,24 @@ def test_cdp_refuses_non_loopback_debugging_and_proxy_use() -> None:
 
     # A separate process owns its proxy environment. This observes our real
     # transport choosing a direct connection even when loopback is not exempt.
-    with serve(accept, "127.0.0.1", 0, ping_interval=None, close_timeout=.5) as server:
+    with serve(accept, "127.0.0.1", 0, ping_interval=None, close_timeout=0.5) as server:
         port = cast(tuple[str, int], server.socket.getsockname())[1]
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
         try:
             environment = dict(os.environ)
-            for name in ("http_proxy", "https_proxy", "all_proxy", "ws_proxy", "wss_proxy",
-                         "HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "WS_PROXY", "WSS_PROXY"):
+            for name in (
+                "http_proxy",
+                "https_proxy",
+                "all_proxy",
+                "ws_proxy",
+                "wss_proxy",
+                "HTTP_PROXY",
+                "HTTPS_PROXY",
+                "ALL_PROXY",
+                "WS_PROXY",
+                "WSS_PROXY",
+            ):
                 environment[name] = "http://127.0.0.1:1"
             environment["no_proxy"] = environment["NO_PROXY"] = ""
             script = (
@@ -259,13 +289,21 @@ def test_browser_accepts_web_pages_but_not_embedded_credentials_or_local_schemes
 
 def test_browser_snapshot_limits_keep_valid_json_and_progress_offsets(tmp_path: Path) -> None:
     source: dict[str, Json] = {
-        "title": "Fixture", "url": "https://example.com", "text": "\x00" * 6000, "text_total": 7000,
+        "title": "Fixture",
+        "url": "https://example.com",
+        "text": "\x00" * 6000,
+        "text_total": 7000,
         "controls": [{"id": str(i), "name": "n" * 300} for i in range(100)],
-        "offset": 4, "total": 104, "more_controls": False,
+        "offset": 4,
+        "total": 104,
+        "more_controls": False,
     }
     channel = Channel.results(
-        {"targetInfos": [{"type": "page", "targetId": "fixture"}]}, {"sessionId": "page-session"},
-        {"frameTree": {"frame": {"id": "main", "url": "https://example.com"}}}, {"executionContextId": 1}, {"result": {"value": source}},
+        {"targetInfos": [{"type": "page", "targetId": "fixture"}]},
+        {"sessionId": "page-session"},
+        {"frameTree": {"frame": {"id": "main", "url": "https://example.com"}}},
+        {"executionContextId": 1},
+        {"result": {"value": source}},
     )
     browser = connected_browser(tmp_path, channel)
     output = browser.request("snapshot", {"target_id": "fixture", "offset": 4}, threading.Event()).text
@@ -297,7 +335,11 @@ def test_browser_screenshot_resets_focus_before_returning_the_image(tmp_path: Pa
 def test_browser_bad_screenshot_resets_focus_before_reporting_a_tool_error(tmp_path: Path) -> None:
     for data in ("invalid base64!", "aGVsbG8="):
         channel = Channel.results(
-            {"targetInfos": [{"type": "page", "targetId": "fixture"}]}, {"sessionId": "page-session"}, {}, {"data": data}, {},
+            {"targetInfos": [{"type": "page", "targetId": "fixture"}]},
+            {"sessionId": "page-session"},
+            {},
+            {"data": data},
+            {},
         )
         browser = connected_browser(tmp_path, channel)
         try:
@@ -373,7 +415,7 @@ def test_browser_preserves_focus_reset_failure_when_owned_process_cleanup_also_f
     channel = screenshot_channel()
     channel.replies[4] = '{"id":5,"error":{"message":"Focus reset failed"}}'
     channel.replies.append('{"id":6,"result":{}}')
-    browser = connected_browser(tmp_path, channel, owner=Managed(FinishedProcess(), FailedJobCleanup(), False))
+    browser = connected_browser(tmp_path, channel, owner=Managed(FinishedProcess(), FailedJobCleanup(), visible=False))
     with TestCase().assertRaisesRegex(BrowserError, "^Focus reset failed$") as failure:
         browser.request("screenshot", {"target_id": "fixture"}, threading.Event())
     assert any("owned browser processes did not finish exiting" in note for note in failure.exception.__notes__)
@@ -387,11 +429,13 @@ def test_browser_preserves_the_primary_failure_when_focus_reset_also_fails(tmp_p
         channel = screenshot_channel()
         if primary == "enable":
             channel.replies[2:] = [
-                '{"id":3,"error":{"message":"Primary failure"}}', '{"id":4,"error":{"message":"Focus reset failed"}}',
+                '{"id":3,"error":{"message":"Primary failure"}}',
+                '{"id":4,"error":{"message":"Focus reset failed"}}',
             ]
         else:
             channel.replies[3:] = [
-                '{"id":4,"error":{"message":"Primary failure"}}', '{"id":5,"error":{"message":"Focus reset failed"}}',
+                '{"id":4,"error":{"message":"Primary failure"}}',
+                '{"id":5,"error":{"message":"Focus reset failed"}}',
             ]
         browser = connected_browser(tmp_path, channel)
         with TestCase().assertRaisesRegex(BrowserError, "^Primary failure$") as failure:
@@ -437,7 +481,7 @@ def test_browser_canceled_capture_closes_only_its_owned_browser(tmp_path: Path) 
             return super().recv(timeout)
 
     process = Process()
-    for owner in (Attached(Product.EDGE), Managed(process, None, False)):
+    for owner in (Attached(Product.EDGE), Managed(process, None, visible=False)):
         stop = threading.Event()
         channel = CancelCaptureChannel(stop)
         browser = connected_browser(tmp_path, channel, owner=owner)
@@ -507,13 +551,14 @@ def test_browser_waits_for_the_root_after_job_termination_instead_of_killing_it_
         def close(self) -> None:
             process.job_closed = True
 
-    browser = connected_browser(tmp_path / "profile", Channel.results({}), owner=Managed(process, Job(), False))
+    browser = connected_browser(tmp_path / "profile", Channel.results({}), owner=Managed(process, Job(), visible=False))
     browser.close()
     assert process.job_closed
 
 
 def test_browser_allows_normal_shutdown_before_forcing_its_owned_job(tmp_path: Path) -> None:
     """Detect a grace period that interrupts a browser already closing normally."""
+
     class ClosingProcess:
         # This adapter owns one pending exit and publishes its exit observation.
         __slots__ = ("returncode",)
@@ -552,6 +597,6 @@ def test_browser_allows_normal_shutdown_before_forcing_its_owned_job(tmp_path: P
                 process.returncode = 1
 
     job = Job()
-    browser = connected_browser(tmp_path / "profile", Channel.results({}), owner=Managed(process, job, False))
+    browser = connected_browser(tmp_path / "profile", Channel.results({}), owner=Managed(process, job, visible=False))
     browser.close()
     assert process.poll() == 0 and job.closed and not job.terminated_running_root

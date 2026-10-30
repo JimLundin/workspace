@@ -22,7 +22,7 @@ from automation.task import Interrupted, RequestSource, Running, RunRef
 from winapi import system, windows
 
 ROOT = Path(__file__).resolve().parent.parent
-_PROGRAM = r'''
+_PROGRAM = r"""
 import os, socket, sys, threading
 from pathlib import Path
 from runtime import activate
@@ -74,7 +74,7 @@ try:
     notify("closed")
 finally:
     channel.close()
-'''
+"""
 
 
 @dataclass(slots=True)
@@ -111,7 +111,10 @@ def worker(folder: Path, *, mode: str) -> Generator[NativeWorker]:
         environment = dict(os.environ, LOCALAPPDATA=str(folder / "profile"), OPENAI_API_KEY="", OPENAI_BASE_URL="", PYTHONUTF8="1")
         process: subprocess.Popen[bytes] = subprocess.Popen(
             [sys.executable, "-c", _PROGRAM, str(folder), title, str(port), mode],
-            cwd=ROOT, env=environment, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            cwd=ROOT,
+            env=environment,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
         )
         try:
             peer, _address = server.accept()

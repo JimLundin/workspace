@@ -38,7 +38,7 @@ class Message:
     created_at: float
     observed_at: float
     reactions: tuple[str, ...] = ()
-    own: bool = False
+    own: bool = field(default=False, kw_only=True)
 
     @property
     def key(self) -> tuple[str, str]:
@@ -90,7 +90,7 @@ class SourceDateHint:
 
 
 class SourceDateStatus(Enum):
-    UNKNOWN = 'unknown'
+    UNKNOWN = "unknown"
 
 
 type SourceTime = SourceDate | SourceDateHint | SourceDateStatus
@@ -165,8 +165,9 @@ class Feed:
         return next((chat for chat in self.conversations if chat.identity == identity), None)
 
     def unseen(self, message: Message) -> bool:
-        return not message.own and not any(mark.key == message.key and mark.fingerprint == fingerprint(message.text)
-                                           for mark in (*self.acknowledged, *self.handled))
+        return not message.own and not any(
+            mark.key == message.key and mark.fingerprint == fingerprint(message.text) for mark in (*self.acknowledged, *self.handled)
+        )
 
     def pending_update(self, update: Update) -> bool:
         key, revision = update.key, update_fingerprint(update)
@@ -189,8 +190,7 @@ def observed(feed: Feed, messages: tuple[Message, ...], at: float) -> Feed:
         merged[message.key] = replace(message, observed_at=previous.observed_at, own=message.own or previous.own) if previous is not None else message
     retained = tuple(sorted(merged.values(), key=message_order)[-MAX_MESSAGES:])
     keys = {message.key for message in retained}
-    return replace(feed, messages=retained, checked_at=at,
-                   acknowledged=tuple(mark for mark in feed.acknowledged if mark.key in keys))
+    return replace(feed, messages=retained, checked_at=at, acknowledged=tuple(mark for mark in feed.acknowledged if mark.key in keys))
 
 
 def acknowledge(feed: Feed, key: tuple[str, str]) -> Feed:
@@ -210,8 +210,11 @@ def handle(feed: Feed, marks: tuple[Acknowledgement, ...]) -> Feed:
 
 
 def reopen(feed: Feed, key: tuple[str, str]) -> Feed:
-    return replace(feed, handled=tuple(mark for mark in feed.handled if mark.key != key),
-                   acknowledged=tuple(mark for mark in feed.acknowledged if mark.key != key))
+    return replace(
+        feed,
+        handled=tuple(mark for mark in feed.handled if mark.key != key),
+        acknowledged=tuple(mark for mark in feed.acknowledged if mark.key != key),
+    )
 
 
 def updates_observed(feed: Feed, updates: tuple[Update, ...]) -> Feed:
@@ -229,15 +232,18 @@ def update_order(update: Update) -> float:
 def notices_observed(feed: Feed, notices: assistant.system_notices.Observed) -> Feed:
     # Windows retains delivery and dismissal ownership. An unavailable read never removes history.
     updated = updates_observed(feed, tuple(notice_update(item) for item in notices.notices))
-    detail = {Banners.SUPPRESSED: "Windows banners are suppressed while Workspace receives notifications.",
-              Banners.PARTIAL: "Some Windows banners could not be suppressed. Notification delivery is still enabled.",
-              Banners.UNMANAGED: "Windows notifications are available."}[notices.banners]
+    detail = {
+        Banners.SUPPRESSED: "Windows banners are suppressed while Workspace receives notifications.",
+        Banners.PARTIAL: "Some Windows banners could not be suppressed. Notification delivery is still enabled.",
+        Banners.UNMANAGED: "Windows notifications are available.",
+    }[notices.banners]
     return replace(updated, notice_detail=detail)
 
 
 def notice_update(notice: Notice) -> Update:
-    return Update(WindowsNotice(notice.key, notice.app_id), notice.title, notice.body, notice.app_name,
-                  (notice.key.created / 10_000_000) - 11_644_473_600)
+    return Update(
+        WindowsNotice(notice.key, notice.app_id), notice.title, notice.body, notice.app_name, (notice.key.created / 10_000_000) - 11_644_473_600
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -343,6 +349,19 @@ class NotificationFilters:
 
 
 type Command = (
-    Connect | Disconnect | Refresh | Follow | Seen | Send | SaveDraft | OpenChat | ResolveAttempt
-    | Handle | Reopen | OpenUpdate | WindowsObserved | HandleNotice | NotificationFilters
+    Connect
+    | Disconnect
+    | Refresh
+    | Follow
+    | Seen
+    | Send
+    | SaveDraft
+    | OpenChat
+    | ResolveAttempt
+    | Handle
+    | Reopen
+    | OpenUpdate
+    | WindowsObserved
+    | HandleNotice
+    | NotificationFilters
 )

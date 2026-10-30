@@ -20,7 +20,13 @@ class Connection:
     # Preserve BrowserConnection's consumed CDP interface, including its
     # cancellation, session routing and bounded operation timeout inputs.
     def call(
-        self, method: str, params: dict[str, Json], cancel: threading.Event, *, session: str = "", timeout: float = 15,
+        self,
+        method: str,
+        params: dict[str, Json],
+        cancel: threading.Event,
+        *,
+        session: str = "",
+        timeout: float = 15,
     ) -> dict[str, Json]:
         if method != "Browser.setPermission":
             raise AssertionError(f"Unexpected Teams connection operation: {method}")

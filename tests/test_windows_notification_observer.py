@@ -32,7 +32,7 @@ class Lease:
 class Source:
     """Own fixture poll callbacks and lifecycle counters across the real worker thread."""
 
-    __slots__ = ('closes', 'observe', 'opens')
+    __slots__ = ("closes", "observe", "opens")
 
     def __init__(self, observe: Callable[[], Awaitable[Observation]]) -> None:
         self.observe = observe
@@ -55,12 +55,14 @@ class Source:
 def test_banner_failure_keeps_notice_delivery_and_repeated_read_failures_release_suppression() -> None:
     notice = Notice(NoticeKey(1, 10), "Fixture", "Fixture", "Update", "Local test")
     calls = 0
+
     async def read_fixture() -> Observation:
         nonlocal calls
         calls += 1
         if calls > 2:
             raise TimeoutError("Fixture notification read timed out")
         return Observed((notice,))
+
     lease = Lease()
     source = Source(read_fixture)
     observer = NotificationObserver(source=source, banner_policy=lease)
@@ -78,12 +80,14 @@ def test_banner_failure_keeps_notice_delivery_and_repeated_read_failures_release
 def test_notification_polls_share_one_event_loop_for_late_winrt_callbacks() -> None:
     loops: list[asyncio.AbstractEventLoop] = []
     completed: list[bool] = []
+
     async def observe() -> Observation:
         loop = asyncio.get_running_loop()
         loops.append(loop)
         if len(loops) == 1:
-            loop.call_later(.02, completed.append, True)
+            loop.call_later(0.02, completed.append, True)
         return Observed(())
+
     observer = NotificationObserver(source=Source(observe), banner_policy=Lease())
     try:
         for _ in range(2):

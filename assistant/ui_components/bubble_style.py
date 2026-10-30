@@ -41,6 +41,12 @@ def palette(tone: Tone, app: App | None = None) -> Palette:
             return Palette("#372922", "#a47c69", "#f4d2be", "#9c6049")
         case App.EDGE:
             return Palette("#203332", "#5e9690", "#c4f1e9", "#267e76")
+        case App.WEB_PAGE:
+            return Palette("#23313b", "#6e91a8", "#c6e4f3", "#456f88")
+        case App.DOCUMENT:
+            return Palette("#26312a", "#72967a", "#d2ead3", "#52795c")
+        case App.KANBAN:
+            return Palette("#332d25", "#9b8159", "#f1d5a2", "#816234")
         case App.WINDOWS:
             return Palette("#252c3a", "#6e83a5", "#d4e3ff", "#486a9c")
         case App.WORKSPACE | None:

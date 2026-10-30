@@ -1,13 +1,17 @@
 """Protected Qt dialogs for the keeper; independent of editable assistant modules.
 
-Import this only after runtime activation. The bootstrap itself uses the standard
-library and remains importable on Python 3.12. Qt is the pinned GUI dependency.
+Import this only after runtime activation. The keeper uses installed Python
+3.15; Qt is the pinned GUI dependency.
 """
 
+import msvcrt
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
 
 from PySide6 import QtCore, QtGui, QtWidgets
+
+from keeper_control import Control, Supervisor
 
 # Resolve Python 3.15's deferred executor export before Qt inspects imports.
 _executor = ThreadPoolExecutor
@@ -27,18 +31,24 @@ class KeeperUi:
     __slots__ = (
         "__weakref__",
         "app",
+        "components",
         "timer",
         "trial",
         "windows",
     )
 
-    def __init__(self) -> None:
+    def __init__(self, state: Path) -> None:
+        self.components = Control(state)
         self.app = QtWidgets.QApplication([])
         self.app.setQuitOnLastWindowClosed(False)
         self.app.setStyleSheet(STYLE)
         self.windows: list[QtWidgets.QDialog] = []
         self.trial: QtWidgets.QDialog | None = None
         self.timer = QtCore.QTimer()
+
+    def poll_components(self, supervisor: Supervisor, now: float) -> None:
+        """The keeper event loop owns typed file commands alongside its dialogs."""
+        self.components.poll(supervisor, now)
 
     def dialog(self, title: str, text: str) -> tuple[QtWidgets.QDialog, QtWidgets.QVBoxLayout]:
         dialog = QtWidgets.QDialog()
@@ -130,6 +140,7 @@ class KeeperUi:
             if tick():
                 self.timer.stop()
                 self.app.quit()
+
         self.timer.setInterval(500)
         self.timer.timeout.connect(poll)
         self.timer.start()
@@ -138,3 +149,14 @@ class KeeperUi:
             dialog.hide()
             dialog.deleteLater()
         QtCore.QCoreApplication.sendPostedEvents(None, QtCore.QEvent.Type.DeferredDelete)
+
+
+def launch(state: Path, run: Callable[[KeeperUi], None]) -> None:
+    """Own the singleton lock before creating Qt or starting any child."""
+    state.mkdir(parents=True, exist_ok=True)
+    with (state / "keeper.lock").open("a+b") as lock_file:
+        try:
+            msvcrt.locking(lock_file.fileno(), msvcrt.LK_NBLCK, 1)
+        except OSError:
+            return
+        run(KeeperUi(state))

@@ -58,6 +58,8 @@ lazy from automation.task import (
 )
 
 type MeetingControl = Callable[[StartMeeting | MeetingCommand], MeetingSucceeded | MeetingFailed]
+
+
 @dataclass(frozen=True, slots=True)
 class StopConversation:
     conversation_id: str
@@ -77,8 +79,10 @@ def in_conversation(task: Task, conversation_id: str | None) -> bool:
 
 
 def active(task: Task) -> bool:
-    return not terminal(task.state) and task.state is not TaskStatus.PAUSED and not (
-        isinstance(task.state, Waiting) and isinstance(task.state.reason, (Blocked, Until))
+    return (
+        not terminal(task.state)
+        and task.state is not TaskStatus.PAUSED
+        and not (isinstance(task.state, Waiting) and isinstance(task.state.reason, (Blocked, Until)))
     )
 
 
@@ -101,22 +105,62 @@ def input_message(task: Task, review: ApprovalReview | None) -> agent_session.Qu
 
 class WorkAgent:
     __slots__ = (
-        "_closed", "_closing", "_conversation", "_create_window", "_displayed", "_displayed_review", "_input", "_jobs",
-        "_last_stop", "_last_submission_source", "_live", "_lock", "_meeting_results", "_ordinary_pending", "_pending", "_queued", "_rejected_input",
-        "_reported_running", "_sequence", "_service", "_settled", "_snapshot", "_thread", "_wake", "_watch_groups", "_watched",
-        "clock", "context", "identity", "meeting", "on_done", "on_snapshot", "on_start", "report_error", "window",
+        "_closed",
+        "_closing",
+        "_conversation",
+        "_create_window",
+        "_displayed",
+        "_displayed_review",
+        "_input",
+        "_jobs",
+        "_last_stop",
+        "_last_submission_source",
+        "_live",
+        "_lock",
+        "_meeting_results",
+        "_ordinary_pending",
+        "_pending",
+        "_queued",
+        "_rejected_input",
+        "_reported_running",
+        "_sequence",
+        "_service",
+        "_settled",
+        "_snapshot",
+        "_thread",
+        "_wake",
+        "_watch_groups",
+        "_watched",
+        "clock",
+        "context",
+        "identity",
+        "meeting",
+        "on_done",
+        "on_snapshot",
+        "on_start",
+        "report_error",
+        "window",
     )
 
     def __init__(
-        self, tasks: TaskStore, routines: RoutineStore, saved_context: ContextStore, bridge: WorkBridge,
-        create_window: Callable[[WorkAgent], AgentWindow], *, on_snapshot: Callable[[WorkSnapshot], None],
-        on_done: Callable[[], None], report_error: Callable[[str], None], on_start: Callable[[], None] | None = None,
-        context: Callable[[], ContextSnapshot] | None = None, meeting: MeetingControl | None = None,
-        clock: Callable[[], float] = time.time, identity: Callable[[], str] = lambda: uuid.uuid4().hex,
+        self,
+        tasks: TaskStore,
+        routines: RoutineStore,
+        saved_context: ContextStore,
+        bridge: WorkBridge,
+        create_window: Callable[[WorkAgent], AgentWindow],
+        *,
+        on_snapshot: Callable[[WorkSnapshot], None],
+        on_done: Callable[[], None],
+        report_error: Callable[[str], None],
+        on_start: Callable[[], None] | None = None,
+        context: Callable[[], ContextSnapshot] | None = None,
+        meeting: MeetingControl | None = None,
+        clock: Callable[[], float] = time.time,
+        identity: Callable[[], str] = lambda: uuid.uuid4().hex,
         assistant_pid: int | None = None,
     ) -> None:
-        self._service = WorkService(tasks, routines, saved_context, bridge,
-                                    assistant_pid=os.getpid() if assistant_pid is None else assistant_pid)
+        self._service = WorkService(tasks, routines, saved_context, bridge, assistant_pid=os.getpid() if assistant_pid is None else assistant_pid)
         self._create_window = create_window
         self.on_snapshot, self.on_done, self.report_error, self.on_start = on_snapshot, on_done, report_error, on_start
         self.context, self.meeting, self.clock, self.identity = context, meeting, clock, identity
@@ -195,6 +239,9 @@ class WorkAgent:
             return
         if reveal:
             self._panel().show()
+
+    def notify_canvas(self, title: str, target: str) -> None:
+        self._panel().notify_canvas(title, target)
 
     def submit_identified(self, identity: str, prompt: str) -> None:
         """Accept a caller-owned task ID so repeated submissions reuse the same task.
@@ -356,7 +403,7 @@ class WorkAgent:
             self._input = None
 
     def _display(self, task: Task, review: ApprovalReview | None) -> None:
-        source = request_context(task.prompt) if task.id.startswith('feed-choice:') else None
+        source = request_context(task.prompt) if task.id.startswith(("feed-choice:", "feed-reply:")) else None
         previous = self._displayed
         if task == previous and review == self._displayed_review:
             return
@@ -432,8 +479,10 @@ class WorkAgent:
             self._snapshot = snapshot
             self._restore_reply(snapshot)
             if self._conversation is None:
-                self._conversation = next((task.source.conversation_id for task in snapshot.tasks
-                                           if isinstance(task.source, RequestSource) and not terminal(task.state)), None)
+                self._conversation = next(
+                    (task.source.conversation_id for task in snapshot.tasks if isinstance(task.source, RequestSource) and not terminal(task.state)),
+                    None,
+                )
             tasks = sorted((task for task in snapshot.tasks if in_conversation(task, self._conversation)), key=chronological)
             task_ids = {task.id for task in tasks}
             self._settled = {identity: revision for identity, revision in self._settled.items() if identity in task_ids}
@@ -457,8 +506,10 @@ class WorkAgent:
                 self._displayed = None
             for task in tasks:
                 if (
-                    active(task) and (self._displayed is None or task.id != self._displayed.id)
-                    and task.id not in self._queued and len(self._queued) < 100
+                    active(task)
+                    and (self._displayed is None or task.id != self._displayed.id)
+                    and task.id not in self._queued
+                    and len(self._queued) < 100
                 ):
                     self._panel().queued(task.prompt)
                     self._queued.add(task.id)
@@ -478,7 +529,9 @@ class WorkAgent:
         if self._input != (task_id, request_id) or self.window is None:
             return
         if (
-            task is not None and isinstance(task.state, Waiting) and isinstance(task.state.reason, (Question, Approval))
+            task is not None
+            and isinstance(task.state, Waiting)
+            and isinstance(task.state.reason, (Question, Approval))
             and task.state.reason.id == request_id
         ):
             review = next((review for review in snapshot.reviews if review_matches(task, review)), None)
@@ -548,7 +601,7 @@ class WorkAgent:
         try:
             if not self._service.bridge.respond(message, result):
                 self._service.problem = "The meeting request expired before its result was delivered. Check Recordings for its current state."
-        except (OSError, ValueError):
+        except OSError, ValueError:
             self._service.problem = "The work process disconnected before confirming the meeting result. Check Recordings for its current state."
 
     def _jobs_ready(self) -> tuple[Observe, ...]:

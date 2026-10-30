@@ -34,8 +34,9 @@ class ManagerRuntime(Protocol):
 
 class NativeRuntime:
     def run(self, arguments: Sequence[str]) -> subprocess.CompletedProcess[str]:
-        return subprocess.run(arguments, check=False, capture_output=True, text=True, encoding="utf-8",
-                              timeout=3, creationflags=0x08000000 if os.name == "nt" else 0)
+        return subprocess.run(
+            arguments, check=False, capture_output=True, text=True, encoding="utf-8", timeout=3, creationflags=0x08000000 if os.name == "nt" else 0
+        )
 
     def launch(self, arguments: Sequence[str]) -> ManagedProcess:
         if os.name == "nt":
@@ -91,17 +92,17 @@ def window_id(data: object, hwnd: int) -> str | None:
 
 def window_handles(data: object) -> frozenset[int]:
     if not isinstance(data, dict):
-        raise OSError('GlazeWM returned an invalid window list.')
-    rows = cast(dict[str, object], data).get('windows')
+        raise OSError("GlazeWM returned an invalid window list.")
+    rows = cast(dict[str, object], data).get("windows")
     if not isinstance(rows, list):
-        raise OSError('GlazeWM returned an invalid window list.')
+        raise OSError("GlazeWM returned an invalid window list.")
     found: set[int] = set()
     for value in cast(list[object], rows):
         if not isinstance(value, dict):
-            raise OSError('GlazeWM returned an invalid window.')
-        handle = cast(dict[str, object], value).get('handle')
+            raise OSError("GlazeWM returned an invalid window.")
+        handle = cast(dict[str, object], value).get("handle")
         if type(handle) is not int or handle <= 0:
-            raise OSError('GlazeWM returned an invalid window handle.')
+            raise OSError("GlazeWM returned an invalid window handle.")
         found.add(handle)
     return frozenset(found)
 
@@ -116,20 +117,25 @@ def scoped_config(source: bytes) -> bytes:
     for ending in (b"\r\n", b"\n"):
         for expression in (r"(?i)^workspace(?:\b| ·)", r"(?i)^(?:toolkit|workspace)(?:\b| ·)"):
             title = expression.encode()
-            stanza = ending.join((b"  - commands: ['ignore']", b"    match:",
-                                  b"      - window_title: { regex: '" + title + b"' }", b""))
+            stanza = ending.join((b"  - commands: ['ignore']", b"    match:", b"      - window_title: { regex: '" + title + b"' }", b""))
             # Require a whole generated stanza at a line boundary. A following
             # nested field means this rule is already constrained/customized.
             start = source.find(stanza)
-            if start < 0 or (start > 0 and source[start - 1:start] != b"\n"):
+            if start < 0 or (start > 0 and source[start - 1 : start] != b"\n"):
                 continue
-            tail = source[start + len(stanza):]
+            tail = source[start + len(stanza) :]
             following = next((line for line in tail.splitlines() if line.strip() and not line.lstrip().startswith(b"#")), b"")
             if following.startswith(b"        "):
                 continue
-            repaired = ending.join((b"  - commands: ['ignore']", b"    match:",
-                                    "      - window_title: { regex: '(?i)^workspace(?:\\b| ·)' }".encode(),
-                                    b"        window_process: { regex: '^pythonw?$' }", b""))
+            repaired = ending.join(
+                (
+                    b"  - commands: ['ignore']",
+                    b"    match:",
+                    "      - window_title: { regex: '(?i)^workspace(?:\\b| ·)' }".encode(),
+                    b"        window_process: { regex: '^pythonw?$' }",
+                    b"",
+                )
+            )
             return source[:start] + repaired + tail
     return source
 
@@ -164,7 +170,7 @@ class GlazeWM:
         try:
             value = self.exchange(("query", "paused"))
             return value if type(value) is bool else None
-        except (OSError, ValueError):
+        except OSError, ValueError:
             return None
 
     def start(self) -> None:
@@ -188,7 +194,7 @@ class GlazeWM:
                 while self.process.poll() is None and self.runtime.clock() < deadline:
                     if self.paused() is not None:
                         return
-                    self.runtime.sleep(.1)
+                    self.runtime.sleep(0.1)
                 raise OSError("GlazeWM could not start. See %USERPROFILE%\\.glzr\\glazewm\\errors.log.")
             except BaseException:
                 self._stop_owned()
@@ -226,17 +232,17 @@ class GlazeWM:
         with self.lock:
             if self.closed or self.paused() is not False:
                 return False
-            identity = window_id(self.exchange(('query', 'windows')), hwnd)
+            identity = window_id(self.exchange(("query", "windows")), hwnd)
             if identity is None:
                 return False
-            self.exchange(('command', 'focus', '--container-id', identity))
+            self.exchange(("command", "focus", "--container-id", identity))
             return True
 
     def managed_handles(self) -> frozenset[int]:
         with self.lock:
             if self.closed or self.paused() is None:
                 return frozenset()
-            return window_handles(self.exchange(('query', 'windows')))
+            return window_handles(self.exchange(("query", "windows")))
 
     def _stop_owned(self) -> None:
         if self.process is not None:
@@ -246,7 +252,7 @@ class GlazeWM:
                         if self.paused() is True:
                             self.exchange(("command", "wm-toggle-pause"))
                         self.exchange(("command", "wm-exit"))
-                    except (OSError, ValueError):
+                    except OSError, ValueError:
                         pass
                     try:
                         self.process.wait(timeout=5)

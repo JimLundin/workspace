@@ -36,7 +36,10 @@ class RecordingExecution:
 
 class RunnerRig:
     def __init__(
-        self, execution: Execution | None = None, *, context: Callable[[], ContextSnapshot] | None = None,
+        self,
+        execution: Execution | None = None,
+        *,
+        context: Callable[[], ContextSnapshot] | None = None,
         on_waiting: Callable[[bool], None] | None = None,
     ) -> None:
         self.windows: list[RecordingWindow] = []
@@ -44,8 +47,11 @@ class RunnerRig:
         self.completed: list[bool] = []
         self.waiting = on_waiting
         self.runner = AgentRunner(
-            execution or RecordingExecution(), self.create_window, report_error=self.errors.append,
-            on_done=lambda: self.completed.append(self.runner.running()), context=context,
+            execution or RecordingExecution(),
+            self.create_window,
+            report_error=self.errors.append,
+            on_done=lambda: self.completed.append(self.runner.running()),
+            context=context,
         )
 
     def create_window(self, runner: AgentRunner) -> RecordingWindow:
@@ -243,8 +249,11 @@ def test_wait_during_a_later_start_waits_for_that_run() -> None:
             assert release.wait(5)
 
     runner = AgentRunner(
-        execution, lambda runner: RecordingWindow(runner.stop), on_done=lambda: None,
-        report_error=errors.append, on_start=starting,
+        execution,
+        lambda runner: RecordingWindow(runner.stop),
+        on_done=lambda: None,
+        report_error=errors.append,
+        on_start=starting,
     )
     runner.start("First")
     assert runner.wait(5)
@@ -269,7 +278,10 @@ def test_wait_includes_the_completion_callback() -> None:
         assert release.wait(5)
 
     runner = AgentRunner(
-        RecordingExecution(), lambda runner: RecordingWindow(runner.stop), on_done=completed, report_error=errors.append,
+        RecordingExecution(),
+        lambda runner: RecordingWindow(runner.stop),
+        on_done=completed,
+        report_error=errors.append,
     )
     runner.start("First")
     try:
@@ -289,8 +301,12 @@ def test_sdk_execution_keeps_history_until_a_new_conversation() -> None:
     with fake_endpoint() as endpoint:
         wire = Rig(endpoint, says("I found budget.xlsx."))
         execution = AgentExecution(
-            Settings(endpoint.url, "fixture", "transcribe", "chat", "agent", "", ""), machine,
-            journal=lambda entry: None, record=metrics.append, report_error=errors.append, close_background=machine.close_background,
+            Settings(endpoint.url, "fixture", "transcribe", "chat", "agent", "", ""),
+            machine,
+            journal=lambda entry: None,
+            record=metrics.append,
+            report_error=errors.append,
+            close_background=machine.close_background,
         )
         rig = RunnerRig(execution)
         for task in ("Find my workbook", "Open that one"):
@@ -320,8 +336,12 @@ def test_stopped_sdk_execution_closes_background_work_and_preserves_history() ->
 
         endpoint.respond = respond
         execution = AgentExecution(
-            Settings(endpoint.url, "fixture", "transcribe", "chat", "agent", "", ""), FakeMachine(),
-            journal=lambda entry: None, record=lambda details: None, report_error=errors.append, close_background=lambda: closed.append(True),
+            Settings(endpoint.url, "fixture", "transcribe", "chat", "agent", "", ""),
+            FakeMachine(),
+            journal=lambda entry: None,
+            record=lambda details: None,
+            report_error=errors.append,
+            close_background=lambda: closed.append(True),
         )
         rig = RunnerRig(execution)
         try:

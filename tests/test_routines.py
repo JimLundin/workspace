@@ -26,8 +26,14 @@ from automation.task import Blocked, Completed, Control, RoutineSource, Waiting
 def ready_event(store: MeetingStore, at: float) -> TranscriptReady | None:
     saved = store.state()
     return transcript_ready(
-        store.folder.name, saved.title, str(store.transcript), finished=saved.finished, pending=saved.pending,
-        revision=saved.revision, exported_revision=saved.exported_revision, completed_at=at,
+        store.folder.name,
+        saved.title,
+        str(store.transcript),
+        finished=saved.finished,
+        pending=saved.pending,
+        revision=saved.revision,
+        exported_revision=saved.exported_revision,
+        completed_at=at,
     )
 
 
@@ -166,7 +172,7 @@ def test_one_shot_disabled_before_due_runs_once_when_reenabled_after_due(tmp_pat
 
     reopened = RoutineStore(path)
     reopened.enable("once", at=110)
-    task, = reopened.dispatch(tasks, now=110)
+    (task,) = reopened.dispatch(tasks, now=110)
     assert len(tasks.list_tasks()) == 1
     tasks.control(task.id, Control.CANCEL, at=111)
 
@@ -212,7 +218,7 @@ def test_submitted_waiting_task_recovers_its_outbox_receipt_without_duplication(
     tasks = TaskStore(path)
     routines.create("once", "Review", "Review the proposal.", Once(10), at=1)
     routines.enable("once", at=2)
-    firing, = routines.pending(10)
+    (firing,) = routines.pending(10)
     handoff = routines.accept(firing.id, at=10)
     assert handoff is not None
     task = tasks.submit("existing-task", handoff.title, handoff.prompt, handoff.source, at=10)
@@ -223,7 +229,7 @@ def test_submitted_waiting_task_recovers_its_outbox_receipt_without_duplication(
     reopened = RoutineStore(path)
     recovered = reopened.dispatch(tasks, now=13)
     assert len(recovered) == 1 and recovered[0].id == task.id
-    summary, = reopened.summaries(13)
+    (summary,) = reopened.summaries(13)
     assert summary.last_firing is not None and summary.last_firing.task_id == task.id
     assert not reopened.dispatch(tasks, now=14)
     assert len(tasks.list_tasks()) == 1
@@ -235,13 +241,13 @@ def test_disable_and_edit_fence_pending_handoffs_but_keep_accepted_work(tmp_path
     tasks = TaskStore(path)
     routines.create("cancel", "Cancelled", "An instruction to withdraw.", Once(10), at=1)
     routines.enable("cancel", at=2)
-    pending, = routines.pending(10)
+    (pending,) = routines.pending(10)
     routines.disable("cancel", at=11)
     assert routines.accept(pending.id, at=12) is None
     assert not routines.dispatch(tasks, now=12)
     routines.create("edit", "Original", "Use the accepted original instruction.", Once(20), at=12)
     routines.enable("edit", at=13)
-    original, = routines.pending(20)
+    (original,) = routines.pending(20)
     accepted = routines.accept(original.id, at=20)
     assert accepted is not None and isinstance(accepted.state, Accepted)
     routines.update("edit", "Replacement", "Use the replacement instruction.", Once(100), at=21, expected_revision=0)
@@ -259,13 +265,13 @@ def test_edit_rejects_stale_ui_revision_and_replaces_pending_configuration(tmp_p
     tasks = TaskStore(path)
     routines.create("edited", "Draft", "Review the draft.", Once(10), at=1)
     routines.enable("edited", at=2)
-    previous, = routines.pending(10)
+    (previous,) = routines.pending(10)
     updated = routines.update("edited", "Final", "Review the final document.", Once(20), at=11, expected_revision=0)
     with TestCase().assertRaises(ValueError):
         routines.update("edited", "Stale", "Overwrite the current edit.", Once(30), at=12, expected_revision=0)
     assert routines.accept(previous.id, at=13) is None
     assert not routines.dispatch(tasks, now=19)
-    task, = routines.dispatch(tasks, now=20)
+    (task,) = routines.dispatch(tasks, now=20)
     assert isinstance(task.source, RoutineSource)
     assert "final document" in task.prompt and task.source.revision == updated.revision
     assert "Overwrite" not in task.prompt
@@ -286,7 +292,7 @@ def test_exact_file_watch_has_a_new_baseline_after_enable_without_reusing_event_
     assert not routines.dispatch(tasks, now=4)
     watched.write_text("A changed report with new decisions.", encoding="utf-8")
     routines.scan_files(5)
-    first, = routines.dispatch(tasks, now=5)
+    (first,) = routines.dispatch(tasks, now=5)
     tasks.control(first.id, Control.CANCEL, at=6)
     routines.disable("watch", at=6)
     watched.write_text("Changes while the routine is disabled.", encoding="utf-8")
@@ -296,12 +302,12 @@ def test_exact_file_watch_has_a_new_baseline_after_enable_without_reusing_event_
     assert not routines.dispatch(tasks, now=9)
     watched.write_text("A subsequent enabled change.", encoding="utf-8")
     routines.scan_files(10)
-    second, = routines.dispatch(tasks, now=10)
+    (second,) = routines.dispatch(tasks, now=10)
     assert second.id != first.id
     tasks.control(second.id, Control.CANCEL, at=11)
     watched.unlink()
     RoutineStore(path).scan_files(12)
-    third, = RoutineStore(path).dispatch(tasks, now=12)
+    (third,) = RoutineStore(path).dispatch(tasks, now=12)
     assert third.id not in (first.id, second.id)
     assert len(tasks.list_tasks()) == 3
 

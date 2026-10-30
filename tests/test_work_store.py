@@ -149,8 +149,9 @@ def test_failed_claim_rolls_back_the_execution_identity(tmp_path: Path) -> None:
     store = TaskStore(path)
     store.submit("task", "Task", "Prepare the notes.", RequestSource("chat"), at=1)
     with closing(sqlite3.connect(path)) as database, database:
-        database.execute("CREATE TRIGGER reject_claim BEFORE UPDATE ON tasks WHEN NEW.phase='running' "
-                         "BEGIN SELECT RAISE(ABORT,'fixture write failure'); END")
+        database.execute(
+            "CREATE TRIGGER reject_claim BEFORE UPDATE ON tasks WHEN NEW.phase='running' BEGIN SELECT RAISE(ABORT,'fixture write failure'); END"
+        )
     with TestCase().assertRaises(sqlite3.DatabaseError):
         store.claim("worker", "run", at=2)
     with closing(sqlite3.connect(path)) as database, database:
@@ -258,8 +259,9 @@ def test_answer_and_ready_state_commit_together(tmp_path: Path) -> None:
     assert run is not None
     store.finish(run.run, Waiting(Question("format", "Which format?", "")), at=3)
     with closing(sqlite3.connect(path)) as database, database:
-        database.execute("CREATE TRIGGER reject_reply BEFORE UPDATE ON tasks WHEN OLD.phase='waiting' "
-                         "BEGIN SELECT RAISE(ABORT,'fixture reply failure'); END")
+        database.execute(
+            "CREATE TRIGGER reject_reply BEFORE UPDATE ON tasks WHEN OLD.phase='waiting' BEGIN SELECT RAISE(ABORT,'fixture reply failure'); END"
+        )
     with TestCase().assertRaises(sqlite3.DatabaseError):
         store.answer("task", "format", TextAnswer("Markdown"), at=4)
     assert TaskStore(path).responses("task") == ()
@@ -355,8 +357,9 @@ def test_durable_attempt_requires_reconciliation_before_replay_or_completion(tmp
     target = tmp_path / "notes.md"
     contents = b"The agreed project actions.\n"
     expected = hashlib.sha256(contents).hexdigest()
-    spec = ActionSpec("write_file", "Update project notes", hashlib.sha256(b"notes update").hexdigest(),
-                      (str(target),), FileDigest(str(target), expected))
+    spec = ActionSpec(
+        "write_file", "Update project notes", hashlib.sha256(b"notes update").hexdigest(), (str(target),), FileDigest(str(target), expected)
+    )
     store = TaskStore(path)
     store.submit("task", "Notes", "Update the project notes.", RequestSource("chat"), at=1)
     old = store.claim("old-worker", "old-run", at=2)
@@ -382,8 +385,9 @@ def test_action_finishing_in_the_same_clock_tick_is_saved_and_can_complete(tmp_p
     target = tmp_path / "notes.md"
     contents = b"The agreed project actions.\n"
     expected = hashlib.sha256(contents).hexdigest()
-    spec = ActionSpec("write_file", "Update project notes", hashlib.sha256(b"notes update").hexdigest(),
-                      (str(target),), FileDigest(str(target), expected))
+    spec = ActionSpec(
+        "write_file", "Update project notes", hashlib.sha256(b"notes update").hexdigest(), (str(target),), FileDigest(str(target), expected)
+    )
     store = TaskStore(path)
     store.submit("task", "Notes", "Update the project notes.", RequestSource("chat"), at=1)
     run = store.claim("worker", "run", at=2)
@@ -527,8 +531,7 @@ def test_invalid_action_and_reply_rows_do_not_enter_typed_interfaces(tmp_path: P
     assert run is not None
     store.begin_action(run.run, "action", specification(), at=3)
     with closing(sqlite3.connect(path)) as database, database:
-        database.execute("UPDATE actions SET outcome=?,outcome_kind='verified' WHERE id='action'",
-                         ('{"kind":"verified","evidence":42}',))
+        database.execute("UPDATE actions SET outcome=?,outcome_kind='verified' WHERE id='action'", ('{"kind":"verified","evidence":42}',))
     with TestCase().assertRaises(ValueError):
         store.actions("task")
     store.finish(run.run, Waiting(Question("format", "Which format?", "")), at=4)

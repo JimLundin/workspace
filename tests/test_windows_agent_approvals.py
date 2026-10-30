@@ -26,7 +26,12 @@ class InlineUi:
         self.requests: list[tuple[str, str, bool]] = []
 
     def agent_input(
-        self, title: str, detail: str = "", *, question: bool = False, cancel: threading.Event | None = None,
+        self,
+        title: str,
+        detail: str = "",
+        *,
+        question: bool = False,
+        cancel: threading.Event | None = None,
     ) -> str | None:
         self.requests.append((title, detail, question))
         return "The budget workbook" if question else "approve"
@@ -40,7 +45,12 @@ class WaitingUi:
         self.inputs = Inputs(self.events.put)
 
     def agent_input(
-        self, title: str, detail: str = "", *, question: bool = False, cancel: threading.Event | None = None,
+        self,
+        title: str,
+        detail: str = "",
+        *,
+        question: bool = False,
+        cancel: threading.Event | None = None,
     ) -> str | None:
         return self.inputs.ask(title, detail, question=question, cancel=cancel)
 
@@ -74,7 +84,11 @@ def test_stop_cancels_an_open_tool_while_its_inline_approval_is_waiting() -> Non
     opened: list[str] = []
     machine = WinMachine(Desktop(), ui, browser=Browser(), teams=Teams(), open_target=opened.append)
     agent = Agent(
-        Settings("", "", "", "", "", "", "", agent_approvals=True), machine, FakeWindow(), stopped, journal=lambda entry: None,
+        Settings("", "", "", "", "", "", "", agent_approvals=True),
+        machine,
+        FakeWindow(),
+        stopped,
+        journal=lambda entry: None,
     )
 
     with ThreadPoolExecutor(max_workers=1) as worker:

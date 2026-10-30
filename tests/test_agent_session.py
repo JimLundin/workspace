@@ -90,13 +90,13 @@ def test_finishing_marks_unfinished_summaries_and_tools_and_preserves_completed_
 
 def test_meeting_preview_updates_without_adding_messages_or_changing_the_agent_task() -> None:
     session = Session()
-    session = transition(session, Begin('Find the workbook', 0, queued=False))
+    session = transition(session, Begin("Find the workbook", 0, queued=False))
     state = RecordingState(phase="recording", identity="meeting-1", preview="First sentence.")
     session = transition(session, RecordingUpdated(state, 0))
     previous = session
-    session = transition(session, Said('Found it.', 0))
+    session = transition(session, Said("Found it.", 0))
     for index in range(500):
-        session = transition(session, RecordingUpdated(replace(state, seconds=index, preview=f'Recent sentence {index}.'), 0))
+        session = transition(session, RecordingUpdated(replace(state, seconds=index, preview=f"Recent sentence {index}."), 0))
     assert len(session.messages) == 3 and session.busy and session.last_said == "Found it."
     assert previous.messages[1].text.endswith("First sentence.")
     assert "Recent sentence 499" in session.messages[1].text
@@ -140,11 +140,14 @@ def test_follow_ups_keep_messages_and_only_deduplicate_the_current_turns_final_a
     session = Session()
     for prompt in ("Find my workbook", "Look for it again"):
         session = transition(session, Begin(prompt, 0, queued=False))
-        session = transition(session, Said('I found budget.xlsx.', 0))
-        session = transition(session, Done('I found budget.xlsx.', 0))
+        session = transition(session, Said("I found budget.xlsx.", 0))
+        session = transition(session, Done("I found budget.xlsx.", 0))
         session = transition(session, Finished())
     assert [message.text for message in session.messages] == [
-        "Find my workbook", "I found budget.xlsx.", "Look for it again", "I found budget.xlsx.",
+        "Find my workbook",
+        "I found budget.xlsx.",
+        "Look for it again",
+        "I found budget.xlsx.",
     ]
     assert not session.busy
     assert session.status == "Ready"
@@ -152,12 +155,12 @@ def test_follow_ups_keep_messages_and_only_deduplicate_the_current_turns_final_a
 
 def test_queued_messages_appear_once_when_their_turn_starts_and_activity_is_separate() -> None:
     session = Session()
-    session = transition(session, Begin('Find my workbook', 0, queued=False))
-    session = transition(session, Enqueued('Open that one'))
+    session = transition(session, Begin("Find my workbook", 0, queued=False))
+    session = transition(session, Enqueued("Open that one"))
     assert session.queued == ("Open that one",)
     assert "Open that one" not in session.all_text()
-    session = transition(session, Done('Found it.', 0))
-    session = transition(session, Begin('Open that one', 0, queued=True))
+    session = transition(session, Done("Found it.", 0))
+    session = transition(session, Begin("Open that one", 0, queued=True))
     session = transition(session, Progress('open {"target":"budget.xlsx"}'))
     assert not session.queued
     assert session.all_text().count("Open that one") == 1
@@ -167,10 +170,10 @@ def test_queued_messages_appear_once_when_their_turn_starts_and_activity_is_sepa
 
 def test_render_snapshots_remain_unchanged_when_the_model_continues() -> None:
     session = Session()
-    session = transition(session, Begin('Read the workbook', 0, queued=False))
+    session = transition(session, Begin("Read the workbook", 0, queued=False))
     before = session
-    session = transition(session, Enqueued('Then summarize it'))
-    session = transition(session, Said('Read it.', 0))
+    session = transition(session, Enqueued("Then summarize it"))
+    session = transition(session, Said("Read it.", 0))
     session = transition(session, Finished())
     assert len(before.messages) == 1 and before.queued == () and before.busy
 
@@ -178,7 +181,9 @@ def test_render_snapshots_remain_unchanged_when_the_model_continues() -> None:
 def test_session_events_can_be_replayed_and_branched_without_a_clock_or_shared_mutation() -> None:
     original = Session(identity="replay")
     events: tuple[Event, ...] = (
-        Begin("Find the workbook", 10), Progress("Looking"), Question("q1", "Which workbook?", "", 12),
+        Begin("Find the workbook", 10),
+        Progress("Looking"),
+        Question("q1", "Which workbook?", "", 12),
     )
     pending = original
     for event in events:
@@ -212,12 +217,12 @@ def test_mismatched_and_late_responses_cannot_change_another_input_or_its_contro
 
 def test_waiting_state_and_decision_remain_in_the_transcript() -> None:
     session = Session()
-    session = transition(session, Begin('Open my workbook', 0, queued=False))
-    session = transition(session, Approval('open-1', 'Open this?', 'budget.xlsx', 0))
-    session = transition(session, Progress('Checking progress'))
+    session = transition(session, Begin("Open my workbook", 0, queued=False))
+    session = transition(session, Approval("open-1", "Open this?", "budget.xlsx", 0))
+    session = transition(session, Progress("Checking progress"))
     assert bool(session.waiting)
     assert session.status == "Needs your approval"
-    session = transition(session, ApprovalDecided('open-1', 'declined'))
+    session = transition(session, ApprovalDecided("open-1", "declined"))
     assert not session.waiting
     assert isinstance(session.messages[-1], Approval) and session.messages[-1].decision == "declined"
     assert "budget.xlsx" in session.all_text()
@@ -225,14 +230,14 @@ def test_waiting_state_and_decision_remain_in_the_transcript() -> None:
 
 def test_stopping_removes_the_queue_and_preserves_the_cancelled_request() -> None:
     session = Session()
-    session = transition(session, Begin('Open my workbook', 0, queued=False))
-    session = transition(session, Enqueued('Discard this'))
-    session = transition(session, Approval('open-1', 'Open this?', '', 0))
+    session = transition(session, Begin("Open my workbook", 0, queued=False))
+    session = transition(session, Enqueued("Discard this"))
+    session = transition(session, Approval("open-1", "Open this?", "", 0))
     session = transition(session, StopRequested())
-    session = transition(session, InputCancelled('open-1'))
+    session = transition(session, InputCancelled("open-1"))
     assert bool(session.stopping) and not session.queued
     assert str(session.status) == "Stopping…"
-    session = transition(session, Done('Stopped by you.', 0))
+    session = transition(session, Done("Stopped by you.", 0))
     session = transition(session, Finished())
     assert not session.busy and not session.stopping
     assert session.status == "Stopped"

@@ -4,7 +4,7 @@ popup menus, and icons drawn from pixels."""
 import ctypes
 from collections.abc import Callable, Sequence
 from ctypes import wintypes
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Final
 
 from winapi._core import LRESULT, NativeFunction, fn, gdi32, kernel32, last_error, shell32, user32
@@ -272,8 +272,8 @@ class MenuItem:
     id: int
     """What `show_menu` returns when this is chosen; 0 for a separator."""
     text: str = ""
-    enabled: bool = True
-    checked: bool = False
+    enabled: bool = field(default=True, kw_only=True)
+    checked: bool = field(default=False, kw_only=True)
 
 
 def show_menu(window: int, items: Sequence[MenuItem]) -> int:

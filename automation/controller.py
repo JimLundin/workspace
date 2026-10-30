@@ -95,15 +95,38 @@ class WorkController:
     """
 
     __slots__ = (
-        "_finished", "_flight", "_lock", "_shutdown", "_snapshot", "_started", "_wake",
-        "execution", "limit", "log", "new_run_id", "now", "on_change", "on_error", "owner", "poll_seconds", "store",
+        "_finished",
+        "_flight",
+        "_lock",
+        "_shutdown",
+        "_snapshot",
+        "_started",
+        "_wake",
+        "execution",
+        "limit",
+        "log",
+        "new_run_id",
+        "now",
+        "on_change",
+        "on_error",
+        "owner",
+        "poll_seconds",
+        "store",
     )
 
     def __init__(
-        self, store: TaskStore, execution: WorkExecution, *, owner: str,
-        log: Callable[[Claim], Log], now: Callable[[], float], new_run_id: Callable[[], str],
-        on_change: Callable[[ControllerSnapshot], None], on_error: Callable[[str], None],
-        poll_seconds: float = .1, limit: int = 100,
+        self,
+        store: TaskStore,
+        execution: WorkExecution,
+        *,
+        owner: str,
+        log: Callable[[Claim], Log],
+        now: Callable[[], float],
+        new_run_id: Callable[[], str],
+        on_change: Callable[[ControllerSnapshot], None],
+        on_error: Callable[[str], None],
+        poll_seconds: float = 0.1,
+        limit: int = 100,
     ) -> None:
         identifier(owner, "worker owner")
         integer(limit, "task snapshot limit", minimum=1, maximum=MAX_PAGE)
@@ -232,8 +255,7 @@ class WorkController:
                 outcome: Outcome = Interrupted(claim.run, "Workspace is stopping.")
             else:
                 log = self.log(claim)
-                outcome = (Interrupted(claim.run, "Workspace is stopping.") if stop.is_set()
-                           else self.execution.run_work(claim, self.store, log, stop))
+                outcome = Interrupted(claim.run, "Workspace is stopping.") if stop.is_set() else self.execution.run_work(claim, self.store, log, stop)
             result.set_result(outcome)
         except BaseException as error:
             result.set_exception(error)

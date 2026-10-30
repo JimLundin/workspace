@@ -5,13 +5,15 @@ import threading
 import time
 import uuid
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from enum import Enum, auto
 from pathlib import Path
-from typing import Protocol, assert_never, cast
+from typing import Literal, Protocol, TypedDict, assert_never, cast
 from urllib.parse import quote, urlencode, urlsplit
 
-from assistant.graph_http import GraphError, Http
+from pydantic import TypeAdapter
+
+from assistant.graph_http import GraphError, Http, Request
 from assistant.llm import Json
 lazy from winapi.protection import protect, unprotect
 
@@ -91,7 +93,9 @@ class TokenStore:
 
 class Transport(Protocol):
     def request(
-        self, method: str, url: str, headers: dict[str, str], body: bytes | None, cancel: threading.Event,
+        self,
+        request: Request,
+        cancel: threading.Event,
     ) -> tuple[int, dict[str, Json]]: ...
 
 
@@ -144,7 +148,7 @@ def sign_in_action(flow: DeviceFlow, now: float, deadline: float, *, stopped: bo
     if now >= deadline:
         return Poll.PENDING
     if now < flow.next_poll:
-        return WaitForPoll(min(.05, flow.next_poll - now, deadline - now, flow.expires - now))
+        return WaitForPoll(min(0.05, flow.next_poll - now, deadline - now, flow.expires - now))
     return Poll.REQUEST
 
 
@@ -156,8 +160,51 @@ def defer_poll(flow: DeviceFlow, now: float, *, slow_down: bool) -> DeviceFlow:
 @dataclass(frozen=True, slots=True)
 class Page:
     route: str
-    chats: bool
+    chats: bool = field(kw_only=True)
     entries: tuple[Json, ...] = ()
+
+
+# Microsoft uses punctuation in member field names, requiring functional TypedDict syntax.
+MemberData = TypedDict(
+    "MemberData",
+    {
+        "@odata.type": Literal["#microsoft.graph.aadUserConversationMember"],
+        "roles": tuple[Literal["guest", "owner"], ...],
+        "user@odata.bind": str,
+    },
+)
+
+
+class CreateChat(TypedDict):
+    chatType: Literal["oneOnOne"]
+    members: tuple[MemberData, ...]
+
+
+class SendMessage(TypedDict):
+    body: TextBody
+
+
+class TextBody(TypedDict):
+    contentType: Literal["text"]
+    content: str
+
+
+_CREATE_CHAT = TypeAdapter(CreateChat)
+_SEND_MESSAGE = TypeAdapter(SendMessage)
+
+
+@dataclass(frozen=True, slots=True)
+class Read:
+    path: str
+
+
+@dataclass(frozen=True, slots=True)
+class Write:
+    path: str
+    body: bytes
+
+
+type GraphRequest = Read | Write
 
 
 class Teams:
@@ -166,15 +213,20 @@ class Teams:
     __slots__ = ("clock", "environment", "flow", "folder", "http", "lock", "pages", "store")
 
     def __init__(
-        self, folder: Path, *, store: TokenStore | None = None, http: Transport | None = None,
-        environment: Mapping[str, str] | None = None, clock: Clock | None = None,
+        self,
+        folder: Path,
+        *,
+        store: TokenStore | None = None,
+        http: Transport | None = None,
+        environment: Mapping[str, str] | None = None,
+        clock: Clock | None = None,
     ) -> None:
         self.folder = folder
         settings: Mapping[str, str] = environment if environment is not None else {}
         # Pyright 1.1.414's stub incorrectly gives frozendict.__init__ no arguments.
-        self.environment: frozendict[str, str] = frozendict({
-            name: settings[name] for name in ("WORKSPACE_GRAPH_CLIENT_ID", "WORKSPACE_GRAPH_TENANT_ID") if name in settings
-        })
+        self.environment: frozendict[str, str] = frozendict(
+            {name: settings[name] for name in ("WORKSPACE_GRAPH_CLIENT_ID", "WORKSPACE_GRAPH_TENANT_ID") if name in settings}
+        )
         self.clock: Clock = clock if clock is not None else SystemClock()
         self.store = store or TokenStore(folder / "tokens.bin")
         self.http = http or Http()
@@ -199,7 +251,7 @@ class Teams:
     def _oauth(self, route: str, fields: dict[str, str], cancel: threading.Event) -> tuple[int, dict[str, Json]]:
         config = self._config()
         url = f"https://login.microsoftonline.com/{_text(config, 'tenant_id')}/oauth2/v2.0/{route}"
-        return self.http.request("POST", url, {"Content-Type": "application/x-www-form-urlencoded"}, urlencode(fields).encode(), cancel)
+        return self.http.request(Request("POST", url, (("Content-Type", "application/x-www-form-urlencoded"),), urlencode(fields).encode()), cancel)
 
     def _save(self, data: dict[str, Json], previous: dict[str, Json] | None = None) -> str:
         token = _text(data, "access_token")
@@ -207,8 +259,11 @@ class Teams:
             raise GraphError("Microsoft did not return a usable sign-in token.")
         lifetime = _integer(data, "expires_in", 3600, 1, 172800)
         stored: dict[str, Json] = {
-            **self._config(), "access_token": token, "refresh_token": _text(data, "refresh_token") or _text(previous or {}, "refresh_token"),
-            "expires_at": self.clock.time() + lifetime, "scope": _text(data, "scope"),
+            **self._config(),
+            "access_token": token,
+            "refresh_token": _text(data, "refresh_token") or _text(previous or {}, "refresh_token"),
+            "expires_at": self.clock.time() + lifetime,
+            "scope": _text(data, "scope"),
         }
         self.store.write(stored)
         return token
@@ -224,22 +279,42 @@ class Teams:
         refresh = _text(saved, "refresh_token")
         if not refresh:
             raise GraphError("The Teams sign-in expired. Use teams_sign_in again.")
-        status, result = self._oauth("token", {
-            "client_id": _text(config, "client_id"), "grant_type": "refresh_token", "refresh_token": refresh, "scope": SCOPE_REQUEST,
-        }, cancel)
+        status, result = self._oauth(
+            "token",
+            {
+                "client_id": _text(config, "client_id"),
+                "grant_type": "refresh_token",
+                "refresh_token": refresh,
+                "scope": SCOPE_REQUEST,
+            },
+            cancel,
+        )
         if status != 200:
             if result.get("error") in ("invalid_grant", "interaction_required", "consent_required"):
                 self.store.clear()
             raise GraphError("Microsoft could not refresh Teams sign-in. Sign in again; consent or Conditional Access may require interaction.")
         return self._save(result, saved)
 
-    def _api(self, method: str, path: str, cancel: threading.Event, body: dict[str, Json] | None = None) -> dict[str, Json]:
+    def _api(self, request: GraphRequest, cancel: threading.Event) -> dict[str, Json]:
+        body: bytes | None
+        match request:
+            case Read(path):
+                method, body = "GET", None
+            case Write(path, body):
+                method = "POST"
+            case _:
+                assert_never(request)
         if not path.startswith("/") or path.startswith("//"):
             raise GraphError("Invalid Microsoft Graph route.")
         token = self._token(cancel)
         status, data = self.http.request(
-            method, GRAPH + path, {"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
-            json.dumps(body).encode("utf-8") if body is not None else None, cancel,
+            Request(
+                method,
+                GRAPH + path,
+                (("Authorization", f"Bearer {token}"), ("Content-Type", "application/json")),
+                body,
+            ),
+            cancel,
         )
         if not 200 <= status < 300:
             if status == 401:
@@ -258,14 +333,22 @@ class Teams:
             raise GraphError("Microsoft did not start sign-in. Check the approved app's public-client/device-code settings and tenant policy.")
         code, user_code, verification = _text(result, "device_code"), _text(result, "user_code"), _text(result, "verification_uri")
         parsed = urlsplit(verification)
-        if (not code or not user_code or parsed.scheme != "https" or parsed.username or parsed.password
-                or parsed.netloc not in ("microsoft.com", "www.microsoft.com", "login.microsoftonline.com")):
+        if (
+            not code
+            or not user_code
+            or parsed.scheme != "https"
+            or parsed.username
+            or parsed.password
+            or parsed.netloc not in ("microsoft.com", "www.microsoft.com", "login.microsoftonline.com")
+        ):
             raise GraphError("Microsoft returned an unexpected sign-in destination.")
         interval = _integer(result, "interval", 5, 1, 60)
         now = self.clock.monotonic()
         self.flow = DeviceFlow(code, user_code, verification, now + _integer(result, "expires_in", 900, 1, 3600), interval, now + interval)
         return {
-            "state": "waiting_for_sign_in", "verification_url": verification, "user_code": user_code,
+            "state": "waiting_for_sign_in",
+            "verification_url": verification,
+            "user_code": user_code,
             "message": "Show this code to the user. browser_sign_in can open the URL; use teams_finish_sign_in after they sign in.",
         }
 
@@ -295,10 +378,15 @@ class Teams:
                     pass
                 case _:
                     assert_never(action)
-            status, result = self._oauth("token", {
-                "grant_type": "urn:ietf:params:oauth:grant-type:device_code",
-                "client_id": _text(self._config(), "client_id"), "device_code": flow.code,
-            }, cancel)
+            status, result = self._oauth(
+                "token",
+                {
+                    "grant_type": "urn:ietf:params:oauth:grant-type:device_code",
+                    "client_id": _text(self._config(), "client_id"),
+                    "device_code": flow.code,
+                },
+                cancel,
+            )
             if status == 200:
                 self._save(result)
                 self.flow = None
@@ -314,7 +402,7 @@ class Teams:
     def _page(self, page: Page, cancel: threading.Event) -> dict[str, Json]:
         if page.entries:
             return self._batch(list(page.entries), page.route, chats=page.chats)
-        data = self._api("GET", page.route, cancel)
+        data = self._api(Read(page.route), cancel)
         entries = data.get("value", [])
         if not isinstance(entries, list):
             raise GraphError("Microsoft returned an invalid list.")
@@ -325,9 +413,11 @@ class Teams:
             fields = ("id", "topic", "chatType", "webUrl") if page.chats else ("id", "displayName", "mail", "userPrincipalName")
             value: dict[str, Json] = {name: _text(item, name)[:500] if isinstance(item.get(name), str) else None for name in fields}
             if page.chats and isinstance(members := item.get("members"), list):
-                value["members"] = [{name: _text(member, name)[:200] if isinstance(member.get(name), str) else None
-                                     for name in ("userId", "displayName", "email")} for member in members[:10]
-                                    if isinstance(member, dict)]
+                value["members"] = [
+                    {name: _text(member, name)[:200] if isinstance(member.get(name), str) else None for name in ("userId", "displayName", "email")}
+                    for member in members[:10]
+                    if isinstance(member, dict)
+                ]
                 value["members_truncated"] = len(members) > 10 or "members@odata.nextLink" in item
             values.append(value)
         route = ""
@@ -350,7 +440,7 @@ class Teams:
             if len(self.pages) >= 32:
                 self.pages.pop(next(iter(self.pages)))
             cursor = uuid.uuid4().hex
-            self.pages[cursor] = Page(route, chats, tuple(remaining))
+            self.pages[cursor] = Page(route, chats=chats, entries=tuple(remaining))
             result["next_cursor"] = cursor
         return result
 
@@ -372,7 +462,8 @@ class Teams:
 
     def _configure(self, args: dict[str, Json]) -> dict[str, Json]:
         config: dict[str, Json] = {
-            "client_id": _guid(_text(args, "client_id"), "Client ID"), "tenant_id": _guid(_text(args, "tenant_id"), "Tenant ID"),
+            "client_id": _guid(_text(args, "client_id"), "Client ID"),
+            "tenant_id": _guid(_text(args, "tenant_id"), "Tenant ID"),
         }
         for key, variable in (("client_id", "WORKSPACE_GRAPH_CLIENT_ID"), ("tenant_id", "WORKSPACE_GRAPH_TENANT_ID")):
             if (environment := self.environment.get(variable)) and _guid(environment, key) != config[key]:
@@ -391,12 +482,12 @@ class Teams:
             raise GraphError("Provide a chat ID and optional message ID of at most 500 characters.")
         route = f"/chats/{quote(chat_id, safe='')}/messages"
         if message_id:
-            data = self._api("GET", route + "/" + quote(message_id, safe=""), cancel)
+            data = self._api(Read(route + "/" + quote(message_id, safe="")), cancel)
             if _text(data, "id") != message_id:
                 raise GraphError("Microsoft returned a different message; the requested send is not verified.")
             values: list[Json] = [data]
         else:
-            data = self._api("GET", route + "?" + urlencode({"$top": str(limit), "$orderby": "createdDateTime desc"}), cancel)
+            data = self._api(Read(route + "?" + urlencode({"$top": str(limit), "$orderby": "createdDateTime desc"})), cancel)
             received = data.get("value")
             if not isinstance(received, list):
                 raise GraphError("Microsoft returned an invalid message list.")
@@ -408,12 +499,18 @@ class Teams:
             identity, content, kind = _text(value, "id"), _text(body, "content"), _text(body, "contentType")
             if not identity or len(identity) > 500 or kind not in ("text", "html"):
                 raise GraphError("Microsoft returned an invalid message.")
-            messages.append({
-                "message_id": identity, "content": content[:12_000], "content_type": kind,
-                "content_truncated": len(content) > 12_000, "created_at": _text(value, "createdDateTime"),
-            })
+            messages.append(
+                {
+                    "message_id": identity,
+                    "content": content[:12_000],
+                    "content_type": kind,
+                    "content_truncated": len(content) > 12_000,
+                    "created_at": _text(value, "createdDateTime"),
+                }
+            )
         result: dict[str, Json] = {
-            "chat_id": chat_id, "messages": messages,
+            "chat_id": chat_id,
+            "messages": messages,
             "more_available": bool(data.get("@odata.nextLink")) or len(values) > limit,
         }
         while len(json.dumps(result, ensure_ascii=False)) > MAX_OUTPUT:
@@ -430,8 +527,10 @@ class Teams:
             config = self._config(required=False)
             saved = self.store.read() if config else {}
             return {
-                "configured": bool(config), "saved_sign_in": bool(saved) and all(saved.get(k) == v for k, v in config.items()),
-                "sign_in_pending": self.flow is not None and self.flow.expires > self.clock.monotonic(), "scopes": list(SCOPES),
+                "configured": bool(config),
+                "saved_sign_in": bool(saved) and all(saved.get(k) == v for k, v in config.items()),
+                "sign_in_pending": self.flow is not None and self.flow.expires > self.clock.monotonic(),
+                "scopes": list(SCOPES),
                 "message": "Use teams_configure with an approved app's client and tenant IDs, then teams_sign_in." if not config else "",
             }
         if operation == "sign_out":
@@ -460,30 +559,39 @@ class Teams:
                     if not 2 <= len(search) <= 200:
                         raise GraphError("Use at least two characters of a recipient's name, email or user principal name.")
                     escaped = search.replace("'", "''")
-                    query.update({
-                        "$select": "id,displayName,mail,userPrincipalName",
-                        "$filter": f"startswith(displayName,'{escaped}') or startswith(userPrincipalName,'{escaped}') or mail eq '{escaped}'",
-                    })
+                    query.update(
+                        {
+                            "$select": "id,displayName,mail,userPrincipalName",
+                            "$filter": f"startswith(displayName,'{escaped}') or startswith(userPrincipalName,'{escaped}') or mail eq '{escaped}'",
+                        }
+                    )
                 route = ("/me/chats?" if chats else "/users?") + urlencode(query)
-                page = Page(route, chats)
+                page = Page(route, chats=chats)
             return self._page(page, cancel)
         if operation == "open_chat":
             user = _guid(_text(args, "user_id"), "Recipient ID")
-            me = self._api("GET", "/me?$select=id,userType", cancel)
+            me = self._api(Read("/me?$select=id,userType"), cancel)
             own_id = _guid(_text(me, "id"), "Signed-in user ID")
             if own_id == user:
                 raise GraphError("Choose another user for a one-to-one chat.")
-            members: list[Json] = []
+            members: list[MemberData] = []
             for identity, guest in ((own_id, me.get("userType") == "Guest"), (user, args.get("guest") is True)):
-                members.append({"@odata.type": "#microsoft.graph.aadUserConversationMember", "roles": ["guest" if guest else "owner"],
-                                "user@odata.bind": f"https://graph.microsoft.com/v1.0/users('{identity}')"})
-            chat = self._api("POST", "/chats", cancel, {"chatType": "oneOnOne", "members": members})
+                members.append(
+                    {
+                        "@odata.type": "#microsoft.graph.aadUserConversationMember",
+                        "roles": ("guest" if guest else "owner",),
+                        "user@odata.bind": f"https://graph.microsoft.com/v1.0/users('{identity}')",
+                    }
+                )
+            body: CreateChat = {"chatType": "oneOnOne", "members": tuple(members)}
+            chat = self._api(Write("/chats", _CREATE_CHAT.dump_json(body)), cancel)
             return {name: chat.get(name) for name in ("id", "chatType", "webUrl")}
         if operation == "send_message":
             chat_id, content = _text(args, "chat_id"), _text(args, "text")
             if not chat_id or len(chat_id) > 500 or not content.strip() or len(content) > 10_000 or len(content.encode("utf-8")) > 24_000:
                 raise GraphError("Provide a chat ID and non-empty message of at most 10,000 characters / 24 KB.")
-            result = self._api("POST", f"/chats/{quote(chat_id, safe='')}/messages", cancel, {"body": {"contentType": "text", "content": content}})
+            message: SendMessage = {"body": {"contentType": "text", "content": content}}
+            result = self._api(Write(f"/chats/{quote(chat_id, safe='')}/messages", _SEND_MESSAGE.dump_json(message)), cancel)
             if not _text(result, "id"):
                 raise GraphError("Microsoft accepted the request but returned no message ID. Inspect the chat before retrying.")
             return {"sent": True, "chat_id": chat_id, "message_id": result["id"], "created_at": result.get("createdDateTime")}

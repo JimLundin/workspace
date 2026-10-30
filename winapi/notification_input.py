@@ -32,8 +32,7 @@ class _Mouse(ctypes.Structure):
     flags: int
     time: int
     extra: int
-    _fields_ = [("point", wintypes.POINT), ("data", wintypes.DWORD), ("flags", wintypes.DWORD),
-                ("time", wintypes.DWORD), ("extra", ULONG_PTR)]
+    _fields_ = [("point", wintypes.POINT), ("data", wintypes.DWORD), ("flags", wintypes.DWORD), ("time", wintypes.DWORD), ("extra", ULONG_PTR)]
 
 
 @dataclass(frozen=True, slots=True)

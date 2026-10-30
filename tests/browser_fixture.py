@@ -3,6 +3,7 @@
 import threading
 from collections.abc import Generator, Mapping
 from contextlib import contextmanager
+from dataclasses import dataclass
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlsplit
 
@@ -33,8 +34,15 @@ FRAME = """<!doctype html><title>Frame</title>
 <output>Frame waiting</output>"""
 
 
+@dataclass(frozen=True, slots=True)
+class Attachment:
+    content: bytes
+    content_type: str
+    cookie: str
+
+
 @contextmanager
-def fixture(page: str = PAGE, *, pages: Mapping[str, str] | None = None) -> Generator[str]:
+def fixture(page: str = PAGE, *, pages: Mapping[str, str | Attachment] | None = None) -> Generator[str]:
     # Snapshot the scenario documents before the server thread starts; requests
     # never observe changes to module globals or a caller's route catalog.
     routes = frozendict(pages or {})
@@ -42,9 +50,13 @@ def fixture(page: str = PAGE, *, pages: Mapping[str, str] | None = None) -> Gene
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self) -> None:
             path = urlsplit(self.path).path
-            data = routes.get(path, FRAME if path == "/frame" else page).encode("utf-8")
-            self.send_response(200)
-            self.send_header("Content-Type", "text/html; charset=utf-8")
+            match routes.get(path, FRAME if path == "/frame" else page):
+                case Attachment(content=data, content_type=content_type, cookie=cookie):
+                    status = 200 if cookie in self.headers.get("Cookie", "") else 401
+                case str() as text:
+                    data, content_type, status = text.encode("utf-8"), "text/html; charset=utf-8", 200
+            self.send_response(status)
+            self.send_header("Content-Type", content_type)
             self.send_header("Content-Length", str(len(data)))
             self.send_header("Content-Security-Policy", "require-trusted-types-for 'script'")
             self.end_headers()
@@ -54,7 +66,7 @@ def fixture(page: str = PAGE, *, pages: Mapping[str, str] | None = None) -> Gene
             pass
 
     server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
-    thread = threading.Thread(target=lambda: server.serve_forever(poll_interval=.02), daemon=True)
+    thread = threading.Thread(target=lambda: server.serve_forever(poll_interval=0.02), daemon=True)
     thread.start()
     try:
         yield f"http://127.0.0.1:{server.server_port}/"

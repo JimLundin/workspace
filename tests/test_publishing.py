@@ -84,7 +84,8 @@ def test_durable_publication_records_before_candidate_code_and_remote_push(tmp_p
     work = WorkExecution(claim, store, Resources(), clock=clock)
     marker = tmp_path / "candidate-executed"
     (workspace / "probe.py").write_text(
-        f"from pathlib import Path\nPath({str(marker)!r}).touch()\n", encoding="utf-8",
+        f"from pathlib import Path\nPath({str(marker)!r}).touch()\n",
+        encoding="utf-8",
     )
 
     def approve(title: str, detail: str) -> bool:
@@ -93,20 +94,25 @@ def test_durable_publication_records_before_candidate_code_and_remote_push(tmp_p
 
     def execute(perform: Callable[[], str]) -> str:
         return work.actions.execute(
-            plan("publish_changes", work.arguments), perform, bool, threading.Event(),
+            plan("publish_changes", work.arguments),
+            perform,
+            bool,
+            threading.Event(),
             verify=lambda _: ActionVerified("Remote readback matched the published commit."),
         )
 
     with closing(sqlite3.connect(tmp_path / "work.sqlite3")) as database, database:
         database.execute("CREATE TRIGGER refuse_publication BEFORE INSERT ON actions BEGIN SELECT RAISE(ABORT,'cannot record'); END")
     with TestCase().assertRaises(sqlite3.DatabaseError):
-        publish_source(live, workspace, "Reviewed update", approve, lambda: False,
-                       remote=str(remote), branch="workspace/agent-durable", execute=execute)
+        publish_source(
+            live, workspace, "Reviewed update", approve, lambda: False, remote=str(remote), branch="workspace/agent-durable", execute=execute
+        )
     assert not marker.exists() and not git(remote, "for-each-ref", "refs/heads/workspace/")
     with closing(sqlite3.connect(tmp_path / "work.sqlite3")) as database, database:
         database.execute("DROP TRIGGER refuse_publication")
-    result = publish_source(live, workspace, "Reviewed update", approve, lambda: False,
-                            remote=str(remote), branch="workspace/agent-durable", execute=execute)
+    result = publish_source(
+        live, workspace, "Reviewed update", approve, lambda: False, remote=str(remote), branch="workspace/agent-durable", execute=execute
+    )
     assert marker.exists() and "Published" in result
     assert git(remote, "show", "refs/heads/workspace/agent-durable:config.py") == "GREETING = 'hello'"
     assert isinstance(store.actions("task")[0].outcome, ActionVerified)

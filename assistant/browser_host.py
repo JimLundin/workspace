@@ -55,8 +55,7 @@ def sealed(data: bytes, *, opening: bool = False) -> bytes:
 def endpoint(folder: Path) -> Endpoint:
     value = mapping(cast(Json, json.loads(sealed((folder / "endpoint.bin").read_bytes(), opening=True))))
     port, pid, token = value.get("port"), value.get("pid"), value.get("token")
-    if (type(port) is not int or not 1 <= port <= 65535 or type(pid) is not int or pid <= 0
-            or not isinstance(token, str) or len(token) != 64):
+    if type(port) is not int or not 1 <= port <= 65535 or type(pid) is not int or pid <= 0 or not isinstance(token, str) or len(token) != 64:
         raise BrowserError("The browser connection host published an invalid endpoint.")
     return Endpoint(port, token, pid)
 
@@ -95,8 +94,8 @@ def exchange(location: Endpoint, request: dict[str, Json], cancel: threading.Eve
     if cancel.is_set():
         raise InterruptedError("Stopped before contacting the browser host.")
     try:
-        with socket.create_connection(("127.0.0.1", location.port), timeout=.5) as stream:
-            stream.settimeout(.1)
+        with socket.create_connection(("127.0.0.1", location.port), timeout=0.5) as stream:
+            stream.settimeout(0.1)
             stream.sendall(frame({**request, "token": location.token}))
             reply = receive(stream, cancel, time.monotonic() + timeout)
     except BrowserError:
@@ -125,12 +124,22 @@ class HostedConnection:
         self.location, self.identity, self.closed = location, uuid.uuid4().hex, False
 
     def call(
-        self, method: str, params: dict[str, Json], cancel: threading.Event, *, session: str = "", timeout: float = 15,
+        self,
+        method: str,
+        params: dict[str, Json],
+        cancel: threading.Event,
+        *,
+        session: str = "",
+        timeout: float = 15,
     ) -> dict[str, Json]:
         if self.closed:
             raise DisconnectedError("This browser client is disconnected.")
-        return exchange(self.location, {"operation": "call", "client": self.identity, "method": method, "params": params,
-                                        "session": session, "timeout": timeout}, cancel, timeout=timeout + .5)
+        return exchange(
+            self.location,
+            {"operation": "call", "client": self.identity, "method": method, "params": params, "session": session, "timeout": timeout},
+            cancel,
+            timeout=timeout + 0.5,
+        )
 
     def close(self) -> None:
         if not self.closed:
@@ -148,10 +157,8 @@ def lease(folder: Path) -> Generator[None]:
             stream.flush()
         stream.seek(0)
         if sys.platform == "win32":
-
             msvcrt.locking(stream.fileno(), msvcrt.LK_NBLCK, 1)
         else:
-
             fcntl.flock(stream.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
         yield
 
@@ -169,7 +176,7 @@ class Host:
     def handle(self, request: dict[str, Json], cancel: threading.Event) -> dict[str, Json]:
         if request.get("operation") == "status":
             return {"connected": self.session is not None, "generation": self.generation, "clients": len(self.clients), "pid": os.getpid()}
-        while not self.lock.acquire(timeout=.1):
+        while not self.lock.acquire(timeout=0.1):
             if cancel.is_set():
                 raise InterruptedError("Stopped before the queued browser request started.")
         try:
@@ -196,8 +203,15 @@ class Host:
                 raise DisconnectedError("The approved browser connection is unavailable. Use Connect Teams to reconnect explicitly.")
             method, session = text(request, "method"), text(request, "session")
             timeout = request.get("timeout")
-            if (not method or len(method) > 256 or len(session) > 512 or isinstance(timeout, bool)
-                    or not isinstance(timeout, (int, float)) or not math.isfinite(timeout) or not 0 < timeout <= 60):
+            if (
+                not method
+                or len(method) > 256
+                or len(session) > 512
+                or isinstance(timeout, bool)
+                or not isinstance(timeout, (int, float))
+                or not math.isfinite(timeout)
+                or not 0 < timeout <= 60
+            ):
                 raise BrowserError("The browser host command is invalid.")
             if method == "Browser.close":
                 raise BrowserError("Workspace does not own the personal browser's lifetime.")
@@ -233,7 +247,7 @@ class Server:
         self.stream = socket.socket()
         self.stream.bind(("127.0.0.1", 0))
         self.stream.listen(MAX_CLIENTS)
-        self.stream.settimeout(.25)
+        self.stream.settimeout(0.25)
         _address, port = cast(tuple[str, int], self.stream.getsockname())
         self.location = Endpoint(port, secrets.token_hex(32), os.getpid())
         self.stop = threading.Event()
@@ -266,25 +280,25 @@ class Server:
         cancel, finished = threading.Event(), threading.Event()
 
         def watch() -> None:
-            while not finished.wait(.1):
+            while not finished.wait(0.1):
                 if self.stop.is_set():
                     cancel.set()
                     return
                 try:
                     watched: list[socket.socket] = [stream]
                     empty: list[socket.socket] = []
-                    selection: tuple[list[socket.socket], list[socket.socket], list[socket.socket]] = select.select(watched, empty, empty, .1)
+                    selection: tuple[list[socket.socket], list[socket.socket], list[socket.socket]] = select.select(watched, empty, empty, 0.1)
                     ready = selection[0]
                     if ready:
                         cancel.set()  # Each local socket carries one request; EOF cancels it.
                         return
-                except (OSError, ValueError):
+                except OSError, ValueError:
                     cancel.set()
                     return
 
         watcher: threading.Thread | None = None
         try:
-            stream.settimeout(.1)
+            stream.settimeout(0.1)
             request = receive(stream, cancel, time.monotonic() + 3)
             if not hmac.compare_digest(text(request, "token"), self.location.token):
                 return
@@ -296,12 +310,12 @@ class Server:
                 reply = {"error": {"kind": type(error).__name__, "message": str(error)[:1000]}}
             if not cancel.is_set():
                 stream.sendall(frame(reply))
-        except (OSError, ValueError):
+        except OSError, ValueError:
             pass
         finally:
             finished.set()
             if watcher is not None:
-                watcher.join(timeout=.3)
+                watcher.join(timeout=0.3)
             stream.close()
             self.limit.release()
 
@@ -322,16 +336,22 @@ def connect_shared(folder: Path, product: Product, cancel: threading.Event) -> H
         exchange(location, {"operation": "status"}, cancel, timeout=1)
     except InterruptedError:
         raise
-    except (OSError, ValueError):
+    except OSError, ValueError:
         location = None
     if location is None:
         flags = 0x0000_0208 if sys.platform == "win32" else 0
-        subprocess.Popen([sys.executable, "-B", "-m", "assistant.browser_host", product.value, str(folder)],
-                         cwd=Path(__file__).parents[1], creationflags=flags, start_new_session=sys.platform != "win32",
-                         stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        subprocess.Popen(
+            [sys.executable, "-B", "-m", "assistant.browser_host", product.value, str(folder)],
+            cwd=Path(__file__).parents[1],
+            creationflags=flags,
+            start_new_session=sys.platform != "win32",
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
         deadline = time.monotonic() + 8
         while location is None and time.monotonic() < deadline:
-            if cancel.wait(.1):
+            if cancel.wait(0.1):
                 raise InterruptedError("Stopped before the browser connection host was ready.")
             try:
                 found = endpoint(folder)
@@ -339,7 +359,7 @@ def connect_shared(folder: Path, product: Product, cancel: threading.Event) -> H
                 location = found
             except InterruptedError:
                 raise
-            except (OSError, ValueError):
+            except OSError, ValueError:
                 pass
     if location is None:
         raise BrowserError("Workspace's browser connection host could not start.")

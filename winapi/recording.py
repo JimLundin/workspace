@@ -44,7 +44,9 @@ _IID_CAPTURE = _guid("C8ADBD64-E71E-48A0-A4DE-185C395CD317")
 
 def _check(result: int, action: str) -> None:
     if result < 0:
-        raise OSError(f"{action} failed (Windows audio 0x{result & 0xFFFF_FFFF:08X}). Check the selected audio devices and desktop microphone access.")
+        raise OSError(
+            f"{action} failed (Windows audio 0x{result & 0xFFFF_FFFF:08X}). Check the selected audio devices and desktop microphone access."
+        )
 
 
 # These are the scalar ABI argument types consumed by WASAPI's COM methods.
@@ -128,7 +130,7 @@ def _format(pointer: ctypes.c_void_p) -> PcmFormat:
             tag = 3
     if tag not in (1, 3):
         raise OSError("The audio device does not provide supported PCM audio.")
-    result = PcmFormat(int(format.nSamplesPerSec), int(format.nChannels), int(format.wBitsPerSample), tag == 3)
+    result = PcmFormat(int(format.nSamplesPerSec), int(format.nChannels), int(format.wBitsPerSample), floating=tag == 3)
     if result.frame_bytes != format.nBlockAlign:
         raise OSError("The audio device returned an inconsistent sample format.")
     return result
@@ -147,21 +149,34 @@ class Stream:
         try:
             # Multimedia default matches normal app playback and the system's
             # selected microphone. Both use shared mode, including alongside B/N.
-            _check(self.api.method(enumerator, 4, ctypes.c_int, ctypes.c_int, ctypes.c_void_p)(
-                enumerator, 0 if loopback else 1, 1, ctypes.byref(self.device)), f"Opening {self.label.lower()}")
-            _check(self.api.method(self.device, 3, ctypes.c_void_p, wintypes.DWORD, ctypes.c_void_p, ctypes.c_void_p)(
-                self.device, _IID_CLIENT, 23, None, ctypes.byref(self.client)), f"Preparing {self.label.lower()}")
+            _check(
+                self.api.method(enumerator, 4, ctypes.c_int, ctypes.c_int, ctypes.c_void_p)(
+                    enumerator, 0 if loopback else 1, 1, ctypes.byref(self.device)
+                ),
+                f"Opening {self.label.lower()}",
+            )
+            _check(
+                self.api.method(self.device, 3, ctypes.c_void_p, wintypes.DWORD, ctypes.c_void_p, ctypes.c_void_p)(
+                    self.device, _IID_CLIENT, 23, None, ctypes.byref(self.client)
+                ),
+                f"Preparing {self.label.lower()}",
+            )
             format = ctypes.c_void_p()
             _check(self.api.method(self.client, 8, ctypes.c_void_p)(self.client, ctypes.byref(format)), "Reading audio format")
             try:
                 self.converter = Converter(_format(format))
-                _check(self.api.method(self.client, 3, ctypes.c_int, wintypes.DWORD, ctypes.c_longlong, ctypes.c_longlong,
-                               ctypes.c_void_p, ctypes.c_void_p)(
-                    self.client, 0, _LOOPBACK if loopback else 0, 10_000_000, 0, format, None), f"Initializing {self.label.lower()}")
+                _check(
+                    self.api.method(
+                        self.client, 3, ctypes.c_int, wintypes.DWORD, ctypes.c_longlong, ctypes.c_longlong, ctypes.c_void_p, ctypes.c_void_p
+                    )(self.client, 0, _LOOPBACK if loopback else 0, 10_000_000, 0, format, None),
+                    f"Initializing {self.label.lower()}",
+                )
             finally:
                 self.api.free_format(format)
-            _check(self.api.method(self.client, 14, ctypes.c_void_p, ctypes.c_void_p)(
-                self.client, _IID_CAPTURE, ctypes.byref(self.capture)), "Opening audio capture")
+            _check(
+                self.api.method(self.client, 14, ctypes.c_void_p, ctypes.c_void_p)(self.client, _IID_CAPTURE, ctypes.byref(self.capture)),
+                "Opening audio capture",
+            )
         except BaseException:
             self.close()
             raise
@@ -178,9 +193,12 @@ class Stream:
                 return
             data, frames, flags = ctypes.c_void_p(), wintypes.UINT(), wintypes.DWORD()
             position, timestamp = ctypes.c_ulonglong(), ctypes.c_ulonglong()
-            _check(self.api.method(self.capture, 3, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p)(
-                self.capture, ctypes.byref(data), ctypes.byref(frames), ctypes.byref(flags), ctypes.byref(position), ctypes.byref(timestamp)),
-                f"Capturing {self.label.lower()}")
+            _check(
+                self.api.method(self.capture, 3, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p)(
+                    self.capture, ctypes.byref(data), ctypes.byref(frames), ctypes.byref(flags), ctypes.byref(position), ctypes.byref(timestamp)
+                ),
+                f"Capturing {self.label.lower()}",
+            )
             try:
                 if flags.value & _TIMESTAMP_ERROR:
                     raise OSError(f"{self.label} lost its audio clock. The captured part has been saved.")
@@ -218,7 +236,10 @@ class Stream:
 class MeetingAudio:
     """Capture only between explicit Start and Stop; never opens a device at import."""
 
-    __slots__ = ("api", "computer_audio",)
+    __slots__ = (
+        "api",
+        "computer_audio",
+    )
 
     def __init__(self, api: WasapiApi | None = None, *, computer_audio: bool = True) -> None:
         self.api = api if api is not None else NativeWasapi()
@@ -268,7 +289,7 @@ class MeetingAudio:
                 stream.stop()
             drain()
             consume(mixer.take(until))
-        except (OSError, ValueError):
+        except OSError, ValueError:
             # Retain samples already returned by the other device, including
             # the latency cushion, before reporting a capture/storage failure.
             if latest > mixer.cursor:

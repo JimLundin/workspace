@@ -17,16 +17,22 @@ from tests.json_fixture import json_object, json_text
 
 def event(provider: Provider, session: str = "fixture-session") -> dict[str, object]:
     tool = "AskUserQuestion" if provider is Provider.CLAUDE else "request_user_input"
-    return {"session_id": session, "cwd": "/fictional/project", "hook_event_name": "PreToolUse", "tool_name": tool,
-            "tool_input": {"questions": [{"id": "one", "question": "Which sheet?", "options": [{"label": "Revenue", "description": "Use totals"}]}]}}
+    return {
+        "session_id": session,
+        "cwd": "/fictional/project",
+        "hook_event_name": "PreToolUse",
+        "tool_name": tool,
+        "tool_input": {"questions": [{"id": "one", "question": "Which sheet?", "options": [{"label": "Revenue", "description": "Use totals"}]}]},
+    }
 
 
 def post(endpoint: Path, provider: Provider, payload: dict[str, object]) -> object:
     data = cast(dict[str, str], json_object(endpoint.read_text()))
     message_data: dict[str, object] = {"provider": provider.value, "event": payload}
     message = json.dumps(message_data).encode()
-    command = urllib.request.Request(json_text(data["url"]), data=message, headers={"Authorization": "Bearer " + data["token"],
-                                  "Content-Type": "application/json"})
+    command = urllib.request.Request(
+        json_text(data["url"]), data=message, headers={"Authorization": "Bearer " + data["token"], "Content-Type": "application/json"}
+    )
     with cast(HTTPResponse, urlopen(command, timeout=4)) as response:
         return json_object(response.read())
 
@@ -35,9 +41,11 @@ def test_both_cli_hooks_receive_the_exact_user_answer_over_local_transport(tmp_p
     for provider in Provider:
         arrived = threading.Event()
         observed: list[tuple[Request, ...]] = []
+
         def publish(values: tuple[Request, ...], observed: list[tuple[Request, ...]] = observed, arrived: threading.Event = arrived) -> None:
             observed.append(values)
             arrived.set()
+
         endpoint = tmp_path / "bridge.json"
         inbox = ConsoleInbox(endpoint, publish, timeout=3)
         try:
@@ -62,15 +70,22 @@ def test_both_cli_hooks_receive_the_exact_user_answer_over_local_transport(tmp_p
 def test_permission_requests_cannot_be_approved_by_dismissal_or_free_text(tmp_path: Path) -> None:
     arrived = threading.Event()
     values: list[tuple[Request, ...]] = []
+
     def publish(current: tuple[Request, ...]) -> None:
         values.append(current)
         arrived.set()
+
     endpoint = tmp_path / "bridge.json"
     inbox = ConsoleInbox(endpoint, publish, timeout=3)
     try:
         with ThreadPoolExecutor(max_workers=1) as worker:
-            raw: dict[str, object] = {"session_id": "fixture", "cwd": "/fictional", "hook_event_name": "PermissionRequest",
-                   "tool_name": "Bash", "tool_input": {"command": "echo fixture"}}
+            raw: dict[str, object] = {
+                "session_id": "fixture",
+                "cwd": "/fictional",
+                "hook_event_name": "PermissionRequest",
+                "tool_name": "Bash",
+                "tool_input": {"command": "echo fixture"},
+            }
             waiting = worker.submit(post, endpoint, Provider.CLAUDE, raw)
             assert arrived.wait(2)
             current = values[-1][0]
@@ -85,10 +100,12 @@ def test_permission_requests_cannot_be_approved_by_dismissal_or_free_text(tmp_pa
 def test_interruption_releases_only_its_exact_console_session(tmp_path: Path) -> None:
     arrived = threading.Event()
     values: list[tuple[Request, ...]] = []
+
     def publish(current: tuple[Request, ...]) -> None:
         values.append(current)
         if len(current) == 2:
             arrived.set()
+
     endpoint = tmp_path / "bridge.json"
     inbox = ConsoleInbox(endpoint, publish, timeout=3)
     try:

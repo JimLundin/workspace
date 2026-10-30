@@ -30,6 +30,8 @@ from collections.abc import Iterator
 from pathlib import Path
 from typing import Protocol
 
+import runtime
+
 _WINDOWS_ONLY = ("WinDLL", "WINFUNCTYPE", "windll", "winreg", "msvcrt", "_winapi", "PySide6", "shiboken6", "win32more")
 """Signs that an import failed only because this isn't Windows."""
 
@@ -141,9 +143,12 @@ def check(root: Path, *, fast: bool = False, durations: int = 0) -> tuple[bool, 
     os.environ.pop("WORKSPACE_E2E", None)  # never the end-to-end tests: they'd start a second workspace
     sys.path.insert(0, str(root))
     os.chdir(root)
-    from runtime import activate
-
-    activate()
+    runtime.activate(root=root)
+    candidate_runtime = root / "runtime.py"
+    if candidate_runtime.is_file() and candidate_runtime.resolve() != Path(runtime.__file__).resolve():
+        # This checker owns a fresh process. Drop only its preloaded bootstrap
+        # cache entry so import_all executes the selected copy's runtime too.
+        sys.modules.pop("runtime", None)
     problems: list[str] = []
     timings: list[tuple[float, str]] = []
     started = time.perf_counter()

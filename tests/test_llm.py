@@ -14,13 +14,13 @@ from assistant.llm import (
     Settings,
     Text,
     ToolCall,
-    ToolSpec,
     assistant_message,
     chat,
     settings_from,
     stream,
     system_message,
     tool_result,
+    tool_spec,
     transcribe,
     user_message,
     wav,
@@ -67,7 +67,9 @@ def test_settings_overrides() -> None:
         "WORKSPACE_VOCABULARY": "Miryoku, Colemak",
         "WORKSPACE_LANGUAGE": "sv",
     }
-    assert settings_from(env) == Settings("https://ai.example/v1", "k", "whisper-1", "fast", "smart", "Miryoku, Colemak", "sv", "high", True)
+    assert settings_from(env) == Settings(
+        "https://ai.example/v1", "k", "whisper-1", "fast", "smart", "Miryoku, Colemak", "sv", "high", agent_approvals=True
+    )
 
 
 def test_agent_model_is_independent_of_the_quick_chat_model() -> None:
@@ -172,7 +174,7 @@ def test_chat_sends_images_as_data_urls() -> None:
 def test_chat_with_tools_returns_tool_calls() -> None:
     call = '{"id": "call_1", "type": "function", "function": {"name": "read_file", "arguments": "{\\"path\\": \\"a.txt\\"}"}}'
     answer = f'{{"choices": [{{"message": {{"role": "assistant", "content": null, "tool_calls": [{call}]}}}}]}}'.encode()
-    spec = ToolSpec("read_file", "Read a file", {"type": "object", "properties": {"path": {"type": "string"}}, "required": ["path"]})
+    spec = tool_spec("read_file", "Read a file", {"type": "object", "properties": {"path": {"type": "string"}}, "required": ["path"]})
     with fake_endpoint() as endpoint:
         endpoint.replies = [tests.fake_endpoint.Reply(answer)]
         reply = chat(settings(endpoint.url), [user_message("read a.txt")], tools=[spec])

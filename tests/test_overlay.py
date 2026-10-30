@@ -1,5 +1,6 @@
 """The learning overlay follows the layout and remembers the user's tray choice."""
 
+from dataclasses import replace
 from pathlib import Path
 
 from assistant.overlay import KeyHighlights, OverlayState, fit_position, load_enabled, load_position, nearest_work_area, save_enabled, save_position
@@ -71,58 +72,58 @@ def test_reset_clears_both_held_keys_and_tap_flashes_immediately() -> None:
 
 def test_overlay_tracks_physical_keys_across_layers_and_while_hidden() -> None:
     overlay = OverlayState(layout_on=True)
-    overlay.key(M, True)
-    overlay.indicate(Layer.SYM, locked=False, caps_word=False)
+    overlay = overlay.key(M, down=True)
+    overlay = overlay.indicate(Layer.SYM, locked=False, caps_word=False)
     assert overlay.pressed == frozenset({M})
-    overlay.enabled = False
-    overlay.key(Q, True)
-    overlay.key(M, False)
-    overlay.enabled = True
+    overlay = replace(overlay, enabled=False)
+    overlay = overlay.key(Q, down=True)
+    overlay = overlay.key(M, down=False)
+    overlay = replace(overlay, enabled=True)
     assert overlay.pressed == frozenset({Q})
-    overlay.key(Q, True)  # repeat
-    overlay.key(M, False)  # duplicate release
+    overlay = overlay.key(Q, down=True)  # repeat
+    overlay = overlay.key(M, down=False)  # duplicate release
     assert overlay.pressed == frozenset({Q})
 
 
 def test_layout_resets_and_unknown_keys_cannot_leave_stale_highlights() -> None:
     overlay = OverlayState(layout_on=True)
-    overlay.key(Scancode(0x7FFF), True)
+    overlay = overlay.key(Scancode(0x7FFF), down=True)
     assert overlay.pressed == frozenset()
-    overlay.key(Q, True)
-    overlay.set_layout(False)
-    overlay.key(M, True)
+    overlay = overlay.key(Q, down=True)
+    overlay = overlay.set_layout(on=False)
+    overlay = overlay.key(M, down=True)
     assert overlay.pressed == frozenset()
-    overlay.set_layout(True)
-    overlay.key(M, True)
-    overlay.set_layout(True)  # a restarted layout announces ON again
+    overlay = overlay.set_layout(on=True)
+    overlay = overlay.key(M, down=True)
+    overlay = overlay.set_layout(on=True)  # a restarted layout announces ON again
     assert overlay.pressed == frozenset()
-    overlay.key(Q, True)
-    overlay.key(Scancode(0), False)  # reset before replaying current holds
+    overlay = overlay.key(Q, down=True)
+    overlay = overlay.key(Scancode(0), down=False)  # reset before replaying current holds
     assert overlay.pressed == frozenset()
 
 
 def test_overlay_stays_visible_on_the_base_and_held_layers() -> None:
     overlay = OverlayState()
     assert not bool(overlay.visible)
-    overlay.set_layout(True)
+    overlay = overlay.set_layout(on=True)
     assert bool(overlay.visible)
     assert overlay.title == "BASE"
-    overlay.indicate(Layer.TOOLS, locked=False, caps_word=False)
+    overlay = overlay.indicate(Layer.TOOLS, locked=False, caps_word=False)
     assert bool(overlay.visible)
     assert overlay.layer is Layer.TOOLS
     assert overlay.title == "TOOLS"
-    overlay.indicate(None, locked=False, caps_word=False)
+    overlay = overlay.indicate(None, locked=False, caps_word=False)
     assert bool(overlay.visible)
     assert overlay.title == "BASE"
 
 
 def test_overlay_tracks_locked_layers_and_clears_them_when_layout_turns_off() -> None:
     overlay = OverlayState(layout_on=True)
-    overlay.indicate(Layer.NAV, locked=True, caps_word=True)
+    overlay = overlay.indicate(Layer.NAV, locked=True, caps_word=True)
     assert overlay.title == "NAV · locked · CAPS WORD"
-    overlay.set_layout(False)
+    overlay = overlay.set_layout(on=False)
     assert not bool(overlay.visible)
-    overlay.set_layout(True)
+    overlay = overlay.set_layout(on=True)
     assert bool(overlay.visible)
     assert overlay.layer is None
     assert overlay.title == "BASE"
@@ -130,28 +131,28 @@ def test_overlay_tracks_locked_layers_and_clears_them_when_layout_turns_off() ->
 
 def test_hiding_overlay_survives_layer_changes_and_switching_layout_on() -> None:
     overlay = OverlayState(enabled=False, layout_on=True)
-    overlay.indicate(Layer.NUM, locked=True, caps_word=False)
+    overlay = overlay.indicate(Layer.NUM, locked=True, caps_word=False)
     assert not bool(overlay.visible)
-    overlay.set_layout(False)
-    overlay.set_layout(True)
+    overlay = overlay.set_layout(on=False)
+    overlay = overlay.set_layout(on=True)
     assert not bool(overlay.visible)
-    overlay.enabled = True
+    overlay = replace(overlay, enabled=True)
     assert bool(overlay.visible)
 
 
 def test_overlay_preference_is_remembered(tmp_path: Path) -> None:
     preference = tmp_path / "settings" / "overlay.json"
     assert load_enabled(preference)
-    save_enabled(False, preference)
+    save_enabled(enabled=False, path=preference)
     assert not load_enabled(preference)
-    save_enabled(True, preference)
+    save_enabled(enabled=True, path=preference)
     assert load_enabled(preference)
     assert not preference.with_suffix(".tmp").exists()
 
 
 def test_invalid_overlay_preference_uses_the_visible_default(tmp_path: Path) -> None:
     preference = tmp_path / "overlay.json"
-    for text in ('not json', '[]', '{}', '{"enabled": "false"}', '{"enabled": 0}'):
+    for text in ("not json", "[]", "{}", '{"enabled": "false"}', '{"enabled": 0}'):
         preference.write_text(text, encoding="utf-8")
         assert load_enabled(preference)
 
@@ -160,18 +161,18 @@ def test_drag_position_and_tray_visibility_are_saved_independently(tmp_path: Pat
     preference = tmp_path / "settings" / "overlay.json"
     position = preference.with_name("overlay-position.json")
     assert load_position(position) is None
-    save_enabled(False, preference)
+    save_enabled(enabled=False, path=preference)
     save_position((-730, -1200), position)
     assert not load_enabled(preference)
     assert load_position(position) == (-730, -1200)
-    save_enabled(True, preference)
+    save_enabled(enabled=True, path=preference)
     assert load_position(position) == (-730, -1200)
     assert not position.with_suffix(".tmp").exists()
 
 
 def test_invalid_drag_position_uses_default_placement(tmp_path: Path) -> None:
     position = tmp_path / "overlay-position.json"
-    for text in ('not json', '[]', '{}', '{"x": 100}', '{"x": false, "y": 20}', '{"x": 10.5, "y": 20}', '{"x": 10, "y": "20"}'):
+    for text in ("not json", "[]", "{}", '{"x": 100}', '{"x": false, "y": 20}', '{"x": 10.5, "y": 20}', '{"x": 10, "y": "20"}'):
         position.write_text(text, encoding="utf-8")
         assert load_position(position) is None
 
@@ -183,13 +184,13 @@ def test_overlay_can_be_placed_on_monitors_left_of_and_above_primary() -> None:
     areas = (left, above, primary)
     for position, expected in (((-720, -1000), left), ((1000, -800), above), ((960, 600), primary)):
         assert nearest_work_area(position, areas) == expected
-        assert fit_position(position, 780, 300, expected) == position
+        assert fit_position(position, (780, 300), expected) == position
 
 
 def test_overlay_keeps_its_handle_reachable_after_monitor_is_unplugged() -> None:
     primary = Rect(0, 0, 1920, 1200)
     saved = (-720, -1000)
     work = nearest_work_area(saved, (primary,))
-    assert fit_position(saved, 780, 300, work) == (390, 0)
-    assert fit_position((1910, 1190), 780, 300, work) == (1530, 900)
-    assert fit_position(saved, 2400, 1400, work) == (960, 0)
+    assert fit_position(saved, (780, 300), work) == (390, 0)
+    assert fit_position((1910, 1190), (780, 300), work) == (1530, 900)
+    assert fit_position(saved, (2400, 1400), work) == (960, 0)

@@ -26,14 +26,11 @@ lazy from PySide6.QtGui import (
 )
 lazy from PySide6.QtWidgets import QAbstractButton, QLabel, QTextEdit, QWidget
 
-import assistant.feed_icons
 from assistant import notification_reading, notification_text, step_view
 from assistant.agent_session import StreamState
 from assistant.agent_window import log_view
-from assistant.control_feedback import paint_feedback
 from assistant.feed_items import WorkItem
 from assistant.feed_origin import App, Origin
-from assistant.feed_title import TITLE_SIZE, FeedTitle, heading_width
 from assistant.feed_triage import Assessment, proposal_revision, solutions_for
 from assistant.notifications import (
     REVEAL_SECONDS,
@@ -58,9 +55,14 @@ from assistant.notifications import (
     tone,
 )
 from assistant.qt_runtime import prepare
-from assistant.qt_text import INSET, TEXT_PADDING, Document, TextView, font, units
 from assistant.rich_text import Span
-from assistant.toast_style import Ink, Palette, palette
+from assistant.ui_components.bubble_style import Ink, Palette, palette
+from assistant.ui_components.bubble_surface import BubbleAppearance, paint_surface
+from assistant.ui_components.canvas_jump import CanvasJumpButton
+from assistant.ui_components.heading import TITLE_SIZE, FeedTitle, heading_width
+from assistant.ui_components.press_feedback import paint_feedback
+from assistant.ui_components.source_badge import paint_origins
+from assistant.ui_components.text import INSET, TEXT_PADDING, Document, TextView, font, units
 from winapi import appearance, windows
 from winapi.composition import DesktopComposition, Glass
 from winapi.shapes import Rect
@@ -75,6 +77,7 @@ if TYPE_CHECKING:
 class Prepared:
     width: int
     spans: tuple[Span, ...]
+    canvas_actions: tuple[Span, ...]
     body_height: int
     header_height: int
     label_width: int
@@ -140,18 +143,18 @@ class Measure:
         curated = source is not None and isinstance(source.item, Assessment)
         inset = 8
         maximum_width = min(maximum / scale, 280 if user else maximum / scale)
-        spans = notification_text.spans(content, expanded=expanded)
+        presentation = notification_text.bubble_text(notification_text.spans(content, expanded=expanded))
+        spans = presentation.body
         if curated and isinstance(content, WorkItem):
-            spans = spans[1:] if expanded else ()
+            spans = spans[1:]
         details = notification_text.step_blocks(content, expanded=expanded)
-        meta, footer = '' if compact else caption(content), "You" if user else hint(content)
+        meta, footer = "" if compact else caption(content), "You" if user else hint(content)
         if isinstance(content, (Entry, Turn)):
             # Agent questions use the bubble's voice tooltip, with no input footer.
-            footer = ''
+            footer = ""
         badge_width = 28 + 18 * (min(3, len(source.origins)) - 1) if source is not None and source.origins else 28
-        controls = ((26 if not user else 0)
-                    + (26 if notification_text.expandable(content) and not curated else 0) + (32 if can_stop(content) else 0))
-        label = notification_text.title_text(content) if isinstance(content, Turn) or curated else '' if compact else heading(content)
+        controls = (26 if not user else 0) + (26 if notification_text.expandable(content) and not curated else 0) + (32 if can_stop(content) else 0)
+        label = notification_text.title_text(content) if isinstance(content, Turn) or curated else "" if compact else heading(content)
         body_padding = INSET * 2 + 8
         # The feed has one column width. Only the person's speech uses a smaller
         # bubble; standalone replies must match conversation and proposal cards.
@@ -159,30 +162,56 @@ class Measure:
         if user:
             body_width = self.body.intrinsic_width(spans, max(1, maximum_width - body_padding))
             width = min(maximum_width, max(100, badge_width + INSET * 2, body_width + body_padding))
-        labels = (tuple(option.label for option in solutions_for(content.item))
-                  if isinstance(content, WorkItem) and isinstance(content.item, Assessment)
-                  else tuple(span.text for span in notification_text.options(content)))
+        labels = (
+            tuple(option.label for option in solutions_for(content.item))
+            if isinstance(content, WorkItem) and isinstance(content.item, Assessment)
+            else tuple(span.text for span in notification_text.options(content))
+        )
         text_width = max(1, round(math.ceil(width * scale) / scale) - body_padding)
         body_height = self.body.load(spans, text_width) + TEXT_PADDING * 2 if spans else 0
         details_height = self.details.total(details, text_width) + TEXT_PADDING * 2 if details else 0
         label_width: float = max(1, round(math.ceil(width * scale) / scale) - controls - badge_width - INSET * 2)
         if curated or isinstance(content, Turn):
-            label_width = heading_width(round(math.ceil(width * scale) / scale), badge_width,
-                                        stopping=can_stop(content), disclosing=notification_text.expandable(content) and not curated)
-            title_height = (self.text_height(label, TITLE_SIZE, label_width, bold=True) if expanded
-                            else QFontMetricsF(font(TITLE_SIZE, bold=True)).height())
+            label_width = heading_width(
+                round(math.ceil(width * scale) / scale),
+                badge_width,
+                stopping=can_stop(content),
+                disclosing=notification_text.expandable(content) and not curated,
+            )
+            title_height = (
+                self.text_height(label, TITLE_SIZE, label_width, bold=True) if expanded else QFontMetricsF(font(TITLE_SIZE, bold=True)).height()
+            )
             header: float = 16 + max(24, math.ceil(title_height)) + 6
         else:
-            header = 20 if user else 36 if compact else inset + 14 + max(28, self.text_height(label, 9.5, label_width, bold=True)
-                                                                      + self.text_height(meta, 8.5, label_width)) + 8
+            header = (
+                20
+                if user
+                else 36
+                if compact
+                else inset + 14 + max(28, self.text_height(label, 9.5, label_width, bold=True) + self.text_height(meta, 8.5, label_width)) + 8
+            )
         footer_height = self.text_height(footer, 8.5, text_width) + 8 if footer and not user else 0
         if labels:
             geometry = choice_geometry(labels, text_width)
             footer_height = geometry[-1][1] + 30
-            footer = ''
-        return Prepared(math.ceil(width * scale), spans, math.ceil(body_height * scale), math.ceil(header * scale),
-                        math.floor(label_width * scale), footer, math.ceil(footer_height * scale), meta, details,
-                        math.ceil(details_height * scale), round(200 * scale), round(8 * scale), math.floor(text_width * scale))
+            footer = ""
+        footer_height += 42 * len(presentation.canvas_actions)
+        return Prepared(
+            math.ceil(width * scale),
+            spans,
+            presentation.canvas_actions,
+            math.ceil(body_height * scale),
+            math.ceil(header * scale),
+            math.floor(label_width * scale),
+            footer,
+            math.ceil(footer_height * scale),
+            meta,
+            details,
+            math.ceil(details_height * scale),
+            round(200 * scale),
+            round(8 * scale),
+            math.floor(text_width * scale),
+        )
 
     def fit_body(self, document: Document, spans: tuple[Span, ...], width: int, available: int) -> int:
         if not spans:
@@ -197,10 +226,10 @@ class Measure:
         text_width = max(1, prepared.text_width + width - prepared.width)
         details = min(prepared.details_height, budget)
         available -= details
-        body = (self.fit_body(self.body, prepared.spans, text_width, available)
-                if prepared.body_height > available else prepared.body_height)
-        return Layout(details, body, prepared.hint, prepared.hint_height,
-                      prepared.header_height + details + body + prepared.hint_height + prepared.padding)
+        body = self.fit_body(self.body, prepared.spans, text_width, available) if prepared.body_height > available else prepared.body_height
+        return Layout(
+            details, body, prepared.hint, prepared.hint_height, prepared.header_height + details + body + prepared.hint_height + prepared.padding
+        )
 
     def close(self) -> None:
         self.body.close()
@@ -232,7 +261,7 @@ class IconButton(QAbstractButton):
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         paint_feedback(self, painter, self.ink)
         painter.setPen(QPen(QColor(self.ink), 1.6, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
-        painter.setOpacity(.45 if not self.isEnabled() else 1)
+        painter.setOpacity(0.45 if not self.isEnabled() else 1)
         cx, cy = self.width() / 2, self.height() / 2
         path = QPainterPath()
         match self.kind:
@@ -276,7 +305,7 @@ class IconButton(QAbstractButton):
 
 
 class SourceBadge(QWidget):
-    __slots__ = ('card',)
+    __slots__ = ("card",)
 
     def __init__(self, card: Card) -> None:
         super().__init__(card.window)
@@ -286,9 +315,9 @@ class SourceBadge(QWidget):
     def source(self, content: Content) -> None:
         source = origin_item(content)
         sources = source.origins if source is not None and source.origins else (Origin(App.WORKSPACE, App.WORKSPACE.value),)
-        names = ', '.join(origin.name for origin in sources)
-        names += ' · You' if tone(content) is Tone.USER else ''
-        self.setAccessibleName('From ' + names)
+        names = ", ".join(origin.name for origin in sources)
+        names += " · You" if tone(content) is Tone.USER else ""
+        self.setAccessibleName("From " + names)
         self.setToolTip(escape(names))
         self.setGeometry(0, 0, 28 + 18 * (min(3, len(sources)) - 1), 28)
         self.show()
@@ -301,12 +330,7 @@ class SourceBadge(QWidget):
         sources = source.origins if source is not None and source.origins else (Origin(App.WORKSPACE, App.WORKSPACE.value),)
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        for index, origin in reversed(tuple(enumerate(sources[:3]))):
-            x = index * 18
-            painter.setPen(QPen(QColor(self.card.colors.edge), 1))
-            painter.setBrush(QColor(self.card.colors.surface))
-            painter.drawEllipse(QRectF(x + .5, .5, 27, 27))
-            assistant.feed_icons.icon(origin.app).paint(painter, QtCore.QRect(x + 5, 5, 18, 18))
+        paint_origins(painter, sources, self.card.colors)
         if content is not None and spinning(content):
             painter.setPen(QPen(QColor(self.card.ink.foreground), 1.6))
             painter.drawArc(QRectF(1.5, 1.5, 25, 25), round(self.card.spin_angle * 16), 240 * 16)
@@ -322,21 +346,12 @@ class Bubble(QWidget):
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
         self.setWindowTitle("Workspace · Agent notification")
-        self.setToolTip("Press the agent voice-to-text button (N) to reply.")
+        self.setToolTip("Hold the agent voice-to-text button (N) to reply; release to send.")
 
     def paintEvent(self, event: QPaintEvent) -> None:
         card = self.card
         painter = QPainter(self)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        outline = QPainterPath()
-        outline.addRoundedRect(QRectF(self.rect()).adjusted(8.5, 8.5, -.5, -.5), 26, 26)
-        # A nonzero alpha also makes all empty space in the bubble a real mouse
-        # target. Text and icon padding need no extra invisible native windows.
-        painter.fillPath(outline, QColor(1, 1, 1, 1) if card.glass else QColor(card.colors.surface))
-        edge = QColor(card.colors.edge)
-        edge.setAlpha(85 if card.glass else 255)
-        painter.setPen(QPen(edge, 1))
-        painter.drawPath(outline)
+        edge = paint_surface(painter, QRectF(self.rect()), BubbleAppearance(card.colors, glass=card.glass))
         if card.content is None or card.prepared is None or tone(card.content) is Tone.USER:
             return
         if card.text.isVisible() and isinstance(card.content, Turn) and (not card.label.isHidden() or card.details.isVisible()):
@@ -356,8 +371,11 @@ class Bubble(QWidget):
     def mouseReleaseEvent(self, event: QMouseEvent) -> None:
         prepared = self.card.prepared
         source = isinstance(self.card.content, WorkItem) and isinstance(self.card.content.item, Assessment)
-        if (event.button() is Qt.MouseButton.LeftButton and prepared is not None
-                and (source or event.position().y() < prepared[2].header_height / self.card.owner.scale)):
+        if (
+            event.button() is Qt.MouseButton.LeftButton
+            and prepared is not None
+            and (source or event.position().y() < prepared[2].header_height / self.card.owner.scale)
+        ):
             self.card.toggle()
             event.accept()
         else:
@@ -377,6 +395,7 @@ class Card:
         "__weakref__",
         "badge",
         "bounds",
+        "canvas_actions",
         "caption",
         "choice_revision",
         "choices",
@@ -425,9 +444,15 @@ class Card:
         "window",
     )
 
-    def __init__(self, owner: AgentToasts, toast: Toast, width: int, *,
-                 move: Callable[[int, Rect], None] = windows.move,
-                 glass: Callable[[DesktopComposition], Glass] | None = None) -> None:
+    def __init__(
+        self,
+        owner: AgentToasts,
+        toast: Toast,
+        width: int,
+        *,
+        move: Callable[[int, Rect], None] = windows.move,
+        glass: Callable[[DesktopComposition], Glass] | None = None,
+    ) -> None:
         # Geometry and glass creation are the two native effects owned by a card;
         # injected adapters retain real widgets and the same scene lifetime.
         self.move, self.create_glass = move, _glass if glass is None else glass
@@ -463,12 +488,9 @@ class Card:
             label.setTextFormat(Qt.TextFormat.PlainText)
             label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
             label.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
-        self.hint.linkActivated.connect(self.owner.action_link)
         self.text = TextView(self.window, self.scroll_delta, self.menu)
         self.text.setToolTip(self.window.toolTip())
-        self.text.setOpenExternalLinks(False)
-        self.text.setOpenLinks(False)
-        self.text.anchorClicked.connect(self.owner.action)
+        self.connect_actions()
         self.details = step_view.StepsView(self.window, self.scroll_details, self.history)
         for text in (self.text, self.details):
             text.verticalScrollBar().valueChanged.connect(self.window.update)
@@ -479,11 +501,18 @@ class Card:
         self.disclosure.clicked.connect(self.toggle)
         self.dismiss = IconButton(self.window, Icon.DISMISS, lambda: self.owner.dismiss_card(self.key))
         self.dismiss.clicked.connect(lambda: self.owner.dismiss_card(self.key))
+        self.canvas_actions: tuple[tuple[Span, CanvasJumpButton], ...] = ()
         self.choices: list[QtWidgets.QPushButton] = []
-        self.choice_revision = ''
+        self.choice_revision = ""
         self.chosen = False
         self.handle = int(self.window.winId())
         windows.make_overlay(self.handle, click_through=False)
+
+    def connect_actions(self) -> None:
+        self.hint.linkActivated.connect(self.owner.action_link)
+        self.text.setOpenExternalLinks(False)
+        self.text.setOpenLinks(False)
+        self.text.anchorClicked.connect(self.owner.action)
 
     def park(self) -> None:
         """Retain native windows, but detach every interaction from old content.
@@ -503,13 +532,14 @@ class Card:
         self.expanded = self.hovered = self.tail_pending = False
         self.reveals = ()
         self.spans = ()
+        self.update_canvas_actions(())
         self.text.setExtraSelections([])
         self.text.update_spans((), 1)
         self.details.clear()
         for button in self.choices:
             shiboken6.delete(button)
         self.choices = []
-        self.choice_revision = ''
+        self.choice_revision = ""
         self.chosen = False
 
     def bind(self, toast: Toast, width: int) -> None:
@@ -561,14 +591,14 @@ class Card:
         callback = self.owner.agent.on_choose_work
         if callback is None or not callback(self.content.item.identity, revision, choice):
             if self.owner.agent.on_problem is not None:
-                self.owner.agent.on_problem('That solution could not be started. The proposal may have changed; try again.')
+                self.owner.agent.on_problem("That solution could not be started. The proposal may have changed; try again.")
             return
         self.chosen = True
         for button in self.choices:
             button.setEnabled(False)
         selected_button = next((button for button in self.choices if button.objectName() == choice), None)
         if selected_button is not None:
-            selected_button.setText('Queued')
+            selected_button.setText("Queued")
 
     def update_choices(self, content: Content) -> None:
         item = content.item if isinstance(content, WorkItem) and isinstance(content.item, Assessment) else None
@@ -595,29 +625,49 @@ class Card:
             button.setObjectName(solution.identity)
             button.setFont(font(8.5))
             button.setCursor(Qt.CursorShape.PointingHandCursor)
-            button.setAccessibleName(solution.label + (' · Recommended' if index == 0 else ''))
-            button.setToolTip(('Recommended: ' if index == 0 else '') + solution.detail)
+            button.setAccessibleName(solution.label + (" · Recommended" if index == 0 else ""))
+            button.setToolTip(("Recommended: " if index == 0 else "") + solution.detail)
             button.clicked.connect(self.solution_action(revision, solution.identity))
             self.choices.append(button)
         self.style_choices()
 
+    def update_canvas_actions(self, actions: tuple[Span, ...]) -> None:
+        if actions == tuple(span for span, _button in self.canvas_actions):
+            return
+        for _span, old in self.canvas_actions:
+            shiboken6.delete(old)
+
+        def create(span: Span) -> tuple[Span, CanvasJumpButton]:
+            button = CanvasJumpButton(self.window)
+            button.recolor(self.ink)
+            button.clicked.connect(self.link_action(span.link))
+            return span, button
+
+        # The card owns native button lifetimes; observations and membership
+        # stay immutable. Parked cards discard their old destinations.
+        self.canvas_actions = tuple(create(span) for span in actions)
+
     def link_action(self, url: str) -> Callable[[object], None]:
         def clicked(_checked: object) -> None:
             self.owner.action_link(url)
+
         return clicked
 
     def solution_action(self, revision: str, choice: str) -> Callable[[object], None]:
         def clicked(_checked: object) -> None:
             self.choose_solution(revision, choice)
+
         return clicked
 
     def style_choices(self) -> None:
         for index, button in enumerate(self.choices):
-            button.setStyleSheet(f'QPushButton {{ color: {self.ink.foreground}; background: transparent; '
-                                f'border: 1px solid {self.ink.link if index == 0 else self.ink.secondary}; '
-                                'border-radius: 10px; padding: 2px 8px; } '
-                                'QPushButton:hover { background: rgba(128,128,160,40); } '
-                                'QPushButton:disabled { color: #888888; }')
+            button.setStyleSheet(
+                f"QPushButton {{ color: {self.ink.foreground}; background: transparent; "
+                f"border: 1px solid {self.ink.link if index == 0 else self.ink.secondary}; "
+                "border-radius: 10px; padding: 2px 8px; } "
+                "QPushButton:hover { background: rgba(128,128,160,40); } "
+                "QPushButton:disabled { color: #888888; }"
+            )
 
     def toggle(self, *, animate: bool = True) -> None:
         if self.closed or self.retiring or self.content is None or not notification_text.expandable(self.content):
@@ -629,12 +679,12 @@ class Card:
             scroll = self.details.verticalScrollBar()
             scroll.setValue(scroll.value() + round(-delta / 120 * self.line_height / self.owner.scale * 3))
             self.detail_offset = self.details.offset
-            self.owner.set_hover(self.key, True)
+            self.owner.set_hover(self.key, inside=True)
 
     def check_pointer(self) -> None:
         if not self.closed and self.bounds is not None:
             x, y = self.owner.desktop.cursor_position()
-            self.owner.set_hover(self.key, self.bounds.contains(x, y))
+            self.owner.set_hover(self.key, inside=self.bounds.contains(x, y))
 
     def scroll_delta(self, delta: int) -> None:
         if not delta or self.closed or self.prepared is None:
@@ -643,7 +693,7 @@ class Card:
         scroll.setValue(scroll.value() + round(-delta / 120 * self.line_height / self.owner.scale * 3))
         self.reader = notification_reading.Paused(self.text.offset * self.owner.scale)
         self.page_origin = self.reader.offset
-        self.owner.set_hover(self.key, True)
+        self.owner.set_hover(self.key, inside=True)
         self.owner.tick()
 
     def overflow(self) -> int:
@@ -661,7 +711,8 @@ class Card:
         self.reader = notification_reading.advance(self.reader, now, limit, self.speed, paused=paused)
         if limit and not paused and self.text.height() > 1:
             offset = notification_reading.displayed(
-                self.reader.offset, limit, self.layout.body_height, self.line_height, smooth=smooth, origin=self.page_origin)
+                self.reader.offset, limit, self.layout.body_height, self.line_height, smooth=smooth, origin=self.page_origin
+            )
             self.text.verticalScrollBar().setValue(round(offset / self.owner.scale))
         return not isinstance(self.reader, notification_reading.Finished)
 
@@ -685,20 +736,21 @@ class Card:
                 log_view(f"Rounded glass unavailable; using the solid material: {error}")
         self.glass = preference is appearance.Material.GLASS and self.layer is not None
         if self.layer is not None:
-            self.layer.color(self.colors.tint, .82 if self.frost is appearance.Frost.SMOKED else .22)
+            self.layer.color(self.colors.tint, 0.82 if self.frost is appearance.Frost.SMOKED else 0.22)
             if not self.glass:
                 self.layer.hide()
         if not self.glass and not isinstance(preference, appearance.Contrast):
             self.ink = Ink()
         title_size = TITLE_SIZE if isinstance(content, Turn) or (isinstance(content, WorkItem) and isinstance(content.item, Assessment)) else 9.5
         for label, color in ((self.label, self.ink.foreground), (self.caption, self.ink.secondary), (self.hint, self.ink.secondary)):
-            face = (f"font-size: {title_size}pt; "
-                    "font-weight: 600; font-family: 'Segoe UI';") if label is self.label else ''
+            face = (f"font-size: {title_size}pt; font-weight: 600; font-family: 'Segoe UI';") if label is self.label else ""
             label.setStyleSheet(f"background: transparent; color: {color}; padding: 0; margin: 0; border: none; {face}")
         for button in (self.stop, self.disclosure, self.dismiss):
             button.ink = self.ink.foreground
             button.update()
         self.style_choices()
+        for _span, canvas_button in self.canvas_actions:
+            canvas_button.recolor(self.ink)
         self.text.recolor(self.ink)
         self.details.recolor(self.ink)
         self.badge.update()
@@ -721,9 +773,9 @@ class Card:
         self.label.flow = curated or isinstance(content, Turn)
         self.label.expanded = self.expanded
         self.label.setFont(font(TITLE_SIZE if self.label.flow else 9.5, bold=True))
-        self.label.setObjectName('workItemTitle' if curated else '')
+        self.label.setObjectName("workItemTitle" if curated else "")
         self.label.setText(notification_text.title_text(content))
-        self.label.setToolTip(escape(self.label.text()) if curated else '')
+        self.label.setToolTip(escape(self.label.text()) if curated else "")
         self.caption.setText(prepared.caption)
         self.label.setVisible(self.label.flow or (not user and not compact))
         self.caption.setVisible(not user and bool(prepared.caption))
@@ -733,8 +785,12 @@ class Card:
         width = prepared.width
         source = origin_item(content)
         app = source.origins[0].app if source is not None and source.origins else None
-        if (content == self.content and (width, maximum) == (self.width, self.maximum)
-                and self.look == (tone(content), app, preference, self.frost) and self.layout is not None):
+        if (
+            content == self.content
+            and (width, maximum) == (self.width, self.maximum)
+            and self.look == (tone(content), app, preference, self.frost)
+            and self.layout is not None
+        ):
             return
         previous = self.content
         self.layout = self.owner.measure.layout(prepared, width, maximum)
@@ -744,22 +800,25 @@ class Card:
         self.render_heading(content, prepared)
         self.badge.source(content)
         self.update_choices(content)
+        self.update_canvas_actions(prepared.canvas_actions)
         self.hint.setTextFormat(Qt.TextFormat.PlainText)
         self.hint.setText(self.layout.hint)
         self.hint.setAlignment((Qt.AlignmentFlag.AlignRight if user else Qt.AlignmentFlag.AlignLeft) | Qt.AlignmentFlag.AlignVCenter)
         self.stop.setVisible(can_stop(content))
         self.dismiss.setVisible(not user)
-        self.stop.setEnabled(not (isinstance(content, Turn) and isinstance(content.state, Working) and content.state.phase is Busy.STOPPING)
-                             and not (isinstance(content, Recording) and content.state.phase == "stopping"))
+        self.stop.setEnabled(
+            not (isinstance(content, Turn) and isinstance(content.state, Working) and content.state.phase is Busy.STOPPING)
+            and not (isinstance(content, Recording) and content.state.phase == "stopping")
+        )
         source = origin_item(content)
         curated = source is not None and isinstance(source.item, Assessment)
         self.disclosure.setVisible(notification_text.expandable(content) and not curated)
         self.window.setCursor(Qt.CursorShape.PointingHandCursor if curated else Qt.CursorShape.ArrowCursor)
-        self.window.setAccessibleDescription(('Click to hide details' if self.expanded else 'Click to expand details') if curated else '')
+        self.window.setAccessibleDescription(("Click to hide details" if self.expanded else "Click to expand details") if curated else "")
         self.disclosure.expanded = self.expanded
-        section = 'details' if isinstance(content, WorkItem) else 'steps'
-        self.disclosure.setAccessibleName(('Hide ' if self.expanded else 'Show ') + section)
-        self.disclosure.setToolTip(self.disclosure.accessibleName() + (' · ' + caption(content) if caption(content) else ''))
+        section = "details" if isinstance(content, WorkItem) else "steps"
+        self.disclosure.setAccessibleName(("Hide " if self.expanded else "Show ") + section)
+        self.disclosure.setToolTip(self.disclosure.accessibleName() + (" · " + caption(content) if caption(content) else ""))
         self.disclosure.update()
         text_width = max(1, prepared.text_width / self.owner.scale)
         self.details.present(content, text_width, expanded=self.expanded)
@@ -769,13 +828,22 @@ class Card:
             self.text.update_spans(prepared.spans, text_width)
             self.speed = notification_reading.pace("".join(span.text for span in prepared.spans), prepared.body_height, self.line_height)
             before, after = notification_text.answer(previous), notification_text.answer(content)
-            if (before is not None and after is not None and before.identity == after.identity and after.state is not StreamState.INTERRUPTED
-                    and self.owner.motion_enabled() and not isinstance(preference, appearance.Contrast)):
+            if (
+                before is not None
+                and after is not None
+                and before.identity == after.identity
+                and after.state is not StreamState.INTERRUPTED
+                and self.owner.motion_enabled()
+                and not isinstance(preference, appearance.Contrast)
+            ):
                 end = units("".join(span.text for span in self.spans))
                 if end > offset:
                     self.reveals = (*self.reveals[-11:], Reveal(offset, end, self.owner.clock()))
-        self.place_content(self.frame.width if previous is not None else width, self.frame.height if previous is not None else self.height,
-                           self.frame.details if previous is not None else self.layout.details_height)
+        self.place_content(
+            self.frame.width if previous is not None else width,
+            self.frame.height if previous is not None else self.height,
+            self.frame.details if previous is not None else self.layout.details_height,
+        )
         if isinstance(content, Recording):
             self.tail_pending = True  # Follow the newest transcript after Qt resolves the final viewport.
         self.window.setAccessibleName(f"{heading(content)}. {prepared.caption}".strip())
@@ -855,19 +923,32 @@ class Card:
                 text.verticalScrollBar().setValue(offset)
             else:
                 text.hide()
-        footer_top = round((top + body_height) / scale)
+        self.place_footer(round((top + body_height) / scale), text_width)
+
+    def place_footer(self, top: int, width: int) -> None:
+        if self.layout is None or self.prepared is None:
+            return
+        scale = self.owner.scale
+        layout, prepared = self.layout, self.prepared[2]
+        footer_top = top
         if self.choices:
             self.hint.hide()
-            geometry = choice_geometry(tuple(button.text() for button in self.choices), text_width)
+            geometry = choice_geometry(tuple(button.text() for button in self.choices), width)
             for button, (x, y, button_width) in zip(self.choices, geometry, strict=True):
                 button.setGeometry(INSET + 8 + x, footer_top + y, button_width, 24)
                 button.show()
             footer_top += geometry[-1][1] + 30
-        elif layout.hint_height:
-            self.hint.setGeometry(INSET + 8, footer_top, text_width, max(1, round(layout.hint_height / scale) - 4))
+        elif layout.hint_height > len(prepared.canvas_actions) * 42 * scale:
+            hint_height = layout.hint_height / scale - len(prepared.canvas_actions) * 42
+            self.hint.setGeometry(INSET + 8, footer_top, width, max(1, round(hint_height) - 4))
             self.hint.show()
+            footer_top += round(hint_height)
         else:
             self.hint.hide()
+        for _span, button in self.canvas_actions:
+            button.setGeometry(INSET + 8, footer_top + 6, min(width, button.sizeHint().width()), 32)
+            button.show()
+            footer_top += 42
         self.window.update()
 
     def pulse(self, now: float) -> None:
@@ -883,8 +964,7 @@ class Card:
         if self.bounds is not None and self.right == right and self.frame == frame:
             return
         bounds = Rect(right - round(frame.width), round(frame.y), right, round(frame.y + frame.height))
-        if (self.bounds is None or (self.bounds.width, self.bounds.height) != (bounds.width, bounds.height)
-                or self.frame.details != frame.details):
+        if self.bounds is None or (self.bounds.width, self.bounds.height) != (bounds.width, bounds.height) or self.frame.details != frame.details:
             self.place_content(bounds.width, bounds.height, frame.details)
         if self.bounds != bounds:
             self.move(self.handle, bounds)
@@ -906,7 +986,7 @@ class Card:
 
     def reveal(self) -> None:
         self.window.show()
-        windows.show_quietly(self.handle, True)
+        windows.show_quietly(self.handle, visible=True)
         if self.layer is not None and self.glass:
             self.layer.position(self.surface_bounds, self.owner.scale, self.alpha)
             self.layer.show(self.handle)

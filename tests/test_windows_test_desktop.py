@@ -82,14 +82,23 @@ def test_desktop_bootstrap_preserves_arguments_streams_and_failure_status(tmp_pa
     )
     # Request a fresh desktop identity to force relaunch even though this child
     # initially inherits our private desktop. Neither desktop is ever shown.
-    arguments = ('spaces and "quotes"', 'Åäö $literal `value`')
+    arguments = ('spaces and "quotes"', "Åäö $literal `value`")
     checked = subprocess.run(
-        (sys.executable, '-X', 'utf8', '-B', str(script), *arguments),
-        cwd=Path(__file__).resolve().parent.parent, input='Fixture input Åäö\n',
-        env=dict(os.environ, PYTHONPATH=str(Path(__file__).resolve().parent.parent),
-                 WORKSPACE_TEST_DESKTOP='workspace-tests-' + uuid.uuid4().hex, WORKSPACE_E2E='1'),
-        capture_output=True, text=True, encoding='utf-8', timeout=30, check=False,
+        (sys.executable, "-X", "utf8", "-B", str(script), *arguments),
+        cwd=Path(__file__).resolve().parent.parent,
+        input="Fixture input Åäö\n",
+        env=dict(
+            os.environ,
+            PYTHONPATH=str(Path(__file__).resolve().parent.parent),
+            WORKSPACE_TEST_DESKTOP="workspace-tests-" + uuid.uuid4().hex,
+            WORKSPACE_E2E="1",
+        ),
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        timeout=30,
+        check=False,
     )
     assert checked.returncode == 7, checked.stderr
     assert TypeAdapter[tuple[str, ...]](tuple[str, ...]).validate_json(checked.stdout) == arguments
-    assert checked.stderr.strip() == 'Fixture failure Åäö'
+    assert checked.stderr.strip() == "Fixture failure Åäö"

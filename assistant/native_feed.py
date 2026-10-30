@@ -45,13 +45,19 @@ def project(state: NativeFeed, feed: Feed) -> Feed:
     result = handle(result, state.feed.handled)
     for key in state.reopened:
         result = reopen(result, key)
-    return replace(result, muted_apps=state.muted if state.muted is not None else result.muted_apps,
-                   notice_detail=state.feed.notice_detail or result.notice_detail)
+    return replace(
+        result,
+        muted_apps=state.muted if state.muted is not None else result.muted_apps,
+        notice_detail=state.feed.notice_detail or result.notice_detail,
+    )
 
 
 def captured(feed: Feed, marks: tuple[Acknowledgement, ...]) -> tuple[Update, ...]:
-    return tuple(update for update in feed.updates if isinstance(update.source, WindowsNotice)
-                 and Acknowledgement(update.key, update_fingerprint(update)) in marks)
+    return tuple(
+        update
+        for update in feed.updates
+        if isinstance(update.source, WindowsNotice) and Acknowledgement(update.key, update_fingerprint(update)) in marks
+    )
 
 
 def forward(feed: Feed, command: Command) -> tuple[Command, ...]:
@@ -75,8 +81,7 @@ def acted(state: NativeFeed, feed: Feed, command: Command) -> Changed:
         case HandleNotice(notice):
             native = (notice_update(notice),)
         case Reopen(key) if any(update.key == key and isinstance(update.source, WindowsNotice) for update in feed.updates):
-            return Changed(replace(state, feed=reopen(state.feed, key),
-                                   reopened=(*state.reopened, key)[-MAX_HANDLED:]))
+            return Changed(replace(state, feed=reopen(state.feed, key), reopened=(*state.reopened, key)[-MAX_HANDLED:]))
         case NotificationFilters(apps):
             return Changed(replace(state, muted=apps))
         case _:
@@ -84,5 +89,7 @@ def acted(state: NativeFeed, feed: Feed, command: Command) -> Changed:
     keys = {update.key for update in native}
     updated = updates_observed(state.feed, native)
     updated = handle(updated, tuple(Acknowledgement(update.key, update_fingerprint(update)) for update in native))
-    return Changed(replace(state, feed=updated, reopened=tuple(key for key in state.reopened if key not in keys)),
-                   tuple(update.source.key for update in native if isinstance(update.source, WindowsNotice)))
+    return Changed(
+        replace(state, feed=updated, reopened=tuple(key for key in state.reopened if key not in keys)),
+        tuple(update.source.key for update in native if isinstance(update.source, WindowsNotice)),
+    )

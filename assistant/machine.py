@@ -45,7 +45,12 @@ class HumanInput(Protocol):
     """A local UI or a worker's cancellable human-input bridge."""
 
     def agent_input(
-        self, title: str, detail: str = "", *, question: bool = False, cancel: threading.Event | None = None,
+        self,
+        title: str,
+        detail: str = "",
+        *,
+        question: bool = False,
+        cancel: threading.Event | None = None,
     ) -> str | None: ...
 
 
@@ -83,10 +88,15 @@ class NativeDesktop:
 
     def paste(self, text: str) -> None:
         def shortcut() -> None:
-            inputs.send_keys([
-                inputs.KeyStroke(0xA2, True), inputs.KeyStroke(0x56, True),
-                inputs.KeyStroke(0x56, False), inputs.KeyStroke(0xA2, False),
-            ], MAGIC)
+            inputs.send_keys(
+                [
+                    inputs.KeyStroke(0xA2, down=True),
+                    inputs.KeyStroke(0x56, down=True),
+                    inputs.KeyStroke(0x56, down=False),
+                    inputs.KeyStroke(0xA2, down=False),
+                ],
+                MAGIC,
+            )
 
         paste_text(self.owner, text, clipboard, shortcut, lambda: time.sleep(_PASTE_WAIT_S))
 
@@ -115,8 +125,9 @@ class NativeCaptureObservation:
         if not foreground:
             return CaptureSources(None, Rect(0, 0, 0, 0), (), None)
         selected = windows.visible_rect(handle) if handle and windows.exists(handle) and not windows.is_minimized(handle) else None
-        return CaptureSources(screen.monitor_of(foreground).area, screen.virtual_screen(),
-                              tuple(monitor.area for monitor in screen.monitors()), selected)
+        return CaptureSources(
+            screen.monitor_of(foreground).area, screen.virtual_screen(), tuple(monitor.area for monitor in screen.monitors()), selected
+        )
 
 
 def open_file(target: str) -> None:
@@ -129,9 +140,15 @@ class WinMachine:
     __slots__ = ("background_browser", "capture_sources", "desktop", "meetings", "open_target", "teams_client", "ui")
 
     def __init__(
-        self, desktop: DesktopAccess, ui: HumanInput, *, browser: BrowserControl | None = None,
-        teams: TeamsControl | None = None, meetings: MeetingControl | None = None,
-        capture_sources: CaptureObservation | None = None, open_target: Callable[[str], None] = open_file,
+        self,
+        desktop: DesktopAccess,
+        ui: HumanInput,
+        *,
+        browser: BrowserControl | None = None,
+        teams: TeamsControl | None = None,
+        meetings: MeetingControl | None = None,
+        capture_sources: CaptureObservation | None = None,
+        open_target: Callable[[str], None] = open_file,
     ) -> None:
         # Each optional capability has its own owner; worker composition selects
         # transports independently of capture, meetings and human input.
@@ -174,7 +191,12 @@ class WinMachine:
             self.teams_client.cancel_sign_in()
 
     def run_powershell(
-        self, command: str, timeout_s: float, *, cwd: str | None = None, cancel: threading.Event | None = None,
+        self,
+        command: str,
+        timeout_s: float,
+        *,
+        cwd: str | None = None,
+        cancel: threading.Event | None = None,
     ) -> tuple[int, str]:
         return commands.powershell(command, cwd=cwd, timeout_s=timeout_s, cancel=cancel)
 
@@ -204,11 +226,23 @@ class WinMachine:
     def desktop_state(self) -> str:
         x, y = inputs.cursor_position()
         data: dict[str, Json] = {
-            "coordinates": "physical screen pixels", "foreground": windows.foreground(), "cursor": {"x": x, "y": y},
-            "monitors": [{"index": index, "bounds": rectangle_data(monitor.area), "work": rectangle_data(monitor.work),
-                          "primary": monitor.primary} for index, monitor in enumerate(screen.monitors())],
-            "windows": [{"handle": window.handle, "title": window.title, "app": window.exe, "minimized": window.minimized,
-                         "bounds": rectangle_data(windows.outer_rect(window.handle))} for window in windows.windows()],
+            "coordinates": "physical screen pixels",
+            "foreground": windows.foreground(),
+            "cursor": {"x": x, "y": y},
+            "monitors": [
+                {"index": index, "bounds": rectangle_data(monitor.area), "work": rectangle_data(monitor.work), "primary": monitor.primary}
+                for index, monitor in enumerate(screen.monitors())
+            ],
+            "windows": [
+                {
+                    "handle": window.handle,
+                    "title": window.title,
+                    "app": window.exe,
+                    "minimized": window.minimized,
+                    "bounds": rectangle_data(windows.outer_rect(window.handle)),
+                }
+                for window in windows.windows()
+            ],
         }
         return json.dumps(data, ensure_ascii=False)
 
@@ -225,13 +259,21 @@ class WinMachine:
             if windows.is_maximized(handle) or windows.is_minimized(handle):
                 windows.show(handle, windows.SW_RESTORE)
             if action in ("snap_left", "snap_right"):
-                bounds = half(screen.monitor_of(handle).work, "left" if action == "snap_left" else "right",
-                              windows.outer_rect(handle), windows.visible_rect(handle))
+                bounds = half(
+                    screen.monitor_of(handle).work,
+                    "left" if action == "snap_left" else "right",
+                    windows.outer_rect(handle),
+                    windows.visible_rect(handle),
+                )
             if bounds is None:
                 raise OSError("Moving a window requires bounds.")
             windows.move(handle, bounds)
-        state: dict[str, Json] = {"handle": handle, "bounds": rectangle_data(windows.outer_rect(handle)),
-                                  "minimized": windows.is_minimized(handle), "maximized": windows.is_maximized(handle)}
+        state: dict[str, Json] = {
+            "handle": handle,
+            "bounds": rectangle_data(windows.outer_rect(handle)),
+            "minimized": windows.is_minimized(handle),
+            "maximized": windows.is_maximized(handle),
+        }
         return json.dumps(state)
 
     def inspect_ui(self, request: dict[str, Json], cancel: threading.Event) -> tuple[int, str]:
@@ -243,7 +285,7 @@ class WinMachine:
     def move_mouse(self, x: int, y: int) -> None:
         inputs.move_mouse(x, y, screen.virtual_screen(), MAGIC)
 
-    def mouse_button(self, button: str, down: bool) -> None:
+    def mouse_button(self, button: str, *, down: bool) -> None:
         inputs.mouse_button(button, MAGIC, down=down)
 
     def click(self, x: int, y: int, button: str, count: int) -> None:
@@ -256,7 +298,7 @@ class WinMachine:
         self.desktop.paste(text)
 
     def press_keys(self, strokes: list[tuple[int, bool]]) -> None:
-        inputs.send_keys([inputs.KeyStroke(vk, down, vk in _EXTENDED_VKS) for vk, down in strokes], MAGIC)
+        inputs.send_keys([inputs.KeyStroke(vk, down=down, extended=vk in _EXTENDED_VKS) for vk, down in strokes], MAGIC)
 
     def scroll(self, x: int, y: int, clicks: int, *, horizontal: bool = False) -> None:
         inputs.move_mouse(x, y, screen.virtual_screen(), MAGIC)
@@ -288,4 +330,3 @@ class WinMachine:
 
     def install(self, summary: str) -> None:
         keeper.ask("install", summary)
-

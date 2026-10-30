@@ -54,6 +54,7 @@ class EventLoop:
         self.closed = False
         self.timer = QtCore.QTimer(app)
         self.timer.setInterval(16)
+
         def paint_tick() -> None:
             self.painted()
 
@@ -74,11 +75,17 @@ class EventLoop:
 
     def scale(self, work: Rect) -> float:
         area = next((monitor.area for monitor in screen.monitors() if monitor.area.contains(work.left, work.top)), None)
-        target = next((display for display in self.app.screens() if area is not None
-                       and (display.geometry().left(), display.geometry().top()) == (area.left, area.top)), self.app.primaryScreen())
+        target = next(
+            (
+                display
+                for display in self.app.screens()
+                if area is not None and (display.geometry().left(), display.geometry().top()) == (area.left, area.top)
+            ),
+            self.app.primaryScreen(),
+        )
         return target.devicePixelRatio()
 
-    def watch(self, visible: bool) -> None:
+    def watch(self, *, visible: bool) -> None:
         if not self.closed:
             self.timer.start() if visible else self.timer.stop()
 

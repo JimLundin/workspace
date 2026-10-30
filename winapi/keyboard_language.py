@@ -78,7 +78,7 @@ class NativeLanguageDesktop:
 class KeyboardLanguages:
     """Run on the layout's message-loop timer, never in a keyboard-hook callback."""
 
-    __slots__ = ("colemak", "desktop", "enabled", "english")
+    __slots__ = ("active", "colemak", "desktop", "english", "firmware_connected")
 
     def __init__(self, desktop: LanguageDesktop | None = None) -> None:
         self.desktop = desktop if desktop is not None else NativeLanguageDesktop()
@@ -86,16 +86,18 @@ class KeyboardLanguages:
         self.colemak = self.desktop.load(self.desktop.colemak())
         if not self.english or not self.colemak:
             raise OSError("Windows could not load the English and Colemak keyboards.")
-        self.enabled: bool | None = None
+        self.active: int | None = None
+        self.firmware_connected: bool = False
 
-    def enforce(self, enabled: bool) -> None:
-        target = self.english if enabled else self.colemak
-        if self.enabled != enabled:
+    def enforce(self, *, enabled: bool, firmware_connected: bool = False) -> None:
+        self.firmware_connected = firmware_connected
+        target = self.english if enabled or firmware_connected else self.colemak
+        if self.active != target:
             self.desktop.activate(target)
-            self.enabled = enabled
+            self.active = target
         hwnd, current = self.desktop.foreground()
         if hwnd and current != target:
             self.desktop.request(hwnd, target)
 
     def close(self) -> None:
-        self.enforce(False)
+        self.enforce(enabled=False, firmware_connected=self.firmware_connected)

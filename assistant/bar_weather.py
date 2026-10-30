@@ -20,9 +20,9 @@ def weather_response(raw: object) -> Weather:
         raise ValueError("Missing current weather.")
     values = cast(dict[str, object], current)
     temperature, code, day = values.get("temperature_2m"), values.get("weather_code"), values.get("is_day")
-    if (type(temperature) not in (int, float) or type(code) is not int or type(day) is not int or day not in (0, 1)):
+    if type(temperature) not in (int, float) or type(code) is not int or type(day) is not int or day not in (0, 1):
         raise ValueError("Invalid weather fields.")
-    return Weather(float(cast(float, temperature)), code, day == 1)
+    return Weather(float(cast(float, temperature)), code, daytime=day == 1)
 
 
 class LocalWeather:
@@ -44,14 +44,19 @@ class LocalWeather:
                     # Coarse coordinates suffice for temperature without sending a precise location.
                     latitude, longitude = (round(value, 1) for value in coordinates)
                     with httpx.Client(timeout=5, follow_redirects=True) as client:
-                        response = client.get("https://api.open-meteo.com/v1/forecast", params={
-                            "latitude": latitude, "longitude": longitude,
-                            "current": "temperature_2m,weather_code,is_day", "temperature_unit": "celsius",
-                        })
+                        response = client.get(
+                            "https://api.open-meteo.com/v1/forecast",
+                            params={
+                                "latitude": latitude,
+                                "longitude": longitude,
+                                "current": "temperature_2m,weather_code,is_day",
+                                "temperature_unit": "celsius",
+                            },
+                        )
                         response.raise_for_status()
                         raw: object = json.loads(response.text)
                         observed = weather_response(raw)
-            except (OSError, ValueError, httpx.HTTPError):
+            except OSError, ValueError, httpx.HTTPError:
                 pass
             if self.cancelled.is_set():
                 return
@@ -63,4 +68,4 @@ class LocalWeather:
 
     def close(self) -> None:
         self.cancelled.set()
-        self.worker.join(timeout=.1)
+        self.worker.join(timeout=0.1)

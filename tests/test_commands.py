@@ -16,7 +16,8 @@ def test_command_input_and_working_directory_survive_quotes_unicode_and_long_scr
     text = 'Åäö "quoted" $value `literal`\n' * 2000
     code, output = run(
         [sys.executable, "-c", "import os, sys; value=sys.stdin.buffer.read().decode('utf-8'); print(os.getcwd()); print(len(value))"],
-        input_text=text, cwd=str(tmp_path),
+        input_text=text,
+        cwd=str(tmp_path),
     )
     assert code == 0
     assert output.splitlines() == [str(tmp_path), str(len(text))]
@@ -24,7 +25,7 @@ def test_command_input_and_working_directory_survive_quotes_unicode_and_long_scr
 
 def test_command_exit_status_and_truncated_output_preserve_the_ending() -> None:
     code, output = run([sys.executable, "-c", "import sys; print('start' + 'x'*100000 + 'THE END'); sys.exit(7)"])
-    assert code == 7 and output.startswith('start') and output.rstrip().endswith('THE END')
+    assert code == 7 and output.startswith("start") and output.rstrip().endswith("THE END")
     assert "[output truncated]" in output and len(output) < OUTPUT_LIMIT + 100
 
 
@@ -35,16 +36,13 @@ def test_stopped_command_does_not_launch_and_timeout_ends_running_work(tmp_path:
     code, output = run([sys.executable, "-c", "import pathlib,sys; pathlib.Path(sys.argv[1]).touch()", str(marker)], cancel=cancelled)
     assert code != 0 and "Stopped" in output and not marker.exists()
     before = time.monotonic()
-    code, output = run([sys.executable, "-c", "import time; time.sleep(60)"], timeout_s=.1)
+    code, output = run([sys.executable, "-c", "import time; time.sleep(60)"], timeout_s=0.1)
     assert code != 0 and "Timed out" in output
     assert time.monotonic() - before < 12
 
 
 def test_stop_terminates_the_command_and_its_running_child() -> None:
-    child = (
-        "import socket,sys; channel=socket.create_connection(('127.0.0.1',int(sys.argv[1]))); "
-        "channel.sendall(b'!'); channel.recv(1)"
-    )
+    child = "import socket,sys; channel=socket.create_connection(('127.0.0.1',int(sys.argv[1]))); channel.sendall(b'!'); channel.recv(1)"
     parent = (
         "import subprocess,sys,time; "
         "subprocess.Popen([sys.executable,'-c',sys.argv[1],sys.argv[2]], "

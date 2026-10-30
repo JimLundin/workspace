@@ -35,10 +35,10 @@ ESCAPE: Final = Scancode(0x29)
 TALK: Final = Scancode(0x39)
 """The physical Spacebar holds dictation. C remains the Space/Nav thumb."""
 AGENT: Final = Scancode(0x31)
-"""Physical N toggles agent speech."""
+"""Physical N holds agent speech and sends on release."""
 DICTATE_TOGGLE: Final = Scancode(0x30)
 """Physical B toggles dictation."""
-VOICE_KEYS: Final = {TALK: Tool.DICTATE, DICTATE_TOGGLE: Tool.DICTATE_TOGGLE, AGENT: Tool.AGENT_VOICE_TOGGLE}
+VOICE_KEYS: Final = {TALK: Tool.DICTATE, DICTATE_TOGGLE: Tool.DICTATE_TOGGLE, AGENT: Tool.AGENT_VOICE}
 """Dedicated voice buttons work on every layer, without a tap-hold delay."""
 
 
@@ -216,7 +216,7 @@ CHARACTERS: Final[dict[Key, tuple[str, str]]] = {
 """The character each key types on the US English layout: (plain, shifted)."""
 
 
-def character(key: Key, shifted: bool) -> str | None:
+def character(key: Key, *, shifted: bool) -> str | None:
     """What a key types, or None for keys that don't type (arrows, Enter...)."""
     pair = CHARACTERS.get(key)
     return None if pair is None else pair[shifted]

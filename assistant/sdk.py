@@ -34,15 +34,17 @@ from agents.tool_context import ToolContext
 from openai import APIError, AsyncOpenAI, DefaultAsyncHttpxClient
 from openai.types.responses import ResponseOutputItem, ResponseStreamEvent
 from openai.types.shared import Reasoning
-from pydantic import AfterValidator, TypeAdapter
+from pydantic import AfterValidator, BeforeValidator, TypeAdapter
 
 from assistant.agent import KEPT_SCREENSHOTS
+from assistant.agent_history import History
 from assistant.agent_session import Answer, LiveMessage, ReasoningSummary, StreamState
 from assistant.llm import Json, ToolCall, ToolSpec
 from automation.execution import Incomplete, InstallationRequested, InvalidConfiguration, Reported, ReportStatus
 lazy from assistant.agent import Agent
 
 set_tracing_disabled(True)
+
 
 @runtime_checkable
 class _Fields(Protocol):
@@ -63,16 +65,33 @@ def materialize(value: object) -> object:
     match value, value:
         case dict(), _Fields() as fields:
             return {key: materialize(item) for key, item in fields.items()}
-        case (list() | Iterator()), _Elements() as elements:
+        case ((list() | Iterator()), _Elements() as elements):
             return [materialize(item) for item in elements]
         case _:
             return value
 
 
-_RESPONSE_ITEMS = TypeAdapter(Annotated[list[TResponseInputItem], AfterValidator(materialize)])
-_RESPONSE_ITEM = TypeAdapter(Annotated[TResponseInputItem, AfterValidator(materialize)])
 _JSON_ITEMS = TypeAdapter(list[Json])
 _SCHEMA = TypeAdapter(dict[str, object])
+
+
+def replay_metadata(value: object) -> object:
+    """A function-call output may have no namespace; replay input requires omission.
+
+    Adapt only this output/input mismatch, retaining reasoning and every other
+    field for normal validation. Rebuild the mapping without changing SDK input.
+    """
+    match value:
+        case {"type": "function_call", "namespace": None}:
+            return {key: item for key, item in _SCHEMA.validate_python(value).items() if key != "namespace"}
+        case _:
+            return value
+
+
+type _ReplayItem = Annotated[TResponseInputItem, BeforeValidator(replay_metadata)]
+
+_RESPONSE_ITEMS = TypeAdapter(Annotated[list[_ReplayItem], AfterValidator(materialize)])
+_RESPONSE_ITEM = TypeAdapter(Annotated[_ReplayItem, AfterValidator(materialize)])
 
 
 class StoppedError(Exception):
@@ -87,21 +106,25 @@ class MemorySession:
     session_settings: SessionSettings | None = None
 
     def __init__(
-        self, items: list[Json], *, checkpoint: Callable[[list[Json]], None] | None = None, session_id: str = "workspace",
+        self,
+        items: History,
+        *,
+        checkpoint: Callable[[list[Json]], None] | None = None,
+        session_id: str = "workspace",
     ) -> None:
         self.items = items
         self.checkpoint, self.session_id = checkpoint, session_id
 
     async def get_items(self, limit: int | None = None) -> list[TResponseInputItem]:
-        items = self.items if limit is None else self.items[-limit:] if limit > 0 else []
-        return _RESPONSE_ITEMS.validate_python(copy.deepcopy(items))
+        return _RESPONSE_ITEMS.validate_python(self.items.read(limit))
 
     async def add_items(self, items: list[TResponseInputItem]) -> None:
-        self.items.extend(_JSON_ITEMS.validate_python(copy.deepcopy(items)))
+        incoming = _JSON_ITEMS.validate_python(copy.deepcopy(items))
         # Discard old image bytes in retained context too, not just in the HTTP request.
-        self.items[:] = recent_images(self.items)
+        retained = recent_images([*self.items.read(), *incoming])
+        self.items.replace(retained)
         if self.checkpoint is not None:
-            self.checkpoint(self.items)
+            self.checkpoint(retained)
 
     async def pop_item(self) -> TResponseInputItem | None:
         return _RESPONSE_ITEM.validate_python(self.items.pop()) if self.items else None
@@ -117,7 +140,11 @@ class Hooks(RunHooks["Agent"]):
         self.awaiting_model = True
 
     async def on_llm_start(
-        self, context: RunContextWrapper[Agent], agent: agents.Agent[Agent], system_prompt: str | None, input_items: list[TResponseInputItem],
+        self,
+        context: RunContextWrapper[Agent],
+        agent: agents.Agent[Agent],
+        system_prompt: str | None,
+        input_items: list[TResponseInputItem],
     ) -> None:
         if context.context.stop.is_set():
             raise StoppedError
@@ -225,7 +252,7 @@ async def watch_stop(local: Agent, result: RunResultStreaming, hooks: Hooks) -> 
                 result.cancel()
             # During tools, after_tools finishes normally and saves their results.
             return
-        await asyncio.sleep(.05)
+        await asyncio.sleep(0.05)
 
 
 def tool(spec: ToolSpec) -> FunctionTool:
@@ -243,8 +270,11 @@ def tool(spec: ToolSpec) -> FunctionTool:
         return output.text
 
     return FunctionTool(
-        name=spec.name, description=spec.description, params_json_schema=_SCHEMA.validate_python(copy.deepcopy(spec.parameters)),
-        on_invoke_tool=invoke, strict_json_schema=False,
+        name=spec.name,
+        description=spec.description,
+        params_json_schema=_SCHEMA.validate_json(spec.parameters),
+        on_invoke_tool=invoke,
+        strict_json_schema=False,
     )
 
 
@@ -310,27 +340,41 @@ async def run(local: Agent, task: str, prompt: str, specs: tuple[ToolSpec, ...])
         return False
     http = DefaultAsyncHttpxClient(trust_env=True)
     async with AsyncOpenAI(
-        base_url=local.settings.base_url, api_key=local.settings.api_key, max_retries=0, timeout=600, http_client=http,
+        base_url=local.settings.base_url,
+        api_key=local.settings.api_key,
+        max_retries=0,
+        timeout=600,
+        http_client=http,
     ) as client:
         model = OpenAIResponsesModel(model=local.settings.agent_model, openai_client=client)
         agent: agents.Agent[Agent] = agents.Agent(
-            name="Workspace", instructions=prompt, model=model, tools=[tool(spec) for spec in specs],
+            name="Workspace",
+            instructions=prompt,
+            model=model,
+            tools=[tool(spec) for spec in specs],
             model_settings=ModelSettings(reasoning=reasoning, store=False, response_include=["reasoning.encrypted_content"]),
             tool_use_behavior=after_tools,
         )
         hooks, timeline = Hooks(), Timeline(local.update)
         try:
             result = Runner.run_streamed(
-                agent, request_input(local, task), context=local, max_turns=local.max_steps, hooks=hooks,
+                agent,
+                request_input(local, task),
+                context=local,
+                max_turns=local.max_steps,
+                hooks=hooks,
                 session=MemorySession(
-                    local.history, checkpoint=local.work.checkpoint if local.work is not None else None,
+                    local.history,
+                    checkpoint=local.work.checkpoint if local.work is not None else None,
                     session_id=local.work.claim.run.run_id if local.work is not None else "workspace",
                 ),
                 run_config=RunConfig(
-                    tracing_disabled=True, trace_include_sensitive_data=False,
+                    tracing_disabled=True,
+                    trace_include_sensitive_data=False,
                     # Serialize locally: some compatible endpoints reject parallel_tool_calls.
                     tool_execution=ToolExecutionConfig(max_function_tool_concurrency=1),
-                    tool_not_found_behavior="return_error_to_model", call_model_input_filter=trim_screenshots,
+                    tool_not_found_behavior="return_error_to_model",
+                    call_model_input_filter=trim_screenshots,
                 ),
             )
             watcher = asyncio.create_task(watch_stop(local, result, hooks))
@@ -367,8 +411,11 @@ async def run(local: Agent, task: str, prompt: str, specs: tuple[ToolSpec, ...])
         output: object = result.final_output
         final = str(output or "Done.")
         local.report = (
-            ReportStatus.STOPPED if local.stop.is_set() else
-            InstallationRequested(local.installing) if local.installing is not None else Reported(final)
+            ReportStatus.STOPPED
+            if local.stop.is_set()
+            else InstallationRequested(local.installing)
+            if local.installing is not None
+            else Reported(final)
         )
         local.log.done("Stopped." if local.stop.is_set() else final)
         return not local.stop.is_set()

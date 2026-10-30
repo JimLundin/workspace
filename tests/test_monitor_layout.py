@@ -8,9 +8,18 @@ from assistant.monitor_layout import Display, MoveTile, OrientWorkspace, Tile, d
 
 
 def display(index: int, width: int, height: int, count: int) -> Display:
-    return Display(str(UUID(int=index + 1)), index * width, 0, width, height, 1.0,
-                   str(index + 1), str(UUID(int=index + 100)), 'horizontal',
-                   tuple(Tile(str(UUID(int=index * 100 + offset + 1000)), offset == 0) for offset in range(count)))
+    return Display(
+        str(UUID(int=index + 1)),
+        index * width,
+        0,
+        width,
+        height,
+        1.0,
+        str(index + 1),
+        str(UUID(int=index + 100)),
+        "horizontal",
+        tuple(Tile(str(UUID(int=index * 100 + offset + 1000)), focused=offset == 0) for offset in range(count)),
+    )
 
 
 def test_new_displays_receive_tiles_and_focused_window_stays_put() -> None:
@@ -27,7 +36,7 @@ def test_logical_area_and_portrait_orientation_guide_placement() -> None:
     operations = plan((laptop, large, portrait))
     moves = [operation for operation in operations if isinstance(operation, MoveTile)]
     assert len(moves) == 5  # One on laptop, three on large, two on portrait.
-    assert OrientWorkspace(portrait.workspace_id, 'vertical') in operations
+    assert OrientWorkspace(portrait.workspace_id, "vertical") in operations
     assert len([move for move in moves if move.workspace == large.workspace]) == 3
     assert len([move for move in moves if move.workspace == portrait.workspace]) == 2
 
@@ -40,21 +49,30 @@ def test_balanced_layout_is_stable_and_empty_screens_do_not_create_windows() -> 
 
 
 def test_parser_excludes_hidden_floating_minimized_and_dragged_windows() -> None:
-    row: dict[str, object] = {'id': str(UUID(int=1)), 'x': -1440, 'y': -100,
-                             'width': 1440, 'height': 2560, 'scaleFactor': 1.0}
+    row: dict[str, object] = {"id": str(UUID(int=1)), "x": -1440, "y": -100, "width": 1440, "height": 2560, "scaleFactor": 1.0}
     nodes: list[dict[str, object]] = []
     observations: tuple[tuple[int, str, str, object], ...] = (
-        (0, 'tiling', 'shown', None), (1, 'floating', 'shown', None),
-        (2, 'tiling', 'hidden', None), (3, 'minimized', 'shown', None), (4, 'tiling', 'shown', {}),
+        (0, "tiling", "shown", None),
+        (1, "floating", "shown", None),
+        (2, "tiling", "hidden", None),
+        (3, "minimized", "shown", None),
+        (4, "tiling", "shown", {}),
     )
     for index, state, shown, drag in observations:
-        nodes.append({'id': str(UUID(int=10 + index)), 'type': 'window', 'state': {'type': state},
-                      'displayState': shown, 'activeDrag': drag, 'hasFocus': False})
-    row['children'] = [{'id': str(UUID(int=100)), 'name': '1', 'isDisplayed': True,
-                        'tilingDirection': 'vertical', 'children': nodes}]
-    result = displays({'monitors': [row]})
-    assert len(result) == 1 and result[0].tiles == (Tile(str(UUID(int=10)), False),)
+        nodes.append(
+            {
+                "id": str(UUID(int=10 + index)),
+                "type": "window",
+                "state": {"type": state},
+                "displayState": shown,
+                "activeDrag": drag,
+                "hasFocus": False,
+            }
+        )
+    row["children"] = [{"id": str(UUID(int=100)), "name": "1", "isDisplayed": True, "tilingDirection": "vertical", "children": nodes}]
+    result = displays({"monitors": [row]})
+    assert len(result) == 1 and result[0].tiles == (Tile(str(UUID(int=10)), focused=False),)
     assert result[0].x == -1440 and plan(result) == ()
-    row['scaleFactor'] = float('nan')
+    row["scaleFactor"] = float("nan")
     with TestCase().assertRaises(OSError):
-        displays({'monitors': [row]})
+        displays({"monitors": [row]})

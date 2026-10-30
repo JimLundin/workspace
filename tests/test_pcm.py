@@ -16,7 +16,7 @@ def test_resampling_is_identical_across_arbitrary_packet_boundaries() -> None:
         expected = Converter(format).convert(pcm)
         for packet in (8, 24, 136):
             converter = Converter(format)
-            actual = b"".join(converter.convert(pcm[i:i + packet]) for i in range(0, len(pcm), packet))
+            actual = b"".join(converter.convert(pcm[i : i + packet]) for i in range(0, len(pcm), packet))
             assert actual == expected
             assert abs(len(actual) // 2 - 97 * RATE / rate) <= 2
 
@@ -41,7 +41,7 @@ def test_native_formats_downmix_clip_and_reject_invalid_samples() -> None:
         pcm = b"".join((sample * scale).to_bytes(bits // 8, "little", signed=True) for sample in (1000, 3000, -4000, 2000))
         assert Converter(PcmFormat(RATE, 2, bits)).convert(pcm) == array("h", [2000, -1000]).tobytes()
     floating = Converter(PcmFormat(RATE, 1, 32, floating=True))
-    assert floating.convert(array("f", [.75, 2, -2]).tobytes()) == array("h", [24576, 32767, -32768]).tobytes()
+    assert floating.convert(array("f", [0.75, 2, -2]).tobytes()) == array("h", [24576, 32767, -32768]).tobytes()
     assert Converter(PcmFormat(RATE, 1, 32)).convert(array("i", [3 * 65536 + 32768]).tobytes()) == array("h", [4]).tobytes()
     with TestCase().assertRaises(ValueError):
         floating.convert(array("f", [math.nan]).tobytes())

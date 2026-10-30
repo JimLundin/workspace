@@ -114,7 +114,7 @@ cannot roll back navigation, network requests or JavaScript already started in
 a personal page. See [session reuse research](browser-session-reuse.md) for the
 vendor references and profile-selection limitations.
 
-## Teams setup for later
+## Microsoft Graph setup
 
 The adapter is installed without app IDs or a Microsoft sign-in. Configuration
 and status checks make no network requests. It needs an approved **Microsoft
@@ -141,12 +141,12 @@ The delegated scopes are:
 | `User.ReadBasic.All` | Resolve recipients by name or email. |
 | `Chat.Read` | List chats and read bounded message history for the requested work and result verification. |
 | `Chat.Create` | Get or create a one-to-one chat. |
-| `ChatMessage.Send` | Send the user's requested message. |
+| `ChatMessage.Send` | Send the user's requested Teams message. |
 | `offline_access` | Refresh the saved sign-in. |
 
 This does not request application-wide message access or migration permissions.
 Existing sign-ins granted only `Chat.ReadBasic` may require renewed Microsoft
-consent before message readback is available.
+consent before message readback is available. Outlook web uses the browser sign-in separately and requests no Graph scopes.
 
 | Tool | Use |
 |---|---|
@@ -166,6 +166,67 @@ clears old credentials and page cursors. User and chat pages use opaque in-memor
 cursors; Graph pagination can only continue on the expected Microsoft host and
 route. Large membership lists are marked as truncated. Sending is a single POST
 with no automatic retry, including on a timeout or uncertain response.
+
+## Outlook and AIP Kanban agent tools
+
+Outlook tools reuse the signed-in browser at `outlook.office.com`,
+`outlook.office365.com` or `outlook.cloud.microsoft`. Obtain the exact page ID from
+`browser_tabs`, connecting with `browser_attach` when needed. No Microsoft app IDs
+or additional Graph consent are required. These adapters use the English web
+interface observed in the live apps; unexpected controls fail explicitly.
+
+| Tool | Use |
+|---|---|
+| `outlook_web_read` | List rendered conversation IDs/previews and read the selected pane, including search scope, loading/truncation and draft presence. |
+| `outlook_web_search` | Submit an Outlook search expression through its search box and return fresh rendered results. The existing search scope may be All folders. |
+| `outlook_web_open_mail` | Select an exact conversation ID and wait for its confirmed reading pane and body. Opening can mark it read under Outlook's settings. |
+| `outlook_web_draft_reply` | Prepare an unsent reply to the selected conversation, retaining Outlook's recipients and signature. The editor remains open for review. |
+
+Conversation IDs can group multiple messages; they are not individual Graph mail
+IDs. Pagination covers rendered rows only. Scroll the list with generic browser
+tools to load more, then read it again. Search scope is reported instead of silently
+changed. Existing open drafts block search, selection and reply preparation.
+The tools never click Send. Inspect the open editor and Outlook's autosave status
+before closing a draft, and inspect an uncertain result before retrying. The
+existing local classic-Outlook/file draft workflow remains available for prepared
+meeting packages.
+
+For Teams without Graph setup, `teams_web_read` returns rendered chat identities,
+selected messages, authors and reactions in an explicit signed-in Teams page.
+`teams_web_open_chat` selects a rendered chat by identity, independently of its
+title. `teams_web_draft_reply` inserts an unsent reply only into the exact selected
+chat's empty editor. Existing drafts are preserved. These tools use background
+browser DOM work and do not activate the native tab. Recent/sidebar and rendered
+message history are bounded; they are not a tenant-wide search or archive.
+
+The Kanban adapter targets the observed AIP Kanban app at
+`https://dev-team-kanban.fcg.palantirfoundry.com`. Obtain its exact page ID from
+`browser_tabs`, connecting with `browser_attach` when needed. Multiple open board
+tabs require an explicit selection. Workspace reuses the signed-in page without
+copying credentials or calling undocumented Foundry APIs.
+
+| Tool | Use |
+|---|---|
+| `kanban_board` | Return stable task IDs, titles, current columns and filters. Query and pagination apply to currently rendered cards without changing filters. |
+| `kanban_read_task` | Open an exact task, read fields/description and bounded comments, dependencies and activity, then close its details. |
+| `kanban_update_task` | Change one title, description, due date, estimate, labels or acceptance-criteria field. Requires its exact expected value and verifies saved readback. |
+| `kanban_move_task` | Move an exact card from its expected column through the app's drag/drop handler, retaining the app's WIP/testing rules. |
+| `kanban_comment` | Post a comment through the task editor and confirm visible readback. |
+
+Existing task dialogs and comment drafts block conflicting operations. Missing
+or ambiguous cards, changed fields/columns and unexpected origins are rejected.
+The board's existing filters still limit discovery; absence from a filtered board
+does not establish that a task does not exist. A failed save/move/post must be
+inspected before retrying. Task readback and comments are bounded; generic browser
+snapshots remain available for longer detail views. These adapters currently do
+not create or delete tasks, attach files, or change assignees/reviewers.
+
+New tool arguments/results remain in the agent's in-memory conversation; persistent
+journals retain only redacted integration status and hashed target identities.
+The same optional approval setting and durable effect coordinator apply to these
+tools. HTTP, OAuth, Pydantic validation and DOM/event implementations are trusted
+dependency/platform behavior; tests cover Workspace routing, selection, stale
+state, draft preservation, output limits, cancellation and effect ownership.
 
 ## Validation and limits
 

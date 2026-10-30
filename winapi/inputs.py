@@ -3,7 +3,7 @@
 import ctypes
 from collections.abc import Callable, Sequence
 from ctypes import wintypes
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Final
 
 from winapi._core import LRESULT, ULONG_PTR, fn, kernel32, user32
@@ -91,7 +91,13 @@ _VK_RETURN: Final = 0x0D
 _MOUSEEVENTF_MOVE, _MOUSEEVENTF_ABSOLUTE, _MOUSEEVENTF_VIRTUALDESK = 0x0001, 0x8000, 0x4000
 _MOUSEEVENTF_WHEEL: Final = 0x0800
 _MOUSEEVENTF_HWHEEL: Final = 0x1000
-_BUTTON_FLAGS: Final = {"left": (0x0002, 0x0004), "right": (0x0008, 0x0010), "middle": (0x0020, 0x0040), "x1": (0x0080, 0x0100), "x2": (0x0080, 0x0100)}
+_BUTTON_FLAGS: Final = {
+    "left": (0x0002, 0x0004),
+    "right": (0x0008, 0x0010),
+    "middle": (0x0020, 0x0040),
+    "x1": (0x0080, 0x0100),
+    "x2": (0x0080, 0x0100),
+}
 _BUTTON_DATA: Final = {"x1": 1, "x2": 2}
 
 HookProc = Callable[[int, int, int], int]
@@ -122,8 +128,8 @@ class KeyStroke:
     """One key going down or up, by virtual key."""
 
     vk: int
-    down: bool
-    extended: bool = False
+    down: bool = field(kw_only=True)
+    extended: bool = field(default=False, kw_only=True)
 
 
 def read_key_event(lparam: int) -> KeyEvent:
@@ -175,7 +181,10 @@ def send_key(vk: int, scancode: int, flags: int, extra: int) -> None:
 
 def send_keys(strokes: Sequence[KeyStroke], extra: int, *, submit: SubmitInput = _submit) -> None:
     """Virtual keys, with the scancodes Windows' layout gives them."""
-    _send([_key(s.vk, scancode_for(s.vk), (0 if s.down else KEYEVENTF_KEYUP) | (KEYEVENTF_EXTENDEDKEY if s.extended else 0), extra) for s in strokes], submit)
+    _send(
+        [_key(s.vk, scancode_for(s.vk), (0 if s.down else KEYEVENTF_KEYUP) | (KEYEVENTF_EXTENDEDKEY if s.extended else 0), extra) for s in strokes],
+        submit,
+    )
 
 
 def send_scancodes(strokes: Sequence[tuple[int, bool]], extra: int) -> None:

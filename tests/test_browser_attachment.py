@@ -23,7 +23,10 @@ from tests.test_browser import Channel, ScriptedSessions, connected_browser, dec
 
 @contextmanager
 def consent_browser(
-    tmp_path: Path, approval: threading.Event, *, sockets: SocketConnector = connect_socket,
+    tmp_path: Path,
+    approval: threading.Event,
+    *,
+    sockets: SocketConnector = connect_socket,
 ) -> Generator[tuple[Browser, list[str], threading.Event]]:
     """A real CDP socket whose WebSocket upgrade waits for browser consent."""
     approvals: list[str] = []
@@ -43,14 +46,16 @@ def consent_browser(
             reply: dict[str, Json] = {"id": command["id"], "result": {"targetInfos": []}}
             connection.send(json.dumps(reply))
 
-    server = serve(commands, "127.0.0.1", 0, process_request=approve, ping_interval=None, close_timeout=.5)
+    server = serve(commands, "127.0.0.1", 0, process_request=approve, ping_interval=None, close_timeout=0.5)
     port = cast(tuple[str, int], server.socket.getsockname())[1]
     (tmp_path / "DevToolsActivePort").write_text(f"{port}\n/devtools/browser/fixture\n", encoding="ascii")
+
     def connect(uri: str, cancel: threading.Event, *, timeout: float = 2) -> Cdp:
         return Cdp.connect(uri, cancel, timeout=timeout, sockets=sockets)
 
     browser = Browser(
-        tmp_path / "unused", source=Product.EDGE,
+        tmp_path / "unused",
+        source=Product.EDGE,
         opener=NativeSessions(tmp_path / "unused", profiles=lambda _: tmp_path, connect=connect),
     )
     thread = threading.Thread(target=server.serve_forever, daemon=True)
@@ -67,6 +72,7 @@ def consent_browser(
 def test_attachment_waits_for_consent_then_reuses_the_approved_connection(tmp_path: Path) -> None:
     approval = threading.Event()
     sockets: list[socket.socket] = []
+
     def connecting(address: tuple[str, int], *, timeout: float) -> socket.socket:
         transport = socket.create_connection(address, timeout=timeout)
         sockets.append(transport)
@@ -93,9 +99,17 @@ def test_attachment_waits_for_consent_then_reuses_the_approved_connection(tmp_pa
 
 def test_endpoint_discovery_is_bounded_and_accepts_only_a_local_browser_path() -> None:
     assert endpoint(b"12345\r\n/devtools/browser/fixture-123\r\n") == "ws://127.0.0.1:12345/devtools/browser/fixture-123"
-    for data in (b"", b"0\n/devtools/browser/id", b"65536\n/devtools/browser/id", b"123\n/devtools/page/id",
-                 b"123\n/devtools/browser/id?redirect=evil", b"123\n/devtools/browser/../../secret", b"1\n\xff",
-                 b"123\n/devtools/browser/id\nextra", b"1" * 513):
+    for data in (
+        b"",
+        b"0\n/devtools/browser/id",
+        b"65536\n/devtools/browser/id",
+        b"123\n/devtools/page/id",
+        b"123\n/devtools/browser/id?redirect=evil",
+        b"123\n/devtools/browser/../../secret",
+        b"1\n\xff",
+        b"123\n/devtools/browser/id\nextra",
+        b"1" * 513,
+    ):
         with TestCase().assertRaisesRegex(BrowserError, "invalid debugging endpoint"):
             endpoint(data)
 
@@ -124,7 +138,8 @@ def test_attach_reuses_one_connection_and_never_closes_the_personal_browser(tmp_
         return connection
 
     browser = Browser(
-        tmp_path / "unused", source=Product.EDGE,
+        tmp_path / "unused",
+        source=Product.EDGE,
         opener=NativeSessions(tmp_path / "unused", profiles=lambda _: tmp_path, connect=connect),
     )
     first = decoded(browser.request("attach", {}, cancel).text)
@@ -139,12 +154,14 @@ def test_attach_reuses_one_connection_and_never_closes_the_personal_browser(tmp_
 
 def test_attached_tab_pages_identify_created_tabs_and_keep_late_targets_accessible(tmp_path: Path) -> None:
     targets: list[Json] = [
-        {"type": "page", "targetId": f"page-{index}", "title": "t" * 300, "url": "https://example.com/" + "u" * 900}
-        for index in range(65)
+        {"type": "page", "targetId": f"page-{index}", "title": "t" * 300, "url": "https://example.com/" + "u" * 900} for index in range(65)
     ]
     replies: list[Json] = [
-        {"targetInfos": targets}, {"targetInfos": targets}, {"targetInfos": targets},
-        {"success": True}, {"targetInfos": targets[:-1]},
+        {"targetInfos": targets},
+        {"targetInfos": targets},
+        {"targetInfos": targets},
+        {"success": True},
+        {"targetInfos": targets[:-1]},
     ]
     messages: list[dict[str, Json]] = [{"id": index, "result": value} for index, value in enumerate(replies, 1)]
     channel = Channel(*(json.dumps(message) for message in messages))
@@ -180,7 +197,8 @@ def test_missing_or_denied_attachment_does_not_launch_a_separate_browser(tmp_pat
         raise BrowserError("Denied")
 
     browser = Browser(
-        tmp_path / "unused", source=Product.CHROME,
+        tmp_path / "unused",
+        source=Product.CHROME,
         opener=NativeSessions(tmp_path / "unused", profiles=lambda _: tmp_path, connect=denied),
     )
     with TestCase().assertRaisesRegex(BrowserError, "chrome://inspect"):
@@ -244,6 +262,6 @@ def test_opening_deadline_closes_pending_consent_without_pressing_stop() -> None
         port = cast(tuple[str, int], server.getsockname())[1]
         started = time.monotonic()
         with TestCase().assertRaisesRegex(BrowserError, "not approved in time"):
-            Cdp.connect(f"ws://127.0.0.1:{port}/devtools/browser/fixture", cancel, timeout=.25)
+            Cdp.connect(f"ws://127.0.0.1:{port}/devtools/browser/fixture", cancel, timeout=0.25)
         assert time.monotonic() - started < 2 and not cancel.is_set()
         assert pending_server.result(timeout=2), "The expired connection is still open."

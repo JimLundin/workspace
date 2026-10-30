@@ -24,8 +24,18 @@ from winapi._core import fn, kernel32
 
 _open_directory = cast(
     Callable[[str, int, int, None, int, int, None], int | None],
-    fn(kernel32, "CreateFileW", wintypes.HANDLE, wintypes.LPCWSTR, wintypes.DWORD, wintypes.DWORD,
-       ctypes.c_void_p, wintypes.DWORD, wintypes.DWORD, wintypes.HANDLE),
+    fn(
+        kernel32,
+        "CreateFileW",
+        wintypes.HANDLE,
+        wintypes.LPCWSTR,
+        wintypes.DWORD,
+        wintypes.DWORD,
+        ctypes.c_void_p,
+        wintypes.DWORD,
+        wintypes.DWORD,
+        wintypes.HANDLE,
+    ),
 )
 _close_handle = cast(Callable[[int], bool], fn(kernel32, "CloseHandle", wintypes.BOOL, wintypes.HANDLE))
 
@@ -111,7 +121,11 @@ def test_native_access_and_lock_errors_retry_the_same_atomic_publication(tmp_pat
         attempts: list[tuple[Path, Path]] = []
 
         def install(
-            source: Path, destination: Path, *, error: OSError = failure, observed: list[tuple[Path, Path]] = attempts,
+            source: Path,
+            destination: Path,
+            *,
+            error: OSError = failure,
+            observed: list[tuple[Path, Path]] = attempts,
         ) -> None:
             observed.append((source, destination))
             if len(observed) == 1:

@@ -2,7 +2,7 @@
 
 import math
 from array import array
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from assistant.llm import RATE
 
@@ -12,7 +12,7 @@ class PcmFormat:
     rate: int
     channels: int
     bits: int
-    floating: bool = False
+    floating: bool = field(default=False, kw_only=True)
 
     def __post_init__(self) -> None:
         if not 8_000 <= self.rate <= 384_000 or not 1 <= self.channels <= 8:
@@ -50,7 +50,7 @@ class Converter:
             self.output_frames += len(pcm) // 2
             return pcm
         if format.bits == 24:
-            samples = [float(int.from_bytes(pcm[i:i + 3], "little", signed=True)) / 256 for i in range(0, len(pcm), 3)]
+            samples = [float(int.from_bytes(pcm[i : i + 3], "little", signed=True)) / 256 for i in range(0, len(pcm), 3)]
         elif format.floating:
             samples = [float(value) * 32768 for value in array("f", pcm)]
         elif format.bits == 16:
@@ -59,7 +59,7 @@ class Converter:
             samples = [float(value) / 65536 for value in array("i", pcm)]
         if not all(math.isfinite(sample) for sample in samples):
             raise ValueError("The audio device returned a non-finite sample.")
-        mono = [sum(samples[i:i + format.channels]) / format.channels for i in range(0, len(samples), format.channels)]
+        mono = [sum(samples[i : i + format.channels]) / format.channels for i in range(0, len(samples), format.channels)]
         beginning = self.input_frames
         if beginning:
             mono.insert(0, self.last)

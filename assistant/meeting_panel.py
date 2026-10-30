@@ -1,7 +1,7 @@
 """Completed recordings and sourced follow-through, with retained local edits."""
 
 from collections.abc import Callable
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from datetime import datetime
 from email.utils import getaddresses
 from html import escape
@@ -42,9 +42,9 @@ lazy from assistant.meeting_workflow import (
     package_values,
     previous_task,
 )
-lazy from assistant.panel_controls import button, label
 lazy from assistant.recording_state import duration
-lazy from assistant.widgets import Browser, Editor, column, replace_text, row
+lazy from assistant.ui_components.controls import button, label
+lazy from assistant.ui_components.widgets import Browser, Editor, column, replace_text, row
 lazy from assistant.work_window import task_label
 
 prepare()
@@ -62,13 +62,16 @@ class ActionEdit:
     text: str
     owner: str
     due: str
-    done: bool
+    done: bool = field(kw_only=True)
     revision: int
 
     def content(self) -> ActionContent:
-        return ActionContent(self.text.strip(), AssignedOwner(self.owner.strip()) if self.owner.strip() else Unspecified.NOT_STATED,
-                             AssignedDue(self.due.strip()) if self.due.strip() else Unspecified.NOT_STATED,
-                             ActionStatus.DONE if self.done else ActionStatus.OPEN)
+        return ActionContent(
+            self.text.strip(),
+            AssignedOwner(self.owner.strip()) if self.owner.strip() else Unspecified.NOT_STATED,
+            AssignedDue(self.due.strip()) if self.due.strip() else Unspecified.NOT_STATED,
+            ActionStatus.DONE if self.done else ActionStatus.OPEN,
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -124,14 +127,19 @@ def parse_recipients(value: str) -> tuple[Addressee, ...]:
 
 def action_edit(value: ActionRevision) -> ActionEdit:
     content = value.content
-    return ActionEdit(content.text, content.owner.name if isinstance(content.owner, AssignedOwner) else "",
-                      content.due.text if isinstance(content.due, AssignedDue) else "", content.status is ActionStatus.DONE, value.revision)
+    return ActionEdit(
+        content.text,
+        content.owner.name if isinstance(content.owner, AssignedOwner) else "",
+        content.due.text if isinstance(content.due, AssignedDue) else "",
+        done=content.status is ActionStatus.DONE,
+        revision=value.revision,
+    )
 
 
 def draft_edit(value: DraftRevision) -> DraftEdit:
-    return DraftEdit(value.content.subject, value.content.body, ", ".join(
-        recipient_label(person) for person in value.content.recipients
-    ), value.revision)
+    return DraftEdit(
+        value.content.subject, value.content.body, ", ".join(recipient_label(person) for person in value.content.recipients), value.revision
+    )
 
 
 def recipient_label(person: Addressee) -> str:
@@ -168,7 +176,8 @@ def citations_html(citations: tuple[Citation, ...], sources: TranscriptBundle) -
     parts = {transcript.source.id: index for index, transcript in enumerate(sources.transcripts, 1)}
     return "<br>".join(
         f'<a href="source:{quote(value.source_id, safe="")}#{value.line}">Part {parts[value.source_id]} · line {value.line}</a>'
-        f' <span style="color:#94a5b7">{escape(value.quote)}</span>' for value in citations
+        f' <span style="color:#94a5b7">{escape(value.quote)}</span>'
+        for value in citations
     )
 
 
@@ -260,8 +269,8 @@ class MeetingPanel(QtWidgets.QWidget):
         actions.addStretch()
         layout.addLayout(actions)
         self.action_choice.currentIndexChanged.connect(self.show_action)
-        for field in (self.action_text, self.owner, self.due):
-            field.textChanged.connect(self.change_action)
+        for control in (self.action_text, self.owner, self.due):
+            control.textChanged.connect(self.change_action)
         self.done.toggled.connect(self.change_action)
         return panel
 
@@ -299,8 +308,8 @@ class MeetingPanel(QtWidgets.QWidget):
         actions.addStretch()
         layout.addLayout(actions)
         self.draft_choice.currentIndexChanged.connect(self.show_draft)
-        for field in (self.recipients, self.subject, self.draft_body):
-            field.textChanged.connect(self.change_draft)
+        for control in (self.recipients, self.subject, self.draft_body):
+            control.textChanged.connect(self.change_draft)
         return panel
 
     def refresh(self) -> None:
@@ -347,9 +356,18 @@ class MeetingPanel(QtWidgets.QWidget):
                 self.recordings.addTopLevelItem(item)
             self.loading = False
         self.select_recordings()
-        choices(self.preparations, tuple((progress.request.task_id,
-                package_values(progress.packages)[0].publication.followup.title if package_values(progress.packages) else
-                " + ".join(transcript.source.title for transcript in progress.request.bundle.transcripts)) for progress in snapshot.preparations))
+        choices(
+            self.preparations,
+            tuple(
+                (
+                    progress.request.task_id,
+                    package_values(progress.packages)[0].publication.followup.title
+                    if package_values(progress.packages)
+                    else " + ".join(transcript.source.title for transcript in progress.request.bundle.transcripts),
+                )
+                for progress in snapshot.preparations
+            ),
+        )
         self.render_package()
 
     def receipts(self, snapshot: MeetingSnapshot) -> None:
@@ -382,8 +400,11 @@ class MeetingPanel(QtWidgets.QWidget):
 
     def package(self) -> FollowupPackage | None:
         progress = next((value for value in self.snapshot.preparations if value.request.task_id == choice(self.preparations)), None)
-        return next((value for value in package_values(progress.packages)
-                     if value.publication.version == choice(self.versions)), None) if progress else None
+        return (
+            next((value for value in package_values(progress.packages) if value.publication.version == choice(self.versions)), None)
+            if progress
+            else None
+        )
 
     def render_package(self) -> None:
         progress = next((value for value in self.snapshot.preparations if value.request.task_id == choice(self.preparations)), None)
@@ -412,8 +433,11 @@ class MeetingPanel(QtWidgets.QWidget):
         self.draft_panel.setEnabled(package is not None)
         if package is None:
             self.notes.setProperty("rendered", "")
-            self.notes.setPlainText("Choose a saved version above to review its notes and edits." if self.versions.count() > 1 else
-                                    "The verified meeting package will appear here when it is ready.")
+            self.notes.setPlainText(
+                "Choose a saved version above to review its notes and edits."
+                if self.versions.count() > 1
+                else "The verified meeting package will appear here when it is ready."
+            )
             choices(self.action_choice, ())
             choices(self.draft_choice, ())
             choices(self.source_choice, ())
@@ -423,8 +447,9 @@ class MeetingPanel(QtWidgets.QWidget):
             for title, statements in (("Notes", followup.notes), ("Decisions", followup.decisions)):
                 if statements:
                     sections.append(f"<h3>{title}</h3>")
-                    sections.extend(f"<p>{escape(statement.text)}</p><p>{citations_html(statement.citations, followup.sources)}</p>"
-                                    for statement in statements)
+                    sections.extend(
+                        f"<p>{escape(statement.text)}</p><p>{citations_html(statement.citations, followup.sources)}</p>" for statement in statements
+                    )
             rendered = "".join(sections)
             previous_rendering: object = self.notes.property("rendered")
             if previous_rendering != rendered:
@@ -432,9 +457,13 @@ class MeetingPanel(QtWidgets.QWidget):
                 self.notes.setHtml(rendered)
             choices(self.action_choice, tuple((value.id, value.content.text[:120]) for value in package.actions))
             choices(self.draft_choice, tuple((value.id, value.content.subject) for value in package.drafts))
-            choices(self.source_choice, tuple((value.source.id,
-                    f"Part {index} · {value.source.title} · {datetime.fromtimestamp(value.source.started_at):%d %b %H:%M}")
-                    for index, value in enumerate(followup.sources.transcripts, 1)))
+            choices(
+                self.source_choice,
+                tuple(
+                    (value.source.id, f"Part {index} · {value.source.title} · {datetime.fromtimestamp(value.source.started_at):%d %b %H:%M}")
+                    for index, value in enumerate(followup.sources.transcripts, 1)
+                ),
+            )
         self.show_action()
         self.show_draft()
         self.show_source()
@@ -508,8 +537,9 @@ class MeetingPanel(QtWidgets.QWidget):
         if not self.loading and selected is not None:
             key, value = selected
             previous = self.action_edits.get(key, action_edit(value))
-            self.action_edits[key] = ActionEdit(self.action_text.toPlainText(), self.owner.text(), self.due.text(),
-                                                self.done.isChecked(), previous.revision)
+            self.action_edits[key] = ActionEdit(
+                self.action_text.toPlainText(), self.owner.text(), self.due.text(), done=self.done.isChecked(), revision=previous.revision
+            )
             self.action_errors.pop(key, None)
             self.edit_status()
 
@@ -585,8 +615,11 @@ class MeetingPanel(QtWidgets.QWidget):
 
     def show_source(self) -> None:
         package = self.package()
-        source = next((value for value in package.publication.followup.sources.transcripts
-                       if value.source.id == choice(self.source_choice)), None) if package else None
+        source = (
+            next((value for value in package.publication.followup.sources.transcripts if value.source.id == choice(self.source_choice)), None)
+            if package
+            else None
+        )
         replace_text(self.source_text, source.text if source else "")
         notice = source.source.notice if source is not None else None
         self.source_notice.setText(notice.text if isinstance(notice, CaptureNotice) else "")

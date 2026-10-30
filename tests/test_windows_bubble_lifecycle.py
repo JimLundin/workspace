@@ -50,7 +50,7 @@ def test_animation_clock_starts_after_native_preparation() -> None:
 
         def apply_style(self, content: Content, preference: appearance.Preference) -> None:
             super().apply_style(content, preference)
-            panel.now += .4
+            panel.now += 0.4
 
     with notifications(animated=True, create_card=SlowCard) as panel:
         panel.agent.say("Fictional reply with a slow native preparation.")
@@ -58,7 +58,7 @@ def test_animation_clock_starts_after_native_preparation() -> None:
         card = next(iter(panel.view.cards.values()))
         assert card.motion is not None, "Preparation used up the animation's entire duration."
         assert card.motion.started == panel.now and card.alpha == 0
-        panel.now += .14
+        panel.now += 0.14
         panel.view.tick()
         assert 0 < card.alpha < 1
 

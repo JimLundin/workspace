@@ -7,6 +7,7 @@ import queue
 import threading
 import traceback
 from collections.abc import Callable
+from concurrent.futures import Future, TimeoutError
 from dataclasses import dataclass, replace
 from functools import partial
 from pathlib import Path
@@ -17,8 +18,38 @@ lazy from PySide6 import QtCore, QtGui, QtWidgets
 lazy from PySide6.QtCore import Qt
 
 import winapi.shapes
+from assistant.agent_session import Answered
+from assistant.canvas_activity import (
+    Attention,
+    CanvasActivity,
+    CanvasQuestion,
+    CanvasRequest,
+    CanvasRun,
+    SessionRequest,
+    TaskRequest,
+    important_changes,
+    session_activity,
+    task_activity,
+)
 from assistant.overlay import KeyHighlights, fit_position, nearest_work_area
 from assistant.qt_runtime import prepare
+from assistant.work_canvas_commands import (
+    CanvasCommand,
+    CanvasRefused,
+    CanvasResponse,
+    CanvasUpdated,
+    ReadCanvas,
+    UpdateCanvas,
+    edited,
+    revision,
+    snapshot,
+)
+from assistant.work_canvas_investigation import pending, retained
+from assistant.work_canvas_model import CanvasDocument, hidden_ids
+from assistant.work_window import AnswerTask
+from automation.personal_work import Catalog
+from automation.task import Task, TextAnswer
+from usage import DIRECTORY
 from winapi import windows
 from winapi.shapes import Rect
 lazy import assistant.communications
@@ -32,22 +63,23 @@ lazy from assistant.desktop_bar import BarActions, DesktopBar
 lazy from assistant.feed_triage import Board
 lazy from assistant.geometry import region
 lazy from assistant.icons import State
-lazy from assistant.inbox_attention import pending_count
 lazy from assistant.keymap import PHYSICAL_NAMES, Cap, Kind, keymap
 lazy from assistant.meeting_panel import MeetingPanel
 lazy from assistant.meeting_workflow import MeetingSnapshot, MeetingWorkflow
 lazy from assistant.native_feed import NativeFeed, acted, forward, observed, project
 lazy from assistant.overlay_desktop import NativeOverlayDesktop, OverlayDesktop
-lazy from assistant.panel_controls import STYLE, button, label
 lazy from assistant.qt_ui import application, cancel, later
 lazy from assistant.recording_state import RecordingAction, RecordingState
 lazy from assistant.system_notices import NoticeKey
 lazy from assistant.theme import ACCENT, BACKGROUND, FOREGROUND, MUTED
+lazy from assistant.ui_components.canvas_loading import CanvasLoading
+lazy from assistant.ui_components.controls import STYLE, button, label
+lazy from assistant.ui_components.widgets import Editor, Window, column, row, show_window
 lazy from assistant.vector_icons import icon
-lazy from assistant.widgets import Editor, Window, column, row, show_window
 lazy from assistant.window_switcher import WindowSwitcher
-lazy from assistant.work_panel import WorkPanel
-lazy from assistant.work_window import WorkCommand, WorkWindow
+lazy from assistant.work_canvas_store import CanvasStore
+lazy from assistant.work_canvas_window import CanvasWindow
+lazy from assistant.work_window import WorkCommand, WorkSnapshot, WorkWindow
 lazy from miryoku.layout import Layer, Scancode
 lazy from protocol import Tool
 
@@ -67,6 +99,7 @@ class MeetingConnection:
     workflow: MeetingWorkflow
     open_file: Callable[[Path], None]
 
+
 def _bring_forward(window: QtWidgets.QWidget, focus: QtWidgets.QWidget) -> None:
     show_window(window, focus=True, target=focus)
 
@@ -76,8 +109,9 @@ def _near_pointer(window: QtWidgets.QWidget, width: int, height: int) -> None:
     display = QtWidgets.QApplication.screenAt(point) or window.screen()
     area = display.availableGeometry()
     window.resize(width, height)
-    window.move(max(area.left(), min(point.x() - width // 2, area.right() - width)),
-                max(area.top(), min(point.y() - height // 3, area.bottom() - height)))
+    window.move(
+        max(area.left(), min(point.x() - width // 2, area.right() - width)), max(area.top(), min(point.y() - height // 3, area.bottom() - height))
+    )
 
 
 class Presentation(Protocol):
@@ -115,7 +149,16 @@ class Ui:
     __slots__ = (
         "_agent",
         "_agent_lock",
+        "_agent_speaking",
         "_agent_waiting",
+        "_canvas_activity",
+        "_canvas_autonomous",
+        "_canvas_catalog",
+        "_canvas_notice",
+        "_canvas_run",
+        "_canvas_store",
+        "_canvas_tasks",
+        "_canvas_work",
         "_choose_work",
         "_closed",
         "_communication_action",
@@ -152,8 +195,12 @@ class Ui:
     )
 
     def __init__(
-        self, *, on_agent_waiting: Callable[[bool], None] | None = None, on_recording: Callable[[RecordingAction], None] | None = None,
-        presentation: Presentation | None = None, desktop_factory: DesktopFactory | None = None,
+        self,
+        *,
+        on_agent_waiting: Callable[[bool], None] | None = None,
+        on_recording: Callable[[RecordingAction], None] | None = None,
+        presentation: Presentation | None = None,
+        desktop_factory: DesktopFactory | None = None,
         feed_factory: Callable[[QtWidgets.QApplication, AgentWindow], AgentToasts] | None = None,
         dismiss_notice: Callable[[NoticeKey], None] | None = None,
     ) -> None:
@@ -166,6 +213,9 @@ class Ui:
         if threading.current_thread() is not threading.main_thread():
             raise RuntimeError("Qt must be created on the process's main thread.")
         self._agent: AgentWindow | None = None
+        # Qt owns the latest capture observation, including before the canvas
+        # exists, so opening it during a held speech key starts in that state.
+        self._agent_speaking: bool = False
         self._communication_action: Callable[[assistant.communications.Command], bool] | None = None
         self._communication_feed = assistant.communications.Feed()
         self._communication_drafts: dict[str, str] = {}
@@ -180,19 +230,25 @@ class Ui:
         self._switcher: WindowSwitcher | None = None
         self._agent_lock = threading.Lock()
         self._work: WorkWindow | None = None
-        self._work_view: WorkPanel | None = None
+        self._work_view: CanvasWindow | None = None
+        self._canvas_store: CanvasStore | None = None
+        self._canvas_autonomous = False
+        self._canvas_work: tuple[Task, ...] = ()
+        self._canvas_catalog: Catalog | None = None
+        self._canvas_activity: tuple[CanvasActivity, ...] = ()
+        self._canvas_tasks: tuple[CanvasActivity, ...] = ()
+        self._canvas_notice: Callable[[str, str], None] | None = None
+        self._canvas_run: Callable[[CanvasRun], None] | None = None
         self._meetings: MeetingConnection | None = None
         self._work_lock = threading.Lock()
-        self._agent_waiting = on_agent_waiting
-        self._recording = on_recording
+        self._agent_waiting, self._recording = on_agent_waiting, on_recording
         self._indicator: Indicator | None = None
         """Made on first use, on the Qt thread."""
         self._keymap: KeymapWindow | None = None
         self._keyboard_overlay: KeymapOverlay | None = None
         self._jobs: queue.Queue[Job] = queue.Queue()
-        self._closed = threading.Event()
+        self._closed, self._inputs_closed = threading.Event(), False
         self._input_lock = threading.Lock()
-        self._inputs_closed = False
         self._pending_inputs: set[Callable[[], None]] = set()
         self._dialogs: list[QtWidgets.QWidget] = []
         self._thread = threading.current_thread()
@@ -204,7 +260,10 @@ class Ui:
         self._poll_timer.start()
 
     def configure_controls(
-        self, *, on_agent_waiting: Callable[[bool], None], on_recording: Callable[[RecordingAction], None],
+        self,
+        *,
+        on_agent_waiting: Callable[[bool], None],
+        on_recording: Callable[[RecordingAction], None],
     ) -> None:
         """Connect the application before it creates any views."""
         self._agent_waiting, self._recording = on_agent_waiting, on_recording
@@ -238,8 +297,9 @@ class Ui:
             self.close_agent()
             self.close_work()
             self._work_view = None
-            while ((self._agent is not None and not self._agent.closed_ready.is_set())
-                   or (self._work is not None and not self._work.closed_ready.is_set())):
+            while (self._agent is not None and not self._agent.closed_ready.is_set()) or (
+                self._work is not None and not self._work.closed_ready.is_set()
+            ):
                 self._poll(self._root)
 
     def _close_inputs(self) -> None:
@@ -248,7 +308,6 @@ class Ui:
             pending = tuple(self._pending_inputs)
         for cancel_input in pending:
             cancel_input()
-
 
     def _poll(self, root: QtWidgets.QApplication) -> None:
         for _ in range(64):
@@ -275,7 +334,10 @@ class Ui:
             self._jobs.put(job)
 
     def _ask[T](
-        self, build: Callable[[QtWidgets.QApplication, Callable[[T], None]], None], *, on_close: Callable[[], T] | None = None,
+        self,
+        build: Callable[[QtWidgets.QApplication, Callable[[T], None]], None],
+        *,
+        on_close: Callable[[], T] | None = None,
     ) -> T:
         """Builds a window on the Qt thread and waits for the answer it gives."""
         answers: queue.Queue[_Answer[T] | Exception] = queue.Queue()
@@ -330,14 +392,17 @@ class Ui:
             dialog.setInputMode(QtWidgets.QInputDialog.InputMode.TextInput)
             dialog.setStyleSheet(STYLE)
             self._dialogs.append(dialog)
+
             def finish(result: int) -> None:
                 done(dialog.textValue().strip() if result == QtWidgets.QDialog.DialogCode.Accepted else None)
                 self._dialogs.remove(dialog)
                 dialog.deleteLater()
+
             dialog.finished.connect(finish)
             self.presentation.position(dialog, 640, 130)
             dialog.open()
             self.presentation.reveal(dialog, dialog)
+
         return self._ask(build, on_close=lambda: None)
 
     def choose_region(self, screen: Rect) -> Rect | None:
@@ -346,6 +411,7 @@ class Ui:
             self._dialogs.append(picker)
             picker.destroyed.connect(lambda: self._dialogs.remove(picker))
             show_window(picker, focus=True)
+
         return self._ask(build, on_close=lambda: None)
 
     # ---- an answer, with follow-ups ----------------------------------------------------
@@ -368,9 +434,16 @@ class Ui:
         self.post(job)
 
     def show_keyboard_overlay(
-        self, layer: Layer | None, title: str, work: Rect, *, visible: bool, pressed: frozenset[Scancode] = frozenset(),
+        self,
+        layer: Layer | None,
+        title: str,
+        work: Rect,
+        *,
+        visible: bool,
+        pressed: frozenset[Scancode] = frozenset(),
     ) -> None:
         """A faded key map that follows the current layer without taking keyboard focus."""
+
         def job(root: QtWidgets.QApplication) -> None:
             if self._keyboard_overlay is None:
                 if not visible:
@@ -382,6 +455,7 @@ class Ui:
 
     def show_pressed_keys(self, pressed: frozenset[Scancode], *, reset: bool = False) -> None:
         """Update feedback on the Qt thread without opening a hidden overlay."""
+
         def job(root: QtWidgets.QApplication) -> None:
             if self._keyboard_overlay is not None:
                 self._keyboard_overlay.set_pressed(pressed, reset=reset)
@@ -403,16 +477,29 @@ class Ui:
         self.post(lambda root: self._overlay(root).flash(text, work, seconds))
 
     def agent(
-        self, task: str | None, stop: Callable[[], None], *, on_problem: Callable[[str], None] | None = None,
-        on_reset: Callable[[], bool] | None = None, on_submit: Callable[[str], None] | None = None,
+        self,
+        task: str | None,
+        stop: Callable[[], None],
+        *,
+        on_problem: Callable[[str], None] | None = None,
+        on_reset: Callable[[], bool] | None = None,
+        on_submit: Callable[[str], None] | None = None,
         on_work: Callable[[], None] | None = None,
-        focus: bool = False, reveal: bool = True, queued: bool = False,
+        focus: bool = False,
+        reveal: bool = True,
+        queued: bool = False,
     ) -> AgentWindow:
         with self._agent_lock:
             if self._agent is None:
                 self._agent = AgentWindow(
-                    stop, post=lambda job: self.post(lambda root: job()), create_view=lambda agent: self._feed_factory(self._root, agent),
-                    on_problem=on_problem, on_reset=on_reset, on_submit=on_submit, on_waiting=self._agent_waiting, on_recording=self._recording,
+                    stop,
+                    post=lambda job: self.post(lambda root: job()),
+                    create_view=self._compose_feed,
+                    on_problem=on_problem,
+                    on_reset=on_reset,
+                    on_submit=on_submit,
+                    on_waiting=self._agent_waiting,
+                    on_recording=self._recording,
                     on_work=on_work,
                     on_communication=self.communicate,
                     on_snapshot=self.refresh_inbox,
@@ -430,9 +517,12 @@ class Ui:
             panel.show(focus=focus)
         return panel
 
-    def configure_triage(self, observe: Callable[[assistant.communications.Feed, tuple[assistant.console_requests.Request, ...]], None],
-                         dismiss: Callable[[str], bool] | None = None,
-                         choose: Callable[[str, str, str], bool] | None = None) -> None:
+    def configure_triage(
+        self,
+        observe: Callable[[assistant.communications.Feed, tuple[assistant.console_requests.Request, ...]], None],
+        dismiss: Callable[[str], bool] | None = None,
+        choose: Callable[[str, str, str], bool] | None = None,
+    ) -> None:
         self._triage_observe = observe
         self._dismiss_work = dismiss
         self._choose_work = choose
@@ -446,6 +536,7 @@ class Ui:
             if self._agent is not None:
                 self._agent.triage(board)
             self.refresh_inbox()
+
         self.post(update)
 
     def observe_triage(self) -> None:
@@ -482,6 +573,7 @@ class Ui:
             if self._agent is not None:
                 self._agent.communications(self._communication_feed, drafts)
             self.refresh_inbox()
+
         self.post(update)
 
     def system_notices(self, observation: assistant.system_notices.Observed) -> None:
@@ -492,6 +584,7 @@ class Ui:
             if self._agent is not None:
                 self._agent.communications(self._communication_feed, self._communication_drafts)
             self.refresh_inbox()
+
         self.post(update)
         if self._communication_action is not None:
             self._communication_action(WindowsObserved(observation))
@@ -508,12 +601,11 @@ class Ui:
             if self._agent is not None:
                 self._agent.consoles(requests)
             self.refresh_inbox()
+
         self.post(update)
 
     def refresh_inbox(self, session: Snapshot | None = None) -> None:
         """Publish attention on the Qt thread, including before the agent view exists."""
-        if self._desktop is None:
-            return
         if session is None:
             if self._agent is None:
                 session = Session()
@@ -521,7 +613,13 @@ class Ui:
                 with self._agent.lock:
                     session = self._agent.state
         session = replace(session, communications=self._communication_feed, console_requests=self._console_requests, triage=self._triage)
-        self._desktop.inbox_changed(pending_count(session))
+        activity = session_activity(session)
+        if activity != self._canvas_activity:
+            self._canvas_activity = activity
+            if self._canvas_store is not None:
+                self.render_canvas_document(self._canvas_store.observe_session(session))
+        if self._desktop is not None:
+            self.refresh_canvas_attention()
 
     def dismiss_system_notice(self, key: NoticeKey) -> None:
         if self._notice_dismissal is not None:
@@ -536,7 +634,12 @@ class Ui:
         return notice is not None and self.communicate(HandleNotice(notice))
 
     def agent_input(
-        self, title: str, detail: str = "", *, question: bool = False, cancel: threading.Event | None = None,
+        self,
+        title: str,
+        detail: str = "",
+        *,
+        question: bool = False,
+        cancel: threading.Event | None = None,
     ) -> str | None:
         """Wait on the agent's inline request, without displaying or focusing a window."""
         if self._agent is None:
@@ -552,24 +655,273 @@ class Ui:
                 self._agent.closed_ready.wait(timeout=3)
 
     def work(
-        self, on_command: Callable[[WorkCommand], None], *, on_problem: Callable[[str], None] | None = None,
-        focus: bool = True, reveal: bool = True,
+        self,
+        on_command: Callable[[WorkCommand], None],
+        *,
+        on_problem: Callable[[str], None] | None = None,
+        focus: bool = True,
+        reveal: bool = True,
     ) -> WorkWindow:
         with self._work_lock:
             if self._work is None:
                 self._work = WorkWindow(
-                    on_command, post=lambda job: self.post(lambda root: job()),
-                    create_view=self._create_work, on_problem=on_problem,
+                    on_command,
+                    post=lambda job: self.post(lambda root: job()),
+                    create_view=self._create_work,
+                    on_problem=on_problem,
+                    create_loading=self._create_canvas_loading,
                 )
             work = self._work
         if reveal:
             work.show(focus=focus)
         return work
 
-    def _create_work(self, work: WorkWindow) -> WorkPanel:
-        self._work_view = WorkPanel(self._root, work)
+    def _create_canvas_loading(self) -> CanvasLoading:
+        return CanvasLoading(self._root, paint_frame=self._paint_canvas_loading)
+
+    def _paint_canvas_loading(self) -> None:
+        # Native exposure must run before blocking setup. Keep queued canvas
+        # redirects/publications on the outer dispatcher until its view exists.
+        active = self._poll_timer.isActive()
+        self._poll_timer.stop()
+        try:
+            self._root.processEvents(QtCore.QEventLoop.ProcessEventsFlag.ExcludeUserInputEvents)
+        finally:
+            if active:
+                self._poll_timer.start()
+
+    def _create_work(self, work: WorkWindow) -> CanvasWindow:
+        if self._canvas_store is None:
+            self._canvas_store = CanvasStore(DIRECTORY / "work" / "canvas.sqlite3")
+        self._canvas_store.capture(self._canvas_activity)
+        self._work_view = CanvasWindow(self._root, work, self._canvas_store)
+        self._work_view.personal.study = self._canvas_run
+        self._work_view.personal.voice_hint.set_pressed(pressed=self._agent_speaking)
         self._attach_meetings()
         return self._work_view
+
+    def _compose_feed(self, agent: AgentWindow) -> AgentToasts:
+        view = self._feed_factory(self._root, agent)
+        view.use_canvas(self.open_canvas_at)
+        return view
+
+    def configure_canvas(
+        self, store: CanvasStore, notice: Callable[[str, str], None], run: Callable[[CanvasRun], None], *, autonomous: bool = False
+    ) -> None:
+        # Storage, redirects, execution and availability compose the canvas's
+        # independent effects; Qt remains its sole mutation owner.
+        def configure(_: QtWidgets.QApplication) -> None:
+            self._canvas_store, self._canvas_notice, self._canvas_run = store, notice, run
+            self._canvas_autonomous = autonomous
+            session = self._agent.state if self._agent is not None else Session()
+            self.render_canvas_document(store.observe_session(session))
+            self.refresh_canvas_attention()
+            if self._work_view is not None:
+                self._work_view.personal.study = run
+            if autonomous:
+                self.investigate_canvas()
+
+        self.post(configure)
+
+    def canvas_command(self, command: CanvasCommand) -> CanvasResponse:
+        """Marshal bridge operations to Qt, never saving a worker's stale snapshot."""
+        if threading.current_thread() is self._thread:
+            return self.apply_canvas_command(command)
+        result: Future[CanvasResponse] = Future()
+
+        def execute(_: QtWidgets.QApplication) -> None:
+            if not result.set_running_or_notify_cancel():
+                return
+            try:
+                response = self.apply_canvas_command(command)
+            except Exception as error:
+                result.set_exception(error)
+            else:
+                result.set_result(response)
+
+        self.post(execute)
+        try:
+            return result.result(timeout=8)
+        except TimeoutError:
+            # A queued command is cancelled before applying. If already running,
+            # transport failure stays uncertain; never claim it was rejected.
+            result.cancel()
+            raise
+
+    def apply_canvas_command(self, command: CanvasCommand) -> CanvasResponse:
+        store = self._canvas_store
+        if store is None:
+            return CanvasRefused("The local canvas is unavailable.")
+        catalog = self._canvas_catalog or Catalog()
+        document = store.read()
+        match command:
+            case ReadCanvas():
+                return snapshot(document, catalog, command)
+            case UpdateCanvas():
+                try:
+                    current = edited(document, command, catalog)
+                except ValueError as error:
+                    return CanvasRefused(str(error))
+                store.save(current)
+                receipt = CanvasUpdated(command.expected_revision, revision(current), changed=current != document)
+                # Return the committed receipt before a later Qt refresh reflows.
+                self.post(lambda _: self.render_canvas_document(store.read()))
+                return receipt
+
+    def investigate_canvas(self) -> None:
+        if not self._canvas_autonomous or self._canvas_store is None or self._canvas_catalog is None or self._canvas_run is None:
+            return
+        previous = self._canvas_store.read()
+        document = retained(previous, self._canvas_work)
+        if document != previous:
+            self._canvas_store.save(document)
+        for run in pending(self._canvas_catalog, document, self._canvas_work):
+            document = replace(document, runs=(*document.runs, run))
+            self._canvas_store.save(document)
+            try:
+                self._canvas_run(run)
+            except ValueError:
+                # Queue refusal must not mark this evidence as investigated.
+                document = replace(document, runs=tuple(binding for binding in document.runs if binding.task_id != run.task_id))
+                self._canvas_store.save(document)
+                break
+        if document != previous:
+            # Native interactions also save full documents. Keep the panel's
+            # snapshot current before another gesture can save placements.
+            self.render_canvas_document(document)
+
+    def render_canvas_document(self, document: CanvasDocument) -> None:
+        hidden = hidden_ids(self._canvas_catalog or Catalog(), document)
+        if self._agent is not None:
+            self._agent.settle_canvas(
+                frozenset(
+                    item.id
+                    for item in document.activity
+                    if isinstance(item, CanvasQuestion) and (item.reply is not Attention.WAITING or item.id in hidden)
+                )
+            )
+        if self._work_view is not None:
+            self._work_view.personal.document = document
+            self._work_view.personal.render(self._work_view.personal.view)
+
+    def visible_canvas_activity(self) -> tuple[CanvasActivity, ...]:
+        document = self._canvas_store.read() if self._canvas_store is not None else CanvasDocument(activity=self._canvas_activity)
+        hidden = hidden_ids(self._canvas_catalog or Catalog(), document)
+        return tuple(item for item in document.activity if item.id not in hidden)
+
+    def refresh_canvas_attention(self) -> None:
+        activity = self.visible_canvas_activity()
+        if self._desktop is not None:
+            self._desktop.inbox_changed(sum(isinstance(item, CanvasQuestion) and item.reply is Attention.WAITING for item in activity))
+
+    def observe_canvas_work(self, snapshot: WorkSnapshot) -> None:
+        def observe(_: QtWidgets.QApplication) -> None:
+            self._canvas_work = snapshot.tasks
+            if self._canvas_store is None:
+                return
+            previous = self._canvas_store.read()
+            updates = task_activity(snapshot.tasks, previous.runs)
+            known = frozenset(item.id for item in (*self._canvas_tasks, *self._canvas_activity))
+            self._canvas_tasks = updates
+            document = self._canvas_store.observe_tasks(snapshot)
+            self.render_canvas_document(document)
+            self.refresh_canvas_attention()
+            visible = frozenset(item.id for item in self.visible_canvas_activity())
+            additions = tuple(item for item in updates if item.id not in known and item.id in visible)
+            if self._canvas_notice is not None and additions and (self._work_view is None or not self._work_view.window.isActiveWindow()):
+                latest = additions[-1]
+                self._canvas_notice(latest.title, latest.id)
+            self.investigate_canvas()
+
+        self.post(observe)
+
+    def observe_canvas(self, catalog: Catalog) -> None:
+        def observe(_: QtWidgets.QApplication) -> None:
+            previous, self._canvas_catalog = self._canvas_catalog, catalog
+            self.investigate_canvas()
+            self.refresh_canvas_attention()
+            if self._canvas_store is not None:
+                self.render_canvas_document(self._canvas_store.read())
+            if previous is None or self._canvas_store is None:
+                return
+            changes = important_changes(previous, catalog)
+            if changes and self._canvas_notice is not None and (self._work_view is None or not self._work_view.window.isActiveWindow()):
+                latest = next(work for work in catalog.works if work.id == changes[-1])
+                self._canvas_notice("Canvas updated · " + latest.definition.title, latest.id)
+
+        self.post(observe)
+
+    def open_canvas_at(self, identity: str) -> None:
+        if self._work is None:
+            if self._agent is not None:
+                self._agent.show_work()
+        else:
+            self._work.show()
+
+        def reveal(_: QtWidgets.QApplication) -> None:
+            if self._work_view is not None:
+                self._work_view.personal.open_at(identity)
+
+        self.post(reveal)
+
+    def open_reference(self, url: str) -> None:
+        """Qt delegates a validated original document/page to the desktop shell."""
+
+        def open_original(_: QtWidgets.QApplication) -> None:
+            if not QtGui.QDesktopServices.openUrl(QtCore.QUrl(url)) and self._work is not None:
+                self._work.problem("The original reference could not be opened.")
+
+        self.post(open_original)
+
+    def voice_agent(self, text: str, fallback: Callable[[str], None]) -> None:
+        """Route speech on Qt to the canvas context or conversation input.
+
+        A rejected clarification reply is consumed here, so it cannot accidentally
+        answer another question or become a new task. Dictation has its own path.
+        """
+
+        def route(_: QtWidgets.QApplication) -> None:
+            panel = self._work_view.personal if self._work_view is not None else None
+            question = next((item for item in self.visible_canvas_activity() if panel is not None and item.id == panel.selected), None)
+            match question:
+                case CanvasQuestion(reply=Attention.WAITING) if panel is not None and panel.frame.isVisible():
+                    if not self.answer_canvas(question.request, text):
+                        panel.status.setText("This reply could not be sent. Your transcript is available with Copy latest transcript.")
+                case _ if panel is not None and panel.frame.isVisible():
+                    panel.send_instruction(text)
+                case _:
+                    fallback(text)
+
+        self.post(route)
+
+    def answer_canvas(self, request: CanvasRequest, value: str) -> bool:
+        if self._canvas_store is not None and not any(
+            isinstance(item, CanvasQuestion) and item.request == request and item.reply is Attention.WAITING
+            for item in self.visible_canvas_activity()
+        ):
+            return False
+        accepted = False
+        match request:
+            case SessionRequest(session_id=identity, request_id=key):
+                if self._agent is not None and self._agent.state.identity == identity:
+                    accepted = self._agent.respond(key, value)
+            case TaskRequest(task_id=task, request_id=key):
+                if self._work is not None:
+                    try:
+                        answer = TextAnswer(value)
+                    except ValueError:
+                        return False
+                    accepted = self._work.send(AnswerTask(task, key, answer))
+        if accepted and self._canvas_store is not None:
+            document = self._canvas_store.read()
+            updates = tuple(
+                replace(item, reply=Answered(value)) if isinstance(item, CanvasQuestion) and item.request == request else item
+                for item in document.activity
+            )
+            self._canvas_store.save(replace(document, activity=updates))
+            self.render_canvas_document(self._canvas_store.read())
+            self.refresh_canvas_attention()
+        return accepted
 
     def _attach_meetings(self) -> None:
         connection, view = self._meetings, self._work_view
@@ -580,20 +932,22 @@ class Ui:
         def configure(_: QtWidgets.QApplication) -> None:
             self._meetings = MeetingConnection(workflow, open_file)
             self._attach_meetings()
+
         self.post(configure)
 
     def meetings_changed(self, snapshot: MeetingSnapshot) -> None:
         def render(_: QtWidgets.QApplication) -> None:
             if self._work_view is not None and self._work_view.meetings is not None:
                 self._work_view.meetings.render_snapshot(snapshot)
+
         self.post(render)
 
     def show_meetings(self) -> None:
         def reveal(_: QtWidgets.QApplication) -> None:
             if self._work_view is not None:
                 self._work_view.show_meetings()
-        self.post(reveal)
 
+        self.post(reveal)
 
     def close_work(self) -> None:
         if self._work is not None:
@@ -605,22 +959,36 @@ class Ui:
 
     def open_inbox(self, show_agent: Callable[[], None]) -> None:
         """Bell and keyboard requests share Qt-owned initialization and inbox focus."""
+
         def reveal(_: QtWidgets.QApplication) -> None:
             with self._input_lock:
                 if self._inputs_closed:
                     return
-            show_agent()
-            if self._agent is not None:
-                self._agent.open_inbox()
+            activity = self.visible_canvas_activity()
+            question = next((item for item in activity if isinstance(item, CanvasQuestion) and item.reply is Attention.WAITING), None)
+            if question is not None:
+                self.open_canvas_at(question.id)
+            elif self._work is not None:
+                self._work.show()
+            else:
+                show_agent()
+
         self.post(reveal)
 
     def desktop(
-        self, *, show_agent: Callable[[], None], show_work: Callable[[], None], stop: Callable[[], None],
-        overlay: Callable[[], None], menu: Callable[[], None], on_problem: Callable[[str], None],
+        self,
+        *,
+        show_agent: Callable[[], None],
+        show_work: Callable[[], None],
+        stop: Callable[[], None],
+        overlay: Callable[[], None],
+        menu: Callable[[], None],
+        on_problem: Callable[[str], None],
         audio_level: Callable[[], float | None] | None = None,
         tiling: Callable[[Tool, int], None] | None = None,
     ) -> None:
         """Create only Workspace's floating native controls."""
+
         def create(root: QtWidgets.QApplication) -> None:
             with self._input_lock:
                 if self._inputs_closed:
@@ -628,24 +996,43 @@ class Ui:
             if self._desktop is not None:
                 return
             try:
-                actions = BarActions(show_agent, show_work, stop, self._recording or (lambda _: None), self.show_keymap, overlay, menu,
-                                     on_problem, tiling or (lambda _tool, _hwnd: None), self.system_notices, self.handle_system_notice,
-                                     inbox=lambda: self.open_inbox(show_agent))
+                actions = BarActions(
+                    show_agent,
+                    show_work,
+                    stop,
+                    self._recording or (lambda _: None),
+                    self.show_keymap,
+                    overlay,
+                    menu,
+                    on_problem,
+                    tiling or (lambda _tool, _hwnd: None),
+                    self.system_notices,
+                    self.handle_system_notice,
+                    inbox=lambda: self.open_inbox(show_agent),
+                )
                 self._desktop = self._desktop_factory(actions, audio_level=audio_level)
                 self.refresh_inbox()
             except Exception:
                 traceback.print_exc()
                 on_problem("The Workspace bar could not start. The tray remains available.")
+
         self.post(create)
 
-    def desktop_state(self, state: State) -> None:
-        self.post(lambda _: self._desktop.state(state) if self._desktop is not None else None)
+    def desktop_state(self, state: State, *, agent_speaking: bool = False) -> None:
+        def display(_: QtWidgets.QApplication) -> None:
+            self._agent_speaking = agent_speaking
+            if self._desktop is not None:
+                self._desktop.state(state)
+            if self._work_view is not None:
+                self._work_view.personal.voice_hint.set_pressed(pressed=agent_speaking)
+
+        self.post(display)
 
     def desktop_recording(self, recording: RecordingState) -> None:
         self.post(lambda _: self._desktop.recording_changed(recording) if self._desktop is not None else None)
 
-    def desktop_layout(self, enabled: bool) -> None:
-        self.post(lambda _: self._desktop.layout(enabled) if self._desktop is not None else None)
+    def desktop_layout(self, *, enabled: bool) -> None:
+        self.post(lambda _: self._desktop.layout(enabled=enabled) if self._desktop is not None else None)
 
     def toggle_taskbar(self) -> None:
         self.post(lambda _: self._desktop.toggle_taskbar() if self._desktop is not None else None)
@@ -657,12 +1044,15 @@ class Ui:
                 return
             self._switcher = WindowSwitcher(choices, focus)
             current = self._switcher
+
             def cleared(_: int) -> None:
                 if self._switcher is current:
                     self._switcher = None
+
             current.finished.connect(cleared)
             _near_pointer(current, current.width(), current.height())
             _bring_forward(current, current.search)
+
         self.post(show)
 
     def close_desktop(self) -> None:
@@ -670,6 +1060,7 @@ class Ui:
             return
         done = threading.Event()
         problems: list[str] = []
+
         def close(_: QtWidgets.QApplication) -> None:
             try:
                 if self._desktop is not None:
@@ -679,6 +1070,7 @@ class Ui:
                 problems.append(str(error))
             finally:
                 done.set()
+
         if threading.current_thread() is self._thread:
             close(self._root)
         else:
@@ -784,6 +1176,7 @@ class AnswerWindow:
                 cursor.insertText(text)
                 self.text.setTextCursor(cursor)
                 self.text.ensureCursorVisible()
+
         self.ui.post(job)
 
     def all_text(self) -> str:
@@ -807,6 +1200,7 @@ class AnswerWindow:
             if shiboken6.isValid(self.window):
                 self.entry.setEnabled(True)
                 self.entry.setFocus()
+
         self.ui.post(job)
 
     def fail(self, message: str) -> None:
@@ -830,7 +1224,7 @@ class Indicator:
         self._window.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Tool)
         self._window.setStyleSheet(STYLE)
         self._window.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
-        self._window.setWindowOpacity(.9)
+        self._window.setWindowOpacity(0.9)
         layout = row(self._window)
         layout.setContentsMargins(16, 6, 16, 6)
         self._label = label("")
@@ -870,6 +1264,8 @@ class Indicator:
             self._show(*self._steady)
         else:
             self._window.hide()
+
+
 _COLOURS: Final = {
     Kind.KEY: ("#2b2e33", FOREGROUND),
     Kind.MOD: ("#21403a", "#8fe3c6"),
@@ -927,7 +1323,7 @@ class KeymapCanvas(QtWidgets.QWidget):
             fill, ink = self.colors(name)
             painter.setPen(QtGui.QPen(QtGui.QColor("#fff0cc" if name in self.highlighted else "#424b58"), 1))
             painter.setBrush(QtGui.QColor(fill))
-            painter.drawRoundedRect(bounds.adjusted(.5, .5, -.5, -.5), 4, 4)
+            painter.drawRoundedRect(bounds.adjusted(0.5, 0.5, -0.5, -0.5), 4, 4)
             face = QtGui.QFont("Segoe UI")
             face.setPixelSize(max(8, round(10 * self.scale)))
             painter.setFont(face)
@@ -1001,7 +1397,7 @@ class KeymapOverlay:
         self._window.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Tool)
         self._window.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
         self._window.setStyleSheet(STYLE)
-        self._window.setWindowOpacity(.55)
+        self._window.setWindowOpacity(0.55)
         layout = column(self._window)
         layout.setContentsMargins(8, 8, 8, 8)
         self._heading = label("", "muted")
@@ -1034,7 +1430,7 @@ class KeymapOverlay:
         if self._position is not None:
             work = nearest_work_area(self._position, areas)
         density = self._window.devicePixelRatioF()
-        scale = max(.2, min(.85, (work.width / density - 32) / (14 * _UNIT), (work.height / density - 180) / (4 * (_HEIGHT + _GAP))))
+        scale = max(0.2, min(0.85, (work.width / density - 32) / (14 * _UNIT), (work.height / density - 180) / (4 * (_HEIGHT + _GAP))))
         self._heading.setText(f"Workspace keyboard · {title}")
         self._canvas.draw(layer, scale)
         self._view = view
@@ -1089,8 +1485,13 @@ class KeymapOverlay:
             areas = self._desktop.work_areas()
             if areas:
                 scale = self._window.devicePixelRatioF()
-                self._move(fit_position(self._position, round(self._window.width() * scale),
-                                        round((self._window.height() + self._handle.height() + 4) * scale), nearest_work_area(self._position, areas)))
+                self._move(
+                    fit_position(
+                        self._position,
+                        (round(self._window.width() * scale), round((self._window.height() + self._handle.height() + 4) * scale)),
+                        nearest_work_area(self._position, areas),
+                    )
+                )
             try:
                 self._desktop.save_position(self._position)
             except OSError:
@@ -1127,9 +1528,12 @@ class KeymapWindow:
         layout.addLayout(buttons)
         self.canvas = KeymapCanvas()
         layout.addWidget(self.canvas)
-        layout.addWidget(label(
-            "Space: hold · B: dictate toggle · N: agent toggle · Apps + Esc: windows", "muted",
-        ))
+        layout.addWidget(
+            label(
+                "Space: hold · B: dictate toggle · N: agent toggle · Apps + Esc: windows",
+                "muted",
+            )
+        )
         self.layer: Layer | None = None
         self.draw(None)
         _near_pointer(self.window, 940, 390)

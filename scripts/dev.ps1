@@ -1,5 +1,5 @@
 param(
-    [ValidateSet('check', 'deploy', 'lint', 'typecheck', 'mutate', 'watch', 'preview')]
+    [ValidateSet('check', 'deploy', 'lint', 'format', 'typecheck', 'mutate', 'watch', 'preview')]
     [string]$Command = 'check',
     [Parameter(ValueFromRemainingArguments = $true)]
     [string[]]$Arguments
@@ -20,6 +20,7 @@ try {
         'deploy' { & $python -m scripts.deploy deploy @Arguments }
         'mutate' { & $python -m scripts.mutate @Arguments }
         'lint' { & $python -m ruff check @Arguments }
+        'format' { & $python -m ruff format @Arguments }
         'typecheck' { & $python -m pyright --pythonpath $python @Arguments }
     }
     exit $LASTEXITCODE

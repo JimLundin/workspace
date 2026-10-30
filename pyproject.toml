@@ -8,11 +8,12 @@ version = "0.1.0"
 requires-python = ">=3.15"
 dependencies = [
     "openai-agents==0.24.0",
+    "openai==3.35.1",
+    "pydantic==2.14.1",
     "markdown-it-py==4.0.0",
     "httpx==0.28.1",
     "websockets==16.1.1",
     "PySide6-Essentials==6.12.0; sys_platform == 'win32'",
-    "PySide6-WebEngine==6.12.0.140; sys_platform == 'win32'",
     "win32more-core==0.8.7; sys_platform == 'win32'",
     "win32more-Microsoft.Windows.SDK.Contracts==0.8.10.0.28000.2705; sys_platform == 'win32'",
     "win32more-Microsoft.Windows.SDK.Win32Metadata==0.8.71.0.26; sys_platform == 'win32'",
@@ -45,8 +46,12 @@ typeCheckingMode = "strict"
 [tool.ruff]
 target-version = "py315"
 line-length = 150
+extend-include = ["*.pyw"]
 # Preserve vendored upstream declarations; lint consumed local stubs separately.
 extend-exclude = ["typings/.workspace-typeshed"]
+
+[tool.ruff.format]
+line-ending = "lf"
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "N", "UP", "B", "SIM", "RUF", "PL", "C4", "RET", "TID252"]
@@ -223,12 +228,9 @@ max-positional-args = 5
 ban-relative-imports = "all"
 
 [tool.ruff.lint.per-file-ignores]
-# Python 3.12 bootstrap resolves candidate/runtime imports after activation.
+# Protected owners resolve candidate/runtime imports after activation.
 "keeper.py" = ["PLC0415"]
 "selfcheck.py" = ["PLC0415"]
-# Double-click launchers must activate the bundled runtime before product imports.
-"workspace.pyw" = ["E402"]
-"miryoku.pyw" = ["E402"]
 # The layout tables are kept as a wide grid that reads across the keyboard.
 "miryoku/layout.py" = ["E501"]
 # Win32 functions keep their Windows names, one prototype per line.
@@ -237,7 +239,7 @@ ban-relative-imports = "all"
 "typings/win32more/**/*.pyi" = ["N801", "N802"]
 
 [tool.setuptools]
-py-modules = ["config", "diagnostics", "keeper", "keeper_ui", "protocol", "runtime", "selfcheck", "usage"]
+py-modules = ["config", "diagnostics", "keeper", "keeper_control", "keeper_ui", "protocol", "runtime", "selfcheck", "usage"]
 
 [tool.setuptools.packages.find]
 include = ["assistant*", "automation*", "miryoku*", "winapi*"]
@@ -248,7 +250,7 @@ assistant = ["*.ps1", "*.yaml"]
 [tool.workspace.architecture]
 # Model ownership follows module moves; mutable effect owners are not models.
 models = [
-  "assistant.control_policy",
+    "assistant.control_policy",
     "assistant.agent_session",
     "assistant.communications",
     "assistant.feed_triage",
@@ -292,51 +294,3 @@ module = "assistant.sdk"
 declaration = "TextBuffer"
 expression = "TextBuffer"
 reason = "Private streaming accumulators update growing fragment maps and completion sets; persistent copies per fragment add substantial cumulative work. Published timeline values remain immutable."
-
-[[tool.workspace.architecture.exceptions]]
-rule = "immutable-data"
-module = "assistant.agent_input"
-declaration = "_Input"
-expression = "_Input"
-kind = "migration"
-reason = "Existing reply mailbox is shared by a waiting thread and its answer callback. Move mutable coordination into its effect owner before making the reply record immutable."
-
-[[tool.workspace.architecture.exceptions]]
-rule = "immutable-data"
-module = "assistant.overlay"
-declaration = "OverlayState"
-expression = "OverlayState"
-kind = "migration"
-reason = "Existing overlay callers expect in-place updates. Replace them with immutable transitions in a focused native-view change; no performance necessity is claimed."
-
-[[tool.workspace.architecture.exceptions]]
-rule = "immutable-data"
-module = "assistant.shell_state"
-declaration = "WindowsKeyTap"
-expression = "WindowsKeyTap"
-kind = "migration"
-reason = "Existing Windows-key hook mutates held-key state. Measure its native callback before replacing that state; the current shape has no specific before/after evidence."
-
-[[tool.workspace.architecture.exceptions]]
-rule = "mutable-field"
-module = "assistant.agent"
-declaration = "Args.values"
-expression = "dict[str, object]"
-kind = "migration"
-reason = "Existing tool arguments retain mutable parsed JSON. Freeze validated nested data at ingress while preserving the external encoding in its adapter."
-
-[[tool.workspace.architecture.exceptions]]
-rule = "mutable-field"
-module = "assistant.agent_execution"
-declaration = "Conversation.history"
-expression = "list[Json]"
-kind = "migration"
-reason = "Existing volatile SDK history is shared by identity with Agent. Move its mutation behind the execution owner while preserving ADR-0001 recovery and privacy constraints."
-
-[[tool.workspace.architecture.exceptions]]
-rule = "mutable-field"
-module = "assistant.llm"
-declaration = "ToolSpec.parameters"
-expression = "dict[str, Json]"
-kind = "migration"
-reason = "Existing tool schemas are mutable JSON dictionaries. Introduce immutable schemas together with explicit JSON conversion in the SDK and HTTP adapters."

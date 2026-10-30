@@ -66,8 +66,10 @@ def test_a_module_that_cant_import_fails(tmp_path: Path) -> None:
 
 
 def test_missing_native_ui_dependencies_are_only_skipped_off_windows(tmp_path: Path) -> None:
-    native = {f"tools/native_{index}.py": f"raise ModuleNotFoundError(\"No module named '{name}'\")\n"
-              for index, name in enumerate(("PySide6", "shiboken6", "win32more"))}
+    native = {
+        f"tools/native_{index}.py": f"raise ModuleNotFoundError(\"No module named '{name}'\")\n"
+        for index, name in enumerate(("PySide6", "shiboken6", "win32more"))
+    }
     code, report = selfcheck(tree(tmp_path, {**SOUND, **native}))
     if sys.platform == "win32":
         assert code == 1 and all(f"doesn't import: tools.native_{index}" in report for index in range(3)), report
@@ -79,7 +81,6 @@ def test_a_crashing_test_module_fails(tmp_path: Path) -> None:
     code, report = selfcheck(tree(tmp_path, {**SOUND, "tests/test_bad.py": "raise RuntimeError('boom')\n"}))
     assert code == 1
     assert "boom" in report
-
 
 
 def test_broken_windowless_launcher_fails(tmp_path: Path) -> None:
@@ -112,3 +113,19 @@ def test_compile_excludes_dependency_and_cache_sources(tmp_path: Path) -> None:
     problems: list[str] = []
     compile_all(root, problems)
     assert not problems
+
+
+def test_candidate_dependency_manifest_takes_precedence_over_the_checker_runtime(tmp_path: Path) -> None:
+    # Detect checking against the launcher's bundle after selecting a candidate
+    # that declares an incompatible adjacent runtime.
+    candidate = tree(tmp_path, {**SOUND, ".runtime/manifest.json": '{"python": "3.99"}'})
+    code, report = selfcheck(candidate)
+    assert code == 1 and "Windows x64 Python 3.99" in report, report
+
+
+def test_candidate_bootstrap_import_failure_is_not_hidden_by_the_checker_runtime(tmp_path: Path) -> None:
+    # Detect skipping the selected copy's runtime because activation preloaded
+    # the checker's module under the same import name.
+    candidate = tree(tmp_path, {**SOUND, "runtime.py": "raise RuntimeError('candidate runtime failed')\n"})
+    code, report = selfcheck(candidate)
+    assert code == 1 and "doesn't import: runtime" in report and "candidate runtime failed" in report, report

@@ -1,11 +1,12 @@
 """The learning overlay's state, placement and remembered preferences."""
 
-import json
 import math
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import Final, cast
+from typing import Final
+
+from pydantic import StrictBool, StrictInt, TypeAdapter
 
 from assistant.keymap import PHYSICAL_NAMES
 from miryoku.layout import Layer, Scancode
@@ -17,19 +18,33 @@ POSITION: Final = DIRECTORY / "overlay-position.json"
 """Position is written by the UI thread, independently of the tray preference."""
 
 
-def _read(path: Path) -> dict[str, object]:
+@dataclass(frozen=True, slots=True)
+class Preference:
+    enabled: StrictBool = field(kw_only=True)
+
+
+@dataclass(frozen=True, slots=True)
+class Position:
+    x: StrictInt
+    y: StrictInt
+
+
+_PREFERENCE = TypeAdapter(Preference)
+_POSITION = TypeAdapter(Position)
+
+
+def _read[T](path: Path, adapter: TypeAdapter[T]) -> T | None:
     try:
-        data: object = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return {}
-    return cast("dict[str, object]", data) if isinstance(data, dict) else {}
+        return adapter.validate_json(path.read_bytes())
+    except OSError, ValueError:
+        return None
 
 
-def _save(data: dict[str, object], path: Path) -> None:
+def _save[T](data: T, path: Path, adapter: TypeAdapter[T]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_suffix(".tmp")
     try:
-        temporary.write_text(json.dumps(data) + "\n", encoding="utf-8")
+        temporary.write_bytes(adapter.dump_json(data) + b"\n")
         temporary.replace(path)
     finally:
         temporary.unlink(missing_ok=True)
@@ -37,24 +52,23 @@ def _save(data: dict[str, object], path: Path) -> None:
 
 def load_enabled(path: Path = PREFERENCE) -> bool:
     """Start with the learning aid visible unless the user has hidden it."""
-    value = _read(path).get("enabled")
-    return value if isinstance(value, bool) else True
+    preference = _read(path, _PREFERENCE)
+    return preference.enabled if preference is not None else True
 
 
-def save_enabled(enabled: bool, path: Path = PREFERENCE) -> None:
-    _save({"enabled": enabled}, path)
+def save_enabled(*, enabled: bool, path: Path = PREFERENCE) -> None:
+    _save(Preference(enabled=enabled), path, _PREFERENCE)
 
 
 def load_position(path: Path = POSITION) -> tuple[int, int] | None:
     """The drag handle's horizontal centre and top, in physical screen pixels."""
-    data = _read(path)
-    x, y = data.get("x"), data.get("y")
-    return (x, y) if type(x) is int and type(y) is int else None
+    position = _read(path, _POSITION)
+    return (position.x, position.y) if position is not None else None
 
 
 def save_position(position: tuple[int, int], path: Path = POSITION) -> None:
     x, y = position
-    _save({"x": x, "y": y}, path)
+    _save(Position(x, y), path, _POSITION)
 
 
 def nearest_work_area(position: tuple[int, int], areas: Sequence[Rect]) -> Rect:
@@ -67,9 +81,10 @@ def nearest_work_area(position: tuple[int, int], areas: Sequence[Rect]) -> Rect:
     return min(areas, key=distance)
 
 
-def fit_position(position: tuple[int, int], width: int, height: int, work: Rect) -> tuple[int, int]:
+def fit_position(position: tuple[int, int], size: tuple[int, int], work: Rect) -> tuple[int, int]:
     """Keep the keyboard and handle on this monitor, with the handle always reachable."""
     x, y = position
+    width, height = size
     visible_width = min(width, work.width)
     x = max(work.left + visible_width // 2, min(x, work.right - (visible_width - visible_width // 2)))
     y = max(work.top, min(y, work.bottom - height))
@@ -104,13 +119,15 @@ class KeyHighlights:
         self._until.clear()
 
 
-@dataclass(slots=True)
+@dataclass(frozen=True, slots=True)
 class OverlayState:
-    enabled: bool = True
-    layout_on: bool = False
+    """An observation replaced by the UI owner after each layout event."""
+
+    enabled: bool = field(default=True, kw_only=True)
+    layout_on: bool = field(default=False, kw_only=True)
     layer: Layer | None = None
-    locked: bool = False
-    caps_word: bool = False
+    locked: bool = field(default=False, kw_only=True)
+    caps_word: bool = field(default=False, kw_only=True)
     pressed: frozenset[Scancode] = frozenset()
 
     @property
@@ -126,17 +143,20 @@ class OverlayState:
             parts.append("CAPS WORD")
         return " · ".join(parts)
 
-    def set_layout(self, on: bool) -> None:
-        self.layout_on = on
-        self.pressed = frozenset()
-        if not on:
-            self.layer, self.locked, self.caps_word = None, False, False
+    def set_layout(self, *, on: bool) -> OverlayState:
+        return (
+            replace(self, layout_on=True, pressed=frozenset())
+            if on
+            else replace(self, layout_on=False, pressed=frozenset(), layer=None, locked=False, caps_word=False)
+        )
 
-    def indicate(self, layer: Layer | None, *, locked: bool, caps_word: bool) -> None:
-        self.layer, self.locked, self.caps_word = layer, locked, caps_word
+    def indicate(self, layer: Layer | None, *, locked: bool, caps_word: bool) -> OverlayState:
+        return replace(self, layer=layer, locked=locked, caps_word=caps_word)
 
-    def key(self, scancode: Scancode, down: bool) -> None:
+    def key(self, scancode: Scancode, *, down: bool) -> OverlayState:
         if not scancode:
-            self.pressed = frozenset()
-        elif self.layout_on and scancode in PHYSICAL_NAMES:
-            self.pressed = self.pressed | {scancode} if down else self.pressed - {scancode}
+            return replace(self, pressed=frozenset())
+        if self.layout_on and scancode in PHYSICAL_NAMES:
+            pressed = self.pressed | {scancode} if down else self.pressed - {scancode}
+            return replace(self, pressed=pressed)
+        return self

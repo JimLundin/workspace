@@ -28,7 +28,7 @@ def test_base_layer() -> None:
     assert base["§"] == ("On/off", "hold: quit", Kind.SPECIAL)
     assert base["B"] == ("Dictate toggle", "toggle", Kind.TOOL)
     assert base["Space"] == ("Talk", "hold", Kind.TOOL)
-    assert base["N"] == ("Agent toggle", "toggle", Kind.TOOL)
+    assert base["N"] == ("Agent talk", "hold", Kind.TOOL)
     assert base["Y"] == ("", "", Kind.BLANK)
 
 
@@ -37,7 +37,7 @@ def test_voice_buttons_stay_visible_on_every_layer() -> None:
     for layer in layers:
         keys = caps(layer)
         assert keys["Space"] == ("Talk", "hold", Kind.TOOL)
-        assert keys["N"] == ("Agent toggle", "toggle", Kind.TOOL)
+        assert keys["N"] == ("Agent talk", "hold", Kind.TOOL)
         assert keys["B"] == ("Dictate toggle", "toggle", Kind.TOOL)
 
 
@@ -71,7 +71,6 @@ def test_every_tool_has_a_label() -> None:
     labels = {cap.label for layer in layers for row in keymap(layer) for cap in row if cap.kind is Kind.TOOL}
     assert len(labels) == len(set(Tool))
     assert set(TOOL_NAMES) == set(Tool)
-
 
 
 def test_indicator_text() -> None:

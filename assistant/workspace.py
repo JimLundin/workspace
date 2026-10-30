@@ -6,7 +6,7 @@ import difflib
 import sys
 import tempfile
 import threading
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 
 from assistant import commands
@@ -20,7 +20,7 @@ class SourceError(Exception):
 
 @dataclass(frozen=True, slots=True)
 class CheckCompleted:
-    passed: bool
+    passed: bool = field(kw_only=True)
     report: str
 
 
@@ -129,7 +129,11 @@ class Workspace:
         return (result.passed, result.report) if isinstance(result, CheckCompleted) else (False, result.reason)
 
     def inspect_check(
-        self, timeout_s: float = 300, *, fast: bool = False, cancel: threading.Event | None = None,
+        self,
+        timeout_s: float = 300,
+        *,
+        fast: bool = False,
+        cancel: threading.Event | None = None,
     ) -> CheckResult:
         """Run the stable selfcheck on a fresh copy so tests cannot leave stale bytecode in the draft."""
         with tempfile.TemporaryDirectory(prefix="workspace-check-") as scratch:
@@ -143,5 +147,5 @@ class Workspace:
             if code == -1:
                 return CheckInterrupted(report)
             if source_digest(candidate) != digest:
-                return CheckCompleted(False, "Runtime checks changed the candidate source; fix the tests and check again.")
-            return CheckCompleted(code == 0, report)
+                return CheckCompleted(passed=False, report="Runtime checks changed the candidate source; fix the tests and check again.")
+            return CheckCompleted(passed=code == 0, report=report)

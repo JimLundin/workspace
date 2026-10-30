@@ -103,9 +103,12 @@ def test_watched_caller_reply_failures_have_distinct_exact_receipts_after_confir
                 assert command_finished.wait(5)
                 assert rig.saved_context.get(marker) is None
                 assert rig.agent.snapshot().reply_problems == ()
+
             def another_attempt(state: WorkSnapshot, receipt: str = previous_receipt) -> bool:
-                return any(problem.task_id == "caller-task" and problem.request_id == "format" and problem.receipt_id != receipt
-                           for problem in state.reply_problems)
+                return any(
+                    problem.task_id == "caller-task" and problem.request_id == "format" and problem.receipt_id != receipt
+                    for problem in state.reply_problems
+                )
 
             snapshot = feed.until(another_attempt)
             assert len(snapshot.reply_problems) == 1
@@ -118,8 +121,9 @@ def test_watched_caller_reply_failures_have_distinct_exact_receipts_after_confir
             assert rig.tasks.responses("caller-task") == ()
 
         rig.agent.command(AnswerTask("caller-task", "format", TextAnswer("Markdown")))
-        snapshot = feed.until(lambda state: any(task.id == "caller-task" and task.state is TaskStatus.READY for task in state.tasks)
-                              and not state.reply_problems)
+        snapshot = feed.until(
+            lambda state: any(task.id == "caller-task" and task.state is TaskStatus.READY for task in state.tasks) and not state.reply_problems
+        )
         assert [response.reply for response in rig.tasks.responses("caller-task")] == [TextAnswer("Markdown")]
         other = next(task for task in snapshot.tasks if task.id == "another-task")
         assert isinstance(other.state, Waiting) and isinstance(other.state.reason, Question) and other.state.reason.id == "format"

@@ -21,7 +21,9 @@ from assistant.qt_runtime import prepare
 from assistant.qt_ui import application
 from assistant.recording_state import RecordingState
 from assistant.shell_controls import TaskbarControl, WindowsKeyDispatch, WindowsKeyEffects
-from protocol import LAYOUT_MAGIC, Tool
+from miryoku.win import Keyboard, maintain_keyboard
+from protocol import LAYOUT_MAGIC, WM_TOGGLE_LAYOUT, Tool
+from tests.test_windows_bindings import KeyboardFixture
 from winapi import inputs, keyboard_language, system
 lazy from assistant.notifications import Tone
 lazy from assistant.qt_ui import EventLoop
@@ -33,40 +35,58 @@ prepare()
 
 
 def test_floating_bar_shows_only_active_controls_and_retracts(tmp_path: Path) -> None:
+    # Defect: activity/capture/layer titles leak onto the toolbar, numeric
+    # readouts disappear, or inactive controls remain visible.
     app = application()
     invoked: list[str] = []
-    actions = BarActions(lambda: invoked.append("agent"), lambda: invoked.append("work"), lambda: invoked.append("agent-stop"),
-                         invoked.append, lambda: invoked.append("keyboard"), lambda: None, lambda: invoked.append("menu"), invoked.append,
-                         inbox=lambda: invoked.append("inbox"))
+    actions = BarActions(
+        lambda: invoked.append("agent"),
+        lambda: invoked.append("work"),
+        lambda: invoked.append("agent-stop"),
+        invoked.append,
+        lambda: invoked.append("keyboard"),
+        lambda: None,
+        lambda: invoked.append("menu"),
+        invoked.append,
+        inbox=lambda: invoked.append("inbox"),
+    )
     bar = DesktopBar(actions, native_shell=False)
     try:
         width = bar.window.width()
-        assert bar.status.text() == bar.ambient.text and bar.stop.isHidden()
+        assert bar.ambient.clock in bar.status.text() and bar.ambient.text in bar.status.toolTip() and bar.stop.isHidden()
         assert not bar.capture.presented and not bar.keycaps.presented
-        assert len([button for button in bar.window.findChildren(QtWidgets.QToolButton) if not button.isHidden()]) == 1
+        assert len([button for button in bar.window.findChildren(QtWidgets.QToolButton) if not button.isHidden()]) == 2
         bar.state(State.AGENT)
         assert not bar.stop.isHidden() and bar.stop.geometry().right() < bar.window.width()
         bar.stop.click()
         bar.recording_changed(RecordingState(phase="recording", seconds=125))
         bar.state(State.LISTENING)
-        assert not bar.status.text() and "Listening" in bar.status.accessibleName() and bar.record.text() == "02:05"
+        assert not bar.status.text() and "Listening" in bar.status.accessibleName()
+        assert not bar.record.text() and "02:05" in bar.record.toolTip()
         assert not bar.record_stop.isHidden() and not bar.stop.isHidden()
         bar.record_stop.click()
-        bar.layout(False)
-        assert bar.keyboard.text() == "Colemak"
+        bar.layout(enabled=False)
+        assert not bar.keyboard.text() and "Colemak" in bar.keyboard.accessibleName()
         bar.keyboard.click()
         assert invoked == ["agent-stop", "stop", "keyboard"]
         bar.recording_changed(RecordingState(phase="saved"))
-        bar.layout(True)
+        bar.layout(enabled=True)
         bar.state(State.READY)
         assert bar.window.width() == width
         assert bar.view is not None and bar.view.capture is None and bar.view.keyboard is None
         bar.open_menu()
         assert [action.text() for action in bar.menu.actions() if not action.isSeparator()] == [
-            "Your work feed", "Work and meetings", "Record a meeting", "Keyboard map", "Keyboard overlay",
-            "Windows taskbar", "Switch windows · Apps + Esc", "Copy latest transcript",
+            "Your work feed",
+            "Your work canvas",
+            "Record a meeting",
+            "Keyboard map",
+            "Keyboard overlay",
+            "Windows taskbar",
+            "Switch windows · Apps + Esc",
+            "Copy latest transcript",
             "Windows notification settings",
-            "Window tiling", "All Workspace controls…",
+            "Window tiling",
+            "All Workspace controls…",
         ]
         bar.menu.close()
         bar.window.grab().save(str(tmp_path / "floating-bar.png"))
@@ -81,9 +101,17 @@ def test_toolbar_groups_keep_their_actions_and_dividers_between_functions() -> N
     # function from its Stop, or one group's button calls another function.
     app = application()
     invoked: list[str] = []
-    actions = BarActions(lambda: invoked.append('agent'), lambda: invoked.append('meeting'), lambda: invoked.append('stop'),
-                         lambda action: invoked.append('record-' + action), lambda: invoked.append('keyboard'),
-                         lambda: None, lambda: invoked.append('controls'), lambda _: None, inbox=lambda: invoked.append('inbox'))
+    actions = BarActions(
+        lambda: invoked.append("agent"),
+        lambda: invoked.append("canvas"),
+        lambda: invoked.append("stop"),
+        lambda action: invoked.append("record-" + action),
+        lambda: invoked.append("keyboard"),
+        lambda: None,
+        lambda: invoked.append("controls"),
+        lambda _: None,
+        inbox=lambda: invoked.append("inbox"),
+    )
     bar = DesktopBar(actions, native_shell=False)
     try:
         assert bar.status.focusPolicy() is QtCore.Qt.FocusPolicy.NoFocus
@@ -99,30 +127,26 @@ def test_toolbar_groups_keep_their_actions_and_dividers_between_functions() -> N
         bar.inbox_changed(1)
         assert not bar.inbox_divider.isHidden()
         row = bar.window.row
-        assert row.indexOf(bar.menu_button) < row.indexOf(bar.controls_divider) < row.indexOf(bar.status)
+        assert row.indexOf(bar.menu_button) < row.indexOf(bar.canvas) < row.indexOf(bar.controls_divider) < row.indexOf(bar.status)
         assert row.indexOf(bar.status) + 1 == row.indexOf(bar.stop)
         assert row.indexOf(bar.stop) < row.indexOf(bar.inbox_divider) < row.indexOf(bar.inbox)
+        assert not bar.canvas.isHidden()
+        bar.canvas.click()
         bar.stop.click()
         bar.inbox.click()
-        bar.recording_changed(RecordingState(phase='recording'))
+        bar.recording_changed(RecordingState(phase="recording"))
         bar.record.click()
         bar.record_stop.click()
         # Defect: the shared control reserves caption space for an empty label.
-        for button in (bar.menu_button, bar.stop, bar.record_stop):
+        for button in (bar.menu_button, bar.canvas, bar.stop, bar.record_stop, bar.inbox, bar.record):
             assert button.width() == button.height() == 24
             assert button.toolButtonStyle() is QtCore.Qt.ToolButtonStyle.ToolButtonIconOnly
-        for labelled in (bar.inbox, bar.record):
-            assert labelled.toolButtonStyle() is QtCore.Qt.ToolButtonStyle.ToolButtonTextBesideIcon
-            assert labelled.width() >= labelled.fontMetrics().horizontalAdvance(labelled.text()) + labelled.iconSize().width()
-            # Defect: native text-beside-icon metrics reserve an oversized blank
-            # trailing area, so the hover surface extends far past the count.
-            assert 24 <= labelled.width() - labelled.fontMetrics().horizontalAdvance(labelled.text()) <= 30
         # Defects: the toolbar omits shared hover feedback or native painting
-        # leaves the icon/count off-center inside its shaded hit target.
+        # leaves the icon off-center inside its shaded hit target.
         check_inbox_painting(app, bar)
-        bar.layer('NAV')
+        bar.layer("NAV")
         bar.keyboard.click()
-        assert invoked == ['stop', 'inbox', 'meeting', 'record-stop', 'keyboard']
+        assert invoked == ["canvas", "stop", "inbox", "canvas", "record-stop", "keyboard"]
         bar.inbox_changed(0)
         assert bar.inbox_divider.isHidden() and bar.inbox.isHidden()
         assert bar.inbox.sizeHint().width() == 24
@@ -204,7 +228,7 @@ def test_taskbars_are_never_hidden_without_the_recovery_handshake() -> None:
     """Detect acquiring shell ownership after a failed recovery startup."""
     desktop, guard = TaskbarDesktop(), RecoveryGuard(ready=False)
     control = TaskbarControl(desktop, lambda: guard)
-    with unittest.TestCase().assertRaisesRegex(OSError, 'recovery could not start'):
+    with unittest.TestCase().assertRaisesRegex(OSError, "recovery could not start"):
         control.start()
     control.enforce()
     assert desktop.shown == {101: True} and guard.closed
@@ -221,10 +245,10 @@ class LanguageDesktop:
 
     def load(self, identity: str) -> int:
         self.loads += (identity,)
-        return 0x4090409 if identity == '00000409' else 0xF002041D
+        return 0x4090409 if identity == "00000409" else 0xF002041D
 
     def colemak(self) -> str:
-        return 'd001041d'
+        return "d001041d"
 
     def activate(self, layout: int) -> None:
         self.activations += (layout,)
@@ -239,12 +263,37 @@ class LanguageDesktop:
 def test_keyboard_language_rechecks_each_foreground_and_both_toggle_states() -> None:
     desktop = LanguageDesktop()
     languages = keyboard_language.KeyboardLanguages(desktop)
-    languages.enforce(True)
-    languages.enforce(True)
-    languages.enforce(False)
-    assert desktop.loads == ('00000409', 'd001041d')
+    languages.enforce(enabled=True)
+    languages.enforce(enabled=True)
+    languages.enforce(enabled=False)
+    assert desktop.loads == ("00000409", "d001041d")
     assert desktop.activations == (0x4090409, 0xF002041D)
     assert desktop.requests == ((11, 0x4090409), (22, 0xF002041D))
+
+
+def test_firmware_keyboard_keeps_english_when_remapping_is_off_and_on_shutdown() -> None:
+    """Detect Colemak being applied a second time to firmware-generated output."""
+    desktop = LanguageDesktop()
+    desktop.observations = iter(((11, 0x4090409), (11, 0xF002041D), (22, 0xF002041D), (22, 0x4090409), (22, 0x4090409)))
+    languages = keyboard_language.KeyboardLanguages(desktop)
+    driver = KeyboardFixture()
+    keyboard = Keyboard(driver)
+    keyboard.on_message(WM_TOGGLE_LAYOUT)
+    maintain_keyboard(keyboard, languages)
+    driver.devices = (r"\\?\HID#VID_A8F8&PID_1832&MI_00#connected",)
+    maintain_keyboard(keyboard, languages)
+    maintain_keyboard(keyboard, languages)
+    languages.close()
+    assert desktop.activations == (0xF002041D, 0x4090409)
+    assert desktop.requests == ((11, 0xF002041D), (11, 0x4090409), (22, 0x4090409))
+    driver.devices = ()
+    maintain_keyboard(keyboard, languages)
+    assert not keyboard.engine.enabled
+    assert_language_restored(desktop)
+
+
+def assert_language_restored(desktop: LanguageDesktop) -> None:
+    assert desktop.activations[-1] == 0xF002041D and desktop.requests[-1] == (22, 0xF002041D)
 
 
 def test_windows_key_observer_preserves_input_and_ignores_other_injected_keys() -> None:
@@ -271,10 +320,18 @@ def test_windows_key_observer_preserves_input_and_ignores_other_injected_keys() 
 
 def test_toolbar_respects_contrast_and_releases_only_its_composition_owner() -> None:
     app = application()
-    actions = BarActions(lambda: None, lambda: None, lambda: None, lambda action: None,
-                         lambda: None, lambda: None, lambda: None, lambda message: None, inbox=lambda: None)
-    bar = DesktopBar(actions, native_shell=False,
-                     observations=BarObservations(material=lambda: appearance.Contrast("#000000", "#ffff00")))
+    actions = BarActions(
+        lambda: None,
+        lambda: None,
+        lambda: None,
+        lambda action: None,
+        lambda: None,
+        lambda: None,
+        lambda: None,
+        lambda message: None,
+        inbox=lambda: None,
+    )
+    bar = DesktopBar(actions, native_shell=False, observations=BarObservations(material=lambda: appearance.Contrast("#000000", "#ffff00")))
     other_view = EventLoop(app, lambda: None)
     try:
         assert not bar.window.glass
@@ -291,26 +348,40 @@ def test_toolbar_respects_contrast_and_releases_only_its_composition_owner() -> 
 def test_menu_button_opens_controls_and_audio_trace_only_moves_during_capture() -> None:
     app = application()
     agent: list[str] = []
-    actions = BarActions(lambda: agent.append("opened"), lambda: None, lambda: None, lambda action: None,
-                         lambda: None, lambda: None, lambda: None, lambda message: None, inbox=lambda: None)
-    level = [.25]
-    bar = DesktopBar(actions, native_shell=False, audio_level=lambda: level[0],
-                     observations=BarObservations(power=lambda: Battery(73, False, False)))
+    actions = BarActions(
+        lambda: agent.append("opened"),
+        lambda: None,
+        lambda: None,
+        lambda action: None,
+        lambda: None,
+        lambda: None,
+        lambda: None,
+        lambda message: None,
+        inbox=lambda: None,
+    )
+    level = [0.25]
+    bar = DesktopBar(
+        actions,
+        native_shell=False,
+        audio_level=lambda: level[0],
+        observations=BarObservations(power=lambda: Battery(73, powered=False, charging=False)),
+    )
     try:
         # This interaction checks rendered geometry; retain real Qt layout while
         # disabling native shell observers, as in the adjacent spinner fixture.
         bar.visible = True
         bar.render(animate=False)
         assert not bar.audio_timer.isActive()
-        assert "73%" in bar.status.text() and "Workspace" not in bar.status.text()
+        assert bar.ambient.clock in bar.status.text() and "73%" in bar.status.text()
+        check_numeric_readouts(bar)
         bar.menu_button.click()
         assert bar.menu.isVisible()
         bar.menu.actions()[0].trigger()
         assert agent == ["opened"]
         bar.menu.close()
-        bar.weather = Weather(-3.2, 71, True)
+        bar.weather = Weather(-3.2, 71, daytime=True)
         bar.tick()
-        assert "-3°" in bar.status.text()
+        assert "73%" in bar.status.text() and "-3°" in bar.status.toolTip()
         assert bar.status.width() >= bar.status.sizeHint().width()
         bar.state(State.LISTENING)
         assert bar.audio_timer.isActive()
@@ -318,14 +389,14 @@ def test_menu_button_opens_controls_and_audio_trace_only_moves_during_capture() 
         while bar.status.samples[-1] == 0 and time.monotonic() < deadline:
             bar.sample_audio()
             app.processEvents()
-            time.sleep(.005)
+            time.sleep(0.005)
         assert bar.status.samples[-1] > 0
         level[0] = 0
         deadline = time.monotonic() + 1
         while bar.status.samples[-1] > 0 and time.monotonic() < deadline:
             bar.sample_audio()
             app.processEvents()
-            time.sleep(.005)
+            time.sleep(0.005)
         assert bar.status.samples[-1] == 0
         trace = tuple(bar.status.samples)
         bar.state(State.WORKING)
@@ -336,7 +407,7 @@ def test_menu_button_opens_controls_and_audio_trace_only_moves_during_capture() 
         assert tuple(bar.status.samples) == trace and bool(bar.status.processing)
         bar.state(State.READY)
         assert not bool(bar.status.listening) and not bool(bar.status.processing)
-        assert bar.status.text() == bar.ambient.text
+        assert bar.ambient.clock in bar.status.text() and "73%" in bar.status.text()
     finally:
         bar.close()
         app.processEvents()
@@ -347,10 +418,18 @@ def test_transcription_animates_a_compact_spinner_and_stops_after_completion() -
     # failing to repaint under work, ignoring reduced motion, or leaving a timer running.
     app = application()
     motion = [True]
-    actions = BarActions(lambda: None, lambda: None, lambda: None, lambda action: None,
-                         lambda: None, lambda: None, lambda: None, lambda message: None, inbox=lambda: None)
-    bar = DesktopBar(actions, native_shell=False,
-                     observations=BarObservations(motion=lambda: motion[0]))
+    actions = BarActions(
+        lambda: None,
+        lambda: None,
+        lambda: None,
+        lambda action: None,
+        lambda: None,
+        lambda: None,
+        lambda: None,
+        lambda message: None,
+        inbox=lambda: None,
+    )
+    bar = DesktopBar(actions, native_shell=False, observations=BarObservations(motion=lambda: motion[0]))
     bar.visible = True
     try:
         bar.render(animate=False)
@@ -383,26 +462,37 @@ def test_transcription_animates_a_compact_spinner_and_stops_after_completion() -
 
 
 def test_full_plugged_in_battery_keeps_charger_and_reclaims_percentage_width() -> None:
-    # Defect: text policy hides the number but drawing/layout keeps its old width
-    # or drops the independent charger symbol.
+    # Defect: the hidden full-battery percentage retains blank caption space,
+    # or disconnecting power leaves the charger and fails to restore the number.
     app = application()
-    power = [Battery(95, True, True)]
-    actions = BarActions(lambda: None, lambda: None, lambda: None, lambda action: None,
-                         lambda: None, lambda: None, lambda: None, lambda message: None, inbox=lambda: None)
+    power = [Battery(95, powered=True, charging=True)]
+    actions = BarActions(
+        lambda: None,
+        lambda: None,
+        lambda: None,
+        lambda action: None,
+        lambda: None,
+        lambda: None,
+        lambda: None,
+        lambda message: None,
+        inbox=lambda: None,
+    )
     bar = DesktopBar(actions, native_shell=False, observations=BarObservations(power=lambda: power[0]))
     try:
         width = bar.status.sizeHint().width()
         percent_width = bar.status.fontMetrics().horizontalAdvance("95%")
-        power[0] = Battery(96, True, True)
+        power[0] = Battery(96, powered=True, charging=True)
         bar.next_power = 0
         bar.tick()
         assert bool(bar.status.plugged_in) and "Charger connected" in bar.status.accessibleName()
         assert bar.status.text() == bar.ambient.clock
         assert bar.status.sizeHint().width() == width - percent_width
-        power[0] = Battery(96, False, False)
+        power[0] = Battery(96, powered=False, charging=False)
         bar.next_power = 0
         bar.tick()
         assert not bool(bar.status.plugged_in) and "96%" in bar.status.text()
+        assert bar.status.sizeHint().width() == width - 16
+        assert "Charger connected" not in bar.status.accessibleName()
     finally:
         bar.close()
         app.processEvents()
@@ -417,25 +507,34 @@ def test_slow_native_audio_level_does_not_block_the_waveform_ui() -> None:
     def level() -> float:
         readers.append(threading.current_thread())
         entered.set()
-        released.wait(.25)
-        return .25
+        released.wait(0.25)
+        return 0.25
 
-    actions = BarActions(lambda: None, lambda: None, lambda: None, lambda action: None,
-                         lambda: None, lambda: None, lambda: None, lambda message: None, inbox=lambda: None)
+    actions = BarActions(
+        lambda: None,
+        lambda: None,
+        lambda: None,
+        lambda action: None,
+        lambda: None,
+        lambda: None,
+        lambda: None,
+        lambda message: None,
+        inbox=lambda: None,
+    )
     bar = DesktopBar(actions, native_shell=False, audio_level=level)
     try:
         bar.state(State.LISTENING)
         started = time.monotonic()
         bar.sample_audio()
-        assert time.monotonic() - started < .025, "A slow driver blocked a waveform frame."
-        assert entered.wait(.5), "Listening must start observing the microphone."
+        assert time.monotonic() - started < 0.025, "A slow driver blocked a waveform frame."
+        assert entered.wait(0.5), "Listening must start observing the microphone."
         assert readers and all(reader is not caller for reader in readers), "Native audio observation belongs off Qt's thread."
         released.set()
         deadline = time.monotonic() + 1
         while time.monotonic() < deadline and bar.status.samples[-1] == 0:
             bar.sample_audio()
             app.processEvents()
-            time.sleep(.005)
+            time.sleep(0.005)
         assert bar.status.samples[-1] > 0, "The native sample did not reach the waveform."
     finally:
         released.set()
@@ -445,8 +544,17 @@ def test_slow_native_audio_level_does_not_block_the_waveform_ui() -> None:
 
 def test_bar_attaches_to_screen_edge_and_status_icons_remain_visible_during_dictation() -> None:
     app = application()
-    actions = BarActions(lambda: None, lambda: None, lambda: None, lambda action: None,
-                         lambda: None, lambda: None, lambda: None, lambda message: None, inbox=lambda: None)
+    actions = BarActions(
+        lambda: None,
+        lambda: None,
+        lambda: None,
+        lambda action: None,
+        lambda: None,
+        lambda: None,
+        lambda: None,
+        lambda message: None,
+        inbox=lambda: None,
+    )
     bar = DesktopBar(actions, native_shell=False)
     try:
         assert bar.window.y() == app.primaryScreen().geometry().top()
@@ -462,7 +570,25 @@ def test_bar_attaches_to_screen_edge_and_status_icons_remain_visible_during_dict
         assert "Speakers unmuted" in bar.status.accessibleName()
         bar.state(State.WORKING)
         assert bar.status.system.alerts == ("speaker-on", "wifi-off")
+        # Defect: durable agent work replaces the clock with static text, or
+        # its spinner keeps moving after work ends or animations are disabled.
+        bar.state(State.AGENT)
+        assert bar.status.processing and not bar.status.text() and not bar.stop.isHidden()
+        assert "Working" in bar.status.accessibleName()
+        assert bar.status.pulse(1.0, animate=True)
+        angle = bar.status.spin_angle
+        assert bar.status.pulse(1.1, animate=True) and bar.status.spin_angle != angle
+        assert not bar.status.pulse(1.2, animate=False) and bar.status.spin_angle == 90
+        # Defect: speaker/Wi-Fi icons interpose between the spinner and Stop.
+        bar.status.resize(bar.status.sizeHint())
+        alerts = render_toolbar_status(bar)
+        bar.status.system_changed(SystemStatus())
+        bar.status.resize(bar.status.sizeHint())
+        activity = render_toolbar_status(bar)
+        assert alerts.copy(alerts.width() - activity.width(), 0, activity.width(), activity.height()) == activity
+        bar.status.system_changed(status)
         bar.state(State.READY)
+        assert not bar.status.processing and not bar.status.pulse(1.3, animate=True)
         bar.status.system_changed(SystemStatus(Speakers.MUTED, Wifi.CONNECTED))
         assert bar.status.sizeHint().width() == resting_width
         assert "Speakers unmuted" not in bar.status.accessibleName()
@@ -474,9 +600,18 @@ def test_bar_attaches_to_screen_edge_and_status_icons_remain_visible_during_dict
 def test_tiling_menu_keeps_the_window_captured_before_the_popup() -> None:
     app = application()
     invoked: list[tuple[Tool, int]] = []
-    actions = BarActions(lambda: None, lambda: None, lambda: None, lambda action: None,
-                         lambda: None, lambda: None, lambda: None, lambda message: None,
-                         lambda tool, hwnd: invoked.append((tool, hwnd)), inbox=lambda: None)
+    actions = BarActions(
+        lambda: None,
+        lambda: None,
+        lambda: None,
+        lambda action: None,
+        lambda: None,
+        lambda: None,
+        lambda: None,
+        lambda message: None,
+        lambda tool, hwnd: invoked.append((tool, hwnd)),
+        inbox=lambda: None,
+    )
     foreground = [42]
     bar = DesktopBar(actions, native_shell=False, observations=BarObservations(foreground=lambda: foreground[0]))
     try:
@@ -493,8 +628,17 @@ def test_tiling_menu_keeps_the_window_captured_before_the_popup() -> None:
 
 def test_segments_slide_from_above_join_at_rest_and_reverse_without_jumping() -> None:
     app = application()
-    actions = BarActions(lambda: None, lambda: None, lambda: None, lambda action: None,
-                         lambda: None, lambda: None, lambda: None, lambda message: None, inbox=lambda: None)
+    actions = BarActions(
+        lambda: None,
+        lambda: None,
+        lambda: None,
+        lambda action: None,
+        lambda: None,
+        lambda: None,
+        lambda: None,
+        lambda message: None,
+        inbox=lambda: None,
+    )
     now = 1000.0
     bar = DesktopBar(actions, native_shell=False, observations=BarObservations(clock=lambda: now, motion=lambda: True))
     try:
@@ -505,16 +649,16 @@ def test_segments_slide_from_above_join_at_rest_and_reverse_without_jumping() ->
         bar.layer("NAV")
         assert all(pill.y() < pill.anchor.y() for pill in bar.pills)
         assert all(pill.height() == 28 for pill in bar.pills)
-        now += .08
+        now += 0.08
         bar.paint_frames()
         assert all(0 < pill.alpha < 1 for pill in bar.pills)
         bar.recording_changed(RecordingState(phase="saved"))
-        now += .04
+        now += 0.04
         bar.paint_frames()
         before = bar.capture.y(), bar.capture.alpha
         bar.recording_changed(RecordingState(phase="recording"))
         assert (bar.capture.y(), bar.capture.alpha) == before
-        now += .17
+        now += 0.17
         bar.paint_frames()
         assert all(pill.alpha == 1 and pill.y() == pill.anchor.y() for pill in bar.pills)
         assert bar.window.joined_left and bar.window.joined_right
@@ -526,7 +670,7 @@ def test_segments_slide_from_above_join_at_rest_and_reverse_without_jumping() ->
         assert mask.contains(QtCore.QPointF(6.25, 3))
         assert not mask.contains(QtCore.QPointF(6.25, 20))
         bar.recording_changed(RecordingState(phase="saved"))
-        now += .17
+        now += 0.17
         bar.paint_frames()
         assert not bar.capture.isVisible() and not bar.window.joined_right
     finally:
@@ -536,8 +680,17 @@ def test_segments_slide_from_above_join_at_rest_and_reverse_without_jumping() ->
 
 def test_reduced_motion_is_immediate_and_the_screen_edge_has_no_stroke() -> None:
     app = application()
-    actions = BarActions(lambda: None, lambda: None, lambda: None, lambda action: None,
-                         lambda: None, lambda: None, lambda: None, lambda message: None, inbox=lambda: None)
+    actions = BarActions(
+        lambda: None,
+        lambda: None,
+        lambda: None,
+        lambda action: None,
+        lambda: None,
+        lambda: None,
+        lambda: None,
+        lambda message: None,
+        inbox=lambda: None,
+    )
     bar = DesktopBar(actions, native_shell=False, observations=BarObservations(motion=lambda: False))
     try:
         bar.visible = True
@@ -558,24 +711,51 @@ def test_reduced_motion_is_immediate_and_the_screen_edge_has_no_stroke() -> None
 def test_window_switcher_search_navigation_and_activation() -> None:
     app = application()
     focused: list[int] = []
-    picker = WindowSwitcher((Window(1, 'Editor · current', 'editor.exe', False),
-                             Window(2, 'Planning board', 'browser.exe', False),
-                             Window(3, 'Archived planning', 'browser.exe', True)), focused.append)
+    picker = WindowSwitcher(
+        (
+            Window(1, "Editor · current", "editor.exe", minimized=False),
+            Window(2, "Planning board", "browser.exe", minimized=False),
+            Window(3, "Archived planning", "browser.exe", minimized=True),
+        ),
+        focused.append,
+    )
     try:
         assert picker.items.currentRow() == 1  # F6 defaults to the previous window.
-        picker.search.setText('planning browser')
+        picker.search.setText("planning browser")
         assert picker.items.count() == 2
         key = QtGui.QKeyEvent(QtCore.QEvent.Type.KeyPress, QtCore.Qt.Key.Key_Down, QtCore.Qt.KeyboardModifier.NoModifier)
         assert picker.eventFilter(picker.search, key)
         assert picker.items.currentRow() == 1
         picker.activate()
         assert focused == [3]
-        picker.filter('no such window')
+        picker.filter("no such window")
         picker.activate()
         assert focused == [3]
     finally:
         picker.close()
         app.processEvents()
+
+
+def render_toolbar_status(bar: DesktopBar) -> QtGui.QImage:
+    # Observe only the owned readout: a parent's rounded background changes
+    # when removing alerts resizes the bar and is outside this ordering check.
+    image = QtGui.QImage(bar.status.size(), QtGui.QImage.Format.Format_ARGB32_Premultiplied)
+    image.fill(QtCore.Qt.GlobalColor.transparent)
+    painter = QtGui.QPainter(image)
+    bar.status.render(painter, QtCore.QPoint(), QtGui.QRegion(), QtWidgets.QWidget.RenderFlag.DrawChildren)
+    painter.end()
+    return image
+
+
+def check_numeric_readouts(bar: DesktopBar) -> None:
+    # Defect: captions are published for accessibility while painting still
+    # substitutes the uninformative 14-pixel clock/battery icons.
+    display = render_toolbar_status(bar)
+    clock_width = bar.status.fontMetrics().horizontalAdvance(bar.ambient.clock)
+    for start, width in ((5, clock_width), (5 + clock_width + 14, bar.status.fontMetrics().horizontalAdvance("73%"))):
+        readout = display.copy(start, 0, width, display.height())
+        columns = tuple(x for x in range(readout.width()) if any(readout.pixelColor(x, y).alpha() >= 200 for y in range(readout.height())))
+        assert columns and columns[-1] - columns[0] > 14
 
 
 def check_inbox_painting(app: QtWidgets.QApplication, bar: DesktopBar) -> None:
@@ -589,7 +769,6 @@ def check_inbox_painting(app: QtWidgets.QApplication, bar: DesktopBar) -> None:
     painter.end()
     left, right = image.pixelColor(3, image.height() // 2), image.pixelColor(image.width() - 4, image.height() // 2)
     assert 0 < left.alpha() < 100 and left == right
-    columns = tuple(x for x in range(image.width())
-                    if any(image.pixelColor(x, y).alpha() >= 200 for y in range(image.height())))
+    columns = tuple(x for x in range(image.width()) if any(image.pixelColor(x, y).alpha() >= 200 for y in range(image.height())))
     assert columns and abs(columns[0] - (image.width() - 1 - columns[-1])) <= 3
     assert bar.inbox.geometry() == target

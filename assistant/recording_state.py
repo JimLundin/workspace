@@ -1,6 +1,6 @@
 """Recording values and decisions, independent of devices, storage, threads, and widgets."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum, auto
 from math import isfinite
 from typing import Literal, assert_never
@@ -83,7 +83,7 @@ class StoredState:
     started: float
     frames: int
     pending: int
-    finished: bool
+    finished: bool = field(kw_only=True)
     problem: str
     revision: int
     exported_revision: int
@@ -120,8 +120,13 @@ def completion_phase(saved: StoredState) -> CompletionPhase:
 
 
 def published(
-    current: RecordingState, incoming: Publication, *, stopping: bool, paused: str | None = None,
-    phase: Phase | None = None, detail: str | None = None,
+    current: RecordingState,
+    incoming: Publication,
+    *,
+    stopping: bool,
+    paused: str | None = None,
+    phase: Phase | None = None,
+    detail: str | None = None,
 ) -> RecordingState | None:
     """Reject stale observations before deriving the next immutable view snapshot."""
     saved = incoming.saved
@@ -129,10 +134,12 @@ def published(
         return None  # a new capture reserved the view before its journal exists
     if current.identity and current.identity != incoming.identity:
         return None
-    if ((saved.revision, saved.exported_revision) < (current.revision, current.exported_revision)
-            or saved.frames < round(current.seconds * RATE)
-            or saved.frames - saved.pending < round((current.seconds - current.pending_seconds) * RATE)
-            or (not saved.finished and current.phase in ("finishing", "paused", "saved", "interrupted"))):
+    if (
+        (saved.revision, saved.exported_revision) < (current.revision, current.exported_revision)
+        or saved.frames < round(current.seconds * RATE)
+        or saved.frames - saved.pending < round((current.seconds - current.pending_seconds) * RATE)
+        or (not saved.finished and current.phase in ("finishing", "paused", "saved", "interrupted"))
+    ):
         return None
     if not saved.finished:
         phase = "stopping" if stopping else "starting" if current.phase == "starting" else "recording"
@@ -141,8 +148,17 @@ def published(
     elif phase is None:
         phase = completion_phase(saved)
     return RecordingState(
-        phase, incoming.identity, saved.title, saved.source, saved.frames / RATE, saved.pending / RATE, incoming.path,
-        saved.problem or (detail if detail is not None else current.detail), incoming.preview, saved.revision, saved.exported_revision,
+        phase,
+        incoming.identity,
+        saved.title,
+        saved.source,
+        saved.frames / RATE,
+        saved.pending / RATE,
+        incoming.path,
+        saved.problem or (detail if detail is not None else current.detail),
+        incoming.preview,
+        saved.revision,
+        saved.exported_revision,
     )
 
 

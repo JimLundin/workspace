@@ -171,7 +171,9 @@ document.addEventListener('keydown',e=>{if(e.key==='Escape')document.getElementB
 </script>"""
 
 
-ACTIVITY_CHAT_PAGE = PAGE + """<div data-tid="app-layout-area--nav"><button aria-label="Chat" id="restore-chats">Chat</button></div>
+ACTIVITY_CHAT_PAGE = (
+    PAGE
+    + """<div data-tid="app-layout-area--nav"><button aria-label="Chat" id="restore-chats">Chat</button></div>
         <script>
         const chatRows=[...document.querySelectorAll('[role=treeitem]')];
         for(const row of chatRows) row.remove();
@@ -181,7 +183,10 @@ ACTIVITY_CHAT_PAGE = PAGE + """<div data-tid="app-layout-area--nav"><button aria
           setTimeout(()=>{for(const row of chatRows)document.body.append(row);},300);
         };
         </script>"""
-EMPTY_CHAT_PAGE = PAGE + """<div data-tid="app-layout-area--nav"><button aria-label="Chat" id="chat-nav">Chat</button></div>
+)
+EMPTY_CHAT_PAGE = (
+    PAGE
+    + """<div data-tid="app-layout-area--nav"><button aria-label="Chat" id="chat-nav">Chat</button></div>
         <script>
         const sidebar=[...document.querySelectorAll('[role=treeitem]')];
         for(const row of sidebar)row.remove();
@@ -191,7 +196,10 @@ EMPTY_CHAT_PAGE = PAGE + """<div data-tid="app-layout-area--nav"><button aria-la
           document.body.append(editor);render();
         },300);
         </script>"""
-LAUNCHER_PAGE = PAGE + """<button id="openTeamsClientInBrowser">Continue in this browser</button><script>
+)
+LAUNCHER_PAGE = (
+    PAGE
+    + """<button id="openTeamsClientInBrowser">Continue in this browser</button><script>
         if(location.pathname==='/dl/launcher/launcher.html'){
           for(const row of document.querySelectorAll('[role=treeitem]'))row.remove();
           editor.remove();send.setAttribute('data-track-thread-id','');document.querySelector('#messages').replaceChildren();
@@ -200,6 +208,7 @@ LAUNCHER_PAGE = PAGE + """<button id="openTeamsClientInBrowser">Continue in this
           current='19:two@thread.v2';render();
           document.querySelector('#openTeamsClientInBrowser').remove();
         }</script>"""
+)
 DELAYED_CHAT_PAGE = PAGE.replace("editor.textContent=''; render();", "editor.textContent='';setTimeout(render,300);")
 
 
@@ -212,18 +221,20 @@ def verify_activity_identity_dates_and_read_action(web: TeamsWeb, cancel: thread
     assert first.items[0].kind is UpdateKind.REACTION and first.items[1].kind is UpdateKind.INVITATION
     assert first.items[0].source_time == SourceDate(datetime(2026, 10, 20, 7, 30, tzinfo=UTC).timestamp())
     assert first.items[1].source_time is SourceDateStatus.UNKNOWN
-    web.evaluate("(() => {document.querySelector('[id^=activity-feed-item-timestamp]').textContent='Yesterday';return true})()",
-                 cancel, target=web.target)
+    web.evaluate(
+        "(() => {document.querySelector('[id^=activity-feed-item-timestamp]').textContent='Yesterday';return true})()", cancel, target=web.target
+    )
     changed = web.activity(cancel).items[0]
     assert changed.text == first.items[0].text and changed.source_time == first.items[0].source_time
-    web.evaluate("(() => {document.querySelector('[id^=activity-feed-item-timestamp]').removeAttribute('datetime');return true})()",
-                 cancel, target=web.target)
+    web.evaluate(
+        "(() => {document.querySelector('[id^=activity-feed-item-timestamp]').removeAttribute('datetime');return true})()", cancel, target=web.target
+    )
     relative = web.activity(cancel).items[0]
     match relative.source_time:
-        case SourceDateHint('Yesterday', observed_on):
+        case SourceDateHint("Yesterday", observed_on):
             assert observed_on == datetime.fromtimestamp(relative.created_at, UTC).astimezone().date()
         case _:
-            raise AssertionError('A relative Teams date must remain evidence rather than becoming collected today.')
+            raise AssertionError("A relative Teams date must remain evidence rather than becoming collected today.")
     assert web.activity_read("123", cancel)
     assert web.evaluate("document.body.dataset.toggles", cancel, target=web.target) == "1"
     assert web.activity_read("123", cancel)
@@ -243,8 +254,11 @@ def verify_saved_activity_activation(browser: Browser, web: TeamsWeb, trace: Nat
 
 
 def verify_exact_chat_observation_and_reply(web: TeamsWeb, cancel: threading.Event) -> None:
-    web.evaluate("(() => { const nodes=[...document.body.childNodes]; document.body.replaceChildren();"
-                 " setTimeout(()=>document.body.replaceChildren(...nodes),1000); return true; })()", cancel)
+    web.evaluate(
+        "(() => { const nodes=[...document.body.childNodes]; document.body.replaceChildren();"
+        " setTimeout(()=>document.body.replaceChildren(...nodes),1000); return true; })()",
+        cancel,
+    )
     read = web.select("19:one@thread.v2", cancel)
     assert len(read.conversations) == 2
     assert read.messages[0].sender == "Anna"
@@ -277,9 +291,12 @@ def verify_exact_chat_observation_and_reply(web: TeamsWeb, cancel: threading.Eve
     assert web.read(cancel).current == "19:one@thread.v2"
 
     # Changing the route while text is inserted must stop before Send.
-    web.evaluate("(() => { const editor=document.querySelector('[contenteditable]'); editor.textContent='';"
-                 " editor.addEventListener('input',()=>document.querySelector('button')"
-                 ".setAttribute('data-track-thread-id','19:one@thread.v2'),{once:true}); return true; })()", cancel)
+    web.evaluate(
+        "(() => { const editor=document.querySelector('[contenteditable]'); editor.textContent='';"
+        " editor.addEventListener('input',()=>document.querySelector('button')"
+        ".setAttribute('data-track-thread-id','19:one@thread.v2'),{once:true}); return true; })()",
+        cancel,
+    )
     with unittest.TestCase().assertRaisesRegex(BrowserError, "prepared"):
         web.send("19:two@thread.v2", "Route changed", cancel)
     assert web.evaluate("JSON.parse(document.body.dataset.sent).length", cancel) == 1
@@ -323,8 +340,10 @@ def verify_chat_navigation_recovery(browser: Browser, web: TeamsWeb, adapter: Fi
     web.target = cast(str, opened["target_id"])
     web.evaluate("(() => {for(const row of document.querySelectorAll('[role=treeitem]'))row.remove();return true;})()", cancel)
     restored = web.select("19:two@thread.v2", cancel)
-    assert ("open", {"target_id": web.target,
-                     "url": "https://teams.cloud.microsoft/l/chat/19:two@thread.v2/conversations?webjoin=true"}) in adapter.requests
+    assert (
+        "open",
+        {"target_id": web.target, "url": "https://teams.cloud.microsoft/l/chat/19:two@thread.v2/conversations?webjoin=true"},
+    ) in adapter.requests
     assert restored.current == "19:two@thread.v2" and restored.messages[0].sender == "Sam"
     assert web.opening == {}
 
@@ -333,8 +352,9 @@ def verify_communications(browser: Browser, trace: NativeTrace) -> None:
     """Borrow a managed lifetime; reload documents and construct fresh Teams state."""
     unused = browser.profile.parent / "unused-teams-profile"
     web = TeamsWeb(unused, browser=browser)
-    pages = frozendict({"/activity-feed": ACTIVITY_PAGE, "/chats": PAGE,
-                        "/activity": ACTIVITY_CHAT_PAGE, "/delayed": DELAYED_CHAT_PAGE, "/empty": EMPTY_CHAT_PAGE})
+    pages = frozendict(
+        {"/activity-feed": ACTIVITY_PAGE, "/chats": PAGE, "/activity": ACTIVITY_CHAT_PAGE, "/delayed": DELAYED_CHAT_PAGE, "/empty": EMPTY_CHAT_PAGE}
+    )
     with fixture(LAUNCHER_PAGE, pages=pages) as url:
         opened = request(browser, "open", url=url + "activity-feed")
         web.target = cast(str, opened["target_id"])

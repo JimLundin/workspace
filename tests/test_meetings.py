@@ -142,6 +142,7 @@ def test_text_commit_survives_an_interrupted_markdown_export(tmp_path: Path) -> 
     assert batch is not None
     store.complete(batch, "The decision is durable.")
     original = store.transcript.read_bytes()
+
     def unavailable(temporary: Path, transcript: Path) -> None:
         raise OSError("fixture: disk unavailable")
 
@@ -225,10 +226,10 @@ def test_a_tiny_final_fragment_is_padded_for_upload_without_changing_recorded_du
             service.start()
             wait_for(lambda: service.snapshot().phase == "saved")
             body = endpoint.last.body
-            with wave.open(io.BytesIO(body[body.index(b"RIFF"):]), "rb") as uploaded:
+            with wave.open(io.BytesIO(body[body.index(b"RIFF") :]), "rb") as uploaded:
                 assert uploaded.getnframes() == RATE
                 audio = uploaded.readframes(RATE)
-                assert audio[:len(tail)] == tail and not any(audio[len(tail):])
+                assert audio[: len(tail)] == tail and not any(audio[len(tail) :])
             assert service.snapshot().seconds == len(tail) / (RATE * 2)
         finally:
             service.close()
@@ -244,7 +245,10 @@ def test_slow_transcription_does_not_block_capture_stop_or_shutdown(tmp_path: Pa
         return "The late response."
 
     service = Meetings(
-        settings("https://fixture.invalid/v1"), lambda source: capture, archive=MeetingArchive(tmp_path), transcribe_audio=slow,
+        settings("https://fixture.invalid/v1"),
+        lambda source: capture,
+        archive=MeetingArchive(tmp_path),
+        transcribe_audio=slow,
     )
     try:
         service.start()
@@ -305,8 +309,11 @@ def test_failed_requests_retain_the_audio_and_retry_without_duplicate_text(tmp_p
         return "Recovered after the outage."
 
     service = Meetings(
-        settings("https://fixture.invalid/v1"), lambda source: capture, archive=MeetingArchive(tmp_path),
-        transcribe_audio=intermittent, retry_policy=RetryPolicy(delays=(0,)),
+        settings("https://fixture.invalid/v1"),
+        lambda source: capture,
+        archive=MeetingArchive(tmp_path),
+        transcribe_audio=intermittent,
+        retry_policy=RetryPolicy(delays=(0,)),
     )
     try:
         service.start()
@@ -323,11 +330,14 @@ def test_failed_requests_retain_the_audio_and_retry_without_duplicate_text(tmp_p
 
 def test_a_full_backlog_stops_capture_and_saves_every_completed_block(tmp_path: Path) -> None:
     capture = GeneratedCapture(50)
+
     def unavailable(audio: bytes, *, context: str) -> Failure:
         return Failure("fixture offline")
 
     service = Meetings(
-        settings("https://fixture.invalid/v1"), lambda source: capture, archive=MeetingArchive(tmp_path, max_pending_bytes=RATE * 4),
+        settings("https://fixture.invalid/v1"),
+        lambda source: capture,
+        archive=MeetingArchive(tmp_path, max_pending_bytes=RATE * 4),
         transcribe_audio=unavailable,
     )
     try:

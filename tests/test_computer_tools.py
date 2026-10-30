@@ -22,12 +22,14 @@ def call(agent: Agent, name: str, arguments: dict[str, object]) -> str:
 def test_new_computer_tools_are_available_to_the_model_without_default_approvals() -> None:
     with fake_endpoint() as endpoint:
         rig = Rig(
-            endpoint, calls(("inspect_ui", {"handle": 7})),
+            endpoint,
+            calls(("inspect_ui", {"handle": 7})),
             calls(("ui_action", {"handle": 7, "id": "1.2.3", "action": "invoke"})),
             calls(("screenshot", {})),
             calls(("move_mouse", {"x": 10, "y": 20}), ("scroll", {"x": 30, "y": 40, "clicks": 2, "horizontal": True})),
             calls(("paste_text", {"text": "A complete block of text"}), ("press_keys", {"keys": "win", "repeat": 2})),
-            calls(("manage_window", {"handle": 7, "action": "maximize"})), says("Done."),
+            calls(("manage_window", {"handle": 7, "action": "maximize"})),
+            says("Done."),
         )
         rig.run()
         assert "move 20,40" in rig.machine.log
@@ -45,8 +47,8 @@ class StoppingMouse(FakeMachine):
         super().__init__()
         self.stop = stop
 
-    def mouse_button(self, button: str, down: bool) -> None:
-        super().mouse_button(button, down)
+    def mouse_button(self, button: str, *, down: bool) -> None:
+        super().mouse_button(button, down=down)
         if down:
             self.stop.set()
 
@@ -57,7 +59,11 @@ def test_stopping_a_drag_releases_its_button_and_modifiers() -> None:
     agent = Agent(Settings("", "", "", "", "", "", ""), machine, FakeWindow(), stop, journal=lambda entry: None)
     agent.shot = Shot(Rect(-1920, 0, 0, 1080), 960, 540)
     arguments: dict[str, object] = {
-        "x": 10, "y": 20, "to_x": 300, "to_y": 200, "modifiers": "ctrl+shift",
+        "x": 10,
+        "y": 20,
+        "to_x": 300,
+        "to_y": 200,
+        "modifiers": "ctrl+shift",
     }
     result = agent.call(ToolCall("drag", "drag", json.dumps(arguments)))
     assert not result.ok and "Stopped" in result.text
@@ -72,7 +78,8 @@ def test_bad_coordinates_and_action_arguments_do_not_produce_input() -> None:
     agent = Agent(Settings("", "", "", "", "", "", ""), machine, FakeWindow(), threading.Event(), journal=lambda entry: None)
     agent.shot = Shot(Rect(0, 0, 100, 100), 100, 100)
     for name, arguments in (
-        ("click", {"x": -1, "y": 10}), ("move_mouse", {"x": 100, "y": 10}),
+        ("click", {"x": -1, "y": 10}),
+        ("move_mouse", {"x": 100, "y": 10}),
         ("scroll", {"x": 10, "y": 10, "clicks": 1000}),
         ("press_keys", {"keys": "enter", "repeat": -1}),
         ("ui_action", {"handle": 7, "id": "1.2.3", "action": "unrecognized"}),
@@ -85,7 +92,7 @@ def test_bad_coordinates_and_action_arguments_do_not_produce_input() -> None:
 
 def context(title: str = "Budget.xlsx - Excel") -> ContextSnapshot:
     now = time.time()
-    return ContextSnapshot(now, "workspace", (Activity(Window(7, title, "excel.exe", False), now - 2, now, False),))
+    return ContextSnapshot(now, "workspace", (Activity(Window(7, title, "excel.exe", minimized=False), now - 2, now, agent_active=False),))
 
 
 def test_request_context_includes_the_work_window_and_one_current_screenshot() -> None:
@@ -110,17 +117,21 @@ def test_automatic_and_explicit_screenshots_share_the_same_history_limit() -> No
             endpoint.replies = [calls(("screenshot", {})), says("I see it.")]
             agent = Agent(settings, rig.machine, rig.window, rig.stop, journal=rig.journal.append, history=rig.history, context=context())
             assert agent.run("Check this")
-        assert json.dumps(rig.history).count('data:image/png;base64,') == 2
-        assert json.dumps(rig.sent()).count('data:image/png;base64,') == 2
-        assert "earlier screenshot" in json.dumps(rig.history)
+        assert rig.history.encoded().decode().count("data:image/png;base64,") == 2
+        assert json.dumps(rig.sent()).count("data:image/png;base64,") == 2
+        assert "earlier screenshot" in rig.history.encoded().decode()
 
 
 def test_disabled_context_does_not_capture_or_add_observations_to_the_request() -> None:
     with fake_endpoint() as endpoint:
         rig = Rig(endpoint, says("Done."))
         agent = Agent(
-            Settings(endpoint.url, "fixture", "transcribe", "chat", "agent", "", ""), rig.machine, rig.window,
-            rig.stop, journal=rig.journal.append, context=ContextSnapshot(time.time(), "disabled"),
+            Settings(endpoint.url, "fixture", "transcribe", "chat", "agent", "", ""),
+            rig.machine,
+            rig.window,
+            rig.stop,
+            journal=rig.journal.append,
+            context=ContextSnapshot(time.time(), "disabled"),
         )
         assert agent.run("Do the task")
         assert rig.sent(0)[0] == {"role": "user", "content": "Do the task"}
@@ -135,8 +146,12 @@ def test_unavailable_screen_context_keeps_the_request_and_activity_usable() -> N
     with fake_endpoint() as endpoint:
         rig = Rig(endpoint, says("I can still work with files."))
         agent = Agent(
-            Settings(endpoint.url, "fixture", "transcribe", "chat", "agent", "", ""), LockedDesktop(), rig.window,
-            rig.stop, journal=rig.journal.append, context=context(),
+            Settings(endpoint.url, "fixture", "transcribe", "chat", "agent", "", ""),
+            LockedDesktop(),
+            rig.window,
+            rig.stop,
+            journal=rig.journal.append,
+            context=context(),
         )
         assert agent.run("Find this workbook")
         body = json.dumps(rig.sent(0)[0])
@@ -148,8 +163,13 @@ def test_context_tool_refreshes_the_current_app_without_taking_a_screenshot() ->
     machine = FakeMachine()
     journal: list[dict[str, Json]] = []
     agent = Agent(
-        Settings("", "", "", "", "", "", ""), machine, FakeWindow(), threading.Event(), journal=journal.append,
-        context=context(), context_reader=lambda: context("Report.docx - Word"),
+        Settings("", "", "", "", "", "", ""),
+        machine,
+        FakeWindow(),
+        threading.Event(),
+        journal=journal.append,
+        context=context(),
+        context_reader=lambda: context("Report.docx - Word"),
     )
     assert "Report.docx - Word" in call(agent, "get_context", {})
     assert "Report.docx" not in json.dumps(journal)

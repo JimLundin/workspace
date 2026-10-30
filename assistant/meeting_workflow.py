@@ -190,7 +190,10 @@ def package_values(observation: PackageObservation) -> tuple[FollowupPackage, ..
 
 
 def work_observation(
-    request: PreparedFollowup, snapshot: WorkSnapshot, previous: WorkObservation, submission_problem: str | None = None,
+    request: PreparedFollowup,
+    snapshot: WorkSnapshot,
+    previous: WorkObservation,
+    submission_problem: str | None = None,
 ) -> WorkObservation:
     """A missing cached row cannot establish that an accepted submission failed."""
     last = previous_task(previous)
@@ -258,16 +261,44 @@ class MeetingWorkflow:
     """
 
     __slots__ = (
-        "_attempted", "_changes", "_closed", "_closing", "_jobs", "_lock", "_prepared", "_problems", "_progress",
-        "_retained", "_snapshot", "_sources", "_submission_problems", "_thread", "_wake", "archive", "clock", "followups",
-        "publish", "read_work", "report_error", "requests", "retain_work", "submit_identified",
+        "_attempted",
+        "_changes",
+        "_closed",
+        "_closing",
+        "_jobs",
+        "_lock",
+        "_prepared",
+        "_problems",
+        "_progress",
+        "_retained",
+        "_snapshot",
+        "_sources",
+        "_submission_problems",
+        "_thread",
+        "_wake",
+        "archive",
+        "clock",
+        "followups",
+        "publish",
+        "read_work",
+        "report_error",
+        "requests",
+        "retain_work",
+        "submit_identified",
     )
 
     def __init__(
-        self, archive: MeetingArchive, requests: MeetingRequests, followups: FollowupStore, *,
-        submit_identified: Callable[[str, str], None], read_work: Callable[[], WorkSnapshot],
-        retain_work: Callable[[tuple[str, ...]], None], publish: Callable[[MeetingSnapshot], None],
-        report_error: Callable[[str], None], clock: Callable[[], float] = time.time,
+        self,
+        archive: MeetingArchive,
+        requests: MeetingRequests,
+        followups: FollowupStore,
+        *,
+        submit_identified: Callable[[str, str], None],
+        read_work: Callable[[], WorkSnapshot],
+        retain_work: Callable[[tuple[str, ...]], None],
+        publish: Callable[[MeetingSnapshot], None],
+        report_error: Callable[[str], None],
+        clock: Callable[[], float] = time.time,
     ) -> None:
         self.archive, self.requests, self.followups = archive, requests, followups
         self.submit_identified, self.read_work, self.retain_work = submit_identified, read_work, retain_work
@@ -492,10 +523,13 @@ class MeetingWorkflow:
             for publication in self.followups.versions(request.task_id):
                 if not package_matches(request, publication):
                     raise ValueError("A published package belongs to different selected transcript evidence.")
-                values.append(FollowupPackage(
-                    publication, self.followups.drafts(request.task_id, publication.version),
-                    self.followups.actions(request.task_id, publication.version),
-                ))
+                values.append(
+                    FollowupPackage(
+                        publication,
+                        self.followups.drafts(request.task_id, publication.version),
+                        self.followups.actions(request.task_id, publication.version),
+                    )
+                )
             if not values and isinstance(work, ObservedWork) and isinstance(work.task.state, Completed):
                 raise ValueError("The task finished without a verified meeting package. Its written reply is not a published artifact.")
             if not values and package_values(previous):
@@ -516,8 +550,15 @@ class MeetingWorkflow:
         progress: dict[str, FollowupProgress] = {}
         for request in self._prepared.values():
             previous = self._progress.get(request.task_id, FollowupProgress(request, WorkPending.OBSERVATION, AvailablePackages()))
-            work = WorkUnavailable(read_problem, previous_task(previous.work)) if snapshot is None else work_observation(
-                request, snapshot, previous.work, self._submission_problems.get(request.task_id),
+            work = (
+                WorkUnavailable(read_problem, previous_task(previous.work))
+                if snapshot is None
+                else work_observation(
+                    request,
+                    snapshot,
+                    previous.work,
+                    self._submission_problems.get(request.task_id),
+                )
             )
             if isinstance(work, ObservedWork):
                 self._submission_problems.pop(request.task_id, None)
@@ -527,7 +568,10 @@ class MeetingWorkflow:
             progress[request.task_id] = FollowupProgress(request, work, packages)
         self._progress = progress
         current = MeetingSnapshot(
-            self._sources, tuple(reversed(tuple(progress.values()))), tuple(self._problems.values()), tuple(self._changes.values()),
+            self._sources,
+            tuple(reversed(tuple(progress.values()))),
+            tuple(self._problems.values()),
+            tuple(self._changes.values()),
         )
         with self._lock:
             changed = current != self._snapshot

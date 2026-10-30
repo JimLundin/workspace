@@ -1,7 +1,7 @@
 """Validated console requests and exact answers, independent of terminal rendering."""
 
 import json
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from enum import Enum, auto
 from typing import cast
 
@@ -28,7 +28,7 @@ class Option:
 class Question:
     text: str
     options: tuple[Option, ...] = ()
-    multiple: bool = False
+    multiple: bool = field(default=False, kw_only=True)
 
 
 @dataclass(frozen=True, slots=True)
@@ -41,7 +41,7 @@ class Request:
     detail: str
     questions: tuple[Question, ...]
     created_at: float
-    approval: bool = False
+    approval: bool = field(default=False, kw_only=True)
     state: State = State.WAITING
     answers: tuple[tuple[int, str], ...] = ()
 
@@ -101,8 +101,17 @@ def request(provider: Provider, raw: object, identity: str, at: float) -> Reques
     inputs = object_value(data.get("tool_input"))
     if event == "PermissionRequest":
         detail = json.dumps(inputs, ensure_ascii=False)[:12_000]
-        return Request(identity, provider, session, cwd, f"Approve {tool or 'an action'}?", detail,
-                       (Question("Allow this action?", (Option("Approve"), Option("Decline"))),), at, approval=True)
+        return Request(
+            identity,
+            provider,
+            session,
+            cwd,
+            f"Approve {tool or 'an action'}?",
+            detail,
+            (Question("Allow this action?", (Option("Approve"), Option("Decline"))),),
+            at,
+            approval=True,
+        )
     if event != "PreToolUse" or not tool.endswith(("AskUserQuestion", "request_user_input", "request_user_input_async")):
         raise ValueError("Unsupported console hook event.")
     rows = list_value(inputs.get("questions"))
@@ -127,7 +136,7 @@ def request(provider: Provider, raw: object, identity: str, at: float) -> Reques
         multiple = row.get("multiSelect", False)
         if not isinstance(multiple, bool):
             raise ValueError("Invalid console selection mode.")
-        questions.append(Question(prompt, tuple(options), multiple))
+        questions.append(Question(prompt, tuple(options), multiple=multiple))
     return Request(identity, provider, session, cwd, "Your answer is needed", "", tuple(questions), at)
 
 
@@ -156,10 +165,13 @@ def hook_output(provider: Provider, raw: object, current: Request) -> dict[str, 
     answers = {current.questions[index].text: answer for index, answer in current.answers}
     if provider is Provider.CLAUDE:
         inputs = object_value(data.get("tool_input"))
-        return {"hookSpecificOutput": {"hookEventName": event, "permissionDecision": "allow",
-                                       "updatedInput": {**inputs, "answers": answers}}}
+        return {"hookSpecificOutput": {"hookEventName": event, "permissionDecision": "allow", "updatedInput": {**inputs, "answers": answers}}}
     # Codex has no documented hook result replacement. Skip the native question
     # and deliver the user's answer as the tool's model-visible blocking reason.
-    return {"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny",
-                                   "permissionDecisionReason": "The user answered this question through Workspace's inbox: "
-                                                               + json.dumps(answers, ensure_ascii=False)}}
+    return {
+        "hookSpecificOutput": {
+            "hookEventName": "PreToolUse",
+            "permissionDecision": "deny",
+            "permissionDecisionReason": "The user answered this question through Workspace's inbox: " + json.dumps(answers, ensure_ascii=False),
+        }
+    }

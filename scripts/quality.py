@@ -19,10 +19,10 @@ from pydantic import StrictInt, StrictStr, StringConstraints, TypeAdapter
 from scripts.architecture import python_sources
 from scripts.source_analysis import Cache, Source, parse
 
-type LintRule = Literal['FBT001', 'FBT002', 'PLR0913']
-type Rule = LintRule | Literal['import-alias', 're-export', 'inline-import', 'relative-import']
+type LintRule = Literal["FBT001", "FBT002", "PLR0913"]
+type Rule = LintRule | Literal["import-alias", "re-export", "inline-import", "relative-import"]
 type Text = Annotated[StrictStr, StringConstraints(strip_whitespace=True, min_length=1)]
-type Digest = Annotated[StrictStr, StringConstraints(pattern=r'^[0-9a-f]{64}$')]
+type Digest = Annotated[StrictStr, StringConstraints(pattern=r"^[0-9a-f]{64}$")]
 type _Definition = tuple[str, ast.FunctionDef | ast.AsyncFunctionDef]
 
 
@@ -52,11 +52,12 @@ class Key:
 class Entry:
     key: Key
     reason: Text
+    kind: Literal["migration", "interface"] = "migration"
 
 
 @dataclass(frozen=True, slots=True)
 class Baseline:
-    kind: Literal['workspace-quality-migrations-v1']
+    kind: Literal["workspace-quality-migrations-v1"]
     entries: tuple[Entry, ...]
 
 
@@ -67,7 +68,7 @@ class Finding:
     detail: str
 
     def describe(self) -> str:
-        return f'{self.key.path}:{self.line}: {self.key.rule}: {self.key.scope}: {self.detail}'
+        return f"{self.key.path}:{self.line}: {self.key.rule}: {self.key.scope}: {self.detail}"
 
 
 @dataclass(frozen=True, slots=True)
@@ -76,6 +77,7 @@ class Report:
     warnings: tuple[Finding, ...]
     stale: tuple[Entry, ...]
     legacy: int
+    interfaces: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -89,12 +91,12 @@ BASELINE = TypeAdapter[Baseline](Baseline)
 FINDINGS = TypeAdapter[tuple[Finding, ...]](tuple[Finding, ...])
 
 
-def definitions(tree: ast.AST, scope: str = '') -> Iterator[_Definition]:
+def definitions(tree: ast.AST, scope: str = "") -> Iterator[_Definition]:
     match tree:
         case ast.ClassDef(name=name):
-            scope = '.'.join(part for part in (scope, name) if part)
+            scope = ".".join(part for part in (scope, name) if part)
         case ast.FunctionDef(name=name) | ast.AsyncFunctionDef(name=name):
-            scope = '.'.join(part for part in (scope, name) if part)
+            scope = ".".join(part for part in (scope, name) if part)
             yield scope, tree
         case _:
             pass
@@ -110,10 +112,12 @@ def identify(root: Path, diagnostic: Diagnostic, scopes: Iterable[_Definition]) 
     row = diagnostic.location.row
     candidates = (item for item in scopes if item[1].lineno <= row <= (item[1].end_lineno or item[1].lineno))
     scope, node = max(candidates, key=_location_rank)
-    if diagnostic.code != 'PLR0913':
-        parameter = next((arg.arg for arg in (*node.args.posonlyargs, *node.args.args)
-                          if arg.lineno == row and arg.col_offset + 1 == diagnostic.location.column), '')
-        scope = '.'.join(part for part in (scope, parameter) if part)
+    if diagnostic.code != "PLR0913":
+        parameter = next(
+            (arg.arg for arg in (*node.args.posonlyargs, *node.args.args) if arg.lineno == row and arg.col_offset + 1 == diagnostic.location.column),
+            "",
+        )
+        scope = ".".join(part for part in (scope, parameter) if part)
     signature = hashlib.sha256(ast.dump(node.args, include_attributes=False).encode()).hexdigest()
     key = Key(rule=diagnostic.code, path=Path(diagnostic.filename).relative_to(root).as_posix(), scope=scope, signature=signature)
     return Finding(key, row, diagnostic.message)
@@ -121,7 +125,7 @@ def identify(root: Path, diagnostic: Diagnostic, scopes: Iterable[_Definition]) 
 
 def located(root: Path, observed: LintSource, cache: Cache | None) -> tuple[Finding, ...]:
     source = observed.source
-    key = cache.key('quality', source, extra=DIAGNOSTICS.dump_json(observed.diagnostics)) if cache is not None else ''
+    key = cache.key("quality", source, extra=DIAGNOSTICS.dump_json(observed.diagnostics)) if cache is not None else ""
     if cache is not None and (saved := cache.read(key, FINDINGS)) is not None:
         return saved
     tree = parse(source)
@@ -137,13 +141,34 @@ def scan(root: Path, names: Iterable[str] | None = None, *, cache: Cache | None 
     sources = python_sources(root, names)
     if not sources:
         return ()
-    profile = Path(__file__).resolve().parent.parent / 'pyproject.toml'
-    result = subprocess.run((sys.executable, '-m', 'ruff', 'check', '--select', 'FBT001,FBT002,PLR0913',
-                             '--ignore-noqa', '--output-format', 'json', '--config', str(profile),
-                             '--config', 'lint.ignore=[]', '--config', 'lint.per-file-ignores={}', *sources),
-                            cwd=root, capture_output=True, text=True, encoding='utf-8', check=False)
+    profile = Path(__file__).resolve().parent.parent / "pyproject.toml"
+    result = subprocess.run(
+        (
+            sys.executable,
+            "-m",
+            "ruff",
+            "check",
+            "--select",
+            "FBT001,FBT002,PLR0913",
+            "--ignore-noqa",
+            "--output-format",
+            "json",
+            "--config",
+            str(profile),
+            "--config",
+            "lint.ignore=[]",
+            "--config",
+            "lint.per-file-ignores={}",
+            *sources,
+        ),
+        cwd=root,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        check=False,
+    )
     if result.returncode not in (0, 1):
-        raise RuntimeError('Signature lint did not complete: ' + result.stderr.strip())
+        raise RuntimeError("Signature lint did not complete: " + result.stderr.strip())
     diagnostics = DIAGNOSTICS.validate_json(result.stdout)
     # Group once instead of comparing every diagnostic's Windows path to every
     # source. This local accumulator prevents quadratic path construction.
@@ -151,48 +176,53 @@ def scan(root: Path, names: Iterable[str] | None = None, *, cache: Cache | None 
     for item in diagnostics:
         name = Path(item.filename).relative_to(root).as_posix()
         grouped.setdefault(name, []).append(item)
-    return tuple(finding for name in sources for finding in located(
-        root, LintSource(Source(name, (root / name).read_text(encoding='utf-8')), tuple(grouped.get(name, ()))), cache))
+    return tuple(
+        finding
+        for name in sources
+        for finding in located(root, LintSource(Source(name, (root / name).read_text(encoding="utf-8")), tuple(grouped.get(name, ()))), cache)
+    )
 
 
 def imports(path: str, tree: ast.Module) -> Iterator[Finding]:
-    def walk(node: ast.AST, scope: str = '<module>') -> Iterator[Finding]:
+    def walk(node: ast.AST, scope: str = "<module>") -> Iterator[Finding]:
         match node:
             case ast.ClassDef(name=name) | ast.FunctionDef(name=name) | ast.AsyncFunctionDef(name=name):
-                scope = name if scope == '<module>' else scope + '.' + name
+                scope = name if scope == "<module>" else scope + "." + name
             case ast.Import(names=names) | ast.ImportFrom(names=names):
                 signature = hashlib.sha256(ast.dump(node, include_attributes=False).encode()).hexdigest()
                 match node:
                     case ast.ImportFrom(level=level) if level:
-                        key = Key(rule='relative-import', path=path, scope=scope, signature=signature)
-                        yield Finding(key, node.lineno, 'Use an absolute import from the owning module.')
+                        key = Key(rule="relative-import", path=path, scope=scope, signature=signature)
+                        yield Finding(key, node.lineno, "Use an absolute import from the owning module.")
                     case _:
                         pass
-                if scope != '<module>':
-                    key = Key(rule='inline-import', path=path, scope=scope, signature=signature)
-                    yield Finding(key, node.lineno, 'Declare imports at module level; use lazy imports to defer loading.')
+                if scope != "<module>":
+                    key = Key(rule="inline-import", path=path, scope=scope, signature=signature)
+                    yield Finding(key, node.lineno, "Declare imports at module level; use lazy imports to defer loading.")
                 if any(alias.asname for alias in names):
-                    key = Key(rule='import-alias', path=path, scope=scope, signature=signature)
-                    yield Finding(key, node.lineno, 'Import from the owner and use module-qualified names instead of cosmetic aliases.')
+                    key = Key(rule="import-alias", path=path, scope=scope, signature=signature)
+                    yield Finding(key, node.lineno, "Import from the owner and use module-qualified names instead of cosmetic aliases.")
             case _:
                 pass
         for child in ast.iter_child_nodes(node):
             yield from walk(child, scope)
 
     yield from walk(tree)
-    def bindings() -> Iterator[tuple[Literal['import', 'local'], str]]:
+
+    def bindings() -> Iterator[tuple[Literal["import", "local"], str]]:
         for node in tree.body:
             match node:
                 case ast.Import(names=names) | ast.ImportFrom(names=names):
                     for alias in names:
-                        yield 'import', alias.asname or alias.name
+                        yield "import", alias.asname or alias.name
                 case ast.ClassDef(name=name) | ast.FunctionDef(name=name) | ast.AsyncFunctionDef(name=name):
-                    yield 'local', name
+                    yield "local", name
                 case _:
                     pass
+
     observed = tuple(bindings())
-    bound = frozenset(name for kind, name in observed if kind == 'import')
-    owned = frozenset(name for kind, name in observed if kind == 'local')
+    bound = frozenset(name for kind, name in observed if kind == "import")
+    owned = frozenset(name for kind, name in observed if kind == "local")
 
     def forwarded_names(values: Iterable[ast.expr]) -> Iterator[str]:
         for value in values:
@@ -201,15 +231,21 @@ def imports(path: str, tree: ast.Module) -> Iterator[Finding]:
                     yield name
                 case _:
                     pass
+
     for node in tree.body:
         match node:
-            case ast.Assign(targets=[ast.Name(id='__all__')], value=ast.List(elts=values) | ast.Tuple(elts=values)):
+            case ast.Assign(targets=[ast.Name(id="__all__")], value=ast.List(elts=values) | ast.Tuple(elts=values)):
                 forwarded = tuple(forwarded_names(values))
                 if forwarded:
-                    key = Key(rule='re-export', path=path, scope='__all__',
-                              signature=hashlib.sha256(ast.dump(node, include_attributes=False).encode()).hexdigest())
-                    yield Finding(key, node.lineno, 'Export local interfaces; consumers should import forwarded names from their owner: '
-                                  + ', '.join(forwarded))
+                    key = Key(
+                        rule="re-export",
+                        path=path,
+                        scope="__all__",
+                        signature=hashlib.sha256(ast.dump(node, include_attributes=False).encode()).hexdigest(),
+                    )
+                    yield Finding(
+                        key, node.lineno, "Export local interfaces; consumers should import forwarded names from their owner: " + ", ".join(forwarded)
+                    )
             case _:
                 pass
 
@@ -217,13 +253,15 @@ def imports(path: str, tree: ast.Module) -> Iterator[Finding]:
 def load(path: Path) -> tuple[Entry, ...]:
     entries = BASELINE.validate_json(path.read_bytes()).entries
     if len(frozenset(entry.key for entry in entries)) != len(entries):
-        raise ValueError('Quality migrations must contain unique exact keys.')
+        raise ValueError("Quality migrations must contain unique exact keys.")
     for entry in entries:
-        if entry.key.rule == 'relative-import':
-            raise ValueError('Absolute imports are required without migration exceptions.')
+        if entry.kind == "interface" and entry.key.rule != "PLR0913":
+            raise ValueError("Only a specifically reviewed wide signature can be an intentional interface.")
+        if entry.key.rule == "relative-import":
+            raise ValueError("Absolute imports are required without migration exceptions.")
         source = Path(entry.key.path)
-        if source.is_absolute() or '..' in source.parts or source.as_posix() != entry.key.path or '*' in entry.key.scope:
-            raise ValueError('Quality migrations require exact relative paths and declarations.')
+        if source.is_absolute() or ".." in source.parts or source.as_posix() != entry.key.path or "*" in entry.key.scope:
+            raise ValueError("Quality migrations require exact relative paths and declarations.")
     return entries
 
 
@@ -232,19 +270,26 @@ def compare(findings: Iterable[Finding], entries: Iterable[Entry]) -> Report:
     accepted = frozenset(entry.key for entry in baseline)
     observed = frozenset(finding.key for finding in observations)
     new = tuple(finding for finding in observations if finding.key not in accepted)
-    return Report(failures=tuple(finding for finding in new if finding.key.rule != 'PLR0913'),
-                  warnings=tuple(finding for finding in new if finding.key.rule == 'PLR0913'),
-                  stale=tuple(entry for entry in baseline if entry.key not in observed), legacy=len(accepted & observed))
+    return Report(
+        failures=tuple(finding for finding in new if finding.key.rule != "PLR0913"),
+        warnings=tuple(finding for finding in new if finding.key.rule == "PLR0913"),
+        stale=tuple(entry for entry in baseline if entry.key not in observed),
+        legacy=sum(entry.key in observed and entry.kind == "migration" for entry in baseline),
+        interfaces=sum(entry.key in observed and entry.kind == "interface" for entry in baseline),
+    )
 
 
 def check(root: Path, names: Iterable[str] | None = None, *, cache: Cache | None = None) -> Report:
-    report = compare(scan(root, names, cache=cache), load(root / 'docs' / 'quality-migrations.json'))
+    report = compare(scan(root, names, cache=cache), load(root / "docs" / "quality-migrations.json"))
     for finding in (*report.failures, *report.warnings):
-        print(('Review warning: ' if finding.key.rule == 'PLR0913' else '') + finding.describe(), flush=True)
+        print(("Review warning: " if finding.key.rule == "PLR0913" else "") + finding.describe(), flush=True)
     for entry in report.stale:
-        print(f'Stale quality migration: {entry.key.path}: {entry.key.scope}; remove its exact baseline entry.', flush=True)
-    print(f'Quality: {len(report.failures)} interface violations, {len(report.warnings)} signature review warnings; '
-          f'{report.legacy} existing migration entries.', flush=True)
+        print(f"Stale quality migration: {entry.key.path}: {entry.key.scope}; remove its exact baseline entry.", flush=True)
+    print(
+        f"Quality: {len(report.failures)} interface violations, {len(report.warnings)} signature review warnings; "
+        f"{report.legacy} existing migration entries; {report.interfaces} reviewed fixed interfaces.",
+        flush=True,
+    )
     return report
 
 
@@ -253,5 +298,5 @@ def main() -> None:
     raise SystemExit(bool(report.failures or report.stale))
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

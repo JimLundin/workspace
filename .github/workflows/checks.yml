@@ -28,6 +28,7 @@ jobs:
       - run: mypy .
       - run: pyright
       - run: ruff check .
+      - run: ruff format --check .
       - run: python -m scripts.quality
   bundle:
     runs-on: windows-latest
@@ -39,7 +40,7 @@ jobs:
       - run: python -m pip install pydantic==2.14.1
       - run: python scripts/bundle.py dist/workspace-sdk-python315-win64.zip
       - run: python -m zipfile -e dist/workspace-sdk-python315-win64.zip dist/check
-      - run: ./dist/check/workspace/.python/python.exe dist/check/workspace/selfcheck.py
+      - run: python dist/check/workspace/selfcheck.py
       - uses: actions/upload-artifact@v4
         with:
           name: workspace-sdk-python315-win64

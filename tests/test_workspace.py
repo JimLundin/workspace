@@ -102,7 +102,6 @@ def test_runtime_checks_cannot_change_the_source_that_was_checked(tmp_path: Path
     assert w.read("candidate.py") == content
 
 
-
 def test_validation_does_not_import_candidate_modules(tmp_path: Path) -> None:
     w = workspace(tmp_path)
     marker = tmp_path / "outside"

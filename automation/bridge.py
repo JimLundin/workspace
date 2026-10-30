@@ -158,14 +158,19 @@ def read_discovery(folder: Path) -> Discovery:
     address = _address(folder, epoch)
     if data["address"] != address:
         raise ValueError("Worker discovery does not identify this local profile.")
-    return Discovery(epoch, integer(data["pid"], "worker PID", minimum=1, maximum=2**32 - 1), address,
-                     bytes.fromhex(digest(data["key"], "worker authentication key")))
+    return Discovery(
+        epoch,
+        integer(data["pid"], "worker PID", minimum=1, maximum=2**32 - 1),
+        address,
+        bytes.fromhex(digest(data["key"], "worker authentication key")),
+    )
 
 
 def _publish_discovery(folder: Path, discovery: Discovery) -> None:
     folder.mkdir(parents=True, exist_ok=True)
-    frame = ipc.pack({"version": ipc.VERSION, "epoch": discovery.epoch, "pid": discovery.pid,
-                      "address": discovery.address, "key": discovery.key.hex()})
+    frame = ipc.pack(
+        {"version": ipc.VERSION, "epoch": discovery.epoch, "pid": discovery.pid, "address": discovery.address, "key": discovery.key.hex()}
+    )
     descriptor, temporary = tempfile.mkstemp(prefix=".worker-", dir=folder)
     path = Path(temporary)
     try:
@@ -187,8 +192,9 @@ def _connect_raw(address: str, timeout_s: float) -> Channel:
                 raise TimeoutError("The local work process did not accept a connection.")
             try:
                 _winapi.WaitNamedPipe(address, max(1, min(50, int(remaining * 1000))))
-                handle = _winapi.CreateFile(address, _winapi.GENERIC_READ | _winapi.GENERIC_WRITE,
-                                            0, 0, _winapi.OPEN_EXISTING, _winapi.FILE_FLAG_OVERLAPPED, 0)
+                handle = _winapi.CreateFile(
+                    address, _winapi.GENERIC_READ | _winapi.GENERIC_WRITE, 0, 0, _winapi.OPEN_EXISTING, _winapi.FILE_FLAG_OVERLAPPED, 0
+                )
             except OSError as error:
                 if error.winerror in (_winapi.ERROR_SEM_TIMEOUT, _winapi.ERROR_PIPE_BUSY):
                     continue
@@ -241,9 +247,9 @@ def _client_auth(channel: Channel, key: bytes) -> None:
     if len(challenge) != len(AUTH_PREFIX) + 32 or not challenge.startswith(AUTH_PREFIX):
         raise OSError("Work IPC authentication failed.")
     nonce = secrets.token_bytes(32)
-    channel.send_bytes(nonce + hmac.digest(key, b"client:" + challenge[len(AUTH_PREFIX):] + nonce, "sha256"))
+    channel.send_bytes(nonce + hmac.digest(key, b"client:" + challenge[len(AUTH_PREFIX) :] + nonce, "sha256"))
     answer = channel.recv_bytes(128)
-    if not hmac.compare_digest(answer, hmac.digest(key, b"server:" + challenge[len(AUTH_PREFIX):] + nonce, "sha256")):
+    if not hmac.compare_digest(answer, hmac.digest(key, b"server:" + challenge[len(AUTH_PREFIX) :] + nonce, "sha256")):
         raise OSError("Work IPC authentication failed.")
 
 
@@ -293,9 +299,9 @@ def enqueue(state: Outbox, epoch: str, payload: ipc.BridgeEvent) -> tuple[Outbox
     if size > ipc.MAX_FRAME - 4096:
         raise ValueError("The event is too large for a bounded IPC reply.")
     key = _update_key(payload)
-    entries = tuple(item for item in state.entries if not (
-        key is not None and _replaceable(item.envelope.payload) and _update_key(item.envelope.payload) == key
-    ))
+    entries = tuple(
+        item for item in state.entries if not (key is not None and _replaceable(item.envelope.payload) and _update_key(item.envelope.payload) == key)
+    )
     lost = len(entries) >= ipc.MAX_EVENTS or sum(item.size for item in entries) + size > MAX_BUFFER_BYTES
     if lost:
         resync = ipc.Envelope(epoch, state.sequence + 1, ipc.Resync("Live updates were discarded; reload work and request fresh approval previews."))
@@ -315,12 +321,35 @@ class BridgeServer:
     """One worker's bounded listener, context cache, and UI-owned requests."""
 
     __slots__ = (
-        "_active", "_assistant_pid", "_client", "_closed", "_context", "_finished", "_io_lock", "_last_poll", "_listener",
-        "_lock", "_outbox", "_pending", "_registrations", "_started", "discovery", "folder", "owns", "timeout_s", "wake",
+        "_active",
+        "_assistant_pid",
+        "_client",
+        "_closed",
+        "_context",
+        "_finished",
+        "_io_lock",
+        "_last_poll",
+        "_listener",
+        "_lock",
+        "_outbox",
+        "_pending",
+        "_registrations",
+        "_started",
+        "discovery",
+        "folder",
+        "owns",
+        "timeout_s",
+        "wake",
     )
 
     def __init__(
-        self, folder: Path, *, epoch: str, wake: Callable[[], None], owns: Callable[[RunRef], bool], timeout_s: float = 2,
+        self,
+        folder: Path,
+        *,
+        epoch: str,
+        wake: Callable[[], None],
+        owns: Callable[[RunRef], bool],
+        timeout_s: float = 2,
     ) -> None:
         if len(epoch) != 32 or any(char not in "0123456789abcdef" for char in epoch):
             raise ValueError("Worker epochs must be fresh UUID hex values.")
@@ -364,7 +393,7 @@ class BridgeServer:
                 try:
                     accepted: Channel = listener.accept()
                     channel: Channel = LocalChannel(accepted)
-                except (OSError, ValueError):
+                except OSError, ValueError:
                     if self._closed.is_set():
                         break
                     raise
@@ -378,7 +407,7 @@ class BridgeServer:
                         request = ipc.decode_request(channel.recv_bytes(ipc.MAX_FRAME))
                         reply = self._handle(request)
                         channel.send_bytes(ipc.encode_reply(reply))
-                except (OSError, EOFError, ValueError, RuntimeError):
+                except OSError, EOFError, ValueError, RuntimeError:
                     # Neither malformed JSON nor challenge material belongs in a log.
                     pass
                 finally:
@@ -402,6 +431,7 @@ class BridgeServer:
             if not pending.result.done():
                 pending.result.set_result(ipc.MeetingFailed(reason))
         self._pending.clear()
+
     def _publish(self, payload: ipc.BridgeEvent) -> None:
         self._outbox, lost = enqueue(self._outbox, self.discovery.epoch, payload)
         if lost:
@@ -412,7 +442,7 @@ class BridgeServer:
             return ipc.Rejected("This message belongs to an earlier work process.")
         operation = request.operation
         if isinstance(operation, ipc.MeetingResponse) and not self.owns(operation.run):
-            return ipc.Accepted(self.discovery.epoch, False)
+            return ipc.Accepted(self.discovery.epoch, accepted=False)
         with self._lock:
             if self._closed.is_set():
                 return ipc.Rejected("The work process is stopping.")
@@ -424,7 +454,7 @@ class BridgeServer:
                     self._client = request.client
                 self._assistant_pid = operation.assistant_pid
                 self._last_poll = time.monotonic()
-                return ipc.Accepted(self.discovery.epoch, True)
+                return ipc.Accepted(self.discovery.epoch, accepted=True)
             if request.client != self._client:
                 return ipc.Rejected("This assistant connection was replaced.")
             match operation:
@@ -444,15 +474,15 @@ class BridgeServer:
                 case ipc.MeetingResponse(run, request_id, result):
                     pending = self._pending.get(request_id)
                     if pending is None or pending.run != run or pending.client != request.client or pending.result.done():
-                        return ipc.Accepted(self.discovery.epoch, False)
+                        return ipc.Accepted(self.discovery.epoch, accepted=False)
                     pending.result.set_result(result)
-                    return ipc.Accepted(self.discovery.epoch, True)
+                    return ipc.Accepted(self.discovery.epoch, accepted=True)
                 case ipc.Command.WAKE:
                     pass
                 case _:
                     assert_never(operation)
         self.wake()
-        return ipc.Accepted(self.discovery.epoch, True)
+        return ipc.Accepted(self.discovery.epoch, accepted=True)
 
     def _poll(self, after: int, limit: int) -> ipc.Reply:
         state = self._outbox
@@ -519,7 +549,7 @@ class BridgeServer:
                 if remaining <= 0:
                     raise OSError("The meeting owner did not respond. Inspect meeting status before trying again.")
                 try:
-                    answer = result.result(timeout=min(remaining, .1))
+                    answer = result.result(timeout=min(remaining, 0.1))
                 except TimeoutError:
                     continue
                 match answer:
@@ -549,7 +579,7 @@ class BridgeServer:
         # Wake a native accept before closing its listener. This is required
         # for both AF_UNIX accept() and an overlapped Windows pipe accept.
         with contextlib.suppress(OSError, ValueError):
-            _connect_raw(self.discovery.address, min(.2, self.timeout_s)).close()
+            _connect_raw(self.discovery.address, min(0.2, self.timeout_s)).close()
         if not self._finished.wait(self.timeout_s + 1):
             raise RuntimeError("The work IPC listener did not release its native handles.")
 
@@ -562,8 +592,18 @@ class BridgeClient:
     """Assistant-owned client; serialize calls on its observer/command thread."""
 
     __slots__ = (
-        "_active", "_client", "_closed", "_context", "_cursor", "_discovery", "_gate", "_io_lock", "_pid", "_registrations",
-        "folder", "timeout_s",
+        "_active",
+        "_client",
+        "_closed",
+        "_context",
+        "_cursor",
+        "_discovery",
+        "_gate",
+        "_io_lock",
+        "_pid",
+        "_registrations",
+        "folder",
+        "timeout_s",
     )
 
     def __init__(self, folder: Path, *, timeout_s: float = 2) -> None:

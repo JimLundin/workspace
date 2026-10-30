@@ -1,6 +1,6 @@
 """Plain value types the bindings return. No ctypes: importable anywhere."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 
 @dataclass(frozen=True, slots=True)
@@ -32,7 +32,7 @@ class Window:
     title: str
     exe: str
     """The program's file name, lowercase: `windowsterminal.exe`."""
-    minimized: bool
+    minimized: bool = field(kw_only=True)
 
 
 def utf16_units(text: str) -> list[int]:

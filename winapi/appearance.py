@@ -90,8 +90,7 @@ class _HighContrast(ctypes.Structure):
     _fields_ = [("size", wintypes.UINT), ("flags", wintypes.DWORD), ("scheme", wintypes.LPWSTR)]
 
 
-_SystemParametersInfoW = fn(user32, "SystemParametersInfoW", wintypes.BOOL,
-                           wintypes.UINT, wintypes.UINT, ctypes.c_void_p, wintypes.UINT)
+_SystemParametersInfoW = fn(user32, "SystemParametersInfoW", wintypes.BOOL, wintypes.UINT, wintypes.UINT, ctypes.c_void_p, wintypes.UINT)
 _GetSysColor = fn(user32, "GetSysColor", wintypes.DWORD, ctypes.c_int)
 _GetDC = fn(user32, "GetDC", wintypes.HDC, wintypes.HWND)
 _ReleaseDC = fn(user32, "ReleaseDC", ctypes.c_int, wintypes.HWND, wintypes.HDC)
@@ -131,7 +130,7 @@ class TimerResolution:
         self.period = NativeTimerPeriod() if period is None else period
         self.active = False
 
-    def update(self, active: bool) -> None:
+    def update(self, *, active: bool) -> None:
         if active and not self.active:
             self.active = self.period.request()
         elif not active and self.active:
@@ -178,8 +177,7 @@ def background_frost(bounds: Rect) -> Frost:
     if not dc:
         return Frost.SMOKED
     # Sample the sides: above/below can contain a neighboring conversation bubble.
-    points = tuple((x, bounds.top + bounds.height * third // 3)
-                   for x in (bounds.left - 12, bounds.right + 12) for third in (1, 2))
+    points = tuple((x, bounds.top + bounds.height * third // 3) for x in (bounds.left - 12, bounds.right + 12) for third in (1, 2))
     colors: list[int] = []
     try:
         for px, py in points:
@@ -194,14 +192,14 @@ def background_frost(bounds: Rect) -> Frost:
 def frost_for(colors: tuple[int, ...]) -> Frost:
     """Use light glass on uniform backgrounds; shade mixed or unknown surfaces."""
     values = tuple(luminance(color) for color in colors)
-    if values and all(value < .18 for value in values):
+    if values and all(value < 0.18 for value in values):
         return Frost.LIGHT
-    if values and all(value > .5 for value in values):
+    if values and all(value > 0.5 for value in values):
         return Frost.BRIGHT
     return Frost.SMOKED
 
 
 def luminance(color: int) -> float:
     channels = tuple((color >> shift & 255) / 255 for shift in (0, 8, 16))
-    linear = tuple(value / 12.92 if value <= .04045 else math.pow((value + .055) / 1.055, 2.4) for value in channels)
-    return sum(value * weight for value, weight in zip(linear, (.2126, .7152, .0722), strict=True))
+    linear = tuple(value / 12.92 if value <= 0.04045 else math.pow((value + 0.055) / 1.055, 2.4) for value in channels)
+    return sum(value * weight for value, weight in zip(linear, (0.2126, 0.7152, 0.0722), strict=True))

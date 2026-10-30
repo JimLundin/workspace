@@ -8,7 +8,7 @@ lazy from PySide6.QtCore import Qt
 import winapi.shapes
 from assistant.notifications import Tone
 from assistant.qt_runtime import prepare
-from assistant.toast_style import Ink, palette
+from assistant.ui_components.bubble_style import Ink, palette
 
 prepare()
 
@@ -47,8 +47,10 @@ QLabel {{ color: {ink.secondary}; font: 11px 'Segoe UI'; }}
         layout.addWidget(QtWidgets.QLabel("↑ ↓ select · Enter switch · Escape close", self))
         self.search.textChanged.connect(self.filter)
         self.search.returnPressed.connect(self.activate)
+
         def picked(_: QtWidgets.QListWidgetItem) -> None:
             self.activate()
+
         self.items.itemActivated.connect(picked)
         self.search.installEventFilter(self)
         self.filter("")

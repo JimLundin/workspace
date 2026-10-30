@@ -87,6 +87,7 @@ class NativeWork:
 
     def build(self, work: WorkWindow) -> WorkPanel:
         self.view = WorkPanel(self.root, work, clock=lambda: 1000.0)
+        self.view.notebook.setCurrentIndex(0)
         return self.view
 
     def pump(self) -> None:
@@ -201,8 +202,9 @@ def test_background_render_preserves_selection_scroll_draft_and_hidden_state() -
     with native_work() as panel:
         view = panel.view
         result = "A line of complete analysis.\n" * 160 + "The complete ending. Åäö."
-        tasks = tuple(replace(work_task(Completed(result, ("Verified",)), identity=f"task-{index}"), title=f"Workbook {index}")
-                      for index in range(80))
+        tasks = tuple(
+            replace(work_task(Completed(result, ("Verified",)), identity=f"task-{index}"), title=f"Workbook {index}") for index in range(80)
+        )
         panel.publish(WorkSnapshot(tasks=tasks))
         select(view.tasks, "task-40")
         panel.pump()
@@ -213,7 +215,7 @@ def test_background_render_preserves_selection_scroll_draft_and_hidden_state() -
         cursor.setPosition(8, QtGui.QTextCursor.MoveMode.KeepAnchor)
         view.detail.setTextCursor(cursor)
         selected = cursor.selectedText()
-        view.detail.verticalScrollBar().setValue(round(view.detail.verticalScrollBar().maximum() * .4))
+        view.detail.verticalScrollBar().setValue(round(view.detail.verticalScrollBar().maximum() * 0.4))
         panel.pump()
         detail_scroll = scroll_position(view.detail)
         list_scroll = scroll_position(view.tasks)
@@ -231,8 +233,8 @@ def test_background_render_preserves_selection_scroll_draft_and_hidden_state() -
         identity: object = current.data(0, Qt.ItemDataRole.UserRole)
         assert identity == "task-40"
         assert view.detail.textCursor().selectedText() == selected
-        assert abs(scroll_position(view.detail) - detail_scroll) < .01
-        assert abs(scroll_position(view.tasks) - list_scroll) < .01
+        assert abs(scroll_position(view.detail) - detail_scroll) < 0.01
+        assert abs(scroll_position(view.tasks) - list_scroll) < 0.01
         assert view.prompt.toPlainText() == "Preserve this unfinished follow-up. Åäö."
         assert "The complete ending. Åäö.!" in view.detail.toPlainText()
         after_render = windows.foreground()

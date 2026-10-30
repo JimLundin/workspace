@@ -64,57 +64,64 @@ class BarObservations:
 
 class DesktopBar:
     __slots__ = (
-        'actions',
-        'activity',
-        'ambient',
-        'audio_meter',
-        'audio_timer',
-        'capture',
-        'closed',
-        'controls',
-        'controls_divider',
-        'current_layer',
-        'errors',
-        'inbox',
-        'inbox_divider',
-        'keyboard',
-        'keycaps',
-        'keys',
-        'layout_enabled',
-        'loop',
-        'materials',
-        'menu',
-        'menu_button',
-        'next_material',
-        'next_power',
-        'notification_access',
-        'notification_observation',
-        'notification_service',
-        'observations',
-        'pills',
-        'power',
-        'preference',
-        'record',
-        'record_stop',
-        'recording',
-        'sample_bounds',
-        'status',
-        'status_service',
-        'stop',
-        'taskbar',
-        'timer',
-        'view',
-        'visible',
-        'weather',
-        'weather_service',
-        'window',
-        'worker',
+        "actions",
+        "activity",
+        "ambient",
+        "audio_meter",
+        "audio_timer",
+        "canvas",
+        "capture",
+        "closed",
+        "controls",
+        "controls_divider",
+        "current_layer",
+        "errors",
+        "inbox",
+        "inbox_divider",
+        "keyboard",
+        "keycaps",
+        "keys",
+        "layout_enabled",
+        "loop",
+        "materials",
+        "menu",
+        "menu_button",
+        "next_material",
+        "next_power",
+        "notification_access",
+        "notification_observation",
+        "notification_service",
+        "observations",
+        "pills",
+        "power",
+        "preference",
+        "record",
+        "record_stop",
+        "recording",
+        "sample_bounds",
+        "status",
+        "status_service",
+        "stop",
+        "taskbar",
+        "timer",
+        "view",
+        "visible",
+        "weather",
+        "weather_service",
+        "window",
+        "worker",
     )
 
     # Actions, native-shell lifetime, audio ownership and desktop observations
     # are separate composition dependencies rather than UI options.
-    def __init__(self, actions: BarActions, *, native_shell: bool = True, audio_level: Callable[[], float | None] | None = None,
-                 observations: BarObservations | None = None) -> None:
+    def __init__(
+        self,
+        actions: BarActions,
+        *,
+        native_shell: bool = True,
+        audio_level: Callable[[], float | None] | None = None,
+        observations: BarObservations | None = None,
+    ) -> None:
         self.actions = actions
         self.observations = BarObservations() if observations is None else observations
         self.closed = False
@@ -171,9 +178,10 @@ class DesktopBar:
         self.capture = Pill(self.loop, "Workspace recording controls", attached=True)
         self.keycaps = Pill(self.loop, "Workspace keyboard mode", attached=True)
         self.pills = (self.window, self.capture, self.keycaps)
-        # Function boundaries are menu | status + its Stop | inbox. Auxiliary
+        # Function boundaries are menu + canvas | status + its Stop | inbox. Auxiliary
         # capsules already mark recording/keyboard boundaries with their shape.
         self.menu_button = self.window.button("menu", "", "Open Workspace controls", self.open_menu)
+        self.canvas = self.window.button("canvas", "", "Open your work canvas", self.actions.work)
         self.controls_divider = Divider(self.window)
         self.window.row.addWidget(self.controls_divider)
         self.status = StatusView(self.window)
@@ -183,9 +191,9 @@ class DesktopBar:
         self.inbox_divider = Divider(self.window)
         self.window.row.addWidget(self.inbox_divider)
         self.inbox_divider.hide()
-        self.inbox: QtWidgets.QToolButton = self.window.button("bell", "", "Open inbox · Hold V + T", self.actions.inbox)
+        self.inbox: QtWidgets.QToolButton = self.window.button("bell", "", "Open agent clarifications · Hold V + T", self.actions.inbox)
         self.inbox.hide()
-        self.record = self.capture.button("mic", "", "Open meeting recording", self.actions.work)
+        self.record = self.capture.button("mic", "", "Open canvas · Meetings are in its menu", self.actions.work)
         self.record_stop = self.capture.button("close", "", "Stop recording", lambda: self.actions.record("stop"))
         self.keyboard = self.keycaps.button("keyboard", "", "Current keyboard mode · open key map", self.actions.keyboard)
         self.menu = QtWidgets.QMenu(self.window)
@@ -214,13 +222,15 @@ class DesktopBar:
     def open_menu(self) -> None:
         target = self.observations.foreground()
         self.menu.clear()
+
         def item(label: str, action: Callable[[], None]) -> None:
             def triggered() -> None:
                 action()
 
             self.menu.addAction(label).triggered.connect(triggered)
+
         item("Your work feed", self.actions.agent)
-        item("Work and meetings", self.actions.work)
+        item("Your work canvas", self.actions.work)
         record_action: RecordingAction = "stop" if self.recording.capturing else "start"
         item("Stop recording" if self.recording.capturing else "Record a meeting", lambda: self.actions.record(record_action))
         self.menu.addSeparator()
@@ -232,15 +242,22 @@ class DesktopBar:
         item("Windows notification settings", self.notification_settings)
         tiling = self.menu.addMenu("Window tiling")
         tiling.addAction("Spread windows across screens").triggered.connect(lambda: self.actions.tiling(Tool.TILE_BALANCE, target))
+
         def tile_action(selected: Tool) -> Callable[[object], None]:
             def triggered(_checked: object) -> None:
                 self.actions.tiling(selected, target)
+
             return triggered
 
-        for label, tool in (("Focus left", Tool.TILE_FOCUS_LEFT), ("Focus right", Tool.TILE_FOCUS_RIGHT),
-                            ("Previous workspace", Tool.TILE_PREVIOUS_WORKSPACE), ("Next workspace", Tool.TILE_NEXT_WORKSPACE),
-                            ("Float or tile the active window", Tool.TILE_FLOAT), ("Change split direction", Tool.TILE_DIRECTION),
-                            ("Pause or resume automatic tiling", Tool.TILE_PAUSE)):
+        for label, tool in (
+            ("Focus left", Tool.TILE_FOCUS_LEFT),
+            ("Focus right", Tool.TILE_FOCUS_RIGHT),
+            ("Previous workspace", Tool.TILE_PREVIOUS_WORKSPACE),
+            ("Next workspace", Tool.TILE_NEXT_WORKSPACE),
+            ("Float or tile the active window", Tool.TILE_FLOAT),
+            ("Change split direction", Tool.TILE_DIRECTION),
+            ("Pause or resume automatic tiling", Tool.TILE_PAUSE),
+        ):
             tiling.addAction(label).triggered.connect(tile_action(tool))
         self.menu.addSeparator()
         item("All Workspace controls…", self.actions.menu)
@@ -264,11 +281,9 @@ QMenu::separator {{ height: 1px; background: {colors.edge}; margin: 4px 10px; }}
         """Qt requires updating its live button in place, solely on this owner thread."""
         if self.closed:
             return
-        text = "" if not count else str(count) if count < 100 else "99+"
-        description = f"{count} inbox {'item needs' if count == 1 else 'items need'} your attention · open inbox · Hold V + T"
-        if self.inbox.text() == text and self.inbox.toolTip() == description:
+        description = f"{count} {'clarification needs' if count == 1 else 'clarifications need'} your input · open canvas · Hold V + T"
+        if self.inbox.toolTip() == description:
             return
-        self.inbox.setText(text)
         self.inbox.setToolTip(description)
         self.inbox.setAccessibleName(description)
         self.inbox.setVisible(count > 0)
@@ -285,7 +300,7 @@ QMenu::separator {{ height: 1px; background: {colors.edge}; margin: 4px 10px; }}
         self.current_layer = text
         self.render(animate=self.observations.motion())
 
-    def layout(self, enabled: bool) -> None:
+    def layout(self, *, enabled: bool) -> None:
         self.layout_enabled = enabled
         self.render(animate=self.observations.motion())
 
@@ -295,21 +310,20 @@ QMenu::separator {{ height: 1px; background: {colors.edge}; margin: 4px 10px; }}
         view = toolbar(self.activity, self.recording, enabled=self.layout_enabled, layer=self.current_layer)
         if view != self.view:
             self.view = view
-            self.status.capture(listening=self.activity is State.LISTENING, processing=self.activity is State.WORKING)
+            self.status.capture(listening=self.activity is State.LISTENING, processing=self.activity in (State.WORKING, State.AGENT))
             if isinstance(view.activity, Resting):
                 self.status.facts(self.ambient)
-                self.status.setToolTip("Clock, battery and local weather")
                 self.stop.hide()
             else:
                 self.status.facts(None)
-                self.status.setText("" if self.status.listening or self.status.processing else view.activity.title)
-                self.status.setToolTip(view.activity.title)
-                self.status.accessible()
                 self.status.symbol = view.activity.icon
                 self.stop.setVisible(view.activity.can_stop)
                 self.stop.setToolTip("Stop speech capture" if self.activity is State.LISTENING else "Stop agent work")
-                self.status.setToolTip("Transcribing captured audio" if self.activity is State.WORKING
-                                       else view.activity.title + (" · use Stop to finish" if view.activity.can_stop else ""))
+                self.status.describe(
+                    "Transcribing captured audio"
+                    if self.activity is State.WORKING
+                    else view.activity.title + (" · use Stop to finish" if view.activity.can_stop else "")
+                )
             if self.activity is State.LISTENING:
                 self.audio_timer.start()
             else:
@@ -317,20 +331,22 @@ QMenu::separator {{ height: 1px; background: {colors.edge}; margin: 4px 10px; }}
             if self.audio_meter is not None:
                 self.audio_meter.listen(enabled=self.activity is State.LISTENING)
             if view.capture is not None:
-                self.record.setText(view.capture.title)
+                self.record.setToolTip(view.capture.title + " · Open canvas · Meetings are in its menu")
+                self.record.setAccessibleName(self.record.toolTip())
                 self.record_stop.setVisible(view.capture.can_stop)
                 was_recording: object = self.record.property("recording")
                 if was_recording != self.recording.capturing:
                     self.record.setProperty("recording", self.recording.capturing)
                     self.capture.recolor()
-            self.keyboard.setText(view.keyboard or "")
+            self.keyboard.setToolTip((view.keyboard or "Current keyboard mode") + " · Open key map")
+            self.keyboard.setAccessibleName(self.keyboard.toolTip())
             for pill in self.pills:
                 pill.adjustSize()
         self.position()
         now = self.observations.clock()
-        self.window.show_activity(self.visible, now, animate=animate)
-        self.capture.show_activity(self.visible and view.capture is not None, now, animate=animate)
-        self.keycaps.show_activity(self.visible and view.keyboard is not None, now, animate=animate)
+        self.window.show_activity(visible=self.visible, now=now, animate=animate)
+        self.capture.show_activity(visible=self.visible and view.capture is not None, now=now, animate=animate)
+        self.keycaps.show_activity(visible=self.visible and view.keyboard is not None, now=now, animate=animate)
         self.paint_frames()
 
     def position(self) -> None:
@@ -342,8 +358,8 @@ QMenu::separator {{ height: 1px; background: {colors.edge}; margin: 4px 10px; }}
         left = x - self.keycaps.attached_width() + OVERLAP
         fits_capture = right + self.capture.attached_width() <= area.right() - 12
         fits_keyboard = left >= area.left() + 12
-        self.capture.attach(fits_capture)
-        self.keycaps.attach(fits_keyboard)
+        self.capture.attach(attached=fits_capture)
+        self.keycaps.attach(attached=fits_keyboard)
         capture = fits_capture and (self.capture.presented or self.capture.alpha > 0)
         keyboard = fits_keyboard and (self.keycaps.presented or self.keycaps.alpha > 0)
         self.window.connections(left=keyboard, right=capture)
@@ -356,10 +372,12 @@ QMenu::separator {{ height: 1px; background: {colors.edge}; margin: 4px 10px; }}
         if self.closed:
             return
         now = self.observations.clock()
-        moving = [pill.advance(now) for pill in self.pills]
+        advancing = tuple(pill for pill in self.pills if pill.alpha != pill.fade_to)
+        moving = tuple(pill.advance(now) for pill in advancing)
         spinning = self.status.pulse(now, animate=self.visible and self.observations.motion())
-        self.position()
-        self.loop.watch(any(moving) or spinning)
+        if advancing:
+            self.position()
+        self.loop.watch(visible=any(moving) or spinning)
 
     def tick(self) -> None:
         if self.closed:
@@ -391,16 +409,23 @@ QMenu::separator {{ height: 1px; background: {colors.edge}; margin: 4px 10px; }}
                 self.status.facts(ambient)
                 self.window.adjustSize()
         visible_bounds = tuple(pill.bounds for pill in self.pills if pill.isVisible() and pill.bounds is not None)
-        self.sample_bounds = (Rect(min(rect.left for rect in visible_bounds), min(rect.top for rect in visible_bounds),
-                                   max(rect.right for rect in visible_bounds), max(rect.bottom for rect in visible_bounds))
-                              if visible_bounds else None)
+        self.sample_bounds = (
+            Rect(
+                min(rect.left for rect in visible_bounds),
+                min(rect.top for rect in visible_bounds),
+                max(rect.right for rect in visible_bounds),
+                max(rect.bottom for rect in visible_bounds),
+            )
+            if visible_bounds
+            else None
+        )
         # Sample outside the entire group: adjacent glass must not darken its neighbor.
         for sample in self.materials.read():
             if sample.bounds == self.sample_bounds:
                 for pill in self.pills:
                     pill.frost = sample.frost
         if now >= self.next_material:
-            self.next_material = now + .75
+            self.next_material = now + 0.75
             self.preference = self.observations.material()
             if self.preference is appearance.Material.GLASS and self.sample_bounds is not None:
                 self.materials.submit((self.sample_bounds,))
@@ -420,7 +445,7 @@ QMenu::separator {{ height: 1px; background: {colors.edge}; margin: 4px 10px; }}
             self.notification_service.dismiss(key)
 
     def notification_settings(self) -> None:
-        os.startfile('ms-settings:notifications')
+        os.startfile("ms-settings:notifications")
 
     def poll_notifications(self) -> None:
         if self.notification_service is not None:

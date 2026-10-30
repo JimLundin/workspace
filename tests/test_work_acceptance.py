@@ -41,12 +41,17 @@ def finished_meeting_task(tmp_path: Path, settings: Settings, errors: list[str])
     events = TranscriptEvents(archive, routines, on_error=errors.append, on_change=dispatch, clock=lambda: 30)
     events.recover(archive.journals())
     routines.enable(routine.id, at=20)
+
     def transcribe(audio: bytes, *, context: str) -> str:
         return TRANSCRIPT
 
     meetings = Meetings(
-        settings, lambda source: GeneratedCapture(1), archive=archive, transcribe_audio=transcribe,
-        on_recovery=events.recover, on_complete=events.completed,
+        settings,
+        lambda source: GeneratedCapture(1),
+        archive=archive,
+        transcribe_audio=transcribe,
+        on_recovery=events.recover,
+        on_complete=events.completed,
     )
     try:
         meetings.start(title="Release planning")
@@ -93,8 +98,12 @@ def test_finished_meeting_produces_one_verified_notes_file_and_survives_restart(
         ]
         machine, log = FakeMachine(), FakeWindow()
         execution = AgentExecution(
-            settings, machine, journal=lambda record: None, record=lambda record: None,
-            report_error=errors.append, close_background=machine.close_background,
+            settings,
+            machine,
+            journal=lambda record: None,
+            record=lambda record: None,
+            report_error=errors.append,
+            close_background=machine.close_background,
             workspace=Workspace(live_tree(tmp_path / "source"), tmp_path / "workspace"),
         )
         settled = threading.Event()
@@ -104,8 +113,14 @@ def test_finished_meeting_produces_one_verified_notes_file_and_survives_restart(
                 settled.set()
 
         controller = WorkController(
-            TaskStore(work_path), execution, owner="acceptance-worker", log=lambda claim: log, now=lambda: 40,
-            new_run_id=lambda: "meeting-notes-run", on_change=published, on_error=errors.append,
+            TaskStore(work_path),
+            execution,
+            owner="acceptance-worker",
+            log=lambda claim: log,
+            now=lambda: 40,
+            new_run_id=lambda: "meeting-notes-run",
+            on_change=published,
+            on_error=errors.append,
         )
         controller.start()
         try:

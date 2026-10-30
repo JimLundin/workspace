@@ -28,7 +28,12 @@ _CREATE_NO_WINDOW: Final = 0x0800_0000
 
 def _shortcut(vk: int) -> None:
     """Ctrl + a key, tagged so the layout lets it through."""
-    keys = [inputs.KeyStroke(_VK_CONTROL, True), inputs.KeyStroke(vk, True), inputs.KeyStroke(vk, False), inputs.KeyStroke(_VK_CONTROL, False)]
+    keys = [
+        inputs.KeyStroke(_VK_CONTROL, down=True),
+        inputs.KeyStroke(vk, down=True),
+        inputs.KeyStroke(vk, down=False),
+        inputs.KeyStroke(_VK_CONTROL, down=False),
+    ]
     inputs.send_keys(keys, MAGIC)
 
 

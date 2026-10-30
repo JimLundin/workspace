@@ -32,7 +32,7 @@ the tests retain header geometry, wrapping, hit targets and DPI checks.
 | `Ui.review` / `ReviewWindow` ("Change Workspace?") | No caller outside their own definitions; `WinMachine.review` delegates actual candidate review to the keeper | Remove unused entry point, dialog and its two stale signature migration entries. |
 | Keeper review/trial dialogs | `keeper.py` uses protected `keeper_ui.py` | Retain actual installation, trial and rollback ownership. |
 | Preview test's visible "Transcribing" caption requirement | Current toolbar deliberately presents a compact spinner, with speech state in its tooltip/accessibility | Remove the stale caption expectation; retain sample-to-real-view processing-state coverage. |
-| Previous notification/inbox/history panels and native canvas | Already removed; history uses the floating feed and canvas belongs to Shared Workspace | Keep retired; do not restore their implementations or tests. |
+| Previous notification/inbox/history panels and canvas implementation | Already removed; history uses the floating feed | Keep the retired implementations removed. The user's 29 October direction introduces a new native work canvas backed by the current catalog and shared bubble components; its owned integration is covered in `test_windows_work_panel.py`. |
 
 ## Cause and containment
 

@@ -35,6 +35,8 @@ class Menu(Enum):
     WORK = 14
     TASKBAR = 15
     FOLLOWUPS = 17
+    RESTART_ASSISTANT = 18
+    RESTART_AUTOMATION = 19
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -51,20 +53,29 @@ def menu_items(state: MenuState) -> tuple[MenuItem, ...]:
     status = {None: "not running", LayoutState.ON: "on", LayoutState.OFF: "off", LayoutState.QUIT: "not running"}[state.layout]
     running = state.layout in (LayoutState.ON, LayoutState.OFF)
     return (
-        MenuItem(Menu.TOGGLE_LAYOUT.value, f"Layout: {status}" + ("\tTap §" if running else ""),
-                 enabled=running, checked=state.layout is LayoutState.ON),
+        MenuItem(
+            Menu.TOGGLE_LAYOUT.value, f"Layout: {status}" + ("\tTap §" if running else ""), enabled=running, checked=state.layout is LayoutState.ON
+        ),
         MenuItem(Menu.RESTART_LAYOUT.value, "Restart layout" if running else "Start layout"),
         MenuItem(Menu.OVERLAY.value, "Keyboard overlay", checked=state.overlay_enabled),
-        MenuItem(Menu.KEYMAP.value, "Key map"), MenuItem(0),
+        MenuItem(Menu.KEYMAP.value, "Key map"),
+        MenuItem(0),
         MenuItem(Menu.ASK.value, "Ask…\tHold V + P"),
         MenuItem(Menu.AGENT.value, "Agent session\tHold V + L"),
         MenuItem(Menu.WORK.value, "Work…"),
         MenuItem(Menu.TASKBAR.value, "Toggle Windows taskbar\tWindows key"),
         MenuItem(Menu.STOP_AGENT.value, "Stop agent\tHold V + Ö", enabled=state.agent_running),
         MenuItem(Menu.MEETING.value, "Stop recording" if state.capturing else "Record a meeting"),
-        MenuItem(Menu.TRANSCRIPTS.value, "Transcripts"), MenuItem(Menu.FOLLOWUPS.value, "Meeting follow-up…"),
-        MenuItem(0), MenuItem(Menu.UNDO.value, "Undo the last update"), MenuItem(Menu.USAGE.value, "Usage report"),
-        MenuItem(Menu.LOGS.value, "Open logs folder"), MenuItem(0), MenuItem(Menu.QUIT.value, "Quit Workspace"),
+        MenuItem(Menu.TRANSCRIPTS.value, "Transcripts"),
+        MenuItem(Menu.FOLLOWUPS.value, "Meeting follow-up…"),
+        MenuItem(0),
+        MenuItem(Menu.UNDO.value, "Undo the last update"),
+        MenuItem(Menu.USAGE.value, "Usage report"),
+        MenuItem(Menu.LOGS.value, "Open logs folder"),
+        MenuItem(0),
+        MenuItem(Menu.RESTART_ASSISTANT.value, "Restart assistant"),
+        MenuItem(Menu.RESTART_AUTOMATION.value, "Restart automation"),
+        MenuItem(Menu.QUIT.value, "Quit Workspace"),
     )
 
 
@@ -96,11 +107,13 @@ def initialize_controls(handle: int, start_workers: Callable[[], None], effects:
 
 def meeting_file_job(path: Path, open_file: Callable[[Path], None], report_error: Callable[[str], None]) -> Callable[[], None]:
     """Keep the canonical path and defer shell effects to the controller's worker."""
+
     def open_saved_file() -> None:
         try:
             open_file(path)
         except OSError:
             report_error("Windows could not open this file. You can still review it in Meetings.")
+
     return open_saved_file
 
 

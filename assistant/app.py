@@ -7,28 +7,35 @@ its tool requests here without depending on either work storage or model calls.
 import contextlib
 import os
 import queue
-import sys
 import threading
 import time
 import traceback
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from enum import Enum, auto
 from pathlib import Path
 from typing import Final, Protocol, assert_never
 
 import keeper
 import usage
+from assistant.activity import ActivityTracker, ContextSnapshot, Observation
 from config import APPS
 from usage import DIRECTORY, Detail
-lazy from assistant import control_policy
-lazy from assistant.activity import ActivityTracker, ContextSnapshot, Observation
+lazy from assistant import activity, control_policy
+lazy from assistant.browser import Browser
+lazy from assistant.browser_session import Product
+lazy from assistant.canvas_activity import CanvasInstruction, CanvasRun
 lazy from assistant.communications_browser import TeamsWeb
-lazy from assistant.communications_service import Communications, windows_store
+lazy from assistant.communications_service import Communications
+lazy from assistant.communications_state import COMMUNICATIONS_STATE
 lazy from assistant.console_inbox import ConsoleInbox
 lazy from assistant.desktop import WinDesktop
 lazy from assistant.features import Assistant, switcher_windows
+lazy from assistant.feed_contracts import STORED_BOARD
+lazy from assistant.feed_research import Research
+lazy from assistant.feed_triage import Candidate
 lazy from assistant.feed_triage_service import Triage, classify
+lazy from assistant.feed_work import FeedWork
 lazy from assistant.icons import State, dot
 lazy from assistant.keymap import indicator_text
 lazy from assistant.lifecycle import Timings
@@ -41,17 +48,39 @@ lazy from assistant.meeting_workflow import MeetingWorkflow
 lazy from assistant.meetings import Meetings
 lazy from assistant.monitor_layout import MonitorLayout
 lazy from assistant.overlay import OverlayState, load_enabled, save_enabled
+lazy from assistant.personal_work_model import Correlator
+lazy from assistant.personal_work_service import PersonalWork
+lazy from assistant.personal_work_sources import BrowserSources
 lazy from assistant.recording_state import RecordingAction, RecordingState
 lazy from assistant.report import write_report
+lazy from assistant.state_store import windows_store
 lazy from assistant.tiling import GlazeWM
 lazy from assistant.ui import Ui
 lazy from assistant.work_agent import WorkAgent
-lazy from assistant.work_window import WorkSnapshot
+lazy from assistant.work_canvas_investigation import instruction_prompt
+lazy from assistant.work_canvas_store import CanvasStore
+lazy from assistant.work_window import ControlTask, WorkCommand, WorkSnapshot
 lazy from automation.bridge import BridgeClient
 lazy from automation.context import ContextStore
 lazy from automation.ipc import MeetingCommand, MeetingFailed, MeetingSucceeded, StartMeeting
+lazy from automation.personal_work import (
+    PERSONAL_REQUEST,
+    AddDocument,
+    AddWebPage,
+    DismissWork,
+    OpenWorkSource,
+    PersonalStore,
+    PersonalView,
+    RefreshPersonalWork,
+    RestoreWork,
+    SaveWork,
+    SourceKind,
+    UnlinkWork,
+    WorkThread,
+)
 lazy from automation.routines import RoutineStore
 lazy from automation.store import TaskStore
+lazy from automation.task import Control
 lazy from keeper import ASSISTANT_WINDOW
 lazy from miryoku.layout import Layer
 lazy from protocol import WM_INDICATOR, WM_KEY_STATE, WM_LAYOUT_STATE, WM_REQUEST, LayoutState, Tool, decode_indicator
@@ -70,12 +99,6 @@ def log(text: str) -> None:
         LOG.parent.mkdir(parents=True, exist_ok=True)
         with LOG.open("a", encoding="utf-8") as file:
             file.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')} {text}\n")
-
-
-def pythonw() -> str:
-    """The windowless Python, so the layout doesn't open a console."""
-    candidate = Path(sys.executable).with_name("pythonw.exe")
-    return str(candidate) if candidate.exists() else sys.executable
 
 
 # ---- the tray icon ---------------------------------------------------------------------
@@ -116,7 +139,7 @@ def foreground_context() -> Observation:
         return "unavailable"
     if windows.process_id(handle) == os.getpid():
         return "workspace"
-    return Window(handle, windows.title(handle), windows.exe(handle), windows.is_minimized(handle))
+    return Window(handle, windows.title(handle), windows.exe(handle), minimized=windows.is_minimized(handle))
 
 
 # ---- the program -----------------------------------------------------------------------
@@ -181,6 +204,7 @@ class AssistantApp:
         "mic_event",
         "monitor_layout",
         "overlay",
+        "personal",
         "settings",
         "startup",
         "startup_effects",
@@ -199,7 +223,8 @@ class AssistantApp:
         self._recording_phase = "idle"
         self.ui = ui
         self.ui.configure_controls(
-            on_agent_waiting=lambda waiting: self.show(State.NEEDS_INPUT if waiting else State.AGENT), on_recording=self.recording_action,
+            on_agent_waiting=lambda waiting: self.show(State.NEEDS_INPUT if waiting else State.AGENT),
+            on_recording=self.recording_action,
         )
         self.overlay = OverlayState(enabled=load_enabled())
         self.jobs: queue.Queue[Callable[[], None] | None] = queue.Queue()
@@ -209,13 +234,15 @@ class AssistantApp:
         self.tiling = GlazeWM()
         self.monitor_layout = MonitorLayout(self.tiling, self.problem)
         mic = audio.Microphone(RATE, MAX_SECONDS, self.mic_event)
-        self.desktop = WinDesktop(self.window.handle, mic, self.ui, on_state=self.show, on_notify=self.tray.notify,
-                                  on_problem=self.problem, tiling=self.tiling)
+        self.desktop = WinDesktop(
+            self.window.handle, mic, self.ui, on_state=self.show, on_notify=self.tray.notify, on_problem=self.problem, tiling=self.tiling
+        )
         self.timings.mark("control window and microphone")
         missing = settings if isinstance(settings, Missing) else None
         usable = settings if isinstance(settings, Settings) else Settings("", "", "", "", "", "", "")
         self.settings = usable
         self.activity: ActivityTracker
+
         def context() -> ContextSnapshot:
             # The tracker and runner refer to each other; observe after composition.
             return self.activity.snapshot()
@@ -225,50 +252,84 @@ class AssistantApp:
         routines = RoutineStore(tasks.path)
         saved_context = ContextStore(tasks.path)
         self.agent = WorkAgent(
-            tasks, routines, saved_context, BridgeClient(work_folder),
+            tasks,
+            routines,
+            saved_context,
+            BridgeClient(work_folder),
             lambda runner: self.ui.agent(
-                None, runner.stop, on_problem=self.problem, on_reset=runner.new_conversation, on_submit=runner.start,
-                on_work=self.show_work, reveal=False,
+                None,
+                runner.stop,
+                on_problem=self.problem,
+                on_reset=runner.new_conversation,
+                on_submit=runner.start,
+                on_work=self.show_work,
+                reveal=False,
             ),
-            on_snapshot=self.work_changed, on_done=self.agent_done, report_error=log,
-            on_start=lambda: self.show(State.AGENT), context=context, meeting=self.meeting_command,
+            on_snapshot=self.work_changed,
+            on_done=self.agent_done,
+            report_error=log,
+            on_start=lambda: self.show(State.AGENT),
+            context=context,
+            meeting=self.meeting_command,
         )
         self.timings.mark("work frontend")
-        self.communications = Communications(TeamsWeb(DIRECTORY / "browser-profile"),
-                                             windows_store(DIRECTORY / "communications.bin"), self.ui.communications_changed,
-                                             self.ui.dismiss_system_notice)
+        self.activity = ActivityTracker(
+            foreground_context,
+            self.agent.running,
+            policy=activity.Policy(enabled=os.environ.get("WORKSPACE_AGENT_CONTEXT", "recent").lower() != "off"),
+        )
+        self.communications = Communications(
+            TeamsWeb(DIRECTORY / "browser-profile"),
+            windows_store(DIRECTORY / "communications.bin", COMMUNICATIONS_STATE),
+            self.ui.communications_changed,
+            self.ui.dismiss_system_notice,
+        )
         self.ui.configure_communications(self.communications.submit)
         self.consoles = ConsoleInbox(DIRECTORY / "inbox-bridge.json", self.ui.console_changed)
         self.ui.configure_console(self.consoles.command)
-        self.triage = Triage(DIRECTORY / "work-feed-bridge.json", windows_store(DIRECTORY / "work-feed.bin"),
-                             self.ui.triage_changed, lambda batch, rules: classify(usable, batch, rules), self.consoles.command,
-                             submit=self.agent.submit_identified)
+        self.personal = self.create_personal(tasks)
+        self.triage = Triage(
+            DIRECTORY / "work-feed-bridge.json",
+            windows_store(DIRECTORY / "work-feed.bin", STORED_BOARD),
+            self.ui.triage_changed,
+            self.review_feed,
+            self.consoles.command,
+            submit=self.agent.submit_identified,
+            work=FeedWork(tasks, saved_context, context),
+            personal=self.personal,
+            canvas=self.ui.canvas_command,
+        )
         self.ui.configure_triage(self.triage.observe, self.triage.dismiss, self.triage.choose_from_ui)
         self.timings.mark("communications and feed bridges")
         archive = MeetingArchive(DIRECTORY / "meetings")
         followup_folder = work_folder / "meeting-followups"
         self.followups = MeetingWorkflow(
-            archive, MeetingRequests(followup_folder), FollowupStore(followup_folder / "packages"),
-            submit_identified=self.agent.submit_identified, read_work=self.agent.snapshot,
+            archive,
+            MeetingRequests(followup_folder),
+            FollowupStore(followup_folder / "packages"),
+            submit_identified=self.agent.submit_identified,
+            read_work=self.agent.snapshot,
             retain_work=lambda ids: self.agent.watch(ids, owner="meetings"),
-            publish=self.ui.meetings_changed, report_error=log,
+            publish=self.ui.meetings_changed,
+            report_error=log,
         )
         self.ui.configure_meetings(self.followups, self.open_meeting_file)
         events = TranscriptEvents(archive, routines, on_error=log, on_change=self.refresh_work)
         self.meetings = Meetings(
-            usable, lambda source: recording.MeetingAudio(computer_audio=source == "both"), archive=archive,
-            on_update=self.recording_changed, on_recovery=events.recover, on_complete=events.completed,
+            usable,
+            lambda source: recording.MeetingAudio(computer_audio=source == "both"),
+            archive=archive,
+            on_update=self.recording_changed,
+            on_recovery=events.recover,
+            on_complete=events.completed,
         )
         self.timings.mark("meeting services")
-        self.activity = ActivityTracker(
-            foreground_context, self.agent.running, enabled=os.environ.get("WORKSPACE_AGENT_CONTEXT", "recent").lower() != "off",
-        )
         self.assistant = Assistant(
             self.desktop,
             usable,
             record=self.record,
             submit=self.jobs.put,
-            run_agent=self.agent.voice,
+            run_agent=self.voice_agent,
             show_agent=self.agent.show,
             stop_agent=self.agent.stop,
             missing=missing,
@@ -277,20 +338,77 @@ class AssistantApp:
         self.capture_timer: int | None = None
         """What the layout last said; None until it does."""
         self.worker = threading.Thread(target=self.work, name="worker", daemon=True)
-        self.startup = WorkerStartup((self.activity.start, self.worker.start, self.agent.start_worker,
-                                      self.communications.start, self.followups.start, self.meetings.start_worker,
-                                      self.monitor_layout.start))
+        self.startup = WorkerStartup(
+            (
+                self.activity.start,
+                self.worker.start,
+                self.agent.start_worker,
+                self.personal.start,
+                self.communications.start,
+                self.followups.start,
+                self.meetings.start_worker,
+                self.monitor_layout.start,
+            )
+        )
         if missing is not None:
             self.tray.notify("Workspace", f"The AI tools need {', '.join(missing.names)}; the layout works without them.", warning=True)
 
     # ---- running -----------------------------------------------------------------------
 
+    def create_personal(self, tasks: TaskStore) -> PersonalWork:
+        canvas = CanvasStore(tasks.path.parent / "canvas.sqlite3")
+        self.ui.configure_canvas(
+            canvas,
+            self.agent.notify_canvas,
+            lambda run: self.continue_thread(canvas, run),
+            autonomous=bool(self.settings.api_key and self.settings.base_url),
+        )
+        self.agent.watch(tuple(run.task_id for run in canvas.read().runs), owner="canvas")
+        if self.settings.api_key and self.settings.base_url:
+            # Recover only the crash window between binding and task commit.
+            # Existing task prompts may have been redirected by the user.
+            for run in canvas.read().runs:
+                if (run.evidence is not None or isinstance(run.intent, CanvasInstruction)) and tasks.get(run.task_id) is None:
+                    self.ui.post(self.canvas_recovery(canvas, run))
+        return PersonalWork(
+            PersonalStore(tasks.path),
+            BrowserSources(Browser(DIRECTORY / "browser-profile", source=Product.EDGE)),
+            self.personal_changed,
+            model=Correlator(self.settings) if self.settings.api_key and self.settings.base_url else None,
+            dismissed=self.stop_dismissed_work,
+        )
+
+    def stop_dismissed_work(self, work: WorkThread) -> None:
+        """The committed user dismissal owns cancellation of only its research."""
+        canvas = CanvasStore(DIRECTORY / "work" / "canvas.sqlite3")
+        for run in canvas.read().runs:
+            if run.work_id == work.id:
+                self.agent.command(ControlTask(run.task_id, Control.CANCEL))
+
+    def canvas_recovery(self, canvas: CanvasStore, run: CanvasRun) -> Callable[[object], None]:
+        def recover(_root: object) -> None:
+            self.continue_thread(canvas, run)
+
+        return recover
+
     def start_background(self) -> None:
         self.startup.start()
         if os.environ.get("WORKSPACE_DESKTOP", "on").lower() != "off":
-            self.ui.desktop(show_agent=self.agent.show, show_work=self.show_work, stop=self.stop_requested,
-                            overlay=self.toggle_overlay, menu=self.request_menu, on_problem=self.problem, audio_level=self.desktop.mic.level,
-                            tiling=self.tile_from_menu)
+            # Prepare Qt controls while starting the desktop, so the first
+            # canvas click reuses the current native scene and font resources.
+            work = self.ui.work(self.work_command, on_problem=self.problem, reveal=False)
+            work.publish(replace(self.agent.snapshot(), personal=self.personal.snapshot()))
+            work.prepare()
+            self.ui.desktop(
+                show_agent=self.agent.show,
+                show_work=self.show_work,
+                stop=self.stop_requested,
+                overlay=self.toggle_overlay,
+                menu=self.request_menu,
+                on_problem=self.problem,
+                audio_level=self.desktop.mic.level,
+                tiling=self.tile_from_menu,
+            )
 
     def run(self) -> None:
         self.capture_timer = control_policy.initialize_controls(self.window.handle, self.start_background, self.startup_effects)
@@ -306,6 +424,8 @@ class AssistantApp:
             self.capture_timer = None
         self.assistant.stop_capture(discard=True, reason="shutdown")
         timings.mark("stop capture")
+        self.personal.close()
+        timings.mark("personal work")
         self.triage.close()
         timings.mark("feed triage")
         self.consoles.close()
@@ -350,16 +470,18 @@ class AssistantApp:
             self.switch_windows()
             return
         if tool is Tool.COPY_TRANSCRIPT:
-            self.assistant.handle(tool, True)
+            self.assistant.handle(tool, down=True)
             return
         if tool is Tool.TILE_BALANCE:
             threading.Thread(target=self.monitor_layout.balance, name="window redistribution", daemon=True).start()
             return
+
         def arrange() -> None:
             try:
                 self.desktop.arrange(tool, target=hwnd)
             except OSError as error:
                 self.problem(str(error))
+
         self.jobs.put(arrange)
 
     def switch_windows(self) -> None:
@@ -372,7 +494,9 @@ class AssistantApp:
                     pass
                 if not windows.focus(handle):
                     self.problem("That window is no longer available or Windows refused to focus it.")
+
             threading.Thread(target=activate, name="window navigation", daemon=True).start()
+
         def collect() -> None:
             try:
                 managed = self.tiling.managed_handles()
@@ -381,6 +505,7 @@ class AssistantApp:
             visible = frozenset(w.handle for w in windows.windows())
             all_windows = tuple(w for w in windows.windows(include_cloaked=True) if windows.process_id(w.handle) != os.getpid())
             self.ui.switch_windows(switcher_windows(all_windows, visible, managed), focus)
+
         threading.Thread(target=collect, name="window list", daemon=True).start()
 
     def stop_requested(self) -> None:
@@ -406,7 +531,7 @@ class AssistantApp:
             state = State.LISTENING
         if state in (State.READY, State.LAYOUT_OFF) and self.agent.running():
             state = State.NEEDS_INPUT if self.agent.window is not None and self.agent.window.waiting else State.AGENT
-        self.ui.desktop_state(state)
+        self.ui.desktop_state(state, agent_speaking=self.assistant.listening is Tool.AGENT_VOICE)
         self.tray.show(State.RECORDING if self.meetings.snapshot().capturing else state)
 
     def recording_changed(self, state: RecordingState) -> None:
@@ -444,11 +569,72 @@ class AssistantApp:
         self.agent.refresh()
         self.followups.refresh()
 
+    def review_feed(self, batch: tuple[Candidate, ...], rules: tuple[str, ...]) -> str:
+        research = Research(self.settings, self.triage.research_context, self.triage.research_conversation, stop=self.triage.closed)
+        return classify(self.settings, batch, rules, working_context=self.triage.working_context(batch), research=research)
+
     def work_changed(self, snapshot: WorkSnapshot) -> None:
-        self.ui.work(self.agent.command, on_problem=self.problem, reveal=False).publish(snapshot)
+        self.ui.work(self.work_command, on_problem=self.problem, reveal=False).publish(replace(snapshot, personal=self.personal.snapshot()))
+        self.ui.observe_canvas_work(snapshot)
+        self.triage.context_changed(snapshot.tasks, snapshot.context)
+
+    def personal_changed(self, view: PersonalView) -> None:
+        self.ui.work(self.work_command, on_problem=self.problem, reveal=False).publish(replace(self.agent.snapshot(), personal=view))
+        self.ui.observe_canvas(view.catalog)
+
+    def continue_thread(self, canvas: CanvasStore, run: CanvasRun) -> None:
+        self.agent.watch(tuple(binding.task_id for binding in canvas.read().runs), owner="canvas")
+        match run.intent:
+            case CanvasInstruction():
+                self.agent.submit_identified(run.task_id, instruction_prompt(run))
+                return
+            case _:
+                pass
+        title = next((work.definition.title for work in self.personal.snapshot().catalog.works if work.id == run.work_id), run.work_id)
+        self.agent.submit_identified(
+            run.task_id,
+            f"Research and build the canvas for {title}.\n"
+            f"Continue work thread {run.work_id} on the local desktop canvas. Read work_canvas_read and its current "
+            "work_items_list representation and linked sources. Inspect relevant browser conversations and their document references; "
+            "use outlook_web_documents and outlook_web_open_document for rendered attachments. Find referenced documents in "
+            "browser resources or local files, register their verified references with work_items_add_document, compare version evidence, "
+            "and use work_canvas_update to collect/nest the sources and useful findings under this work. Arrange with the shared layout. "
+            "Research the next useful step and update the work thread with what you learn. Routine collection stays quiet. "
+            "Ask the user for clarification when missing input prevents progress; continue this same work after the answer. "
+            "Keep your progress and findings on the work representation.",
+        )
+
+    def work_command(self, command: WorkCommand) -> None:
+        match command:
+            case AddDocument() | AddWebPage() | DismissWork() | RestoreWork() | SaveWork() | UnlinkWork():
+                validated = PERSONAL_REQUEST.validate_json(PERSONAL_REQUEST.dump_json(command))
+                match validated:
+                    case AddDocument() | AddWebPage() | DismissWork() | RestoreWork() | SaveWork() | UnlinkWork():
+                        self.personal.enqueue(validated)
+                    case _:
+                        raise ValueError("Invalid personal work edit.")
+            case RefreshPersonalWork.REFRESH:
+                self.personal.refresh()
+            case OpenWorkSource(source_id):
+                source = next((source for source in self.personal.snapshot().catalog.sources if source.id == source_id), None)
+                if source is None:
+                    raise ValueError("This source is no longer available. Refresh My work.")
+                if source.kind in (SourceKind.DOCUMENT, SourceKind.WEB_PAGE):
+                    self.ui.open_reference(source.url)
+                    return
+                self.agent.start(
+                    f"Open in {source.kind.value.capitalize()}: {source.title}\n"
+                    f"Show this exact original source in the user's browser. Application: {source.kind.value}; "
+                    f"source identity: {source.identity}; observed URL: {source.url}. "
+                    "Use browser_tabs to find the signed-in page and the dedicated app tools to select its exact identity, "
+                    "then show the page. If it isn't rendered, search or navigate using its observed title/URL and verify "
+                    "the identity before opening. Preserve existing drafts. This request only opens the source."
+                )
+            case _:
+                self.agent.command(command)
 
     def show_work(self) -> None:
-        self.ui.work(self.agent.command, on_problem=self.problem)
+        self.ui.work(self.work_command, on_problem=self.problem)
         self.agent.refresh()
 
     def show_meetings(self) -> None:
@@ -483,6 +669,9 @@ class AssistantApp:
         if self.assistant.listening is None:
             self.assistant.idle()
 
+    def voice_agent(self, text: str) -> None:
+        self.ui.voice_agent(text, self.agent.voice)
+
     def problem(self, message: str) -> None:
         log(message)
         system.beep(system.MB_ICONEXCLAMATION)
@@ -492,7 +681,7 @@ class AssistantApp:
         self.ui.show_keyboard_overlay(self.overlay.layer, self.overlay.title, work, visible=self.overlay.visible, pressed=self.overlay.pressed)
 
     def display_overlay(self, change: control_policy.OverlayChange) -> None:
-        self.overlay.enabled = change.enabled
+        self.overlay = replace(self.overlay, enabled=change.enabled)
         self.show_overlay(indicator_area())
 
     def persist_overlay(self, change: control_policy.OverlayChange) -> None:
@@ -514,8 +703,8 @@ class AssistantApp:
         self.assistant.layout_on = self.layout is LayoutState.ON
         if not self.assistant.layout_on:
             self.assistant.stop_capture(reason="layout_off")
-        self.ui.desktop_layout(self.assistant.layout_on)
-        self.overlay.set_layout(self.assistant.layout_on)
+        self.ui.desktop_layout(enabled=self.assistant.layout_on)
+        self.overlay = self.overlay.set_layout(on=self.assistant.layout_on)
         self.ui.show_pressed_keys(self.overlay.pressed, reset=True)
         self.show_overlay(work)
         if self.assistant.listening is None:
@@ -533,7 +722,7 @@ class AssistantApp:
                 action = control_policy.control_event(control_policy.WindowInput(message, wparam, lparam), APPS)
                 match action:
                     case control_policy.PhysicalKey(scancode=scancode, down=down):
-                        self.overlay.key(scancode, down)
+                        self.overlay = self.overlay.key(scancode, down=down)
                         self.ui.show_pressed_keys(self.overlay.pressed, reset=action.reset)
                     case control_policy.Action.OPEN_INBOX:
                         self.ui.open_inbox(self.agent.show)
@@ -544,7 +733,7 @@ class AssistantApp:
                     case control_policy.Action.BALANCE_WINDOWS:
                         self.tile_from_menu(Tool.TILE_BALANCE, 0)
                     case control_policy.FeatureRequest(request=request, down=down):
-                        self.assistant.handle(request, down)
+                        self.assistant.handle(request, down=down)
                     case None:
                         pass
                     case _:
@@ -555,7 +744,7 @@ class AssistantApp:
                 layer = next((layer for layer in Layer if layer.value == index), None)
                 work = indicator_area()
                 self.ui.indicate(indicator_text(layer, locked=locked, caps_word=caps_word), work)
-                self.overlay.indicate(layer, locked=locked, caps_word=caps_word)
+                self.overlay = self.overlay.indicate(layer, locked=locked, caps_word=caps_word)
                 self.show_overlay(work)
                 return 0
             if message == WM_LAYOUT_STATE:
@@ -575,8 +764,9 @@ class AssistantApp:
         system.post_message(self.window.handle, WM_SHOW_MENU, 0, 0)
 
     def menu(self) -> None:
-        state = control_policy.MenuState(layout=self.layout, overlay_enabled=self.overlay.enabled,
-                                         agent_running=self.agent.running(), capturing=self.meetings.snapshot().capturing)
+        state = control_policy.MenuState(
+            layout=self.layout, overlay_enabled=self.overlay.enabled, agent_running=self.agent.running(), capturing=self.meetings.snapshot().capturing
+        )
         items = control_policy.menu_items(state)
         match shell.show_menu(self.window.handle, items):
             case control_policy.Menu.TOGGLE_LAYOUT.value:
@@ -584,14 +774,18 @@ class AssistantApp:
                     self.problem("Couldn't reach the layout. Try Start layout or Restart layout.")
             case control_policy.Menu.RESTART_LAYOUT.value:
                 keeper.ask("restart_layout")
+            case control_policy.Menu.RESTART_ASSISTANT.value:
+                keeper.ask("restart_assistant")
+            case control_policy.Menu.RESTART_AUTOMATION.value:
+                keeper.ask("restart_automation")
             case control_policy.Menu.OVERLAY.value:
                 self.toggle_overlay()
             case control_policy.Menu.KEYMAP.value:
                 self.ui.show_keymap()
             case control_policy.Menu.ASK.value:
-                self.assistant.handle(Tool.ASK, True)
+                self.assistant.handle(Tool.ASK, down=True)
             case control_policy.Menu.AGENT.value:
-                self.assistant.handle(Tool.AGENT_TYPED, True)
+                self.assistant.handle(Tool.AGENT_TYPED, down=True)
             case control_policy.Menu.WORK.value:
                 self.show_work()
             case control_policy.Menu.TASKBAR.value:

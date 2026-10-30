@@ -4,6 +4,7 @@ import asyncio
 import contextlib
 import ssl
 import threading
+from dataclasses import dataclass
 from math import isfinite
 
 from pydantic import TypeAdapter
@@ -18,6 +19,16 @@ class GraphError(OSError):
     pass
 
 
+@dataclass(frozen=True, slots=True)
+class Request:
+    """One HTTP exchange; credentials and payload remain private to transport."""
+
+    method: str
+    url: str
+    headers: tuple[tuple[str, str], ...] = ()
+    body: bytes | None = None
+
+
 class Http:
     __slots__ = ("socket_timeout", "timeout")
 
@@ -27,18 +38,22 @@ class Http:
         self.timeout, self.socket_timeout = timeout, socket_timeout
 
     def request(
-        self, method: str, url: str, headers: dict[str, str], body: bytes | None, cancel: threading.Event,
+        self,
+        request: Request,
+        cancel: threading.Event,
     ) -> tuple[int, dict[str, Json]]:
         if cancel.is_set():
             raise GraphError("Stopped before contacting Microsoft.")
-        return asyncio.run(self._request(method, url, headers, body, cancel))
+        return asyncio.run(self._request(request, cancel))
 
     async def _request(
-        self, method: str, url: str, headers: dict[str, str], body: bytes | None, cancel: threading.Event,
+        self,
+        request: Request,
+        cancel: threading.Event,
     ) -> tuple[int, dict[str, Json]]:
         async def receive() -> tuple[int, dict[str, Json]]:
             async with httpx.AsyncClient(verify=ssl.create_default_context(), timeout=self.socket_timeout, follow_redirects=False) as client:
-                return await self._receive(client, method, url, headers, body)
+                return await self._receive(client, request)
 
         pending = asyncio.create_task(receive())
         try:
@@ -46,7 +61,7 @@ class Http:
                 while not pending.done():
                     if cancel.is_set():
                         raise GraphError("Stopped. A request already sent to Microsoft may have completed; check its result before retrying.")
-                    await asyncio.sleep(.05)
+                    await asyncio.sleep(0.05)
                 return await pending
         except (httpx.HTTPError, ValueError, TimeoutError) as error:
             # Never include request headers, response bodies or token endpoint
@@ -59,10 +74,12 @@ class Http:
                 await pending
 
     async def _receive(
-        self, client: httpx.AsyncClient, method: str, url: str, headers: dict[str, str], body: bytes | None,
+        self,
+        client: httpx.AsyncClient,
+        request: Request,
     ) -> tuple[int, dict[str, Json]]:
-        """The HTTP boundary pairs a request's verb, endpoint, headers and body with its live client."""
-        async with client.stream(method, url, headers=headers, content=body) as response:
+        """Read one bounded response without redirects or automatic retries."""
+        async with client.stream(request.method, request.url, headers=dict(request.headers), content=request.body) as response:
             data = bytearray()
             async for chunk in response.aiter_bytes():
                 data.extend(chunk)

@@ -73,7 +73,7 @@ def test_completed_turns_follow_filters_and_active_turns_stay_reachable() -> Non
     assert observe(finished, Query(source=Source.AGENTS, search="totals")) == selected
     assert observe(finished, Query(source=Source.MAIL)) == ()
     assert observe(finished, Query(search="unrelated")) == ()
-    working, = observe(active, Query(source=Source.MAIL, search="unrelated"))
+    (working,) = observe(active, Query(source=Source.MAIL, search="unrelated"))
     assert isinstance(working, Turn) and isinstance(working.state, Working)
 
 
@@ -87,7 +87,7 @@ def test_thinking_keeps_its_actions_in_one_stable_bubble_in_order() -> None:
     session = transition(Session(identity="one"), Begin("Find the workbook", 1))
     stack = advance(Stack(), session, 100)
     assert [toast.key for toast in stack.toasts] == [TurnKey(0)]
-    work, = stack.toasts
+    (work,) = stack.toasts
     turn = bubble(stack)
     first = turn.entries[0]
     assert isinstance(first, Entry) and isinstance(first.message, ChatMessage)
@@ -348,11 +348,11 @@ def test_hover_preserves_remaining_reading_time_and_reset_discards_old_timers() 
     session = transition(Session(identity="one"), Said("A short reply", 1))
     stack = advance(Stack(), session, 100)
     key = stack.toasts[0].key
-    stack = hover(stack, key, True, 105)
+    stack = hover(stack, key, inside=True, now=105)
     assert stack.toasts[0].lifetime == Paused(7)
     stack = advance(stack, session, 5000)
     assert stack.toasts and next_expiry(stack) is None
-    stack = hover(stack, key, False, 5000)
+    stack = hover(stack, key, inside=False, now=5000)
     assert next_expiry(stack) == 5007 and not advance(stack, session, 5007).toasts
     session = transition(Session(identity="two"), Said("The new conversation", 2))
     reset = advance(stack, session, 5008)
@@ -364,7 +364,7 @@ def test_unread_content_stays_through_updates_then_gets_a_full_expiry_delay() ->
     session = transition(transition(Session(identity="one"), Begin("Read it", 1)), Answer("stream", "A long reply", 2))
     stack = advance(Stack(), session, 100)
     key = TurnKey(0)
-    stack = reading_hold(stack, key, True, 100, busy=True, hovered=False)
+    stack = reading_hold(stack, key, reading=True, now=100, busy=True, hovered=False)
     session = transition(session, Answer("stream", "A long reply with its ending.", 3, StreamState.COMPLETE))
     stack = advance(stack, session, 100.5)  # New output while busy must retain the unread hold.
     session = transition(session, Finished())
@@ -372,9 +372,9 @@ def test_unread_content_stays_through_updates_then_gets_a_full_expiry_delay() ->
     stack = advance(stack, session, 10000)
     assert len(stack.toasts) == 1 and stack.toasts[0].lifetime is Held.READING
     assert next_expiry(stack) is None
-    stack = reading_hold(stack, key, False, 10001, busy=False, hovered=True)
+    stack = reading_hold(stack, key, reading=False, now=10001, busy=False, hovered=True)
     assert stack.toasts[0].lifetime == Paused(12)
-    stack = hover(stack, key, False, 20000)
+    stack = hover(stack, key, inside=False, now=20000)
     assert next_expiry(stack) == 20012
     assert not advance(stack, session, 20012).toasts
 
