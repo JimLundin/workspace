@@ -291,6 +291,7 @@ def test_meaningful_rejection_records_reason_and_revision_without_completing_or_
                 "solutions": list[Json]([{"label": "Check", "kind": "check", "detail": "Check it."}] * 2),
             },
         ),
+        ("work_feed_update", {"operation": "rule", "text": "Keep budget notices quiet.\x00"}),
         ("work_feed_answer", {"request_id": "console", "question_index": 32, "text": "Revenue"}),
     )
     for tool, values in invalid:

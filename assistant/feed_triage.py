@@ -354,19 +354,18 @@ def edited(board: Board, edit: BoardEdit, observation: EditObservation) -> Board
     """Apply one explicit user edit, reconcile it with live sources and record its decision once."""
     match edit:
         case SaveRule(rule):
-            return _decided(
-                _refiltered(board, (*(value for value in board.rules if value != rule), rule)[-40:], observation), edit, None, observation
-            )
+            prior, changed = None, _refiltered(board, (*(value for value in board.rules if value != rule), rule)[-40:], observation)
         case ForgetRule(rule):
-            return _decided(_refiltered(board, tuple(value for value in board.rules if value != rule), observation), edit, None, observation)
+            prior, changed = None, _refiltered(board, tuple(value for value in board.rules if value != rule), observation)
         case ClearRules():
-            return _decided(_refiltered(board, (), observation), edit, None, observation)
+            prior, changed = None, _refiltered(board, (), observation)
         case _:
             prior = next((item for item in board.items if item.identity == edit.item), None)
             if prior is None:
                 raise ValueError("That work item is no longer current. Read the feed again.")
-            changed = replace(board, items=tuple(_handled(item, edit) if item.identity == prior.identity else item for item in board.items))
-            return _decided(reconcile(changed, observation.candidates), edit, prior, observation)
+            handled = replace(board, items=tuple(_handled(item, edit) if item.identity == prior.identity else item for item in board.items))
+            changed = reconcile(handled, observation.candidates)
+    return _decided(changed, edit, prior, observation)
 
 
 def _refiltered(board: Board, rules: tuple[str, ...], observation: EditObservation) -> Board:

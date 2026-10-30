@@ -11,8 +11,10 @@ from assistant.llm import Json
 type Label = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=32)]
 type Detail = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=1200)]
 type Priority = Annotated[int, Field(strict=True, ge=0, le=2)]
-type ItemIdentity = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=128)]
-type Choice = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=32)]
+type ItemIdentity = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=128, pattern=r"^[^\x00]+$")]
+type Choice = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=32, pattern=r"^[^\x00]+$")]
+# Command text becomes recorded decision text, whose saved contract forbids NUL.
+type CommandText = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=1200, pattern=r"^[^\x00]+$")]
 
 
 @dataclass(frozen=True, slots=True)
@@ -92,19 +94,19 @@ class ChooseSolution:
 class AnswerConsole:
     request_id: ItemIdentity
     question_index: Annotated[int, Field(strict=True, ge=0, lt=32)]
-    text: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=4096)]
+    text: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=4096, pattern=r"^[^\x00]+$")]
     operation: Literal["console_answer"] = "console_answer"
 
 
 @dataclass(frozen=True, slots=True)
 class SaveRule:
-    text: Detail
+    text: CommandText
     operation: Literal["rule"] = "rule"
 
 
 @dataclass(frozen=True, slots=True)
 class ForgetRule:
-    text: Detail
+    text: CommandText
     operation: Literal["forget_rule"] = "forget_rule"
 
 
@@ -135,7 +137,7 @@ class DismissItem:
 class RejectProposal:
     item: ItemIdentity
     revision: ItemIdentity
-    text: Detail
+    text: CommandText
     operation: Literal["reject"] = "reject"
 
 
@@ -144,8 +146,8 @@ class ReviseProposal:
     """The user's correction; omitted priority keeps the current one, omitted solutions plan the suggestion."""
 
     item: ItemIdentity
-    text: Detail
-    question: Annotated[str, StringConstraints(strip_whitespace=True, max_length=600)] = ""
+    text: CommandText
+    question: Annotated[str, StringConstraints(strip_whitespace=True, max_length=600, pattern=r"^[^\x00]*$")] = ""
     priority: Priority | None = None
     solutions: Annotated[ProposedSolutions, Field(min_length=1)] | None = None
     operation: Literal["propose"] = "propose"
