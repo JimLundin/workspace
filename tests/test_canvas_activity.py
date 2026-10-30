@@ -21,13 +21,14 @@ from assistant.canvas_activity import (
     important_changes,
     redirect_session,
 )
+from assistant.llm import Json
 from assistant.notifications import Tone, active, observe, tone
 from assistant.work_canvas import WorkCanvas
 from assistant.work_canvas_model import DOCUMENT, CanvasCollection, CanvasDocument, CanvasNote, Placement, observe_activity
 from assistant.work_window import ReplyProblem, WorkSnapshot
-from automation.actions import plan
+from automation.actions import Change, Operation
 from automation.personal_work import Catalog, SourceKind, WorkDefinition, WorkState, WorkThread
-from automation.task import ActionReturned, ActionSpec, ActionUncertain, ActionVerified, Completed, RequestSource, Waiting
+from automation.task import ActionReturned, ActionSpec, ActionUncertain, ActionVerified, Completed, NoVerification, RequestSource, Waiting
 from tests.personal_work_fixture import source
 from tests.test_work_agent import WorkRig
 from tests.test_work_canvas import local_canvas
@@ -142,6 +143,10 @@ def test_startup_removes_retired_fetch_projections_from_the_saved_canvas(tmp_pat
     assert saved(store.path).activity == (finding,)
 
 
+def attempted(tool: str, arguments: dict[str, Json]) -> ActionSpec:
+    return Change(()).specification(Operation.of(tool, arguments), NoVerification.NONE)
+
+
 def test_action_history_stays_out_of_the_canvas_while_prepared_content_remains(tmp_path: Path) -> None:
     # Defect: observed action attempts or acknowledgments still become cards,
     # or suppressing the ledger also removes actual prepared content.
@@ -152,13 +157,11 @@ def test_action_history_stays_out_of_the_canvas_while_prepared_content_remains(t
         claim = rig.tasks.claim("worker", "run", at=2)
         assert claim is not None
         canvas.save(CanvasDocument(runs=(CanvasRun(task.id, "work:atlas"),)))
-        fetch_spec = plan("browser_open", {"url": "https://example.test/research"})
-        assert isinstance(fetch_spec, ActionSpec)
+        fetch_spec = attempted("browser_open", {"url": "https://example.test/research"})
         fetch = rig.tasks.begin_action(claim.run, "fetch", fetch_spec, at=2.5)
         assert fetch is not None
         rig.tasks.finish_action(fetch.id, ActionReturned("Fetched a page"), at=2.6)
-        draft_spec = plan("outlook_web_draft_reply", {"body": "Proposed handoff"})
-        assert isinstance(draft_spec, ActionSpec)
+        draft_spec = attempted("outlook_web_draft_reply", {"body": "Proposed handoff"})
         draft = rig.tasks.begin_action(claim.run, "draft", draft_spec, at=3)
         assert draft is not None
         assert not rig.refresh().actions
@@ -171,13 +174,11 @@ def test_action_history_stays_out_of_the_canvas_while_prepared_content_remains(t
         assert not document.activity
         artifact = CanvasNote("note:handoff", "Handoff reply", "Proposed handoff", "work:atlas")
         canvas.save(replace(document, notes=(artifact,)))
-        ticket_spec = plan("kanban_update_task", {"id": "AT-42"})
-        assert isinstance(ticket_spec, ActionSpec)
+        ticket_spec = attempted("kanban_update_task", {"id": "AT-42"})
         ticket = rig.tasks.begin_action(claim.run, "ticket", ticket_spec, at=5)
         assert ticket is not None
         rig.tasks.finish_action(ticket.id, ActionUncertain("Readback unavailable"), at=6)
-        metadata_spec = plan("work_items_save", {"title": "Atlas"})
-        assert isinstance(metadata_spec, ActionSpec)
+        metadata_spec = attempted("work_items_save", {"title": "Atlas"})
         metadata = rig.tasks.begin_action(claim.run, "classification", metadata_spec, at=7)
         assert metadata is not None
         document = canvas.observe_work(rig.refresh()).document

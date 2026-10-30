@@ -24,7 +24,7 @@ from tests.feed_fixture import TriageFixture
 from tests.json_fixture import json_object, json_rows, json_text
 from tests.test_feed_triage import output
 from tests.test_work_actions import claimed
-lazy from assistant.agent import SPECS
+lazy from assistant.feed_agent_tools import SPECS
 lazy from tests.test_agent import ToolRig, durable, says
 
 

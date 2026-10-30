@@ -9,7 +9,7 @@ from pathlib import Path
 if sys.platform != "win32":
     raise unittest.SkipTest("Windows machine ownership")
 
-from assistant.agent import Machine
+from assistant.agent_tools import Machine
 from assistant.browser import BrowserResult
 from assistant.geometry import Shot
 from assistant.llm import Json

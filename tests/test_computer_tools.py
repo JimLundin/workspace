@@ -59,7 +59,7 @@ def test_stopping_a_drag_releases_its_button_and_modifiers(tmp_path: Path) -> No
     stop = threading.Event()
     machine = StoppingMouse(stop)
     agent = Agent(Settings("", "", "", "", "", "", ""), machine, FakeWindow(), stop, work=durable(tmp_path))
-    agent.shot = Shot(Rect(-1920, 0, 0, 1080), 960, 540)
+    agent.screen.shot = Shot(Rect(-1920, 0, 0, 1080), 960, 540)
     arguments: dict[str, object] = {
         "x": 10,
         "y": 20,
@@ -78,7 +78,7 @@ def test_stopping_a_drag_releases_its_button_and_modifiers(tmp_path: Path) -> No
 def test_bad_coordinates_and_action_arguments_do_not_produce_input(tmp_path: Path) -> None:
     machine = FakeMachine()
     agent = Agent(Settings("", "", "", "", "", "", ""), machine, FakeWindow(), threading.Event(), work=durable(tmp_path))
-    agent.shot = Shot(Rect(0, 0, 100, 100), 100, 100)
+    agent.screen.shot = Shot(Rect(0, 0, 100, 100), 100, 100)
     for name, arguments in (
         ("click", {"x": -1, "y": 10}),
         ("move_mouse", {"x": 100, "y": 10}),
@@ -108,7 +108,7 @@ def test_request_context_includes_the_work_window_and_one_current_screenshot(tmp
         body = json.dumps(request["content"])
         assert "Summarize this" in body and "Budget.xlsx - Excel" in body and "input_image" in body
         assert "not instructions" in body and rig.machine.log == ["screenshot"]
-        assert agent.shot is not None
+        assert agent.screen.shot is not None
 
 
 def test_automatic_and_explicit_screenshots_share_the_same_history_limit(tmp_path: Path) -> None:
@@ -158,7 +158,7 @@ def test_unavailable_screen_context_keeps_the_request_and_activity_usable(tmp_pa
         assert agent.run("Find this workbook")
         body = json.dumps(rig.sent(0)[0])
         assert "Find this workbook" in body and "Budget.xlsx" in body and "desktop is locked" in body
-        assert "input_image" not in body and agent.shot is None
+        assert "input_image" not in body and agent.screen.shot is None
 
 
 def test_context_tool_refreshes_the_current_app_without_taking_a_screenshot(tmp_path: Path) -> None:

@@ -4,16 +4,7 @@
     {
       "key": {
         "rule": "PLR0913",
-        "path": "assistant/agent.py",
-        "scope": "Agent.effect",
-        "signature": "b18fec5190f0015e745e60d5a140a79a562f35544a1a6c819506c7688695cde5"
-      },
-      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
-    },
-    {
-      "key": {
-        "rule": "PLR0913",
-        "path": "assistant/agent.py",
+        "path": "assistant/agent_tools.py",
         "scope": "Machine.click",
         "signature": "e46675a3fa8d7c2003a0627dc80d6a899e20efffcfc3abb427f17c822fcd4c09"
       },
@@ -22,7 +13,7 @@
     {
       "key": {
         "rule": "PLR0913",
-        "path": "assistant/agent.py",
+        "path": "assistant/agent_tools.py",
         "scope": "Machine.run_powershell",
         "signature": "0b6eb81687c17ada02fe4cc0e0ffea1581c3e6aa3889556423665dcdb81fcafe"
       },
@@ -31,7 +22,7 @@
     {
       "key": {
         "rule": "PLR0913",
-        "path": "assistant/agent.py",
+        "path": "assistant/agent_tools.py",
         "scope": "Machine.screenshot",
         "signature": "7545a4b3932df79cbe6212d953ae6424246b13328321f15dc9a3dd7676d2afae"
       },
@@ -40,7 +31,7 @@
     {
       "key": {
         "rule": "PLR0913",
-        "path": "assistant/agent.py",
+        "path": "assistant/agent_tools.py",
         "scope": "Machine.scroll",
         "signature": "79de4cafbf4c7fb5c1bd40ec9cb47f8b87777afd928d5787eafe4e0aebfc1f77"
       },
@@ -970,15 +961,6 @@
         "path": "automation/execution.py",
         "scope": "WorkExecution.__init__",
         "signature": "ae68b1bbce90905d0dde12954edff97446fd0e003360ef2b5598b82009c0ff80"
-      },
-      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
-    },
-    {
-      "key": {
-        "rule": "PLR0913",
-        "path": "automation/execution.py",
-        "scope": "WorkExecution.observed",
-        "signature": "b59e04dc903cbfcf4ce941f304f12992d6edc914f3bfdc53d2851f35bdaee49c"
       },
       "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
     },

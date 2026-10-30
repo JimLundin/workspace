@@ -14,17 +14,17 @@ from assistant.agent import Agent
 from assistant.agent_execution import AgentExecution
 from assistant.llm import Settings, ToolCall
 from assistant.workspace import CheckInterrupted, Workspace
-from automation.actions import Resources, plan
+from automation.actions import Change, Operation, Resources
 from automation.execution import WorkExecution
 from automation.store import TaskStore
 from automation.task import (
     ActionReturned,
-    ActionSpec,
     ActionVerified,
     Blocked,
     Claim,
     Completed,
     Control,
+    NoVerification,
     Question,
     RequestSource,
     RoutineSource,
@@ -260,15 +260,21 @@ def test_installation_resumes_only_after_running_source_matches_the_requested_di
     workspace = Workspace(live_tree(tmp_path / "live"), tmp_path / "workspace")
     workspace.ensure()
     workspace.write("config.py", "GREETING = 'installed update'\n")
-    specification = plan(
+    installation = Operation.of(
         "apply_changes",
-        {
-            "summary": "Updated greeting",
-            "source_digest": source_digest(workspace.root),
-            "destination": str(workspace.live.absolute()),
-        },
+        {"summary": "Updated greeting", "source_digest": source_digest(workspace.root), "destination": str(workspace.live.absolute())},
     )
-    assert isinstance(specification, ActionSpec)
+    agent = Agent(
+        Settings("", "", "", "", "", "", ""),
+        FakeMachine(),
+        FakeWindow(),
+        threading.Event(),
+        work=WorkExecution(claim, store, Resources()),
+        workspace=workspace,
+    )
+    classified = agent.tools["apply_changes"].classify(installation.arguments)
+    assert isinstance(classified, Change)
+    specification = classified.specification(installation, NoVerification.NONE)
     assert store.begin_action(claim.run, "install", specification, at=clock()) is not None
     store.finish_action("install", ActionReturned("Keeper installation requested."), at=clock())
     store.finish(claim.run, Waiting(Blocked("Waiting for keeper.")), at=clock())

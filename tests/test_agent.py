@@ -9,9 +9,11 @@ from datetime import datetime
 from pathlib import Path
 from typing import Final, cast
 
-from assistant.agent import Agent, Output, allowed, key_strokes
+from assistant.agent import Agent
 from assistant.agent_history import History
 from assistant.agent_session import LiveMessage, Succeeded, ToolActivity, ToolStatus
+from assistant.agent_tools import Output
+from assistant.desktop_tools import allowed, key_strokes
 from assistant.feed_agent_tools import request
 from assistant.geometry import Shot
 from assistant.llm import Json, Settings, ToolCall, settings_from

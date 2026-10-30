@@ -1,10 +1,14 @@
 """Agent canvas capabilities with exact local-owner receipts."""
 
+from collections.abc import Callable
 from typing import Final
 
+from assistant.agent_tools import Args, Display, Output, Session, Tool, fixed
 from assistant.business_tools import spec
 from assistant.llm import Json
+from assistant.work_bridge_contracts import BridgeCommand
 from assistant.work_canvas_commands import CANVAS_COMMAND, CANVAS_RESPONSE, CanvasCommand, CanvasRefused, CanvasUpdated, ReadCanvas, UpdateCanvas
+from automation.actions import Change, Observation
 from automation.task import ActionNotApplied, ActionUncertain, ActionVerified
 
 INSTRUCTIONS = """You build and maintain the local desktop canvas; the user is not expected to populate or arrange it.
@@ -71,3 +75,21 @@ def verified(command: CanvasCommand, output: str) -> ActionVerified | ActionNotA
             return ActionNotApplied(error)
         case _:
             return ActionUncertain("The canvas owner did not confirm the requested edit.")
+
+
+class Canvas:
+    __slots__ = ("request", "session")
+
+    def __init__(self, session: Session, request: Callable[[BridgeCommand], str]) -> None:
+        self.session, self.request = session, request
+
+    def tools(self) -> tuple[Tool, ...]:
+        read, update = SPECS
+        return (
+            Tool(read, self.canvas, fixed(Observation(("work-canvas",))), Display.PRIVATE),
+            Tool(update, self.canvas, fixed(Change(("work-canvas",))), Display.PRIVATE),
+        )
+
+    def canvas(self, args: Args) -> Output:
+        command = validated(args.tool, args.values)
+        return self.session.effect(args.operation, lambda: Output(self.request(command)), lambda output: verified(command, output.text))

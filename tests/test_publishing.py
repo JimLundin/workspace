@@ -9,9 +9,9 @@ from pathlib import Path
 from unittest import TestCase
 
 from assistant.publishing import PublishError, git, publish_source
-from automation.actions import Resources, plan
+from automation.actions import Change, Operation, Resources
 from automation.execution import ApprovalReview, WorkExecution
-from automation.task import ActionVerified, ApprovalDecision, Waiting
+from automation.task import ActionVerified, ApprovalDecision, NoVerification, Waiting
 from keeper import copy_source
 from tests.test_work_actions import claimed
 from tests.test_workspace import live_tree
@@ -88,13 +88,15 @@ def test_durable_publication_records_before_candidate_code_and_remote_push(tmp_p
         encoding="utf-8",
     )
 
+    reviewed: list[Operation] = []
+
     def approve(title: str, detail: str) -> bool:
-        work.bind("publish_changes", {"summary": "Reviewed update", "publication_review": detail})
+        reviewed.append(Operation.of("publish_changes", {"summary": "Reviewed update", "publication_review": detail}))
         return True
 
     def execute(perform: Callable[[], str]) -> str:
         return work.actions.execute(
-            plan("publish_changes", work.arguments),
+            Change(("exclusive",)).specification(reviewed[-1], NoVerification.NONE),
             perform,
             bool,
             threading.Event(),
@@ -130,8 +132,7 @@ def test_durable_publication_approval_is_bound_to_the_frozen_candidate_and_desti
     work = WorkExecution(claim, store, Resources(), review=display, clock=clock)
 
     def approve(title: str, detail: str) -> bool:
-        work.bind("publish_changes", {"summary": "Update", "publication_review": detail})
-        return work.approve(title, detail)
+        return work.approve(Operation.of("publish_changes", {"summary": "Update", "publication_review": detail}), title, detail)
 
     with TestCase().assertRaisesRegex(PublishError, "cancelled"):
         publish_source(live, workspace, "Update", approve, lambda: False, remote=str(remote), branch="workspace/agent-durable")

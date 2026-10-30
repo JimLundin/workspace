@@ -121,6 +121,17 @@ A recorded intention to change something outside the task itself. An attempt
 does not establish that the intended effect occurred.
 _Avoid_: Completed action
 
+**Operation**:
+One exact tool call with the arguments and targets it will act on. An approval
+covers exactly one operation, and an action attempt records one.
+_Avoid_: Tool name, approved tool
+
+**Tool family**:
+The owner of a group of agent tools and each tool's facts: what the model is
+offered, whether a call reads or changes state, what it holds while it runs,
+what proves its effect and what the visible log may show.
+_Avoid_: Tool table, tool registry
+
 **Observed outcome**:
 Evidence about what an action actually did. An interrupted attempt can retain
 an uncertain outcome until the affected state is inspected.
