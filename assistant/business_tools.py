@@ -182,8 +182,16 @@ _WEB_MARKERS: Final = (
 )
 
 
+def _marker(kind: str, value: Json) -> tuple[str, ...]:
+    match value:
+        case str() as identity if identity:
+            return (target(kind, identity),)
+        case _:
+            return ()
+
+
 def _web_resources(locks: tuple[str, ...], arguments: Mapping[str, Json]) -> tuple[str, ...]:
-    return (*locks, *(target(kind, value) for name, kind in _WEB_MARKERS if isinstance(value := arguments.get(name), str) and value))
+    return (*locks, *(marker for name, kind in _WEB_MARKERS for marker in _marker(kind, arguments.get(name))))
 
 
 @dataclass(frozen=True, slots=True)
