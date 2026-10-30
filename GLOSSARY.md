@@ -115,8 +115,10 @@ _Avoid_: Chat turn, command
 
 **Task profile**:
 What a requested task is for: a general request, a feed handoff or a meeting
-follow-up. It selects the agent's tools, instructions and completion check.
-Work for a standing instruction runs as a general request.
+follow-up. It owns the task's execution: the conversation its agent continues,
+whether the agent sees the request's desktop context, its tools and
+instructions, what it recovers before a run, and its completion check. Work for
+a standing instruction runs as a general request.
 _Avoid_: Task kind, agent mode
 
 **Meeting follow-up**:

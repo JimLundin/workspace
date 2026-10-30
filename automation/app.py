@@ -33,6 +33,7 @@ lazy from assistant.meeting_followup_store import FollowupStore
 lazy from assistant.meeting_requests import MeetingRequests
 lazy from assistant.outlook import OutlookDrafts
 lazy from assistant.recording_state import AudioSource
+lazy from assistant.task_profiles import RequestContext
 lazy from automation import ipc
 lazy from automation.bridge import BridgeServer, ProfileLease
 lazy from automation.context import ContextStore, select_context
@@ -40,7 +41,7 @@ lazy from automation.controller import ControllerSnapshot, Fault, Idle, Stopping
 lazy from automation.execution import ApprovalReview, Log, Outcome
 lazy from automation.routines import RoutineStore
 lazy from automation.store import TaskStore
-lazy from automation.task import Claim, RunRef, owns
+lazy from automation.task import Claim, RunRef, Task, owns
 
 
 def report(message: str, *, folder: Path = DIRECTORY / "work") -> None:
@@ -90,10 +91,15 @@ class RemoteMeetings:
 class DesktopContext:
     """Fresh foreground observations exclude both Workspace process owners."""
 
-    __slots__ = ("bridge", "enabled")
+    __slots__ = ("bridge", "contexts", "enabled")
 
-    def __init__(self, bridge: BridgeServer, *, enabled: bool) -> None:
-        self.bridge, self.enabled = bridge, enabled
+    def __init__(self, bridge: BridgeServer, contexts: ContextStore, *, enabled: bool) -> None:
+        self.bridge, self.contexts, self.enabled = bridge, contexts, enabled
+
+    def request(self, task: Task) -> RequestContext:
+        """Read only for a profile that admits the request's desktop context."""
+        saved = select_context(self.contexts.list(), task.prompt[:20_000], time.time()).describe()
+        return RequestContext(self.bridge.invocation(task.id), saved, self.snapshot)
 
     def snapshot(self) -> ContextSnapshot:
         now = time.time()
@@ -142,16 +148,10 @@ class VolatileLog:
 
 
 class NativeExecution:
-    __slots__ = ("bridge", "contexts", "execution", "meetings")
+    __slots__ = ("bridge", "execution", "meetings")
 
-    def __init__(
-        self,
-        execution: AgentExecution,
-        bridge: BridgeServer,
-        meetings: RemoteMeetings,
-        contexts: ContextStore,
-    ) -> None:
-        self.execution, self.bridge, self.meetings, self.contexts = execution, bridge, meetings, contexts
+    def __init__(self, execution: AgentExecution, bridge: BridgeServer, meetings: RemoteMeetings) -> None:
+        self.execution, self.bridge, self.meetings = execution, bridge, meetings
 
     def run_work(self, claim: Claim, store: TaskStore, log: Log, stop: threading.Event) -> Outcome:
         self.meetings.current = MeetingRun(claim.run, stop)
@@ -163,9 +163,7 @@ class NativeExecution:
                 return False
 
         try:
-            context = self.bridge.invocation(claim.task.id)
-            saved = select_context(self.contexts.list(), claim.task.prompt[:20_000], time.time()).describe()
-            return self.execution.run_work(claim, store, log, stop, context=context, context_text=saved, review=review)
+            return self.execution.run_work(claim, store, log, stop, review=review)
         finally:
             self.meetings.current = None
 
@@ -174,7 +172,7 @@ def _native_execution(settings: Settings | Missing, bridge: BridgeServer, hwnd: 
     meetings = RemoteMeetings(bridge)
     browser = Browser(DIRECTORY / "browser-profile", source=Product.EDGE)
     machine = WinMachine(NativeDesktop(hwnd), meetings=meetings, browser=browser)
-    context = DesktopContext(bridge, enabled=os.environ.get("WORKSPACE_AGENT_CONTEXT", "recent").lower() != "off")
+    context = DesktopContext(bridge, contexts, enabled=os.environ.get("WORKSPACE_AGENT_CONTEXT", "recent").lower() != "off")
     usable = settings if isinstance(settings, Settings) else Settings("", "", "", "", "", "", "")
     followups = bridge.folder / "meeting-followups"
     try:
@@ -184,13 +182,13 @@ def _native_execution(settings: Settings | Missing, bridge: BridgeServer, hwnd: 
             record=lambda details: usage.record("automation", "agent", details),
             report_error=lambda detail: report(detail, folder=bridge.folder),
             close_background=machine.close_background,
-            context=context.snapshot,
+            context=context.request,
             meeting=MeetingWork(MeetingRequests(followups), FollowupStore(followups / "packages"), OutlookDrafts(followups / "mail")),
         )
     except BaseException:
         machine.close_background()
         raise
-    return NativeExecution(execution, bridge, meetings, contexts), machine
+    return NativeExecution(execution, bridge, meetings), machine
 
 
 def run(

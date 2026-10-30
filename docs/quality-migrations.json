@@ -40,15 +40,6 @@
     {
       "key": {
         "rule": "PLR0913",
-        "path": "assistant/agent_execution.py",
-        "scope": "AgentExecution.run_work",
-        "signature": "42457f4da934b0f178e25c2aa8351e4286fb8040f5b63cd748640ada80bc30e8"
-      },
-      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
-    },
-    {
-      "key": {
-        "rule": "PLR0913",
         "path": "assistant/agent_window.py",
         "scope": "AgentWindow.begin",
         "signature": "c603826b6901d73b7b120508da22e30c141e47ab811886cb1c3a243ad8684f6f"
@@ -844,15 +835,6 @@
         "path": "automation/actions.py",
         "scope": "Actions.execute",
         "signature": "f3f3eda8a1dc24eb1c17e9027e09058607f5938b719cf5e58331016c1fc7473d"
-      },
-      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
-    },
-    {
-      "key": {
-        "rule": "PLR0913",
-        "path": "automation/app.py",
-        "scope": "NativeExecution.__init__",
-        "signature": "337a5a10963c26a04ff4be22711eb3e80270ada8349638965363436de5ddd970"
       },
       "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
     },

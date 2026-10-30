@@ -255,7 +255,14 @@ class WorkAgent:
         """
         identity = identifier(identity, "task identity")
         prompt = text(prompt, "task prompt").strip()
-        captured = self.context() if self.context is not None else None
+        match profile:
+            case RequestKind.MEETING_FOLLOWUP:
+                # Its agent sees only the selected recordings.
+                captured = None
+            case RequestKind.GENERAL | FeedHandoff():
+                captured = self.context() if self.context is not None else None
+            case _:
+                assert_never(profile)
         with self._lock:
             if not self._enqueue(IdentifiedSubmission(identity, prompt, self._source(profile), captured)):
                 raise ValueError("Work is closing or its input queue is full. Try the request again.")

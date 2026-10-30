@@ -6,7 +6,7 @@ import time
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Final
+from typing import Final, Protocol
 
 from assistant.agent_tools import DECLINED, TEXT, Args, ArgumentError, Display, Output, Session, Tool, fixed, schema
 from assistant.llm import Json, tool_spec
@@ -74,6 +74,14 @@ def verified_installation(store: TaskStore, claim: Claim, live: Path) -> Waiting
     return None
 
 
+class Installer(Session, Protocol):
+    """The session self-change acts through, told when the keeper is asked to install."""
+
+    def installation_requested(self, summary: str, /) -> None:
+        """The task is over: its run ends while the keeper installs."""
+        ...
+
+
 @dataclass(frozen=True, slots=True)
 class Delivery:
     """Where checked changes go: the keeper's install root, and the branch publishing pushes."""
@@ -85,19 +93,17 @@ class Delivery:
 class SelfChange:
     """The agent's draft of Workspace and what its checks established.
 
-    Mutable by necessity: the checked diff, a failed check and an installation
-    request follow the run's tool calls. Only this family's handlers write them.
+    Mutable by necessity: the checked diff and a failed check follow the run's
+    tool calls. Only this family's handlers write them.
     """
 
-    __slots__ = ("check_failed", "checked", "delivery", "installing", "session", "workspace")
+    __slots__ = ("check_failed", "checked", "delivery", "session", "workspace")
 
-    def __init__(self, session: Session, workspace: Workspace, delivery: Delivery) -> None:
+    def __init__(self, session: Installer, workspace: Workspace, delivery: Delivery) -> None:
         self.session, self.workspace, self.delivery = session, workspace, delivery
         self.checked: str | None = None
         """The diff that last passed its checks."""
         self.check_failed = False
-        self.installing: str | None = None
-        """Set once the keeper has been asked to install: the task is over."""
 
     def tools(self) -> tuple[Tool, ...]:
         path = schema({"path": TEXT}, ("path",))
@@ -302,7 +308,7 @@ class SelfChange:
             if install_root is not None and self.source().root != install_root:
                 copy_source(self.source().root, install_root)
             self.session.machine.install(summary)
-            self.installing = summary
+            self.session.installation_requested(summary)
             return Output("Asked the keeper to install it.")
 
         return self.session.effect(operation, execute)
