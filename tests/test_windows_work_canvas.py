@@ -34,6 +34,7 @@ from assistant.work_canvas import WorkCanvas, instruction_prompt
 from assistant.work_canvas_commands import CANVAS_RESPONSE, CanvasSnapshot, CanvasUpdated
 from assistant.work_canvas_context import CanvasMode
 from assistant.work_canvas_detail import NoteDetail, QuestionDetail, SourceDetail, WorkDetail
+from assistant.work_canvas_edits import SaveNote
 from assistant.work_canvas_model import (
     CanvasCollection,
     CanvasDocument,
@@ -111,8 +112,9 @@ class NativeCanvas:
 
     def publish(self, snapshot: WorkSnapshot) -> None:
         self.store.observe_catalog(snapshot.personal.catalog)
-        self.view.personal.document = self.store.observe_work(snapshot).document
+        document = self.store.observe_work(snapshot).document
         self.work.publish(snapshot)
+        self.view.personal.show_document(document)
         self.pump()
 
     def last_command(self) -> WorkCommand:
@@ -641,7 +643,7 @@ def test_canvas_speech_instructs_the_open_canvas_and_keeps_failed_directions_for
         task = tasks.get(run.task_id)
         assert task is not None and task.prompt.startswith(instruction + "\n\n") and "whole canvas" in task.prompt
         finding = CanvasNote("note:versions", "Deployment plans", "Two versions found")
-        assert canvas.commit(save_note(canvas.document, finding))
+        assert canvas.commit(SaveNote(finding))
         canvas.select(finding.id)
         ui.voice_agent("Explain the differences", fallback.append)
         ui.pump()

@@ -1,7 +1,7 @@
 """The canvas owner: one local document, its observations and its policy.
 
 `WorkCanvas` is the only writer of `canvas.sqlite3`. Qt serializes every
-observation, command, answer and gesture commit through it; other threads only
+observation, command, answer and user edit through it; other threads only
 read. Callers render the returned document and deliver the returned notices.
 """
 
@@ -45,19 +45,13 @@ from assistant.work_canvas_commands import (
     revision,
     snapshot,
 )
-from assistant.work_canvas_context import CanvasScope, project
-from assistant.work_canvas_gestures import NestBubble, PlaceBubbles
+from assistant.work_canvas_edits import UserEdit, user_edited
 from assistant.work_canvas_model import (
     DOCUMENT,
     CanvasDocument,
     hidden_ids,
-    nest,
     observe_activity,
-    release_subtree,
     result_document,
-    save_view,
-    toggle_expansion,
-    view_state,
 )
 from assistant.work_window import WorkSnapshot
 from automation.personal_work import Catalog, SourceKind, WorkState, WorkThread
@@ -247,28 +241,10 @@ class WorkCanvas:
                 self.save(current)
                 return CanvasUpdated(request.expected_revision, revision(current), changed=current != document)
 
-    def commit_gesture(self, scope: CanvasScope, gesture: PlaceBubbles | NestBubble) -> CanvasDocument:
-        """Persist one released gesture; an invalid nesting raises ValueError and saves nothing."""
+    def commit(self, edit: UserEdit) -> CanvasDocument:
+        """Persist one user edit to the latest document; an invalid edit raises ValueError and saves nothing."""
         document = self.read()
-        match gesture:
-            case PlaceBubbles(id=identity, positions=positions):
-                state = view_state(document, scope.identity)
-                replacements = frozendict((position.id, position) for position in positions)
-                placements = tuple(replacements.get(placement.id, placement) for placement in state.placements)
-                return self._persist(document, save_view(document, replace(state, placements=placements, pinned=state.pinned | {identity})))
-            case NestBubble(id=identity, parent_id=parent, positions=positions, members=members):
-                nested = nest(document, parent, identity)
-                project(self._observed_catalog(), nested, scope)
-                nested = release_subtree(nested, members)
-                state = view_state(nested, scope.identity)
-                if parent is None:
-                    state = replace(state, placements=(*state.placements, *positions), pinned=state.pinned | {identity})
-                nested = save_view(nested, state)
-                if parent is not None and parent != scope.identity:
-                    nested = toggle_expansion(nested, scope.identity, parent, expanded=True)
-                return self._persist(document, nested)
-            case _:
-                assert_never(gesture)
+        return self._persist(document, user_edited(document, self._observed_catalog(), edit))
 
     def waiting(self) -> tuple[CanvasQuestion, ...]:
         """Visible questions still waiting for the user, in canvas order."""

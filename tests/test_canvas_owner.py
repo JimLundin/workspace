@@ -1,4 +1,4 @@
-"""The canvas owner's observation, attention, answer and commit policy."""
+"""The canvas owner's observation, attention, answer and user-edit policy."""
 
 from dataclasses import replace
 from pathlib import Path
@@ -17,9 +17,11 @@ from assistant.work_canvas import (
     SpeechRoute,
     WorkCanvas,
 )
+from assistant.work_canvas_commands import ArrangeCanvas, CanvasUpdated, MoveBubble, PutNote, PutRelation, UpdateCanvas, revision
 from assistant.work_canvas_context import CanvasScope, context_path
+from assistant.work_canvas_edits import ArrangeView, RenameGroup, UserEdit
 from assistant.work_canvas_gestures import NestBubble, PlaceBubbles
-from assistant.work_canvas_model import CanvasDocument, Placement, view_state
+from assistant.work_canvas_model import CanvasCollection, CanvasDocument, CanvasNote, CanvasRelation, Placement, view_state
 from assistant.work_window import WorkSnapshot
 from automation.personal_work import DismissedWork, WorkState
 from automation.task import Blocked, Completed, Waiting
@@ -160,12 +162,36 @@ def test_released_gestures_commit_placement_and_nesting_or_save_nothing(tmp_path
     before = canvas.read()
     parent = data.sources[0].id
     with TestCase().assertRaisesRegex(ValueError, "contain"):
-        canvas.commit_gesture(CanvasScope(), NestBubble(parent, parent, (), frozenset((parent,))))
+        canvas.commit(UserEdit(CanvasScope(), NestBubble(parent, parent, (), frozenset((parent,)))))
     assert canvas.read() == before
-    nested = canvas.commit_gesture(CanvasScope(), NestBubble("note:annotation", "work:two", (), frozenset(("note:annotation",))))
+    nested = canvas.commit(UserEdit(CanvasScope(), NestBubble("note:annotation", "work:two", (), frozenset(("note:annotation",)))))
     assert context_path("note:annotation", data, nested)[-2:] == ("work:two", "note:annotation")
     assert "note:annotation" not in nested.pinned and "work:two" in view_state(nested, None).expanded
-    placed = canvas.commit_gesture(CanvasScope(), PlaceBubbles("note:annotation", (Placement("note:annotation", 40, 60),)))
+    placed = canvas.commit(UserEdit(CanvasScope(), PlaceBubbles("note:annotation", (Placement("note:annotation", 40, 60),))))
     assert placed == canvas.read() and "note:annotation" in placed.pinned
-    rooted = canvas.commit_gesture(CanvasScope(), NestBubble("note:annotation", None, (Placement("note:annotation", 90, 30),), frozenset()))
+    rooted = canvas.commit(UserEdit(CanvasScope(), NestBubble("note:annotation", None, (Placement("note:annotation", 90, 30),), frozenset())))
     assert Placement("note:annotation", 90, 30) in rooted.placements and context_path("note:annotation", data, rooted) == ("note:annotation",)
+
+
+def test_user_edits_apply_to_the_latest_document_and_keep_bridge_updates(tmp_path: Path) -> None:
+    # Defect: a user edit saves the panel's rendered copy, or a layout measured
+    # before an agent's arrangement replaces that arrangement.
+    canvas = local_canvas(tmp_path)
+    canvas.save(CanvasDocument(collections=(CanvasCollection("group:drafts", "Drafts"),)))
+    canvas.observe_catalog(catalog())
+    rendered = canvas.read()
+    finding = CanvasNote("note:finding", "Finding", "Version two is approved.")
+    pinned = Placement("work:one", 300, 40)
+    bridge = UpdateCanvas(revision(rendered), (PutNote(finding), MoveBubble("group:drafts", "work:one"), ArrangeCanvas(None, (pinned,))))
+    assert isinstance(canvas.command(bridge), CanvasUpdated)
+    stale = view_state(rendered, None)
+    canvas.commit(UserEdit(CanvasScope(), ArrangeView(stale, replace(stale, placements=(Placement("work:one", 0, 64),)))))
+    relation = CanvasRelation("work:one", "work:two", "Same approval")
+    canvas.commit(UserEdit(CanvasScope(), PutRelation(relation)))
+    current = canvas.commit(UserEdit(CanvasScope(), RenameGroup("group:drafts", "Approvals")))
+    assert current == canvas.read() and current.notes == (finding,) and current.relations == (relation,)
+    assert current.collections == (CanvasCollection("group:drafts", "Approvals", parent_id="work:one"),)
+    assert current.placements == (pinned,) and current.pinned == frozenset(("work:one",))
+    fresh = view_state(current, None)
+    arranged = replace(fresh, placements=(pinned, Placement("work:two", 0, 64)))
+    assert view_state(canvas.commit(UserEdit(CanvasScope(), ArrangeView(fresh, arranged))), None) == arranged == view_state(canvas.read(), None)
