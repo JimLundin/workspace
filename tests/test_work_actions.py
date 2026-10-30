@@ -289,24 +289,6 @@ def test_native_tab_verification_uses_the_listed_target_even_when_the_strip_is_p
     assert isinstance(work.outcome(Reported("Pinned the requested tab."), threading.Event()), Completed)
 
 
-def test_open_chat_requires_matching_one_to_one_membership_not_account_status(tmp_path: Path) -> None:
-    store, claim, clock = claimed(tmp_path)
-    work = WorkExecution(claim, store, Resources(), clock=clock)
-    agent = families(work)
-    attempt(agent, "teams_open_chat", {"user_id": "requested-recipient"})
-    action = store.actions("task")[0]
-    for evidence in (
-        observe(agent, Operation.of("teams_status", {}), '{"configured":true,"saved_sign_in":true}'),
-        observe(agent, Operation.of("teams_list_chats", {}), '{"chats":[{"chatType":"oneOnOne","members":[{"userId":"someone-else"}]}]}'),
-        observe(agent, Operation.of("teams_list_chats", {}), '{"chats":[{"chatType":"group","members":[{"userId":"requested-recipient"}]}]}'),
-    ):
-        with TestCase().assertRaisesRegex(ValueError, "target"):
-            reconcile(agent, Reconciliation(action.id, evidence, applied=True))
-    correct = observe(agent, Operation.of("teams_list_chats", {}), '{"chats":[{"chatType":"oneOnOne","members":[{"userId":"requested-recipient"}]}]}')
-    reconcile(agent, Reconciliation(action.id, correct, applied=True))
-    assert isinstance(work.outcome(Reported("The recipient's chat exists."), threading.Event()), Completed)
-
-
 def test_old_unverified_action_cannot_fall_off_the_completion_page(tmp_path: Path) -> None:
     store, claim, clock = claimed(tmp_path)
     work = WorkExecution(claim, store, Resources(), clock=clock)
@@ -361,8 +343,8 @@ def test_exact_approval_is_once_only_and_private_review_never_enters_storage(tmp
 def test_approval_needs_live_preview_and_cannot_authorize_changed_arguments_or_goal(tmp_path: Path) -> None:
     store, claim, clock = claimed(tmp_path)
     work = WorkExecution(claim, store, Resources(), clock=clock)
-    draft = Operation.of("teams_send_message", {"chat_id": "recipient-one", "text": "first draft"})
-    assert not work.approve(draft, "Send message?", "Review the draft")
+    draft = Operation.of("teams_web_draft_reply", {"target_id": "page", "chat_id": "recipient-one", "text": "first draft"})
+    assert not work.approve(draft, "Prepare reply?", "Review the draft")
     assert isinstance(work.disposition, Waiting) and isinstance(work.disposition.reason, Blocked)
     reviews: list[ApprovalReview] = []
 
@@ -371,7 +353,7 @@ def test_approval_needs_live_preview_and_cannot_authorize_changed_arguments_or_g
         return True
 
     original = WorkExecution(claim, store, Resources(), review=display, clock=clock)
-    assert not original.approve(draft, "Send message?", "Review the draft")
+    assert not original.approve(draft, "Prepare reply?", "Review the draft")
     assert original.disposition is not None
     assert store.finish(claim.run, original.disposition, at=clock()) is not None
     assert store.answer("task", reviews[0].request.id, ApprovalDecision.APPROVED, at=clock()) is not None
@@ -379,45 +361,13 @@ def test_approval_needs_live_preview_and_cannot_authorize_changed_arguments_or_g
     assert resumed is not None
     changed = WorkExecution(resumed, store, Resources(), review=display, clock=clock)
     assert not changed.approve(
-        Operation.of("teams_send_message", {"chat_id": "recipient-two", "text": "first draft"}), "Send message?", "Review the draft"
+        Operation.of("teams_web_draft_reply", {"target_id": "page", "chat_id": "recipient-two", "text": "first draft"}),
+        "Prepare reply?",
+        "Review the draft",
     )
     assert store.revise("task", "Only prepare a draft; do not send it.", at=clock()) is not None
     redirected = store.claim("worker", "changed-goal", at=clock())
     assert redirected is not None
     new_goal = WorkExecution(redirected, store, Resources(), review=display, clock=clock)
-    assert not new_goal.approve(draft, "Send message?", "Review the draft")
+    assert not new_goal.approve(draft, "Prepare reply?", "Review the draft")
     assert not store.actions("task")
-
-
-def test_message_reconciliation_requires_same_chat_new_matching_complete_text(tmp_path: Path) -> None:
-    store, claim, clock = claimed(tmp_path)
-    work = WorkExecution(claim, store, Resources(), clock=clock)
-    agent = families(work)
-    attempt(agent, "teams_send_message", {"chat_id": "release-chat", "text": "Ship Friday"})
-    action = store.actions("task")[0]
-
-    def inspect(chat: str, content: str, created: str, *, truncated: bool = False) -> str:
-        message: dict[str, object] = {
-            "message_id": "sent-message",
-            "content": content,
-            "created_at": created,
-            "content_type": "text",
-            "content_truncated": truncated,
-        }
-        payload: dict[str, object] = {"chat_id": chat, "messages": [message]}
-        result = json.dumps(payload)
-        return observe(agent, Operation.of("teams_read_messages", {"chat_id": chat}), result)
-
-    for evidence in (
-        inspect("other-chat", "Ship Friday", "1970-01-01T00:00:10+00:00"),
-        inspect("release-chat", "Ship Thursday", "1970-01-01T00:00:10+00:00"),
-        inspect("release-chat", "Ship Friday", "1970-01-01T00:00:01+00:00"),
-        inspect("release-chat", "Ship Friday", "1970-01-01T00:00:10+00:00", truncated=True),
-    ):
-        with TestCase().assertRaises(ValueError):
-            reconcile(agent, Reconciliation(action.id, evidence, applied=True))
-    correct = inspect("release-chat", "Ship Friday", "1970-01-01T00:00:10+00:00")
-    with TestCase().assertRaisesRegex(ValueError, "Absence"):
-        reconcile(agent, Reconciliation(action.id, correct, applied=False))
-    reconcile(agent, Reconciliation(action.id, correct, applied=True))
-    assert isinstance(work.outcome(Reported("Message sent and read back."), threading.Event()), Completed)

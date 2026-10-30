@@ -114,65 +114,20 @@ cannot roll back navigation, network requests or JavaScript already started in
 a personal page. See [session reuse research](browser-session-reuse.md) for the
 vendor references and profile-selection limitations.
 
-## Microsoft Graph setup
+## Teams
 
-The adapter is installed without app IDs or a Microsoft sign-in. Configuration
-and status checks make no network requests. It needs an approved **Microsoft
-Entra public client application** whose tenant permits device-code sign-in and
-the required delegated permissions. No client secret is used.
-
-When the IDs are available, ask Workspace to configure Teams using the application
-(client) ID and directory (tenant) ID. `teams_configure` saves them in
-`%LOCALAPPDATA%\workspace\teams\config.json`. Alternatively, set
-`WORKSPACE_GRAPH_CLIENT_ID` and `WORKSPACE_GRAPH_TENANT_ID` in the environment. Those
-settings take precedence; conflicting saved configuration is rejected explicitly.
-
-`teams_sign_in` returns a Microsoft verification URL and a short user code. Open
-that URL, enter the code and complete sign-in and consent. Workspace can display it
-in the regular browser with `open`. After completing it, use `teams_finish_sign_in` to save
-the result. Stop cancels pending polling. Tenant policy may require administrator
-consent or disallow this flow; the adapter reports Microsoft's refusal.
-
-The delegated scopes are:
-
-| Permission | Purpose |
-|---|---|
-| `User.Read` | Identify the signed-in user when creating a chat. |
-| `User.ReadBasic.All` | Resolve recipients by name or email. |
-| `Chat.Read` | List chats and read bounded message history for the requested work and result verification. |
-| `Chat.Create` | Get or create a one-to-one chat. |
-| `ChatMessage.Send` | Send the user's requested Teams message. |
-| `offline_access` | Refresh the saved sign-in. |
-
-This does not request application-wide message access or migration permissions.
-Existing sign-ins granted only `Chat.ReadBasic` may require renewed Microsoft
-consent before message readback is available. Outlook web uses the browser sign-in separately and requests no Graph scopes.
-
-| Tool | Use |
-|---|---|
-| `teams_status` | Report configuration, saved sign-in and pending sign-in. |
-| `teams_configure` | Save approved client and tenant IDs without authenticating. |
-| `teams_sign_in` / `teams_finish_sign_in` | Start and finish delegated sign-in. |
-| `teams_find_users` | Resolve a name, email or user principal name. |
-| `teams_list_chats` | List recent chats with basic members and bounded pagination. |
-| `teams_read_messages` | Read bounded history or one exact message in an identified chat to inspect the requested result. |
-| `teams_open_chat` | Get or create a one-to-one chat for a resolved user ID. |
-| `teams_send_message` | Send plain text to an identified chat when requested by the user. |
-| `teams_sign_out` | Remove Workspace's stored API credentials; browser sign-in is separate. |
-
-Access and refresh tokens are encrypted with Windows DPAPI for the current
-account in `tokens.bin`. They never appear in tool results. Changing app IDs
-clears old credentials and page cursors. User and chat pages use opaque in-memory
-cursors; Graph pagination can only continue on the expected Microsoft host and
-route. Large membership lists are marked as truncated. Sending is a single POST
-with no automatic retry, including on a timeout or uncertain response.
+Teams work runs only in the signed-in browser through `teams_web_read`,
+`teams_web_open_chat` and `teams_web_draft_reply`. Workspace has no Microsoft
+Graph integration, app registration or stored Teams tokens; the earlier Graph
+adapter was retired because the browser covers the same work without tenant
+consent.
 
 ## Outlook and AIP Kanban agent tools
 
 Outlook tools reuse the signed-in browser at `outlook.office.com`,
 `outlook.office365.com` or `outlook.cloud.microsoft`. Obtain the exact page ID from
 `browser_tabs`, connecting with `browser_attach` when needed. No Microsoft app IDs
-or additional Graph consent are required. These adapters use the English web
+or consent are required. These adapters use the English web
 interface observed in the live apps; unexpected controls fail explicitly.
 
 | Tool | Use |
@@ -182,7 +137,7 @@ interface observed in the live apps; unexpected controls fail explicitly.
 | `outlook_web_open_mail` | Select an exact conversation ID and wait for its confirmed reading pane and body. Opening can mark it read under Outlook's settings. |
 | `outlook_web_draft_reply` | Prepare an unsent reply to the selected conversation, retaining Outlook's recipients and signature. The editor remains open for review. |
 
-Conversation IDs can group multiple messages; they are not individual Graph mail
+Conversation IDs can group multiple messages; they are not individual mail
 IDs. Pagination covers rendered rows only. Scroll the list with generic browser
 tools to load more, then read it again. Search scope is reported instead of silently
 changed. Existing open drafts block search, selection and reply preparation.
@@ -191,7 +146,7 @@ before closing a draft, and inspect an uncertain result before retrying. The
 existing local classic-Outlook/file draft workflow remains available for prepared
 meeting packages.
 
-For Teams without Graph setup, `teams_web_read` returns rendered chat identities,
+`teams_web_read` returns rendered chat identities,
 selected messages, authors and reactions in an explicit signed-in Teams page.
 `teams_web_open_chat` selects a rendered chat by identity, independently of its
 title. `teams_web_draft_reply` inserts an unsent reply only into the exact selected
@@ -237,19 +192,10 @@ tests reuse a disposable browser's saved session, keep its blank and existing
 tabs intact, capture an attached page, and verify that cancellation only detaches.
 A local pending WebSocket handshake verifies cancellation during the consent
 wait. These tests do not connect to a personal browser or approve its dialog. Native tests
-cover DPAPI and job cleanup. Controlled HTTP tests cover sign-in, consent denial,
-refresh, page validation, output limits, cancellation, journal redaction and
-single-attempt sends. They use no real Microsoft credentials or Teams messages.
+cover DPAPI and job cleanup. Local Teams, Outlook and Kanban fixtures verify each
+web-app script's output against its result type; they use no real Microsoft
+credentials or Teams messages.
 
-Authenticated company-site automation and live Teams sending remain untested
-until the approved app and user sign-in are configured. Native desktop apps
+Authenticated company-site automation remains untested against live tenants. Native desktop apps
 continue to use their APIs, accessibility or foreground input; they do not gain
 a generic headless mode.
-
-Microsoft references:
-
-- [Device authorization grant](https://learn.microsoft.com/en-us/entra/identity-platform/v2-oauth2-device-code)
-- [List users](https://learn.microsoft.com/en-us/graph/api/user-list?view=graph-rest-1.0)
-- [List chats](https://learn.microsoft.com/en-us/graph/api/chat-list?view=graph-rest-1.0)
-- [Create a chat](https://learn.microsoft.com/en-us/graph/api/chat-post?view=graph-rest-1.0)
-- [Send a chat message](https://learn.microsoft.com/en-us/graph/api/chat-post-messages?view=graph-rest-1.0)

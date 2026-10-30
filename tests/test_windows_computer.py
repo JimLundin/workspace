@@ -19,7 +19,7 @@ from assistant import commands, uia
 from assistant.geometry import Shot, fit
 from assistant.llm import Json
 from assistant.machine import CaptureSources, WinMachine
-from tests.test_windows_machine import Browser, Desktop, Teams
+from tests.test_windows_machine import Browser, Desktop
 from winapi.shapes import Rect
 
 
@@ -61,7 +61,7 @@ def fixture(folder: Path) -> Generator[int]:
 
 def inspect(handle: int, *, query: str = "", limit: int = 100, offset: int = 0) -> dict[str, Json]:
     request: dict[str, Json] = {"operation": "inspect", "handle": handle, "query": query, "limit": limit, "offset": offset, "depth": 10}
-    code, text = WinMachine(Desktop(), browser=Browser(), teams=Teams()).inspect_ui(request, threading.Event())
+    code, text = WinMachine(Desktop(), browser=Browser()).inspect_ui(request, threading.Event())
     assert code == 0, text
     return decoded(text)
 
@@ -142,7 +142,7 @@ def test_screenshot_sources_use_physical_bounds_and_scale_only_the_image() -> No
             return self.current
 
     sources = Sources()
-    machine = WinMachine(CaptureDesktop(), browser=Browser(), teams=Teams(), capture_sources=sources)
+    machine = WinMachine(CaptureDesktop(), browser=Browser(), capture_sources=sources)
     _, shot = machine.screenshot(handle=7, longest=400)
     assert shot.area == work and (shot.width, shot.height) == (400, 300)
     assert shot.to_screen(200, 150) == (-1300, 400)

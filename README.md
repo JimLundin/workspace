@@ -57,8 +57,6 @@ and our typed Win32 bindings (`winapi/`), independently of the assistant.
    | `WORKSPACE_AGENT_REASONING_EFFORT` | optional; default `low` for quicker replies; use an effort supported by your selected model |
    | `WORKSPACE_AGENT_APPROVALS` | optional; default `never`; set `ask` to opt in to action and update approvals |
    | `WORKSPACE_AGENT_CONTEXT` | optional; default `recent`; set `off` to disable idle activity tracking and automatic request context |
-   | `WORKSPACE_GRAPH_CLIENT_ID` | optional; approved Entra app ID for Teams; can also be saved through the agent |
-   | `WORKSPACE_GRAPH_TENANT_ID` | optional; the matching Entra tenant ID |
    | `WORKSPACE_TRANSCRIBE_MODEL` | optional; default `gpt-4o-transcribe` |
    | `WORKSPACE_VOCABULARY` | optional; names and jargon to expect in dictation |
    | `WORKSPACE_LANGUAGE` | optional; `sv` or `en`, default detected |
@@ -454,18 +452,13 @@ The separate headless Edge profile is still available when explicitly selected.
 See [browser session reuse](docs/browser-session-reuse.md) for supported setup
 and the browser's consent requirements.
 
-The **Teams API adapter is ready to configure later**. Once an approved Microsoft
-Entra public application's client and tenant IDs are available, ask the agent to
-configure Teams and sign in. It can then find recipients, list chats, get or
-create a one-to-one chat and send a requested plain-text message. Sign-in uses
-Microsoft's device flow, and saved tokens are encrypted for your Windows account.
-Teams and Outlook web have dedicated tools that reuse the signed-in Edge tabs,
-with no Entra app setup. The agent can read/select Teams conversations, search/read
+Teams and Outlook web have dedicated tools that reuse the signed-in Edge tabs.
+Workspace has no Teams API integration; all Teams work runs in the browser. The agent can read/select Teams conversations, search/read
 Outlook conversations and prepare unsent replies while preserving existing drafts
 and Outlook signatures. The internal AIP Kanban tools read tasks, edit fields,
 post comments and move cards with stale-state checks and saved readback, using the
 app's existing validation and board filters.
-See [background automation and Teams setup](docs/background-automation.md) for
+See [background automation](docs/background-automation.md) for
 permissions, tool details and current limitations.
 
 While idle, Workspace keeps recent app and window-title changes in memory: up to

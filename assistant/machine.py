@@ -5,13 +5,14 @@ microphone, or start a meeting. A worker supplies its own clipboard window and
 bridges only the interactions whose owner remains in the assistant process.
 """
 
-import json
 import os
 import threading
 import time
 from collections.abc import Callable
-from dataclasses import dataclass
-from typing import Final, Protocol
+from dataclasses import dataclass, field
+from typing import Final, Literal, Protocol
+
+from pydantic import TypeAdapter
 
 import keeper
 import keeper_control
@@ -25,7 +26,6 @@ lazy from assistant.geometry import Shot, fit, half
 lazy from assistant.llm import Json
 lazy from assistant.png import encode_png
 lazy from assistant.recording_state import AudioSource
-lazy from assistant.teams import Teams
 lazy from assistant.textio import paste_text
 lazy from assistant.web_apps import Located, WebAppOperation
 lazy from winapi import clipboard, inputs, screen, system, windows
@@ -59,11 +59,6 @@ class BrowserControl(Protocol):
     def close(self) -> None: ...
 
 
-class TeamsControl(Protocol):
-    def request(self, operation: str, args: dict[str, Json], cancel: threading.Event) -> str: ...
-    def cancel_sign_in(self) -> None: ...
-
-
 class NativeDesktop:
     """Capture and paste for a worker's existing clipboard window, without a UI."""
 
@@ -91,8 +86,62 @@ class NativeDesktop:
         paste_text(self.owner, text, clipboard, shortcut, lambda: time.sleep(_PASTE_WAIT_S))
 
 
-def rectangle_data(area: Rect) -> dict[str, Json]:
-    return {"x": area.left, "y": area.top, "width": area.width, "height": area.height}
+@dataclass(frozen=True, slots=True)
+class Bounds:
+    x: int
+    y: int
+    width: int
+    height: int
+
+
+def bounds_of(area: Rect) -> Bounds:
+    return Bounds(area.left, area.top, area.width, area.height)
+
+
+@dataclass(frozen=True, slots=True)
+class Cursor:
+    x: int
+    y: int
+
+
+@dataclass(frozen=True, slots=True)
+class MonitorRow:
+    index: int
+    bounds: Bounds
+    work: Bounds
+    primary: bool = field(kw_only=True)
+
+
+@dataclass(frozen=True, slots=True)
+class WindowRow:
+    handle: int
+    title: str
+    app: str
+    bounds: Bounds
+    minimized: bool = field(kw_only=True)
+
+
+@dataclass(frozen=True, slots=True)
+class DesktopState:
+    """The desktop tool's observation, in physical screen pixels."""
+
+    foreground: int
+    cursor: Cursor
+    monitors: tuple[MonitorRow, ...]
+    windows: tuple[WindowRow, ...]
+    coordinates: Literal["physical screen pixels"] = "physical screen pixels"
+
+
+@dataclass(frozen=True, slots=True)
+class WindowState:
+    handle: int
+    bounds: Bounds
+    minimized: bool = field(kw_only=True)
+    maximized: bool = field(kw_only=True)
+
+
+_DESKTOP = TypeAdapter(DesktopState)
+_WINDOW = TypeAdapter(WindowState)
 
 
 @dataclass(frozen=True, slots=True)
@@ -127,14 +176,13 @@ def open_file(target: str) -> None:
 class WinMachine:
     """What the agent's tools act on, done with Windows calls."""
 
-    __slots__ = ("background_browser", "capture_sources", "desktop", "meetings", "open_target", "teams_client")
+    __slots__ = ("background_browser", "capture_sources", "desktop", "meetings", "open_target")
 
     def __init__(
         self,
         desktop: DesktopAccess,
         *,
         browser: BrowserControl | None = None,
-        teams: TeamsControl | None = None,
         meetings: MeetingControl | None = None,
         capture_sources: CaptureObservation | None = None,
         open_target: Callable[[str], None] = open_file,
@@ -145,7 +193,6 @@ class WinMachine:
         self.capture_sources: CaptureObservation = NativeCaptureObservation() if capture_sources is None else capture_sources
         self.open_target = open_target
         self.background_browser: BrowserControl = Browser(DIRECTORY / "browser-profile", source=Product.EDGE) if browser is None else browser
-        self.teams_client: TeamsControl = Teams(DIRECTORY / "teams", environment=os.environ) if teams is None else teams
         self.meetings = meetings
 
     def meeting(self, operation: str, source: str = "both", title: str = "Meeting") -> str:
@@ -172,14 +219,8 @@ class WinMachine:
     def web_app[Q: Located, R](self, operation: WebAppOperation[Q, R], query: Q, cancel: threading.Event) -> R:
         return self.background_browser.web_app(operation, query, cancel)
 
-    def teams(self, operation: str, arguments: dict[str, Json], cancel: threading.Event) -> str:
-        return self.teams_client.request(operation, arguments, cancel)
-
     def close_background(self) -> None:
-        try:
-            self.background_browser.close()
-        finally:
-            self.teams_client.cancel_sign_in()
+        self.background_browser.close()
 
     def run_powershell(
         self,
@@ -216,26 +257,19 @@ class WinMachine:
 
     def desktop_state(self) -> str:
         x, y = inputs.cursor_position()
-        data: dict[str, Json] = {
-            "coordinates": "physical screen pixels",
-            "foreground": windows.foreground(),
-            "cursor": {"x": x, "y": y},
-            "monitors": [
-                {"index": index, "bounds": rectangle_data(monitor.area), "work": rectangle_data(monitor.work), "primary": monitor.primary}
+        state = DesktopState(
+            windows.foreground(),
+            Cursor(x, y),
+            tuple(
+                MonitorRow(index, bounds_of(monitor.area), bounds_of(monitor.work), primary=monitor.primary)
                 for index, monitor in enumerate(screen.monitors())
-            ],
-            "windows": [
-                {
-                    "handle": window.handle,
-                    "title": window.title,
-                    "app": window.exe,
-                    "minimized": window.minimized,
-                    "bounds": rectangle_data(windows.outer_rect(window.handle)),
-                }
+            ),
+            tuple(
+                WindowRow(window.handle, window.title, window.exe, bounds_of(windows.outer_rect(window.handle)), minimized=window.minimized)
                 for window in windows.windows()
-            ],
-        }
-        return json.dumps(data, ensure_ascii=False)
+            ),
+        )
+        return _DESKTOP.dump_json(state).decode()
 
     def window_action(self, handle: int, action: str, bounds: Rect | None = None) -> str:
         if not windows.exists(handle):
@@ -259,13 +293,10 @@ class WinMachine:
             if bounds is None:
                 raise OSError("Moving a window requires bounds.")
             windows.move(handle, bounds)
-        state: dict[str, Json] = {
-            "handle": handle,
-            "bounds": rectangle_data(windows.outer_rect(handle)),
-            "minimized": windows.is_minimized(handle),
-            "maximized": windows.is_maximized(handle),
-        }
-        return json.dumps(state)
+        state = WindowState(
+            handle, bounds_of(windows.outer_rect(handle)), minimized=windows.is_minimized(handle), maximized=windows.is_maximized(handle)
+        )
+        return _WINDOW.dump_json(state).decode()
 
     def inspect_ui(self, request: dict[str, Json], cancel: threading.Event) -> tuple[int, str]:
         handle = request.get("handle") or windows.foreground()

@@ -182,7 +182,7 @@ def test_approval_mode_declines_business_writes_before_the_machine(tmp_path: Pat
     rig = ToolRig(approvals=True, work=durable(tmp_path))
     for name in ("kanban_update_task", "kanban_move_task", "kanban_comment", "teams_web_draft_reply", "outlook_web_draft_reply"):
         assert not rig.call(name, **arguments(name)).ok
-    assert not any(item.startswith(("web_app ", "teams ")) for item in rig.machine.log)
+    assert not any(item.startswith("web_app ") for item in rig.machine.log)
 
 
 def test_agent_reads_and_document_collection_do_not_request_application_clarification(tmp_path: Path) -> None:

@@ -150,10 +150,6 @@ class FakeMachine:
         self.log.append("web_app " + query.target_id)
         raise BrowserError("This machine has no captured web-app results.")
 
-    def teams(self, operation: str, arguments: dict[str, Json], cancel: threading.Event) -> str:
-        self.log.append("teams " + operation + " " + json.dumps(arguments))
-        return '{"state":"ready"}'
-
     def close_background(self) -> None:
         pass
 
