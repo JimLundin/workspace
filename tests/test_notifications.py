@@ -4,18 +4,16 @@ from dataclasses import replace
 
 from assistant.agent_session import (
     Answer,
-    Approval,
-    ApprovalDecided,
+    Answered,
     Begin,
     ChatMessage,
     Enqueued,
     Failed,
     Finished,
     Progress,
-    Question,
-    QuestionAnswered,
     ReasoningSummary,
     RecordingUpdated,
+    Resolution,
     Result,
     Said,
     Session,
@@ -60,6 +58,8 @@ from assistant.notifications import (
     tone,
 )
 from assistant.recording_state import RecordingState
+from automation.task import ApprovalDecision
+from tests.agent_requests import asked, reviewed
 
 
 def test_completed_turns_follow_filters_and_active_turns_stay_reachable() -> None:
@@ -255,7 +255,7 @@ def test_bursts_keep_controls_and_all_steps_without_creating_more_windows() -> N
 
 def test_pending_question_stays_visible_when_the_steps_are_collapsed() -> None:
     session = transition(Session(identity="one"), Begin("Find it", 1))
-    session = transition(session, Question("question", "Which workbook?", "Choose a filename.", 2))
+    session = transition(session, asked("question", "Which workbook?", "Choose a filename.", 2))
     stack = advance(Stack(), session, 100)
     for index in range(8):
         session = transition(session, Said(f"Update {index}", 4))
@@ -272,9 +272,9 @@ def test_pending_question_stays_visible_when_the_steps_are_collapsed() -> None:
 
 def test_voice_response_stays_with_its_question_then_moves_into_steps() -> None:
     session = transition(Session(identity="one"), Begin("Find it", 1))
-    session = transition(session, Question("question", "Which workbook?", "Choose a filename.", 2))
+    session = transition(session, asked("question", "Which workbook?", "Choose a filename.", 2))
     stack = advance(Stack(), session, 100)
-    session = transition(session, QuestionAnswered("question", "The revenue sheet"))
+    session = transition(session, Resolution("question", Answered("The revenue sheet")))
     stack = advance(stack, session, 101)
     turn = bubble(stack)
     assert [toast.key for toast in stack.toasts] == [TurnKey(0)]
@@ -290,12 +290,12 @@ def test_voice_response_stays_with_its_question_then_moves_into_steps() -> None:
 
 
 def test_standalone_question_keeps_its_answer_in_the_same_bubble() -> None:
-    session = transition(Session(identity="one"), Question("question", "Open the workbook?", "budget.xlsx", 1))
+    session = transition(Session(identity="one"), asked("question", "Open the workbook?", "budget.xlsx", 1))
     stack = advance(Stack(), session, 100)
     assert [toast.key for toast in stack.toasts] == [TurnKey(-1)]
     turn = bubble(stack, -1)
     assert isinstance(turn.state, Working) and turn.state.phase is Busy.WAITING and not spinning(turn)
-    session = transition(session, QuestionAnswered("question", "Yes"))
+    session = transition(session, Resolution("question", Answered("Yes")))
     stack = advance(stack, session, 101)
     assert [toast.key for toast in stack.toasts] == [TurnKey(-1)]
     assert body(bubble(stack, -1)) == "Open the workbook?\n\nbudget.xlsx\n\nYes"
@@ -303,10 +303,10 @@ def test_standalone_question_keeps_its_answer_in_the_same_bubble() -> None:
 
 def test_approval_decision_stays_with_the_original_request() -> None:
     session = transition(Session(identity="one"), Begin("Open it", 1))
-    session = transition(session, Approval("approval", "Open this?", "budget.xlsx", 2))
+    session = transition(session, reviewed("approval", "Open this?", "budget.xlsx", 2))
     stack = advance(Stack(), session, 100)
     original = body(bubble(stack))
-    session = transition(session, ApprovalDecided("approval", "approved"))
+    session = transition(session, Resolution("approval", ApprovalDecision.APPROVED))
     turn = bubble(advance(stack, session, 101))
     assert body(turn) == original + "\n\nApproved" and not hint(turn)
     assert isinstance(turn.entries[-1], Response) and turn.entries[-1].index == 1

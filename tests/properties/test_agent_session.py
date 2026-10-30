@@ -1,22 +1,12 @@
 """Replies resolve exactly their pending request; stale and retired replies do nothing."""
 
 from dataclasses import dataclass, field, replace
-from typing import Literal
 
 from hypothesis import strategies
 
-from assistant.agent_session import (
-    Answered,
-    Approval,
-    ApprovalDecided,
-    InputCancelled,
-    Message,
-    Question,
-    QuestionAnswered,
-    Resolution,
-    Session,
-    transition,
-)
+from assistant.agent_session import Answered, Cancelled, Resolution, Session, transition
+from automation.task import ApprovalDecision
+from tests.agent_requests import asked, reviewed
 from tests.properties.generation import cases, property_test
 
 
@@ -25,17 +15,17 @@ class ReplyCase:
     identity: str
     text: str
     question: bool = field(kw_only=True)
-    decision: Literal["approved", "declined"]
+    decision: ApprovalDecision
     stopping: bool = field(kw_only=True)
 
 
 def reply_cases(draw: strategies.DrawFn) -> ReplyCase:
-    decisions: tuple[Literal["approved", "declined"], ...] = ("approved", "declined")
     return ReplyCase(
-        draw(strategies.text(min_size=1, max_size=32)),
+        # Requests are validated durable values: their identities contain no NUL.
+        draw(strategies.text(min_size=1, max_size=32)).replace("\0", "·"),
         draw(strategies.text(max_size=96)),
         question=draw(strategies.booleans()),
-        decision=draw(strategies.sampled_from(decisions)),
+        decision=draw(strategies.sampled_from(tuple(ApprovalDecision))),
         stopping=draw(strategies.booleans()),
     )
 
@@ -44,29 +34,17 @@ def reply_cases(draw: strategies.DrawFn) -> ReplyCase:
 def test_only_the_matching_pending_request_accepts_a_reply(case: ReplyCase) -> None:
     current = "current/" + case.identity
     stale = "stale/" + case.identity
-    request: Question | Approval = Question(current, "Reply?", "", 1) if case.question else Approval(current, "Proceed?", "", 1)
-    other = Question("other/" + case.identity, "Another request", "", 2)
+    request = asked(current, "Reply?", "", 1) if case.question else reviewed(current, "Proceed?", "", 1)
+    other = asked("other/" + case.identity, "Another request", "", 2)
     session = Session(messages=(other, request), phase="stopping" if case.stopping else "running", status="Waiting")
-    stale_events: tuple[Resolution, ...] = (QuestionAnswered(stale, case.text), ApprovalDecided(stale, case.decision), InputCancelled(stale))
-    for event in stale_events:
+    for event in (Resolution(stale, Answered(case.text)), Resolution(stale, case.decision), Resolution(stale, Cancelled())):
         assert transition(session, event) == session
-    mismatch: Resolution = ApprovalDecided(current, case.decision) if case.question else QuestionAnswered(current, case.text)
+    mismatch = Resolution(current, case.decision) if case.question else Resolution(current, Answered(case.text))
     assert transition(session, mismatch) == session
 
-    reply: Resolution = QuestionAnswered(current, case.text) if case.question else ApprovalDecided(current, case.decision)
-    resolved: Message
-    match request:
-        case Question():
-            resolved = replace(request, reply=Answered(case.text))
-        case Approval():
-            resolved = replace(request, decision=case.decision)
-    updated = transition(session, reply)
-    assert updated == replace(session, messages=(other, resolved), status="Stopping…" if case.stopping else "Working…")
-    retired_events: tuple[Resolution, ...] = (
-        QuestionAnswered(current, case.text + " later"),
-        ApprovalDecided(current, case.decision),
-        InputCancelled(current),
-    )
-    for event in retired_events:
+    reply = Answered(case.text) if case.question else case.decision
+    updated = transition(session, Resolution(current, reply))
+    assert updated == replace(session, messages=(other, replace(request, reply=reply)), status="Stopping…" if case.stopping else "Working…")
+    for event in (Resolution(current, Answered(case.text + " later")), Resolution(current, case.decision), Resolution(current, Cancelled())):
         assert transition(updated, event) == updated
     assert session.messages == (other, request)

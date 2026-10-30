@@ -13,7 +13,6 @@ if sys.platform != "win32":
 
 lazy from PySide6 import QtCore, QtWidgets
 
-from assistant.agent_session import Question
 from assistant.agent_toasts import AgentToasts
 from assistant.agent_window import AgentWindow
 from assistant.communications import Feed
@@ -25,6 +24,7 @@ from assistant.qt_ui import application
 from assistant.system_notices import Notice, NoticeKey, Observed
 from assistant.ui import Ui
 from assistant.work_canvas_window import CanvasWindow
+from tests.agent_requests import asked
 from tests.test_work_canvas import local_canvas
 
 prepare()
@@ -170,7 +170,7 @@ def test_app_context_stays_quiet_and_only_agent_questions_change_toolbar_attenti
         ui.pump()
         assert ui.bar.inbox.isHidden()
         agent = ui.agent(None, lambda: None, reveal=False)
-        agent.request_input(Question("owned", "Which sheet?", "", 3), accept_answer)
+        agent.request_input(asked("owned", "Which sheet?", "", 3), accept_answer)
         ui.pump()
         assert not ui.bar.inbox.text() and not ui.bar.inbox.isHidden()
         assert "1 clarification needs" in ui.bar.inbox.accessibleName()

@@ -6,7 +6,7 @@ from enum import Enum, auto
 from pydantic import TypeAdapter
 
 import assistant.agent_session
-from assistant.agent_session import Approval, ChatMessage, Question, pending
+from assistant.agent_session import AgentRequest, ChatMessage, pending
 from assistant.communications import Feed, Message, Reply, Update, UpdateKind, WindowsNotice, chat_tickets
 from assistant.console_requests import Request, State
 from assistant.feed_origin import App, application
@@ -57,7 +57,7 @@ def kind(item: Item) -> Kind:
     match item:
         case Request(state=State.WAITING):
             return Kind.ANSWER
-        case Question() | Approval() | Message() | Reply():
+        case AgentRequest() | Message() | Reply():
             return Kind.ANSWER
         case Update(kind=UpdateKind.INVITATION):
             return Kind.MEETING
@@ -69,7 +69,7 @@ def kind(item: Item) -> Kind:
 
 def matches(item: Item, query: Query) -> bool:
     # A question requiring the user's answer stays reachable even in a narrow filter.
-    if isinstance(item, (Question, Approval)) and pending(item):
+    if isinstance(item, AgentRequest) and pending(item):
         return True
     if isinstance(item, Request) and item.state is State.WAITING:
         return True

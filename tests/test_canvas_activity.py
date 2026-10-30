@@ -7,7 +7,7 @@ from pathlib import Path
 
 import assistant.agent_session
 import automation.task
-from assistant.agent_session import Answered, Approval, CanvasNotice, CanvasSettled, ChatMessage, Question, Session, transition
+from assistant.agent_session import Answered, CanvasNotice, CanvasSettled, ChatMessage, Session, transition
 from assistant.canvas_activity import (
     ActionState,
     Attention,
@@ -29,6 +29,7 @@ from assistant.work_window import ReplyProblem, WorkSnapshot
 from automation.actions import Change, Operation
 from automation.personal_work import Catalog, SourceKind, WorkDefinition, WorkState, WorkThread
 from automation.task import ActionReturned, ActionSpec, ActionUncertain, ActionVerified, Completed, NoVerification, RequestSource, Waiting
+from tests.agent_requests import asked, reviewed
 from tests.personal_work_fixture import source
 from tests.test_work_agent import WorkRig
 from tests.test_work_canvas import local_canvas
@@ -62,7 +63,7 @@ def test_saved_questions_keep_their_route_state_and_thread_after_session_mirrori
     question = document.activity[0]
     assert isinstance(question, CanvasQuestion)
     assert question.request == TaskRequest(task.id, "request-1") and question.work_ids == ("work:atlas",)
-    mirror = Question("request-1", "Which supplier?", "", 201)
+    mirror = asked("request-1", "Which supplier?", "", 201)
     session = Session(identity="session-one", messages=(mirror,))
     document = observed_session(store, session)
     mirrored = document.activity[0]
@@ -89,7 +90,7 @@ def test_new_session_closes_old_questions_without_closing_live_durable_questions
     # Defect: a restarted assistant leaves old questions actionable or closes
     # a task question merely because it is no longer in the visible conversation.
     store = local_canvas(tmp_path)
-    store.observe_session(Session(identity="old", messages=(Question("old-request", "Which workbook?", "", 10),)))
+    store.observe_session(Session(identity="old", messages=(asked("old-request", "Which workbook?", "", 10),)))
     task = work_task(Waiting(automation.task.Question("task-request", "Which supplier?", "")))
     store.observe_work(WorkSnapshot(tasks=(task,)))
     document = observed_session(store, Session(identity="new"))
@@ -101,8 +102,8 @@ def test_new_session_closes_old_questions_without_closing_live_durable_questions
 def test_floating_attention_has_exact_persistent_redirects_and_retains_approval_guards() -> None:
     # Defect: app context or routine progress becomes an alert, a pending question
     # expires, or a guarded approval is lost when the floating surface redirects.
-    question = Question("question with spaces", "Which supplier?", "Background context", 10)
-    approval = Approval("approval", "Publish reply?", "Exact reply preview", 11)
+    question = asked("question with spaces", "Which supplier?", "Background context", 10)
+    approval = reviewed("approval", "Publish reply?", "Exact reply preview", 11)
     session = Session(messages=(ChatMessage("Workspace", "Fetched the next mail", 9), question, approval), phase="running")
     redirected = redirect_session(session)
     assert len(redirected.messages) == 2 and redirected.messages[1] == approval

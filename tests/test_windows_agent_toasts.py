@@ -22,20 +22,7 @@ lazy from PySide6.QtGui import QEnterEvent, QFont, QImage, QPainter, QRegion, QT
 lazy from PySide6.QtTest import QTest
 lazy from PySide6.QtWidgets import QWidget
 
-from assistant.agent_session import (
-    Answer,
-    Approval,
-    Begin,
-    Failed,
-    Question,
-    ReasoningSummary,
-    Said,
-    Session,
-    StreamState,
-    Succeeded,
-    ToolActivity,
-    transition,
-)
+from assistant.agent_session import Answer, Begin, Failed, ReasoningSummary, Said, Session, StreamState, Succeeded, ToolActivity, transition
 from assistant.agent_toasts import AgentToasts
 from assistant.agent_window import AgentWindow
 from assistant.feed_contracts import DismissItem
@@ -49,6 +36,7 @@ from assistant.recording_state import RecordingAction, RecordingState
 from assistant.rich_text import formatted
 from assistant.toast_card import Card
 from assistant.ui_components.text import TextView
+from tests.agent_requests import asked, reviewed
 from winapi import appearance, screen, system, windows
 from winapi.composition import DesktopComposition, Glass
 from winapi.shapes import Rect
@@ -696,7 +684,7 @@ def test_narrow_work_area_keeps_complete_question_lines_with_voice_tooltip() -> 
     with notifications() as panel:
         panel.desktop.bounds = Rect(40, 40, 290, 600)
         state = transition(Session(identity="narrow-area"), Begin("Check the notes", 1))
-        state = transition(state, Question("question", "Which workbook should I use?", "Please say the filename.", 2))
+        state = transition(state, asked("question", "Which workbook should I use?", "Please say the filename.", 2))
         panel.view.render(state)
         panel.pump()
         for card in panel.view.cards.values():
@@ -1017,7 +1005,7 @@ def test_spinner_reuses_widgets_and_stops_timers_for_reduced_motion_and_input() 
         assert panel.view.animation_timer is None
         panel.animated = True
         replies: list[str] = []
-        panel.agent.request_input(Question("open", "Open this?", "budget.xlsx", panel.now), recording(replies))
+        panel.agent.request_input(asked("open", "Open this?", "budget.xlsx", panel.now), recording(replies))
         assert panel.requested.wait(timeout=2)
         panel.pump()
         panel.advance(0.3)
@@ -1092,7 +1080,7 @@ def test_questions_can_be_answered_or_stopped_by_voice_without_history() -> None
     with notifications() as panel:
         panel.agent.begin("Open the workbook", panel.stop)
         replies: list[str] = []
-        panel.agent.request_input(Question("open", "Open this?", "budget.xlsx", panel.now), recording(replies))
+        panel.agent.request_input(asked("open", "Open this?", "budget.xlsx", panel.now), recording(replies))
         assert panel.requested.wait(timeout=2)
         panel.pump()
         panel.advance(3600)
@@ -1105,7 +1093,7 @@ def test_questions_can_be_answered_or_stopped_by_voice_without_history() -> None
         assert panel.view.cards[TurnKey(0)] is question
         assert "The revenue sheet." in question.text.toPlainText() and "Open this?" in question.text.toPlainText()
         panel.requested.clear()
-        panel.agent.request_input(Approval("write", "Open this?", "budget.xlsx", panel.now), recording(replies))
+        panel.agent.request_input(reviewed("write", "Open this?", "budget.xlsx", panel.now), recording(replies))
         assert panel.requested.wait(timeout=2)
         panel.pump()
         approval = panel.view.cards[TurnKey(0)]

@@ -15,20 +15,20 @@ from typing import Final, Protocol
 
 import assistant.console_requests
 from assistant.agent_session import (
-    Approval,
+    AgentRequest,
     Begin,
+    Cancelled,
     CanvasNotice,
     CanvasSettled,
     Done,
     Enqueued,
     Event,
     Finished,
-    InputCancelled,
     LiveMessage,
     Problem,
     Progress,
-    Question,
     RecordingUpdated,
+    Resolution,
     Said,
     Session,
     Snapshot,
@@ -43,6 +43,7 @@ from assistant.feed_items import SourceAction
 from assistant.feed_origin import FeedRequest
 from assistant.feed_triage import Board
 from assistant.recording_state import RecordingAction, RecordingState
+from automation.task import Approval, Question
 from usage import DIRECTORY
 
 VIEW_LOG: Final = DIRECTORY / "agent-ui.log"
@@ -66,7 +67,7 @@ class View(Protocol):
 
 @dataclass(frozen=True, slots=True)
 class _ExternalRequest:
-    message: Question | Approval
+    message: AgentRequest
     respond: Callable[[str], bool]
 
 
@@ -221,7 +222,7 @@ class AgentWindow:
                 return False
             question = self.state.question
         if question is not None:
-            return self.respond(question.request_id, text)
+            return self.respond(question.id, text)
         if self.on_submit is None:
             return False
         self.on_submit(text)
@@ -236,13 +237,13 @@ class AgentWindow:
         with self.lock:
             if self.closed or self.state.stopping:
                 return True
-            request = next((message for message in self.state.messages if isinstance(message, (Question, Approval)) and pending(message)), None)
-        match request:
-            case None:
-                return False
-            case Question(request_id=identity):
+            request = next((message for message in self.state.messages if isinstance(message, AgentRequest) and pending(message)), None)
+        if request is None:
+            return False
+        match request.request:
+            case Question(id=identity):
                 self.respond(identity, text.strip())
-            case Approval(request_id=identity):
+            case Approval(id=identity):
                 answer = text.strip().casefold().rstrip(".!?").strip()
                 if answer in ("approve", "decline"):
                     self.respond(identity, answer)
@@ -250,23 +251,23 @@ class AgentWindow:
                     self.say("Approval is still waiting. Hold N and say just “approve” or “decline”, then release to send.")
         return True
 
-    def request_input(self, message: Question | Approval, respond: Callable[[str], bool]) -> None:
+    def request_input(self, message: AgentRequest, respond: Callable[[str], bool]) -> None:
         """Project an exact durable request without starting a waiting thread."""
         with self.lock:
             if self.closed:
                 return
             old = self._external
-            if isinstance(old, _ExternalAnswer) and old.request_id == message.request_id:
+            if isinstance(old, _ExternalAnswer) and old.request_id == message.id:
                 return
-            if isinstance(old, _ExternalRequest) and old.message.request_id == message.request_id:
+            if isinstance(old, _ExternalRequest) and old.message.id == message.id:
                 self._external = _ExternalRequest(old.message, respond)
                 return
             self._external = _ExternalRequest(message, respond)
             self._presented = None
             was_waiting = self.state.waiting
             if old is not None:
-                old_id = old.message.request_id if isinstance(old, _ExternalRequest) else old.request_id
-                self.state = transition(self.state, InputCancelled(old_id))
+                old_id = old.message.id if isinstance(old, _ExternalRequest) else old.request_id
+                self.state = transition(self.state, Resolution(old_id, Cancelled()))
             self.state = transition(self.state, message)
             waiting = self.state.waiting
             self._changed()
@@ -277,13 +278,13 @@ class AgentWindow:
         """Remove only this view's matching request; durable state stays owned by work."""
         with self.lock:
             request = self._external
-            identity = request.message.request_id if isinstance(request, _ExternalRequest) else request.request_id if request is not None else None
+            identity = request.message.id if isinstance(request, _ExternalRequest) else request.request_id if request is not None else None
             if identity != request_id:
                 return
             self._external = None
             self._presented = None
             was_waiting = self.state.waiting
-            self.state = transition(self.state, InputCancelled(request_id))
+            self.state = transition(self.state, Resolution(request_id, Cancelled()))
             waiting = self.state.waiting
             self._changed()
         if was_waiting != waiting and self.on_waiting is not None:
@@ -293,7 +294,7 @@ class AgentWindow:
         """A native view acknowledges that this exact approval preview is visible."""
         with self.lock:
             request = self._external
-            if isinstance(request, _ExternalRequest) and isinstance(request.message, Approval) and request.message.request_id == request_id:
+            if isinstance(request, _ExternalRequest) and isinstance(request.message.request, Approval) and request.message.id == request_id:
                 self._presented = request_id
 
     def respond(self, identity: str, answer: str) -> bool:
@@ -304,9 +305,9 @@ class AgentWindow:
                 return False
             request = self._external
             presented = self._presented == identity
-            if not isinstance(request, _ExternalRequest) or request.message.request_id != identity or not acceptable(request.message, answer):
+            if not isinstance(request, _ExternalRequest) or request.message.id != identity or not acceptable(request.message.request, answer):
                 return False
-            if isinstance(request.message, Approval) and answer == "approve" and not presented:
+            if isinstance(request.message.request, Approval) and answer == "approve" and not presented:
                 self.say("Open the current action preview before approving it.")
                 return False
             self._external = submitted
@@ -426,7 +427,7 @@ class AgentWindow:
         with self.lock:
             request = self._external
         if isinstance(request, _ExternalRequest):
-            self.clear_external_input(request.message.request_id)
+            self.clear_external_input(request.message.id)
         self._event(StopRequested())
 
     def all_text(self) -> str:

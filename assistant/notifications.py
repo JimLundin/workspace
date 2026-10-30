@@ -11,14 +11,13 @@ from typing import Final, assert_never
 
 import assistant.feed_items
 from assistant.agent_session import (
+    AgentRequest,
     Answer,
     Answered,
-    Approval,
     Cancelled,
     ChatMessage,
     Failed,
     MeetingMessage,
-    Question,
     ReasoningSummary,
     Snapshot,
     StreamState,
@@ -32,6 +31,7 @@ from assistant.feed_items import DEFAULT_QUERY, SourceKey, WorkItem, WorkState, 
 from assistant.feed_triage import Assessment
 from assistant.inbox import Query, Source, matches, user_caption
 from assistant.recording_state import RecordingState, duration, phase_label
+from automation.task import Approval, ApprovalDecision, Question
 
 MAX_VISIBLE: Final = 5
 MAX_WORK_VISIBLE: Final = 3
@@ -101,7 +101,7 @@ class Settled(Enum):
 @dataclass(frozen=True, slots=True)
 class Entry:
     index: int
-    message: ChatMessage | Answer | ToolActivity | Question | Approval
+    message: ChatMessage | Answer | ToolActivity | AgentRequest
 
 
 @dataclass(frozen=True, slots=True)
@@ -190,7 +190,7 @@ def active(content: Content) -> bool:
             return state.phase in ("starting", "recording", "stopping", "finishing", "paused")
         case Entry(message=Answer(state=StreamState.RUNNING) | ToolActivity(outcome=ToolStatus.RUNNING)):
             return True
-        case Entry(message=Question() | Approval() as message):
+        case Entry(message=AgentRequest() as message):
             return pending(message)
         case Entry(message=ChatMessage(source=source)) if source is not None and source.identity.startswith("canvas:question:"):
             return True
@@ -219,7 +219,7 @@ def observe(session: Snapshot, query: Query = DEFAULT_QUERY) -> tuple[Content, .
     proposals = proposal_index(session)
     requests = tuple(index for index, message in enumerate(session.messages) if isinstance(message, ChatMessage) and message.speaker == "You")
     latest = requests[-1] if requests else -1
-    initial_input = any(isinstance(message, (Question, Approval)) for message in session.messages[: requests[0] if requests else None])
+    initial_input = any(isinstance(message, AgentRequest) for message in session.messages[: requests[0] if requests else None])
     request: int | None = -1 if initial_input or (latest == -1 and session.busy) else None
     entries: list[Entry | Response] = []
 
@@ -254,14 +254,14 @@ def observe(session: Snapshot, query: Query = DEFAULT_QUERY) -> tuple[Content, .
             case ChatMessage(speaker="You"):
                 finish_turn()
                 request, entries = index, [Entry(index, message)]
-            case ChatMessage() | Answer() | ToolActivity() | Question() | Approval():
+            case ChatMessage() | Answer() | ToolActivity() | AgentRequest():
                 target = result if request is None else entries
                 target.append(Entry(index, message))
                 match message:
-                    case Question(reply=Answered(text)):
+                    case AgentRequest(reply=Answered(text)):
                         target.append(Response(index, text, message.created_at))
-                    case Approval(decision="approved" | "declined" as decision):
-                        target.append(Response(index, decision.capitalize(), message.created_at))
+                    case AgentRequest(reply=ApprovalDecision() as decision):
+                        target.append(Response(index, decision.name.capitalize(), message.created_at))
                     case _:
                         pass
             case MeetingMessage() | ReasoningSummary():
@@ -285,7 +285,7 @@ def settled(entries: tuple[Entry | Response, ...]) -> Settled:
                 return Settled.STOPPED
             case Entry(message=ChatMessage(speaker="Workspace", text=text)) if text.startswith("Stopped"):
                 return Settled.STOPPED
-            case Entry(message=Question(reply=Cancelled()) | Approval(decision="cancelled")):
+            case Entry(message=AgentRequest(reply=Cancelled())):
                 return Settled.STOPPED
             case Entry(message=ChatMessage() | Answer() | ToolActivity(outcome=Succeeded())):
                 return Settled.FINISHED
@@ -305,7 +305,7 @@ def results(turn: Turn) -> tuple[Entry | Response, ...]:
             entry.index
             for entry in reversed(turn.entries)
             if isinstance(entry, Entry)
-            and isinstance(entry.message, (Answer, ChatMessage, Question, Approval))
+            and isinstance(entry.message, (Answer, ChatMessage, AgentRequest))
             and not (isinstance(entry.message, ChatMessage) and entry.message.speaker == "You")
         ),
         -1,
@@ -313,7 +313,7 @@ def results(turn: Turn) -> tuple[Entry | Response, ...]:
     return tuple(
         entry
         for entry in turn.entries
-        if entry.index == latest or (isinstance(entry, Entry) and isinstance(entry.message, (Question, Approval)) and pending(entry.message))
+        if entry.index == latest or (isinstance(entry, Entry) and isinstance(entry.message, AgentRequest) and pending(entry.message))
     )
 
 
@@ -451,7 +451,7 @@ def priority(content: Content) -> int:
             return 2
         case Turn() | Recording() if active(content):
             return 3
-        case Entry(message=Question() | Approval() as message) if pending(message):
+        case Entry(message=AgentRequest() as message) if pending(message):
             return 2
         case WorkItem(item=Assessment(priority=level)):
             return 1 + level
@@ -506,7 +506,7 @@ def next_expiry(stack: Stack) -> float | None:
 
 def body(content: Content) -> str:
     match content:
-        case Entry(message=Question() | Approval() as message):
+        case Entry(message=AgentRequest() as message):
             return message.text + ("\n\n" + message.detail if message.detail else "")
         case Turn():
             return "\n\n".join(body(entry) for entry in results(content))
@@ -562,9 +562,9 @@ def hint(content: Content) -> str:
             return "".join(span.text for span in action_spans(content))
         case Turn():
             return next((text for entry in results(content) if (text := hint(entry))), "")
-        case Entry(message=Question() as message) if pending(message):
+        case Entry(message=AgentRequest(request=Question()) as message) if pending(message):
             return "N toggles a spoken reply"
-        case Entry(message=Approval() as message) if pending(message):
+        case Entry(message=AgentRequest(request=Approval()) as message) if pending(message):
             return "N: say “approve” or “decline”"
         case Recording(state=RecordingState(phase="paused")):
             return "Transcription paused · Retry in Agent session"
@@ -602,7 +602,7 @@ def tone(content: Content) -> Tone:
             return Tone.USER
         case Turn() if hint(content):
             return Tone.QUESTION
-        case Entry(message=Question() | Approval()):
+        case Entry(message=AgentRequest()):
             return Tone.QUESTION
         case WorkItem(waiting=True):
             return Tone.QUESTION

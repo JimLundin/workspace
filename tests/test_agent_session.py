@@ -3,11 +3,10 @@
 from dataclasses import replace
 
 from assistant.agent_session import (
+    AgentRequest,
     Answer,
     Answered,
-    Approval,
     ApprovalControls,
-    ApprovalDecided,
     Begin,
     Cancelled,
     Done,
@@ -15,12 +14,10 @@ from assistant.agent_session import (
     Event,
     Failed,
     Finished,
-    InputCancelled,
     Progress,
-    Question,
-    QuestionAnswered,
     ReasoningSummary,
     RecordingUpdated,
+    Resolution,
     ResponseText,
     Said,
     Session,
@@ -32,6 +29,8 @@ from assistant.agent_session import (
     transition,
 )
 from assistant.recording_state import RecordingState
+from automation.task import ApprovalDecision
+from tests.agent_requests import asked, reviewed
 
 
 def test_live_messages_replace_their_row_and_final_completion_is_not_duplicated() -> None:
@@ -145,7 +144,7 @@ def test_session_events_can_be_replayed_and_branched_without_a_clock_or_shared_m
     events: tuple[Event, ...] = (
         Begin("Find the workbook", 10),
         Progress("Looking"),
-        Question("q1", "Which workbook?", "", 12),
+        asked("q1", "Which workbook?", "", 12),
     )
     pending = original
     for event in events:
@@ -155,38 +154,38 @@ def test_session_events_can_be_replayed_and_branched_without_a_clock_or_shared_m
         replay = transition(replay, event)
     assert replay == pending and original.messages == ()
     answer = "  Budget.xlsx\nKeep the full answer.  "
-    answered = transition(pending, QuestionAnswered("q1", answer))
-    cancelled = transition(pending, InputCancelled("q1"))
+    answered = transition(pending, Resolution("q1", Answered(answer)))
+    cancelled = transition(pending, Resolution("q1", Cancelled()))
     assert pending.question is not None and answered.question is None and cancelled.question is None
-    assert isinstance(answered.messages[-1], Question) and answered.messages[-1].reply == Answered(answer)
-    assert isinstance(cancelled.messages[-1], Question) and cancelled.messages[-1].reply == Cancelled()
+    assert isinstance(answered.messages[-1], AgentRequest) and answered.messages[-1].reply == Answered(answer)
+    assert isinstance(cancelled.messages[-1], AgentRequest) and cancelled.messages[-1].reply == Cancelled()
     assert answered.messages[0] is pending.messages[0]
     assert [message.created_at for message in answered.messages] == [10, 12]
 
 
 def test_mismatched_and_late_responses_cannot_change_another_input_or_its_controls() -> None:
-    approval = transition(Session(), Approval("a1", "Open this?", "budget.xlsx", 10))
-    assert transition(approval, QuestionAnswered("a1", "approve")) is approval
-    assert transition(approval, ApprovalDecided("old", "approved")) is approval
+    approval = transition(Session(), reviewed("a1", "Open this?", "budget.xlsx", 10))
+    assert transition(approval, Resolution("a1", Answered("approve"))) is approval
+    assert transition(approval, Resolution("old", ApprovalDecision.APPROVED)) is approval
     assert presentation(approval.messages[0]).response == ApprovalControls("a1")
-    declined = transition(approval, ApprovalDecided("a1", "declined"))
-    assert transition(declined, ApprovalDecided("a1", "approved")) is declined
+    declined = transition(approval, Resolution("a1", ApprovalDecision.DECLINED))
+    assert transition(declined, Resolution("a1", ApprovalDecision.APPROVED)) is declined
     assert presentation(declined.messages[0]).response == ResponseText("Declined")
-    question = transition(Session(), Question("q1", "Which one?", "", 11))
-    assert transition(question, ApprovalDecided("q1", "approved")) is question
+    question = transition(Session(), asked("q1", "Which one?", "", 11))
+    assert transition(question, Resolution("q1", ApprovalDecision.APPROVED)) is question
     assert presentation(question.messages[0]).response is None
 
 
 def test_waiting_state_and_decision_remain_in_the_transcript() -> None:
     session = Session()
     session = transition(session, Begin("Open my workbook", 0, queued=False))
-    session = transition(session, Approval("open-1", "Open this?", "budget.xlsx", 0))
+    session = transition(session, reviewed("open-1", "Open this?", "budget.xlsx", 0))
     session = transition(session, Progress("Checking progress"))
     assert bool(session.waiting)
     assert session.status == "Needs your approval"
-    session = transition(session, ApprovalDecided("open-1", "declined"))
+    session = transition(session, Resolution("open-1", ApprovalDecision.DECLINED))
     assert not session.waiting
-    assert isinstance(session.messages[-1], Approval) and session.messages[-1].decision == "declined"
+    assert isinstance(session.messages[-1], AgentRequest) and session.messages[-1].reply is ApprovalDecision.DECLINED
     assert "budget.xlsx" in session.all_text()
 
 
@@ -194,13 +193,13 @@ def test_stopping_removes_the_queue_and_preserves_the_cancelled_request() -> Non
     session = Session()
     session = transition(session, Begin("Open my workbook", 0, queued=False))
     session = transition(session, Enqueued("Discard this"))
-    session = transition(session, Approval("open-1", "Open this?", "", 0))
+    session = transition(session, reviewed("open-1", "Open this?", "", 0))
     session = transition(session, StopRequested())
-    session = transition(session, InputCancelled("open-1"))
+    session = transition(session, Resolution("open-1", Cancelled()))
     assert bool(session.stopping) and not session.queued
     assert str(session.status) == "Stopping…"
     session = transition(session, Done("Stopped by you.", 0))
     session = transition(session, Finished())
     assert not session.busy and not session.stopping
     assert session.status == "Stopped"
-    assert isinstance(session.messages[1], Approval) and session.messages[1].decision == "cancelled"
+    assert isinstance(session.messages[1], AgentRequest) and session.messages[1].reply == Cancelled()

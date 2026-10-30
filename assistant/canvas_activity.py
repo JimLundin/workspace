@@ -57,7 +57,7 @@ def canvas_reply(reply: assistant.agent_session.Reply) -> CanvasReply:
     match reply:
         case assistant.agent_session.Pending():
             return Attention.WAITING
-        case assistant.agent_session.Cancelled():
+        case assistant.agent_session.Cancelled() | automation.task.ApprovalDecision():
             return Attention.CLOSED
         case assistant.agent_session.Answered():
             return reply
@@ -164,7 +164,9 @@ def session_activity(session: assistant.agent_session.Snapshot) -> tuple[CanvasA
         match message:
             case assistant.agent_session.ChatMessage(speaker="You", source=source):
                 work_ids = (source.identity,) if source is not None else ()
-            case assistant.agent_session.Question(request_id=identity, text=title, detail=detail, created_at=at, reply=reply):
+            case assistant.agent_session.AgentRequest(
+                request=automation.task.Question(id=identity, text=title), detail=detail, created_at=at, reply=reply
+            ):
                 result = (
                     *result,
                     CanvasQuestion(
@@ -275,7 +277,9 @@ def redirect_session(session: assistant.agent_session.Snapshot) -> assistant.age
     messages: tuple[assistant.agent_session.Message, ...] = ()
     for message in session.messages:
         match message:
-            case assistant.agent_session.Question(reply=assistant.agent_session.Pending(), request_id=identity, text=title, created_at=at):
+            case assistant.agent_session.AgentRequest(
+                request=automation.task.Question(id=identity, text=title), reply=assistant.agent_session.Pending(), created_at=at
+            ):
                 target = "question:" + identity
                 messages = (
                     *messages,
@@ -286,7 +290,7 @@ def redirect_session(session: assistant.agent_session.Snapshot) -> assistant.age
                         FeedRequest("canvas:" + target, title[:240]),
                     ),
                 )
-            case assistant.agent_session.Approval():
+            case assistant.agent_session.AgentRequest(request=automation.task.Approval()):
                 messages = (*messages, message)
             case assistant.agent_session.ChatMessage(source=source) if source is not None and source.identity.startswith("canvas:"):
                 messages = (*messages, message)

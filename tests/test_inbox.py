@@ -1,7 +1,7 @@
-from assistant.agent_session import Question
 from assistant.communications import Conversation, Feed, Message, TeamsActivity, Update, UpdateKind, WindowsNotice
 from assistant.inbox import Kind, Query, Source, matches, review_prompt
 from assistant.system_notices import NoticeKey
+from tests.agent_requests import asked
 
 
 def test_source_and_category_filters_keep_actionable_agent_questions_reachable() -> None:
@@ -11,7 +11,7 @@ def test_source_and_category_filters_keep_actionable_agent_questions_reachable()
     assert not matches(reaction, Query(Source.MAIL))
     assert matches(mail, Query(Source.MAIL, search="review budget"))
     assert not matches(mail, Query(Source.MAIL, search="missing"))
-    assert matches(Question("owned", "Which workbook?", "", 1), Query(Source.MAIL, Kind.REACTION, "missing"))
+    assert matches(asked("owned", "Which workbook?", "", 1), Query(Source.MAIL, Kind.REACTION, "missing"))
 
 
 def test_inbox_review_freezes_only_matching_pending_sources_as_quoted_data() -> None:

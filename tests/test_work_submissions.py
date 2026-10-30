@@ -296,8 +296,7 @@ def test_a_failed_answer_commit_restores_the_exact_question_for_a_new_reply(tmp_
             assert not has_pending_input(rig.panel)
         rig.refresh()
         question = rig.panel.state.question
-        assert has_pending_input(rig.panel) and isinstance(question, agent_session.Question)
-        assert question.request_id == "which-file"
+        assert has_pending_input(rig.panel) and question is not None and question.id == "which-file"
         assert rig.panel.submit("Use the revenue workbook")
         rig.refresh()
         assert [response.reply for response in rig.tasks.responses("question-task")] == [TextAnswer("Use the revenue workbook")]

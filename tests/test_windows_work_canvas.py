@@ -18,7 +18,7 @@ lazy from PySide6 import QtCore, QtGui, QtTest, QtWidgets
 lazy from PySide6.QtCore import Qt
 
 import automation.task
-from assistant.agent_session import Answered, Question
+from assistant.agent_session import Answered
 from assistant.canvas_activity import ROOT_CONTEXT, Attention, CanvasInstruction, CanvasQuestion, CanvasRun, SessionRequest, TaskRequest
 from assistant.feed_agent_tools import request
 from assistant.feed_origin import App
@@ -71,6 +71,7 @@ from automation.personal_work import (
 from automation.store import TaskStore
 from automation.task import ActionNotApplied, ActionVerified
 from automation.work_documents import WebDocument
+from tests.agent_requests import asked
 from tests.feed_fixture import open_bridge
 from tests.personal_work_fixture import source
 from tests.test_agent import ToolRig
@@ -948,7 +949,7 @@ def test_canvas_clarification_redirect_submits_context_to_the_waiting_agent(tmp_
         return True
 
     agent.request_input(
-        Question("atlas", "Which supplier should own Atlas?", "I have read the handoff mail. I need your ownership decision.", time.time()),
+        asked("atlas", "Which supplier should own Atlas?", "I have read the handoff mail. I need your ownership decision.", time.time()),
         resume,
     )
     try:

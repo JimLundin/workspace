@@ -22,7 +22,7 @@ from usage import DIRECTORY
 from winapi import appearance, windows
 from winapi.shapes import Rect
 lazy from assistant import console_requests, notification_reading
-lazy from assistant.agent_session import Approval, Session, Snapshot, pending
+lazy from assistant.agent_session import AgentRequest, Session, Snapshot, pending
 lazy from assistant.agent_window import AgentWindow
 lazy from assistant.feed_desktop import Desktop, NativeDesktop
 lazy from assistant.feed_items import SourceKey, Verb, WorkItem, act, help_request
@@ -53,6 +53,7 @@ lazy from assistant.notifications import (
 lazy from assistant.qt_ui import EventLoop, cancel, later
 lazy from assistant.toast_card import Card, Measure
 lazy from assistant.ui_components.text import font
+lazy from automation.task import Approval
 lazy from winapi.notification_input import Region, WheelRouter
 
 prepare()
@@ -307,8 +308,8 @@ class AgentToasts:
                     card.text.verticalScrollBar().setValue(card.text.verticalScrollBar().maximum())
                     card.tail_pending = False
         for message in self.session.messages:
-            if isinstance(message, Approval) and pending(message) and self.approval_visible(message.request_id):
-                self.agent.input_presented(message.request_id)
+            if isinstance(message, AgentRequest) and isinstance(message.request, Approval) and pending(message) and self.approval_visible(message.id):
+                self.agent.input_presented(message.id)
 
     def approval_visible(self, request_id: str) -> bool:
         """A painted, opaque card or visible history entry contains this review."""
@@ -320,7 +321,11 @@ class AgentToasts:
             content = card.content
             entries = results(content) if isinstance(content, Turn) else (content,) if isinstance(content, Entry) else ()
             if any(
-                isinstance(entry, Entry) and isinstance(entry.message, Approval) and entry.message.request_id == request_id and pending(entry.message)
+                isinstance(entry, Entry)
+                and isinstance(entry.message, AgentRequest)
+                and isinstance(entry.message.request, Approval)
+                and entry.message.id == request_id
+                and pending(entry.message)
                 for entry in entries
             ):
                 return True

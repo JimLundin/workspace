@@ -4,9 +4,10 @@ import threading
 from collections import deque
 from collections.abc import Callable
 
-from assistant.agent_session import Answer, Question, Snapshot, StreamState, pending
+from assistant.agent_session import Answer, Snapshot, StreamState, pending
 from assistant.agent_window import AgentWindow, View
 from assistant.recording_state import RecordingAction
+from tests.agent_requests import asked
 
 
 class RecordingView:
@@ -177,9 +178,9 @@ def test_inline_answer_uses_the_same_composer_and_stopping_restores_submission()
         return True
 
     assert not panel.reply_by_voice("Start a task")
-    panel.request_input(Question("first", "Which workbook?", "", 1), accept)
+    panel.request_input(asked("first", "Which workbook?", "", 1), accept)
     assert panel.submit(answer) and replies == [answer] and not submitted
-    panel.request_input(Question("second", "Which sheet?", "", 2), accept)
+    panel.request_input(asked("second", "Which sheet?", "", 2), accept)
     panel.stopping()
     assert not panel.waiting and not panel.respond("second", "Too late")
     panel.finish()
@@ -192,7 +193,7 @@ def test_inline_answer_uses_the_same_composer_and_stopping_restores_submission()
 def test_quitting_during_ui_warmup_withdraws_requests_and_never_creates_a_late_window() -> None:
     panel = RecordingWindow(lambda: None)
     panel.show()
-    panel.request_input(Question("open", "Open this?", "budget.xlsx", 1), lambda _reply: True)
+    panel.request_input(asked("open", "Open this?", "budget.xlsx", 1), lambda _reply: True)
     panel.close()
     assert not panel.respond("open", "Yes")
     panel.paint()
@@ -244,7 +245,7 @@ def test_snapshot_callbacks_follow_the_ui_queue_and_stop_after_close() -> None:
         while jobs:
             jobs.popleft()()
         assert observed_counts() == (0,)
-        panel.request_input(Question("owned", "Which sheet?", "", 1), lambda _: True)
+        panel.request_input(asked("owned", "Which sheet?", "", 1), lambda _: True)
         assert observed_counts() == (0,)
         while jobs:
             jobs.popleft()()
@@ -253,7 +254,7 @@ def test_snapshot_callbacks_follow_the_ui_queue_and_stop_after_close() -> None:
         while jobs:
             jobs.popleft()()
         assert observed_counts() == (0, 1, 0)
-        panel.request_input(Question("late", "Another sheet?", "", 2), lambda _: True)
+        panel.request_input(asked("late", "Another sheet?", "", 2), lambda _: True)
     finally:
         panel.close()
         while jobs:

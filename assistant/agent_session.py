@@ -15,8 +15,8 @@ from assistant.communications import Feed
 from assistant.feed_origin import FeedRequest
 from assistant.feed_triage import Board
 from assistant.recording_state import RecordingState
+from automation.task import Approval, ApprovalDecision, Question
 
-type Decision = Literal["pending", "approved", "declined", "cancelled"]
 type Result = Literal["Ready", "Stopped", "Needs attention"]
 
 
@@ -35,7 +35,8 @@ class Cancelled:
     pass
 
 
-type Reply = Pending | Answered | Cancelled
+type Resolved = Answered | ApprovalDecision | Cancelled
+type Reply = Pending | Resolved
 
 
 @dataclass(frozen=True, slots=True)
@@ -121,24 +122,32 @@ class MeetingMessage:
 
 
 @dataclass(frozen=True, slots=True)
-class Question:
-    request_id: str
-    text: str
+class AgentRequest:
+    """A durable question or approval in the timeline, with the person's reply.
+
+    `detail` is what the person reviews: a question's detail, or the full live
+    review of an approval's exact operation.
+    """
+
+    request: Question | Approval
     detail: str
     created_at: float
     reply: Reply = Pending()
 
+    @property
+    def id(self) -> str:
+        return self.request.id
 
-@dataclass(frozen=True, slots=True)
-class Approval:
-    request_id: str
-    text: str
-    detail: str
-    created_at: float
-    decision: Decision = "pending"
+    @property
+    def text(self) -> str:
+        match self.request:
+            case Question(text=text) | Approval(title=text):
+                return text
+            case _:
+                assert_never(self.request)
 
 
-type Message = ChatMessage | MeetingMessage | Question | Approval | LiveMessage
+type Message = ChatMessage | MeetingMessage | AgentRequest | LiveMessage
 
 
 @dataclass(frozen=True, slots=True)
@@ -200,20 +209,9 @@ class StopRequested:
 
 
 @dataclass(frozen=True, slots=True)
-class QuestionAnswered:
-    identity: str
-    text: str
-
-
-@dataclass(frozen=True, slots=True)
-class ApprovalDecided:
-    identity: str
-    decision: Literal["approved", "declined"]
-
-
-@dataclass(frozen=True, slots=True)
-class InputCancelled:
-    identity: str
+class Resolution:
+    request_id: str
+    reply: Resolved
 
 
 @dataclass(frozen=True, slots=True)
@@ -222,7 +220,6 @@ class RecordingUpdated:
     at: float
 
 
-type Resolution = QuestionAnswered | ApprovalDecided | InputCancelled
 type Event = (
     Begin
     | Enqueued
@@ -234,8 +231,7 @@ type Event = (
     | Problem
     | Finished
     | StopRequested
-    | Question
-    | Approval
+    | AgentRequest
     | Resolution
     | RecordingUpdated
     | LiveMessage
@@ -244,9 +240,9 @@ type Event = (
 
 def pending(message: Message) -> bool:
     match message:
-        case Question(reply=Pending()) | Approval(decision="pending"):
+        case AgentRequest(reply=Pending()):
             return True
-        case ChatMessage() | MeetingMessage() | Question() | Approval() | Answer() | ReasoningSummary() | ToolActivity():
+        case ChatMessage() | MeetingMessage() | AgentRequest() | Answer() | ReasoningSummary() | ToolActivity():
             return False
         case _:
             assert_never(message)
@@ -282,8 +278,15 @@ class Session:
         return any(pending(message) for message in self.messages)
 
     @property
-    def question(self) -> Question | None:
-        return next((message for message in self.messages if isinstance(message, Question) and isinstance(message.reply, Pending)), None)
+    def question(self) -> AgentRequest | None:
+        return next(
+            (
+                message
+                for message in self.messages
+                if isinstance(message, AgentRequest) and isinstance(message.request, Question) and pending(message)
+            ),
+            None,
+        )
 
     def all_text(self) -> str:
         return "\n\n".join(message_text(message) for message in self.messages)
@@ -344,11 +347,11 @@ def transition(state: Session, event: Event) -> Session:
             return replace(state, phase="idle", queued=(), status=state.result, messages=tuple(interrupt(message) for message in state.messages))
         case StopRequested():
             return replace(state, queued=(), phase="stopping" if state.busy else state.phase, status="Stopping…" if state.busy else state.status)
-        case Question() | Approval():
+        case AgentRequest(request=request):
             return replace(
-                state, messages=(*state.messages, event), status="Waiting for your reply" if isinstance(event, Question) else "Needs your approval"
+                state, messages=(*state.messages, event), status="Waiting for your reply" if isinstance(request, Question) else "Needs your approval"
             )
-        case QuestionAnswered() | ApprovalDecided() | InputCancelled():
+        case Resolution():
             return resolve(state, event)
         case RecordingUpdated(recording, at):
             return update_recording(state, recording, at)
@@ -413,32 +416,29 @@ def acceptable(request: Question | Approval, answer: str) -> bool:
             assert_never(request)
 
 
-def resolution(request: Question | Approval, answer: str) -> Resolution:
-    match request:
-        case Question(request_id=identity):
-            return QuestionAnswered(identity, answer)
-        case Approval(request_id=identity):
-            return ApprovalDecided(identity, "approved" if answer == "approve" else "declined")
+def resolution(message: AgentRequest, answer: str) -> Resolution:
+    """The reply to an answer `acceptable` already admitted for this request."""
+    match message.request:
+        case Question():
+            return Resolution(message.id, Answered(answer))
+        case Approval():
+            return Resolution(message.id, ApprovalDecision.APPROVED if answer == "approve" else ApprovalDecision.DECLINED)
         case _:
-            assert_never(request)
+            assert_never(message.request)
 
 
 def resolve(state: Session, event: Resolution) -> Session:
     for index, message in enumerate(state.messages):
-        if not isinstance(message, (Question, Approval)) or message.request_id != event.identity or not pending(message):
+        if not isinstance(message, AgentRequest) or message.id != event.request_id or not pending(message):
             continue
-        updated: Message
-        match message, event:
-            case Question(), QuestionAnswered(text=text):
-                updated = replace(message, reply=Answered(text))
-            case Approval(), ApprovalDecided(decision=decision):
-                updated = replace(message, decision=decision)
-            case Question(), InputCancelled():
-                updated = replace(message, reply=Cancelled())
-            case Approval(), InputCancelled():
-                updated = replace(message, decision="cancelled")
+        match message.request, event.reply:
+            case Question(), Answered() | Cancelled():
+                pass
+            case Approval(), ApprovalDecision() | Cancelled():
+                pass
             case _:
                 return state  # a response for another kind of input cannot resolve this one
+        updated = replace(message, reply=event.reply)
         return replace(
             state, messages=(*state.messages[:index], updated, *state.messages[index + 1 :]), status="Stopping…" if state.stopping else "Working…"
         )
@@ -470,12 +470,16 @@ def update_recording(state: Session, recording: RecordingState, at: float) -> Se
     return replace(state, recording=recording, messages=(*state.messages, MeetingMessage(recording.identity, text, at)))
 
 
-def question_response(reply: Reply) -> str:
+def reply_text(reply: Reply) -> str:
     match reply:
         case Pending():
             return "pending"
         case Answered(text):
             return text
+        case ApprovalDecision.APPROVED:
+            return "approved"
+        case ApprovalDecision.DECLINED:
+            return "declined"
         case Cancelled():
             return "cancelled"
         case _:
@@ -495,10 +499,10 @@ def message_text(message: Message) -> str:
             parts = (name, message.text)
         case MeetingMessage(text=text):
             parts = ("Meeting", text)
-        case Question(text=text, detail=detail, reply=reply):
-            parts = ("You", text, detail, "answered", reply.text) if isinstance(reply, Answered) else ("You", text, detail, question_response(reply))
-        case Approval(text=text, detail=detail, decision=decision):
-            parts = ("You", text, detail, decision)
+        case AgentRequest(detail=detail, reply=Answered(answer)):
+            parts = ("You", message.text, detail, "answered", answer)
+        case AgentRequest(detail=detail, reply=reply):
+            parts = ("You", message.text, detail, reply_text(reply))
         case _:
             assert_never(message)
     return "\n".join(part for part in parts if part)
@@ -521,18 +525,6 @@ class Presentation:
     detail: str = ""
     response: ApprovalControls | ResponseText | None = None
     muted: bool = field(default=False, kw_only=True)
-
-
-def question_presentation(detail: str, reply: Reply) -> Presentation:
-    match reply:
-        case Pending():
-            return Presentation("Question", detail=detail)
-        case Answered(text):
-            return Presentation("Question", detail=detail, response=ResponseText(text))
-        case Cancelled():
-            return Presentation("Question", detail=detail, response=ResponseText("Cancelled"))
-        case _:
-            assert_never(reply)
 
 
 def presentation(message: Message) -> Presentation:
@@ -563,11 +555,14 @@ def presentation(message: Message) -> Presentation:
             return Presentation(f"{action_text.title(name)} · {status}", "plain", muted=True)
         case MeetingMessage():
             return Presentation("Meeting")
-        case Question(detail=detail, reply=reply):
-            return question_presentation(detail, reply)
-        case Approval(request_id=identity, detail=detail, decision="pending"):
+        case AgentRequest(request=Question(), detail=detail, reply=Pending()):
+            return Presentation("Question", detail=detail)
+        case AgentRequest(request=Approval(id=identity), detail=detail, reply=Pending()):
             return Presentation("Approval", detail=detail, response=ApprovalControls(identity))
-        case Approval(detail=detail, decision=decision):
-            return Presentation("Approval", detail=detail, response=ResponseText(decision.capitalize()))
+        case AgentRequest(request=Question(), detail=detail, reply=Answered(text)):
+            return Presentation("Question", detail=detail, response=ResponseText(text))
+        case AgentRequest(request=request, detail=detail, reply=reply):
+            role = "Question" if isinstance(request, Question) else "Approval"
+            return Presentation(role, detail=detail, response=ResponseText(reply_text(reply).capitalize()))
         case _:
             assert_never(message)

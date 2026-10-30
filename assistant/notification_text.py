@@ -5,11 +5,12 @@ from textwrap import shorten
 
 from assistant import feed_items, tool_text
 from assistant.action_text import readable
-from assistant.agent_session import Answer, Approval, ChatMessage, ToolActivity, pending
+from assistant.agent_session import AgentRequest, Answer, ChatMessage, ToolActivity, pending
 from assistant.feed_items import WorkItem, action_spans, expanded_spans, link
 from assistant.feed_triage import Assessment
 from assistant.notifications import Content, Entry, Response, Turn, body, heading, plain, results, steps
 from assistant.rich_text import Span, formatted
+from automation.task import Approval
 
 
 def answer(content: Content | None) -> Answer | None:
@@ -125,10 +126,13 @@ def options(content: Content) -> tuple[Span, ...]:
         return tuple(span for span in action_spans(content) if span.link)
     entries = results(content) if isinstance(content, Turn) else (content,) if isinstance(content, Entry) else ()
     for entry in entries:
-        if isinstance(entry, Entry) and isinstance(entry.message, Approval) and pending(entry.message):
-            return tuple(
-                link("agent-option", label, {"request": entry.message.request_id, "answer": label.casefold()}) for label in ("Approve", "Decline")
-            )
+        if (
+            isinstance(entry, Entry)
+            and isinstance(entry.message, AgentRequest)
+            and isinstance(entry.message.request, Approval)
+            and pending(entry.message)
+        ):
+            return tuple(link("agent-option", label, {"request": entry.message.id, "answer": label.casefold()}) for label in ("Approve", "Decline"))
     return ()
 
 

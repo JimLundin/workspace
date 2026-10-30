@@ -94,14 +94,14 @@ def chronological(task: Task) -> tuple[float, str]:
     return task.created_at, task.id
 
 
-def input_message(task: Task, review: ApprovalReview | None) -> agent_session.Question | agent_session.Approval | None:
+def input_message(task: Task, review: ApprovalReview | None) -> agent_session.AgentRequest | None:
     """A redacted journal record cannot become an approvable conversation row."""
     match task.state:
-        case Waiting(Question(identity, question, detail)):
-            return agent_session.Question(identity, question, detail, task.updated_at)
+        case Waiting(Question() as question):
+            return agent_session.AgentRequest(question, question.detail, task.updated_at)
         case Waiting(Approval()):
             if review is not None and review_matches(task, review):
-                return agent_session.Approval(review.request.id, review.title, review.detail, task.updated_at)
+                return agent_session.AgentRequest(review.request, review.detail, task.updated_at)
             return None
         case _:
             return None
@@ -381,23 +381,23 @@ class WorkAgent:
                 return False
             return self._enqueue(Issued(AnswerTask(task_id, request_id, reply), self.identity(), self._source(), None))
 
-    def _request(self, task: Task, message: agent_session.Question | agent_session.Approval) -> None:
+    def _request(self, task: Task, message: agent_session.AgentRequest) -> None:
         def respond(answer: str) -> bool:
-            if isinstance(message, agent_session.Question):
+            if isinstance(message.request, Question):
                 try:
-                    return self._reply(task.id, message.request_id, TextAnswer(answer))
+                    return self._reply(task.id, message.id, TextAnswer(answer))
                 except ValueError:
                     return False
             match answer.strip().casefold():
                 case "approve":
-                    return self._reply(task.id, message.request_id, ApprovalDecision.APPROVED)
+                    return self._reply(task.id, message.id, ApprovalDecision.APPROVED)
                 case "decline":
-                    return self._reply(task.id, message.request_id, ApprovalDecision.DECLINED)
+                    return self._reply(task.id, message.id, ApprovalDecision.DECLINED)
                 case _:
                     return False
 
-        self._clear_input((task.id, message.request_id))
-        self._input = task.id, message.request_id
+        self._clear_input((task.id, message.id))
+        self._input = task.id, message.id
         self._panel().request_input(message, respond)
 
     def _clear_input(self, keep: tuple[str, str] | None = None) -> None:

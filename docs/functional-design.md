@@ -30,10 +30,10 @@ The main places to read are:
 | `assistant/work_bridge_contracts.py`, `browser_documents.py` | Validated desktop bridge variants and document stream contracts | The bridge joins feed, catalog and canvas wire contracts without a feed-to-canvas import cycle; `Browser` owns authenticated CDP streams and exclusive bounded file collection |
 | `assistant/work_window.py`, `work_canvas_window.py`, `ui_components/bubble.py`, `ui_components/text.py` | Current observations and bounded preview presentation | Desktop startup prepares the hidden native canvas; Qt retains group/header identities, materializes visible nested bubbles and shapes previews during viewport painting |
 | `assistant/llm.py` | System, user, assistant, and tool-result message variants; request serialization | HTTP client functions |
-| `assistant/agent_session.py` | Typed events, messages, questions, approvals, session transitions, and presentation | `agent_window.py`, `agent_toasts.py`, `toast_card.py` |
+| `assistant/agent_session.py` | Typed events, messages, agent request rows over the durable questions and approvals, session transitions, and presentation | `agent_window.py`, `agent_toasts.py`, `toast_card.py` |
 | `assistant/agent.py`, `agent_toolsets.py`, `agent_execution.py` | Tool dispatch, approval and observation recording for one durable work claim; each task profile's toolset | `AgentExecution` selects the toolset from the task profile and owns per-conversation SDK history, source drafts and run cleanup; `WorkExecution` owns the claim's effects |
 | `assistant/agent_tools.py`, `desktop_tools.py`, `browser_tools.py`, `business_tools.py`, `self_change_tools.py`, `meeting_tools.py`, `feed_agent_tools.py`, `work_canvas_tools.py`, `personal_work_tools.py`, `task_tools.py` | Tool families: each `Tool` declares its schema, handler, read/change classification with resources, reconciliation proof, readback evidence and visible display; handlers describe each exact `Operation` to approval and effect | The agent composes the families over its `Session`; `Screen` and `SelfChange` own the latest screenshot and the source draft's check/install state |
-| `automation/task.py`, `store.py` | Durable task, wait, reply, action, and run variants; controls and stale-run decisions | `TaskStore` owns SQLite transactions and validates stored records |
+| `automation/task.py`, `store.py` | Durable task, request profile, agent request, reply, action, and run variants; controls and stale-run decisions | `TaskStore` owns SQLite transactions and validates stored records |
 | `automation/controller.py`, `execution.py`, `actions.py` | Work outcomes, recovery context, exact operations, observation evidence, reconciliation proof and verification decisions | `WorkController` owns execution lifetime; `Actions` owns cancellable effect coordination |
 | `automation/routines.py`, `context.py` | Trigger occurrences, accepted handoffs, context relevance and freshness | The routine/context stores own persistence; `meeting_events.py` owns transcript delivery and startup scanning |
 | `assistant/work_window.py`, `work_agent.py`, `work_service.py` | Work commands, immutable projections, conversation/task selection and meeting RPC acceptance | `WorkAgent` owns frontend observation and asynchronous UI delivery; `WorkService` composes journal/transport calls and RPC replies; `WorkWindow` schedules its native view |
@@ -161,9 +161,10 @@ preserved when other bubbles arrive.
 Session events include their timestamps. IDs and clocks are supplied by the
 work controller, so a sequence of events can be replayed or branched
 without changing its source state. Views receive the immutable session itself.
-Questions carry a pending, answered, or cancelled reply; approvals carry a
-decision. A reply for the wrong request kind or an already resolved request
-leaves the session unchanged.
+An agent request row projects the durable question or approval itself, with
+the detail the person reviews and their reply: pending, answered, an approval
+decision, or cancelled. A reply for the wrong request kind or an already
+resolved request leaves the session unchanged.
 
 The legacy task controller accepts an execution adapter and a window factory. Its
 immutable `Active` state carries the current task and pending tasks with their

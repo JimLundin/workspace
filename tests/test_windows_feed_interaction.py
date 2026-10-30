@@ -10,7 +10,7 @@ lazy from PySide6 import QtWidgets
 lazy from PySide6.QtCore import Qt
 lazy from PySide6.QtTest import QTest
 
-from assistant.agent_session import Question, Succeeded, ToolActivity
+from assistant.agent_session import Succeeded, ToolActivity
 from assistant.console_requests import Answer, Command, Provider, request
 from assistant.feed_items import WorkItem
 from assistant.feed_origin import FeedRequest
@@ -18,6 +18,7 @@ from assistant.feed_triage import Assessment, Board, Solution, SolutionKind
 from assistant.notification_text import details, spans
 from assistant.notifications import Turn
 from assistant.qt_runtime import prepare
+from tests.agent_requests import asked
 from tests.test_console_inbox import event
 from tests.test_windows_agent_toasts import notifications
 
@@ -66,7 +67,7 @@ def test_pending_question_points_to_agent_voice_without_an_editor() -> None:
             replies.append(answer)
             return True
 
-        panel.agent.request_input(Question("owned-question", "Which figures should I check?", "Only the project totals.", 1), record_reply)
+        panel.agent.request_input(asked("owned-question", "Which figures should I check?", "Only the project totals.", 1), record_reply)
         panel.pump()
         card = next(c for c in panel.view.cards.values() if not c.retiring)
         assert not card.window.findChildren(QtWidgets.QPlainTextEdit)
@@ -123,7 +124,7 @@ def test_proposal_thinking_question_and_reply_keep_the_same_source_bubble() -> N
         assert panel.view.cards[card.key] is card and isinstance(card.content, Turn)
         assert len([card for card in panel.view.cards.values() if not card.retiring]) == 1
         assert card.label.text() == proposal.title and card.dismiss.isVisible()
-        panel.agent.request_input(Question("linked-question", "Use the revised sheet?", "It includes the corrections.", 2), lambda _answer: True)
+        panel.agent.request_input(asked("linked-question", "Use the revised sheet?", "It includes the corrections.", 2), lambda _answer: True)
         panel.pump()
         assert panel.view.cards[card.key] is card
         assert not card.window.findChildren(QtWidgets.QPlainTextEdit)

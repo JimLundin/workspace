@@ -5,7 +5,7 @@ from pathlib import Path
 from unittest import TestCase
 
 import automation.task
-from assistant.agent_session import Answered, Question, Session
+from assistant.agent_session import Answered, Session
 from assistant.canvas_activity import CanvasInstruction, CanvasQuestion, CanvasRequest, CanvasRun, CanvasUpdate, SessionRequest
 from assistant.work_canvas import (
     Announcement,
@@ -23,6 +23,7 @@ from assistant.work_canvas_model import CanvasDocument, Placement, view_state
 from assistant.work_window import WorkSnapshot
 from automation.personal_work import DismissedWork, WorkState
 from automation.task import Blocked, Completed, Waiting
+from tests.agent_requests import asked
 from tests.test_work_canvas import catalog, local_canvas, nested_bubbles
 from tests.test_work_window import work_task
 
@@ -75,7 +76,7 @@ def test_answers_reach_only_visible_waiting_questions_and_record_one_reply(tmp_p
     hidden = work_task(Waiting(automation.task.Question("hidden", "Hidden question", "")), identity="hidden-task")
     finding = CanvasUpdate("result:finding", "Finding", "Version two is approved.", 5, (active.id,))
     canvas.save(CanvasDocument(runs=(CanvasRun(current.id, active.id), CanvasRun(hidden.id, dismissed.id)), activity=(finding,)))
-    canvas.observe_session(Session(identity="session", messages=(Question("chat", "Which supplier?", "", 10),)))
+    canvas.observe_session(Session(identity="session", messages=(asked("chat", "Which supplier?", "", 10),)))
     document = canvas.observe_work(WorkSnapshot(tasks=(current, hidden))).document
     assert [question.id for question in canvas.waiting()] == ["question:chat", "question:current"]
     assert canvas.settled(document) == frozenset(("question:hidden",))
@@ -106,7 +107,7 @@ def test_speech_answers_the_selected_question_or_instructs_only_an_open_canvas(t
     # Defect: speech answers an unselected question, becomes a task while a
     # question is selected, or instructs a canvas the user cannot see.
     canvas = local_canvas(tmp_path)
-    canvas.observe_session(Session(identity="session", messages=(Question("chat", "Which supplier?", "", 10),)))
+    canvas.observe_session(Session(identity="session", messages=(asked("chat", "Which supplier?", "", 10),)))
     assert canvas.speech("question:chat", visible=True) == AnswerQuestion(SessionRequest("session", "chat"))
     assert canvas.speech("work:one", visible=True) is SpeechRoute.INSTRUCT
     assert canvas.speech(None, visible=True) is SpeechRoute.INSTRUCT
