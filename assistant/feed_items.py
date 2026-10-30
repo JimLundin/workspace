@@ -289,8 +289,7 @@ def body_spans(row: WorkItem) -> tuple[Span, ...]:
             pass
     values = spans(row)
     first = next((index for index, span in enumerate(values) if item_action(span)), len(values))
-    if first < len(values) and first and values[first - 1].text == "\n":
-        first -= 1
+    # The blank separator before the actions is trailing whitespace here.
     return trimmed(values[:first])
 
 
