@@ -7,7 +7,8 @@ from pathlib import Path
 from unittest import TestCase
 
 from assistant import agent_session
-from automation.task import Completed, Question, RequestSource, RoutineSource, TaskStatus, TextAnswer, Waiting
+from assistant.feed_origin import FeedRequest
+from automation.task import Completed, FeedHandoff, Question, RequestKind, RequestSource, RoutineSource, TaskStatus, TextAnswer, Waiting
 from tests.test_external_input import has_pending_input
 from tests.test_work_agent import RecordingBridge, WorkRig, invocation
 from tests.work_fixture import seed_tasks
@@ -66,19 +67,21 @@ def test_identified_duplicates_reuse_the_original_source_and_invocation_context_
     current = invocation("Original workbook")
     rig = WorkRig(tmp_path, context=lambda: current)
     try:
-        rig.agent.submit_identified("caller-task", "Summarize this workbook")
+        rig.agent.submit_identified("caller-task", "Summarize this workbook", RequestKind.GENERAL)
         rig.refresh()
         original = rig.tasks.get("caller-task")
         assert original is not None
         current = invocation("A different workbook")
         assert rig.agent.new_conversation()
-        rig.agent.submit_identified("caller-task", "Summarize this workbook")
+        rig.agent.submit_identified("caller-task", "Summarize this workbook", RequestKind.GENERAL)
         snapshot = rig.refresh()
         assert rig.tasks.get("caller-task") == original
         assert rig.bridge.registrations == [(original.id, invocation("Original workbook"), 1234)]
         assert snapshot.submission_problems == () and len(snapshot.tasks) == 1
         assert snapshot.status == "" and not rig.errors
-        rig.agent.submit_identified("caller-task", "An unrelated request")
+        rig.agent.submit_identified("caller-task", "Summarize this workbook", FeedHandoff("feed-item", "Workbook summary"))
+        assert [problem.task_id for problem in rig.refresh().submission_problems] == [original.id], "A profile cannot change under one identity."
+        rig.agent.submit_identified("caller-task", "An unrelated request", RequestKind.GENERAL)
         snapshot = rig.refresh()
         assert rig.tasks.get("caller-task") == original
         assert len(rig.bridge.registrations) == 1
@@ -93,7 +96,7 @@ def test_an_identified_request_cannot_attach_a_routine_task_with_the_same_id_and
     rig = WorkRig(tmp_path)
     try:
         original = rig.tasks.submit("collision", "Routine work", "Routine work", RoutineSource("routine", 0, "occurrence"), at=rig.clock())
-        rig.agent.submit_identified("collision", "Routine work")
+        rig.agent.submit_identified("collision", "Routine work", RequestKind.GENERAL)
         snapshot = rig.refresh()
         assert rig.tasks.get("collision") == original and rig.bridge.registrations == []
         assert [problem.task_id for problem in snapshot.submission_problems] == ["collision"]
@@ -105,9 +108,9 @@ def test_invalid_identified_input_is_rejected_before_the_caller_accepts_it(tmp_p
     rig = WorkRig(tmp_path, start=False)
     try:
         with TestCase().assertRaisesRegex(ValueError, "task identity"):
-            rig.agent.submit_identified("invalid\0identity", "A request")
+            rig.agent.submit_identified("invalid\0identity", "A request", RequestKind.GENERAL)
         with TestCase().assertRaisesRegex(ValueError, "task prompt"):
-            rig.agent.submit_identified("valid-identity", " \n ")
+            rig.agent.submit_identified("valid-identity", " \n ", RequestKind.GENERAL)
         assert rig.agent.snapshot().tasks == () and not rig.agent.running()
     finally:
         rig.close()
@@ -117,15 +120,15 @@ def test_unconfirmed_submission_keeps_known_rows_and_later_matching_work_clears_
     gate = PollHold()
     rig = WorkRig(tmp_path, bridge=RecordingBridge(on_poll=gate.poll))
     try:
-        rig.agent.submit_identified("known-task", "Known work")
+        rig.agent.submit_identified("known-task", "Known work", RequestKind.GENERAL)
         before = rig.refresh()
         original = rig.tasks.get("known-task")
         assert original is not None
         rig.agent.new_conversation()
         rig.agent.watch(("known-task", "unconfirmed", "another-unconfirmed"))
         with unavailable_journal(rig, gate):
-            rig.agent.submit_identified("unconfirmed", "A request whose commit is unconfirmed")
-            rig.agent.submit_identified("another-unconfirmed", "A separate request")
+            rig.agent.submit_identified("unconfirmed", "A request whose commit is unconfirmed", RequestKind.GENERAL)
+            rig.agent.submit_identified("another-unconfirmed", "A separate request", RequestKind.GENERAL)
             assert rig.agent.refresh().wait(5)
             snapshot = rig.agent.snapshot()
             assert snapshot.tasks == before.tasks
@@ -197,15 +200,15 @@ def test_unrelated_failures_cannot_evict_a_watched_identity_collision(tmp_path: 
     gate = PollHold()
     rig = WorkRig(tmp_path, bridge=RecordingBridge(on_poll=gate.poll))
     try:
-        rig.agent.submit_identified("watched-collision", "The original request")
+        rig.agent.submit_identified("watched-collision", "The original request", RequestKind.GENERAL)
         rig.agent.watch(("watched-collision",))
         rig.refresh()
-        rig.agent.submit_identified("watched-collision", "A conflicting request")
+        rig.agent.submit_identified("watched-collision", "A conflicting request", RequestKind.GENERAL)
         collision = rig.refresh().submission_problems[0]
         with unavailable_journal(rig, gate):
             for batch in range(3):
                 for index in range(100):
-                    rig.agent.submit_identified(f"failed-{batch}-{index}", "Another request during the outage")
+                    rig.agent.submit_identified(f"failed-{batch}-{index}", "Another request during the outage", RequestKind.GENERAL)
                 assert rig.agent.refresh().wait(5)
             assert collision in rig.agent.snapshot().submission_problems
         snapshot = rig.refresh()
@@ -245,11 +248,11 @@ def test_stop_remains_available_when_ordinary_input_capacity_is_full(tmp_path: P
     try:
         # Observations consume the same ordinary queue slots as submissions.
         # One real task makes Stop meaningful without 256 repeated journal writes.
-        rig.agent.submit_identified("accepted", "Accepted request")
+        rig.agent.submit_identified("accepted", "Accepted request", RequestKind.GENERAL)
         observations = tuple(rig.agent.refresh() for _ in range(255))
         assert all(not completed.is_set() for completed in observations)
         with TestCase().assertRaisesRegex(ValueError, "queue is full"):
-            rig.agent.submit_identified("over-capacity", "This request was not accepted")
+            rig.agent.submit_identified("over-capacity", "This request was not accepted", RequestKind.GENERAL)
         for _ in range(10):
             rig.agent.stop()
         rig.agent.close()
@@ -265,9 +268,9 @@ def test_stop_remains_available_when_ordinary_input_capacity_is_full(tmp_path: P
 def test_stop_ordering_preserves_new_requests_accepted_after_stop(tmp_path: Path) -> None:
     rig = WorkRig(tmp_path, start=False)
     try:
-        rig.agent.submit_identified("before-stop", "Cancel this request")
+        rig.agent.submit_identified("before-stop", "Cancel this request", RequestKind.GENERAL)
         rig.agent.stop()
-        rig.agent.submit_identified("after-stop", "A new request after Stop")
+        rig.agent.submit_identified("after-stop", "A new request after Stop", RequestKind.GENERAL)
         rig.agent.close()
         assert rig.agent.wait_closed(5)
         before, after = rig.tasks.get("before-stop"), rig.tasks.get("after-stop")
@@ -281,7 +284,7 @@ def test_a_failed_answer_commit_restores_the_exact_question_for_a_new_reply(tmp_
     gate = PollHold()
     rig = WorkRig(tmp_path, bridge=RecordingBridge(on_poll=gate.poll))
     try:
-        rig.agent.submit_identified("question-task", "Choose the workbook")
+        rig.agent.submit_identified("question-task", "Choose the workbook", RequestKind.GENERAL)
         rig.refresh()
         claim = rig.tasks.claim("worker", "question-run", at=rig.clock())
         assert claim is not None
@@ -307,7 +310,7 @@ def test_a_later_confirmed_answer_is_not_reopened_after_a_failed_observation(tmp
     gate = PollHold()
     rig = WorkRig(tmp_path, bridge=RecordingBridge(on_poll=gate.poll))
     try:
-        rig.agent.submit_identified("question-task", "Choose a year")
+        rig.agent.submit_identified("question-task", "Choose a year", RequestKind.GENERAL)
         rig.refresh()
         claim = rig.tasks.claim("worker", "question-run", at=rig.clock())
         assert claim is not None
@@ -354,3 +357,16 @@ def test_ordinary_unconfirmed_submission_requires_its_original_prompt_and_conver
                 assert [problem.task_id for problem in rig.refresh().submission_problems] == [identity]
         finally:
             rig.close()
+
+
+def test_a_feed_handoff_opens_its_turn_with_its_feed_label_instead_of_its_recipe(tmp_path: Path) -> None:
+    # Defect: the conversation shows a feed handoff's generated recipe without its
+    # feed item, so its turn cannot share the item's bubble.
+    rig = WorkRig(tmp_path)
+    try:
+        rig.agent.submit_identified("feed-task", "Carry out the recipe.\nContext JSON:\n{}", FeedHandoff("teams:atlas", "Atlas supplier"))
+        rig.refresh()
+        opened = [message for message in rig.panel.state.messages if isinstance(message, agent_session.ChatMessage)]
+        assert [(message.text, message.source) for message in opened] == [("Atlas supplier", FeedRequest("teams:atlas", "Atlas supplier"))]
+    finally:
+        rig.close()

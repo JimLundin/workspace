@@ -46,8 +46,10 @@ from automation.task import (
     ApprovalDecision,
     Completed,
     Control,
+    Profile,
     Question,
     RequestSource,
+    RoutineSource,
     Running,
     Task,
     Waiting,
@@ -90,7 +92,9 @@ type WorkRequest = Issued | IdentifiedSubmission
 @dataclass(frozen=True, slots=True)
 class UnconfirmedSubmission:
     prompt: str
-    source: RequestSource | None
+    profile: Profile
+    conversation_id: str | None
+    """An identified submission reuses its task from any conversation."""
     problem: SubmissionProblem
 
 
@@ -99,9 +103,16 @@ type RoutineCommand = CreateRoutine | UpdateRoutine | EnableRoutine | DisableRou
 type ContextCommand = AddPreference | UpdatePreference | AddProjectNote | UpdateProjectNote | RemoveContext
 
 
-def submission_matches(task: Task, prompt: str, source: RequestSource | None = None) -> bool:
+def submission_matches(task: Task, submission: UnconfirmedSubmission) -> bool:
     """The caller resolved this task by ID; verify its remaining submission constraints."""
-    return task.prompt == prompt.strip() and isinstance(task.source, RequestSource) and (source is None or task.source == source)
+    match task.source:
+        case RequestSource(conversation_id, profile):
+            conversation = submission.conversation_id is None or conversation_id == submission.conversation_id
+            return task.prompt == submission.prompt and profile == submission.profile and conversation
+        case RoutineSource():
+            return False
+        case _:
+            assert_never(task.source)
 
 
 def follow_up_prompt(task: Task, prompt: str) -> str:
@@ -188,19 +199,19 @@ class WorkService:
             self._submissions.pop(identity)
 
     def submission_failed(self, issued: WorkRequest, reason: str, *, watched: frozenset[str]) -> None:
-        source: RequestSource | None
+        conversation: str | None
         match issued:
-            case Issued(command=Submit(prompt), source=source):
+            case Issued(command=Submit(prompt), source=RequestSource(conversation)):
                 pass
             case IdentifiedSubmission(prompt=prompt):
-                source = None
+                conversation = None
             case Issued():
                 return
             case _:
                 assert_never(issued)
         problem = SubmissionProblem(issued.identity, f"Could not confirm this submission: {reason[:4_000]}".replace("\0", "�"))
         self._submissions.pop(issued.identity, None)
-        self._submissions[issued.identity] = UnconfirmedSubmission(prompt.strip(), source, problem)
+        self._submissions[issued.identity] = UnconfirmedSubmission(prompt.strip(), issued.source.profile, conversation, problem)
         self._limit_submissions(watched)
 
     def _limit_replies(self, watched: frozenset[str]) -> None:
@@ -229,9 +240,11 @@ class WorkService:
             existing = self.tasks.get(request.identity)
             source = request.source
             if existing is not None:
-                if not submission_matches(existing, request.prompt) or not isinstance(existing.source, RequestSource):
-                    raise ValueError("That task identity already belongs to a different request.")
-                source = existing.source
+                match existing.source:
+                    case RequestSource(profile=profile) as original if profile == source.profile and existing.prompt == request.prompt.strip():
+                        source = original
+                    case _:
+                        raise ValueError("That task identity already belongs to a different request.")
             issued = Issued(Submit(request.prompt), request.identity, source, request.context)
         else:
             issued = request
@@ -378,7 +391,7 @@ class WorkService:
     ) -> tuple[SubmissionProblem, ...]:
         for identity, submission in tuple(self._submissions.items()):
             task = current.get(identity)
-            if confirmed and task is not None and submission_matches(task, submission.prompt, submission.source):
+            if confirmed and task is not None and submission_matches(task, submission):
                 self._submissions.pop(identity)
         problems = {identity: submission.problem for identity, submission in self._submissions.items()}
         missing_reason = (

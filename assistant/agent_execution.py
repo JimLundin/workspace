@@ -8,19 +8,20 @@ import time
 from collections import OrderedDict
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
+from typing import assert_never
 
 from assistant.activity import ContextSnapshot
 from assistant.agent import Agent, Log
 from assistant.agent_history import History
 from assistant.agent_tools import Machine
 from assistant.llm import Settings
-from assistant.meeting_execution import MeetingWork
+from assistant.meeting_execution import MeetingRun, MeetingWork
 from assistant.self_change_tools import verified_installation
 from assistant.workspace import Workspace
 from automation.actions import ActionError, Resources
 from automation.execution import ApprovalReview, Incomplete, Outcome, WorkExecution
 from automation.store import TaskStore
-from automation.task import Blocked, Claim, RequestSource, Waiting
+from automation.task import Blocked, Claim, FeedHandoff, RequestKind, RequestSource, Task, Waiting, task_profile
 from diagnostics import failure_info
 from usage import Detail
 
@@ -80,6 +81,17 @@ class AgentExecution:
             self.conversations.popitem(last=False)
         return self.conversations[key]
 
+    def followup(self, task: Task) -> MeetingRun | None:
+        match profile := task_profile(task.source):
+            case RequestKind.MEETING_FOLLOWUP:
+                if self.meeting is None:
+                    raise ValueError("Meeting follow-up is not configured for this work process.")
+                return self.meeting.session(task)
+            case RequestKind.GENERAL | FeedHandoff():
+                return None
+            case _:
+                assert_never(profile)
+
     def run_work(
         self,
         claim: Claim,
@@ -94,9 +106,7 @@ class AgentExecution:
         """Execute one durable claim; the controller commits the returned disposition."""
         started = time.monotonic()
         try:
-            if self.meeting is None and claim.task.id.startswith("meeting-followup-"):
-                raise ValueError("Meeting follow-up is not configured for this work process.")
-            followup = self.meeting.session(claim.task) if self.meeting is not None else None
+            followup = self.followup(claim.task)
         except (OSError, ValueError, sqlite3.Error) as error:
             reason = f"Meeting preparation could not be opened: {error}"[:4000]
             log.problem(reason)

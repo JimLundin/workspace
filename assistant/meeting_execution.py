@@ -12,7 +12,7 @@ from assistant.meeting_followup_store import FollowupStore, Publication, Publish
 from assistant.meeting_requests import MeetingRequests, PreparedFollowup, task_identity
 from automation.actions import ActionError
 from automation.execution import Outcome, WorkExecution
-from automation.task import ActionSpec, ActionUncertain, ActionVerified, Blocked, Completed, RequestSource, Task, Waiting, digest, identifier, integer
+from automation.task import ActionSpec, ActionUncertain, ActionVerified, Blocked, Completed, Task, Waiting, digest, identifier, integer
 
 SOURCE_PAGE = 32_000
 _MAIL_RESOURCE = "meeting-draft:"
@@ -82,15 +82,12 @@ class MeetingWork:
     def __init__(self, requests: MeetingRequests, packages: FollowupStore, drafts: Drafts) -> None:
         self.requests, self.packages, self.drafts = requests, packages, drafts
 
-    def session(self, task: Task) -> MeetingRun | None:
-        # The workflow reserves this identity namespace before task submission.
-        # A missing binding must not silently gain the general desktop toolset.
-        if not task.id.startswith("meeting-followup-"):
-            return None
+    def session(self, task: Task) -> MeetingRun:
+        """A missing binding must not silently gain the general desktop toolset."""
         request = self.requests.get(task.id)
         if request is None:
             raise ValueError("The selected recording snapshots are missing. Prepare the meeting follow-up again.")
-        if task.id != task_identity(request.bundle) or task.prompt != request.prompt.strip() or not isinstance(task.source, RequestSource):
+        if task.id != task_identity(request.bundle) or task.prompt != request.prompt.strip():
             raise ValueError("This task no longer matches its exact meeting preparation. Prepare a new follow-up from the intended recordings.")
         return MeetingRun(request, self.packages, self.drafts)
 

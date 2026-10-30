@@ -24,13 +24,16 @@ from automation.task import (
     Completed,
     Control,
     Failed,
+    FeedHandoff,
     FileDigest,
     GoalRevision,
     Interrupted,
     NoVerification,
     Outcome,
+    Profile,
     Question,
     Reply,
+    RequestKind,
     RequestSource,
     Response,
     RoutineSource,
@@ -132,10 +135,40 @@ def _strings(value: object, name: str, *, maximum: int, count: int) -> tuple[str
     return tuple(text(item, name, maximum=maximum) for item in values)
 
 
+def _profile_data(profile: Profile) -> dict[str, object]:
+    match profile:
+        case RequestKind.GENERAL:
+            return {"kind": "general"}
+        case RequestKind.MEETING_FOLLOWUP:
+            return {"kind": "meeting_followup"}
+        case FeedHandoff(item, title):
+            return {"kind": "feed", "item": item, "title": title}
+        case _:
+            assert_never(profile)
+
+
+def _profile(value: object) -> Profile:
+    if not isinstance(value, dict):
+        raise ValueError("Invalid stored request profile.")
+    data = cast(dict[str, object], value)
+    match data.get("kind"):
+        case "general":
+            _fields(data, "kind")
+            return RequestKind.GENERAL
+        case "meeting_followup":
+            _fields(data, "kind")
+            return RequestKind.MEETING_FOLLOWUP
+        case "feed":
+            _fields(data, "kind", "item", "title")
+            return FeedHandoff(identifier(data["item"], "feed item identity"), text(data["title"], "feed item title", maximum=240))
+        case _:
+            raise ValueError("Invalid stored request profile.")
+
+
 def _source_data(source: Source) -> dict[str, object]:
     match source:
-        case RequestSource(conversation_id):
-            return {"kind": "request", "conversation_id": conversation_id}
+        case RequestSource(conversation_id, profile):
+            return {"kind": "request", "conversation_id": conversation_id, "profile": _profile_data(profile)}
         case RoutineSource(routine_id, revision, occurrence_id):
             return {"kind": "routine", "routine_id": routine_id, "revision": revision, "occurrence_id": occurrence_id}
         case _:
@@ -146,8 +179,8 @@ def _source(value: object) -> Source:
     data = _load(value)
     match data.get("kind"):
         case "request":
-            _fields(data, "kind", "conversation_id")
-            return RequestSource(identifier(data["conversation_id"], "conversation identity"))
+            _fields(data, "kind", "conversation_id", "profile")
+            return RequestSource(identifier(data["conversation_id"], "conversation identity"), _profile(data["profile"]))
         case "routine":
             _fields(data, "kind", "routine_id", "revision", "occurrence_id")
             return RoutineSource(
@@ -486,10 +519,11 @@ class TaskStore:
 
     @staticmethod
     def _migrate_unbound_approvals(connection: _Connection) -> None:
-        """Version 2 packed an approval's operation into its identity.
+        """Version 2 packed an approval's operation into its identity and recorded no request profiles.
 
         Its pending approvals become blocked and its grants are dropped, so each
         operation is reviewed again; nothing is approved without its fingerprint.
+        Feed handoffs become general requests: only their feed label is lost.
         """
         blocked = _dump(_state_data(Waiting(Blocked(_UNBOUND_APPROVAL))))
         connection.execute(
@@ -501,6 +535,17 @@ class TaskStore:
             (blocked,),
         )
         connection.execute("DELETE FROM responses WHERE json_extract(request,'$.kind')='approval'")
+        # Before profiles, the meeting workflow reserved this task identity namespace.
+        connection.execute(
+            "UPDATE tasks SET source=json_set(source,'$.profile',json(?)) "
+            "WHERE json_extract(source,'$.kind')='request' AND id LIKE 'meeting-followup-%'",
+            (_dump(_profile_data(RequestKind.MEETING_FOLLOWUP)),),
+        )
+        connection.execute(
+            "UPDATE tasks SET source=json_set(source,'$.profile',json(?)) "
+            "WHERE json_extract(source,'$.kind')='request' AND json_extract(source,'$.profile') IS NULL",
+            (_dump(_profile_data(RequestKind.GENERAL)),),
+        )
         connection.execute(f"PRAGMA user_version={SCHEMA_VERSION}")
 
     @contextmanager
@@ -728,7 +773,7 @@ class TaskStore:
                     return count
                 for row in rows:
                     task = self._read_task(connection, row)
-                    if task.source != RequestSource(conversation_id):
+                    if not isinstance(task.source, RequestSource) or task.source.conversation_id != conversation_id:
                         raise ValueError("The conversation index disagrees with the task source.")
                     result = controlled(task, command, at=at)
                     if result is not None:

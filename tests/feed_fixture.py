@@ -16,6 +16,7 @@ from assistant.console_requests import Command
 from assistant.feed_triage import Board, Candidate
 from assistant.feed_triage_service import Store, Triage
 from assistant.feed_work import FeedWork
+from automation.task import Profile
 
 
 class LocalBridge(ThreadingHTTPServer):
@@ -39,7 +40,7 @@ class TriageFixture(Triage):
         model: Callable[[tuple[Candidate, ...], tuple[str, ...]], str],
         console: Callable[[Command], bool],
         *,
-        submit: Callable[[str, str], None] | None = None,
+        submit: Callable[[str, str, Profile], None] | None = None,
         clock: Callable[[], float] = time.time,
         work: FeedWork | None = None,
     ) -> None:

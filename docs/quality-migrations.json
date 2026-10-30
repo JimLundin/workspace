@@ -536,15 +536,6 @@
       "key": {
         "rule": "PLR0913",
         "path": "assistant/meeting_workflow.py",
-        "scope": "MeetingWorkflow.__init__",
-        "signature": "eaa2bf81a866a5be8983d66f49c844177ec97a10c978ae8062b095c85b0f796e"
-      },
-      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
-    },
-    {
-      "key": {
-        "rule": "PLR0913",
-        "path": "assistant/meeting_workflow.py",
         "scope": "work_observation",
         "signature": "2c673b932ab3389f9b7d531b28d1d11d881b8f02a63e379e7e17e6250f45a484"
       },
@@ -1305,15 +1296,6 @@
         "path": "tests/test_meeting_followup.py",
         "scope": "completed_meeting",
         "signature": "548c45b134669f1ca01129942af578cb0e1ada77a84b698c1302571a480bf644"
-      },
-      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
-    },
-    {
-      "key": {
-        "rule": "PLR0913",
-        "path": "tests/test_meeting_workflow.py",
-        "scope": "WorkflowRig.__init__",
-        "signature": "df68aeaa673e11fd4db6908244120064eb09bb18200c5dd7cc4b3daa88a347e7"
       },
       "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
     },

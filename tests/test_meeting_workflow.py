@@ -42,7 +42,7 @@ from assistant.meeting_workflow import (
     WorkUnavailable,
 )
 from assistant.work_window import WorkSnapshot
-from automation.task import Completed, RoutineSource, Running
+from automation.task import Completed, Profile, RequestKind, RoutineSource, Running
 from tests.test_meeting_events import saved_meeting
 from tests.test_meetings import SPEECH
 from tests.test_work_agent import WorkRig
@@ -56,7 +56,7 @@ class WorkflowRig:
         folder: Path,
         *,
         work: WorkRig | None = None,
-        submit: Callable[[str, str], None] | None = None,
+        submit: Callable[[str, str, Profile], None] | None = None,
         read_work: Callable[[], WorkSnapshot] | None = None,
         start: bool = True,
     ) -> None:
@@ -172,11 +172,11 @@ def test_multiple_segments_are_reserved_before_queue_acceptance_and_duplicate_pr
     requests = MeetingRequests(tmp_path / "followups")
     accepted: list[PreparedFollowup] = []
 
-    def submit(identity: str, prompt: str) -> None:
+    def submit(identity: str, prompt: str, profile: Profile) -> None:
         prepared = requests.get(identity)
-        assert prepared is not None and prepared.prompt == prompt
+        assert prepared is not None and prepared.prompt == prompt and profile is RequestKind.MEETING_FOLLOWUP
         accepted.append(prepared)
-        work.agent.submit_identified(identity, prompt)
+        work.agent.submit_identified(identity, prompt, profile)
 
     rig = WorkflowRig(tmp_path, work=work, submit=submit)
     try:
@@ -203,7 +203,7 @@ def test_restart_retries_the_exact_saved_prompt_without_requiring_original_trans
     bundle = TranscriptBundle((observe_transcript(meeting),))
     saved = MeetingRequests(tmp_path / "followups").prepare(task_identity(bundle), bundle, "An earlier exact recipe prompt.\n", at=55)
 
-    def unavailable(_identity: str, _prompt: str) -> None:
+    def unavailable(_identity: str, _prompt: str, _profile: Profile) -> None:
         raise OSError("The work queue is unavailable.")
 
     first = WorkflowRig(tmp_path, submit=unavailable)
@@ -218,9 +218,9 @@ def test_restart_retries_the_exact_saved_prompt_without_requiring_original_trans
     work = WorkRig(tmp_path / "work")
     submitted: list[str] = []
 
-    def submit(identity: str, prompt: str) -> None:
+    def submit(identity: str, prompt: str, profile: Profile) -> None:
         submitted.append(prompt)
-        work.agent.submit_identified(identity, prompt)
+        work.agent.submit_identified(identity, prompt, profile)
 
     second = WorkflowRig(tmp_path, work=work, submit=submit)
     try:

@@ -83,7 +83,7 @@ from automation.personal_work import (
     UnlinkWork,
     WorkRefused,
 )
-from automation.task import Phase, Task, phase
+from automation.task import FeedHandoff, Phase, Profile, Task, phase
 lazy from assistant.feed_research import Research
 
 _ADDRESS = TypeAdapter(tuple[str, int])
@@ -179,7 +179,7 @@ class Triage:
         model: Callable[[tuple[Candidate, ...], tuple[str, ...]], str],
         console: Callable[[Command], bool],
         *,
-        submit: Callable[[str, str], None] | None = None,
+        submit: Callable[[str, str, Profile], None] | None = None,
         server_factory: Callable[[type[BaseHTTPRequestHandler]], ThreadingHTTPServer] = open_bridge,
         wait: Callable[[threading.Event, float], bool] = wait_for_stop,
         clock: Callable[[], float] = time.time,
@@ -436,7 +436,7 @@ class Triage:
             self.publish(self.board)
         if task not in self.submitted:
             try:
-                self.submit(task, prompt)
+                self.submit(task, prompt, FeedHandoff(decision.item, decision.title))
             except ValueError as error:
                 raise OSError("The request could not be queued. Your decision is saved; try again.") from error
             self.submitted.add(task)

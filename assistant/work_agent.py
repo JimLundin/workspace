@@ -17,7 +17,7 @@ from typing import assert_never
 lazy from assistant import agent_session
 lazy from assistant.activity import ContextSnapshot
 lazy from assistant.agent_window import AgentWindow
-lazy from assistant.feed_triage import request_context
+lazy from assistant.feed_origin import FeedRequest
 lazy from assistant.work_service import IdentifiedSubmission, Issued, WorkBridge, WorkService
 lazy from assistant.work_window import AnswerTask, FollowUp, Redirect, Submit, WorkCommand, WorkSnapshot
 lazy from automation.context import ContextStore
@@ -39,10 +39,14 @@ lazy from automation.task import (
     Blocked,
     Completed,
     Failed,
+    FeedHandoff,
     Interrupted,
+    Profile,
     Question,
     Reply,
+    RequestKind,
     RequestSource,
+    RoutineSource,
     Running,
     RunRef,
     Task,
@@ -197,10 +201,10 @@ class WorkAgent:
                 self._thread = threading.Thread(target=self._observe, name="work frontend", daemon=True)
                 self._thread.start()
 
-    def _source(self) -> RequestSource:
+    def _source(self, profile: Profile = RequestKind.GENERAL) -> RequestSource:
         if self._conversation is None:
             self._conversation = self.identity()
-        return RequestSource(self._conversation)
+        return RequestSource(self._conversation, profile)
 
     def _enqueue(self, job: Issued | IdentifiedSubmission | Observe) -> bool:
         with self._lock:
@@ -243,7 +247,7 @@ class WorkAgent:
     def notify_canvas(self, title: str, target: str) -> None:
         self._panel().notify_canvas(title, target)
 
-    def submit_identified(self, identity: str, prompt: str) -> None:
+    def submit_identified(self, identity: str, prompt: str, profile: Profile) -> None:
         """Accept a caller-owned task ID so repeated submissions reuse the same task.
 
         The observer retains journal and transport ownership, just as it does
@@ -253,7 +257,7 @@ class WorkAgent:
         prompt = text(prompt, "task prompt").strip()
         captured = self.context() if self.context is not None else None
         with self._lock:
-            if not self._enqueue(IdentifiedSubmission(identity, prompt, self._source(), captured)):
+            if not self._enqueue(IdentifiedSubmission(identity, prompt, self._source(profile), captured)):
                 raise ValueError("Work is closing or its input queue is full. Try the request again.")
 
     def watch(self, task_ids: tuple[str, ...], *, owner: str = "default") -> None:
@@ -403,7 +407,11 @@ class WorkAgent:
             self._input = None
 
     def _display(self, task: Task, review: ApprovalReview | None) -> None:
-        source = request_context(task.prompt) if task.id.startswith(("feed-choice:", "feed-reply:")) else None
+        match task.source:
+            case RequestSource(profile=FeedHandoff(item, title)):
+                source: FeedRequest | None = FeedRequest(item, title)
+            case RequestSource() | RoutineSource():
+                source = None
         previous = self._displayed
         if task == previous and review == self._displayed_review:
             return

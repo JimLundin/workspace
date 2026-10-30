@@ -24,6 +24,7 @@ from automation.task import (
     FileDigest,
     Interrupted,
     Question,
+    RequestKind,
     RequestSource,
     RoutineSource,
     Running,
@@ -316,9 +317,10 @@ def test_refresh_approval_requires_exact_pending_approval_and_never_approves(tmp
     assert reopened.answer("task", "question", TextAnswer("Project A"), at=12) is not None
 
 
-def test_version_two_approvals_reopen_blocked_and_their_grants_cannot_authorize(tmp_path: Path) -> None:
+def test_version_two_journals_reopen_with_blocked_approvals_and_recorded_profiles(tmp_path: Path) -> None:
     # Defect: a journal whose approvals packed their operation into the ID crashes
-    # recovery, or keeps a pending approval or grant without a recorded fingerprint.
+    # recovery, keeps a pending approval or grant without a recorded fingerprint,
+    # or lets a saved meeting follow-up run with the general toolset.
     path = tmp_path / "work.sqlite3"
     store = TaskStore(path)
     for task in ("granted", "pending"):
@@ -327,18 +329,24 @@ def test_version_two_approvals_reopen_blocked_and_their_grants_cannot_authorize(
         assert claim is not None
         store.finish(claim.run, Waiting(Approval(task + "-request", "Apply?", "Preview.", "a" * 64)), at=3)
     assert store.answer("granted", "granted-request", ApprovalDecision.APPROVED, at=4) is not None
+    store.submit("meeting-followup-" + "c" * 64, "Meeting", "Prepare notes.", RequestSource("chat", RequestKind.MEETING_FOLLOWUP), at=1)
     legacy = '{"kind":"approval","id":"approval:0:' + "a" * 64 + ':nonce","title":"Apply?","detail":"Preview."}'
     with closing(sqlite3.connect(path)) as database, database:
         database.execute("UPDATE tasks SET state=json_object('kind','waiting','reason',json(?)) WHERE id='pending'", (legacy,))
         database.execute("UPDATE requests SET request=?", (legacy,))
         database.execute("UPDATE responses SET request=?", (legacy,))
+        database.execute("UPDATE tasks SET source=json_remove(source,'$.profile')")
         database.execute("PRAGMA user_version=2")
     reopened = TaskStore(path)
     pending = reopened.get("pending")
     assert pending is not None and isinstance(pending.state, Waiting) and isinstance(pending.state.reason, Blocked)
     assert reopened.responses("granted") == () and reopened.request_run("pending", "pending-request") is None
     assert reopened.control("pending", Control.RESUME, at=5) is not None
-    assert TaskStore(path).get("granted") is not None
+    assert [task.source.profile for task in TaskStore(path).list_tasks() if isinstance(task.source, RequestSource)] == [
+        RequestKind.GENERAL,
+        RequestKind.GENERAL,
+        RequestKind.MEETING_FOLLOWUP,
+    ]
 
 
 def test_timed_waits_wake_at_the_deadline_and_blocked_work_requires_explicit_resume(tmp_path: Path) -> None:

@@ -31,7 +31,7 @@ from automation.actions import Resources
 from automation.execution import WorkExecution
 from automation.files import filesystem_path
 from automation.store import TaskStore
-from automation.task import ActionUncertain, ActionVerified, Blocked, Claim, Completed, Control, FileDigest, RequestSource, Waiting
+from automation.task import ActionUncertain, ActionVerified, Blocked, Claim, Completed, Control, FileDigest, RequestKind, RequestSource, Waiting
 from tests.fake_endpoint import FakeEndpoint, fake_endpoint
 from tests.test_agent import FakeMachine, FakeWindow, calls, says
 from tests.test_meeting_followup import BODY, NOTICE, followup_response, followup_sources, response_item
@@ -72,7 +72,11 @@ class MeetingRig:
 
     def claim(self, *, prompt: str | None = None) -> Claim:
         self.tasks.submit(
-            self.prepared.task_id, "Release planning follow-up", prompt or self.prepared.prompt, RequestSource("shared-chat"), at=time.time()
+            self.prepared.task_id,
+            "Release planning follow-up",
+            prompt or self.prepared.prompt,
+            RequestSource("shared-chat", RequestKind.MEETING_FOLLOWUP),
+            at=time.time(),
         )
         claim = self.tasks.claim("worker", uuid.uuid4().hex, at=time.time())
         assert claim is not None and claim.task.id == self.prepared.task_id
@@ -98,7 +102,6 @@ class MeetingRig:
 
     def agent(self, claim: Claim, *, context: Callable[[], ContextSnapshot] | None = None) -> Agent:
         selected = self.meeting.session(claim.task)
-        assert selected is not None
         return Agent(
             Settings("", "", "", "", "", "", ""),
             self.machine,

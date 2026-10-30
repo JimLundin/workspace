@@ -13,7 +13,8 @@ lazy from PySide6.QtTest import QTest
 from assistant.agent_session import Question, Succeeded, ToolActivity
 from assistant.console_requests import Answer, Command, Provider, request
 from assistant.feed_items import WorkItem
-from assistant.feed_triage import Assessment, Board, Solution, SolutionKind, request_context, solution_task, solutions_for
+from assistant.feed_origin import FeedRequest
+from assistant.feed_triage import Assessment, Board, Solution, SolutionKind
 from assistant.notification_text import details, spans
 from assistant.notifications import Turn
 from assistant.qt_runtime import prepare
@@ -116,10 +117,8 @@ def test_proposal_thinking_question_and_reply_keep_the_same_source_bubble() -> N
         panel.agent.triage(Board(enabled=True, items=(proposal,)))
         panel.pump()
         card = next(card for card in panel.view.cards.values() if not card.retiring)
-        _identity, prompt = solution_task(proposal, solutions_for(proposal)[0])
-        context = request_context(prompt)
-        assert context is not None
-        panel.agent.begin(context.title, panel.stop, source=context)
+        context = FeedRequest(proposal.identity, proposal.title)
+        panel.agent.begin(proposal.title, panel.stop, source=context)
         panel.pump()
         assert panel.view.cards[card.key] is card and isinstance(card.content, Turn)
         assert len([card for card in panel.view.cards.values() if not card.retiring]) == 1

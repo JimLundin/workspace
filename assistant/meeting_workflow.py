@@ -26,7 +26,7 @@ from assistant.meeting_followup_store import (
 from assistant.meeting_requests import MAX_REQUESTS, MeetingRequests, PreparedFollowup, followup_prompt, task_identity
 from assistant.meeting_store import MeetingArchive
 from assistant.work_window import WorkSnapshot
-from automation.task import Completed, RequestSource, Task, digest, identifier, integer, variant
+from automation.task import Completed, Profile, RequestKind, Task, digest, identifier, integer, task_profile, variant
 
 MAX_MEETINGS = 512
 MAX_COMMANDS = 64
@@ -204,7 +204,7 @@ def work_observation(
     if task is not None:
         # WorkAgent preserves its established outer-whitespace normalization.
         # Retries still submit the exact prompt saved with this preparation.
-        if not isinstance(task.source, RequestSource) or task.prompt != request.prompt.strip():
+        if task_profile(task.source) is not RequestKind.MEETING_FOLLOWUP or task.prompt != request.prompt.strip():
             return WorkUnavailable("The saved task identity belongs to different work.", last)
         if snapshot.status:
             return WorkUnavailable(snapshot.status, task)
@@ -293,13 +293,15 @@ class MeetingWorkflow:
         requests: MeetingRequests,
         followups: FollowupStore,
         *,
-        submit_identified: Callable[[str, str], None],
+        submit_identified: Callable[[str, str, Profile], None],
         read_work: Callable[[], WorkSnapshot],
         retain_work: Callable[[tuple[str, ...]], None],
         publish: Callable[[MeetingSnapshot], None],
         report_error: Callable[[str], None],
         clock: Callable[[], float] = time.time,
     ) -> None:
+        # Each input is a separate effect owner: the recording and preparation
+        # stores, the work agent's submission, observation and retention, and the UI.
         self.archive, self.requests, self.followups = archive, requests, followups
         self.submit_identified, self.read_work, self.retain_work = submit_identified, read_work, retain_work
         self.publish, self.report_error, self.clock = publish, report_error, clock
@@ -426,7 +428,7 @@ class MeetingWorkflow:
             return
         self._attempted.add(request.task_id)
         try:
-            self.submit_identified(request.task_id, request.prompt)
+            self.submit_identified(request.task_id, request.prompt, RequestKind.MEETING_FOLLOWUP)
             self._submission_problems.pop(request.task_id, None)
         except Exception as error:
             self._submission_problems[request.task_id] = str(error) or "The saved preparation could not enter the work queue."

@@ -81,7 +81,7 @@ lazy from automation.personal_work import (
 )
 lazy from automation.routines import RoutineStore
 lazy from automation.store import TaskStore
-lazy from automation.task import Control
+lazy from automation.task import Control, RequestKind
 lazy from miryoku.layout import Layer
 lazy from protocol import WM_INDICATOR, WM_KEY_STATE, WM_LAYOUT_STATE, WM_REQUEST, LayoutState, Tool, decode_indicator
 lazy from winapi import audio, recording, screen, shell, system, windows
@@ -581,7 +581,7 @@ class AssistantApp:
         self.agent.watch(tuple(binding.task_id for binding in self.canvas.read().runs), owner="canvas")
         match run.intent:
             case CanvasInstruction():
-                self.agent.submit_identified(run.task_id, instruction_prompt(run))
+                self.agent.submit_identified(run.task_id, instruction_prompt(run), RequestKind.GENERAL)
                 return
             case _:
                 pass
@@ -597,6 +597,7 @@ class AssistantApp:
             "Research the next useful step and update the work thread with what you learn. Routine collection stays quiet. "
             "Ask the user for clarification when missing input prevents progress; continue this same work after the answer. "
             "Keep your progress and findings on the work representation.",
+            RequestKind.GENERAL,
         )
 
     def work_command(self, command: WorkCommand) -> None:

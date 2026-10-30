@@ -11,7 +11,7 @@ from assistant.activity import Activity, ContextSnapshot
 from assistant.feed_agent_tools import request
 from assistant.feed_contracts import REVIEW_INPUT, FeedReply, StoredBoard
 from assistant.feed_history import Decision, Handoff
-from assistant.feed_triage import Board, Disposition, candidate, decode, proposal_revision, request_context, restored, saved, unassessed
+from assistant.feed_triage import Board, Disposition, candidate, decode, proposal_revision, restored, saved, unassessed
 from assistant.feed_triage_service import classify
 from assistant.feed_work import FeedWork
 from assistant.llm import Json, Settings
@@ -19,7 +19,7 @@ from automation.actions import Resources
 from automation.context import ContextStore, Preference, ProjectNote
 from automation.execution import WorkExecution
 from automation.store import TaskStore
-from automation.task import Completed, Question, RequestSource, TextAnswer, Waiting
+from automation.task import Completed, FeedHandoff, Profile, Question, RequestSource, TextAnswer, Waiting
 from tests.fake_endpoint import fake_endpoint
 from tests.feed_fixture import TriageFixture
 from tests.test_feed_triage import output
@@ -124,14 +124,14 @@ def test_registered_reply_tool_saves_instruction_before_handoff_and_reuses_it_af
     item = decode(output(([source.identity], "action")), (source,))[0]
     feed_store = MemoryStore()
     feed_store.data = saved(Board(enabled=True, items=(item,)))
-    submitted: list[tuple[str, str]] = []
+    submitted: list[tuple[str, str, Profile]] = []
     words = "Compare Atlas against the approved forecast and write the supplier explanation."
 
-    def queue(task: str, prompt: str) -> None:
+    def queue(task: str, prompt: str, profile: Profile) -> None:
         stored = restored(feed_store.read())
         assert stored.history[-1].text == words, "The handoff ran before the decision was durable."
-        submitted.append((task, prompt))
-        tasks.submit(task, item.title, prompt, RequestSource("feed"), at=clock())
+        submitted.append((task, prompt, profile))
+        tasks.submit(task, item.title, prompt, RequestSource("feed", profile), at=clock())
 
     endpoint = tmp_path / "bridge.json"
     triage = TriageFixture(endpoint, feed_store, lambda _: None, lambda _batch, _rules: "{}", lambda _: False, submit=queue)
@@ -143,10 +143,9 @@ def test_registered_reply_tool_saves_instruction_before_handoff_and_reuses_it_af
         assert not wrong.ok and not submitted and not triage.board.history
         result = rig.call("work_feed_reply", **arguments)
         assert result.ok and len(submitted) == 1
-        task_id, prompt = submitted[0]
+        task_id, prompt, profile = submitted[0]
         assert words in prompt and "Carry out the user's instruction" in prompt
-        origin = request_context(prompt)
-        assert origin is not None and origin.identity == item.identity
+        assert profile == FeedHandoff(item.identity, item.title)
         assert triage.board.actions == (item,), "Queueing is not completion."
         assert _OBJECT.validate_json(result.text)["queued"] == task_id
     finally:
@@ -187,7 +186,7 @@ def test_failed_feed_save_cannot_start_reply_work_and_failed_queue_keeps_retryab
         lambda _: None,
         lambda _batch, _rules: "{}",
         lambda _: False,
-        submit=lambda task, _prompt: submitted.append(task),
+        submit=lambda task, _prompt, _profile: submitted.append(task),
     )
     try:
         with TestCase().assertRaises(OSError):
@@ -196,7 +195,7 @@ def test_failed_feed_save_cannot_start_reply_work_and_failed_queue_keeps_retryab
     finally:
         failed.close()
 
-    def unavailable(_task: str, _prompt: str) -> None:
+    def unavailable(_task: str, _prompt: str, _profile: Profile) -> None:
         raise ValueError("Work queue unavailable")
 
     store = MemoryStore()

@@ -57,12 +57,37 @@ def strings(value: object, field: str, *, maximum: int, count: int) -> None:
         text(item, field, maximum=maximum)
 
 
+class RequestKind(Enum):
+    GENERAL = auto()
+    """The person's own request, worked with the general toolset."""
+    MEETING_FOLLOWUP = auto()
+    """A prepared meeting follow-up: the task identity binds its saved preparation."""
+
+
+@dataclass(frozen=True, slots=True)
+class FeedHandoff:
+    """Work the person chose from the feed, labelled by its feed item."""
+
+    item: str
+    title: str
+
+    def __post_init__(self) -> None:
+        identifier(self.item, "feed item identity")
+        text(self.title, "feed item title", maximum=240)
+
+
+type Profile = RequestKind | FeedHandoff
+"""What a requested task is for: it selects the agent's tools, instructions and completion check."""
+
+
 @dataclass(frozen=True, slots=True)
 class RequestSource:
     conversation_id: str
+    profile: Profile = RequestKind.GENERAL
 
     def __post_init__(self) -> None:
         identifier(self.conversation_id, "conversation identity")
+        variant(self.profile, (RequestKind, FeedHandoff), "request profile")
 
 
 @dataclass(frozen=True, slots=True)
@@ -78,6 +103,17 @@ class RoutineSource:
 
 
 type Source = RequestSource | RoutineSource
+
+
+def task_profile(source: Source) -> Profile:
+    """A standing instruction's work runs as a general request."""
+    match source:
+        case RequestSource(profile=profile):
+            return profile
+        case RoutineSource():
+            return RequestKind.GENERAL
+        case _:
+            assert_never(source)
 
 
 @dataclass(frozen=True, slots=True)

@@ -18,7 +18,7 @@ from assistant.llm import Settings
 from assistant.work_bridge_contracts import BridgeCommand
 from automation.actions import Resources
 from automation.execution import WorkExecution
-from automation.task import ActionNotApplied, ActionVerified, RequestSource
+from automation.task import ActionNotApplied, ActionVerified, FeedHandoff, Profile, RequestSource
 from tests.fake_endpoint import fake_endpoint
 from tests.feed_fixture import TriageFixture
 from tests.json_fixture import json_object, json_rows, json_text
@@ -300,10 +300,10 @@ def test_click_and_voice_choose_the_same_task_and_stale_or_unavailable_choices_d
     item = decode(output(([source.identity], "action")), (source,))[0]
     store = MemoryStore()
     store.data = saved(Board(enabled=True, items=(item,)))
-    submitted: list[tuple[str, str]] = []
+    submitted: list[tuple[str, str, Profile]] = []
 
-    def submit(task: str, prompt: str) -> None:
-        submitted.append((task, prompt))
+    def submit(task: str, prompt: str, profile: Profile) -> None:
+        submitted.append((task, prompt, profile))
 
     endpoint = tmp_path / "choices.json"
     triage = TriageFixture(endpoint, store, lambda _: None, lambda _batch, _rules: "{}", lambda _: False, submit=submit)
@@ -312,6 +312,7 @@ def test_click_and_voice_choose_the_same_task_and_stale_or_unavailable_choices_d
         assert triage.choose_from_ui(item.identity, revision, "1")
         response = json_object(request(ChooseSolution(item.identity, revision, "1"), endpoint))
         assert response["queued"] == submitted[0][0] and len(submitted) == 1
+        assert submitted[0][2] == FeedHandoff(item.identity, item.title), "The handoff keeps its feed label."
         assert triage.board.actions == (item,)  # queued work is not completion
         triage.board = replace(triage.board, items=(replace(item, summary="Changed context"),))
         assert not triage.choose_from_ui(item.identity, revision, "2") and len(submitted) == 1
@@ -319,7 +320,7 @@ def test_click_and_voice_choose_the_same_task_and_stale_or_unavailable_choices_d
         triage.submit = None
         assert not triage.choose_from_ui(item.identity, revision, "2")
 
-        def unavailable(task: str, prompt: str) -> None:
+        def unavailable(task: str, prompt: str, profile: Profile) -> None:
             raise ValueError("Queue is unavailable")
 
         triage.submit = unavailable
@@ -337,8 +338,8 @@ def test_voice_choice_tool_requires_exact_revision_before_effect(tmp_path: Path)
     feed_store.data = saved(Board(enabled=True, items=(item,)))
     store, claim, clock = claimed(tmp_path)
 
-    def queue(task: str, prompt: str) -> None:
-        store.submit(task, item.title, prompt, RequestSource("feed"), at=clock())
+    def queue(task: str, prompt: str, profile: Profile) -> None:
+        store.submit(task, item.title, prompt, RequestSource("feed", profile), at=clock())
 
     endpoint = tmp_path / "choice.json"
     triage = TriageFixture(endpoint, feed_store, lambda _: None, lambda _batch, _rules: "{}", lambda _: False, submit=queue)
