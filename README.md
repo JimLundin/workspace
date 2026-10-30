@@ -488,13 +488,15 @@ applications expose few accessibility controls; the agent can use screenshots,
 input or an application API instead. It checks results and reports an actual
 blocker when Windows refuses access.
 
-With `WORKSPACE_AGENT_APPROVALS=ask`, writes and opens ask each time, commands ask
-unless they match `ALLOWED_COMMANDS` in `config.py`, and desktop control asks once
-per task. The keeper also reviews self-updates in that optional mode.
+With `WORKSPACE_AGENT_APPROVALS=ask`, writes, opens and desktop actions each wait
+for a durable approval in the work overview, and commands do too unless they match
+`ALLOWED_COMMANDS` in `config.py`. The keeper also reviews self-updates in that
+optional mode.
 
-It stops after 80 steps (`AGENT_MAX_STEPS`). The journal records tool names and
-success status. Browser and Teams arguments and results stay out of persistent
-journals and activity details, including form values and sign-in codes.
+It stops after 80 steps (`AGENT_MAX_STEPS`). The task journal records each
+consequential action and its outcome. Browser and Teams arguments and results stay
+out of persistent journals and activity details, including form values and
+sign-in codes.
 
 ## Durable work
 

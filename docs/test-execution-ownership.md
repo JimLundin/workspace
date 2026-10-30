@@ -25,7 +25,7 @@ The additional inventory was reviewed against these resource owners:
 | `test_outlook` | Fictional Outlook command adapter, MIME/JSON files in each temporary directory; one Python command fixture. No Outlook COM session. |
 | `test_meetings`, `test_meeting_events` | Generated PCM capture adapter, temporary meeting journals/transcripts, explicitly supplied archive, localhost transcription fixture or explicit transcription operation. No microphone or loopback capture. |
 | `test_selfcheck`, `test_workspace` | Real candidate interpreters and source files under each temporary directory. The checked repository supplies runner source only. No installed application updates. |
-| `test_computer_tools`, `test_agent_runner`, `test_background_agent`, `test_features` | Explicit fake machine/window/execution adapters, real SDK calls to private localhost endpoints. No native windows, browser launches or input injection. |
+| `test_computer_tools`, `test_background_agent`, `test_features` | Explicit fake machine/window adapters, real SDK calls to private localhost endpoints. No native windows, browser launches or input injection. |
 | `test_llm` | Loopback HTTP servers with OS-assigned ports, bounded real clients, fixture credentials and explicit shutdown. |
 | `test_feed_triage_service`, `test_console_inbox` | Private loopback transports and temporary endpoint files; fictional sources, explicit stores/callbacks/waits. No installation bridge file. |
 | `test_work_execution`, `test_work_agent`, `test_work_submissions` | Temporary SQLite journals, private candidate source, explicit bridge/window/machine adapters. Worker threads and transport servers close before their fixture exits. |
