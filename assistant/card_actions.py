@@ -54,7 +54,7 @@ def parse(link: str) -> CardAction | None:
         url = urlsplit(link)
     except ValueError:
         return None
-    fields = parse_qs(url.query, keep_blank_values=True)
+    fields = parse_qs(url.query)
     if url.scheme != _SCHEME or url.path or url.fragment or any(len(values) != 1 for values in fields.values()):
         return None
     values = {name: value for name, (value,) in fields.items()}
