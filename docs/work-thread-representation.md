@@ -175,7 +175,9 @@ projection, shared identity and navigation are in `work_canvas_context.py`.
 Measured nested containers and scoped placement are in `work_canvas_layout.py`.
 `canvas_activity.py` owns clarification
 routing, reply reconciliation, quiet presentation and material-change policy.
-`work_canvas_store.py` owns local document IO. `work_canvas_view.py` owns native
+`work_canvas.py`'s `WorkCanvas` is the single owner of the local document: it
+saves every edit, observes work, sessions and the catalog, and returns the
+documents and announcements that `Ui` renders. `work_canvas_view.py` owns native
 spatial interaction, and `work_canvas_detail.py` owns in-place drafts and controls.
 `work_canvas_window.py` owns the dedicated frame and optional administration
 window. `personal_work_panel.py` composes these with the existing immutable
@@ -328,8 +330,8 @@ releases the moved subtree's old scope pins so they cannot pull it back.
 
 Gesture states, inputs and effects are frozen payload variants handled by `match`.
 Qt owns mutable graphics, pointer capture and previews in
-`work_canvas_interaction.py`; the panel persists one edit on release and performs
-one reflow. Pointer moves do not write SQLite or rebuild topology. Membership and
+`personal_work_panel.py`; `WorkCanvas` persists one edit on release and the panel
+performs one reflow. Pointer moves do not write SQLite or rebuild topology. Membership and
 ancestry use immutable indexes with a bounded eight-entry `functools.lru_cache`,
 keyed by catalog and editable structure, excluding geometry and cameras.
 Stdlib grouping provides the index construction; native graph/layout dependencies
