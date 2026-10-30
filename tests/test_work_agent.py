@@ -258,7 +258,8 @@ def pending_approval(rig: WorkRig, prompt: str = "Send the reviewed draft") -> t
 
 def test_queued_requests_persist_with_their_invocation_context_without_reopening_the_panel(tmp_path: Path) -> None:
     # Defect: an agent voice request is dropped while another task is running,
-    # or queues under stale invocation context instead of preserving both tasks.
+    # or queues under stale invocation context instead of preserving both tasks;
+    # or a meeting follow-up captures desktop context its agent must not see.
     current = invocation("First workbook")
     rig = WorkRig(tmp_path, context=lambda: current)
     try:
@@ -280,6 +281,9 @@ def test_queued_requests_persist_with_their_invocation_context_without_reopening
         assert {task.prompt for task in TaskStore(rig.tasks.path).list_tasks()} == {"Summarize this", "And this one"}
         assert b"First workbook" not in rig.tasks.path.read_bytes(), "Activity snapshots must remain volatile."
         assert rig.agent.running() and rig.started == [True]
+        rig.agent.submit_identified("meeting-task", "Prepare the meeting follow-up", RequestKind.MEETING_FOLLOWUP)
+        rig.refresh()
+        assert rig.bridge.registrations[-1] == ("meeting-task", None, 1234)
     finally:
         rig.close()
 
