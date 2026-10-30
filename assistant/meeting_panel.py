@@ -37,6 +37,8 @@ lazy from assistant.meeting_workflow import (
     FollowupPackage,
     MeetingSnapshot,
     MeetingWorkflow,
+    OpenedFollowup,
+    OpenProblem,
     PackagesUnavailable,
     WorkUnavailable,
     package_values,
@@ -187,7 +189,8 @@ class MeetingPanel(QtWidgets.QWidget):
         self.workflow, self.open_file = workflow, open_file
         self.snapshot = MeetingSnapshot()
         self.checked: dict[str, TranscriptSource] = {}
-        self.loading = False
+        # `opening` is the follow-up last asked to open; the workflow keeps it open until another is chosen.
+        self.loading, self.opening = False, ""
         self.action_edits: dict[ArtifactKey, ActionEdit] = {}
         self.draft_edits: dict[ArtifactKey, DraftEdit] = {}
         self.pending_actions: dict[ArtifactKey, tuple[ActionChange, ActionEdit]] = {}
@@ -358,15 +361,7 @@ class MeetingPanel(QtWidgets.QWidget):
         self.select_recordings()
         choices(
             self.preparations,
-            tuple(
-                (
-                    progress.request.task_id,
-                    package_values(progress.packages)[0].publication.followup.title
-                    if package_values(progress.packages)
-                    else " + ".join(transcript.source.title for transcript in progress.request.bundle.transcripts),
-                )
-                for progress in snapshot.preparations
-            ),
+            tuple((progress.followup.task_id, progress.followup.title) for progress in snapshot.preparations),
         )
         self.render_package()
 
@@ -398,17 +393,35 @@ class MeetingPanel(QtWidgets.QWidget):
                 elif current_action is not None:
                     self.action_edits[key] = replace(current_action, revision=result.revision.revision)
 
+    def opened(self) -> OpenedFollowup | None:
+        match self.snapshot.opened:
+            case OpenedFollowup(request) as opened if request.task_id == choice(self.preparations):
+                return opened
+            case OpenedFollowup() | OpenProblem() | None:
+                return None
+
     def package(self) -> FollowupPackage | None:
-        progress = next((value for value in self.snapshot.preparations if value.request.task_id == choice(self.preparations)), None)
+        opened = self.opened()
         return (
-            next((value for value in package_values(progress.packages) if value.publication.version == choice(self.versions)), None)
-            if progress
-            else None
+            next((value for value in package_values(opened.packages) if value.publication.version == choice(self.versions)), None) if opened else None
         )
 
+    def open_selected(self) -> None:
+        selected = choice(self.preparations)
+        if not selected or selected == self.opening:
+            return
+        try:
+            self.workflow.open(selected)
+            self.opening = selected
+        except ValueError as error:
+            self.status.setText(str(error))
+
     def render_package(self) -> None:
-        progress = next((value for value in self.snapshot.preparations if value.request.task_id == choice(self.preparations)), None)
-        packages = package_values(progress.packages) if progress else ()
+        self.open_selected()
+        selected = choice(self.preparations)
+        progress = next((value for value in self.snapshot.preparations if value.followup.task_id == selected), None)
+        opened = self.opened()
+        packages = package_values(opened.packages) if opened else ()
         versions = tuple((value.publication.version, f"Version · {value.publication.version[:12]}") for value in packages)
         if len(versions) > 1:
             versions = (("", "Choose a saved version…"), *versions)
@@ -419,8 +432,13 @@ class MeetingPanel(QtWidgets.QWidget):
             state = task_label(task) if task else "Waiting for the work process"
             if isinstance(progress.work, WorkUnavailable):
                 problems.append(progress.work.reason)
-            if isinstance(progress.packages, PackagesUnavailable):
-                problems.append(progress.packages.reason)
+            match self.snapshot.opened:
+                case OpenedFollowup(packages=PackagesUnavailable(reason)) if opened is not None:
+                    problems.append(reason)
+                case OpenProblem(task_id, reason) if task_id == selected:
+                    problems.append(reason)
+                case OpenedFollowup() | OpenProblem() | None:
+                    pass
         else:
             state = "Choose completed recordings to prepare notes, actions and drafts."
         self.status.setText("\n".join(problems) if problems else state)

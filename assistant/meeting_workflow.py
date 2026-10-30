@@ -23,7 +23,7 @@ from assistant.meeting_followup_store import (
     TranscriptNotReadyError,
     observe_transcript,
 )
-from assistant.meeting_preparation import Preparations, PreparedFollowup
+from assistant.meeting_preparation import Preparations, PreparedFollowup, followup_title
 from assistant.meeting_store import MeetingArchive
 from assistant.work_window import WorkSnapshot
 from automation.task import (
@@ -41,7 +41,9 @@ from automation.task import (
 )
 
 MAX_MEETINGS = 512
-MAX_PREPARATIONS = 128
+# A presentation bound: the follow-up picker is a plain list without search.
+# Older follow-ups stay in the journal and in Work, and the view says so.
+MAX_LISTED = 100
 MAX_COMMANDS = 64
 MAX_CHANGES = 128
 
@@ -86,10 +88,32 @@ type PackageObservation = AvailablePackages | PackagesUnavailable
 
 
 @dataclass(frozen=True, slots=True)
+class ListedFollowup:
+    """A meeting follow-up as the journal lists it, without its recordings."""
+
+    task_id: str
+    profile: MeetingFollowup
+    title: str
+
+
+@dataclass(frozen=True, slots=True)
 class FollowupProgress:
-    request: PreparedFollowup
+    followup: ListedFollowup
     work: WorkObservation
+
+
+@dataclass(frozen=True, slots=True)
+class OpenedFollowup:
+    """The one follow-up the view opened: its verified recordings and saved packages."""
+
+    request: PreparedFollowup
     packages: PackageObservation
+
+
+@dataclass(frozen=True, slots=True)
+class OpenProblem:
+    task_id: str
+    reason: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -180,6 +204,7 @@ class MeetingSnapshot:
     preparations: tuple[FollowupProgress, ...] = ()
     problems: tuple[WorkflowProblem, ...] = ()
     changes: tuple[ChangeResult, ...] = ()
+    opened: OpenedFollowup | OpenProblem | None = None
 
 
 def previous_task(observation: WorkObservation) -> Task | None:
@@ -212,7 +237,7 @@ def meeting_profile(task: Task) -> MeetingFollowup | None:
             assert_never(profile)
 
 
-def work_observation(request: PreparedFollowup, snapshot: WorkSnapshot, previous: WorkObservation) -> WorkObservation:
+def work_observation(request: ListedFollowup, snapshot: WorkSnapshot, previous: WorkObservation) -> WorkObservation:
     """A missing cached row cannot establish that an accepted submission failed."""
     last = previous_task(previous)
     problem = next((item.reason for item in snapshot.submission_problems if item.task_id == request.task_id), None)
@@ -240,10 +265,6 @@ def _chronological(source: TranscriptSource) -> tuple[float, str]:
     return source.started_at, source.id
 
 
-def _created(task: Task) -> tuple[float, str]:
-    return task.created_at, task.id
-
-
 def _selection(selected: tuple[TranscriptSource, ...]) -> tuple[TranscriptSource, ...]:
     if not 1 <= len(selected) <= MAX_SOURCES:
         raise ValueError(f"Select between one and {MAX_SOURCES} completed recording segments.")
@@ -258,11 +279,16 @@ class _Prepare:
 
 
 @dataclass(frozen=True, slots=True)
+class _Open:
+    task_id: str
+
+
+@dataclass(frozen=True, slots=True)
 class _Observe:
     completed: threading.Event
 
 
-type _Command = _Prepare | DraftChange | ActionChange | _Observe
+type _Command = _Prepare | _Open | DraftChange | ActionChange | _Observe
 
 
 class MeetingWorkflow:
@@ -276,7 +302,8 @@ class MeetingWorkflow:
     results. Each save attempt must receive a new identity from the caller.
     Each meeting follow-up's profile names its saved recordings, so the
     journal alone lists preparations; the work snapshot adds its status and
-    submission problems.
+    submission problems. Only the follow-up the view opens loads its
+    recordings and packages.
     """
 
     __slots__ = (
@@ -284,8 +311,10 @@ class MeetingWorkflow:
         "_closed",
         "_closing",
         "_jobs",
+        "_listed",
         "_lock",
-        "_prepared",
+        "_opened",
+        "_pending",
         "_problems",
         "_progress",
         "_snapshot",
@@ -327,9 +356,11 @@ class MeetingWorkflow:
         self._thread: threading.Thread | None = None
         self._snapshot = MeetingSnapshot()
         self._sources: tuple[TranscriptSource, ...] = ()
-        # Oldest first: the journal's meeting follow-ups and this session's not yet observed preparations.
-        self._prepared: dict[str, PreparedFollowup] = {}
+        # Newest first, as listed; pending holds this session's preparations the journal has not yet shown.
+        self._listed: dict[str, ListedFollowup] = {}
+        self._pending: dict[str, ListedFollowup] = {}
         self._progress: dict[str, FollowupProgress] = {}
+        self._opened: OpenedFollowup | OpenProblem | None = None
         self._problems: dict[str, WorkflowProblem] = {}
         self._changes: dict[tuple[str, str, str, str, str], ChangeResult] = {}
 
@@ -359,6 +390,10 @@ class MeetingWorkflow:
 
     def prepare(self, selected: tuple[TranscriptSource, ...]) -> None:
         self._enqueue(_Prepare(_selection(selected)))
+
+    def open(self, task_id: str) -> None:
+        """Load one listed follow-up's recordings and packages in place of the previously opened one."""
+        self._enqueue(_Open(identifier(task_id, "meeting task identity")))
 
     def save_draft(self, change: DraftChange) -> None:
         variant(change, DraftChange, "draft change")
@@ -414,26 +449,30 @@ class MeetingWorkflow:
             self._problems["catalog"] = CatalogProblem(str(error) or "The meeting archive could not be read.")
             self.report_error(traceback.format_exc())
 
-    def _discover(self, tasks: tuple[Task, ...]) -> None:
-        """Each journaled meeting follow-up's profile names the recordings it was prepared from."""
-        journaled = {task.id: (task.title, profile) for task in sorted(tasks, key=_created) if (profile := meeting_profile(task)) is not None}
-        order = (*journaled, *(identity for identity in self._prepared if identity not in journaled))
-        prepared: dict[str, PreparedFollowup] = {}
-        problems: list[str] = []
-        for identity in order[-MAX_PREPARATIONS:]:
-            if (known := self._prepared.get(identity)) is not None:
-                prepared[identity] = known
-                continue
-            title, profile = journaled[identity]
-            try:
-                prepared[identity] = self.preparations.read(identity, profile)
-            except (OSError, ValueError) as error:
-                problems.append(f"{title}: {error}")
-        self._prepared = prepared
-        if problems:
-            self._problems["recovery"] = RecoveryProblem("\n".join(problems[:8])[:8000])
+    def _list(self, tasks: tuple[Task, ...]) -> None:
+        """List follow-ups from journal metadata; no recordings are read."""
+        journaled = {task.id: ListedFollowup(task.id, profile, task.title) for task in tasks if (profile := meeting_profile(task)) is not None}
+        self._pending = {identity: value for identity, value in self._pending.items() if identity not in journaled}
+        listed = (*reversed(self._pending.values()), *journaled.values())
+        self._listed = {value.task_id: value for value in listed[:MAX_LISTED]}
+        if len(listed) > MAX_LISTED:
+            self._problems["listing"] = RecoveryProblem(f"Showing the {MAX_LISTED} most recent meeting follow-ups; older ones remain in Work.")
         else:
-            self._problems.pop("recovery", None)
+            self._problems.pop("listing", None)
+
+    def _open(self, task_id: str) -> None:
+        match self._opened:
+            case OpenedFollowup(request) if request.task_id == task_id:
+                return
+            case OpenedFollowup() | OpenProblem() | None:
+                pass
+        listed = self._listed.get(task_id) or self._pending.get(task_id)
+        try:
+            if listed is None:
+                raise ValueError("That meeting follow-up is no longer listed.")
+            self._opened = OpenedFollowup(self.preparations.read(task_id, listed.profile), AvailablePackages())
+        except (OSError, ValueError) as error:
+            self._opened = OpenProblem(task_id, str(error) or "The meeting follow-up could not be opened.")
 
     def _prepare(self, selected: tuple[TranscriptSource, ...]) -> None:
         try:
@@ -451,10 +490,10 @@ class MeetingWorkflow:
             # The task names its saved recordings, so resubmitting an unconfirmed one is idempotent.
             if previous is None or not isinstance(previous.work, ObservedWork):
                 self.submit_identified(prepared.task_id, prepared.prompt, prepared.profile)
-            self._prepared.pop(prepared.task_id, None)
-            self._prepared[prepared.task_id] = prepared
-            while len(self._prepared) > MAX_PREPARATIONS:
-                self._prepared.pop(next(iter(self._prepared)))
+            self._pending.pop(prepared.task_id, None)
+            self._pending[prepared.task_id] = ListedFollowup(prepared.task_id, prepared.profile, followup_title(prepared.bundle))
+            while len(self._pending) > MAX_LISTED:
+                self._pending.pop(next(iter(self._pending)))
             self._problems.pop("prepare", None)
         except Exception as error:
             self._problems["prepare"] = PrepareProblem(selected, str(error) or "The selected meeting could not be prepared.")
@@ -477,9 +516,13 @@ class MeetingWorkflow:
     def _edit(self, change: DraftChange | ActionChange) -> None:
         result: ChangeResult
         try:
-            request = self._prepared.get(change.task_id)
+            match self._opened:
+                case OpenedFollowup(request) if request.task_id == change.task_id:
+                    pass
+                case _:
+                    raise ValueError("Open this meeting follow-up before saving its edits.")
             publication = self.followups.read(change.task_id, change.version)
-            if request is None or not package_matches(request, publication):
+            if not package_matches(request, publication):
                 raise ValueError("This package does not belong to the saved meeting preparation.")
             match change:
                 case DraftChange(task_id, version, draft_id, content, expected):
@@ -529,31 +572,36 @@ class MeetingWorkflow:
         try:
             observed = self.read_work()
             variant(observed, WorkSnapshot, "meeting work observation")
-            journaled = self.journal(MAX_PREPARATIONS)
-            self._discover(journaled)
+            journaled = self.journal(MAX_LISTED + 1)
+            self._list(journaled)
             # Meeting tasks come from the journal query; the snapshot adds status and submission problems.
             snapshot = replace(observed, tasks=journaled)
         except Exception as error:
             read_problem = str(error) or "The work process could not be observed."
             self.report_error(traceback.format_exc())
         progress: dict[str, FollowupProgress] = {}
-        for request in self._prepared.values():
-            previous = self._progress.get(request.task_id, FollowupProgress(request, WorkPending.OBSERVATION, AvailablePackages()))
+        for listed in self._listed.values():
+            previous = self._progress.get(listed.task_id, FollowupProgress(listed, WorkPending.OBSERVATION))
             work = (
-                WorkUnavailable(read_problem, previous_task(previous.work))
-                if snapshot is None
-                else work_observation(request, snapshot, previous.work)
+                WorkUnavailable(read_problem, previous_task(previous.work)) if snapshot is None else work_observation(listed, snapshot, previous.work)
             )
-            packages = previous.packages
-            if refresh_packages or work != previous.work or isinstance(packages, PackagesUnavailable) or not package_values(packages):
-                packages = self._packages(request, work, packages)
-            progress[request.task_id] = FollowupProgress(request, work, packages)
-        self._progress = progress
+            progress[listed.task_id] = FollowupProgress(listed, work)
+        previous_progress, self._progress = self._progress, progress
+        match self._opened:
+            case OpenedFollowup(request, packages):
+                observed, earlier = progress.get(request.task_id), previous_progress.get(request.task_id)
+                work = WorkPending.OBSERVATION if observed is None else observed.work
+                changed_work = earlier is None or work != earlier.work
+                if refresh_packages or changed_work or isinstance(packages, PackagesUnavailable) or not package_values(packages):
+                    self._opened = OpenedFollowup(request, self._packages(request, work, packages))
+            case OpenProblem() | None:
+                pass
         current = MeetingSnapshot(
             self._sources,
-            tuple(reversed(tuple(progress.values()))),
+            tuple(progress.values()),
             tuple(self._problems.values()),
             tuple(self._changes.values()),
+            self._opened,
         )
         with self._lock:
             changed = current != self._snapshot
@@ -580,6 +628,9 @@ class MeetingWorkflow:
                     match command:
                         case _Prepare(selected):
                             self._prepare(selected)
+                            refresh = True
+                        case _Open(task_id):
+                            self._open(task_id)
                             refresh = True
                         case DraftChange() | ActionChange():
                             self._edit(command)

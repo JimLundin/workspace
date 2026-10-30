@@ -24,6 +24,7 @@ from assistant.meeting_followup_store import FollowupStore, PublishedFollowup, o
 from assistant.meeting_preparation import Preparations, PreparedFollowup
 from assistant.meeting_store import MeetingArchive, MeetingStore
 from assistant.meeting_workflow import (
+    MAX_LISTED,
     ActionChange,
     ActionSaved,
     ActionSaveProblem,
@@ -31,10 +32,11 @@ from assistant.meeting_workflow import (
     DraftChange,
     DraftSaved,
     DraftSaveProblem,
-    FollowupProgress,
     MeetingSnapshot,
     MeetingWorkflow,
     ObservedWork,
+    OpenedFollowup,
+    OpenProblem,
     PackagesUnavailable,
     PrepareProblem,
     RecoveryProblem,
@@ -42,7 +44,7 @@ from assistant.meeting_workflow import (
     WorkUnavailable,
 )
 from assistant.work_window import WorkSnapshot
-from automation.task import Completed, MeetingFollowup, Profile, RoutineSource, Running
+from automation.task import Completed, MeetingFollowup, Profile, RequestSource, RoutineSource, Running
 from tests.test_meeting_events import saved_meeting
 from tests.test_meetings import SPEECH
 from tests.test_work_agent import WorkRig
@@ -112,15 +114,23 @@ class ObservationHold:
         return self.read_work()
 
 
-def prepare_meeting_from(rig: WorkflowRig, meeting: MeetingStore) -> FollowupProgress:
+def opened(snapshot: MeetingSnapshot) -> OpenedFollowup:
+    assert isinstance(snapshot.opened, OpenedFollowup), snapshot.opened
+    return snapshot.opened
+
+
+def prepare_meeting_from(rig: WorkflowRig, meeting: MeetingStore) -> OpenedFollowup:
     source = observe_transcript(meeting).source
     rig.workflow.prepare((source,))
-    progress = next(item for item in rig.settle().preparations if item.request.bundle.transcripts[0].source == source)
+    progress = rig.settle().preparations[0]
     assert isinstance(progress.work, ObservedWork)
-    return progress
+    rig.workflow.open(progress.followup.task_id)
+    result = opened(rig.refresh())
+    assert tuple(item.source for item in result.request.bundle.transcripts) == (source,)
+    return result
 
 
-def prepare_meeting(rig: WorkflowRig) -> FollowupProgress:
+def prepare_meeting(rig: WorkflowRig) -> OpenedFollowup:
     return prepare_meeting_from(rig, saved_meeting(rig.archive, "Shipping review"))
 
 
@@ -188,12 +198,14 @@ def test_multiple_segments_are_saved_before_queue_acceptance_and_duplicate_prepa
         rig.workflow.prepare(selected)
         rig.workflow.prepare(selected)
         pending = rig.refresh().preparations
-        assert len(pending) == 1 and {prepared.task_id for prepared in accepted} == {pending[0].request.task_id}
-        assert tuple(item.source for item in pending[0].request.bundle.transcripts) == selected
+        assert len(pending) == 1 and {prepared.task_id for prepared in accepted} == {pending[0].followup.task_id}
+        assert pending[0].followup.title == "Meeting follow-up: Selected segment 0 + Selected segment 1 + Selected segment 2"
+        rig.workflow.open(pending[0].followup.task_id)
+        assert tuple(item.source for item in opened(rig.refresh()).request.bundle.transcripts) == selected
         assert pending[0].work is WorkPending.OBSERVATION and work.tasks.list_tasks() == ()
         work.agent.start_worker()
         progress = rig.settle().preparations[0]
-        assert isinstance(progress.work, ObservedWork) and progress.work.task.id == pending[0].request.task_id
+        assert isinstance(progress.work, ObservedWork) and progress.work.task.id == pending[0].followup.task_id
         assert len(work.tasks.list_tasks()) == 1
         assert not rig.errors
     finally:
@@ -201,16 +213,14 @@ def test_multiple_segments_are_saved_before_queue_acceptance_and_duplicate_prepa
 
 
 def test_restart_lists_journaled_followups_from_their_saved_recordings_without_resubmitting(tmp_path: Path) -> None:
-    # Defect: a failed submission is listed as pending work, a restart loses
-    # follow-ups whose original transcripts are gone or resubmits them, or one
-    # follow-up's missing recordings hide the others.
+    # Defect: a failed submission is listed as pending work, or a restart loses
+    # follow-ups whose original transcripts are gone or resubmits them.
     def unavailable(_identity: str, _prompt: str, _profile: Profile) -> None:
         raise OSError("The work queue is unavailable.")
 
     first = WorkflowRig(tmp_path, submit=unavailable)
     try:
         meeting = saved_meeting(first.archive, "Before restart")
-        lost = saved_meeting(first.archive, "Recordings removed later")
         first.workflow.prepare((observe_transcript(meeting).source,))
         refused = first.settle()
         assert refused.preparations == () and any(isinstance(item, PrepareProblem) for item in refused.problems)
@@ -219,22 +229,73 @@ def test_restart_lists_journaled_followups_from_their_saved_recordings_without_r
     second = WorkflowRig(tmp_path)
     try:
         saved = prepare_meeting_from(second, meeting)
-        removed = prepare_meeting_from(second, lost)
     finally:
         second.close()
     meeting.transcript.unlink()
-    (second.preparations.root / f"{removed.request.profile.bundle}.json").unlink()
     submitted: list[str] = []
     third = WorkflowRig(tmp_path, submit=lambda identity, _prompt, _profile: submitted.append(identity))
     try:
         recovered = third.settle()
-        assert [item.request for item in recovered.preparations] == [saved.request]
+        assert [item.followup.task_id for item in recovered.preparations] == [saved.request.task_id]
         assert isinstance(recovered.preparations[0].work, ObservedWork) and not submitted
-        assert recovered.preparations[0].request.bundle.transcripts[0].content == saved.request.bundle.transcripts[0].content
-        problem = next(item for item in recovered.problems if isinstance(item, RecoveryProblem))
-        assert "Prepare the meeting follow-up again." in problem.reason
+        third.workflow.open(saved.request.task_id)
+        assert opened(third.refresh()).request == saved.request
     finally:
         third.close()
+
+
+def test_listing_many_followups_reads_no_recordings_and_opening_one_verifies_its_bundle(tmp_path: Path) -> None:
+    # Defect: listing loads every follow-up's recordings, or opening one skips
+    # verifying that its saved recordings still exist unchanged.
+    rig = WorkflowRig(tmp_path)
+    try:
+        recordings = tuple(saved_meeting(rig.archive, f"Planning part {index}") for index in range(6))
+        for meeting in recordings:
+            rig.workflow.prepare((observe_transcript(meeting).source,))
+        listed = rig.settle().preparations
+        assert len(listed) == len(recordings) and all(isinstance(item.work, ObservedWork) for item in listed)
+    finally:
+        rig.close()
+    retained = rig.preparations.root.with_name("retained-preparations")
+    rig.preparations.root.rename(retained)
+    reopened = WorkflowRig(tmp_path)
+    try:
+        relisted = reopened.settle()
+        assert [item.followup for item in relisted.preparations] == [item.followup for item in listed]
+        assert all(isinstance(item.work, ObservedWork) for item in relisted.preparations) and not relisted.problems
+        newest = relisted.preparations[0].followup
+        assert newest.title == "Meeting follow-up: Planning part 5"
+        reopened.workflow.open(newest.task_id)
+        missing = reopened.refresh().opened
+        assert isinstance(missing, OpenProblem) and "Prepare the meeting follow-up again." in missing.reason
+        retained.rename(reopened.preparations.root)
+        reopened.workflow.open(relisted.preparations[1].followup.task_id)
+        part_four = opened(reopened.refresh()).request
+        assert part_four.bundle.transcripts[0].source.title == "Planning part 4"
+        (reopened.preparations.root / f"{part_four.profile.bundle}.json").unlink()
+        reopened.workflow.open(part_four.task_id)
+        assert opened(reopened.refresh()).request == part_four, "Reopening the open follow-up must not read its bundle again."
+        reopened.workflow.open(relisted.preparations[2].followup.task_id)
+        assert opened(reopened.refresh()).request.bundle.transcripts[0].source.title == "Planning part 3"
+    finally:
+        reopened.close()
+
+
+def test_followups_beyond_the_listed_bound_are_announced_instead_of_silently_dropped(tmp_path: Path) -> None:
+    # Defect: older follow-ups disappear from the view without saying where they are.
+    rig = WorkflowRig(tmp_path)
+    try:
+        for index in range(MAX_LISTED + 1):
+            if index == MAX_LISTED:
+                complete = rig.settle()
+                assert len(complete.preparations) == MAX_LISTED and not complete.problems
+            profile = MeetingFollowup(f"{index:064x}")
+            rig.work.tasks.submit(f"meeting-{index}", f"Follow-up {index}", "Prepare notes.", RequestSource("chat", profile), at=index)
+        snapshot = rig.settle()
+        assert len(snapshot.preparations) == MAX_LISTED and snapshot.preparations[0].followup.title == f"Follow-up {MAX_LISTED}"
+        assert any(isinstance(item, RecoveryProblem) and "older ones remain in Work" in item.reason for item in snapshot.problems)
+    finally:
+        rig.close()
 
 
 def test_changed_transcripts_reject_stale_selection_and_create_a_distinct_source_version(tmp_path: Path) -> None:
@@ -248,14 +309,14 @@ def test_changed_transcripts_reject_stale_selection_and_create_a_distinct_source
         stale = rig.settle()
         problem = next(item for item in stale.problems if isinstance(item, PrepareProblem))
         assert problem.selected == (source,) and "changed" in problem.reason
-        assert [item.request for item in stale.preparations] == [original.request] and len(rig.work.tasks.list_tasks()) == 1
+        assert [item.followup.task_id for item in stale.preparations] == [original.request.task_id] and len(rig.work.tasks.list_tasks()) == 1
         current = stale.transcripts[0]
         assert current.sha256 != source.sha256
         rig.workflow.prepare((current,))
         updated = rig.settle()
         assert len(updated.preparations) == 2 and len(rig.work.tasks.list_tasks()) == 2
-        assert updated.preparations[0].request.task_id != original.request.task_id
-        assert updated.preparations[1].request == original.request
+        assert updated.preparations[0].followup.task_id != original.request.task_id
+        assert updated.preparations[1].followup.task_id == original.request.task_id
         assert not any(isinstance(item, PrepareProblem) for item in updated.problems)
     finally:
         rig.close()
@@ -275,7 +336,7 @@ def test_failed_preparation_storage_retains_known_progress_and_submits_nothing_n
             rig.workflow.prepare(selected)
             snapshot = rig.settle()
             assert any(isinstance(item, PrepareProblem) and item.selected == selected for item in snapshot.problems)
-            assert [item.request for item in snapshot.preparations] == [original.request]
+            assert [item.followup.task_id for item in snapshot.preparations] == [original.request.task_id]
             assert isinstance(snapshot.preparations[0].work, ObservedWork)
             assert len(rig.work.tasks.list_tasks()) == 1
         finally:
@@ -304,10 +365,10 @@ def test_progress_is_observed_by_task_and_narrative_completion_does_not_create_a
             Completed("The notes are ready in a claimed path, and the email draft is complete.", ()),
             at=rig.work.clock(),
         )
-        finished = rig.settle().preparations[0]
+        finished = opened(rig.settle())
         assert isinstance(finished.packages, PackagesUnavailable) and not finished.packages.previous
         publication = publish_package(rig, prepared.request)
-        verified = rig.refresh().preparations[0].packages
+        verified = opened(rig.refresh()).packages
         assert isinstance(verified, AvailablePackages)
         assert [item.publication for item in verified.values] == [publication]
         assert verified.values[0].drafts[0].content.body == "The team decided to ship on Friday."
@@ -331,7 +392,8 @@ def test_foreign_task_and_source_packages_cannot_attach_to_a_meeting_preparation
         unrelated = saved_meeting(rig.archive, "Different source evidence")
         wrong_bundle = TranscriptBundle((observe_transcript(unrelated),))
         wrong = rig.followups.publish(rig.followups.plan(identity, followup_for(wrong_bundle)))
-        observed = rig.refresh().preparations[0]
+        rig.workflow.open(identity)
+        observed = opened(rig.refresh())
         assert isinstance(observed.packages, PackagesUnavailable) and not observed.packages.previous
         change = DraftChange(identity, wrong.version, "followup", DraftContent("User draft", "User text", ()), 0, "foreign-draft-attempt")
         rig.workflow.save_draft(change)
@@ -379,7 +441,7 @@ def test_saved_edits_survive_late_packages_and_conflicts_retain_exact_unsaved_co
         assert failed.change == unsaved and "changed" in failed.reason
         late = publish_package(rig, prepared.request, title="A later generated package")
         refreshed = rig.refresh()
-        packages = refreshed.preparations[0].packages
+        packages = opened(refreshed).packages
         assert isinstance(packages, AvailablePackages) and len(packages.values) == 2
         original = next(item for item in packages.values if item.publication.version == published.version)
         newer = next(item for item in packages.values if item.publication.version == late.version)
@@ -396,7 +458,7 @@ def test_missing_package_files_keep_previous_artifacts_and_a_failed_edit_for_rec
     try:
         prepared = prepare_meeting(rig)
         published = publish_package(rig, prepared.request)
-        previous = rig.refresh().preparations[0].packages
+        previous = opened(rig.refresh()).packages
         assert isinstance(previous, AvailablePackages)
         retained = published.directory.with_name(".temporarily-unavailable")
         published.directory.rename(retained)
@@ -411,13 +473,13 @@ def test_missing_package_files_keep_previous_artifacts_and_a_failed_edit_for_rec
             )
             rig.workflow.save_draft(change)
             unavailable = rig.refresh()
-            package = unavailable.preparations[0].packages
+            package = opened(unavailable).packages
             assert isinstance(package, PackagesUnavailable) and package.previous == previous.values
             assert isinstance(unavailable.changes[-1], DraftSaveProblem) and unavailable.changes[-1].change == change
         finally:
             retained.rename(published.directory)
         recovered = rig.refresh()
-        assert recovered.preparations[0].packages == previous
+        assert opened(recovered).packages == previous
         assert isinstance(recovered.changes[-1], DraftSaveProblem) and recovered.changes[-1].change == change
     finally:
         rig.close()
@@ -525,11 +587,12 @@ def test_work_observation_failure_retains_the_last_matching_task(tmp_path: Path)
 
     rig = WorkflowRig(tmp_path, work=work, read_work=read)
     try:
-        prepared = prepare_meeting(rig)
-        assert isinstance(prepared.work, ObservedWork)
+        prepare_meeting(rig)
+        observed = rig.refresh().preparations[0].work
+        assert isinstance(observed, ObservedWork)
         unavailable.set()
         lost = rig.refresh().preparations[0].work
-        assert isinstance(lost, WorkUnavailable) and lost.previous == prepared.work.task
+        assert isinstance(lost, WorkUnavailable) and lost.previous == observed.task
         assert len(rig.work.tasks.list_tasks()) == 1
         unavailable.clear()
         assert isinstance(rig.settle().preparations[0].work, ObservedWork)
