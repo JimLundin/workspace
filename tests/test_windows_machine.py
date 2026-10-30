@@ -80,23 +80,9 @@ class Browser:
             raise self.failure
 
 
-class Teams:
-    __slots__ = ("calls",)
-
-    def __init__(self) -> None:
-        self.calls: list[str] = []
-
-    def request(self, operation: str, args: dict[str, Json], cancel: threading.Event) -> str:
-        self.calls.append(operation)
-        return "Teams observation"
-
-    def cancel_sign_in(self) -> None:
-        self.calls.append("cancel sign-in")
-
-
 def test_machine_uses_explicit_desktop_and_meeting_owners() -> None:
     desktop, recording = Desktop(), Recording()
-    machine: Machine = WinMachine(desktop, browser=Browser(), teams=Teams(), meetings=recording)
+    machine: Machine = WinMachine(desktop, browser=Browser(), meetings=recording)
     machine.paste_text("A prepared note")
     assert desktop.pasted == ["A prepared note"]
     assert machine.meeting("start", "microphone", "Planning") == "Recording owner status"
@@ -113,13 +99,12 @@ def test_machine_uses_explicit_desktop_and_meeting_owners() -> None:
     assert len(recording.calls) == 4
 
 
-def test_machine_keeps_browser_and_teams_cleanup_with_their_owners() -> None:
-    browser, teams = Browser(OSError("Browser disconnect failed")), Teams()
-    machine = WinMachine(Desktop(), browser=browser, teams=teams)
+def test_machine_keeps_browser_cleanup_with_its_owner() -> None:
+    browser = Browser(OSError("Browser disconnect failed"))
+    machine = WinMachine(Desktop(), browser=browser)
     cancel = threading.Event()
     assert machine.browse("browser_tabs", {}, cancel) == ("Browser observation", b"browser image")
     assert machine.web_app(TEAMS_READ, TeamsQuery("page"), cancel) == TEAMS_PAGE
-    assert machine.teams("teams_status", {}, cancel) == "Teams observation"
     try:
         machine.close_background()
     except OSError as error:
@@ -127,7 +112,6 @@ def test_machine_keeps_browser_and_teams_cleanup_with_their_owners() -> None:
     else:
         raise AssertionError("A failed disconnect must remain visible.")
     assert browser.calls == ["browser_tabs", "web_app page", "close"]
-    assert teams.calls == ["teams_status", "cancel sign-in"]
     try:
         machine.meeting("status")
     except OSError as error:

@@ -25,7 +25,6 @@ lazy from assistant.geometry import Shot, fit, half
 lazy from assistant.llm import Json
 lazy from assistant.png import encode_png
 lazy from assistant.recording_state import AudioSource
-lazy from assistant.teams import Teams
 lazy from assistant.textio import paste_text
 lazy from assistant.web_apps import Located, WebAppOperation
 lazy from winapi import clipboard, inputs, screen, system, windows
@@ -57,11 +56,6 @@ class BrowserControl(Protocol):
     def request(self, operation: str, args: dict[str, Json], cancel: threading.Event) -> BrowserResult: ...
     def web_app[Q: Located, R](self, operation: WebAppOperation[Q, R], query: Q, cancel: threading.Event) -> R: ...
     def close(self) -> None: ...
-
-
-class TeamsControl(Protocol):
-    def request(self, operation: str, args: dict[str, Json], cancel: threading.Event) -> str: ...
-    def cancel_sign_in(self) -> None: ...
 
 
 class NativeDesktop:
@@ -127,14 +121,13 @@ def open_file(target: str) -> None:
 class WinMachine:
     """What the agent's tools act on, done with Windows calls."""
 
-    __slots__ = ("background_browser", "capture_sources", "desktop", "meetings", "open_target", "teams_client")
+    __slots__ = ("background_browser", "capture_sources", "desktop", "meetings", "open_target")
 
     def __init__(
         self,
         desktop: DesktopAccess,
         *,
         browser: BrowserControl | None = None,
-        teams: TeamsControl | None = None,
         meetings: MeetingControl | None = None,
         capture_sources: CaptureObservation | None = None,
         open_target: Callable[[str], None] = open_file,
@@ -145,7 +138,6 @@ class WinMachine:
         self.capture_sources: CaptureObservation = NativeCaptureObservation() if capture_sources is None else capture_sources
         self.open_target = open_target
         self.background_browser: BrowserControl = Browser(DIRECTORY / "browser-profile", source=Product.EDGE) if browser is None else browser
-        self.teams_client: TeamsControl = Teams(DIRECTORY / "teams", environment=os.environ) if teams is None else teams
         self.meetings = meetings
 
     def meeting(self, operation: str, source: str = "both", title: str = "Meeting") -> str:
@@ -172,14 +164,8 @@ class WinMachine:
     def web_app[Q: Located, R](self, operation: WebAppOperation[Q, R], query: Q, cancel: threading.Event) -> R:
         return self.background_browser.web_app(operation, query, cancel)
 
-    def teams(self, operation: str, arguments: dict[str, Json], cancel: threading.Event) -> str:
-        return self.teams_client.request(operation, arguments, cancel)
-
     def close_background(self) -> None:
-        try:
-            self.background_browser.close()
-        finally:
-            self.teams_client.cancel_sign_in()
+        self.background_browser.close()
 
     def run_powershell(
         self,

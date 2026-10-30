@@ -45,7 +45,6 @@ The main places to read are:
 | `assistant/meeting_followup.py`, `meeting_requests.py` | Frozen transcript bundles, exact citations, sourced actions and drafts, preparation identity | `meeting_followup_store.py` owns verified publications and revision-checked edits; `MeetingRequests` owns saved preparations |
 | `assistant/meeting_workflow.py` | Catalog, work and package observations; identified edit commands and receipts | `MeetingWorkflow` owns background I/O; `meeting_panel.py` owns Qt selection, local edits and explicit handoff |
 | `assistant/meeting_execution.py`, `meeting_tools.py`, `outlook.py` | Constrained meeting execution, bounded source reads and verified draft outcomes | The work process owns generation; `outlook.ps1` owns Outlook COM observation and draft operations |
-| `assistant/teams.py` | Frozen device flow, polling deadlines, retry intervals and read/write requests | `Teams` owns the shared delegated Microsoft session; `SystemClock`, `TokenStore`, and `graph_http.Http` own clock, encrypted credentials and bounded transport |
 | `assistant/web_apps.py`, `business_tools.py` | Web-app operations, each declared once with its typed query, page script, application and typed result; exact task/chat/mail conversation identities and expected-value checks. The business family is the only model-tool adapter: private schemas, JSON text and typed readback confirmation | `WebApps` runs an operation through the browser's wake/evaluate lifecycle and the applications' own controls; `Browser.web_app` serializes it with other page work; native browser fixtures decode every script's real output with its result type |
 | `runtime.py` | Dependency ABI validation | `activate` |
 | `assistant/control_policy.py` | Immutable native message actions and tray observations, menu projection, press-only control routing, startup ordering and queued file handoff | `AssistantApp` owns native interpretation, layout transport, UI feedback and worker lifetime |
@@ -624,12 +623,6 @@ they must remain usable before loading or trusting bundled Pydantic/Qt. Unknown
 manifest fields stay objects; ABI fields are validated before activation. The
 keeper's native function prototypes preserve pointer-sized handles and message
 payloads, replacing the former unprototyped DLL assertion.
-
-Graph transport accepts one immutable HTTP request and an independently owned
-cancellation event. Its bounded generic JSON-object responses stay at the
-transport boundary; Teams validates the fields it consumes. Graph reads and
-writes are explicit immutable alternatives. Chat creation and message bodies
-have distinct typed Pydantic wire shapes; neither retains mutable request data.
 
 Panel storage validates the saved bounds used to select the conversation monitor.
 Retired pin/display options, preference saving and unused panel fitting/docking

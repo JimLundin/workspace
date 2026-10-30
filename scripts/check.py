@@ -81,7 +81,6 @@ PORTABLE = (
 AFTER_WORKERS = frozenset(
     {
         "tests/test_agent_streaming.py",
-        "tests/test_graph_http.py",
     }
 )
 

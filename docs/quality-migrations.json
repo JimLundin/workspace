@@ -607,33 +607,6 @@
     {
       "key": {
         "rule": "PLR0913",
-        "path": "assistant/teams.py",
-        "scope": "Teams.__init__",
-        "signature": "797b3ea80cb24ad2c3df22666abbcb5485bc280ef038a5aa59ac01426a5ec168"
-      },
-      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
-    },
-    {
-      "key": {
-        "rule": "PLR0913",
-        "path": "assistant/teams.py",
-        "scope": "_integer",
-        "signature": "a55bf5b9189ac47e96e10eb1f88f3b02905901ce4ac7382093906445798458a3"
-      },
-      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
-    },
-    {
-      "key": {
-        "rule": "PLR0913",
-        "path": "assistant/teams.py",
-        "scope": "sign_in_action",
-        "signature": "2433f80d09808453b972a3b9a413cee2d02670738dd6f7d46df9719def448427"
-      },
-      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
-    },
-    {
-      "key": {
-        "rule": "PLR0913",
         "path": "assistant/textio.py",
         "scope": "paste_text",
         "signature": "507442eaa0861dfee94994e582c314c2c0048f4362d2c83385c9b44a42d958af"

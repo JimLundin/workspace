@@ -16,7 +16,7 @@ with the current dependency extraction policy.
 
 The remaining 49 locked packages are reachable from the used runtime roots
 when Windows/Python markers and requested extras are evaluated. HTTPX and HTTPX2
-are both required: Workspace's Graph/weather adapters use HTTPX; the pinned
+are both required: Workspace's weather adapter uses HTTPX; the pinned
 agent SDK requires HTTPX2. The interpreter pin stays unchanged; the reduced
 dependency lock requires a rebuilt runtime bundle.
 

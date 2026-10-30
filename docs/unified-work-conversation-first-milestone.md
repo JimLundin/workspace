@@ -41,9 +41,8 @@ observed evidence, not proof of server delivery. Interrupted or ambiguous
 attempts become unknown and are never replayed. After inspecting Teams, the
 user can mark an unknown attempt reviewed; its original evidence remains.
 
-The Teams API adapter remains available for a later approved Entra setup.
-Normal web login does not grant Graph consent. This slice does not clear Teams
-Activity or native flashing, dismiss Windows notifications, accept invitations,
+Teams is reached only through the signed-in browser; the Graph adapter was retired.
+This slice does not clear Teams Activity or native flashing, dismiss Windows notifications, accept invitations,
 or provide complete account-scoped background synchronization.
 
 Read-only production-adapter checks on the signed-in laptop discovered 25 chats
@@ -296,7 +295,6 @@ does not require a model turn.
 | Existing owner | Change needed |
 | --- | --- |
 | `assistant/browser.py`, `browser_session.py` | Reuse the existing consent, page ownership, cancellation and observation mechanisms. Retain one connection and scoped page identity. |
-| `assistant/teams.py`, `graph_http.py` | Keep the structured Graph route available for later permitted setup. It needs richer observations, history pagination, throttling metadata and sync before it can drive the same projection. |
 | `assistant/system_notices.py`, `system_toasts.py`, `winapi/notifications.py` | Separate Windows notice identity and dismissal from communication source identity; never infer a reply destination from a notification title. |
 | `assistant/agent_session.py`, `agent_window.py`, `agent_panel.py` | The current session only models agent/meeting entries. Add a presentation composition boundary for communication observations rather than pretending an incoming colleague message was said by Workspace. Preserve existing question/input routing. |
 | `assistant/work_agent.py`, `work_window.py`, `automation/task.py` | Bind explicit agent assistance to source identity and task identity; preserve existing execution and recovery ownership. |
