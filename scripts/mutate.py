@@ -20,12 +20,19 @@ from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import suppress
 from dataclasses import dataclass
+from enum import Enum
 from pathlib import Path
-from typing import Literal, cast
+from typing import cast
 from xml.etree import ElementTree
 
 ROOT = Path(__file__).resolve().parent.parent
-type Status = Literal["killed", "survived", "timeout", "error"]
+
+
+class Status(Enum):
+    KILLED = "killed"
+    SURVIVED = "survived"
+    TIMEOUT = "timeout"
+    ERROR = "error"
 
 
 @dataclass(frozen=True, slots=True)
@@ -211,23 +218,23 @@ def run(root: Path, source: Path, content: bytes, tests: list[str], timeout: flo
             except subprocess.TimeoutExpired as error:
                 stop_process_tree(process)
                 process.communicate(timeout=10)
-                return Result("timeout", time.perf_counter() - started, 0, detail=timeout_detail(error))
+                return Result(Status.TIMEOUT, time.perf_counter() - started, 0, detail=timeout_detail(error))
             returncode = process.wait()
         elapsed = time.perf_counter() - started
         detail = (stdout + stderr)[-4000:]
         if not report.is_file():
-            return Result("error", elapsed, 0, detail=detail)
+            return Result(Status.ERROR, elapsed, 0, detail=detail)
         try:
             cases = list(ElementTree.parse(report).iter("testcase"))
         except ElementTree.ParseError:
-            return Result("error", elapsed, 0, detail=detail)
+            return Result(Status.ERROR, elapsed, 0, detail=detail)
         executed = [case for case in cases if case.find("skipped") is None]
         failed = tuple(f"{case.get('classname')}.{case.get('name')}" for case in cases if case.find("failure") is not None)
         if any(case.find("error") is not None for case in cases) or returncode not in (0, 1) or not executed:
-            return Result("error", elapsed, len(executed), detail=detail)
+            return Result(Status.ERROR, elapsed, len(executed), detail=detail)
         if returncode == 1 and not failed:
-            return Result("error", elapsed, len(executed), detail=detail)
-        return Result("killed" if failed else "survived", elapsed, len(executed), failed, detail)
+            return Result(Status.ERROR, elapsed, len(executed), detail=detail)
+        return Result(Status.KILLED if failed else Status.SURVIVED, elapsed, len(executed), failed, detail)
 
 
 def campaign(
@@ -251,8 +258,8 @@ def campaign(
                 digest.update(path.relative_to(snapshot).as_posix().encode() + b"\0")
                 digest.update(hashlib.sha256(path.read_bytes()).digest())
         baseline = run(snapshot, source, original, tests, timeout)
-        print(f"Baseline: {baseline.status}, {baseline.tests} tests in {baseline.seconds:.2f}s", flush=True)
-        if baseline.status != "survived":
+        print(f"Baseline: {baseline.status.value}, {baseline.tests} tests in {baseline.seconds:.2f}s", flush=True)
+        if baseline.status is not Status.SURVIVED:
             print(baseline.detail)
             raise SystemExit("Baseline must pass at least one test before mutating.")
 
@@ -262,7 +269,7 @@ def campaign(
         results: list[Result] = []
         with ThreadPoolExecutor(max_workers=workers) as pool:
             for mutation, result in zip(selected, pool.map(check, selected), strict=True):
-                print(f"{result.status:8} {source}:{mutation.line} {mutation.function}: {mutation.before!r} -> {mutation.after!r}", flush=True)
+                print(f"{result.status.value:8} {source}:{mutation.line} {mutation.function}: {mutation.before!r} -> {mutation.after!r}", flush=True)
                 results.append(result)
         return baseline, results, digest.hexdigest()
 
@@ -315,7 +322,7 @@ def main() -> None:
             "after": mutation.after,
             "start": mutation.start,
             "end": mutation.end,
-            "status": result.status,
+            "status": result.status.value,
             "seconds": round(result.seconds, 3),
             "tests": result.tests,
             "killed_by": result.killed_by,
@@ -336,10 +343,10 @@ def main() -> None:
         "snapshot_sha256": digest,
     }
     output.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
-    counts = {status: sum(result["status"] == status for result in results) for status in ("killed", "survived", "timeout", "error")}
-    print(", ".join(f"{count} {status}" for status, count in counts.items()), flush=True)
+    counts = {status: sum(result.status is status for result in outcomes) for status in Status}
+    print(", ".join(f"{count} {status.value}" for status, count in counts.items()), flush=True)
     print(f"Evidence: {output}", flush=True)
-    raise SystemExit(0 if counts["killed"] == len(results) else 1)
+    raise SystemExit(0 if counts[Status.KILLED] == len(outcomes) else 1)
 
 
 if __name__ == "__main__":
