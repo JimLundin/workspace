@@ -1,4 +1,4 @@
-"""The keeper's typed files: its inbox and the deployment pause.
+"""The keeper's typed files: its inbox, its rollback target and the deployment pause.
 
 Other programs ask the keeper for installs, undo, keep and restarts through its
 inbox folder; a request it can't read is refused, never silently dropped. The
@@ -57,6 +57,14 @@ class Malformed:
     reason: str
 
 
+@dataclass(frozen=True, slots=True, kw_only=True)
+class Rollback:
+    """The version the last install replaced; pending means restore it before starting."""
+
+    version: str | None
+    pending: bool
+
+
 @dataclass(frozen=True, slots=True)
 class Pause:
     token: str
@@ -97,6 +105,7 @@ class Capability:
 
 
 REQUEST = TypeAdapter[Request](Install | Undo | Keep | Restart)
+ROLLBACK = TypeAdapter[Rollback](Rollback)
 COMMAND = TypeAdapter[Pause | Resume](Pause | Resume)
 STATUS = TypeAdapter[Paused | Resumed | Refused](Paused | Resumed | Refused)
 CAPABILITY = TypeAdapter[Capability](Capability)

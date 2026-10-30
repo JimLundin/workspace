@@ -20,7 +20,6 @@ import contextlib
 import ctypes
 import difflib
 import hashlib
-import json
 import os
 import shutil
 import subprocess
@@ -33,12 +32,12 @@ from ctypes import wintypes
 from datetime import datetime
 from enum import Enum, auto
 from pathlib import Path
-from typing import Final, Protocol, TypedDict, assert_never
+from typing import Final, Protocol, assert_never
 
 from components import CATALOGUE, Component, Entry, read_marker
 
 # Bundled dependencies load only after `keeper.py` activates the runtime.
-lazy from keeper_control import Install, Keep, Malformed, Request, Restart, Undo, take
+lazy from keeper_control import ROLLBACK, Install, Keep, Malformed, Request, Restart, Rollback, Undo, take
 
 LIVE: Final = Path(__file__).resolve().parent
 """Workspace's own folder: the version that runs."""
@@ -61,15 +60,6 @@ CHECK_S: Final = 300.0
 CRASH_WINDOW_S: Final = 600.0
 MAX_CRASHES: Final = 3
 """Restarts allowed within `CRASH_WINDOW_S`; one more crash and the keeper stops trying."""
-
-
-# Standard-library codecs keep protected recovery IO usable without loading
-# bundled dependencies. Typed wire fields are validated structurally.
-
-
-class RecoveryData(TypedDict):
-    version: str | None
-    pending: bool
 
 
 # ---- versions on disk ------------------------------------------------------------------
@@ -234,25 +224,22 @@ class Recovery:
     def __init__(self, path: Path) -> None:
         self.path = path
 
-    def read(self) -> tuple[str | None, bool]:
+    def read(self) -> Rollback:
         if not self.path.exists():
-            return None, False
-        raw: object = json.loads(self.path.read_text(encoding="utf-8"))
-        match raw:
-            case {"version": str() as version, "pending": bool() as pending}:
-                if not version or Path(version).name != version or version in (".", ".."):
-                    raise ValueError("Invalid rollback version")
-                return version, pending
-            case {"version": None, "pending": bool() as pending}:
-                return None, pending
+            return Rollback(version=None, pending=False)
+        rollback = ROLLBACK.validate_json(self.path.read_bytes(), strict=True)
+        match rollback.version:
+            case "" | "." | "..":
+                raise ValueError("Invalid rollback version")
+            case str() as version if Path(version).name != version:
+                raise ValueError("Invalid rollback version")
             case _:
-                raise ValueError("Invalid update recovery state")
+                return rollback
 
-    def write(self, version: str | None, *, pending: bool) -> None:
+    def write(self, rollback: Rollback) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         temporary = self.path.with_suffix(".tmp")
-        data: RecoveryData = {"version": version, "pending": pending}
-        temporary.write_text(json.dumps(data), encoding="utf-8")
+        temporary.write_bytes(ROLLBACK.dump_json(rollback))
         temporary.replace(self.path)
 
 
@@ -282,17 +269,19 @@ class Keeper:
         """Recover an interrupted install/trial before loading the live source."""
         if self.recovery is None:
             return
-        version, pending = self.recovery.read()
-        self.undoable = version
-        if pending and version is not None:
-            self.world.restore(version)
-            self.undoable = None
-            self.persist(pending=False)
-            self.world.notify("Update undone: the previous trial or installation was interrupted.")
+        match self.recovery.read():
+            case Rollback(version=str() as version, pending=True):
+                self.undoable = version  # still undoable if this restore fails
+                self.world.restore(version)
+                self.undoable = None
+                self.persist(pending=False)
+                self.world.notify("Update undone: the previous trial or installation was interrupted.")
+            case Rollback(version=version):
+                self.undoable = version
 
     def persist(self, *, pending: bool) -> None:
         if self.recovery is not None:
-            self.recovery.write(self.undoable, pending=pending)
+            self.recovery.write(Rollback(version=self.undoable, pending=pending))
 
     def start(self, now: float) -> None:
         for name in CATALOGUE:

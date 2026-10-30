@@ -588,8 +588,7 @@ edits stay available for follow-up requests in the same conversation, then:
 The last 20 versions are kept in `%LOCALAPPDATA%\workspace\versions`. The agent
 can't change the protected keeper, runtime activation, checker, dialogs or component-control
 modules. The keeper's protected dialogs use the pinned Qt dependency; its typed
-request inbox and component-control transport use Pydantic; its rollback record
-uses the standard library.
+request inbox, rollback record and component-control transport use Pydantic.
 A request it can't read is refused with a notice. The `.runtime` dependency directory is also
 protected and stay outside source snapshots and updates. Code and tests run with
 your account permissions.

@@ -15,7 +15,7 @@ from keeper import (
     snapshot,
     source_files,
 )
-from keeper_control import STATUS, Control, Install, Keep, Pause, Paused, Refused, Restart, Resume, Resumed, Undo, ask, submit, take
+from keeper_control import STATUS, Control, Install, Keep, Pause, Paused, Refused, Restart, Resume, Resumed, Rollback, Undo, ask, submit, take
 
 # ---- a fake world for the keeper's logic -----------------------------------------------
 
@@ -641,13 +641,13 @@ def test_undo_survives_keeper_restart(tmp_path: Path) -> None:
 
 def test_interrupted_trial_is_restored_before_starting(tmp_path: Path) -> None:
     recovery = Recovery(tmp_path / "recovery.json")
-    recovery.write("v1", pending=True)
+    recovery.write(Rollback(version="v1", pending=True))
     world = World()
     keeper = Keeper(world, recovery)
     keeper.recover()
     keeper.start(0)
     assert world.log[0] == "restore v1"
-    assert recovery.read() == (None, False)
+    assert recovery.read() == Rollback(version=None, pending=False)
 
 
 def test_recovery_failure_preserves_retry_state(tmp_path: Path) -> None:
@@ -658,12 +658,12 @@ def test_recovery_failure_preserves_retry_state(tmp_path: Path) -> None:
             raise PermissionError("locked backup")
 
     recovery = Recovery(tmp_path / "recovery.json")
-    recovery.write("v1", pending=True)
+    recovery.write(Rollback(version="v1", pending=True))
     keeper = Keeper(FailingRestore(), recovery)
     keeper.undoable = "v1"
     keeper.rollback("failed", 0)
     assert keeper.done
-    assert recovery.read() == ("v1", True)
+    assert recovery.read() == Rollback(version="v1", pending=True)
 
 
 def test_completed_trial_persists_undo_target(tmp_path: Path) -> None:
@@ -675,7 +675,7 @@ def test_completed_trial_persists_undo_target(tmp_path: Path) -> None:
     keeper.tick(1)
     installed(world, keeper)
     keeper.tick(700)
-    assert recovery.read() == ("v1", False)
+    assert recovery.read() == Rollback(version="v1", pending=False)
 
 
 def test_candidate_review_does_not_execute_code_and_is_frozen(tmp_path: Path) -> None:
@@ -729,4 +729,4 @@ def test_failed_second_update_keeps_first_update_undoable_after_restart(tmp_path
     keeper.request(Install("broken second update"), now=30)
     world.check.outcome = (False, "broken")
     keeper.tick(31)
-    assert recovery.read() == ("v1", False)
+    assert recovery.read() == Rollback(version="v1", pending=False)
