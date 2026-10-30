@@ -2,8 +2,23 @@
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from typing import assert_never
 
-from assistant.feed_contracts import FeedCommand
+from assistant.feed_contracts import (
+    AnswerConsole,
+    ChooseSolution,
+    ClearRules,
+    CompleteItem,
+    DismissItem,
+    FeedCommand,
+    FeedReply,
+    ForgetRule,
+    QuietItem,
+    ReadFeed,
+    RejectProposal,
+    ReviseProposal,
+    SaveRule,
+)
 from assistant.work_bridge_contracts import BridgeCommand, BridgeResponse, FeedResponse
 from assistant.work_canvas_commands import CanvasCommand, CanvasResponse, ReadCanvas, UpdateCanvas
 from automation.personal_work import (
@@ -34,5 +49,20 @@ class WorkOwners:
                 return self.canvas(command)
             case AddDocument() | AddWebPage() | DismissWork() | RestoreWork() | ListWork() | ListSources() | SaveWork() | UnlinkWork():
                 return self.personal(command)
-            case _:
+            case (
+                ReadFeed()
+                | ChooseSolution()
+                | AnswerConsole()
+                | FeedReply()
+                | SaveRule()
+                | ForgetRule()
+                | ClearRules()
+                | CompleteItem()
+                | QuietItem()
+                | DismissItem()
+                | RejectProposal()
+                | ReviseProposal()
+            ):
                 return self.feed(command)
+            case _ as unreachable:
+                assert_never(unreachable)
