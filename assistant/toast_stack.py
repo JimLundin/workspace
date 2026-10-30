@@ -150,7 +150,7 @@ def fit(column: Column, viewport: Viewport) -> Fit:
         # Retiring bubbles cannot consume space needed by the next page.
         reserved = ()
         heights = allocate(spaces, _available(viewport, len(spaces)))
-    if all(heights) or column.capacity == 1:
+    if all(heights):
         return Fit(heights, len(reserved), column.capacity)
     return Fit(heights, len(reserved), max(1, min(column.capacity - 1, sum(height > 0 for height in heights))))
 
