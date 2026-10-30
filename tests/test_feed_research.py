@@ -12,9 +12,10 @@ from pydantic import TypeAdapter
 
 from assistant.activity import ContextSnapshot
 from assistant.communications import Conversation, Feed, Message, acknowledge
-from assistant.feed_contracts import StoredBoard
+from assistant.feed_contracts import Disposition, StoredBoard
 from assistant.feed_research import Research
-from assistant.feed_triage import Board, Disposition, collect, decode, proposal_revision, restored, saved, unassessed
+from assistant.feed_sources import triage_evidence
+from assistant.feed_triage import Board, decode, proposal_revision, restored, saved, unassessed
 from assistant.feed_triage_service import classify
 from assistant.feed_work import FeedWork
 from assistant.llm import Json, Settings
@@ -48,7 +49,7 @@ def test_background_research_reads_topic_memory_full_thread_and_file_before_publ
         ),
     )
     feed = acknowledge(acknowledge(feed, feed.messages[0].key), feed.messages[3].key)
-    batch = collect(feed, ())
+    batch = triage_evidence(feed, ())
     assert len(batch) == 1
     triage = TriageFixture(
         MemoryStore(),
@@ -96,7 +97,7 @@ def test_own_reply_reconsiders_cached_work_and_cannot_be_overwritten_by_old_rese
     # Defect: a user's reply changes neither pending candidates nor cached
     # review freshness, leaving options based on the unanswered old request.
     feed = Feed(followed=("atlas",), messages=(Message("atlas", "question", "Alice", "Which forecast should I use?", 10, 10),))
-    batch = collect(feed, ())
+    batch = triage_evidence(feed, ())
     item = decode(output(([batch[0].identity], "action")), batch)[0]
     store = MemoryStore()
     store.data = saved(Board(enabled=True, items=(item,)))
@@ -109,7 +110,7 @@ def test_own_reply_reconsiders_cached_work_and_cannot_be_overwritten_by_old_rese
         epoch = triage.epoch
         answered = replace(feed, messages=(*feed.messages, Message("atlas", "reply", "Jim", "Use the approved forecast.", 11, 11, own=True)))
         triage.observe(answered, ())
-        assert collect(answered, ()) == batch
+        assert triage_evidence(answered, ()) == batch
         assert triage.epoch == epoch + 1 and unassessed(triage.board, batch, today=day) == batch
         assert "Use the approved forecast" in triage.research_conversation(batch[0].identity)
         triage.dismiss(item.identity)
@@ -123,7 +124,7 @@ def test_public_research_supplies_findings_or_an_explicit_access_gap_without_los
     # Defect: private context is included in the public lookup, hosted-tool
     # failure aborts all inbox review, or returned findings never reach the reviewer.
     feed = Feed(followed=("atlas",), messages=(Message("atlas", "one", "Alice", "Private Atlas project details.", 10, 10),))
-    batch = collect(feed, ())
+    batch = triage_evidence(feed, ())
     findings = "Official documentation describes an export option: https://example.org/docs/export"
     for status in (200, 400):
         with fake_endpoint() as endpoint:
@@ -196,7 +197,7 @@ def test_old_recipe_refreshes_automatic_options_but_preserves_dismissal() -> Non
     # Defect: the deployed research recipe keeps displaying cached shallow
     # options all day, or uses a recipe refresh to reopen dismissed work.
     from_source = Feed(followed=("atlas",), messages=(Message("atlas", "one", "Alice", "Review Atlas.", 10, 10),))
-    batch = collect(from_source, ())
+    batch = triage_evidence(from_source, ())
     day = date(2026, 10, 29)
     item = replace(decode(output(([batch[0].identity], "action")), batch)[0], reviewed_on=day)
     state = saved(Board(enabled=True, items=(item,)))

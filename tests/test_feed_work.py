@@ -9,9 +9,10 @@ from pydantic import TypeAdapter
 
 from assistant.activity import Activity, ContextSnapshot
 from assistant.feed_agent_tools import request
-from assistant.feed_contracts import REVIEW_INPUT, FeedRejected, FeedReply, StoredBoard
+from assistant.feed_contracts import REVIEW_INPUT, Disposition, FeedRejected, FeedReply, StoredBoard
 from assistant.feed_history import Decision, Handoff
-from assistant.feed_triage import Board, Disposition, candidate, decode, proposal_revision, restored, saved, unassessed
+from assistant.feed_sources import Excerpt
+from assistant.feed_triage import Board, decode, proposal_revision, restored, saved, unassessed
 from assistant.feed_triage_service import classify
 from assistant.feed_work import FeedWork
 from assistant.llm import Json, Settings
@@ -22,6 +23,7 @@ from automation.store import TaskStore
 from automation.task import Completed, FeedHandoff, Profile, Question, RequestSource, TextAnswer, Waiting
 from tests.fake_endpoint import fake_endpoint
 from tests.feed_fixture import TriageFixture, feed_bridge
+from tests.feed_source_fixture import captured
 from tests.test_feed_triage import output
 from tests.test_feed_triage_service import MemoryStore
 from tests.test_work_actions import claimed
@@ -54,7 +56,7 @@ def test_model_gets_project_facts_prior_decisions_task_results_and_recorded_answ
     tasks.finish(second.run, Completed(detailed_result, ("Read the approved forecast.",)), at=15)
     desktop = ContextSnapshot(50, "active", (Activity(Window(1, "Atlas forecast", "excel.exe", minimized=False), 40, 50, agent_active=False),))
     work = FeedWork(tasks, context, lambda: desktop)
-    source = candidate("chat", "atlas", "Atlas forecast", "Explain the variance before Friday.", 40)
+    source = captured("atlas", Excerpt("Atlas forecast", "Explain the variance before Friday.", 40))
     item = decode(output(([source.identity], "action")), (source,))[0]
     decision = Decision(
         "correction",
@@ -120,7 +122,7 @@ def test_registered_reply_tool_saves_instruction_before_handoff_and_reuses_it_af
     # Defect: treating a reply as a cosmetic update, dropping it on restart,
     # queueing before saving, or accepting a stale/different reply under the same ID.
     tasks, claim, clock = claimed(tmp_path)
-    source = candidate("chat", "atlas", "Atlas review", "Explain the supplier variance.", 1)
+    source = captured("atlas", Excerpt("Atlas review", "Explain the supplier variance.", 1))
     item = decode(output(([source.identity], "action")), (source,))[0]
     feed_store = MemoryStore()
     feed_store.data = saved(Board(enabled=True, items=(item,)))
@@ -170,7 +172,7 @@ def test_registered_reply_tool_saves_instruction_before_handoff_and_reuses_it_af
 def test_failed_feed_save_cannot_start_reply_work_and_failed_queue_keeps_retryable_instruction(tmp_path: Path) -> None:
     # Defect: a storage error starts unrecorded work; a queue error loses the
     # exact user's instruction or falsely reports a no-change validation rejection.
-    source = candidate("chat", "review", "Review", "Please review.", 1)
+    source = captured("review", Excerpt("Review", "Please review.", 1))
     item = decode(output(([source.identity], "action")), (source,))[0]
 
     class FailedStore(MemoryStore):
@@ -213,7 +215,7 @@ def test_failed_feed_save_cannot_start_reply_work_and_failed_queue_keeps_retryab
 def test_context_changes_reconsider_open_work_without_reopening_handled_items(tmp_path: Path) -> None:
     # Defect: same-day source caching ignores a new saved decision or completed
     # task; context refresh revives work the user already dismissed.
-    source = candidate("chat", "one", "Atlas", "Review the variance.", 1)
+    source = captured("one", Excerpt("Atlas", "Review the variance.", 1))
     day = datetime.fromtimestamp(50, UTC).date()
     item = replace(decode(output(([source.identity], "action")), (source,))[0], reviewed_on=day)
     store = MemoryStore()

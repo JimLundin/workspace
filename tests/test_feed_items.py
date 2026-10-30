@@ -12,6 +12,7 @@ from assistant.inbox import Query, Source
 from assistant.notifications import MAX_VISIBLE, Stack, Turn, advance, body, observe
 from assistant.system_notices import NoticeKey
 from tests.test_console_inbox import event
+from tests.test_feed_triage import output
 lazy from assistant.communications import (
     Acknowledgement,
     Conversation,
@@ -28,7 +29,8 @@ lazy from assistant.communications import (
 )
 lazy from assistant.feed_items import reactions
 lazy from assistant.feed_origin import App
-lazy from assistant.feed_triage import Assessment, Board, collect
+lazy from assistant.feed_sources import SourceKind, triage_evidence
+lazy from assistant.feed_triage import Assessment, Board, decode
 lazy from assistant.notification_sources import HandleNotice
 lazy from assistant.system_notices import Notice
 
@@ -40,7 +42,7 @@ def test_notification_projection_shares_evidence_for_proposals_and_attached_turn
             Update(WindowsNotice(NoticeKey(index, 1), "outlook"), f"Figures {index}", f"Evidence {index}", "Outlook", index + 1) for index in range(3)
         )
     )
-    candidates = collect(feed, ())
+    candidates = triage_evidence(feed, ())
     proposals = tuple(
         Assessment(str(index), ((source.identity, source.revision),), source.title, "Compare totals", "Prepare a draft", "", 1, index + 1)
         for index, source in enumerate(candidates)
@@ -61,7 +63,7 @@ def test_notification_projection_shares_evidence_for_proposals_and_attached_turn
 def test_expansion_shows_only_matching_source_revisions_and_labels_missing_originals() -> None:
     update = Update(WindowsNotice(NoticeKey(80, 2), "outlook"), "Forecast", "Original captured figures", "Outlook", 3)
     feed = Feed(updates=(update,))
-    source = collect(feed, ())[0]
+    source = triage_evidence(feed, ())[0]
     proposal = Assessment(
         "forecast", ((source.identity, source.revision),), "Review the forecast", "The figures need review.", "Check the totals.", "", 1, 3
     )
@@ -82,18 +84,14 @@ def test_grouped_work_keeps_app_identity_and_rich_body_links_without_an_action_f
         messages=(Message("chat", "one", "Anna", "Review the figures", 2, 2),),
         updates=(Update(WindowsNotice(NoticeKey(1, 2), "outlook"), "Review reminder", "Please review", "Outlook", 3),),
     )
-    candidates = collect(feed, ())
-    proposal = Assessment(
-        "group",
-        tuple((item.identity, item.revision) for item in candidates),
-        "Review the figures",
-        "Read **the totals** at [the report](https://example.test/report). Then check `FY27`.",
-        "- Compare both sheets\n- Prepare a draft",
-        "Shall I draft it?",
-        1,
-        3,
+    candidates = triage_evidence(feed, ())
+    proposal = replace(
+        decode(output(([item.identity for item in candidates], "action")), candidates)[0],
+        summary="Read **the totals** at [the report](https://example.test/report). Then check `FY27`.",
+        suggestion="- Compare both sheets\n- Prepare a draft",
     )
-    row = observed(Session(communications=feed, triage=Board(enabled=True, items=(proposal,))))[0]
+    # Defect: badges are recovered from live sources, so handled sources lose or change their app.
+    row = observed(Session(communications=Feed(), triage=Board(enabled=True, items=(proposal,))))[0]
     assert [origin.app for origin in row.origins] == [App.TEAMS, App.OUTLOOK]
     body = body_spans(row)
     assert any(span.link == "https://example.test/report" for span in body)
@@ -134,11 +132,11 @@ def test_windows_teams_and_console_requests_join_agent_bubbles_with_exact_source
     source = [toast.content for toast in stack.toasts if isinstance(toast.content, WorkItem)]
     assert len(source) == 3
     assert any("Here is the plan." in body(toast.content) for toast in stack.toasts)
-    assert {item.key.source for item in source} == {"chat", "windows", "console"}
+    assert {item.key.kind for item in source} == {SourceKind.CHAT, SourceKind.WINDOWS, SourceKind.CONSOLE}
     assert any(span.link.startswith("workspace://console-option?") for row in source for span in action_spans(row) if span.link)
     assert any(span.link.startswith("workspace://help?source=chat&item=chat") for row in source for span in action_spans(row) if span.link)
     assert len(observed(state, Query(Source.MAIL))) == 2  # Mail plus the pending console question.
-    question = next(row for row in source if row.key.source == "console")
+    question = next(row for row in source if row.key.kind is SourceKind.CONSOLE)
     assert "Which sheet?" in "".join(span.text for span in body_spans(question))
     assert any("Revenue" in span.text for span in action_spans(question))
     assert "".join(span.text for span in action_spans(question)) == "Revenue"
@@ -156,13 +154,13 @@ def test_done_handles_the_revisions_a_card_rendered_and_never_a_later_arrival() 
         messages=(original,),
         updates=(Update(WindowsNotice(notice.key, notice.app_id), notice.title, notice.body, notice.app_name, 3),),
     )
-    rows = {row.key.source: row for row in observed(Session(communications=rendered))}
+    rows = {row.key.kind: row for row in observed(Session(communications=rendered))}
     arrival = Message("chat", "two", "Anna", "Also the budget", 4, 4)
     captured = (Acknowledgement(original.key, fingerprint(original.text)),)
-    assert act(rows["chat"], Verb.DONE) == Handle(captured)
+    assert act(rows[SourceKind.CHAT], Verb.DONE) == Handle(captured)
     live = handle(replace(rendered, messages=(original, arrival)), captured)
     assert not live.unseen(original) and live.unseen(arrival)
-    assert act(rows["windows"], Verb.DONE) == HandleNotice(notice)
+    assert act(rows[SourceKind.WINDOWS], Verb.DONE) == HandleNotice(notice)
 
 
 def test_pending_sources_remain_reachable_after_overflow_filtering_and_agent_reset() -> None:
@@ -211,7 +209,7 @@ def test_expanded_question_context_excludes_other_topics_in_the_same_chat() -> N
             Message("chat", "lunch", "Sam", "Lunch is in the kitchen.", 2, 2),
         ),
     )
-    candidates = collect(feed, ())
+    candidates = triage_evidence(feed, ())
     assert len(candidates) == 2
     source = next(item for item in candidates if "budget" in item.body)
     proposal = Assessment(
@@ -234,6 +232,6 @@ def test_multiple_choice_questions_show_options_for_voice_without_submitting_one
     # Defect: a pill click prematurely submits one choice from a multi-select request.
     current = request(Provider.CLAUDE, event(Provider.CLAUDE), "multiple", 1)
     current = replace(current, questions=(replace(current.questions[0], multiple=True),))
-    row = next(item for item in observed(Session(console_requests=(current,))) if item.key.source == "console")
+    row = next(item for item in observed(Session(console_requests=(current,))) if item.key.kind is SourceKind.CONSOLE)
     assert not action_spans(row)
     assert "Revenue" in "".join(span.text for span in body_spans(row))

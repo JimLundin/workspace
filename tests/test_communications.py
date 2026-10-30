@@ -20,7 +20,7 @@ from assistant.communications import (
     update_fingerprint,
     updates_observed,
 )
-from assistant.communications_browser import TeamsWeb, observation
+from assistant.communications_browser import TeamsWeb
 from assistant.llm import Json
 from tests.teams_fixture import Browser
 
@@ -51,9 +51,10 @@ def test_bounded_history_prunes_acknowledgements_with_their_messages() -> None:
 
 
 def test_external_observation_rejects_missing_source_identity() -> None:
-    invalid: Json = {"current": "Anna", "title": "Anna", "conversations": [], "messages": [], "editor_ready": True}
+    browser = Browser()
+    browser.documents = ({"current": "Anna", "title": "Anna", "conversations": [], "messages": [], "editor_ready": True},)
     try:
-        observation(invalid, 1)
+        TeamsWeb(Path("unused"), browser=browser).read(threading.Event())
     except BrowserError:
         pass
     else:

@@ -6,8 +6,10 @@ from pathlib import Path
 from assistant import notification_text
 from assistant.agent_session import Answer, StreamState, Succeeded, ToolActivity
 from assistant.communications import Delivery, Reply
-from assistant.feed_items import SourceKey, WorkItem
-from assistant.feed_triage import Assessment, Solution, SolutionKind
+from assistant.feed_contracts import SolutionKind
+from assistant.feed_items import WorkItem
+from assistant.feed_sources import SourceKey, SourceKind
+from assistant.feed_triage import Assessment, Solution
 from assistant.notifications import Entry, Settled, Turn
 from tests.fake_endpoint import fake_endpoint
 from tests.json_fixture import json_object, json_rows
@@ -49,7 +51,7 @@ def test_earlier_answers_keep_markdown_when_moved_into_steps() -> None:
 def test_reply_work_item_uses_the_markdown_body_adapter() -> None:
     """Detect the Reply variant bypassing our existing rich-text path."""
     reply = Reply("reply", "chat", "Proposed reply", "Please check **the totals**.", 1, Delivery.UNKNOWN)
-    row = WorkItem(SourceKey("reply", "reply"), reply, reply.title)
+    row = WorkItem(SourceKey(SourceKind.REPLY, "reply"), reply, reply.title)
     assert any("the totals" in span.text and "bold" in span.tags for span in notification_text.spans(row))
 
 
@@ -89,7 +91,7 @@ def test_expanded_proposal_formats_each_possible_reply() -> None:
         1,
         solutions=(Solution("draft", "Draft reply", SolutionKind.DRAFT, "Please check **the totals** in `FY27`."),),
     )
-    row = WorkItem(SourceKey("triage", "plan"), item, item.title)
+    row = WorkItem(SourceKey(SourceKind.PROPOSAL, "plan"), item, item.title)
     detail = notification_text.spans(row, expanded=True)
     assert any("the totals" in span.text and "bold" in span.tags for span in detail)
     assert any(span.text == "FY27" and "code" in span.tags for span in detail)

@@ -12,9 +12,10 @@ lazy from PySide6.QtTest import QTest
 
 from assistant.agent_session import Succeeded, ToolActivity
 from assistant.console_requests import Answer, Command, Provider, request
+from assistant.feed_contracts import SolutionKind
 from assistant.feed_items import WorkItem
 from assistant.feed_origin import FeedRequest
-from assistant.feed_triage import Assessment, Board, Solution, SolutionKind
+from assistant.feed_triage import Assessment, Board, Solution
 from assistant.notification_text import details, spans
 from assistant.notifications import Turn
 from assistant.qt_runtime import prepare

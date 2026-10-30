@@ -6,16 +6,25 @@ from datetime import date
 
 from assistant.agent_session import Session
 from assistant.communications import Conversation, Feed, Message, TeamsActivity, Update, UpdateKind
-from assistant.feed_contracts import CompleteItem, DismissItem, ForgetRule, ProposedSolution, QuietItem, RejectProposal, ReviseProposal, SaveRule
+from assistant.feed_contracts import (
+    STORED_BOARD,
+    CompleteItem,
+    DismissItem,
+    Disposition,
+    ForgetRule,
+    ProposedSolution,
+    QuietItem,
+    RejectProposal,
+    ReviseProposal,
+    SaveRule,
+)
 from assistant.feed_items import WorkItem, action_spans, observed, text
+from assistant.feed_sources import Excerpt, triage_evidence
 from assistant.feed_triage import (
     Assessment,
     Board,
-    Disposition,
     EditObservation,
     applied,
-    candidate,
-    collect,
     decode,
     edited,
     reconcile,
@@ -25,6 +34,7 @@ from assistant.feed_triage import (
 )
 from assistant.llm import Json
 from assistant.notifications import Stack, advance
+from tests.feed_source_fixture import captured
 from tests.json_fixture import json_object, json_rows
 lazy from assistant.feed_agent_tools import validated
 lazy from assistant.feed_triage import batch_for, proposal_revision, reconsidered, selected, solution_task
@@ -58,7 +68,7 @@ def test_reactions_never_become_cards_and_grouped_requests_have_no_manual_action
         messages=(Message("budget", "one", "Anna", "Can you review the budget?", 1, 1),),
         updates=(Update(TeamsActivity("reaction"), "Anna liked a message", "👍", "Teams", 2, UpdateKind.REACTION),),
     )
-    candidates = collect(feed, ())
+    candidates = triage_evidence(feed, ())
     board = reconcile(Board(enabled=True), candidates)
     batch = unassessed(board, candidates)
     assert len(batch) == 1 and board.reactions == 1
@@ -72,8 +82,8 @@ def test_reactions_never_become_cards_and_grouped_requests_have_no_manual_action
 
 
 def test_model_must_cover_exact_sources_once_and_cannot_complete_work() -> None:
-    first = candidate("chat", "one", "Budget", "Please review.", 1)
-    second = candidate("windows", "two", "Budget review", "Same request.", 2)
+    first = captured("one", Excerpt("Budget", "Please review.", 1))
+    second = captured("two", Excerpt("Budget review", "Same request.", 2))
     batch = (first, second)
     grouped = decode(output(([first.identity, second.identity], "action")), batch)
     assert len(grouped) == 1 and len(grouped[0].references) == 2
@@ -93,7 +103,7 @@ def test_model_must_cover_exact_sources_once_and_cannot_complete_work() -> None:
 
 
 def test_revision_change_rejects_stale_results_and_completed_work_does_not_reappear_on_poll() -> None:
-    first = candidate("chat", "one", "Budget", "Please review.", 1)
+    first = captured("one", Excerpt("Budget", "Please review.", 1))
     current = replace(first, revision="new-revision", body="Updated figures need review.")
     assessment = decode(output(([first.identity], "action")), (first,))
     board = applied(Board(enabled=True), assessment, (first,))
@@ -106,7 +116,7 @@ def test_revision_change_rejects_stale_results_and_completed_work_does_not_reapp
 
 
 def test_explicit_voice_feedback_reclassifies_open_and_quiet_work_and_survives_restore() -> None:
-    first = candidate("chat", "one", "Budget", "Thanks.", 1)
+    first = captured("one", Excerpt("Budget", "Thanks.", 1))
     board = applied(Board(enabled=True), decode(output(([first.identity], "quiet")), (first,)), (first,))
     assert not board.actions and not unassessed(board, (first,))
     board = edited(board, SaveRule("Keep routine budget acknowledgements quiet."), EditObservation((first,), 2))
@@ -123,8 +133,8 @@ def test_explicit_voice_feedback_reclassifies_open_and_quiet_work_and_survives_r
 
 
 def test_new_related_arrival_can_join_an_existing_action_without_duplicate_cards() -> None:
-    first = candidate("chat", "one", "Budget", "Please review.", 1)
-    second = candidate("windows", "two", "Budget reminder", "Reminder to review.", 2)
+    first = captured("one", Excerpt("Budget", "Please review.", 1))
+    second = captured("two", Excerpt("Budget reminder", "Reminder to review.", 2))
     board = applied(Board(enabled=True), decode(output(([first.identity], "action")), (first,)), (first,))
     candidates = (first, second)
     batch = batch_for(reconcile(board, candidates), candidates)
@@ -134,7 +144,7 @@ def test_new_related_arrival_can_join_an_existing_action_without_duplicate_cards
 
 
 def test_proposed_work_survives_source_disappearance_and_restart_without_becoming_live_evidence() -> None:
-    first = candidate("windows", "one", "Review", "Please review the totals.", 1)
+    first = captured("one", Excerpt("Review", "Please review the totals.", 1))
     board = applied(Board(enabled=True), decode(output(([first.identity], "action")), (first,)), (first,))
     offline = reconcile(restored(saved(board)), ())
     assert offline.actions == board.actions
@@ -147,7 +157,7 @@ def test_proposed_work_survives_source_disappearance_and_restart_without_becomin
 
 
 def test_dismissal_survives_poll_restart_and_filter_feedback_but_new_evidence_gets_reviewed() -> None:
-    first = candidate("chat", "one", "Budget", "Please review.", 1)
+    first = captured("one", Excerpt("Budget", "Please review.", 1))
     board = applied(Board(enabled=True), decode(output(([first.identity], "action")), (first,)), (first,))
     dismissed = edited(board, DismissItem(board.actions[0].identity), EditObservation((first,), 2))
     restarted = reconcile(restored(saved(dismissed)), (first,))
@@ -187,7 +197,7 @@ def test_top_work_is_selected_by_importance_and_dismissal_advances_the_queue_wit
 
 
 def test_solutions_are_revision_bound_persisted_and_untrusted_details_cannot_expand_the_recipe() -> None:
-    source = candidate("chat", "budget", "Budget", "Please review.", 1)
+    source = captured("budget", Excerpt("Budget", "Please review.", 1))
     item = decode(output(([source.identity], "action")), (source,))[0]
     board = restored(saved(Board(enabled=True, items=(item,))))
     assert board.actions == (item,) and saved(board).items
@@ -208,7 +218,7 @@ def test_solutions_are_revision_bound_persisted_and_untrusted_details_cannot_exp
 
 
 def test_action_solutions_require_valid_distinct_bounded_choices() -> None:
-    source = candidate("chat", "one", "Review", "Please review.", 1)
+    source = captured("one", Excerpt("Review", "Please review.", 1))
     options: tuple[list[Json], ...] = (
         [],
         [{"label": "Send", "kind": "send", "detail": "Send it now."}],
@@ -228,7 +238,7 @@ def test_action_solutions_require_valid_distinct_bounded_choices() -> None:
 
 
 def test_voice_correction_replaces_solutions_immediately_even_without_live_sources() -> None:
-    source = candidate("windows", "one", "Review", "Please review.", 1)
+    source = captured("one", Excerpt("Review", "Please review.", 1))
     item = decode(output(([source.identity], "action")), (source,))[0]
     board = Board(enabled=True, items=(item,))
     revised = edited(
@@ -250,7 +260,7 @@ def test_voice_correction_replaces_solutions_immediately_even_without_live_sourc
 
 
 def test_meaningful_rejection_records_reason_and_revision_without_completing_or_sending() -> None:
-    source = candidate("chat", "request", "Budget", "Can you approve this budget?", 1)
+    source = captured("request", Excerpt("Budget", "Can you approve this budget?", 1))
     item = decode(output(([source.identity], "action")), (source,))[0]
     board = Board(enabled=True, items=(item,))
     arguments: dict[str, Json] = {
@@ -308,8 +318,8 @@ def test_context_refresh_reopens_automatic_quiet_work_but_keeps_explicit_handlin
     # Defect: a request hidden because related work was underway stays hidden
     # after that work fails; refreshing context also revives an explicit user quiet.
     today = date(2026, 10, 29)
-    automatic = candidate("chat", "automatic", "Atlas", "Review the variance.", 1)
-    explicit = candidate("chat", "explicit", "Orion", "Routine update.", 1)
+    automatic = captured("automatic", Excerpt("Atlas", "Review the variance.", 1))
+    explicit = captured("explicit", Excerpt("Orion", "Routine update.", 1))
     quiet = replace(decode(output(([automatic.identity], "quiet")), (automatic,))[0], reviewed_on=today)
     proposal = replace(decode(output(([explicit.identity], "action")), (explicit,))[0], reviewed_on=today)
     handled = edited(Board(enabled=True, items=(proposal,)), QuietItem(proposal.identity), EditObservation((), 2))
@@ -321,3 +331,21 @@ def test_context_refresh_reopens_automatic_quiet_work_but_keeps_explicit_handlin
     assert refreshed.items[1] == handled.items[0]
     filtered = edited(refreshed, SaveRule("Prioritize a different project."), EditObservation((automatic, explicit), 3))
     assert filtered.items == handled.items
+
+
+def test_a_board_saved_before_origins_were_captured_keeps_its_rules_and_items() -> None:
+    # Defect: the added origins field makes older saved boards fail validation, discarding rules and history.
+    source = captured("one", Excerpt("Budget", "Please review.", 1))
+    board = edited(
+        applied(Board(enabled=True), decode(output(([source.identity], "action")), (source,)), (source,)),
+        SaveRule("Keep routine updates quiet."),
+        EditObservation((), 2),
+    )
+    assert board.items and board.history
+    stored = STORED_BOARD.dump_python(saved(board), mode="json")
+    for item in stored["items"]:
+        del item["origins"]
+    restarted = restored(STORED_BOARD.validate_python(stored))
+    assert restarted.rules == board.rules and restarted.history == board.history
+    assert [item.identity for item in restarted.items] == [item.identity for item in board.items]
+    assert all(item.origins == () for item in restarted.items)

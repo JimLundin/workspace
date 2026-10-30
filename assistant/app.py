@@ -35,7 +35,7 @@ lazy from assistant.desktop import WinDesktop
 lazy from assistant.features import Assistant, switcher_windows
 lazy from assistant.feed_contracts import STORED_BOARD
 lazy from assistant.feed_research import Research
-lazy from assistant.feed_triage import Candidate
+lazy from assistant.feed_sources import Candidate
 lazy from assistant.feed_triage_service import Triage, classify
 lazy from assistant.feed_work import FeedWork
 lazy from assistant.icons import State, dot
