@@ -63,9 +63,9 @@ the duration of an individual stall. The capture contains stack locations only.
 
 ## Change and ownership
 
-`feed_items.proposal_index` creates one immutable snapshot of evidence, source
-origins and projected work items. `proposal` consumes an explicit `ProposalSources`
-input. `notifications.observe` passes its projected work items into the source
+`feed_items.proposal_index` creates one immutable snapshot of evidence and
+projected work items. `proposal` consumes that explicit evidence mapping; origins
+are captured on the assessment itself. `notifications.observe` passes its projected work items into the source
 feed observation, so attached agent turns and side-feed cards share the same
 validated candidate objects. Direct source-feed observation builds its own index
 once when no projection is supplied. Indexes use Python 3.15's native `frozendict`.

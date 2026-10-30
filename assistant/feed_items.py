@@ -1,8 +1,8 @@
 """Source work joins the existing floating conversation without becoming agent instructions."""
 
-from collections.abc import Mapping
+from collections.abc import Iterable, Iterator, Mapping
 from dataclasses import dataclass, replace
-from enum import Enum, auto
+from enum import Enum
 from typing import assert_never
 from urllib.parse import urlencode
 
@@ -24,13 +24,30 @@ from assistant.communications import (
     Update,
     UpdateKind,
     WindowsNotice,
-    chat_tickets,
     fingerprint,
     update_fingerprint,
 )
-from assistant.console_requests import Request, State
-from assistant.feed_origin import App, Origin, application
-from assistant.feed_triage import Assessment, Candidate, collect, identity
+from assistant.console_requests import Request
+from assistant.feed_origin import Origin
+from assistant.feed_sources import (
+    Attention,
+    Candidate,
+    ChatMessageSource,
+    ChatTicketSource,
+    ConsoleSource,
+    FeedSource,
+    ReplySource,
+    SourceKey,
+    SourceKind,
+    UpdateSource,
+    attention,
+    key,
+    listed,
+    origin,
+    title,
+    triage_evidence,
+)
+from assistant.feed_triage import Assessment
 from assistant.inbox import Query, matches
 from assistant.notification_sources import HandleNotice, OpenApp, ReopenNotice, ToggleApp
 from assistant.rich_text import Span, formatted
@@ -41,22 +58,11 @@ DEFAULT_QUERY = Query()
 
 
 @dataclass(frozen=True, slots=True)
-class SourceKey:
-    source: str
-    identity: str
-
-
-class WorkState(Enum):
-    PENDING = auto()
-    HANDLED = auto()
-
-
-@dataclass(frozen=True, slots=True)
 class WorkItem:
     key: SourceKey
     item: ChatTicket | Message | Update | Reply | Request | Assessment
     title: str
-    state: WorkState = WorkState.PENDING
+    attention: Attention = Attention.TRIAGE
     origins: tuple[Origin, ...] = ()
     evidence: tuple[Candidate, ...] = ()
 
@@ -66,86 +72,50 @@ class WorkItem:
 
     @property
     def waiting(self) -> bool:
-        return isinstance(self.item, Request) and self.item.state is State.WAITING
+        return self.attention is Attention.DIRECT
 
 
-def origins(item: ChatTicket | Message | Update | Reply | Request) -> tuple[Origin, ...]:
-    match item:
-        case ChatTicket() | Message() | Reply():
-            return (Origin(App.TEAMS, App.TEAMS.value),)
-        case Update(source=WindowsNotice(app_id=app_id), app_name=name):
-            return (application(name, app_id),)
-        case Update():
-            return (Origin(App.TEAMS, App.TEAMS.value),)
-        case Request(provider=provider):
-            return (application(provider.value),)
+def observation(source: FeedSource) -> ChatTicket | Message | Update | Reply | Request:
+    match source:
+        case (
+            ChatTicketSource(ticket=item)
+            | ChatMessageSource(message=item)
+            | UpdateSource(update=item)
+            | ReplySource(reply=item)
+            | ConsoleSource(request=item)
+        ):
+            return item
         case _:
-            assert_never(item)
+            assert_never(source)
+
+
+def row(source: FeedSource) -> WorkItem:
+    return WorkItem(key(source), observation(source), title(source), attention(source), origins=(origin(source),))
 
 
 def observed(session: Snapshot, query: Query = DEFAULT_QUERY, *, proposals: Mapping[str, WorkItem] | None = None) -> tuple[WorkItem, ...]:
     if session.triage.enabled:
         indexed = proposal_index(session) if proposals is None else proposals
         selected = tuple(indexed[item.identity] for item in session.triage.actions)
-        waiting = tuple(
-            WorkItem(SourceKey("console", request.identity), request, request.provider.value, origins=origins(request))
-            for request in session.console_requests
-            if request.state is State.WAITING
-        )
-        return (*selected, *waiting)
-    feed = session.communications
-    rows: list[WorkItem] = []
-    if query.history:
-        for message in feed.messages:
-            chat = feed.conversation(message.conversation)
-            rows.append(
-                WorkItem(
-                    SourceKey("chat-message", message.conversation + "/" + message.identity),
-                    message,
-                    chat.title if chat is not None else "Teams",
-                    WorkState.PENDING if feed.unseen(message) else WorkState.HANDLED,
-                )
-            )
-    else:
-        for ticket in chat_tickets(feed):
-            chat = feed.conversation(ticket.conversation)
-            rows.append(WorkItem(SourceKey("chat", ticket.conversation), ticket, chat.title if chat is not None else "Teams"))
-    for update in feed.updates:
-        if query.history or feed.needs_attention(update):
-            rows.append(
-                WorkItem(SourceKey(*update.key), update, update.app_name, WorkState.PENDING if feed.pending_update(update) else WorkState.HANDLED)
-            )
-    for reply in feed.replies:
-        rows.append(
-            WorkItem(
-                SourceKey("reply", reply.identity),
-                reply,
-                reply.title,
-                WorkState.HANDLED if reply.delivery in (Delivery.OBSERVED, Delivery.REVIEWED) else WorkState.PENDING,
-            )
-        )
-    for request in session.console_requests:
-        if query.history or request.state in (State.WAITING, State.INFORMATION):
-            rows.append(
-                WorkItem(
-                    SourceKey("console", request.identity),
-                    request,
-                    request.provider.value,
-                    WorkState.HANDLED if request.state in (State.ANSWERED, State.EXPIRED) else WorkState.PENDING,
-                )
-            )
-    return tuple(
-        replace(row, origins=origins(row.item))
-        for row in rows
-        if not isinstance(row.item, Assessment) and matches(row.item.latest if isinstance(row.item, ChatTicket) else row.item, query)
-    )
+        # Triage never assesses direct questions, so they join its proposals unfiltered.
+        direct = tuple(row(source) for source in map(ConsoleSource, session.console_requests) if attention(source) is Attention.DIRECT)
+        return (*selected, *direct)
+    sources = listed(session.communications, session.console_requests, history=query.history)
+    return tuple(row(source) for source in sources if matches(source, query))
+
+
+def reaction_updates(sources: Iterable[FeedSource]) -> Iterator[Update]:
+    for source in sources:
+        match source:
+            case UpdateSource(update=Update(kind=UpdateKind.REACTION) as update):
+                yield update
+            case _:
+                pass
 
 
 def reactions(session: Snapshot) -> tuple[str, str]:
     """One quiet emoji strip; reaction arrivals never become action bubbles."""
-    updates = tuple(
-        item for item in session.communications.updates if item.kind is UpdateKind.REACTION and session.communications.needs_attention(item)
-    )
+    updates = tuple(reaction_updates(listed(session.communications, (), history=False)))
     counts: dict[str, int] = {}
     for item in updates:
         evidence = item.title.casefold()
@@ -218,7 +188,7 @@ class Verb(Enum):
 
 def item_link(verb: Verb, caption: str, row: WorkItem) -> Span:
     """Name the rendered item, never its source fields: a click acts on what the person saw."""
-    return link(verb.value, caption, {"source": row.key.source, "item": row.key.identity})
+    return link(verb.value, caption, {"source": row.key.kind.value, "item": row.key.identity})
 
 
 type SourceAction = assistant.communications.Command | assistant.notification_sources.Command
@@ -268,7 +238,7 @@ def help_request(row: WorkItem) -> str:
 
 
 def handling_link(row: WorkItem) -> Span:
-    return item_link(Verb.DONE, "Done", row) if row.state is WorkState.PENDING else item_link(Verb.REOPEN, "Reopen", row)
+    return item_link(Verb.DONE, "Done", row) if row.attention is not Attention.RESOLVED else item_link(Verb.REOPEN, "Reopen", row)
 
 
 def spans(row: WorkItem) -> tuple[Span, ...]:
@@ -360,7 +330,7 @@ def action_spans(row: WorkItem) -> tuple[Span, ...]:
         request = row.item
         supplied = dict(request.answers)
         first = next((i for i in range(len(request.questions)) if i not in supplied), None)
-        if request.state is not State.WAITING or first is None or request.questions[first].multiple:
+        if row.attention is not Attention.DIRECT or first is None or request.questions[first].multiple:
             return ()
         return tuple(
             link("console-option", option.label, {"message": request.identity, "question": str(first), "answer": option.label})
@@ -371,47 +341,24 @@ def action_spans(row: WorkItem) -> tuple[Span, ...]:
     return tuple(value for index, action in enumerate(actions) for value in ((Span("  ·  "), action) if index else (action,)))
 
 
-@dataclass(frozen=True, slots=True)
-class ProposalSources:
-    evidence: frozendict[tuple[str, str], Candidate]
-    origins: frozendict[str, Origin]
-
-
-def proposal(item: Assessment, sources: ProposalSources) -> WorkItem:
-    def origin(ref: str) -> Origin:
-        if known := sources.origins.get(ref):
-            return known
-        match ref.partition(":")[0]:
-            case "chat" | "activity" | "reply":
-                return Origin(App.TEAMS, App.TEAMS.value)
-            case "windows":
-                return Origin(App.WINDOWS, App.WINDOWS.value)
-            case _:
-                return Origin(App.WORKSPACE, App.WORKSPACE.value)
-
+def proposal(item: Assessment, evidence: Mapping[tuple[str, str], Candidate]) -> WorkItem:
     return WorkItem(
-        SourceKey("triage", item.identity),
+        SourceKey(SourceKind.PROPOSAL, item.identity),
         item,
         item.title,
-        origins=tuple({origin(ref): None for ref, _revision in item.references}),
-        evidence=tuple(sources.evidence[ref] for ref in item.references if ref in sources.evidence),
+        origins=item.origins,
+        evidence=tuple(evidence[ref] for ref in item.references if ref in evidence),
     )
 
 
 def proposal_index(session: Snapshot) -> frozendict[str, WorkItem]:
     """Build evidence once per snapshot, then pass the same projection to each consumer.
 
-    Native frozen dictionaries retain immutable candidates, origins and work items.
+    Native frozen dictionaries retain immutable candidates and work items.
     """
     if not session.triage.items:
         return frozendict({})
-    sources = ProposalSources(
-        frozendict({(source.identity, source.revision): source for source in collect(session.communications, session.console_requests)}),
-        frozendict(
-            {
-                **{identity(*update.key): origins(update)[0] for update in session.communications.updates},
-                **{identity("console", request.identity): origins(request)[0] for request in session.console_requests},
-            }
-        ),
+    evidence = frozendict(
+        {(source.identity, source.revision): source for source in triage_evidence(session.communications, session.console_requests)}
     )
-    return frozendict({item.identity: proposal(item, sources) for item in session.triage.items})
+    return frozendict({item.identity: proposal(item, evidence) for item in session.triage.items})

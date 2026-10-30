@@ -27,7 +27,8 @@ from assistant.agent_session import (
     pending,
     presentation,
 )
-from assistant.feed_items import DEFAULT_QUERY, SourceKey, WorkItem, WorkState, action_spans, proposal_index
+from assistant.feed_items import DEFAULT_QUERY, WorkItem, action_spans, proposal_index
+from assistant.feed_sources import Attention, SourceKey
 from assistant.feed_triage import Assessment
 from assistant.inbox import Query, Source, matches, user_caption
 from assistant.recording_state import RecordingState, duration, phase_label
@@ -196,8 +197,8 @@ def active(content: Content) -> bool:
             return True
         case Entry() | Response():
             return False
-        case WorkItem(state=state):
-            return state is WorkState.PENDING
+        case WorkItem(attention=attention):
+            return attention is not Attention.RESOLVED
         case _:
             assert_never(content)
 

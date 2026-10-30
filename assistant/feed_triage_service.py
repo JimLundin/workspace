@@ -20,6 +20,7 @@ from assistant.feed_contracts import (
     ConsoleOptionQuestion,
     ConsolePendingRequest,
     DismissItem,
+    Disposition,
     FeedCommand,
     FeedRejected,
     FeedReply,
@@ -33,15 +34,13 @@ from assistant.feed_contracts import (
     StoredBoard,
 )
 from assistant.feed_history import Decision, Handoff
+from assistant.feed_sources import Candidate, triage_evidence
 from assistant.feed_triage import (
     INSTRUCTIONS,
     Board,
-    Candidate,
-    Disposition,
     EditObservation,
     applied,
     batch_for,
-    collect,
     conversation_context,
     decode,
     edited,
@@ -89,7 +88,7 @@ def source_evidence(item: Candidate) -> SourceEvidence:
             created, hint, observed_on = None, None, None
         case _ as unreachable:
             assert_never(unreachable)
-    return SourceEvidence(item.identity, item.revision, item.source, item.title, item.body, created, hint, observed_on)
+    return SourceEvidence(item.identity, item.revision, item.kind.value, item.title, item.body, created, hint, observed_on)
 
 
 def classify(
@@ -182,7 +181,7 @@ class Triage:
         with self.lock:
             history_changed = self.feed.messages != feed.messages
             self.feed, self.requests = feed, requests
-            candidates = collect(feed, requests)
+            candidates = triage_evidence(feed, requests)
             if candidates == self.candidates and not history_changed:
                 return
             if history_changed:

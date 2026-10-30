@@ -12,8 +12,10 @@ lazy from PySide6.QtCore import Qt
 lazy from PySide6.QtGui import QFont
 
 from assistant.agent_session import Answer, Failed, StreamState, Succeeded, ToolActivity
-from assistant.feed_items import SourceKey, WorkItem
-from assistant.feed_triage import Assessment, Solution, SolutionKind
+from assistant.feed_contracts import SolutionKind
+from assistant.feed_items import WorkItem
+from assistant.feed_sources import SourceKey, SourceKind
+from assistant.feed_triage import Assessment, Solution
 from assistant.notifications import TurnKey
 from assistant.qt_runtime import prepare
 from assistant.tool_call_view import ToolCall
@@ -131,7 +133,7 @@ def test_time_observation_and_proposed_reply_reach_native_rich_views() -> None:
             3,
             solutions=(Solution("reply", "Draft reply", SolutionKind.DRAFT, "Please review **the totals** in `FY27`."),),
         )
-        row = WorkItem(SourceKey("triage", "draft"), item, item.title)
+        row = WorkItem(SourceKey(SourceKind.PROPOSAL, "draft"), item, item.title)
         card.expanded = True
         card.render(row, card.width, card.maximum, panel.view.material_preference())
         assert "**" not in card.text.toPlainText()

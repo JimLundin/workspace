@@ -1,11 +1,13 @@
 """Pydantic contracts for feed model requests, recommendations and typed user commands."""
 
 from dataclasses import dataclass, field
+from enum import Enum
 from typing import Annotated, Literal, Protocol
 
 from pydantic import AfterValidator, Field, StringConstraints, TypeAdapter
 
 from assistant.feed_history import Decision, Identity
+from assistant.feed_origin import Origin
 from assistant.llm import Json
 
 type Label = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=32)]
@@ -196,11 +198,26 @@ def reply_schema() -> dict[str, Json]:
 SOLUTION_CONTEXT = TypeAdapter(SolutionContext)
 
 
+class Disposition(Enum):
+    ACTION = "action"
+    QUIET = "quiet"
+    USER_QUIET = "user_quiet"
+    DONE = "done"
+    DISMISSED = "dismissed"
+    REJECTED = "rejected"
+
+
+class SolutionKind(Enum):
+    DRAFT = "draft"
+    CHECK = "check"
+    PLAN = "plan"
+
+
 @dataclass(frozen=True, slots=True)
 class StoredSolution:
     id: str
     label: str
-    kind: str
+    kind: SolutionKind
     detail: str
     recommended: bool = field(kw_only=True)
 
@@ -215,11 +232,13 @@ class StoredItem:
     question: str
     priority: int
     at: float
-    disposition: str
+    disposition: Disposition
     solutions: tuple[StoredSolution, ...]
     revision: str
     decision: str
     reviewed_on: str | None
+    # Empty means the item was assessed before origins were captured; it loads without badges.
+    origins: tuple[Origin, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)

@@ -8,11 +8,14 @@ from pathlib import Path
 
 from assistant.communications import Feed, SourceDate, SourceDateStatus, TeamsActivity, Update
 from assistant.communications_browser import activity_observation, observation
-from assistant.feed_triage import Board, Candidate, Disposition, candidate, collect, decode, restored, saved, unassessed
+from assistant.feed_contracts import Disposition
+from assistant.feed_sources import Candidate, Excerpt, triage_evidence
+from assistant.feed_triage import Board, decode, restored, saved, unassessed
 from assistant.feed_triage_service import classify, source_evidence
 from assistant.llm import Settings
 from tests import fake_endpoint
 from tests.feed_fixture import TriageFixture
+from tests.feed_source_fixture import captured
 from tests.test_feed_triage import output
 from tests.test_feed_triage_service import MemoryStore, wait_until
 lazy from tests.test_agent import says
@@ -25,7 +28,7 @@ def test_saved_review_dates_refresh_only_open_work_and_only_on_a_new_day() -> No
     """Lost review stamps cause repeat startup queries; age must not undo handling."""
     reviewed_on = datetime.fromtimestamp(LAST_WEEK, UTC).date()
     today = datetime.fromtimestamp(THIS_WEEK, UTC).date()
-    sources = tuple(candidate("chat", kind.value, "Review", "Please review.", LAST_WEEK) for kind in Disposition)
+    sources = tuple(captured(kind.value, Excerpt("Review", "Please review.", LAST_WEEK)) for kind in Disposition)
     proposals = tuple(
         replace(decode(output(([source.identity], "action")), (source,))[0], disposition=kind, reviewed_on=reviewed_on)
         for source, kind in zip(sources, Disposition, strict=True)
@@ -75,13 +78,13 @@ def test_an_undated_chat_is_not_presented_as_created_today() -> None:
         THIS_WEEK,
     )
     feed = Feed(messages=found.messages, followed=(found.current,))
-    (source,) = collect(feed, ())
+    (source,) = triage_evidence(feed, ())
     assert source.source_time is SourceDateStatus.UNKNOWN
     assert source_evidence(source).created_at is None
 
 
 def test_triage_model_receives_readable_current_and_source_dates() -> None:
-    source = candidate("chat", "old-invite", "Meeting reminder", "The meeting is tomorrow.", LAST_WEEK)
+    source = captured("old-invite", Excerpt("Meeting reminder", "The meeting is tomorrow.", LAST_WEEK))
     with fake_endpoint.fake_endpoint() as endpoint:
         endpoint.replies = [says('{"items": []}')]
         settings = Settings(endpoint.url, "fixture", "transcribe", "chat", "agent", "", "")
@@ -103,7 +106,7 @@ def test_triage_model_receives_readable_current_and_source_dates() -> None:
 def test_voice_feed_snapshot_keeps_the_source_date_with_its_text(tmp_path: Path) -> None:
     triage = TriageFixture(MemoryStore(), lambda _: None, lambda _batch, _rules: "{}", lambda _: False, clock=lambda: THIS_WEEK)
     try:
-        source = candidate("chat", "old-invite", "Meeting reminder", "The meeting is tomorrow.", LAST_WEEK)
+        source = captured("old-invite", Excerpt("Meeting reminder", "The meeting is tomorrow.", LAST_WEEK))
         triage.candidates = (source,)
         snapshot = triage.snapshot()
         assert snapshot.reviewed_at.startswith("2026-10-27T")
@@ -129,7 +132,7 @@ def test_teams_activity_uses_the_provider_date_instead_of_its_collection_time() 
         },
         THIS_WEEK,
     )
-    sources = collect(Feed(updates=observed.items), ())
+    sources = triage_evidence(Feed(updates=observed.items), ())
     with fake_endpoint.fake_endpoint() as endpoint:
         endpoint.replies = [says('{"items": []}')]
         classify(Settings(endpoint.url, "fixture", "transcribe", "chat", "agent", "", ""), sources, (), clock=lambda: THIS_WEEK)
