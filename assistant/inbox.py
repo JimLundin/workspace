@@ -8,7 +8,7 @@ from typing import assert_never
 from pydantic import TypeAdapter
 
 import assistant.agent_session
-from assistant.agent_session import AgentRequest, ChatMessage, pending
+from assistant.agent_session import AgentRequest, ChatMessage, message_body, pending
 from assistant.communications import Message, Update, UpdateKind, WindowsNotice
 from assistant.feed_origin import App
 from assistant.feed_sources import (
@@ -100,7 +100,7 @@ def matches(item: Item, query: Query) -> bool:
         case ReplySource(reply=reply):
             searchable = reply.text
         case _:
-            searchable = item.text
+            searchable = message_body(item)
     return all(word in searchable.casefold() for word in query.search.casefold().split())
 
 

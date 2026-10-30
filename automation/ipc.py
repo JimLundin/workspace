@@ -10,9 +10,12 @@ from enum import Enum, auto
 from typing import Final, assert_never, cast
 
 from assistant.activity import Activity, ContextSnapshot
-from assistant.agent_session import (
+from assistant.agent_session import Begin
+from assistant.llm import Json
+from assistant.recording_state import AudioSource
+from automation.execution import ApprovalReview
+from automation.presentation import (
     Answer,
-    Begin,
     Done,
     Failed,
     Finished,
@@ -27,9 +30,6 @@ from assistant.agent_session import (
     ToolOutcome,
     ToolStatus,
 )
-from assistant.llm import Json
-from assistant.recording_state import AudioSource
-from automation.execution import ApprovalReview
 from automation.task import Approval, RunRef, digest, identifier, integer, text, timestamp
 from winapi.shapes import Window
 

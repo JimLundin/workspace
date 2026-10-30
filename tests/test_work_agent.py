@@ -8,7 +8,7 @@ from contextlib import contextmanager
 from pathlib import Path
 
 from assistant.activity import Activity, ContextSnapshot
-from assistant.agent_session import Answer, ChatMessage, Said, StreamState
+from assistant.agent_session import ChatMessage
 from assistant.work_agent import MeetingControl, WorkAgent
 from assistant.work_window import (
     AddPreference,
@@ -42,6 +42,7 @@ from automation.ipc import (
     ReviewEvent,
     StartMeeting,
 )
+from automation.presentation import Answer, Said, StreamState
 from automation.routines import Every, Once, RoutineStore
 from automation.store import TaskStore
 from automation.task import (

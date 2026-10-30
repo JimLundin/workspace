@@ -23,7 +23,7 @@ from winapi import screen, system, windows
 from winapi.shapes import Window
 lazy from assistant.activity import ContextSnapshot, Observation, Sample, observed
 lazy from assistant.agent_execution import AgentExecution
-lazy from assistant.agent_session import Begin, Done, Finished, LiveMessage, Problem, Progress, Said
+lazy from assistant.agent_session import Begin
 lazy from assistant.browser import Browser
 lazy from assistant.browser_session import Product
 lazy from assistant.llm import Missing, Settings
@@ -39,6 +39,7 @@ lazy from automation.bridge import BridgeServer, ProfileLease
 lazy from automation.context import ContextStore, select_context
 lazy from automation.controller import ControllerSnapshot, Fault, Idle, Stopping, WorkController, WorkExecution, Working
 lazy from automation.execution import ApprovalReview, Log, Outcome
+lazy from automation.presentation import Done, Finished, LiveMessage, Problem, Progress, Said
 lazy from automation.routines import RoutineStore
 lazy from automation.store import TaskStore
 lazy from automation.task import Claim, RunRef, Task, owns

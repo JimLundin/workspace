@@ -9,9 +9,9 @@ from dataclasses import dataclass, field
 from enum import Enum, auto
 from typing import Protocol, assert_never
 
-from assistant.agent_session import LiveMessage
 from assistant.llm import Json
 from automation.actions import Actions, Evidence, Observation, Operation, Resources
+from automation.presentation import LiveMessage
 from automation.store import TaskStore
 from automation.task import (
     ActionNotApplied,

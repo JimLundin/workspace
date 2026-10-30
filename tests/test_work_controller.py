@@ -8,9 +8,9 @@ from contextlib import contextmanager
 from pathlib import Path
 
 import automation.task
-from assistant.agent_session import LiveMessage
 from automation.controller import ControllerSnapshot, Fault, Idle, Stopping, WorkController
 from automation.execution import Log, Outcome
+from automation.presentation import LiveMessage
 from automation.store import TaskStore
 from automation.task import (
     ActionSpec,

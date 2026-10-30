@@ -5,11 +5,12 @@ from textwrap import shorten
 
 from assistant import feed_items, tool_text
 from assistant.action_text import readable
-from assistant.agent_session import AgentRequest, Answer, ChatMessage, ToolActivity, pending
+from assistant.agent_session import AgentRequest, ChatMessage, pending
 from assistant.feed_items import WorkItem, action_spans, expanded_spans, link
 from assistant.feed_triage import Assessment
 from assistant.notifications import Content, Entry, Response, Turn, body, heading, plain, results, steps
 from assistant.rich_text import Span, formatted
+from automation.presentation import Answer, ToolActivity
 from automation.task import Approval
 
 

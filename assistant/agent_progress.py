@@ -5,7 +5,7 @@ from dataclasses import dataclass, field, replace
 from hashlib import sha256
 from textwrap import shorten
 
-from assistant.agent_session import Answer, ChatMessage, Message, ReasoningSummary, Snapshot, ToolActivity
+from assistant.agent_session import ChatMessage, Message, Snapshot
 from assistant.canvas_activity import redirect_session
 from assistant.notifications import (
     Busy,
@@ -22,6 +22,7 @@ from assistant.notifications import (
     reading_seconds,
     settled,
 )
+from automation.presentation import Answer, ReasoningSummary, ToolActivity
 
 TRAIL_LENGTH = 3
 TRAIL_ALPHA = (1.0, 0.42, 0.14, 0.04, 0.02)
