@@ -26,7 +26,7 @@ from automation.task import (
     Completed,
     Failed,
     FileDigest,
-    Interrupted,
+    Outcome,
     Question,
     Response,
     Task,
@@ -35,8 +35,6 @@ from automation.task import (
     Waiting,
     text,
 )
-
-type Outcome = Completed | Failed | Waiting | Interrupted
 
 
 class ReportStatus(Enum):

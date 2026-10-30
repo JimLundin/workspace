@@ -38,11 +38,11 @@ lazy from automation import ipc
 lazy from automation.bridge import BridgeServer, ProfileLease
 lazy from automation.context import ContextStore, select_context
 lazy from automation.controller import ControllerSnapshot, Fault, Idle, Stopping, WorkController, WorkExecution, Working
-lazy from automation.execution import ApprovalReview, Log, Outcome
+lazy from automation.execution import ApprovalReview, Log
 lazy from automation.presentation import Done, Finished, LiveMessage, Problem, Progress, Said
 lazy from automation.routines import RoutineStore
 lazy from automation.store import TaskStore
-lazy from automation.task import Claim, RunRef, Task, owns
+lazy from automation.task import Claim, Outcome, RunRef, Task, owns
 
 
 def report(message: str, *, folder: Path = DIRECTORY / "work") -> None:

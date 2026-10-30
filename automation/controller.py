@@ -12,11 +12,11 @@ from collections.abc import Callable
 from concurrent.futures import Future
 from dataclasses import dataclass
 from enum import Enum, auto
-from typing import Protocol, assert_never
+from typing import Protocol
 
-from automation.execution import Log, Outcome
+from automation.execution import Log
 from automation.store import MAX_PAGE, TaskStore
-from automation.task import Blocked, Claim, Completed, Failed, Interrupted, RunRef, Task, Waiting, identifier, integer, owns
+from automation.task import Blocked, Claim, Outcome, RunRef, Task, Waiting, identifier, integer, owns
 
 
 class Idle(Enum):
@@ -61,17 +61,6 @@ class _Flight:
     stop: threading.Event
     result: Future[Outcome]
     thread: threading.Thread
-
-
-def live_outcome(outcome: Outcome) -> Completed | Failed | Waiting:
-    """Live interruptions wait for a defined resume, rather than spinning."""
-    match outcome:
-        case Completed() | Failed() | Waiting():
-            return outcome
-        case Interrupted(reason=reason):
-            return Waiting(Blocked(reason))
-        case _:
-            assert_never(outcome)
 
 
 def failure_text(error: BaseException) -> str:
@@ -251,11 +240,13 @@ class WorkController:
 
     def _execute(self, claim: Claim, stop: threading.Event, result: Future[Outcome]) -> None:
         try:
+            # A run stopped before execution waits for a defined resume, rather than spinning.
+            stopping = Waiting(Blocked("Workspace is stopping."))
             if stop.is_set():
-                outcome: Outcome = Interrupted(claim.run, "Workspace is stopping.")
+                outcome: Outcome = stopping
             else:
                 log = self.log(claim)
-                outcome = Interrupted(claim.run, "Workspace is stopping.") if stop.is_set() else self.execution.run_work(claim, self.store, log, stop)
+                outcome = stopping if stop.is_set() else self.execution.run_work(claim, self.store, log, stop)
             result.set_result(outcome)
         except BaseException as error:
             result.set_exception(error)
@@ -267,7 +258,7 @@ class WorkController:
         # also finishes the target's final notification before another claim.
         flight.thread.join()
         try:
-            outcome = live_outcome(flight.result.result())
+            outcome = flight.result.result()
         except BaseException as error:
             self._report(failure_text(error))
             outcome = Waiting(Blocked("Execution failed. Inspect the task and resume when its blocker is resolved."))

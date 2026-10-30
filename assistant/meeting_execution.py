@@ -11,7 +11,7 @@ from assistant.meeting_followup import CaptureNotice, EmailAddress, NoCaptureNot
 from assistant.meeting_followup_store import FollowupStore, Publication, PublishedFollowup
 from assistant.meeting_preparation import Preparations, PreparedFollowup
 from automation.actions import ActionError
-from automation.execution import Outcome, WorkExecution
+from automation.execution import WorkExecution
 from automation.task import (
     Action,
     ActionUncertain,
@@ -22,6 +22,7 @@ from automation.task import (
     MailTarget,
     MeetingFollowup,
     NoVerification,
+    Outcome,
     Waiting,
     digest,
     identifier,
