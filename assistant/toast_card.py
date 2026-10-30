@@ -841,7 +841,7 @@ class Card:
                 and after is not None
                 and before.identity == after.identity
                 and after.state is not StreamState.INTERRUPTED
-                and self.owner.motion_enabled()
+                and self.owner.environment.animations()
                 and not isinstance(preference, appearance.Contrast)
             ):
                 end = units("".join(span.text for span in self.spans))

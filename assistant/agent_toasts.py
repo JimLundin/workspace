@@ -105,13 +105,12 @@ class AgentToasts:
         "closed",
         "create_card",
         "desktop",
+        "environment",
         "expiry_timer",
         "loop",
-        "material_preference",
         "materials",
         "measure",
         "monitor",
-        "motion_enabled",
         "next_material",
         "page",
         "pointer_timer",
@@ -124,7 +123,6 @@ class AgentToasts:
         "session",
         "spares",
         "stack",
-        "timing",
         "viewport",
         "wheel",
         "work",
@@ -138,20 +136,19 @@ class AgentToasts:
         *,
         monitor: Rect | None = None,
         clock: Callable[[], float] = time.monotonic,
-        motion_enabled: Callable[[], bool] = appearance.animations_enabled,
-        material_preference: Callable[[], appearance.Preference] = appearance.preference,
         desktop: Desktop | None = None,
         create_card: Callable[[AgentToasts, Toast, int], Card] | None = None,
-        timing: appearance.TimerResolution | None = None,
+        environment: appearance.Environment | None = None,
     ) -> None:
         # One view owns cards, desktop observation and motion timer lifetimes.
-        # Independent monitor hint, clock and native adapters enter at construction
-        # so every card shares that ownership; tests consume the same contracts.
+        # Independent monitor hint, clock, desktop and appearance environment enter
+        # at construction so every card shares that ownership; tests consume the
+        # same contracts.
         # The feed's action owners enter here, so a card reaches them directly.
-        self.root, self.agent, self.actions, self.clock, self.motion_enabled = root, agent, actions, clock, motion_enabled
+        self.root, self.agent, self.actions, self.clock = root, agent, actions, clock
+        self.environment: appearance.Environment = appearance.Environment() if environment is None else environment
         self.desktop: Desktop = NativeDesktop() if desktop is None else desktop
         self.create_card = Card if create_card is None else create_card
-        self.material_preference = material_preference
         self.materials = appearance.FrostSampler()
         self.monitor = monitor if monitor is not None else saved_monitor()
         self.session = Session()
@@ -160,7 +157,6 @@ class AgentToasts:
         self.progress_head: PhaseKey | None = None
         self.loop = EventLoop(root, self.sync_layers)
         self.measure = Measure()
-        self.timing = appearance.TimerResolution() if timing is None else timing
         self.wheel = WheelRouter()
         self.cards: dict[Key, Card] = {}
         # Qt owns these native resources. Keep at most MAX_VISIBLE surfaces for
@@ -273,7 +269,7 @@ class AgentToasts:
         if not any(card.motion is not None or card.reveals for card in self.cards.values()):
             samples = {sample.bounds: sample for sample in self.materials.read()}
             if samples:
-                preference = self.material_preference()
+                preference = self.environment.material()
                 for card in self.cards.values():
                     if card.bounds is not None and (sample := samples.get(card.bounds)) is not None:
                         card.match_background(sample, preference)
@@ -397,8 +393,8 @@ class AgentToasts:
         if not self.cards and not self.stack.toasts:
             self.work = None
             return
-        animate = self.motion_enabled() if animate is None else animate
-        preference = self.material_preference()
+        animate = self.environment.animations() if animate is None else animate
+        preference = self.environment.material()
         work = self.area()
         scale = self.loop.scale(work)
         immediate = self.work is not None and (self.work != work or self.scale != scale)
@@ -556,7 +552,7 @@ class AgentToasts:
                 card.text.verticalScrollBar().setValue(0)
             card.prepared = None
             card.layout = None
-        self.sync(self.clock(), animate=animate and self.motion_enabled())
+        self.sync(self.clock(), animate=animate and self.environment.animations())
 
     def dismiss_card(self, key: Key) -> None:
         card = self.cards.get(key)
@@ -613,7 +609,7 @@ class AgentToasts:
         removed = False
         spin = False
         revealing = False
-        animate = self.motion_enabled()
+        animate = self.environment.animations()
         reader = next(
             (card for card in sorted(self.cards.values(), key=card_order) if card.needs_reading() and (not self.live_progress or card.alpha >= 0.99)),
             None,
@@ -640,13 +636,13 @@ class AgentToasts:
                 card.pulse(now if animate else 0)
                 spin = spin or animate
         if removed:
-            self.layout(now, animate=self.motion_enabled())
+            self.layout(now, animate=self.environment.animations())
         self.sync_wheel()
         self.schedule_pointer()
         moving = any(card.motion is not None for card in self.cards.values())
         scrolling = reader is not None and not reader.hovered
         sliding = reader is not None and scrolling and animate and isinstance(reader.reader, notification_reading.Scrolling)
-        self.timing.update(active=moving or revealing or sliding)
+        self.environment.timer.update(active=moving or revealing or sliding)
         if self.stack is not before:
             self.schedule_expiry()
             self.schedule_pointer()
@@ -693,7 +689,7 @@ class AgentToasts:
         self.refresh()
 
     def clear_cards(self) -> None:
-        self.timing.update(active=False)
+        self.environment.timer.update(active=False)
         self.wheel.update(())
         if self.pointer_timer is not None:
             cancel(self.pointer_timer)

@@ -124,11 +124,11 @@ class Notifications:
             self,
             monitor=Rect(30, 30, 430, 790),
             clock=lambda: self.now,
-            motion_enabled=lambda: self.animated,
             desktop=self.desktop,
             create_card=self.create_card,
-            timing=self.timing,
-            material_preference=lambda: self.preference,
+            environment=appearance.Environment(
+                lambda: self.animated, lambda: self.preference, appearance.TimerResolution() if self.timing is None else self.timing
+            ),
         )
         return self._view
 
@@ -802,7 +802,7 @@ def test_streaming_reveals_only_new_text_and_releases_animation_timing() -> None
         panel.pump()
         panel.advance(0.3)
         assert reply.text.toPlainText() == final and not reply.text.extraSelections()
-        assert panel.view.animation_timer is None and not panel.view.timing.active
+        assert panel.view.animation_timer is None and not panel.view.environment.timer.active
 
 
 class Period:
@@ -824,19 +824,19 @@ def test_motion_timing_is_balanced_on_reduced_motion_history_and_close() -> None
     with notifications(animated=True, timing=appearance.TimerResolution(period)) as panel:
         panel.agent.begin("Read the notes", panel.stop)
         panel.pump()
-        assert (panel.view.timing.active, period.calls) == (True, ("begin",))
+        assert (panel.view.environment.timer.active, period.calls) == (True, ("begin",))
         panel.animated = False
         panel.advance(0.016)
-        assert (panel.view.timing.active, period.calls) == (False, ("begin", "end"))
+        assert (panel.view.environment.timer.active, period.calls) == (False, ("begin", "end"))
         panel.animated = True
         panel.agent.say("A reply.")
         panel.pump()
-        assert panel.view.timing.active
+        assert panel.view.environment.timer.active
         panel.view.clear_cards()
-        assert not bool(panel.view.timing.active)
+        assert not bool(panel.view.environment.timer.active)
         panel.view.refresh()
         panel.pump()
-        assert panel.view.timing.active
+        assert panel.view.environment.timer.active
     assert period.calls == ("begin", "end") * 3
 
 

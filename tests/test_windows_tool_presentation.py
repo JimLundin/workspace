@@ -135,7 +135,7 @@ def test_time_observation_and_proposed_reply_reach_native_rich_views() -> None:
         )
         row = WorkItem(SourceKey(SourceKind.PROPOSAL, "draft"), item, item.title)
         card.expanded = True
-        card.render(row, card.width, card.maximum, panel.view.material_preference())
+        card.render(row, card.width, card.maximum, panel.view.environment.material())
         assert "**" not in card.text.toPlainText()
         assert card.text.document().find("the totals").charFormat().fontWeight() >= QFont.Weight.DemiBold
         assert card.text.document().find("FY27").charFormat().font().family() == "Consolas"
