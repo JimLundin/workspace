@@ -403,7 +403,7 @@ def test_reserved_workflow_omits_unrelated_history_context_and_general_tools(tmp
         ("screenshot", {}),
         ("browser_tabs", {}),
         ("meeting_start", {}),
-        ("teams_read_messages", {"chat_id": "unrelated"}),
+        ("teams_web_read", {"target_id": "unrelated"}),
         ("read_file", {"path": str(secret_file)}),
         ("write_file", {"path": str(tmp_path / "forbidden.txt"), "content": "Forbidden change"}),
         ("read_source", {"path": "config.py"}),

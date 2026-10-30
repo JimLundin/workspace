@@ -11,7 +11,7 @@ from typing import Final, cast
 
 from assistant.agent import Agent
 from assistant.agent_history import History
-from assistant.agent_session import LiveMessage, Succeeded, ToolActivity, ToolStatus
+from assistant.agent_session import activity_text
 from assistant.agent_tools import Output
 from assistant.agent_toolsets import General
 from assistant.browser_values import BrowserError
@@ -24,6 +24,7 @@ from assistant.work_bridge_contracts import BridgeCommand
 from assistant.workspace import Workspace
 from automation.actions import Resources
 from automation.execution import ApprovalReview, WorkExecution
+from automation.presentation import LiveMessage, Succeeded, ToolActivity, ToolStatus
 from automation.store import TaskStore
 from automation.task import RequestSource
 from tests.fake_endpoint import FakeEndpoint, Received, Reply, fake_endpoint, sse
@@ -149,10 +150,6 @@ class FakeMachine:
     def web_app[Q: Located, R](self, operation: WebAppOperation[Q, R], query: Q, cancel: threading.Event) -> R:
         self.log.append("web_app " + query.target_id)
         raise BrowserError("This machine has no captured web-app results.")
-
-    def teams(self, operation: str, arguments: dict[str, Json], cancel: threading.Event) -> str:
-        self.log.append("teams " + operation + " " + json.dumps(arguments))
-        return '{"state":"ready"}'
 
     def close_background(self) -> None:
         pass
@@ -533,7 +530,7 @@ def test_tool_publishes_readable_previews_without_changing_the_model_result(tmp_
     assert started.outcome is ToolStatus.RUNNING and isinstance(completed.outcome, Succeeded)
     assert started.detail.startswith("Find controls matching “Budget") and started.detail.endswith("…")
     assert completed.identity == started.identity and completed.detail == started.detail
-    assert "• Save" in completed.text and '"controls"' not in completed.text
+    assert "• Save" in activity_text(completed) and '"controls"' not in activity_text(completed)
     assert result.ok and observed(result.text) == '{"controls":[{"id":"1.2.3","name":"Save","actions":["invoke"]}]}'
 
 

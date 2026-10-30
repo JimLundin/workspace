@@ -7,6 +7,7 @@ from collections.abc import Callable
 from contextlib import suppress
 from dataclasses import dataclass, field
 from datetime import datetime
+from typing import assert_never
 lazy import os
 
 lazy from PySide6 import QtCore, QtGui, QtWidgets
@@ -18,7 +19,7 @@ lazy from assistant.ambient import Ambient, Power, PowerUnavailable, Weather
 lazy from assistant.audio_meter import AudioMeter
 lazy from assistant.bar_button import Divider, StatusView
 lazy from assistant.bar_geometry import OVERLAP
-lazy from assistant.bar_model import Resting, Toolbar, toolbar
+lazy from assistant.bar_model import Activity, Resting, Toolbar, toolbar
 lazy from assistant.bar_status import StatusObserver
 lazy from assistant.bar_surface import Pill
 lazy from assistant.bar_weather import LocalWeather
@@ -61,6 +62,7 @@ class BarObservations:
     power: Callable[[], Power] = winapi.ambient.power
     material: Callable[[], appearance.Preference] = appearance.preference
     motion: Callable[[], bool] = appearance.animations_enabled
+    local_time: Callable[[], datetime] = datetime.now
 
 
 class DesktopBar:
@@ -145,7 +147,7 @@ class DesktopBar:
         self.weather: Weather | None = None
         self.weather_service: LocalWeather | None = None
         self.status_service: StatusObserver | None = None
-        self.ambient = Ambient(datetime.now().strftime("%H:%M"), self.power)
+        self.ambient = Ambient(self.observations.local_time().strftime("%H:%M"), self.power)
         self.audio_meter: AudioMeter | None = None
         self.sample_bounds: Rect | None = None
         self.preference: appearance.Preference = appearance.Material.SOLID
@@ -289,7 +291,7 @@ QMenu::separator {{ height: 1px; background: {colors.edge}; margin: 4px 10px; }}
         self.inbox.setAccessibleName(description)
         self.inbox.setVisible(count > 0)
         self.inbox_divider.setVisible(count > 0)
-        self.window.adjustSize()
+        self.window.fit()
         self.position()
 
     def recording_changed(self, recording: RecordingState) -> None:
@@ -312,19 +314,23 @@ QMenu::separator {{ height: 1px; background: {colors.edge}; margin: 4px 10px; }}
         if view != self.view:
             self.view = view
             self.status.capture(listening=self.activity is State.LISTENING, processing=self.activity in (State.WORKING, State.AGENT))
-            if isinstance(view.activity, Resting):
-                self.status.facts(self.ambient)
-                self.stop.hide()
-            else:
-                self.status.facts(None)
-                self.status.symbol = view.activity.icon
-                self.stop.setVisible(view.activity.can_stop)
-                self.stop.setToolTip("Stop speech capture" if self.activity is State.LISTENING else "Stop agent work")
-                self.status.describe(
-                    "Transcribing captured audio"
-                    if self.activity is State.WORKING
-                    else view.activity.title + (" · use Stop to finish" if view.activity.can_stop else "")
-                )
+            match view.activity:
+                case Resting():
+                    self.status.facts(self.ambient)
+                    self.stop.hide()
+                case Activity(title=title, icon=symbol, stop=stop):
+                    self.status.facts(None)
+                    self.status.symbol = symbol
+                    if stop is None:
+                        self.stop.hide()
+                        self.status.describe(title)
+                    else:
+                        self.stop.setToolTip(stop)
+                        self.stop.setAccessibleName(stop)
+                        self.stop.show()
+                        self.status.describe(title + " · use Stop to finish")
+                case _:
+                    assert_never(view.activity)
             if self.activity is State.LISTENING:
                 self.audio_timer.start()
             else:
@@ -342,7 +348,7 @@ QMenu::separator {{ height: 1px; background: {colors.edge}; margin: 4px 10px; }}
             self.keyboard.setToolTip((view.keyboard or "Current keyboard mode") + " · Open key map")
             self.keyboard.setAccessibleName(self.keyboard.toolTip())
             for pill in self.pills:
-                pill.adjustSize()
+                pill.fit()
         self.position()
         now = self.observations.clock()
         self.window.show_activity(visible=self.visible, now=now, animate=animate)
@@ -402,13 +408,16 @@ QMenu::separator {{ height: 1px; background: {colors.edge}; margin: 4px 10px; }}
                 system = self.status_service.results.get_nowait()
                 if system != self.status.system:
                     self.status.system_changed(system)
-                    self.window.adjustSize()
-        ambient = Ambient(datetime.now().strftime("%H:%M"), self.power, self.weather)
+                    self.window.fit()
+        ambient = Ambient(self.observations.local_time().strftime("%H:%M"), self.power, self.weather)
         if ambient != self.ambient:
             self.ambient = ambient
-            if self.view is not None and isinstance(self.view.activity, Resting):
-                self.status.facts(ambient)
-                self.window.adjustSize()
+            match self.view.activity if self.view is not None else None:
+                case Resting():
+                    self.status.facts(ambient)
+                    self.window.fit()
+                case Activity() | None:
+                    pass
         visible_bounds = tuple(pill.bounds for pill in self.pills if pill.isVisible() and pill.bounds is not None)
         self.sample_bounds = (
             Rect(

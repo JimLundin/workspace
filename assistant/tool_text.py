@@ -6,8 +6,8 @@ from enum import Enum
 from typing import assert_never
 
 from assistant import action_text
-from assistant.agent_session import Failed, Succeeded, ToolActivity, ToolStatus
 from assistant.rich_text import Span
+from automation.presentation import Failed, Succeeded, ToolActivity, ToolStatus
 
 
 class State(Enum):

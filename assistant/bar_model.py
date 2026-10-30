@@ -1,7 +1,6 @@
 """Only active work earns space in the desktop toolbar."""
 
 from dataclasses import dataclass, field
-from typing import Literal
 
 from assistant.icons import State
 from assistant.notifications import Tone
@@ -18,13 +17,15 @@ class Activity:
     title: str
     icon: str
     tone: Tone
-    can_stop: bool = field(default=False, kw_only=True)
+    # What the bar's Stop control ends; None when this activity offers no Stop.
+    stop: str | None = field(kw_only=True)
 
 
 @dataclass(frozen=True, slots=True)
 class Capture:
+    # RecordingState.phase is the alternative; the capsule only needs its
+    # caption and whether that phase can still be stopped.
     title: str
-    action: Literal["stop", "open"]
     can_stop: bool = field(kw_only=True)
 
 
@@ -39,10 +40,10 @@ def toolbar(state: State, recording: RecordingState, *, enabled: bool, layer: st
     activities: dict[State, Activity | Resting] = {
         State.READY: Resting(),
         State.LAYOUT_OFF: Resting(),
-        State.LISTENING: Activity("Listening", "mic", Tone.USER, can_stop=True),
-        State.WORKING: Activity("Transcribing", "refresh", Tone.THINKING),
-        State.AGENT: Activity("Working", "agent", Tone.ACTION, can_stop=True),
-        State.NEEDS_INPUT: Activity("Needs you", "chat", Tone.QUESTION),
+        State.LISTENING: Activity("Listening", "mic", Tone.USER, stop="Stop speech capture"),
+        State.WORKING: Activity("Transcribing captured audio", "refresh", Tone.THINKING, stop=None),
+        State.AGENT: Activity("Working", "agent", Tone.ACTION, stop="Stop agent work"),
+        State.NEEDS_INPUT: Activity("Needs you", "chat", Tone.QUESTION, stop=None),
         State.RECORDING: Resting(),
     }
     activity = activities[state]
@@ -50,15 +51,15 @@ def toolbar(state: State, recording: RecordingState, *, enabled: bool, layer: st
     seconds = max(0, int(recording.seconds))
     match recording.phase:
         case "starting":
-            capture = Capture("Starting…", "stop", can_stop=True)
+            capture = Capture("Starting…", can_stop=True)
         case "recording":
-            capture = Capture(f"{seconds // 60:02}:{seconds % 60:02}", "stop", can_stop=True)
+            capture = Capture(f"{seconds // 60:02}:{seconds % 60:02}", can_stop=True)
         case "stopping":
-            capture = Capture("Stopping…", "open", can_stop=False)
+            capture = Capture("Stopping…", can_stop=False)
         case "finishing":
-            capture = Capture("Saving…", "open", can_stop=False)
+            capture = Capture("Saving…", can_stop=False)
         case "paused" | "interrupted":
-            capture = Capture("Check recording", "open", can_stop=False)
+            capture = Capture("Check recording", can_stop=False)
         case "idle" | "saved":
             pass
     return Toolbar(activity, capture, "Colemak" if not enabled else layer)

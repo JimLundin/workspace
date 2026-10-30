@@ -14,7 +14,6 @@ from queue import Queue
 from assistant.console_requests import Command
 from assistant.feed_contracts import FeedCommand, FeedRejected
 from assistant.feed_sources import Candidate
-from assistant.feed_triage import Board
 from assistant.feed_triage_service import Store, Triage
 from assistant.feed_work import FeedWork
 from assistant.local_bridge import LocalBridge
@@ -48,7 +47,6 @@ class TriageFixture(Triage):
     def __init__(
         self,
         store: Store,
-        publish: Callable[[Board], None],
         model: Callable[[tuple[Candidate, ...], tuple[str, ...]], str],
         console: Callable[[Command], bool],
         *,
@@ -58,7 +56,7 @@ class TriageFixture(Triage):
     ) -> None:
         # Preserve the real owner's dependency interface rather than hide it in options.
         self.delays: Queue[tuple[float, threading.Event]] = Queue()
-        super().__init__(store, publish, model, console, submit=submit, wait=self.wait_for_stop, clock=clock, work=work)
+        super().__init__(store, model, console, submit=submit, wait=self.wait_for_stop, clock=clock, work=work)
 
     def wait_for_stop(self, stopped: threading.Event, timeout: float) -> bool:
         released = threading.Event()

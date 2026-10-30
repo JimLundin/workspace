@@ -4,6 +4,7 @@ from dataclasses import replace
 from itertools import chain
 
 from assistant.agent_session import notice_text
+from assistant.card_actions import OpenCanvas, parse
 from assistant.notification_text import bubble_text
 from assistant.rich_text import Span, changed_tail, formatted
 
@@ -11,13 +12,14 @@ from assistant.rich_text import Span, changed_tail, formatted
 def test_canvas_redirect_is_clickable_but_other_internal_actions_stay_inert() -> None:
     # Defect: the formatter strips the canvas link before Qt can activate it.
     spans = tuple(formatted(notice_text("Needs your input", "question:one")))
-    assert next(span for span in spans if span.text == "Open on canvas").link == "workspace://canvas?target=question%3Aone"
-    assert all(not span.link for span in formatted("[Install](workspace://install?target=one)"))
+    assert parse(next(span for span in spans if span.text == "Open on canvas").link) == OpenCanvas("question:one")
+    # Quoted text can't carry a card's own source actions.
+    assert all(not span.link for span in formatted("[Done](workspace://done?source=chat&item=one)"))
     # Workspace's presentation must reserve the canvas route for its native
     # action while keeping ordinary research links in selectable body text.
     presented = bubble_text(spans)
     assert "".join(span.text for span in presented.body) == "Needs your input"
-    assert len(presented.canvas_actions) == 1 and presented.canvas_actions[0].link.endswith("question%3Aone")
+    assert len(presented.canvas_actions) == 1 and parse(presented.canvas_actions[0].link) == OpenCanvas("question:one")
     research = tuple(formatted("[Research](https://example.test/page)"))
     assert bubble_text(research).body == research and not bubble_text(research).canvas_actions
 

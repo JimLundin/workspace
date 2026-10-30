@@ -55,7 +55,7 @@ When the user explicitly selects one by voice, use work_feed_choose with that ex
 It queues investigation or preparation with the work agent; queued is not completed or sent.
 If the user corrects the reading, use propose to revise your recommendation and optional solutions from their correction.
 Discuss next steps naturally and briefly; the user primarily responds by voice. Do not tell the user to operate filter boxes.
-The feed reads Teams through the signed-in browser; Teams Graph API tools require separate consent and aren't this connection.
+The feed reads Teams through the signed-in browser.
 Outlook and Teams browser tools read signed-in rendered pages. Never claim full mailbox or complete Teams coverage."""
 
 

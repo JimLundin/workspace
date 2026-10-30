@@ -13,9 +13,10 @@ from typing import Annotated, Final, Literal, assert_never
 from pydantic import ConfigDict, Field, TypeAdapter
 
 from assistant.activity import Activity, ContextSnapshot
-from assistant.agent_session import (
+from assistant.recording_state import AudioSource
+from automation.execution import ApprovalReview
+from automation.presentation import (
     Answer,
-    Begin,
     Done,
     Finished,
     LiveMessage,
@@ -25,8 +26,6 @@ from assistant.agent_session import (
     Said,
     ToolActivity,
 )
-from assistant.recording_state import AudioSource
-from automation.execution import ApprovalReview
 from automation.task import RunRef, identifier, integer, text, timestamp
 
 VERSION: Final = 2
@@ -37,21 +36,13 @@ MAX_CONTEXT: Final = 128
 # Frames are strict: a peer's JSON never coerces into another type or adds fields.
 _WIRE = ConfigDict(strict=True, extra="forbid", allow_inf_nan=False)
 
-type PresentationEvent = Begin | Progress | Said | Done | Problem | Finished | LiveMessage
+type PresentationEvent = Progress | Said | Done | Problem | Finished | LiveMessage
 type ProcessId = Annotated[int, Field(ge=1, le=2**32 - 1)]
 
 
 def _moment(event: PresentationEvent) -> None:
     match event:
-        case (
-            Begin(at=at)
-            | Said(at=at)
-            | Done(at=at)
-            | Problem(at=at)
-            | Answer(created_at=at)
-            | ReasoningSummary(created_at=at)
-            | ToolActivity(created_at=at)
-        ):
+        case Said(at=at) | Done(at=at) | Problem(at=at) | Answer(created_at=at) | ReasoningSummary(created_at=at) | ToolActivity(created_at=at):
             timestamp(at, "event time")
         case Progress() | Finished():
             pass
@@ -314,17 +305,6 @@ def _received(operation: Operation) -> None:
             assert_never(operation)
 
 
-def _published(payload: BridgeEvent) -> BridgeEvent:
-    match payload:
-        case LogEvent(event=Begin() as event):
-            # A feed request's source stays with the work process.
-            return replace(payload, event=replace(event, source=None))
-        case LogEvent() | ReviewEvent() | MeetingRequest() | Resync():
-            return payload
-        case _:
-            assert_never(payload)
-
-
 def _bounded_frame(frame: bytes) -> bytes:
     if not frame or len(frame) > MAX_FRAME:
         raise ValueError("Invalid IPC frame length.")
@@ -338,7 +318,7 @@ def _version(version: int) -> None:
 
 def encode_event(message: Envelope) -> bytes:
     """The event as a batch carries it, checked against the same decoder."""
-    frame = _EVENT.dump_json(replace(message, payload=_published(message.payload)))
+    frame = _EVENT.dump_json(message)
     decode_event(frame)
     return frame
 
@@ -362,14 +342,7 @@ def decode_request(frame: bytes) -> Request:
 
 
 def encode_reply(reply: Reply) -> bytes:
-    match reply:
-        case Batch(events=events):
-            sent: Reply = replace(reply, events=tuple(replace(event, payload=_published(event.payload)) for event in events))
-        case Accepted() | Rejected():
-            sent = reply
-        case _:
-            assert_never(reply)
-    frame = _REPLY.dump_json(_ReplyFrame(VERSION, sent))
+    frame = _REPLY.dump_json(_ReplyFrame(VERSION, reply))
     if len(frame) > MAX_FRAME:
         raise ValueError("IPC frame is too large.")
     decode_reply(frame)

@@ -9,6 +9,8 @@ from pathlib import Path
 if sys.platform != "win32":
     raise unittest.SkipTest("Windows machine ownership")
 
+from pydantic import TypeAdapter
+
 from assistant.agent_tools import Machine
 from assistant.browser import BrowserResult
 from assistant.geometry import Shot
@@ -56,6 +58,7 @@ class Recording:
         return "Recording owner status"
 
 
+WIRE = TypeAdapter(dict[str, Json])
 TEAMS_PAGE = TeamsPage("", "", (), (), editor_ready=False)
 
 
@@ -80,23 +83,9 @@ class Browser:
             raise self.failure
 
 
-class Teams:
-    __slots__ = ("calls",)
-
-    def __init__(self) -> None:
-        self.calls: list[str] = []
-
-    def request(self, operation: str, args: dict[str, Json], cancel: threading.Event) -> str:
-        self.calls.append(operation)
-        return "Teams observation"
-
-    def cancel_sign_in(self) -> None:
-        self.calls.append("cancel sign-in")
-
-
 def test_machine_uses_explicit_desktop_and_meeting_owners() -> None:
     desktop, recording = Desktop(), Recording()
-    machine: Machine = WinMachine(desktop, browser=Browser(), teams=Teams(), meetings=recording)
+    machine: Machine = WinMachine(desktop, browser=Browser(), meetings=recording)
     machine.paste_text("A prepared note")
     assert desktop.pasted == ["A prepared note"]
     assert machine.meeting("start", "microphone", "Planning") == "Recording owner status"
@@ -113,13 +102,12 @@ def test_machine_uses_explicit_desktop_and_meeting_owners() -> None:
     assert len(recording.calls) == 4
 
 
-def test_machine_keeps_browser_and_teams_cleanup_with_their_owners() -> None:
-    browser, teams = Browser(OSError("Browser disconnect failed")), Teams()
-    machine = WinMachine(Desktop(), browser=browser, teams=teams)
+def test_machine_keeps_browser_cleanup_with_its_owner() -> None:
+    browser = Browser(OSError("Browser disconnect failed"))
+    machine = WinMachine(Desktop(), browser=browser)
     cancel = threading.Event()
     assert machine.browse("browser_tabs", {}, cancel) == ("Browser observation", b"browser image")
     assert machine.web_app(TEAMS_READ, TeamsQuery("page"), cancel) == TEAMS_PAGE
-    assert machine.teams("teams_status", {}, cancel) == "Teams observation"
     try:
         machine.close_background()
     except OSError as error:
@@ -127,13 +115,24 @@ def test_machine_keeps_browser_and_teams_cleanup_with_their_owners() -> None:
     else:
         raise AssertionError("A failed disconnect must remain visible.")
     assert browser.calls == ["browser_tabs", "web_app page", "close"]
-    assert teams.calls == ["teams_status", "cancel sign-in"]
     try:
         machine.meeting("status")
     except OSError as error:
         assert str(error) == "Meeting recording is unavailable."
     else:
         raise AssertionError("A missing recording owner must be reported.")
+
+
+def test_desktop_state_reports_the_real_monitors_windows_and_foreground() -> None:
+    # Defect: the typed desktop observation drops or misassigns monitor and
+    # window rows, so the model receives coordinates for the wrong surface.
+    state = WIRE.validate_json(WinMachine(Desktop(), browser=Browser()).desktop_state())
+    match state:
+        case {"coordinates": "physical screen pixels", "monitors": [*monitors], "windows": [*rows], "foreground": int()}:
+            assert monitors and sum(1 for monitor in monitors if isinstance(monitor, dict) and monitor["primary"] is True) == 1
+            assert all(isinstance(row, dict) and isinstance(row["handle"], int) and isinstance(row["bounds"], dict) for row in rows)
+        case _:
+            raise AssertionError(f"Unexpected desktop observation: {state}")
 
 
 def test_machine_import_and_construction_do_not_load_ui_or_audio() -> None:

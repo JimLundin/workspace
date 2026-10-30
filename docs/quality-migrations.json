@@ -490,15 +490,6 @@
     {
       "key": {
         "rule": "PLR0913",
-        "path": "assistant/notifications.py",
-        "scope": "advance",
-        "signature": "5f8258c21010969b894a161e19a568a919b1f036152116f795ccd5a805095fd9"
-      },
-      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
-    },
-    {
-      "key": {
-        "rule": "PLR0913",
         "path": "assistant/outlook.py",
         "scope": "_text",
         "signature": "3ecc38dcc213e22500d408ef43d331da904ec99967d6261a0f0f271691f78cf0"
@@ -547,33 +538,6 @@
         "path": "assistant/sdk.py",
         "scope": "run",
         "signature": "70e1fb5106be73fba2e0599e72872c933dc2200fcfffda5ec82287a82e1ac54a"
-      },
-      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
-    },
-    {
-      "key": {
-        "rule": "PLR0913",
-        "path": "assistant/teams.py",
-        "scope": "Teams.__init__",
-        "signature": "797b3ea80cb24ad2c3df22666abbcb5485bc280ef038a5aa59ac01426a5ec168"
-      },
-      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
-    },
-    {
-      "key": {
-        "rule": "PLR0913",
-        "path": "assistant/teams.py",
-        "scope": "_integer",
-        "signature": "a55bf5b9189ac47e96e10eb1f88f3b02905901ce4ac7382093906445798458a3"
-      },
-      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
-    },
-    {
-      "key": {
-        "rule": "PLR0913",
-        "path": "assistant/teams.py",
-        "scope": "sign_in_action",
-        "signature": "2433f80d09808453b972a3b9a413cee2d02670738dd6f7d46df9719def448427"
       },
       "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
     },
@@ -1068,24 +1032,6 @@
     {
       "key": {
         "rule": "PLR0913",
-        "path": "scripts/mutate.py",
-        "scope": "campaign",
-        "signature": "52db696371f22339ca9fac8613e039bf5712a7f06d48afd1d828fea5267e0a01"
-      },
-      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
-    },
-    {
-      "key": {
-        "rule": "PLR0913",
-        "path": "scripts/mutate.py",
-        "scope": "run",
-        "signature": "d3ae11f31c108c5c1467aca9d675de44e68bc5fa2e01d9d945abfad1f37df51f"
-      },
-      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
-    },
-    {
-      "key": {
-        "rule": "PLR0913",
         "path": "selfcheck.py",
         "scope": "run_tests",
         "signature": "1ef13c1a58f37dff6915d441b04e83263784579b34f031bbe8a61f42ee24d153"
@@ -1270,15 +1216,6 @@
         "path": "tests/test_work_actions.py",
         "scope": "StoppingStore.begin_action",
         "signature": "38a69067bbfb48fbc6d4f32bed18c3cce7ffdf117d0d60082e092731223ff3da"
-      },
-      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
-    },
-    {
-      "key": {
-        "rule": "PLR0913",
-        "path": "tests/test_work_actions.py",
-        "scope": "test_message_reconciliation_requires_same_chat_new_matching_complete_text.inspect",
-        "signature": "e694bd035086d400ec9499ed066119cabe48d0bc2f7c6228efb59f461101441f"
       },
       "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
     },

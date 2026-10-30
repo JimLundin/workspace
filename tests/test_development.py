@@ -10,7 +10,7 @@ def test_watch_uses_only_successful_session_baseline_and_keeps_native_scope(tmp_
     # Detect a watch command comparing every save only to deployed bytes, losing
     # its source receipt, or silently dropping Windows coverage/function scope.
     receipt = tmp_path / "checked.json"
-    settings = Settings(tests=("tests/test_windows_feed.py::test_source_badge_overlaps_and_title_shares_header_with_controls",))
+    settings = Settings(tests=("tests/test_windows_feed_interaction.py::test_expanding_a_bubble_collapses_the_previous_one",))
     initial = check_command(settings, receipt)
     assert initial[:4] == (sys.executable, "-B", "-m", "scripts.check") and "--native" in initial
     assert initial[initial.index("--receipt") + 1] == str(receipt)

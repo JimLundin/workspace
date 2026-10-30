@@ -4,6 +4,10 @@ Investigated on 2026-10-26 against Microsoft's API documentation, its source
 Markdown, and unauthenticated first-party web response headers. This is a
 feasibility report, not a production communication feed or a live send test.
 
+The Graph adapter this report evaluated was retired on 2026-10-30. Workspace
+reads and drafts Teams messages only in the signed-in browser; the Graph findings
+remain as research.
+
 ## Product boundary
 
 Workspace's proposed surface is one work conversation: incoming colleague
@@ -192,7 +196,7 @@ with the existing connector; do not assume embedding or remove CSP protections.
 
 ## Current source gaps and first milestone
 
-The current [Teams adapter](../assistant/teams.py) requests `User.Read`,
+The Teams adapter at the time requested `User.Read`,
 `User.ReadBasic.All`, `Chat.Read`, `Chat.Create`, `ChatMessage.Send` and
 `offline_access`. It has configured-app/device-flow support and encrypted
 credentials. It discards chat preview/read markers and message sender,
@@ -262,7 +266,7 @@ Workspace Graph app access still needs arranging.
 19. [Microsoft Graph v1.0: Subscription lifetime](https://learn.microsoft.com/en-us/graph/api/resources/subscription?view=graph-rest-1.0#subscription-lifetime), verified against its [first-party include](https://github.com/microsoftgraph/microsoft-graph-docs-contrib/blob/main/concepts/includes/change-notifications-subscription-lifetime.md).
 20. [Microsoft Graph v1.0: getVapidPublicKey](https://learn.microsoft.com/en-us/graph/api/subscription-getvapidpublickey?view=graph-rest-1.0).
 21. [Microsoft Graph v1.0: Subscription properties, including Web Push fields](https://learn.microsoft.com/en-us/graph/api/resources/subscription?view=graph-rest-1.0#properties).
-22. [Workspace: Current Teams implementation](../assistant/teams.py).
+22. Workspace: the Teams Graph adapter, since retired.
 23. [Microsoft Support: Manage Teams notifications](https://support.microsoft.com/en-us/office/manage-notifications-in-microsoft-teams-1cc31834-5fe5-412b-8edb-43fecc78413d).
 24. [Microsoft Graph v1.0: List calendar events](https://learn.microsoft.com/en-us/graph/api/user-list-events?view=graph-rest-1.0).
 25. [Microsoft Graph v1.0: Accept an event](https://learn.microsoft.com/en-us/graph/api/event-accept?view=graph-rest-1.0).

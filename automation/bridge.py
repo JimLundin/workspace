@@ -27,8 +27,8 @@ from typing import BinaryIO, Final, Protocol, assert_never
 from pydantic import ConfigDict, TypeAdapter
 
 from assistant.activity import ContextSnapshot
-from assistant.agent_session import Answer, Progress, ReasoningSummary, StreamState, ToolActivity, ToolStatus
 from automation import ipc
+from automation.presentation import Answer, Progress, ReasoningSummary, StreamState, ToolActivity, ToolStatus
 from automation.task import RunRef, identifier, integer
 
 if sys.platform == "win32":

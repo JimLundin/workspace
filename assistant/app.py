@@ -288,15 +288,13 @@ class AssistantApp:
             windows_store(DIRECTORY / "communications.bin", COMMUNICATIONS_STATE),
             self.ui.communications_changed,
         )
-        self.ui.configure_communications(self.communications.submit, windows_store(DIRECTORY / "notifications.bin", NOTIFICATION_STATE))
         self.consoles = ConsoleInbox(DIRECTORY / "inbox-bridge.json", self.ui.console_changed)
-        self.ui.configure_console(self.consoles.command)
         self.canvas: WorkCanvas = WorkCanvas(
             work_folder / "canvas.sqlite3", self.continue_thread, autonomous=bool(self.settings.api_key and self.settings.base_url)
         )
         self.personal = self.create_personal(tasks)
         self.triage, self.work_bridge = self.create_feed(FeedWork(tasks, saved_context, context))
-        self.ui.configure_triage(self.triage.observe, self.triage.dismiss, self.triage.choose_from_ui)
+        self.ui.configure_feed(windows_store(DIRECTORY / "notifications.bin", NOTIFICATION_STATE), self.triage.observe)
         self.timings.mark("communications and feed bridges")
         archive = MeetingArchive(DIRECTORY / "meetings")
         followup_folder = work_folder / "meeting-followups"
@@ -373,7 +371,6 @@ class AssistantApp:
         """The feed owner, then the work bridge that routes agent tools to it, personal work and the canvas."""
         triage = Triage(
             windows_store(DIRECTORY / "work-feed.bin", STORED_BOARD),
-            self.ui.triage_changed,
             self.review_feed,
             self.consoles.command,
             submit=self.agent.submit_identified,

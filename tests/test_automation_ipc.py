@@ -15,10 +15,10 @@ from pathlib import Path
 from unittest import TestCase
 
 from assistant.activity import Activity, ContextSnapshot
-from assistant.agent_session import Answer, Done, Progress, StreamState
 from automation import ipc
 from automation.bridge import BridgeClient, BridgeServer, Channel, LocalChannel, ProfileLease, read_discovery
 from automation.execution import ApprovalReview
+from automation.presentation import Answer, Done, Progress, StreamState
 from automation.task import Approval, RunRef
 from winapi.shapes import Window
 

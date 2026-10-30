@@ -30,6 +30,12 @@ direct answer and triage cannot hide it. A reply still sending is settling. The
 feed shows every source that is not resolved.
 _Avoid_: Source string, identity prefix
 
+**Card action**:
+What a floating bubble's link or button does: open the canvas at a target or
+decide the agent's pending approval. Bubbles direct the person; app arrivals
+never become cards. A link that is not exactly one card action does nothing.
+_Avoid_: Action URL, link string, feed card
+
 **Work thread**:
 The context for an ongoing outcome or responsibility, containing its related
 sources, questions, research and actions. It organizes these contributions

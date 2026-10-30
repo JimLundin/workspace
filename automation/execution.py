@@ -10,9 +10,9 @@ from typing import Annotated, Protocol, assert_never
 
 from pydantic import Field, TypeAdapter
 
-from assistant.agent_session import LiveMessage
 from assistant.llm import Json
 from automation.actions import Actions, Evidence, Observation, Operation, Resources
+from automation.presentation import LiveMessage
 from automation.store import TaskStore
 from automation.task import (
     Action,
@@ -28,7 +28,7 @@ from automation.task import (
     Completed,
     Failed,
     FileDigest,
-    Interrupted,
+    Outcome,
     Question,
     Response,
     Task,
@@ -37,8 +37,6 @@ from automation.task import (
     Waiting,
     text,
 )
-
-type Outcome = Completed | Failed | Waiting | Interrupted
 
 
 class ReportStatus(Enum):
@@ -94,6 +92,8 @@ def review_matches(task: Task, review: ApprovalReview) -> bool:
 
 
 class Log(Protocol):
+    """Where the user watches the agent work."""
+
     def step(self, message: str, /) -> None: ...
     def say(self, message: str, /) -> None: ...
     def updates(self) -> Callable[[LiveMessage], None]: ...
@@ -102,17 +102,10 @@ class Log(Protocol):
 
 
 @dataclass(frozen=True, slots=True)
-class MessageEvidence:
-    digest: str
-    at: float
-
-
-@dataclass(frozen=True, slots=True)
 class Readback:
     """Evidence a tool family derives from one inspection's result, beyond its resources."""
 
     resources: tuple[str, ...] = ()
-    messages: tuple[MessageEvidence, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -131,8 +124,6 @@ class ProofRule(Enum):
     """An arbitrary script has no inferred target: any targeted inspection the agent chooses."""
     ADAPTER = auto()
     """Only the adapter's own exact readback verifies it; no other observation can."""
-    MESSAGE = auto()
-    """The exact message body read back in its chat, created after the attempt."""
 
 
 type Proof = Targets | ProofRule
@@ -174,7 +165,6 @@ class Observed:
     resources: tuple[str, ...]
     at: float
     evidence: Evidence
-    messages: tuple[MessageEvidence, ...] = ()
 
 
 def covers(proof: Proof, pending: ActionSpec, observed: Observed) -> bool:
@@ -186,8 +176,6 @@ def covers(proof: Proof, pending: ActionSpec, observed: Observed) -> bool:
             return observed.evidence is Evidence.TARGETED
         case Targets(listing):
             pass
-        case ProofRule.MESSAGE:
-            listing = ""
         case _:
             assert_never(proof)
     expected = tuple(item for item in pending.resources if item.startswith("target:"))
@@ -310,7 +298,6 @@ class WorkExecution:
             (*observation.resources, *readback.resources),
             self.clock(),
             observation.evidence,
-            readback.messages,
         )
         self.observations.append(observed)
         self.observations[:] = self.observations[-64:]
@@ -334,15 +321,6 @@ class WorkExecution:
         rule = proof(pending.specification.tool)
         if not covers(rule, pending.specification, observation):
             raise ValueError("The observation did not inspect this action's target. Inspect the same file, tab, chat or window.")
-        if rule is ProofRule.MESSAGE:
-            matching = any(
-                "message-body:" + item.digest in pending.specification.resources and item.at >= pending.started_at for item in observation.messages
-            )
-            if not applied or not matching:
-                raise ValueError(
-                    "A sent message needs matching, complete text in that chat created after the attempt. "
-                    "Absence from recent messages cannot prove it was not sent.",
-                )
         if isinstance(pending.specification.verification, FileDigest):
             verified = self.actions.verifier.verify(pending.specification.verification)
             if not isinstance(verified, ActionVerified):

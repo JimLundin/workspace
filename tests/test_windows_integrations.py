@@ -11,22 +11,16 @@ from unittest import TestCase
 if sys.platform != "win32":
     raise unittest.SkipTest("Windows integration primitives")
 
-from assistant.teams import TokenStore
 from winapi.processes import ProcessJob
 from winapi.protection import protect, unprotect
 
 
-def test_dpapi_roundtrip_and_tamper_rejection(tmp_path: Path) -> None:
+def test_dpapi_roundtrip_and_tamper_rejection() -> None:
     secret = b"fixture-only-integration-secret"
     encrypted = protect(secret)
     assert secret not in encrypted and unprotect(encrypted) == secret
     with TestCase().assertRaises(OSError):
         unprotect(encrypted[: len(encrypted) // 2])
-    store = TokenStore(tmp_path / "tokens.bin")
-    store.write({"access_token": secret.decode()})
-    assert secret not in store.path.read_bytes() and store.read()["access_token"] == secret.decode()
-    store.clear()
-    assert not store.path.exists()
 
 
 def test_job_closure_stops_an_owned_process_and_its_child(tmp_path: Path) -> None:

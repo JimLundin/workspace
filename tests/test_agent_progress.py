@@ -3,20 +3,9 @@
 from dataclasses import replace
 
 from assistant.agent_progress import Progress, advance_progress, visible
-from assistant.agent_session import (
-    Answer,
-    CanvasNotice,
-    CanvasSettled,
-    ChatMessage,
-    Finished,
-    ReasoningSummary,
-    Session,
-    StreamState,
-    Succeeded,
-    ToolActivity,
-    transition,
-)
+from assistant.agent_session import CanvasNotice, CanvasSettled, ChatMessage, Session, transition
 from assistant.notifications import PhaseKey, Turn, body, steps
+from automation.presentation import Answer, Finished, ReasoningSummary, StreamState, Succeeded, ToolActivity
 
 
 def test_tools_grow_within_a_phase_and_new_public_updates_start_the_next() -> None:

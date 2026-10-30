@@ -47,6 +47,10 @@ Saved work lives under `%LOCALAPPDATA%\workspace\work\meeting-followups`:
 | `packages` | Notes, action CSV, draft files, source snapshots, and edit history |
 | `mail` | Verified mail destination records and any fallback email files |
 
+Folder names under `packages` are 16-character digest prefixes, so every file
+stays within 58 characters of that folder and opens in ordinary programs. Each
+package still verifies its full task identity and content digest when read.
+
 The implementation uses Workspace's existing durable work controller. The
 selection is saved before submission, and the task's profile names it by content
 digest; a missing or changed selection blocks the task before the model runs.

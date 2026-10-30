@@ -78,7 +78,7 @@ def test_publication_recovers_after_a_directory_reader_releases_its_handle(tmp_p
     assert attempts[0][1] == plan.directory
     assert store.read(plan.task_id, plan.version) == published
     assert isinstance(FileVerifier().verify(plan.verification), ActionVerified)
-    assert {path.name for path in filesystem_path(plan.directory.parent).iterdir()} == {plan.version}
+    assert {path.name for path in filesystem_path(plan.directory.parent).iterdir()} == {plan.directory.name}
 
 
 def test_persistent_directory_readers_exhaust_retries_without_losing_prior_versions(tmp_path: Path) -> None:
@@ -105,7 +105,7 @@ def test_persistent_directory_readers_exhaust_retries_without_losing_prior_versi
     assert 2 <= len(failures) <= 6 and raised.exception is failures[-1]
     assert all(error.winerror in (5, 32, 33) for error in failures)
     assert store.versions(original.task_id) == (original,)
-    assert {path.name for path in filesystem_path(plan.directory.parent).iterdir()} == {original.version}
+    assert {path.name for path in filesystem_path(plan.directory.parent).iterdir()} == {original.directory.name}
     recovered = original_store.publish(plan)
     assert recovered.version == plan.version
     assert original_store.read(original.task_id, original.version) == original

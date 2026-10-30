@@ -7,7 +7,6 @@ The checkout is never modified. Timeouts and collection errors are not kills.
 import argparse
 import ast
 import hashlib
-import json
 import os
 import random
 import shutil
@@ -16,16 +15,25 @@ import subprocess
 import sys
 import tempfile
 import time
-from collections.abc import Iterator
+from collections.abc import Collection, Iterable, Iterator, Mapping
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import suppress
 from dataclasses import dataclass
+from enum import Enum
 from pathlib import Path
-from typing import Literal, cast
+from types import MappingProxyType
 from xml.etree import ElementTree
 
+from pydantic import TypeAdapter, ValidationError
+
 ROOT = Path(__file__).resolve().parent.parent
-type Status = Literal["killed", "survived", "timeout", "error"]
+
+
+class Status(Enum):
+    KILLED = "killed"
+    SURVIVED = "survived"
+    TIMEOUT = "timeout"
+    ERROR = "error"
 
 
 @dataclass(frozen=True, slots=True)
@@ -42,6 +50,18 @@ class Mutation:
 
 
 @dataclass(frozen=True, slots=True)
+class Campaign:
+    """One frozen source file, its mutants, the tests that judge them and how they run."""
+
+    source: Path
+    original: bytes
+    mutations: tuple[Mutation, ...]
+    tests: tuple[str, ...]
+    timeout: float
+    workers: int
+
+
+@dataclass(frozen=True, slots=True)
 class Result:
     status: Status
     seconds: float
@@ -50,67 +70,79 @@ class Result:
     detail: str = ""
 
 
+COMPARISON_SWAPS: Mapping[type[ast.cmpop], type[ast.cmpop]] = MappingProxyType(
+    {
+        ast.Lt: ast.LtE,
+        ast.LtE: ast.Lt,
+        ast.Gt: ast.GtE,
+        ast.GtE: ast.Gt,
+        ast.Eq: ast.NotEq,
+        ast.NotEq: ast.Eq,
+        ast.Is: ast.IsNot,
+        ast.IsNot: ast.Is,
+        ast.In: ast.NotIn,
+        ast.NotIn: ast.In,
+    }
+)
+ARITHMETIC_SWAPS: Mapping[type[ast.operator], type[ast.operator]] = MappingProxyType(
+    {
+        ast.Add: ast.Sub,
+        ast.Sub: ast.Add,
+        ast.Mult: ast.Div,
+        ast.Div: ast.Mult,
+        ast.FloorDiv: ast.Mult,
+    }
+)
+
+
 def expressions(tree: ast.AST, function: str = "") -> Iterator[tuple[str, ast.expr, str]]:
     """Mutate runtime decisions, not annotations, schemas, docstrings, or messages."""
-    if isinstance(tree, ast.ClassDef):
-        for statement in tree.body:
-            yield from expressions(statement, f"{function}.{tree.name}".strip("."))
-        return
-    if isinstance(tree, (ast.FunctionDef, ast.AsyncFunctionDef)):
-        name = f"{function}.{tree.name}".strip(".")
-        for statement in tree.body:
-            yield from expressions(statement, name)
-        return
-    if isinstance(tree, (ast.AnnAssign, ast.arg)):
-        if isinstance(tree, ast.AnnAssign) and tree.value is not None:
-            yield from expressions(tree.value, function)
-        return
+    match tree:
+        case ast.ClassDef(name=name, body=body):
+            for statement in body:
+                yield from expressions(statement, f"{function}.{name}".strip("."))
+            return
+        case ast.FunctionDef(name=name, body=body) | ast.AsyncFunctionDef(name=name, body=body):
+            for statement in body:
+                yield from expressions(statement, f"{function}.{name}".strip("."))
+            return
+        case ast.AnnAssign(value=value):
+            if value is not None:
+                yield from expressions(value, function)
+            return
+        case ast.arg():
+            return
+        case _:
+            pass
     if function:
-        changed: ast.expr
-        if isinstance(tree, (ast.If, ast.IfExp, ast.While)):
-            yield function, tree.test, f"(not ({ast.unparse(tree.test)}))"
-        elif isinstance(tree, ast.Compare):
-            swaps: dict[type[ast.cmpop], type[ast.cmpop]] = {
-                ast.Lt: ast.LtE,
-                ast.LtE: ast.Lt,
-                ast.Gt: ast.GtE,
-                ast.GtE: ast.Gt,
-                ast.Eq: ast.NotEq,
-                ast.NotEq: ast.Eq,
-                ast.Is: ast.IsNot,
-                ast.IsNot: ast.Is,
-                ast.In: ast.NotIn,
-                ast.NotIn: ast.In,
-            }
-            for index, operator in enumerate(tree.ops):
-                operators = list(tree.ops)
-                operators[index] = swaps[type(operator)]()
-                changed = ast.Compare(left=tree.left, ops=operators, comparators=tree.comparators)
-                yield function, tree, f"({ast.unparse(changed)})"
-        elif isinstance(tree, ast.BoolOp):
-            changed = ast.BoolOp(op=ast.Or() if isinstance(tree.op, ast.And) else ast.And(), values=tree.values)
-            yield function, tree, f"({ast.unparse(changed)})"
-        elif isinstance(tree, ast.BinOp):
-            arithmetic: dict[type[ast.operator], type[ast.operator]] = {
-                ast.Add: ast.Sub,
-                ast.Sub: ast.Add,
-                ast.Mult: ast.Div,
-                ast.Div: ast.Mult,
-                ast.FloorDiv: ast.Mult,
-            }
-            if replacement := arithmetic.get(type(tree.op)):
-                changed = ast.BinOp(left=tree.left, op=replacement(), right=tree.right)
-                yield function, tree, f"({ast.unparse(changed)})"
-        elif isinstance(tree, ast.Constant) and type(tree.value) in (int, float):
-            value = cast(int | float, tree.value)
-            yield function, tree, repr(value + 1)
-        elif isinstance(tree, ast.Constant) and isinstance(tree.value, bool):
-            yield function, tree, str(not tree.value)
+        yield from decisions(tree, function)
     for child in ast.iter_child_nodes(tree):
         yield from expressions(child, function)
 
 
-def mutations(source: bytes, functions: list[str]) -> list[Mutation]:
+def decisions(tree: ast.AST, function: str) -> Iterator[tuple[str, ast.expr, str]]:
+    match tree:
+        case ast.If(test=test) | ast.IfExp(test=test) | ast.While(test=test):
+            yield function, test, f"(not ({ast.unparse(test)}))"
+        case ast.Compare(left=left, ops=operators, comparators=comparators):
+            for index, operator in enumerate(operators):
+                swapped = [*operators[:index], COMPARISON_SWAPS[type(operator)](), *operators[index + 1 :]]
+                yield function, tree, f"({ast.unparse(ast.Compare(left=left, ops=swapped, comparators=comparators))})"
+        case ast.BoolOp(op=ast.And(), values=values):
+            yield function, tree, f"({ast.unparse(ast.BoolOp(op=ast.Or(), values=values))})"
+        case ast.BoolOp(values=values):
+            yield function, tree, f"({ast.unparse(ast.BoolOp(op=ast.And(), values=values))})"
+        case ast.BinOp(left=left, op=operator, right=right) if (replacement := ARITHMETIC_SWAPS.get(type(operator))) is not None:
+            yield function, tree, f"({ast.unparse(ast.BinOp(left=left, op=replacement(), right=right))})"
+        case ast.Constant(value=bool() as value):
+            yield function, tree, str(not value)
+        case ast.Constant(value=int() | float() as value):
+            yield function, tree, repr(value + 1)
+        case _:
+            pass
+
+
+def mutations(source: bytes, functions: Collection[str]) -> list[Mutation]:
     offsets = [0]
     for line in source.splitlines(keepends=True):
         offsets.append(offsets[-1] + len(line))
@@ -139,7 +171,7 @@ def mutation_order(mutation: Mutation) -> tuple[int, int, str]:
     return mutation.line, mutation.start, mutation.after
 
 
-def replacements(source: bytes, changes: list[list[str]]) -> list[Mutation]:
+def replacements(source: bytes, changes: Iterable[tuple[str, str]]) -> list[Mutation]:
     found: list[Mutation] = []
     for before, after in changes:
         fragment = before.encode("utf-8")
@@ -179,24 +211,42 @@ def stop_process_tree(process: subprocess.Popen[str]) -> None:
 
 def timeout_detail(error: subprocess.TimeoutExpired) -> str:
     def decoded(output: bytes | str | None) -> str:
-        return output.decode("utf-8", errors="replace") if isinstance(output, bytes) else output or ""
+        match output:
+            case bytes():
+                return output.decode("utf-8", errors="replace")
+            case str():
+                return output
+            case None:
+                return ""
 
     return (decoded(error.stdout) + decoded(error.stderr))[-4000:]
 
 
-def run(root: Path, source: Path, content: bytes, tests: list[str], timeout: float) -> Result:
+def run(root: Path, campaign: Campaign, content: bytes) -> Result:
     with tempfile.TemporaryDirectory(prefix="workspace-mutation-") as scratch:
         folder = Path(scratch)
         candidate = folder / "source"
         copy_source(root, candidate)
-        (candidate / source).write_bytes(content)
+        (candidate / campaign.source).write_bytes(content)
         report = folder / "results.xml"
         environment = dict(os.environ, PYTHONPATH=str(candidate), PYTHONDONTWRITEBYTECODE="1", PYTEST_DISABLE_PLUGIN_AUTOLOAD="1")
         environment.pop("WORKSPACE_E2E", None)
         environment.pop("PYTEST_ADDOPTS", None)
         started = time.perf_counter()
         with subprocess.Popen(
-            [sys.executable, "-B", "-m", "pytest", "-q", "-x", "--tb=short", "-o", "addopts=", f"--junitxml={report}", *tests],
+            [
+                sys.executable,
+                "-B",
+                "-m",
+                "scripts.mutation_session",
+                "-q",
+                "-x",
+                "--tb=short",
+                "-o",
+                "addopts=",
+                f"--junitxml={report}",
+                *campaign.tests,
+            ],
             cwd=candidate,
             env=environment,
             stdout=subprocess.PIPE,
@@ -207,64 +257,133 @@ def run(root: Path, source: Path, content: bytes, tests: list[str], timeout: flo
             start_new_session=sys.platform != "win32",
         ) as process:
             try:
-                stdout, stderr = process.communicate(timeout=timeout)
+                stdout, stderr = process.communicate(timeout=campaign.timeout)
             except subprocess.TimeoutExpired as error:
                 stop_process_tree(process)
                 process.communicate(timeout=10)
-                return Result("timeout", time.perf_counter() - started, 0, detail=timeout_detail(error))
+                return Result(Status.TIMEOUT, time.perf_counter() - started, 0, detail=timeout_detail(error))
             returncode = process.wait()
         elapsed = time.perf_counter() - started
         detail = (stdout + stderr)[-4000:]
         if not report.is_file():
-            return Result("error", elapsed, 0, detail=detail)
+            return Result(Status.ERROR, elapsed, 0, detail=detail)
         try:
             cases = list(ElementTree.parse(report).iter("testcase"))
         except ElementTree.ParseError:
-            return Result("error", elapsed, 0, detail=detail)
+            return Result(Status.ERROR, elapsed, 0, detail=detail)
         executed = [case for case in cases if case.find("skipped") is None]
         failed = tuple(f"{case.get('classname')}.{case.get('name')}" for case in cases if case.find("failure") is not None)
         if any(case.find("error") is not None for case in cases) or returncode not in (0, 1) or not executed:
-            return Result("error", elapsed, len(executed), detail=detail)
+            return Result(Status.ERROR, elapsed, len(executed), detail=detail)
         if returncode == 1 and not failed:
-            return Result("error", elapsed, len(executed), detail=detail)
-        return Result("killed" if failed else "survived", elapsed, len(executed), failed)
+            return Result(Status.ERROR, elapsed, len(executed), detail=detail)
+        return Result(Status.KILLED if failed else Status.SURVIVED, elapsed, len(executed), failed, detail)
 
 
-def campaign(
-    root: Path,
-    source: Path,
-    original: bytes,
-    selected: list[Mutation],
-    tests: list[str],
-    *,
-    timeout: float,
-    workers: int,
-) -> tuple[Result, list[Result], str]:
+def run_campaign(root: Path, campaign: Campaign) -> tuple[Result, tuple[Result, ...], str]:
     # Freeze once: edits made during a long run must not change its test oracle.
     with tempfile.TemporaryDirectory(prefix="workspace-mutation-baseline-") as scratch:
         snapshot = Path(scratch) / "source"
         copy_source(root, snapshot)
-        (snapshot / source).write_bytes(original)
+        (snapshot / campaign.source).write_bytes(campaign.original)
         digest = hashlib.sha256()
         for path in sorted(snapshot.rglob("*")):
             if path.is_file():
                 digest.update(path.relative_to(snapshot).as_posix().encode() + b"\0")
                 digest.update(hashlib.sha256(path.read_bytes()).digest())
-        baseline = run(snapshot, source, original, tests, timeout)
-        print(f"Baseline: {baseline.status}, {baseline.tests} tests in {baseline.seconds:.2f}s", flush=True)
-        if baseline.status != "survived":
+        baseline = run(snapshot, campaign, campaign.original)
+        print(f"Baseline: {baseline.status.value}, {baseline.tests} tests in {baseline.seconds:.2f}s", flush=True)
+        if baseline.status is not Status.SURVIVED:
             print(baseline.detail)
             raise SystemExit("Baseline must pass at least one test before mutating.")
 
         def check(mutation: Mutation) -> Result:
-            return run(snapshot, source, mutation.apply(original), tests, timeout)
+            return run(snapshot, campaign, mutation.apply(campaign.original))
 
-        results: list[Result] = []
-        with ThreadPoolExecutor(max_workers=workers) as pool:
-            for mutation, result in zip(selected, pool.map(check, selected), strict=True):
-                print(f"{result.status:8} {source}:{mutation.line} {mutation.function}: {mutation.before!r} -> {mutation.after!r}", flush=True)
-                results.append(result)
+        with ThreadPoolExecutor(max_workers=campaign.workers) as pool:
+            results = tuple(
+                announced(campaign, mutation, result)
+                for mutation, result in zip(campaign.mutations, pool.map(check, campaign.mutations), strict=True)
+            )
         return baseline, results, digest.hexdigest()
+
+
+def announced(campaign: Campaign, mutation: Mutation, result: Result) -> Result:
+    print(f"{result.status.value:8} {campaign.source}:{mutation.line} {mutation.function}: {mutation.before!r} -> {mutation.after!r}", flush=True)
+    return result
+
+
+@dataclass(frozen=True, slots=True)
+class MutationEvidence:
+    function: str
+    line: int
+    before: str
+    after: str
+    start: int
+    end: int
+    status: Status
+    seconds: float
+    tests: int
+    killed_by: tuple[str, ...]
+    detail: str
+
+
+@dataclass(frozen=True, slots=True)
+class Evidence:
+    """The --output report; field order is its JSON shape."""
+
+    source: str
+    tests: tuple[str, ...]
+    generated: int
+    seed: int
+    baseline_seconds: float
+    baseline_tests: int
+    results: tuple[MutationEvidence, ...]
+    source_sha256: str
+    snapshot_sha256: str
+
+
+EVIDENCE = TypeAdapter(Evidence)
+
+
+def observed(mutation: Mutation, result: Result) -> MutationEvidence:
+    return MutationEvidence(
+        mutation.function,
+        mutation.line,
+        mutation.before,
+        mutation.after,
+        mutation.start,
+        mutation.end,
+        result.status,
+        round(result.seconds, 3),
+        result.tests,
+        result.killed_by,
+        result.detail,
+    )
+
+
+@dataclass(frozen=True, slots=True)
+class Options:
+    source: Path
+    root: Path
+    tests: tuple[str, ...]
+    function: tuple[str, ...] | None
+    replace: tuple[tuple[str, str], ...] | None
+    limit: int
+    seed: int
+    timeout: float
+    workers: int
+    output: Path
+
+
+OPTIONS = TypeAdapter(Options)
+
+
+def arguments(parser: argparse.ArgumentParser) -> Options:
+    try:
+        return OPTIONS.validate_python(vars(parser.parse_args()))
+    except ValidationError as error:
+        return parser.error(str(error))
 
 
 def main() -> None:
@@ -279,13 +398,11 @@ def main() -> None:
     parser.add_argument("--timeout", type=float, default=30, help="seconds per subprocess; timeouts are reported separately")
     parser.add_argument("--workers", type=int, default=1, help="use 1 for tests sharing the Windows desktop")
     parser.add_argument("--output", type=Path, required=True, help="JSON evidence, preferably outside the source tree")
-    args = parser.parse_args()
-    root = cast(Path, args.root).resolve()
-    source = cast(Path, args.source)
-    output = cast(Path, args.output).resolve()
-    tests = cast(list[str], args.tests)
-    limit, seed, workers = cast(int, args.limit), cast(int, args.seed), cast(int, args.workers)
-    timeout = cast(float, args.timeout)
+    options = arguments(parser)
+    root = options.root.resolve()
+    source = options.source
+    output = options.output.resolve()
+    tests, limit, seed, workers, timeout = options.tests, options.limit, options.seed, options.workers, options.timeout
     if source.is_absolute() or ".." in source.parts or not (root / source).is_file():
         parser.error("source must be an existing file relative to --root")
     if output.is_relative_to(root) and not any(part.startswith(".") or part == "dist" for part in output.relative_to(root).parts):
@@ -293,53 +410,35 @@ def main() -> None:
     if limit < 0 or workers < 1 or timeout <= 0:
         parser.error("limit must be nonnegative; workers and timeout must be positive")
     original = (root / source).read_bytes()
-    changes = cast(list[list[str]] | None, args.replace)
-    functions = cast(list[str] | None, args.function)
+    changes, functions = options.replace, options.function
     if changes and functions:
         parser.error("choose either seeded replacements or function selection")
     try:
-        candidates = replacements(original, changes) if changes else mutations(original, functions or [])
+        candidates = replacements(original, changes) if changes else mutations(original, functions or ())
     except (ValueError, SyntaxError) as error:
         parser.error(str(error))
     if not candidates:
         parser.error("no mutations matched the selected source/functions")
-    selected = random.Random(seed).sample(candidates, limit) if 0 < limit < len(candidates) else candidates
-    selected.sort(key=mutation_order)
+    selected = tuple(sorted(random.Random(seed).sample(candidates, limit) if 0 < limit < len(candidates) else candidates, key=mutation_order))
     print(f"Testing {len(selected)} of {len(candidates)} decision mutations in {source}", flush=True)
-    baseline, outcomes, digest = campaign(root, source, original, selected, tests, timeout=timeout, workers=workers)
-    results: list[dict[str, object]] = [
-        {
-            "function": mutation.function,
-            "line": mutation.line,
-            "before": mutation.before,
-            "after": mutation.after,
-            "start": mutation.start,
-            "end": mutation.end,
-            "status": result.status,
-            "seconds": round(result.seconds, 3),
-            "tests": result.tests,
-            "killed_by": result.killed_by,
-            "detail": result.detail,
-        }
-        for mutation, result in zip(selected, outcomes, strict=True)
-    ]
+    baseline, outcomes, digest = run_campaign(root, Campaign(source, original, selected, tests, timeout, workers))
     output.parent.mkdir(parents=True, exist_ok=True)
-    report: dict[str, object] = {
-        "source": source.as_posix(),
-        "tests": tests,
-        "generated": len(candidates),
-        "seed": seed,
-        "baseline_seconds": baseline.seconds,
-        "baseline_tests": baseline.tests,
-        "results": results,
-        "source_sha256": hashlib.sha256(original).hexdigest(),
-        "snapshot_sha256": digest,
-    }
-    output.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
-    counts = {status: sum(result["status"] == status for result in results) for status in ("killed", "survived", "timeout", "error")}
-    print(", ".join(f"{count} {status}" for status, count in counts.items()), flush=True)
+    evidence = Evidence(
+        source=source.as_posix(),
+        tests=tests,
+        generated=len(candidates),
+        seed=seed,
+        baseline_seconds=baseline.seconds,
+        baseline_tests=baseline.tests,
+        results=tuple(map(observed, selected, outcomes, strict=True)),
+        source_sha256=hashlib.sha256(original).hexdigest(),
+        snapshot_sha256=digest,
+    )
+    output.write_bytes(EVIDENCE.dump_json(evidence, indent=2) + b"\n")
+    counts = {status: sum(result.status is status for result in outcomes) for status in Status}
+    print(", ".join(f"{count} {status.value}" for status, count in counts.items()), flush=True)
     print(f"Evidence: {output}", flush=True)
-    raise SystemExit(0 if counts["killed"] == len(results) else 1)
+    raise SystemExit(0 if counts[Status.KILLED] == len(outcomes) else 1)
 
 
 if __name__ == "__main__":

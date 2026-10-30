@@ -27,11 +27,8 @@ lazy from PySide6.QtGui import (
 lazy from PySide6.QtWidgets import QAbstractButton, QLabel, QTextEdit, QWidget
 
 from assistant import notification_reading, notification_text, step_view
-from assistant.agent_session import StreamState
 from assistant.agent_window import log_view
-from assistant.feed_items import WorkItem
-from assistant.feed_origin import App, Origin
-from assistant.feed_triage import Assessment, proposal_revision, solutions_for
+from assistant.feed_origin import Origin
 from assistant.notifications import (
     REVEAL_SECONDS,
     Busy,
@@ -47,10 +44,9 @@ from assistant.notifications import (
     Working,
     can_stop,
     caption,
-    display_order,
     heading,
     hint,
-    origin_item,
+    order_of,
     spinning,
     tone,
 )
@@ -70,6 +66,7 @@ from assistant.ui_components.bubble import (
 from assistant.ui_components.canvas_jump import CanvasJumpButton
 from assistant.ui_components.press_feedback import paint_feedback
 from assistant.ui_components.text import INSET, TEXT_PADDING, Document, TextView, font, units
+from automation.presentation import StreamState
 from winapi import appearance, windows
 from winapi.composition import DesktopComposition, Glass
 from winapi.shapes import Rect
@@ -145,23 +142,19 @@ class Measure:
     def prepare(self, content: Content, maximum: int, *, expanded: bool = False) -> Prepared:
         scale = self.scale
         user = tone(content) is Tone.USER
-        compact = isinstance(content, WorkItem) or (isinstance(content, Turn) and isinstance(content.state, Settled))
-        source = origin_item(content)
-        curated = source is not None and isinstance(source.item, Assessment)
+        compact = isinstance(content, Turn) and isinstance(content.state, Settled)
         inset = 8
         maximum_width = min(maximum / scale, 280 if user else maximum / scale)
-        presentation = notification_text.bubble_text(notification_text.spans(content, expanded=expanded))
+        presentation = notification_text.bubble_text(notification_text.spans(content))
         spans = presentation.body
-        if curated and isinstance(content, WorkItem):
-            spans = spans[1:]
         details = notification_text.step_blocks(content, expanded=expanded)
         meta, footer = "" if compact else caption(content), "You" if user else hint(content)
         if isinstance(content, (Entry, Turn)):
             # Agent questions use the bubble's voice tooltip, with no input footer.
             footer = ""
-        badge = badge_width(content_origins(content))
-        controls = (26 if not user else 0) + (26 if notification_text.expandable(content) and not curated else 0) + (32 if can_stop(content) else 0)
-        label = notification_text.title_text(content) if isinstance(content, Turn) or curated else "" if compact else heading(content)
+        badge = badge_width(BUBBLE_ORIGINS)
+        controls = (26 if not user else 0) + (26 if notification_text.expandable(content) else 0) + (32 if can_stop(content) else 0)
+        label = notification_text.title_text(content) if isinstance(content, Turn) else "" if compact else heading(content)
         body_padding = INSET * 2 + 8
         # The feed has one column width. Only the person's speech uses a smaller
         # bubble; standalone replies must match conversation and proposal cards.
@@ -169,21 +162,17 @@ class Measure:
         if user:
             body_width = self.body.intrinsic_width(spans, max(1, maximum_width - body_padding))
             width = min(maximum_width, max(100, badge + INSET * 2, body_width + body_padding))
-        labels = (
-            tuple(option.label for option in solutions_for(content.item))
-            if isinstance(content, WorkItem) and isinstance(content.item, Assessment)
-            else tuple(span.text for span in notification_text.options(content))
-        )
+        labels = tuple(span.text for span in notification_text.options(content))
         text_width = max(1, round(math.ceil(width * scale) / scale) - body_padding)
         body_height = self.body.load(spans, text_width) + TEXT_PADDING * 2 if spans else 0
         details_height = self.details.total(details, text_width) + TEXT_PADDING * 2 if details else 0
         label_width: float = max(1, round(math.ceil(width * scale) / scale) - controls - badge - INSET * 2)
-        if curated or isinstance(content, Turn):
+        if isinstance(content, Turn):
             label_width = heading_width(
                 round(math.ceil(width * scale) / scale),
                 badge,
                 stopping=can_stop(content),
-                disclosing=notification_text.expandable(content) and not curated,
+                disclosing=notification_text.expandable(content),
             )
             title_height = (
                 self.text_height(label, TITLE_SIZE, label_width, bold=True) if expanded else QFontMetricsF(font(TITLE_SIZE, bold=True)).height()
@@ -320,7 +309,7 @@ class SourceBadge(QWidget):
         self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
 
     def source(self, content: Content) -> None:
-        sources = content_origins(content)
+        sources = BUBBLE_ORIGINS
         names = ", ".join(origin.name for origin in sources)
         names += " · You" if tone(content) is Tone.USER else ""
         self.setAccessibleName("From " + names)
@@ -334,15 +323,14 @@ class SourceBadge(QWidget):
         content = self.card.content
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        paint_origins(painter, content_origins(content), self.card.colors)
+        paint_origins(painter, BUBBLE_ORIGINS, self.card.colors)
         if content is not None and spinning(content):
             painter.setPen(QPen(QColor(self.card.ink.foreground), 1.6))
             painter.drawArc(QRectF(1.5, 1.5, 25, 25), round(self.card.spin_angle * 16), 240 * 16)
 
 
-def content_origins(content: Content | None) -> tuple[Origin, ...]:
-    source = origin_item(content)
-    return badge_origins(source.origins if source is not None else ())
+# Every bubble is Workspace's own: the agent's direction, never an app arrival.
+BUBBLE_ORIGINS: tuple[Origin, ...] = badge_origins(())
 
 
 class Bubble(QWidget):
@@ -379,11 +367,10 @@ class Bubble(QWidget):
 
     def mouseReleaseEvent(self, event: QMouseEvent) -> None:
         prepared = self.card.prepared
-        source = isinstance(self.card.content, WorkItem) and isinstance(self.card.content.item, Assessment)
         if (
             event.button() is Qt.MouseButton.LeftButton
             and prepared is not None
-            and (source or event.position().y() < prepared[2].header_height / self.card.owner.scale)
+            and event.position().y() < prepared[2].header_height / self.card.owner.scale
         ):
             self.card.toggle()
             event.accept()
@@ -406,9 +393,8 @@ class Card:
         "bounds",
         "canvas_actions",
         "caption",
-        "choice_revision",
+        "choice_options",
         "choices",
-        "chosen",
         "closed",
         "colors",
         "content",
@@ -465,12 +451,12 @@ class Card:
         # Geometry and glass creation are the two native effects owned by a card;
         # injected adapters retain real widgets and the same scene lifetime.
         self.move, self.create_glass = move, _glass if glass is None else glass
-        self.owner, self.key, self.order = owner, toast.key, display_order(toast, curated=owner.session.triage.enabled)
+        self.owner, self.key, self.order = owner, toast.key, (0, *order_of(toast))
         self.content: Content | None = None
         self.prepared: tuple[Content, int, Prepared] | None = None
         self.layout: Layout | None = None
         self.bounds: Rect | None = None
-        self.look: tuple[Tone, App | None, appearance.Preference, appearance.Frost] | None = None
+        self.look: tuple[Tone, appearance.Preference, appearance.Frost] | None = None
         self.frost = appearance.Frost.SMOKED
         self.glass = self.closed = self.hovered = self.retiring = self.expanded = self.tail_pending = False
         self.motion: Motion | None = None
@@ -512,8 +498,7 @@ class Card:
         self.dismiss.clicked.connect(lambda: self.owner.dismiss_card(self.key))
         self.canvas_actions: tuple[tuple[Span, CanvasJumpButton], ...] = ()
         self.choices: list[QtWidgets.QPushButton] = []
-        self.choice_revision = ""
-        self.chosen = False
+        self.choice_options: tuple[Span, ...] = ()
         self.handle = int(self.window.winId())
         windows.make_overlay(self.handle, click_through=False)
 
@@ -548,13 +533,12 @@ class Card:
         for button in self.choices:
             shiboken6.delete(button)
         self.choices = []
-        self.choice_revision = ""
-        self.chosen = False
+        self.choice_options = ()
 
     def bind(self, toast: Toast, width: int) -> None:
         """Assign new logical content to a parked native resource."""
         self.key = toast.key
-        self.order = display_order(toast, curated=self.owner.session.triage.enabled)
+        self.order = (0, *order_of(toast))
         self.retiring = False
         self.bounds = None
         self.reader = notification_reading.Waiting(0, self.owner.clock() + notification_reading.START_SECONDS)
@@ -594,49 +578,20 @@ class Card:
             case _:
                 pass
 
-    def choose_solution(self, revision: str, choice: str) -> None:
-        if self.closed or self.retiring or not isinstance(self.content, WorkItem) or not isinstance(self.content.item, Assessment):
-            return
-        callback = self.owner.agent.on_choose_work
-        if callback is None or not callback(self.content.item.identity, revision, choice):
-            if self.owner.agent.on_problem is not None:
-                self.owner.agent.on_problem("That solution could not be started. The proposal may have changed; try again.")
-            return
-        self.chosen = True
-        for button in self.choices:
-            button.setEnabled(False)
-        selected_button = next((button for button in self.choices if button.objectName() == choice), None)
-        if selected_button is not None:
-            selected_button.setText("Queued")
-
     def update_choices(self, content: Content) -> None:
-        item = content.item if isinstance(content, WorkItem) and isinstance(content.item, Assessment) else None
         options = notification_text.options(content)
-        revision = proposal_revision(item) if item is not None and solutions_for(item) else repr(options)
-        if revision == self.choice_revision:
+        if options == self.choice_options:
             return
         for button in self.choices:
             shiboken6.delete(button)
         self.choices = []
-        self.choice_revision, self.chosen = revision, False
-        if item is None:
-            for option in options:
-                button = QtWidgets.QPushButton(option.text, self.window)
-                button.setFont(font(8.5))
-                button.setCursor(Qt.CursorShape.PointingHandCursor)
-                button.setAccessibleName(option.text)
-                button.clicked.connect(self.link_action(option.link))
-                self.choices.append(button)
-            self.style_choices()
-            return
-        for index, solution in enumerate(solutions_for(item)):
-            button = QtWidgets.QPushButton(solution.label, self.window)
-            button.setObjectName(solution.identity)
+        self.choice_options = options
+        for option in options:
+            button = QtWidgets.QPushButton(option.text, self.window)
             button.setFont(font(8.5))
             button.setCursor(Qt.CursorShape.PointingHandCursor)
-            button.setAccessibleName(solution.label + (" · Recommended" if index == 0 else ""))
-            button.setToolTip(("Recommended: " if index == 0 else "") + solution.detail)
-            button.clicked.connect(self.solution_action(revision, solution.identity))
+            button.setAccessibleName(option.text)
+            button.clicked.connect(self.link_action(option.link))
             self.choices.append(button)
         self.style_choices()
 
@@ -659,12 +614,6 @@ class Card:
     def link_action(self, url: str) -> Callable[[object], None]:
         def clicked(_checked: object) -> None:
             self.owner.action_link(url)
-
-        return clicked
-
-    def solution_action(self, revision: str, choice: str) -> Callable[[object], None]:
-        def clicked(_checked: object) -> None:
-            self.choose_solution(revision, choice)
 
         return clicked
 
@@ -711,10 +660,10 @@ class Card:
         return max(0, self.prepared[2].body_height - self.layout.body_height)
 
     def needs_reading(self) -> bool:
-        return not self.retiring and not isinstance(self.content, (Recording, WorkItem)) and self.reader.offset < self.overflow()
+        return not self.retiring and not isinstance(self.content, Recording) and self.reader.offset < self.overflow()
 
     def read(self, now: float, *, paused: bool, smooth: bool) -> bool:
-        if isinstance(self.content, (Recording, WorkItem)) or self.prepared is None or self.layout is None:
+        if isinstance(self.content, Recording) or self.prepared is None or self.layout is None:
             return False
         limit = self.overflow()
         self.reader = notification_reading.advance(self.reader, now, limit, self.speed, paused=paused)
@@ -726,13 +675,11 @@ class Card:
         return not isinstance(self.reader, notification_reading.Finished)
 
     def apply_style(self, content: Content, preference: appearance.Preference) -> None:
-        source = origin_item(content)
-        app = source.origins[0].app if source is not None and source.origins else None
-        look = (tone(content), app, preference, self.frost)
+        look = (tone(content), preference, self.frost)
         if self.look == look:
             return
         self.look = look
-        self.colors, self.ink = palette(tone(content), app), Ink()
+        self.colors, self.ink = palette(tone(content)), Ink()
         if isinstance(preference, appearance.Contrast):
             self.colors = Palette(preference.background, preference.foreground, preference.foreground, preference.background)
             self.ink = Ink(*(preference.foreground for _ in range(4)))
@@ -750,7 +697,7 @@ class Card:
                 self.layer.hide()
         if not self.glass and not isinstance(preference, appearance.Contrast):
             self.ink = Ink()
-        title_size = TITLE_SIZE if isinstance(content, Turn) or (isinstance(content, WorkItem) and isinstance(content.item, Assessment)) else 9.5
+        title_size = TITLE_SIZE if isinstance(content, Turn) else 9.5
         for label, color in ((self.label, self.ink.foreground), (self.caption, self.ink.secondary), (self.hint, self.ink.secondary)):
             face = (f"font-size: {title_size}pt; font-weight: 600; font-family: 'Segoe UI';") if label is self.label else ""
             label.setStyleSheet(f"background: transparent; color: {color}; padding: 0; margin: 0; border: none; {face}")
@@ -776,15 +723,11 @@ class Card:
 
     def render_heading(self, content: Content, prepared: Prepared) -> None:
         user = tone(content) is Tone.USER
-        compact = isinstance(content, WorkItem) or (isinstance(content, Turn) and isinstance(content.state, Settled))
-        source = origin_item(content)
-        curated = source is not None and isinstance(source.item, Assessment)
-        self.label.flow = curated or isinstance(content, Turn)
+        compact = isinstance(content, Turn) and isinstance(content.state, Settled)
+        self.label.flow = isinstance(content, Turn)
         self.label.expanded = self.expanded
         self.label.setFont(font(TITLE_SIZE if self.label.flow else 9.5, bold=True))
-        self.label.setObjectName("workItemTitle" if curated else "")
         self.label.setText(notification_text.title_text(content))
-        self.label.setToolTip(escape(self.label.text()) if curated else "")
         self.caption.setText(prepared.caption)
         self.label.setVisible(self.label.flow or (not user and not compact))
         self.caption.setVisible(not user and bool(prepared.caption))
@@ -792,12 +735,10 @@ class Card:
     def render(self, content: Content, maximum_width: int, maximum: int, preference: appearance.Preference) -> None:
         prepared = self.measure(content, maximum_width)
         width = prepared.width
-        source = origin_item(content)
-        app = source.origins[0].app if source is not None and source.origins else None
         if (
             content == self.content
             and (width, maximum) == (self.width, self.maximum)
-            and self.look == (tone(content), app, preference, self.frost)
+            and self.look == (tone(content), preference, self.frost)
             and self.layout is not None
         ):
             return
@@ -819,14 +760,9 @@ class Card:
             not (isinstance(content, Turn) and isinstance(content.state, Working) and content.state.phase is Busy.STOPPING)
             and not (isinstance(content, Recording) and content.state.phase == "stopping")
         )
-        source = origin_item(content)
-        curated = source is not None and isinstance(source.item, Assessment)
-        self.disclosure.setVisible(notification_text.expandable(content) and not curated)
-        self.window.setCursor(Qt.CursorShape.PointingHandCursor if curated else Qt.CursorShape.ArrowCursor)
-        self.window.setAccessibleDescription(("Click to hide details" if self.expanded else "Click to expand details") if curated else "")
+        self.disclosure.setVisible(notification_text.expandable(content))
         self.disclosure.expanded = self.expanded
-        section = "details" if isinstance(content, WorkItem) else "steps"
-        self.disclosure.setAccessibleName(("Hide " if self.expanded else "Show ") + section)
+        self.disclosure.setAccessibleName(("Hide " if self.expanded else "Show ") + "steps")
         self.disclosure.setToolTip(self.disclosure.accessibleName() + (" · " + caption(content) if caption(content) else ""))
         self.disclosure.update()
         text_width = max(1, prepared.text_width / self.owner.scale)
@@ -842,7 +778,7 @@ class Card:
                 and after is not None
                 and before.identity == after.identity
                 and after.state is not StreamState.INTERRUPTED
-                and self.owner.motion_enabled()
+                and self.owner.environment.animations()
                 and not isinstance(preference, appearance.Contrast)
             ):
                 end = units("".join(span.text for span in self.spans))
@@ -911,7 +847,7 @@ class Card:
             right -= 32
             controls += 32
         if not self.disclosure.isHidden():
-            if isinstance(self.content, WorkItem) or (isinstance(self.content, Turn) and prepared.header_height <= 36 * scale):
+            if isinstance(self.content, Turn) and prepared.header_height <= 36 * scale:
                 self.disclosure.setGeometry(right - 22, 14, 22, 20)
             else:
                 self.disclosure.setGeometry(right - 28, 14, 28, max(28, round(header - 20)))

@@ -5,16 +5,27 @@ Replaying the same events against a session always gives the same result.
 """
 
 from dataclasses import dataclass, field, replace
-from enum import Enum
 from typing import Literal, assert_never
-from urllib.parse import urlencode
 
-import assistant.console_requests
 from assistant import action_text
-from assistant.communications import Feed
+from assistant.card_actions import OpenCanvas, encode
 from assistant.feed_origin import FeedRequest
-from assistant.feed_triage import Board
 from assistant.recording_state import RecordingState
+from automation.presentation import (
+    Answer,
+    Done,
+    Failed,
+    Finished,
+    LiveMessage,
+    Problem,
+    Progress,
+    ReasoningSummary,
+    Said,
+    StreamState,
+    Succeeded,
+    ToolActivity,
+    ToolStatus,
+)
 from automation.task import Approval, ApprovalDecision, Question
 
 type Result = Literal["Ready", "Stopped", "Needs attention"]
@@ -45,78 +56,6 @@ class ChatMessage:
     text: str
     created_at: float
     source: FeedRequest | None = None
-
-
-class StreamState(Enum):
-    RUNNING = "running"
-    COMPLETE = "complete"
-    INTERRUPTED = "interrupted"
-
-
-@dataclass(frozen=True, slots=True)
-class Answer:
-    identity: str
-    text: str
-    created_at: float
-    state: StreamState = StreamState.RUNNING
-    kind: Literal["answer"] = "answer"
-
-
-@dataclass(frozen=True, slots=True)
-class ReasoningSummary:
-    identity: str
-    text: str
-    created_at: float
-    state: StreamState = StreamState.RUNNING
-    kind: Literal["reasoning"] = "reasoning"
-
-
-class ToolStatus(Enum):
-    RUNNING = "running"
-    CANCELLED = "cancelled"
-
-
-@dataclass(frozen=True, slots=True)
-class Succeeded:
-    text: str
-    kind: Literal["succeeded"] = "succeeded"
-
-
-@dataclass(frozen=True, slots=True)
-class Failed:
-    text: str
-    kind: Literal["failed"] = "failed"
-
-
-type ToolOutcome = ToolStatus | Succeeded | Failed
-
-
-@dataclass(frozen=True, slots=True)
-class ToolActivity:
-    identity: str
-    name: str
-    detail: str
-    created_at: float
-    outcome: ToolOutcome = ToolStatus.RUNNING
-    kind: Literal["tool"] = "tool"
-
-    @property
-    def text(self) -> str:
-        detail = action_text.arguments(self.name, self.detail)
-        match self.outcome:
-            case ToolStatus.RUNNING:
-                return detail
-            case Succeeded(text):
-                return "\n".join(part for part in (detail, action_text.result(self.name, text)) if part)
-            case Failed(text):
-                return "\n".join(part for part in (detail, action_text.readable(text)) if part)
-            case ToolStatus.CANCELLED:
-                return detail
-            case _:
-                assert_never(self.outcome)
-
-
-type LiveMessage = Answer | ReasoningSummary | ToolActivity
 
 
 @dataclass(frozen=True, slots=True)
@@ -161,25 +100,11 @@ class Begin:
     at: float
     queued: bool = field(default=False, kw_only=True)
     source: FeedRequest | None = None
-    kind: Literal["begin"] = "begin"
 
 
 @dataclass(frozen=True, slots=True)
 class Enqueued:
     text: str
-
-
-@dataclass(frozen=True, slots=True)
-class Progress:
-    text: str
-    kind: Literal["progress"] = "progress"
-
-
-@dataclass(frozen=True, slots=True)
-class Said:
-    text: str
-    at: float
-    kind: Literal["said"] = "said"
 
 
 @dataclass(frozen=True, slots=True)
@@ -192,25 +117,6 @@ class CanvasNotice:
 @dataclass(frozen=True, slots=True)
 class CanvasSettled:
     targets: frozenset[str]
-
-
-@dataclass(frozen=True, slots=True)
-class Done:
-    text: str
-    at: float
-    kind: Literal["done"] = "done"
-
-
-@dataclass(frozen=True, slots=True)
-class Problem:
-    text: str
-    at: float
-    kind: Literal["problem"] = "problem"
-
-
-@dataclass(frozen=True, slots=True)
-class Finished:
-    kind: Literal["finished"] = "finished"
 
 
 @dataclass(frozen=True, slots=True)
@@ -267,10 +173,6 @@ class Session:
     activity: tuple[str, ...] = ()
     phase: Literal["idle", "running", "stopping"] = "idle"
     status: str = "Ready"
-    triage: Board = field(default_factory=Board)
-    communications: Feed = field(default_factory=Feed)
-    console_requests: tuple[assistant.console_requests.Request, ...] = ()
-    communication_drafts: tuple[tuple[str, str], ...] = ()
     last_said: str = ""
     result: Result = "Ready"
     recording: RecordingState = field(default_factory=RecordingState)
@@ -307,7 +209,7 @@ type Snapshot = Session
 
 
 def notice_text(title: str, target: str) -> str:
-    return title + "\n\n[Open on canvas](workspace://canvas?" + urlencode({"target": target}) + ")"
+    return title + "\n\n[Open on canvas](" + encode(OpenCanvas(target)) + ")"
 
 
 def transition(state: Session, event: Event) -> Session:
@@ -496,6 +398,30 @@ def reply_text(reply: Reply) -> str:
             assert_never(reply)
 
 
+def activity_text(activity: ToolActivity) -> str:
+    detail = action_text.arguments(activity.name, activity.detail)
+    match activity.outcome:
+        case ToolStatus.RUNNING | ToolStatus.CANCELLED:
+            return detail
+        case Succeeded(text):
+            return "\n".join(part for part in (detail, action_text.result(activity.name, text)) if part)
+        case Failed(text):
+            return "\n".join(part for part in (detail, action_text.readable(text)) if part)
+        case _:
+            assert_never(activity.outcome)
+
+
+def message_body(message: Message) -> str:
+    """The visible text of a timeline message."""
+    match message:
+        case ToolActivity():
+            return activity_text(message)
+        case ChatMessage() | Answer() | ReasoningSummary() | MeetingMessage() | AgentRequest():
+            return message.text
+        case _:
+            assert_never(message)
+
+
 def message_text(message: Message) -> str:
     parts: tuple[str, ...]
     match message:
@@ -506,7 +432,7 @@ def message_text(message: Message) -> str:
         case ReasoningSummary(text=text):
             parts = ("Reasoning summary", text)
         case ToolActivity(name=name):
-            parts = (name, message.text)
+            parts = (name, activity_text(message))
         case MeetingMessage(text=text):
             parts = ("Meeting", text)
         case AgentRequest(detail=detail, reply=Answered(answer)):

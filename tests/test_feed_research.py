@@ -12,7 +12,7 @@ from pydantic import TypeAdapter
 
 from assistant.activity import ContextSnapshot
 from assistant.communications import Conversation, Feed, Message, acknowledge
-from assistant.feed_contracts import Disposition, StoredBoard
+from assistant.feed_contracts import DismissItem, Disposition, StoredBoard
 from assistant.feed_research import Research
 from assistant.feed_sources import triage_evidence
 from assistant.feed_triage import Board, decode, proposal_revision, restored, saved, unassessed
@@ -53,7 +53,6 @@ def test_background_research_reads_topic_memory_full_thread_and_file_before_publ
     assert len(batch) == 1
     triage = TriageFixture(
         MemoryStore(),
-        lambda _: None,
         lambda _batch, _rules: "{}",
         lambda _: False,
         work=FeedWork(tasks, memory, lambda: ContextSnapshot(50, "active", ())),
@@ -101,7 +100,7 @@ def test_own_reply_reconsiders_cached_work_and_cannot_be_overwritten_by_old_rese
     item = decode(output(([batch[0].identity], "action")), batch)[0]
     store = MemoryStore()
     store.data = saved(Board(enabled=True, items=(item,)))
-    triage = TriageFixture(store, lambda _: None, lambda _batch, _rules: "{}", lambda _: False)
+    triage = TriageFixture(store, lambda _batch, _rules: "{}", lambda _: False)
     try:
         triage.observe(feed, ())
         # Simulate a current committed review through the actual immutable board contract.
@@ -113,7 +112,7 @@ def test_own_reply_reconsiders_cached_work_and_cannot_be_overwritten_by_old_rese
         assert triage_evidence(answered, ()) == batch
         assert triage.epoch == epoch + 1 and unassessed(triage.board, batch, today=day) == batch
         assert "Use the approved forecast" in triage.research_conversation(batch[0].identity)
-        triage.dismiss(item.identity)
+        triage.edit(DismissItem(item.identity))
         triage.observe(replace(answered, messages=(*answered.messages, Message("atlas", "thanks", "Jim", "Thanks.", 12, 12, own=True))), ())
         assert not triage.board.actions and not unassessed(triage.board, batch, today=day)
     finally:

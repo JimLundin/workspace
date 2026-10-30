@@ -4,9 +4,10 @@ import threading
 from collections import deque
 from collections.abc import Callable
 
-from assistant.agent_session import Answer, Snapshot, StreamState, pending
+from assistant.agent_session import Snapshot, message_body, pending
 from assistant.agent_window import AgentWindow, View
 from assistant.recording_state import RecordingAction
+from automation.presentation import Answer, StreamState
 from tests.agent_requests import asked
 
 
@@ -139,7 +140,7 @@ def test_model_thread_never_calls_widgets_and_rapid_updates_are_coalesced() -> N
     assert set(panel.view.threads) == {ui_thread}
     assert len(panel.view.states[-1].activity) == 100
     assert len(panel.view.states[-1].messages) == 2
-    assert panel.view.states[-1].messages[-1].text == "All done."
+    assert message_body(panel.view.states[-1].messages[-1]) == "All done."
     panel.close()
     panel.paint()
 
@@ -157,7 +158,7 @@ def test_live_publishers_cannot_update_a_later_turn_or_a_reset_conversation() ->
     first(Answer("late", "This belongs to the first request", 2))
     assert panel.state is before and not panel.jobs
     second(Answer("second-answer", "Second answer", 3))
-    assert panel.state.messages[-1].text == "Second answer"
+    assert message_body(panel.state.messages[-1]) == "Second answer"
     panel.reset()
     panel.begin("Fresh conversation", panel.stop)
     before = panel.state

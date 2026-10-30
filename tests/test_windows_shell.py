@@ -5,6 +5,7 @@ import sys
 import threading
 import time
 import unittest
+from datetime import datetime
 from pathlib import Path
 
 if sys.platform != "win32":
@@ -36,7 +37,8 @@ prepare()
 
 def test_floating_bar_shows_only_active_controls_and_retracts(tmp_path: Path) -> None:
     # Defect: activity/capture/layer titles leak onto the toolbar, numeric
-    # readouts disappear, or inactive controls remain visible.
+    # readouts disappear, inactive controls remain visible, or Stop keeps the
+    # wider resting layout's position past the edge of the narrowed bar.
     app = application()
     invoked: list[str] = []
     actions = BarActions(
@@ -50,7 +52,10 @@ def test_floating_bar_shows_only_active_controls_and_retracts(tmp_path: Path) ->
         invoked.append,
         inbox=lambda: invoked.append("inbox"),
     )
-    bar = DesktopBar(actions, native_shell=False)
+    # A charger and wide clock digits give the resting readout its widest
+    # common measure, so Stop's position shows whether the row follows the shrink.
+    observations = BarObservations(power=lambda: Battery(95, powered=True, charging=False), local_time=lambda: datetime(2026, 10, 30, 20, 59))
+    bar = DesktopBar(actions, native_shell=False, observations=observations)
     try:
         width = bar.window.width()
         assert bar.ambient.clock in bar.status.text() and bar.ambient.text in bar.status.toolTip() and bar.stop.isHidden()
