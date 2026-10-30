@@ -143,7 +143,11 @@ requests, replies, effects and results remain in the existing task journal.
 Future feed reviews read these outcomes without converting one-off choices into
 standing preferences. Queue acknowledgment is distinct from task completion.
 `feed_contracts.py` defines immutable IO shapes, validated and serialized with
-Pydantic `TypeAdapter`; application decisions operate on typed values.
+Pydantic `TypeAdapter`; application decisions operate on typed values. Every feed
+operation is one `FeedCommand` variant, validated by the agent tool adapter and
+again at the bridge. `feed_triage.edited` is the single pure transition for explicit
+board edits: it owns dispositions, rule preservation, reconciliation and the
+recorded decision, so `Triage` only persists and publishes the result.
 History stays in the same floating feed; the separate legacy panel is removed.
 Source work never scrolls automatically; expanded overflow uses manual scrolling.
 Typed input is available on explicit request and closes after submitting to Workspace.
