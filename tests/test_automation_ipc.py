@@ -86,8 +86,14 @@ def disconnected(read: Future[bytes]) -> None:
 
 
 def test_unavailable_worker_retains_invocation_and_replays_after_restart(tmp_path: Path) -> None:
+    # An untitled background window is ordinary desktop context, not malformed data.
     context = ContextSnapshot(
-        12, "active", (Activity(Window(41, "Private project context", "editor.exe", minimized=False), 10, 12, agent_active=False),)
+        12,
+        "active",
+        (
+            Activity(Window(40, "", "", minimized=True), 9, 10, agent_active=False),
+            Activity(Window(41, "Private project context", "editor.exe", minimized=False), 10, 12, agent_active=False),
+        ),
     )
     client = BridgeClient(tmp_path, timeout_s=0.5)
     with TestCase().assertRaises(OSError):
