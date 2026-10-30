@@ -22,7 +22,7 @@ lazy from PySide6.QtGui import QEnterEvent, QFont, QImage, QPainter, QRegion, QT
 lazy from PySide6.QtTest import QTest
 lazy from PySide6.QtWidgets import QWidget
 
-from assistant.agent_session import Answer, Begin, Failed, ReasoningSummary, Said, Session, StreamState, Succeeded, ToolActivity, transition
+from assistant.agent_session import Begin, Session, transition
 from assistant.agent_toasts import AgentToasts
 from assistant.agent_window import AgentWindow
 from assistant.feed_contracts import DismissItem
@@ -36,6 +36,7 @@ from assistant.recording_state import RecordingAction, RecordingState
 from assistant.rich_text import formatted
 from assistant.toast_card import Card
 from assistant.ui_components.text import TextView
+from automation.presentation import Answer, Failed, ReasoningSummary, Said, StreamState, Succeeded, ToolActivity
 from tests.agent_requests import asked, reviewed
 from winapi import appearance, screen, system, windows
 from winapi.composition import DesktopComposition, Glass

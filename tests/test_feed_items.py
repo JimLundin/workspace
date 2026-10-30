@@ -3,7 +3,7 @@
 from dataclasses import replace
 
 import assistant.notification_text
-from assistant.agent_session import Begin, Said, Session, transition
+from assistant.agent_session import Begin, Session, transition
 from assistant.communications import Update, WindowsNotice
 from assistant.console_requests import Provider, request
 from assistant.feed_items import Verb, WorkItem, act, action_spans, body_spans, expanded_spans, observed
@@ -11,6 +11,7 @@ from assistant.feed_origin import FeedRequest
 from assistant.inbox import Query, Source
 from assistant.notifications import MAX_VISIBLE, Stack, Turn, advance, body, observe
 from assistant.system_notices import NoticeKey
+from automation.presentation import Said
 from tests.test_console_inbox import event
 from tests.test_feed_triage import output
 lazy from assistant.communications import (

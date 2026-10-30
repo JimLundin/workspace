@@ -27,7 +27,6 @@ lazy from PySide6.QtGui import (
 lazy from PySide6.QtWidgets import QAbstractButton, QLabel, QTextEdit, QWidget
 
 from assistant import notification_reading, notification_text, step_view
-from assistant.agent_session import StreamState
 from assistant.agent_window import log_view
 from assistant.feed_items import WorkItem
 from assistant.feed_origin import App, Origin
@@ -70,6 +69,7 @@ from assistant.ui_components.bubble import (
 from assistant.ui_components.canvas_jump import CanvasJumpButton
 from assistant.ui_components.press_feedback import paint_feedback
 from assistant.ui_components.text import INSET, TEXT_PADDING, Document, TextView, font, units
+from automation.presentation import StreamState
 from winapi import appearance, windows
 from winapi.composition import DesktopComposition, Glass
 from winapi.shapes import Rect

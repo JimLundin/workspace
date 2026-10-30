@@ -11,7 +11,6 @@ lazy from PySide6 import QtWidgets
 lazy from PySide6.QtCore import Qt
 lazy from PySide6.QtGui import QFont
 
-from assistant.agent_session import Answer, Failed, StreamState, Succeeded, ToolActivity
 from assistant.feed_contracts import SolutionKind
 from assistant.feed_items import WorkItem
 from assistant.feed_sources import SourceKey, SourceKind
@@ -21,6 +20,7 @@ from assistant.qt_runtime import prepare
 from assistant.tool_call_view import ToolCall
 from assistant.tool_text import State, presentation
 from assistant.ui_components.text import TextView
+from automation.presentation import Answer, Failed, StreamState, Succeeded, ToolActivity
 from tests.test_windows_agent_toasts import notifications
 
 prepare()

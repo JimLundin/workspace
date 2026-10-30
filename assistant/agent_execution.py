@@ -8,7 +8,7 @@ from collections import OrderedDict
 from collections.abc import Callable, Mapping
 from typing import assert_never
 
-from assistant.agent import Agent, Log
+from assistant.agent import Agent
 from assistant.agent_history import History
 from assistant.agent_tools import Machine
 from assistant.llm import Settings
@@ -16,9 +16,9 @@ from assistant.meeting_execution import MeetingWork
 from assistant.task_profiles import UNSEEN, Conversation, GeneralRun, MeetingFollowupRun, ProfileRun, RequestContext
 from assistant.workspace import Workspace
 from automation.actions import ActionError, Resources
-from automation.execution import ApprovalReview, Incomplete, Outcome, WorkExecution
+from automation.execution import ApprovalReview, Incomplete, Log, WorkExecution
 from automation.store import TaskStore
-from automation.task import Blocked, Claim, FeedHandoff, MeetingFollowup, RequestKind, RequestSource, Task, Waiting, task_profile
+from automation.task import Blocked, Claim, FeedHandoff, MeetingFollowup, Outcome, RequestKind, RequestSource, Task, Waiting, task_profile
 from diagnostics import failure_info
 from usage import Detail
 

@@ -9,9 +9,9 @@ from dataclasses import dataclass, field
 from enum import Enum, auto
 from typing import Protocol, assert_never
 
-from assistant.agent_session import LiveMessage
 from assistant.llm import Json
 from automation.actions import Actions, Evidence, Observation, Operation, Resources
+from automation.presentation import LiveMessage
 from automation.store import TaskStore
 from automation.task import (
     ActionNotApplied,
@@ -26,7 +26,7 @@ from automation.task import (
     Completed,
     Failed,
     FileDigest,
-    Interrupted,
+    Outcome,
     Question,
     Response,
     Task,
@@ -35,8 +35,6 @@ from automation.task import (
     Waiting,
     text,
 )
-
-type Outcome = Completed | Failed | Waiting | Interrupted
 
 
 class ReportStatus(Enum):
@@ -92,6 +90,8 @@ def review_matches(task: Task, review: ApprovalReview) -> bool:
 
 
 class Log(Protocol):
+    """Where the user watches the agent work."""
+
     def step(self, message: str, /) -> None: ...
     def say(self, message: str, /) -> None: ...
     def updates(self) -> Callable[[LiveMessage], None]: ...

@@ -20,16 +20,10 @@ from assistant.agent_session import (
     Cancelled,
     CanvasNotice,
     CanvasSettled,
-    Done,
     Enqueued,
     Event,
-    Finished,
-    LiveMessage,
-    Problem,
-    Progress,
     RecordingUpdated,
     Resolution,
-    Said,
     Session,
     Snapshot,
     StopRequested,
@@ -43,6 +37,7 @@ from assistant.feed_items import SourceAction
 from assistant.feed_origin import FeedRequest
 from assistant.feed_triage import Board
 from assistant.recording_state import RecordingAction, RecordingState
+from automation.presentation import Done, Finished, LiveMessage, Problem, Progress, Said
 from automation.task import Approval, Question
 from usage import DIRECTORY
 

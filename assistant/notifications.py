@@ -10,28 +10,13 @@ from enum import Enum, auto
 from typing import Final, assert_never
 
 import assistant.feed_items
-from assistant.agent_session import (
-    AgentRequest,
-    Answer,
-    Answered,
-    Cancelled,
-    ChatMessage,
-    Failed,
-    MeetingMessage,
-    ReasoningSummary,
-    Snapshot,
-    StreamState,
-    Succeeded,
-    ToolActivity,
-    ToolStatus,
-    pending,
-    presentation,
-)
+from assistant.agent_session import AgentRequest, Answered, Cancelled, ChatMessage, MeetingMessage, Snapshot, message_body, pending, presentation
 from assistant.feed_items import DEFAULT_QUERY, WorkItem, action_spans, proposal_index
 from assistant.feed_sources import Attention, SourceKey
 from assistant.feed_triage import Assessment
 from assistant.inbox import Query, Source, matches, user_caption
 from assistant.recording_state import RecordingState, duration, phase_label
+from automation.presentation import Answer, Failed, ReasoningSummary, StreamState, Succeeded, ToolActivity, ToolStatus
 from automation.task import Approval, ApprovalDecision, Question
 
 MAX_VISIBLE: Final = 5
@@ -514,7 +499,7 @@ def body(content: Content) -> str:
         case Entry(message=ChatMessage() as message):
             return user_caption(message)
         case Entry(message=message):
-            return message.text
+            return message_body(message)
         case Response(text=text):
             return text
         case Recording(state):
