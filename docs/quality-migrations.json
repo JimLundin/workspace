@@ -1131,24 +1131,6 @@
     {
       "key": {
         "rule": "PLR0913",
-        "path": "scripts/mutate.py",
-        "scope": "campaign",
-        "signature": "52db696371f22339ca9fac8613e039bf5712a7f06d48afd1d828fea5267e0a01"
-      },
-      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
-    },
-    {
-      "key": {
-        "rule": "PLR0913",
-        "path": "scripts/mutate.py",
-        "scope": "run",
-        "signature": "d3ae11f31c108c5c1467aca9d675de44e68bc5fa2e01d9d945abfad1f37df51f"
-      },
-      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
-    },
-    {
-      "key": {
-        "rule": "PLR0913",
         "path": "selfcheck.py",
         "scope": "run_tests",
         "signature": "1ef13c1a58f37dff6915d441b04e83263784579b34f031bbe8a61f42ee24d153"

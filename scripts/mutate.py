@@ -51,6 +51,18 @@ class Mutation:
 
 
 @dataclass(frozen=True, slots=True)
+class Campaign:
+    """One frozen source file, its mutants, the tests that judge them and how they run."""
+
+    source: Path
+    original: bytes
+    mutations: tuple[Mutation, ...]
+    tests: tuple[str, ...]
+    timeout: float
+    workers: int
+
+
+@dataclass(frozen=True, slots=True)
 class Result:
     status: Status
     seconds: float
@@ -211,19 +223,31 @@ def timeout_detail(error: subprocess.TimeoutExpired) -> str:
     return (decoded(error.stdout) + decoded(error.stderr))[-4000:]
 
 
-def run(root: Path, source: Path, content: bytes, tests: list[str], timeout: float) -> Result:
+def run(root: Path, campaign: Campaign, content: bytes) -> Result:
     with tempfile.TemporaryDirectory(prefix="workspace-mutation-") as scratch:
         folder = Path(scratch)
         candidate = folder / "source"
         copy_source(root, candidate)
-        (candidate / source).write_bytes(content)
+        (candidate / campaign.source).write_bytes(content)
         report = folder / "results.xml"
         environment = dict(os.environ, PYTHONPATH=str(candidate), PYTHONDONTWRITEBYTECODE="1", PYTEST_DISABLE_PLUGIN_AUTOLOAD="1")
         environment.pop("WORKSPACE_E2E", None)
         environment.pop("PYTEST_ADDOPTS", None)
         started = time.perf_counter()
         with subprocess.Popen(
-            [sys.executable, "-B", "-m", "scripts.mutation_session", "-q", "-x", "--tb=short", "-o", "addopts=", f"--junitxml={report}", *tests],
+            [
+                sys.executable,
+                "-B",
+                "-m",
+                "scripts.mutation_session",
+                "-q",
+                "-x",
+                "--tb=short",
+                "-o",
+                "addopts=",
+                f"--junitxml={report}",
+                *campaign.tests,
+            ],
             cwd=candidate,
             env=environment,
             stdout=subprocess.PIPE,
@@ -234,7 +258,7 @@ def run(root: Path, source: Path, content: bytes, tests: list[str], timeout: flo
             start_new_session=sys.platform != "win32",
         ) as process:
             try:
-                stdout, stderr = process.communicate(timeout=timeout)
+                stdout, stderr = process.communicate(timeout=campaign.timeout)
             except subprocess.TimeoutExpired as error:
                 stop_process_tree(process)
                 process.communicate(timeout=10)
@@ -257,41 +281,37 @@ def run(root: Path, source: Path, content: bytes, tests: list[str], timeout: flo
         return Result(Status.KILLED if failed else Status.SURVIVED, elapsed, len(executed), failed, detail)
 
 
-def campaign(
-    root: Path,
-    source: Path,
-    original: bytes,
-    selected: list[Mutation],
-    tests: list[str],
-    *,
-    timeout: float,
-    workers: int,
-) -> tuple[Result, list[Result], str]:
+def run_campaign(root: Path, campaign: Campaign) -> tuple[Result, tuple[Result, ...], str]:
     # Freeze once: edits made during a long run must not change its test oracle.
     with tempfile.TemporaryDirectory(prefix="workspace-mutation-baseline-") as scratch:
         snapshot = Path(scratch) / "source"
         copy_source(root, snapshot)
-        (snapshot / source).write_bytes(original)
+        (snapshot / campaign.source).write_bytes(campaign.original)
         digest = hashlib.sha256()
         for path in sorted(snapshot.rglob("*")):
             if path.is_file():
                 digest.update(path.relative_to(snapshot).as_posix().encode() + b"\0")
                 digest.update(hashlib.sha256(path.read_bytes()).digest())
-        baseline = run(snapshot, source, original, tests, timeout)
+        baseline = run(snapshot, campaign, campaign.original)
         print(f"Baseline: {baseline.status.value}, {baseline.tests} tests in {baseline.seconds:.2f}s", flush=True)
         if baseline.status is not Status.SURVIVED:
             print(baseline.detail)
             raise SystemExit("Baseline must pass at least one test before mutating.")
 
         def check(mutation: Mutation) -> Result:
-            return run(snapshot, source, mutation.apply(original), tests, timeout)
+            return run(snapshot, campaign, mutation.apply(campaign.original))
 
-        results: list[Result] = []
-        with ThreadPoolExecutor(max_workers=workers) as pool:
-            for mutation, result in zip(selected, pool.map(check, selected), strict=True):
-                print(f"{result.status.value:8} {source}:{mutation.line} {mutation.function}: {mutation.before!r} -> {mutation.after!r}", flush=True)
-                results.append(result)
+        with ThreadPoolExecutor(max_workers=campaign.workers) as pool:
+            results = tuple(
+                announced(campaign, mutation, result)
+                for mutation, result in zip(campaign.mutations, pool.map(check, campaign.mutations), strict=True)
+            )
         return baseline, results, digest.hexdigest()
+
+
+def announced(campaign: Campaign, mutation: Mutation, result: Result) -> Result:
+    print(f"{result.status.value:8} {campaign.source}:{mutation.line} {mutation.function}: {mutation.before!r} -> {mutation.after!r}", flush=True)
+    return result
 
 
 @dataclass(frozen=True, slots=True)
@@ -351,10 +371,9 @@ def main() -> None:
         parser.error(str(error))
     if not candidates:
         parser.error("no mutations matched the selected source/functions")
-    selected = random.Random(seed).sample(candidates, limit) if 0 < limit < len(candidates) else candidates
-    selected.sort(key=mutation_order)
+    selected = tuple(sorted(random.Random(seed).sample(candidates, limit) if 0 < limit < len(candidates) else candidates, key=mutation_order))
     print(f"Testing {len(selected)} of {len(candidates)} decision mutations in {source}", flush=True)
-    baseline, outcomes, digest = campaign(root, source, original, selected, list(tests), timeout=timeout, workers=workers)
+    baseline, outcomes, digest = run_campaign(root, Campaign(source, original, selected, tests, timeout, workers))
     results: list[dict[str, object]] = [
         {
             "function": mutation.function,
