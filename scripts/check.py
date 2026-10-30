@@ -332,6 +332,17 @@ def execute_overlapped(tests: tuple[str, ...], root: Path) -> Results:
     return combined_results(tuple(results), tuple(phases))
 
 
+@contextmanager
+def scratch_directory() -> Generator[Path]:
+    """The tmp_path fixture shared with mutation sessions.
+
+    Stores nest digest-named folders under it, so it stays shallow enough for
+    Windows MAX_PATH; pytest's own tmp_path nests too deep for them.
+    """
+    with tempfile.TemporaryDirectory(prefix="workspace-edit-check-") as scratch:
+        yield Path(scratch)
+
+
 def execute_tests(tests: tuple[str, ...], root: Path, load: Callable[[str], object] = importlib.import_module) -> Results:
     # Same small test-function protocol as selfcheck, sequential within its owner.
     # Accumulators belong to this executor; only immutable observations leave it.
@@ -363,8 +374,8 @@ def execute_tests(tests: tuple[str, ...], root: Path, load: Callable[[str], obje
                 parameters = inspect.signature(test).parameters
                 if set(parameters) - {"tmp_path"}:
                     raise TypeError("Only tmp_path fixtures are supported, as in selfcheck.")
-                with tempfile.TemporaryDirectory(prefix="workspace-edit-check-") as scratch:
-                    test(**({"tmp_path": Path(scratch)} if parameters else {}))
+                with scratch_directory() as scratch:
+                    test(**({"tmp_path": scratch} if parameters else {}))
                 passed += 1
             except unittest.SkipTest:
                 skipped += 1

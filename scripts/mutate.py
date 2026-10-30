@@ -196,7 +196,7 @@ def run(root: Path, source: Path, content: bytes, tests: list[str], timeout: flo
         environment.pop("PYTEST_ADDOPTS", None)
         started = time.perf_counter()
         with subprocess.Popen(
-            [sys.executable, "-B", "-m", "pytest", "-q", "-x", "--tb=short", "-o", "addopts=", f"--junitxml={report}", *tests],
+            [sys.executable, "-B", "-m", "scripts.mutation_session", "-q", "-x", "--tb=short", "-o", "addopts=", f"--junitxml={report}", *tests],
             cwd=candidate,
             env=environment,
             stdout=subprocess.PIPE,
