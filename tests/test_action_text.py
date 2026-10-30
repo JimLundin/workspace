@@ -1,8 +1,9 @@
 """Action payloads read as labels and lists in both notifications and history."""
 
 from assistant.action_text import readable
-from assistant.agent_session import Failed, Succeeded, ToolActivity, ToolStatus
+from assistant.agent_session import activity_text
 from assistant.notifications import Entry, body
+from automation.presentation import Failed, Succeeded, ToolActivity, ToolStatus
 
 
 def test_action_arguments_and_results_are_readable_through_the_conversation_views() -> None:
@@ -10,7 +11,7 @@ def test_action_arguments_and_results_are_readable_through_the_conversation_view
     for outcome in (ToolStatus.RUNNING, Succeeded('{"rows":24,"saved":false}'), Failed('{"error":"File unavailable"}')):
         message = ToolActivity("read", "read_file", detail, 1, outcome)
         text = body(Entry(0, message))
-        assert text == message.text
+        assert text == activity_text(message)
         assert "Path: C:\\Documents\\budget.xlsx\nRead only: Yes" in text
         assert '{"' not in text and "false" not in text
         if isinstance(outcome, Succeeded):
@@ -31,8 +32,8 @@ def test_control_actions_explain_the_target_without_exposing_transport_details()
     message = ToolActivity(
         "inspect", "inspect_ui", '{"handle":42,"depth":3}', 1, Succeeded('{"controls":[{"name":"Save","id":"1.2.3","actions":["invoke"]}]}')
     )
-    assert message.text == "Inspect the selected window.\nControls found:\n• Save"
-    assert "1.2.3" not in message.text and "42" not in message.text and "invoke" not in message.text
+    assert activity_text(message) == "Inspect the selected window.\nControls found:\n• Save"
+    assert "1.2.3" not in activity_text(message) and "42" not in activity_text(message) and "invoke" not in activity_text(message)
 
 
 def test_control_and_window_commands_name_the_operation_and_target() -> None:
@@ -51,13 +52,13 @@ def test_control_and_window_commands_name_the_operation_and_target() -> None:
 
 def test_empty_control_search_explains_that_nothing_matched() -> None:
     message = ToolActivity("inspect", "inspect_ui", '{"query":"","handle":42}', 1, Succeeded('{"controls":[]}'))
-    assert message.text == "Inspect the selected window.\nNo matching controls."
+    assert activity_text(message) == "Inspect the selected window.\nNo matching controls."
 
 
 def test_control_summary_counts_unnamed_and_omitted_controls() -> None:
     result = '{"controls":[{"name":"Save"},{"name":""},{"name":"Print"},{"role":"button"},{"name":"Close"}]}'
     message = ToolActivity("inspect", "inspect_ui", '{"query":"Budget"}', 1, Succeeded(result))
-    assert message.text == "Find controls matching “Budget”\nControls found:\n• Save\n• Print\n… 3 more controls"
+    assert activity_text(message) == "Find controls matching “Budget”\nControls found:\n• Save\n• Print\n… 3 more controls"
 
 
 def test_large_result_keeps_its_leading_fields_and_reports_only_omitted_values() -> None:
@@ -94,6 +95,6 @@ def test_work_feed_previews_keep_rejection_reasons_and_omit_execution_metadata()
         1,
         Succeeded('{"accepted":false,"reason":"The proposal changed.","token":"secret"}'),
     )
-    assert "No, the figures are incomplete." in message.text
-    assert "No change was made." in message.text and "The proposal changed." in message.text
-    assert "opaque" not in message.text and "secret" not in message.text
+    assert "No, the figures are incomplete." in activity_text(message)
+    assert "No change was made." in activity_text(message) and "The proposal changed." in activity_text(message)
+    assert "opaque" not in activity_text(message) and "secret" not in activity_text(message)

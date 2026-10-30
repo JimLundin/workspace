@@ -2,27 +2,7 @@
 
 from dataclasses import replace
 
-from assistant.agent_session import (
-    Answer,
-    Answered,
-    Begin,
-    ChatMessage,
-    Enqueued,
-    Failed,
-    Finished,
-    Progress,
-    ReasoningSummary,
-    RecordingUpdated,
-    Resolution,
-    Result,
-    Said,
-    Session,
-    StopRequested,
-    StreamState,
-    Succeeded,
-    ToolActivity,
-    transition,
-)
+from assistant.agent_session import Answered, Begin, ChatMessage, Enqueued, RecordingUpdated, Resolution, Result, Session, StopRequested, transition
 from assistant.notification_text import details, spans
 from assistant.notifications import (
     MAX_VISIBLE,
@@ -56,6 +36,7 @@ from assistant.notifications import (
     tone,
 )
 from assistant.recording_state import RecordingState
+from automation.presentation import Answer, Failed, Finished, Progress, ReasoningSummary, Said, StreamState, Succeeded, ToolActivity
 from automation.task import ApprovalDecision
 from tests.agent_requests import asked, reviewed
 

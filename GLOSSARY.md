@@ -138,10 +138,11 @@ _Avoid_: Task kind, agent mode
 
 **Meeting follow-up**:
 Notes, decisions, actions and unsent email drafts prepared from recordings the
-person selected. Their transcripts are frozen when it is prepared. Its agent
-sees only those sources and the follow-up's tools, and it completes only after
-its package is published and each draft's save is verified. The person reviews
-and edits the resulting actions and drafts.
+person selected. Their transcripts are frozen when it is prepared, and its
+task names that saved selection by content digest. Its agent sees only those
+sources and the follow-up's tools, and it completes only after its package is
+published and each draft's save is verified by reading back the exact draft
+revision it wrote. The person reviews and edits the resulting actions and drafts.
 _Avoid_: Meeting-notes routine, meeting summary
 
 **Meeting-notes routine**:
@@ -175,6 +176,13 @@ The owner of a group of agent tools and each tool's facts: what the model is
 offered, whether a call reads or changes state, what it holds while it runs,
 what proves its effect and what the visible log may show.
 _Avoid_: Tool table, tool registry
+
+**Web-app operation**:
+One kind of Teams, Outlook or AIP Kanban interaction in a signed-in browser
+page, declared once with its typed query, page script, application and typed
+result. In-process readers perform it with typed values; the business tool
+family offers it to the model. A model's call of one is an operation.
+_Avoid_: App command, operation name
 
 **Observed outcome**:
 Evidence about what an action actually did. An interrupted attempt can retain

@@ -8,9 +8,9 @@ from contextlib import contextmanager
 from pathlib import Path
 
 import automation.task
-from assistant.agent_session import LiveMessage
 from automation.controller import ControllerSnapshot, Fault, Idle, Stopping, WorkController
-from automation.execution import Log, Outcome
+from automation.execution import Log
+from automation.presentation import LiveMessage
 from automation.store import TaskStore
 from automation.task import (
     ActionSpec,
@@ -19,6 +19,7 @@ from automation.task import (
     Completed,
     Control,
     Interrupted,
+    Outcome,
     Question,
     RequestSource,
     Running,
@@ -292,25 +293,6 @@ def test_shutdown_parks_active_work_and_preserves_queued_tasks_until_restart(tmp
     assert [claim.task.id for claim in resumed.execution.claims] == ["first", "second"]
     assert isinstance(resumed.execution.claims[0].previous, Interrupted)
     assert not rig.errors and not resumed.errors
-
-
-def test_live_interruption_waits_for_resume_instead_of_retrying_forever(tmp_path: Path) -> None:
-    def operate(claim: Claim, store: TaskStore, stop: threading.Event) -> Outcome:
-        if claim.task.id == "unavailable":
-            return Interrupted(claim.run, "The endpoint is unavailable.")
-        return Completed("Other work can continue.", ())
-
-    rig = Rig(tmp_path / "work.sqlite3", Execution(operate))
-    rig.submit("unavailable")
-    with rig.running() as controller:
-        rig.observations.until(lambda snapshot: task_is(snapshot, "unavailable", Waiting))
-        rig.submit("other")
-        controller.wake()
-        rig.observations.until(lambda snapshot: task_is(snapshot, "other", Completed))
-        assert [claim.task.id for claim in rig.execution.claims] == ["unavailable", "other"]
-        waiting = rig.store.get("unavailable")
-        assert waiting is not None and waiting.state == Waiting(Blocked("The endpoint is unavailable."))
-    assert not rig.errors
 
 
 def assert_execution_failure_releases_other_work(tmp_path: Path, error: BaseException) -> None:

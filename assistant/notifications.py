@@ -9,24 +9,9 @@ from dataclasses import dataclass, replace
 from enum import Enum, auto
 from typing import Final, assert_never
 
-from assistant.agent_session import (
-    AgentRequest,
-    Answer,
-    Answered,
-    Cancelled,
-    ChatMessage,
-    Failed,
-    MeetingMessage,
-    ReasoningSummary,
-    Snapshot,
-    StreamState,
-    Succeeded,
-    ToolActivity,
-    ToolStatus,
-    pending,
-    presentation,
-)
+from assistant.agent_session import AgentRequest, Answered, Cancelled, ChatMessage, MeetingMessage, Snapshot, message_body, pending, presentation
 from assistant.recording_state import RecordingState, duration, phase_label
+from automation.presentation import Answer, Failed, ReasoningSummary, StreamState, Succeeded, ToolActivity, ToolStatus
 from automation.task import Approval, ApprovalDecision, Question
 
 MAX_VISIBLE: Final = 5
@@ -463,7 +448,7 @@ def body(content: Content) -> str:
         case Turn():
             return "\n\n".join(body(entry) for entry in results(content))
         case Entry(message=message):
-            return message.text
+            return message_body(message)
         case Response(text=text):
             return text
         case Recording(state):

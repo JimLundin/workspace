@@ -2,14 +2,13 @@
 
 import contextlib
 import hashlib
-import sqlite3
 import threading
 import time
 from collections import OrderedDict
 from collections.abc import Callable, Mapping
 from typing import assert_never
 
-from assistant.agent import Agent, Log
+from assistant.agent import Agent
 from assistant.agent_history import History
 from assistant.agent_tools import Machine
 from assistant.llm import Settings
@@ -17,9 +16,9 @@ from assistant.meeting_execution import MeetingWork
 from assistant.task_profiles import UNSEEN, Conversation, GeneralRun, MeetingFollowupRun, ProfileRun, RequestContext
 from assistant.workspace import Workspace
 from automation.actions import ActionError, Resources
-from automation.execution import ApprovalReview, Incomplete, Outcome, WorkExecution
+from automation.execution import ApprovalReview, Incomplete, Log, WorkExecution
 from automation.store import TaskStore
-from automation.task import Blocked, Claim, FeedHandoff, RequestKind, RequestSource, Task, Waiting, task_profile
+from automation.task import Blocked, Claim, FeedHandoff, MeetingFollowup, Outcome, RequestKind, RequestSource, Task, Waiting, task_profile
 from diagnostics import failure_info
 from usage import Detail
 
@@ -85,13 +84,13 @@ class AgentExecution:
     def profile(self, claim: Claim) -> ProfileRun:
         """The one place a task's profile selects its run."""
         match profile := task_profile(claim.task.source):
-            case RequestKind.MEETING_FOLLOWUP:
-                # A missing binding must not silently gain the general profile.
+            case MeetingFollowup():
+                # A missing or changed preparation must not silently gain the general profile.
                 if self.meeting is None:
                     raise ProfileError("Meeting follow-up is not configured for this work process.")
                 try:
-                    run = self.meeting.session(claim.task)
-                except (OSError, ValueError, sqlite3.Error) as error:
+                    run = self.meeting.session(claim.task.id, profile)
+                except (OSError, ValueError) as error:
                     raise ProfileError(f"Meeting preparation could not be opened: {error}"[:4000]) from error
                 return MeetingFollowupRun(self._conversation("task:" + claim.task.id), run)
             case RequestKind.GENERAL | FeedHandoff():

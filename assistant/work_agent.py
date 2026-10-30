@@ -14,6 +14,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import assert_never
 
+lazy import automation.presentation
 lazy from assistant import agent_session
 lazy from assistant.activity import ContextSnapshot
 lazy from assistant.agent_window import AgentWindow
@@ -41,6 +42,7 @@ lazy from automation.task import (
     Failed,
     FeedHandoff,
     Interrupted,
+    MeetingFollowup,
     Profile,
     Question,
     Reply,
@@ -190,7 +192,7 @@ class WorkAgent:
         self._rejected_input: tuple[str, str] | None = None
         self._watch_groups: dict[str, frozenset[str]] = {}
         self._watched: frozenset[str] = frozenset()
-        self._live: Callable[[agent_session.LiveMessage], None] | None = None
+        self._live: Callable[[automation.presentation.LiveMessage], None] | None = None
         self._meeting_results: dict[tuple[str, RunRef, str], MeetingSucceeded | MeetingFailed] = {}
         self.window: AgentWindow | None = None
 
@@ -256,7 +258,7 @@ class WorkAgent:
         identity = identifier(identity, "task identity")
         prompt = text(prompt, "task prompt").strip()
         match profile:
-            case RequestKind.MEETING_FOLLOWUP:
+            case MeetingFollowup():
                 # Its agent sees only the selected recordings.
                 captured = None
             case RequestKind.GENERAL | FeedHandoff():
@@ -580,19 +582,17 @@ class WorkAgent:
             if self._displayed is None or self._displayed.id != task.id or self.window is None or self._closing.is_set():
                 return
             match event.event:
-                case agent_session.Begin():
-                    pass  # The persisted task already introduced this turn.
-                case agent_session.Progress(text):
+                case automation.presentation.Progress(text):
                     self.window.step(text)
-                case agent_session.Said(text, _):
+                case automation.presentation.Said(text, _):
                     self.window.say(text)
-                case agent_session.Done():
+                case automation.presentation.Done():
                     pass  # A durable outcome, not a late live frame, completes work.
-                case agent_session.Problem(text, _):
+                case automation.presentation.Problem(text, _):
                     self.window.problem(text)
-                case agent_session.Finished():
+                case automation.presentation.Finished():
                     pass
-                case agent_session.Answer() | agent_session.ReasoningSummary() | agent_session.ToolActivity():
+                case automation.presentation.Answer() | automation.presentation.ReasoningSummary() | automation.presentation.ToolActivity():
                     if self._live is not None:
                         self._live(event.event)
                 case _:

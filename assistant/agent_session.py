@@ -5,13 +5,27 @@ Replaying the same events against a session always gives the same result.
 """
 
 from dataclasses import dataclass, field, replace
-from enum import Enum, auto
 from typing import Literal, assert_never
 
 from assistant import action_text
 from assistant.card_actions import OpenCanvas, encode
 from assistant.feed_origin import FeedRequest
 from assistant.recording_state import RecordingState
+from automation.presentation import (
+    Answer,
+    Done,
+    Failed,
+    Finished,
+    LiveMessage,
+    Problem,
+    Progress,
+    ReasoningSummary,
+    Said,
+    StreamState,
+    Succeeded,
+    ToolActivity,
+    ToolStatus,
+)
 from automation.task import Approval, ApprovalDecision, Question
 
 type Result = Literal["Ready", "Stopped", "Needs attention"]
@@ -42,73 +56,6 @@ class ChatMessage:
     text: str
     created_at: float
     source: FeedRequest | None = None
-
-
-class StreamState(Enum):
-    RUNNING = auto()
-    COMPLETE = auto()
-    INTERRUPTED = auto()
-
-
-@dataclass(frozen=True, slots=True)
-class Answer:
-    identity: str
-    text: str
-    created_at: float
-    state: StreamState = StreamState.RUNNING
-
-
-@dataclass(frozen=True, slots=True)
-class ReasoningSummary:
-    identity: str
-    text: str
-    created_at: float
-    state: StreamState = StreamState.RUNNING
-
-
-class ToolStatus(Enum):
-    RUNNING = auto()
-    CANCELLED = auto()
-
-
-@dataclass(frozen=True, slots=True)
-class Succeeded:
-    text: str
-
-
-@dataclass(frozen=True, slots=True)
-class Failed:
-    text: str
-
-
-type ToolOutcome = ToolStatus | Succeeded | Failed
-
-
-@dataclass(frozen=True, slots=True)
-class ToolActivity:
-    identity: str
-    name: str
-    detail: str
-    created_at: float
-    outcome: ToolOutcome = ToolStatus.RUNNING
-
-    @property
-    def text(self) -> str:
-        detail = action_text.arguments(self.name, self.detail)
-        match self.outcome:
-            case ToolStatus.RUNNING:
-                return detail
-            case Succeeded(text):
-                return "\n".join(part for part in (detail, action_text.result(self.name, text)) if part)
-            case Failed(text):
-                return "\n".join(part for part in (detail, action_text.readable(text)) if part)
-            case ToolStatus.CANCELLED:
-                return detail
-            case _:
-                assert_never(self.outcome)
-
-
-type LiveMessage = Answer | ReasoningSummary | ToolActivity
 
 
 @dataclass(frozen=True, slots=True)
@@ -161,17 +108,6 @@ class Enqueued:
 
 
 @dataclass(frozen=True, slots=True)
-class Progress:
-    text: str
-
-
-@dataclass(frozen=True, slots=True)
-class Said:
-    text: str
-    at: float
-
-
-@dataclass(frozen=True, slots=True)
 class CanvasNotice:
     title: str
     target: str
@@ -181,23 +117,6 @@ class CanvasNotice:
 @dataclass(frozen=True, slots=True)
 class CanvasSettled:
     targets: frozenset[str]
-
-
-@dataclass(frozen=True, slots=True)
-class Done:
-    text: str
-    at: float
-
-
-@dataclass(frozen=True, slots=True)
-class Problem:
-    text: str
-    at: float
-
-
-@dataclass(frozen=True, slots=True)
-class Finished:
-    pass
 
 
 @dataclass(frozen=True, slots=True)
@@ -479,6 +398,30 @@ def reply_text(reply: Reply) -> str:
             assert_never(reply)
 
 
+def activity_text(activity: ToolActivity) -> str:
+    detail = action_text.arguments(activity.name, activity.detail)
+    match activity.outcome:
+        case ToolStatus.RUNNING | ToolStatus.CANCELLED:
+            return detail
+        case Succeeded(text):
+            return "\n".join(part for part in (detail, action_text.result(activity.name, text)) if part)
+        case Failed(text):
+            return "\n".join(part for part in (detail, action_text.readable(text)) if part)
+        case _:
+            assert_never(activity.outcome)
+
+
+def message_body(message: Message) -> str:
+    """The visible text of a timeline message."""
+    match message:
+        case ToolActivity():
+            return activity_text(message)
+        case ChatMessage() | Answer() | ReasoningSummary() | MeetingMessage() | AgentRequest():
+            return message.text
+        case _:
+            assert_never(message)
+
+
 def message_text(message: Message) -> str:
     parts: tuple[str, ...]
     match message:
@@ -489,7 +432,7 @@ def message_text(message: Message) -> str:
         case ReasoningSummary(text=text):
             parts = ("Reasoning summary", text)
         case ToolActivity(name=name):
-            parts = (name, message.text)
+            parts = (name, activity_text(message))
         case MeetingMessage(text=text):
             parts = ("Meeting", text)
         case AgentRequest(detail=detail, reply=Answered(answer)):

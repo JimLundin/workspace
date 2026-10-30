@@ -292,11 +292,16 @@ def test_browser_snapshot_limits_keep_valid_json_and_progress_offsets(tmp_path: 
         "title": "Fixture",
         "url": "https://example.com",
         "text": "\x00" * 6000,
+        "text_offset": 0,
         "text_total": 7000,
-        "controls": [{"id": str(i), "name": "n" * 300} for i in range(100)],
+        "controls": [
+            {"id": str(i), "tag": "a", "role": "", "type": "", "name": "n" * 300, "value": "", "href": "", "disabled": False, "checked": False}
+            for i in range(100)
+        ],
         "offset": 4,
         "total": 104,
         "more_controls": False,
+        "scan_limited": False,
     }
     channel = Channel.results(
         {"targetInfos": [{"type": "page", "targetId": "fixture"}]},

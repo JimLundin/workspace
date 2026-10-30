@@ -17,8 +17,8 @@ from assistant.agent_toolsets import General, MeetingFollowupTools
 from assistant.meeting_execution import MeetingRun
 from assistant.self_change_tools import verified_installation
 from assistant.workspace import Workspace
-from automation.execution import Outcome, WorkExecution
-from automation.task import Waiting
+from automation.execution import WorkExecution
+from automation.task import Outcome, Waiting
 
 
 @dataclass(frozen=True, slots=True)

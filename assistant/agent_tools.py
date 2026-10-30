@@ -19,8 +19,9 @@ from assistant.geometry import Shot
 from assistant.llm import Json, ToolSpec
 from automation.actions import Classification, Operation
 from automation.execution import Proof, Readback, Targets
-from automation.task import ActionNotApplied, ActionUncertain, ActionVerified, NoVerification, Verification
+from automation.task import ActionNotApplied, ActionUncertain, ActionVerified, FileDigest, MailTarget, NoVerification
 from winapi.shapes import Rect, Window
+lazy from assistant.web_apps import Located, WebAppOperation
 
 _ARGUMENTS = TypeAdapter(dict[str, Json], config=ConfigDict(allow_inf_nan=False))
 
@@ -46,7 +47,10 @@ class Machine(Protocol):
     def window_action(self, handle: int, action: str, bounds: Rect | None = None) -> str: ...
     def inspect_ui(self, request: dict[str, Json], cancel: threading.Event) -> tuple[int, str]: ...
     def browse(self, operation: str, arguments: dict[str, Json], cancel: threading.Event) -> tuple[str, bytes | None]: ...
-    def teams(self, operation: str, arguments: dict[str, Json], cancel: threading.Event) -> str: ...
+    def web_app[Q: Located, R](self, operation: WebAppOperation[Q, R], query: Q, cancel: threading.Event) -> R:
+        """A typed Teams, Outlook or Kanban operation in the signed-in browser."""
+        ...
+
     def meeting(self, operation: str, source: str = "both", title: str = "Meeting") -> str: ...
     def move_mouse(self, x: int, y: int) -> None: ...
     def mouse_button(self, button: str, *, down: bool) -> None: ...
@@ -130,7 +134,17 @@ class Args:
 
 
 type Verifier = Callable[[Output], ActionVerified | ActionUncertain | ActionNotApplied]
-type Verify = Verification | Verifier
+
+
+@dataclass(frozen=True, slots=True)
+class AdapterReadback:
+    """The adapter confirms its own result; a later run verifies the attempt by reading back `target` again."""
+
+    target: MailTarget
+    confirm: Verifier
+
+
+type Verify = NoVerification | FileDigest | Verifier | AdapterReadback
 """A durable digest the journal checks, or the adapter's own confirmation of its result."""
 
 

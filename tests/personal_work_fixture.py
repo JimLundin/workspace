@@ -9,10 +9,12 @@ from pydantic import TypeAdapter
 from assistant.browser import BrowserResult
 from assistant.browser_values import BrowserError
 from assistant.llm import Json
-from assistant.personal_work_sources import Observations, observed_source
+from assistant.personal_work_sources import Observations, Tab, Tabs, observed_source
+from assistant.web_apps import Located, WebAppOperation
 from automation.personal_work import SourceKind, WorkSource
 
 WIRE = TypeAdapter(dict[str, Json])
+TABS = TypeAdapter(Tabs)
 
 
 def source(kind: SourceKind, identity: str = "one", at: float = 10) -> WorkSource:
@@ -49,11 +51,17 @@ class CapturedSources:
 
 
 class CapturedBrowser:
-    """Own a concrete response catalog and an observable browser-request log."""
+    """Own typed page observations and an observable log of the queries that read them.
 
-    def __init__(self, responses: Mapping[tuple[str, str, int], dict[str, Json] | BrowserError]) -> None:
-        self.responses = responses
-        self.calls: list[tuple[str, str, int]] = []
+    Each answer must be an instance of its operation's result type, so a
+    fixture cannot drift from the shape the real page script is checked against.
+    """
+
+    def __init__(self, tabs: tuple[Tab, ...] | BrowserError, answers: Mapping[Located, object]) -> None:
+        self.tabs = tabs
+        self.answers = answers
+        self.queries: list[Located] = []
+        self.tab_reads = 0
         self.connections = 0
         self.closed = 0
 
@@ -61,14 +69,21 @@ class CapturedBrowser:
         self.connections += 1
 
     def request(self, operation: str, args: dict[str, Json], cancel: threading.Event) -> BrowserResult:
-        target, offset = args.get("target_id", ""), args.get("offset", 0)
-        assert isinstance(target, str) and isinstance(offset, int)
-        key = (operation, target, offset)
-        self.calls.append(key)
-        response = self.responses[key]
-        if isinstance(response, BrowserError):
-            raise response
-        return BrowserResult(WIRE.dump_json(response).decode())
+        assert operation == "tabs"
+        self.tab_reads += 1
+        match self.tabs:
+            case BrowserError() as error:
+                raise error
+            case tabs:
+                return BrowserResult(TABS.dump_json(Tabs(tabs)).decode())
+
+    def web_app[Q: Located, R](self, operation: WebAppOperation[Q, R], query: Q, cancel: threading.Event) -> R:
+        self.queries.append(query)
+        match self.answers[query]:
+            case BrowserError() as error:
+                raise error
+            case answer:
+                return operation.result.validate_python(answer)
 
     def close(self) -> None:
         self.closed += 1

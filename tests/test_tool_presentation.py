@@ -4,8 +4,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from assistant import notification_text
-from assistant.agent_session import Answer, StreamState, Succeeded, ToolActivity
 from assistant.notifications import Entry, Settled, Turn
+from automation.presentation import Answer, StreamState, Succeeded, ToolActivity
 from tests.fake_endpoint import fake_endpoint
 from tests.json_fixture import json_object, json_rows
 from tests.test_agent import Rig, ToolRig, calls, durable, says

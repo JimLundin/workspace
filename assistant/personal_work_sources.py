@@ -6,6 +6,7 @@ saved evidence. CDP targets belong to this observation and are never persisted.
 """
 
 import threading
+from collections.abc import Iterable
 from dataclasses import dataclass, replace
 from typing import Protocol, assert_never
 from urllib.parse import urlsplit
@@ -15,13 +16,38 @@ from pydantic import TypeAdapter
 from assistant.browser import BrowserResult
 from assistant.browser_values import BrowserError
 from assistant.llm import Json
+from assistant.web_apps import (
+    KANBAN_BOARD,
+    OUTLOOK_READ,
+    TEAMS_READ,
+    Board,
+    BoardQuery,
+    Located,
+    Mailbox,
+    MailList,
+    TeamsPage,
+    TeamsQuery,
+    WebAppOperation,
+)
 from automation.personal_work import SourceKind, WorkSource, source_id, source_revision
 
 
 class BrowserPort(Protocol):
     def connect(self, cancel: threading.Event) -> None: ...
     def request(self, operation: str, args: dict[str, Json], cancel: threading.Event) -> BrowserResult: ...
+    def web_app[Q: Located, R](self, operation: WebAppOperation[Q, R], query: Q, cancel: threading.Event) -> R: ...
     def close(self) -> None: ...
+
+
+class Piece(Protocol):
+    """An individually identified message within an observed conversation."""
+
+    @property
+    def identity(self) -> str: ...
+    @property
+    def sender(self) -> str: ...
+    @property
+    def text(self) -> str: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -36,62 +62,6 @@ class Tabs:
 
 
 @dataclass(frozen=True, slots=True)
-class Card:
-    task_id: str
-    title: str
-    column: str
-    text: str
-
-
-@dataclass(frozen=True, slots=True)
-class Board:
-    tasks: tuple[Card, ...]
-    next_offset: int | None = None
-
-
-@dataclass(frozen=True, slots=True)
-class Chat:
-    identity: str
-    title: str
-
-
-@dataclass(frozen=True, slots=True)
-class Message:
-    identity: str
-    sender: str
-    text: str
-
-
-@dataclass(frozen=True, slots=True)
-class Teams:
-    current: str
-    title: str
-    conversations: tuple[Chat, ...]
-    messages: tuple[Message, ...]
-
-
-@dataclass(frozen=True, slots=True)
-class Mail:
-    conversation_id: str
-    preview: str
-
-
-@dataclass(frozen=True, slots=True)
-class SelectedMail:
-    conversation_id: str
-    subject: str
-    text: str
-    messages: tuple[Message, ...] = ()
-
-
-@dataclass(frozen=True, slots=True)
-class Outlook:
-    conversations: tuple[Mail, ...]
-    selected: SelectedMail | None
-    next_offset: int | None = None
-
-
-@dataclass(frozen=True, slots=True)
 class Observations:
     sources: tuple[WorkSource, ...]
     coverage: tuple[str, ...]
@@ -99,9 +69,6 @@ class Observations:
 
 
 _TABS = TypeAdapter(Tabs)
-_BOARD = TypeAdapter(Board)
-_TEAMS = TypeAdapter(Teams)
-_OUTLOOK = TypeAdapter(Outlook)
 
 
 def kind_for(url: str) -> SourceKind | None:
@@ -134,7 +101,7 @@ def board_sources(board: Board, tab: Tab, at: float) -> tuple[WorkSource, ...]:
     )
 
 
-def teams_sources(teams: Teams, tab: Tab, at: float) -> tuple[WorkSource, ...]:
+def teams_sources(teams: TeamsPage, tab: Tab, at: float) -> tuple[WorkSource, ...]:
     # Title-only sidebar entries are locators, not evidence of an obligation.
     # The selected conversation's actual rendered messages can connect work.
     if not teams.current or not teams.messages:
@@ -149,7 +116,7 @@ def mail_title(preview: str) -> str:
     return " · ".join(line for line in lines[:4] if line not in ("External", "Inbox"))[:240] or "Outlook conversation"
 
 
-def outlook_sources(outlook: Outlook, tab: Tab, at: float) -> tuple[WorkSource, ...]:
+def outlook_sources(outlook: Mailbox, tab: Tab, at: float) -> tuple[WorkSource, ...]:
     origin = urlsplit(tab.url)
     mailbox = f"https://{origin.hostname}/mail/"
     selected = outlook.selected
@@ -172,7 +139,7 @@ def outlook_sources(outlook: Outlook, tab: Tab, at: float) -> tuple[WorkSource, 
     return (*sources, *message_sources(conversation, selected.messages)) if conversation is not None and selected is not None else sources
 
 
-def message_sources(conversation: WorkSource, messages: tuple[Message, ...]) -> tuple[WorkSource, ...]:
+def message_sources(conversation: WorkSource, messages: Iterable[Piece]) -> tuple[WorkSource, ...]:
     return tuple(
         replace(
             observed_source(
@@ -227,24 +194,20 @@ class BrowserSources:
                         for _ in range(3):
                             if cancel.is_set():
                                 break
-                            result = _BOARD.validate_json(
-                                self.browser.request("kanban_board", {"target_id": tab.id, "offset": offset, "limit": 30}, cancel).text
-                            )
+                            result = self.browser.web_app(KANBAN_BOARD, BoardQuery(tab.id, offset=offset, limit=30), cancel)
                             sources = (*sources, *board_sources(result, tab, at))
                             if result.next_offset is None:
                                 break
                             offset = result.next_offset
                     case SourceKind.TEAMS:
-                        result_teams = _TEAMS.validate_json(self.browser.request("teams_web_read", {"target_id": tab.id}, cancel).text)
+                        result_teams = self.browser.web_app(TEAMS_READ, TeamsQuery(tab.id), cancel)
                         sources = (*sources, *teams_sources(result_teams, tab, at))
                     case SourceKind.OUTLOOK:
                         offset = 0
                         for _ in range(3):
                             if cancel.is_set():
                                 break
-                            result_mail = _OUTLOOK.validate_json(
-                                self.browser.request("outlook_web_read", {"target_id": tab.id, "offset": offset, "limit": 20}, cancel).text
-                            )
+                            result_mail = self.browser.web_app(OUTLOOK_READ, MailList(tab.id, offset=offset, limit=20), cancel)
                             sources = (*sources, *outlook_sources(result_mail, tab, at))
                             if result_mail.next_offset is None:
                                 break

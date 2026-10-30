@@ -22,14 +22,14 @@ from pydantic import ConfigDict, TypeAdapter
 from assistant import action_text
 from assistant.activity import ContextSnapshot
 from assistant.agent_history import History
-from assistant.agent_session import Failed, LiveMessage, Succeeded, ToolActivity, ToolStatus
-from assistant.agent_tools import Args, ArgumentError, Display, Machine, Output, Tool, Verify
+from assistant.agent_tools import AdapterReadback, Args, ArgumentError, Display, Machine, Output, Tool, Verify
 from assistant.desktop_tools import Screen
 from assistant.llm import Json, Settings, ToolCall
 from assistant.publishing import PublishError
 from assistant.workspace import SourceError
 from automation.actions import ActionError, Change, Observation, Operation
-from automation.execution import Proof, Report, ReportStatus, Targets, WorkExecution
+from automation.execution import Log, Proof, Report, ReportStatus, Targets, WorkExecution
+from automation.presentation import Failed, Succeeded, ToolActivity, ToolStatus
 from automation.task import FileDigest, NoVerification
 from config import AGENT_MAX_STEPS
 lazy from assistant import sdk
@@ -38,16 +38,6 @@ KEPT_SCREENSHOTS: Final = 2
 """Screenshots kept in the conversation; older ones are replaced by a note, to save space."""
 
 _ARGUMENTS = TypeAdapter(dict[str, Json], config=ConfigDict(allow_inf_nan=False))
-
-
-class Log(Protocol):
-    """Where the user watches the agent work."""
-
-    def step(self, text: str, /) -> None: ...
-    def say(self, text: str, /) -> None: ...
-    def updates(self) -> Callable[[LiveMessage], None]: ...
-    def problem(self, text: str, /) -> None: ...
-    def done(self, text: str, /) -> None: ...
 
 
 def registry(tools: Iterable[Tool]) -> frozendict[str, Tool]:
@@ -233,6 +223,9 @@ class Agent:
                 match verify:
                     case NoVerification() | FileDigest():
                         return self.work.actions.execute(change.specification(operation, verify), perform, lambda result: result.ok, self.stop)
+                    case AdapterReadback(target, confirm):
+                        specification = change.specification(operation, target)
+                        return self.work.actions.execute(specification, perform, lambda result: result.ok, self.stop, verify=confirm)
                     case _:
                         specification = change.specification(operation, NoVerification.NONE)
                         return self.work.actions.execute(specification, perform, lambda result: result.ok, self.stop, verify=verify)

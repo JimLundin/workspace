@@ -15,11 +15,11 @@ def test_listening_and_meeting_capture_remain_independently_visible() -> None:
     view = toolbar(State.LISTENING, RecordingState(phase="recording", seconds=125), enabled=True, layer=None)
     assert isinstance(view.activity, Activity)
     assert view.activity.title == "Listening"
-    assert view.activity.can_stop
+    assert view.activity.stop == "Stop speech capture"
     assert view.capture is not None and view.capture.title == "02:05" and view.capture.can_stop
     working = toolbar(State.AGENT, RecordingState(phase="recording", seconds=125), enabled=True, layer=None)
     assert isinstance(working.activity, Activity)
-    assert working.activity.can_stop and working.capture == view.capture
+    assert working.activity.stop == "Stop agent work" and working.capture == view.capture
 
 
 def test_only_temporary_keyboard_modes_occupy_space() -> None:
