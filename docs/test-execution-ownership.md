@@ -27,7 +27,7 @@ The additional inventory was reviewed against these resource owners:
 | `test_selfcheck`, `test_workspace` | Real candidate interpreters and source files under each temporary directory. The checked repository supplies runner source only. No installed application updates. |
 | `test_computer_tools`, `test_background_agent`, `test_features` | Explicit fake machine/window adapters, real SDK calls to private localhost endpoints. No native windows, browser launches or input injection. |
 | `test_llm` | Loopback HTTP servers with OS-assigned ports, bounded real clients, fixture credentials and explicit shutdown. |
-| `test_feed_triage_service`, `test_console_inbox` | Private loopback transports and temporary endpoint files; fictional sources, explicit stores/callbacks/waits. No installation bridge file. |
+| `test_feed_triage_service`, `test_console_inbox`, `test_local_bridge` | Private loopback transports and temporary endpoint files; fictional sources, explicit stores/callbacks/waits. No installation bridge file. |
 | `test_work_execution`, `test_work_agent`, `test_work_submissions` | Temporary SQLite journals, private candidate source, explicit bridge/window/machine adapters. Worker threads and transport servers close before their fixture exits. |
 | `test_commands` | Python child processes owned by the real command runner's jobs, temporary marker files and OS-assigned loopback ports. Cancellation closes only owned children. |
 | `test_project_context`, `test_routines` | Temporary SQLite journals and watched files, explicit timestamps and transcript observations. |
