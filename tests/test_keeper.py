@@ -633,8 +633,10 @@ def test_undo_survives_keeper_restart(tmp_path: Path) -> None:
     keeper.tick(1)
     installed(world, keeper)
     keeper.request(Keep(), now=30)
+    world.take()
     restarted = Keeper(world, recovery)
     restarted.recover()
+    assert world.take() == []  # a kept change stays installed on the next launch
     restarted.request(Undo(), now=40)
     assert "restore v1" in world.log
 
