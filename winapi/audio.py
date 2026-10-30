@@ -84,12 +84,16 @@ class MMTIME(ctypes.Structure):
 
 
 _waveInGetPosition = fn(winmm, "waveInGetPosition", wintypes.UINT, _HWAVEIN, ctypes.POINTER(MMTIME), wintypes.UINT)
+_waveInMessage = fn(winmm, "waveInMessage", wintypes.UINT, _HWAVEIN, wintypes.UINT, ctypes.c_void_p, ctypes.c_void_p)
 
 _WAVE_MAPPER: Final = 0xFFFF_FFFF
 _WAVE_FORMAT_PCM: Final = 1
 _CALLBACK_EVENT: Final = 0x0005_0000
 _WHDR_DONE: Final = 0x01
 _RETURN_TIMEOUT_MS: Final = 1000
+_DRVM_MAPPER_PREFERRED_GET: Final = 0x2015
+_DRV_QUERYFUNCTIONINSTANCEID: Final = 0x0811
+_DRV_QUERYFUNCTIONINSTANCEIDSIZE: Final = 0x0812
 
 
 class InputDriver(Protocol):
@@ -109,6 +113,9 @@ class InputDriver(Protocol):
     def close(self, handle: wintypes.HANDLE) -> int: ...
     def position(self, handle: wintypes.HANDLE, result: MMTIME) -> int: ...
     def wait(self, event: EventHandle, timeout_ms: int) -> bool: ...
+    def device(self) -> str | None:
+        """The capture endpoint the mapper would open now; None when it can't be observed."""
+        ...
 
 
 class WaveInput:
@@ -145,14 +152,51 @@ class WaveInput:
     def wait(self, event: EventHandle, timeout_ms: int) -> bool:
         return wait_any([event], timeout_ms=timeout_ms) is not None
 
+    def device(self) -> str | None:
+        index, flags = wintypes.DWORD(), wintypes.DWORD()
+        if _waveInMessage(_HWAVEIN(_WAVE_MAPPER), _DRVM_MAPPER_PREFERRED_GET, ctypes.byref(index), ctypes.byref(flags)):
+            return None
+        # A device message addresses the device by its ID in the handle position.
+        device = _HWAVEIN(index.value)
+        size = wintypes.DWORD()
+        if _waveInMessage(device, _DRV_QUERYFUNCTIONINSTANCEIDSIZE, ctypes.byref(size), None) or not 0 < size.value <= 4096:
+            return None
+        endpoint = ctypes.create_unicode_buffer(size.value // ctypes.sizeof(ctypes.c_wchar) + 1)
+        if _waveInMessage(device, _DRV_QUERYFUNCTIONINSTANCEID, endpoint, size.value):
+            return None
+        return endpoint.value or None
+
+
+def follows_default(opened: str | None, current: str | None) -> bool:
+    """Reopen when the default capture endpoint is known to differ from the opened one.
+
+    An unobservable default keeps the open handle rather than paying a reopen on every press.
+    """
+    return current is not None and current != opened
+
 
 class Microphone:
     """Records the default microphone as 16-bit mono PCM into one buffer, allocated
     once. Windows sets `event` whenever the recording changes state, including when
     the buffer is full. Opened at construction and kept ready until `close`, but
-    only records between `start` and `stop`."""
+    only records between `start` and `stop`. After the default capture device
+    changes, `follow_default` or the next press reopens on the new default, so
+    dictation and the level meter observe the device Windows now selects."""
 
-    __slots__ = ("_buffer", "_driver", "_format", "_handle", "_header", "_last_position", "_lock", "_prepared", "_queued", "_stopping", "event")
+    __slots__ = (
+        "_buffer",
+        "_device",
+        "_driver",
+        "_format",
+        "_handle",
+        "_header",
+        "_last_position",
+        "_lock",
+        "_prepared",
+        "_queued",
+        "_stopping",
+        "event",
+    )
 
     # The buffer format/capacity, completion event and native driver jointly
     # define one recording lifetime; the driver remains a keyword-only port.
@@ -167,6 +211,8 @@ class Microphone:
         self._stopping = False
         self._lock = threading.RLock()
         self._last_position = 0
+        self._device: str | None = None
+        """The capture endpoint that was the default when the handle opened."""
         self.event = event
         # Opening a device can take a second. Pay that cost before the talk key is
         # pressed; start() retries and reports the error if it isn't available yet.
@@ -175,9 +221,10 @@ class Microphone:
     def _open(self) -> int:
         if self._handle:
             return 0
+        device = self._driver.device()
         error, handle = self._driver.open(self._format, self.event)
         if not error:
-            self._handle = handle
+            self._handle, self._device = handle, device
         return error
 
     def start(self) -> int:
@@ -193,6 +240,8 @@ class Microphone:
                 self.stop()  # finish cleanup after a failed stop before reusing its buffer
             except OSError as problem:
                 return problem.errno or 1
+        if self._handle and follows_default(self._device, self._driver.device()):
+            self.close()
         if error := self._open():
             return error
         self._header = WAVEHDR(ctypes.addressof(self._buffer), len(self._buffer))
@@ -208,6 +257,23 @@ class Microphone:
         if error := self._driver.start(self._handle):
             self.close()
         return error
+
+    def follow_default(self) -> None:
+        """Reopen an idle handle on a changed default capture device.
+
+        Called periodically, so the first press after a change doesn't lose its
+        opening words to the open. A press or release in progress keeps the lock;
+        a recording or a closed handle is left to the next start.
+        """
+        if not self._lock.acquire(blocking=False):
+            return
+        try:
+            if self._prepared or not self._handle or not follows_default(self._device, self._driver.device()):
+                return
+            self.close()
+            self._open()
+        finally:
+            self._lock.release()
 
     def full(self) -> bool:
         return bool(self._header.dwFlags & _WHDR_DONE)
@@ -281,3 +347,23 @@ class Microphone:
                 self.stop()
                 self._driver.close(self._handle)
                 self._handle = _HWAVEIN()
+
+
+class DefaultFollower:
+    """Owns the thread that keeps one microphone on the current default capture device."""
+
+    __slots__ = ("_closing", "_thread")
+
+    def __init__(self, microphone: Microphone, interval: float = 2.0) -> None:
+        self._closing = threading.Event()
+        self._thread = threading.Thread(target=self._run, args=(microphone, interval), name="microphone default follower", daemon=True)
+        self._thread.start()
+
+    def _run(self, microphone: Microphone, interval: float) -> None:
+        while not self._closing.wait(interval):
+            microphone.follow_default()
+
+    def close(self) -> None:
+        """Returns once no reopen is in progress, so the microphone can close next."""
+        self._closing.set()
+        self._thread.join(timeout=2)

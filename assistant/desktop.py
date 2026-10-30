@@ -38,7 +38,7 @@ def _shortcut(vk: int) -> None:
 
 
 class WinDesktop:
-    __slots__ = ("mic", "on_notify", "on_problem", "on_state", "owner", "tiling", "ui")
+    __slots__ = ("mic", "mic_follower", "on_notify", "on_problem", "on_state", "owner", "tiling", "ui")
 
     def __init__(
         self,
@@ -54,6 +54,8 @@ class WinDesktop:
         self.owner = owner
         """The assistant's window: it owns what we put on the clipboard."""
         self.mic = mic
+        self.mic_follower = audio.DefaultFollower(mic)
+        """Keeps dictation and the level meter on the current default capture device."""
         self.ui = ui
         self.on_state = on_state
         self.on_notify = on_notify
@@ -69,6 +71,10 @@ class WinDesktop:
 
     def stop_listening(self) -> bytes:
         return self.mic.stop()
+
+    def close_microphone(self) -> None:
+        self.mic_follower.close()
+        self.mic.close()
 
     # ---- text in other programs --------------------------------------------------------
 
