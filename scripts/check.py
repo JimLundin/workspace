@@ -25,7 +25,7 @@ lazy from concurrent.futures import ProcessPoolExecutor
 from pydantic import TypeAdapter, ValidationError
 
 from scripts.architecture import Report, dependencies, module_name, review
-from scripts.deploy_files import file_at, read, sha, source_map, write
+from scripts.deploy_files import CheckedArchitecture, CheckReceipt, file_at, read, sha, source_map, write, write_receipt
 from scripts.development_paths import LIVE, PROFILE
 from scripts.source_analysis import Cache
 lazy import selfcheck
@@ -500,20 +500,19 @@ def publish_check(options: Options, run: CheckRun) -> bool:
     for seconds, name in sorted((item for item in observations if not item[1].startswith(("phase:", "module:", "worker:module:"))), reverse=True)[:5]:
         print(f"{seconds:.3f}s {name}")
     if not failures and options.receipt:
-        write(
+        write_receipt(
             options.receipt,
-            {
-                "kind": "workspace-edit-check-v1",
-                "files": dict(run.files),
-                "tests": run.selection.tests,
-                "profile": run.selection.reason,
-                "platform": "win32" if options.native else sys.platform,
-                "passed": passed,
-                "skipped": skipped,
-                "architecture": {"sources": len(run.architecture.sources), "exceptions": len(run.architecture.exceptions)},
-                "elapsed_seconds": run.elapsed,
-                "checked_at_ns": time.time_ns(),
-            },
+            CheckReceipt(
+                files=frozendict(run.files),
+                tests=run.selection.tests,
+                profile=run.selection.reason,
+                platform="win32" if options.native else sys.platform,
+                passed=passed,
+                skipped=skipped,
+                architecture=CheckedArchitecture(sources=len(run.architecture.sources), exceptions=len(run.architecture.exceptions)),
+                elapsed_seconds=run.elapsed,
+                checked_at_ns=time.time_ns(),
+            ),
         )
     return bool(failures)
 

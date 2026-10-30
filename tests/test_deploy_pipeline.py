@@ -13,7 +13,21 @@ from pathlib import Path, PureWindowsPath
 
 from scripts import deploy
 from scripts.deploy_archive import repack
-from scripts.deploy_files import HELPERS, PINS, file_at, files, member, names, sha, source_map, write, zip_files
+from scripts.deploy_files import (
+    HELPERS,
+    PINS,
+    CheckedArchitecture,
+    CheckReceipt,
+    file_at,
+    files,
+    member,
+    names,
+    sha,
+    source_map,
+    write,
+    write_receipt,
+    zip_files,
+)
 from scripts.deploy_policy import ComponentRestart, FullRestart, restart_plan
 from scripts.deploy_processes import Observation, Process, installed_processes, role_for
 from scripts.deploy_values import Prepared, Stopped
@@ -158,7 +172,20 @@ def test_staging_includes_nested_native_helpers_and_the_checked_source(tmp_path:
         shutil.copyfile(root / name, target)
     wanted = files(source, skip_roots=(".git",))
     receipt = tmp_path / "checked.json"
-    write(receipt, {"kind": "workspace-edit-check-v1", "tests": [], "files": wanted, "passed": 1})
+    write_receipt(
+        receipt,
+        CheckReceipt(
+            files=frozendict(wanted),
+            tests=(),
+            profile="explicit iteration scope",
+            platform="win32",
+            passed=1,
+            skipped=0,
+            architecture=CheckedArchitecture(sources=1, exceptions=0),
+            elapsed_seconds=1.0,
+            checked_at_ns=1,
+        ),
+    )
     stage = tmp_path / "workspace-source-test"
     command = (
         "from runtime import activate; activate(); from pathlib import Path; import sys; "

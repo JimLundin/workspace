@@ -8,8 +8,10 @@ import stat
 import zipfile
 from collections.abc import Collection, Iterable, Iterator, Mapping
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path, PurePosixPath
+from typing import Literal
 
 from pydantic import TypeAdapter, ValidationError
 
@@ -36,6 +38,31 @@ HELPERS = (
 )
 RECORD = TypeAdapter[dict[str, object]](dict[str, object])
 SOURCE_HASHES = TypeAdapter[dict[str, str]](dict[str, str])
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class CheckedArchitecture:
+    sources: int
+    exceptions: int
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class CheckReceipt:
+    """A successful scripts.check run, bound to the exact source bytes it checked."""
+
+    files: frozendict[str, str]
+    tests: tuple[str, ...]
+    profile: str
+    platform: str
+    passed: int
+    skipped: int
+    architecture: CheckedArchitecture
+    elapsed_seconds: float
+    checked_at_ns: int
+    kind: Literal["workspace-edit-check-v1"] = "workspace-edit-check-v1"
+
+
+CHECK_RECEIPT = TypeAdapter[CheckReceipt](CheckReceipt)
 
 
 def sha(path: Path) -> str:
@@ -170,12 +197,28 @@ def zip_files(path: Path, root: str = "workspace", *, source_only: bool = False)
     return dict(sorted(result.items()))
 
 
+def write_receipt(path: Path, receipt: CheckReceipt) -> None:
+    write(path, CHECK_RECEIPT.dump_python(receipt, mode="json"))
+
+
+def read_receipt(path: Path) -> CheckReceipt:
+    try:
+        return CHECK_RECEIPT.validate_json(path.read_bytes(), strict=True)
+    except ValidationError as error:
+        raise ValueError("Supply a successful scripts.check source-bound receipt.") from error
+
+
 def source_map(value: object) -> dict[str, str]:
     try:
         record = RECORD.validate_python(value, strict=True)
         result = SOURCE_HASHES.validate_python(record.get("files"), strict=True)
     except ValidationError as error:
         raise ValueError("Supply a nonempty source manifest with a files-to-SHA-256 object.") from error
+    return checked_sources(result)
+
+
+def checked_sources(result: Mapping[str, str]) -> dict[str, str]:
+    """A release's source manifest: hashed source files only, including the runtime pins."""
     if not result:
         raise ValueError("Supply a nonempty source manifest with a files-to-SHA-256 object.")
     names(result)
