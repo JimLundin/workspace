@@ -8,7 +8,7 @@ from assistant import outlook
 from assistant.llm import Json
 from assistant.meeting_followup import CaptureNotice, EmailAddress, NoCaptureNotice, draft_data, followup_data, parse_followup
 from assistant.meeting_followup_store import FollowupStore, Publication, PublishedFollowup
-from assistant.meeting_requests import MeetingRequests, PreparedFollowup, task_identity
+from assistant.meeting_preparation import Preparations, PreparedFollowup
 from automation.actions import ActionError
 from automation.execution import Outcome, WorkExecution
 from automation.task import (
@@ -19,8 +19,8 @@ from automation.task import (
     Completed,
     FileDigest,
     MailTarget,
+    MeetingFollowup,
     NoVerification,
-    Task,
     Waiting,
     digest,
     identifier,
@@ -57,19 +57,14 @@ def verified_mail(request: outlook.DraftRequest, result: outlook.DraftResult | o
 
 
 class MeetingWork:
-    __slots__ = ("drafts", "packages", "requests")
+    __slots__ = ("drafts", "packages", "preparations")
 
-    def __init__(self, requests: MeetingRequests, packages: FollowupStore, drafts: Drafts) -> None:
-        self.requests, self.packages, self.drafts = requests, packages, drafts
+    def __init__(self, preparations: Preparations, packages: FollowupStore, drafts: Drafts) -> None:
+        self.preparations, self.packages, self.drafts = preparations, packages, drafts
 
-    def session(self, task: Task) -> MeetingRun:
-        """A missing binding must not silently gain the general desktop toolset."""
-        request = self.requests.get(task.id)
-        if request is None:
-            raise ValueError("The selected recording snapshots are missing. Prepare the meeting follow-up again.")
-        if task.id != task_identity(request.bundle) or task.prompt != request.prompt.strip():
-            raise ValueError("This task no longer matches its exact meeting preparation. Prepare a new follow-up from the intended recordings.")
-        return MeetingRun(request, self.packages, self.drafts)
+    def session(self, task_id: str, profile: MeetingFollowup) -> MeetingRun:
+        """The run sees exactly the recordings its profile names; a missing or changed bundle raises."""
+        return MeetingRun(self.preparations.read(task_id, profile), self.packages, self.drafts)
 
 
 class MeetingRun:

@@ -123,10 +123,11 @@ _Avoid_: Task kind, agent mode
 
 **Meeting follow-up**:
 Notes, decisions, actions and unsent email drafts prepared from recordings the
-person selected. Their transcripts are frozen when it is prepared. Its agent
-sees only those sources and the follow-up's tools, and it completes only after
-its package is published and each draft's save is verified. The person reviews
-and edits the resulting actions and drafts.
+person selected. Their transcripts are frozen when it is prepared, and its
+task names that saved selection by content digest. Its agent sees only those
+sources and the follow-up's tools, and it completes only after its package is
+published and each draft's save is verified by reading back the exact draft
+revision it wrote. The person reviews and edits the resulting actions and drafts.
 _Avoid_: Meeting-notes routine, meeting summary
 
 **Meeting-notes routine**:

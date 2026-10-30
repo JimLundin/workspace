@@ -23,12 +23,25 @@ from assistant.meeting_followup_store import (
     TranscriptNotReadyError,
     observe_transcript,
 )
-from assistant.meeting_requests import MAX_REQUESTS, MeetingRequests, PreparedFollowup, followup_prompt, task_identity
+from assistant.meeting_preparation import Preparations, PreparedFollowup
 from assistant.meeting_store import MeetingArchive
 from assistant.work_window import WorkSnapshot
-from automation.task import Completed, Profile, RequestKind, Task, digest, identifier, integer, task_profile, variant
+from automation.task import (
+    Completed,
+    FeedHandoff,
+    MeetingFollowup,
+    Profile,
+    RequestKind,
+    Task,
+    digest,
+    identifier,
+    integer,
+    task_profile,
+    variant,
+)
 
 MAX_MEETINGS = 512
+MAX_PREPARATIONS = 128
 MAX_COMMANDS = 64
 MAX_CHANGES = 128
 
@@ -189,12 +202,17 @@ def package_values(observation: PackageObservation) -> tuple[FollowupPackage, ..
             assert_never(observation)
 
 
-def work_observation(
-    request: PreparedFollowup,
-    snapshot: WorkSnapshot,
-    previous: WorkObservation,
-    submission_problem: str | None = None,
-) -> WorkObservation:
+def meeting_profile(task: Task) -> MeetingFollowup | None:
+    match profile := task_profile(task.source):
+        case MeetingFollowup():
+            return profile
+        case RequestKind() | FeedHandoff():
+            return None
+        case _:
+            assert_never(profile)
+
+
+def work_observation(request: PreparedFollowup, snapshot: WorkSnapshot, previous: WorkObservation) -> WorkObservation:
     """A missing cached row cannot establish that an accepted submission failed."""
     last = previous_task(previous)
     problem = next((item.reason for item in snapshot.submission_problems if item.task_id == request.task_id), None)
@@ -202,15 +220,13 @@ def work_observation(
         return WorkUnavailable(problem, last)
     task = next((item for item in snapshot.tasks if item.id == request.task_id), None)
     if task is not None:
-        # WorkAgent preserves its established outer-whitespace normalization.
-        # Retries still submit the exact prompt saved with this preparation.
-        if task_profile(task.source) is not RequestKind.MEETING_FOLLOWUP or task.prompt != request.prompt.strip():
+        if meeting_profile(task) != request.profile:
             return WorkUnavailable("The saved task identity belongs to different work.", last)
         if snapshot.status:
             return WorkUnavailable(snapshot.status, task)
         return ObservedWork(task)
-    if reason := submission_problem or snapshot.status:
-        return WorkUnavailable(reason, last)
+    if snapshot.status:
+        return WorkUnavailable(snapshot.status, last)
     if last is not None:
         return WorkUnavailable("Waiting to confirm this saved task again.", last)
     return WorkPending.OBSERVATION
@@ -222,6 +238,10 @@ def package_matches(request: PreparedFollowup, publication: PublishedFollowup) -
 
 def _chronological(source: TranscriptSource) -> tuple[float, str]:
     return source.started_at, source.id
+
+
+def _created(task: Task) -> tuple[float, str]:
+    return task.created_at, task.id
 
 
 def _selection(value: object) -> tuple[TranscriptSource, ...]:
@@ -258,10 +278,11 @@ class MeetingWorkflow:
     queue or journal. The caller retains selection and dirty editor text using
     source identities and the task/version/artifact/revision/attempt in change
     results. Each save attempt must receive a new identity from the caller.
+    Preparations are listed from the work journal, where each meeting
+    follow-up's profile names its saved recordings.
     """
 
     __slots__ = (
-        "_attempted",
         "_changes",
         "_closed",
         "_closing",
@@ -273,16 +294,15 @@ class MeetingWorkflow:
         "_retained",
         "_snapshot",
         "_sources",
-        "_submission_problems",
         "_thread",
         "_wake",
         "archive",
         "clock",
         "followups",
+        "preparations",
         "publish",
         "read_work",
         "report_error",
-        "requests",
         "retain_work",
         "submit_identified",
     )
@@ -290,7 +310,7 @@ class MeetingWorkflow:
     def __init__(
         self,
         archive: MeetingArchive,
-        requests: MeetingRequests,
+        preparations: Preparations,
         followups: FollowupStore,
         *,
         submit_identified: Callable[[str, str, Profile], None],
@@ -302,7 +322,7 @@ class MeetingWorkflow:
     ) -> None:
         # Each input is a separate effect owner: the recording and preparation
         # stores, the work agent's submission, observation and retention, and the UI.
-        self.archive, self.requests, self.followups = archive, requests, followups
+        self.archive, self.preparations, self.followups = archive, preparations, followups
         self.submit_identified, self.read_work, self.retain_work = submit_identified, read_work, retain_work
         self.publish, self.report_error, self.clock = publish, report_error, clock
         self._lock = threading.Lock()
@@ -311,10 +331,9 @@ class MeetingWorkflow:
         self._thread: threading.Thread | None = None
         self._snapshot = MeetingSnapshot()
         self._sources: tuple[TranscriptSource, ...] = ()
+        # Oldest first: the journal's meeting follow-ups and this session's not yet observed preparations.
         self._prepared: dict[str, PreparedFollowup] = {}
         self._progress: dict[str, FollowupProgress] = {}
-        self._attempted: set[str] = set()
-        self._submission_problems: dict[str, str] = {}
         self._problems: dict[str, WorkflowProblem] = {}
         self._changes: dict[tuple[str, str, str, str, str], ChangeResult] = {}
         self._retained: tuple[str, ...] = ()
@@ -400,16 +419,6 @@ class MeetingWorkflow:
             self._problems["catalog"] = CatalogProblem(str(error) or "The meeting archive could not be read.")
             self.report_error(traceback.format_exc())
 
-    def _remember(self, request: PreparedFollowup) -> None:
-        self._prepared.pop(request.task_id, None)
-        self._prepared[request.task_id] = request
-        while len(self._prepared) > MAX_REQUESTS:
-            oldest = next(iter(self._prepared))
-            self._prepared.pop(oldest)
-            self._progress.pop(oldest, None)
-            self._attempted.discard(oldest)
-            self._submission_problems.pop(oldest, None)
-
     def _retain(self) -> bool:
         identities = tuple(self._prepared)
         try:
@@ -423,30 +432,29 @@ class MeetingWorkflow:
             self.report_error(traceback.format_exc())
             return False
 
-    def _submit(self, request: PreparedFollowup, *, retry: bool = False) -> None:
-        if request.task_id in self._attempted and not retry:
-            return
-        self._attempted.add(request.task_id)
-        try:
-            self.submit_identified(request.task_id, request.prompt, RequestKind.MEETING_FOLLOWUP)
-            self._submission_problems.pop(request.task_id, None)
-        except Exception as error:
-            self._submission_problems[request.task_id] = str(error) or "The saved preparation could not enter the work queue."
-            self.report_error(traceback.format_exc())
-
-    def _recover(self) -> None:
-        try:
-            recovered = self.requests.list()
-            for request in reversed(recovered):
-                if request.task_id not in self._prepared:
-                    self._remember(request)
+    def _discover(self, snapshot: WorkSnapshot) -> None:
+        """Each journaled meeting follow-up's profile names the recordings it was prepared from."""
+        journaled = {
+            task.id: (task.title, profile) for task in sorted(snapshot.tasks, key=_created) if (profile := meeting_profile(task)) is not None
+        }
+        order = (*journaled, *(identity for identity in self._prepared if identity not in journaled))
+        prepared: dict[str, PreparedFollowup] = {}
+        problems: list[str] = []
+        for identity in order[-MAX_PREPARATIONS:]:
+            if (known := self._prepared.get(identity)) is not None:
+                prepared[identity] = known
+                continue
+            title, profile = journaled[identity]
+            try:
+                prepared[identity] = self.preparations.read(identity, profile)
+            except (OSError, ValueError) as error:
+                problems.append(f"{title}: {error}")
+        self._prepared = prepared
+        if problems:
+            self._problems["recovery"] = RecoveryProblem("\n".join(problems[:8])[:8000])
+        else:
             self._problems.pop("recovery", None)
-            if self._retain():
-                for request in self._prepared.values():
-                    self._submit(request)
-        except Exception as error:
-            self._problems["recovery"] = RecoveryProblem(str(error) or "Saved meeting preparations could not be recovered.")
-            self.report_error(traceback.format_exc())
+        self._retain()
 
     def _prepare(self, selected: tuple[TranscriptSource, ...]) -> None:
         try:
@@ -459,19 +467,16 @@ class MeetingWorkflow:
                 if current.source != source:
                     raise ValueError("A selected transcript changed. Refresh and select its current version before preparing follow-ups.")
                 observed.append(current)
-            bundle = TranscriptBundle(tuple(observed))
-            identity = task_identity(bundle)
-            request = self.requests.get(identity)
-            if request is None:
-                request = self.requests.prepare(identity, bundle, followup_prompt(bundle), at=self.clock())
-            elif request.bundle != bundle:
-                raise ValueError("The saved preparation belongs to different transcript observations.")
-            # The exact persisted prompt is reused; rebuilding it here would
-            # turn a recipe-text change into an identified submission conflict.
-            self._remember(request)
-            previous = self._progress.get(identity)
-            if self._retain():
-                self._submit(request, retry=previous is not None and isinstance(previous.work, WorkUnavailable))
+            prepared = self.preparations.prepare(TranscriptBundle(tuple(observed)))
+            previous = self._progress.get(prepared.task_id)
+            # The task names its saved recordings, so resubmitting an unconfirmed one is idempotent.
+            if previous is None or not isinstance(previous.work, ObservedWork):
+                self.submit_identified(prepared.task_id, prepared.prompt, prepared.profile)
+            self._prepared.pop(prepared.task_id, None)
+            self._prepared[prepared.task_id] = prepared
+            while len(self._prepared) > MAX_PREPARATIONS:
+                self._prepared.pop(next(iter(self._prepared)))
+            self._retain()
             self._problems.pop("prepare", None)
         except Exception as error:
             self._problems["prepare"] = PrepareProblem(selected, str(error) or "The selected meeting could not be prepared.")
@@ -494,7 +499,7 @@ class MeetingWorkflow:
     def _edit(self, change: DraftChange | ActionChange) -> None:
         result: ChangeResult
         try:
-            request = self.requests.get(change.task_id)
+            request = self._prepared.get(change.task_id)
             publication = self.followups.read(change.task_id, change.version)
             if request is None or not package_matches(request, publication):
                 raise ValueError("This package does not belong to the saved meeting preparation.")
@@ -549,21 +554,16 @@ class MeetingWorkflow:
         except Exception as error:
             read_problem = str(error) or "The work process could not be observed."
             self.report_error(traceback.format_exc())
+        if snapshot is not None:
+            self._discover(snapshot)
         progress: dict[str, FollowupProgress] = {}
         for request in self._prepared.values():
             previous = self._progress.get(request.task_id, FollowupProgress(request, WorkPending.OBSERVATION, AvailablePackages()))
             work = (
                 WorkUnavailable(read_problem, previous_task(previous.work))
                 if snapshot is None
-                else work_observation(
-                    request,
-                    snapshot,
-                    previous.work,
-                    self._submission_problems.get(request.task_id),
-                )
+                else work_observation(request, snapshot, previous.work)
             )
-            if isinstance(work, ObservedWork):
-                self._submission_problems.pop(request.task_id, None)
             packages = previous.packages
             if refresh_packages or work != previous.work or isinstance(packages, PackagesUnavailable) or not package_values(packages):
                 packages = self._packages(request, work, packages)
@@ -587,7 +587,6 @@ class MeetingWorkflow:
     def _run(self) -> None:
         try:
             self._catalog()
-            self._recover()
             first = True
             while True:
                 observations: list[threading.Event] = []
@@ -613,7 +612,6 @@ class MeetingWorkflow:
                 try:
                     if refresh:
                         self._catalog()
-                        self._recover()
                     self._observe(refresh_packages=refresh)
                 finally:
                     for completed in observations:

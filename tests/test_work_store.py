@@ -329,7 +329,7 @@ def test_version_two_journals_reopen_with_blocked_approvals_and_recorded_profile
         assert claim is not None
         store.finish(claim.run, Waiting(Approval(task + "-request", "Apply?", "Preview.", "a" * 64)), at=3)
     assert store.answer("granted", "granted-request", ApprovalDecision.APPROVED, at=4) is not None
-    store.submit("meeting-followup-" + "c" * 64, "Meeting", "Prepare notes.", RequestSource("chat", RequestKind.MEETING_FOLLOWUP), at=1)
+    store.submit("meeting-followup-" + "c" * 64, "Meeting", "Prepare notes.", RequestSource("chat"), at=1)
     legacy = '{"kind":"approval","id":"approval:0:' + "a" * 64 + ':nonce","title":"Apply?","detail":"Preview."}'
     with closing(sqlite3.connect(path)) as database, database:
         database.execute("UPDATE tasks SET state=json_object('kind','waiting','reason',json(?)) WHERE id='pending'", (legacy,))
@@ -345,8 +345,26 @@ def test_version_two_journals_reopen_with_blocked_approvals_and_recorded_profile
     assert [task.source.profile for task in TaskStore(path).list_tasks() if isinstance(task.source, RequestSource)] == [
         RequestKind.GENERAL,
         RequestKind.GENERAL,
-        RequestKind.MEETING_FOLLOWUP,
     ]
+
+
+def test_version_three_journals_drop_meeting_followups_that_name_no_saved_recordings(tmp_path: Path) -> None:
+    # Defect: a version 3 journal does not open, its legacy meeting follow-up
+    # breaks every task listing, or that task's journal rows prevent dropping it.
+    path = tmp_path / "work.sqlite3"
+    store = TaskStore(path)
+    legacy = "meeting-followup-" + "c" * 64
+    store.submit(legacy, "Meeting", "Prepare notes.", RequestSource("chat"), at=1)
+    claim = store.claim("worker", "meeting-run", at=2)
+    assert claim is not None and store.begin_action(claim.run, "mail-save", specification(), at=3) is not None
+    assert store.finish(claim.run, Waiting(Question("owner", "Who owns the release?", "")), at=4) is not None
+    store.submit("kept", "Chat", "Keep this request.", RequestSource("chat"), at=5)
+    with closing(sqlite3.connect(path)) as database, database:
+        database.execute("UPDATE tasks SET source=json_set(source,'$.profile','meeting_followup') WHERE id=?", (legacy,))
+        database.execute("PRAGMA user_version=3")
+    reopened = TaskStore(path)
+    assert [task.id for task in reopened.list_tasks()] == ["kept"]
+    assert reopened.get(legacy) is None and reopened.actions(legacy) == ()
 
 
 def test_timed_waits_wake_at_the_deadline_and_blocked_work_requires_explicit_resume(tmp_path: Path) -> None:

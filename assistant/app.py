@@ -45,7 +45,7 @@ lazy from assistant.llm import MAX_SECONDS, RATE, Missing, Settings
 lazy from assistant.local_bridge import LocalBridge
 lazy from assistant.meeting_events import TranscriptEvents
 lazy from assistant.meeting_followup_store import FollowupStore
-lazy from assistant.meeting_requests import MeetingRequests
+lazy from assistant.meeting_preparation import Preparations
 lazy from assistant.meeting_store import MeetingArchive
 lazy from assistant.meeting_workflow import MeetingWorkflow
 lazy from assistant.meetings import Meetings
@@ -302,7 +302,7 @@ class AssistantApp:
         followup_folder = work_folder / "meeting-followups"
         self.followups = MeetingWorkflow(
             archive,
-            MeetingRequests(followup_folder),
+            Preparations(followup_folder / "preparations"),
             FollowupStore(followup_folder / "packages"),
             submit_identified=self.agent.submit_identified,
             read_work=self.agent.snapshot,

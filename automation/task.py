@@ -60,8 +60,6 @@ def strings(value: object, field: str, *, maximum: int, count: int) -> None:
 class RequestKind(Enum):
     GENERAL = auto()
     """The person's own request, worked with the general toolset."""
-    MEETING_FOLLOWUP = auto()
-    """A prepared meeting follow-up: the task identity binds its saved preparation."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -76,7 +74,17 @@ class FeedHandoff:
         text(self.title, "feed item title", maximum=240)
 
 
-type Profile = RequestKind | FeedHandoff
+@dataclass(frozen=True, slots=True)
+class MeetingFollowup:
+    """A prepared meeting follow-up: `bundle` is the content digest of its saved recordings."""
+
+    bundle: str
+
+    def __post_init__(self) -> None:
+        digest(self.bundle, "meeting bundle digest")
+
+
+type Profile = RequestKind | FeedHandoff | MeetingFollowup
 """What a requested task is for: it selects the agent's tools, instructions and completion check."""
 
 
@@ -87,7 +95,7 @@ class RequestSource:
 
     def __post_init__(self) -> None:
         identifier(self.conversation_id, "conversation identity")
-        variant(self.profile, (RequestKind, FeedHandoff), "request profile")
+        variant(self.profile, (RequestKind, FeedHandoff, MeetingFollowup), "request profile")
 
 
 @dataclass(frozen=True, slots=True)

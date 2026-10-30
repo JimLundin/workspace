@@ -29,6 +29,7 @@ from automation.task import (
     GoalRevision,
     Interrupted,
     MailTarget,
+    MeetingFollowup,
     NoVerification,
     Outcome,
     Profile,
@@ -69,7 +70,7 @@ from automation.task import (
     variant,
 )
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 _UNBOUND_APPROVAL = "This approval was saved before approvals recorded their operation. Resume the task to review it again."
 MAX_PAGE = 1_000
 _TASK_COLUMNS: tuple[str, ...] = (
@@ -140,8 +141,8 @@ def _profile_data(profile: Profile) -> dict[str, object]:
     match profile:
         case RequestKind.GENERAL:
             return {"profile": "general"}
-        case RequestKind.MEETING_FOLLOWUP:
-            return {"profile": "meeting_followup"}
+        case MeetingFollowup(bundle):
+            return {"profile": "meeting_followup", "bundle": bundle}
         case FeedHandoff(item, title):
             return {"profile": "feed", "item": item, "title": title}
         case _:
@@ -154,8 +155,8 @@ def _profile(data: dict[str, object]) -> Profile:
             _fields(data, "kind", "conversation_id", "profile")
             return RequestKind.GENERAL
         case "meeting_followup":
-            _fields(data, "kind", "conversation_id", "profile")
-            return RequestKind.MEETING_FOLLOWUP
+            _fields(data, "kind", "conversation_id", "profile", "bundle")
+            return MeetingFollowup(digest(data["bundle"], "meeting bundle digest"))
         case "feed":
             _fields(data, "kind", "conversation_id", "profile", "item", "title")
             return FeedHandoff(identifier(data["item"], "feed item identity"), text(data["title"], "feed item title", maximum=240))
@@ -495,6 +496,8 @@ class TaskStore:
                 return
             if version == 2:
                 self._migrate_from_version_2(connection)
+            if version in (2, 3):
+                self._migrate_from_version_3(connection)
                 return
             if version != 0:
                 raise ValueError("This work database requires a different Workspace schema version.")
@@ -551,6 +554,18 @@ class TaskStore:
             "UPDATE tasks SET source=json_set(source,'$.profile','general') "
             "WHERE json_extract(source,'$.kind')='request' AND json_extract(source,'$.profile') IS NULL"
         )
+
+    @staticmethod
+    def _migrate_from_version_3(connection: _Connection) -> None:
+        """Version 3 meeting follow-ups bound their recordings in a separate preparation store.
+
+        Their profiles name no bundle, so those tasks and their journal rows are
+        dropped. Published packages and mail files stay on disk, unlisted.
+        """
+        legacy = "SELECT id FROM tasks WHERE json_extract(source,'$.profile')='meeting_followup'"
+        for table in ("actions", "requests", "responses", "goals", "runs"):
+            connection.execute(f"DELETE FROM {table} WHERE task_id IN ({legacy})")
+        connection.execute(f"DELETE FROM tasks WHERE id IN ({legacy})")
         connection.execute(f"PRAGMA user_version={SCHEMA_VERSION}")
 
     @contextmanager
