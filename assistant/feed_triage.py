@@ -354,7 +354,6 @@ def saved(board: Board) -> StoredBoard:
             StoredItem(
                 item.identity,
                 item.references,
-                item.origins,
                 item.title,
                 item.summary,
                 item.suggestion,
@@ -369,6 +368,7 @@ def saved(board: Board) -> StoredBoard:
                 proposal_revision(item),
                 item.decision,
                 item.reviewed_on.isoformat() if item.reviewed_on is not None else None,
+                item.origins,
             )
             for item in board.items[-1000:]
         ),

@@ -233,7 +233,6 @@ class StoredSolution:
 class StoredItem:
     id: str
     refs: tuple[tuple[str, str], ...]
-    origins: tuple[Origin, ...]
     title: str
     summary: str
     suggestion: str
@@ -245,6 +244,8 @@ class StoredItem:
     revision: str
     decision: str
     reviewed_on: str | None
+    # Empty means the item was assessed before origins were captured; it loads without badges.
+    origins: tuple[Origin, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)

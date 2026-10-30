@@ -7,6 +7,7 @@ from datetime import date
 from assistant.agent_session import Session
 from assistant.communications import Conversation, Feed, Message, TeamsActivity, Update, UpdateKind
 from assistant.feed_contracts import (
+    STORED_BOARD,
     CompleteItem,
     DismissItem,
     Disposition,
@@ -330,3 +331,20 @@ def test_context_refresh_reopens_automatic_quiet_work_but_keeps_explicit_handlin
     assert refreshed.items[1] == handled.items[0]
     filtered = edited(refreshed, SaveRule("Prioritize a different project."), EditObservation((automatic, explicit), 3))
     assert filtered.items == handled.items
+
+
+def test_a_board_saved_before_origins_were_captured_keeps_its_rules_and_items() -> None:
+    # Defect: the added origins field makes older saved boards fail validation, discarding rules and history.
+    source = captured("one", Excerpt("Budget", "Please review.", 1))
+    board = edited(
+        applied(Board(enabled=True), decode(output(([source.identity], "action")), (source,)), (source,)),
+        SaveRule("Keep routine updates quiet."),
+        EditObservation((), 2),
+    )
+    assert board.items and board.history
+    stored = STORED_BOARD.dump_python(saved(board), mode="json")
+    for item in stored["items"]:
+        del item["origins"]
+    restarted = restored(STORED_BOARD.validate_python(stored))
+    assert restarted.rules == board.rules and restarted.history == board.history and [item.identity for item in restarted.items] == [item.identity for item in board.items]
+    assert all(item.origins == () for item in restarted.items)
