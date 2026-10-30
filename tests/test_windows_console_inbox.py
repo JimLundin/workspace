@@ -14,6 +14,7 @@ if sys.platform != "win32":
     raise unittest.SkipTest("Windows console hook transport")
 
 from assistant.agent_toasts import AgentToasts
+from assistant.card_actions import AnswerConsole, parse
 from assistant.console_inbox import ConsoleInbox
 from assistant.console_requests import Answer, Provider, Request, State
 from assistant.feed_items import WorkItem, action_spans, body_spans
@@ -28,7 +29,7 @@ def answer_request(view: AgentToasts, current: Request, approval: str) -> None:
             for card in view.cards.values()
             if isinstance(card.content, WorkItem)
             for span in (*body_spans(card.content), *action_spans(card.content))
-            if span.link.startswith("workspace://console-option?") and f"answer={approval}" in span.link
+            if parse(span.link) == AnswerConsole(current.identity, 0, approval)
         )
         view.action_link(decision)
     else:

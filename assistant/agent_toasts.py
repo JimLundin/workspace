@@ -5,8 +5,8 @@ import webbrowser
 from collections.abc import Callable
 from dataclasses import replace
 from pathlib import Path
-from typing import Annotated, Final, TypedDict
-from urllib.parse import parse_qs, urlsplit
+from typing import Annotated, Final, TypedDict, assert_never
+from urllib.parse import urlsplit
 
 from pydantic import Field, StrictInt, TypeAdapter
 lazy from PySide6 import QtCore
@@ -24,9 +24,10 @@ from winapi.shapes import Rect
 lazy from assistant import console_requests, notification_reading
 lazy from assistant.agent_session import AgentRequest, Session, Snapshot, pending
 lazy from assistant.agent_window import AgentWindow
+lazy from assistant.card_actions import AnswerApproval, AnswerConsole, ItemAction, OpenCanvas, Verb, parse
 lazy from assistant.feed_desktop import Desktop, NativeDesktop
-lazy from assistant.feed_items import Verb, WorkItem, act, help_request
-lazy from assistant.feed_sources import Attention, SourceKey, SourceKind, listed
+lazy from assistant.feed_items import WorkItem, act, help_request
+lazy from assistant.feed_sources import Attention, SourceKey, listed
 lazy from assistant.feed_triage import Assessment
 lazy from assistant.inbox import Query, review_prompt
 lazy from assistant.notifications import (
@@ -507,8 +508,25 @@ class AgentToasts:
             prompt = review_prompt(listed(self.session.communications, self.session.console_requests, history=False), self.query)
             self.agent.on_submit(prompt)
 
-    def action_link(self, url: str) -> None:
-        self.action(QtCore.QUrl(url))
+    def action_link(self, link: str) -> None:
+        if urlsplit(link).scheme in ("http", "https", "mailto"):
+            webbrowser.open(link)
+            return
+        action = parse(link)
+        match action:
+            case OpenCanvas(target=target):
+                if self.canvas_open is not None:
+                    self.canvas_open(target)
+            case AnswerApproval(request=request, decision=decision):
+                self.agent.respond(request, decision.value)
+            case AnswerConsole() as answer:
+                self.answer_console(answer)
+            case ItemAction(verb=verb, item=item):
+                self.act_on(verb, item)
+            case None:
+                pass
+            case _:
+                assert_never(action)
 
     def toggle_card(self, selected: Card, *, animate: bool) -> None:
         """Qt owns disclosure state; collapse and expand on one layout clock."""
@@ -540,32 +558,11 @@ class AgentToasts:
         self.refresh()
 
     def action(self, url: QtCore.QUrl) -> None:
-        parsed = urlsplit(url.toString())
-        if parsed.scheme in ("http", "https", "mailto"):
-            webbrowser.open(url.toString())
-            return
-        if parsed.scheme != "workspace":
-            return
-        if parsed.netloc == "canvas" and self.canvas_open is not None:
-            target = parse_qs(parsed.query).get("target", [""])[0]
-            if target:
-                self.canvas_open(target)
-            return
-        if parsed.netloc == "agent-option":
-            self.answer_option(parsed.query)
-            return
-        values = parse_qs(parsed.query)
-        if parsed.netloc == "console-option":
-            self.answer_console(values.get("message", [""])[0], values)
-            return
-        if parsed.netloc == "console-dismiss" and self.agent.on_console is not None:
-            self.agent.on_console(console_requests.Dismiss(values.get("message", [""])[0]))
-            return
-        verb = next((verb for verb in Verb if verb.value == parsed.netloc), None)
-        kind = next((kind for kind in SourceKind if kind.value == values.get("source", [""])[0]), None)
-        key = SourceKey(kind, values.get("item", [""])[0]) if kind is not None else None
+        self.action_link(url.toString(QtCore.QUrl.ComponentFormattingOption.FullyEncoded))
+
+    def act_on(self, verb: Verb, key: SourceKey) -> None:
         row = next((card.content for card in self.cards.values() if isinstance(card.content, WorkItem) and card.content.key == key), None)
-        if verb is None or row is None:
+        if row is None:
             return
         if verb is Verb.HELP:
             prompt = help_request(row)
@@ -709,12 +706,8 @@ class AgentToasts:
         self.measure.close()
         self.loop.close()
 
-    def answer_console(self, identity: str, values: dict[str, list[str]]) -> None:
-        index = values.get("question", ["0"])[0]
-        if not index.isdecimal():
-            return
-        question = int(index)
-        answer = values.get("answer", [""])[0]
+    def answer_console(self, chosen: AnswerConsole) -> None:
+        identity, question, answer = chosen.request, chosen.question, chosen.answer
         for card in self.cards.values():
             origin = origin_item(card.content)
             match origin:
@@ -731,10 +724,6 @@ class AgentToasts:
                         break
                 case _:
                     pass
-
-    def answer_option(self, query: str) -> None:
-        values = parse_qs(query)
-        self.agent.respond(values.get("request", [""])[0], values.get("answer", [""])[0])
 
 
 def card_order(card: Card) -> tuple[int, float, int, int]:

@@ -12,6 +12,7 @@ lazy from PySide6.QtCore import QPoint, QRectF, Qt
 lazy from PySide6.QtGui import QPainterPath
 lazy from PySide6.QtTest import QTest
 
+from assistant.card_actions import ItemAction, Verb, parse
 from assistant.communications import Acknowledgement, Update, WindowsNotice, handle, update_fingerprint
 from assistant.feed_contracts import SolutionKind
 from assistant.feed_items import WorkItem, action_spans
@@ -184,7 +185,7 @@ def test_windows_notifications_use_the_chat_renderer_and_handling_removes_only_t
         done = next(button for button in card.choices if button.text() == "Done")
         assert done.isVisible() and card.window.rect().contains(done.geometry())
         assert isinstance(card.content, WorkItem)
-        action = next(span.link for span in action_spans(card.content) if span.link.startswith("workspace://done?"))
+        action = next(span.link for span in action_spans(card.content) if parse(span.link) == ItemAction(Verb.DONE, card.content.key))
         panel.view.action_link(action)
         assert commands[-1] == HandleNotice(Notice(NoticeKey(91, 100), "owned", "Outlook", "Review the figures", "A fictional notice"))
         panel.agent.communications(handle(feed, (Acknowledgement(first.key, update_fingerprint(first)),)), {})

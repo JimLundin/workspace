@@ -12,6 +12,8 @@ from urllib.parse import urlsplit
 from markdown_it import MarkdownIt
 from markdown_it.tree import SyntaxTreeNode
 
+from assistant.card_actions import OpenCanvas, parse
+
 
 @dataclass(frozen=True, slots=True)
 class Span:
@@ -73,13 +75,15 @@ def _web_link(target: object) -> str:
         return ""
     try:
         url = urlsplit(target)
-        if url.scheme.lower() in ("http", "https") and url.netloc:
-            return target
-        if url.scheme == "workspace" and url.netloc == "canvas" and not url.path and not url.fragment:
-            return target
-        return ""
     except ValueError:
         return ""
+    if url.scheme.lower() in ("http", "https") and url.netloc:
+        return target
+    match parse(target):
+        case OpenCanvas():
+            return target
+        case _:
+            return ""
 
 
 def _inline(nodes: Sequence[SyntaxTreeNode], tags: tuple[str, ...] = (), link: str = "") -> Iterator[Span]:

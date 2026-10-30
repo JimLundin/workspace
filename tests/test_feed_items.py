@@ -4,9 +4,10 @@ from dataclasses import replace
 
 import assistant.notification_text
 from assistant.agent_session import Begin, Said, Session, transition
+from assistant.card_actions import AnswerConsole, ItemAction, Verb, parse
 from assistant.communications import Update, WindowsNotice
 from assistant.console_requests import Provider, request
-from assistant.feed_items import Verb, WorkItem, act, action_spans, body_spans, expanded_spans, observed
+from assistant.feed_items import WorkItem, act, action_spans, body_spans, expanded_spans, observed
 from assistant.feed_origin import FeedRequest
 from assistant.inbox import Query, Source
 from assistant.notifications import MAX_VISIBLE, Stack, Turn, advance, body, observe
@@ -29,7 +30,7 @@ lazy from assistant.communications import (
 )
 lazy from assistant.feed_items import reactions
 lazy from assistant.feed_origin import App
-lazy from assistant.feed_sources import SourceKind, triage_evidence
+lazy from assistant.feed_sources import SourceKey, SourceKind, triage_evidence
 lazy from assistant.feed_triage import Assessment, Board, decode
 lazy from assistant.notification_sources import HandleNotice
 lazy from assistant.system_notices import Notice
@@ -133,8 +134,9 @@ def test_windows_teams_and_console_requests_join_agent_bubbles_with_exact_source
     assert len(source) == 3
     assert any("Here is the plan." in body(toast.content) for toast in stack.toasts)
     assert {item.key.kind for item in source} == {SourceKind.CHAT, SourceKind.WINDOWS, SourceKind.CONSOLE}
-    assert any(span.link.startswith("workspace://console-option?") for row in source for span in action_spans(row) if span.link)
-    assert any(span.link.startswith("workspace://help?source=chat&item=chat") for row in source for span in action_spans(row) if span.link)
+    actions = tuple(parse(span.link) for row in source for span in action_spans(row) if span.link)
+    assert any(isinstance(action, AnswerConsole) for action in actions)
+    assert ItemAction(Verb.HELP, SourceKey(SourceKind.CHAT, "chat")) in actions
     assert len(observed(state, Query(Source.MAIL))) == 2  # Mail plus the pending console question.
     question = next(row for row in source if row.key.kind is SourceKind.CONSOLE)
     assert "Which sheet?" in "".join(span.text for span in body_spans(question))

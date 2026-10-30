@@ -2,13 +2,12 @@
 
 from collections.abc import Iterable, Iterator, Mapping
 from dataclasses import dataclass, replace
-from enum import Enum
 from typing import assert_never
-from urllib.parse import urlencode
 
 import assistant.communications
 import assistant.notification_sources
 from assistant.agent_session import Snapshot
+from assistant.card_actions import AnswerConsole, CardAction, ItemAction, Verb, encode, parse
 from assistant.communications import (
     Acknowledgement,
     ChatTicket,
@@ -172,23 +171,20 @@ def text(row: WorkItem) -> str:
             return body + ("\n" + detail if detail else "")
 
 
-def link(action: str, caption: str, values: dict[str, str]) -> Span:
-    return Span(caption, ("link",), "workspace://" + action + "?" + urlencode(values))
-
-
-class Verb(Enum):
-    DONE = "done"
-    REOPEN = "reopen"
-    HELP = "help"
-    OPEN_CHAT = "open"
-    OPEN_SOURCE = "update"
-    HIDE_APP = "filter-app"
-    REVIEWED = "reviewed"
+def link(caption: str, action: CardAction) -> Span:
+    return Span(caption, ("link",), encode(action))
 
 
 def item_link(verb: Verb, caption: str, row: WorkItem) -> Span:
-    """Name the rendered item, never its source fields: a click acts on what the person saw."""
-    return link(verb.value, caption, {"source": row.key.kind.value, "item": row.key.identity})
+    return link(caption, ItemAction(verb, row.key))
+
+
+def item_action(span: Span) -> bool:
+    match parse(span.link):
+        case ItemAction():
+            return True
+        case _:
+            return False
 
 
 type SourceAction = assistant.communications.Command | assistant.notification_sources.Command
@@ -302,7 +298,7 @@ def body_spans(row: WorkItem) -> tuple[Span, ...]:
             body[-1] = replace(body[-1], text=body[-1].text.rstrip())
         return tuple(body)
     values = spans(row)
-    first = next((index for index, span in enumerate(values) if span.link.startswith("workspace://")), len(values))
+    first = next((index for index, span in enumerate(values) if item_action(span)), len(values))
     if first < len(values) and first and values[first - 1].text == "\n":
         first -= 1
     body = list(values[:first])
@@ -332,12 +328,8 @@ def action_spans(row: WorkItem) -> tuple[Span, ...]:
         first = next((i for i in range(len(request.questions)) if i not in supplied), None)
         if row.attention is not Attention.DIRECT or first is None or request.questions[first].multiple:
             return ()
-        return tuple(
-            link("console-option", option.label, {"message": request.identity, "question": str(first), "answer": option.label})
-            for option in request.questions[first].options
-        )
-    values = spans(row)
-    actions = [span for span in values if span.link.startswith("workspace://")]
+        return tuple(link(option.label, AnswerConsole(request.identity, first, option.label)) for option in request.questions[first].options)
+    actions = [span for span in spans(row) if item_action(span)]
     return tuple(value for index, action in enumerate(actions) for value in ((Span("  ·  "), action) if index else (action,)))
 
 

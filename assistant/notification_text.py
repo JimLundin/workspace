@@ -6,6 +6,7 @@ from textwrap import shorten
 from assistant import feed_items, tool_text
 from assistant.action_text import readable
 from assistant.agent_session import AgentRequest, Answer, ChatMessage, ToolActivity, pending
+from assistant.card_actions import AnswerApproval, Decision, OpenCanvas, parse
 from assistant.feed_items import WorkItem, action_spans, expanded_spans, link
 from assistant.feed_triage import Assessment
 from assistant.notifications import Content, Entry, Response, Turn, body, heading, plain, results, steps
@@ -58,9 +59,7 @@ class BubbleText:
 
 def bubble_text(values: tuple[Span, ...]) -> BubbleText:
     """Workspace's canvas redirects are persistent controls beside the text."""
-    actions = tuple(
-        frozendict((span.link, span) for span in values if span.text == "Open on canvas" and span.link.startswith("workspace://canvas?")).values()
-    )
+    actions = tuple(frozendict((span.link, span) for span in values if span.text == "Open on canvas" and canvas_link(span)).values())
     if not actions:
         return BubbleText(values, ())
     links = frozenset(span.link for span in actions)
@@ -68,6 +67,14 @@ def bubble_text(values: tuple[Span, ...]) -> BubbleText:
     last = next((index for index in reversed(range(len(body))) if body[index].text.rstrip()), None)
     body = (*body[:last], replace(body[last], text=body[last].text.rstrip())) if last is not None else ()
     return BubbleText(body, actions)
+
+
+def canvas_link(span: Span) -> bool:
+    match parse(span.link):
+        case OpenCanvas():
+            return True
+        case _:
+            return False
 
 
 @dataclass(frozen=True, slots=True)
@@ -132,7 +139,10 @@ def options(content: Content) -> tuple[Span, ...]:
             and isinstance(entry.message.request, Approval)
             and pending(entry.message)
         ):
-            return tuple(link("agent-option", label, {"request": entry.message.id, "answer": label.casefold()}) for label in ("Approve", "Decline"))
+            return (
+                link("Approve", AnswerApproval(entry.message.id, Decision.APPROVE)),
+                link("Decline", AnswerApproval(entry.message.id, Decision.DECLINE)),
+            )
     return ()
 
 

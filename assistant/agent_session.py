@@ -7,10 +7,10 @@ Replaying the same events against a session always gives the same result.
 from dataclasses import dataclass, field, replace
 from enum import Enum, auto
 from typing import Literal, assert_never
-from urllib.parse import urlencode
 
 import assistant.console_requests
 from assistant import action_text
+from assistant.card_actions import OpenCanvas, encode
 from assistant.communications import Feed
 from assistant.feed_origin import FeedRequest
 from assistant.feed_triage import Board
@@ -297,7 +297,7 @@ type Snapshot = Session
 
 
 def notice_text(title: str, target: str) -> str:
-    return title + "\n\n[Open on canvas](workspace://canvas?" + urlencode({"target": target}) + ")"
+    return title + "\n\n[Open on canvas](" + encode(OpenCanvas(target)) + ")"
 
 
 def transition(state: Session, event: Event) -> Session:
