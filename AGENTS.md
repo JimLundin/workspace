@@ -5,10 +5,11 @@ The active development checkout is `C:\Users\Jim.Lundin\Projects\workspace`
 run its native Windows tools. `/home/jim/workspace` links to this Windows checkout;
 the original Linux tree is preserved at `/home/jim/workspace-linux-reference`.
 
-Workspace owns the Windows keyboard, dictation, assistant, floating desktop bar
-and automation. Preserve its Python/Qt runtime. The canvas and embedded
-workspace browser belong to
-[Shared Workspace](https://github.com/JimLundin/shared-workspace).
+Workspace owns the Windows keyboard, dictation, assistant, floating desktop bar,
+automation and the native Qt work canvas
+([docs/work-thread-representation.md](docs/work-thread-representation.md)).
+Preserve its Python/Qt runtime. The embedded workspace browser belongs to
+[Shared Workspace](https://github.com/JimLundin/shared-workspace), which is paused.
 
 Workspace is in the trial phase. Refactor around current product behavior and
 explicit ownership. Remove retired features, unused interfaces and their tests;

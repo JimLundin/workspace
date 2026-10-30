@@ -72,7 +72,9 @@ def test_drop_creates_containment_while_connector_creates_a_relationship() -> No
     current = transition(Idle.READY, PressBubble(drag()), scene())
     moving = transition(current.state, PointerMoved(ScenePoint(600, 100), 10), scene())
     nested = transition(moving.state, PointerReleased(ScenePoint(600, 100)), scene())
-    assert nested.effect == NestBubble("group:drag", "group:target", (Placement("group:drag", 500, 80), Placement("note:child", 524, 252)))
+    assert nested.effect == NestBubble(
+        "group:drag", "group:target", (Placement("group:drag", 500, 80), Placement("note:child", 524, 252)), drag().members
+    )
     drawing = transition(Idle.READY, PressConnector("group:drag", ScenePoint(340, 64)), scene())
     preview = transition(drawing.state, PointerMoved(ScenePoint(600, 100), 10), scene())
     assert preview.effect == RelationPreview("group:drag", ScenePoint(600, 100), "group:target")
@@ -82,7 +84,7 @@ def test_drop_creates_containment_while_connector_creates_a_relationship() -> No
     current = transition(Idle.READY, PressBubble(leaf), scene())
     moving = transition(current.state, PointerMoved(ScenePoint(1000, 1000), 10), scene())
     rooted = transition(moving.state, PointerReleased(ScenePoint(1000, 1000)), scene())
-    assert rooted.effect == NestBubble("note:child", None, (Placement("note:child", 974, 972),))
+    assert rooted.effect == NestBubble("note:child", None, (Placement("note:child", 974, 972),), leaf.members)
 
 
 def test_dragging_the_focused_root_preserves_its_parent_on_empty_space() -> None:

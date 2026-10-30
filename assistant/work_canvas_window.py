@@ -14,14 +14,14 @@ from assistant.ui_components.canvas_chrome import CanvasFrame, icon_button
 from assistant.ui_components.paint_ready import PaintReady
 from assistant.ui_components.text import font
 from assistant.ui_components.widgets import column, show_window
-from assistant.work_canvas_store import CanvasStore
+from assistant.work_canvas import WorkCanvas
 from assistant.work_window import WorkSnapshot, WorkWindow
 lazy from assistant.meeting_panel import MeetingPanel
 lazy from assistant.work_panel import WorkPanel
 
 
 class CanvasWindow:
-    def __init__(self, root: QtWidgets.QApplication, work: WorkWindow, store: CanvasStore) -> None:
+    def __init__(self, root: QtWidgets.QApplication, work: WorkWindow, canvas: WorkCanvas) -> None:
         self.root: QtWidgets.QApplication = root
         self.work: WorkWindow = work
         self.snapshot: WorkSnapshot = WorkSnapshot()
@@ -34,7 +34,7 @@ class CanvasWindow:
         # visible source preview must not pay that setup cost on a user click.
         QtGui.QFontMetricsF(font()).horizontalAdvance("Workspace")
         self.window.setWindowState(Qt.WindowState.WindowMaximized)
-        self.personal: PersonalPanel = PersonalPanel(self.window, work, store)
+        self.personal: PersonalPanel = PersonalPanel(self.window, work, canvas)
         self.exit_button: QtWidgets.QToolButton = icon_button("close", "Close canvas", self.hide)
         self.personal.toolbar_layout.addWidget(self.exit_button)
         self.personal.position_chrome()
@@ -65,8 +65,6 @@ class CanvasWindow:
 
     def render(self, snapshot: WorkSnapshot) -> None:
         self.snapshot = snapshot
-        if self.personal.store is not None:
-            self.personal.document = self.personal.store.observe_tasks(snapshot)
         self.personal.render(snapshot.personal)
         if not self.preview_prepared and self.personal.visible_cards:
             # Warm the initial visible viewport while the startup view is hidden.

@@ -5,7 +5,8 @@ from itertools import islice
 from pathlib import Path
 from unittest import TestCase
 
-from assistant.canvas_activity import Attention, CanvasQuestion, CanvasUpdate, TaskRequest
+from assistant.canvas_activity import Attention, CanvasQuestion, CanvasRun, CanvasUpdate, TaskRequest
+from assistant.work_canvas import WorkCanvas
 from assistant.work_canvas_connections import CanvasConnection, RelationConnection, connections
 from assistant.work_canvas_context import CanvasMode, CanvasScene, CanvasScope, context_path, project, scene_contents
 from assistant.work_canvas_layout import Box, Measurements, Size, layout
@@ -25,9 +26,16 @@ from assistant.work_canvas_model import (
     toggle_expansion,
     view_state,
 )
-from assistant.work_canvas_store import CanvasStore
 from automation.personal_work import Association, Catalog, DismissedWork, SourceKind, WorkDefinition, WorkThread, source_id
 from tests.personal_work_fixture import source
+
+
+def queue_nothing(_run: CanvasRun) -> None:
+    pass
+
+
+def local_canvas(folder: Path) -> WorkCanvas:
+    return WorkCanvas(folder / "canvas.sqlite3", queue_nothing, autonomous=False)
 
 
 def catalog() -> Catalog:
@@ -171,9 +179,8 @@ def test_scoped_positions_survive_reopen_and_collapsing_groups(tmp_path: Path) -
     document = save_view(document, root)
     focused = CanvasViewState("work:two", (Placement(pinned.id, -120, 84),), frozenset((pinned.id,)))
     document = save_view(document, focused)
-    store = CanvasStore(tmp_path / "canvas.sqlite3")
-    store.save(document)
-    restored = CanvasStore(store.path).read()
+    local_canvas(tmp_path).save(document)
+    restored = local_canvas(tmp_path).read()
     assert view_state(restored, None) == root and view_state(restored, "work:two") == focused
     collapsed = project(data, restored, CanvasScope(mode=CanvasMode.CONTEXTS))
     arranged = layout(collapsed, root, measure(collapsed))
@@ -316,9 +323,8 @@ def test_per_bubble_expansion_is_complete_scoped_and_preserves_hidden_pins(tmp_p
     pins = Placement(data.sources[-1].id, 900, 200)
     canvas = save_view(canvas, replace(view_state(canvas, None), placements=(pins,), pinned=frozenset((pins.id,))))
     collapsed = toggle_expansion(canvas, None, conversation.id, expanded=False)
-    store = CanvasStore(tmp_path / "canvas.sqlite3")
-    store.save(collapsed)
-    reopened = store.read()
+    local_canvas(tmp_path).save(collapsed)
+    reopened = local_canvas(tmp_path).read()
     scene = project(data, reopened, CanvasScope())
     arranged = layout(scene, view_state(reopened, None), measure(scene))
     assert pins in arranged.state.placements and pins.id in arranged.state.pinned
@@ -332,7 +338,7 @@ def test_relationships_project_collapsed_endpoints_without_losing_edit_identity(
     data = catalog()
     relation = CanvasRelation(data.sources[0].id, data.sources[1].id, "Supports the outcome")
     document = CanvasDocument(relations=(relation,), collapsed=frozenset(work.id for work in data.works))
-    store = CanvasStore(tmp_path / "relations.sqlite3")
+    store = local_canvas(tmp_path)
     store.save(document)
     scene = project(data, store.read(), CanvasScope())
     assert RelationConnection(data.works[0].id, data.works[1].id, relation) in connections(data, scene, store.read().relations)

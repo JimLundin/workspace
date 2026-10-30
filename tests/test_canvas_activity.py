@@ -1,5 +1,7 @@
 """Agent activity, request identity and Workspace's quiet attention policy."""
 
+import sqlite3
+from contextlib import closing
 from dataclasses import replace
 from pathlib import Path
 
@@ -20,58 +22,76 @@ from assistant.canvas_activity import (
     redirect_session,
 )
 from assistant.notifications import Tone, active, observe, tone
+from assistant.work_canvas import WorkCanvas
 from assistant.work_canvas_model import DOCUMENT, CanvasCollection, CanvasDocument, CanvasNote, Placement, observe_activity
-from assistant.work_canvas_store import CanvasStore
 from assistant.work_window import ReplyProblem, WorkSnapshot
 from automation.actions import plan
 from automation.personal_work import Catalog, SourceKind, WorkDefinition, WorkState, WorkThread
 from automation.task import ActionReturned, ActionSpec, ActionUncertain, ActionVerified, Completed, RequestSource, Waiting
 from tests.personal_work_fixture import source
 from tests.test_work_agent import WorkRig
+from tests.test_work_canvas import local_canvas
 from tests.test_work_window import work_task
+
+
+def saved(path: Path) -> CanvasDocument:
+    """The stored row itself, before the owner's read-time projection."""
+    with closing(sqlite3.connect(path)) as connection:
+        observed: object = connection.execute("SELECT payload FROM canvas WHERE id=1").fetchone()
+    match observed:
+        case (bytes() as payload,):
+            return DOCUMENT.validate_json(payload)
+        case _:
+            raise AssertionError("The canvas row is missing.")
+
+
+def observed_session(canvas: WorkCanvas, session: Session) -> CanvasDocument:
+    document = canvas.observe_session(session)
+    assert document is not None, "A changed session must be observed."
+    return document
 
 
 def test_saved_questions_keep_their_route_state_and_thread_after_session_mirroring(tmp_path: Path) -> None:
     # Defect: storage flattens a clarification into an update, a conversation
     # mirror replaces its durable task route, or a stale mirror erases context.
     task = work_task(Waiting(automation.task.Question("request-1", "Which supplier?", "Choose a deployment supplier.")))
-    store = CanvasStore(tmp_path / "canvas.sqlite3")
+    store = local_canvas(tmp_path)
     store.save(CanvasDocument(runs=(CanvasRun(task.id, "work:atlas"),)))
-    document = store.observe_tasks(WorkSnapshot(tasks=(task,)))
+    document = store.observe_work(WorkSnapshot(tasks=(task,))).document
     question = document.activity[0]
     assert isinstance(question, CanvasQuestion)
     assert question.request == TaskRequest(task.id, "request-1") and question.work_ids == ("work:atlas",)
     mirror = Question("request-1", "Which supplier?", "", 201)
     session = Session(identity="session-one", messages=(mirror,))
-    document = store.observe_session(session)
+    document = observed_session(store, session)
     mirrored = document.activity[0]
     assert isinstance(mirrored, CanvasQuestion) and mirrored.request == question.request
     accepted = replace(question, reply=Answered("Use Contoso"))
     store.save(observe_activity(document, (accepted,)))
     cancelled = replace(session, messages=(replace(mirror, reply=assistant.agent_session.Cancelled()),))
-    document = store.observe_session(cancelled)
+    document = observed_session(store, cancelled)
     assert document.activity == (accepted,)
     # A failure receipt reopens only the exact live request, retaining the draft
     # in the native editor rather than displaying an unconfirmed answer forever.
     problem = ReplyProblem(task_id=task.id, request_id="request-1", receipt_id="reply-1", reason="Disk unavailable")
-    restored = store.observe_tasks(WorkSnapshot(tasks=(task,), reply_problems=(problem,)))
+    restored = store.observe_work(WorkSnapshot(tasks=(task,), reply_problems=(problem,))).document
     retry = restored.activity[0]
     assert isinstance(retry, CanvasQuestion) and retry.reply is Attention.WAITING
-    closed = store.observe_tasks(WorkSnapshot(tasks=(replace(task, state=Completed("Supplier confirmed", ())),)))
+    closed = store.observe_work(WorkSnapshot(tasks=(replace(task, state=Completed("Supplier confirmed", ())),))).document
     resolved = closed.activity[0]
     assert isinstance(resolved, CanvasQuestion) and resolved.reply is Attention.CLOSED
     assert isinstance(closed.activity[1], CanvasUpdate) and closed.activity[1].work_ids == ("work:atlas",)
-    assert CanvasStore(store.path).read() == closed
+    assert local_canvas(tmp_path).read() == closed
 
 
 def test_new_session_closes_old_questions_without_closing_live_durable_questions(tmp_path: Path) -> None:
     # Defect: a restarted assistant leaves old questions actionable or closes
     # a task question merely because it is no longer in the visible conversation.
-    store = CanvasStore(tmp_path / "canvas.sqlite3")
+    store = local_canvas(tmp_path)
     store.observe_session(Session(identity="old", messages=(Question("old-request", "Which workbook?", "", 10),)))
     task = work_task(Waiting(automation.task.Question("task-request", "Which supplier?", "")))
-    store.observe_tasks(WorkSnapshot(tasks=(task,)))
-    document = store.observe_session(Session(identity="new"))
+    store.observe_work(WorkSnapshot(tasks=(task,)))
+    document = observed_session(store, Session(identity="new"))
     old, durable = document.activity
     assert isinstance(old, CanvasQuestion) and isinstance(durable, CanvasQuestion)
     assert old.reply is Attention.CLOSED and durable.reply is Attention.WAITING
@@ -114,20 +134,19 @@ def test_classification_stays_quiet_and_state_transitions_redirect_to_the_contex
 def test_startup_removes_retired_fetch_projections_from_the_saved_canvas(tmp_path: Path) -> None:
     # Defect: retired fetches are only hidden in memory, so every subsequent
     # load reparses them and old execution attempts remain canvas context.
-    store = CanvasStore(tmp_path / "canvas.sqlite3")
+    store = local_canvas(tmp_path)
     fetched = CanvasAction("action:fetch", "Browser fetch", "Attempted navigation", 1, ActionState.RETURNED, ("work:atlas",))
     finding = CanvasUpdate("result:research", "Verified conclusion", "Useful evidence", 2, ("work:atlas",))
     store.save(CanvasDocument(activity=(fetched, finding)))
-    reopened = CanvasStore(store.path)
-    with reopened.connection() as connection:
-        assert reopened.loaded(connection).activity == (finding,)
+    local_canvas(tmp_path)
+    assert saved(store.path).activity == (finding,)
 
 
 def test_action_history_stays_out_of_the_canvas_while_prepared_content_remains(tmp_path: Path) -> None:
     # Defect: observed action attempts or acknowledgments still become cards,
     # or suppressing the ledger also removes actual prepared content.
     rig = WorkRig(tmp_path)
-    canvas = CanvasStore(tmp_path / "canvas.sqlite3")
+    canvas = local_canvas(tmp_path)
     try:
         task = rig.tasks.submit("canvas-task", "Prepare handoff", "Draft a handoff reply", RequestSource("canvas"), at=1)
         claim = rig.tasks.claim("worker", "run", at=2)
@@ -144,11 +163,11 @@ def test_action_history_stays_out_of_the_canvas_while_prepared_content_remains(t
         assert draft is not None
         assert not rig.refresh().actions
         rig.agent.watch((task.id,), owner="canvas")
-        pending = canvas.observe_tasks(rig.refresh()).activity
+        pending = canvas.observe_work(rig.refresh()).document.activity
         assert not pending
         returned = rig.tasks.finish_action(draft.id, ActionReturned("Reply draft is available in Outlook"), at=4)
         assert returned is not None
-        document = canvas.observe_tasks(rig.refresh())
+        document = canvas.observe_work(rig.refresh()).document
         assert not document.activity
         artifact = CanvasNote("note:handoff", "Handoff reply", "Proposed handoff", "work:atlas")
         canvas.save(replace(document, notes=(artifact,)))
@@ -161,12 +180,12 @@ def test_action_history_stays_out_of_the_canvas_while_prepared_content_remains(t
         assert isinstance(metadata_spec, ActionSpec)
         metadata = rig.tasks.begin_action(claim.run, "classification", metadata_spec, at=7)
         assert metadata is not None
-        document = canvas.observe_tasks(rig.refresh())
+        document = canvas.observe_work(rig.refresh()).document
         assert not document.activity and document.notes == (artifact,)
         rig.tasks.finish_action(ticket.id, ActionVerified("AT-42 now has the agreed owner"), at=8)
-        final = canvas.observe_tasks(rig.refresh())
+        final = canvas.observe_work(rig.refresh()).document
         assert not final.activity and final.notes == (artifact,)
-        assert len(rig.refresh().actions) == 4 and CanvasStore(canvas.path).read() == final
+        assert len(rig.refresh().actions) == 4 and local_canvas(tmp_path).read() == final
     finally:
         rig.close()
 
@@ -174,7 +193,7 @@ def test_action_history_stays_out_of_the_canvas_while_prepared_content_remains(t
 def test_existing_request_scaffolding_is_removed_without_losing_its_results(tmp_path: Path) -> None:
     # Defect: cleanup leaves generated instructions/action reports visible or
     # deletes, unnests, or moves the useful content collected beneath them.
-    store = CanvasStore(tmp_path / "canvas.sqlite3")
+    store = local_canvas(tmp_path)
     request = CanvasNote("note:instruction:old", "Agent request · Arrange Atlas", "Arrange the bubbles", "group:atlas")
     followup = CanvasNote("note:instruction:followup", "Agent request · More detail", "Compare the dates", request.id)
     finding = CanvasNote("note:plan", "Deployment plan", "Verified deployment dates", followup.id)
@@ -188,25 +207,24 @@ def test_existing_request_scaffolding_is_removed_without_losing_its_results(tmp_
         pinned=frozenset((finding.id, request.id)),
         collections=(CanvasCollection("group:atlas", "Atlas", (request.id,)),),
     )
-    with store.connection() as connection:
+    with closing(sqlite3.connect(store.path)) as connection, connection:
         connection.execute("UPDATE canvas SET payload=? WHERE id=1", (DOCUMENT.dump_json(legacy),))
-    restored = CanvasStore(store.path).read()
+    restored = local_canvas(tmp_path).read()
     assert restored.notes == (replace(finding, context_id="group:atlas"),)
     assert restored.placements == (placed,) and restored.pinned == frozenset((finding.id,))
     assert restored.collections[0].members == (finding.id,) and not restored.activity
     assert restored.runs[0].work_id == "group:atlas"
-    with store.connection() as connection:
-        assert store.loaded(connection) == restored
+    assert saved(store.path) == restored
 
 
 def test_another_research_run_does_not_turn_an_arrangement_report_into_context(tmp_path: Path) -> None:
     # Defect: a research binding for another task mistakenly qualifies every
     # completed instruction as a substantive research result.
-    store = CanvasStore(tmp_path / "canvas.sqlite3")
+    store = local_canvas(tmp_path)
     store.save(
         CanvasDocument(runs=(CanvasRun("arrange", "work:atlas", CanvasInstruction("Arrange these bubbles")), CanvasRun("research", "work:atlas")))
     )
     arrangement = work_task(Completed("Moved the bubbles", ()), identity="arrange")
     research = work_task(Completed("The current plan is version 3", ()), identity="research")
-    document = store.observe_tasks(WorkSnapshot(tasks=(arrangement, research)))
+    document = store.observe_work(WorkSnapshot(tasks=(arrangement, research))).document
     assert document.activity == (CanvasUpdate("result:research", research.title, "The current plan is version 3", 200, ("work:atlas",)),)
