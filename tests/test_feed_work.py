@@ -9,7 +9,7 @@ from pydantic import TypeAdapter
 
 from assistant.activity import Activity, ContextSnapshot
 from assistant.feed_agent_tools import request
-from assistant.feed_contracts import REVIEW_INPUT, FeedReply, StoredBoard
+from assistant.feed_contracts import REVIEW_INPUT, FeedRejected, FeedReply, StoredBoard
 from assistant.feed_history import Decision, Handoff
 from assistant.feed_triage import Board, Disposition, candidate, decode, proposal_revision, restored, saved, unassessed
 from assistant.feed_triage_service import classify
@@ -21,7 +21,7 @@ from automation.execution import WorkExecution
 from automation.store import TaskStore
 from automation.task import Completed, FeedHandoff, Profile, Question, RequestSource, TextAnswer, Waiting
 from tests.fake_endpoint import fake_endpoint
-from tests.feed_fixture import TriageFixture
+from tests.feed_fixture import TriageFixture, feed_bridge
 from tests.test_feed_triage import output
 from tests.test_feed_triage_service import MemoryStore
 from tests.test_work_actions import claimed
@@ -134,7 +134,8 @@ def test_registered_reply_tool_saves_instruction_before_handoff_and_reuses_it_af
         tasks.submit(task, item.title, prompt, RequestSource("feed", profile), at=clock())
 
     endpoint = tmp_path / "bridge.json"
-    triage = TriageFixture(endpoint, feed_store, lambda _: None, lambda _batch, _rules: "{}", lambda _: False, submit=queue)
+    triage = TriageFixture(feed_store, lambda _: None, lambda _batch, _rules: "{}", lambda _: False, submit=queue)
+    bridge = feed_bridge(endpoint, triage)
     rig = ToolRig(work=WorkExecution(claim, tasks, Resources(), clock=clock), feed_request=lambda data: request(data, endpoint))
     reply = FeedReply(item.identity, proposal_revision(item), "user-turn-one", words)
     arguments = {"item": reply.item, "revision": reply.revision, "reply_id": reply.reply_id, "text": reply.text}
@@ -149,8 +150,9 @@ def test_registered_reply_tool_saves_instruction_before_handoff_and_reuses_it_af
         assert triage.board.actions == (item,), "Queueing is not completion."
         assert _OBJECT.validate_json(result.text)["queued"] == task_id
     finally:
+        bridge.close()
         triage.close()
-    restarted = TriageFixture(endpoint, feed_store, lambda _: None, lambda _batch, _rules: "{}", lambda _: False, submit=queue)
+    restarted = TriageFixture(feed_store, lambda _: None, lambda _batch, _rules: "{}", lambda _: False, submit=queue)
     try:
         restarted.command(reply)
         assert len(submitted) == 2 and submitted[0] == submitted[1]
@@ -159,8 +161,7 @@ def test_registered_reply_tool_saves_instruction_before_handoff_and_reuses_it_af
         restarted.board = replace(restarted.board, items=(replace(item, summary="New reading"),))
         restarted.command(reply)
         assert len(submitted) == 2
-        with TestCase().assertRaises(ValueError):
-            restarted.command(replace(reply, text="A different instruction."))
+        assert isinstance(restarted.command(replace(reply, text="A different instruction.")), FeedRejected)
         assert len(restarted.board.history) == 1
     finally:
         restarted.close()
@@ -181,7 +182,6 @@ def test_failed_feed_save_cannot_start_reply_work_and_failed_queue_keeps_retryab
     submitted: list[str] = []
     command = FeedReply(item.identity, proposal_revision(item), "reply", "Check the totals.")
     failed = TriageFixture(
-        tmp_path / "failed.json",
         broken,
         lambda _: None,
         lambda _batch, _rules: "{}",
@@ -200,7 +200,7 @@ def test_failed_feed_save_cannot_start_reply_work_and_failed_queue_keeps_retryab
 
     store = MemoryStore()
     store.data = saved(Board(enabled=True, items=(item,)))
-    queued = TriageFixture(tmp_path / "queued.json", store, lambda _: None, lambda _batch, _rules: "{}", lambda _: False, submit=unavailable)
+    queued = TriageFixture(store, lambda _: None, lambda _batch, _rules: "{}", lambda _: False, submit=unavailable)
     try:
         with TestCase().assertRaises(OSError):
             queued.command(command)
@@ -218,7 +218,7 @@ def test_context_changes_reconsider_open_work_without_reopening_handled_items(tm
     item = replace(decode(output(([source.identity], "action")), (source,))[0], reviewed_on=day)
     store = MemoryStore()
     store.data = saved(Board(enabled=True, items=(replace(item, disposition=Disposition.QUIET),)))
-    triage = TriageFixture(tmp_path / "context.json", store, lambda _: None, lambda _batch, _rules: "{}", lambda _: False)
+    triage = TriageFixture(store, lambda _: None, lambda _batch, _rules: "{}", lambda _: False)
     try:
         assert not unassessed(triage.board, (source,), today=day)
         triage.context_changed((), ())

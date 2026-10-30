@@ -193,13 +193,6 @@ def reply_schema() -> dict[str, Json]:
     return {**schema, "properties": {key: value for key, value in properties.items() if key != "operation"}, "additionalProperties": False}
 
 
-@dataclass(frozen=True, slots=True)
-class BridgeEndpoint:
-    url: str
-    token: str
-
-
-BRIDGE_ENDPOINT = TypeAdapter(BridgeEndpoint)
 SOLUTION_CONTEXT = TypeAdapter(SolutionContext)
 
 

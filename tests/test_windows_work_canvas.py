@@ -22,14 +22,16 @@ from assistant.agent_session import Answered
 from assistant.canvas_activity import ROOT_CONTEXT, Attention, CanvasInstruction, CanvasQuestion, CanvasRun, SessionRequest, TaskRequest
 from assistant.feed_agent_tools import request
 from assistant.feed_origin import App
-from assistant.feed_triage_service import Triage
 from assistant.icons import State
+from assistant.local_bridge import LocalBridge
 from assistant.notifications import body
 from assistant.personal_work_panel import PersonalPanel
 from assistant.qt_runtime import prepare
 from assistant.qt_ui import application
 from assistant.ui_components.bubble import heading_text
 from assistant.ui_components.canvas_loading import CanvasLoading
+from assistant.work_bridge import WorkOwners
+from assistant.work_bridge_contracts import WORK_BRIDGE
 from assistant.work_canvas import WorkCanvas, instruction_prompt
 from assistant.work_canvas_commands import CANVAS_RESPONSE, CanvasSnapshot, CanvasUpdated
 from assistant.work_canvas_context import CanvasMode
@@ -72,10 +74,9 @@ from automation.store import TaskStore
 from automation.task import ActionNotApplied, ActionVerified
 from automation.work_documents import WebDocument
 from tests.agent_requests import asked
-from tests.feed_fixture import open_bridge
+from tests.feed_fixture import feed_unavailable, no_personal_work
 from tests.personal_work_fixture import source
 from tests.test_agent import ToolRig
-from tests.test_feed_triage_service import MemoryStore
 from tests.test_windows_inbox_attention import InboxUi
 from tests.test_work_actions import claimed
 from tests.test_work_canvas import local_canvas, nested_bubbles
@@ -827,9 +828,7 @@ def test_agent_canvas_bridge_commits_on_qt_and_refreshes_without_revealing(tmp_p
     ui.observe_canvas(nested_bubbles()[0])
     ui.pump()
     endpoint = tmp_path / "bridge.json"
-    triage = Triage(
-        endpoint, MemoryStore(), lambda _: None, lambda _batch, _rules: "{}", lambda _: False, server_factory=open_bridge, canvas=ui.canvas_command
-    )
+    bridge = LocalBridge(endpoint, WORK_BRIDGE, WorkOwners(feed_unavailable, no_personal_work, ui.canvas_command).handle)
     tasks, claim, clock = claimed(tmp_path)
     rig = ToolRig(work=WorkExecution(claim, tasks, Resources(), clock=clock), feed_request=lambda data: request(data, endpoint))
     try:
@@ -870,7 +869,7 @@ def test_agent_canvas_bridge_commits_on_qt_and_refreshes_without_revealing(tmp_p
         assert not any(widget.isVisible() for widget in ui.root.topLevelWidgets())
         assert not rig.machine.log
     finally:
-        triage.close()
+        bridge.close()
         ui.dispose()
 
 
