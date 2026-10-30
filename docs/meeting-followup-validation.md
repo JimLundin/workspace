@@ -233,6 +233,10 @@ To repeat the focused portable suite with the project's Python 3.15 environment:
 .venv/bin/python -B -m pytest -q tests/test_meeting_followup.py tests/test_meeting_requests.py tests/test_meeting_workflow.py tests/test_outlook.py tests/test_meeting_execution.py
 ```
 
+`meeting_requests.py` and its tests were later removed, when each follow-up
+task began naming its content-addressed selection. Omit that module when
+repeating the suite on current source.
+
 The earlier [durable-work validation](agentic-validation.md) and its mutation
 evidence remain unchanged. This audit is frozen at the pre-deployment gate;
 root retains subsequent ZIP, installation, canonical import, and reload receipts

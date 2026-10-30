@@ -23,7 +23,7 @@ from assistant import action_text
 from assistant.activity import ContextSnapshot
 from assistant.agent_history import History
 from assistant.agent_session import Failed, LiveMessage, Succeeded, ToolActivity, ToolStatus
-from assistant.agent_tools import Args, ArgumentError, Display, Machine, Output, Tool, Verify
+from assistant.agent_tools import AdapterReadback, Args, ArgumentError, Display, Machine, Output, Tool, Verify
 from assistant.desktop_tools import Screen
 from assistant.llm import Json, Settings, ToolCall
 from assistant.publishing import PublishError
@@ -233,6 +233,9 @@ class Agent:
                 match verify:
                     case NoVerification() | FileDigest():
                         return self.work.actions.execute(change.specification(operation, verify), perform, lambda result: result.ok, self.stop)
+                    case AdapterReadback(target, confirm):
+                        specification = change.specification(operation, target)
+                        return self.work.actions.execute(specification, perform, lambda result: result.ok, self.stop, verify=confirm)
                     case _:
                         specification = change.specification(operation, NoVerification.NONE)
                         return self.work.actions.execute(specification, perform, lambda result: result.ok, self.stop, verify=verify)

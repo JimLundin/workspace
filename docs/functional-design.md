@@ -42,7 +42,7 @@ The main places to read are:
 | `assistant/notifications.py`, `notification_text.py`, `notification_reading.py`, `toast_style.py` | Grouped turns, attached results, optional steps, reading states, lifetimes, tints, and motion sampling | `agent_toasts.py`, `toast_card.py`, `qt_text.py`, `qt_ui.py`, `winapi/composition.py`, `winapi/appearance.py`, `winapi/notification_input.py` |
 | `assistant/browser_values.py`, `browser_session.py`, `browser.py` | Browser ownership, immutable page/tab/group observations and command variants, group selection, typed paginated projections | `Browser`, `NativeSessions`, `Cdp`, `browser_tabs.TabStrip` and a cancellable connection wait |
 | `assistant/recording_state.py` | Audio batches, stored observations, completion rules, retry policy, stale-update rejection, and recording controls | `meetings.py` and `meeting_store.py` |
-| `assistant/meeting_followup.py`, `meeting_requests.py` | Frozen transcript bundles, exact citations, sourced actions and drafts, preparation identity | `meeting_followup_store.py` owns verified publications and revision-checked edits; `MeetingRequests` owns saved preparations |
+| `assistant/meeting_followup.py`, `meeting_preparation.py` | Frozen transcript bundles, exact citations, sourced actions and drafts, preparation identity | `meeting_followup_store.py` owns verified publications and revision-checked edits; `Preparations` owns content-addressed bundle files |
 | `assistant/meeting_workflow.py` | Catalog, work and package observations; identified edit commands and receipts | `MeetingWorkflow` owns background I/O; `meeting_panel.py` owns Qt selection, local edits and explicit handoff |
 | `assistant/meeting_execution.py`, `meeting_tools.py`, `outlook.py` | Constrained meeting execution, bounded source reads and verified draft outcomes | The work process owns generation; `outlook.ps1` owns Outlook COM observation and draft operations |
 | `assistant/teams.py` | Frozen device flow, polling deadlines, retry intervals and read/write requests | `Teams` owns the shared delegated Microsoft session; `SystemClock`, `TokenStore`, and `graph_http.Http` own clock, encrypted credentials and bounded transport |
@@ -264,7 +264,9 @@ across assistant views without tying the application lifetime to a view.
 UI uses Qt; no GUI objects cross the keyboard process boundary.
 
 Meeting follow-through shares the work journal and selected saved transcript
-versions. Its owner queues catalog reads, preparation and revision-checked edits
+versions. A follow-up task's profile carries the content digest of its saved
+bundle, so the journal alone lists follow-ups and each run opens exactly its
+recordings. Its owner queues catalog reads, preparation and revision-checked edits
 off the UI thread, and closes before WorkAgent. The Meetings view retains raw
 editor buffers by task, package version and artifact. Only the matching save
 receipt clears a submitted edit; newer typing remains against the acknowledged

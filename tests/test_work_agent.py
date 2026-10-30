@@ -50,6 +50,7 @@ from automation.task import (
     Blocked,
     Completed,
     Control,
+    MeetingFollowup,
     Question,
     RequestKind,
     RequestSource,
@@ -281,7 +282,7 @@ def test_queued_requests_persist_with_their_invocation_context_without_reopening
         assert {task.prompt for task in TaskStore(rig.tasks.path).list_tasks()} == {"Summarize this", "And this one"}
         assert b"First workbook" not in rig.tasks.path.read_bytes(), "Activity snapshots must remain volatile."
         assert rig.agent.running() and rig.started == [True]
-        rig.agent.submit_identified("meeting-task", "Prepare the meeting follow-up", RequestKind.MEETING_FOLLOWUP)
+        rig.agent.submit_identified("meeting-task", "Prepare the meeting follow-up", MeetingFollowup("d" * 64))
         rig.agent.submit_identified("routine-task", "Run the standing instruction", RequestKind.GENERAL)
         rig.refresh()
         assert rig.bridge.registrations[-2:] == [("meeting-task", None, 1234), ("routine-task", invocation("Second workbook"), 1234)]
@@ -525,7 +526,7 @@ def test_follow_up_retains_related_context_and_user_controls_survive_reopening(t
     # Defect: a follow-up inherits a meeting follow-up's constrained profile,
     # so it cannot open a preparation of its own.
     with work(tmp_path) as rig:
-        rig.agent.submit_identified("original-report", "Prepare the original report", RequestKind.MEETING_FOLLOWUP)
+        rig.agent.submit_identified("original-report", "Prepare the original report", MeetingFollowup("d" * 64))
         rig.refresh()
         claim = rig.tasks.claim("worker-one", "report-run", at=rig.clock())
         assert claim is not None
@@ -533,7 +534,7 @@ def test_follow_up_retains_related_context_and_user_controls_survive_reopening(t
         rig.agent.command(FollowUp(claim.task.id, "Add a one-page summary"))
         rig.refresh()
         follow_up = next(task for task in rig.tasks.list_tasks() if task.id != claim.task.id)
-        assert isinstance(claim.task.source, RequestSource) and claim.task.source.profile is RequestKind.MEETING_FOLLOWUP
+        assert isinstance(claim.task.source, RequestSource) and claim.task.source.profile == MeetingFollowup("d" * 64)
         assert follow_up.source == RequestSource(claim.task.source.conversation_id) and "output/report.md" in follow_up.prompt
         assert "Add a one-page summary" in follow_up.prompt
         rig.agent.command(ControlTask(follow_up.id, Control.PAUSE))

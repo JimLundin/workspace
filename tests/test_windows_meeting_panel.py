@@ -34,7 +34,7 @@ from assistant.meeting_followup import (
 )
 from assistant.meeting_followup_store import ActionRevision, DraftFiles, DraftRevision, Edited, Original, PublishedFollowup
 from assistant.meeting_panel import ArtifactKey, DraftEdit, MeetingPanel, choice
-from assistant.meeting_requests import PreparedFollowup
+from assistant.meeting_preparation import PreparedFollowup
 from assistant.meeting_workflow import (
     ActionChange,
     ActionSaved,
@@ -51,6 +51,7 @@ from assistant.meeting_workflow import (
 from assistant.qt_runtime import prepare
 from assistant.qt_ui import application
 from assistant.ui_components.appearance import CONTROL_STYLE
+from automation.task import MeetingFollowup
 
 prepare()
 
@@ -90,7 +91,7 @@ class WorkflowFixture(MeetingWorkflow):
 
     def __init__(self, packages: tuple[FollowupPackage, ...]) -> None:
         bundle = packages[0].publication.followup.sources
-        request = PreparedFollowup("meeting-task", bundle, "Prepare this saved meeting", 1792660000)
+        request = PreparedFollowup("meeting-task", MeetingFollowup("a" * 64), bundle)
         self.value = MeetingSnapshot(
             tuple(reversed(tuple(item.source for item in bundle.transcripts))),
             (FollowupProgress(request, WorkPending.OBSERVATION, AvailablePackages(packages)),),

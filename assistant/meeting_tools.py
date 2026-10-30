@@ -6,7 +6,7 @@ from typing import Final
 from pydantic import ConfigDict, TypeAdapter
 
 from assistant import outlook
-from assistant.agent_tools import DECLINED, TEXT, Args, ArgumentError, Display, Output, Session, Tool, fixed, schema
+from assistant.agent_tools import DECLINED, TEXT, AdapterReadback, Args, ArgumentError, Display, Output, Session, Tool, fixed, schema
 from assistant.llm import Json, ToolSpec, tool_spec
 from assistant.meeting_execution import MeetingRun, encoded, verified_mail
 from automation.actions import Change, Evidence, Observation, Operation, target
@@ -197,9 +197,9 @@ def _package(arguments: Mapping[str, Json]) -> tuple[str, ...]:
 
 
 def _mail(arguments: Mapping[str, Json]) -> tuple[str, ...]:
-    match arguments.get("task_id"), arguments.get("draft_id"), arguments.get("mail_target"):
-        case str() as task_id, str() as draft_id, str() as marker:
-            return (target("meeting-mail", (task_id, draft_id)), marker)
+    match arguments.get("task_id"), arguments.get("draft_id"):
+        case str() as task_id, str() as draft_id:
+            return (target("meeting-mail", (task_id, draft_id)),)
         case _:
             return ()
 
@@ -260,7 +260,6 @@ class MeetingFollowup:
                 "draft_id": target.draft_id,
                 "revision": target.revision,
                 "mail_fingerprint": target.fingerprint,
-                "mail_target": target.resource,
             },
         )
         content = _VALUE.validate_python(outlook.content_data(request.content))
@@ -275,4 +274,4 @@ class MeetingFollowup:
             verified = isinstance(saved, (outlook.SavedOutlookDraft, outlook.SavedEmlDraft))
             return Output(encoded(self.run.mail_result(target, saved)), ok=verified)
 
-        return self.session.effect(operation, save, lambda _: verified_mail(request, saved))
+        return self.session.effect(operation, save, AdapterReadback(target, lambda _: verified_mail(request, saved)))

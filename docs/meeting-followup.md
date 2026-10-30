@@ -43,13 +43,17 @@ Saved work lives under `%LOCALAPPDATA%\workspace\work\meeting-followups`:
 
 | Location | Contents |
 | --- | --- |
-| `requests.sqlite3` | The ordered selection, exact transcript bytes, and original work request |
+| `preparations` | Each prepared selection's exact transcript bytes and source details, one file per content digest |
 | `packages` | Notes, action CSV, draft files, source snapshots, and edit history |
 | `mail` | Verified mail destination records and any fallback email files |
 
-The implementation uses Workspace's existing durable work controller. Preparation
-is stored before submission; every publication and mail save passes through
-the action journal. Model output is validated against the selected transcript
+The implementation uses Workspace's existing durable work controller. The
+selection is saved before submission, and the task's profile names it by content
+digest; a missing or changed selection blocks the task before the model runs.
+Every publication and mail save passes through the action journal, and each mail
+save records the exact draft revision it wrote. Follow-ups prepared before
+selections were content-addressed are no longer listed; their packages and mail
+files remain on disk. Model output is validated against the selected transcript
 bytes before publication. A model reply alone cannot mark the workflow complete.
 The meeting worker's tools are limited to those sources, artifacts, draft
 saving, and durable questions/recovery.
