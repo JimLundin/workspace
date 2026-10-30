@@ -22,9 +22,18 @@ MAX_STORED_BYTES = 2 * MAX_BUNDLE_BYTES + MAX_SOURCES * 64_000
 _BUNDLE = TypeAdapter(TranscriptBundle)
 
 
+def followup_title(bundle: TranscriptBundle) -> str:
+    """The task's title, which the journal lists without loading the recordings."""
+    return ("Meeting follow-up: " + " + ".join(transcript.source.title for transcript in bundle.transcripts))[:240]
+
+
 def followup_prompt(bundle: TranscriptBundle) -> str:
-    """Instructions for the constrained meeting worker over this saved selection."""
+    """Instructions for the constrained meeting worker over this saved selection.
+
+    The work queue titles a task with its prompt's first line, so that line is the follow-up's title.
+    """
     return (
+        f"{followup_title(bundle)}\n\n"
         "Prepare sourced meeting notes, decisions, action items, and complete follow-up email drafts for this saved selection.\n\n"
         f"Source digest: {bundle.fingerprint}\n\n"
         "Call meeting_read_sources with no arguments to inspect every selected recording. Then read every selected source_id, "
