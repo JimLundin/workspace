@@ -18,6 +18,7 @@ from typing import Final, Protocol, assert_never
 
 import components
 import keeper
+import keeper_control
 import usage
 from assistant.activity import ActivityTracker, ContextSnapshot, Observation
 from config import APPS
@@ -779,11 +780,11 @@ class AssistantApp:
                 if not control_policy.toggle_layout(self.startup_effects):
                     self.problem("Couldn't reach the layout. Try Start layout or Restart layout.")
             case control_policy.Menu.RESTART_LAYOUT.value:
-                keeper.ask("restart_layout")
+                keeper_control.ask(keeper.REQUESTS, keeper_control.Restart("layout"))
             case control_policy.Menu.RESTART_ASSISTANT.value:
-                keeper.ask("restart_assistant")
+                keeper_control.ask(keeper.REQUESTS, keeper_control.Restart("assistant"))
             case control_policy.Menu.RESTART_AUTOMATION.value:
-                keeper.ask("restart_automation")
+                keeper_control.ask(keeper.REQUESTS, keeper_control.Restart("automation"))
             case control_policy.Menu.OVERLAY.value:
                 self.toggle_overlay()
             case control_policy.Menu.KEYMAP.value:
@@ -805,7 +806,7 @@ class AssistantApp:
             case control_policy.Menu.FOLLOWUPS.value:
                 self.show_meetings()
             case control_policy.Menu.UNDO.value:
-                keeper.ask("undo")
+                keeper_control.ask(keeper.REQUESTS, keeper_control.Undo())
             case control_policy.Menu.USAGE.value:
                 os.startfile(write_report())
             case control_policy.Menu.LOGS.value:

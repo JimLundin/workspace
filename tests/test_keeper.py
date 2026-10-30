@@ -9,15 +9,13 @@ from keeper import (
     Keeper,
     Recovery,
     Stage,
-    ask,
     install,
     prepare_candidate,
     restore,
     snapshot,
     source_files,
-    take_requests,
 )
-from keeper_control import STATUS, Control, Pause, Paused, Refused, Resume, Resumed, submit
+from keeper_control import STATUS, Control, Install, Keep, Pause, Paused, Refused, Restart, Resume, Resumed, Rollback, Undo, ask, submit, take
 
 # ---- a fake world for the keeper's logic -----------------------------------------------
 
@@ -116,7 +114,7 @@ def running(world: World) -> Keeper:
 
 def installed(world: World, keeper: Keeper) -> None:
     """An install that passes its checks and comes up: now on trial."""
-    keeper.request("install", "a new snippet", now=10)
+    keeper.request(Install("a new snippet"), now=10)
     world.check.outcome = (True, "ok")
     keeper.tick(now=20)
     world.come_up()
@@ -177,7 +175,7 @@ def test_layout_restart_preserves_the_worker_and_assistant() -> None:
     world = World()
     keeper = running(world)
     automation, assistant = world.children["automation"], world.children["assistant"]
-    keeper.request("restart_layout", "", now=5)
+    keeper.request(Restart("layout"), now=5)
     assert world.take() == ["stop layout", "start layout"]
     assert world.children["automation"] is automation and not automation.stopped
     assert world.children["assistant"] is assistant and not assistant.stopped
@@ -190,7 +188,7 @@ def test_independent_restart_preserves_other_children_and_waits_for_fresh_readin
         world = World()
         keeper = running(world)
         original = tuple(world.children.items())
-        keeper.request("restart_" + name, "", now=5)
+        keeper.request(Restart(name), now=5)
         assert world.take() == ["stop " + name, "start " + name]
         for other, child in original:
             if other != name:
@@ -214,7 +212,7 @@ def test_deployment_pause_requires_matching_resume_and_keeps_keyboard_alive(tmp_
     control.poll(keeper, 5)
     assert STATUS.validate_json((tmp_path / "component-status.json").read_bytes(), strict=True) == Paused("deployment", ("assistant",))
     keeper.tick(now=6)
-    keeper.request("restart_layout", "", now=7)
+    keeper.request(Restart("layout"), now=7)
     paused_stage = keeper.stage
     assert paused_stage is Stage.PAUSED and not layout.stopped
     submit(tmp_path, Resume("different-deployment"))
@@ -233,7 +231,7 @@ def test_pause_refuses_update_and_duplicate_selections_and_allows_no_restart() -
     world = World()
     keeper = running(world)
     assert not keeper.suspend(("assistant", "assistant"))
-    keeper.request("install", "", now=5)
+    keeper.request(Install(""), now=5)
     assert not keeper.suspend(("assistant",))
     other = World()
     paused = running(other)
@@ -250,7 +248,7 @@ def test_quitting_the_layout_on_purpose_leaves_it_stopped_until_asked() -> None:
     world.children["layout"].code = 0  # the escape key held
     keeper.tick(now=5)
     assert world.take() == []
-    keeper.request("restart_layout", "", now=6)
+    keeper.request(Restart("layout"), now=6)
     assert world.take() == ["start layout"]
 
 
@@ -325,7 +323,7 @@ def test_an_install_is_checked_snapshotted_installed_and_tried() -> None:
 def test_a_change_that_fails_its_checks_is_not_installed() -> None:
     world = World()
     keeper = running(world)
-    keeper.request("install", "broken", now=10)
+    keeper.request(Install("broken"), now=10)
     world.check.outcome = (False, "FAILED tests.test_engine.test_plain_letters")
     keeper.tick(now=20)
     assert world.take() == ["check", "notify Not installed: the change failed its checks."]
@@ -336,7 +334,7 @@ def test_a_change_that_fails_its_checks_is_not_installed() -> None:
 def test_a_change_that_doesnt_come_up_is_undone() -> None:
     world = World()
     keeper = running(world)
-    keeper.request("install", "slow", now=10)
+    keeper.request(Install("slow"), now=10)
     world.check.outcome = (True, "ok")
     keeper.tick(now=20)
     world.take()
@@ -356,7 +354,7 @@ def test_a_change_that_doesnt_come_up_is_undone() -> None:
 def test_update_is_undone_when_only_automation_never_becomes_ready() -> None:
     world = World()
     keeper = running(world)
-    keeper.request("install", "missing worker readiness", now=10)
+    keeper.request(Install("missing worker readiness"), now=10)
     world.check.outcome = (True, "ok")
     keeper.tick(now=20)
     world.take()
@@ -379,7 +377,7 @@ def test_update_is_undone_when_only_automation_never_becomes_ready() -> None:
 def test_update_is_undone_when_automation_exits_before_readiness() -> None:
     world = World()
     keeper = running(world)
-    keeper.request("install", "worker exits early", now=10)
+    keeper.request(Install("worker exits early"), now=10)
     world.check.outcome = (True, "ok")
     keeper.tick(now=20)
     world.take()
@@ -400,7 +398,7 @@ def test_update_is_undone_when_automation_exits_before_readiness() -> None:
 def test_a_change_that_exits_while_starting_is_undone_at_once() -> None:
     world = World()
     keeper = running(world)
-    keeper.request("install", "crashy", now=10)
+    keeper.request(Install("crashy"), now=10)
     world.check.outcome = (True, "ok")
     keeper.tick(now=20)
     world.take()
@@ -481,10 +479,10 @@ def test_keep_ends_the_trial_and_undo_rolls_back() -> None:
     world = World()
     keeper = running(world)
     installed(world, keeper)
-    keeper.request("keep", "", now=30)
+    keeper.request(Keep(), now=30)
     assert keeper.stage is Stage.RUNNING
     world.take()
-    keeper.request("undo", "", now=40)  # undo works after the trial too
+    keeper.request(Undo(), now=40)  # undo works after the trial too
     assert world.take() == [
         "stop automation",
         "stop assistant",
@@ -501,7 +499,7 @@ def test_crashing_over_and_over_after_an_update_undoes_it() -> None:
     world = World()
     keeper = running(world)
     installed(world, keeper)
-    keeper.request("keep", "", now=30)
+    keeper.request(Keep(), now=30)
     world.take()
     for t in range(4):
         world.children["assistant"].code = 1
@@ -512,8 +510,8 @@ def test_crashing_over_and_over_after_an_update_undoes_it() -> None:
 def test_one_thing_at_a_time() -> None:
     world = World()
     keeper = running(world)
-    keeper.request("install", "first", now=10)
-    keeper.request("install", "second", now=11)
+    keeper.request(Install("first"), now=10)
+    keeper.request(Install("second"), now=11)
     assert world.take() == ["check", "notify Busy installing; try again in a moment."]
 
 
@@ -576,11 +574,34 @@ def test_snapshots_keep_the_last_twenty(tmp_path: Path) -> None:
     assert len(list(versions.iterdir())) == 20
 
 
-def test_requests_arrive_in_order(tmp_path: Path) -> None:
-    ask("install", "first", folder=tmp_path)
-    ask("undo", "", folder=tmp_path)
-    assert take_requests(folder=tmp_path) == (("install", "first"), ("undo", ""))
-    assert take_requests(folder=tmp_path) == ()
+def test_inbox_requests_reach_the_keeper_once_and_in_order(tmp_path: Path) -> None:
+    # Detect reordering the inbox, delivering a request twice, or a restart
+    # slipping in while the install it followed is being checked.
+    world = World()
+    keeper = running(world)
+    ask(tmp_path, Install("first"))
+    ask(tmp_path, Restart("layout"))
+    for request in take(tmp_path):
+        keeper.request(request, now=5)
+    assert world.take() == ["check", "notify Workspace is starting or updating; try the restart again in a moment."]
+    assert keeper.stage is Stage.CHECKING and keeper.summary == "first"
+    assert tuple(take(tmp_path)) == ()
+
+
+def test_a_misspelled_request_is_refused_visibly(tmp_path: Path) -> None:
+    # Detect an unknown request or component being silently ignored, acted
+    # on, or left in the inbox where it blocks source deployment.
+    world = World()
+    keeper = running(world)
+    (tmp_path / "00000000000000000001.json").write_bytes(b'{"action": "undoo"}')
+    (tmp_path / "00000000000000000002.json").write_bytes(b'{"action": "restart", "component": "layuot"}')
+    for request in take(tmp_path):
+        keeper.request(request, now=5)
+    assert world.take() == [
+        "notify Refused a request the keeper doesn't recognise (00000000000000000001.json).",
+        "notify Refused a request the keeper doesn't recognise (00000000000000000002.json).",
+    ]
+    assert keeper.stage is Stage.RUNNING and not any(tmp_path.iterdir())
 
 
 def test_the_keeper_and_its_checker_are_protected() -> None:
@@ -596,7 +617,7 @@ def test_install_failure_restores_and_restarts() -> None:
 
     world = FailingWorld()
     keeper = running(world)
-    keeper.request("install", "change", 10)
+    keeper.request(Install("change"), now=10)
     world.check.outcome = (True, "ok")
     keeper.tick(20)
     assert "restore v1" in world.log
@@ -611,22 +632,24 @@ def test_undo_survives_keeper_restart(tmp_path: Path) -> None:
     world.come_up()
     keeper.tick(1)
     installed(world, keeper)
-    keeper.request("keep", "", 30)
+    keeper.request(Keep(), now=30)
+    world.take()
     restarted = Keeper(world, recovery)
     restarted.recover()
-    restarted.request("undo", "", 40)
+    assert world.take() == []  # a kept change stays installed on the next launch
+    restarted.request(Undo(), now=40)
     assert "restore v1" in world.log
 
 
 def test_interrupted_trial_is_restored_before_starting(tmp_path: Path) -> None:
     recovery = Recovery(tmp_path / "recovery.json")
-    recovery.write("v1", pending=True)
+    recovery.write(Rollback(version="v1", pending=True))
     world = World()
     keeper = Keeper(world, recovery)
     keeper.recover()
     keeper.start(0)
     assert world.log[0] == "restore v1"
-    assert recovery.read() == (None, False)
+    assert recovery.read() == Rollback(version=None, pending=False)
 
 
 def test_recovery_failure_preserves_retry_state(tmp_path: Path) -> None:
@@ -637,12 +660,12 @@ def test_recovery_failure_preserves_retry_state(tmp_path: Path) -> None:
             raise PermissionError("locked backup")
 
     recovery = Recovery(tmp_path / "recovery.json")
-    recovery.write("v1", pending=True)
+    recovery.write(Rollback(version="v1", pending=True))
     keeper = Keeper(FailingRestore(), recovery)
     keeper.undoable = "v1"
     keeper.rollback("failed", 0)
     assert keeper.done
-    assert recovery.read() == ("v1", True)
+    assert recovery.read() == Rollback(version="v1", pending=True)
 
 
 def test_completed_trial_persists_undo_target(tmp_path: Path) -> None:
@@ -654,7 +677,7 @@ def test_completed_trial_persists_undo_target(tmp_path: Path) -> None:
     keeper.tick(1)
     installed(world, keeper)
     keeper.tick(700)
-    assert recovery.read() == ("v1", False)
+    assert recovery.read() == Rollback(version="v1", pending=False)
 
 
 def test_candidate_review_does_not_execute_code_and_is_frozen(tmp_path: Path) -> None:
@@ -705,7 +728,7 @@ def test_failed_second_update_keeps_first_update_undoable_after_restart(tmp_path
     world.come_up()
     keeper.tick(1)
     installed(world, keeper)
-    keeper.request("install", "broken second update", 30)
+    keeper.request(Install("broken second update"), now=30)
     world.check.outcome = (False, "broken")
     keeper.tick(31)
-    assert recovery.read() == ("v1", False)
+    assert recovery.read() == Rollback(version="v1", pending=False)
