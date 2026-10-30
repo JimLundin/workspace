@@ -284,15 +284,6 @@
       "key": {
         "rule": "PLR0913",
         "path": "assistant/feed_triage.py",
-        "scope": "candidate",
-        "signature": "99f67dcafccc110a05c366e8022d225660ad2cfa333523843b020fbe982b166e"
-      },
-      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
-    },
-    {
-      "key": {
-        "rule": "PLR0913",
-        "path": "assistant/feed_triage.py",
         "scope": "selected",
         "signature": "cbf4f83f1e7bc924a1495ac7b5353dd78901c54932a78c91ecaffcb0fee153f8"
       },
@@ -304,15 +295,6 @@
         "path": "assistant/geometry.py",
         "scope": "half",
         "signature": "5b6febaa5129264ab8d93d6e9a9cf8cc43014d4430f5411b5a1946474ed6c517"
-      },
-      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
-    },
-    {
-      "key": {
-        "rule": "PLR0913",
-        "path": "assistant/inbox.py",
-        "scope": "review_prompt",
-        "signature": "5a2c0d8fa6e9d8575b07792468f939e06344748ddf52e9e9ada545ca5b1ec1ec"
       },
       "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
     },

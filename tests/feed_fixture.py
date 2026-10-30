@@ -13,7 +13,8 @@ from pathlib import Path
 from queue import Queue
 
 from assistant.console_requests import Command
-from assistant.feed_triage import Board, Candidate
+from assistant.feed_sources import Candidate
+from assistant.feed_triage import Board
 from assistant.feed_triage_service import Store, Triage
 from assistant.feed_work import FeedWork
 from automation.task import Profile
