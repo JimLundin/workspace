@@ -24,7 +24,6 @@ lazy from assistant.agent_window import AgentWindow
 lazy from assistant.desktop_bar import BarActions, DesktopBar
 lazy from assistant.feed_triage import Assessment, Board
 lazy from assistant.icons import State
-lazy from assistant.panel import PanelPreferences
 lazy from assistant.qt_ui import application
 lazy from assistant.recording_state import RecordingState
 lazy from winapi import screen
@@ -144,7 +143,7 @@ class Preview:
             raise
 
     def build_feed(self, agent: AgentWindow) -> AgentToasts:
-        self.feed = AgentToasts(self.root, agent, preferences=PanelPreferences(Rect(40, 200, 440, 900)))
+        self.feed = AgentToasts(self.root, agent, monitor=Rect(40, 200, 440, 900))
         return self.feed
 
     def action(self, text: str) -> None:
