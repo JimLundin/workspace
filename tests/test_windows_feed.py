@@ -20,8 +20,8 @@ from assistant.qt_runtime import prepare
 from assistant.qt_ui import application
 from assistant.system_notices import Notice, NoticeKey, Observed
 from assistant.toast_card import Card
+from assistant.ui_components.bubble import TITLE_SIZE
 from assistant.ui_components.controls import STYLE
-from assistant.ui_components.heading import TITLE_SIZE
 from tests.communications_fixture import communication_feed
 from tests.test_feed_triage import output
 from tests.test_windows_agent_toasts import notifications, widget_rect

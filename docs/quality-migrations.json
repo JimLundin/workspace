@@ -337,7 +337,7 @@
     {
       "key": {
         "rule": "PLR0913",
-        "path": "assistant/ui_components/heading.py",
+        "path": "assistant/ui_components/bubble.py",
         "scope": "heading_width",
         "signature": "09b8251c69d514e2e9582db2b46a92bb926aa40d582fd999a3c13ef91bbc3ecc"
       },

@@ -13,12 +13,10 @@ lazy from PySide6.QtCore import Qt
 from assistant.canvas_activity import Attention, CanvasAction, CanvasQuestion, CanvasUpdate
 from assistant.feed_origin import App, Origin
 from assistant.notifications import Tone
+from assistant.ui_components.bubble import BubbleAppearance, CanvasHeading, badge_origins, badge_width, paint_origins, paint_surface
 from assistant.ui_components.bubble_style import Palette, palette
-from assistant.ui_components.bubble_surface import BubbleAppearance, paint_surface
 from assistant.ui_components.canvas_bubble import CanvasBubble, CanvasEvents
 from assistant.ui_components.canvas_controls import CanvasControl, ControlAction
-from assistant.ui_components.heading import CanvasHeading
-from assistant.ui_components.source_badge import paint_origins
 from assistant.ui_components.text import PlainLayout, font
 from assistant.work_canvas_context import ContextGroup, descendants
 from assistant.work_canvas_model import CanvasContent, caption, summary, title
@@ -116,7 +114,7 @@ class CanvasCard(CanvasBubble):
         self.heading.setFont(font(8.5))
         self.heading.setDefaultTextColor(QtGui.QColor("#b7afc9"))
         origins = source_origins(self.content)
-        heading_x = 44 + 18 * (min(3, len(origins)) - 1)
+        heading_x = badge_width(origins) + 16
         title_width = width - heading_x - 64
         title_height = self.title_label.load(title(self.content), title_width, expanded=self.expanded)
         self.title_label.setPos(heading_x, 18)
@@ -168,9 +166,7 @@ class CanvasCard(CanvasBubble):
 
     def paint(self, painter: QtGui.QPainter, option: QtWidgets.QStyleOptionGraphicsItem, widget: QtWidgets.QWidget | None = None) -> None:
         paint_surface(painter, self.rect(), BubbleAppearance(self.colors))
-        painter.save()
         paint_origins(painter, source_origins(self.content), self.colors)
-        painter.restore()
         self.paint_selection(painter)
 
     def show_detail(self, widget: QtWidgets.QWidget) -> None:
@@ -298,11 +294,10 @@ def source_app(content: CanvasContent) -> App:
 
 def source_origins(content: CanvasContent) -> tuple[Origin, ...]:
     match content:
-        case CanvasUpdate(origins=origins) | CanvasQuestion(origins=origins) | CanvasAction(origins=origins) if origins:
-            return origins
+        case CanvasUpdate(origins=origins) | CanvasQuestion(origins=origins) | CanvasAction(origins=origins):
+            return badge_origins(origins)
         case _:
-            app = source_app(content)
-            return (Origin(app, app.value),)
+            return badge_origins((), source_app(content))
 
 
 class CanvasGroup(CanvasBubble):
@@ -331,10 +326,9 @@ class CanvasGroup(CanvasBubble):
         self.setRect(0, 0, bounds.width(), bounds.height())
         self.setPos(bounds.topLeft())
         self.setToolTip(group.title + "\nClick to show contents; double-click to center this bubble")
-        self.origins = tuple(
-            frozendict((origin.app, origin) for nested in descendants(group) for item in nested.pieces for origin in source_origins(item)).values()
-        ) or (Origin(App.WORKSPACE, "Workspace"),)
-        title_x = 44 + 18 * (min(3, len(self.origins)) - 1)
+        unique = frozendict((origin.app, origin) for nested in descendants(group) for item in nested.pieces for origin in source_origins(item))
+        self.origins = badge_origins(tuple(unique.values()))
+        title_x = badge_width(self.origins) + 16
         self.title_label.load(group.title, bounds.width() - title_x - 64, expanded=False)
         self.title_label.setPos(title_x, 18)
         count = len(group.children) + len(group.items)
@@ -360,8 +354,6 @@ class CanvasGroup(CanvasBubble):
     @override
     def paint(self, painter: QtGui.QPainter, option: QtWidgets.QStyleOptionGraphicsItem, widget: QtWidgets.QWidget | None = None) -> None:
         paint_surface(painter, self.rect(), BubbleAppearance(self.colors))
-        painter.save()
         paint_origins(painter, self.origins, self.colors)
-        painter.restore()
 
         self.paint_selection(painter)
