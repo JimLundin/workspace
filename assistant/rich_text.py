@@ -71,8 +71,11 @@ _EMPHASIS = {"strong": "bold", "em": "italic", "s": "strike"}
 
 
 def _web_link(target: object) -> str:
-    if not isinstance(target, str):
-        return ""
+    match target:
+        case str():
+            pass
+        case _:
+            return ""
     try:
         url = urlsplit(target)
     except ValueError:

@@ -1,6 +1,6 @@
 """Source work joins the existing floating conversation without becoming agent instructions."""
 
-from collections.abc import Iterable, Iterator, Mapping
+from collections.abc import Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, replace
 from typing import assert_never
 
@@ -66,7 +66,11 @@ class WorkItem:
 
     @property
     def created_at(self) -> float:
-        return self.item.latest.created_at if isinstance(self.item, ChatTicket) else self.item.created_at
+        match self.item:
+            case ChatTicket(latest=latest):
+                return latest.created_at
+            case Message() | Update() | Reply() | Request() | Assessment():
+                return self.item.created_at
 
     @property
     def waiting(self) -> bool:
@@ -242,21 +246,26 @@ def spans(row: WorkItem) -> tuple[Span, ...]:
             result = [Span(title + "\n", ("bold", "feed", "feed_title")), Span("Request\n", ("bold", "muted", "feed")), *formatted_body(summary)]
             if suggestion:
                 result.extend((Span("\n\nSuggested approach\n", ("bold", "muted", "feed")), *formatted_body(suggestion, "feed_suggestion")))
-        case ChatTicket() | Message():
-            message = row.item.latest if isinstance(row.item, ChatTicket) else row.item
+        case ChatTicket(latest=message) | (Message() as message):
             result = [Span(message.sender + "\n", ("bold", "feed")), *formatted_body(message.text)]
             actions = [
                 item_link(Verb.HELP, "Ask Workspace", row),
                 handling_link(row),
                 item_link(Verb.OPEN_CHAT, "Open Teams", row),
             ]
-            if isinstance(row.item, ChatTicket) and len(row.item.messages) > 1:
-                result.append(Span(f"\n{len(row.item.messages)} messages in this exchange", ("muted",)))
+            match row.item:
+                case ChatTicket(messages=messages) if len(messages) > 1:
+                    result.append(Span(f"\n{len(messages)} messages in this exchange", ("muted",)))
+                case _:
+                    pass
         case Update() as update:
             result = [Span(update.title + "\n", ("bold", "feed", "feed_title")), *formatted_body(update.text)]
             actions = [handling_link(row), item_link(Verb.HELP, "Ask Workspace", row), item_link(Verb.OPEN_SOURCE, "Open source", row)]
-            if isinstance(update.source, WindowsNotice) and update.source.app_id:
-                actions.append(item_link(Verb.HIDE_APP, "Hide app", row))
+            match update.source:
+                case WindowsNotice(app_id=app_id) if app_id:
+                    actions.append(item_link(Verb.HIDE_APP, "Hide app", row))
+                case _:
+                    pass
         case Request():
             return body_spans(row)
         case Reply(text=body, detail=detail, delivery=delivery):
@@ -273,59 +282,78 @@ def spans(row: WorkItem) -> tuple[Span, ...]:
 
 
 def body_spans(row: WorkItem) -> tuple[Span, ...]:
-    if isinstance(row.item, Request):
-        request = row.item
-        supplied = dict(request.answers)
-        pending_index = next((i for i in range(len(request.questions)) if i not in supplied), None)
-        chosen = tuple(enumerate(request.questions)) if pending_index is None else ((pending_index, request.questions[pending_index]),)
-        body = [Span(request.title + "\n", ("bold", "feed"))] if request.title != "Your answer is needed" else []
-        if request.detail:
-            body.extend(formatted_body(readable(request.detail)))
-            body.append(Span("\n"))
-        for index, question in chosen:
-            body.extend((*formatted_body(question.text, "bold"), Span("\n")))
-            if question.multiple and index not in supplied:
-                for option in question.options:
-                    body.append(Span(option.label + (" · " + option.description if option.description else "") + "\n", ("feed",)))
-            if index in supplied:
-                body.append(Span("You: " + supplied[index] + "\n", ("muted", "feed")))
-        while body and not body[-1].text.strip():
-            body.pop()
-        if body:
-            body[-1] = replace(body[-1], text=body[-1].text.rstrip())
-        return tuple(body)
+    match row.item:
+        case Request() as request:
+            return request_spans(request)
+        case _:
+            pass
     values = spans(row)
     first = next((index for index, span in enumerate(values) if item_action(span)), len(values))
     if first < len(values) and first and values[first - 1].text == "\n":
         first -= 1
-    body = list(values[:first])
-    while body and not body[-1].text.strip():
-        body.pop()
-    if body:
-        body[-1] = replace(body[-1], text=body[-1].text.rstrip())
-    return tuple(body)
+    return trimmed(values[:first])
+
+
+def request_spans(request: Request) -> tuple[Span, ...]:
+    supplied = dict(request.answers)
+    pending_index = next((i for i in range(len(request.questions)) if i not in supplied), None)
+    chosen = tuple(enumerate(request.questions)) if pending_index is None else ((pending_index, request.questions[pending_index]),)
+    body = [Span(request.title + "\n", ("bold", "feed"))] if request.title != "Your answer is needed" else []
+    if request.detail:
+        body.extend(formatted_body(readable(request.detail)))
+        body.append(Span("\n"))
+    for index, question in chosen:
+        body.extend((*formatted_body(question.text, "bold"), Span("\n")))
+        if question.multiple and index not in supplied:
+            for option in question.options:
+                body.append(Span(option.label + (" · " + option.description if option.description else "") + "\n", ("feed",)))
+        if index in supplied:
+            body.append(Span("You: " + supplied[index] + "\n", ("muted", "feed")))
+    return trimmed(body)
+
+
+def trimmed(values: Sequence[Span]) -> tuple[Span, ...]:
+    """Drop trailing blank spans and the last span's trailing whitespace."""
+    last = next((index for index in reversed(range(len(values))) if values[index].text.strip()), None)
+    if last is None:
+        return ()
+    return (*values[:last], replace(values[last], text=values[last].text.rstrip()))
 
 
 def expanded_spans(row: WorkItem) -> tuple[Span, ...]:
-    result = list(body_spans(row))
-    if isinstance(row.item, Assessment):
-        for option in row.item.solutions:
-            result.extend((Span("\n\n"), Span(option.label + "\n", ("bold", "muted", "feed")), *formatted_body(option.detail, "feed_suggestion")))
-        for source in row.evidence:
-            result.extend((Span("\n\n"), Span(source.title + "\n", ("bold", "muted", "feed")), *formatted_body(source.body)))
-        if len(row.evidence) != len(row.item.references):
-            result.extend((Span("\n\n"), Span("Some original source content is no longer available.", ("muted", "feed"))))
-    return tuple(result)
+    body = body_spans(row)
+    match row.item:
+        case Assessment(solutions=solutions, references=references):
+            options = (
+                part
+                for option in solutions
+                for part in (Span("\n\n"), Span(option.label + "\n", ("bold", "muted", "feed")), *formatted_body(option.detail, "feed_suggestion"))
+            )
+            sources = (
+                part
+                for source in row.evidence
+                for part in (Span("\n\n"), Span(source.title + "\n", ("bold", "muted", "feed")), *formatted_body(source.body))
+            )
+            missing = (
+                (Span("\n\n"), Span("Some original source content is no longer available.", ("muted", "feed")))
+                if len(row.evidence) != len(references)
+                else ()
+            )
+            return (*body, *options, *sources, *missing)
+        case _:
+            return body
 
 
 def action_spans(row: WorkItem) -> tuple[Span, ...]:
-    if isinstance(row.item, Request):
-        request = row.item
-        supplied = dict(request.answers)
-        first = next((i for i in range(len(request.questions)) if i not in supplied), None)
-        if row.attention is not Attention.DIRECT or first is None or request.questions[first].multiple:
-            return ()
-        return tuple(link(option.label, AnswerConsole(request.identity, first, option.label)) for option in request.questions[first].options)
+    match row.item:
+        case Request() as request:
+            supplied = dict(request.answers)
+            first = next((i for i in range(len(request.questions)) if i not in supplied), None)
+            if row.attention is not Attention.DIRECT or first is None or request.questions[first].multiple:
+                return ()
+            return tuple(link(option.label, AnswerConsole(request.identity, first, option.label)) for option in request.questions[first].options)
+        case _:
+            pass
     actions = [span for span in spans(row) if item_action(span)]
     return tuple(value for index, action in enumerate(actions) for value in ((Span("  ·  "), action) if index else (action,)))
 
