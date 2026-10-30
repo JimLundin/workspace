@@ -30,7 +30,7 @@ lazy from assistant.llm import Missing, Settings
 lazy from assistant.machine import NativeDesktop, WinMachine
 lazy from assistant.meeting_execution import MeetingWork
 lazy from assistant.meeting_followup_store import FollowupStore
-lazy from assistant.meeting_requests import MeetingRequests
+lazy from assistant.meeting_preparation import Preparations
 lazy from assistant.outlook import OutlookDrafts
 lazy from assistant.recording_state import AudioSource
 lazy from assistant.task_profiles import RequestContext
@@ -183,7 +183,7 @@ def _native_execution(settings: Settings | Missing, bridge: BridgeServer, hwnd: 
             report_error=lambda detail: report(detail, folder=bridge.folder),
             close_background=machine.close_background,
             context=context.request,
-            meeting=MeetingWork(MeetingRequests(followups), FollowupStore(followups / "packages"), OutlookDrafts(followups / "mail")),
+            meeting=MeetingWork(Preparations(followups / "preparations"), FollowupStore(followups / "packages"), OutlookDrafts(followups / "mail")),
         )
     except BaseException:
         machine.close_background()

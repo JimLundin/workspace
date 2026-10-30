@@ -41,6 +41,7 @@ lazy from automation.task import (
     Failed,
     FeedHandoff,
     Interrupted,
+    MeetingFollowup,
     Profile,
     Question,
     Reply,
@@ -256,7 +257,7 @@ class WorkAgent:
         identity = identifier(identity, "task identity")
         prompt = text(prompt, "task prompt").strip()
         match profile:
-            case RequestKind.MEETING_FOLLOWUP:
+            case MeetingFollowup():
                 # Its agent sees only the selected recordings.
                 captured = None
             case RequestKind.GENERAL | FeedHandoff():

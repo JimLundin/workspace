@@ -28,6 +28,8 @@ from automation.task import (
     FileDigest,
     GoalRevision,
     Interrupted,
+    MailTarget,
+    MeetingFollowup,
     NoVerification,
     Outcome,
     Profile,
@@ -68,7 +70,7 @@ from automation.task import (
     variant,
 )
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 _UNBOUND_APPROVAL = "This approval was saved before approvals recorded their operation. Resume the task to review it again."
 MAX_PAGE = 1_000
 _TASK_COLUMNS: tuple[str, ...] = (
@@ -90,6 +92,9 @@ _TASK_COLUMNS: tuple[str, ...] = (
     "wake_at",
 )
 _TASK_SELECT = ", ".join(_TASK_COLUMNS)
+# Queries by profile repeat this exact expression so SQLite uses the index.
+_PROFILE = "json_extract(source,'$.profile')"
+_PROFILE_INDEX = f"CREATE INDEX IF NOT EXISTS request_profile ON tasks({_PROFILE},created_at,id)"
 _ACTION_COLUMNS = "id, task_id, run_id, specification, started_at, updated_at, outcome, outcome_kind, fingerprint"
 
 
@@ -139,8 +144,8 @@ def _profile_data(profile: Profile) -> dict[str, object]:
     match profile:
         case RequestKind.GENERAL:
             return {"profile": "general"}
-        case RequestKind.MEETING_FOLLOWUP:
-            return {"profile": "meeting_followup"}
+        case MeetingFollowup(bundle):
+            return {"profile": "meeting_followup", "bundle": bundle}
         case FeedHandoff(item, title):
             return {"profile": "feed", "item": item, "title": title}
         case _:
@@ -153,8 +158,8 @@ def _profile(data: dict[str, object]) -> Profile:
             _fields(data, "kind", "conversation_id", "profile")
             return RequestKind.GENERAL
         case "meeting_followup":
-            _fields(data, "kind", "conversation_id", "profile")
-            return RequestKind.MEETING_FOLLOWUP
+            _fields(data, "kind", "conversation_id", "profile", "bundle")
+            return MeetingFollowup(digest(data["bundle"], "meeting bundle digest"))
         case "feed":
             _fields(data, "kind", "conversation_id", "profile", "item", "title")
             return FeedHandoff(identifier(data["item"], "feed item identity"), text(data["title"], "feed item title", maximum=240))
@@ -367,6 +372,8 @@ def _verification_data(verification: Verification) -> dict[str, object]:
             return {"kind": "none"}
         case FileDigest(path, sha256):
             return {"kind": "file_digest", "path": path, "sha256": sha256}
+        case MailTarget(version, draft_id, revision, fingerprint):
+            return {"kind": "mail_target", "version": version, "draft_id": draft_id, "revision": revision, "fingerprint": fingerprint}
         case _:
             assert_never(verification)
 
@@ -396,6 +403,14 @@ def _specification(value: object) -> ActionSpec:
         case "file_digest":
             _fields(check, "kind", "path", "sha256")
             verification = FileDigest(text(check["path"], "verification path", maximum=32_768), digest(check["sha256"], "file digest"))
+        case "mail_target":
+            _fields(check, "kind", "version", "draft_id", "revision", "fingerprint")
+            verification = MailTarget(
+                digest(check["version"], "meeting package version"),
+                identifier(check["draft_id"], "meeting draft identity"),
+                integer(check["revision"], "meeting draft revision"),
+                digest(check["fingerprint"], "mail content fingerprint"),
+            )
         case _:
             raise ValueError("Invalid stored action verification.")
     return ActionSpec(
@@ -484,6 +499,8 @@ class TaskStore:
                 return
             if version == 2:
                 self._migrate_from_version_2(connection)
+            if version in (2, 3):
+                self._migrate_from_version_3(connection)
                 return
             if version != 0:
                 raise ValueError("This work database requires a different Workspace schema version.")
@@ -496,6 +513,7 @@ class TaskStore:
                 "routine_id TEXT, routine_revision INTEGER, occurrence_id TEXT, wake_at REAL)",
                 "CREATE UNIQUE INDEX routine_occurrence ON tasks(routine_id,routine_revision,occurrence_id) WHERE routine_id IS NOT NULL",
                 "CREATE INDEX runnable_work ON tasks(phase,priority DESC,created_at,id)",
+                _PROFILE_INDEX,
                 "CREATE TABLE runs (id TEXT PRIMARY KEY, task_id TEXT NOT NULL REFERENCES tasks(id), owner TEXT NOT NULL, "
                 "started_at REAL NOT NULL, previous_state TEXT NOT NULL, ended_at REAL, disposition TEXT, UNIQUE(id,task_id))",
                 "CREATE TABLE goals (task_id TEXT NOT NULL REFERENCES tasks(id), revision INTEGER NOT NULL, prompt TEXT NOT NULL, "
@@ -540,6 +558,19 @@ class TaskStore:
             "UPDATE tasks SET source=json_set(source,'$.profile','general') "
             "WHERE json_extract(source,'$.kind')='request' AND json_extract(source,'$.profile') IS NULL"
         )
+
+    @staticmethod
+    def _migrate_from_version_3(connection: _Connection) -> None:
+        """Version 3 meeting follow-ups bound their recordings in a separate preparation store.
+
+        Their profiles name no bundle, so those tasks and their journal rows are
+        dropped. Published packages and mail files stay on disk, unlisted.
+        """
+        legacy = "SELECT id FROM tasks WHERE json_extract(source,'$.profile')='meeting_followup'"
+        for table in ("actions", "requests", "responses", "goals", "runs"):
+            connection.execute(f"DELETE FROM {table} WHERE task_id IN ({legacy})")
+        connection.execute(f"DELETE FROM tasks WHERE id IN ({legacy})")
+        connection.execute(_PROFILE_INDEX)
         connection.execute(f"PRAGMA user_version={SCHEMA_VERSION}")
 
     @contextmanager
@@ -643,6 +674,15 @@ class TaskStore:
         integer(limit, "task page size", minimum=1, maximum=MAX_PAGE)
         with self._connection() as connection:
             rows = connection.execute(f"SELECT {_TASK_SELECT} FROM tasks ORDER BY updated_at DESC,id LIMIT ?", (limit,)).fetchall()
+            return tuple(self._read_task(connection, row) for row in rows)
+
+    def meeting_followups(self, limit: int) -> tuple[Task, ...]:
+        """The newest meeting follow-ups, however many other tasks were updated since."""
+        integer(limit, "meeting follow-up page size", minimum=1, maximum=MAX_PAGE)
+        with self._connection() as connection:
+            rows = connection.execute(
+                f"SELECT {_TASK_SELECT} FROM tasks WHERE {_PROFILE}='meeting_followup' ORDER BY created_at DESC,id DESC LIMIT ?", (limit,)
+            ).fetchall()
             return tuple(self._read_task(connection, row) for row in rows)
 
     def active_for_routine(self, routine_id: str) -> Task | None:
