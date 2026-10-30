@@ -152,7 +152,7 @@ def test_staging_includes_nested_native_helpers_and_the_checked_source(tmp_path:
 
     for package in ("scripts", "winapi"):
         shutil.copytree(root / package, source / package, ignore=ignored_cache)
-    for name in ("runtime.py", "keeper.py", "keeper_control.py", *PINS):
+    for name in ("runtime.py", "keeper.py", "keeper_control.py", "components.py", *PINS):
         target = source / name
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(root / name, target)
@@ -311,6 +311,7 @@ def test_repack_preserves_descriptor_and_zip64_records(tmp_path: Path) -> None:
 def test_process_classifier_preserves_only_independent_browser_host() -> None:
     assert role_for(("pythonw.exe", "-B", "-m", "assistant.browser_host", "--generation", "1"), windowed=True) is None
     assert role_for(("pythonw.exe", "-m", "assistant"), windowed=True) == "assistant"
+    assert role_for(("pythonw.exe", "-m", "miryoku"), windowed=True) == "layout"
     assert role_for(("pythonw.exe", "workspace.pyw"), windowed=True) == "keeper"
     assert role_for(("python.exe", "test.py", "-m", "assistant.browser_host"), windowed=False) == "runtime"
     assert role_for(("pythonw.exe", "test.py", "workspace.pyw"), windowed=True) == "runtime"
@@ -321,7 +322,7 @@ def test_process_group_rejects_unowned_or_duplicate_children() -> None:
         Process(10, 1, "keeper", "pythonw.exe", 1),
         Process(11, 10, "assistant", "pythonw.exe", 1),
         Process(12, 10, "automation", "pythonw.exe", 1),
-        Process(13, 10, "miryoku", "pythonw.exe", 1),
+        Process(13, 10, "layout", "pythonw.exe", 1),
     )
     assert group(rows)["assistant"].pid == 11
     variants: tuple[tuple[Process, ...], ...] = ((*rows, rows[1]), (*rows, Process(14, 99, "runtime", "python.exe", 1)), rows[:-1])

@@ -239,7 +239,7 @@ ban-relative-imports = "all"
 "typings/win32more/**/*.pyi" = ["N801", "N802"]
 
 [tool.setuptools]
-py-modules = ["config", "diagnostics", "keeper", "keeper_control", "keeper_ui", "protocol", "runtime", "selfcheck", "usage"]
+py-modules = ["components", "config", "diagnostics", "keeper", "keeper_control", "keeper_ui", "protocol", "runtime", "selfcheck", "usage"]
 
 [tool.setuptools.packages.find]
 include = ["assistant*", "automation*", "miryoku*", "winapi*"]

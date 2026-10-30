@@ -5,18 +5,14 @@ from collections.abc import Callable
 from pathlib import Path
 
 from keeper import (
-    LAYOUT_WINDOW,
     PROTECTED,
-    WM_QUIT_LAYOUT,
     Keeper,
     Recovery,
     Stage,
-    WindowTarget,
     ask,
     install,
     prepare_candidate,
     restore,
-    shutdown_seconds,
     snapshot,
     source_files,
     take_requests,
@@ -24,12 +20,6 @@ from keeper import (
 from keeper_control import STATUS, Control, Pause, Paused, Refused, Resume, Resumed, submit
 
 # ---- a fake world for the keeper's logic -----------------------------------------------
-
-
-def test_input_retains_its_short_shutdown_deadline() -> None:
-    # Defect: allowing lengthy assistant cleanup also delays recovery from a
-    # stuck input process, which has no network work to drain.
-    assert shutdown_seconds(WindowTarget(LAYOUT_WINDOW, WM_QUIT_LAYOUT)) == 5
 
 
 class FakeChild:

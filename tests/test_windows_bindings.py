@@ -31,8 +31,9 @@ from assistant.control_policy import (
     toggle_layout,
 )
 from assistant.overlay import OverlayState, load_enabled, save_enabled
+from components import LAYOUT
 from config import APPS
-from keeper import LAYOUT_WINDOW, Stage, WindowsUser32
+from keeper import Stage, WindowsUser32
 from keeper_control import STATUS, Control, Pause, Paused, Resume, Resumed, submit
 from miryoku.engine import Indicator
 from miryoku.layout import AGENT, DICTATE_TOGGLE, ESCAPE, TALK, Key, Layer, Mod, Scancode
@@ -811,7 +812,7 @@ class LayoutFixture:
         self.timeline: tuple[str, ...] = ()
 
     def find_window(self, title: str) -> int | None:
-        assert title == LAYOUT_WINDOW
+        assert title == LAYOUT.window.title
         self.timeline += ("find layout",)
         return self.handle
 

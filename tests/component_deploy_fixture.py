@@ -16,13 +16,13 @@ from collections.abc import Generator
 from enum import Enum, auto
 from pathlib import Path
 
+from components import CATALOGUE, Component, read_marker, started_ms
 from keeper import Keeper, Stage
 from keeper_control import Control
 from scripts.deploy_archive import repack
 from scripts.deploy_files import files, sha
-from scripts.deploy_policy import ROOTS
 from scripts.deploy_processes import Process, process_id
-from scripts.deploy_values import Prepared, Role
+from scripts.deploy_values import Prepared
 from scripts.deploy_windows import Release
 from tests.test_keeper import FakeCheck
 
@@ -34,6 +34,15 @@ def runtime_folders(_folder: str, names: list[str]) -> tuple[str, ...]:
 class SourceChange(Enum):
     ASSISTANT = auto()
     UNCHANGED = auto()
+
+
+# A venv's python.exe is a launcher with its own pid; children must be the
+# interpreter process that writes their readiness marker.
+INTERPRETER = str(Path(sys.base_prefix) / "python.exe")
+
+
+def entry_source(root: Path, name: Component) -> Path:
+    return root / CATALOGUE[name].module / "__main__.py"
 
 
 class Child:
@@ -58,27 +67,21 @@ class World:
         self.history: tuple[Child, ...] = ()
         self.lock = threading.RLock()
 
-    def start(self, name: str) -> Child:
+    def start(self, name: Component) -> Child:
         with self.lock:
-            role: Role
-            match name:
-                case "layout":
-                    role = "miryoku"
-                case "assistant":
-                    role = "assistant"
-                case "automation":
-                    role = "automation"
-                case _:
-                    raise ValueError(name)
-            ready = self.root / "profile" / "keeper" / ("ready-" + name)
-            ready.unlink(missing_ok=True)
+            marker = CATALOGUE[name].marker(self.root / "profile" / "keeper")
+            marker.unlink(missing_ok=True)
             stop = self.root / (name + "-stop-" + str(len(self.history)))
-            source = self.root / "live" / (ROOTS[name].replace(".", "/") + ".py")
-            created = time.time_ns() // 1_000_000
-            process = subprocess.Popen((sys.executable, "-B", "-m", "tests.component_child", str(source), str(ready), str(stop)))
-            child = Child(Process(process.pid, os.getpid(), role, sys.executable, created), process, stop)
+            source = entry_source(self.root / "live", name)
+            command = (INTERPRETER, "-B", "-m", "tests.component_child", str(source), str(self.loaded(name)), str(stop))
+            process = subprocess.Popen(command, env={**os.environ, "WORKSPACE_READY": str(marker)})
+            child = Child(Process(process.pid, os.getpid(), name, INTERPRETER, started_ms(process.pid)), process, stop)
             self.history = (*self.history, child)
             return child
+
+    def loaded(self, name: Component) -> Path:
+        """Where a child records the entry source it loaded."""
+        return self.root / ("loaded-" + name)
 
     def observations(self) -> tuple[Child, ...]:
         with self.lock:
@@ -87,8 +90,8 @@ class World:
     def snapshot(self) -> str:
         raise AssertionError("The release owns source snapshots")
 
-    def is_ready(self, name: str) -> bool:
-        return (self.root / "profile" / "keeper" / ("ready-" + name)).is_file()
+    def is_ready(self, name: Component) -> bool:
+        return read_marker(CATALOGUE[name].marker(self.root / "profile" / "keeper")) is not None
 
     def start_check(self) -> FakeCheck:
         return FakeCheck()
@@ -116,8 +119,8 @@ class ComponentRelease(Release):
         for directory in (".runtime",):
             (self.live / directory).mkdir()
             (self.live / directory / "preserved").write_bytes(b"pinned runtime")
-        for module in ROOTS.values():
-            path = self.live / (module.replace(".", "/") + ".py")
+        for name in CATALOGUE:
+            path = entry_source(self.live, name)
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text("version = 'before'\n")
         old = files(self.live, skip_roots=(".runtime",))

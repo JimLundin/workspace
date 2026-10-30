@@ -35,7 +35,7 @@ lazy from scripts.check_native import execute_native
 lazy from scripts.native_desktop import current_name
 
 ROOT = Path(__file__).resolve().parent.parent
-BROAD = frozenset({"keeper.py", "selfcheck.py", "runtime.py", "workspace.pyw", "config.py", "protocol.py", "pyproject.toml"})
+BROAD = frozenset({"keeper.py", "components.py", "selfcheck.py", "runtime.py", "workspace.pyw", "config.py", "protocol.py", "pyproject.toml"})
 TEST_NAMES = TypeAdapter[list[str]](list[str])
 WINDOWS_IMPORTS = ("WinDLL", "WINFUNCTYPE", "windll", "winreg", "msvcrt", "_winapi", "PySide6", "shiboken6", "win32more")
 # Reviewed effect owners: fake desktop adapters, private localhost endpoints,

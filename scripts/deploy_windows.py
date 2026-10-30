@@ -19,18 +19,19 @@ from ctypes import wintypes
 from pathlib import Path, PurePosixPath
 lazy import msvcrt
 
+from components import ASSISTANT, BAR_WINDOW, CATALOGUE, LAYOUT, Writer, read_marker, shutdown_budget, unix_ms
 from keeper_control import CAPABILITY, STATUS, Pause, Paused, Refused, Resume, Resumed, submit
 from scripts.deploy_archive import repack
 from scripts.deploy_files import PINS, RUNTIME, file_at, files, no_link, read, sha, write, zip_files
-from scripts.deploy_policy import COMPONENTS, ComponentRestart, FullRestart, RestartPlan, restart_plan
+from scripts.deploy_policy import ComponentRestart, FullRestart, RestartPlan, restart_plan
 from scripts.deploy_processes import Process, inventory, same_processes
 from scripts.deploy_values import PREPARED, RELOADED, RUNTIME_AUDIT, STOPPED, Config, Exit, Prepared, Ready, Role, Stopped
 from scripts.development_paths import PYTHON
 lazy from winapi._core import fn
 
-CORE = frozenset({"keeper", "assistant", "automation", "miryoku"})
-FLAGS = ("ready-assistant", "ready-automation", "ready-layout")
-MARKER_ROLES = frozendict({"ready-assistant": "assistant", "ready-automation": "automation", "ready-layout": "miryoku"})
+CORE = frozenset({"keeper", *CATALOGUE})
+STOP_SLACK_S = 10.0
+"""Beyond the keeper's own stop budgets: its control polling and the coordinator's observation."""
 
 
 def launch_interpreter(installed: Mapping[str, object], stopped: Stopped) -> Path:
@@ -46,7 +47,7 @@ def launch_interpreter(installed: Mapping[str, object], stopped: Stopped) -> Pat
 
 def group(rows: tuple[Process, ...]) -> dict[Role, Process]:
     core: dict[Role, Process] = {row.role: row for row in rows if row.role in CORE}
-    if len([row for row in rows if row.role in CORE]) != 4 or set(core) != set(CORE):
+    if len([row for row in rows if row.role in CORE]) != len(CORE) or set(core) != set(CORE):
         raise RuntimeError("The installed keeper and its three children are not a complete group.")
     if any(row.parent_pid != core["keeper"].pid for role, row in core.items() if role != "keeper"):
         raise RuntimeError("The installed children do not belong to the inspected keeper.")
@@ -159,7 +160,7 @@ class Release:
             times = [wintypes.FILETIME() for _ in range(4)]
             if not self.image_name(handle, 0, image, ctypes.byref(size)) or not self.process_times(handle, *(ctypes.byref(value) for value in times)):
                 raise ctypes.WinError(ctypes.get_last_error())
-            created = ((times[0].dwHighDateTime << 32) | times[0].dwLowDateTime) // 10000 - 11644473600000
+            created = unix_ms(times[0])
             if self.process_id(handle) != row.pid or Path(image.value) != Path(row.executable) or created != row.created_ms:
                 raise RuntimeError("A process changed identity before its handle could be retained.")
             return handle
@@ -362,10 +363,10 @@ class Release:
 
     def stop_full(self, rows: tuple[Process, ...]) -> None:
         core = group(rows)
-        handle, owner = self.hwnd("workspace assistant", "workspace assistant class")
+        handle, owner = self.hwnd(ASSISTANT.window.title, ASSISTANT.window.window_class)
         if not handle or owner != core["assistant"].pid:
             raise RuntimeError("The installed assistant has no matching owned control window.")
-        bar, bar_owner = self.hwnd("Workspace floating bar")
+        bar, bar_owner = self.hwnd(BAR_WINDOW)
         record: Stopped = {
             "was_running": True,
             "clean_exit": False,
@@ -389,10 +390,11 @@ class Release:
                 self.keeper_idle()
                 record["requested_at_ns"] = time.time_ns()
                 self.receipt("stop-started.json", record)
-                if not self.post_message(handle, 0x0010, 0, 0):
+                if not self.post_message(handle, ASSISTANT.quit_message, 0, 0):
                     raise ctypes.WinError(ctypes.get_last_error())
                 seen: set[int] = set()
-                deadline = time.monotonic() + 90
+                budget = shutdown_budget(CATALOGUE) + STOP_SLACK_S
+                deadline = time.monotonic() + budget
                 while True:
                     self.observe_exits(record, retained, seen)
                     remaining = self.inventory()
@@ -407,7 +409,7 @@ class Release:
                         self.receipt("stopped.json", record)
                         return
                     if time.monotonic() >= deadline:
-                        raise TimeoutError("Normal shutdown exceeded 90 seconds; no process was terminated and no source was replaced.")
+                        raise TimeoutError(f"Normal shutdown exceeded {budget:.0f} seconds; no process was terminated and no source was replaced.")
                     time.sleep(0.25)
         except Exception as error:
             self.receipt("stop-failure.json", dict(record, error_type=type(error).__name__, error=str(error)))
@@ -426,24 +428,22 @@ class Release:
             case ComponentRestart(components=components):
                 self.receipt("restart-plan.json", {"components": components, "full": False})
             case FullRestart.ALL:
-                self.receipt("restart-plan.json", {"components": COMPONENTS, "full": True})
+                self.receipt("restart-plan.json", {"components": tuple(CATALOGUE), "full": True})
         return result
 
     def stop_selected(self, rows: tuple[Process, ...], plan: ComponentRestart) -> None:
         """Retain exact handles while the supervisor pauses selected child trees."""
         core = group(rows)
-        selected_roles = frozenset("miryoku" if name == "layout" else name for name in plan.components)
-        selected = {row.pid for row in rows if row.role in selected_roles}
+        selected = {row.pid for row in rows if row.role in plan.components}
         while descendants := {row.pid for row in rows if row.parent_pid in selected} - selected:
             selected.update(descendants)
         preserved = tuple(row for row in rows if row.pid not in selected)
-        bar, owner = self.hwnd("Workspace floating bar")
+        bar, owner = self.hwnd(BAR_WINDOW)
         record: Stopped = {
             "was_running": True,
             "clean_exit": False,
             "processes_before": [row.identity() for row in rows],
             "preserved": [row.identity() for row in preserved],
-            "preserved_markers": {flag: (self.state / flag).stat().st_mtime_ns for flag, role in MARKER_ROLES.items() if role not in selected_roles},
             "bar_was_visible": bool(bar and owner == core["assistant"].pid and self.window_visible(bar)),
             "exits": [],
         }
@@ -464,7 +464,8 @@ class Release:
                 self.receipt("stop-started.json", record)
                 submit(self.state, Pause(self.stage.name, plan.components))
                 seen: set[int] = set()
-                deadline = time.monotonic() + 90
+                budget = shutdown_budget(plan.components) + STOP_SLACK_S
+                deadline = time.monotonic() + budget
                 while time.monotonic() < deadline:
                     if any(self.exit_code(retained[row.pid][1]) is not None for row in preserved):
                         raise RuntimeError("A retained component exited during source deployment.")
@@ -486,7 +487,7 @@ class Release:
                         case _:
                             pass
                     time.sleep(0.1)
-                raise TimeoutError("Component pause did not complete within 90 seconds; no source was replaced.")
+                raise TimeoutError(f"Component pause did not complete within {budget:.0f} seconds; no source was replaced.")
         except Exception as error:
             self.receipt("stop-failure.json", dict(record, error_type=type(error).__name__, error=str(error)))
             raise
@@ -693,18 +694,16 @@ class Release:
             row.identity() != preserved[role] if role in preserved else row.created_ms < started_ns // 1000000 for role, row in core.items()
         ):
             return None
-        markers = {name: (self.state / name).stat().st_mtime_ns for name in FLAGS if (self.state / name).is_file()}
-        retained_markers = stopped.get("preserved_markers", {})
-        if any(markers.get(name, 0) != retained_markers[name] if name in retained_markers else markers.get(name, 0) < started_ns for name in FLAGS):
+        if any(read_marker(entry.marker(self.state)) != Writer(core[name].pid, core[name].created_ms) for name, entry in CATALOGUE.items()):
             return None
-        control, owner = self.hwnd("workspace assistant", "workspace assistant class")
+        control, owner = self.hwnd(ASSISTANT.window.title, ASSISTANT.window.window_class)
         if not control or owner != core["assistant"].pid:
             return None
         if require_bar:
-            bar, bar_owner = self.hwnd("Workspace floating bar")
+            bar, bar_owner = self.hwnd(BAR_WINDOW)
             if not bar or bar_owner != owner or not self.window_visible(bar):
                 return None
-        return {"core": {role: row.identity() for role, row in core.items()}, "markers": markers}, rows
+        return {"core": {role: row.identity() for role, row in core.items()}}, rows
 
     def reload(self) -> None:
         self.prepared()
@@ -717,11 +716,6 @@ class Release:
             self.footprint("footprint-after.json", (), workload="Workspace was left stopped as originally observed")
             self.receipt("reloaded.json", {"was_running": False, "left_stopped": True})
             return
-        retained_roles = {row.role for row in retained}
-        for name in FLAGS:
-            if MARKER_ROLES[name] in retained_roles:
-                continue
-            (self.state / name).unlink(missing_ok=True)
         if retained:
             keeper_pid = next(row.pid for row in retained if row.role == "keeper")
             started_ns = time.time_ns()
@@ -839,7 +833,7 @@ def drive(release: Release, action: str) -> None:
                         raise RuntimeError("The reloaded receipt has no verified readiness time.")
                 measurements["outage"] = round((verified - stopped.get("requested_at_ns", 0)) / 1e9, 3) if stopped["exits"] else 0.0
                 measurements["keyboard_outage"] = (
-                    0.0 if any(row["role"] == "miryoku" for row in stopped.get("preserved", [])) else measurements["outage"]
+                    0.0 if any(row["role"] == LAYOUT.name for row in stopped.get("preserved", [])) else measurements["outage"]
                 )
             release.receipt("timings.json", measurements)
             print(json.dumps(measurements), flush=True)

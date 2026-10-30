@@ -13,13 +13,13 @@ from typing import Literal, Protocol
 
 from pydantic import TypeAdapter, ValidationError
 
-from keeper import Program
+from components import Component
 
 
 @dataclass(frozen=True, slots=True)
 class Pause:
     token: str
-    components: tuple[Program, ...]
+    components: tuple[Component, ...]
     action: Literal["pause"] = "pause"
 
 
@@ -32,7 +32,7 @@ class Resume:
 @dataclass(frozen=True, slots=True)
 class Paused:
     token: str
-    components: tuple[Program, ...]
+    components: tuple[Component, ...]
     phase: Literal["paused"] = "paused"
 
 
@@ -61,7 +61,7 @@ CAPABILITY = TypeAdapter[Capability](Capability)
 
 
 class Supervisor(Protocol):
-    def suspend(self, components: tuple[Program, ...]) -> bool: ...
+    def suspend(self, components: tuple[Component, ...]) -> bool: ...
     def resume(self, now: float) -> None: ...
 
 

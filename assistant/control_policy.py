@@ -11,8 +11,8 @@ from enum import Enum
 from pathlib import Path
 from typing import Protocol
 
-import keeper
 import protocol
+from components import LAYOUT
 from miryoku.layout import Scancode
 from protocol import App, LayoutState, Request, Tool
 lazy from winapi.shell import MenuItem
@@ -91,7 +91,7 @@ class StartupEffects(LayoutTransport, Protocol):
 
 
 def toggle_layout(effects: LayoutTransport) -> bool:
-    window = effects.find_window(keeper.LAYOUT_WINDOW)
+    window = effects.find_window(LAYOUT.window.title)
     return window is not None and effects.post(window, protocol.WM_TOGGLE_LAYOUT, 0, 0)
 
 
@@ -99,7 +99,7 @@ def initialize_controls(handle: int, start_workers: Callable[[], None], effects:
     """Start owners before requesting state replay and announcing readiness."""
     timer = effects.start_timer(handle)
     start_workers()
-    if (layout := effects.find_window(keeper.LAYOUT_WINDOW)) is not None:
+    if (layout := effects.find_window(LAYOUT.window.title)) is not None:
         effects.post(layout, protocol.WM_QUERY_LAYOUT_STATE, 0, 0)
     effects.ready()
     return timer

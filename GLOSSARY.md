@@ -154,3 +154,14 @@ _Avoid_: Shutdown, interruption
 An execution break that leaves a task unfinished and recoverable. It does not
 authorize blindly repeating an action with an uncertain outcome.
 _Avoid_: Cancellation, failure
+
+**Component catalogue**:
+The one list of programs the keeper supervises: the layout, the assistant and
+automation. Each entry names its entry module, control window, quit message,
+shutdown budget and readiness marker.
+_Avoid_: Program, role, miryoku (as a component name)
+
+**Readiness marker**:
+The file a component writes once it is up. It names its writer by process id
+and creation time, so a reader accepts it only from the process it observed.
+_Avoid_: Ready flag

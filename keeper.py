@@ -9,8 +9,9 @@ usable with the mouse alone in case the change broke the keyboard.
 
 So that a change can never break what undoes it, the agent can't edit this file,
 selfcheck.py or workspace.pyw (`PROTECTED`), and the keeper uses a protected Qt dialog module. Its coordination uses only the
-standard library. The other programs talk to it through files: requests in one
-folder, and a "ready" file each program writes once it's up.
+standard library. What it runs is listed in the protected components.py. The other
+programs talk to it through files: requests in one folder, and a readiness marker
+each program writes once it's up.
 
     pythonw keeper.py        (workspace.pyw does this)
 """
@@ -29,14 +30,12 @@ import time
 import uuid
 from collections.abc import Callable
 from ctypes import wintypes
-from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum, auto
 from pathlib import Path
-from types import MappingProxyType
-from typing import Final, Literal, Protocol, TypedDict
+from typing import Final, Protocol, TypedDict
 
-type Program = Literal["layout", "assistant", "automation"]
+from components import CATALOGUE, Component, Entry, read_marker
 
 LIVE: Final = Path(__file__).resolve().parent
 """Workspace's own folder: the version that runs."""
@@ -49,20 +48,8 @@ VERSIONS: Final = DIRECTORY / "versions"
 """A copy of each version replaced by an install, newest last."""
 KEPT_VERSIONS: Final = 20
 
-PROTECTED: Final = frozenset({"keeper.py", "selfcheck.py", "workspace.pyw", "runtime.py", "keeper_ui.py", "keeper_control.py"})
+PROTECTED: Final = frozenset({"keeper.py", "selfcheck.py", "workspace.pyw", "runtime.py", "keeper_ui.py", "keeper_control.py", "components.py"})
 """Files a change can't touch."""
-PROGRAMS: Final = MappingProxyType({"layout": "miryoku", "assistant": "assistant", "automation": "automation"})
-"""What the keeper runs, in startup order: name -> module.
-Shutdown reverses this order so execution releases the desktop before its UI.
-"""
-
-# The window titles and messages that ask each program to quit cleanly (the layout
-# lets go of held keys first). Defined here, the stable side; protocol.py uses them.
-LAYOUT_WINDOW: Final = "workspace layout"
-ASSISTANT_WINDOW: Final = "workspace assistant"
-AUTOMATION_WINDOW: Final = "workspace automation"
-WM_CLOSE: Final = 0x0010
-WM_QUIT_LAYOUT: Final = 0x8003
 
 START_S: Final = 30.0
 """How long a program gets to say it's ready."""
@@ -115,13 +102,6 @@ def take_requests(*, folder: Path = REQUESTS) -> tuple[tuple[str, str], ...]:
         with contextlib.suppress(OSError):
             path.unlink()
     return tuple(taken)
-
-
-def ready() -> None:
-    """Called by a program the keeper runs, once it's up."""
-    if path := os.environ.get("WORKSPACE_READY"):
-        with contextlib.suppress(OSError):
-            Path(path).write_text("ready", encoding="utf-8")
 
 
 # ---- versions on disk ------------------------------------------------------------------
@@ -244,8 +224,8 @@ class Check(Protocol):
 class World(Protocol):
     """What the keeper does to the computer."""
 
-    def start(self, name: str) -> Child: ...
-    def is_ready(self, name: str) -> bool: ...
+    def start(self, name: Component) -> Child: ...
+    def is_ready(self, name: Component) -> bool: ...
     def start_check(self) -> Check: ...
     def snapshot(self) -> str: ...
     def restore(self, version: str) -> None: ...
@@ -261,6 +241,11 @@ class Stage(Enum):
     CHECKING = auto()
     TRIAL = auto()
     PAUSED = auto()
+
+
+def restarted(action: str) -> Component | None:
+    """The component a `restart_<name>` request names."""
+    return next((name for name in CATALOGUE if action == f"restart_{name}"), None)
 
 
 def unexpected_exit(name: str, code: int | None) -> bool:
@@ -316,7 +301,7 @@ class Keeper:
     def __init__(self, world: World, recovery: Recovery | None = None) -> None:
         self.recovery = recovery
         self.world = world
-        self.children: dict[str, Child] = {}
+        self.children: dict[Component, Child] = {}
         self.stage = Stage.STARTING
         self.deadline = 0.0
         self.check: Check | None = None
@@ -327,7 +312,7 @@ class Keeper:
         """Starting a just-installed change (so failing to start undoes it)."""
         self.crashes: list[float] = []
         self.done = False
-        self.suspended: tuple[Program, ...] = ()
+        self.suspended: tuple[Component, ...] = ()
         """The assistant was quit: the keeper should exit."""
 
     def recover(self) -> None:
@@ -347,12 +332,12 @@ class Keeper:
             self.recovery.write(self.undoable, pending=pending)
 
     def start(self, now: float) -> None:
-        for name in PROGRAMS:
+        for name in CATALOGUE:
             self.children[name] = self.world.start(name)
         self.stage, self.deadline = Stage.STARTING, now + START_S
 
     def stop_all(self) -> None:
-        for name in reversed(PROGRAMS):
+        for name in reversed(CATALOGUE):
             if (child := self.children.get(name)) is not None and child.poll() is None:
                 child.stop()
         self.children = {}
@@ -381,11 +366,10 @@ class Keeper:
                     self.world.notify("There's no update to undo.")
                 else:
                     self.rollback("you undid it", now)
-            case "restart_layout" | "restart_assistant" | "restart_automation":
+            case _ if (name := restarted(action)) is not None:
                 if self.stage is not Stage.RUNNING:
                     self.world.notify("Workspace is starting or updating; try the restart again in a moment.")
                     return
-                name = action.removeprefix("restart_")
                 if (child := self.children.pop(name, None)) is not None and child.poll() is None:
                     child.stop()
                 self.children[name] = self.world.start(name)
@@ -393,15 +377,15 @@ class Keeper:
             case _:
                 pass
 
-    def suspend(self, components: tuple[Program, ...]) -> bool:
+    def suspend(self, components: tuple[Component, ...]) -> bool:
         """Stop only selected children; retain supervision ownership during IO."""
         if self.stage is not Stage.RUNNING or len(set(components)) != len(components):
             return False
-        if any(name not in PROGRAMS or name not in self.children for name in components):
+        if any(name not in self.children for name in components):
             return False
         self.suspended = components
         self.stage = Stage.PAUSED
-        for name in reversed(PROGRAMS):
+        for name in reversed(CATALOGUE):
             if name in components:
                 child = self.children.pop(name)
                 if child.poll() is None:
@@ -410,7 +394,7 @@ class Keeper:
 
     def resume(self, now: float) -> None:
         """Start paused children only after the coordinator verified replacement."""
-        for name in PROGRAMS:
+        for name in CATALOGUE:
             if name in self.suspended:
                 self.children[name] = self.world.start(name)
         self.suspended = ()
@@ -532,7 +516,7 @@ class Keeper:
 
 
 class _User32(Protocol):
-    def FindWindowW(self, cls: None, title: str) -> int: ...
+    def FindWindowW(self, cls: str | None, title: str) -> int: ...
     def PostMessageW(self, hwnd: int, message: int, wparam: int, lparam: int) -> int:
         """The Win32 message ABI requires a window, message and two payload words."""
         ...
@@ -556,7 +540,7 @@ class WindowsUser32:
             ("PostMessageW", library)
         )
 
-    def FindWindowW(self, cls: None, title: str) -> int:
+    def FindWindowW(self, cls: str | None, title: str) -> int:
         return self.find(cls, title) or 0
 
     def PostMessageW(self, hwnd: int, message: int, wparam: int, lparam: int) -> int:
@@ -584,43 +568,26 @@ def _pythonw() -> str:
     return str(candidate) if candidate.exists() else sys.executable
 
 
-@dataclass(frozen=True, slots=True)
-class WindowTarget:
-    title: str
-    quit_message: int
-
-
-def shutdown_seconds(target: WindowTarget) -> float:
-    # Assistant cleanup includes a 20-second personal-work join, and automation
-    # must park ongoing work and close its browser. Give these effect owners a
-    # bounded minute before force termination. Input keeps its short stop budget.
-    # The deployment coordinator independently requires zero exit codes.
-    match target:
-        case WindowTarget(quit_message=0x0010):
-            return 60.0
-        case _:
-            return 5.0
-
-
 class Process:
     """A program the keeper started. Stopping asks it to quit (so the layout lets go
     of held keys) and only then ends it."""
 
-    __slots__ = ("process", "target", "user32")
+    __slots__ = ("component", "process", "user32")
 
-    def __init__(self, process: subprocess.Popen[bytes], target: WindowTarget, user32: _User32) -> None:
+    def __init__(self, process: subprocess.Popen[bytes], component: Entry, user32: _User32) -> None:
         self.process: subprocess.Popen[bytes] = process
-        self.target: WindowTarget = target
+        self.component: Entry = component
         self.user32: _User32 = user32
 
     def poll(self) -> int | None:
         return self.process.poll()
 
     def stop(self) -> None:
-        if hwnd := self.user32.FindWindowW(None, self.target.title):
-            self.user32.PostMessageW(hwnd, self.target.quit_message, 0, 0)
+        window = self.component.window
+        if hwnd := self.user32.FindWindowW(window.window_class, window.title):
+            self.user32.PostMessageW(hwnd, self.component.quit_message, 0, 0)
         try:
-            self.process.wait(timeout=shutdown_seconds(self.target))
+            self.process.wait(timeout=self.component.shutdown_s)
         except subprocess.TimeoutExpired:
             self.process.kill()
             self.process.wait()
@@ -670,21 +637,20 @@ def main(ui: Ui) -> None:
         def __init__(self) -> None:
             self.candidate = STATE / "candidate"
 
-        def start(self, name: str) -> Child:
-            flag = STATE / f"ready-{name}"
-            flag.unlink(missing_ok=True)
-            env = {**os.environ, "WORKSPACE_READY": str(flag)}
+        def start(self, name: Component) -> Child:
+            component = CATALOGUE[name]
+            marker = component.marker(STATE)
+            marker.unlink(missing_ok=True)
+            env = {**os.environ, "WORKSPACE_READY": str(marker)}
             with (DIRECTORY / f"{name}.log").open("ab") as errors:
-                process = subprocess.Popen([_pythonw(), "-m", PROGRAMS[name]], cwd=LIVE, env=env, stderr=errors, creationflags=0x0800_0000)
+                process = subprocess.Popen([_pythonw(), "-m", component.module], cwd=LIVE, env=env, stderr=errors, creationflags=0x0800_0000)
             _log(f"started {name}")
-            if name == "layout":
-                return Process(process, WindowTarget(LAYOUT_WINDOW, WM_QUIT_LAYOUT), user32)
-            if name == "automation":
-                return Process(process, WindowTarget(AUTOMATION_WINDOW, WM_CLOSE), user32)
-            return Process(process, WindowTarget(ASSISTANT_WINDOW, WM_CLOSE), user32)
+            return Process(process, component, user32)
 
-        def is_ready(self, name: str) -> bool:
-            return (STATE / f"ready-{name}").exists()
+        def is_ready(self, name: Component) -> bool:
+            # The keeper is the only starter and removes the marker first, so any
+            # marker is this child's. A venv launcher's pid differs from its writer's.
+            return read_marker(CATALOGUE[name].marker(STATE)) is not None
 
         def start_check(self) -> Check:
             _log("checking the workspace")

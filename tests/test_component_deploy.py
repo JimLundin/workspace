@@ -2,10 +2,9 @@
 
 import contextlib
 import io
-import os
 from pathlib import Path
 
-from keeper import Program
+from components import ASSISTANT, Component, Writer, write_marker
 from scripts.deploy_files import read, sha
 from scripts.deploy_policy import ComponentRestart
 from scripts.deploy_windows import drive
@@ -21,7 +20,7 @@ def test_selective_deployment_and_rollback_preserve_keyboard_and_supervisor(tmp_
         release = ComponentRelease(root, change, fail_copy=fail)
         before = release.inventory()
         try:
-            components: tuple[Program, ...] = ("assistant",) if change is SourceChange.ASSISTANT else ()
+            components: tuple[Component, ...] = ("assistant",) if change is SourceChange.ASSISTANT else ()
             assert release.plan(next(row.pid for row in before if row.role == "keeper")) == ComponentRestart(components)
             with contextlib.redirect_stdout(io.StringIO()):
                 try:
@@ -38,10 +37,10 @@ def test_selective_deployment_and_rollback_preserve_keyboard_and_supervisor(tmp_
                 else:
                     assert current.identity() == original.identity()
             expected = "version = 'after'\n" if not fail and change is SourceChange.ASSISTANT else "version = 'before'\n"
-            assert (release.state / "ready-assistant").read_text() == expected
+            assert release.world.loaded("assistant").read_text() == expected
             stopped = release.shutdown_receipt()
             assert [row["role"] for row in stopped["exits"]] == list(components)
-            assert {row["role"] for row in stopped.get("preserved", [])} == {"keeper", "automation", "miryoku", "assistant"} - set(components)
+            assert {row["role"] for row in stopped.get("preserved", [])} == {"keeper", "automation", "layout", "assistant"} - set(components)
             assert read(release.stage / "restart-plan.json")["components"] == list(components)
             assert (release.live / ".ruff_cache" / "CACHEDIR.TAG").read_bytes() == b"unmanaged cache bytes"
             if fail:
@@ -50,19 +49,19 @@ def test_selective_deployment_and_rollback_preserve_keyboard_and_supervisor(tmp_
                 assert not (release.live / "added.py").exists()
             elif change is SourceChange.ASSISTANT:
                 assert (release.stage / "verified.json").is_file()
-                # A retained marker can stay old, but the assistant's marker
-                # must come from this launch rather than the previous process.
+                # A retained marker names its retained writer, but the assistant's
+                # marker must name the replacement rather than the previous process.
                 launched = read(release.stage / "launch.json")
                 match launched:
                     case {"keeper_pid": int() as pid, "started_at_ns": int() as started}:
                         pass
                     case _:
                         raise AssertionError("Missing launch evidence")
-                marker = release.state / "ready-assistant"
-                fresh = marker.stat().st_mtime_ns
-                os.utime(marker, ns=(1, 1))
+                marker = ASSISTANT.marker(release.state)
+                fresh = marker.read_bytes()
+                write_marker(marker, next(Writer(row.pid, row.created_ms) for row in before if row.role == "assistant"))
                 assert release.readiness(pid, started, require_bar=True) is None
-                os.utime(marker, ns=(fresh, fresh))
+                marker.write_bytes(fresh)
                 assert release.readiness(pid, started, require_bar=True) is not None
             else:
                 assert read(release.stage / "timings.json")["keyboard_outage"] == 0

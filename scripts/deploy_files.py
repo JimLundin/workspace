@@ -32,6 +32,7 @@ HELPERS = (
     "winapi/shapes.py",
     "keeper_control.py",
     "keeper.py",
+    "components.py",
 )
 RECORD = TypeAdapter[dict[str, object]](dict[str, object])
 SOURCE_HASHES = TypeAdapter[dict[str, str]](dict[str, str])

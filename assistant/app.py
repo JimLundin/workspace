@@ -16,6 +16,7 @@ from enum import Enum, auto
 from pathlib import Path
 from typing import Final, Protocol, assert_never
 
+import components
 import keeper
 import usage
 from assistant.activity import ActivityTracker, ContextSnapshot, Observation
@@ -81,7 +82,6 @@ lazy from automation.personal_work import (
 lazy from automation.routines import RoutineStore
 lazy from automation.store import TaskStore
 lazy from automation.task import Control
-lazy from keeper import ASSISTANT_WINDOW
 lazy from miryoku.layout import Layer
 lazy from protocol import WM_INDICATOR, WM_KEY_STATE, WM_LAYOUT_STATE, WM_REQUEST, LayoutState, Tool, decode_indicator
 lazy from winapi import audio, recording, screen, shell, system, windows
@@ -173,7 +173,7 @@ class NativeStartup:
         return system.set_window_timer(handle, 1000)
 
     def ready(self) -> None:
-        keeper.ready()
+        components.ready()
 
 
 @dataclass(frozen=True, slots=True)
@@ -228,7 +228,7 @@ class AssistantApp:
         )
         self.overlay = OverlayState(enabled=load_enabled())
         self.jobs: queue.Queue[Callable[[], None] | None] = queue.Queue()
-        self.window = shell.AppWindow(ASSISTANT_WINDOW, self.on_message)
+        self.window = shell.AppWindow(components.ASSISTANT.window.title, self.on_message)
         self.tray = Tray(self.window.handle)
         self.mic_event = system.create_event()
         self.tiling = GlazeWM()
@@ -832,7 +832,7 @@ class Runtime:
     identifies the same controller when Qt exits before its message loop.
     """
 
-    title: str = ASSISTANT_WINDOW
+    title: str = components.ASSISTANT.window.title
     lock_name: str = LOCK_NAME
     ui: Callable[[], Ui] = create_ui
     controller: Callable[[Settings | Missing, Ui], Controller] = create_controller

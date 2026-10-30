@@ -28,7 +28,7 @@ lazy from PySide6 import QtCore, QtWidgets
 
 from assistant.qt_runtime import prepare
 from assistant.qt_ui import application
-from keeper import ASSISTANT_WINDOW
+from components import ASSISTANT, CATALOGUE, read_marker
 from protocol import MAGIC
 from winapi import clipboard, inputs, screen, system, windows
 from winapi.shapes import Rect
@@ -101,7 +101,7 @@ def workspace(endpoint: FakeEndpoint, home: Path, live: Path = ROOT) -> Generato
         time.sleep(0.5)
         yield
     finally:
-        if (hwnd := windows.find(ASSISTANT_WINDOW)) is not None:
+        if (hwnd := windows.find(ASSISTANT.window.title)) is not None:
             system.post_message(hwnd, system.WM_CLOSE, 0, 0)  # as Quit in the tray menu: the keeper stops everything
         try:
             process.wait(timeout=15)
@@ -112,7 +112,7 @@ def workspace(endpoint: FakeEndpoint, home: Path, live: Path = ROOT) -> Generato
 
 def both_ready(home: Path) -> bool:
     state = home / "workspace" / "keeper"
-    return (state / "ready-layout").exists() and (state / "ready-assistant").exists() and (state / "ready-automation").exists()
+    return all(read_marker(entry.marker(state)) is not None for entry in CATALOGUE.values())
 
 
 @contextmanager

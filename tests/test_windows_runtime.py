@@ -7,12 +7,14 @@ import sys
 import textwrap
 import time
 import unittest
+from dataclasses import replace
 from pathlib import Path
 
 if sys.platform != "win32":
     raise unittest.SkipTest("Windows bundle integration")
 
-from keeper import Process, WindowsUser32, WindowTarget
+from components import ASSISTANT, Window
+from keeper import Process, WindowsUser32
 from runtime import activate
 from scripts.deploy_processes import inventory
 
@@ -47,7 +49,7 @@ def test_keeper_allows_owned_cleanup_longer_than_five_seconds(tmp_path: Path) ->
                 if process.poll() is not None or time.monotonic() >= deadline:
                     raise AssertionError("The cleanup fixture did not become ready")
                 time.sleep(0.01)
-            child = Process(process, WindowTarget(title, 0x0010), boundary)
+            child = Process(process, replace(ASSISTANT, window=Window(title, None)), boundary)
             child.stop()
             assert process.returncode == 0, "The keeper terminated a responsive child before cleanup finished"
         finally:
