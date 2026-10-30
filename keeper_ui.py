@@ -11,7 +11,7 @@ from pathlib import Path
 
 from PySide6 import QtCore, QtGui, QtWidgets
 
-from keeper_control import Control, Supervisor
+from keeper_control import Control, Keep, Supervisor, Undo
 
 # Resolve Python 3.15's deferred executor export before Qt inspects imports.
 _executor = ThreadPoolExecutor
@@ -110,7 +110,7 @@ class KeeperUi:
         self.corner(dialog)
         QtCore.QTimer.singleShot(20_000, dialog, dialog.accept)
 
-    def show_trial(self, summary: str | None, choose: Callable[[str], None]) -> None:
+    def show_trial(self, summary: str | None, choose: Callable[[Keep | Undo], None]) -> None:
         if self.trial is not None:
             self.trial.hide()
             self.trial.deleteLater()
@@ -126,9 +126,9 @@ class KeeperUi:
         undo = QtWidgets.QPushButton("Undo")
         keep = QtWidgets.QPushButton("Keep")
         keep.setObjectName("primary")
-        undo.clicked.connect(lambda: choose("undo"))
-        keep.clicked.connect(lambda: choose("keep"))
-        dialog.rejected.connect(lambda: choose("keep"))
+        undo.clicked.connect(lambda: choose(Undo()))
+        keep.clicked.connect(lambda: choose(Keep()))
+        dialog.rejected.connect(lambda: choose(Keep()))
         controls.addWidget(undo)
         controls.addWidget(keep)
         layout.addLayout(controls)

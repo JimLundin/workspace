@@ -70,6 +70,12 @@ An explicit connection between two bubbles, describing how their context relates
 It remains attached to those pieces when their containers are opened or collapsed.
 _Avoid_: Containment, source assignment
 
+**Canvas edit**:
+A change the person makes on the canvas, such as moving, nesting, grouping,
+expanding or relating bubbles, or editing a note. It applies to the canvas as it
+is now, so changes the agent made since the canvas was last shown remain.
+_Avoid_: Saved view copy, panel save
+
 **Bubble contents**:
 The pieces collected inside a bubble, such as individual emails within an email
 conversation. Containment is distinct from that bubble's connections to work.
@@ -203,6 +209,21 @@ The one list of programs the keeper supervises: the layout, the assistant and
 automation. Each entry names its entry module, control window, quit message,
 shutdown budget and readiness marker.
 _Avoid_: Program, role, miryoku (as a component name)
+
+**Local bridge**:
+The authenticated loopback listener through which a local client reaches
+Workspace owners. The work bridge carries the agents' feed, work and canvas
+tool requests; the hook bridge carries console CLI hook events. Each bridge
+publishes an endpoint file with its address and token. An owner's refusal is a
+typed reply, not a transport error.
+_Avoid_: Feed bridge, console server
+
+**Keeper request**:
+A typed ask in the keeper's inbox folder: install a checked change, undo the
+last install, keep the change on trial, or restart one catalogue component.
+The keeper takes each once, oldest first, and refuses one it can't read with a
+visible notice. Deployment pause and resume are separate component commands.
+_Avoid_: Action, agent request (the user's ask of the agent)
 
 **Readiness marker**:
 The file a component writes once it is up. It names its writer by process id

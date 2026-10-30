@@ -1,85 +1,58 @@
-"""An authenticated, local hook inbox. Pending answers survive UI changes, not application exit."""
+"""The local console hook inbox. Pending answers survive UI changes, not application exit."""
 
-import contextlib
-import hmac
-import json
 import secrets
 import threading
 import time
 from collections.abc import Callable
-from dataclasses import replace
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import cast
+
+from pydantic import TypeAdapter
 
 from assistant.console_requests import Answer, Command, Dismiss, Provider, Request, State, answered, hook_output, object_value, request, text
+from assistant.local_bridge import Contract, LocalBridge
 
 MAX_REQUESTS = 128
 
 
+@dataclass(frozen=True, slots=True)
+class HookDelivery:
+    """What `scripts/inbox_hook.py` posts: its provider and the CLI's hook event.
+
+    The event stays an unvalidated observation until `console_requests.request`
+    validates the supported shapes.
+    """
+
+    provider: Provider
+    event: object
+
+
+# `scripts/inbox_hook.py` runs without Workspace's dependencies and keeps its
+# own copy of this contract: it reads the endpoint file, posts here and writes
+# the reply verbatim as the CLI's hook output.
+HOOK_BRIDGE: Contract[HookDelivery, dict[str, object]] = Contract("/request", TypeAdapter(HookDelivery), TypeAdapter(dict[str, object]))
+
+
 class ConsoleInbox:
-    __slots__ = ("closed", "endpoint", "lock", "publish", "requests", "server", "thread", "timeout", "token", "waiters")
+    __slots__ = ("bridge", "closed", "lock", "publish", "requests", "timeout", "waiters")
 
     def __init__(self, endpoint: Path, publish: Callable[[tuple[Request, ...]], None], *, timeout: float = 570) -> None:
-        self.endpoint, self.publish, self.timeout = endpoint, publish, timeout
+        self.publish, self.timeout = publish, timeout
         self.lock = threading.RLock()
         self.closed = threading.Event()
         self.requests: dict[str, Request] = {}
         self.waiters: dict[str, threading.Event] = {}
-        self.token = secrets.token_urlsafe(32)
-        owner = self
+        self.bridge = LocalBridge(endpoint, HOOK_BRIDGE, self.deliver)
 
-        class Handler(BaseHTTPRequestHandler):
-            def log_message(self, format: str, *args: object) -> None:
-                pass  # Hook payloads may contain private messages or command arguments.
-
-            def do_POST(self) -> None:
-                if self.path != "/request" or not hmac.compare_digest(self.headers.get("Authorization", ""), "Bearer " + owner.token):
-                    self.send_error(403)
-                    return
-                try:
-                    length = int(self.headers.get("Content-Length", "0"))
-                    if not 0 < length <= 64_000:
-                        raise ValueError("Invalid hook payload size.")
-                    data = object_value(cast(object, json.loads(self.rfile.read(length))))
-                    provider = Provider(text(data.get("provider"), 64))
-                    raw = data.get("event")
-                    event = object_value(raw)
-                    if event.get("hook_event_name") in ("Interrupt", "SessionEnd"):
-                        owner.cancel_session(provider, text(event.get("session_id"), 512))
-                        result: dict[str, object] = {}
-                    else:
-                        current = request(provider, raw, secrets.token_hex(16), time.time())
-                        answer = owner.receive(current)
-                        result = hook_output(provider, raw, answer)
-                    output = json.dumps(result).encode("utf-8")
-                except ValueError, TypeError:
-                    self.send_error(400)
-                    return
-                self.send_response(200)
-                self.send_header("Content-Type", "application/json")
-                self.send_header("Content-Length", str(len(output)))
-                self.end_headers()
-                with contextlib.suppress(BrokenPipeError, ConnectionResetError):
-                    self.wfile.write(output)
-
-        self.server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
-        self.server.daemon_threads = True
-        self.endpoint.parent.mkdir(parents=True, exist_ok=True)
-        candidate = self.endpoint.with_suffix(".tmp")
-        address = cast(object, self.server.socket.getsockname())
-        if not isinstance(address, tuple):
-            raise OSError("Console inbox has no valid local listener address.")
-        elements = cast(tuple[object, ...], address)
-        if len(elements) != 2 or type(elements[1]) is not int:
-            raise OSError("Console inbox has no valid local listener address.")
-        port = elements[1]
-        configuration: dict[str, str] = {"url": f"http://127.0.0.1:{port}/request", "token": self.token}
-        candidate.write_text(json.dumps(configuration), encoding="utf-8")
-        candidate.chmod(0o600)
-        candidate.replace(self.endpoint)
-        self.thread = threading.Thread(target=self.server.serve_forever, name="Console inbox", daemon=True)
-        self.thread.start()
+    def deliver(self, delivery: HookDelivery) -> dict[str, object]:
+        """Hold a waiting hook until it is answered, dismissed, cancelled or expired."""
+        provider, event = delivery.provider, object_value(delivery.event)
+        match event.get("hook_event_name"):
+            case "Interrupt" | "SessionEnd":
+                self.cancel_session(provider, text(event.get("session_id"), 512))
+                return {}
+            case _:
+                return hook_output(provider, event, self.receive(request(provider, event, secrets.token_hex(16), time.time())))
 
     def changed(self) -> None:
         self.publish(tuple(self.requests.values()))
@@ -148,10 +121,4 @@ class ConsoleInbox:
                     self.requests[identity] = replace(current, state=State.EXPIRED)
             for waiter in self.waiters.values():
                 waiter.set()
-        self.server.shutdown()
-        self.server.server_close()
-        self.thread.join(timeout=2)
-        with contextlib.suppress(FileNotFoundError):
-            data = object_value(cast(object, json.loads(self.endpoint.read_text(encoding="utf-8"))))
-            if data.get("token") == self.token:
-                self.endpoint.unlink()
+        self.bridge.close()

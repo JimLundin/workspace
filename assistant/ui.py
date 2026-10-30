@@ -711,8 +711,7 @@ class Ui:
         if self._agent is not None and self._canvas is not None:
             self._agent.settle_canvas(self._canvas.settled(document))
         if self._work_view is not None:
-            self._work_view.personal.document = document
-            self._work_view.personal.render(self._work_view.personal.view)
+            self._work_view.personal.show_document(document)
 
     def refresh_canvas_attention(self) -> None:
         if self._desktop is not None:

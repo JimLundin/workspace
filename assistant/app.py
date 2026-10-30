@@ -18,6 +18,7 @@ from typing import Final, Protocol, assert_never
 
 import components
 import keeper
+import keeper_control
 import usage
 from assistant.activity import ActivityTracker, ContextSnapshot, Observation
 from config import APPS
@@ -41,6 +42,7 @@ lazy from assistant.icons import State, dot
 lazy from assistant.keymap import indicator_text
 lazy from assistant.lifecycle import Timings
 lazy from assistant.llm import MAX_SECONDS, RATE, Missing, Settings
+lazy from assistant.local_bridge import LocalBridge
 lazy from assistant.meeting_events import TranscriptEvents
 lazy from assistant.meeting_followup_store import FollowupStore
 lazy from assistant.meeting_requests import MeetingRequests
@@ -59,6 +61,8 @@ lazy from assistant.state_store import windows_store
 lazy from assistant.tiling import GlazeWM
 lazy from assistant.ui import Ui
 lazy from assistant.work_agent import WorkAgent
+lazy from assistant.work_bridge import WorkOwners
+lazy from assistant.work_bridge_contracts import WORK_BRIDGE, BridgeCommand, BridgeResponse
 lazy from assistant.work_canvas import WorkCanvas, instruction_prompt
 lazy from assistant.work_window import ControlTask, WorkCommand, WorkSnapshot
 lazy from automation.bridge import BridgeClient
@@ -215,6 +219,7 @@ class AssistantApp:
         "triage",
         "ui",
         "window",
+        "work_bridge",
         "worker",
     )
 
@@ -290,17 +295,7 @@ class AssistantApp:
             work_folder / "canvas.sqlite3", self.continue_thread, autonomous=bool(self.settings.api_key and self.settings.base_url)
         )
         self.personal = self.create_personal(tasks)
-        self.triage = Triage(
-            DIRECTORY / "work-feed-bridge.json",
-            windows_store(DIRECTORY / "work-feed.bin", STORED_BOARD),
-            self.ui.triage_changed,
-            self.review_feed,
-            self.consoles.command,
-            submit=self.agent.submit_identified,
-            work=FeedWork(tasks, saved_context, context),
-            personal=self.personal,
-            canvas=self.ui.canvas_command,
-        )
+        self.triage, self.work_bridge = self.create_feed(FeedWork(tasks, saved_context, context))
         self.ui.configure_triage(self.triage.observe, self.triage.dismiss, self.triage.choose_from_ui)
         self.timings.mark("communications and feed bridges")
         archive = MeetingArchive(DIRECTORY / "meetings")
@@ -374,6 +369,20 @@ class AssistantApp:
             dismissed=self.stop_dismissed_work,
         )
 
+    def create_feed(self, work: FeedWork) -> tuple[Triage, LocalBridge[BridgeCommand, BridgeResponse]]:
+        """The feed owner, then the work bridge that routes agent tools to it, personal work and the canvas."""
+        triage = Triage(
+            windows_store(DIRECTORY / "work-feed.bin", STORED_BOARD),
+            self.ui.triage_changed,
+            self.review_feed,
+            self.consoles.command,
+            submit=self.agent.submit_identified,
+            work=work,
+            personal=self.personal,
+        )
+        owners = WorkOwners(triage.command, self.personal.handle, self.ui.canvas_command)
+        return triage, LocalBridge(DIRECTORY / "work-feed-bridge.json", WORK_BRIDGE, owners.handle)
+
     def stop_dismissed_work(self, work: WorkThread) -> None:
         """The committed user dismissal owns cancellation of only its research."""
         for run in self.canvas.read().runs:
@@ -419,6 +428,8 @@ class AssistantApp:
             self.capture_timer = None
         self.assistant.stop_capture(discard=True, reason="shutdown")
         timings.mark("stop capture")
+        self.work_bridge.close()
+        timings.mark("work bridge")
         self.personal.close()
         timings.mark("personal work")
         self.triage.close()
@@ -769,11 +780,11 @@ class AssistantApp:
                 if not control_policy.toggle_layout(self.startup_effects):
                     self.problem("Couldn't reach the layout. Try Start layout or Restart layout.")
             case control_policy.Menu.RESTART_LAYOUT.value:
-                keeper.ask("restart_layout")
+                keeper_control.ask(keeper.REQUESTS, keeper_control.Restart("layout"))
             case control_policy.Menu.RESTART_ASSISTANT.value:
-                keeper.ask("restart_assistant")
+                keeper_control.ask(keeper.REQUESTS, keeper_control.Restart("assistant"))
             case control_policy.Menu.RESTART_AUTOMATION.value:
-                keeper.ask("restart_automation")
+                keeper_control.ask(keeper.REQUESTS, keeper_control.Restart("automation"))
             case control_policy.Menu.OVERLAY.value:
                 self.toggle_overlay()
             case control_policy.Menu.KEYMAP.value:
@@ -795,7 +806,7 @@ class AssistantApp:
             case control_policy.Menu.FOLLOWUPS.value:
                 self.show_meetings()
             case control_policy.Menu.UNDO.value:
-                keeper.ask("undo")
+                keeper_control.ask(keeper.REQUESTS, keeper_control.Undo())
             case control_policy.Menu.USAGE.value:
                 os.startfile(write_report())
             case control_policy.Menu.LOGS.value:

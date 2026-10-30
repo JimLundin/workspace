@@ -1,4 +1,4 @@
-"""Real triage/HTTP wiring with explicitly released debounce steps.
+"""Real triage and work-bridge wiring with explicitly released debounce steps.
 
 The fixture owns only waiting: locks, worker threads, model calls, HTTP requests
 and response files use the production implementation. Each advance releases one
@@ -8,26 +8,38 @@ delay after the test has supplied the observations for that step.
 import threading
 import time
 from collections.abc import Callable
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from queue import Queue
 
 from assistant.console_requests import Command
+from assistant.feed_contracts import FeedCommand, FeedRejected
 from assistant.feed_sources import Candidate
 from assistant.feed_triage import Board
 from assistant.feed_triage_service import Store, Triage
 from assistant.feed_work import FeedWork
+from assistant.local_bridge import LocalBridge
+from assistant.work_bridge import WorkOwners
+from assistant.work_bridge_contracts import WORK_BRIDGE, BridgeCommand, BridgeResponse, FeedResponse
+from assistant.work_canvas_commands import CanvasCommand, CanvasRefused, CanvasResponse
+from automation.personal_work import PersonalRequest, PersonalResponse, WorkRefused
 from automation.task import Profile
 
 
-class LocalBridge(ThreadingHTTPServer):
-    def serve_forever(self, poll_interval: float = 0.5) -> None:
-        # HTTP behavior is unchanged; idle fixture shutdown need not take .5s.
-        super().serve_forever(poll_interval=0.02)
+def feed_unavailable(_: FeedCommand) -> FeedResponse:
+    return FeedRejected("The work feed is unavailable.")
 
 
-def open_bridge(handler: type[BaseHTTPRequestHandler]) -> ThreadingHTTPServer:
-    return LocalBridge(("127.0.0.1", 0), handler)
+def no_personal_work(_: PersonalRequest) -> PersonalResponse:
+    return WorkRefused("My work is unavailable.")
+
+
+def no_canvas(_: CanvasCommand) -> CanvasResponse:
+    return CanvasRefused("The local canvas is unavailable.")
+
+
+def feed_bridge(endpoint: Path, triage: Triage) -> LocalBridge[BridgeCommand, BridgeResponse]:
+    """The application's work bridge with only the feed owner available."""
+    return LocalBridge(endpoint, WORK_BRIDGE, WorkOwners(triage.command, no_personal_work, no_canvas).handle)
 
 
 class TriageFixture(Triage):
@@ -35,7 +47,6 @@ class TriageFixture(Triage):
 
     def __init__(
         self,
-        endpoint: Path,
         store: Store,
         publish: Callable[[Board], None],
         model: Callable[[tuple[Candidate, ...], tuple[str, ...]], str],
@@ -47,9 +58,7 @@ class TriageFixture(Triage):
     ) -> None:
         # Preserve the real owner's dependency interface rather than hide it in options.
         self.delays: Queue[tuple[float, threading.Event]] = Queue()
-        super().__init__(
-            endpoint, store, publish, model, console, submit=submit, server_factory=open_bridge, wait=self.wait_for_stop, clock=clock, work=work
-        )
+        super().__init__(store, publish, model, console, submit=submit, wait=self.wait_for_stop, clock=clock, work=work)
 
     def wait_for_stop(self, stopped: threading.Event, timeout: float) -> bool:
         released = threading.Event()

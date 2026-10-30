@@ -1,28 +1,19 @@
-"""Coalesced automatic triage and an authenticated local seam for the voice agent."""
+"""Coalesced automatic triage and the feed commands the voice agent sends over the work bridge."""
 
-import contextlib
-import hmac
-import secrets
 import threading
 import time
 from collections.abc import Callable
 from dataclasses import replace
 from datetime import UTC, datetime
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from itertools import chain, islice
-from pathlib import Path
 from typing import Protocol, assert_never
-
-from pydantic import TypeAdapter
 
 from assistant.communications import Feed, SourceDate, SourceDateHint, SourceDateStatus
 from assistant.console_requests import Answer, Command, Request, State
 from assistant.feed_contracts import (
-    BRIDGE_ENDPOINT,
     SOLUTION_CONTEXT,
     AnswerConsole,
     BoardEdit,
-    BridgeEndpoint,
     ChooseSolution,
     ChosenHandoff,
     ConsoleAnswered,
@@ -30,6 +21,7 @@ from assistant.feed_contracts import (
     ConsolePendingRequest,
     DismissItem,
     Disposition,
+    FeedCommand,
     FeedRejected,
     FeedReply,
     FeedSnapshot,
@@ -68,24 +60,10 @@ from assistant.feed_triage import (
 from assistant.feed_work import FeedWork, WorkingContext
 from assistant.llm import Settings
 from assistant.personal_work_service import PersonalWork
-from assistant.work_bridge_contracts import BRIDGE_COMMAND, BRIDGE_RESPONSE, BridgeCommand, BridgeResponse
-from assistant.work_canvas_commands import CanvasCommand, CanvasRefused, CanvasResponse, ReadCanvas, UpdateCanvas
+from assistant.work_bridge_contracts import FeedResponse
 from automation.context import ContextRecord
-from automation.personal_work import (
-    AddDocument,
-    AddWebPage,
-    DismissWork,
-    ListSources,
-    ListWork,
-    RestoreWork,
-    SaveWork,
-    UnlinkWork,
-    WorkRefused,
-)
 from automation.task import FeedHandoff, Phase, Profile, Task, phase
 lazy from assistant.feed_research import Research
-
-_ADDRESS = TypeAdapter(tuple[str, int])
 
 
 class RejectedError(ValueError):
@@ -133,10 +111,6 @@ def classify(
     return investigator.review(payload, instructions)
 
 
-def open_bridge(handler: type[BaseHTTPRequestHandler]) -> ThreadingHTTPServer:
-    return ThreadingHTTPServer(("127.0.0.1", 0), handler)
-
-
 def wait_for_stop(stopped: threading.Event, seconds: float) -> bool:
     return stopped.wait(seconds)
 
@@ -145,12 +119,10 @@ class Triage:
     __slots__ = (
         "board",
         "candidates",
-        "canvas",
         "clock",
         "closed",
         "console",
         "context_revision",
-        "endpoint",
         "epoch",
         "feed",
         "lock",
@@ -158,13 +130,10 @@ class Triage:
         "personal",
         "publish",
         "requests",
-        "server",
-        "server_thread",
         "store",
         "submit",
         "submitted",
         "thread",
-        "token",
         "wait",
         "wake",
         "work",
@@ -172,30 +141,26 @@ class Triage:
 
     def __init__(
         self,
-        endpoint: Path,
         store: Store,
         publish: Callable[[Board], None],
         model: Callable[[tuple[Candidate, ...], tuple[str, ...]], str],
         console: Callable[[Command], bool],
         *,
         submit: Callable[[str, str, Profile], None] | None = None,
-        server_factory: Callable[[type[BaseHTTPRequestHandler]], ThreadingHTTPServer] = open_bridge,
         wait: Callable[[threading.Event, float], bool] = wait_for_stop,
         clock: Callable[[], float] = time.time,
         work: FeedWork | None = None,
         personal: PersonalWork | None = None,
-        canvas: Callable[[CanvasCommand], CanvasResponse] | None = None,
     ) -> None:
-        # Compose the real storage, model, voice and HTTP effects here. Server
-        # construction and cancellable delays vary independently in native and
+        # Compose the real storage, model, voice, work-queue and context effects
+        # here. Cancellable delays and the clock vary independently in native and
         # deterministic adapters, so each is an explicit dependency.
-        self.endpoint, self.store, self.publish, self.model, self.console = endpoint, store, publish, model, console
+        self.store, self.publish, self.model, self.console = store, publish, model, console
         self.wait: Callable[[threading.Event, float], bool] = wait
         self.clock: Callable[[], float] = clock
         self.submit = submit
         self.work = work
         self.personal = personal
-        self.canvas = canvas
         self.context_revision: tuple[tuple[tuple[str, Phase, int], ...], tuple[ContextRecord, ...]] | None = None
         self.submitted: set[str] = set()
         self.lock = threading.RLock()
@@ -208,51 +173,7 @@ class Triage:
             self.board: Board = restored(store.read())
         except ValueError, OSError:
             self.board = Board(enabled=True, status="Saved feed preferences could not be loaded.")
-        self.token = secrets.token_urlsafe(32)
-        owner = self
-
-        class Handler(BaseHTTPRequestHandler):
-            def log_message(self, format: str, *args: object) -> None:
-                pass
-
-            def do_POST(self) -> None:
-                if self.path != "/feed" or not hmac.compare_digest(self.headers.get("Authorization", ""), "Bearer " + owner.token):
-                    self.send_error(403)
-                    return
-                try:
-                    length = int(self.headers.get("Content-Length", "0"))
-                    if not 0 < length <= 64000:
-                        raise ValueError("Invalid feed payload size.")
-                    command = BRIDGE_COMMAND.validate_json(self.rfile.read(length))
-                    result = owner.command(command)
-                except RejectedError as error:
-                    result = FeedRejected(str(error))
-                except ValueError, TypeError:
-                    self.send_error(400)
-                    return
-                except OSError:
-                    self.send_error(503)
-                    return
-                output = BRIDGE_RESPONSE.dump_json(result)
-                self.send_response(200)
-                self.send_header("Content-Type", "application/json")
-                self.send_header("Content-Length", str(len(output)))
-                self.end_headers()
-                with contextlib.suppress(BrokenPipeError, ConnectionResetError):
-                    self.wfile.write(output)
-
-        self.server = server_factory(Handler)
-        self.server.daemon_threads = True
-        address = _ADDRESS.validate_python(self.server.socket.getsockname())
-        endpoint.parent.mkdir(parents=True, exist_ok=True)
-        temporary = endpoint.with_suffix(".tmp")
-        configuration = BridgeEndpoint(f"http://127.0.0.1:{address[1]}/feed", self.token)
-        temporary.write_bytes(BRIDGE_ENDPOINT.dump_json(configuration))
-        temporary.chmod(0o600)
-        temporary.replace(endpoint)
-        self.server_thread = threading.Thread(target=self.server.serve_forever, name="Work feed bridge", daemon=True)
         self.thread = threading.Thread(target=self.run, name="Work feed triage", daemon=True)
-        self.server_thread.start()
         self.thread.start()
         self.publish(self.board)
 
@@ -360,12 +281,15 @@ class Triage:
             feed = self.feed
         return conversation_context(feed, source_id)
 
-    def command(self, command: BridgeCommand) -> BridgeResponse:
+    def command(self, command: FeedCommand) -> FeedResponse:
+        """Answer one bridge command; a validation refusal leaves state unchanged."""
+        try:
+            return self.decide(command)
+        except RejectedError as error:
+            return FeedRejected(str(error))
+
+    def decide(self, command: FeedCommand) -> FeedResponse:
         match command:
-            case ReadCanvas() | UpdateCanvas():
-                return self.canvas(command) if self.canvas is not None else CanvasRefused("The local canvas is unavailable.")
-            case AddDocument() | AddWebPage() | DismissWork() | RestoreWork() | ListWork() | ListSources() | SaveWork() | UnlinkWork():
-                return self.personal.handle(command) if self.personal is not None else WorkRefused("My work is unavailable.")
             case ReadFeed():
                 return self.snapshot()
             case FeedReply():
@@ -535,11 +459,4 @@ class Triage:
     def close(self) -> None:
         self.closed.set()
         self.wake.set()
-        self.server.shutdown()
-        self.server.server_close()
-        self.server_thread.join(timeout=2)
         self.thread.join(timeout=2)
-        with contextlib.suppress(OSError, ValueError):
-            data = BRIDGE_ENDPOINT.validate_json(self.endpoint.read_bytes())
-            if data.token == self.token:
-                self.endpoint.unlink()
