@@ -18,7 +18,7 @@ lazy from PySide6 import QtCore, QtGui, QtTest, QtWidgets
 lazy from PySide6.QtCore import Qt
 
 import automation.task
-from assistant.agent_session import Answered
+from assistant.agent_session import Answered, Question
 from assistant.canvas_activity import ROOT_CONTEXT, Attention, CanvasInstruction, CanvasQuestion, CanvasRun, SessionRequest, TaskRequest
 from assistant.feed_agent_tools import request
 from assistant.feed_origin import App
@@ -941,43 +941,40 @@ def test_canvas_clarification_redirect_submits_context_to_the_waiting_agent(tmp_
     ui.pump()
     agent.show(focus=False)
     ui.pump()
-    with ThreadPoolExecutor(max_workers=1) as worker:
-        resumed: list[str] = []
+    resumed: list[str] = []
 
-        def research() -> str | None:
-            answer = agent.input(
-                "Which supplier should own Atlas?", "I have read the handoff mail. I need your ownership decision.", question=True, cancel=None
-            )
-            if answer is not None:
-                resumed.append(answer)
-            return answer
+    def resume(answer: str) -> bool:
+        resumed.append(answer)
+        return True
 
-        result = worker.submit(research)
-        try:
-            pump_until(ui, lambda: bool(store.read().activity))
-            question = store.read().activity[0]
-            assert isinstance(question, CanvasQuestion) and isinstance(question.request, SessionRequest)
-            click_canvas_notification(ui)
-            canvas = ui.canvas_view.personal
-            assert canvas.selected == question.id
-            detail = canvas.detail(question.id)
-            assert isinstance(detail, QuestionDetail)
-            assert not detail.frame.findChildren(QtWidgets.QPlainTextEdit) and detail.frame.height() <= 152
-            assert detail.status.text() == "Hold N to reply · release to send"
-            fallback: list[str] = []
-            ui.voice_agent("Contoso owns the handoff.", fallback.append)
-            pump_until(ui, result.done)
-            assert result.result() == "Contoso owns the handoff." and resumed == ["Contoso owns the handoff."]
-            ui.pump()
-            assert "Contoso owns the handoff." in detail.response.text() and not fallback
-            answered = store.read().activity[0]
-            assert isinstance(answered, CanvasQuestion) and answered.reply == Answered("Contoso owns the handoff.")
-            card = canvas.card(question.id)
-            assert card is not None and card.detail_proxy is not None
-            assert card.rect().contains(card.detail_proxy.boundingRect().translated(card.detail_proxy.pos()))
-        finally:
-            agent.inputs.cancel_all()
-            ui.dispose()
+    agent.request_input(
+        Question("atlas", "Which supplier should own Atlas?", "I have read the handoff mail. I need your ownership decision.", time.time()),
+        resume,
+    )
+    try:
+        pump_until(ui, lambda: bool(store.read().activity))
+        question = store.read().activity[0]
+        assert isinstance(question, CanvasQuestion) and isinstance(question.request, SessionRequest)
+        click_canvas_notification(ui)
+        canvas = ui.canvas_view.personal
+        assert canvas.selected == question.id
+        detail = canvas.detail(question.id)
+        assert isinstance(detail, QuestionDetail)
+        assert not detail.frame.findChildren(QtWidgets.QPlainTextEdit) and detail.frame.height() <= 152
+        assert detail.status.text() == "Hold N to reply · release to send"
+        fallback: list[str] = []
+        ui.voice_agent("Contoso owns the handoff.", fallback.append)
+        pump_until(ui, lambda: bool(resumed))
+        assert resumed == ["Contoso owns the handoff."]
+        ui.pump()
+        assert "Contoso owns the handoff." in detail.response.text() and not fallback
+        answered = store.read().activity[0]
+        assert isinstance(answered, CanvasQuestion) and answered.reply == Answered("Contoso owns the handoff.")
+        card = canvas.card(question.id)
+        assert card is not None and card.detail_proxy is not None
+        assert card.rect().contains(card.detail_proxy.boundingRect().translated(card.detail_proxy.pos()))
+    finally:
+        ui.dispose()
 
 
 def test_canvas_spoken_reply_keeps_transcript_on_rejection_and_continue_stays_bound_to_work(tmp_path: Path) -> None:

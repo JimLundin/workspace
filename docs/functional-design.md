@@ -30,7 +30,7 @@ The main places to read are:
 | `assistant/work_bridge_contracts.py`, `browser_documents.py` | Validated desktop bridge variants and document stream contracts | The bridge joins feed, catalog and canvas wire contracts without a feed-to-canvas import cycle; `Browser` owns authenticated CDP streams and exclusive bounded file collection |
 | `assistant/work_window.py`, `work_canvas_window.py`, `ui_components/bubble.py`, `ui_components/text.py` | Current observations and bounded preview presentation | Desktop startup prepares the hidden native canvas; Qt retains group/header identities, materializes visible nested bubbles and shapes previews during viewport painting |
 | `assistant/llm.py` | System, user, assistant, and tool-result message variants; request serialization | HTTP client functions |
-| `assistant/agent_session.py` | Typed events, messages, questions, approvals, session transitions, and presentation | `agent_window.py`, `agent_input.py`, `agent_toasts.py`, `toast_card.py` |
+| `assistant/agent_session.py` | Typed events, messages, questions, approvals, session transitions, and presentation | `agent_window.py`, `agent_toasts.py`, `toast_card.py` |
 | `assistant/agent.py`, `agent_execution.py` | Tool dispatch, approval and observation recording for one durable work claim | `AgentExecution` owns per-conversation SDK history, source drafts and run cleanup; `WorkExecution` owns the claim's effects |
 | `assistant/agent_tools.py`, `desktop_tools.py`, `browser_tools.py`, `business_tools.py`, `self_change_tools.py`, `meeting_tools.py`, `feed_agent_tools.py`, `work_canvas_tools.py`, `personal_work_tools.py`, `task_tools.py` | Tool families: each `Tool` declares its schema, handler, read/change classification with resources, reconciliation proof, readback evidence and visible display; handlers describe each exact `Operation` to approval and effect | The agent composes the families over its `Session`; `Screen` and `SelfChange` own the latest screenshot and the source draft's check/install state |
 | `automation/task.py`, `store.py` | Durable task, wait, reply, action, and run variants; controls and stale-run decisions | `TaskStore` owns SQLite transactions and validates stored records |
@@ -159,7 +159,7 @@ Enter submits; Shift+Enter adds a line. Drafts and exact reply destinations are
 preserved when other bubbles arrive.
 
 Session events include their timestamps. IDs and clocks are supplied by the
-controller or input broker, so a sequence of events can be replayed or branched
+work controller, so a sequence of events can be replayed or branched
 without changing its source state. Views receive the immutable session itself.
 Questions carry a pending, answered, or cancelled reply; approvals carry a
 decision. A reply for the wrong request kind or an already resolved request

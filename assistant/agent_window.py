@@ -14,7 +14,6 @@ from dataclasses import dataclass, replace
 from typing import Final, Protocol
 
 import assistant.console_requests
-from assistant.agent_input import Inputs, acceptable, resolution
 from assistant.agent_session import (
     Approval,
     Begin,
@@ -34,7 +33,9 @@ from assistant.agent_session import (
     Session,
     Snapshot,
     StopRequested,
+    acceptable,
     pending,
+    resolution,
     transition,
 )
 from assistant.communications import Feed
@@ -79,14 +80,12 @@ class AgentWindow:
         "__weakref__",
         "_create_view",
         "_external",
-        "_failed",
         "_pending",
         "_post",
         "_presented",
         "_view",
         "closed",
         "closed_ready",
-        "inputs",
         "lock",
         "on_choose_work",
         "on_communication",
@@ -138,12 +137,11 @@ class AgentWindow:
         self._external: _ExternalRequest | _ExternalAnswer | None = None
         self._presented: str | None = None
         self.state = Session(identity=uuid.uuid4().hex)
-        self.inputs = Inputs(self._event)
         self.lock = threading.RLock()
         self.ready = threading.Event()
         self.closed_ready = threading.Event()
         self.started = time.monotonic()
-        self.closed = self._failed = self._pending = False
+        self.closed = self._pending = False
         self._post, self._create_view = post, create_view
         self._view: View | None = None
         self._post(self._create)
@@ -158,17 +156,14 @@ class AgentWindow:
             return
         try:
             self._view = self._create_view(self)
-            self._failed = False
             self._render()
             self.ready.set()
             log_view(f"Agent conversation view ready in {time.monotonic() - self.started:.2f}s.")
         except Exception:
-            self._failed = True
             if self._view is not None:
                 with contextlib.suppress(Exception):
                     self._view.close()
                 self._view = None
-            self.inputs.cancel_all()
             log_view(traceback.format_exc())
             self.problem("The agent panel couldn't open. Reopen Agent session to retry; details are in agent-ui.log.")
 
@@ -190,7 +185,6 @@ class AgentWindow:
     def _event(self, event: Event) -> None:
         with self.lock:
             if self.closed:
-                self.inputs.cancel_all()
                 return
             was_waiting = self.state.waiting
             self.state = transition(self.state, event)
@@ -303,23 +297,20 @@ class AgentWindow:
                 self._presented = request_id
 
     def respond(self, identity: str, answer: str) -> bool:
-        """Route a reply to an exact external request or the existing local broker."""
+        """Route a reply to the exact durable request this view projects."""
         submitted = _ExternalAnswer(identity)
         with self.lock:
             if self.closed:
                 return False
             request = self._external
             presented = self._presented == identity
-            if isinstance(request, _ExternalRequest) and request.message.request_id == identity:
-                if not acceptable(request.message, answer):
-                    return False
-                if isinstance(request.message, Approval) and answer == "approve" and not presented:
-                    self.say("Open the current action preview before approving it.")
-                    return False
-                self._external = submitted
-                self._presented = None
-        if not isinstance(request, _ExternalRequest) or request.message.request_id != identity:
-            return self.inputs.respond(identity, answer)
+            if not isinstance(request, _ExternalRequest) or request.message.request_id != identity or not acceptable(request.message, answer):
+                return False
+            if isinstance(request.message, Approval) and answer == "approve" and not presented:
+                self.say("Open the current action preview before approving it.")
+                return False
+            self._external = submitted
+            self._presented = None
         accepted = False
         try:
             accepted = request.respond(answer)
@@ -436,13 +427,7 @@ class AgentWindow:
             request = self._external
         if isinstance(request, _ExternalRequest):
             self.clear_external_input(request.message.request_id)
-        self.inputs.cancel_all()
         self._event(StopRequested())
-
-    def input(self, title: str, detail: str, *, question: bool, cancel: threading.Event | None) -> str | None:
-        if self.closed or self._failed:
-            return None
-        return self.inputs.ask(title, detail, question=question, cancel=cancel)
 
     def all_text(self) -> str:
         with self.lock:
@@ -454,7 +439,6 @@ class AgentWindow:
             self._external = None
             self._presented = None
         self.ready.clear()
-        self.inputs.cancel_all()
 
         def destroy() -> None:
             try:

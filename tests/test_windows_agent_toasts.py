@@ -22,7 +22,20 @@ lazy from PySide6.QtGui import QEnterEvent, QFont, QImage, QPainter, QRegion, QT
 lazy from PySide6.QtTest import QTest
 lazy from PySide6.QtWidgets import QWidget
 
-from assistant.agent_session import Answer, Begin, Failed, Question, ReasoningSummary, Said, Session, StreamState, Succeeded, ToolActivity, transition
+from assistant.agent_session import (
+    Answer,
+    Approval,
+    Begin,
+    Failed,
+    Question,
+    ReasoningSummary,
+    Said,
+    Session,
+    StreamState,
+    Succeeded,
+    ToolActivity,
+    transition,
+)
 from assistant.agent_toasts import AgentToasts
 from assistant.agent_window import AgentWindow
 from assistant.feed_contracts import DismissItem
@@ -36,7 +49,6 @@ from assistant.recording_state import RecordingAction, RecordingState
 from assistant.rich_text import formatted
 from assistant.toast_card import Card
 from assistant.ui_components.text import TextView
-from tests.test_agent_session import asking
 from winapi import appearance, screen, system, windows
 from winapi.composition import DesktopComposition, Glass
 from winapi.shapes import Rect
@@ -979,6 +991,16 @@ def test_repeating_a_frame_keeps_native_geometry_stable_after_dpi_rounding() -> 
         assert not moves and windows.outer_rect(card.handle) == bounds
 
 
+def recording(replies: list[str]) -> Callable[[str], bool]:
+    """Accept every reply to a projected durable request, in order."""
+
+    def accept(reply: str) -> bool:
+        replies.append(reply)
+        return True
+
+    return accept
+
+
 def test_spinner_reuses_widgets_and_stops_timers_for_reduced_motion_and_input() -> None:
     with notifications(animated=True) as panel:
         panel.agent.begin("Find **the workbook**", panel.stop)
@@ -994,13 +1016,14 @@ def test_spinner_reuses_widgets_and_stops_timers_for_reduced_motion_and_input() 
         panel.view.tick()
         assert panel.view.animation_timer is None
         panel.animated = True
-        with asking(panel.agent.inputs, question=True) as pending:
-            assert panel.requested.wait(timeout=2)
-            panel.pump()
-            panel.advance(0.3)
-            assert panel.view.animation_timer is None
-            assert panel.agent.reply_by_voice("The workbook on my desktop")
-            assert pending.result() == "The workbook on my desktop"
+        replies: list[str] = []
+        panel.agent.request_input(Question("open", "Open this?", "budget.xlsx", panel.now), recording(replies))
+        assert panel.requested.wait(timeout=2)
+        panel.pump()
+        panel.advance(0.3)
+        assert panel.view.animation_timer is None
+        assert panel.agent.reply_by_voice("The workbook on my desktop")
+        assert replies == ["The workbook on my desktop"]
         panel.agent.finish()
         panel.pump()
         panel.advance(0.3)
@@ -1068,26 +1091,27 @@ def test_hovering_glass_pauses_expiry_and_close_cancels_all_observation() -> Non
 def test_questions_can_be_answered_or_stopped_by_voice_without_history() -> None:
     with notifications() as panel:
         panel.agent.begin("Open the workbook", panel.stop)
-        with asking(panel.agent.inputs, question=True) as pending:
-            assert panel.requested.wait(timeout=2)
-            panel.pump()
-            panel.advance(3600)
-            question = panel.view.cards[TurnKey(0)]
-            assert "agent voice-to-text button" in question.window.toolTip()
-            assert "Open this?" in question.text.toPlainText()
-            assert panel.agent.reply_by_voice("The revenue sheet.")
-            assert pending.result() == "The revenue sheet."
+        replies: list[str] = []
+        panel.agent.request_input(Question("open", "Open this?", "budget.xlsx", panel.now), recording(replies))
+        assert panel.requested.wait(timeout=2)
+        panel.pump()
+        panel.advance(3600)
+        question = panel.view.cards[TurnKey(0)]
+        assert "agent voice-to-text button" in question.window.toolTip()
+        assert "Open this?" in question.text.toPlainText()
+        assert panel.agent.reply_by_voice("The revenue sheet.")
+        assert replies == ["The revenue sheet."]
         panel.pump()
         assert panel.view.cards[TurnKey(0)] is question
         assert "The revenue sheet." in question.text.toPlainText() and "Open this?" in question.text.toPlainText()
         panel.requested.clear()
-        with asking(panel.agent.inputs) as pending:
-            assert panel.requested.wait(timeout=2)
-            panel.pump()
-            approval = panel.view.cards[TurnKey(0)]
-            assert [button.text() for button in approval.choices] == ["Approve", "Decline"]
-            approval.stop.click()
-            assert pending.result() is None
+        panel.agent.request_input(Approval("write", "Open this?", "budget.xlsx", panel.now), recording(replies))
+        assert panel.requested.wait(timeout=2)
+        panel.pump()
+        approval = panel.view.cards[TurnKey(0)]
+        assert [button.text() for button in approval.choices] == ["Approve", "Decline"]
+        approval.stop.click()
+        assert not panel.agent.waiting and replies == ["The revenue sheet."]
         panel.pump()
         assert not approval.stop.isEnabled()
 

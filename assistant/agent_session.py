@@ -1,7 +1,7 @@
 """Immutable conversation values and pure transitions for the agent timeline.
 
-Clocks, IDs, waiting, locking, and widgets belong to the controller and input
-broker. Replaying the same events against a session always gives the same result.
+Clocks, IDs, locking, and widgets belong to the controller and its window.
+Replaying the same events against a session always gives the same result.
 """
 
 from dataclasses import dataclass, field, replace
@@ -401,6 +401,26 @@ def update_live(state: Session, event: LiveMessage) -> Session:
         messages = (*state.messages, event)
     last_said = event.text.strip() if isinstance(event, Answer) and event.state is StreamState.COMPLETE else state.last_said
     return replace(state, messages=messages, last_said=last_said)
+
+
+def acceptable(request: Question | Approval, answer: str) -> bool:
+    match request:
+        case Question():
+            return bool(answer.strip())
+        case Approval():
+            return answer in ("approve", "decline")
+        case _:
+            assert_never(request)
+
+
+def resolution(request: Question | Approval, answer: str) -> Resolution:
+    match request:
+        case Question(request_id=identity):
+            return QuestionAnswered(identity, answer)
+        case Approval(request_id=identity):
+            return ApprovalDecided(identity, "approved" if answer == "approve" else "declined")
+        case _:
+            assert_never(request)
 
 
 def resolve(state: Session, event: Resolution) -> Session:

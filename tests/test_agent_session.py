@@ -1,12 +1,7 @@
-"""Conversation continuity and explicit, cancellable inline human input."""
+"""Conversation continuity and the timeline's agent requests."""
 
-import queue
-import threading
-from collections.abc import Generator
-from contextlib import contextmanager
 from dataclasses import replace
 
-from assistant.agent_input import Inputs
 from assistant.agent_session import (
     Answer,
     Answered,
@@ -101,39 +96,6 @@ def test_meeting_preview_updates_without_adding_messages_or_changing_the_agent_t
     assert previous.messages[1].text.endswith("First sentence.")
     assert "Recent sentence 499" in session.messages[1].text
     assert session.recording.seconds == 499
-
-
-def input_id(event: Event) -> str:
-    assert isinstance(event, (Question, Approval))
-    return event.request_id
-
-
-class Pending:
-    __slots__ = ("answers", "thread")
-
-    def __init__(self, inputs: Inputs, *, question: bool, cancel: threading.Event | None) -> None:
-        self.answers: list[str | None] = []
-        self.thread = threading.Thread(
-            target=lambda: self.answers.append(inputs.ask("Open this?", "budget.xlsx", question=question, cancel=cancel)),
-            daemon=True,
-        )
-        self.thread.start()
-
-    def result(self) -> str | None:
-        self.thread.join(timeout=2)
-        assert not self.thread.is_alive(), "An inline request stayed blocked after response or cancellation."
-        assert len(self.answers) == 1
-        return self.answers[0]
-
-
-@contextmanager
-def asking(inputs: Inputs, *, question: bool = False, cancel: threading.Event | None = None) -> Generator[Pending]:
-    pending = Pending(inputs, question=question, cancel=cancel)
-    try:
-        yield pending
-    finally:
-        inputs.cancel_all()
-        pending.thread.join(timeout=2)
 
 
 def test_follow_ups_keep_messages_and_only_deduplicate_the_current_turns_final_answer() -> None:
@@ -242,90 +204,3 @@ def test_stopping_removes_the_queue_and_preserves_the_cancelled_request() -> Non
     assert not session.busy and not session.stopping
     assert session.status == "Stopped"
     assert isinstance(session.messages[1], Approval) and session.messages[1].decision == "cancelled"
-
-
-def test_approval_requires_an_explicit_response_to_its_exact_request() -> None:
-    events: queue.Queue[Event] = queue.Queue()
-    inputs = Inputs(events.put)
-    with asking(inputs) as pending:
-        request = events.get(timeout=2)
-        identity = input_id(request)
-        assert isinstance(request, Approval) and identity
-        assert not inputs.respond("unrelated", "approve")
-        assert not inputs.respond(identity, "yes")
-        assert not pending.answers
-        assert inputs.respond(identity, "approve")
-        assert not inputs.respond(identity, "approve")
-        assert pending.result() == "approve"
-        assert events.get(timeout=2) == ApprovalDecided(identity, "approved")
-    assert not inputs.pending
-
-
-def test_stop_unblocks_a_waiting_approval_and_late_approval_cannot_approve_the_next_tool() -> None:
-    events: queue.Queue[Event] = queue.Queue()
-    inputs = Inputs(events.put)
-    stopped = threading.Event()
-    with asking(inputs, cancel=stopped) as pending:
-        previous = input_id(events.get(timeout=2))
-        stopped.set()
-        assert pending.result() is None
-        assert isinstance(events.get(timeout=2), InputCancelled)
-    with asking(inputs) as pending:
-        current = input_id(events.get(timeout=2))
-        assert current != previous
-        assert not inputs.respond(previous, "approve")
-        assert not pending.answers
-        assert inputs.respond(current, "decline")
-        assert pending.result() == "decline"
-        assert events.get(timeout=2) == ApprovalDecided(current, "declined")
-
-
-def test_stopped_request_does_not_appear_or_wait() -> None:
-    events: queue.Queue[Event] = queue.Queue()
-    inputs = Inputs(events.put)
-    stopped = threading.Event()
-    stopped.set()
-    assert inputs.ask("Open this?", "budget.xlsx", question=False, cancel=stopped) is None
-    assert events.empty()
-    assert not inputs.pending
-
-
-def test_stop_wins_over_an_approval_delivered_at_the_same_time() -> None:
-    stopped = threading.Event()
-    events: list[Event] = []
-
-    def publish(event: Event) -> None:
-        events.append(event)
-        if isinstance(event, (Question, Approval)):
-            assert inputs.respond(input_id(event), "approve")
-            stopped.set()
-
-    inputs = Inputs(publish)
-    assert inputs.ask("Open this?", "budget.xlsx", question=False, cancel=stopped) is None
-    assert isinstance(events[-1], InputCancelled)
-
-
-def test_question_keeps_the_full_answer_and_rejects_an_empty_reply() -> None:
-    events: queue.Queue[Event] = queue.Queue()
-    inputs = Inputs(events.put)
-    answer = "Budget for October\nUse the updated copy, please. Åäö."
-    with asking(inputs, question=True) as pending:
-        identity = input_id(events.get(timeout=2))
-        assert not inputs.respond(identity, "  ")
-        assert inputs.respond(identity, answer)
-        assert pending.result() == answer
-        resolved = events.get(timeout=2)
-        assert resolved == QuestionAnswered(identity, answer)
-
-
-def test_closing_the_view_cancels_every_waiting_input_without_approving_it() -> None:
-    events: queue.Queue[Event] = queue.Queue()
-    inputs = Inputs(events.put)
-    with asking(inputs) as approval, asking(inputs, question=True) as question:
-        identities = [input_id(events.get(timeout=2)) for _ in range(2)]
-        inputs.cancel_all()
-        assert approval.result() is None
-        assert question.result() is None
-        assert all(isinstance(events.get(timeout=2), InputCancelled) for _ in range(2))
-        assert all(not inputs.respond(identity, "approve") for identity in identities)
-    assert not inputs.pending

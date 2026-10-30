@@ -49,27 +49,9 @@
     {
       "key": {
         "rule": "PLR0913",
-        "path": "assistant/agent_input.py",
-        "scope": "Inputs.ask",
-        "signature": "a6e2f8041d65ee8d3a9cf0c4067db418b7cb45c79ddb943b31f256de99551525"
-      },
-      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
-    },
-    {
-      "key": {
-        "rule": "PLR0913",
         "path": "assistant/agent_window.py",
         "scope": "AgentWindow.begin",
         "signature": "c603826b6901d73b7b120508da22e30c141e47ab811886cb1c3a243ad8684f6f"
-      },
-      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
-    },
-    {
-      "key": {
-        "rule": "PLR0913",
-        "path": "assistant/agent_window.py",
-        "scope": "AgentWindow.input",
-        "signature": "a6e2f8041d65ee8d3a9cf0c4067db418b7cb45c79ddb943b31f256de99551525"
       },
       "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
     },

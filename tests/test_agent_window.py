@@ -7,7 +7,6 @@ from collections.abc import Callable
 from assistant.agent_session import Answer, Question, Snapshot, StreamState, pending
 from assistant.agent_window import AgentWindow, View
 from assistant.recording_state import RecordingAction
-from tests.test_agent_session import asking
 
 
 class RecordingView:
@@ -167,65 +166,37 @@ def test_live_publishers_cannot_update_a_later_turn_or_a_reset_conversation() ->
     panel.paint()
 
 
-def test_inline_answer_uses_the_same_composer_and_cancellation_restores_submission() -> None:
-    requested = threading.Event()
+def test_inline_answer_uses_the_same_composer_and_stopping_restores_submission() -> None:
+    replies: list[str] = []
     submitted: list[str] = []
-    panel = RecordingWindow(lambda: None, on_submit=submitted.append, on_waiting=lambda waiting: requested.set() if waiting else None)
+    panel = RecordingWindow(lambda: None, on_submit=submitted.append)
     answer = "The revenue sheet\nwith the entire ending. Åäö."
-    with asking(panel.inputs, question=True) as pending:
-        assert requested.wait(timeout=2)
-        assert panel.submit(answer)
-        assert pending.result() == answer
-        assert not submitted
-    requested.clear()
-    with asking(panel.inputs, question=True) as pending:
-        assert requested.wait(timeout=2)
-        panel.stopping()
-        assert pending.result() is None
+
+    def accept(reply: str) -> bool:
+        replies.append(reply)
+        return True
+
+    assert not panel.reply_by_voice("Start a task")
+    panel.request_input(Question("first", "Which workbook?", "", 1), accept)
+    assert panel.submit(answer) and replies == [answer] and not submitted
+    panel.request_input(Question("second", "Which sheet?", "", 2), accept)
+    panel.stopping()
+    assert not panel.waiting and not panel.respond("second", "Too late")
     panel.finish()
     assert panel.submit("Continue with the same workbook")
-    assert submitted == ["Continue with the same workbook"]
+    assert submitted == ["Continue with the same workbook"] and replies == [answer]
     panel.close()
     panel.paint()
 
 
-def test_voice_answers_questions_and_only_explicit_complete_utterances_approve() -> None:
-    requested = threading.Event()
-    panel = RecordingWindow(lambda: None, on_waiting=lambda waiting: requested.set() if waiting else None)
-    assert not panel.reply_by_voice("Start a task")
-    with asking(panel.inputs, question=True) as pending:
-        assert requested.wait(timeout=2)
-        assert panel.reply_by_voice("The revenue sheet. Åäö.")
-        assert pending.result() == "The revenue sheet. Åäö."
-    requested.clear()
-    with asking(panel.inputs) as pending:
-        assert requested.wait(timeout=2)
-        assert panel.reply_by_voice("Do not approve this")
-        assert panel.waiting and pending.thread.is_alive()
-        assert panel.reply_by_voice(" Approve. ")
-        assert pending.result() == "approve"
-    requested.clear()
-    with asking(panel.inputs) as pending:
-        assert requested.wait(timeout=2)
-        assert panel.reply_by_voice("Decline!")
-        assert pending.result() == "decline"
-    assert not panel.reply_by_voice("A follow-up task")
-    panel.close()
-    assert panel.reply_by_voice("Late transcription after shutdown")
-    panel.paint()
-
-
-def test_quitting_during_ui_warmup_cancels_questions_and_never_creates_a_late_window() -> None:
-    requested = threading.Event()
-    panel = RecordingWindow(lambda: None, on_waiting=lambda waiting: requested.set() if waiting else None)
+def test_quitting_during_ui_warmup_withdraws_requests_and_never_creates_a_late_window() -> None:
+    panel = RecordingWindow(lambda: None)
     panel.show()
-    with asking(panel.inputs, question=True) as pending:
-        assert requested.wait(timeout=2)
-        panel.close()
-        assert pending.result() is None
+    panel.request_input(Question("open", "Open this?", "budget.xlsx", 1), lambda _reply: True)
+    panel.close()
+    assert not panel.respond("open", "Yes")
     panel.paint()
     assert not panel.view.states and not panel.view.shown and not panel.ready.is_set()
-    assert panel.input("Too late", "", question=True, cancel=None) is None
 
 
 def test_failed_widget_startup_reports_the_problem_and_can_be_retried() -> None:
@@ -245,7 +216,6 @@ def test_failed_widget_startup_reports_the_problem_and_can_be_retried() -> None:
     while jobs:
         jobs.popleft()()
     assert len(problems) == 1 and not panel.ready.is_set()
-    assert panel.input("Can't show this question", "", question=True, cancel=None) is None
     panel.show()
     while jobs:
         jobs.popleft()()
