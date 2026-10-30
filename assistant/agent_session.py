@@ -8,12 +8,10 @@ from dataclasses import dataclass, field, replace
 from enum import Enum, auto
 from typing import Literal, assert_never
 
-import assistant.console_requests
 from assistant import action_text
 from assistant.card_actions import OpenCanvas, encode
-from assistant.communications import Feed
+from assistant.feed_observation import FeedSnapshot
 from assistant.feed_origin import FeedRequest
-from assistant.feed_triage import Board
 from assistant.recording_state import RecordingState
 from automation.task import Approval, ApprovalDecision, Question
 
@@ -257,10 +255,7 @@ class Session:
     activity: tuple[str, ...] = ()
     phase: Literal["idle", "running", "stopping"] = "idle"
     status: str = "Ready"
-    triage: Board = field(default_factory=Board)
-    communications: Feed = field(default_factory=Feed)
-    console_requests: tuple[assistant.console_requests.Request, ...] = ()
-    communication_drafts: tuple[tuple[str, str], ...] = ()
+    feed: FeedSnapshot = field(default_factory=FeedSnapshot)
     last_said: str = ""
     result: Result = "Ready"
     recording: RecordingState = field(default_factory=RecordingState)

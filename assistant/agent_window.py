@@ -13,7 +13,6 @@ from collections.abc import Callable
 from dataclasses import dataclass, replace
 from typing import Final, Protocol
 
-import assistant.console_requests
 from assistant.agent_session import (
     AgentRequest,
     Begin,
@@ -38,10 +37,8 @@ from assistant.agent_session import (
     resolution,
     transition,
 )
-from assistant.communications import Feed
-from assistant.feed_items import SourceAction
+from assistant.feed_observation import FeedSnapshot
 from assistant.feed_origin import FeedRequest
-from assistant.feed_triage import Board
 from assistant.recording_state import RecordingAction, RecordingState
 from automation.task import Approval, Question
 from usage import DIRECTORY
@@ -88,10 +85,6 @@ class AgentWindow:
         "closed",
         "closed_ready",
         "lock",
-        "on_choose_work",
-        "on_communication",
-        "on_console",
-        "on_dismiss_work",
         "on_problem",
         "on_recording",
         "on_reset",
@@ -117,24 +110,17 @@ class AgentWindow:
         on_waiting: Callable[[bool], None] | None = None,
         on_recording: Callable[[RecordingAction], None] | None = None,
         on_work: Callable[[], None] | None = None,
-        on_communication: Callable[[SourceAction], bool] | None = None,
-        on_console: Callable[[assistant.console_requests.Command], bool] | None = None,
         on_snapshot: Callable[[Snapshot], None] | None = None,
-        on_choose_work: Callable[[str, str, str], bool] | None = None,
-        on_dismiss_work: Callable[[str], bool] | None = None,
     ) -> None:
         # This conversation owns one view, request lifetime and snapshot stream.
         # Its independent interaction callbacks are composed together here so a
         # caller can connect the actual effect owners before the first render.
+        # Feed actions reach their owners through the view, not this window.
         self.stop, self.on_problem, self.on_reset, self.on_submit = stop, on_problem, on_reset, on_submit
         self.on_waiting = on_waiting
         self.on_recording = on_recording
         self.on_work = on_work
-        self.on_communication = on_communication
-        self.on_console = on_console
         self.on_snapshot: Callable[[Snapshot], None] | None = on_snapshot
-        self.on_choose_work = on_choose_work
-        self.on_dismiss_work = on_dismiss_work
         self._external: _ExternalRequest | _ExternalAnswer | None = None
         self._presented: str | None = None
         self.state = Session(identity=uuid.uuid4().hex)
@@ -391,13 +377,7 @@ class AgentWindow:
             self._external = None
             self._presented = None
             recording = self.state.recording
-            self.state = Session(
-                identity=uuid.uuid4().hex,
-                communications=self.state.communications,
-                console_requests=self.state.console_requests,
-                communication_drafts=self.state.communication_drafts,
-                triage=self.state.triage,
-            )
+            self.state = Session(identity=uuid.uuid4().hex, feed=self.state.feed)
             if recording.phase not in ("idle", "saved", "interrupted"):
                 self.state = transition(self.state, RecordingUpdated(recording, time.time()))
             self._changed()
@@ -405,22 +385,10 @@ class AgentWindow:
     def recording(self, state: RecordingState) -> None:
         self._event(RecordingUpdated(state, time.time()))
 
-    def communications(self, feed: Feed, drafts: dict[str, str]) -> None:
+    def observe_feed(self, feed: FeedSnapshot) -> None:
         with self.lock:
             if not self.closed:
-                self.state = replace(self.state, communications=feed, communication_drafts=tuple(drafts.items()))
-                self._changed()
-
-    def triage(self, board: Board) -> None:
-        with self.lock:
-            if not self.closed:
-                self.state = replace(self.state, triage=board)
-                self._changed()
-
-    def consoles(self, requests: tuple[assistant.console_requests.Request, ...]) -> None:
-        with self.lock:
-            if not self.closed:
-                self.state = replace(self.state, console_requests=requests)
+                self.state = replace(self.state, feed=feed)
                 self._changed()
 
     def stopping(self) -> None:

@@ -59,7 +59,7 @@ lazy from assistant.recording_state import RecordingAction, RecordingState
 lazy from assistant.report import write_report
 lazy from assistant.state_store import windows_store
 lazy from assistant.tiling import GlazeWM
-lazy from assistant.ui import Ui
+lazy from assistant.ui import FeedOwners, Ui
 lazy from assistant.work_agent import WorkAgent
 lazy from assistant.work_bridge import WorkOwners
 lazy from assistant.work_bridge_contracts import WORK_BRIDGE, BridgeCommand, BridgeResponse
@@ -288,15 +288,17 @@ class AssistantApp:
             windows_store(DIRECTORY / "communications.bin", COMMUNICATIONS_STATE),
             self.ui.communications_changed,
         )
-        self.ui.configure_communications(self.communications.submit, windows_store(DIRECTORY / "notifications.bin", NOTIFICATION_STATE))
         self.consoles = ConsoleInbox(DIRECTORY / "inbox-bridge.json", self.ui.console_changed)
-        self.ui.configure_console(self.consoles.command)
         self.canvas: WorkCanvas = WorkCanvas(
             work_folder / "canvas.sqlite3", self.continue_thread, autonomous=bool(self.settings.api_key and self.settings.base_url)
         )
         self.personal = self.create_personal(tasks)
         self.triage, self.work_bridge = self.create_feed(FeedWork(tasks, saved_context, context))
-        self.ui.configure_triage(self.triage.observe, self.triage.dismiss, self.triage.choose_from_ui)
+        self.ui.configure_feed(
+            FeedOwners(
+                self.communications.submit, windows_store(DIRECTORY / "notifications.bin", NOTIFICATION_STATE), self.consoles.command, self.triage
+            )
+        )
         self.timings.mark("communications and feed bridges")
         archive = MeetingArchive(DIRECTORY / "meetings")
         followup_folder = work_folder / "meeting-followups"

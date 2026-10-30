@@ -6,6 +6,7 @@ import subprocess
 import sys
 import time
 import unittest
+from functools import partial
 from pathlib import Path
 
 from tests.json_fixture import json_fields, json_object, json_text
@@ -18,6 +19,7 @@ from assistant.card_actions import AnswerConsole, parse
 from assistant.console_inbox import ConsoleInbox
 from assistant.console_requests import Answer, Provider, Request, State
 from assistant.feed_items import WorkItem, action_spans, body_spans
+from assistant.feed_observation import ConsolesObserved
 from tests.test_console_inbox import event
 from tests.test_windows_agent_toasts import notifications
 
@@ -34,15 +36,19 @@ def answer_request(view: AgentToasts, current: Request, approval: str) -> None:
         view.action_link(decision)
     else:
         # The voice agent relays the user's answer through the existing console owner.
-        action = view.agent.on_console
-        assert action is not None and action(Answer(current.identity, 0, "Revenue · Åäö"))
+        assert view.actions.answer_console(Answer(current.identity, 0, "Revenue · Åäö"))
 
 
 def test_windows_cli_hook_processes_receive_native_inbox_answers_and_explicit_permission_decisions(tmp_path: Path) -> None:
     script = Path(__file__).parent.parent / "scripts" / "inbox_hook.py"
     with notifications() as panel:
-        broker = ConsoleInbox(tmp_path / "workspace" / "inbox-bridge.json", panel.agent.consoles, timeout=10)
-        panel.agent.on_console = broker.command
+        # The broker publishes from its own thread; the fixture's Qt queue receives it.
+        broker = ConsoleInbox(
+            tmp_path / "workspace" / "inbox-bridge.json",
+            lambda requests: panel.jobs.append(partial(panel.observe, ConsolesObserved(requests))),
+            timeout=10,
+        )
+        panel.console = broker.command
         try:
             for provider, approval in ((Provider.CODEX, ""), (Provider.CLAUDE, ""), (Provider.CODEX, "Decline"), (Provider.CLAUDE, "Approve")):
                 raw = event(provider, "owned-" + provider.name + approval)
@@ -64,7 +70,7 @@ def test_windows_cli_hook_processes_receive_native_inbox_answers_and_explicit_pe
                         current = next(
                             (
                                 item
-                                for item in panel.view.session.console_requests
+                                for item in panel.view.session.feed.console_requests
                                 if item.session == raw["session_id"] and item.state is State.WAITING
                             ),
                             None,

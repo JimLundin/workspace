@@ -5,7 +5,7 @@ import webbrowser
 from collections.abc import Callable
 from dataclasses import replace
 from pathlib import Path
-from typing import Annotated, Final, TypedDict, assert_never
+from typing import Annotated, Final, Protocol, TypedDict, assert_never
 from urllib.parse import urlsplit
 
 from pydantic import Field, StrictInt, TypeAdapter
@@ -27,6 +27,7 @@ lazy from assistant.agent_window import AgentWindow
 lazy from assistant.card_actions import AnswerApproval, AnswerConsole, ItemAction, OpenCanvas, Verb, parse
 lazy from assistant.feed_desktop import Desktop, NativeDesktop
 lazy from assistant.feed_items import WorkItem, act, help_request
+lazy from assistant.feed_observation import SourceAction
 lazy from assistant.feed_sources import Attention, SourceKey, listed
 lazy from assistant.feed_triage import Assessment
 lazy from assistant.inbox import Query, review_prompt
@@ -82,9 +83,19 @@ def saved_monitor(path: Path = MONITOR) -> Rect | None:
     return Rect(values["x"], values["y"], values["x"] + values["width"], values["y"] + values["height"])
 
 
+class FeedActions(Protocol):
+    """The owners a feed card reaches when the person acts on it; each answer says whether it was accepted."""
+
+    def communicate(self, command: SourceAction) -> bool: ...
+    def answer_console(self, answer: console_requests.Answer) -> bool: ...
+    def dismiss_work(self, identity: str) -> bool: ...
+    def choose_work(self, identity: str, revision: str, choice: str) -> bool: ...
+
+
 class AgentToasts:
     __slots__ = (
         "__weakref__",
+        "actions",
         "agent",
         "animation_timer",
         "canvas_open",
@@ -123,6 +134,7 @@ class AgentToasts:
         self,
         root: QApplication,
         agent: AgentWindow,
+        actions: FeedActions,
         *,
         monitor: Rect | None = None,
         clock: Callable[[], float] = time.monotonic,
@@ -135,7 +147,8 @@ class AgentToasts:
         # One view owns cards, desktop observation and motion timer lifetimes.
         # Independent monitor hint, clock and native adapters enter at construction
         # so every card shares that ownership; tests consume the same contracts.
-        self.root, self.agent, self.clock, self.motion_enabled = root, agent, clock, motion_enabled
+        # The feed's action owners enter here, so a card reaches them directly.
+        self.root, self.agent, self.actions, self.clock, self.motion_enabled = root, agent, actions, clock, motion_enabled
         self.desktop: Desktop = NativeDesktop() if desktop is None else desktop
         self.create_card = Card if create_card is None else create_card
         self.material_preference = material_preference
@@ -463,7 +476,7 @@ class AgentToasts:
                 return toast.content
 
     def order_for(self, toast: Toast) -> tuple[int, float, int, int]:
-        order = display_order(toast, curated=self.session.triage.enabled and not self.query.history)
+        order = display_order(toast, curated=self.session.feed.triage.enabled and not self.query.history)
         if self.live_progress:
             return (0 if isinstance(toast.key, PhaseKey) else 1, *order[1:])
         return order
@@ -505,7 +518,8 @@ class AgentToasts:
 
     def review_feed(self) -> None:
         if self.agent.on_submit is not None:
-            prompt = review_prompt(listed(self.session.communications, self.session.console_requests, history=False), self.query)
+            feed = self.session.feed
+            prompt = review_prompt(listed(feed.communications, feed.console_requests, history=False), self.query)
             self.agent.on_submit(prompt)
 
     def action_link(self, link: str) -> None:
@@ -548,12 +562,14 @@ class AgentToasts:
         card = self.cards.get(key)
         if card is None:
             return
-        if isinstance(card.content, WorkItem) and isinstance(card.content.item, Assessment):
-            action = self.agent.on_dismiss_work
-            if action is None or not action(card.content.item.identity):
-                if self.agent.on_problem is not None:
-                    self.agent.on_problem("That item could not be dismissed. It remains in your feed.")
-                return
+        match card.content:
+            case WorkItem(item=Assessment(identity=identity)):
+                if not self.actions.dismiss_work(identity):
+                    if self.agent.on_problem is not None:
+                        self.agent.on_problem("That item could not be dismissed. It remains in your feed.")
+                    return
+            case _:
+                pass
         self.stack = hide(self.stack, key)
         self.refresh()
 
@@ -571,8 +587,8 @@ class AgentToasts:
                 self.agent.on_submit(prompt)
             return
         command = act(row, verb)
-        if command is not None and self.agent.on_communication is not None:
-            self.agent.on_communication(command)
+        if command is not None:
+            self.actions.communicate(command)
 
     def sync_wheel(self) -> None:
         regions: list[Region] = []
@@ -718,9 +734,8 @@ class AgentToasts:
                         and 0 <= question < len(questions)
                         and not questions[question].multiple
                         and answer in (option.label for option in questions[question].options)
-                        and self.agent.on_console is not None
                     ):
-                        self.agent.on_console(console_requests.Answer(identity, question, answer))
+                        self.actions.answer_console(console_requests.Answer(identity, question, answer))
                         break
                 case _:
                     pass

@@ -18,10 +18,12 @@ lazy from PySide6.QtCore import Qt
 
 from assistant.qt_runtime import prepare
 from runtime import activate
+lazy import assistant.console_requests
 lazy from assistant.agent_session import Answer, StreamState, Succeeded, ToolActivity
 lazy from assistant.agent_toasts import AgentToasts
 lazy from assistant.agent_window import AgentWindow
 lazy from assistant.desktop_bar import BarActions, DesktopBar
+lazy from assistant.feed_observation import FeedSnapshot, SourceAction
 lazy from assistant.feed_triage import Assessment, Board
 lazy from assistant.icons import State
 lazy from assistant.qt_ui import application
@@ -143,8 +145,24 @@ class Preview:
             raise
 
     def build_feed(self, agent: AgentWindow) -> AgentToasts:
-        self.feed = AgentToasts(self.root, agent, monitor=Rect(40, 200, 440, 900))
+        self.feed = AgentToasts(self.root, agent, self, monitor=Rect(40, 200, 440, 900))
         return self.feed
+
+    def communicate(self, command: SourceAction) -> bool:
+        self.action("Source action")
+        return False
+
+    def answer_console(self, answer: assistant.console_requests.Answer) -> bool:
+        self.action("Console answer: " + answer.text)
+        return False
+
+    def dismiss_work(self, identity: str) -> bool:
+        self.action("Dismiss " + identity)
+        return False
+
+    def choose_work(self, identity: str, revision: str, choice: str) -> bool:
+        self.action("Choose " + choice)
+        return False
 
     def action(self, text: str) -> None:
         self.status.setText("Preview action: " + text)
@@ -171,31 +189,33 @@ class Preview:
             self.bar.state(states[index])
         if self.agent is not None:
             self.agent.reset()
-            self.agent.triage(
-                Board(
-                    enabled=True,
-                    items=(
-                        Assessment(
-                            "preview-budget",
-                            (),
-                            "Review the sample budget",
-                            "Check **the totals** in `FY27`.",
-                            "Compare the two sample sheets.",
-                            "",
-                            2,
-                            time.time(),
+            self.agent.observe_feed(
+                FeedSnapshot(
+                    triage=Board(
+                        enabled=True,
+                        items=(
+                            Assessment(
+                                "preview-budget",
+                                (),
+                                "Review the sample budget",
+                                "Check **the totals** in `FY27`.",
+                                "Compare the two sample sheets.",
+                                "",
+                                2,
+                                time.time(),
+                            ),
+                            Assessment(
+                                "preview-brief",
+                                (),
+                                "Prepare the Friday brief",
+                                "A fictional teammate asks for a short summary.",
+                                "Draft three points for review.",
+                                "",
+                                1,
+                                time.time(),
+                            ),
                         ),
-                        Assessment(
-                            "preview-brief",
-                            (),
-                            "Prepare the Friday brief",
-                            "A fictional teammate asks for a short summary.",
-                            "Draft three points for review.",
-                            "",
-                            1,
-                            time.time(),
-                        ),
-                    ),
+                    )
                 )
             )
             self.agent.begin("Review the sample workbook", lambda: self.action("Stop"))

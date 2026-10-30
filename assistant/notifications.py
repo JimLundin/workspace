@@ -364,7 +364,7 @@ def advance(
     previous = {key_of(content): content for content in stack.observed}
     existing = {toast.key: toast for toast in stack.toasts}
     observed = observe(session, query)
-    curated = session.triage.enabled and not query.history
+    curated = session.feed.triage.enabled and not query.history
     if curated:
         work = sorted((item for item in observed if isinstance(item, WorkItem)), key=work_order)[:MAX_WORK_VISIBLE]
         observed = (*(item for item in observed if not isinstance(item, WorkItem)), *work)

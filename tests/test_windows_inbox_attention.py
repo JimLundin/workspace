@@ -13,17 +13,18 @@ if sys.platform != "win32":
 
 lazy from PySide6 import QtCore, QtWidgets
 
-from assistant.agent_toasts import AgentToasts
+from assistant.agent_toasts import AgentToasts, FeedActions
 from assistant.agent_window import AgentWindow
-from assistant.communications import Feed
 from assistant.console_requests import Provider, Request
 from assistant.desktop_bar import BarActions, DesktopBar
 from assistant.feed_triage import Assessment, Board
 from assistant.qt_runtime import prepare
 from assistant.qt_ui import application
 from assistant.system_notices import Notice, NoticeKey, Observed
-from assistant.ui import Ui
+from assistant.ui import Ui, Views
+from assistant.work_canvas import WorkCanvas
 from assistant.work_canvas_window import CanvasWindow
+from assistant.work_window import WorkWindow
 from tests.agent_requests import asked
 from tests.test_work_canvas import local_canvas
 
@@ -31,37 +32,40 @@ prepare()
 
 
 class InboxUi(Ui):
-    __slots__ = ("current_feed",)
+    """The production Ui with isolated views; it keeps the views Ui built and reads nothing private."""
+
+    __slots__ = ("current_bar", "current_canvas", "current_feed")
 
     def __init__(self, *, dismiss_notice: Callable[[NoticeKey], None] | None = None) -> None:
+        self.current_bar: DesktopBar | None = None
+        self.current_canvas: CanvasWindow | None = None
         self.current_feed: AgentToasts | None = None
-        super().__init__(desktop_factory=isolated_bar, feed_factory=self.create_feed, dismiss_notice=dismiss_notice or (lambda _: None))
+        super().__init__(views=Views(self.create_bar, self.create_feed, self.create_canvas), dismiss_notice=dismiss_notice or (lambda _: None))
 
-    def create_feed(self, root: QtWidgets.QApplication, agent: AgentWindow) -> AgentToasts:
-        self.current_feed = AgentToasts(root, agent)
+    def create_bar(self, actions: BarActions, *, audio_level: Callable[[], float | None] | None = None) -> DesktopBar:
+        self.current_bar = DesktopBar(actions, native_shell=False, audio_level=audio_level)
+        return self.current_bar
+
+    def create_feed(self, root: QtWidgets.QApplication, agent: AgentWindow, actions: FeedActions) -> AgentToasts:
+        self.current_feed = AgentToasts(root, agent, actions)
         return self.current_feed
 
-    @property
-    def communications(self) -> Feed:
-        return self._communication_feed
+    def create_canvas(self, root: QtWidgets.QApplication, work: WorkWindow, canvas: WorkCanvas) -> CanvasWindow:
+        self.current_canvas = CanvasWindow(root, work, canvas)
+        return self.current_canvas
 
     @property
     def root(self) -> QtWidgets.QApplication:
-        return self._root
+        return application()
 
     def pump(self) -> None:
-        self._poll(self._root)
-        self._root.processEvents()
+        self.drain()
+        application().processEvents()
 
     @property
     def bar(self) -> DesktopBar:
-        assert self._desktop is not None
-        return self._desktop
-
-    @property
-    def panel(self) -> AgentWindow:
-        assert self._agent is not None
-        return self._agent
+        assert self.current_bar is not None
+        return self.current_bar
 
     @property
     def feed(self) -> AgentToasts:
@@ -70,17 +74,12 @@ class InboxUi(Ui):
 
     @property
     def canvas_view(self) -> CanvasWindow:
-        assert self._work_view is not None
-        return self._work_view
+        assert self.current_canvas is not None
+        return self.current_canvas
 
     def dispose(self) -> None:
-        self._poll_timer.stop()
-        self._close_views()
+        self.close_views()
         self.pump()
-
-
-def isolated_bar(actions: BarActions, *, audio_level: Callable[[], float | None] | None = None) -> DesktopBar:
-    return DesktopBar(actions, native_shell=False, audio_level=audio_level)
 
 
 def accept_answer(answer: str) -> bool:

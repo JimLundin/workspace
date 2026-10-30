@@ -8,10 +8,10 @@ import threading
 import traceback
 from collections.abc import Callable
 from concurrent.futures import Future, TimeoutError
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
-from typing import Final, Protocol
+from typing import Final, Protocol, assert_never
 
 lazy import shiboken6
 lazy from PySide6 import QtCore, QtGui, QtWidgets
@@ -32,26 +32,29 @@ lazy import assistant.communications
 lazy import assistant.console_requests
 lazy import assistant.system_notices
 lazy from assistant.agent_session import Session, Snapshot
-lazy from assistant.agent_toasts import AgentToasts
+lazy from assistant.agent_toasts import AgentToasts, FeedActions
 lazy from assistant.agent_window import AgentWindow
 lazy from assistant.desktop_bar import BarActions, DesktopBar
-lazy from assistant.feed_items import SourceAction
+lazy from assistant.feed_observation import (
+    ConsolesObserved,
+    FeedObservation,
+    FeedUpdate,
+    NoticesObserved,
+    SourceAction,
+    TeamsObserved,
+    ToNotices,
+    ToTeams,
+    TriageObserved,
+    observe,
+    route,
+)
 lazy from assistant.feed_triage import Board
 lazy from assistant.geometry import region
 lazy from assistant.icons import State
 lazy from assistant.keymap import PHYSICAL_NAMES, Cap, Kind, keymap
 lazy from assistant.meeting_panel import MeetingPanel
 lazy from assistant.meeting_workflow import MeetingSnapshot, MeetingWorkflow
-lazy from assistant.notification_sources import (
-    HandleNotice,
-    Notices,
-    NotificationSources,
-    NotificationState,
-    OpenApp,
-    ReopenNotice,
-    ToggleApp,
-    joined,
-)
+lazy from assistant.notification_sources import HandleNotice, NotificationSources, NotificationState
 lazy from assistant.overlay_desktop import NativeOverlayDesktop, OverlayDesktop
 lazy from assistant.qt_ui import application, cancel, later
 lazy from assistant.recording_state import RecordingAction, RecordingState
@@ -127,8 +130,37 @@ def _native_desktop(actions: BarActions, *, audio_level: Callable[[], float | No
     return DesktopBar(actions, audio_level=audio_level)
 
 
-def _native_feed_view(root: QtWidgets.QApplication, agent: AgentWindow) -> AgentToasts:
-    return AgentToasts(root, agent)
+def _native_feed_view(root: QtWidgets.QApplication, agent: AgentWindow, actions: FeedActions) -> AgentToasts:
+    return AgentToasts(root, agent, actions)
+
+
+def _native_canvas_view(root: QtWidgets.QApplication, work: WorkWindow, canvas: WorkCanvas) -> CanvasWindow:
+    return CanvasWindow(root, work, canvas)
+
+
+@dataclass(frozen=True, slots=True)
+class Views:
+    """How Ui builds its native views; a test builds isolated ones and keeps what it built."""
+
+    desktop: DesktopFactory = _native_desktop
+    feed: Callable[[QtWidgets.QApplication, AgentWindow, FeedActions], AgentToasts] = _native_feed_view
+    canvas: Callable[[QtWidgets.QApplication, WorkWindow, WorkCanvas], CanvasWindow] = _native_canvas_view
+
+
+class TriageOwner(Protocol):
+    def observe(self, feed: assistant.communications.Feed, requests: tuple[assistant.console_requests.Request, ...]) -> None: ...
+    def dismiss(self, identity: str) -> bool: ...
+    def choose_from_ui(self, identity: str, revision: str, choice: str) -> bool: ...
+
+
+@dataclass(frozen=True, slots=True)
+class FeedOwners:
+    """The owners of the feed's sources and the effects a card asks of them, composed once by the application."""
+
+    teams: Callable[[assistant.communications.Command], bool]
+    notifications: SavedState[NotificationState]
+    console: Callable[[assistant.console_requests.Command], bool]
+    triage: TriageOwner
 
 
 class Ui:
@@ -139,18 +171,11 @@ class Ui:
         "_agent_waiting",
         "_canvas",
         "_canvas_notice",
-        "_choose_work",
         "_closed",
-        "_communication_action",
-        "_communication_drafts",
-        "_communication_feed",
-        "_console_action",
-        "_console_requests",
         "_desktop",
-        "_desktop_factory",
         "_dialogs",
-        "_dismiss_work",
-        "_feed_factory",
+        "_feed",
+        "_feed_owners",
         "_indicator",
         "_input_lock",
         "_inputs_closed",
@@ -165,10 +190,8 @@ class Ui:
         "_recording",
         "_root",
         "_switcher",
-        "_teams_feed",
         "_thread",
-        "_triage",
-        "_triage_observe",
+        "_views",
         "_work",
         "_work_lock",
         "_work_view",
@@ -181,15 +204,13 @@ class Ui:
         on_agent_waiting: Callable[[bool], None] | None = None,
         on_recording: Callable[[RecordingAction], None] | None = None,
         presentation: Presentation | None = None,
-        desktop_factory: DesktopFactory | None = None,
-        feed_factory: Callable[[QtWidgets.QApplication, AgentWindow], AgentToasts] | None = None,
+        views: Views | None = None,
         dismiss_notice: Callable[[NoticeKey], None] | None = None,
     ) -> None:
         # Ui owns independent dialog, toolbar and feed lifetimes; their concrete
         # factories and native effects enter here before any view is created.
         self.presentation: Presentation = NativePresentation() if presentation is None else presentation
-        self._desktop_factory: DesktopFactory = _native_desktop if desktop_factory is None else desktop_factory
-        self._feed_factory: Callable[[QtWidgets.QApplication, AgentWindow], AgentToasts] = _native_feed_view if feed_factory is None else feed_factory
+        self._views: Views = Views() if views is None else views
         self._notice_dismissal: Callable[[NoticeKey], None] | None = dismiss_notice
         if threading.current_thread() is not threading.main_thread():
             raise RuntimeError("Qt must be created on the process's main thread.")
@@ -197,16 +218,10 @@ class Ui:
         # Qt owns the latest capture observation, including before the canvas
         # exists, so opening it during a held speech key starts in that state.
         self._agent_speaking: bool = False
-        self._communication_action: Callable[[assistant.communications.Command], bool] | None = None
-        self._communication_feed = self._teams_feed = assistant.communications.Feed()
-        self._communication_drafts: dict[str, str] = {}
+        # Qt's thread owns the feed observation; every observer's report arrives there.
+        self._feed = FeedObservation()
+        self._feed_owners: FeedOwners | None = None
         self._notifications: NotificationSources | None = None
-        self._console_action: Callable[[assistant.console_requests.Command], bool] | None = None
-        self._console_requests: tuple[assistant.console_requests.Request, ...] = ()
-        self._triage = Board()
-        self._triage_observe: Callable[[assistant.communications.Feed, tuple[assistant.console_requests.Request, ...]], None] | None = None
-        self._choose_work: Callable[[str, str, str], bool] | None = None
-        self._dismiss_work: Callable[[str], bool] | None = None
         self._desktop: DesktopBar | None = None
         self._switcher: WindowSwitcher | None = None
         self._agent_lock = threading.Lock()
@@ -231,7 +246,7 @@ class Ui:
         self._root.setStyleSheet(CONTROL_STYLE)
         self._poll_timer = QtCore.QTimer(self._root)
         self._poll_timer.setInterval(20)
-        self._poll_timer.timeout.connect(lambda: self._poll(self._root))
+        self._poll_timer.timeout.connect(self.drain)
         self._poll_timer.start()
 
     def configure_controls(
@@ -253,7 +268,7 @@ class Ui:
             try:
                 self._close_inputs()
                 try:
-                    self._close_views()
+                    self.close_views()
                 finally:
                     self._poll_timer.stop()
                     for window in self._root.topLevelWidgets():
@@ -265,7 +280,9 @@ class Ui:
             finally:
                 self._closed.set()
 
-    def _close_views(self) -> None:
+    def close_views(self) -> None:
+        """Close every view on the Qt thread, running queued jobs until each acknowledges."""
+        self._poll_timer.stop()
         try:
             self.close_desktop()
         finally:
@@ -275,7 +292,7 @@ class Ui:
             while (self._agent is not None and not self._agent.closed_ready.is_set()) or (
                 self._work is not None and not self._work.closed_ready.is_set()
             ):
-                self._poll(self._root)
+                self.drain()
 
     def _close_inputs(self) -> None:
         with self._input_lock:
@@ -284,14 +301,15 @@ class Ui:
         for cancel_input in pending:
             cancel_input()
 
-    def _poll(self, root: QtWidgets.QApplication) -> None:
+    def drain(self) -> None:
+        """Run up to 64 queued jobs now; call only on the Qt thread."""
         for _ in range(64):
             try:
                 job = self._jobs.get_nowait()
             except queue.Empty:
                 break
             try:
-                job(root)
+                job(self._root)
             except Exception:
                 traceback.print_exc()
 
@@ -476,15 +494,11 @@ class Ui:
                     on_waiting=self._agent_waiting,
                     on_recording=self._recording,
                     on_work=on_work,
-                    on_communication=self.communicate,
                     on_snapshot=self.refresh_inbox,
                 )
-                self._agent.communications(self._communication_feed, self._communication_drafts)
-                self._agent.on_console = self._console_action
-                self._agent.consoles(self._console_requests)
-                self._agent.triage(self._triage)
-                self._agent.on_dismiss_work = self._dismiss_work
-                self._agent.on_choose_work = self._choose_work
+                created = self._agent
+                # Qt's thread owns the observation; later reports reach the window there too.
+                self.post(lambda _: created.observe_feed(self._feed.snapshot))
             panel = self._agent
         if task is not None:
             panel.begin(task, stop, queued=queued)
@@ -492,89 +506,58 @@ class Ui:
             panel.show(focus=focus)
         return panel
 
-    def configure_triage(
-        self,
-        observe: Callable[[assistant.communications.Feed, tuple[assistant.console_requests.Request, ...]], None],
-        dismiss: Callable[[str], bool] | None = None,
-        choose: Callable[[str, str, str], bool] | None = None,
-    ) -> None:
-        self._triage_observe = observe
-        self._dismiss_work = dismiss
-        self._choose_work = choose
+    def configure_feed(self, owners: FeedOwners) -> None:
+        """Connect the feed's owners before their observers start; cards reach them through this Ui."""
+        notifications = NotificationSources(owners.notifications, self.dismiss_system_notice)
+        notifications.load()
+        self._feed_owners, self._notifications = owners, notifications
+
+    def _observe_feed(self, update: FeedUpdate) -> None:
+        change = observe(self._feed, update)
+        self._feed = change.observation
+        if change.assess is not None and self._feed_owners is not None:
+            self._feed_owners.triage.observe(change.assess.communications, change.assess.requests)
         if self._agent is not None:
-            self._agent.on_dismiss_work = dismiss
-            self._agent.on_choose_work = choose
+            self._agent.observe_feed(self._feed.snapshot)
 
     def triage_changed(self, board: Board) -> None:
-        def update(_: QtWidgets.QApplication) -> None:
-            self._triage = board
-            if self._agent is not None:
-                self._agent.triage(board)
-            self.refresh_inbox()
+        self.post(lambda _: self._observe_feed(TriageObserved(board)))
 
-        self.post(update)
-
-    def observe_triage(self) -> None:
-        if self._triage_observe is not None:
-            self._triage_observe(self._communication_feed, self._console_requests)
-
-    def configure_communications(
-        self, action: Callable[[assistant.communications.Command], bool], notifications: SavedState[NotificationState]
-    ) -> None:
-        """Connect the Teams worker and the Windows notice owner whose work this feed joins."""
-        owner = NotificationSources(notifications, self.dismiss_system_notice)
-        owner.load()
-        self._communication_action, self._notifications = action, owner
-        if self._agent is not None:
-            self._agent.on_communication = self.communicate
-
-    def communicate(self, command: SourceAction) -> bool:
-        match command:
-            case HandleNotice() | ReopenNotice() | OpenApp() | ToggleApp():
-                if self._notifications is None or not self._notifications.command(command):
-                    return False
-                self.publish_feed()
-                return True
-            case _:
-                return self._communication_action is not None and self._communication_action(command)
-
-    def publish_feed(self) -> None:
-        """Join Teams work and Windows notices on Qt's thread, where both observations arrive."""
-        notices = self._notifications.state if self._notifications is not None else Notices()
-        self._communication_feed = joined(self._teams_feed, notices)
-        self.observe_triage()
-        if self._agent is not None:
-            self._agent.communications(self._communication_feed, self._communication_drafts)
-        self.refresh_inbox()
-
-    def communications_changed(self, feed: assistant.communications.Feed, drafts: dict[str, str]) -> None:
-        def update(_: QtWidgets.QApplication) -> None:
-            self._teams_feed, self._communication_drafts = feed, drafts
-            self.publish_feed()
-
-        self.post(update)
+    def communications_changed(self, feed: assistant.communications.Feed) -> None:
+        self.post(lambda _: self._observe_feed(TeamsObserved(feed)))
 
     def system_notices(self, observation: assistant.system_notices.Observed) -> None:
         def update(_: QtWidgets.QApplication) -> None:
             if self._notifications is not None and self._notifications.observe(observation):
-                self.publish_feed()
+                self._observe_feed(NoticesObserved(self._notifications.state))
 
         self.post(update)
-
-    def configure_console(self, action: Callable[[assistant.console_requests.Command], bool]) -> None:
-        self._console_action = action
-        if self._agent is not None:
-            self._agent.on_console = action
 
     def console_changed(self, requests: tuple[assistant.console_requests.Request, ...]) -> None:
-        def update(_: QtWidgets.QApplication) -> None:
-            self._console_requests = requests
-            self.observe_triage()
-            if self._agent is not None:
-                self._agent.consoles(requests)
-            self.refresh_inbox()
+        self.post(lambda _: self._observe_feed(ConsolesObserved(requests)))
 
-        self.post(update)
+    def communicate(self, command: SourceAction) -> bool:
+        destination = route(command)
+        match destination:
+            case ToNotices(command=notice):
+                notifications = self._notifications
+                if notifications is None or not notifications.command(notice):
+                    return False
+                self._observe_feed(NoticesObserved(notifications.state))
+                return True
+            case ToTeams(command=teams):
+                return self._feed_owners is not None and self._feed_owners.teams(teams)
+            case _:
+                assert_never(destination)
+
+    def answer_console(self, answer: assistant.console_requests.Answer) -> bool:
+        return self._feed_owners is not None and self._feed_owners.console(answer)
+
+    def dismiss_work(self, identity: str) -> bool:
+        return self._feed_owners is not None and self._feed_owners.triage.dismiss(identity)
+
+    def choose_work(self, identity: str, revision: str, choice: str) -> bool:
+        return self._feed_owners is not None and self._feed_owners.triage.choose_from_ui(identity, revision, choice)
 
     def refresh_inbox(self, session: Snapshot | None = None) -> None:
         """Publish attention on the Qt thread, including before the agent view exists."""
@@ -584,7 +567,6 @@ class Ui:
             else:
                 with self._agent.lock:
                     session = self._agent.state
-        session = replace(session, communications=self._communication_feed, console_requests=self._console_requests, triage=self._triage)
         document = self._canvas.observe_session(session) if self._canvas is not None else None
         if document is not None:
             self.render_canvas_document(document)
@@ -649,13 +631,13 @@ class Ui:
     def _create_work(self, work: WorkWindow) -> CanvasWindow:
         if self._canvas is None:
             raise RuntimeError("The canvas opens after its owner is configured.")
-        self._work_view = CanvasWindow(self._root, work, self._canvas)
+        self._work_view = self._views.canvas(self._root, work, self._canvas)
         self._work_view.personal.voice_hint.set_pressed(pressed=self._agent_speaking)
         self._attach_meetings()
         return self._work_view
 
     def _compose_feed(self, agent: AgentWindow) -> AgentToasts:
-        view = self._feed_factory(self._root, agent)
+        view = self._views.feed(self._root, agent, self)
         view.use_canvas(self.open_canvas_at)
         return view
 
@@ -892,7 +874,7 @@ class Ui:
                     self.handle_system_notice,
                     inbox=lambda: self.open_inbox(show_agent),
                 )
-                self._desktop = self._desktop_factory(actions, audio_level=audio_level)
+                self._desktop = self._views.desktop(actions, audio_level=audio_level)
                 self.refresh_inbox()
             except Exception:
                 traceback.print_exc()

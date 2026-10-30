@@ -22,12 +22,13 @@ lazy from PySide6.QtGui import QEnterEvent, QFont, QImage, QPainter, QRegion, QT
 lazy from PySide6.QtTest import QTest
 lazy from PySide6.QtWidgets import QWidget
 
+import assistant.console_requests
 from assistant.agent_session import Answer, Begin, Failed, ReasoningSummary, Said, Session, StreamState, Succeeded, ToolActivity, transition
 from assistant.agent_toasts import AgentToasts
 from assistant.agent_window import AgentWindow
 from assistant.feed_contracts import DismissItem
 from assistant.feed_desktop import NativeDesktop
-from assistant.feed_items import SourceAction
+from assistant.feed_observation import FeedObservation, FeedUpdate, SourceAction, TriageObserved, observe
 from assistant.feed_triage import EditObservation, edited
 from assistant.notifications import MAX_VISIBLE, WIDTH, Kind, MessageKey, PhaseKey, Toast, TurnKey
 from assistant.qt_runtime import prepare
@@ -67,11 +68,13 @@ class Notifications:
         "choices",
         "choose_allowed",
         "commands",
+        "console",
         "create_card",
         "desktop",
         "dismiss_allowed",
         "jobs",
         "now",
+        "observation",
         "preference",
         "recorded",
         "requested",
@@ -93,6 +96,8 @@ class Notifications:
         self.dismiss_allowed = self.choose_allowed = True
         self.choices: list[tuple[str, str, str]] = []
         self.commands: list[SourceAction] = []
+        self.console: Callable[[assistant.console_requests.Command], bool] = lambda _: True
+        self.observation = FeedObservation()
         self.jobs: deque[Callable[[], None]] = deque()
         self.requested = threading.Event()
         self.recorded: list[RecordingAction] = []
@@ -103,9 +108,6 @@ class Notifications:
             create_view=self.build,
             on_waiting=lambda waiting: self.requested.set() if waiting else None,
             on_recording=self.recorded.append,
-            on_dismiss_work=self.dismiss,
-            on_choose_work=self.choose,
-            on_communication=self.communicate,
         )
         self.pump()
         assert self.agent.ready.is_set(), self.agent.all_text()
@@ -119,6 +121,7 @@ class Notifications:
         self._view = AgentToasts(
             self.root,
             agent,
+            self,
             monitor=Rect(30, 30, 430, 790),
             clock=lambda: self.now,
             motion_enabled=lambda: self.animated,
@@ -129,13 +132,21 @@ class Notifications:
         )
         return self._view
 
-    def dismiss(self, identity: str) -> bool:
+    def observe(self, update: FeedUpdate) -> None:
+        """Report one observer's update as Ui does, through the feed observation."""
+        self.observation = observe(self.observation, update).observation
+        self.agent.observe_feed(self.observation.snapshot)
+
+    def dismiss_work(self, identity: str) -> bool:
         if not self.dismiss_allowed:
             return False
-        self.agent.triage(edited(self.agent.state.triage, DismissItem(identity), EditObservation((), self.now)))
+        self.observe(TriageObserved(edited(self.observation.snapshot.triage, DismissItem(identity), EditObservation((), self.now))))
         return True
 
-    def choose(self, identity: str, revision: str, choice: str) -> bool:
+    def answer_console(self, answer: assistant.console_requests.Answer) -> bool:
+        return self.console(answer)
+
+    def choose_work(self, identity: str, revision: str, choice: str) -> bool:
         if not self.choose_allowed:
             return False
         self.choices.append((identity, revision, choice))

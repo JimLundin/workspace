@@ -465,7 +465,7 @@ class Card:
         # Geometry and glass creation are the two native effects owned by a card;
         # injected adapters retain real widgets and the same scene lifetime.
         self.move, self.create_glass = move, _glass if glass is None else glass
-        self.owner, self.key, self.order = owner, toast.key, display_order(toast, curated=owner.session.triage.enabled)
+        self.owner, self.key, self.order = owner, toast.key, display_order(toast, curated=owner.session.feed.triage.enabled)
         self.content: Content | None = None
         self.prepared: tuple[Content, int, Prepared] | None = None
         self.layout: Layout | None = None
@@ -554,7 +554,7 @@ class Card:
     def bind(self, toast: Toast, width: int) -> None:
         """Assign new logical content to a parked native resource."""
         self.key = toast.key
-        self.order = display_order(toast, curated=self.owner.session.triage.enabled)
+        self.order = display_order(toast, curated=self.owner.session.feed.triage.enabled)
         self.retiring = False
         self.bounds = None
         self.reader = notification_reading.Waiting(0, self.owner.clock() + notification_reading.START_SECONDS)
@@ -597,8 +597,7 @@ class Card:
     def choose_solution(self, revision: str, choice: str) -> None:
         if self.closed or self.retiring or not isinstance(self.content, WorkItem) or not isinstance(self.content.item, Assessment):
             return
-        callback = self.owner.agent.on_choose_work
-        if callback is None or not callback(self.content.item.identity, revision, choice):
+        if not self.owner.actions.choose_work(self.content.item.identity, revision, choice):
             if self.owner.agent.on_problem is not None:
                 self.owner.agent.on_problem("That solution could not be started. The proposal may have changed; try again.")
             return

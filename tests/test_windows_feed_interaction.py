@@ -14,6 +14,7 @@ from assistant.agent_session import Succeeded, ToolActivity
 from assistant.console_requests import Answer, Command, Provider, request
 from assistant.feed_contracts import SolutionKind
 from assistant.feed_items import WorkItem
+from assistant.feed_observation import ConsolesObserved, TriageObserved
 from assistant.feed_origin import FeedRequest
 from assistant.feed_triage import Assessment, Board, Solution
 from assistant.notification_text import details, spans
@@ -88,9 +89,9 @@ def test_console_options_are_pills_and_route_to_the_exact_question() -> None:
             answers.append(command)
             return True
 
-        panel.agent.on_console = answer
+        panel.console = answer
         current = request(Provider.CLAUDE, event(Provider.CLAUDE, "owned-console"), "owned-console", 1)
-        panel.agent.consoles((current,))
+        panel.observe(ConsolesObserved((current,)))
         panel.pump()
         card = next(c for c in panel.view.cards.values() if isinstance(c.content, WorkItem))
         assert card.choices and not card.hint.text().startswith("<a"), "Question options must be pill buttons."
@@ -116,7 +117,7 @@ def test_proposal_thinking_question_and_reply_keep_the_same_source_bubble() -> N
             1,
             solutions=(Solution("check", "Compare sheets", SolutionKind.CHECK, "Compare the original and revised totals."),),
         )
-        panel.agent.triage(Board(enabled=True, items=(proposal,)))
+        panel.observe(TriageObserved(Board(enabled=True, items=(proposal,))))
         panel.pump()
         card = next(card for card in panel.view.cards.values() if not card.retiring)
         context = FeedRequest(proposal.identity, proposal.title)
@@ -152,7 +153,7 @@ def test_expanding_a_bubble_collapses_the_previous_one() -> None:
     with notifications() as panel:
         first = Assessment("first", (), "First request", "A fictional summary. " * 8, "Compare the totals.", "", 1, 1)
         second = replace(first, identity="second", title="Second request", created_at=2)
-        panel.agent.triage(Board(enabled=True, items=(first, second)))
+        panel.observe(TriageObserved(Board(enabled=True, items=(first, second))))
         panel.pump()
         cards = tuple(card for card in panel.view.cards.values() if not card.retiring)
         assert len(cards) == 2

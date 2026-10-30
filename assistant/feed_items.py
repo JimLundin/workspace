@@ -4,8 +4,6 @@ from collections.abc import Iterable, Iterator, Mapping
 from dataclasses import dataclass, replace
 from typing import assert_never
 
-import assistant.communications
-import assistant.notification_sources
 from assistant.agent_session import Snapshot
 from assistant.card_actions import AnswerConsole, CardAction, ItemAction, Verb, encode, parse
 from assistant.communications import (
@@ -27,6 +25,7 @@ from assistant.communications import (
     update_fingerprint,
 )
 from assistant.console_requests import Request
+from assistant.feed_observation import SourceAction
 from assistant.feed_origin import Origin
 from assistant.feed_sources import (
     Attention,
@@ -93,13 +92,14 @@ def row(source: FeedSource) -> WorkItem:
 
 
 def observed(session: Snapshot, query: Query = DEFAULT_QUERY, *, proposals: Mapping[str, WorkItem] | None = None) -> tuple[WorkItem, ...]:
-    if session.triage.enabled:
+    feed = session.feed
+    if feed.triage.enabled:
         indexed = proposal_index(session) if proposals is None else proposals
-        selected = tuple(indexed[item.identity] for item in session.triage.actions)
+        selected = tuple(indexed[item.identity] for item in feed.triage.actions)
         # Triage never assesses direct questions, so they join its proposals unfiltered.
-        direct = tuple(row(source) for source in map(ConsoleSource, session.console_requests) if attention(source) is Attention.DIRECT)
+        direct = tuple(row(source) for source in map(ConsoleSource, feed.console_requests) if attention(source) is Attention.DIRECT)
         return (*selected, *direct)
-    sources = listed(session.communications, session.console_requests, history=query.history)
+    sources = listed(feed.communications, feed.console_requests, history=query.history)
     return tuple(row(source) for source in sources if matches(source, query))
 
 
@@ -114,7 +114,7 @@ def reaction_updates(sources: Iterable[FeedSource]) -> Iterator[Update]:
 
 def reactions(session: Snapshot) -> tuple[str, str]:
     """One quiet emoji strip; reaction arrivals never become action bubbles."""
-    updates = tuple(reaction_updates(listed(session.communications, (), history=False)))
+    updates = tuple(reaction_updates(listed(session.feed.communications, (), history=False)))
     counts: dict[str, int] = {}
     for item in updates:
         evidence = item.title.casefold()
@@ -185,9 +185,6 @@ def item_action(span: Span) -> bool:
             return True
         case _:
             return False
-
-
-type SourceAction = assistant.communications.Command | assistant.notification_sources.Command
 
 
 def act(row: WorkItem, verb: Verb) -> SourceAction | None:
@@ -348,9 +345,8 @@ def proposal_index(session: Snapshot) -> frozendict[str, WorkItem]:
 
     Native frozen dictionaries retain immutable candidates and work items.
     """
-    if not session.triage.items:
+    feed = session.feed
+    if not feed.triage.items:
         return frozendict({})
-    evidence = frozendict(
-        {(source.identity, source.revision): source for source in triage_evidence(session.communications, session.console_requests)}
-    )
-    return frozendict({item.identity: proposal(item, evidence) for item in session.triage.items})
+    evidence = frozendict({(source.identity, source.revision): source for source in triage_evidence(feed.communications, feed.console_requests)})
+    return frozendict({item.identity: proposal(item, evidence) for item in feed.triage.items})

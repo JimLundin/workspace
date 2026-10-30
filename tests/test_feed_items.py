@@ -8,6 +8,7 @@ from assistant.card_actions import AnswerConsole, ItemAction, Verb, parse
 from assistant.communications import Update, WindowsNotice
 from assistant.console_requests import Provider, request
 from assistant.feed_items import WorkItem, act, action_spans, body_spans, expanded_spans, observed
+from assistant.feed_observation import FeedSnapshot
 from assistant.feed_origin import FeedRequest
 from assistant.inbox import Query, Source
 from assistant.notifications import MAX_VISIBLE, Stack, Turn, advance, body, observe
@@ -49,7 +50,7 @@ def test_notification_projection_shares_evidence_for_proposals_and_attached_turn
         for index, source in enumerate(candidates)
     )
     proposals = (proposals[0], replace(proposals[1], references=(*proposals[0].references, *proposals[1].references)), proposals[2])
-    session = Session(communications=feed, triage=Board(enabled=True, items=proposals))
+    session = Session(feed=FeedSnapshot(communications=feed, triage=Board(enabled=True, items=proposals)))
     session = transition(session, Begin("Review figures", 10, source=FeedRequest("0", proposals[0].title)))
     items = observe(session)
     turn = next(item for item in items if isinstance(item, Turn))
@@ -68,11 +69,13 @@ def test_expansion_shows_only_matching_source_revisions_and_labels_missing_origi
     proposal = Assessment(
         "forecast", ((source.identity, source.revision),), "Review the forecast", "The figures need review.", "Check the totals.", "", 1, 3
     )
-    session = Session(communications=feed, triage=Board(enabled=True, items=(proposal,)))
+    session = Session(feed=FeedSnapshot(communications=feed, triage=Board(enabled=True, items=(proposal,))))
     row = observed(session)[0]
     assert "".join(span.text for span in assistant.notification_text.spans(row, expanded=False)) == proposal.title + "\n" + proposal.suggestion
     assert update.text in "".join(span.text for span in expanded_spans(row))
-    newer = replace(session, communications=replace(feed, updates=(replace(update, text="Different, unreviewed figures"),)))
+    newer = replace(
+        session, feed=replace(session.feed, communications=replace(feed, updates=(replace(update, text="Different, unreviewed figures"),)))
+    )
     detail = "".join(span.text for span in expanded_spans(observed(newer)[0]))
     assert "Different, unreviewed figures" not in detail and "no longer available" in detail
     assert proposal.summary in detail
@@ -92,7 +95,7 @@ def test_grouped_work_keeps_app_identity_and_rich_body_links_without_an_action_f
         suggestion="- Compare both sheets\n- Prepare a draft",
     )
     # Defect: badges are recovered from live sources, so handled sources lose or change their app.
-    row = observed(Session(communications=Feed(), triage=Board(enabled=True, items=(proposal,))))[0]
+    row = observed(Session(feed=FeedSnapshot(communications=Feed(), triage=Board(enabled=True, items=(proposal,)))))[0]
     assert [origin.app for origin in row.origins] == [App.TEAMS, App.OUTLOOK]
     body = body_spans(row)
     assert any(span.link == "https://example.test/report" for span in body)
@@ -111,9 +114,11 @@ def test_reactions_share_one_compact_strip_and_disappear_after_exact_handling() 
         Update(TeamsActivity("three"), "Morgan reacted with Laugh", "A preview", "Teams", 3, UpdateKind.REACTION),
     )
     feed = Feed(updates=updates)
-    marks, detail = reactions(Session(communications=feed))
+    marks, detail = reactions(Session(feed=FeedSnapshot(communications=feed)))
     assert marks == "👍 2  😂" and "Anna liked your message" in detail
-    assert reactions(Session(communications=handle(feed, tuple(Acknowledgement(item.key, update_fingerprint(item)) for item in updates)))) == ("", "")
+    assert reactions(
+        Session(feed=FeedSnapshot(communications=handle(feed, tuple(Acknowledgement(item.key, update_fingerprint(item)) for item in updates))))
+    ) == ("", "")
 
 
 def test_windows_teams_and_console_requests_join_agent_bubbles_with_exact_source_links() -> None:
@@ -125,9 +130,9 @@ def test_windows_teams_and_console_requests_join_agent_bubbles_with_exact_source
         messages=(Message("chat", "one", "Anna", "Review the figures", 2, 2),),
         updates=(Update(WindowsNotice(NoticeKey(1, 2), "owned"), "Friday review", "Please review", "Outlook", 3),),
     )
-    state = transition(Session(identity="one", communications=feed), Begin("Help with my work", 1))
+    state = transition(Session(identity="one", feed=FeedSnapshot(communications=feed)), Begin("Help with my work", 1))
     state = transition(state, Said("Here is the plan.", 4))
-    state = replace(state, console_requests=(request(Provider.CLAUDE, event(Provider.CLAUDE), "owned", 5),))
+    state = replace(state, feed=replace(state.feed, console_requests=(request(Provider.CLAUDE, event(Provider.CLAUDE), "owned", 5),)))
     stack = advance(Stack(), state, 100)
     assert len(stack.toasts) <= MAX_VISIBLE
     source = [toast.content for toast in stack.toasts if isinstance(toast.content, WorkItem)]
@@ -156,7 +161,7 @@ def test_done_handles_the_revisions_a_card_rendered_and_never_a_later_arrival() 
         messages=(original,),
         updates=(Update(WindowsNotice(notice.key, notice.app_id), notice.title, notice.body, notice.app_name, 3),),
     )
-    rows = {row.key.kind: row for row in observed(Session(communications=rendered))}
+    rows = {row.key.kind: row for row in observed(Session(feed=FeedSnapshot(communications=rendered)))}
     arrival = Message("chat", "two", "Anna", "Also the budget", 4, 4)
     captured = (Acknowledgement(original.key, fingerprint(original.text)),)
     assert act(rows[SourceKind.CHAT], Verb.DONE) == Handle(captured)
@@ -171,7 +176,7 @@ def test_pending_sources_remain_reachable_after_overflow_filtering_and_agent_res
             Update(WindowsNotice(NoticeKey(index, index + 10), "owned"), f"Item {index}", "Fixture", "Mail", index) for index in range(1, 13)
         )
     )
-    state = Session(identity="one", communications=feed)
+    state = Session(identity="one", feed=FeedSnapshot(communications=feed))
     first = advance(Stack(), state, 100)
     assert len(first.toasts) == 5
     earlier = advance(first, state, 2000, page=1, reveal=True)
@@ -180,7 +185,7 @@ def test_pending_sources_remain_reachable_after_overflow_filtering_and_agent_res
     assert {item.key for item in later.toasts} == {item.key for item in first.toasts}
     reset = advance(later, replace(state, identity="two"), 4000)
     assert {item.key for item in reset.toasts} == {item.key for item in first.toasts}
-    muted = advance(reset, replace(state, communications=replace(feed, notification_filter=NotificationFilter(frozenset({"owned"})))), 5000)
+    muted = advance(reset, replace(state, feed=FeedSnapshot(replace(feed, notification_filter=NotificationFilter(frozenset({"owned"}))))), 5000)
     assert not muted.toasts
 
 
@@ -191,7 +196,7 @@ def test_small_viewport_pages_through_every_pending_item_even_when_questions_ove
         )
     )
     requests = tuple(request(Provider.CLAUDE, event(Provider.CLAUDE, str(index)), str(index), index) for index in range(8, 12))
-    state = Session(identity="one", communications=feed, console_requests=requests)
+    state = Session(identity="one", feed=FeedSnapshot(communications=feed, console_requests=requests))
     for limit in (1, 2, 3):
         stack = advance(Stack(), state, 100, limit=limit)
         seen = {toast.key for toast in stack.toasts}
@@ -224,7 +229,7 @@ def test_expanded_question_context_excludes_other_topics_in_the_same_chat() -> N
         1,
         1,
     )
-    row = observed(Session(communications=feed, triage=Board(enabled=True, items=(proposal,))))[0]
+    row = observed(Session(feed=FeedSnapshot(communications=feed, triage=Board(enabled=True, items=(proposal,)))))[0]
     context = "".join(span.text for span in expanded_spans(row))
     assert "Can you approve the budget?" in context and "Lunch" not in context and "kitchen" not in context
     assert "Request" in context and "Suggested approach" in context
@@ -234,6 +239,6 @@ def test_multiple_choice_questions_show_options_for_voice_without_submitting_one
     # Defect: a pill click prematurely submits one choice from a multi-select request.
     current = request(Provider.CLAUDE, event(Provider.CLAUDE), "multiple", 1)
     current = replace(current, questions=(replace(current.questions[0], multiple=True),))
-    row = next(item for item in observed(Session(console_requests=(current,))) if item.key.kind is SourceKind.CONSOLE)
+    row = next(item for item in observed(Session(feed=FeedSnapshot(console_requests=(current,)))) if item.key.kind is SourceKind.CONSOLE)
     assert not action_spans(row)
     assert "Revenue" in "".join(span.text for span in body_spans(row))
