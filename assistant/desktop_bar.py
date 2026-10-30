@@ -61,6 +61,7 @@ class BarObservations:
     power: Callable[[], Power] = winapi.ambient.power
     material: Callable[[], appearance.Preference] = appearance.preference
     motion: Callable[[], bool] = appearance.animations_enabled
+    local_time: Callable[[], datetime] = datetime.now
 
 
 class DesktopBar:
@@ -145,7 +146,7 @@ class DesktopBar:
         self.weather: Weather | None = None
         self.weather_service: LocalWeather | None = None
         self.status_service: StatusObserver | None = None
-        self.ambient = Ambient(datetime.now().strftime("%H:%M"), self.power)
+        self.ambient = Ambient(self.observations.local_time().strftime("%H:%M"), self.power)
         self.audio_meter: AudioMeter | None = None
         self.sample_bounds: Rect | None = None
         self.preference: appearance.Preference = appearance.Material.SOLID
@@ -403,7 +404,7 @@ QMenu::separator {{ height: 1px; background: {colors.edge}; margin: 4px 10px; }}
                 if system != self.status.system:
                     self.status.system_changed(system)
                     self.window.adjustSize()
-        ambient = Ambient(datetime.now().strftime("%H:%M"), self.power, self.weather)
+        ambient = Ambient(self.observations.local_time().strftime("%H:%M"), self.power, self.weather)
         if ambient != self.ambient:
             self.ambient = ambient
             if self.view is not None and isinstance(self.view.activity, Resting):
