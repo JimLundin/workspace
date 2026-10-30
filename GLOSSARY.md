@@ -61,6 +61,12 @@ An explicit connection between two bubbles, describing how their context relates
 It remains attached to those pieces when their containers are opened or collapsed.
 _Avoid_: Containment, source assignment
 
+**Canvas edit**:
+A change the person makes on the canvas, such as moving, nesting, grouping,
+expanding or relating bubbles, or editing a note. It applies to the canvas as it
+is now, so changes the agent made since the canvas was last shown remain.
+_Avoid_: Saved view copy, panel save
+
 **Bubble contents**:
 The pieces collected inside a bubble, such as individual emails within an email
 conversation. Containment is distinct from that bubble's connections to work.

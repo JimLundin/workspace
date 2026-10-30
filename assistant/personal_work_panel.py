@@ -24,7 +24,7 @@ from assistant.ui_components.controls import button, label
 from assistant.ui_components.voice_legend import VoiceLegend
 from assistant.ui_components.widgets import column, row
 from assistant.work_canvas import Investigating, NotQueued, Queued, ResumeTask, WorkCanvas
-from assistant.work_canvas_commands import PutRelation, RemoveRelation, UpdateCanvas, edited, revision
+from assistant.work_canvas_commands import PutRelation, RemoveRelation
 from assistant.work_canvas_connections import connections
 from assistant.work_canvas_context import (
     CanvasInbox,
@@ -40,6 +40,18 @@ from assistant.work_canvas_context import (
     scene_contents,
     topology,
     visible_groups,
+)
+from assistant.work_canvas_edits import (
+    AddGroup,
+    ArrangeView,
+    Change,
+    PutInside,
+    ReleasePositions,
+    RenameGroup,
+    Reveal,
+    SaveNote,
+    SetExpansion,
+    UserEdit,
 )
 from assistant.work_canvas_gestures import (
     BubbleDrag,
@@ -71,14 +83,7 @@ from assistant.work_canvas_model import (
     CanvasDocument,
     CanvasNote,
     CanvasRelation,
-    CanvasViewState,
     Placement,
-    nest,
-    release_subtree,
-    save_collection,
-    save_note,
-    save_view,
-    toggle_expansion,
     view_state,
 )
 from assistant.work_canvas_view import CanvasCard, CanvasGroup, CanvasViewport
@@ -303,15 +308,20 @@ class PersonalPanel:
         self.canvas.centerOn(left + self.canvas.viewport().width() / 1.8 - 42, top + self.canvas.viewport().height() / 1.8 - 110)
         self.positioned = True
 
-    def commit(self, document: CanvasDocument) -> bool:
-        if document == self.document:
-            return True
+    def show_document(self, document: CanvasDocument) -> None:
+        """Render a document the canvas owner committed or observed."""
+        self.document = document
+        self.render(self.view)
+
+    def commit(self, change: Change) -> bool:
         try:
-            self.work_canvas.save(document)
-        except (OSError, ValueError, sqlite3.Error) as error:
+            self.document = self.work_canvas.commit(UserEdit(self.scope, change))
+        except ValueError as error:
+            self.work.problem(str(error))
+            return False
+        except (OSError, sqlite3.Error) as error:
             self.work.problem("The local canvas could not be saved: " + str(error))
             return False
-        self.document = document
         return True
 
     def sync_cards(self, content: tuple[CanvasContent, ...], visible: frozenset[str]) -> None:
@@ -556,14 +566,7 @@ class PersonalPanel:
             case ClickBubble(id=identity):
                 self.click_bubble(identity)
             case PlaceBubbles() | NestBubble() as released:
-                try:
-                    self.document = self.work_canvas.commit_gesture(self.scope, released)
-                except ValueError as error:
-                    self.work.problem(str(error))
-                    self.reflow()
-                    return
-                except (OSError, sqlite3.Error) as error:
-                    self.work.problem("The local canvas could not be saved: " + str(error))
+                if not self.commit(released):
                     self.reflow()
                     return
                 match released:
@@ -577,7 +580,7 @@ class PersonalPanel:
                 raise RuntimeError("Native previews belong to CanvasInteraction.")
 
     def save_relation(self, relation: CanvasRelation) -> None:
-        self.commit(edited(self.document, UpdateCanvas(revision(self.document), (PutRelation(relation),)), self.view.catalog))
+        self.commit(PutRelation(relation))
         self.draw_connections()
         self.status.setText("")
 
@@ -599,7 +602,7 @@ class PersonalPanel:
             self.save_relation(replace(relation, reason=reason.strip()[:1200]))
 
     def remove_relation(self, relation: CanvasRelation) -> None:
-        self.commit(edited(self.document, UpdateCanvas(revision(self.document), (RemoveRelation(relation.start, relation.end),)), self.view.catalog))
+        self.commit(RemoveRelation(relation.start, relation.end))
         self.draw_connections()
 
     def reflow(self) -> None:
@@ -610,10 +613,10 @@ class PersonalPanel:
             frozendict((card.content.id, Size(card.own_size.width(), card.own_size.height())) for card in self.visible_cards),
             max(380, self.canvas.viewport().width() / 0.9 - 84),
         )
-        arranged = layout(self.projection, view_state(self.document, self.scope.identity), measurements)
-        document = save_view(self.document, arranged.state)
-        if document != self.document:
-            self.commit(document)
+        state = view_state(self.document, self.scope.identity)
+        arranged = layout(self.projection, state, measurements)
+        if arranged.state != state:
+            self.commit(ArrangeView(state, arranged.state))
         positions = frozendict((position.id, position) for position in arranged.state.placements)
         for card in self.visible_cards:
             position = positions[card.content.id]
@@ -695,16 +698,13 @@ class PersonalPanel:
         return False
 
     def release_positions(self) -> None:
-        self.commit(save_view(self.document, CanvasViewState(self.scope.identity)))
+        self.commit(ReleasePositions.RELEASE)
         self.reflow()
 
     def reveal(self, identity: str) -> None:
         # A single scene owns all nested bubbles. Focusing reveals its ancestors
         # without replacing neighbors, saved pins or the scene's native objects.
-        document = self.document
-        for ancestor in context_path(identity, self.view.catalog, document):
-            document = toggle_expansion(document, None, ancestor, expanded=True)
-        self.commit(document)
+        self.commit(Reveal(identity))
         self.scope = CanvasScope()
         self.render(self.view)
 
@@ -756,7 +756,7 @@ class PersonalPanel:
         title, accepted = QtWidgets.QInputDialog.getText(self.frame, "New canvas group", "Group name")
         if accepted and title.strip():
             group = CanvasCollection("group:" + uuid4().hex, title.strip(), parent_id=self.selected)
-            self.commit(save_collection(self.document, group))
+            self.commit(AddGroup(group))
             self.render(self.view)
             self.open_context(group.id)
 
@@ -765,7 +765,7 @@ class PersonalPanel:
         if group is not None:
             title, accepted = QtWidgets.QInputDialog.getText(self.frame, "Rename canvas group", "Group name", text=group.title)
             if accepted and title.strip():
-                self.commit(save_collection(self.document, replace(group, title=title.strip())))
+                self.commit(RenameGroup(identity, title.strip()))
                 self.render(self.view)
 
     def choose_group(self) -> None:
@@ -782,20 +782,14 @@ class PersonalPanel:
             self.add_to_group(groups[labels.index(choice)].id, self.selected)
 
     def add_to_group(self, group_id: str | None, identity: str) -> None:
-        try:
-            visible = next((bubble for bubble in self.capture_gesture_scene().bubbles if bubble.id == identity), None)
-            members = (
-                visible.members
-                if visible is not None
-                else frozenset(item for item, path in topology(self.view.catalog, self.document).paths.items() if identity in path)
-            )
-            document = release_subtree(nest(self.document, group_id, identity), members | {identity})
-            project(self.view.catalog, document, self.scope)
-        except ValueError as error:
-            self.work.problem(str(error))
-            return
-        self.commit(document)
-        self.render(self.view)
+        visible = next((bubble for bubble in self.capture_gesture_scene().bubbles if bubble.id == identity), None)
+        members = (
+            visible.members
+            if visible is not None
+            else frozenset(item for item, path in topology(self.view.catalog, self.document).paths.items() if identity in path)
+        )
+        if self.commit(PutInside(identity, group_id, members)):
+            self.render(self.view)
 
     def pending_questions(self) -> Iterator[CanvasQuestion]:
         for item in topology(self.view.catalog, self.document).pieces:
@@ -836,7 +830,7 @@ class PersonalPanel:
     def toggle_bubble(self, identity: str) -> None:
         group = next((group for root in self.projection.groups for group in descendants(root) if group.id == identity), None)
         if group is not None:
-            self.commit(toggle_expansion(self.document, self.scope.identity, identity, expanded=not group.expanded))
+            self.commit(SetExpansion(identity, expanded=not group.expanded))
             self.scope = replace(self.scope, mode=CanvasMode.CONTENTS)
             self.render(self.view)
             revised = next((item for root in self.projection.groups for item in descendants(root) if item.id == identity), None)
@@ -918,20 +912,14 @@ class PersonalPanel:
     def create_note(self) -> None:
         note = CanvasNote("note:" + uuid4().hex, "New note", context_id=self.selected)
         point = self.canvas.mapToScene(self.canvas.viewport().rect().center())
-        document = save_note(self.document, note)
-        self.commit(document)
+        self.commit(SaveNote(note))
         self.render(self.view)
         self.apply_gesture(PlaceBubbles(note.id, (Placement(note.id, point.x() - 180, point.y() - 140),)))
         self.inspect(note.id)
 
     def save_note(self, note: CanvasNote) -> None:
-        try:
-            document = save_note(self.document, note)
-        except ValueError as error:
-            self.work.problem(str(error))
-            return
-        self.commit(document)
-        self.render(self.view)
+        if self.commit(SaveNote(note)):
+            self.render(self.view)
 
     def create_document(self) -> None:
         path, _selected_filter = QtWidgets.QFileDialog.getOpenFileName(self.frame, "Add document to canvas", "", "Documents (*);;Text (*.txt *.md)")
@@ -1001,7 +989,7 @@ class PersonalPanel:
                 case AddDocument():
                     kind = SourceKind.DOCUMENT
             identity = source_id(kind, document_identity(command.reference.url))
-            self.commit(nest(self.document, self.selected, identity))
+            self.commit(PutInside(identity, self.selected, frozenset()))
 
 
 # Qt owns pointer capture and previews; immutable decisions own the gestures.

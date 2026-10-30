@@ -32,7 +32,7 @@ from automation.task import ActionReturned, ActionSpec, ActionUncertain, ActionV
 from tests.agent_requests import asked, reviewed
 from tests.personal_work_fixture import source
 from tests.test_work_agent import WorkRig
-from tests.test_work_canvas import local_canvas
+from tests.test_work_canvas import local_canvas, seeded
 from tests.test_work_window import work_task
 
 
@@ -58,7 +58,7 @@ def test_saved_questions_keep_their_route_state_and_thread_after_session_mirrori
     # mirror replaces its durable task route, or a stale mirror erases context.
     task = work_task(Waiting(automation.task.Question("request-1", "Which supplier?", "Choose a deployment supplier.")))
     store = local_canvas(tmp_path)
-    store.save(CanvasDocument(runs=(CanvasRun(task.id, "work:atlas"),)))
+    seeded(store, CanvasDocument(runs=(CanvasRun(task.id, "work:atlas"),)))
     document = store.observe_work(WorkSnapshot(tasks=(task,))).document
     question = document.activity[0]
     assert isinstance(question, CanvasQuestion)
@@ -69,7 +69,7 @@ def test_saved_questions_keep_their_route_state_and_thread_after_session_mirrori
     mirrored = document.activity[0]
     assert isinstance(mirrored, CanvasQuestion) and mirrored.request == question.request
     accepted = replace(question, reply=Answered("Use Contoso"))
-    store.save(observe_activity(document, (accepted,)))
+    seeded(store, observe_activity(document, (accepted,)))
     cancelled = replace(session, messages=(replace(mirror, reply=assistant.agent_session.Cancelled()),))
     document = observed_session(store, cancelled)
     assert document.activity == (accepted,)
@@ -139,7 +139,7 @@ def test_startup_removes_retired_fetch_projections_from_the_saved_canvas(tmp_pat
     store = local_canvas(tmp_path)
     fetched = CanvasAction("action:fetch", "Browser fetch", "Attempted navigation", 1, ActionState.RETURNED, ("work:atlas",))
     finding = CanvasUpdate("result:research", "Verified conclusion", "Useful evidence", 2, ("work:atlas",))
-    store.save(CanvasDocument(activity=(fetched, finding)))
+    seeded(store, CanvasDocument(activity=(fetched, finding)))
     local_canvas(tmp_path)
     assert saved(store.path).activity == (finding,)
 
@@ -157,7 +157,7 @@ def test_action_history_stays_out_of_the_canvas_while_prepared_content_remains(t
         task = rig.tasks.submit("canvas-task", "Prepare handoff", "Draft a handoff reply", RequestSource("canvas"), at=1)
         claim = rig.tasks.claim("worker", "run", at=2)
         assert claim is not None
-        canvas.save(CanvasDocument(runs=(CanvasRun(task.id, "work:atlas"),)))
+        seeded(canvas, CanvasDocument(runs=(CanvasRun(task.id, "work:atlas"),)))
         fetch_spec = attempted("browser_open", {"url": "https://example.test/research"})
         fetch = rig.tasks.begin_action(claim.run, "fetch", fetch_spec, at=2.5)
         assert fetch is not None
@@ -174,7 +174,7 @@ def test_action_history_stays_out_of_the_canvas_while_prepared_content_remains(t
         document = canvas.observe_work(rig.refresh()).document
         assert not document.activity
         artifact = CanvasNote("note:handoff", "Handoff reply", "Proposed handoff", "work:atlas")
-        canvas.save(replace(document, notes=(artifact,)))
+        seeded(canvas, replace(document, notes=(artifact,)))
         ticket_spec = attempted("kanban_update_task", {"id": "AT-42"})
         ticket = rig.tasks.begin_action(claim.run, "ticket", ticket_spec, at=5)
         assert ticket is not None
@@ -223,8 +223,9 @@ def test_another_research_run_does_not_turn_an_arrangement_report_into_context(t
     # Defect: a research binding for another task mistakenly qualifies every
     # completed instruction as a substantive research result.
     store = local_canvas(tmp_path)
-    store.save(
-        CanvasDocument(runs=(CanvasRun("arrange", "work:atlas", CanvasInstruction("Arrange these bubbles")), CanvasRun("research", "work:atlas")))
+    seeded(
+        store,
+        CanvasDocument(runs=(CanvasRun("arrange", "work:atlas", CanvasInstruction("Arrange these bubbles")), CanvasRun("research", "work:atlas"))),
     )
     arrangement = work_task(Completed("Moved the bubbles", ()), identity="arrange")
     research = work_task(Completed("The current plan is version 3", ()), identity="research")
