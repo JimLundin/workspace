@@ -2,8 +2,7 @@
 
 import json
 import threading
-from dataclasses import dataclass
-from typing import Protocol, assert_never, cast
+from typing import Protocol, assert_never
 
 from assistant import outlook
 from assistant.llm import Json
@@ -12,10 +11,23 @@ from assistant.meeting_followup_store import FollowupStore, Publication, Publish
 from assistant.meeting_requests import MeetingRequests, PreparedFollowup, task_identity
 from automation.actions import ActionError
 from automation.execution import Outcome, WorkExecution
-from automation.task import ActionSpec, ActionUncertain, ActionVerified, Blocked, Completed, Task, Waiting, digest, identifier, integer
+from automation.task import (
+    Action,
+    ActionUncertain,
+    ActionVerified,
+    Blocked,
+    Completed,
+    FileDigest,
+    MailTarget,
+    NoVerification,
+    Task,
+    Waiting,
+    digest,
+    identifier,
+    integer,
+)
 
 SOURCE_PAGE = 32_000
-_MAIL_RESOURCE = "meeting-draft:"
 
 
 def encoded(data: dict[str, Json]) -> str:
@@ -25,38 +37,6 @@ def encoded(data: dict[str, Json]) -> str:
 class Drafts(Protocol):
     def save(self, request: outlook.DraftRequest, cancel: threading.Event) -> outlook.DraftResult: ...
     def inspect(self, request: outlook.DraftRequest, cancel: threading.Event) -> outlook.DraftResult | outlook.Missing: ...
-
-
-@dataclass(frozen=True, slots=True)
-class MailTarget:
-    version: str
-    draft_id: str
-    revision: int
-    fingerprint: str
-
-    def __post_init__(self) -> None:
-        digest(self.version, "meeting package version")
-        identifier(self.draft_id, "meeting draft identity")
-        integer(self.revision, "meeting draft revision")
-        digest(self.fingerprint, "mail content fingerprint")
-
-    @property
-    def resource(self) -> str:
-        return _MAIL_RESOURCE + json.dumps((self.version, self.draft_id, self.revision, self.fingerprint), separators=(",", ":"))
-
-
-def mail_target(specification: ActionSpec) -> MailTarget:
-    """Only bounded non-content identities are retained in action metadata."""
-    values = tuple(value[len(_MAIL_RESOURCE) :] for value in specification.resources if value.startswith(_MAIL_RESOURCE))
-    if specification.tool != "meeting_save_draft" or len(values) != 1:
-        raise ValueError("The saved mail action has no exact draft revision.")
-    value: object = json.loads(values[0])
-    if not isinstance(value, list):
-        raise ValueError("The saved mail action has an invalid draft revision.")
-    items = cast(list[object], value)
-    if len(items) != 4:
-        raise ValueError("The saved mail action has an invalid draft revision.")
-    return MailTarget(digest(items[0]), identifier(items[1]), integer(items[2], "saved draft revision"), digest(items[3]))
 
 
 def verified_mail(request: outlook.DraftRequest, result: outlook.DraftResult | outlook.Missing) -> ActionVerified | ActionUncertain:
@@ -234,21 +214,29 @@ class MeetingRun:
         """An uncertain native Save can only be resolved by its exact readback."""
         with work.actions.resources.hold(("outlook",), stop):
             for action in work.store.unverified_actions(self.request.task_id):
-                if action.specification.tool != "meeting_save_draft":
-                    continue
-                target = mail_target(action.specification)
-                request = self._draft(target.version, target.draft_id, target.revision)
-                if outlook.fingerprint(request) != target.fingerprint:
-                    raise ActionError("The recorded mail attempt does not match the saved draft revision.")
-                result = self.drafts.inspect(request, stop)
-                observed = verified_mail(request, result)
-                if not isinstance(observed, ActionVerified) or result is outlook.Cancelled.BEFORE_EFFECT:
-                    reason = observed.reason if isinstance(observed, ActionUncertain) else "Mail inspection was stopped."
-                    raise ActionError(reason)
-                if work.store.finish_action(action.id, observed, at=work.clock()) is None:
-                    raise ActionError("The draft was verified, but its action acknowledgement could not be saved.")
-                if result is not outlook.Missing.DRAFT:
-                    self.mail_results[target] = result
+                self._recover_mail(work, action, stop)
+
+    def _recover_mail(self, work: WorkExecution, action: Action, stop: threading.Event) -> None:
+        target = action.specification.verification
+        match target:
+            case NoVerification() | FileDigest():
+                return
+            case MailTarget():
+                pass
+            case _:
+                assert_never(target)
+        request = self._draft(target.version, target.draft_id, target.revision)
+        if outlook.fingerprint(request) != target.fingerprint:
+            raise ActionError("The recorded mail attempt does not match the saved draft revision.")
+        result = self.drafts.inspect(request, stop)
+        observed = verified_mail(request, result)
+        if not isinstance(observed, ActionVerified) or result is outlook.Cancelled.BEFORE_EFFECT:
+            reason = observed.reason if isinstance(observed, ActionUncertain) else "Mail inspection was stopped."
+            raise ActionError(reason)
+        if work.store.finish_action(action.id, observed, at=work.clock()) is None:
+            raise ActionError("The draft was verified, but its action acknowledgement could not be saved.")
+        if result is not outlook.Missing.DRAFT:
+            self.mail_results[target] = result
 
     def _deliveries(
         self,

@@ -363,7 +363,23 @@ class FileDigest:
         digest(self.sha256, "file digest")
 
 
-type Verification = NoVerification | FileDigest
+@dataclass(frozen=True, slots=True)
+class MailTarget:
+    """The exact meeting draft revision a mail save wrote; only its adapter's readback verifies it."""
+
+    version: str
+    draft_id: str
+    revision: int
+    fingerprint: str
+
+    def __post_init__(self) -> None:
+        digest(self.version, "meeting package version")
+        identifier(self.draft_id, "meeting draft identity")
+        integer(self.revision, "meeting draft revision")
+        digest(self.fingerprint, "mail content fingerprint")
+
+
+type Verification = NoVerification | FileDigest | MailTarget
 
 
 @dataclass(frozen=True, slots=True)
@@ -379,7 +395,7 @@ class ActionSpec:
         text(self.label, "action label", maximum=1_024)
         digest(self.fingerprint)
         strings(self.resources, "action resource", maximum=1_024, count=32)
-        variant(self.verification, (NoVerification, FileDigest), "action verification")
+        variant(self.verification, (NoVerification, FileDigest, MailTarget), "action verification")
 
 
 class ActionPending(Enum):

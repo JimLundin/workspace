@@ -28,6 +28,7 @@ from automation.task import (
     FileDigest,
     GoalRevision,
     Interrupted,
+    MailTarget,
     NoVerification,
     Outcome,
     Profile,
@@ -367,6 +368,8 @@ def _verification_data(verification: Verification) -> dict[str, object]:
             return {"kind": "none"}
         case FileDigest(path, sha256):
             return {"kind": "file_digest", "path": path, "sha256": sha256}
+        case MailTarget(version, draft_id, revision, fingerprint):
+            return {"kind": "mail_target", "version": version, "draft_id": draft_id, "revision": revision, "fingerprint": fingerprint}
         case _:
             assert_never(verification)
 
@@ -396,6 +399,14 @@ def _specification(value: object) -> ActionSpec:
         case "file_digest":
             _fields(check, "kind", "path", "sha256")
             verification = FileDigest(text(check["path"], "verification path", maximum=32_768), digest(check["sha256"], "file digest"))
+        case "mail_target":
+            _fields(check, "kind", "version", "draft_id", "revision", "fingerprint")
+            verification = MailTarget(
+                digest(check["version"], "meeting package version"),
+                identifier(check["draft_id"], "meeting draft identity"),
+                integer(check["revision"], "meeting draft revision"),
+                digest(check["fingerprint"], "mail content fingerprint"),
+            )
         case _:
             raise ValueError("Invalid stored action verification.")
     return ActionSpec(

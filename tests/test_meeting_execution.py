@@ -22,7 +22,7 @@ from assistant.agent_execution import AgentExecution, unseen
 from assistant.agent_tools import Output
 from assistant.agent_toolsets import MeetingFollowupTools
 from assistant.llm import Json, Settings, ToolCall
-from assistant.meeting_execution import MeetingWork, mail_target
+from assistant.meeting_execution import MeetingWork
 from assistant.meeting_followup import parse_followup
 from assistant.meeting_followup_store import FollowupStore
 from assistant.meeting_requests import MeetingRequests, followup_prompt, task_identity
@@ -33,7 +33,21 @@ from automation.actions import Resources
 from automation.execution import WorkExecution
 from automation.files import filesystem_path
 from automation.store import TaskStore
-from automation.task import ActionUncertain, ActionVerified, Blocked, Claim, Completed, Control, FileDigest, RequestKind, RequestSource, Task, Waiting
+from automation.task import (
+    Action,
+    ActionUncertain,
+    ActionVerified,
+    Blocked,
+    Claim,
+    Completed,
+    Control,
+    FileDigest,
+    MailTarget,
+    RequestKind,
+    RequestSource,
+    Task,
+    Waiting,
+)
 from tests.fake_endpoint import FakeEndpoint, fake_endpoint
 from tests.test_agent import FakeMachine, FakeWindow, calls, says
 from tests.test_meeting_followup import BODY, NOTICE, followup_response, followup_sources, response_item
@@ -131,6 +145,12 @@ class DraftEffects:
     def inspect(self, request: outlook.DraftRequest, cancel: threading.Event) -> outlook.DraftResult | outlook.Missing:
         self.calls.append(("inspect", request))
         return self.inner.inspect(request, cancel)
+
+
+def mail_target(action: Action) -> MailTarget:
+    target = action.specification.verification
+    assert isinstance(target, MailTarget)
+    return target
 
 
 def call(agent: Agent, name: str, arguments: Mapping[str, Json]) -> Output:
@@ -280,7 +300,7 @@ def test_saved_mail_receipt_must_belong_to_the_selected_package_version(tmp_path
         actions = rig.tasks.actions(claim.task.id)
         assert len(actions) == 3 and all(isinstance(action.outcome, ActionVerified) for action in actions)
         mail_action = next(action for action in actions if action.specification.tool == "meeting_save_draft")
-        assert mail_target(mail_action.specification).version == first_plan.version
+        assert mail_target(mail_action).version == first_plan.version
         assert rig.tasks.finish(claim.run, waiting, at=time.time()) is not None
 
         tasks = TaskStore(rig.tasks.path)
@@ -302,7 +322,7 @@ def test_saved_mail_receipt_must_belong_to_the_selected_package_version(tmp_path
     assert str(saved_mail[0]) in result.result
     verified_mail_actions = tuple(action for action in tasks.actions(claim.task.id) if action.specification.tool == "meeting_save_draft")
     assert len(verified_mail_actions) == 2 and all(isinstance(action.outcome, ActionVerified) for action in verified_mail_actions)
-    assert {mail_target(action.specification).version for action in verified_mail_actions} == {first_plan.version, second_plan.version}
+    assert {mail_target(action).version for action in verified_mail_actions} == {first_plan.version, second_plan.version}
 
 
 def test_reserved_preparation_fails_closed_before_sdk_for_missing_or_changed_binding(tmp_path: Path) -> None:
@@ -474,7 +494,7 @@ def test_uncertain_mail_recovery_reads_exact_historical_revision_after_user_edit
         assert rig.tasks.finish(claim.run, first, at=time.time()) is not None
         pending = rig.tasks.unverified_actions(claim.task.id)
         assert len(pending) == 1 and isinstance(pending[0].outcome, ActionUncertain)
-        assert mail_target(pending[0].specification).revision == attempted.revision
+        assert mail_target(pending[0]).revision == attempted.revision
         assert len(rig.command.files()) == 1
         saved_mail_before = rig.command.files()[0].read_bytes()
         latest = rig.packages.save_draft(

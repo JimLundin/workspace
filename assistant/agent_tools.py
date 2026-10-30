@@ -19,7 +19,7 @@ from assistant.geometry import Shot
 from assistant.llm import Json, ToolSpec
 from automation.actions import Classification, Operation
 from automation.execution import Proof, Readback, Targets
-from automation.task import ActionNotApplied, ActionUncertain, ActionVerified, NoVerification, Verification
+from automation.task import ActionNotApplied, ActionUncertain, ActionVerified, FileDigest, MailTarget, NoVerification
 from winapi.shapes import Rect, Window
 
 _ARGUMENTS = TypeAdapter(dict[str, Json], config=ConfigDict(allow_inf_nan=False))
@@ -130,7 +130,17 @@ class Args:
 
 
 type Verifier = Callable[[Output], ActionVerified | ActionUncertain | ActionNotApplied]
-type Verify = Verification | Verifier
+
+
+@dataclass(frozen=True, slots=True)
+class AdapterReadback:
+    """The adapter confirms its own result; a later run verifies the attempt by reading back `target` again."""
+
+    target: MailTarget
+    confirm: Verifier
+
+
+type Verify = NoVerification | FileDigest | Verifier | AdapterReadback
 """A durable digest the journal checks, or the adapter's own confirmation of its result."""
 
 
