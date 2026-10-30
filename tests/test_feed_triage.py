@@ -346,5 +346,6 @@ def test_a_board_saved_before_origins_were_captured_keeps_its_rules_and_items() 
     for item in stored["items"]:
         del item["origins"]
     restarted = restored(STORED_BOARD.validate_python(stored))
-    assert restarted.rules == board.rules and restarted.history == board.history and [item.identity for item in restarted.items] == [item.identity for item in board.items]
+    assert restarted.rules == board.rules and restarted.history == board.history
+    assert [item.identity for item in restarted.items] == [item.identity for item in board.items]
     assert all(item.origins == () for item in restarted.items)
