@@ -241,9 +241,17 @@ QToolTip {{ background: {self.colors.surface}; color: {self.ink.foreground}; bor
         if self.attached != attached:
             self.attached = attached
             self.margins()
-            self.adjustSize()
+            self.fit()
             self.update()
             self.sync_glass()
+
+    def fit(self) -> None:
+        """Controls follow the measured width now, whether or not the capsule is shown."""
+        self.adjustSize()
+        # Qt lays the row out before resizing, and a hidden window defers the
+        # resize event that would lay it out again. Without this, controls keep
+        # the previous width's positions, past the edge of a narrowed capsule.
+        self.row.setGeometry(self.contentsRect())
 
     def show_activity(self, *, visible: bool, now: float, animate: bool) -> None:
         if visible == self.presented and self.fade_to == float(visible):

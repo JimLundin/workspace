@@ -290,7 +290,7 @@ QMenu::separator {{ height: 1px; background: {colors.edge}; margin: 4px 10px; }}
         self.inbox.setAccessibleName(description)
         self.inbox.setVisible(count > 0)
         self.inbox_divider.setVisible(count > 0)
-        self.window.adjustSize()
+        self.window.fit()
         self.position()
 
     def recording_changed(self, recording: RecordingState) -> None:
@@ -343,7 +343,7 @@ QMenu::separator {{ height: 1px; background: {colors.edge}; margin: 4px 10px; }}
             self.keyboard.setToolTip((view.keyboard or "Current keyboard mode") + " · Open key map")
             self.keyboard.setAccessibleName(self.keyboard.toolTip())
             for pill in self.pills:
-                pill.adjustSize()
+                pill.fit()
         self.position()
         now = self.observations.clock()
         self.window.show_activity(visible=self.visible, now=now, animate=animate)
@@ -403,13 +403,13 @@ QMenu::separator {{ height: 1px; background: {colors.edge}; margin: 4px 10px; }}
                 system = self.status_service.results.get_nowait()
                 if system != self.status.system:
                     self.status.system_changed(system)
-                    self.window.adjustSize()
+                    self.window.fit()
         ambient = Ambient(self.observations.local_time().strftime("%H:%M"), self.power, self.weather)
         if ambient != self.ambient:
             self.ambient = ambient
             if self.view is not None and isinstance(self.view.activity, Resting):
                 self.status.facts(ambient)
-                self.window.adjustSize()
+                self.window.fit()
         visible_bounds = tuple(pill.bounds for pill in self.pills if pill.isVisible() and pill.bounds is not None)
         self.sample_bounds = (
             Rect(
