@@ -153,6 +153,13 @@ offered, whether a call reads or changes state, what it holds while it runs,
 what proves its effect and what the visible log may show.
 _Avoid_: Tool table, tool registry
 
+**Web-app operation**:
+One kind of Teams, Outlook or AIP Kanban interaction in a signed-in browser
+page, declared once with its typed query, page script, application and typed
+result. In-process readers perform it with typed values; the business tool
+family offers it to the model. A model's call of one is an operation.
+_Avoid_: App command, operation name
+
 **Observed outcome**:
 Evidence about what an action actually did. An interrupted attempt can retain
 an uncertain outcome until the affected state is inspected.
