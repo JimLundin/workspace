@@ -42,7 +42,6 @@ class Decision:
 
 
 _DECISIONS = TypeAdapter(tuple[Decision, ...])
-DECISION_KIND = TypeAdapter(DecisionKind)
 
 
 def restored_history(value: object) -> tuple[Decision, ...]:

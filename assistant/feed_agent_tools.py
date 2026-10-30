@@ -3,20 +3,14 @@
 import os
 import urllib.parse
 import urllib.request
+from collections.abc import Mapping
 from http.client import HTTPResponse
 from pathlib import Path
 from typing import override
 
-from pydantic import TypeAdapter
-
-from assistant.console_requests import text
-from assistant.feed_contracts import BRIDGE_ENDPOINT, FEED_REPLY, FeedRejected, FeedReply
-from assistant.feed_triage import decode_solutions
-from assistant.work_bridge_contracts import BRIDGE_RESPONSE, BridgeCommand
-from assistant.work_canvas_commands import CANVAS_COMMAND, ReadCanvas, UpdateCanvas
-from automation.personal_work import PERSONAL_REQUEST, AddDocument, AddWebPage, DismissWork, ListSources, ListWork, RestoreWork, SaveWork, UnlinkWork
-
-_OBJECT = TypeAdapter(dict[str, object])
+from assistant.feed_contracts import BOARD_EDIT, BRIDGE_ENDPOINT, FEED_COMMAND, FeedCommand, FeedRejected
+from assistant.llm import Json
+from assistant.work_bridge_contracts import BRIDGE_COMMAND, BRIDGE_RESPONSE, BridgeCommand
 
 INSTRUCTIONS = """The local canvas is the user's work surface; bubbles primarily carry agent clarifications and canvas redirects.
 For overall work questions, read work_items_list and work_canvas_read first. For a reply to an exact legacy feed proposal
@@ -68,16 +62,9 @@ def request(data: BridgeCommand, endpoint: Path | None = None) -> str:
     parsed = urllib.parse.urlsplit(url)
     if parsed.scheme != "http" or parsed.hostname != "127.0.0.1" or parsed.path != "/feed" or parsed.username or parsed.password:
         raise ValueError("Invalid local work-feed endpoint.")
-    match data:
-        case ReadCanvas() | UpdateCanvas():
-            payload = CANVAS_COMMAND.dump_json(data)
-        case AddDocument() | AddWebPage() | DismissWork() | RestoreWork() | ListWork() | ListSources() | SaveWork() | UnlinkWork():
-            payload = PERSONAL_REQUEST.dump_json(data)
-        case FeedReply():
-            payload = FEED_REPLY.dump_json(data)
-        case _:
-            payload = _OBJECT.dump_json(dict(data))
-    call = urllib.request.Request(url, data=payload, headers={"Authorization": "Bearer " + token, "Content-Type": "application/json"})
+    call = urllib.request.Request(
+        url, data=BRIDGE_COMMAND.dump_json(data), headers={"Authorization": "Bearer " + token, "Content-Type": "application/json"}
+    )
 
     # Never send a local bearer through proxy settings or follow redirects.
     class NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -97,57 +84,22 @@ def request(data: BridgeCommand, endpoint: Path | None = None) -> str:
     return output
 
 
-def validated(data: dict[str, object]) -> BridgeCommand:
-    """Reject missing/invalid local plan arguments before the durable effect begins."""
-    operation = text(data.get("operation"), 32)
-    if operation.startswith("work_canvas_"):
-        return CANVAS_COMMAND.validate_python(data)
-    if operation.startswith("work_items_"):
-        return PERSONAL_REQUEST.validate_python(data)
-    if operation == "reply":
-        return FEED_REPLY.validate_python(data)
-    if operation not in ("rule", "forget_rule", "clear_rules", "done", "quiet", "dismiss", "reject", "propose", "console_answer", "choose"):
-        raise ValueError("Unknown work-feed operation.")
-    result: dict[str, object] = {"operation": operation}
-    if operation in ("done", "quiet", "dismiss", "reject", "propose", "console_answer", "choose"):
-        key = text(data.get("item"), 128).strip()
-        if not key:
-            raise ValueError("This operation needs the exact item/request identity from work_feed.")
-        result["item"] = key
-    if operation in ("rule", "forget_rule", "reject", "propose", "console_answer"):
-        value = text(data.get("text"), 4096 if operation == "console_answer" else 1200).strip()
-        if not value:
-            raise ValueError("This operation needs nonempty text.")
-        result["text"] = value
-    if operation == "propose":
-        result["question"] = text(data.get("question"), 600)
-        if "solutions" in data:
-            options = decode_solutions(data["solutions"])
-            if not options:
-                raise ValueError("A revised proposal needs concrete solutions.")
-            result["solutions"] = [{"label": option.label, "kind": option.kind.value, "detail": option.detail} for option in options]
-        if "priority" in data:
-            priority = data["priority"]
-            if type(priority) is not int or not 0 <= priority <= 2:
-                raise ValueError("Proposal priority must be 0, 1 or 2.")
-            result["priority"] = priority
-    if operation == "reject":
-        revision = text(data.get("revision"), 128).strip()
-        if not revision:
-            raise ValueError("Reject needs the captured proposal revision from work_feed.")
-        result["revision"] = revision
-    if operation == "choose":
-        for key in ("revision", "choice"):
-            value = text(data.get(key), 128 if key == "revision" else 32).strip()
-            if not value:
-                raise ValueError("Choose needs the exact proposal revision and solution id from work_feed.")
-            result[key] = value
-    if operation == "console_answer":
-        index = data.get("question_index")
-        if type(index) is not int or not 0 <= index < 32:
-            raise ValueError("console_answer needs question_index as a nonnegative integer.")
-        result["question_index"] = index
-    return result
+def validated(tool: str, arguments: Mapping[str, Json]) -> FeedCommand:
+    """Reject missing/invalid feed tool arguments before the durable effect begins."""
+    match tool:
+        case "work_feed_update":
+            return BOARD_EDIT.validate_python(arguments)
+        case "work_feed":
+            operation = "read"
+        case "work_feed_choose":
+            operation = "choose"
+        case "work_feed_answer":
+            operation = "console_answer"
+        case "work_feed_reply":
+            operation = "reply"
+        case _:
+            raise ValueError("Unknown work-feed tool.")
+    return FEED_COMMAND.validate_python({**arguments, "operation": operation})
 
 
 def rejected(reply: str) -> bool:
