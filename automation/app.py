@@ -23,7 +23,6 @@ from winapi import screen, system, windows
 from winapi.shapes import Window
 lazy from assistant.activity import ContextSnapshot, Observation, Sample, observed
 lazy from assistant.agent_execution import AgentExecution
-lazy from assistant.agent_session import Begin
 lazy from assistant.browser import Browser
 lazy from assistant.browser_session import Product
 lazy from assistant.llm import Missing, Settings
@@ -312,9 +311,7 @@ class WorkEvents:
         self.previous = active
 
     def log(self, claim: Claim) -> Log:
-        result = VolatileLog(self.bridge, claim.run)
-        result.publish(Begin(claim.task.prompt, time.time()))
-        return result
+        return VolatileLog(self.bridge, claim.run)
 
 
 def stop_work(controller: WorkController, bridge: BridgeServer) -> None:

@@ -582,8 +582,6 @@ class WorkAgent:
             if self._displayed is None or self._displayed.id != task.id or self.window is None or self._closing.is_set():
                 return
             match event.event:
-                case agent_session.Begin():
-                    pass  # The persisted task already introduced this turn.
                 case automation.presentation.Progress(text):
                     self.window.step(text)
                 case automation.presentation.Said(text, _):

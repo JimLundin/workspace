@@ -10,7 +10,6 @@ from enum import Enum, auto
 from typing import Final, assert_never, cast
 
 from assistant.activity import Activity, ContextSnapshot
-from assistant.agent_session import Begin
 from assistant.llm import Json
 from assistant.recording_state import AudioSource
 from automation.execution import ApprovalReview
@@ -39,7 +38,7 @@ MAX_EVENTS: Final = 128
 MAX_TEXT: Final = 128_000
 MAX_CONTEXT: Final = 128
 
-type PresentationEvent = Begin | Progress | Said | Done | Problem | Finished | LiveMessage
+type PresentationEvent = Progress | Said | Done | Problem | Finished | LiveMessage
 
 
 @dataclass(frozen=True, slots=True)
@@ -324,8 +323,6 @@ def _outcome(value: object) -> ToolOutcome:
 
 def _presentation_data(event: PresentationEvent) -> dict[str, Json]:
     match event:
-        case Begin(message, at, queued=queued):
-            return {"kind": "begin", "text": message, "at": at, "queued": queued}
         case Progress(message):
             return {"kind": "progress", "text": message}
         case Said(message, at) | Done(message, at) | Problem(message, at):
@@ -349,9 +346,6 @@ def _presentation_data(event: PresentationEvent) -> dict[str, Json]:
 def _presentation(value: object) -> PresentationEvent:
     kind = _kind(value)
     match kind:
-        case "begin":
-            data = record(value, "kind text at queued")
-            return Begin(_string(data["text"]), timestamp(data["at"]), queued=_boolean(data["queued"]))
         case "progress":
             data = record(value, "kind text")
             return Progress(_string(data["text"]))
