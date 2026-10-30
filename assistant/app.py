@@ -306,7 +306,7 @@ class AssistantApp:
             FollowupStore(followup_folder / "packages"),
             submit_identified=self.agent.submit_identified,
             read_work=self.agent.snapshot,
-            retain_work=lambda ids: self.agent.watch(ids, owner="meetings"),
+            journal=tasks.meeting_followups,
             publish=self.ui.meetings_changed,
             report_error=log,
         )

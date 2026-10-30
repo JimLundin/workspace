@@ -23,6 +23,7 @@ from automation.task import (
     Failed,
     FileDigest,
     Interrupted,
+    MeetingFollowup,
     Question,
     RequestKind,
     RequestSource,
@@ -365,6 +366,17 @@ def test_version_three_journals_drop_meeting_followups_that_name_no_saved_record
     reopened = TaskStore(path)
     assert [task.id for task in reopened.list_tasks()] == ["kept"]
     assert reopened.get(legacy) is None and reopened.actions(legacy) == ()
+
+
+def test_meeting_followups_are_listed_newest_first_regardless_of_other_work(tmp_path: Path) -> None:
+    # Defect: the query returns other profiles or drops older follow-ups behind recently updated work.
+    store = TaskStore(tmp_path / "work.sqlite3")
+    for index, bundle in enumerate("abc"):
+        store.submit(f"meeting-{bundle}", "Meeting", "Prepare notes.", RequestSource("chat", MeetingFollowup(bundle * 64)), at=index)
+    for index in range(3):
+        store.submit(f"chat-{index}", "Chat", "A later request.", RequestSource("chat"), at=10 + index)
+    assert [task.id for task in store.meeting_followups(2)] == ["meeting-c", "meeting-b"]
+    assert [task.id for task in store.meeting_followups(10)] == ["meeting-c", "meeting-b", "meeting-a"]
 
 
 def test_timed_waits_wake_at_the_deadline_and_blocked_work_requires_explicit_resume(tmp_path: Path) -> None:

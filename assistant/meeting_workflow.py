@@ -10,7 +10,7 @@ import threading
 import time
 import traceback
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from enum import Enum, auto
 from typing import assert_never, cast
 
@@ -273,13 +273,14 @@ class MeetingWorkflow:
     """Bounded background I/O behind immutable UI snapshots.
 
     ``publish`` runs on this owner's thread; the view schedules its own updates.
-    ``retain_work`` reports this owner's complete interest set. ``refresh`` is
+    ``journal`` returns the work journal's newest meeting follow-ups. ``refresh`` is
     an observation barrier for this queue only, never for the work process's
     queue or journal. The caller retains selection and dirty editor text using
     source identities and the task/version/artifact/revision/attempt in change
     results. Each save attempt must receive a new identity from the caller.
-    Preparations are listed from the work journal, where each meeting
-    follow-up's profile names its saved recordings.
+    Each meeting follow-up's profile names its saved recordings, so the
+    journal alone lists preparations; the work snapshot adds its status and
+    submission problems.
     """
 
     __slots__ = (
@@ -291,7 +292,6 @@ class MeetingWorkflow:
         "_prepared",
         "_problems",
         "_progress",
-        "_retained",
         "_snapshot",
         "_sources",
         "_thread",
@@ -299,11 +299,11 @@ class MeetingWorkflow:
         "archive",
         "clock",
         "followups",
+        "journal",
         "preparations",
         "publish",
         "read_work",
         "report_error",
-        "retain_work",
         "submit_identified",
     )
 
@@ -315,15 +315,15 @@ class MeetingWorkflow:
         *,
         submit_identified: Callable[[str, str, Profile], None],
         read_work: Callable[[], WorkSnapshot],
-        retain_work: Callable[[tuple[str, ...]], None],
+        journal: Callable[[int], tuple[Task, ...]],
         publish: Callable[[MeetingSnapshot], None],
         report_error: Callable[[str], None],
         clock: Callable[[], float] = time.time,
     ) -> None:
         # Each input is a separate effect owner: the recording and preparation
-        # stores, the work agent's submission, observation and retention, and the UI.
+        # stores, the work agent's submission and observation, the journal, and the UI.
         self.archive, self.preparations, self.followups = archive, preparations, followups
-        self.submit_identified, self.read_work, self.retain_work = submit_identified, read_work, retain_work
+        self.submit_identified, self.read_work, self.journal = submit_identified, read_work, journal
         self.publish, self.report_error, self.clock = publish, report_error, clock
         self._lock = threading.Lock()
         self._jobs: queue.Queue[_Command] = queue.Queue(maxsize=MAX_COMMANDS)
@@ -336,7 +336,6 @@ class MeetingWorkflow:
         self._progress: dict[str, FollowupProgress] = {}
         self._problems: dict[str, WorkflowProblem] = {}
         self._changes: dict[tuple[str, str, str, str, str], ChangeResult] = {}
-        self._retained: tuple[str, ...] = ()
 
     def start(self) -> None:
         with self._lock:
@@ -419,24 +418,9 @@ class MeetingWorkflow:
             self._problems["catalog"] = CatalogProblem(str(error) or "The meeting archive could not be read.")
             self.report_error(traceback.format_exc())
 
-    def _retain(self) -> bool:
-        identities = tuple(self._prepared)
-        try:
-            if identities != self._retained:
-                self.retain_work(identities)
-                self._retained = identities
-            self._problems.pop("watch", None)
-            return True
-        except Exception as error:
-            self._problems["watch"] = RecoveryProblem(str(error) or "The saved meeting tasks could not be observed.")
-            self.report_error(traceback.format_exc())
-            return False
-
-    def _discover(self, snapshot: WorkSnapshot) -> None:
+    def _discover(self, tasks: tuple[Task, ...]) -> None:
         """Each journaled meeting follow-up's profile names the recordings it was prepared from."""
-        journaled = {
-            task.id: (task.title, profile) for task in sorted(snapshot.tasks, key=_created) if (profile := meeting_profile(task)) is not None
-        }
+        journaled = {task.id: (task.title, profile) for task in sorted(tasks, key=_created) if (profile := meeting_profile(task)) is not None}
         order = (*journaled, *(identity for identity in self._prepared if identity not in journaled))
         prepared: dict[str, PreparedFollowup] = {}
         problems: list[str] = []
@@ -454,7 +438,6 @@ class MeetingWorkflow:
             self._problems["recovery"] = RecoveryProblem("\n".join(problems[:8])[:8000])
         else:
             self._problems.pop("recovery", None)
-        self._retain()
 
     def _prepare(self, selected: tuple[TranscriptSource, ...]) -> None:
         try:
@@ -476,7 +459,6 @@ class MeetingWorkflow:
             self._prepared[prepared.task_id] = prepared
             while len(self._prepared) > MAX_PREPARATIONS:
                 self._prepared.pop(next(iter(self._prepared)))
-            self._retain()
             self._problems.pop("prepare", None)
         except Exception as error:
             self._problems["prepare"] = PrepareProblem(selected, str(error) or "The selected meeting could not be prepared.")
@@ -549,13 +531,15 @@ class MeetingWorkflow:
         snapshot: WorkSnapshot | None = None
         read_problem = ""
         try:
-            snapshot = self.read_work()
-            variant(snapshot, WorkSnapshot, "meeting work observation")
+            observed = self.read_work()
+            variant(observed, WorkSnapshot, "meeting work observation")
+            journaled = self.journal(MAX_PREPARATIONS)
+            self._discover(journaled)
+            # Meeting tasks come from the journal query; the snapshot adds status and submission problems.
+            snapshot = replace(observed, tasks=journaled)
         except Exception as error:
             read_problem = str(error) or "The work process could not be observed."
             self.report_error(traceback.format_exc())
-        if snapshot is not None:
-            self._discover(snapshot)
         progress: dict[str, FollowupProgress] = {}
         for request in self._prepared.values():
             previous = self._progress.get(request.task_id, FollowupProgress(request, WorkPending.OBSERVATION, AvailablePackages()))
@@ -624,7 +608,4 @@ class MeetingWorkflow:
         except Exception:
             self.report_error(traceback.format_exc())
         finally:
-            try:
-                self.retain_work(())
-            finally:
-                self._closed.set()
+            self._closed.set()

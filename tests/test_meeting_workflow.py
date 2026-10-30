@@ -72,16 +72,13 @@ class WorkflowRig:
             self.followups,
             submit_identified=submit or self.work.agent.submit_identified,
             read_work=read_work or self.work.agent.snapshot,
-            retain_work=self.retain,
+            journal=self.work.tasks.meeting_followups,
             publish=self.snapshots.append,
             report_error=self.errors.append,
             clock=self.work.clock,
         )
         if start:
             self.workflow.start()
-
-    def retain(self, identities: tuple[str, ...]) -> None:
-        self.work.agent.watch(identities, owner="meetings")
 
     def refresh(self) -> MeetingSnapshot:
         assert self.workflow.refresh().wait(10), "The meeting observer did not finish its queued storage work."

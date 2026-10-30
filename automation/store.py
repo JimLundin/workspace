@@ -92,6 +92,9 @@ _TASK_COLUMNS: tuple[str, ...] = (
     "wake_at",
 )
 _TASK_SELECT = ", ".join(_TASK_COLUMNS)
+# Queries by profile repeat this exact expression so SQLite uses the index.
+_PROFILE = "json_extract(source,'$.profile')"
+_PROFILE_INDEX = f"CREATE INDEX request_profile ON tasks({_PROFILE},created_at,id)"
 _ACTION_COLUMNS = "id, task_id, run_id, specification, started_at, updated_at, outcome, outcome_kind, fingerprint"
 
 
@@ -510,6 +513,7 @@ class TaskStore:
                 "routine_id TEXT, routine_revision INTEGER, occurrence_id TEXT, wake_at REAL)",
                 "CREATE UNIQUE INDEX routine_occurrence ON tasks(routine_id,routine_revision,occurrence_id) WHERE routine_id IS NOT NULL",
                 "CREATE INDEX runnable_work ON tasks(phase,priority DESC,created_at,id)",
+                _PROFILE_INDEX,
                 "CREATE TABLE runs (id TEXT PRIMARY KEY, task_id TEXT NOT NULL REFERENCES tasks(id), owner TEXT NOT NULL, "
                 "started_at REAL NOT NULL, previous_state TEXT NOT NULL, ended_at REAL, disposition TEXT, UNIQUE(id,task_id))",
                 "CREATE TABLE goals (task_id TEXT NOT NULL REFERENCES tasks(id), revision INTEGER NOT NULL, prompt TEXT NOT NULL, "
@@ -566,6 +570,7 @@ class TaskStore:
         for table in ("actions", "requests", "responses", "goals", "runs"):
             connection.execute(f"DELETE FROM {table} WHERE task_id IN ({legacy})")
         connection.execute(f"DELETE FROM tasks WHERE id IN ({legacy})")
+        connection.execute(_PROFILE_INDEX)
         connection.execute(f"PRAGMA user_version={SCHEMA_VERSION}")
 
     @contextmanager
@@ -669,6 +674,15 @@ class TaskStore:
         integer(limit, "task page size", minimum=1, maximum=MAX_PAGE)
         with self._connection() as connection:
             rows = connection.execute(f"SELECT {_TASK_SELECT} FROM tasks ORDER BY updated_at DESC,id LIMIT ?", (limit,)).fetchall()
+            return tuple(self._read_task(connection, row) for row in rows)
+
+    def meeting_followups(self, limit: int) -> tuple[Task, ...]:
+        """The newest meeting follow-ups, however many other tasks were updated since."""
+        integer(limit, "meeting follow-up page size", minimum=1, maximum=MAX_PAGE)
+        with self._connection() as connection:
+            rows = connection.execute(
+                f"SELECT {_TASK_SELECT} FROM tasks WHERE {_PROFILE}='meeting_followup' ORDER BY created_at DESC,id DESC LIMIT ?", (limit,)
+            ).fetchall()
             return tuple(self._read_task(connection, row) for row in rows)
 
     def active_for_routine(self, routine_id: str) -> Task | None:
