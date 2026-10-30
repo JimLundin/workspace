@@ -377,13 +377,50 @@ def test_deep_publications_preserve_paths_and_bytes_through_failure_retry_and_re
         assert notes.read_bytes() == b"User-edited notes must survive a long-path retry.\n"
 
 
+def test_exposed_paths_stay_openable_without_extended_paths_under_a_long_data_root(tmp_path: Path) -> None:
+    # Defect: directory names embed full task and package digests, so the notes,
+    # drafts and edits handed to shell targets exceed MAX_PATH under a longer root.
+    bundle, _ = followup_sources(tmp_path)
+    followup = parse_followup(bundle, json.dumps(followup_response(bundle)))
+    root = tmp_path / ("data-root-" + "r" * max(1, 110 - len(str(tmp_path))))
+    assert len(str(root)) >= 100
+    store = FollowupStore(root)
+    published = store.publish(store.plan("meeting-followup-" + "c" * 64, followup))
+    draft = store.save_draft(
+        published.task_id, published.version, "follow-up", DraftContent("Saved subject", "Saved message.", ()), expected_revision=0, at=10
+    )
+    action = store.save_action(
+        published.task_id,
+        published.version,
+        "review",
+        ActionContent("Arrange the review.", AssignedOwner("Mina"), Unspecified.NOT_STATED, ActionStatus.OPEN),
+        expected_revision=0,
+        at=10,
+    )
+    exposed = (
+        published.notes_path,
+        published.actions_path,
+        Path(published.verification.path),
+        *(path for files in published.drafts for path in (files.eml, files.markdown)),
+        draft.files.eml,
+        draft.files.markdown,
+        action.path,
+    )
+    for path in exposed:
+        assert len(str(path)) <= len(str(root)) + 58, path
+        assert path.read_bytes(), path
+    reopened = FollowupStore(root)
+    assert reopened.versions(published.task_id) == (published,)
+    assert reopened.read(published.task_id, published.version) == published
+
+
 def test_deep_edit_journals_commit_exact_revisions_without_changing_generated_artifacts(tmp_path: Path) -> None:
     bundle, _ = followup_sources(tmp_path)
     followup = parse_followup(bundle, json.dumps(followup_response(bundle)))
     with long_package_root(tmp_path) as (root, accessible):
         store = FollowupStore(root)
         published = store.publish(store.plan("release-task", followup))
-        assert len(str(root / published.task_id / "edits.sqlite3")) > 260
+        assert len(str(root)) > 260
         first = DraftContent("First saved subject", "First saved message.", ())
         draft = store.save_draft(published.task_id, published.version, "follow-up", first, expected_revision=0, at=10)
         revised = replace(first, body="The current saved message.")
