@@ -72,7 +72,7 @@ from assistant.browser_values import (
     text,
 )
 from assistant.llm import Json
-lazy from assistant.web_apps import OPERATIONS, WebApps
+lazy from assistant.web_apps import Located, WebAppOperation, WebApps
 
 MAX_OUTPUT = 20_000
 
@@ -394,9 +394,16 @@ class Browser:
     def request(self, operation: str, args: dict[str, Json], cancel: threading.Event) -> BrowserResult:
         with self.lock:
             try:
-                if operation in OPERATIONS:
-                    return BrowserResult(WebApps(self).request(operation, args, cancel))
                 return self._request(operation, args, cancel)
+            except InterruptedError, DisconnectedError:
+                self.close()
+                raise
+
+    def web_app[Q: Located, R](self, operation: WebAppOperation[Q, R], query: Q, cancel: threading.Event) -> R:
+        """Perform one web-app operation without another request interleaving on its page."""
+        with self.lock:
+            try:
+                return WebApps(self).run(operation, query, cancel)
             except InterruptedError, DisconnectedError:
                 self.close()
                 raise

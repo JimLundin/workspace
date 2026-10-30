@@ -15,6 +15,7 @@ from assistant.geometry import Shot
 from assistant.llm import Json
 from assistant.machine import WinMachine
 from assistant.recording_state import AudioSource
+from assistant.web_apps import TEAMS_READ, Located, TeamsPage, TeamsQuery, WebAppOperation
 from winapi.shapes import Rect
 
 
@@ -55,6 +56,9 @@ class Recording:
         return "Recording owner status"
 
 
+TEAMS_PAGE = TeamsPage("", "", (), (), editor_ready=False)
+
+
 class Browser:
     __slots__ = ("calls", "failure")
 
@@ -65,6 +69,10 @@ class Browser:
     def request(self, operation: str, args: dict[str, Json], cancel: threading.Event) -> BrowserResult:
         self.calls.append(operation)
         return BrowserResult("Browser observation", b"browser image")
+
+    def web_app[Q: Located, R](self, operation: WebAppOperation[Q, R], query: Q, cancel: threading.Event) -> R:
+        self.calls.append("web_app " + query.target_id)
+        return operation.result.validate_python(TEAMS_PAGE)
 
     def close(self) -> None:
         self.calls.append("close")
@@ -110,6 +118,7 @@ def test_machine_keeps_browser_and_teams_cleanup_with_their_owners() -> None:
     machine = WinMachine(Desktop(), browser=browser, teams=teams)
     cancel = threading.Event()
     assert machine.browse("browser_tabs", {}, cancel) == ("Browser observation", b"browser image")
+    assert machine.web_app(TEAMS_READ, TeamsQuery("page"), cancel) == TEAMS_PAGE
     assert machine.teams("teams_status", {}, cancel) == "Teams observation"
     try:
         machine.close_background()
@@ -117,7 +126,7 @@ def test_machine_keeps_browser_and_teams_cleanup_with_their_owners() -> None:
         assert str(error) == "Browser disconnect failed"
     else:
         raise AssertionError("A failed disconnect must remain visible.")
-    assert browser.calls == ["browser_tabs", "close"]
+    assert browser.calls == ["browser_tabs", "web_app page", "close"]
     assert teams.calls == ["teams_status", "cancel sign-in"]
     try:
         machine.meeting("status")

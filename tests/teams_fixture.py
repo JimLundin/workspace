@@ -12,8 +12,9 @@ from contextlib import contextmanager
 from assistant.browser import BrowserResult
 from assistant.browser_session import Attached, BrowserConnection, Owner, Product, Stopped
 from assistant.browser_values import BrowserError
-from assistant.communications_browser import ACTIVITY_OBSERVE, OBSERVE
+from assistant.communications_browser import ACTIVITY_OBSERVE
 from assistant.llm import Json
+from assistant.web_apps import OBSERVE
 
 
 class Connection:
