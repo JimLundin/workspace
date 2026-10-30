@@ -282,8 +282,9 @@ def test_queued_requests_persist_with_their_invocation_context_without_reopening
         assert b"First workbook" not in rig.tasks.path.read_bytes(), "Activity snapshots must remain volatile."
         assert rig.agent.running() and rig.started == [True]
         rig.agent.submit_identified("meeting-task", "Prepare the meeting follow-up", RequestKind.MEETING_FOLLOWUP)
+        rig.agent.submit_identified("routine-task", "Run the standing instruction", RequestKind.GENERAL)
         rig.refresh()
-        assert rig.bridge.registrations[-1] == ("meeting-task", None, 1234)
+        assert rig.bridge.registrations[-2:] == [("meeting-task", None, 1234), ("routine-task", invocation("Second workbook"), 1234)]
     finally:
         rig.close()
 
