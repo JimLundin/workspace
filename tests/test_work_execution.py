@@ -97,16 +97,9 @@ def test_question_suspends_and_recorded_answer_survives_a_fresh_sdk_process_owne
         resumed = reopened.claim("restarted-worker", "resumed-run", at=time.time())
         assert resumed is not None
         endpoint.replies = [calls(("ask_user", {"question": "Which report folder?"})), says("The report folder is resolved.")]
-        result = execution(settings, source, errors).run_work(
-            resumed,
-            reopened,
-            FakeWindow(),
-            threading.Event(),
-            context_text="The latest project context is Finance.",
-        )
+        result = execution(settings, source, errors).run_work(resumed, reopened, FakeWindow(), threading.Event())
         assert isinstance(result, Completed), (result, errors)
-        body = endpoint.received[-1].body.decode("utf-8")
-        assert "Use the Finance reports folder." in body and "latest project context is Finance" in body
+        assert "Use the Finance reports folder." in endpoint.received[-1].body.decode("utf-8")
         assert not errors
 
 

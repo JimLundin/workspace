@@ -13,9 +13,11 @@ lazy from PySide6.QtGui import QPainterPath
 lazy from PySide6.QtTest import QTest
 
 from assistant.communications import Acknowledgement, Update, WindowsNotice, handle, update_fingerprint
+from assistant.feed_contracts import SolutionKind
 from assistant.feed_items import WorkItem, action_spans
 from assistant.feed_origin import App
-from assistant.feed_triage import Assessment, Board, Solution, SolutionKind, candidate, collect, decode, proposal_revision
+from assistant.feed_sources import Excerpt, triage_evidence
+from assistant.feed_triage import Assessment, Board, Solution, decode, proposal_revision
 from assistant.notification_sources import NOTIFICATION_STATE, HandleNotice
 from assistant.notifications import MAX_VISIBLE
 from assistant.qt_runtime import prepare
@@ -26,6 +28,7 @@ from assistant.toast_card import Card
 from assistant.ui_components.appearance import CONTROL_STYLE
 from assistant.ui_components.bubble import TITLE_SIZE
 from tests.communications_fixture import communication_feed
+from tests.feed_source_fixture import captured
 from tests.test_communications_service import LocalCipher
 from tests.test_feed_triage import output
 from tests.test_windows_agent_toasts import notifications, widget_rect
@@ -45,7 +48,7 @@ def test_source_badge_overlaps_and_title_shares_header_with_controls() -> None:
             communication_feed(),
             updates=(Update(WindowsNotice(NoticeKey(81, 100), "outlook"), "Review reminder", "Please review the figures.", "Outlook", 2),),
         )
-        candidates = collect(feed, ())
+        candidates = triage_evidence(feed, ())
         proposal = Assessment(
             "owned-plan",
             tuple((item.identity, item.revision) for item in candidates),
@@ -55,6 +58,7 @@ def test_source_badge_overlaps_and_title_shares_header_with_controls() -> None:
             "Shall I prepare a draft?",
             1,
             2,
+            origins=tuple(item.origin for item in candidates),
         )
         panel.agent.communications(feed, {})
         panel.agent.triage(Board(enabled=True, items=(proposal,)))
@@ -89,7 +93,7 @@ def test_feed_details_expand_on_request_and_never_scroll_themselves() -> None:
             messages=(),
             updates=(Update(WindowsNotice(NoticeKey(811, 100), "outlook"), "Forecast review", original, "Outlook", 2),),
         )
-        source = collect(feed, ())[0]
+        source = triage_evidence(feed, ())[0]
         title = "Review the complete fictional forecast and compare all the revised figures before Friday"
         proposal = Assessment(
             "forecast",
@@ -242,7 +246,7 @@ def test_native_notices_are_available_as_agent_context_without_creating_floating
 def test_solution_buttons_are_compact_and_start_exact_work_without_a_composer() -> None:
 
     with notifications() as panel:
-        source = candidate("chat", "fixture", "Budget", "Review it.", 1)
+        source = captured("fixture", Excerpt("Budget", "Review it.", 1))
         item = decode(output(([source.identity], "action")), (source,))[0]
         submissions = panel.choices
         panel.agent.triage(Board(enabled=True, items=(item,)))
@@ -271,7 +275,7 @@ def test_solution_buttons_are_compact_and_start_exact_work_without_a_composer() 
 def test_failed_solution_start_keeps_choices_available() -> None:
 
     with notifications() as panel:
-        source = candidate("chat", "fixture", "Review", "Please check.", 1)
+        source = captured("fixture", Excerpt("Review", "Please check.", 1))
         item = decode(output(([source.identity], "action")), (source,))[0]
         panel.choose_allowed = False
         panel.agent.triage(Board(enabled=True, items=(item,)))

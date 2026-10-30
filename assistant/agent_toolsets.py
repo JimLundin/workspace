@@ -111,10 +111,6 @@ class General:
             *(self.self_change.tools() if self.self_change is not None else ()),
         )
 
-    @property
-    def installing(self) -> str | None:
-        return self.self_change.installing if self.self_change is not None else None
-
     def instructions(self) -> str:
         prompt = f"{instructions()}\n\n{self_change_tools.INSTRUCTIONS}" if self.self_change is not None else instructions()
         return prompt + "\n\n" + feed_agent_tools.INSTRUCTIONS + "\n" + personal_work_tools.INSTRUCTIONS + "\n" + work_canvas_tools.INSTRUCTIONS
@@ -130,10 +126,6 @@ class MeetingFollowupTools:
             *MeetingFollowup(agent, run).tools(),
             *TaskTools(agent, agent.work, datetime.now).tools(agent.proof, Display.PRIVATE),
         )
-
-    @property
-    def installing(self) -> None:
-        return None
 
     def instructions(self) -> str:
         return meeting_tools.INSTRUCTIONS

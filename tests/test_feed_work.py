@@ -9,9 +9,10 @@ from pydantic import TypeAdapter
 
 from assistant.activity import Activity, ContextSnapshot
 from assistant.feed_agent_tools import request
-from assistant.feed_contracts import REVIEW_INPUT, FeedReply, StoredBoard
+from assistant.feed_contracts import REVIEW_INPUT, Disposition, FeedRejected, FeedReply, StoredBoard
 from assistant.feed_history import Decision, Handoff
-from assistant.feed_triage import Board, Disposition, candidate, decode, proposal_revision, restored, saved, unassessed
+from assistant.feed_sources import Excerpt
+from assistant.feed_triage import Board, decode, proposal_revision, restored, saved, unassessed
 from assistant.feed_triage_service import classify
 from assistant.feed_work import FeedWork
 from assistant.llm import Json, Settings
@@ -21,7 +22,8 @@ from automation.execution import WorkExecution
 from automation.store import TaskStore
 from automation.task import Completed, FeedHandoff, Profile, Question, RequestSource, TextAnswer, Waiting
 from tests.fake_endpoint import fake_endpoint
-from tests.feed_fixture import TriageFixture
+from tests.feed_fixture import TriageFixture, feed_bridge
+from tests.feed_source_fixture import captured
 from tests.test_feed_triage import output
 from tests.test_feed_triage_service import MemoryStore
 from tests.test_work_actions import claimed
@@ -54,7 +56,7 @@ def test_model_gets_project_facts_prior_decisions_task_results_and_recorded_answ
     tasks.finish(second.run, Completed(detailed_result, ("Read the approved forecast.",)), at=15)
     desktop = ContextSnapshot(50, "active", (Activity(Window(1, "Atlas forecast", "excel.exe", minimized=False), 40, 50, agent_active=False),))
     work = FeedWork(tasks, context, lambda: desktop)
-    source = candidate("chat", "atlas", "Atlas forecast", "Explain the variance before Friday.", 40)
+    source = captured("atlas", Excerpt("Atlas forecast", "Explain the variance before Friday.", 40))
     item = decode(output(([source.identity], "action")), (source,))[0]
     decision = Decision(
         "correction",
@@ -120,7 +122,7 @@ def test_registered_reply_tool_saves_instruction_before_handoff_and_reuses_it_af
     # Defect: treating a reply as a cosmetic update, dropping it on restart,
     # queueing before saving, or accepting a stale/different reply under the same ID.
     tasks, claim, clock = claimed(tmp_path)
-    source = candidate("chat", "atlas", "Atlas review", "Explain the supplier variance.", 1)
+    source = captured("atlas", Excerpt("Atlas review", "Explain the supplier variance.", 1))
     item = decode(output(([source.identity], "action")), (source,))[0]
     feed_store = MemoryStore()
     feed_store.data = saved(Board(enabled=True, items=(item,)))
@@ -134,7 +136,8 @@ def test_registered_reply_tool_saves_instruction_before_handoff_and_reuses_it_af
         tasks.submit(task, item.title, prompt, RequestSource("feed", profile), at=clock())
 
     endpoint = tmp_path / "bridge.json"
-    triage = TriageFixture(endpoint, feed_store, lambda _: None, lambda _batch, _rules: "{}", lambda _: False, submit=queue)
+    triage = TriageFixture(feed_store, lambda _: None, lambda _batch, _rules: "{}", lambda _: False, submit=queue)
+    bridge = feed_bridge(endpoint, triage)
     rig = ToolRig(work=WorkExecution(claim, tasks, Resources(), clock=clock), feed_request=lambda data: request(data, endpoint))
     reply = FeedReply(item.identity, proposal_revision(item), "user-turn-one", words)
     arguments = {"item": reply.item, "revision": reply.revision, "reply_id": reply.reply_id, "text": reply.text}
@@ -149,8 +152,9 @@ def test_registered_reply_tool_saves_instruction_before_handoff_and_reuses_it_af
         assert triage.board.actions == (item,), "Queueing is not completion."
         assert _OBJECT.validate_json(result.text)["queued"] == task_id
     finally:
+        bridge.close()
         triage.close()
-    restarted = TriageFixture(endpoint, feed_store, lambda _: None, lambda _batch, _rules: "{}", lambda _: False, submit=queue)
+    restarted = TriageFixture(feed_store, lambda _: None, lambda _batch, _rules: "{}", lambda _: False, submit=queue)
     try:
         restarted.command(reply)
         assert len(submitted) == 2 and submitted[0] == submitted[1]
@@ -159,8 +163,7 @@ def test_registered_reply_tool_saves_instruction_before_handoff_and_reuses_it_af
         restarted.board = replace(restarted.board, items=(replace(item, summary="New reading"),))
         restarted.command(reply)
         assert len(submitted) == 2
-        with TestCase().assertRaises(ValueError):
-            restarted.command(replace(reply, text="A different instruction."))
+        assert isinstance(restarted.command(replace(reply, text="A different instruction.")), FeedRejected)
         assert len(restarted.board.history) == 1
     finally:
         restarted.close()
@@ -169,7 +172,7 @@ def test_registered_reply_tool_saves_instruction_before_handoff_and_reuses_it_af
 def test_failed_feed_save_cannot_start_reply_work_and_failed_queue_keeps_retryable_instruction(tmp_path: Path) -> None:
     # Defect: a storage error starts unrecorded work; a queue error loses the
     # exact user's instruction or falsely reports a no-change validation rejection.
-    source = candidate("chat", "review", "Review", "Please review.", 1)
+    source = captured("review", Excerpt("Review", "Please review.", 1))
     item = decode(output(([source.identity], "action")), (source,))[0]
 
     class FailedStore(MemoryStore):
@@ -181,7 +184,6 @@ def test_failed_feed_save_cannot_start_reply_work_and_failed_queue_keeps_retryab
     submitted: list[str] = []
     command = FeedReply(item.identity, proposal_revision(item), "reply", "Check the totals.")
     failed = TriageFixture(
-        tmp_path / "failed.json",
         broken,
         lambda _: None,
         lambda _batch, _rules: "{}",
@@ -200,7 +202,7 @@ def test_failed_feed_save_cannot_start_reply_work_and_failed_queue_keeps_retryab
 
     store = MemoryStore()
     store.data = saved(Board(enabled=True, items=(item,)))
-    queued = TriageFixture(tmp_path / "queued.json", store, lambda _: None, lambda _batch, _rules: "{}", lambda _: False, submit=unavailable)
+    queued = TriageFixture(store, lambda _: None, lambda _batch, _rules: "{}", lambda _: False, submit=unavailable)
     try:
         with TestCase().assertRaises(OSError):
             queued.command(command)
@@ -213,12 +215,12 @@ def test_failed_feed_save_cannot_start_reply_work_and_failed_queue_keeps_retryab
 def test_context_changes_reconsider_open_work_without_reopening_handled_items(tmp_path: Path) -> None:
     # Defect: same-day source caching ignores a new saved decision or completed
     # task; context refresh revives work the user already dismissed.
-    source = candidate("chat", "one", "Atlas", "Review the variance.", 1)
+    source = captured("one", Excerpt("Atlas", "Review the variance.", 1))
     day = datetime.fromtimestamp(50, UTC).date()
     item = replace(decode(output(([source.identity], "action")), (source,))[0], reviewed_on=day)
     store = MemoryStore()
     store.data = saved(Board(enabled=True, items=(replace(item, disposition=Disposition.QUIET),)))
-    triage = TriageFixture(tmp_path / "context.json", store, lambda _: None, lambda _batch, _rules: "{}", lambda _: False)
+    triage = TriageFixture(store, lambda _: None, lambda _batch, _rules: "{}", lambda _: False)
     try:
         assert not unassessed(triage.board, (source,), today=day)
         triage.context_changed((), ())

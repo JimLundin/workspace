@@ -25,7 +25,8 @@ lazy from assistant import console_requests, notification_reading
 lazy from assistant.agent_session import AgentRequest, Session, Snapshot, pending
 lazy from assistant.agent_window import AgentWindow
 lazy from assistant.feed_desktop import Desktop, NativeDesktop
-lazy from assistant.feed_items import SourceKey, Verb, WorkItem, act, help_request
+lazy from assistant.feed_items import Verb, WorkItem, act, help_request
+lazy from assistant.feed_sources import Attention, SourceKey, SourceKind, listed
 lazy from assistant.feed_triage import Assessment
 lazy from assistant.inbox import Query, review_prompt
 lazy from assistant.notifications import (
@@ -503,7 +504,7 @@ class AgentToasts:
 
     def review_feed(self) -> None:
         if self.agent.on_submit is not None:
-            prompt = review_prompt(self.session.communications, self.query, self.session.console_requests)
+            prompt = review_prompt(listed(self.session.communications, self.session.console_requests, history=False), self.query)
             self.agent.on_submit(prompt)
 
     def action_link(self, url: str) -> None:
@@ -561,7 +562,8 @@ class AgentToasts:
             self.agent.on_console(console_requests.Dismiss(values.get("message", [""])[0]))
             return
         verb = next((verb for verb in Verb if verb.value == parsed.netloc), None)
-        key = SourceKey(values.get("source", [""])[0], values.get("item", [""])[0])
+        kind = next((kind for kind in SourceKind if kind.value == values.get("source", [""])[0]), None)
+        key = SourceKey(kind, values.get("item", [""])[0]) if kind is not None else None
         row = next((card.content for card in self.cards.values() if isinstance(card.content, WorkItem) and card.content.key == key), None)
         if verb is None or row is None:
             return
@@ -716,7 +718,7 @@ class AgentToasts:
         for card in self.cards.values():
             origin = origin_item(card.content)
             match origin:
-                case WorkItem(item=console_requests.Request(identity=request_id, questions=questions, state=console_requests.State.WAITING)):
+                case WorkItem(item=console_requests.Request(identity=request_id, questions=questions), attention=Attention.DIRECT):
                     if (
                         not card.retiring
                         and request_id == identity

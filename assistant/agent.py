@@ -65,11 +65,6 @@ class Toolset(Protocol):
 
     @property
     def tools(self) -> tuple[Tool, ...]: ...
-    @property
-    def installing(self) -> str | None:
-        """The installation the keeper was asked for: the task is over."""
-        ...
-
     def instructions(self) -> str: ...
 
 
@@ -81,6 +76,7 @@ class Agent:
         "context_reader",
         "context_text",
         "history",
+        "installing",
         "log",
         "machine",
         "max_steps",
@@ -130,12 +126,13 @@ class Agent:
         self.context_image: bytes | None = None
         self.work = work
         self.report: Report = ReportStatus.STARTING
+        self.installing: str | None = None
+        """Set once the keeper has been asked to install: the task is over."""
         self.toolset = toolset(self)
         self.tools = registry(self.toolset.tools)
 
-    @property
-    def installing(self) -> str | None:
-        return self.toolset.installing
+    def installation_requested(self, summary: str, /) -> None:
+        self.installing = summary
 
     def current_context(self) -> ContextSnapshot | None:
         return self.context_reader() if self.context_reader is not None else self.context

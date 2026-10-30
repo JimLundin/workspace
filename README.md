@@ -587,9 +587,9 @@ edits stay available for follow-up requests in the same conversation, then:
 
 The last 20 versions are kept in `%LOCALAPPDATA%\workspace\versions`. The agent
 can't change the protected keeper, runtime activation, checker, dialogs or component-control
-modules. The keeper's coordination uses Python's standard library; its protected
-dialogs and typed component-control transport use the pinned Qt and Pydantic
-dependencies. The `.runtime` dependency directory is also
+modules. The keeper's protected dialogs use the pinned Qt dependency; its typed
+request inbox, rollback record and component-control transport use Pydantic.
+A request it can't read is refused with a notice. The `.runtime` dependency directory is also
 protected and stay outside source snapshots and updates. Code and tests run with
 your account permissions.
 
@@ -627,9 +627,11 @@ Workspace uses the [OpenAI Agents SDK](https://developers.openai.com/api/docs/gu
 through `assistant/sdk.py`. Its `Runner` owns model turns and tool execution;
 `assistant/agent.py` dispatches Workspace's tools; each tool family
 (`assistant/*_tools.py`) owns its tools' schemas, permissions and evidence.
-A task's profile selects its toolset in `assistant/agent_toolsets.py`: a
-general request offers the whole desktop, and a prepared meeting follow-up
-offers only its selected recordings, notes and unsent drafts. The supervised
+A task's profile owns its execution in `assistant/task_profiles.py`, with its
+toolset in `assistant/agent_toolsets.py`: a general request continues its
+conversation with the request's desktop context and offers the whole desktop,
+and a prepared meeting follow-up runs in its own conversation without desktop
+context and offers only its selected recordings, notes and unsent drafts. The supervised
 automation process owns execution, browser sessions, and the durable action
 journal; the assistant owns views, human input, and audio capture. The SDK
 uses your configured OpenAI-compatible
@@ -729,7 +731,8 @@ automation/     task.py and store.py (durable work), controller.py (execution),
                 ipc.py, bridge.py, app.py (the supervised worker)
 assistant/      llm.py (the endpoint), features.py (what each key does), agent.py,
                 agent_tools.py and *_tools.py (the agent's tool families),
-                agent_toolsets.py (each task profile's families and instructions),
+                agent_toolsets.py and task_profiles.py (each task profile's
+                families, instructions and execution),
                 workspace.py (the agent's copy of the source), keymap.py;
                 agent_session.py, agent_window.py (conversation and UI scheduling),
                 agent_toasts.py, toast_stack.py, toast_card.py, qt_text.py, qt_ui.py

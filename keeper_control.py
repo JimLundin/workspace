@@ -1,12 +1,16 @@
-"""Typed file handoff for pausing supervised children during source replacement.
+"""The keeper's typed files: its inbox, its rollback target and the deployment pause.
 
-The keeper owns the pause until an explicit matching resume. A failed coordinator
-never starts children against a partly replaced tree. It runs directly on
-the installed Python 3.15 with the keeper.
+Other programs ask the keeper for installs, undo, keep and restarts through its
+inbox folder; a request it can't read is refused, never silently dropped. The
+keeper owns a deployment pause until an explicit matching resume, so a failed
+coordinator never starts children against a partly replaced tree. It runs
+directly on the installed Python 3.15 with the keeper.
 """
 
 import contextlib
 import os
+import time
+from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal, Protocol
@@ -14,6 +18,51 @@ from typing import Literal, Protocol
 from pydantic import TypeAdapter, ValidationError
 
 from components import Component
+
+
+@dataclass(frozen=True, slots=True)
+class Install:
+    """Check and install the agent's workspace; the summary titles its trial."""
+
+    summary: str
+    action: Literal["install"] = "install"
+
+
+@dataclass(frozen=True, slots=True)
+class Undo:
+    action: Literal["undo"] = "undo"
+
+
+@dataclass(frozen=True, slots=True)
+class Keep:
+    """End the current trial and keep the change."""
+
+    action: Literal["keep"] = "keep"
+
+
+@dataclass(frozen=True, slots=True)
+class Restart:
+    component: Component
+    action: Literal["restart"] = "restart"
+
+
+type Request = Install | Undo | Keep | Restart
+
+
+@dataclass(frozen=True, slots=True)
+class Malformed:
+    """An inbox file that names no request the keeper knows; it is refused."""
+
+    file: str
+    reason: str
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class Rollback:
+    """The version the last install replaced; pending means restore it before starting."""
+
+    version: str | None
+    pending: bool
 
 
 @dataclass(frozen=True, slots=True)
@@ -55,7 +104,9 @@ class Capability:
     version: Literal[1] = 1
 
 
-REQUEST = TypeAdapter[Pause | Resume](Pause | Resume)
+REQUEST = TypeAdapter[Request](Install | Undo | Keep | Restart)
+ROLLBACK = TypeAdapter[Rollback](Rollback)
+COMMAND = TypeAdapter[Pause | Resume](Pause | Resume)
 STATUS = TypeAdapter[Paused | Resumed | Refused](Paused | Resumed | Refused)
 CAPABILITY = TypeAdapter[Capability](Capability)
 
@@ -65,11 +116,35 @@ class Supervisor(Protocol):
     def resume(self, now: float) -> None: ...
 
 
+def ask(folder: Path, request: Request) -> None:
+    """Leave one request in the keeper's inbox; it appears whole, never half-written."""
+    folder.mkdir(parents=True, exist_ok=True)
+    name = f"{time.time_ns():020d}"
+    temporary = folder / f"{name}.tmp"
+    temporary.write_bytes(REQUEST.dump_json(request))
+    temporary.replace(folder / f"{name}.json")
+
+
+def take(folder: Path) -> Iterator[Request | Malformed]:
+    """Waiting requests, oldest first. Each is delivered once, after its file is removed."""
+    for path in sorted(folder.glob("*.json")) if folder.exists() else ():
+        try:
+            data = path.read_bytes()
+            path.unlink()
+        except OSError:
+            continue  # held by another process; the next poll retries it
+        try:
+            received: Request | Malformed = REQUEST.validate_json(data, strict=True)
+        except ValidationError as error:
+            received = Malformed(path.name, str(error))
+        yield received
+
+
 def submit(folder: Path, request: Pause | Resume) -> None:
     """Publish one complete command; an existing command belongs to its sender."""
     temporary = folder / "component-command.pending"
     with temporary.open("xb") as stream:
-        stream.write(REQUEST.dump_json(request))
+        stream.write(COMMAND.dump_json(request))
     try:
         destination = folder / "component-command.json"
         if destination.exists():
@@ -114,7 +189,7 @@ class Control:
         if not path.exists():
             return
         try:
-            request = REQUEST.validate_json(path.read_bytes(), strict=True)
+            request = COMMAND.validate_json(path.read_bytes(), strict=True)
             path.unlink()
         except ValidationError:
             with contextlib.suppress(PermissionError, FileNotFoundError):

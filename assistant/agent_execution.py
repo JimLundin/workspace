@@ -7,17 +7,14 @@ import threading
 import time
 from collections import OrderedDict
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass
 from typing import assert_never
 
-from assistant.activity import ContextSnapshot
-from assistant.agent import Agent, Log, Toolset
+from assistant.agent import Agent, Log
 from assistant.agent_history import History
 from assistant.agent_tools import Machine
-from assistant.agent_toolsets import General, MeetingFollowupTools
 from assistant.llm import Settings
-from assistant.meeting_execution import MeetingRun, MeetingWork
-from assistant.self_change_tools import verified_installation
+from assistant.meeting_execution import MeetingWork
+from assistant.task_profiles import UNSEEN, Conversation, GeneralRun, MeetingFollowupRun, ProfileRun, RequestContext
 from assistant.workspace import Workspace
 from automation.actions import ActionError, Resources
 from automation.execution import ApprovalReview, Incomplete, Outcome, WorkExecution
@@ -27,10 +24,12 @@ from diagnostics import failure_info
 from usage import Detail
 
 
-@dataclass(frozen=True, slots=True)
-class Conversation:
-    history: History
-    workspace: Workspace
+def unseen(_task: Task) -> RequestContext:
+    return UNSEEN
+
+
+class ProfileError(Exception):
+    """The task's profile cannot run: the reason is shown and the task waits."""
 
 
 class AgentExecution:
@@ -55,11 +54,12 @@ class AgentExecution:
         record: Callable[[Mapping[str, Detail]], None],
         report_error: Callable[[str], None],
         close_background: Callable[[], None],
-        context: Callable[[], ContextSnapshot] | None = None,
+        context: Callable[[Task], RequestContext] = unseen,
         workspace: Workspace | None = None,
         resources: Resources | None = None,
         meeting: MeetingWork | None = None,
     ) -> None:
+        # `context` is read only for a profile that admits the request's desktop context.
         self.settings, self.machine, self.context = settings, machine, context
         self.record, self.report_error, self.close_background = record, report_error, close_background
         self.workspace = workspace if workspace is not None else Workspace()
@@ -82,14 +82,20 @@ class AgentExecution:
             self.conversations.popitem(last=False)
         return self.conversations[key]
 
-    def followup(self, task: Task) -> MeetingRun | None:
-        match profile := task_profile(task.source):
+    def profile(self, claim: Claim) -> ProfileRun:
+        """The one place a task's profile selects its run."""
+        match profile := task_profile(claim.task.source):
             case RequestKind.MEETING_FOLLOWUP:
+                # A missing binding must not silently gain the general profile.
                 if self.meeting is None:
-                    raise ValueError("Meeting follow-up is not configured for this work process.")
-                return self.meeting.session(task)
+                    raise ProfileError("Meeting follow-up is not configured for this work process.")
+                try:
+                    run = self.meeting.session(claim.task)
+                except (OSError, ValueError, sqlite3.Error) as error:
+                    raise ProfileError(f"Meeting preparation could not be opened: {error}"[:4000]) from error
+                return MeetingFollowupRun(self._conversation("task:" + claim.task.id), run)
             case RequestKind.GENERAL | FeedHandoff():
-                return None
+                return GeneralRun(self.conversation(claim), self.context(claim.task), self.workspace.root)
             case _:
                 assert_never(profile)
 
@@ -100,49 +106,39 @@ class AgentExecution:
         log: Log,
         stop: threading.Event,
         *,
-        context: ContextSnapshot | None = None,
-        context_text: str = "",
         review: Callable[[ApprovalReview], bool] | None = None,
     ) -> Outcome:
-        """Execute one durable claim; the controller commits the returned disposition."""
+        """Execute one durable claim; the controller commits the returned disposition.
+
+        The four positional inputs are the controller's `WorkExecution.run_work`
+        contract; `review` is the work process's per-claim approval channel.
+        """
         started = time.monotonic()
         try:
-            followup = self.followup(claim.task)
-        except (OSError, ValueError, sqlite3.Error) as error:
-            reason = f"Meeting preparation could not be opened: {error}"[:4000]
-            log.problem(reason)
-            return Waiting(Blocked(reason))
-        selected = followup is not None
-        work = WorkExecution(claim, store, self.resources, context_text="" if selected else context_text, review=review)
-        session = self._conversation("task:" + claim.task.id) if selected else self.conversation(claim)
-
-        def toolset(agent: Agent) -> Toolset:
-            if followup is not None:
-                return MeetingFollowupTools(agent, followup)
-            return General(agent, workspace=session.workspace, install_root=self.workspace.root)
-
+            profile = self.profile(claim)
+        except ProfileError as error:
+            log.problem(str(error))
+            return Waiting(Blocked(str(error)))
+        work = WorkExecution(claim, store, self.resources, context_text=profile.context.saved, review=review)
         agent = Agent(
             self.settings,
             self.machine,
             log,
             stop,
             work=work,
-            toolset=toolset,
-            history=session.history,
-            context=None if selected else context,
-            context_reader=None if selected else self.context,
+            toolset=profile.toolset,
+            history=profile.conversation.history,
+            context=profile.context.invocation,
+            context_reader=profile.context.current,
         )
         try:
             if stop.is_set():
                 return Waiting(Blocked("Execution stopped before it started."))
             work.actions.reconcile(stop)
-            if followup is not None:
-                followup.recover(work, stop)
-            if (installation := verified_installation(store, claim, session.workspace.live)) is not None:
-                return installation
+            if (recovered := profile.recover(work, stop)) is not None:
+                return recovered
             agent.run(claim.task.prompt)
-            outcome = work.outcome(agent.report, stop)
-            return followup.completed(outcome) if followup is not None else outcome
+            return profile.completed(work.outcome(agent.report, stop))
         except (ActionError, OSError, ValueError) as error:
             fault = failure_info(error)
             self.report_error(f"Agent execution failed: {fault.kind}; {' > '.join(fault.locations)}")

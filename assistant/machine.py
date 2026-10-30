@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from typing import Final, Protocol
 
 import keeper
+import keeper_control
 from protocol import MAGIC
 from usage import DIRECTORY
 from winapi.shapes import Rect, Window
@@ -310,4 +311,4 @@ class WinMachine:
         self.open_target(target)
 
     def install(self, summary: str) -> None:
-        keeper.ask("install", summary)
+        keeper_control.ask(keeper.REQUESTS, keeper_control.Install(summary))

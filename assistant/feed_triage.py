@@ -4,13 +4,11 @@ import hashlib
 from collections.abc import Iterable
 from dataclasses import dataclass, field, replace
 from datetime import UTC, date, datetime
-from enum import Enum
 from typing import Final, assert_never
 
 from pydantic import TypeAdapter
 
-from assistant.communications import Delivery, Feed, SourceDate, SourceDateStatus, SourceTime, TeamsActivity, UpdateKind, WindowsNotice, chat_tickets
-from assistant.console_requests import Request, State
+from assistant.communications import Feed
 from assistant.feed_contracts import (
     REVIEW_OUTPUT,
     SOLUTION_CONTEXT,
@@ -18,6 +16,7 @@ from assistant.feed_contracts import (
     ClearRules,
     CompleteItem,
     DismissItem,
+    Disposition,
     ForgetRule,
     ItemEdit,
     ProposedSolution,
@@ -26,44 +25,17 @@ from assistant.feed_contracts import (
     ReviseProposal,
     SaveRule,
     SolutionContext,
+    SolutionKind,
     StoredBoard,
     StoredItem,
     StoredSolution,
 )
 from assistant.feed_history import Decision, restored_history
-
-_CHAT_KEY = TypeAdapter(tuple[str, str])
-
-
-class Disposition(Enum):
-    ACTION = "action"
-    QUIET = "quiet"
-    USER_QUIET = "user_quiet"
-    DONE = "done"
-    DISMISSED = "dismissed"
-    REJECTED = "rejected"
-
+from assistant.feed_origin import Origin
+from assistant.feed_sources import Candidate, chat_message
 
 # Triage owns these assessments; every other disposition is explicit user handling.
 AUTOMATIC: Final = frozenset({Disposition.ACTION, Disposition.QUIET})
-
-
-@dataclass(frozen=True, slots=True)
-class Candidate:
-    identity: str
-    revision: str
-    source: str
-    title: str
-    body: str
-    created_at: float
-    reaction: bool = field(default=False, kw_only=True)
-    source_time: SourceTime = field(default=SourceDateStatus.UNKNOWN, kw_only=True)
-
-
-class SolutionKind(Enum):
-    DRAFT = "draft"
-    CHECK = "check"
-    PLAN = "plan"
 
 
 @dataclass(frozen=True, slots=True)
@@ -91,6 +63,8 @@ class Assessment:
     solutions: tuple[Solution, ...] = ()
     decision: str = ""
     reviewed_on: date | None = None
+    # Captured from the evidence at assessment, so badges outlive the live sources.
+    origins: tuple[Origin, ...] = field(default=(), kw_only=True)
 
 
 @dataclass(frozen=True, slots=True)
@@ -115,56 +89,9 @@ def identity(source: str, key: str) -> str:
     return source + ":" + hashlib.sha256(key.encode()).hexdigest()[:24]
 
 
-def candidate(source: str, key: str, title: str, body: str, at: float, *, reaction: bool = False) -> Candidate:
-    revision = hashlib.sha256((title + "\n" + body).encode()).hexdigest()
-    return Candidate(
-        identity(source, key),
-        revision,
-        source,
-        title[:512],
-        body[:6000],
-        at,
-        reaction=reaction,
-        source_time=SourceDate(at) if at > 0 else SourceDateStatus.UNKNOWN,
-    )
-
-
-def collect(feed: Feed, requests: tuple[Request, ...]) -> tuple[Candidate, ...]:
-    result: list[Candidate] = []
-    for ticket in chat_tickets(feed):
-        chat = feed.conversation(ticket.conversation)
-        for message in ticket.messages:
-            key = _CHAT_KEY.dump_json((message.conversation, message.identity)).decode()
-            result.append(candidate("chat", key, (chat.title if chat else "Chat") + " · " + message.sender, message.text, message.created_at))
-    for update in feed.updates:
-        if not feed.needs_attention(update):
-            continue
-        captured = candidate(
-            update.key[0],
-            update.key[1],
-            update.app_name + ": " + update.title,
-            update.text,
-            update.created_at,
-            reaction=update.kind is UpdateKind.REACTION,
-        )
-        match update.source:
-            case TeamsActivity():
-                captured = replace(captured, source_time=update.source_time)
-            case WindowsNotice():
-                pass
-        result.append(captured)
-    for request in requests:
-        if request.state is State.INFORMATION:
-            result.append(candidate("console", request.identity, request.provider.value + ": " + request.title, request.detail, request.created_at))
-    for reply in feed.replies:
-        if reply.delivery in (Delivery.UNKNOWN, Delivery.FAILED):
-            result.append(candidate("reply", reply.identity, "Reply to " + reply.title, reply.detail, reply.created_at))
-    return tuple(result)
-
-
 def conversation_context(feed: Feed, source_id: str) -> str:
     """An exact message identifies its thread; history includes handled and own replies."""
-    anchor = next((message for message in feed.messages if identity("chat", _CHAT_KEY.dump_json(message.key).decode()) == source_id), None)
+    anchor = chat_message(feed, source_id)
     if anchor is None:
         return "Unavailable: no captured conversation history matches this source. Do not infer its contents."
     history = tuple(message for message in feed.messages if message.conversation == anchor.conversation)[-40:]
@@ -311,6 +238,7 @@ def decode(raw: str, candidates: tuple[Candidate, ...]) -> tuple[Assessment, ...
                 max(by_id[ref].created_at for ref in refs),
                 disposition,
                 solutions,
+                origins=tuple(dict.fromkeys(by_id[ref].origin for ref in refs)),
             )
         )
     if seen != set(by_id):
@@ -432,14 +360,15 @@ def saved(board: Board) -> StoredBoard:
                 item.question,
                 item.priority,
                 item.created_at,
-                item.disposition.value,
+                item.disposition,
                 tuple(
-                    StoredSolution(option.identity, option.label, option.kind.value, option.detail, recommended=index == 0)
+                    StoredSolution(option.identity, option.label, option.kind, option.detail, recommended=index == 0)
                     for index, option in enumerate(item.solutions)
                 ),
                 proposal_revision(item),
                 item.decision,
                 item.reviewed_on.isoformat() if item.reviewed_on is not None else None,
+                item.origins,
             )
             for item in board.items[-1000:]
         ),
@@ -474,10 +403,11 @@ def restored(state: StoredBoard) -> Board:
             item.question,
             item.priority,
             item.at,
-            Disposition(item.disposition),
-            tuple(Solution(option.id, option.label, SolutionKind(option.kind), option.detail) for option in item.solutions),
+            item.disposition,
+            tuple(Solution(option.id, option.label, option.kind, option.detail) for option in item.solutions),
             item.decision,
             review_day(item.reviewed_on),
+            origins=item.origins,
         )
         for item in state.items
     )
