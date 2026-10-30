@@ -227,7 +227,7 @@ def run(root: Path, source: Path, content: bytes, tests: list[str], timeout: flo
             return Result("error", elapsed, len(executed), detail=detail)
         if returncode == 1 and not failed:
             return Result("error", elapsed, len(executed), detail=detail)
-        return Result("killed" if failed else "survived", elapsed, len(executed), failed)
+        return Result("killed" if failed else "survived", elapsed, len(executed), failed, detail)
 
 
 def campaign(
