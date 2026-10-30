@@ -201,8 +201,6 @@ class Ui:
     def __init__(
         self,
         *,
-        on_agent_waiting: Callable[[bool], None] | None = None,
-        on_recording: Callable[[RecordingAction], None] | None = None,
         presentation: Presentation | None = None,
         views: Views | None = None,
         dismiss_notice: Callable[[NoticeKey], None] | None = None,
@@ -231,7 +229,10 @@ class Ui:
         self._canvas_notice: Callable[[str, str], None] | None = None
         self._meetings: MeetingConnection | None = None
         self._work_lock = threading.Lock()
-        self._agent_waiting, self._recording = on_agent_waiting, on_recording
+        # The controller that owns these effects is created after Ui, on its own
+        # thread, so it connects them through configure_controls.
+        self._agent_waiting: Callable[[bool], None] | None = None
+        self._recording: Callable[[RecordingAction], None] | None = None
         self._indicator: Indicator | None = None
         """Made on first use, on the Qt thread."""
         self._keymap: KeymapWindow | None = None
