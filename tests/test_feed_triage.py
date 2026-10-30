@@ -279,6 +279,7 @@ def test_meaningful_rejection_records_reason_and_revision_without_completing_or_
         pass
     else:
         raise AssertionError("A stale proposal was rejected.")
+    duplicate: Json = {"label": "Check", "kind": "check", "detail": "Check it."}
     invalid: tuple[tuple[str, dict[str, Json]], ...] = (
         ("work_feed_update", {**arguments, "text": " "}),
         ("work_feed_update", {"operation": "choose", "item": item.identity, "revision": proposal_revision(item), "choice": "1"}),
@@ -288,7 +289,7 @@ def test_meaningful_rejection_records_reason_and_revision_without_completing_or_
                 "operation": "propose",
                 "item": item.identity,
                 "text": "Check.",
-                "solutions": list[Json]([{"label": "Check", "kind": "check", "detail": "Check it."}] * 2),
+                "solutions": [duplicate, duplicate],
             },
         ),
         ("work_feed_update", {"operation": "rule", "text": "Keep budget notices quiet.\x00"}),
