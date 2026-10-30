@@ -1,14 +1,15 @@
 """Teams web observations and exact-chat actions in one owned background tab."""
 
 import contextlib
-import json
 import threading
 import time
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Literal, Protocol, cast
+from typing import Literal, Protocol
 from urllib.parse import quote, urlsplit
+
+from pydantic import TypeAdapter
 
 from assistant.browser import Browser, BrowserResult
 from assistant.browser_session import Attached, BrowserConnection, Owner, Product
@@ -25,8 +26,16 @@ from assistant.communications import (
     UpdateKind,
 )
 from assistant.llm import Json
+from assistant.web_apps import OBSERVE, TEAMS_READ, TeamsPage, decoded
 
 HOSTS = frozenset({"teams.microsoft.com", "teams.cloud.microsoft"})
+_JSON = TypeAdapter(Json)
+_TEXT = TypeAdapter(str)
+
+
+def _literal(value: str) -> str:
+    """A JavaScript string literal for an exact identity or text in a page script."""
+    return _TEXT.dump_json(value).decode()
 
 
 class BrowserPort(Protocol):
@@ -55,55 +64,6 @@ class ChatUnavailableError(BrowserError):
     def __init__(self, reason: Literal["missing", "loading"]) -> None:
         self.reason: Literal["missing", "loading"] = reason
         super().__init__("That Teams chat is not available yet. Other followed chats can keep updating.")
-
-
-# Read only. Neither a conversation title nor a notification supplies a routing key.
-OBSERVE = r"""(() => {
- const clean = value => (value || '').replace(/\u00a0/g, ' ').trim();
- const source = document.querySelector('[data-tid="sendMessageCommands-send"]');
- const current = source?.getAttribute('data-track-thread-id') || '';
- const selected = document.querySelector('[role="treeitem"][data-tabster*="LeftRailSelectedItem"]');
- const selectedKey = (selected?.getAttribute('data-fui-tree-item-value')||'').match(/19:[^\s/]+@(?:thread\.v2|unq\.gbl\.spaces)/)?.[0];
- const ready = !!document.querySelector('[data-tid="ckeditor"][contenteditable="true"]') && (!selectedKey || selectedKey===current);
- const seen = new Set();
- const conversations = [];
- for (const row of document.querySelectorAll('[role="treeitem"]')) {
-   const value = row.getAttribute('data-fui-tree-item-value') || '';
-   const match = value.match(/19:[^\s/]+@(?:thread\.v2|unq\.gbl\.spaces)/);
-   if (!match || !['chat','muted-chat'].includes(row.getAttribute('data-item-type')) || seen.has(match[0])) continue;
-   const title = clean(row.innerText).split('\n').filter(Boolean)[0] || 'Teams conversation';
-   conversations.push({identity:match[0], title:title.slice(0,300), kind:match[0].includes('meeting_')?'meeting':'chat'});
-   seen.add(match[0]);
- }
- const title = clean(document.querySelector('[data-tid="chat-title"]')?.innerText).slice(0,300);
- if (current && !seen.has(current)) conversations.push({
-   identity:current,title:title||'Teams conversation',kind:current.includes('meeting_')?'meeting':'chat'
- });
- const messages = [];
- for (const row of document.querySelectorAll('[data-mid]')) {
-   const identity = row.getAttribute('data-mid');
-   const body = document.getElementById('content-'+identity);
-   if (!identity || !body || !row.contains(body)) continue;
-   const direct = clean(row.querySelector('[data-tid="message-author-name"]')?.innerText);
-   const labels = (row.getAttribute('aria-labelledby')||'').split(/\s+/).map(id=>document.getElementById(id));
-   const linked = labels.find(e=>e?.getAttribute('data-tid')==='message-author-name');
-   const author = direct || clean(linked?.innerText) || 'Teams participant';
-   const text = clean(body.innerText);
-   if (!text) continue;
-   const reactions = [...row.querySelectorAll('[data-tid*="reaction"]')]
-     .map(e=>clean(e.getAttribute('aria-label')||e.innerText)).filter(Boolean);
-   messages.push({identity,sender:author,text:text.slice(0,16000),
-     created_at:/^\d{13}$/.test(identity)?Number(identity)/1000:0,reactions:[...new Set(reactions)].slice(0,20),
-     own:row.getAttribute('data-tid')==='my-message' || !!row.querySelector('[data-tid="my-message"]')});
- }
- const result = {current,title,conversations:conversations.slice(0,150),messages:ready?messages.slice(-80):[],editor_ready:ready};
- while (JSON.stringify(result).length > 18500 && result.messages.length > 1) result.messages.shift();
- while (JSON.stringify(result).length > 18500 && result.conversations.length > 1) result.conversations.pop();
- if (JSON.stringify(result).length > 18500 && result.messages.length) {
-   result.messages[0].text = result.messages[0].text.slice(0,4000)+'\n[Message continues in Teams]';
- }
- return result;
-})()"""
 
 
 ACTIVITY_OBSERVE = r"""(() => {
@@ -212,50 +172,15 @@ class Observation:
     editor_ready: bool = field(kw_only=True)
 
 
-def observation(value: Json, at: float) -> Observation:
-    data = obj(value)
-    current = string(data.get("current", ""), limit=512)
-    if current:
-        current = chat_identity(current)
-    raw_chats, raw_messages = data.get("conversations"), data.get("messages")
-    if not isinstance(raw_chats, list) or not isinstance(raw_messages, list) or len(raw_chats) > 150 or len(raw_messages) > 80:
-        raise BrowserError("Teams returned an invalid conversation list.")
-    chats: list[Conversation] = []
-    for raw in raw_chats:
-        row = obj(raw)
-        kind = row.get("kind")
-        if kind not in ("chat", "meeting"):
-            raise BrowserError("Teams returned an invalid conversation kind.")
-        chats.append(
-            Conversation(
-                chat_identity(row.get("identity")), string(row.get("title"), limit=300, required=True), "meeting" if kind == "meeting" else "chat"
-            )
-        )
-    messages: list[Message] = []
-    for raw in raw_messages:
-        row = obj(raw)
-        stamp, reactions = row.get("created_at"), row.get("reactions")
-        if isinstance(stamp, bool) or not isinstance(stamp, (float, int)) or not 0 <= stamp < 100_000_000_000:
-            raise BrowserError("Teams returned an invalid timestamp.")
-        if not isinstance(reactions, list) or len(reactions) > 20:
-            raise BrowserError("Teams returned invalid reactions.")
-        if current:
-            messages.append(
-                Message(
-                    current,
-                    string(row.get("identity"), limit=512, required=True),
-                    string(row.get("sender"), limit=300, required=True),
-                    string(row.get("text"), required=True),
-                    float(stamp),
-                    at,
-                    tuple(string(item, limit=1000) for item in reactions),
-                    own=row.get("own") is True,
-                )
-            )
-    ready = data.get("editor_ready")
-    if not isinstance(ready, bool):
-        raise BrowserError("Teams returned an invalid editor state.")
-    return Observation(current, string(data.get("title", ""), limit=300), tuple(chats), tuple(messages), editor_ready=ready)
+def observation(page: TeamsPage, at: float) -> Observation:
+    """The page's chats, and the selected chat's messages once it has an exact identity."""
+    chats = tuple(Conversation(chat.identity, chat.title, chat.kind) for chat in page.conversations)
+    messages = tuple(
+        Message(page.current, post.identity, post.sender, post.text, post.created_at, at, post.reactions, own=post.own)
+        for post in page.messages
+        if page.current
+    )
+    return Observation(page.current, page.title, chats, messages, editor_ready=page.editor_ready)
 
 
 class TeamsWeb:
@@ -301,7 +226,7 @@ class TeamsWeb:
             opened = self.evaluate(
                 """(() => {
               const wrap=document.getElementById("""
-                + json.dumps(identity)
+                + _literal(identity)
                 + """);
               if(wrap?.getAttribute('data-tid')!=='activity-feed-list-item-wrap')return false;
               const row=wrap.querySelector('[data-tid="activity-feed-list-item"]');
@@ -335,7 +260,7 @@ class TeamsWeb:
             self.evaluate(
                 """(() => {
               document.getElementById("""
-                + json.dumps(identity)
+                + _literal(identity)
                 + """)
                 ?.querySelector('button[id^="activity-feed-item-context-menu-"]')?.click();return true;
             })()""",
@@ -366,7 +291,7 @@ class TeamsWeb:
             result = self.evaluate(
                 """(() => {
               const wrap=document.getElementById("""
-                + json.dumps(identity)
+                + _literal(identity)
                 + """);
               if(wrap?.getAttribute('data-tid')!=='activity-feed-list-item-wrap')return false;
               const row=wrap.querySelector('[data-tid="activity-feed-list-item"]');
@@ -379,14 +304,17 @@ class TeamsWeb:
                 raise BrowserError("That Teams activity is no longer rendered. Refresh before opening it.")
         self.browser.activate_page(self.target, cancel)
 
+    def evaluated(self, expression: str, cancel: threading.Event, *, target: str = "") -> str:
+        return self.browser.request("evaluate", {"target_id": target or self.target, "expression": expression}, cancel).text
+
     def evaluate(self, expression: str, cancel: threading.Event, *, target: str = "") -> Json:
-        return cast(Json, json.loads(self.browser.request("evaluate", {"target_id": target or self.target, "expression": expression}, cancel).text))
+        return _JSON.validate_json(self.evaluated(expression, cancel, target=target))
 
     def pages(self, cancel: threading.Event) -> tuple[dict[str, Json], ...]:
         rows: list[dict[str, Json]] = []
         offset = 0
         while not cancel.is_set():
-            page = obj(cast(Json, json.loads(self.browser.request("tabs", {"limit": 40, "offset": offset}, cancel).text)))
+            page = obj(_JSON.validate_json(self.browser.request("tabs", {"limit": 40, "offset": offset}, cancel).text))
             items = page.get("tabs")
             if not isinstance(items, list):
                 raise BrowserError("Edge did not return its page list.")
@@ -425,7 +353,8 @@ class TeamsWeb:
     def read(self, cancel: threading.Event, *, target: str = "") -> Observation:
         for _ in range(3):
             try:
-                return observation(self.evaluate(OBSERVE, cancel, target=target), time.time())
+                page = decoded(TEAMS_READ.result, self.evaluated(OBSERVE, cancel, target=target))
+                return observation(page, time.time())
             except NavigationContextError:
                 if cancel.wait(0.15):
                     raise InterruptedError("Stopped while Teams was navigating.") from None
@@ -484,7 +413,7 @@ class TeamsWeb:
         if current.current == identity and current.editor_ready:
             self.opening.pop(target or self.target, None)
             return current
-        encoded = json.dumps(identity)
+        encoded = _literal(identity)
         expression = f"""(() => {{
           const identity={encoded};
           const row=[...document.querySelectorAll('[role="treeitem"]')].find(e=>{{
@@ -565,7 +494,7 @@ class TeamsWeb:
     def _send(self, identity: str, text: str, cancel: threading.Event) -> tuple[Message, ...]:
         before = self._select(identity, cancel)
         known = {message.identity for message in before.messages}
-        encoded, content = json.dumps(identity), json.dumps(text)
+        encoded, content = _literal(identity), _literal(text)
         prepared = self.evaluate(
             f"""(() => {{
           const send=document.querySelector('[data-tid="sendMessageCommands-send"]');

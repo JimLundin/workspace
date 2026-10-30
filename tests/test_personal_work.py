@@ -12,7 +12,22 @@ from assistant.llm import Json, Settings
 from assistant.local_bridge import LocalBridge
 from assistant.personal_work_model import Correlator
 from assistant.personal_work_service import PersonalWork, correlation_input
-from assistant.personal_work_sources import BrowserSources, Message, Outlook, SelectedMail, Tab, outlook_sources
+from assistant.personal_work_sources import BrowserSources, Tab, outlook_sources
+from assistant.web_apps import (
+    Board,
+    BoardQuery,
+    Card,
+    Located,
+    Mailbox,
+    MailList,
+    MailMessage,
+    MailRow,
+    SelectedMail,
+    TeamsChat,
+    TeamsPage,
+    TeamsPost,
+    TeamsQuery,
+)
 from assistant.work_bridge import WorkOwners
 from assistant.work_bridge_contracts import WORK_BRIDGE
 from assistant.work_canvas_model import caption
@@ -287,37 +302,38 @@ def test_user_correction_during_review_is_not_undone(tmp_path: Path) -> None:
         service.close()
 
 
+def board(*cards: Card, following: int | None = None) -> Board:
+    return Board(cards, len(cards), ("Ready", "Testing"), (), "", "Currently rendered board with its existing filters", following)
+
+
+def mailbox(*rows: MailRow, selected: SelectedMail | None = None, following: int | None = None) -> Mailbox:
+    return Mailbox(rows, len(rows), selected, "", "Current folder and tab", following, editor_open=False)
+
+
 def test_browser_collection_routes_exact_tabs_paginates_and_uses_messages_not_titles() -> None:
     # Defect: the observer reads an unrelated tab, stops at the first Kanban
     # page, or promotes title-only Teams sidebar entries into work evidence.
+    selected, sidebar = "19:selected@thread.v2", "19:sidebar@thread.v2"
     browser = CapturedBrowser(
+        (
+            Tab("board", source(SourceKind.KANBAN).url),
+            Tab("chat", source(SourceKind.TEAMS).url),
+            Tab("mail", source(SourceKind.OUTLOOK).url),
+            Tab("other", "https://example.test/"),
+        ),
         {
-            ("tabs", "", 0): {
-                "tabs": [
-                    {"id": "board", "url": source(SourceKind.KANBAN).url},
-                    {"id": "chat", "url": source(SourceKind.TEAMS).url},
-                    {"id": "mail", "url": source(SourceKind.OUTLOOK).url},
-                    {"id": "other", "url": "https://example.test/"},
-                ]
-            },
-            ("kanban_board", "board", 0): {
-                "tasks": [{"task_id": "one", "title": "Atlas", "column": "Ready", "text": "Supplier review"}],
-                "next_offset": 30,
-            },
-            ("kanban_board", "board", 30): {"tasks": [{"task_id": "two", "title": "Atlas", "column": "Testing", "text": "Deploy"}]},
-            ("teams_web_read", "chat", 0): {
-                "current": "selected",
-                "title": "Atlas",
-                "conversations": [{"identity": "sidebar", "title": "Atlas"}],
-                "messages": [{"identity": "message", "sender": "Colleague", "text": "Awaiting supplier approval"}],
-            },
-            ("outlook_web_read", "mail", 0): {
-                "conversations": [{"conversation_id": "one", "preview": "Supplier review"}],
-                "selected": None,
-                "next_offset": 20,
-            },
-            ("outlook_web_read", "mail", 20): {"conversations": [{"conversation_id": "two", "preview": "Deploy Atlas"}], "selected": None},
-        }
+            BoardQuery("board", offset=0, limit=30): board(Card("one", "Atlas", "Ready", "Supplier review"), following=30),
+            BoardQuery("board", offset=30, limit=30): board(Card("two", "Atlas", "Testing", "Deploy")),
+            TeamsQuery("chat"): TeamsPage(
+                selected,
+                "Atlas",
+                (TeamsChat(sidebar, "Atlas", "chat"),),
+                (TeamsPost("message", "Colleague", "Awaiting supplier approval", 0, (), own=False),),
+                editor_ready=True,
+            ),
+            MailList("mail", offset=0, limit=20): mailbox(MailRow("one", "Supplier review", "", selected=False), following=20),
+            MailList("mail", offset=20, limit=20): mailbox(MailRow("two", "Deploy Atlas", "", selected=False)),
+        },
     )
     reader = BrowserSources(browser)
     observations = reader.read(20, threading.Event())
@@ -327,11 +343,11 @@ def test_browser_collection_routes_exact_tabs_paginates_and_uses_messages_not_ti
     assert len(teams) == 2
     conversation = next(item for item in teams if item.parent_id is None)
     piece = next(item for item in teams if item.parent_id is not None)
-    assert conversation.identity == "selected" and "supplier approval" in conversation.excerpt
+    assert conversation.identity == selected and "supplier approval" in conversation.excerpt
     assert piece.parent_id == conversation.id and piece.excerpt == "Awaiting supplier approval"
     assert caption(piece) == "Teams message"
-    assert ("kanban_board", "board", 30) in browser.calls and ("outlook_web_read", "mail", 20) in browser.calls
-    assert all(target != "other" for _, target, _ in browser.calls)
+    assert BoardQuery("board", offset=30, limit=30) in browser.queries and MailList("mail", offset=20, limit=20) in browser.queries
+    assert all(query.target_id != "other" for query in browser.queries)
     reader.close()
     assert browser.closed == 1
 
@@ -339,9 +355,9 @@ def test_browser_collection_routes_exact_tabs_paginates_and_uses_messages_not_ti
 def test_selected_outlook_body_is_evidence_even_without_a_rendered_list_row() -> None:
     # Defect: selected mail disappears from collection when paginating or
     # when Outlook virtualizes its list row out of the current view.
-    selected = SelectedMail("selected", "Atlas approval", "The supplier approved deployment.")
+    selected = SelectedMail("selected", "Atlas approval", (), "The supplier approved deployment.", "", truncated=False, loading=False)
     tab = Tab("mail", source(SourceKind.OUTLOOK).url)
-    observations = outlook_sources(Outlook((), selected), tab, 20)
+    observations = outlook_sources(mailbox(selected=selected), tab, 20)
     assert len(observations) == 1 and observations[0].identity == selected.conversation_id
     assert observations[0].excerpt == selected.text and observations[0].title == selected.subject
 
@@ -349,22 +365,18 @@ def test_selected_outlook_body_is_evidence_even_without_a_rendered_list_row() ->
 def test_unavailable_browser_waits_for_refresh_and_empty_chats_are_not_evidence() -> None:
     # Defect: failed attachment repeatedly interrupts the user, or sidebar
     # titles alone create responsibilities despite no observed message body.
-    browser = CapturedBrowser({("tabs", "", 0): BrowserError("Unavailable")})
+    browser = CapturedBrowser(BrowserError("Unavailable"), {})
     reader = BrowserSources(browser)
     first = reader.read(10, threading.Event())
     assert not first.sources and first.problems
     reader.read(11, threading.Event())
-    assert len(browser.calls) == 1
-    available: Mapping[tuple[str, str, int], dict[str, Json] | BrowserError] = {
-        ("tabs", "", 0): {"tabs": [{"id": "chat", "url": source(SourceKind.TEAMS).url}]},
-        ("teams_web_read", "chat", 0): {
-            "current": "one",
-            "title": "Deploy Atlas",
-            "conversations": [{"identity": "one", "title": "Deploy Atlas"}],
-            "messages": [],
-        },
+    assert browser.tab_reads == 1
+    chat = "19:one@thread.v2"
+    browser.tabs = (Tab("chat", source(SourceKind.TEAMS).url),)
+    available: Mapping[Located, object] = {
+        TeamsQuery("chat"): TeamsPage(chat, "Deploy Atlas", (TeamsChat(chat, "Deploy Atlas", "chat"),), (), editor_ready=True)
     }
-    browser.responses = available
+    browser.answers = available
     reader.refresh()
     fresh = reader.read(12, threading.Event())
     assert not fresh.sources and not fresh.problems and fresh.coverage == ("teams",)
@@ -505,20 +517,23 @@ def test_individual_mail_preserves_the_conversation_reference(tmp_path: Path) ->
     selected = SelectedMail(
         "conversation",
         "Supplier approval",
-        "Latest reply",
         (
-            Message("first", "Anna", "Can we migrate on Friday?"),
-            Message("second", "Jim", "Friday is approved."),
+            MailMessage("first", "Anna", "Can we migrate on Friday?"),
+            MailMessage("second", "Jim", "Friday is approved."),
         ),
+        "Latest reply",
+        "",
+        truncated=False,
+        loading=False,
     )
-    sources = outlook_sources(Outlook((), selected), Tab("mail", source(SourceKind.OUTLOOK).url), 1)
+    sources = outlook_sources(mailbox(selected=selected), Tab("mail", source(SourceKind.OUTLOOK).url), 1)
     conversation, first, second = sources
     assert first.parent_id == second.parent_id == conversation.id and first.id != second.id
     store = PersonalStore(tmp_path / "work.sqlite3")
     store.observe(sources)
     pieces = store.handle(ListSources(query=conversation.id), 1)
     assert isinstance(pieces, SourcePage) and frozenset(item.id for item in pieces.sources) == frozenset(item.id for item in sources)
-    another = outlook_sources(Outlook((), replace(selected, conversation_id="another")), Tab("mail", source(SourceKind.OUTLOOK).url), 1)
+    another = outlook_sources(mailbox(selected=replace(selected, conversation_id="another")), Tab("mail", source(SourceKind.OUTLOOK).url), 1)
     assert first.id != another[1].id and first.identity == another[1].identity
     captured = correlation_input(store.read())
     assert conversation in captured.sources and first in captured.sources
