@@ -113,14 +113,6 @@ follow-up. It selects the agent's tools, instructions and completion check.
 Work for a standing instruction runs as a general request.
 _Avoid_: Task kind, agent mode
 
-**Meeting follow-up**:
-Notes, decisions, actions and unsent email drafts prepared from recordings the
-person selected. Their transcripts are frozen when it is prepared. Its agent
-sees only those sources and the follow-up's tools, and it completes only after
-its package is published and each draft's save is verified. It is distinct from
-a standing instruction that writes notes for each completed transcript.
-_Avoid_: Meeting notes routine, meeting summary
-
 **Run**:
 One period of execution of a task. A task can have several runs as it waits,
 resumes, or recovers from an interruption.
