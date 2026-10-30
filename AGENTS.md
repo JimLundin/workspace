@@ -157,6 +157,22 @@ with `--receipt "$env:TEMP\workspace-check.json"` and deploy with
 Keep the protected selfcheck gate and full CI checks unchanged. Do not rebuild the
 runtime bundle or use the old temporary deployment helper for source-only edits.
 
+# Committing work
+
+Work is not done until it is committed and pushed. After the final check passes,
+commit the checked working tree on the current branch, deploy, and push. Never
+report a task as done, finished or ready while any part of it is uncommitted or
+unpushed; report exactly what remains uncommitted and why.
+
+- Commit in small steps that each describe one change. End every message with
+  the attribution trailer the session provides.
+- Work done in worktrees or by subagents is complete only once the coordinator
+  has merged it into the user's branch, committed and pushed. Remove finished
+  worktrees and merged branches; never leave the only copy of finished work in a
+  worktree, a stash or an unpushed branch.
+- When uncommitted work from earlier sessions is present, commit it as its own
+  snapshot before committing new work on top, so both are recorded.
+
 # Windows deployment
 
 After each completed change, update the Windows Downloads copy as part of the
