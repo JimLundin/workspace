@@ -13,19 +13,23 @@ if sys.platform != "win32":
 
 lazy from PySide6 import QtCore, QtWidgets
 
-from assistant.agent_toasts import AgentToasts, FeedActions
+from assistant.agent_toasts import AgentToasts
 from assistant.agent_window import AgentWindow
+from assistant.communications import Feed, WindowsNotice
 from assistant.console_requests import Provider, Request
 from assistant.desktop_bar import BarActions, DesktopBar
-from assistant.feed_triage import Assessment, Board
+from assistant.notification_sources import NOTIFICATION_STATE
 from assistant.qt_runtime import prepare
 from assistant.qt_ui import application
+from assistant.state_store import SavedState
 from assistant.system_notices import Notice, NoticeKey, Observed
 from assistant.ui import Ui, Views
 from assistant.work_canvas import WorkCanvas
 from assistant.work_canvas_window import CanvasWindow
 from assistant.work_window import WorkWindow
 from tests.agent_requests import asked
+from tests.communications_fixture import communication_feed
+from tests.test_communications_service import LocalCipher
 from tests.test_work_canvas import local_canvas
 
 prepare()
@@ -46,8 +50,8 @@ class InboxUi(Ui):
         self.current_bar = DesktopBar(actions, native_shell=False, audio_level=audio_level)
         return self.current_bar
 
-    def create_feed(self, root: QtWidgets.QApplication, agent: AgentWindow, actions: FeedActions) -> AgentToasts:
-        self.current_feed = AgentToasts(root, agent, actions)
+    def create_feed(self, root: QtWidgets.QApplication, agent: AgentWindow, open_canvas: Callable[[str], None]) -> AgentToasts:
+        self.current_feed = AgentToasts(root, agent, open_canvas)
         return self.current_feed
 
     def create_canvas(self, root: QtWidgets.QApplication, work: WorkWindow, canvas: WorkCanvas) -> CanvasWindow:
@@ -165,7 +169,6 @@ def test_app_context_stays_quiet_and_only_agent_questions_change_toolbar_attenti
                 ),
             )
         )
-        ui.triage_changed(Board(enabled=True, items=(Assessment("budget", (), "Review budget", "", "", "", 1, 4),)))
         ui.pump()
         assert ui.bar.inbox.isHidden()
         agent = ui.agent(None, lambda: None, reveal=False)
@@ -179,3 +182,29 @@ def test_app_context_stays_quiet_and_only_agent_questions_change_toolbar_attenti
     finally:
         ui.dispose()
         app.setStyleSheet(original_style)
+
+
+def test_app_arrivals_reach_triage_joined_without_floating_alerts(tmp_path: Path) -> None:
+    # Defect: the production Ui turns app observations into floating cards, or
+    # triage sees Teams work without the Windows notices it must assess.
+    original_style = application().styleSheet()
+    assessed: list[Feed] = []
+    ui = InboxUi()
+    ui.configure_feed(
+        SavedState(tmp_path / "notifications.bin", NOTIFICATION_STATE, cipher=LocalCipher()),
+        lambda feed, _requests: assessed.append(feed),
+    )
+    try:
+        agent = ui.agent(None, lambda: None, reveal=False)
+        agent.show(focus=False)
+        ui.pump()
+        notice = Notice(NoticeKey(11, 100), "owned", "Mail", "Review this", "Immediate fictional notice")
+        ui.system_notices(Observed((notice,)))
+        ui.communications_changed(communication_feed())
+        ui.pump()
+        assert not ui.feed.stack.toasts and not ui.feed.cards
+        assert assessed[-1].messages
+        assert any(item.source == WindowsNotice(notice.key, notice.app_id) for item in assessed[-1].updates)
+    finally:
+        ui.dispose()
+        ui.root.setStyleSheet(original_style)

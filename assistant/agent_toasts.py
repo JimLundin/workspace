@@ -5,7 +5,7 @@ import webbrowser
 from collections.abc import Callable
 from dataclasses import replace
 from pathlib import Path
-from typing import Annotated, Final, Protocol, TypedDict, assert_never
+from typing import Annotated, Final, TypedDict, assert_never
 from urllib.parse import urlsplit
 
 from pydantic import Field, StrictInt, TypeAdapter
@@ -15,22 +15,17 @@ lazy from PySide6.QtGui import QFontMetricsF
 lazy from PySide6.QtWidgets import QApplication
 
 from assistant.agent_progress import Progress, advance_progress, compact, retain_lifetimes, visible
-from assistant.canvas_activity import history_session, redirect_session
+from assistant.canvas_activity import redirect_session
 from assistant.qt_runtime import prepare
-from assistant.toast_stack import Active, Column, Measured, Preview, Retiring, Stacking, Viewport, fit, frames, reservable
+from assistant.toast_stack import Active, Column, Measured, Retiring, Stacking, Viewport, fit, frames, reservable
 from usage import DIRECTORY
 from winapi import appearance, windows
 from winapi.shapes import Rect
-lazy from assistant import console_requests, notification_reading
+lazy from assistant import notification_reading
 lazy from assistant.agent_session import AgentRequest, Session, Snapshot, pending
 lazy from assistant.agent_window import AgentWindow
-lazy from assistant.card_actions import AnswerApproval, AnswerConsole, ItemAction, OpenCanvas, Verb, parse
+lazy from assistant.card_actions import AnswerApproval, OpenCanvas, parse
 lazy from assistant.feed_desktop import Desktop, NativeDesktop
-lazy from assistant.feed_items import WorkItem, act, help_request
-lazy from assistant.feed_observation import SourceAction
-lazy from assistant.feed_sources import Attention, SourceKey, listed
-lazy from assistant.feed_triage import Assessment
-lazy from assistant.inbox import Query, review_prompt
 lazy from assistant.notifications import (
     MAX_VISIBLE,
     Content,
@@ -43,11 +38,10 @@ lazy from assistant.notifications import (
     Toast,
     Turn,
     advance,
-    display_order,
     hide,
     hover,
     next_expiry,
-    origin_item,
+    order_of,
     priority,
     reading_hold,
     results,
@@ -83,19 +77,9 @@ def saved_monitor(path: Path = MONITOR) -> Rect | None:
     return Rect(values["x"], values["y"], values["x"] + values["width"], values["y"] + values["height"])
 
 
-class FeedActions(Protocol):
-    """The owners a feed card reaches when the person acts on it; each answer says whether it was accepted."""
-
-    def communicate(self, command: SourceAction) -> bool: ...
-    def answer_console(self, answer: console_requests.Answer) -> bool: ...
-    def dismiss_work(self, identity: str) -> bool: ...
-    def choose_work(self, identity: str, revision: str, choice: str) -> bool: ...
-
-
 class AgentToasts:
     __slots__ = (
         "__weakref__",
-        "actions",
         "agent",
         "animation_timer",
         "canvas_open",
@@ -107,6 +91,7 @@ class AgentToasts:
         "desktop",
         "environment",
         "expiry_timer",
+        "history",
         "loop",
         "materials",
         "measure",
@@ -116,7 +101,6 @@ class AgentToasts:
         "pointer_timer",
         "progress",
         "progress_head",
-        "query",
         "reveal",
         "root",
         "scale",
@@ -132,7 +116,7 @@ class AgentToasts:
         self,
         root: QApplication,
         agent: AgentWindow,
-        actions: FeedActions,
+        open_canvas: Callable[[str], None],
         *,
         monitor: Rect | None = None,
         clock: Callable[[], float] = time.monotonic,
@@ -144,8 +128,8 @@ class AgentToasts:
         # Independent monitor hint, clock, desktop and appearance environment enter
         # at construction so every card shares that ownership; tests consume the
         # same contracts.
-        # The feed's action owners enter here, so a card reaches them directly.
-        self.root, self.agent, self.actions, self.clock = root, agent, actions, clock
+        # Bubbles direct the person to the canvas; its opener enters here.
+        self.root, self.agent, self.canvas_open, self.clock = root, agent, open_canvas, clock
         self.environment: appearance.Environment = appearance.Environment() if environment is None else environment
         self.desktop: Desktop = NativeDesktop() if desktop is None else desktop
         self.create_card = Card if create_card is None else create_card
@@ -163,8 +147,7 @@ class AgentToasts:
         # this view's lifetime; replacing logical content must not rebuild them.
         self.spares: tuple[Card, ...] = ()
         self.closed = False
-        self.query = Query()
-        self.canvas_open: Callable[[str], None] | None = None
+        self.history = False
         self.page = 0
         self.capacity = MAX_VISIBLE
         self.viewport: Viewport | None = None
@@ -184,13 +167,9 @@ class AgentToasts:
         self.session = state
         self.refresh()
 
-    def use_canvas(self, open_at: Callable[[str], None]) -> None:
-        self.canvas_open = open_at
-
     def observation(self) -> Snapshot:
-        if self.canvas_open is None:
-            return self.session
-        return history_session(self.session) if self.query.history else redirect_session(self.session)
+        # History shows the agent's work as it was; live bubbles only redirect.
+        return self.session if self.history else redirect_session(self.session)
 
     def refresh(self) -> None:
         if self.closed:
@@ -205,11 +184,11 @@ class AgentToasts:
 
     @property
     def live_progress(self) -> bool:
-        return self.canvas_open is not None and not self.query.history
+        return not self.history
 
     def project(self, now: float, *, reveal: bool = False) -> None:
         if not self.live_progress:
-            self.stack = advance(self.stack, self.observation(), now, query=self.query, page=self.page, reveal=reveal, limit=self.capacity)
+            self.stack = advance(self.stack, self.observation(), now, history=True, page=self.page, reveal=reveal, limit=self.capacity)
             return
         self.progress = advance_progress(retain_lifetimes(self.progress, self.stack), self.session, now)
         self.stack = visible(self.progress, self.capacity)
@@ -299,13 +278,8 @@ class AgentToasts:
     def measured(self, toast: Toast, width: int) -> Measured:
         card = self.cards[toast.key]
         prepared = card.measure(self.content_for(toast), width)
-        match toast.content:
-            case WorkItem(item=Assessment()) if not card.expanded:
-                preview = Preview.COMPLETE
-            case _:
-                preview = Preview.LINES
         chrome = prepared.header_height + prepared.hint_height + prepared.padding
-        return Measured(prepared.preferred, chrome, prepared.body_height, priority(toast.content), preview)
+        return Measured(prepared.preferred, chrome, prepared.body_height, priority(toast.content))
 
     def sync_layers(self) -> None:
         # Qt rounds device-independent bounds during its layered paint. Align
@@ -432,13 +406,7 @@ class AgentToasts:
             # A resumed recording must restore usable controls immediately,
             # even when its fixed-width geometry matches the fading saved card.
             resized = before != (current.width, current.height)
-            immediate = immediate or (
-                toast.key not in created
-                and (
-                    (isinstance(toast.content, Recording) and (resized or current.alpha < 1))
-                    or (resized and isinstance(toast.content, WorkItem) and isinstance(toast.content.item, Assessment))
-                )
-            )
+            immediate = immediate or (toast.key not in created and isinstance(toast.content, Recording) and (resized or current.alpha < 1))
             if toast.key in created:
                 current.position(
                     work.right - viewport.margin,
@@ -472,10 +440,9 @@ class AgentToasts:
                 return toast.content
 
     def order_for(self, toast: Toast) -> tuple[int, float, int, int]:
-        order = display_order(toast, curated=self.session.feed.triage.enabled and not self.query.history)
-        if self.live_progress:
-            return (0 if isinstance(toast.key, PhaseKey) else 1, *order[1:])
-        return order
+        # Live phases lead; history keeps chronology.
+        group = (0 if isinstance(toast.key, PhaseKey) else 1) if self.live_progress else 0
+        return (group, *order_of(toast))
 
     def layout(self, now: float, *, animate: bool, pushing: bool = False) -> None:
         if self.work is None or self.viewport is None:
@@ -512,12 +479,6 @@ class AgentToasts:
         self.reveal = True
         self.refresh()
 
-    def review_feed(self) -> None:
-        if self.agent.on_submit is not None:
-            feed = self.session.feed
-            prompt = review_prompt(listed(feed.communications, feed.console_requests, history=False), self.query)
-            self.agent.on_submit(prompt)
-
     def action_link(self, link: str) -> None:
         if urlsplit(link).scheme in ("http", "https", "mailto"):
             webbrowser.open(link)
@@ -525,14 +486,9 @@ class AgentToasts:
         action = parse(link)
         match action:
             case OpenCanvas(target=target):
-                if self.canvas_open is not None:
-                    self.canvas_open(target)
+                self.canvas_open(target)
             case AnswerApproval(request=request, decision=decision):
                 self.agent.respond(request, decision.value)
-            case AnswerConsole() as answer:
-                self.answer_console(answer)
-            case ItemAction(verb=verb, item=item):
-                self.act_on(verb, item)
             case None:
                 pass
             case _:
@@ -548,8 +504,6 @@ class AgentToasts:
             if card.expanded:
                 card.detail_offset = card.details.offset
             card.expanded = desired
-            if isinstance(card.content, WorkItem):
-                card.text.verticalScrollBar().setValue(0)
             card.prepared = None
             card.layout = None
         self.sync(self.clock(), animate=animate and self.environment.animations())
@@ -558,33 +512,11 @@ class AgentToasts:
         card = self.cards.get(key)
         if card is None:
             return
-        match card.content:
-            case WorkItem(item=Assessment(identity=identity)):
-                if not self.actions.dismiss_work(identity):
-                    if self.agent.on_problem is not None:
-                        self.agent.on_problem("That item could not be dismissed. It remains in your feed.")
-                    return
-            case _:
-                pass
         self.stack = hide(self.stack, key)
         self.refresh()
 
     def action(self, url: QtCore.QUrl) -> None:
         self.action_link(url.toString(QtCore.QUrl.ComponentFormattingOption.FullyEncoded))
-
-    def act_on(self, verb: Verb, key: SourceKey) -> None:
-        row = next((card.content for card in self.cards.values() if isinstance(card.content, WorkItem) and card.content.key == key), None)
-        if row is None:
-            return
-        if verb is Verb.HELP:
-            prompt = help_request(row)
-            if prompt and self.agent.on_submit is not None:
-                self.query = Query()
-                self.agent.on_submit(prompt)
-            return
-        command = act(row, verb)
-        if command is not None:
-            self.actions.communicate(command)
 
     def sync_wheel(self) -> None:
         regions: list[Region] = []
@@ -669,7 +601,7 @@ class AgentToasts:
         if self.closed:
             return
         self.stack = replace(self.stack, hidden=frozenset())
-        self.query = Query()
+        self.history = False
         self.page = 0
         self.reveal = True
         self.show(focus=True)
@@ -678,13 +610,13 @@ class AgentToasts:
         if self.closed:
             return
         self.stack = replace(self.stack, hidden=frozenset())
-        self.query = replace(self.query, history=True)
+        self.history = True
         self.page = 0
         self.reveal = True
         self.refresh()
 
     def resume(self) -> None:
-        self.query = replace(self.query, history=False)
+        self.history = False
         self.page = 0
         self.refresh()
 
@@ -717,24 +649,6 @@ class AgentToasts:
         self.materials.close()
         self.measure.close()
         self.loop.close()
-
-    def answer_console(self, chosen: AnswerConsole) -> None:
-        identity, question, answer = chosen.request, chosen.question, chosen.answer
-        for card in self.cards.values():
-            origin = origin_item(card.content)
-            match origin:
-                case WorkItem(item=console_requests.Request(identity=request_id, questions=questions), attention=Attention.DIRECT):
-                    if (
-                        not card.retiring
-                        and request_id == identity
-                        and 0 <= question < len(questions)
-                        and not questions[question].multiple
-                        and answer in (option.label for option in questions[question].options)
-                    ):
-                        self.actions.answer_console(console_requests.Answer(identity, question, answer))
-                        break
-                case _:
-                    pass
 
 
 def card_order(card: Card) -> tuple[int, float, int, int]:

@@ -42,7 +42,7 @@ def test_saved_review_dates_refresh_only_open_work_and_only_on_a_new_day() -> No
 
 def test_corrected_provider_dates_invalidate_open_work_without_reopening_handled_items(tmp_path: Path) -> None:
     """Ignoring date-only provider corrections leaves stale recommendations cached."""
-    triage = TriageFixture(MemoryStore(), lambda _: None, lambda _batch, _rules: "{}", lambda _: False)
+    triage = TriageFixture(MemoryStore(), lambda _batch, _rules: "{}", lambda _: False)
     try:
         triage.closed.set()
         updates = tuple(Update(TeamsActivity(str(index)), "Review", "Please review.", "Teams", THIS_WEEK) for index, _kind in enumerate(Disposition))
@@ -104,7 +104,7 @@ def test_triage_model_receives_readable_current_and_source_dates() -> None:
 
 
 def test_voice_feed_snapshot_keeps_the_source_date_with_its_text(tmp_path: Path) -> None:
-    triage = TriageFixture(MemoryStore(), lambda _: None, lambda _batch, _rules: "{}", lambda _: False, clock=lambda: THIS_WEEK)
+    triage = TriageFixture(MemoryStore(), lambda _batch, _rules: "{}", lambda _: False, clock=lambda: THIS_WEEK)
     try:
         source = captured("old-invite", Excerpt("Meeting reminder", "The meeting is tomorrow.", LAST_WEEK))
         triage.candidates = (source,)
@@ -160,7 +160,7 @@ def test_a_new_day_reconsiders_cached_work_without_a_new_notification(tmp_path: 
             reconsidered.set()
         return output(([item.identity for item in batch], "action" if len(calls) == 1 else "quiet"))
 
-    triage = TriageFixture(MemoryStore(), lambda _: None, model, lambda _: False, clock=lambda: now)
+    triage = TriageFixture(MemoryStore(), model, lambda _: False, clock=lambda: now)
     try:
         feed = Feed(updates=(Update(TeamsActivity("old-invite"), "Meeting reminder", "The meeting is tomorrow.", "Teams", LAST_WEEK),))
         triage.observe(feed, ())

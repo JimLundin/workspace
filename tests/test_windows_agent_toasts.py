@@ -22,14 +22,10 @@ lazy from PySide6.QtGui import QEnterEvent, QFont, QImage, QPainter, QRegion, QT
 lazy from PySide6.QtTest import QTest
 lazy from PySide6.QtWidgets import QWidget
 
-import assistant.console_requests
 from assistant.agent_session import Answer, Begin, Failed, ReasoningSummary, Said, Session, StreamState, Succeeded, ToolActivity, transition
 from assistant.agent_toasts import AgentToasts
 from assistant.agent_window import AgentWindow
-from assistant.feed_contracts import DismissItem
 from assistant.feed_desktop import NativeDesktop
-from assistant.feed_observation import FeedObservation, FeedUpdate, SourceAction, TriageObserved, observe
-from assistant.feed_triage import EditObservation, edited
 from assistant.notifications import MAX_VISIBLE, WIDTH, Kind, MessageKey, PhaseKey, Toast, TurnKey
 from assistant.qt_runtime import prepare
 from assistant.qt_ui import application
@@ -65,16 +61,11 @@ class Notifications:
         "_view",
         "agent",
         "animated",
-        "choices",
-        "choose_allowed",
-        "commands",
-        "console",
         "create_card",
         "desktop",
-        "dismiss_allowed",
         "jobs",
         "now",
-        "observation",
+        "opened",
         "preference",
         "recorded",
         "requested",
@@ -92,12 +83,7 @@ class Notifications:
         self.desktop = Desktop()
         self.create_card, self.timing = create_card, timing
         self.preference: appearance.Preference = appearance.preference()
-        # These observations belong to the fixture's concrete feed-action adapter.
-        self.dismiss_allowed = self.choose_allowed = True
-        self.choices: list[tuple[str, str, str]] = []
-        self.commands: list[SourceAction] = []
-        self.console: Callable[[assistant.console_requests.Command], bool] = lambda _: True
-        self.observation = FeedObservation()
+        self.opened: list[str] = []
         self.jobs: deque[Callable[[], None]] = deque()
         self.requested = threading.Event()
         self.recorded: list[RecordingAction] = []
@@ -111,6 +97,9 @@ class Notifications:
         )
         self.pump()
         assert self.agent.ready.is_set(), self.agent.all_text()
+        # Card mechanics run on explicit history, where every turn and message is
+        # its own card; live-progress checks call `view.resume()` first.
+        self.view.show_history()
 
     @property
     def view(self) -> AgentToasts:
@@ -121,7 +110,7 @@ class Notifications:
         self._view = AgentToasts(
             self.root,
             agent,
-            self,
+            self.opened.append,
             monitor=Rect(30, 30, 430, 790),
             clock=lambda: self.now,
             desktop=self.desktop,
@@ -131,30 +120,6 @@ class Notifications:
             ),
         )
         return self._view
-
-    def observe(self, update: FeedUpdate) -> None:
-        """Report one observer's update as Ui does, through the feed observation."""
-        self.observation = observe(self.observation, update).observation
-        self.agent.observe_feed(self.observation.snapshot)
-
-    def dismiss_work(self, identity: str) -> bool:
-        if not self.dismiss_allowed:
-            return False
-        self.observe(TriageObserved(edited(self.observation.snapshot.triage, DismissItem(identity), EditObservation((), self.now))))
-        return True
-
-    def answer_console(self, answer: assistant.console_requests.Answer) -> bool:
-        return self.console(answer)
-
-    def choose_work(self, identity: str, revision: str, choice: str) -> bool:
-        if not self.choose_allowed:
-            return False
-        self.choices.append((identity, revision, choice))
-        return True
-
-    def communicate(self, command: SourceAction) -> bool:
-        self.commands.append(command)
-        return True
 
     def pump(self) -> None:
         while self.jobs:
@@ -240,15 +205,16 @@ class WindowClass(Protocol):
 
 def test_long_reply_keeps_its_ending_scrolls_and_stays_until_read() -> None:
     with notifications(animated=True) as panel:
+        panel.view.resume()
         text = "A useful detail. " * 170 + "\n\nThe final instruction is to save the workbook."
         panel.agent.say(text)
         panel.pump()
         panel.advance(0.3)
-        card = panel.view.cards[MessageKey(0)]
+        (card,) = panel.view.cards.values()
         assert card.text.toPlainText() == "".join(span.text for span in formatted(text))
         assert scroll_position(card) == 0
         panel.advance(31)
-        assert panel.view.cards[MessageKey(0)] is card and scroll_position(card) > 0
+        assert panel.view.cards[card.key] is card and scroll_position(card) > 0
         panel.advance(10000)
         assert tail_visible(card.text)
         panel.advance(31)
@@ -256,7 +222,7 @@ def test_long_reply_keeps_its_ending_scrolls_and_stays_until_read() -> None:
         assert not panel.view.cards
 
 
-def test_long_replies_take_turns_scrolling_instead_of_expiring_unread() -> None:
+def test_long_replies_take_turns_scrolling() -> None:
     with notifications(animated=True) as panel:
         panel.agent.say("First answer. " * 220)
         panel.agent.say("Second answer. " * 220)
@@ -328,7 +294,7 @@ def test_wheel_over_empty_glass_reaches_text_without_focusing_other_apps() -> No
         assert scroll_position(card) > 0 and windows.foreground() == foreground
         panel.view.show_history()
         panel.pump()
-        assert bool(panel.view.query.history)
+        assert bool(panel.view.history)
         panel.agent.close()
         panel.pump()
         assert router.thread is not None and not router.thread.is_alive() and not router.active
@@ -871,7 +837,7 @@ def test_live_phases_grow_push_up_and_fade_with_one_opaque_bubble() -> None:
     # separate bubbles, stacking overlaps, or every old phase remains opaque.
     with notifications(animated=True) as panel:
         view = panel.view
-        view.use_canvas(lambda _: None)
+        view.resume()
         panel.agent.begin("Compare deployment plans", panel.stop)
         publish = panel.agent.updates()
         publish(ReasoningSummary("read", "Reading the deployment plans", 1))
@@ -938,7 +904,9 @@ def test_notifications_are_idle_until_needed_and_leave_focus_untouched() -> None
         assert view.cards[TurnKey(0)] is work and len(view.cards) == 1 and work.stop.isHidden()
         assert work.height <= work.maximum and tail_visible(work.text)
         assert not work.text.textCursor().hasSelection()
-        panel.advance(31)
+        # Current work expires from the live bubbles; reopening must not revive it.
+        view.resume()
+        panel.advance(3600)
         assert not view.cards and view.expiry_timer is None and not view.loop.timer.isActive()
         panel.agent.show()
         panel.pump()
@@ -960,7 +928,8 @@ def test_stack_is_bounded_during_bursts_and_retains_retired_native_layers() -> N
         bounds = sorted((windows.outer_rect(card.handle) for card in panel.view.cards.values()), key=top)
         assert panel.view.work is not None and bounds[0].top >= panel.view.work.top and bounds[-1].bottom < panel.view.work.bottom
         assert all(first.bottom < second.top for first, second in pairwise(bounds))
-        panel.advance(31)
+        panel.view.resume()
+        panel.advance(3600)
         panel.advance(0.3)
         assert not panel.view.cards and all(windows.exists(handle) and not windows.is_visible(handle) for handle in old_handles)
         panel.agent.close()
@@ -1063,6 +1032,7 @@ def test_solid_and_high_contrast_materials_keep_all_content_readable() -> None:
 
 def test_hovering_glass_pauses_expiry_and_close_cancels_all_observation() -> None:
     with notifications() as panel:
+        panel.view.resume()
         panel.agent.say("A reply to read.")
         panel.pump()
         card = next(iter(panel.view.cards.values()))
@@ -1117,17 +1087,18 @@ def test_questions_can_be_answered_or_stopped_by_voice_without_history() -> None
 
 def test_history_uses_the_existing_feed_and_returns_to_current_work() -> None:
     with notifications() as panel:
+        panel.view.resume()
         panel.agent.say("An earlier result worth retaining.")
         panel.pump()
         panel.advance(10000)
         assert not panel.view.cards
         panel.view.show_history()
         panel.pump()
-        assert bool(panel.view.query.history) and panel.view.cards
+        assert bool(panel.view.history) and panel.view.cards
         assert any("An earlier result worth retaining." in card.text.toPlainText() for card in panel.view.cards.values())
         panel.view.resume()
         panel.pump()
-        assert not bool(panel.view.query.history)
+        assert not bool(panel.view.history)
 
 
 def test_recording_stop_is_independent_and_shutdown_closes_every_native_layer() -> None:
@@ -1162,6 +1133,7 @@ def test_recording_preview_keeps_the_latest_transcript_visible() -> None:
 
 def test_new_recording_interrupts_dismissal_and_follows_work_area_changes() -> None:
     with notifications(animated=True) as panel:
+        panel.view.resume()
         panel.agent.recording(RecordingState(phase="saved", identity="first", preview="Saved transcript."))
         panel.pump()
         panel.advance(0.3)

@@ -12,7 +12,6 @@ from pydantic import Field
 
 import assistant.agent_session
 import automation.task
-from assistant.feed_observation import FeedSnapshot
 from assistant.feed_origin import App, FeedRequest, Origin
 from automation.personal_work import Catalog, Identity, Title
 
@@ -295,9 +294,4 @@ def redirect_session(session: assistant.agent_session.Snapshot) -> assistant.age
                 messages = (*messages, message)
             case _:
                 pass
-    return replace(session, phase="idle", messages=messages, feed=FeedSnapshot())
-
-
-def history_session(session: assistant.agent_session.Snapshot) -> assistant.agent_session.Snapshot:
-    """Explicit history retains agent work without turning app context into cards."""
-    return replace(session, feed=FeedSnapshot())
+    return replace(session, phase="idle", messages=messages)

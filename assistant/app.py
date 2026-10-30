@@ -59,7 +59,7 @@ lazy from assistant.recording_state import RecordingAction, RecordingState
 lazy from assistant.report import write_report
 lazy from assistant.state_store import windows_store
 lazy from assistant.tiling import GlazeWM
-lazy from assistant.ui import FeedOwners, Ui
+lazy from assistant.ui import Ui
 lazy from assistant.work_agent import WorkAgent
 lazy from assistant.work_bridge import WorkOwners
 lazy from assistant.work_bridge_contracts import WORK_BRIDGE, BridgeCommand, BridgeResponse
@@ -294,11 +294,7 @@ class AssistantApp:
         )
         self.personal = self.create_personal(tasks)
         self.triage, self.work_bridge = self.create_feed(FeedWork(tasks, saved_context, context))
-        self.ui.configure_feed(
-            FeedOwners(
-                self.communications.submit, windows_store(DIRECTORY / "notifications.bin", NOTIFICATION_STATE), self.consoles.command, self.triage
-            )
-        )
+        self.ui.configure_feed(windows_store(DIRECTORY / "notifications.bin", NOTIFICATION_STATE), self.triage.observe)
         self.timings.mark("communications and feed bridges")
         archive = MeetingArchive(DIRECTORY / "meetings")
         followup_folder = work_folder / "meeting-followups"
@@ -375,7 +371,6 @@ class AssistantApp:
         """The feed owner, then the work bridge that routes agent tools to it, personal work and the canvas."""
         triage = Triage(
             windows_store(DIRECTORY / "work-feed.bin", STORED_BOARD),
-            self.ui.triage_changed,
             self.review_feed,
             self.consoles.command,
             submit=self.agent.submit_identified,

@@ -11,7 +11,7 @@ from concurrent.futures import Future, TimeoutError
 from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
-from typing import Final, Protocol, assert_never
+from typing import Final, Protocol
 
 lazy import shiboken6
 lazy from PySide6 import QtCore, QtGui, QtWidgets
@@ -32,23 +32,10 @@ lazy import assistant.communications
 lazy import assistant.console_requests
 lazy import assistant.system_notices
 lazy from assistant.agent_session import Session, Snapshot
-lazy from assistant.agent_toasts import AgentToasts, FeedActions
+lazy from assistant.agent_toasts import AgentToasts
 lazy from assistant.agent_window import AgentWindow
 lazy from assistant.desktop_bar import BarActions, DesktopBar
-lazy from assistant.feed_observation import (
-    ConsolesObserved,
-    FeedObservation,
-    FeedUpdate,
-    NoticesObserved,
-    SourceAction,
-    TeamsObserved,
-    ToNotices,
-    ToTeams,
-    TriageObserved,
-    observe,
-    route,
-)
-lazy from assistant.feed_triage import Board
+lazy from assistant.feed_observation import ConsolesObserved, FeedObservation, FeedUpdate, NoticesObserved, TeamsObserved, observe
 lazy from assistant.geometry import region
 lazy from assistant.icons import State
 lazy from assistant.keymap import PHYSICAL_NAMES, Cap, Kind, keymap
@@ -130,8 +117,8 @@ def _native_desktop(actions: BarActions, *, audio_level: Callable[[], float | No
     return DesktopBar(actions, audio_level=audio_level)
 
 
-def _native_feed_view(root: QtWidgets.QApplication, agent: AgentWindow, actions: FeedActions) -> AgentToasts:
-    return AgentToasts(root, agent, actions)
+def _native_feed_view(root: QtWidgets.QApplication, agent: AgentWindow, open_canvas: Callable[[str], None]) -> AgentToasts:
+    return AgentToasts(root, agent, open_canvas)
 
 
 def _native_canvas_view(root: QtWidgets.QApplication, work: WorkWindow, canvas: WorkCanvas) -> CanvasWindow:
@@ -143,24 +130,11 @@ class Views:
     """How Ui builds its native views; a test builds isolated ones and keeps what it built."""
 
     desktop: DesktopFactory = _native_desktop
-    feed: Callable[[QtWidgets.QApplication, AgentWindow, FeedActions], AgentToasts] = _native_feed_view
+    feed: Callable[[QtWidgets.QApplication, AgentWindow, Callable[[str], None]], AgentToasts] = _native_feed_view
     canvas: Callable[[QtWidgets.QApplication, WorkWindow, WorkCanvas], CanvasWindow] = _native_canvas_view
 
 
-class TriageOwner(Protocol):
-    def observe(self, feed: assistant.communications.Feed, requests: tuple[assistant.console_requests.Request, ...]) -> None: ...
-    def dismiss(self, identity: str) -> bool: ...
-    def choose_from_ui(self, identity: str, revision: str, choice: str) -> bool: ...
-
-
-@dataclass(frozen=True, slots=True)
-class FeedOwners:
-    """The owners of the feed's sources and the effects a card asks of them, composed once by the application."""
-
-    teams: Callable[[assistant.communications.Command], bool]
-    notifications: SavedState[NotificationState]
-    console: Callable[[assistant.console_requests.Command], bool]
-    triage: TriageOwner
+type Assess = Callable[[assistant.communications.Feed, tuple[assistant.console_requests.Request, ...]], None]
 
 
 class Ui:
@@ -169,13 +143,13 @@ class Ui:
         "_agent_lock",
         "_agent_speaking",
         "_agent_waiting",
+        "_assess",
         "_canvas",
         "_canvas_notice",
         "_closed",
         "_desktop",
         "_dialogs",
         "_feed",
-        "_feed_owners",
         "_indicator",
         "_input_lock",
         "_inputs_closed",
@@ -218,7 +192,7 @@ class Ui:
         self._agent_speaking: bool = False
         # Qt's thread owns the feed observation; every observer's report arrives there.
         self._feed = FeedObservation()
-        self._feed_owners: FeedOwners | None = None
+        self._assess: Assess | None = None
         self._notifications: NotificationSources | None = None
         self._desktop: DesktopBar | None = None
         self._switcher: WindowSwitcher | None = None
@@ -497,9 +471,6 @@ class Ui:
                     on_work=on_work,
                     on_snapshot=self.refresh_inbox,
                 )
-                created = self._agent
-                # Qt's thread owns the observation; later reports reach the window there too.
-                self.post(lambda _: created.observe_feed(self._feed.snapshot))
             panel = self._agent
         if task is not None:
             panel.begin(task, stop, queued=queued)
@@ -507,22 +478,16 @@ class Ui:
             panel.show(focus=focus)
         return panel
 
-    def configure_feed(self, owners: FeedOwners) -> None:
-        """Connect the feed's owners before their observers start; cards reach them through this Ui."""
-        notifications = NotificationSources(owners.notifications, self.dismiss_system_notice)
-        notifications.load()
-        self._feed_owners, self._notifications = owners, notifications
+    def configure_feed(self, notifications: SavedState[NotificationState], assess: Assess) -> None:
+        """Connect the notice store and triage before their observers start."""
+        owner = NotificationSources(notifications, self.dismiss_system_notice)
+        owner.load()
+        self._notifications, self._assess = owner, assess
 
     def _observe_feed(self, update: FeedUpdate) -> None:
-        change = observe(self._feed, update)
-        self._feed = change.observation
-        if change.assess is not None and self._feed_owners is not None:
-            self._feed_owners.triage.observe(change.assess.communications, change.assess.requests)
-        if self._agent is not None:
-            self._agent.observe_feed(self._feed.snapshot)
-
-    def triage_changed(self, board: Board) -> None:
-        self.post(lambda _: self._observe_feed(TriageObserved(board)))
+        self._feed = observe(self._feed, update)
+        if self._assess is not None:
+            self._assess(self._feed.communications, self._feed.console_requests)
 
     def communications_changed(self, feed: assistant.communications.Feed) -> None:
         self.post(lambda _: self._observe_feed(TeamsObserved(feed)))
@@ -536,29 +501,6 @@ class Ui:
 
     def console_changed(self, requests: tuple[assistant.console_requests.Request, ...]) -> None:
         self.post(lambda _: self._observe_feed(ConsolesObserved(requests)))
-
-    def communicate(self, command: SourceAction) -> bool:
-        destination = route(command)
-        match destination:
-            case ToNotices(command=notice):
-                notifications = self._notifications
-                if notifications is None or not notifications.command(notice):
-                    return False
-                self._observe_feed(NoticesObserved(notifications.state))
-                return True
-            case ToTeams(command=teams):
-                return self._feed_owners is not None and self._feed_owners.teams(teams)
-            case _:
-                assert_never(destination)
-
-    def answer_console(self, answer: assistant.console_requests.Answer) -> bool:
-        return self._feed_owners is not None and self._feed_owners.console(answer)
-
-    def dismiss_work(self, identity: str) -> bool:
-        return self._feed_owners is not None and self._feed_owners.triage.dismiss(identity)
-
-    def choose_work(self, identity: str, revision: str, choice: str) -> bool:
-        return self._feed_owners is not None and self._feed_owners.triage.choose_from_ui(identity, revision, choice)
 
     def refresh_inbox(self, session: Snapshot | None = None) -> None:
         """Publish attention on the Qt thread, including before the agent view exists."""
@@ -583,7 +525,11 @@ class Ui:
         if self._desktop is None or self._desktop.notification_observation is None:
             return False
         notice = next((item for item in self._desktop.notification_observation.notices if item.key == key), None)
-        return notice is not None and self.communicate(HandleNotice(notice))
+        notifications = self._notifications
+        if notice is None or notifications is None or not notifications.command(HandleNotice(notice)):
+            return False
+        self._observe_feed(NoticesObserved(notifications.state))
+        return True
 
     def close_agent(self) -> None:
         if self._agent is not None:
@@ -638,9 +584,7 @@ class Ui:
         return self._work_view
 
     def _compose_feed(self, agent: AgentWindow) -> AgentToasts:
-        view = self._views.feed(self._root, agent, self)
-        view.use_canvas(self.open_canvas_at)
-        return view
+        return self._views.feed(self._root, agent, self.open_canvas_at)
 
     def configure_canvas(self, canvas: WorkCanvas, notice: Callable[[str, str], None]) -> None:
         # The canvas owner holds storage and policy; Qt serializes its use.

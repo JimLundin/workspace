@@ -1,14 +1,11 @@
 """The answer and optional steps of a conversation bubble, without UI effects."""
 
 from dataclasses import dataclass, replace
-from textwrap import shorten
 
-from assistant import feed_items, tool_text
+from assistant import tool_text
 from assistant.action_text import readable
 from assistant.agent_session import AgentRequest, Answer, ChatMessage, ToolActivity, pending
-from assistant.card_actions import AnswerApproval, Decision, OpenCanvas, parse
-from assistant.feed_items import WorkItem, action_spans, expanded_spans, link
-from assistant.feed_triage import Assessment
+from assistant.card_actions import AnswerApproval, Decision, OpenCanvas, encode, parse
 from assistant.notifications import Content, Entry, Response, Turn, body, heading, plain, results, steps
 from assistant.rich_text import Span, formatted
 from automation.task import Approval
@@ -43,25 +40,16 @@ def _yours(content: Content) -> bool:
 
 def expandable(content: Content) -> bool:
     match content:
-        case WorkItem(item=Assessment()):
-            return True
         case Turn():
             return bool(steps(content))
         case _:
             return False
 
 
-def spans(content: Content, *, expanded: bool = True) -> tuple[Span, ...]:
+def spans(content: Content) -> tuple[Span, ...]:
     match content:
-        case WorkItem(item=Assessment(suggestion=suggestion), title=title) if not expanded:
-            preview = shorten(suggestion, width=280, placeholder="…")
-            return (Span(title + "\n", ("bold", "feed", "feed_title")), *formatted(preview))
-        case WorkItem(item=Assessment()):
-            return expanded_spans(content)
-        case WorkItem():
-            return feed_items.body_spans(content)
-        case Turn(origin=origin):
-            parts = [spans(entry) for entry in results(content) if not (origin is not None and _yours(entry))]
+        case Turn():
+            parts = [spans(entry) for entry in results(content)]
             return tuple(span for index, part in enumerate(parts) for span in ((Span("\n\n"),) if index else ()) + part)
         case _:
             pass
@@ -150,8 +138,6 @@ def block_spans(block: Step) -> tuple[Span, ...]:
 
 def options(content: Content) -> tuple[Span, ...]:
     match content:
-        case WorkItem():
-            return tuple(span for span in action_spans(content) if span.link)
         case Turn():
             entries = results(content)
         case Entry():
@@ -162,8 +148,8 @@ def options(content: Content) -> tuple[Span, ...]:
         match entry:
             case Entry(message=AgentRequest(request=Approval()) as message) if pending(message):
                 return (
-                    link("Approve", AnswerApproval(message.id, Decision.APPROVE)),
-                    link("Decline", AnswerApproval(message.id, Decision.DECLINE)),
+                    Span("Approve", ("link",), encode(AnswerApproval(message.id, Decision.APPROVE))),
+                    Span("Decline", ("link",), encode(AnswerApproval(message.id, Decision.DECLINE))),
                 )
             case _:
                 pass
@@ -172,8 +158,6 @@ def options(content: Content) -> tuple[Span, ...]:
 
 def title_text(content: Content) -> str:
     match content:
-        case Turn(origin=origin) if origin is not None:
-            return origin.title
         case Turn(entries=entries):
             for entry in entries:
                 match entry:

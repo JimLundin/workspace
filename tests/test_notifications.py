@@ -23,7 +23,6 @@ from assistant.agent_session import (
     ToolActivity,
     transition,
 )
-from assistant.inbox import Query, Source
 from assistant.notification_text import details, spans
 from assistant.notifications import (
     MAX_VISIBLE,
@@ -50,7 +49,6 @@ from assistant.notifications import (
     hint,
     hover,
     next_expiry,
-    observe,
     reading_hold,
     results,
     spinning,
@@ -60,19 +58,6 @@ from assistant.notifications import (
 from assistant.recording_state import RecordingState
 from automation.task import ApprovalDecision
 from tests.agent_requests import asked, reviewed
-
-
-def test_completed_turns_follow_filters_and_active_turns_stay_reachable() -> None:
-    # A filter regression can reveal unrelated finished turns or hide active work.
-    active = transition(Session(identity="filtered"), Begin("Read the workbook", 1))
-    finished = transition(transition(active, Said("The totals match.", 2)), Finished())
-    selected = observe(finished)
-    assert len(selected) == 1 and isinstance(selected[0], Turn)
-    assert observe(finished, Query(source=Source.AGENTS, search="totals")) == selected
-    assert observe(finished, Query(source=Source.MAIL)) == ()
-    assert observe(finished, Query(search="unrelated")) == ()
-    (working,) = observe(active, Query(source=Source.MAIL, search="unrelated"))
-    assert isinstance(working, Turn) and isinstance(working.state, Working)
 
 
 def bubble(stack: Stack, request: int = 0) -> Turn:

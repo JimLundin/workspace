@@ -10,7 +10,7 @@ import time
 import traceback
 import uuid
 from collections.abc import Callable
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from typing import Final, Protocol
 
 from assistant.agent_session import (
@@ -37,7 +37,6 @@ from assistant.agent_session import (
     resolution,
     transition,
 )
-from assistant.feed_observation import FeedSnapshot
 from assistant.feed_origin import FeedRequest
 from assistant.recording_state import RecordingAction, RecordingState
 from automation.task import Approval, Question
@@ -115,7 +114,6 @@ class AgentWindow:
         # This conversation owns one view, request lifetime and snapshot stream.
         # Its independent interaction callbacks are composed together here so a
         # caller can connect the actual effect owners before the first render.
-        # Feed actions reach their owners through the view, not this window.
         self.stop, self.on_problem, self.on_reset, self.on_submit = stop, on_problem, on_reset, on_submit
         self.on_waiting = on_waiting
         self.on_recording = on_recording
@@ -377,19 +375,13 @@ class AgentWindow:
             self._external = None
             self._presented = None
             recording = self.state.recording
-            self.state = Session(identity=uuid.uuid4().hex, feed=self.state.feed)
+            self.state = Session(identity=uuid.uuid4().hex)
             if recording.phase not in ("idle", "saved", "interrupted"):
                 self.state = transition(self.state, RecordingUpdated(recording, time.time()))
             self._changed()
 
     def recording(self, state: RecordingState) -> None:
         self._event(RecordingUpdated(state, time.time()))
-
-    def observe_feed(self, feed: FeedSnapshot) -> None:
-        with self.lock:
-            if not self.closed:
-                self.state = replace(self.state, feed=feed)
-                self._changed()
 
     def stopping(self) -> None:
         with self.lock:

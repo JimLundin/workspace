@@ -5,11 +5,6 @@ from pathlib import Path
 
 from assistant import notification_text
 from assistant.agent_session import Answer, StreamState, Succeeded, ToolActivity
-from assistant.communications import Delivery, Reply
-from assistant.feed_contracts import SolutionKind
-from assistant.feed_items import WorkItem
-from assistant.feed_sources import SourceKey, SourceKind
-from assistant.feed_triage import Assessment, Solution
 from assistant.notifications import Entry, Settled, Turn
 from tests.fake_endpoint import fake_endpoint
 from tests.json_fixture import json_object, json_rows
@@ -48,13 +43,6 @@ def test_earlier_answers_keep_markdown_when_moved_into_steps() -> None:
     assert any(span.text == "finding" and "bold" in span.tags for span in notification_text.details(turn))
 
 
-def test_reply_work_item_uses_the_markdown_body_adapter() -> None:
-    """Detect the Reply variant bypassing our existing rich-text path."""
-    reply = Reply("reply", "chat", "Proposed reply", "Please check **the totals**.", 1, Delivery.UNKNOWN)
-    row = WorkItem(SourceKey(SourceKind.REPLY, "reply"), reply, reply.title)
-    assert any("the totals" in span.text and "bold" in span.tags for span in notification_text.spans(row))
-
-
 def test_model_can_invoke_the_registered_time_tool(tmp_path: Path) -> None:
     """Detect a time handler omitted from the SDK's exposed tool catalog."""
     with fake_endpoint() as endpoint:
@@ -76,22 +64,3 @@ def test_cli_arguments_and_json_output_stay_literal_through_the_tool_boundary(tm
     detail = notification_text.details(Entry(1, activity))
     assert any(span.text == command + "\n" and "tool_input" in span.tags for span in detail)
     assert any('{"status":"**literal**"}' in span.text and "tool_output" in span.tags for span in detail)
-
-
-def test_expanded_proposal_formats_each_possible_reply() -> None:
-    """Detect solution details being available only as a plain button tooltip."""
-    item = Assessment(
-        "plan",
-        (),
-        "Review budget",
-        "A review is needed.",
-        "Prepare a response.",
-        "",
-        1,
-        1,
-        solutions=(Solution("draft", "Draft reply", SolutionKind.DRAFT, "Please check **the totals** in `FY27`."),),
-    )
-    row = WorkItem(SourceKey(SourceKind.PROPOSAL, "plan"), item, item.title)
-    detail = notification_text.spans(row, expanded=True)
-    assert any("the totals" in span.text and "bold" in span.tags for span in detail)
-    assert any(span.text == "FY27" and "code" in span.tags for span in detail)

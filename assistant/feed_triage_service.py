@@ -19,7 +19,6 @@ from assistant.feed_contracts import (
     ConsoleAnswered,
     ConsoleOptionQuestion,
     ConsolePendingRequest,
-    DismissItem,
     Disposition,
     FeedCommand,
     FeedRejected,
@@ -128,7 +127,6 @@ class Triage:
         "lock",
         "model",
         "personal",
-        "publish",
         "requests",
         "store",
         "submit",
@@ -142,7 +140,6 @@ class Triage:
     def __init__(
         self,
         store: Store,
-        publish: Callable[[Board], None],
         model: Callable[[tuple[Candidate, ...], tuple[str, ...]], str],
         console: Callable[[Command], bool],
         *,
@@ -155,7 +152,7 @@ class Triage:
         # Compose the real storage, model, voice, work-queue and context effects
         # here. Cancellable delays and the clock vary independently in native and
         # deterministic adapters, so each is an explicit dependency.
-        self.store, self.publish, self.model, self.console = store, publish, model, console
+        self.store, self.model, self.console = store, model, console
         self.wait: Callable[[threading.Event, float], bool] = wait
         self.clock: Callable[[], float] = clock
         self.submit = submit
@@ -175,7 +172,6 @@ class Triage:
             self.board = Board(enabled=True, status="Saved feed preferences could not be loaded.")
         self.thread = threading.Thread(target=self.run, name="Work feed triage", daemon=True)
         self.thread.start()
-        self.publish(self.board)
 
     def observe(self, feed: Feed, requests: tuple[Request, ...]) -> None:
         with self.lock:
@@ -193,7 +189,6 @@ class Triage:
                 self.epoch += 1
             self.candidates = candidates
             self.board = reconcile(self.board, candidates)
-            self.publish(self.board)
             self.wake.set()
 
     def context_changed(self, tasks: tuple[Task, ...], records: tuple[ContextRecord, ...]) -> None:
@@ -313,7 +308,6 @@ class Triage:
             self.store.write(saved(updated))
             self.board = updated
             self.epoch += 1
-            self.publish(self.board)
             self.wake.set()
         return self.snapshot()
 
@@ -356,7 +350,6 @@ class Triage:
             self.store.write(saved(updated))
             self.board = updated
             self.epoch += 1
-            self.publish(self.board)
         if task not in self.submitted:
             try:
                 self.submit(task, prompt, FeedHandoff(decision.item, decision.title))
@@ -396,20 +389,6 @@ class Triage:
             )
             return self._handoff(decision)
 
-    def choose_from_ui(self, identity: str, revision: str, choice: str) -> bool:
-        try:
-            self.choose(ChooseSolution(identity, revision, choice))
-        except RejectedError, OSError:
-            return False
-        return True
-
-    def dismiss(self, identity: str) -> bool:
-        try:
-            self.edit(DismissItem(identity))
-        except RejectedError, OSError:
-            return False
-        return True
-
     def run(self) -> None:
         retry_without: frozenset[str] = frozenset()
         while not self.closed.is_set():
@@ -432,7 +411,6 @@ class Triage:
                 if not batch:
                     continue
                 self.board = replace(self.board, status="Researching your work…")
-                self.publish(self.board)
             try:
                 assessments = tuple(replace(item, reviewed_on=today) for item in decode(self.model(batch, rules), batch))
                 with self.lock:
@@ -444,13 +422,11 @@ class Triage:
                         updated = applied(self.board, assessments, self.candidates)
                         self.store.write(saved(updated))
                         self.board = updated
-                        self.publish(self.board)
                     if unassessed(self.board, self.candidates, today=today):
                         self.wake.set()
             except OSError, ValueError:
                 with self.lock:
                     self.board = replace(self.board, status="Triage unavailable · new work awaits review")
-                    self.publish(self.board)
                 # Existing proposals and exact console questions remain accessible.
                 if self.wait(self.closed, 30):
                     return
