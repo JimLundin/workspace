@@ -26,6 +26,7 @@ lazy from assistant.png import encode_png
 lazy from assistant.recording_state import AudioSource
 lazy from assistant.teams import Teams
 lazy from assistant.textio import paste_text
+lazy from assistant.web_apps import Located, WebAppOperation
 lazy from winapi import clipboard, inputs, screen, system, windows
 
 _EXTENDED_VKS: Final = frozenset({0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27, 0x28, 0x2C, 0x2D, 0x2E, 0x5B, 0x5D, 0x90})
@@ -53,6 +54,7 @@ class MeetingControl(Protocol):
 
 class BrowserControl(Protocol):
     def request(self, operation: str, args: dict[str, Json], cancel: threading.Event) -> BrowserResult: ...
+    def web_app[Q: Located, R](self, operation: WebAppOperation[Q, R], query: Q, cancel: threading.Event) -> R: ...
     def close(self) -> None: ...
 
 
@@ -165,6 +167,9 @@ class WinMachine:
     def browse(self, operation: str, arguments: dict[str, Json], cancel: threading.Event) -> tuple[str, bytes | None]:
         result = self.background_browser.request(operation, arguments, cancel)
         return result.text, result.image
+
+    def web_app[Q: Located, R](self, operation: WebAppOperation[Q, R], query: Q, cancel: threading.Event) -> R:
+        return self.background_browser.web_app(operation, query, cancel)
 
     def teams(self, operation: str, arguments: dict[str, Json], cancel: threading.Event) -> str:
         return self.teams_client.request(operation, arguments, cancel)

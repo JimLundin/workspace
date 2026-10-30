@@ -14,10 +14,12 @@ from assistant.agent_history import History
 from assistant.agent_session import LiveMessage, Succeeded, ToolActivity, ToolStatus
 from assistant.agent_tools import Output
 from assistant.agent_toolsets import General
+from assistant.browser_values import BrowserError
 from assistant.desktop_tools import allowed, key_strokes
 from assistant.feed_agent_tools import request
 from assistant.geometry import Shot
 from assistant.llm import Json, Settings, ToolCall, settings_from
+from assistant.web_apps import Located, WebAppOperation
 from assistant.work_bridge_contracts import BridgeCommand
 from assistant.workspace import Workspace
 from automation.actions import Resources
@@ -143,6 +145,10 @@ class FakeMachine:
     def browse(self, operation: str, arguments: dict[str, Json], cancel: threading.Event) -> tuple[str, bytes | None]:
         self.log.append("browser " + operation + " " + json.dumps(arguments))
         return "Browser operation completed.", b"\x89PNG" if operation == "screenshot" else None
+
+    def web_app[Q: Located, R](self, operation: WebAppOperation[Q, R], query: Q, cancel: threading.Event) -> R:
+        self.log.append("web_app " + query.target_id)
+        raise BrowserError("This machine has no captured web-app results.")
 
     def teams(self, operation: str, arguments: dict[str, Json], cancel: threading.Event) -> str:
         self.log.append("teams " + operation + " " + json.dumps(arguments))

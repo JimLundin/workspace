@@ -11,6 +11,7 @@ from assistant.communications_browser import activity_observation, observation
 from assistant.feed_triage import Board, Candidate, Disposition, candidate, collect, decode, restored, saved, unassessed
 from assistant.feed_triage_service import classify, source_evidence
 from assistant.llm import Settings
+from assistant.web_apps import TeamsPage, TeamsPost
 from tests import fake_endpoint
 from tests.feed_fixture import TriageFixture
 from tests.test_feed_triage import output
@@ -64,16 +65,8 @@ def test_corrected_provider_dates_invalidate_open_work_without_reopening_handled
 
 def test_an_undated_chat_is_not_presented_as_created_today() -> None:
     """The chat adapter must not substitute collection time for missing evidence."""
-    found = observation(
-        {
-            "current": "19:one@thread.v2",
-            "title": "Review",
-            "conversations": [],
-            "editor_ready": True,
-            "messages": [{"identity": "one", "sender": "Anna", "text": "Tomorrow.", "created_at": 0, "reactions": [], "own": False}],
-        },
-        THIS_WEEK,
-    )
+    page = TeamsPage("19:one@thread.v2", "Review", (), (TeamsPost("one", "Anna", "Tomorrow.", 0, (), own=False),), editor_ready=True)
+    found = observation(page, THIS_WEEK)
     feed = Feed(messages=found.messages, followed=(found.current,))
     (source,) = collect(feed, ())
     assert source.source_time is SourceDateStatus.UNKNOWN

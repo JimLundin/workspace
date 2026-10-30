@@ -8,8 +8,43 @@ from unittest import TestCase
 
 from assistant.browser import Browser
 from assistant.browser_values import BrowserError
-from assistant.llm import Json
-from assistant.web_apps import Origins, WebApps
+from assistant.web_apps import (
+    KANBAN_BOARD,
+    KANBAN_COMMENT,
+    KANBAN_MOVE_TASK,
+    KANBAN_READ_TASK,
+    KANBAN_UPDATE_TASK,
+    OUTLOOK_DOCUMENTS,
+    OUTLOOK_DOWNLOAD_DOCUMENT,
+    OUTLOOK_DRAFT_REPLY,
+    OUTLOOK_OPEN_DOCUMENT,
+    OUTLOOK_OPEN_MAIL,
+    OUTLOOK_READ,
+    OUTLOOK_SEARCH,
+    TEAMS_DRAFT_REPLY,
+    TEAMS_OPEN_CHAT,
+    TEAMS_READ,
+    BoardQuery,
+    ChatDraft,
+    ChatQuery,
+    CollectedDocument,
+    MailDocument,
+    MailDownload,
+    MailDraft,
+    MailList,
+    MailMessage,
+    MailQuery,
+    MailSearch,
+    Origins,
+    PreviewOpened,
+    TaskComment,
+    TaskEdit,
+    TaskMove,
+    TaskQuery,
+    TeamsQuery,
+    WebApps,
+)
+from automation.work_documents import LocalDocument
 from tests import native_communications_browser
 from tests.browser_fixture import Attachment, fixture
 from tests.native_browser_fixture import request
@@ -121,6 +156,7 @@ document.querySelector('button[aria-label="Search"]').onclick=()=>{
 def verify_business_apps(browser: Browser) -> None:
     # Defects: selectors hit a same-title task/chat, a stale comparison still
     # edits, save readback fails, filters change, or a reply sends immediately.
+    # Every operation decodes its script's real output with its result type.
     with fixture(
         pages={
             "/kanban": KANBAN_PAGE,
@@ -135,42 +171,39 @@ def verify_business_apps(browser: Browser) -> None:
         kanban_target = target
         cancel = threading.Event()
 
-        def call(operation: str, **arguments: str | int) -> dict[str, Json]:
-            return decoded(app.request(operation, {"target_id": target, **arguments}, cancel))
-
-        board = call("kanban_board", limit=1)
-        assert board["next_offset"] == 1 and "Jim" in str(board["filters"])
-        assert "task-2" in str(call("kanban_board", offset=1))
-        detail = call("kanban_read_task", task_id="task-2")
-        assert "Second task" in str(detail) and "First task" not in str(detail)
+        board = app.run(KANBAN_BOARD, BoardQuery(target, limit=1), cancel)
+        assert board.next_offset == 1 and "Jim" in str(board.filters)
+        assert "task-2" in str(app.run(KANBAN_BOARD, BoardQuery(target, offset=1), cancel))
+        detail = app.run(KANBAN_READ_TASK, TaskQuery(target, "task-2"), cancel)
+        assert detail.fields["description"] == "Second task" and "First task" not in str(detail)
         with TestCase().assertRaisesRegex(BrowserError, "changed"):
-            call("kanban_update_task", task_id="task-2", field="labels", expected_value="alpha", value="wrong")
-        assert "beta" in str(call("kanban_read_task", task_id="task-2"))
-        assert call("kanban_update_task", task_id="task-2", field="description", expected_value="Second task", value="Updated Åäö")["verified"]
-        assert call("kanban_move_task", task_id="task-2", expected_column="Ready", column="In Progress")["verified"]
+            app.run(KANBAN_UPDATE_TASK, TaskEdit(target, "task-2", "labels", "alpha", "wrong"), cancel)
+        assert app.run(KANBAN_READ_TASK, TaskQuery(target, "task-2"), cancel).fields["labels"] == "beta"
+        edited = app.run(KANBAN_UPDATE_TASK, TaskEdit(target, "task-2", "description", "Second task", "Updated Åäö"), cancel)
+        assert edited.value == "Updated Åäö"
+        assert app.run(KANBAN_MOVE_TASK, TaskMove(target, "task-2", "Ready", "In Progress"), cancel).changed
         with TestCase().assertRaisesRegex(BrowserError, "moved"):
-            call("kanban_move_task", task_id="task-2", expected_column="Ready", column="In Progress")
-        assert call("kanban_comment", task_id="task-2", text="Reviewed once")["posted"]
-        assert "Reviewed once" in str(call("kanban_read_task", task_id="task-2"))
+            app.run(KANBAN_MOVE_TASK, TaskMove(target, "task-2", "Ready", "In Progress"), cancel)
+        assert app.run(KANBAN_COMMENT, TaskComment(target, "task-2", "Reviewed once"), cancel).text == "Reviewed once"
+        assert "Reviewed once" in app.run(KANBAN_READ_TASK, TaskQuery(target, "task-2"), cancel).text
         with TestCase().assertRaisesRegex(BrowserError, "different application"):
-            WebApps(browser).request("kanban_board", {"target_id": target}, cancel)
+            browser.web_app(KANBAN_BOARD, BoardQuery(target), cancel)
         teams_target = request(browser, "open", url=origin + "teams")["target_id"]
         assert isinstance(teams_target, str)
-        target = teams_target
-        chats = call("teams_web_read")
-        assert "19:one@thread.v2" in str(chats) and "19:two@thread.v2" in str(chats)
-        call("teams_web_open_chat", chat_id="19:two@thread.v2")
-        assert "Second chat" in str(call("teams_web_read"))
-        draft = call("teams_web_draft_reply", chat_id="19:two@thread.v2", text="Unsent draft Åäö")
-        assert draft["drafted"] and not draft["sent"]
+        chats = app.run(TEAMS_READ, TeamsQuery(teams_target), cancel)
+        assert {"19:one@thread.v2", "19:two@thread.v2"} <= {chat.identity for chat in chats.conversations}
+        app.run(TEAMS_OPEN_CHAT, ChatQuery(teams_target, "19:two@thread.v2"), cancel)
+        assert "Second chat" in str(app.run(TEAMS_READ, TeamsQuery(teams_target), cancel))
+        draft = app.run(TEAMS_DRAFT_REPLY, ChatDraft(teams_target, "19:two@thread.v2", "Unsent draft Åäö"), cancel)
+        assert draft.text == "Unsent draft Åäö"
         with TestCase().assertRaisesRegex(BrowserError, "contains a draft"):
-            call("teams_web_draft_reply", chat_id="19:two@thread.v2", text="Replacement")
+            app.run(TEAMS_DRAFT_REPLY, ChatDraft(teams_target, "19:two@thread.v2", "Replacement"), cancel)
         with TestCase().assertRaisesRegex(BrowserError, "contains a draft"):
-            call("teams_web_open_chat", chat_id="19:one@thread.v2")
+            app.run(TEAMS_OPEN_CHAT, ChatQuery(teams_target, "19:one@thread.v2"), cancel)
         received = browser.request(
             "evaluate",
             {
-                "target_id": target,
+                "target_id": teams_target,
                 "expression": "({draft:document.querySelector('[contenteditable]').innerText,sent:document.body.dataset.sent||''})",
             },
             cancel,
@@ -181,7 +214,7 @@ def verify_business_apps(browser: Browser) -> None:
         verify_outlook(browser, app, mail_target)
         cancel.set()
         with TestCase().assertRaisesRegex(BrowserError, "Stopped"):
-            call("kanban_comment", task_id="task-1", text="Never")
+            app.run(KANBAN_COMMENT, TaskComment(kanban_target, "task-1", "Never"), cancel)
         # Explicitly close only the pages owned by this fixture.
         for page in (kanban_target, teams_target, mail_target):
             request(browser, "close", target_id=page)
@@ -191,40 +224,34 @@ def verify_outlook(browser: Browser, app: WebApps, target: str) -> None:
     # Defects: Outlook mail is routed by a colliding title, read before its body
     # loads, searched using stale rows, or a signature/draft is overwritten.
     cancel = threading.Event()
-
-    def call(operation: str, **arguments: str | int) -> dict[str, Json]:
-        return decoded(app.request(operation, {"target_id": target, **arguments}, cancel))
-
-    assert call("outlook_web_read", limit=1)["next_offset"] == 1
-    assert "conversation-mail-two" in str(call("outlook_web_read", offset=1))
-    opened = call("outlook_web_open_mail", conversation_id="conversation-mail-two")
+    assert app.run(OUTLOOK_READ, MailList(target, limit=1), cancel).next_offset == 1
+    assert "conversation-mail-two" in str(app.run(OUTLOOK_READ, MailList(target, offset=1), cancel))
+    opened = app.run(OUTLOOK_OPEN_MAIL, MailQuery(target, "conversation-mail-two"), cancel)
     assert "Second mail Åäö" in str(opened) and "First mail" not in str(opened)
     # Defect: aggregate text is split into invented mail, rendered pieces lose
     # their stable identities, or an unsent editor becomes conversation evidence.
-    selected = opened["mail"]
-    assert isinstance(selected, dict)
-    messages = selected["messages"]
-    assert isinstance(messages, list) and len(messages) == 2
-    assert messages[0] == {"identity": "conversation-mail-two-message-1", "sender": "Anna", "text": "Second mail Åäö"}
-    assert isinstance(messages[1], dict) and messages[1]["text"] == "Earlier discussion"
+    assert opened.mail is not None
+    assert opened.mail.messages == (
+        MailMessage("conversation-mail-two-message-1", "Anna", "Second mail Åäö"),
+        MailMessage("conversation-mail-two-message-0", "", "Earlier discussion"),
+    )
     verify_mail_documents(browser, app, target)
     with TestCase().assertRaisesRegex(BrowserError, "exact mail conversation"):
-        call("outlook_web_draft_reply", conversation_id="conversation-mail-one", text="Wrong recipient")
-    results = call("outlook_web_search", query="beta")
-    assert results["rendered_total"] == 1 and "conversation-mail-one" not in str(results)
-    assert call("outlook_web_search", query="no-such-message")["rendered_total"] == 0
-    assert call("outlook_web_search", query="beta")["rendered_total"] == 1
-    call("outlook_web_open_mail", conversation_id="conversation-mail-two")
-    reply = call("outlook_web_draft_reply", conversation_id="conversation-mail-two", text="Reviewed Åäö\nSecond line")
-    assert reply["drafted"] and not reply["sent"]
-    assert call("outlook_web_read")["editor_open"]
-    for operation, args in (
-        ("outlook_web_search", {"query": "alpha"}),
-        ("outlook_web_open_mail", {"conversation_id": "conversation-mail-one"}),
-        ("outlook_web_draft_reply", {"conversation_id": "conversation-mail-two", "text": "Replacement"}),
-    ):
-        with TestCase().assertRaisesRegex(BrowserError, "open draft"):
-            call(operation, **args)
+        app.run(OUTLOOK_DRAFT_REPLY, MailDraft(target, "conversation-mail-one", "Wrong recipient"), cancel)
+    results = app.run(OUTLOOK_SEARCH, MailSearch(target, "beta"), cancel)
+    assert results.rendered_total == 1 and "conversation-mail-one" not in str(results)
+    assert app.run(OUTLOOK_SEARCH, MailSearch(target, "no-such-message"), cancel).rendered_total == 0
+    assert app.run(OUTLOOK_SEARCH, MailSearch(target, "beta"), cancel).rendered_total == 1
+    app.run(OUTLOOK_OPEN_MAIL, MailQuery(target, "conversation-mail-two"), cancel)
+    reply = app.run(OUTLOOK_DRAFT_REPLY, MailDraft(target, "conversation-mail-two", "Reviewed Åäö\nSecond line"), cancel)
+    assert reply.recipients == ("Colleague <colleague@example.test>",)
+    assert app.run(OUTLOOK_READ, MailList(target), cancel).editor_open
+    with TestCase().assertRaisesRegex(BrowserError, "open draft"):
+        app.run(OUTLOOK_SEARCH, MailSearch(target, "alpha"), cancel)
+    with TestCase().assertRaisesRegex(BrowserError, "open draft"):
+        app.run(OUTLOOK_OPEN_MAIL, MailQuery(target, "conversation-mail-one"), cancel)
+    with TestCase().assertRaisesRegex(BrowserError, "open draft"):
+        app.run(OUTLOOK_DRAFT_REPLY, MailDraft(target, "conversation-mail-two", "Replacement"), cancel)
     reply_state = decoded(
         browser.request(
             "evaluate",
@@ -239,71 +266,37 @@ def verify_outlook(browser: Browser, app: WebApps, target: str) -> None:
     assert "Reviewed Åäö\nSecond line" in str(reply_state["draft"]) and "Local signature" in str(reply_state["draft"])
     assert "Reviewed Åäö" in str(reply_state["saved"]) and reply_state["sent"] == ""
     with TestCase().assertRaisesRegex(BrowserError, "different application"):
-        WebApps(browser).request("outlook_web_search", {"target_id": target, "query": "Never"}, cancel)
+        browser.web_app(OUTLOOK_SEARCH, MailSearch(target, "Never"), cancel)
 
 
 def verify_mail_documents(browser: Browser, app: WebApps, target: str) -> None:
     cancel = threading.Event()
-
-    def call(operation: str, **arguments: str | int) -> dict[str, Json]:
-        return decoded(app.request(operation, {"target_id": target, **arguments}, cancel))
-
     # Defect: attachment discovery uses another conversation, anonymous fetch
     # loses cookies, or collection replaces an existing document version.
-    documents = call("outlook_web_documents", conversation_id="conversation-mail-two")
-    attachments = documents["attachments"]
-    assert isinstance(attachments, list) and len(attachments) == 1
-    file = attachments[0]
-    assert isinstance(file, dict) and file["attachment_id"] == "conversation-mail-two-attachment" and not file["ambiguous"]
-    url = file["url"]
-    assert isinstance(url, str)
+    documents = app.run(OUTLOOK_DOCUMENTS, MailQuery(target, "conversation-mail-two"), cancel)
+    (file,) = documents.attachments
+    assert file.attachment_id == "conversation-mail-two-attachment" and not file.ambiguous
+    assert file.url is not None
     with TestCase().assertRaisesRegex(BrowserError, "exact mail conversation"):
-        call("outlook_web_documents", conversation_id="conversation-mail-one")
+        app.run(OUTLOOK_DOCUMENTS, MailQuery(target, "conversation-mail-one"), cancel)
     with TemporaryDirectory(prefix="workspace-attachment-") as folder:
         path = Path(folder) / "Atlas-v2.txt"
-        saved = decoded(
-            app.request(
-                "outlook_web_download_document",
-                {
-                    "target_id": target,
-                    "conversation_id": "conversation-mail-two",
-                    "attachment_id": "conversation-mail-two-attachment",
-                    "expected_url": url,
-                    "destination": {"path": str(path), "kind": "local"},
-                },
-                cancel,
-            )
-        )
+
+        def collect(url: str, destination: Path) -> CollectedDocument:
+            query = MailDownload(target, "conversation-mail-two", "conversation-mail-two-attachment", url, LocalDocument(str(destination)))
+            return app.run(OUTLOOK_DOWNLOAD_DOCUMENT, query, cancel)
+
+        saved = collect(file.url, path)
         content = path.read_bytes()
-        assert content == b"Atlas approved version two\x00\xff" and saved["sha256"] == hashlib.sha256(content).hexdigest()
+        assert content == b"Atlas approved version two\x00\xff" and saved.sha256 == hashlib.sha256(content).hexdigest()
         with TestCase().assertRaises(FileExistsError):
-            app.request(
-                "outlook_web_download_document",
-                {
-                    "target_id": target,
-                    "conversation_id": "conversation-mail-two",
-                    "attachment_id": "conversation-mail-two-attachment",
-                    "expected_url": url,
-                    "destination": {"path": str(path), "kind": "local"},
-                },
-                cancel,
-            )
+            collect(file.url, path)
         assert path.read_bytes() == content
         with TestCase().assertRaisesRegex(BrowserError, "changed"):
-            app.request(
-                "outlook_web_download_document",
-                {
-                    "target_id": target,
-                    "conversation_id": "conversation-mail-two",
-                    "attachment_id": "conversation-mail-two-attachment",
-                    "expected_url": url + "?stale",
-                    "destination": {"path": str(Path(folder) / "stale.txt"), "kind": "local"},
-                },
-                cancel,
-            )
+            collect(file.url + "?stale", Path(folder) / "stale.txt")
         assert not (Path(folder) / "stale.txt").exists()
-    preview = call("outlook_web_open_document", conversation_id="conversation-mail-two", attachment_id="conversation-mail-two-attachment")
-    assert preview["opened"] and "version two" in str(preview["preview"])
+    preview = app.run(OUTLOOK_OPEN_DOCUMENT, MailDocument(target, "conversation-mail-two", "conversation-mail-two-attachment"), cancel)
+    assert isinstance(preview, PreviewOpened) and "version two" in preview.preview
     browser.request(
         "evaluate", {"target_id": target, "expression": "(()=>{document.querySelector('[role=dialog] button').click();return true;})()"}, cancel
     )
