@@ -58,6 +58,7 @@ def test_source_badge_overlaps_and_title_shares_header_with_controls() -> None:
             "Shall I prepare a draft?",
             1,
             2,
+            origins=tuple(item.origin for item in candidates),
         )
         panel.agent.communications(feed, {})
         panel.agent.triage(Board(enabled=True, items=(proposal,)))
