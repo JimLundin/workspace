@@ -1,6 +1,5 @@
 """Automatic coalescing and the actual local voice-agent bridge, with fictional sources."""
 
-import json
 import threading
 import time
 from collections.abc import Callable
@@ -26,7 +25,7 @@ from tests.json_fixture import json_object, json_rows, json_text
 from tests.test_feed_triage import output
 from tests.test_work_actions import claimed
 lazy from assistant.agent import SPECS
-lazy from tests.test_agent import ToolRig, says
+lazy from tests.test_agent import ToolRig, durable, says
 
 
 class MemoryStore:
@@ -176,7 +175,7 @@ def test_saved_visibility_preferences_are_trusted_but_notification_text_is_only_
 
 def test_voice_agent_tools_read_the_curated_plan_and_save_feedback_without_logging_source_text(tmp_path: Path) -> None:
     # Missing catalog entries, wrong bridge routing and source text in the
-    # journal are owned defects. SDK conversation transport is covered in test_agent.
+    # visible tool log are owned defects. SDK conversation transport is covered in test_agent.
     assert {"work_feed", "work_feed_update"} <= {spec.name for spec in SPECS}
     endpoint = tmp_path / "bridge.json"
     triage = TriageFixture(
@@ -188,15 +187,13 @@ def test_voice_agent_tools_read_the_curated_plan_and_save_feedback_without_loggi
         )
         triage.advance()
         wait_until(lambda: triage.board.pending == 0)
-        rig = ToolRig(feed_request=lambda data: request(data, endpoint))
+        rig = ToolRig(feed_request=lambda data: request(data, endpoint), work=durable(tmp_path))
         current = rig.call("work_feed")
         assert current.ok and "Private fictional source body" in current.text
         updated = rig.call("work_feed_update", operation="rule", text="Keep routine fictional notices quiet.")
         assert updated.ok
         assert triage.board.rules == ("Keep routine fictional notices quiet.",)
-        assert len(rig.journal) == 2
-        assert all(entry["args"] == "[integration details omitted]" for entry in rig.journal)
-        assert "Private fictional source body" not in json.dumps(rig.journal)
+        assert "Private fictional source body" not in str((*rig.window.log, *rig.window.live))
     finally:
         triage.close()
 

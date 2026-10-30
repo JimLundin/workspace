@@ -32,25 +32,6 @@ class Desktop:
         self.pasted.append(text)
 
 
-class Human:
-    __slots__ = ("answers", "requests")
-
-    def __init__(self, answers: tuple[str | None, ...] = ("The project notes",)) -> None:
-        self.answers = iter(answers)
-        self.requests: list[tuple[str, str, bool, threading.Event | None]] = []
-
-    def agent_input(
-        self,
-        title: str,
-        detail: str = "",
-        *,
-        question: bool = False,
-        cancel: threading.Event | None = None,
-    ) -> str | None:
-        self.requests.append((title, detail, question, cancel))
-        return next(self.answers)
-
-
 class Recording:
     __slots__ = ("calls",)
 
@@ -105,15 +86,9 @@ class Teams:
         self.calls.append("cancel sign-in")
 
 
-def test_machine_uses_explicit_human_and_meeting_owners() -> None:
-    desktop, human, recording = Desktop(), Human(("The project notes", "approve", None)), Recording()
-    machine: Machine = WinMachine(desktop, human, browser=Browser(), teams=Teams(), meetings=recording)
-    cancel = threading.Event()
-    assert machine.ask_user("Which notes?", cancel=cancel) == "The project notes"
-    assert human.requests == [("Which notes?", "", True, cancel)]
-    assert machine.confirm("Update notes", "The proposed edit", cancel=cancel)
-    assert human.requests[-1] == ("Update notes", "The proposed edit", False, cancel)
-    assert not machine.confirm("Update notes", "The proposed edit", cancel=cancel)
+def test_machine_uses_explicit_desktop_and_meeting_owners() -> None:
+    desktop, recording = Desktop(), Recording()
+    machine: Machine = WinMachine(desktop, browser=Browser(), teams=Teams(), meetings=recording)
     machine.paste_text("A prepared note")
     assert desktop.pasted == ["A prepared note"]
     assert machine.meeting("start", "microphone", "Planning") == "Recording owner status"
@@ -132,7 +107,7 @@ def test_machine_uses_explicit_human_and_meeting_owners() -> None:
 
 def test_machine_keeps_browser_and_teams_cleanup_with_their_owners() -> None:
     browser, teams = Browser(OSError("Browser disconnect failed")), Teams()
-    machine = WinMachine(Desktop(), Human(), browser=browser, teams=teams)
+    machine = WinMachine(Desktop(), browser=browser, teams=teams)
     cancel = threading.Event()
     assert machine.browse("browser_tabs", {}, cancel) == ("Browser observation", b"browser image")
     assert machine.teams("teams_status", {}, cancel) == "Teams observation"
@@ -161,15 +136,10 @@ activate()
 from assistant.machine import NativeDesktop, WinMachine
 from winapi import windows
 
-class Human:
-    def agent_input(self, title, detail="", *, question=False, cancel=None):
-        return None
-
 owner = windows.create_hidden("workspace machine construction fixture")
 try:
-    machine = WinMachine(NativeDesktop(owner), Human())
+    machine = WinMachine(NativeDesktop(owner))
     assert windows.process_id(owner) == os.getpid()
-    assert machine.ask_user("Which notes?") is None
     machine.close_background()
     for name in ("assistant.app", "assistant.desktop", "assistant.ui", "winapi.audio",
                  "winapi.recording", "tkinter", "PySide6"):

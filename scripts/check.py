@@ -59,7 +59,6 @@ PORTABLE = (
     "tests/test_meetings.py",
     "tests/test_selfcheck.py",
     "tests/test_computer_tools.py",
-    "tests/test_agent_runner.py",
     "tests/test_work_execution.py",
     "tests/test_feed_triage_service.py",
     "tests/test_console_inbox.py",

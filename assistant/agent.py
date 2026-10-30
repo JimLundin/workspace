@@ -1,9 +1,9 @@
 """The agent: a model working on a task with tools, step by step, until it's done,
 stopped, or out of steps.
 
-Requested work runs without approval prompts by default, including self-updates.
-WORKSPACE_AGENT_APPROVALS=ask restores per-action prompts and keeper review.
-Every action goes to the agent's journal (a log you can read back).
+Every run executes one durable work claim. Requested work runs without approval
+prompts by default, including self-updates; WORKSPACE_AGENT_APPROVALS=ask
+requests a durable approval for each consequential action.
 """
 
 import asyncio
@@ -62,7 +62,7 @@ _VALUE = TypeAdapter(Json, config=ConfigDict(allow_inf_nan=False))
 
 
 class Machine(Protocol):
-    """What the agent's tools act on: the computer, and the user."""
+    """What the agent's tools act on: the computer."""
 
     def run_powershell(
         self,
@@ -99,15 +99,6 @@ class Machine(Protocol):
     def set_clipboard(self, text: str) -> None: ...
     def open(self, target: str) -> None:
         """A file, folder or web address, as double-clicking it would."""
-
-    def ask_user(self, question: str, *, cancel: threading.Event | None = None) -> str | None: ...
-    def confirm(self, title: str, detail: str, *, cancel: threading.Event | None = None) -> bool:
-        """Asks the user yes or no."""
-        ...
-
-    def review(self, summary: str, diff: str) -> bool:
-        """Shows the user a change to Workspace; True if they approve it."""
-        ...
 
     def install(self, summary: str) -> None:
         """Asks the keeper to install the workspace."""
@@ -764,13 +755,11 @@ class Agent:
         "context_image",
         "context_reader",
         "context_text",
-        "control",
         "feed_request",
         "followup",
         "history",
         "install_root",
         "installing",
-        "journal",
         "log",
         "machine",
         "max_steps",
@@ -793,14 +782,13 @@ class Agent:
         log: Log,
         stop: threading.Event,
         *,
+        work: WorkExecution,
         max_steps: int = AGENT_MAX_STEPS,
-        journal: Callable[[dict[str, Json]], None],
         after_step: Callable[[], None] | None = None,
         workspace: Workspace | None = None,
         history: History | None = None,
         context: ContextSnapshot | None = None,
         context_reader: Callable[[], ContextSnapshot] | None = None,
-        work: WorkExecution | None = None,
         install_root: Path | None = None,
         followup: MeetingRun | None = None,
         clock: Callable[[], datetime] = datetime.now,
@@ -816,15 +804,12 @@ class Agent:
         self.update = log.updates()
         self.stop = stop
         self.max_steps = max_steps
-        self.journal = journal
         self.after_step = after_step
         self.history = history if history is not None else History()
         """Execution-owned volatile session IO; the SDK publishes immutable item bytes."""
         self.shot: Shot | None = None
         self.shot_digest = ""
         """The latest screenshot: clicks are in its coordinates."""
-        self.control: bool | None = None
-        """Whether the user lets the agent use the mouse and keyboard; None: not asked yet."""
         self.workspace = workspace
         """Workspace's source, to change; None: no source tools."""
         self.checked: str | None = None
@@ -838,8 +823,6 @@ class Agent:
         self.context_text = ""
         self.context_image: bytes | None = None
         self.work = work
-        if followup is not None and work is None:
-            raise ValueError("Prepared meeting execution requires a durable work claim.")
         self.followup = followup
         self.install_root = install_root
         self.report: Report = ReportStatus.STARTING
@@ -861,9 +844,7 @@ class Agent:
             specs = (*meeting_tools.SPECS, *WORK_SPECS, *(spec for spec in SPECS if spec.name in ("ask_user", "get_current_time")))
             prompt = meeting_tools.INSTRUCTIONS
         else:
-            specs = (*SPECS, *SOURCE_SPECS) if self.workspace is not None else SPECS
-            if self.work is not None:
-                specs = (*specs, *WORK_SPECS)
+            specs = (*SPECS, *SOURCE_SPECS, *WORK_SPECS) if self.workspace is not None else (*SPECS, *WORK_SPECS)
             prompt = f"{instructions()}\n\n{SELF_CHANGE}" if self.workspace is not None else instructions()
         if self.followup is None:
             prompt += "\n\n" + feed_agent_tools.INSTRUCTIONS + "\n" + personal_work_tools.INSTRUCTIONS + "\n" + work_canvas_tools.INSTRUCTIONS
@@ -872,8 +853,7 @@ class Agent:
             if self.settings.agent_approvals
             else "\nApproval prompts are disabled. Execute authorized work directly; do not invent a confirmation step."
         )
-        if self.work is not None:
-            prompt += "\n\n" + self.work.instructions()
+        prompt += "\n\n" + self.work.instructions()
         return asyncio.run(sdk.run(self, task, prompt, tuple(specs)))
 
     def feed_tool(self, args: Args) -> Output:
@@ -931,9 +911,10 @@ class Agent:
             raw = _ARGUMENTS.validate_json(call.arguments or "{}")
         except ValueError:
             raw = None
+        observation = ""
         if self.stop.is_set():
             output = Output("Stopped by the user.", ok=False)
-        elif self.work is not None and self.work.disposition is not None:
+        elif self.work.disposition is not None:
             output = Output("This task is waiting; this execution will suspend.", ok=False)
         elif raw is None:
             output = Output(f"Error: the arguments for {call.name} aren't a JSON object.", ok=False)
@@ -943,7 +924,7 @@ class Agent:
             output = Output(f"Error: there's no tool called {call.name}.", ok=False)
         else:
             args = Args(call.name, _ARGUMENTS.dump_json(raw))
-            output = self.invoke(tool, args)
+            output, observation = self.invoke(tool, args)
         preview = (
             "Completed."
             if private or call.name == "get_context"
@@ -954,53 +935,32 @@ class Agent:
         outcome = Succeeded(preview) if output.ok else ToolStatus.CANCELLED if self.stop.is_set() else Failed("Failed." if private else preview)
         self.update(ToolActivity(identity, call.name, detail, started, outcome))
         self.log.step(call.name if private else f"{call.name} {call.arguments[:160]}" + ("" if output.ok else f"  ({output.text[:120]})"))
-        self.journal(
-            {
-                "t": datetime.now().isoformat(timespec="seconds"),
-                "tool": call.name,
-                "args": "[integration details omitted]" if private else call.arguments[:500],
-                "ok": output.ok,
-                "result": "Integration result supplied in memory."
-                if private
-                else "Recent work context supplied in memory."
-                if call.name == "get_context"
-                else output.text[:300],
-            }
-        )
-        return output
+        # Only the model cites observation identifiers; the visible preview omits them.
+        return replace(output, text=output.text + f"\n[observation_id: {observation}]") if observation else output
 
-    def invoke(self, tool: Callable[[Agent, Args], Output], args: Args) -> Output:
-        """Run a validated tool behind the durable execution and observation boundary."""
+    def invoke(self, tool: Callable[[Agent, Args], Output], args: Args) -> tuple[Output, str]:
+        """Run a validated tool behind the durable boundary; return its output and observation identifier."""
         try:
-            if self.work is not None:
-                self.work.bind(args.tool, args.values)
-                selected = plan(args.tool, args.values)
-                output = (
-                    self.work.actions.execute(selected, lambda: tool(self, args), lambda result: result.ok, self.stop)
-                    if isinstance(selected, Observation)
-                    else tool(self, args)
-                )
-            else:
-                output = tool(self, args)
+            self.work.bind(args.tool, args.values)
+            selected = plan(args.tool, args.values)
+            output = (
+                self.work.actions.execute(selected, lambda: tool(self, args), lambda result: result.ok, self.stop)
+                if isinstance(selected, Observation)
+                else tool(self, args)
+            )
         except (ArgumentError, SourceError, PublishError, ValueError) as error:
             output = Output(f"Error: {error}", ok=False)
         except ActionError as error:
-            if self.work is not None:
-                self.work.block(str(error))
+            self.work.block(str(error))
             output = Output(f"Error: {error}", ok=False)
         except (OSError, sqlite3.Error) as error:
-            if self.work is not None:
-                try:
-                    if self.work.actions.unresolved():
-                        self.work.block("An operation was interrupted without a conclusive outcome. Resume to inspect its result.")
-                except OSError, sqlite3.Error:
-                    self.work.block("Durable storage is unavailable. Resume after it is available to inspect the result.")
+            try:
+                if self.work.actions.unresolved():
+                    self.work.block("An operation was interrupted without a conclusive outcome. Resume to inspect its result.")
+            except OSError, sqlite3.Error:
+                self.work.block("Durable storage is unavailable. Resume after it is available to inspect the result.")
             output = Output(f"Error: {error}", ok=False)
-        if self.work is not None:
-            observation = self.work.observed(args.tool, self.work.arguments, successful=output.ok, result=output.text)
-            if observation:
-                output = replace(output, text=output.text + f"\n[observation_id: {observation}]")
-        return output
+        return output, self.work.observed(args.tool, self.work.arguments, successful=output.ok, result=output.text)
 
     def effect(
         self,
@@ -1011,8 +971,6 @@ class Agent:
         verify: Callable[[Output], ActionVerified | ActionUncertain | ActionNotApplied] | None = None,
     ) -> Output:
         """Validation and approval happen before an effect is durably attempted."""
-        if self.work is None:
-            return perform()
         specification = plan(
             args.tool,
             self.work.arguments if self.work.tool == args.tool else args.values,
@@ -1036,35 +994,25 @@ class Agent:
         """Prompt only in the user's opt-in approval mode; Stop always wins."""
         if self.stop.is_set():
             return False
-        accepted = not self.settings.agent_approvals or (
-            self.work.approve(title, detail) if self.work is not None else self.machine.confirm(title, detail, cancel=self.stop)
-        )
+        accepted = not self.settings.agent_approvals or self.work.approve(title, detail)
         return accepted and not self.stop.is_set()
 
     def may_control(self) -> bool:
-        if self.work is not None:
-            return self.approve("Allow this desktop action?", "Review the exact operation below. Stop cancels the running task.")
-        if self.control is None:
-            self.control = self.approve(
-                "Let the agent use the mouse and keyboard?",
-                "Until this task ends. Stop it any time from its window.",
-            )
-        return self.control and not self.stop.is_set()
+        return self.approve("Allow this desktop action?", "Review the exact operation below. Stop cancels the running task.")
 
     def on_screen(self, args: Args, x_name: str = "x", y_name: str = "y") -> tuple[int, int] | Output:
         if self.shot is None:
             return Output("Error: take a screenshot first; coordinates are in the latest screenshot.", ok=False)
-        if self.work is not None:
-            area = self.shot.area
-            self.work.bind(
-                args.tool,
-                {
-                    **args.values,
-                    "desktop_image_sha256": self.shot_digest,
-                    "physical_area": [area.left, area.top, area.right, area.bottom],
-                    "image_size": [self.shot.width, self.shot.height],
-                },
-            )
+        area = self.shot.area
+        self.work.bind(
+            args.tool,
+            {
+                **args.values,
+                "desktop_image_sha256": self.shot_digest,
+                "physical_area": [area.left, area.top, area.right, area.bottom],
+                "image_size": [self.shot.width, self.shot.height],
+            },
+        )
         if not self.may_control():
             return Output("The user declined to let you use the mouse and keyboard for this task.", ok=False)
         x, y = args.number(x_name), args.number(y_name)
@@ -1151,7 +1099,7 @@ class Agent:
         return self.effect(args, lambda: Output(self.machine.meeting(operation, source, title)))
 
     def meeting_work(self) -> tuple[MeetingRun, WorkExecution]:
-        if self.followup is None or self.work is None:
+        if self.followup is None:
             raise ArgumentError("Choose completed recordings in Meeting follow-up before using these tools.")
         return self.followup, self.work
 
@@ -1323,8 +1271,7 @@ class Agent:
 
     def inspect_ui(self, args: Args) -> Output:
         handle = self.work_handle(args)
-        if self.work is not None:
-            self.work.bind(args.tool, {**args.values, "handle": handle})
+        self.work.bind(args.tool, {**args.values, "handle": handle})
         request: dict[str, Json] = {
             "operation": "inspect",
             "handle": handle,
@@ -1519,7 +1466,7 @@ class Agent:
         source = self.source()
         diff = source.diff()
         passed, report = source.validate()
-        if passed and self.work is not None:
+        if passed:
             digest = source_digest(source.root)
             self.work.bind(args.tool, {"source_digest": digest, "profile": "fast"})
             if not self.approve("Run Workspace's checks?", "Run this frozen source and its tests?\n\n" + diff):
@@ -1542,9 +1489,6 @@ class Agent:
 
             checked = self.effect(args, execute, verify=verify)
             passed, report = checked.ok, checked.text
-        elif passed and not self.settings.agent_approvals:
-            self.log.step("Running Workspace's fast editing checks...")
-            passed, report = source.check(fast=True)
         if passed and source.diff() != diff:
             passed, report = False, "The workspace changed during its checks; run check_changes again."
         self.checked = diff if passed else None
@@ -1567,20 +1511,17 @@ class Agent:
         if diff != self.checked:
             raise ArgumentError("the changes have changed since they were checked; run check_changes again.")
         digest = source_digest(self.source().root)
-        if self.work is not None:
-            self.work.bind(
-                args.tool,
-                {
-                    **args.values,
-                    "source_digest": digest,
-                    "destination": str(self.source().live.absolute()),
-                    "diff_sha256": hashlib.sha256(diff.encode("utf-8")).hexdigest(),
-                },
-            )
-            if not self.approve("Install workspace changes?", summary + "\n\n" + diff):
-                return Output(DECLINED, ok=False)
-        elif self.settings.agent_approvals and not self.machine.review(summary, diff):
-            return Output("The user didn't approve these changes. Ask what they'd like instead.", ok=False)
+        self.work.bind(
+            args.tool,
+            {
+                **args.values,
+                "source_digest": digest,
+                "destination": str(self.source().live.absolute()),
+                "diff_sha256": hashlib.sha256(diff.encode("utf-8")).hexdigest(),
+            },
+        )
+        if not self.approve("Install workspace changes?", summary + "\n\n" + diff):
+            return Output(DECLINED, ok=False)
         if self.stop.is_set():
             return Output("Stopped by the user.", ok=False)
 
@@ -1602,8 +1543,7 @@ class Agent:
             return Output(report[-6000:], ok=False)
 
         def approve(title: str, detail: str) -> bool:
-            if self.work is not None:
-                self.work.bind(args.tool, {**args.values, "publication_review": detail})
+            self.work.bind(args.tool, {**args.values, "publication_review": detail})
             return self.approve(title, detail)
 
         def execute(perform: Callable[[], str]) -> str:
@@ -1613,10 +1553,7 @@ class Agent:
                 verify=lambda _: ActionVerified("The tested candidate was published; remote branch readback matched its commit."),
             ).text
 
-        branch = None
-        if self.work is not None:
-            identity = hashlib.sha256((self.work.claim.task.id + ":" + str(self.work.claim.task.goal_revision)).encode()).hexdigest()[:24]
-            branch = "workspace/agent-" + identity
+        identity = hashlib.sha256((self.work.claim.task.id + ":" + str(self.work.claim.task.goal_revision)).encode()).hexdigest()[:24]
         result = publish_source(
             source.live,
             source.root,
@@ -1625,7 +1562,7 @@ class Agent:
             self.stop.is_set,
             remote=os.environ.get("WORKSPACE_GIT_REMOTE", DEFAULT_REMOTE),
             base=os.environ.get("WORKSPACE_GIT_BASE", "main"),
-            branch=branch,
+            branch="workspace/agent-" + identity,
             execute=execute,
         )
         return Output(result)
@@ -1640,15 +1577,13 @@ class Agent:
 
     def ask_user(self, args: Args) -> Output:
         question = args.text("question")
-        answer = self.work.ask(question) if self.work is not None else self.machine.ask_user(question, cancel=self.stop)
+        answer = self.work.ask(question)
         return Output(answer if answer else "The user didn't answer.", ok=bool(answer))
 
     def work_actions(self, _: Args) -> Output:
-        return Output(self.work.describe_actions()) if self.work is not None else Output("No durable task is active.", ok=False)
+        return Output(self.work.describe_actions())
 
     def reconcile_action(self, args: Args) -> Output:
-        if self.work is None:
-            return Output("No durable task is active.", ok=False)
         if not isinstance(args.values.get("applied"), bool):
             raise ArgumentError("applied must be true or false.")
         try:

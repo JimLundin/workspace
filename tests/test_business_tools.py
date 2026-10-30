@@ -1,4 +1,4 @@
-"""Registered integration tools, private journals and exact resource ownership."""
+"""Registered integration tools, private previews and exact resource ownership."""
 
 import json
 import threading
@@ -10,7 +10,7 @@ from assistant.llm import Json
 from automation.actions import Observation, Resources, plan, resources
 from automation.execution import WorkExecution
 from automation.task import ActionUncertain, ActionVerified
-from tests.test_agent import FakeMachine, ToolRig
+from tests.test_agent import FakeMachine, ToolRig, durable
 from tests.test_work_actions import claimed
 
 
@@ -64,15 +64,18 @@ def arguments(name: str) -> dict[str, Json]:
             return {"target_id": "page-1"}
 
 
-def test_business_tools_dispatch_privately_and_stop_before_effects() -> None:
-    # Defect: registration sends an app request to the wrong owner or journals
-    # private mail/card content despite integration redaction.
-    rig = ToolRig()
+def test_business_tools_dispatch_privately_and_stop_before_effects(tmp_path: Path) -> None:
+    # Defect: registration sends an app request to the wrong owner or shows
+    # private mail/card content despite integration redaction. Each tool gets
+    # its own task because the fixture's unverified app results suspend a task.
+    machine = FakeMachine()
     for spec in WEB_SPECS:
+        rig = ToolRig(work=durable(tmp_path), machine=machine)
         assert rig.call(spec.name, **arguments(spec.name)).ok
-        assert rig.machine.log[-1].startswith("browser " + spec.name + " ")
-    assert all("private content" not in str(item) for item in rig.journal)
-    before = tuple(rig.machine.log)
+        assert machine.log[-1].startswith("browser " + spec.name + " ")
+        assert all("private content" not in str(item) for item in (*rig.window.log, *rig.window.live))
+    before = tuple(machine.log)
+    rig = ToolRig(work=durable(tmp_path), machine=machine)
     rig.agent.stop.set()
     assert not rig.call("kanban_comment", **arguments("kanban_comment")).ok
     assert tuple(rig.machine.log) == before
@@ -92,19 +95,19 @@ def test_business_reads_and_mutations_have_exact_resource_markers() -> None:
     assert resources("outlook_web_draft_reply", {"conversation_id": "mail-1"}) != resources("outlook_web_open_mail", {"conversation_id": "mail-2"})
 
 
-def test_approval_mode_declines_business_writes_before_the_machine() -> None:
+def test_approval_mode_declines_business_writes_before_the_machine(tmp_path: Path) -> None:
     # Defect: expanded tools bypass the existing optional approval policy.
-    rig = ToolRig(approvals=True)
+    rig = ToolRig(approvals=True, work=durable(tmp_path))
     for name in ("kanban_update_task", "kanban_move_task", "kanban_comment", "teams_web_draft_reply", "outlook_web_draft_reply"):
         assert not rig.call(name, **arguments(name)).ok
     assert not any(item.startswith(("browser ", "teams ")) for item in rig.machine.log)
 
 
-def test_agent_reads_and_document_collection_do_not_request_application_clarification() -> None:
+def test_agent_reads_and_document_collection_do_not_request_application_clarification(tmp_path: Path) -> None:
     # Defect: the agent interrupts autonomous investigation to approve routine
     # reads or collection of an exact attachment into a new local file.
-    rig = ToolRig(approvals=True)
     for name in ("outlook_web_documents", "outlook_web_open_document", "outlook_web_download_document", "teams_web_open_chat"):
+        rig = ToolRig(approvals=True, work=durable(tmp_path))
         assert rig.call(name, **arguments(name)).ok
         assert rig.machine.log[-1].startswith("browser " + name + " ")
 

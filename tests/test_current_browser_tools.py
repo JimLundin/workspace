@@ -7,7 +7,7 @@ from typing import cast
 from automation.actions import Resources
 from automation.execution import WorkExecution
 from tests.fake_endpoint import fake_endpoint
-from tests.test_agent import Rig, ToolRig, calls, says
+from tests.test_agent import Rig, ToolRig, calls, durable, says
 from tests.test_work_actions import claimed
 
 
@@ -20,9 +20,9 @@ def test_retired_embedded_browser_tools_cannot_reach_the_machine_or_start_action
     assert not rig.machine.log and not store.actions(claim.task.id)
 
 
-def test_model_receives_only_current_browser_capabilities() -> None:
+def test_model_receives_only_current_browser_capabilities(tmp_path: Path) -> None:
     with fake_endpoint() as endpoint:
-        rig = Rig(endpoint, calls(("browser_tabs", {})), says("Tabs inspected."))
+        rig = Rig(endpoint, calls(("browser_tabs", {})), says("Tabs inspected."), work=durable(tmp_path))
         rig.run()
         data: object = json.loads(endpoint.received[0].body)
         assert isinstance(data, dict)

@@ -52,22 +52,6 @@ def report(message: str, *, folder: Path = DIRECTORY / "work") -> None:
             file.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')} {message}\n")
 
 
-class DurableInput:
-    """Unmediated synchronous input is unavailable; durable execution owns it."""
-
-    __slots__ = ()
-
-    def agent_input(
-        self,
-        title: str,
-        detail: str = "",
-        *,
-        question: bool = False,
-        cancel: threading.Event | None = None,
-    ) -> str | None:
-        raise OSError("This work requires a durable question or approval in the work overview.")
-
-
 @dataclass(frozen=True, slots=True)
 class MeetingRun:
     run: RunRef
@@ -190,7 +174,7 @@ class NativeExecution:
 def _native_execution(settings: Settings | Missing, bridge: BridgeServer, hwnd: int, contexts: ContextStore) -> tuple[NativeExecution, WinMachine]:
     meetings = RemoteMeetings(bridge)
     browser = Browser(DIRECTORY / "browser-profile", source=Product.EDGE)
-    machine = WinMachine(NativeDesktop(hwnd), DurableInput(), meetings=meetings, browser=browser)
+    machine = WinMachine(NativeDesktop(hwnd), meetings=meetings, browser=browser)
     context = DesktopContext(bridge, enabled=os.environ.get("WORKSPACE_AGENT_CONTEXT", "recent").lower() != "off")
     usable = settings if isinstance(settings, Settings) else Settings("", "", "", "", "", "", "")
     followups = bridge.folder / "meeting-followups"
@@ -198,7 +182,6 @@ def _native_execution(settings: Settings | Missing, bridge: BridgeServer, hwnd: 
         execution = AgentExecution(
             usable,
             machine,
-            journal=lambda entry: None,
             record=lambda details: usage.record("automation", "agent", details),
             report_error=lambda detail: report(detail, folder=bridge.folder),
             close_background=machine.close_background,

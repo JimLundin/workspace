@@ -17,7 +17,10 @@ from assistant.geometry import Shot
 from assistant.llm import Json, Settings, ToolCall, settings_from
 from assistant.work_bridge_contracts import BridgeCommand
 from assistant.workspace import Workspace
-from automation.execution import WorkExecution
+from automation.actions import Resources
+from automation.execution import ApprovalReview, WorkExecution
+from automation.store import TaskStore
+from automation.task import RequestSource
 from tests.fake_endpoint import FakeEndpoint, Received, Reply, fake_endpoint, sse
 from tests.test_workspace import live_tree
 from winapi.shapes import Rect, Window
@@ -78,15 +81,29 @@ def says(text: str) -> Reply:
     return response(message(text))
 
 
+def durable(folder: Path, *, review: Callable[[ApprovalReview], bool] | None = None) -> WorkExecution:
+    """Every agent run executes one claimed durable task."""
+    identity = uuid.uuid4().hex
+    store = TaskStore(folder / "agent-work" / identity / "work.sqlite3")
+    store.submit(identity, "Agent fixture", "do it", RequestSource("chat"), at=1)
+    claim = store.claim("worker", identity, at=2)
+    assert claim is not None
+    return WorkExecution(claim, store, Resources(), review=review)
+
+
+def observed(output: object) -> str:
+    """Durable observations append their evidence identifier to the model's result."""
+    assert isinstance(output, str)
+    text, marker, identity = output.rpartition("\n[observation_id: ")
+    assert marker and identity.endswith("]"), output
+    return text
+
+
 class FakeMachine:
-    __slots__ = ("answers", "approve", "commands", "confirms", "executed", "log", "reviewed")
+    __slots__ = ("commands", "executed", "log")
 
     def __init__(self) -> None:
         self.log: list[str] = []
-        self.approve = True
-        self.reviewed: list[str] = []
-        self.confirms: list[bool] = []
-        self.answers: list[str | None] = []
         self.commands: dict[str, tuple[int, str]] = {}
         self.executed: list[tuple[str, float, str | None, threading.Event | None]] = []
 
@@ -169,19 +186,6 @@ class FakeMachine:
     def open(self, target: str) -> None:
         self.log.append(f"open {target}")
 
-    def ask_user(self, question: str, *, cancel: threading.Event | None = None) -> str | None:
-        self.log.append(f"asked {question}")
-        return self.answers.pop(0) if self.answers else None
-
-    def confirm(self, title: str, detail: str, *, cancel: threading.Event | None = None) -> bool:
-        self.log.append(f"confirm {title}: {detail}")
-        return self.confirms.pop(0) if self.confirms else False
-
-    def review(self, summary: str, diff: str) -> bool:
-        self.log.append(f"review {summary}")
-        self.reviewed.append(diff)
-        return self.approve
-
     def install(self, summary: str) -> None:
         self.log.append(f"install {summary}")
 
@@ -196,16 +200,16 @@ class FakeWindow:
     def updates(self) -> Callable[[LiveMessage], None]:
         return self.live.append
 
-    def step(self, text: str) -> None:
+    def step(self, text: str, /) -> None:
         self.log.append(f"step {text}")
 
-    def say(self, text: str) -> None:
+    def say(self, text: str, /) -> None:
         self.log.append(f"say {text}")
 
-    def problem(self, text: str) -> None:
+    def problem(self, text: str, /) -> None:
         self.log.append(f"problem {text}")
 
-    def done(self, text: str) -> None:
+    def done(self, text: str, /) -> None:
         self.log.append(f"done {text}")
 
     def queued(self, task: str) -> None:
@@ -223,16 +227,15 @@ class FakeWindow:
 
 
 class Rig:
-    __slots__ = ("endpoint", "history", "journal", "machine", "stop", "window", "workspace")
+    __slots__ = ("endpoint", "history", "machine", "stop", "window", "work", "workspace")
 
-    def __init__(self, endpoint: FakeEndpoint, *replies: Reply, workspace: Workspace | None = None) -> None:
-        self.workspace = workspace
+    def __init__(self, endpoint: FakeEndpoint, *replies: Reply, work: WorkExecution, workspace: Workspace | None = None) -> None:
+        self.work, self.workspace = work, workspace
         endpoint.replies = list(replies)
         self.endpoint = endpoint
         self.machine = FakeMachine()
         self.window = FakeWindow()
         self.stop = threading.Event()
-        self.journal: list[dict[str, Json]] = []
         self.history = History()
 
     def run(
@@ -260,8 +263,8 @@ class Rig:
             self.machine,
             self.window,
             self.stop,
+            work=self.work,
             max_steps=max_steps,
-            journal=self.journal.append,
             after_step=after_step,
             workspace=self.workspace,
             history=self.history,
@@ -283,29 +286,27 @@ class Rig:
 class ToolRig:
     """Exercise the public tool boundary; SDK transport has its own scenarios below."""
 
-    __slots__ = ("agent", "journal", "machine", "window")
+    __slots__ = ("agent", "machine", "window")
 
     def __init__(
         self,
         *,
+        work: WorkExecution,
         approvals: bool = False,
         workspace: Workspace | None = None,
         machine: FakeMachine | None = None,
-        work: WorkExecution | None = None,
         clock: Callable[[], datetime] = datetime.now,
         feed_request: Callable[[BridgeCommand], str] = request,
     ) -> None:
         self.machine = machine if machine is not None else FakeMachine()
         self.window = FakeWindow()
-        self.journal: list[dict[str, Json]] = []
         self.agent = Agent(
             Settings("", "", "", "", "", "", "", agent_approvals=approvals),
             self.machine,
             self.window,
             threading.Event(),
-            journal=self.journal.append,
-            workspace=workspace,
             work=work,
+            workspace=workspace,
             clock=clock,
             feed_request=feed_request,
         )
@@ -320,7 +321,7 @@ class ToolRig:
 def test_the_agent_uses_tools_then_answers(tmp_path: Path) -> None:
     (tmp_path / "notes.txt").write_text("hello", encoding="utf-8")
     with fake_endpoint() as endpoint:
-        rig = Rig(endpoint, calls(("list_directory", {"path": str(tmp_path)})), says("There is one file: notes.txt."))
+        rig = Rig(endpoint, calls(("list_directory", {"path": str(tmp_path)})), says("There is one file: notes.txt."), work=durable(tmp_path))
         rig.run("what's in my folder?")
         assert "notes.txt" in rig.results()[0]
         assert rig.window.log[-1] == "done There is one file: notes.txt."
@@ -328,7 +329,7 @@ def test_the_agent_uses_tools_then_answers(tmp_path: Path) -> None:
         assert cast(dict[str, Json], json.loads(endpoint.received[0].body))["model"] == "gpt-6-astra"
 
 
-def test_tool_replay_omits_absent_namespace_and_retains_reasoning_across_follow_ups() -> None:
+def test_tool_replay_omits_absent_namespace_and_retains_reasoning_across_follow_ups(tmp_path: Path) -> None:
     # Workspace must adapt nullable output metadata before validating replay input;
     # otherwise the second model turn and subsequent requests fail before research.
     reasoning: Json = {
@@ -347,7 +348,7 @@ def test_tool_replay_omits_absent_namespace_and_retains_reasoning_across_follow_
         "status": "completed",
     }
     with fake_endpoint() as endpoint:
-        rig = Rig(endpoint, response(reasoning, call), says("Read the clipboard."))
+        rig = Rig(endpoint, response(reasoning, call), says("Read the clipboard."), work=durable(tmp_path))
         rig.run()
         assert rig.window.log[-1] == "done Read the clipboard."
         endpoint.replies = [says("The earlier result is retained.")]
@@ -364,16 +365,17 @@ def test_tool_replay_omits_absent_namespace_and_retains_reasoning_across_follow_
                 "arguments": "{}",
                 "status": "completed",
             }
-            assert any(item.get("call_id") == "call_namespace" and item.get("output") == "clipped" for item in replay)
+            outputs = [item.get("output") for item in replay if item.get("call_id") == "call_namespace" and "output" in item]
+            assert [observed(output) for output in outputs] == ["clipped"]
 
 
-def test_default_agent_uses_sol_with_low_reasoning_across_tool_turns() -> None:
+def test_default_agent_uses_sol_with_low_reasoning_across_tool_turns(tmp_path: Path) -> None:
     """The speed-focused defaults must reach the SDK on every tool turn."""
     with fake_endpoint() as endpoint:
-        rig = Rig(endpoint, calls(("get_clipboard", {})), says("Read it."))
+        rig = Rig(endpoint, calls(("get_clipboard", {})), says("Read it."), work=durable(tmp_path))
         settings = settings_from({"OPENAI_BASE_URL": endpoint.url, "OPENAI_API_KEY": "k"})
         assert isinstance(settings, Settings)
-        agent = Agent(settings, rig.machine, rig.window, rig.stop, journal=rig.journal.append)
+        agent = Agent(settings, rig.machine, rig.window, rig.stop, work=durable(tmp_path))
         agent.run("Read the clipboard.")
         assert len(endpoint.received) == 2
         for request in endpoint.received:
@@ -382,15 +384,15 @@ def test_default_agent_uses_sol_with_low_reasoning_across_tool_turns() -> None:
             assert body["model"] == "gpt-6.1-sol"
             assert body["reasoning"] == {"effort": "low", "summary": "auto"}
             assert body["stream"] is True
-        assert rig.results() == ["clipped"]
+        assert [observed(result) for result in rig.results()] == ["clipped"]
         assert rig.window.log[-1] == "done Read it."
 
 
-def test_agent_uses_responses_with_max_reasoning_and_opens_without_approval() -> None:
+def test_agent_uses_responses_with_max_reasoning_and_opens_without_approval(tmp_path: Path) -> None:
     """Astra needs Responses for tools; compatible endpoints reject extra parameters."""
     target = r"C:\Users\Jim\Downloads\budget.xlsx"
     with fake_endpoint() as endpoint:
-        rig = Rig(endpoint, calls(("open", {"target": target})), says("Opened the workbook."))
+        rig = Rig(endpoint, calls(("open", {"target": target})), says("Opened the workbook."), work=durable(tmp_path))
 
         def respond(request: Received) -> Reply:
             assert rig.window.log[-1] == "step Waiting for the model..."
@@ -409,11 +411,11 @@ def test_agent_uses_responses_with_max_reasoning_and_opens_without_approval() ->
         assert rig.window.log[-1] == "done Opened the workbook."
 
 
-def test_agent_preserves_reasoning_between_tool_calls_and_follow_ups() -> None:
+def test_agent_preserves_reasoning_between_tool_calls_and_follow_ups(tmp_path: Path) -> None:
     reasoning: Json = {"id": "rs_test", "type": "reasoning", "summary": [], "encrypted_content": "opaque-reasoning"}
     call: Json = {"type": "function_call", "call_id": "call_test", "name": "get_clipboard", "arguments": "{}"}
     with fake_endpoint() as endpoint:
-        rig = Rig(endpoint, response(reasoning, message("Reading."), call), says("Read it."))
+        rig = Rig(endpoint, response(reasoning, message("Reading."), call), says("Read it."), work=durable(tmp_path))
         rig.run(effort="high")
         assert reasoning in rig.sent()
         assert cast(dict[str, Json], json.loads(endpoint.last.body))["reasoning"] == {"effort": "high", "summary": "auto"}
@@ -422,9 +424,9 @@ def test_agent_preserves_reasoning_between_tool_calls_and_follow_ups() -> None:
         assert reasoning in rig.sent()
 
 
-def test_invalid_reasoning_effort_is_reported_without_a_request() -> None:
+def test_invalid_reasoning_effort_is_reported_without_a_request(tmp_path: Path) -> None:
     with fake_endpoint() as endpoint:
-        rig = Rig(endpoint, says("unused"))
+        rig = Rig(endpoint, says("unused"), work=durable(tmp_path))
         rig.run(effort="typo")
         assert not endpoint.received
         assert rig.window.log == ["problem Invalid WORKSPACE_AGENT_REASONING_EFFORT: 'typo'."]
@@ -433,88 +435,91 @@ def test_invalid_reasoning_effort_is_reported_without_a_request() -> None:
 def test_follow_up_keeps_the_prompt_answer_and_tool_results(tmp_path: Path) -> None:
     (tmp_path / "budget.xlsx").touch()
     with fake_endpoint() as endpoint:
-        rig = Rig(endpoint, calls(("find_files", {"folder": str(tmp_path), "pattern": "*.xlsx"})), says("I found budget.xlsx."))
+        rig = Rig(
+            endpoint, calls(("find_files", {"folder": str(tmp_path), "pattern": "*.xlsx"})), says("I found budget.xlsx."), work=durable(tmp_path)
+        )
         rig.run("Find my workbook.")
         endpoint.replies = [calls(("open", {"target": str(tmp_path / "budget.xlsx")})), says("Opened it.")]
-        rig.machine.confirms = [True]
         rig.run("Open that one.")
         follow_up = rig.sent(2)
         assert [m["content"] for m in follow_up if m.get("role") == "user"] == ["Find my workbook.", "Open that one."]
         assert "I found budget.xlsx." in json.dumps(follow_up[-2])
-        assert any(m.get("type") == "function_call_output" and m["output"] == str(tmp_path / "budget.xlsx") for m in follow_up)
+        assert any(m.get("type") == "function_call_output" and observed(m["output"]) == str(tmp_path / "budget.xlsx") for m in follow_up)
         assert f"open {tmp_path / 'budget.xlsx'}" in rig.machine.log
 
 
-def test_failed_turn_keeps_completed_actions_for_the_follow_up() -> None:
+def test_failed_turn_keeps_completed_actions_for_the_follow_up(tmp_path: Path) -> None:
     with fake_endpoint() as endpoint:
-        rig = Rig(endpoint, calls(("get_clipboard", {})), Reply(b'{"error": {"message": "unavailable"}}', status=503))
+        rig = Rig(endpoint, calls(("get_clipboard", {})), Reply(b'{"error": {"message": "unavailable"}}', status=503), work=durable(tmp_path))
         rig.run("Read the clipboard.")
         endpoint.replies = [says("It said clipped.")]
         rig.run("What did it say?")
         assert [m["content"] for m in rig.sent() if m.get("role") == "user"] == ["Read the clipboard.", "What did it say?"]
-        assert any(m.get("type") == "function_call_output" and m["output"] == "clipped" for m in rig.sent())
+        assert any(m.get("type") == "function_call_output" and observed(m["output"]) == "clipped" for m in rig.sent())
 
 
-def test_stopped_turn_keeps_completed_actions_and_accepts_a_follow_up() -> None:
+def test_stopped_turn_keeps_completed_actions_and_accepts_a_follow_up(tmp_path: Path) -> None:
     with fake_endpoint() as endpoint:
-        rig = Rig(endpoint, calls(("get_clipboard", {})))
+        rig = Rig(endpoint, calls(("get_clipboard", {})), work=durable(tmp_path))
         rig.run("Read the clipboard.", after_step=rig.stop.set)
         assert rig.window.log[-1] == "done Stopped."
         rig.stop.clear()
         endpoint.replies = [says("It said clipped.")]
         rig.run("What did it say?")
-        assert any(m.get("type") == "function_call_output" and m["output"] == "clipped" for m in rig.sent())
+        assert any(m.get("type") == "function_call_output" and observed(m["output"]) == "clipped" for m in rig.sent())
 
 
 def test_desktop_requests_do_not_prepare_a_source_workspace(tmp_path: Path) -> None:
     workspace = source(tmp_path)
     with fake_endpoint() as endpoint:
-        rig = Rig(endpoint, calls(("list_windows", {})), says("Outlook is open."), workspace=workspace)
+        rig = Rig(endpoint, calls(("list_windows", {})), says("Outlook is open."), workspace=workspace, work=durable(tmp_path))
         rig.run("What is open?")
         assert rig.window.log[-1] == "done Outlook is open."
     assert not workspace.root.exists()
 
 
-def test_every_call_gets_a_result_even_bad_ones() -> None:
+def test_every_call_gets_a_result_even_bad_ones(tmp_path: Path) -> None:
     with fake_endpoint() as endpoint:
-        rig = Rig(endpoint, calls(("no_such_tool", {}), ("read_file", {})), says("Sorry."))
+        rig = Rig(endpoint, calls(("no_such_tool", {}), ("read_file", {})), says("Sorry."), work=durable(tmp_path))
         rig.run()
         assert "Error: read_file needs path (text)." in rig.results()
         assert any("no_such_tool" in result for result in rig.results())
 
 
-def test_stop_ends_the_task_before_the_next_step() -> None:
+def test_stop_ends_the_task_before_the_next_step(tmp_path: Path) -> None:
     with fake_endpoint() as endpoint:
-        rig = Rig(endpoint, calls(("get_clipboard", {})), calls(("get_clipboard", {})), says("never"))
+        rig = Rig(endpoint, calls(("get_clipboard", {})), calls(("get_clipboard", {})), says("never"), work=durable(tmp_path))
         rig.run(after_step=rig.stop.set)
         assert len(endpoint.received) == 1
         assert rig.window.log[-1] == "done Stopped."
 
 
-def test_the_agent_stops_after_its_step_limit() -> None:
+def test_the_agent_stops_after_its_step_limit(tmp_path: Path) -> None:
     with fake_endpoint() as endpoint:
-        rig = Rig(endpoint, *(calls(("get_clipboard", {})) for _ in range(4)))
+        rig = Rig(endpoint, *(calls(("get_clipboard", {})) for _ in range(4)), work=durable(tmp_path))
         rig.run(max_steps=3)
         assert len(endpoint.received) == 3
         assert rig.window.log[-1] == "done Stopped after 3 steps, not finished."
 
 
-def test_model_failures_end_the_task() -> None:
+def test_model_failures_end_the_task(tmp_path: Path) -> None:
     with fake_endpoint() as endpoint:
-        rig = Rig(endpoint, Reply(b'{"error": {"message": "model overloaded"}}', status=503))
+        rig = Rig(endpoint, Reply(b'{"error": {"message": "model overloaded"}}', status=503), work=durable(tmp_path))
         rig.run()
         assert "503" in rig.window.log[-1] and "model overloaded" in rig.window.log[-1]
 
 
-def test_the_journal_records_each_action() -> None:
-    rig = ToolRig()
+def test_effects_are_recorded_as_durable_actions(tmp_path: Path) -> None:
+    # Defect: a tool performs its effect without the durable action record that recovery reads.
+    work = durable(tmp_path)
+    rig = ToolRig(work=work)
     assert rig.call("set_clipboard", text="hi").ok
     assert rig.machine.log == ["clipboard hi"]
-    assert [(e["tool"], e["ok"]) for e in rig.journal] == [("set_clipboard", True)]
+    assert [action.specification.tool for action in work.store.actions(work.claim.task.id)] == ["set_clipboard"]
 
 
-def test_tool_publishes_readable_previews_without_changing_the_model_result() -> None:
-    rig = ToolRig()
+def test_tool_publishes_readable_previews_without_changing_the_model_result(tmp_path: Path) -> None:
+    rig = ToolRig(work=durable(tmp_path))
     result = rig.call("inspect_ui", query="Budget " * 60)
     started, completed = rig.window.live
     assert isinstance(started, ToolActivity) and isinstance(completed, ToolActivity)
@@ -522,30 +527,29 @@ def test_tool_publishes_readable_previews_without_changing_the_model_result() ->
     assert started.detail.startswith("Find controls matching “Budget") and started.detail.endswith("…")
     assert completed.identity == started.identity and completed.detail == started.detail
     assert "• Save" in completed.text and '"controls"' not in completed.text
-    assert result.ok and result.text == '{"controls":[{"id":"1.2.3","name":"Save","actions":["invoke"]}]}'
+    assert result.ok and observed(result.text) == '{"controls":[{"id":"1.2.3","name":"Save","actions":["invoke"]}]}'
 
 
 # ---- what needs permission -------------------------------------------------------------
 
 
-def test_commands_need_confirmation() -> None:
-    rig = ToolRig(approvals=True)
+def test_commands_need_confirmation(tmp_path: Path) -> None:
+    rig = ToolRig(approvals=True, work=durable(tmp_path))
     result = rig.call("run_powershell", command="Remove-Item C:\\temp\\x")
     assert not result.ok and result.text == "The user declined: don't run this. Ask them, or try something else."
     assert not rig.machine.executed
 
 
-def test_confirmed_commands_run_and_report_their_output() -> None:
-    rig = ToolRig(approvals=True)
-    rig.machine.confirms = [True]
+def test_commands_run_and_report_their_output(tmp_path: Path) -> None:
+    rig = ToolRig(work=durable(tmp_path))
     rig.machine.commands = {"Stop-Process -Name notepad": (1, "no such process")}
     result = rig.call("run_powershell", command="Stop-Process -Name notepad")
     assert not result.ok and result.text == "Exit code 1.\nno such process"
     assert rig.machine.executed == [("Stop-Process -Name notepad", 120, None, rig.agent.stop)]
 
 
-def test_allowed_commands_run_without_asking() -> None:
-    rig = ToolRig(approvals=True)
+def test_allowed_commands_run_without_asking(tmp_path: Path) -> None:
+    rig = ToolRig(approvals=True, work=durable(tmp_path))
     for timeout in (1, 600):
         result = rig.call("run_powershell", command="git status", timeout_seconds=timeout, cwd="work folder")
         assert result.ok and result.text == "Exit code 0.\nok"
@@ -565,29 +569,8 @@ def test_allowed_means_nothing_can_be_chained_on() -> None:
     assert not allowed("Remove-Item x")
 
 
-def test_mouse_and_keyboard_need_permission_once_per_task() -> None:
-    rig = ToolRig(approvals=True)
-    rig.machine.confirms = [True]
-    assert rig.call("screenshot").ok
-    assert rig.call("click", x=640, y=360).ok
-    assert rig.call("type_text", text="hi").ok
-    assert [entry for entry in rig.machine.log if entry.startswith("confirm")] == [
-        "confirm Let the agent use the mouse and keyboard?: Until this task ends. Stop it any time from its window."
-    ]
-    assert "click left x1 at 1280,720" in rig.machine.log
-    assert "type hi" in rig.machine.log
-
-
-def test_declining_the_mouse_and_keyboard_is_remembered_for_the_task() -> None:
-    rig = ToolRig(approvals=True)
-    for text in ("a", "b"):
-        result = rig.call("type_text", text=text)
-        assert not result.ok and "declined" in result.text
-    assert rig.machine.log == ["confirm Let the agent use the mouse and keyboard?: Until this task ends. Stop it any time from its window."]
-
-
-def test_clicks_before_any_screenshot_are_refused() -> None:
-    rig = ToolRig()
+def test_clicks_before_any_screenshot_are_refused(tmp_path: Path) -> None:
+    rig = ToolRig(work=durable(tmp_path))
     result = rig.call("click", x=1, y=1)
     assert not result.ok and result.text == "Error: take a screenshot first; coordinates are in the latest screenshot."
     assert not rig.machine.log
@@ -596,10 +579,10 @@ def test_clicks_before_any_screenshot_are_refused() -> None:
 # ---- screenshots -----------------------------------------------------------------------
 
 
-def test_screenshots_go_to_the_model_as_images_and_only_recent_ones_are_kept() -> None:
+def test_screenshots_go_to_the_model_as_images_and_only_recent_ones_are_kept(tmp_path: Path) -> None:
     with fake_endpoint() as endpoint:
         shots = [calls(("screenshot", {})) for _ in range(4)]
-        rig = Rig(endpoint, *shots, says("ok"))
+        rig = Rig(endpoint, *shots, says("ok"), work=durable(tmp_path))
         rig.run()
         last = rig.sent()
         images = [m for m in last if "input_image" in json.dumps(m.get("output"))]
@@ -611,9 +594,9 @@ def test_screenshots_go_to_the_model_as_images_and_only_recent_ones_are_kept() -
         assert "1280x720" in rig.results()[0]
 
 
-def test_follow_ups_keep_only_recent_screenshots_in_memory_and_in_requests() -> None:
+def test_follow_ups_keep_only_recent_screenshots_in_memory_and_in_requests(tmp_path: Path) -> None:
     with fake_endpoint() as endpoint:
-        rig = Rig(endpoint, calls(("screenshot", {})), calls(("screenshot", {})), says("I see the screen."))
+        rig = Rig(endpoint, calls(("screenshot", {})), calls(("screenshot", {})), says("I see the screen."), work=durable(tmp_path))
         rig.run("Look at the screen.")
         endpoint.replies = [calls(("screenshot", {})), says("It changed.")]
         rig.run("Look again.")
@@ -624,55 +607,41 @@ def test_follow_ups_keep_only_recent_screenshots_in_memory_and_in_requests() -> 
         assert results == tool_calls
 
 
-def test_follow_up_asks_for_desktop_control_again() -> None:
-    with fake_endpoint() as endpoint:
-        rig = Rig(endpoint, calls(("type_text", {"text": "first"})), says("Typed."))
-        rig.machine.confirms = [True, False]
-        rig.run("Type first.", approvals=True)
-        endpoint.replies = [calls(("type_text", {"text": "second"})), says("Declined.")]
-        rig.run("Type second.", approvals=True)
-        assert "type first" in rig.machine.log
-        assert "type second" not in rig.machine.log
-        assert len([entry for entry in rig.machine.log if entry.startswith("confirm ")]) == 2
-
-
 # ---- files -----------------------------------------------------------------------------
 
 
 def test_read_file_returns_text_and_says_when_it_was_cut(tmp_path: Path) -> None:
     big = tmp_path / "big.log"
-    rig = ToolRig()
+    rig = ToolRig(work=durable(tmp_path))
     for length in (19_999, 20_000, 20_001, 50_000):
         big.write_text("x" * length, encoding="utf-8")
         result = rig.call("read_file", path=str(big))
         suffix = f"\n[cut: showing 20000 of {length} characters]" if length > 20_000 else ""
-        assert result.ok and result.text == "x" * min(length, 20_000) + suffix
+        assert result.ok and observed(result.text) == "x" * min(length, 20_000) + suffix
 
 
 def test_find_files_matches_names_under_a_folder(tmp_path: Path) -> None:
     (tmp_path / "a").mkdir()
     (tmp_path / "a" / "report.xlsx").write_bytes(b"")
     (tmp_path / "notes.txt").write_text("", encoding="utf-8")
-    rig = ToolRig()
+    rig = ToolRig(work=durable(tmp_path))
     result = rig.call("find_files", folder=str(tmp_path), pattern="*.xlsx")
-    assert result.ok and result.text == str(tmp_path / "a" / "report.xlsx")
+    assert result.ok and observed(result.text) == str(tmp_path / "a" / "report.xlsx")
     for name in ("second.xlsx", "third.xlsx"):
         (tmp_path / name).touch()
     bounded = rig.call("find_files", folder=str(tmp_path), pattern="*.xlsx", limit=2)
-    lines = bounded.text.splitlines()
+    lines = observed(bounded.text).splitlines()
     assert bounded.ok and "[stopped at 2 files]" in lines
     assert len(lines) == 3 and len(set(lines)) == 3
 
 
-def test_write_file_asks_first_and_then_writes(tmp_path: Path) -> None:
+def test_approval_mode_writes_no_file_before_a_durable_approval(tmp_path: Path) -> None:
+    # Defect: write_file performs its effect without consulting the approval gate.
     target = tmp_path / "out" / "reports" / "summary.md"
-    rig = ToolRig(approvals=True)
+    rig = ToolRig(approvals=True, work=durable(tmp_path))
     declined = rig.call("write_file", path=str(target), content="not approved")
     assert not declined.ok and not target.exists()
-    rig.machine.confirms = [True]
-    written = rig.call("write_file", path=str(target), content="# Summary\n")
-    assert written.ok and target.read_text(encoding="utf-8") == "# Summary\n"
-    assert rig.machine.log[0].startswith(f"confirm Write a file?: {target}")
+    assert rig.agent.work.disposition is not None
 
 
 def test_default_tools_write_run_and_control_the_desktop_without_approval(tmp_path: Path) -> None:
@@ -685,6 +654,7 @@ def test_default_tools_write_run_and_control_the_desktop_without_approval(tmp_pa
             calls(("screenshot", {})),
             calls(("click", {"x": 10, "y": 20}), ("type_text", {"text": "hello"}), ("press_keys", {"keys": "enter"})),
             says("Done."),
+            work=durable(tmp_path),
         )
         rig.run()
         assert target.read_text(encoding="utf-8") == "Done"
@@ -692,14 +662,13 @@ def test_default_tools_write_run_and_control_the_desktop_without_approval(tmp_pa
         assert "click left x1 at 20,40" in rig.machine.log
         assert "type hello" in rig.machine.log
         assert any(entry.startswith("keys ") for entry in rig.machine.log)
-        assert not any(entry.startswith("confirm ") for entry in rig.machine.log)
 
 
 def test_stop_prevents_actions_even_with_approvals_disabled(tmp_path: Path) -> None:
     stopped = threading.Event()
     stopped.set()
     machine = FakeMachine()
-    agent = Agent(Settings("", "", "", "", "", "", ""), machine, FakeWindow(), stopped, journal=lambda entry: None)
+    agent = Agent(Settings("", "", "", "", "", "", ""), machine, FakeWindow(), stopped, work=durable(tmp_path))
     target = tmp_path / "not-written.txt"
     for name, args in (
         ("write_file", {"path": str(target), "content": "no"}),
@@ -712,14 +681,6 @@ def test_stop_prevents_actions_even_with_approvals_disabled(tmp_path: Path) -> N
         assert not result.ok and result.text == "Stopped by the user."
     assert not target.exists()
     assert not machine.log
-
-
-def test_ask_user_passes_the_answer_back() -> None:
-    rig = ToolRig()
-    rig.machine.answers = ["Downloads"]
-    answer = rig.call("ask_user", question="Which folder?")
-    assert answer.ok and answer.text == "Downloads"
-    assert not rig.call("ask_user", question="Another folder?").ok
 
 
 # ---- keys ------------------------------------------------------------------------------
@@ -747,11 +708,9 @@ def test_the_agent_edits_checks_and_applies_a_change(tmp_path: Path) -> None:
     workspace = source(tmp_path)
     with fake_endpoint() as endpoint:
         apply = ("apply_changes", {"summary": "Say hello"})
-        rig = Rig(endpoint, calls(EDIT), calls(("check_changes", {})), calls(apply), says("never asked"), workspace=workspace)
-        rig.machine.approve = False
+        rig = Rig(endpoint, calls(EDIT), calls(("check_changes", {})), calls(apply), says("never asked"), workspace=workspace, work=durable(tmp_path))
         rig.run("greet in English")
         assert rig.machine.log == ["install Say hello"]
-        assert rig.machine.reviewed == []
         assert "1 passed, 0 failed" in rig.results(2)[0]
         assert rig.window.log[-1] == "done Installing: Say hello. Workspace restarts in a moment."
         assert len(endpoint.received) == 3  # the task ends with the install
@@ -762,7 +721,17 @@ def test_apply_needs_a_passing_check_of_exactly_these_changes(tmp_path: Path) ->
     second = ("edit_source", {"path": "config.py", "old": "'hello'", "new": "'hi'"})
     apply = ("apply_changes", {"summary": "x"})
     with fake_endpoint() as endpoint:
-        rig = Rig(endpoint, calls(EDIT), calls(apply), calls(("check_changes", {})), calls(second), calls(apply), says("ok"), workspace=workspace)
+        rig = Rig(
+            endpoint,
+            calls(EDIT),
+            calls(apply),
+            calls(("check_changes", {})),
+            calls(second),
+            calls(apply),
+            says("ok"),
+            workspace=workspace,
+            work=durable(tmp_path),
+        )
         rig.run()
         assert rig.results(2) == ["Error: run check_changes first; only checked changes can be installed."]
         assert rig.results(5) == ["Error: the changes have changed since they were checked; run check_changes again."]
@@ -774,7 +743,13 @@ def test_failing_checks_are_reported_and_block_apply(tmp_path: Path) -> None:
     breaking = ("write_source", {"path": "config.py", "content": "GREETING = (\n"})
     with fake_endpoint() as endpoint:
         rig = Rig(
-            endpoint, calls(breaking), calls(("check_changes", {})), calls(("apply_changes", {"summary": "x"})), says("ok"), workspace=workspace
+            endpoint,
+            calls(breaking),
+            calls(("check_changes", {})),
+            calls(("apply_changes", {"summary": "x"})),
+            says("ok"),
+            workspace=workspace,
+            work=durable(tmp_path),
         )
         rig.run()
         assert "doesn't compile" in rig.results(2)[0]
@@ -782,20 +757,9 @@ def test_failing_checks_are_reported_and_block_apply(tmp_path: Path) -> None:
         assert not any(entry.startswith("install") for entry in rig.machine.log)
 
 
-def test_a_declined_review_installs_nothing(tmp_path: Path) -> None:
-    workspace = source(tmp_path)
-    with fake_endpoint() as endpoint:
-        apply = ("apply_changes", {"summary": "x"})
-        rig = Rig(endpoint, calls(EDIT), calls(("check_changes", {})), calls(apply), says("ok"), workspace=workspace)
-        rig.machine.approve = False
-        rig.run(approvals=True)
-        assert rig.machine.log == ["review x"]
-        assert rig.results(3) == ["The user didn't approve these changes. Ask what they'd like instead."]
-
-
 def test_protected_files_cant_be_edited(tmp_path: Path) -> None:
     workspace = source(tmp_path)
-    result = ToolRig(workspace=workspace).call("write_source", path="keeper.py", content="x")
+    result = ToolRig(workspace=workspace, work=durable(tmp_path)).call("write_source", path="keeper.py", content="x")
     assert not result.ok and result.text.startswith("Error: keeper.py is protected")
 
 
@@ -803,33 +767,39 @@ def test_first_source_use_starts_from_the_running_version(tmp_path: Path) -> Non
     workspace = source(tmp_path)
     workspace.root.mkdir()
     (workspace.root / "leftover.py").write_text("x = 1\n", encoding="utf-8")
-    result = ToolRig(workspace=workspace).call("show_changes")
-    assert result.ok and result.text == "No changes yet."
+    result = ToolRig(workspace=workspace, work=durable(tmp_path)).call("show_changes")
+    assert result.ok and observed(result.text) == "No changes yet."
     assert not (workspace.root / "leftover.py").exists()
 
 
 def test_source_edits_survive_follow_up_requests(tmp_path: Path) -> None:
     workspace = source(tmp_path)
     with fake_endpoint() as endpoint:
-        rig = Rig(endpoint, calls(("write_source", {"path": "draft.py", "content": "x = 1\n"})), says("Drafted."), workspace=workspace)
+        rig = Rig(
+            endpoint,
+            calls(("write_source", {"path": "draft.py", "content": "x = 1\n"})),
+            says("Drafted."),
+            workspace=workspace,
+            work=durable(tmp_path),
+        )
         rig.run("Make a draft.")
         endpoint.replies = [calls(("read_source", {"path": "draft.py"})), says("The draft is still here.")]
         rig.run("Read the draft back.")
-        assert rig.results() == ["x = 1\n"]
+        assert [observed(result) for result in rig.results()] == ["x = 1\n"]
         assert not (workspace.live / "draft.py").exists()
 
 
 def test_reading_and_listing_the_source(tmp_path: Path) -> None:
-    rig = ToolRig(workspace=source(tmp_path))
+    rig = ToolRig(workspace=source(tmp_path), work=durable(tmp_path))
     listing = rig.call("list_source")
     text = rig.call("read_source", path="config.py")
-    assert listing.ok and "config.py" in listing.text.splitlines()
-    assert text.ok and text.text == "GREETING = 'hej'\n"
+    assert listing.ok and "config.py" in observed(listing.text).splitlines()
+    assert text.ok and observed(text.text) == "GREETING = 'hej'\n"
 
 
-def test_without_a_workspace_there_are_no_source_tools() -> None:
+def test_without_a_workspace_there_are_no_source_tools(tmp_path: Path) -> None:
     with fake_endpoint() as endpoint:
-        rig = Rig(endpoint, says("ok"))
+        rig = Rig(endpoint, says("ok"), work=durable(tmp_path))
         rig.run()
         assert b"read_source" not in endpoint.last.body
 
@@ -839,40 +809,25 @@ def test_git_external_execution_options_require_confirmation() -> None:
         assert not allowed(command), command
 
 
-def test_approval_mode_defers_runtime_checks_until_keeper_review(tmp_path: Path) -> None:
+def test_approval_mode_runs_no_candidate_code_before_approval(tmp_path: Path) -> None:
     workspace = source(tmp_path)
     marker = tmp_path / "outside-workspace"
     content = f'from pathlib import Path\nPath({str(marker)!r}).write_text("executed")\n'
-    rig = ToolRig(approvals=True, workspace=workspace)
+    rig = ToolRig(approvals=True, workspace=workspace, work=durable(tmp_path))
     assert rig.call("write_source", path="candidate.py", content=content).ok
-    assert rig.call("check_changes").ok
+    assert not rig.call("check_changes").ok
     assert not marker.exists(), "unapproved code executed during checks"
 
 
 def test_fast_editing_checks_leave_native_failures_for_the_full_install_gate(tmp_path: Path) -> None:
     workspace = source(tmp_path)
     (workspace.live / "tests/test_windows_native.py").write_text("def test_native():\n    assert False, 'native failure'\n")
-    rig = ToolRig(workspace=workspace)
+    rig = ToolRig(workspace=workspace, work=durable(tmp_path))
     assert rig.call("edit_source", path="config.py", old="'hej'", new="'hello'").ok
     checked = rig.call("check_changes")
     assert checked.ok and "1 native module deferred" in checked.text
     passed, report = workspace.check()
     assert not passed and "FAILED tests.test_windows_native.test_native" in report
-
-
-def test_stop_during_confirmation_prevents_the_approved_write(tmp_path: Path) -> None:
-    class StopOnConfirmation(FakeMachine):
-        __slots__ = ()
-
-        def confirm(self, title: str, detail: str, *, cancel: threading.Event | None = None) -> bool:
-            assert cancel is not None
-            cancel.set()
-            return True
-
-    rig = ToolRig(approvals=True, machine=StopOnConfirmation())
-    path = tmp_path / "never-written.txt"
-    result = rig.call("write_file", path=str(path), content="too late")
-    assert not result.ok and not path.exists()
 
 
 def test_runtime_failure_returns_to_the_agent_to_fix_before_installing(tmp_path: Path) -> None:
@@ -889,6 +844,7 @@ def test_runtime_failure_returns_to_the_agent_to_fix_before_installing(tmp_path:
             calls(check),
             calls(apply),
             workspace=workspace,
+            work=durable(tmp_path),
         )
         rig.run("Fix the greeting")
         assert "FAILED tests.test_config.test_greeting" in rig.results(2)[0]

@@ -5,12 +5,14 @@ import queue
 import threading
 from collections.abc import Callable, Generator
 from contextlib import contextmanager
+from pathlib import Path
 
 from assistant.agent import Agent
 from assistant.agent_session import Answer, LiveMessage, ReasoningSummary, StreamState, Succeeded, ToolActivity, ToolStatus
 from assistant.llm import Json, Settings
+from automation.execution import WorkExecution
 from tests.fake_endpoint import FakeEndpoint, Received, fake_endpoint
-from tests.test_agent import FakeMachine, FakeWindow, calls, message, response, says
+from tests.test_agent import FakeMachine, FakeWindow, calls, durable, message, response, says
 from tests.test_agent_window import RecordingWindow
 
 
@@ -37,10 +39,17 @@ class ObservedWindow(RecordingWindow):
         return observe
 
 
-def make_agent(endpoint: FakeEndpoint, window: ObservedWindow, stop: threading.Event, *, machine: FakeMachine | None = None) -> Agent:
+def make_agent(
+    endpoint: FakeEndpoint,
+    window: ObservedWindow,
+    stop: threading.Event,
+    *,
+    work: WorkExecution,
+    machine: FakeMachine | None = None,
+) -> Agent:
     window.begin("Read the workbook", stop.set)
     settings = Settings(endpoint.url, "k", "transcribe", "chat", "gpt-6-astra", "", "")
-    return Agent(settings, machine if machine is not None else FakeMachine(), window, stop, journal=lambda _: None)
+    return Agent(settings, machine if machine is not None else FakeMachine(), window, stop, work=work)
 
 
 @contextmanager
@@ -66,7 +75,7 @@ def running(agent: Agent, panel: ObservedWindow) -> Generator[threading.Thread]:
         assert not errors, errors
 
 
-def test_summaries_and_answers_are_visible_before_the_response_finishes() -> None:
+def test_summaries_and_answers_are_visible_before_the_response_finishes(tmp_path: Path) -> None:
     release, stop = threading.Event(), threading.Event()
     panel = ObservedWindow(stop.set)
     summary: Json = {"type": "reasoning", "id": "rs_live", "summary": [{"type": "summary_text", "text": "Checking **the workbook**."}]}
@@ -90,7 +99,7 @@ def test_summaries_and_answers_are_visible_before_the_response_finishes() -> Non
 
     with fake_endpoint() as endpoint:
         endpoint.stream = stream
-        agent = make_agent(endpoint, panel, stop)
+        agent = make_agent(endpoint, panel, stop, work=durable(tmp_path))
         with running(agent, panel) as worker:
             try:
                 assert isinstance(panel.events.get(timeout=3), ReasoningSummary)
@@ -111,7 +120,7 @@ def test_summaries_and_answers_are_visible_before_the_response_finishes() -> Non
             assert partial.messages[-1].text == "Found **budget"  # immutable snapshots
 
 
-def test_summary_parts_stay_separate_and_private_reasoning_never_reaches_the_view() -> None:
+def test_summary_parts_stay_separate_and_private_reasoning_never_reaches_the_view(tmp_path: Path) -> None:
     stop = threading.Event()
     panel = ObservedWindow(stop.set)
     summary: Json = {
@@ -148,7 +157,7 @@ def test_summary_parts_stay_separate_and_private_reasoning_never_reaches_the_vie
 
     with fake_endpoint() as endpoint:
         endpoint.stream = stream
-        agent = make_agent(endpoint, panel, stop)
+        agent = make_agent(endpoint, panel, stop, work=durable(tmp_path))
         agent.run("Read the workbook")
         panel.finish()
         assert [item.text for item in panel.state.messages] == [
@@ -163,7 +172,7 @@ def test_summary_parts_stay_separate_and_private_reasoning_never_reaches_the_vie
         assert not panel.state.activity
 
 
-def test_a_tool_is_shown_running_before_it_returns_and_completes_the_same_row() -> None:
+def test_a_tool_is_shown_running_before_it_returns_and_completes_the_same_row(tmp_path: Path) -> None:
     release, entered, stop = threading.Event(), threading.Event(), threading.Event()
     panel = ObservedWindow(stop.set)
 
@@ -175,7 +184,7 @@ def test_a_tool_is_shown_running_before_it_returns_and_completes_the_same_row() 
 
     with fake_endpoint() as endpoint:
         endpoint.replies = [calls(("get_clipboard", {})), says("Found it.")]
-        agent = make_agent(endpoint, panel, stop, machine=HeldClipboard())
+        agent = make_agent(endpoint, panel, stop, work=durable(tmp_path), machine=HeldClipboard())
         with running(agent, panel) as worker:
             try:
                 assert entered.wait(timeout=3)
@@ -192,7 +201,7 @@ def test_a_tool_is_shown_running_before_it_returns_and_completes_the_same_row() 
             assert completed[0].outcome == Succeeded("Fixture workbook name")
 
 
-def test_stop_closes_a_stalled_stream_and_preserves_earlier_tool_results() -> None:
+def test_stop_closes_a_stalled_stream_and_preserves_earlier_tool_results(tmp_path: Path) -> None:
     release, stop = threading.Event(), threading.Event()
     panel = ObservedWindow(stop.set)
     requests = 0
@@ -209,7 +218,7 @@ def test_stop_closes_a_stalled_stream_and_preserves_earlier_tool_results() -> No
 
     with fake_endpoint() as endpoint:
         endpoint.stream = stream
-        agent = make_agent(endpoint, panel, stop)
+        agent = make_agent(endpoint, panel, stop, work=durable(tmp_path))
         with running(agent, panel) as worker:
             try:
                 while True:
@@ -228,13 +237,13 @@ def test_stop_closes_a_stalled_stream_and_preserves_earlier_tool_results() -> No
                 release.set()
         endpoint.stream = None
         endpoint.replies = [says("It said clipped.")]
-        follow_up = Agent(agent.settings, agent.machine, FakeWindow(), threading.Event(), journal=lambda _: None, history=agent.history)
+        follow_up = Agent(agent.settings, agent.machine, FakeWindow(), threading.Event(), work=agent.work, history=agent.history)
         assert follow_up.run("What did it say?")
-        assert b'"output":"clipped"' in endpoint.last.body
+        assert b'"output":"clipped\\n[observation_id: ' in endpoint.last.body
         assert b"Too late." not in endpoint.last.body and b"The workbook" not in endpoint.last.body
 
 
-def test_ending_a_stream_early_keeps_visible_partial_text_and_reports_the_failure() -> None:
+def test_ending_a_stream_early_keeps_visible_partial_text_and_reports_the_failure(tmp_path: Path) -> None:
     stop = threading.Event()
     panel = ObservedWindow(stop.set)
 
@@ -245,7 +254,7 @@ def test_ending_a_stream_early_keeps_visible_partial_text_and_reports_the_failur
 
     with fake_endpoint() as endpoint:
         endpoint.stream = stream
-        agent = make_agent(endpoint, panel, stop)
+        agent = make_agent(endpoint, panel, stop, work=durable(tmp_path))
         assert not agent.run("Read the workbook")
         panel.finish()
         assert panel.state.status == "Needs attention"

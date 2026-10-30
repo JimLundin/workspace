@@ -41,19 +41,6 @@ class DesktopAccess(Protocol):
     def paste(self, text: str) -> None: ...
 
 
-class HumanInput(Protocol):
-    """A local UI or a worker's cancellable human-input bridge."""
-
-    def agent_input(
-        self,
-        title: str,
-        detail: str = "",
-        *,
-        question: bool = False,
-        cancel: threading.Event | None = None,
-    ) -> str | None: ...
-
-
 class MeetingControl(Protocol):
     """Meeting capture stays with its current owner and can be reached remotely."""
 
@@ -137,12 +124,11 @@ def open_file(target: str) -> None:
 class WinMachine:
     """What the agent's tools act on, done with Windows calls."""
 
-    __slots__ = ("background_browser", "capture_sources", "desktop", "meetings", "open_target", "teams_client", "ui")
+    __slots__ = ("background_browser", "capture_sources", "desktop", "meetings", "open_target", "teams_client")
 
     def __init__(
         self,
         desktop: DesktopAccess,
-        ui: HumanInput,
         *,
         browser: BrowserControl | None = None,
         teams: TeamsControl | None = None,
@@ -151,11 +137,10 @@ class WinMachine:
         open_target: Callable[[str], None] = open_file,
     ) -> None:
         # Each optional capability has its own owner; worker composition selects
-        # transports independently of capture, meetings and human input.
+        # transports independently of capture and meetings.
         self.desktop = desktop
         self.capture_sources: CaptureObservation = NativeCaptureObservation() if capture_sources is None else capture_sources
         self.open_target = open_target
-        self.ui = ui
         self.background_browser: BrowserControl = Browser(DIRECTORY / "browser-profile", source=Product.EDGE) if browser is None else browser
         self.teams_client: TeamsControl = Teams(DIRECTORY / "teams", environment=os.environ) if teams is None else teams
         self.meetings = meetings
@@ -318,15 +303,6 @@ class WinMachine:
 
     def open(self, target: str) -> None:
         self.open_target(target)
-
-    def ask_user(self, question: str, *, cancel: threading.Event | None = None) -> str | None:
-        return self.ui.agent_input(question, question=True, cancel=cancel)
-
-    def confirm(self, title: str, detail: str, *, cancel: threading.Event | None = None) -> bool:
-        return self.ui.agent_input(title, detail, cancel=cancel) == "approve"
-
-    def review(self, summary: str, diff: str) -> bool:
-        return True  # the keeper owns the optional review of its frozen candidate
 
     def install(self, summary: str) -> None:
         keeper.ask("install", summary)

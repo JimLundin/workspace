@@ -44,7 +44,6 @@ class MeetingRig:
         "command",
         "drafts",
         "errors",
-        "journal",
         "journals",
         "machine",
         "meeting",
@@ -68,7 +67,6 @@ class MeetingRig:
         self.workspace = Workspace(live_tree(folder / "source"), folder / "workspace")
         self.machine = FakeMachine()
         self.errors: list[str] = []
-        self.journal: list[dict[str, Json]] = []
         self.response = followup_response(self.bundle)
 
     def claim(self, *, prompt: str | None = None) -> Claim:
@@ -89,7 +87,6 @@ class MeetingRig:
         return AgentExecution(
             Settings(endpoint.url, "fixture", "transcribe", "chat", "gpt-6-astra", "", ""),
             self.machine,
-            journal=self.journal.append,
             record=lambda record: None,
             report_error=self.errors.append,
             close_background=self.machine.close_background,
@@ -106,7 +103,6 @@ class MeetingRig:
             self.machine,
             FakeWindow(),
             threading.Event(),
-            journal=self.journal.append,
             workspace=self.workspace,
             context_reader=context,
             work=WorkExecution(claim, self.tasks, Resources()),
@@ -201,7 +197,7 @@ def test_sdk_publishes_sourced_notes_complete_email_and_verified_durable_actions
     publication = next(action for action in actions if action.specification.tool == "meeting_publish_followup")
     assert isinstance(publication.specification.verification, FileDigest)
     assert publication.specification.verification.sha256 == hashlib.sha256((package.directory / "package.zip").read_bytes()).hexdigest()
-    assert "Complete final sentence." not in repr(actions) and "Complete final sentence." not in repr(rig.journal)
+    assert "Complete final sentence." not in repr(actions)
 
 
 def test_model_completion_without_a_published_and_selected_package_remains_blocked(tmp_path: Path) -> None:

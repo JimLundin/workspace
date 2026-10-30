@@ -633,19 +633,6 @@ class Ui:
         notice = next((item for item in self._desktop.notification_observation.notices if item.key == key), None)
         return notice is not None and self.communicate(HandleNotice(notice))
 
-    def agent_input(
-        self,
-        title: str,
-        detail: str = "",
-        *,
-        question: bool = False,
-        cancel: threading.Event | None = None,
-    ) -> str | None:
-        """Wait on the agent's inline request, without displaying or focusing a window."""
-        if self._agent is None:
-            return None
-        return self._agent.input(title, detail, question=question, cancel=cancel)
-
     def close_agent(self) -> None:
         if self._agent is not None:
             self._agent.close()

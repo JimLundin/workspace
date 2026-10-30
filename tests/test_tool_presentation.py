@@ -1,6 +1,7 @@
 """Regressions for Workspace's tool routing and reply presentation choices."""
 
 from datetime import UTC, datetime
+from pathlib import Path
 
 from assistant import notification_text
 from assistant.agent_session import Answer, StreamState, Succeeded, ToolActivity
@@ -10,14 +11,14 @@ from assistant.feed_triage import Assessment, Solution, SolutionKind
 from assistant.notifications import Entry, Settled, Turn
 from tests.fake_endpoint import fake_endpoint
 from tests.json_fixture import json_object, json_rows
-from tests.test_agent import Rig, ToolRig, calls, says
+from tests.test_agent import Rig, ToolRig, calls, durable, says
 
 
-def test_time_calls_observe_fresh_time_and_publish_tool_activity() -> None:
+def test_time_calls_observe_fresh_time_and_publish_tool_activity(tmp_path: Path) -> None:
     """Detect a missing dispatch or a tool reusing the prompt's stale time."""
     observations = (datetime(2026, 10, 28, 10, tzinfo=UTC), datetime(2026, 10, 28, 11, tzinfo=UTC))
     times = iter(observations)
-    rig = ToolRig(clock=lambda: next(times))
+    rig = ToolRig(clock=lambda: next(times), work=durable(tmp_path))
     first = rig.call("get_current_time")
     second = rig.call("get_current_time")
     assert first.ok and second.ok
@@ -52,19 +53,19 @@ def test_reply_work_item_uses_the_markdown_body_adapter() -> None:
     assert any("the totals" in span.text and "bold" in span.tags for span in notification_text.spans(row))
 
 
-def test_model_can_invoke_the_registered_time_tool() -> None:
+def test_model_can_invoke_the_registered_time_tool(tmp_path: Path) -> None:
     """Detect a time handler omitted from the SDK's exposed tool catalog."""
     with fake_endpoint() as endpoint:
-        rig = Rig(endpoint, calls(("get_current_time", {})), says("Time checked."))
+        rig = Rig(endpoint, calls(("get_current_time", {})), says("Time checked."), work=durable(tmp_path))
         rig.run("Check the current time.")
         request = json_object(endpoint.received[0].body)
         assert any(spec["name"] == "get_current_time" for spec in json_rows(request["tools"]))
         assert "UTC time:" in rig.results()[0]
 
 
-def test_cli_arguments_and_json_output_stay_literal_through_the_tool_boundary() -> None:
+def test_cli_arguments_and_json_output_stay_literal_through_the_tool_boundary(tmp_path: Path) -> None:
     """Detect our preview adapter rewriting a command/result as prose."""
-    rig = ToolRig()
+    rig = ToolRig(work=durable(tmp_path))
     command = 'Write-Output \'{"status":"**literal**"}\''
     rig.machine.commands[command] = (0, '{"status":"**literal**"}')
     assert rig.call("run_powershell", command=command).ok

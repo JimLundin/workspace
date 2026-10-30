@@ -51,7 +51,6 @@ def execution(settings: Settings, workspace: Workspace, errors: list[str]) -> Ag
     return AgentExecution(
         settings,
         machine,
-        journal=lambda record: None,
         record=lambda record: None,
         report_error=errors.append,
         close_background=machine.close_background,
@@ -167,7 +166,7 @@ def test_endpoint_failure_and_step_limit_never_report_completion(tmp_path: Path)
         work = WorkExecution(second, store, Resources())
         endpoint.replies = [calls(("get_clipboard", {}))]
         stop = threading.Event()
-        agent = Agent(settings, FakeMachine(), FakeWindow(), stop, journal=lambda entry: None, work=work, max_steps=1)
+        agent = Agent(settings, FakeMachine(), FakeWindow(), stop, work=work, max_steps=1)
         assert not agent.run(second.task.prompt)
         result = work.outcome(agent.report, stop)
         assert isinstance(result, Waiting) and isinstance(result.reason, Blocked)
@@ -194,7 +193,6 @@ def test_runtime_checks_are_recorded_before_candidate_import_and_failures_remain
         FakeMachine(),
         FakeWindow(),
         threading.Event(),
-        journal=lambda entry: None,
         work=work,
         workspace=workspace,
     )
@@ -252,7 +250,7 @@ def test_nonfinite_tool_arguments_never_enter_effect_storage(tmp_path: Path) -> 
     destination = tmp_path / "forbidden.txt"
     payload: dict[str, object] = {"path": str(destination), "content": "not written", "unexpected": float("nan")}
     args = json.dumps(payload)
-    agent = Agent(Settings("", "", "", "", "", "", ""), FakeMachine(), FakeWindow(), threading.Event(), journal=lambda entry: None, work=work)
+    agent = Agent(Settings("", "", "", "", "", "", ""), FakeMachine(), FakeWindow(), threading.Event(), work=work)
     result = agent.call(ToolCall("invalid", "write_file", args))
     assert not result.ok and not destination.exists() and not store.actions("task")
 

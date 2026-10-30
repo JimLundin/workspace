@@ -100,7 +100,6 @@ def test_finished_meeting_produces_one_verified_notes_file_and_survives_restart(
         execution = AgentExecution(
             settings,
             machine,
-            journal=lambda record: None,
             record=lambda record: None,
             report_error=errors.append,
             close_background=machine.close_background,

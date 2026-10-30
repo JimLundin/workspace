@@ -3,13 +3,14 @@
 import json
 import threading
 import time
+from pathlib import Path
 
 from assistant.activity import Activity, ContextSnapshot
 from assistant.agent import Agent
 from assistant.geometry import Shot
 from assistant.llm import Json, Settings, ToolCall
 from tests.fake_endpoint import fake_endpoint
-from tests.test_agent import FakeMachine, FakeWindow, Rig, calls, says
+from tests.test_agent import FakeMachine, FakeWindow, Rig, calls, durable, says
 from winapi.shapes import Rect, Window
 
 
@@ -19,7 +20,7 @@ def call(agent: Agent, name: str, arguments: dict[str, object]) -> str:
     return result.text
 
 
-def test_new_computer_tools_are_available_to_the_model_without_default_approvals() -> None:
+def test_new_computer_tools_are_available_to_the_model_without_default_approvals(tmp_path: Path) -> None:
     with fake_endpoint() as endpoint:
         rig = Rig(
             endpoint,
@@ -30,6 +31,7 @@ def test_new_computer_tools_are_available_to_the_model_without_default_approvals
             calls(("paste_text", {"text": "A complete block of text"}), ("press_keys", {"keys": "win", "repeat": 2})),
             calls(("manage_window", {"handle": 7, "action": "maximize"})),
             says("Done."),
+            work=durable(tmp_path),
         )
         rig.run()
         assert "move 20,40" in rig.machine.log
@@ -53,10 +55,10 @@ class StoppingMouse(FakeMachine):
             self.stop.set()
 
 
-def test_stopping_a_drag_releases_its_button_and_modifiers() -> None:
+def test_stopping_a_drag_releases_its_button_and_modifiers(tmp_path: Path) -> None:
     stop = threading.Event()
     machine = StoppingMouse(stop)
-    agent = Agent(Settings("", "", "", "", "", "", ""), machine, FakeWindow(), stop, journal=lambda entry: None)
+    agent = Agent(Settings("", "", "", "", "", "", ""), machine, FakeWindow(), stop, work=durable(tmp_path))
     agent.shot = Shot(Rect(-1920, 0, 0, 1080), 960, 540)
     arguments: dict[str, object] = {
         "x": 10,
@@ -73,9 +75,9 @@ def test_stopping_a_drag_releases_its_button_and_modifiers() -> None:
     assert sum(entry.startswith("move ") for entry in machine.log) == 1
 
 
-def test_bad_coordinates_and_action_arguments_do_not_produce_input() -> None:
+def test_bad_coordinates_and_action_arguments_do_not_produce_input(tmp_path: Path) -> None:
     machine = FakeMachine()
-    agent = Agent(Settings("", "", "", "", "", "", ""), machine, FakeWindow(), threading.Event(), journal=lambda entry: None)
+    agent = Agent(Settings("", "", "", "", "", "", ""), machine, FakeWindow(), threading.Event(), work=durable(tmp_path))
     agent.shot = Shot(Rect(0, 0, 100, 100), 100, 100)
     for name, arguments in (
         ("click", {"x": -1, "y": 10}),
@@ -95,11 +97,11 @@ def context(title: str = "Budget.xlsx - Excel") -> ContextSnapshot:
     return ContextSnapshot(now, "workspace", (Activity(Window(7, title, "excel.exe", minimized=False), now - 2, now, agent_active=False),))
 
 
-def test_request_context_includes_the_work_window_and_one_current_screenshot() -> None:
+def test_request_context_includes_the_work_window_and_one_current_screenshot(tmp_path: Path) -> None:
     with fake_endpoint() as endpoint:
-        rig = Rig(endpoint, says("I see the workbook."))
+        rig = Rig(endpoint, says("I see the workbook."), work=durable(tmp_path))
         settings = Settings(endpoint.url, "fixture", "transcribe", "chat", "agent", "", "")
-        agent = Agent(settings, rig.machine, rig.window, rig.stop, journal=rig.journal.append, history=rig.history, context=context())
+        agent = Agent(settings, rig.machine, rig.window, rig.stop, work=durable(tmp_path), history=rig.history, context=context())
         assert agent.run("Summarize this")
         request = rig.sent(0)[0]
         assert request["role"] == "user"
@@ -109,28 +111,28 @@ def test_request_context_includes_the_work_window_and_one_current_screenshot() -
         assert agent.shot is not None
 
 
-def test_automatic_and_explicit_screenshots_share_the_same_history_limit() -> None:
+def test_automatic_and_explicit_screenshots_share_the_same_history_limit(tmp_path: Path) -> None:
     with fake_endpoint() as endpoint:
-        rig = Rig(endpoint, calls(("screenshot", {})), says("I see it."))
+        rig = Rig(endpoint, calls(("screenshot", {})), says("I see it."), work=durable(tmp_path))
         settings = Settings(endpoint.url, "fixture", "transcribe", "chat", "agent", "", "")
         for _ in range(3):
             endpoint.replies = [calls(("screenshot", {})), says("I see it.")]
-            agent = Agent(settings, rig.machine, rig.window, rig.stop, journal=rig.journal.append, history=rig.history, context=context())
+            agent = Agent(settings, rig.machine, rig.window, rig.stop, work=durable(tmp_path), history=rig.history, context=context())
             assert agent.run("Check this")
         assert rig.history.encoded().decode().count("data:image/png;base64,") == 2
         assert json.dumps(rig.sent()).count("data:image/png;base64,") == 2
         assert "earlier screenshot" in rig.history.encoded().decode()
 
 
-def test_disabled_context_does_not_capture_or_add_observations_to_the_request() -> None:
+def test_disabled_context_does_not_capture_or_add_observations_to_the_request(tmp_path: Path) -> None:
     with fake_endpoint() as endpoint:
-        rig = Rig(endpoint, says("Done."))
+        rig = Rig(endpoint, says("Done."), work=durable(tmp_path))
         agent = Agent(
             Settings(endpoint.url, "fixture", "transcribe", "chat", "agent", "", ""),
             rig.machine,
             rig.window,
             rig.stop,
-            journal=rig.journal.append,
+            work=durable(tmp_path),
             context=ContextSnapshot(time.time(), "disabled"),
         )
         assert agent.run("Do the task")
@@ -138,19 +140,19 @@ def test_disabled_context_does_not_capture_or_add_observations_to_the_request() 
         assert not rig.machine.log
 
 
-def test_unavailable_screen_context_keeps_the_request_and_activity_usable() -> None:
+def test_unavailable_screen_context_keeps_the_request_and_activity_usable(tmp_path: Path) -> None:
     class LockedDesktop(FakeMachine):
         def screenshot(self, *, area: Rect | None = None, handle: int = 0, monitor: int = -1, longest: int = 1280) -> tuple[bytes, Shot]:
             raise OSError("The desktop is locked.")
 
     with fake_endpoint() as endpoint:
-        rig = Rig(endpoint, says("I can still work with files."))
+        rig = Rig(endpoint, says("I can still work with files."), work=durable(tmp_path))
         agent = Agent(
             Settings(endpoint.url, "fixture", "transcribe", "chat", "agent", "", ""),
             LockedDesktop(),
             rig.window,
             rig.stop,
-            journal=rig.journal.append,
+            work=durable(tmp_path),
             context=context(),
         )
         assert agent.run("Find this workbook")
@@ -159,7 +161,7 @@ def test_unavailable_screen_context_keeps_the_request_and_activity_usable() -> N
         assert "input_image" not in body and agent.shot is None
 
 
-def test_context_tool_refreshes_the_current_app_without_taking_a_screenshot() -> None:
+def test_context_tool_refreshes_the_current_app_without_taking_a_screenshot(tmp_path: Path) -> None:
     machine = FakeMachine()
     journal: list[dict[str, Json]] = []
     agent = Agent(
@@ -167,7 +169,7 @@ def test_context_tool_refreshes_the_current_app_without_taking_a_screenshot() ->
         machine,
         FakeWindow(),
         threading.Event(),
-        journal=journal.append,
+        work=durable(tmp_path),
         context=context(),
         context_reader=lambda: context("Report.docx - Word"),
     )

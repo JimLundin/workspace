@@ -99,7 +99,7 @@ class StoppedError(Exception):
 
 
 class MemorySession:
-    """The SDK's session interface backed by the app's conversation, retained until reset or exit."""
+    """The SDK's session interface backed by one durable conversation, retained until exit."""
 
     __slots__ = ("checkpoint", "items", "session_id")
     session_id: str
@@ -109,8 +109,8 @@ class MemorySession:
         self,
         items: History,
         *,
-        checkpoint: Callable[[list[Json]], None] | None = None,
-        session_id: str = "workspace",
+        checkpoint: Callable[[list[Json]], None],
+        session_id: str,
     ) -> None:
         self.items = items
         self.checkpoint, self.session_id = checkpoint, session_id
@@ -123,8 +123,7 @@ class MemorySession:
         # Discard old image bytes in retained context too, not just in the HTTP request.
         retained = recent_images([*self.items.read(), *incoming])
         self.items.replace(retained)
-        if self.checkpoint is not None:
-            self.checkpoint(retained)
+        self.checkpoint(retained)
 
     async def pop_item(self) -> TResponseInputItem | None:
         return _RESPONSE_ITEM.validate_python(self.items.pop()) if self.items else None
@@ -258,7 +257,7 @@ async def watch_stop(local: Agent, result: RunResultStreaming, hooks: Hooks) -> 
 def tool(spec: ToolSpec) -> FunctionTool:
     async def invoke(context: ToolContext[Agent], arguments: str) -> object:
         local: Agent = context.context
-        if local.work is not None and local.work.disposition is not None:
+        if local.work.disposition is not None:
             return "This task is waiting; its execution will suspend."
         if local.stop.is_set() or local.installing is not None:
             return "Stopped by the user." if local.stop.is_set() else "Installation already requested."
@@ -285,7 +284,7 @@ def after_tools(context: RunContextWrapper[Agent], results: list[FunctionToolRes
     if local.stop.is_set():
         # Finish normally so the SDK retains completed tool results for a follow-up.
         return ToolsToFinalOutputResult(is_final_output=True, final_output="Stopped.")
-    if local.work is not None and local.work.disposition is not None:
+    if local.work.disposition is not None:
         return ToolsToFinalOutputResult(is_final_output=True, final_output="Waiting for this task to continue.")
     if local.installing is not None:
         return ToolsToFinalOutputResult(is_final_output=True, final_output=f"Installing: {local.installing}. Workspace restarts in a moment.")
@@ -365,8 +364,8 @@ async def run(local: Agent, task: str, prompt: str, specs: tuple[ToolSpec, ...])
                 hooks=hooks,
                 session=MemorySession(
                     local.history,
-                    checkpoint=local.work.checkpoint if local.work is not None else None,
-                    session_id=local.work.claim.run.run_id if local.work is not None else "workspace",
+                    checkpoint=local.work.checkpoint,
+                    session_id=local.work.claim.run.run_id,
                 ),
                 run_config=RunConfig(
                     tracing_disabled=True,
