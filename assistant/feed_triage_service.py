@@ -5,7 +5,7 @@ import hmac
 import secrets
 import threading
 import time
-from collections.abc import Callable, Mapping
+from collections.abc import Callable
 from dataclasses import replace
 from datetime import UTC, datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -16,32 +16,37 @@ from typing import Protocol, assert_never
 from pydantic import TypeAdapter
 
 from assistant.communications import Feed, SourceDate, SourceDateHint, SourceDateStatus
-from assistant.console_requests import Answer, Command, Request, State, text
+from assistant.console_requests import Answer, Command, Request, State
 from assistant.feed_contracts import (
     BRIDGE_ENDPOINT,
-    FEED_REPLY,
     SOLUTION_CONTEXT,
+    AnswerConsole,
+    BoardEdit,
     BridgeEndpoint,
+    ChooseSolution,
     ChosenHandoff,
     ConsoleAnswered,
     ConsoleOptionQuestion,
     ConsolePendingRequest,
+    DismissItem,
     FeedRejected,
     FeedReply,
     FeedSnapshot,
     QueuedHandoff,
+    ReadFeed,
     RejectedDecision,
     ReviewInput,
     SolutionContext,
     SourceEvidence,
     StoredBoard,
 )
-from assistant.feed_history import DECISION_KIND, Decision, Handoff
+from assistant.feed_history import Decision, Handoff
 from assistant.feed_triage import (
     INSTRUCTIONS,
     Board,
     Candidate,
     Disposition,
+    EditObservation,
     applied,
     batch_for,
     collect,
@@ -64,11 +69,10 @@ from assistant.feed_triage import (
 from assistant.feed_work import FeedWork, WorkingContext
 from assistant.llm import Settings
 from assistant.personal_work_service import PersonalWork
-from assistant.work_bridge_contracts import BRIDGE_RESPONSE, BridgeCommand, BridgeResponse
-from assistant.work_canvas_commands import CANVAS_COMMAND, CanvasCommand, CanvasRefused, CanvasResponse, ReadCanvas, UpdateCanvas
+from assistant.work_bridge_contracts import BRIDGE_COMMAND, BRIDGE_RESPONSE, BridgeCommand, BridgeResponse
+from assistant.work_canvas_commands import CanvasCommand, CanvasRefused, CanvasResponse, ReadCanvas, UpdateCanvas
 from automation.context import ContextRecord
 from automation.personal_work import (
-    PERSONAL_REQUEST,
     AddDocument,
     AddWebPage,
     DismissWork,
@@ -82,7 +86,6 @@ from automation.personal_work import (
 from automation.task import Phase, Task, phase
 lazy from assistant.feed_research import Research
 
-_COMMAND = TypeAdapter(dict[str, object])
 _ADDRESS = TypeAdapter(tuple[str, int])
 
 
@@ -221,8 +224,8 @@ class Triage:
                     length = int(self.headers.get("Content-Length", "0"))
                     if not 0 < length <= 64000:
                         raise ValueError("Invalid feed payload size.")
-                    data = _COMMAND.validate_json(self.rfile.read(length))
-                    result = owner.command(data)
+                    command = BRIDGE_COMMAND.validate_json(self.rfile.read(length))
+                    result = owner.command(command)
                 except RejectedError as error:
                     result = FeedRejected(str(error))
                 except ValueError, TypeError:
@@ -358,73 +361,31 @@ class Triage:
             feed = self.feed
         return conversation_context(feed, source_id)
 
-    def command(self, data: BridgeCommand) -> BridgeResponse:
-        match data:
+    def command(self, command: BridgeCommand) -> BridgeResponse:
+        match command:
             case ReadCanvas() | UpdateCanvas():
-                return self.canvas(data) if self.canvas is not None else CanvasRefused("The local canvas is unavailable.")
+                return self.canvas(command) if self.canvas is not None else CanvasRefused("The local canvas is unavailable.")
             case AddDocument() | AddWebPage() | DismissWork() | RestoreWork() | ListWork() | ListSources() | SaveWork() | UnlinkWork():
-                return self.personal.handle(data) if self.personal is not None else WorkRefused("My work is unavailable.")
+                return self.personal.handle(command) if self.personal is not None else WorkRefused("My work is unavailable.")
+            case ReadFeed():
+                return self.snapshot()
             case FeedReply():
-                return self.reply(data)
+                return self.reply(command)
+            case ChooseSolution():
+                return self.choose(command)
+            case AnswerConsole(request_id, index, answer):
+                if not self.console(Answer(request_id, index, answer)):
+                    raise RejectedError("The exact console question is no longer waiting or the answer is invalid. Read the feed again.")
+                return ConsoleAnswered(request_id, index)
             case _:
-                pass
-        operation = text(data.get("operation"), 32, default="read")
-        if operation.startswith("work_canvas_"):
-            command = CANVAS_COMMAND.validate_python(data)
-            return self.canvas(command) if self.canvas is not None else CanvasRefused("The local canvas is unavailable.")
-        if operation.startswith("work_items_"):
-            request = PERSONAL_REQUEST.validate_python(data)
-            return self.personal.handle(request) if self.personal is not None else WorkRefused("My work is unavailable.")
-        if operation == "read":
-            return self.snapshot()
-        if operation == "choose":
-            return self.choose(data)
-        if operation == "reply":
-            try:
-                answer = FEED_REPLY.validate_python(data)
-            except ValueError as error:
-                raise RejectedError("Reply needs an exact current item, revision, reply identity and nonempty text.") from error
-            return self.reply(answer)
-        if operation == "console_answer":
-            request_id = text(data.get("item"), 128)
-            index = data.get("question_index")
-            if type(index) is not int:
-                raise ValueError("Question index must be an integer.")
-            answer_text = text(data.get("text"), 4096)
-            if not self.console(Answer(request_id, index, answer_text)):
-                raise RejectedError("The exact console question is no longer waiting or the answer is invalid. Read the feed again.")
-            return ConsoleAnswered(request_id, index)
+                return self.edit(command)
+
+    def edit(self, command: BoardEdit) -> FeedSnapshot:
         with self.lock:
             try:
-                updated = edited(self.board, dict(data))
+                updated = edited(self.board, command, EditObservation(self.candidates, self.clock()))
             except ValueError as error:
                 raise RejectedError(str(error)) from error
-            if operation in ("rule", "forget_rule", "clear_rules"):
-                available = {item.identity for item in self.candidates}
-                preserved = tuple(
-                    item
-                    for item in self.board.items
-                    if item.disposition not in (Disposition.USER_QUIET, Disposition.DONE, Disposition.DISMISSED, Disposition.REJECTED)
-                    and all(ref[0] not in available for ref in item.references)
-                )
-                updated = replace(updated, items=(*updated.items, *preserved))
-            updated = reconcile(updated, self.candidates)
-            prior = next((item for item in self.board.items if item.identity == data.get("item")), None)
-            revision = proposal_revision(prior) if prior is not None else ""
-            reason = text(data.get("text"), 4096)
-            key = identity("feed-decision", f"{operation}:{prior.identity if prior else ''}:{revision}:{reason}")
-            if not any(entry.id == key for entry in updated.history):
-                decision = Decision(
-                    key,
-                    DECISION_KIND.validate_python(operation),
-                    prior.identity if prior else "",
-                    revision,
-                    prior.title if prior else "",
-                    prior.summary if prior else "",
-                    reason,
-                    self.clock(),
-                )
-                updated = replace(updated, history=(*updated.history, decision)[-200:])
             # Save first, so a failed write never claims a preference is durable.
             self.store.write(saved(updated))
             self.board = updated
@@ -433,10 +394,10 @@ class Triage:
             self.wake.set()
         return self.snapshot()
 
-    def choose(self, data: Mapping[str, object]) -> ChosenHandoff:
+    def choose(self, command: ChooseSolution) -> ChosenHandoff:
         with self.lock:
             try:
-                item, option = selected(self.board, text(data.get("item"), 128), text(data.get("revision"), 128), text(data.get("choice"), 32))
+                item, option = selected(self.board, command.item, command.revision, command.choice)
             except ValueError as error:
                 raise RejectedError(str(error)) from error
             task, prompt = solution_task(item, option)
@@ -514,14 +475,14 @@ class Triage:
 
     def choose_from_ui(self, identity: str, revision: str, choice: str) -> bool:
         try:
-            self.choose({"item": identity, "revision": revision, "choice": choice})
+            self.choose(ChooseSolution(identity, revision, choice))
         except RejectedError, OSError:
             return False
         return True
 
     def dismiss(self, identity: str) -> bool:
         try:
-            self.command({"operation": "dismiss", "item": identity})
+            self.edit(DismissItem(identity))
         except RejectedError, OSError:
             return False
         return True

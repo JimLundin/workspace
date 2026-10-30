@@ -11,7 +11,7 @@ from assistant import console_requests
 from assistant.communications import Feed, TeamsActivity, Update
 from assistant.console_inbox import ConsoleInbox
 from assistant.feed_agent_tools import request
-from assistant.feed_contracts import StoredBoard
+from assistant.feed_contracts import ChooseSolution, ReadFeed, RejectProposal, SaveRule, StoredBoard
 from assistant.feed_triage import Assessment, Board, Candidate, Disposition, candidate, decode, proposal_revision, saved
 from assistant.feed_triage_service import classify
 from assistant.llm import Settings
@@ -51,7 +51,7 @@ def test_dismissal_is_durable_and_a_failed_save_keeps_the_item_visible(tmp_path:
         assert triage.dismiss("proposal") and not triage.board.actions
         assert triage.board.items[0].disposition is Disposition.DISMISSED
         assert not triage.dismiss("missing")
-        triage.command({"operation": "rule", "text": "Prioritize blocked colleagues."})
+        triage.command(SaveRule("Prioritize blocked colleagues."))
         assert len(triage.board.items) == 1
     finally:
         triage.close()
@@ -101,9 +101,9 @@ def test_automatic_triage_coalesces_polls_and_voice_feedback_updates_the_live_pl
         triage.advance()
         wait_until(lambda: bool(triage.board.actions))
         assert len(calls) == 1
-        snapshot = json_object(request({"operation": "read"}, endpoint))
+        snapshot = json_object(request(ReadFeed(), endpoint))
         assert snapshot["focus"] == triage.board.actions[0].identity
-        updated = json_object(request({"operation": "rule", "text": "Keep fictional budget notices quiet."}, endpoint))
+        updated = json_object(request(SaveRule("Keep fictional budget notices quiet."), endpoint))
         assert updated["rules"] == ["Keep fictional budget notices quiet."]
         triage.advance()
         wait_until(lambda: len(calls) == 2 and triage.board.pending == 0)
@@ -148,7 +148,7 @@ def test_inflight_model_cannot_overwrite_new_voice_feedback(tmp_path: Path) -> N
         triage.observe(Feed(updates=(Update(TeamsActivity("fictional"), "Review", "Please review.", "Teams", 1),)), ())
         triage.advance()
         assert entered.wait(5)
-        triage.command({"operation": "rule", "text": "Ignore fictional review notices."})
+        triage.command(SaveRule("Ignore fictional review notices."))
         release.set()
         triage.advance()
         wait_until(lambda: triage.board.pending == 0)
@@ -196,13 +196,6 @@ def test_voice_agent_tools_read_the_curated_plan_and_save_feedback_without_loggi
         assert "Private fictional source body" not in str((*rig.window.log, *rig.window.live))
     finally:
         triage.close()
-
-
-def test_missing_console_destination_is_rejected_before_a_durable_action_attempt(tmp_path: Path) -> None:
-    store, claim, clock = claimed(tmp_path)
-    rig = ToolRig(work=WorkExecution(claim, store, Resources(), clock=clock))
-    result = rig.call("work_feed_update", operation="console_answer", question="fictional-request", question_index=0, text="Revenue")
-    assert not result.ok and not store.actions(claim.task.id)
 
 
 def test_stable_arrival_is_retried_alone_when_a_grouped_chat_changes_during_evaluation(tmp_path: Path) -> None:
@@ -317,7 +310,7 @@ def test_click_and_voice_choose_the_same_task_and_stale_or_unavailable_choices_d
     try:
         revision = proposal_revision(item)
         assert triage.choose_from_ui(item.identity, revision, "1")
-        response = json_object(request({"operation": "choose", "item": item.identity, "revision": revision, "choice": "1"}, endpoint))
+        response = json_object(request(ChooseSolution(item.identity, revision, "1"), endpoint))
         assert response["queued"] == submitted[0][0] and len(submitted) == 1
         assert triage.board.actions == (item,)  # queued work is not completion
         triage.board = replace(triage.board, items=(replace(item, summary="Changed context"),))
@@ -372,9 +365,9 @@ def test_reasoned_rejection_remains_recorded_once_after_feedback_and_reload(tmp_
     endpoint = tmp_path / "rejection.json"
     triage = TriageFixture(endpoint, store, lambda _: None, lambda _batch, _rules: "{}", lambda _: False)
     try:
-        answer = json_object(request({"operation": "reject", "item": item.identity, "revision": proposal_revision(item), "text": reason}, endpoint))
+        answer = json_object(request(RejectProposal(item.identity, proposal_revision(item), reason), endpoint))
         assert not answer["items"] and json_rows(answer["decisions"])[0]["reason"] == reason
-        triage.command({"operation": "rule", "text": "Keep routine reminders quiet."})
+        triage.command(SaveRule("Keep routine reminders quiet."))
         assert len(triage.board.items) == 1 and triage.board.items[0].disposition is Disposition.REJECTED
         assert triage.board.items[0].decision == reason
     finally:

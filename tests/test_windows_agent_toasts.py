@@ -26,8 +26,9 @@ from assistant.agent_session import Answer, Begin, Failed, Question, ReasoningSu
 from assistant.agent_toasts import AgentToasts
 from assistant.agent_window import AgentWindow
 from assistant.communications import Command
+from assistant.feed_contracts import DismissItem
 from assistant.feed_desktop import NativeDesktop
-from assistant.feed_triage import edited
+from assistant.feed_triage import EditObservation, edited
 from assistant.notifications import MAX_VISIBLE, WIDTH, Kind, MessageKey, PhaseKey, Toast, TurnKey
 from assistant.panel import PanelPreferences
 from assistant.qt_runtime import prepare
@@ -132,7 +133,7 @@ class Notifications:
     def dismiss(self, identity: str) -> bool:
         if not self.dismiss_allowed:
             return False
-        self.agent.triage(edited(self.agent.state.triage, {"operation": "dismiss", "item": identity}))
+        self.agent.triage(edited(self.agent.state.triage, DismissItem(identity), EditObservation((), self.now)))
         return True
 
     def choose(self, identity: str, revision: str, choice: str) -> bool:

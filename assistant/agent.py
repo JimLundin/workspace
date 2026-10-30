@@ -16,7 +16,7 @@ import sqlite3
 import threading
 import time
 import uuid
-from collections.abc import Callable, Mapping
+from collections.abc import Callable
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from pathlib import Path
@@ -29,7 +29,7 @@ from assistant.activity import ContextSnapshot
 from assistant.agent_history import History
 from assistant.agent_session import Failed, LiveMessage, Succeeded, ToolActivity, ToolStatus
 from assistant.business_tools import WEB_SPECS, verified_outcome
-from assistant.feed_contracts import FEED_REPLY, FeedReply, reply_schema
+from assistant.feed_contracts import reply_schema
 from assistant.geometry import Shot
 from assistant.llm import (
     Json,
@@ -857,27 +857,7 @@ class Agent:
         return asyncio.run(sdk.run(self, task, prompt, tuple(specs)))
 
     def feed_tool(self, args: Args) -> Output:
-        values: Mapping[str, object] | FeedReply = dict(args.values)
-        command: BridgeCommand
-        if args.tool == "work_feed":
-            command = {"operation": "read"}
-        else:
-            if args.tool == "work_feed_choose":
-                values = {"operation": "choose", "item": args.text("item"), "revision": args.text("revision"), "choice": args.text("choice")}
-            if args.tool == "work_feed_reply":
-                values = FEED_REPLY.validate_python(args.values)
-            if args.tool == "work_feed_answer":
-                values = {
-                    "operation": "console_answer",
-                    "item": args.text("request_id"),
-                    "question_index": args.integer("question_index"),
-                    "text": args.text("text"),
-                }
-            match values:
-                case FeedReply():
-                    command = values
-                case _:
-                    command = feed_agent_tools.validated(dict(values))
+        command = feed_agent_tools.validated(args.tool, args.values)
 
         def perform() -> Output:
             reply = self.feed_request(command)

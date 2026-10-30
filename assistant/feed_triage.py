@@ -1,19 +1,30 @@
 """Pure work-feed triage: source evidence is data, never authorization."""
 
 import hashlib
-from collections.abc import Mapping
+from collections.abc import Iterable
 from dataclasses import dataclass, field, replace
 from datetime import UTC, date, datetime
 from enum import Enum
+from typing import Final, assert_never
 
 from pydantic import TypeAdapter
 
 from assistant.communications import Delivery, Feed, SourceDate, SourceDateStatus, SourceTime, TeamsActivity, UpdateKind, WindowsNotice, chat_tickets
-from assistant.console_requests import Request, State, text
+from assistant.console_requests import Request, State
 from assistant.feed_contracts import (
     REVIEW_OUTPUT,
     SOLUTION_CONTEXT,
-    SOLUTIONS,
+    BoardEdit,
+    ClearRules,
+    CompleteItem,
+    DismissItem,
+    ForgetRule,
+    ItemEdit,
+    ProposedSolution,
+    QuietItem,
+    RejectProposal,
+    ReviseProposal,
+    SaveRule,
     SolutionContext,
     StoredBoard,
     StoredItem,
@@ -32,6 +43,10 @@ class Disposition(Enum):
     DONE = "done"
     DISMISSED = "dismissed"
     REJECTED = "rejected"
+
+
+# Triage owns these assessments; every other disposition is explicit user handling.
+AUTOMATIC: Final = frozenset({Disposition.ACTION, Disposition.QUIET})
 
 
 @dataclass(frozen=True, slots=True)
@@ -192,11 +207,7 @@ def timing_changes(previous: tuple[Candidate, ...], current: tuple[Candidate, ..
 def retimed(board: Board, changed: frozenset[str]) -> Board:
     return replace(
         board,
-        items=tuple(
-            item
-            for item in board.items
-            if item.disposition not in (Disposition.ACTION, Disposition.QUIET) or not any(ref[0] in changed for ref in item.references)
-        ),
+        items=tuple(item for item in board.items if item.disposition not in AUTOMATIC or not any(ref[0] in changed for ref in item.references)),
     )
 
 
@@ -204,7 +215,7 @@ def reconsidered(board: Board) -> Board:
     """New context reopens automatic assessments, preserving explicit user handling."""
     return replace(
         board,
-        items=tuple(replace(item, reviewed_on=None) if item.disposition in (Disposition.ACTION, Disposition.QUIET) else item for item in board.items),
+        items=tuple(replace(item, reviewed_on=None) if item.disposition in AUTOMATIC else item for item in board.items),
     )
 
 
@@ -212,22 +223,15 @@ def unassessed(board: Board, candidates: tuple[Candidate, ...], *, today: date |
     known = {
         ref
         for item in board.items
-        if item.disposition not in (Disposition.ACTION, Disposition.QUIET)
+        if item.disposition not in AUTOMATIC
         or ((item.disposition is Disposition.QUIET or item.solutions) and (today is None or item.reviewed_on == today))
         for ref in item.references
     }
     return tuple(item for item in candidates if not item.reaction and (item.identity, item.revision) not in known)[:20]
 
 
-def decode_solutions(value: object) -> tuple[Solution, ...]:
-    values = SOLUTIONS.validate_python(value)
-    result: list[Solution] = []
-    for index, entry in enumerate(values):
-        label, detail = entry.label, entry.detail
-        if not label or not detail or any(item.label.casefold() == label.casefold() for item in result):
-            raise ValueError("Solutions need distinct concise labels and concrete details.")
-        result.append(Solution(str(index + 1), label, SolutionKind(entry.kind), detail))
-    return tuple(result)
+def solution_options(values: Iterable[ProposedSolution]) -> tuple[Solution, ...]:
+    return tuple(Solution(str(index + 1), entry.label, SolutionKind(entry.kind), entry.detail) for index, entry in enumerate(values))
 
 
 def solutions_for(item: Assessment) -> tuple[Solution, ...]:
@@ -286,14 +290,14 @@ def decode(raw: str, candidates: tuple[Candidate, ...]) -> tuple[Assessment, ...
             raise ValueError("Triage returned unknown or duplicate sources.")
         seen.update(refs)
         disposition = Disposition(group.disposition)
-        if disposition not in (Disposition.ACTION, Disposition.QUIET):
+        if disposition not in AUTOMATIC:
             raise ValueError("Source triage can only propose work or keep it quiet.")
         priority = group.priority
         if type(priority) is not int or not 0 <= priority <= 2:
             raise ValueError("Invalid triage priority.")
         title, summary, suggestion = group.title, group.summary, group.suggestion
         question = ""
-        solutions = decode_solutions(group.solutions)
+        solutions = solution_options(group.solutions)
         if disposition is Disposition.ACTION and (not title.strip() or not summary.strip() or not suggestion.strip() or not solutions):
             raise ValueError("Action needs an explanation and a proposed next step.")
         result.append(
@@ -338,55 +342,81 @@ def applied(board: Board, assessments: tuple[Assessment, ...], candidates: tuple
     return reconcile(replace(board, items=(*retained, *fresh), status=""), candidates)
 
 
-def edited(board: Board, data: Mapping[str, object]) -> Board:
-    operation = text(data.get("operation"), 32)
-    preserved = tuple(
-        item for item in board.items if item.disposition in (Disposition.USER_QUIET, Disposition.DONE, Disposition.DISMISSED, Disposition.REJECTED)
-    )
-    if operation == "rule":
-        rule = text(data.get("text"), 1200).strip()
-        if not rule:
-            raise ValueError("Feedback cannot be empty.")
-        rules = (*tuple(item for item in board.rules if item != rule), rule)[-40:]
-        # Explicit handling survives filtering changes; automatic assessments re-evaluate.
-        return replace(board, rules=rules, items=preserved)
-    if operation in ("clear_rules", "forget_rule"):
-        rule = text(data.get("text"), 1200) if operation == "forget_rule" else ""
-        rules = tuple(value for value in board.rules if value != rule) if operation == "forget_rule" else ()
-        return replace(board, rules=rules, items=preserved)
-    key = text(data.get("item"), 128)
-    if not any(item.identity == key for item in board.items):
-        raise ValueError("That work item is no longer current. Read the feed again.")
-    if operation not in ("done", "quiet", "dismiss", "reject", "propose"):
-        raise ValueError("Unknown work-feed operation.")
+@dataclass(frozen=True, slots=True)
+class EditObservation:
+    """Live sources and the decision time an explicit board edit is applied against."""
 
-    def update(item: Assessment) -> Assessment:
-        if item.identity != key:
-            return item
-        if operation == "reject":
-            if text(data.get("revision"), 128) != proposal_revision(item):
+    candidates: tuple[Candidate, ...]
+    at: float
+
+
+def edited(board: Board, edit: BoardEdit, observation: EditObservation) -> Board:
+    """Apply one explicit user edit, reconcile it with live sources and record its decision once."""
+    match edit:
+        case SaveRule(rule):
+            prior, changed = None, _refiltered(board, (*(value for value in board.rules if value != rule), rule)[-40:], observation)
+        case ForgetRule(rule):
+            prior, changed = None, _refiltered(board, tuple(value for value in board.rules if value != rule), observation)
+        case ClearRules():
+            prior, changed = None, _refiltered(board, (), observation)
+        case _:
+            prior = next((item for item in board.items if item.identity == edit.item), None)
+            if prior is None:
+                raise ValueError("That work item is no longer current. Read the feed again.")
+            handled = replace(board, items=tuple(_handled(item, edit) if item.identity == prior.identity else item for item in board.items))
+            changed = reconcile(handled, observation.candidates)
+    return _decided(changed, edit, prior, observation)
+
+
+def _refiltered(board: Board, rules: tuple[str, ...], observation: EditObservation) -> Board:
+    # Explicit handling survives filtering changes. Automatic assessments with live
+    # sources re-evaluate; those whose sources are gone cannot, so they remain.
+    available = frozenset(item.identity for item in observation.candidates)
+    items = tuple(item for item in board.items if item.disposition not in AUTOMATIC or all(ref[0] not in available for ref in item.references))
+    return reconcile(replace(board, rules=rules, items=items), observation.candidates)
+
+
+def _handled(item: Assessment, edit: ItemEdit) -> Assessment:
+    match edit:
+        case CompleteItem():
+            return replace(item, disposition=Disposition.DONE)
+        case QuietItem():
+            return replace(item, disposition=Disposition.USER_QUIET)
+        case DismissItem():
+            return replace(item, disposition=Disposition.DISMISSED)
+        case RejectProposal(_, revision, reason):
+            if revision != proposal_revision(item):
                 raise ValueError("That proposal has changed. Read the feed again before rejecting it.")
-            reason = text(data.get("text"), 1200).strip()
-            if not reason:
-                raise ValueError("Rejection needs the user's reason.")
             return replace(item, disposition=Disposition.REJECTED, decision=reason)
-        if operation == "propose":
-            suggestion = text(data.get("text"), 1200).strip()
-            if not suggestion:
-                raise ValueError("Proposal cannot be empty.")
-            priority = data.get("priority", item.priority)
-            if type(priority) is not int or not 0 <= priority <= 2:
-                raise ValueError("Invalid proposal priority.")
-            solutions = (
-                decode_solutions(data["solutions"]) if "solutions" in data else (Solution("1", "Prepare solution", SolutionKind.PLAN, suggestion),)
+        case ReviseProposal(text=suggestion, question=question, priority=priority, solutions=solutions):
+            return replace(
+                item,
+                suggestion=suggestion,
+                question=question,
+                priority=item.priority if priority is None else priority,
+                solutions=solution_options(solutions)
+                if solutions is not None
+                else (Solution("1", "Prepare solution", SolutionKind.PLAN, suggestion),),
             )
-            if not solutions:
-                raise ValueError("A revised proposal needs at least one concrete solution.")
-            return replace(item, suggestion=suggestion, question="", priority=priority, solutions=solutions)
-        disposition = Disposition.DONE if operation == "done" else Disposition.DISMISSED if operation == "dismiss" else Disposition.USER_QUIET
-        return replace(item, disposition=disposition)
+        case _ as unreachable:
+            assert_never(unreachable)
 
-    return replace(board, items=tuple(update(item) for item in board.items))
+
+def _decided(board: Board, edit: BoardEdit, prior: Assessment | None, observation: EditObservation) -> Board:
+    match edit:
+        case SaveRule(text=reason) | ForgetRule(text=reason) | RejectProposal(text=reason) | ReviseProposal(text=reason):
+            pass
+        case ClearRules() | CompleteItem() | QuietItem() | DismissItem():
+            reason = ""
+        case _ as unreachable:
+            assert_never(unreachable)
+    item, revision = (prior.identity, proposal_revision(prior)) if prior is not None else ("", "")
+    key = identity("feed-decision", f"{edit.operation}:{item}:{revision}:{reason}")
+    if any(entry.id == key for entry in board.history):
+        return board
+    title, summary = (prior.title, prior.summary) if prior is not None else ("", "")
+    decision = Decision(key, edit.operation, item, revision, title, summary, reason, observation.at)
+    return replace(board, history=(*board.history, decision)[-200:])
 
 
 def saved(board: Board) -> StoredBoard:

@@ -1,14 +1,28 @@
 """The automatic feed handles evidence, noise and revisions without claiming actions happened."""
 
 import json
-from collections.abc import Mapping
 from dataclasses import replace
 from datetime import date
 
 from assistant.agent_session import Session
 from assistant.communications import Conversation, Feed, Message, TeamsActivity, Update, UpdateKind
+from assistant.feed_contracts import CompleteItem, DismissItem, ForgetRule, ProposedSolution, QuietItem, RejectProposal, ReviseProposal, SaveRule
 from assistant.feed_items import WorkItem, action_spans, observed, text
-from assistant.feed_triage import Assessment, Board, Disposition, applied, candidate, collect, decode, edited, reconcile, restored, saved, unassessed
+from assistant.feed_triage import (
+    Assessment,
+    Board,
+    Disposition,
+    EditObservation,
+    applied,
+    candidate,
+    collect,
+    decode,
+    edited,
+    reconcile,
+    restored,
+    saved,
+    unassessed,
+)
 from assistant.llm import Json
 from assistant.notifications import Stack, advance
 from tests.json_fixture import json_object, json_rows
@@ -83,7 +97,7 @@ def test_revision_change_rejects_stale_results_and_completed_work_does_not_reapp
     current = replace(first, revision="new-revision", body="Updated figures need review.")
     assessment = decode(output(([first.identity], "action")), (first,))
     board = applied(Board(enabled=True), assessment, (first,))
-    done = edited(board, {"operation": "done", "item": assessment[0].identity})
+    done = edited(board, CompleteItem(assessment[0].identity), EditObservation((first,), 2))
     assert not reconcile(done, (first,)).actions and not unassessed(done, (first,))
     assert unassessed(reconcile(done, (current,)), (current,)) == (current,)
     assert not applied(Board(enabled=True), assessment, (current,)).actions
@@ -95,13 +109,13 @@ def test_explicit_voice_feedback_reclassifies_open_and_quiet_work_and_survives_r
     first = candidate("chat", "one", "Budget", "Thanks.", 1)
     board = applied(Board(enabled=True), decode(output(([first.identity], "quiet")), (first,)), (first,))
     assert not board.actions and not unassessed(board, (first,))
-    board = edited(board, {"operation": "rule", "text": "Keep routine budget acknowledgements quiet."})
+    board = edited(board, SaveRule("Keep routine budget acknowledgements quiet."), EditObservation((first,), 2))
     assert unassessed(board, (first,)) == (first,)
     assert restored(saved(board)).rules == board.rules
-    forgotten = edited(board, {"operation": "forget_rule", "text": board.rules[0]})
+    forgotten = edited(board, ForgetRule(board.rules[0]), EditObservation((first,), 3))
     assert not forgotten.rules
     try:
-        edited(board, {"operation": "done", "item": "invented"})
+        edited(board, CompleteItem("invented"), EditObservation((first,), 3))
     except ValueError:
         pass
     else:
@@ -124,6 +138,10 @@ def test_proposed_work_survives_source_disappearance_and_restart_without_becomin
     board = applied(Board(enabled=True), decode(output(([first.identity], "action")), (first,)), (first,))
     offline = reconcile(restored(saved(board)), ())
     assert offline.actions == board.actions
+    # Defect: filtering feedback discards work that can no longer be re-evaluated, or keeps stale live assessments.
+    rule = SaveRule("Prioritize blocked colleagues.")
+    assert edited(offline, rule, EditObservation((), 2)).actions == board.actions
+    assert not edited(board, rule, EditObservation((first,), 2)).actions
     changed = replace(first, revision="new", body="The review is cancelled.")
     assert not reconcile(offline, (changed,)).actions
 
@@ -131,9 +149,9 @@ def test_proposed_work_survives_source_disappearance_and_restart_without_becomin
 def test_dismissal_survives_poll_restart_and_filter_feedback_but_new_evidence_gets_reviewed() -> None:
     first = candidate("chat", "one", "Budget", "Please review.", 1)
     board = applied(Board(enabled=True), decode(output(([first.identity], "action")), (first,)), (first,))
-    dismissed = edited(board, {"operation": "dismiss", "item": board.actions[0].identity})
+    dismissed = edited(board, DismissItem(board.actions[0].identity), EditObservation((first,), 2))
     restarted = reconcile(restored(saved(dismissed)), (first,))
-    feedback = edited(restarted, {"operation": "rule", "text": "Prioritize work that blocks a colleague."})
+    feedback = edited(restarted, SaveRule("Prioritize work that blocks a colleague."), EditObservation((first,), 3))
     assert not feedback.actions and not unassessed(feedback, (first,))
     assert feedback.items[0].disposition is Disposition.DISMISSED
     changed = replace(first, revision="new-evidence", body="The deadline is now tomorrow.")
@@ -160,11 +178,11 @@ def test_top_work_is_selected_by_importance_and_dismissal_advances_the_queue_wit
     stack = advance(Stack(), session, 100)
     assert [toast.content.title for toast in stack.toasts if isinstance(toast.content, WorkItem)] == ["Work 0", "Work 1", "Work 2"]
     assert len(board.actions) == 8
-    dismissed = edited(board, {"operation": "dismiss", "item": "0"})
+    dismissed = edited(board, DismissItem("0"), EditObservation((), 1))
     next_stack = advance(stack, replace(session, triage=dismissed), 10000)
     assert [toast.content.title for toast in next_stack.toasts if isinstance(toast.content, WorkItem)] == ["Work 1", "Work 2", "Work 3"]
     assert len(dismissed.actions) == 7
-    reprioritized = edited(dismissed, {"operation": "propose", "item": "7", "text": "Handle the blocker first.", "priority": 2})
+    reprioritized = edited(dismissed, ReviseProposal(item="7", text="Handle the blocker first.", priority=2), EditObservation((), 2))
     assert reprioritized.actions[0].identity == "7"
 
 
@@ -215,17 +233,19 @@ def test_voice_correction_replaces_solutions_immediately_even_without_live_sourc
     board = Board(enabled=True, items=(item,))
     revised = edited(
         board,
-        {
-            "operation": "propose",
-            "item": item.identity,
-            "text": "Prepare a short clarification.",
-            "solutions": [{"label": "Draft clarification", "kind": "draft", "detail": "Ask which totals need review."}],
-        },
+        ReviseProposal(
+            item=item.identity,
+            text="Prepare a short clarification.",
+            question="Which totals need review?",
+            solutions=(ProposedSolution("Draft clarification", "draft", "Ask which totals need review."),),
+        ),
+        EditObservation((), 2),
     )
     assert revised.actions[0].solutions[0].label == "Draft clarification"
-    assert not revised.actions[0].question
+    assert revised.actions[0].question == "Which totals need review?"
+    assert revised.history[-1].kind == "propose" and revised.history[-1].text == "Prepare a short clarification."
     assert restored(saved(revised)).actions == revised.actions
-    fallback = edited(board, {"operation": "propose", "item": item.identity, "text": "Investigate the discrepancy."})
+    fallback = edited(board, ReviseProposal(item=item.identity, text="Investigate the discrepancy."), EditObservation((), 2))
     assert fallback.actions[0].solutions[0].detail == "Investigate the discrepancy."
 
 
@@ -233,37 +253,55 @@ def test_meaningful_rejection_records_reason_and_revision_without_completing_or_
     source = candidate("chat", "request", "Budget", "Can you approve this budget?", 1)
     item = decode(output(([source.identity], "action")), (source,))[0]
     board = Board(enabled=True, items=(item,))
-    rejection = validated(
-        {
-            "operation": "reject",
-            "item": item.identity,
-            "revision": proposal_revision(item),
-            "text": "I cannot approve this because the figures are incomplete.",
-        }
-    )
-    match rejection:
-        case Mapping():
+    arguments: dict[str, Json] = {
+        "operation": "reject",
+        "item": item.identity,
+        "revision": proposal_revision(item),
+        "text": "I cannot approve this because the figures are incomplete.",
+    }
+    match validated("work_feed_update", arguments):
+        case RejectProposal() as rejection:
             pass
         case _:
             raise AssertionError("Filtering feedback became a work reply.")
-    changed = edited(board, rejection)
+    observation = EditObservation((source,), 2)
+    changed = edited(board, rejection, observation)
     assert not changed.actions and changed.items[0].disposition is Disposition.REJECTED
     assert "figures are incomplete" in changed.items[0].decision
     assert restored(saved(changed)).items == changed.items
-    assert edited(changed, {"operation": "rule", "text": "Ignore routine reminders."}).items == changed.items
+    assert [(entry.kind, entry.revision, entry.at) for entry in changed.history] == [("reject", proposal_revision(item), 2)]
+    assert edited(changed, rejection, observation).history == changed.history, "A retried edit recorded a second decision."
+    assert edited(changed, SaveRule("Ignore routine reminders."), observation).items == changed.items
     assert not unassessed(reconcile(changed, (source,)), (source,))
     try:
-        edited(board, {**rejection, "revision": "stale"})
+        edited(board, replace(rejection, revision="stale"), observation)
     except ValueError:
         pass
     else:
         raise AssertionError("A stale proposal was rejected.")
-    try:
-        validated({**rejection, "text": ""})
-    except ValueError:
-        pass
-    else:
-        raise AssertionError("A rejection without a reason was accepted.")
+    duplicate: Json = {"label": "Check", "kind": "check", "detail": "Check it."}
+    invalid: tuple[tuple[str, dict[str, Json]], ...] = (
+        ("work_feed_update", {**arguments, "text": " "}),
+        ("work_feed_update", {"operation": "choose", "item": item.identity, "revision": proposal_revision(item), "choice": "1"}),
+        (
+            "work_feed_update",
+            {
+                "operation": "propose",
+                "item": item.identity,
+                "text": "Check.",
+                "solutions": [duplicate, duplicate],
+            },
+        ),
+        ("work_feed_update", {"operation": "rule", "text": "Keep budget notices quiet.\x00"}),
+        ("work_feed_answer", {"request_id": "console", "question_index": 32, "text": "Revenue"}),
+    )
+    for tool, values in invalid:
+        try:
+            validated(tool, values)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError(f"Invalid {tool} arguments were accepted: {values}")
 
 
 def test_context_refresh_reopens_automatic_quiet_work_but_keeps_explicit_handling() -> None:
@@ -274,12 +312,12 @@ def test_context_refresh_reopens_automatic_quiet_work_but_keeps_explicit_handlin
     explicit = candidate("chat", "explicit", "Orion", "Routine update.", 1)
     quiet = replace(decode(output(([automatic.identity], "quiet")), (automatic,))[0], reviewed_on=today)
     proposal = replace(decode(output(([explicit.identity], "action")), (explicit,))[0], reviewed_on=today)
-    handled = edited(Board(enabled=True, items=(proposal,)), {"operation": "quiet", "item": proposal.identity})
+    handled = edited(Board(enabled=True, items=(proposal,)), QuietItem(proposal.identity), EditObservation((), 2))
     board = Board(enabled=True, items=(quiet, *handled.items))
     assert not unassessed(board, (automatic, explicit), today=today)
     refreshed = reconsidered(restored(saved(board)))
     assert unassessed(refreshed, (automatic, explicit), today=today) == (automatic,)
     assert refreshed.items[1].disposition is Disposition.USER_QUIET
     assert refreshed.items[1] == handled.items[0]
-    filtered = edited(refreshed, {"operation": "rule", "text": "Prioritize a different project."})
+    filtered = edited(refreshed, SaveRule("Prioritize a different project."), EditObservation((automatic, explicit), 3))
     assert filtered.items == handled.items
