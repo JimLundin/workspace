@@ -108,7 +108,7 @@ def run(root: Path, count: int, rounds: int, output: Path | None) -> None:
         "miryoku.pyw",
         "protocol.py",
         "config.py",
-        "keeper.py",
+        "components.py",
         "runtime.py",
         "winapi/inputs.py",
         "winapi/windows.py",

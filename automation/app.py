@@ -16,9 +16,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import assert_never
 
-import keeper
+import components
 import usage
-from keeper import AUTOMATION_WINDOW
 from usage import DIRECTORY
 from winapi import screen, system, windows
 from winapi.shapes import Window
@@ -199,8 +198,8 @@ def run(
     *,
     folder: Path = DIRECTORY / "work",
     execution: WorkExecution | None = None,
-    ready: Callable[[], None] = keeper.ready,
-    title: str = AUTOMATION_WINDOW,
+    ready: Callable[[], None] = components.ready,
+    title: str = components.AUTOMATION.window.title,
 ) -> None:
     """Own one profile until all work is parked and native resources are released.
 

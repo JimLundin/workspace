@@ -10,11 +10,10 @@ from collections.abc import Mapping
 from enum import Enum, auto
 from typing import Final, Protocol, assert_never
 
-import keeper
 import usage
+from components import ASSISTANT, LAYOUT, ready
 from config import APPS
 from diagnostics import FailureInfo, failure_info
-from keeper import ASSISTANT_WINDOW, LAYOUT_WINDOW, WM_QUIT_LAYOUT
 from miryoku.engine import QUIET, Engine, Indicator, Signal, Verdict
 from miryoku.firmware import CapturedKey, ConsumedKey, FirmwareKeyboard, VoiceShortcut, connected, voice_tool
 from miryoku.layout import ESCAPE, SLOTS, TAPPING_TERM_MS, VOICE_KEYS, Key, Mod, Scancode, Unmapped, native_control
@@ -83,7 +82,7 @@ class NativeKeyboardSystem:
     call_next_hook = staticmethod(inputs.call_next_hook)
 
     def find_assistant(self) -> int | None:
-        return windows.find(ASSISTANT_WINDOW)
+        return windows.find(ASSISTANT.window.title)
 
     # Preserve HWND and the native message's three scalar fields at this adapter.
     def post_message(self, hwnd: int, message: int, wparam: int, lparam: int) -> bool:
@@ -509,7 +508,7 @@ def run() -> Exit:
     lock = system.create_lock(LOCK_NAME)
     if lock is None:
         return Exit.ALREADY_RUNNING
-    window = windows.create_hidden(LAYOUT_WINDOW)  # receives control requests from the assistant and keeper
+    window = windows.create_hidden(LAYOUT.window.title)  # receives control requests from the assistant and keeper
     try:
         keyboard = Keyboard()
         keyboard.update_devices()
@@ -519,7 +518,7 @@ def run() -> Exit:
         languages = open_languages(firmware_connected=keyboard.firmware is not None)
         language_timer = system.set_timer(200)
         flush_timer = system.set_timer(USAGE_FLUSH_MS)
-        keeper.ready()  # tells the keeper this version came up
+        ready()  # tells the keeper this version came up
         layout_state: LayoutState = LayoutState.ON if keyboard.engine.enabled else LayoutState.OFF
         keyboard.host.tell_assistant(WM_LAYOUT_STATE, layout_state.value, 0)
         # Nothing here creates reference cycles, so the cycle collector has nothing to
@@ -540,7 +539,7 @@ def run() -> Exit:
                             keyboard.engine.timeout(keyboard.host, message.wparam)
                         except Exception as error:
                             keyboard.input_failed(error, phase="tap_hold_timer")
-                elif message.message == WM_QUIT_LAYOUT:
+                elif message.message == LAYOUT.quit_message:
                     break
                 else:
                     keyboard.on_message(message.message)

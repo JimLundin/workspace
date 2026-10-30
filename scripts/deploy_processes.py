@@ -11,6 +11,7 @@ from ctypes import wintypes
 from dataclasses import dataclass
 from pathlib import Path, PureWindowsPath
 
+from components import CATALOGUE, unix_ms
 from scripts.deploy_values import Identity, Role
 from scripts.development_paths import PYTHON, USER
 lazy from winapi._core import fn
@@ -68,14 +69,10 @@ def role_for(arguments: tuple[str, ...], *, windowed: bool, editor: tuple[PureWi
     if len(arguments) >= 3 and arguments[1:3] == ("-m", "assistant.browser_host"):
         return None
     if windowed:
-        if len(arguments) == 3 and arguments[1] == "-m" and arguments[2] in ("assistant", "automation", "miryoku"):
-            match arguments[2]:
-                case "assistant":
-                    return "assistant"
-                case "automation":
-                    return "automation"
-                case "miryoku":
-                    return "miryoku"
+        if len(arguments) == 3 and arguments[1] == "-m":
+            for entry in CATALOGUE.values():
+                if arguments[2] == entry.module:
+                    return entry.name
         if len(arguments) == 2 and Path(arguments[1]).name.casefold() in ("workspace.pyw", "keeper.py"):
             return "keeper"
     return "runtime"
@@ -258,7 +255,7 @@ class ProcessReader:
                                 entry.th32ParentProcessID,
                                 role,
                                 image.value,
-                                counters[0] // 10000 - 11644473600000,
+                                unix_ms(times[0]),
                                 user_cpu_100ns=counters[3],
                                 kernel_cpu_100ns=counters[2],
                             ),

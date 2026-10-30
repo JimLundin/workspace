@@ -12,6 +12,7 @@ lazy import os
 lazy from PySide6 import QtCore, QtGui, QtWidgets
 
 from assistant.qt_runtime import prepare
+from components import BAR_WINDOW
 lazy import winapi.ambient
 lazy from assistant.ambient import Ambient, Power, PowerUnavailable, Weather
 lazy from assistant.audio_meter import AudioMeter
@@ -174,7 +175,7 @@ class DesktopBar:
             raise
 
     def create_surfaces(self) -> None:
-        self.window = Pill(self.loop, "Workspace floating bar", attached=True)
+        self.window = Pill(self.loop, BAR_WINDOW, attached=True)
         self.capture = Pill(self.loop, "Workspace recording controls", attached=True)
         self.keycaps = Pill(self.loop, "Workspace keyboard mode", attached=True)
         self.pills = (self.window, self.capture, self.keycaps)

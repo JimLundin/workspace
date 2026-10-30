@@ -20,7 +20,7 @@ from pathlib import Path
 lazy from PySide6 import QtCore, QtWidgets
 
 from assistant.qt_runtime import prepare
-from keeper import LAYOUT_WINDOW, WM_QUIT_LAYOUT
+from components import LAYOUT
 from protocol import MAGIC
 from tests.json_fixture import json_value
 lazy from assistant.qt_ui import application
@@ -80,13 +80,13 @@ def focus_fixture(handle: int) -> None:
 def layout() -> Generator[None]:
     assert wait_for(lambda: not layout_running(), lambda: None), "a layout from before is still running"
     process = subprocess.Popen([sys.executable, "-m", "miryoku"], cwd=ROOT)
-    assert wait_for(lambda: windows.find(LAYOUT_WINDOW) is not None, lambda: None), "the layout didn't start"
+    assert wait_for(lambda: windows.find(LAYOUT.window.title) is not None, lambda: None), "the layout didn't start"
     time.sleep(0.3)
     try:
         yield
     finally:
-        if (hwnd := windows.find(LAYOUT_WINDOW)) is not None:
-            system.post_message(hwnd, WM_QUIT_LAYOUT, 0, 0)
+        if (hwnd := windows.find(LAYOUT.window.title)) is not None:
+            system.post_message(hwnd, LAYOUT.quit_message, 0, 0)
         process.wait(timeout=5)
 
 

@@ -10,11 +10,9 @@ from dataclasses import dataclass
 from enum import Enum, auto
 from pathlib import Path
 
-from keeper import Program
+from components import CATALOGUE, Component
+from keeper import PROTECTED
 from scripts.architecture import dependencies, module_name
-
-COMPONENTS: tuple[Program, ...] = ("layout", "assistant", "automation")
-ROOTS = frozendict({"layout": "miryoku.__main__", "assistant": "assistant.__main__", "automation": "automation.__main__"})
 
 
 class FullRestart(Enum):
@@ -23,7 +21,7 @@ class FullRestart(Enum):
 
 @dataclass(frozen=True, slots=True)
 class ComponentRestart:
-    components: tuple[Program, ...]
+    components: tuple[Component, ...]
 
 
 type RestartPlan = FullRestart | ComponentRestart
@@ -59,11 +57,13 @@ def restart_plan(before: Path, after: Path, manifests: tuple[Mapping[str, str], 
     )
     if implicit:
         return FullRestart.ALL
-    if changed & frozenset({"keeper.py", "keeper_control.py", "keeper_ui.py", "workspace.pyw", "runtime.py", "selfcheck.py"}):
+    if changed & PROTECTED:
         return FullRestart.ALL
     graphs = source_imports(before, old), source_imports(after, new)
     affected = frozenset(module_name(name) for name in changed if name.endswith((".py", ".pyw")))
     if any(affected & closure("keeper", graph) for graph in graphs):
         return FullRestart.ALL
-    selected: tuple[Program, ...] = tuple(name for name in COMPONENTS if any(affected & closure(ROOTS[name], graph) for graph in graphs))
+    selected: tuple[Component, ...] = tuple(
+        name for name, entry in CATALOGUE.items() if any(affected & closure(entry.module + ".__main__", graph) for graph in graphs)
+    )
     return ComponentRestart(selected)

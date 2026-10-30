@@ -485,10 +485,14 @@ share CPU and other operating-system resources.
 
 The keeper owns independent child restarts. Its protected event loop consumes
 typed pause/resume commands through `keeper_control.py`; source replacement
-keeps the keeper and unaffected children alive. `scripts/deploy_policy.py` makes
+keeps the keeper and unaffected children alive. The protected, standard-library
+`components.py` catalogue names each child once, with its entry module, control
+window, quit message, shutdown budget and readiness marker; the keeper, the
+release owner and each child read it. `scripts/deploy_policy.py` makes
 the restart selection from immutable manifests and both versions' import graphs.
 The release owner verifies clean selected exits and retained process identities,
-then verifies fresh selected readiness and unchanged retained markers. Failed
+then requires every readiness marker to name the observed process (id and
+creation time) of its component, replaced or retained. Failed
 replacement restores only changed source before resuming. The protected full
 selfcheck and trial-based agent update path keep their full checks and rollback.
 Assistant unavailability produces shortcut feedback without disabling the keyboard
@@ -600,8 +604,8 @@ any tab-group controller.
 
 The activated launcher composes `keeper_ui.launch` with `keeper.main`. The UI
 owner acquires the singleton file lock before creating Qt, then retains that
-lock through the keeper loop. The keeper imports only standard-library modules
-when imported by the keyboard. Its direct executable entry activates the runtime
+lock through the keeper loop. The keyboard imports the component catalogue,
+not the keeper. Its direct executable entry activates the runtime
 before module-level guarded UI imports. All launchers run directly on Python
 3.15; Windows associations use the installed interpreter, while the portable
 command launcher uses `pyw -3.15` without a Python handoff. No interpreter is

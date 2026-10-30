@@ -922,15 +922,6 @@
     {
       "key": {
         "rule": "PLR0913",
-        "path": "automation/app.py",
-        "scope": "run",
-        "signature": "9b6bb79812353180ef64549f891786abc93be6c817fb666c7fbe8584989bd106"
-      },
-      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
-    },
-    {
-      "key": {
-        "rule": "PLR0913",
         "path": "automation/bridge.py",
         "scope": "BridgeServer.__init__",
         "signature": "2909d4f3397e3d95d85722b2a7f7d3501badf6d0666884aeeb8e1d74fcff9a50"

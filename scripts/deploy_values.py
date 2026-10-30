@@ -4,7 +4,9 @@ from typing import Literal, NotRequired, TypedDict
 
 from pydantic import TypeAdapter
 
-type Role = Literal["keeper", "assistant", "automation", "miryoku", "runtime"]
+from components import Component
+
+type Role = Literal["keeper", "runtime"] | Component
 
 
 class Config(TypedDict):
@@ -60,12 +62,10 @@ class Stopped(TypedDict):
     completed_at_ns: NotRequired[int]
     transient_exits: NotRequired[list[dict[str, object]]]
     preserved: NotRequired[list[Identity]]
-    preserved_markers: NotRequired[dict[str, int]]
 
 
 class Ready(TypedDict):
     core: dict[str, Identity]
-    markers: dict[str, int]
 
 
 class RunningReload(TypedDict):
