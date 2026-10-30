@@ -94,7 +94,7 @@ _TASK_COLUMNS: tuple[str, ...] = (
 _TASK_SELECT = ", ".join(_TASK_COLUMNS)
 # Queries by profile repeat this exact expression so SQLite uses the index.
 _PROFILE = "json_extract(source,'$.profile')"
-_PROFILE_INDEX = f"CREATE INDEX request_profile ON tasks({_PROFILE},created_at,id)"
+_PROFILE_INDEX = f"CREATE INDEX IF NOT EXISTS request_profile ON tasks({_PROFILE},created_at,id)"
 _ACTION_COLUMNS = "id, task_id, run_id, specification, started_at, updated_at, outcome, outcome_kind, fingerprint"
 
 
