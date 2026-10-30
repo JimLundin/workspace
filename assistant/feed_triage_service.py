@@ -9,16 +9,11 @@ from itertools import chain, islice
 from typing import Protocol, assert_never
 
 from assistant.communications import Feed, SourceDate, SourceDateHint, SourceDateStatus
-from assistant.console_requests import Answer, Command, Request, State
 from assistant.feed_contracts import (
     SOLUTION_CONTEXT,
-    AnswerConsole,
     BoardEdit,
     ChooseSolution,
     ChosenHandoff,
-    ConsoleAnswered,
-    ConsoleOptionQuestion,
-    ConsolePendingRequest,
     Disposition,
     FeedCommand,
     FeedRejected,
@@ -120,14 +115,12 @@ class Triage:
         "candidates",
         "clock",
         "closed",
-        "console",
         "context_revision",
         "epoch",
         "feed",
         "lock",
         "model",
         "personal",
-        "requests",
         "store",
         "submit",
         "submitted",
@@ -141,7 +134,6 @@ class Triage:
         self,
         store: Store,
         model: Callable[[tuple[Candidate, ...], tuple[str, ...]], str],
-        console: Callable[[Command], bool],
         *,
         submit: Callable[[str, str, Profile], None] | None = None,
         wait: Callable[[threading.Event, float], bool] = wait_for_stop,
@@ -149,10 +141,10 @@ class Triage:
         work: FeedWork | None = None,
         personal: PersonalWork | None = None,
     ) -> None:
-        # Compose the real storage, model, voice, work-queue and context effects
-        # here. Cancellable delays and the clock vary independently in native and
+        # Compose the real storage, model, work-queue and context effects here.
+        # Cancellable delays and the clock vary independently in native and
         # deterministic adapters, so each is an explicit dependency.
-        self.store, self.model, self.console = store, model, console
+        self.store, self.model = store, model
         self.wait: Callable[[threading.Event, float], bool] = wait
         self.clock: Callable[[], float] = clock
         self.submit = submit
@@ -163,7 +155,6 @@ class Triage:
         self.lock = threading.RLock()
         self.closed, self.wake = threading.Event(), threading.Event()
         self.feed = Feed()
-        self.requests: tuple[Request, ...] = ()
         self.candidates: tuple[Candidate, ...] = ()
         self.epoch = 0
         try:
@@ -173,11 +164,11 @@ class Triage:
         self.thread = threading.Thread(target=self.run, name="Work feed triage", daemon=True)
         self.thread.start()
 
-    def observe(self, feed: Feed, requests: tuple[Request, ...]) -> None:
+    def observe(self, feed: Feed) -> None:
         with self.lock:
             history_changed = self.feed.messages != feed.messages
-            self.feed, self.requests = feed, requests
-            candidates = triage_evidence(feed, requests)
+            self.feed = feed
+            candidates = triage_evidence(feed)
             if candidates == self.candidates and not history_changed:
                 return
             if history_changed:
@@ -235,28 +226,6 @@ class Triage:
                 unavailable_items=tuple(proposal.identity for proposal in actions if not all(ref in current for ref in proposal.references)),
                 quiet_reactions=self.board.reactions,
                 sources=tuple(source_evidence(item) for item in islice((item for item in ordered if not item.reaction), 80)),
-                console_questions=tuple(
-                    ConsolePendingRequest(
-                        id=request.identity,
-                        provider=request.provider.value,
-                        title=request.title,
-                        detail=request.detail,
-                        created_at=timestamp_text(request.created_at),
-                        approval=request.approval,
-                        questions=tuple(
-                            ConsoleOptionQuestion(
-                                index=index,
-                                text=question.text,
-                                multiple=question.multiple,
-                                options=tuple(option.label for option in question.options),
-                            )
-                            for index, question in enumerate(request.questions)
-                            if index not in dict(request.answers)
-                        ),
-                    )
-                    for request in self.requests
-                    if request.state is State.WAITING
-                ),
             )
 
     def working_context(self, batch: tuple[Candidate, ...]) -> str:
@@ -291,10 +260,6 @@ class Triage:
                 return self.reply(command)
             case ChooseSolution():
                 return self.choose(command)
-            case AnswerConsole(request_id, index, answer):
-                if not self.console(Answer(request_id, index, answer)):
-                    raise RejectedError("The exact console question is no longer waiting or the answer is invalid. Read the feed again.")
-                return ConsoleAnswered(request_id, index)
             case _:
                 return self.edit(command)
 
@@ -427,7 +392,7 @@ class Triage:
             except OSError, ValueError:
                 with self.lock:
                     self.board = replace(self.board, status="Triage unavailable · new work awaits review")
-                # Existing proposals and exact console questions remain accessible.
+                # Existing proposals remain accessible.
                 if self.wait(self.closed, 30):
                     return
                 self.wake.set()

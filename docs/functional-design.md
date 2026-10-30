@@ -52,11 +52,11 @@ The main places to read are:
 | `assistant/activity.py` | Bounded window history reduced from a window or desktop-state observation | `ActivityTracker` and the Windows foreground reader |
 | `assistant/communications.py` | Source identities, grouped pending chat tickets, captured handling revisions and reply evidence | `communications_service.py` owns encrypted settings/drafts/handling, collection and effects; `communications_browser.py` owns exact-chat and Activity DOM boundaries and reads chats with the Teams web-app operation's result type; `Ui` supplies source observations as agent context; canvas activity owns user attention |
 | `assistant/feed_sources.py` | Feed source variants, each owning its key, origin, attention (the one pending rule) and triage evidence; pending and history listings | Every consumer reads the same list: `feed_triage_service.py` collects evidence and `feed_agent_tools.py` shows the voice agent the feed |
-| `assistant/notifications.py`, `console_requests.py` | The bounded bubble projection of canvas redirects, approvals and agent turns, bounded console requests and exact answer transitions | `agent_toasts.py` and `toast_card.py` own the floating bubbles, explicit history and approval buttons; `console_inbox.py` owns the hook contract and pending lifetime, served by a `LocalBridge`; `scripts/inbox_hook.py` returns supported CLI hook responses |
+| `assistant/notifications.py` | The bounded bubble projection of canvas redirects, approvals and agent turns | `agent_toasts.py` and `toast_card.py` own the floating bubbles, explicit history and approval buttons |
 | `assistant/feed_triage.py` | Revision-bound grouped assessments with their captured origins, quiet/action/completed/dismissed dispositions, explicit feedback and stale-result rejection | `feed_triage_service.py` owns coalesced background model calls, DPAPI plan/preferences and the feed commands the work bridge routes to it, with an explicit cancellable-wait dependency; `feed_agent_tools.py` lets the main voice agent inspect and maintain the same plan; ordinary arrivals do not become floating cards |
 | `assistant/feed_origin.py` | Source application identity and assessment provenance | `feed_icons.py` owns native vector marks; canvas bubbles and the Workspace badge on floating bubbles paint them; the triage board keeps reaction counts quiet |
 | `assistant/notification_sources.py` | Windows notice updates, their captured handling marks, the notification filter and the joined pending feed | `NotificationSources` owns the encrypted filter/handling store and native dismissal on Qt's thread, apart from the Teams worker; the toolbar's notice handling addresses it with the notice it showed |
-| `assistant/feed_observation.py` | Teams work, Windows notices and console requests joined from each observer's latest report | `Ui` marshals each report onto Qt's thread and hands the joined feed to triage; routine arrivals never reach the floating bubbles |
+| `assistant/feed_observation.py` | Teams work and Windows notices joined from each observer's latest report | `Ui` marshals each report onto Qt's thread and hands the joined feed to triage; routine arrivals never reach the floating bubbles |
 | `assistant/card_actions.py` | Card action variants (open the canvas, decide an approval) and their one `workspace://` encoding; a link that is not exactly one variant parses to nothing | `notification_text.py` and `agent_session.notice_text` build variants; `rich_text.py` keeps only canvas redirects clickable in Markdown; `agent_toasts.py` matches the parsed variant |
 | `assistant/system_notices.py` | Native notification identities, quiet history baselines, banner coverage and validated timestamps | `winapi/notifications.py` owns observations and native dismissal; `notification_banners.py` owns the recoverable banner-setting lease; `desktop_bar.py` forwards observations to `Ui`, whose `notification_sources.py` owner keeps them |
 | `assistant/monitor_layout.py`, `tiling.py`, `tiling_commands.py` | Monitor observations, window distribution and native window command mapping | `MonitorLayout` owns automatic redistribution; `GlazeWM` owns manager startup and ordinary window tiling |
@@ -79,7 +79,7 @@ preference edits preserve it; new source evidence gets reviewed again. Each
 solution keeps the exact proposal revision and choice identity, and choosing it
 queues an identified investigation or preparation task; repeated selection reuses
 that identity. Source and model text cannot extend the fixed preparation scope
-into sending, console approval or external changes. Queue acknowledgment is
+into sending, approval or external changes. Queue acknowledgment is
 distinct from completion. Each pending chat message is its own evidence
 candidate. The model may group messages only when they concern the same request.
 Meaningful rejection records the user's reason against the captured proposal
@@ -95,7 +95,7 @@ context to the configured agent model. `feed_research.py` uses the existing Agen
 SDK for a bounded background investigation before options appear. Its tools can
 retrieve topic-specific saved context, captured conversation history including own
 and handled replies, relevant local text files/directories, and public web research.
-It has no general agent, desktop control, write, send or console-answer tools.
+It has no general agent, desktop control, write or send tools.
 Hosted web research runs only when requested; a provider failure returns an explicit
 access limitation to the investigation rather than discarding local work. Binary
 and Office documents are explicitly unavailable through the text-file adapter.

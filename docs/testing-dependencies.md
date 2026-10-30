@@ -44,7 +44,7 @@ effect ownership; fixtures construct the same owners with explicit adapters.
 
 | Area | Explicit dependency or direct test surface |
 | --- | --- |
-| Feed triage and agent tools | Triage and tool clocks, the authenticated feed request, real ConsoleInbox answers and durable SQLite action outcomes. |
+| Feed triage and agent tools | Triage and tool clocks, the authenticated feed request and durable SQLite action outcomes. |
 | Browser and Teams | Browser/Teams interfaces, session connector and clock. Proxy behavior uses a real child environment and WebSocket server; consent uses a concrete connector around the real socket. Native cases retain actual Edge pages and tab activation. |
 | Audio and meetings | WASAPI and wave-input drivers own native calls and lifetime; concrete capture fixtures supply packets and cancellable waits. Snapshot tests inject a connection factory around real SQLite connections. |
 | Shell and keyboard | Native observation/output adapters, taskbar desktop and recovery launcher, keyboard-language observations. Tests use actual ctypes event data and disposable native windows where Windows behavior matters. |

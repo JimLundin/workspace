@@ -1,7 +1,7 @@
 """Feed sources: each variant owns its key, origin, pending rule and triage evidence."""
 
 import hashlib
-from collections.abc import Iterable, Iterator
+from collections.abc import Iterator
 from dataclasses import dataclass, field, replace
 from enum import Enum, auto
 from itertools import chain
@@ -25,7 +25,6 @@ from assistant.communications import (
     WindowsNotice,
     chat_tickets,
 )
-from assistant.console_requests import Request, State
 from assistant.feed_origin import App, Origin, application
 
 _CHAT_KEY = TypeAdapter(tuple[str, str])
@@ -40,7 +39,6 @@ class SourceKind(Enum):
     ACTIVITY = "activity"
     WINDOWS = "windows"
     REPLY = "reply"
-    CONSOLE = "console"
     # A triage proposal groups sources; its rendered row needs a key of its own.
     PROPOSAL = "triage"
 
@@ -81,12 +79,7 @@ class ReplySource:
     reply: Reply
 
 
-@dataclass(frozen=True, slots=True)
-class ConsoleSource:
-    request: Request
-
-
-type FeedSource = ChatTicketSource | ChatMessageSource | UpdateSource | ReplySource | ConsoleSource
+type FeedSource = ChatTicketSource | ChatMessageSource | UpdateSource | ReplySource
 
 
 class Attention(Enum):
@@ -94,8 +87,6 @@ class Attention(Enum):
 
     # Unresolved work the triage agent can group, rank or keep quiet.
     TRIAGE = auto()
-    # A console question or approval the person answers exactly; triage never hides it.
-    DIRECT = auto()
     # A send still in flight: visible while it resolves, not yet work to assess.
     SETTLING = auto()
     RESOLVED = auto()
@@ -133,8 +124,6 @@ def attention(source: FeedSource) -> Attention:
             return Attention.RESOLVED if handled else Attention.TRIAGE
         case ReplySource(reply=reply):
             return _delivery(reply.delivery)
-        case ConsoleSource(request=request):
-            return _console(request.state)
         case _:
             assert_never(source)
 
@@ -151,18 +140,6 @@ def _delivery(delivery: Delivery) -> Attention:
             assert_never(delivery)
 
 
-def _console(state: State) -> Attention:
-    match state:
-        case State.WAITING:
-            return Attention.DIRECT
-        case State.INFORMATION:
-            return Attention.TRIAGE
-        case State.ANSWERED | State.EXPIRED:
-            return Attention.RESOLVED
-        case _:
-            assert_never(state)
-
-
 def key(source: FeedSource) -> SourceKey:
     """The rendered row's identity; a click names it to act on what the person saw."""
     match source:
@@ -174,8 +151,6 @@ def key(source: FeedSource) -> SourceKey:
             return _update_key(update)
         case ReplySource(reply=reply):
             return SourceKey(SourceKind.REPLY, reply.identity)
-        case ConsoleSource(request=request):
-            return SourceKey(SourceKind.CONSOLE, request.identity)
         case _:
             assert_never(source)
 
@@ -199,8 +174,6 @@ def origin(source: FeedSource) -> Origin:
                     return _TEAMS
                 case WindowsNotice(app_id=app_id):
                     return application(update.app_name, app_id)
-        case ConsoleSource(request=request):
-            return application(request.provider.value)
         case _:
             assert_never(source)
 
@@ -213,14 +186,12 @@ def title(source: FeedSource) -> str:
             return update.app_name
         case ReplySource(reply=reply):
             return reply.title
-        case ConsoleSource(request=request):
-            return request.provider.value
         case _:
             assert_never(source)
 
 
 def evidence(source: FeedSource) -> tuple[Candidate, ...]:
-    """Quote only TRIAGE sources; direct questions and in-flight sends are never assessed."""
+    """Quote only TRIAGE sources; in-flight sends and resolved sources are never assessed."""
     if attention(source) is not Attention.TRIAGE:
         return ()
     match source:
@@ -239,9 +210,6 @@ def evidence(source: FeedSource) -> tuple[Candidate, ...]:
                     return (captured,)
         case ReplySource(reply=reply):
             excerpt = Excerpt("Reply to " + reply.title, reply.detail, reply.created_at)
-            return (_captured(key(source), origin(source), excerpt),)
-        case ConsoleSource(request=request):
-            excerpt = Excerpt(request.provider.value + ": " + request.title, request.detail, request.created_at)
             return (_captured(key(source), origin(source), excerpt),)
         case _:
             assert_never(source)
@@ -274,7 +242,7 @@ def _captured(source: SourceKey, at: Origin, excerpt: Excerpt) -> Candidate:
     )
 
 
-def listed(feed: Feed, requests: Iterable[Request], *, history: bool) -> Iterator[FeedSource]:
+def listed(feed: Feed, *, history: bool) -> Iterator[FeedSource]:
     """The feed's sources in display order: pending work, or with history every captured source.
 
     Filtered notices stay out of pending work without being handled. Replies remain
@@ -290,14 +258,10 @@ def listed(feed: Feed, requests: Iterable[Request], *, history: bool) -> Iterato
         if history or feed.needs_attention(update):
             yield UpdateSource(update, handled=not feed.pending_update(update))
     yield from map(ReplySource, feed.replies)
-    for request in requests:
-        source = ConsoleSource(request)
-        if history or attention(source) is not Attention.RESOLVED:
-            yield source
 
 
-def triage_evidence(feed: Feed, requests: Iterable[Request]) -> tuple[Candidate, ...]:
-    return tuple(chain.from_iterable(map(evidence, listed(feed, requests, history=False))))
+def triage_evidence(feed: Feed) -> tuple[Candidate, ...]:
+    return tuple(chain.from_iterable(map(evidence, listed(feed, history=False))))
 
 
 def chat_message(feed: Feed, identity: str) -> Message | None:

@@ -26,7 +26,7 @@ The same bubble and attached reply survive status changes, disclosure and finish
 Qt owns scroll state; the card preserves the full history's position while its
 view shows a different compact document.
 
-Final and earlier replies, feed replies, console questions and expanded solution
+Final and earlier replies, feed replies and expanded solution
 details use the existing MarkdownIt-to-Span adapter and native Qt document.
 Possible replies are readable in the expanded proposal, above its source evidence.
 User input remains an editable text field. No additional Markdown dependency or
