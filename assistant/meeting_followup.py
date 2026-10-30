@@ -1,19 +1,23 @@
-"""Evidence-bound meeting follow-through values and model-response validation.
+"""Evidence-bound meeting follow-through values and the model's follow-up claims.
 
-This module performs no file or network operations. A quote resolves against an
-observed transcript's exact text; generation never supplies its own evidence
-offsets. Publication and editable draft revisions belong to meeting_followup_store.
+This module performs no file or network operations. `FollowupClaims` is the one
+wire shape of a proposed follow-up: its adapter generates the offered tool schema,
+validates the model's payload and stores the canonical package data. A quote
+resolves against an observed transcript's exact text; generation never supplies
+its own evidence offsets. Publication and editable draft revisions belong to
+meeting_followup_store.
 """
 
 import hashlib
-import json
 import re
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from enum import Enum, auto
 from pathlib import Path, PureWindowsPath
-from typing import Literal, assert_never, cast
+from typing import Annotated, Literal, assert_never, cast
 
-from assistant.llm import Json
+from pydantic import ConfigDict, Field, TypeAdapter
+
 from automation.task import digest, identifier, integer, text, timestamp, variant
 
 RECIPE_VERSION = 1
@@ -22,9 +26,12 @@ MAX_BUNDLE_BYTES = 2 * 1024 * 1024
 MAX_SOURCES = 8
 MAX_MODEL_BYTES = 512 * 1024
 MAX_CITATIONS = 8
+MAX_QUOTE = 4000
 MAX_QUOTE_OCCURRENCES = 1024
+MAX_STATEMENTS = 64
 MAX_ACTIONS = 100
 MAX_DRAFTS = 24
+MAX_RECIPIENTS = 30
 MAX_BODY = 32_000
 _EMAIL_TOKEN = re.compile(r"[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?")
 
@@ -119,6 +126,9 @@ class Transcript:
             raise ValueError("The transcript bytes do not match their source digest.")
 
 
+_SELECTION = TypeAdapter(tuple[tuple[str, str], ...])
+
+
 @dataclass(frozen=True, slots=True)
 class TranscriptBundle:
     transcripts: tuple[Transcript, ...]
@@ -135,8 +145,7 @@ class TranscriptBundle:
     def fingerprint(self) -> str:
         # Selection order is intentional: successive recordings retain their order.
         selected = tuple((item.source.id, item.source.sha256) for item in self.transcripts)
-        encoded = json.dumps(selected, separators=(",", ":"), ensure_ascii=False)
-        return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
+        return hashlib.sha256(_SELECTION.dump_json(selected)).hexdigest()
 
 
 @dataclass(frozen=True, slots=True)
@@ -154,7 +163,7 @@ class Citation:
         integer(self.start, "citation start", maximum=MAX_TRANSCRIPT_BYTES)
         integer(self.end, "citation end", minimum=self.start + 1, maximum=MAX_TRANSCRIPT_BYTES)
         integer(self.line, "citation line", minimum=1, maximum=MAX_TRANSCRIPT_BYTES)
-        _text(self.quote, "source quote", 4000)
+        _text(self.quote, "source quote", MAX_QUOTE)
         if self.end - self.start != len(self.quote):
             raise ValueError("Citation offsets must span the quoted text.")
 
@@ -162,7 +171,7 @@ class Citation:
 def resolve_citation(bundle: TranscriptBundle, source_id: str, quote: str, *, occurrence: int | None = None) -> Citation:
     """Resolve a literal source quote; repeated text needs an explicit occurrence."""
     identifier(source_id, "citation source")
-    _text(quote, "source quote", 4000)
+    _text(quote, "source quote", MAX_QUOTE)
     if occurrence is not None:
         integer(occurrence, "quote occurrence", maximum=MAX_QUOTE_OCCURRENCES - 1)
     transcript = next((item for item in bundle.transcripts if item.source.id == source_id), None)
@@ -198,7 +207,7 @@ class CitedText:
 
 
 class Unspecified(Enum):
-    NOT_STATED = auto()
+    NOT_STATED = "not_stated"
 
 
 @dataclass(frozen=True, slots=True)
@@ -256,8 +265,8 @@ class ActionItem:
 
 
 class ActionStatus(Enum):
-    OPEN = auto()
-    DONE = auto()
+    OPEN = "open"
+    DONE = "done"
 
 
 @dataclass(frozen=True, slots=True)
@@ -337,7 +346,7 @@ class DraftContent:
     def __post_init__(self) -> None:
         _header(self.subject, "draft subject", 500)
         _text(self.body, "draft body", MAX_BODY)
-        _tuple(self.recipients, Addressee, "draft recipients", 30)
+        _tuple(self.recipients, Addressee, "draft recipients", MAX_RECIPIENTS)
 
 
 @dataclass(frozen=True, slots=True)
@@ -353,7 +362,7 @@ class EmailDraft:
         identifier(self.id, "draft identity")
         _header(self.subject, "draft subject", 500)
         _text(self.body, "draft body", MAX_BODY)
-        _tuple(self.recipients, SourceRecipient, "source recipients", 30)
+        _tuple(self.recipients, SourceRecipient, "source recipients", MAX_RECIPIENTS)
         _citations(self.citations)
         _tuple(self.action_ids, str, "draft action references", MAX_ACTIONS)
         if len(set(self.action_ids)) != len(self.action_ids):
@@ -378,8 +387,8 @@ class Followup:
     def __post_init__(self) -> None:
         variant(self.sources, TranscriptBundle, "follow-through sources")
         _header(self.title, "follow-through title", 240)
-        _tuple(self.notes, CitedText, "meeting notes", 64, empty=False)
-        _tuple(self.decisions, CitedText, "meeting decisions", 64)
+        _tuple(self.notes, CitedText, "meeting notes", MAX_STATEMENTS, empty=False)
+        _tuple(self.decisions, CitedText, "meeting decisions", MAX_STATEMENTS)
         _tuple(self.actions, ActionItem, "meeting actions", MAX_ACTIONS)
         _tuple(self.drafts, EmailDraft, "follow-up drafts", MAX_DRAFTS)
         actions = {item.id for item in self.actions}
@@ -410,292 +419,227 @@ class Followup:
                 raise ValueError("A citation does not resolve against the observed source text.")
 
 
-def _object(value: object, required: set[str], optional: frozenset[str] = frozenset()) -> dict[str, object]:
-    if not isinstance(value, dict):
-        raise ValueError("The follow-through response must use structured JSON objects.")
-    result = cast(dict[str, object], value)
-    keys = set(result)
-    if not required <= keys or keys - required - optional:
-        raise ValueError("The follow-through response contains missing or unknown fields.")
-    return result
+def _absent(value: object) -> bool:
+    return value is None
 
 
-def _array(value: object, field: str, maximum: int, *, empty: bool = True) -> list[object]:
-    if not isinstance(value, list):
-        raise ValueError(f"Invalid {field}.")
-    result = cast(list[object], value)
-    if len(result) > maximum or (not empty and not result):
-        raise ValueError(f"Invalid {field} count.")
-    return result
+# The model's payload is strict JSON; unknown fields are refused, not ignored.
+_CLAIMS = ConfigDict(extra="forbid", strict=True)
 
 
-def _citation(bundle: TranscriptBundle, value: object) -> Citation:
-    data = _object(value, {"source_id", "quote"}, frozenset({"occurrence"}))
-    return resolve_citation(
-        bundle,
-        identifier(data["source_id"], "citation source"),
-        _text(data["quote"], "source quote", 4000),
-        occurrence=integer(data["occurrence"], "quote occurrence", maximum=MAX_QUOTE_OCCURRENCES - 1) if "occurrence" in data else None,
-    )
+@dataclass(frozen=True, slots=True)
+class QuoteClaim:
+    """A literal quote the model cites; only the observed transcript supplies its offsets."""
+
+    source_id: str
+    quote: Annotated[str, Field(min_length=1, max_length=MAX_QUOTE)]
+    occurrence: Annotated[
+        Annotated[int, Field(ge=0, lt=MAX_QUOTE_OCCURRENCES)] | None,
+        Field(description="Zero-based occurrence, needed only when the exact quote repeats.", exclude_if=_absent),
+    ] = None
+    __pydantic_config__ = _CLAIMS
 
 
-def _evidence(bundle: TranscriptBundle, value: object) -> tuple[Citation, ...]:
-    return tuple(_citation(bundle, item) for item in _array(value, "source citations", MAX_CITATIONS, empty=False))
+type Evidence = Annotated[tuple[QuoteClaim, ...], Field(min_length=1, max_length=MAX_CITATIONS)]
 
 
-def _statement(bundle: TranscriptBundle, value: object) -> CitedText:
-    data = _object(value, {"text", "citations"})
-    return CitedText(_text(data["text"], "meeting statement", 4000), _evidence(bundle, data["citations"]))
+@dataclass(frozen=True, slots=True)
+class StatementClaim:
+    text: str
+    citations: Evidence
+    __pydantic_config__ = _CLAIMS
 
 
-def _owner(bundle: TranscriptBundle, value: object) -> Owner:
-    data = _object(value, {"kind"}, frozenset({"name", "evidence"}))
-    if data["kind"] == "unspecified" and len(data) == 1:
-        return Unspecified.NOT_STATED
-    if data["kind"] == "named" and set(data) == {"kind", "name", "evidence"}:
-        return NamedOwner(_header(data["name"], "action owner", 240), _citation(bundle, data["evidence"]))
-    raise ValueError("An action owner must be named with evidence or explicitly unspecified.")
+@dataclass(frozen=True, slots=True)
+class UnstatedClaim:
+    kind: Literal["unspecified"]
+    __pydantic_config__ = _CLAIMS
 
 
-def _due(bundle: TranscriptBundle, value: object) -> Due:
-    data = _object(value, {"kind"}, frozenset({"text", "evidence"}))
-    if data["kind"] == "unspecified" and len(data) == 1:
-        return Unspecified.NOT_STATED
-    if data["kind"] == "stated" and set(data) == {"kind", "text", "evidence"}:
-        return StatedDue(_header(data["text"], "action due text", 240), _citation(bundle, data["evidence"]))
-    raise ValueError("A due date must retain source wording with evidence or be explicitly unspecified.")
+@dataclass(frozen=True, slots=True)
+class OwnerClaim:
+    kind: Literal["named"]
+    name: str
+    evidence: QuoteClaim
+    __pydantic_config__ = _CLAIMS
 
 
-def _action(bundle: TranscriptBundle, value: object) -> ActionItem:
-    data = _object(value, {"id", "text", "citations", "owner", "due"})
-    return ActionItem(
-        identifier(data["id"], "action identity"),
-        _text(data["text"], "action text", 4000),
-        _evidence(bundle, data["citations"]),
-        _owner(bundle, data["owner"]),
-        _due(bundle, data["due"]),
-    )
+@dataclass(frozen=True, slots=True)
+class DueClaim:
+    kind: Literal["stated"]
+    text: str
+    evidence: QuoteClaim
+    __pydantic_config__ = _CLAIMS
 
 
-def _recipient(bundle: TranscriptBundle, value: object) -> SourceRecipient:
-    data = _object(value, {"name", "email", "citations"})
-    email = Unspecified.NOT_STATED if data["email"] is None else EmailAddress(_header(data["email"], "email address", 320))
-    return SourceRecipient(Addressee(_header(data["name"], "recipient name", 240), email), _evidence(bundle, data["citations"]))
+@dataclass(frozen=True, slots=True)
+class ActionClaim:
+    id: str
+    text: str
+    citations: Evidence
+    owner: Annotated[UnstatedClaim | OwnerClaim, Field(discriminator="kind")]
+    due: Annotated[UnstatedClaim | DueClaim, Field(discriminator="kind")]
+    __pydantic_config__ = _CLAIMS
 
 
-def _draft(bundle: TranscriptBundle, value: object) -> EmailDraft:
-    data = _object(value, {"id", "subject", "body", "recipients", "citations", "action_ids"})
-    return EmailDraft(
-        identifier(data["id"], "draft identity"),
-        _header(data["subject"], "draft subject", 500),
-        _text(data["body"], "draft body", MAX_BODY),
-        tuple(_recipient(bundle, item) for item in _array(data["recipients"], "draft recipients", 30)),
-        _evidence(bundle, data["citations"]),
-        tuple(identifier(item, "draft action reference") for item in _array(data["action_ids"], "draft action references", MAX_ACTIONS)),
-    )
+@dataclass(frozen=True, slots=True)
+class RecipientClaim:
+    name: str
+    email: str | None
+    citations: Evidence
+    __pydantic_config__ = _CLAIMS
 
 
-def _pairs(items: list[tuple[str, object]]) -> dict[str, object]:
-    result: dict[str, object] = {}
-    for key, value in items:
-        if key in result:
-            raise ValueError("Duplicate JSON fields are not valid follow-through data.")
-        result[key] = value
-    return result
+@dataclass(frozen=True, slots=True)
+class DraftClaim:
+    id: str
+    subject: str
+    body: str
+    recipients: Annotated[tuple[RecipientClaim, ...], Field(max_length=MAX_RECIPIENTS)]
+    citations: Evidence
+    action_ids: Annotated[tuple[str, ...], Field(max_length=MAX_ACTIONS)]
+    __pydantic_config__ = _CLAIMS
 
 
-def _constant(value: str) -> None:
-    raise ValueError("Non-finite JSON values are not valid follow-through data.")
+@dataclass(frozen=True, slots=True)
+class FollowupClaims:
+    """What the model proposes; resolution against the frozen transcripts makes it a Followup."""
+
+    source_digest: str
+    title: str
+    notes: Annotated[tuple[StatementClaim, ...], Field(min_length=1, max_length=MAX_STATEMENTS)]
+    decisions: Annotated[tuple[StatementClaim, ...], Field(max_length=MAX_STATEMENTS)]
+    actions: Annotated[tuple[ActionClaim, ...], Field(max_length=MAX_ACTIONS)]
+    drafts: Annotated[tuple[DraftClaim, ...], Field(max_length=MAX_DRAFTS)]
+    __pydantic_config__ = _CLAIMS
 
 
-def parse_followup(bundle: TranscriptBundle, model_json: str) -> Followup:
-    """Validate a complete response without silently repairing claims or evidence."""
-    _text(model_json, "model response", MAX_MODEL_BYTES)
-    if len(model_json.encode("utf-8")) > MAX_MODEL_BYTES:
-        raise ValueError("The model response exceeds its byte limit.")
-    try:
-        raw: object = json.loads(model_json, object_pairs_hook=_pairs, parse_constant=_constant)
-    except (RecursionError, json.JSONDecodeError) as error:
-        raise ValueError("The model response is not bounded valid JSON.") from error
-    data = _object(raw, {"source_digest", "title", "notes", "decisions", "actions", "drafts"})
-    if digest(data["source_digest"], "selected source digest") != bundle.fingerprint:
+FOLLOWUP_CLAIMS = TypeAdapter(FollowupClaims)
+DRAFT_CONTENT = TypeAdapter(DraftContent)
+ACTION_CONTENT = TypeAdapter(ActionContent)
+
+
+def _cite(bundle: TranscriptBundle, claim: QuoteClaim) -> Citation:
+    return resolve_citation(bundle, claim.source_id, claim.quote, occurrence=claim.occurrence)
+
+
+def _evidence(bundle: TranscriptBundle, claims: Iterable[QuoteClaim]) -> tuple[Citation, ...]:
+    return tuple(_cite(bundle, claim) for claim in claims)
+
+
+def _statement(bundle: TranscriptBundle, claim: StatementClaim) -> CitedText:
+    return CitedText(claim.text, _evidence(bundle, claim.citations))
+
+
+def _action(bundle: TranscriptBundle, claim: ActionClaim) -> ActionItem:
+    owner: Owner
+    match claim.owner:
+        case OwnerClaim(name=name, evidence=evidence):
+            owner = NamedOwner(name, _cite(bundle, evidence))
+        case UnstatedClaim():
+            owner = Unspecified.NOT_STATED
+        case _:
+            assert_never(claim.owner)
+    due: Due
+    match claim.due:
+        case DueClaim(text=wording, evidence=evidence):
+            due = StatedDue(wording, _cite(bundle, evidence))
+        case UnstatedClaim():
+            due = Unspecified.NOT_STATED
+        case _:
+            assert_never(claim.due)
+    return ActionItem(claim.id, claim.text, _evidence(bundle, claim.citations), owner, due)
+
+
+def _recipient(bundle: TranscriptBundle, claim: RecipientClaim) -> SourceRecipient:
+    email = Unspecified.NOT_STATED if claim.email is None else EmailAddress(claim.email)
+    return SourceRecipient(Addressee(claim.name, email), _evidence(bundle, claim.citations))
+
+
+def _draft(bundle: TranscriptBundle, claim: DraftClaim) -> EmailDraft:
+    recipients = tuple(_recipient(bundle, item) for item in claim.recipients)
+    return EmailDraft(claim.id, claim.subject, claim.body, recipients, _evidence(bundle, claim.citations), claim.action_ids)
+
+
+def resolve_followup(bundle: TranscriptBundle, claims: FollowupClaims) -> Followup:
+    """Bind every claim to the observed transcripts without silently repairing claims or evidence."""
+    if claims.source_digest != bundle.fingerprint:
         raise ValueError("The follow-through response belongs to a different source selection.")
     return Followup(
         bundle,
-        _header(data["title"], "follow-through title", 240),
-        tuple(_statement(bundle, item) for item in _array(data["notes"], "meeting notes", 64, empty=False)),
-        tuple(_statement(bundle, item) for item in _array(data["decisions"], "meeting decisions", 64)),
-        tuple(_action(bundle, item) for item in _array(data["actions"], "meeting actions", MAX_ACTIONS)),
-        tuple(_draft(bundle, item) for item in _array(data["drafts"], "follow-up drafts", MAX_DRAFTS)),
+        claims.title,
+        tuple(_statement(bundle, item) for item in claims.notes),
+        tuple(_statement(bundle, item) for item in claims.decisions),
+        tuple(_action(bundle, item) for item in claims.actions),
+        tuple(_draft(bundle, item) for item in claims.drafts),
     )
 
 
-def bundle_data(bundle: TranscriptBundle) -> dict[str, Json]:
-    """A complete versioned snapshot suitable for the immutable preparation binding."""
-    values: list[Json] = []
-    for transcript in bundle.transcripts:
-        source = transcript.source
-        match source.notice:
-            case CaptureNotice(text=notice):
-                capture_notice: str | None = notice
-            case NoCaptureNotice.NONE:
-                capture_notice = None
-            case _:
-                assert_never(source.notice)
-        values.append(
-            {
-                "id": source.id,
-                "title": source.title,
-                "path": source.path,
-                "sha256": source.sha256,
-                "started_at": source.started_at,
-                "duration_seconds": source.duration_seconds,
-                "capture": source.capture,
-                "notice": capture_notice,
-                "text": transcript.text,
-            }
-        )
-    return {"version": 1, "sources": values}
-
-
-def bundle_of(value: object) -> TranscriptBundle:
-    """Validate a persisted source snapshot, including its exact UTF-8 byte digests."""
-    data = _object(value, {"version", "sources"})
-    if integer(data["version"], "source snapshot version") != 1:
-        raise ValueError("Unsupported source snapshot version.")
-    sources: list[Transcript] = []
-    for item in _array(data["sources"], "selected transcripts", MAX_SOURCES, empty=False):
-        row = _object(item, {"id", "title", "path", "sha256", "started_at", "duration_seconds", "capture", "notice", "text"})
-        capture = row["capture"]
-        if capture not in ("both", "microphone"):
-            raise ValueError("Invalid recording source.")
-        notice = NoCaptureNotice.NONE if row["notice"] is None else CaptureNotice(_text(row["notice"], "capture notice", 4000))
-        source = TranscriptSource(
-            identifier(row["id"], "transcript identity"),
-            _header(row["title"], "transcript title", 240),
-            _text(row["path"], "transcript path", 4096),
-            digest(row["sha256"], "transcript digest"),
-            timestamp(row["started_at"], "recording start"),
-            timestamp(row["duration_seconds"], "recording duration"),
-            "both" if capture == "both" else "microphone",
-            notice,
-        )
-        content = _text(row["text"], "source snapshot text", MAX_TRANSCRIPT_BYTES).encode("utf-8")
-        sources.append(Transcript(source, content))
-    return TranscriptBundle(tuple(sources))
-
-
-def _citation_data(bundle: TranscriptBundle, citation: Citation) -> dict[str, Json]:
-    data: dict[str, Json] = {"source_id": citation.source_id, "quote": citation.quote}
+def _quote(bundle: TranscriptBundle, citation: Citation) -> QuoteClaim:
     content = next(item.text for item in bundle.transcripts if item.source.id == citation.source_id)
     start = content.find(citation.quote)
-    if content.find(citation.quote, start + 1) >= 0:
-        occurrence = 0
-        while start != citation.start:
-            if occurrence >= MAX_QUOTE_OCCURRENCES - 1:
-                raise ValueError("A highly repeated citation needs a longer source quote.")
-            start = content.find(citation.quote, start + 1)
-            if start < 0:
-                raise ValueError("A citation does not resolve against its source.")
-            occurrence += 1
-        data["occurrence"] = occurrence
-    return data
+    if content.find(citation.quote, start + 1) < 0:
+        return QuoteClaim(citation.source_id, citation.quote)
+    occurrence = 0
+    while start != citation.start:
+        if occurrence >= MAX_QUOTE_OCCURRENCES - 1:
+            raise ValueError("A highly repeated citation needs a longer source quote.")
+        start = content.find(citation.quote, start + 1)
+        if start < 0:
+            raise ValueError("A citation does not resolve against its source.")
+        occurrence += 1
+    return QuoteClaim(citation.source_id, citation.quote, occurrence)
 
 
-def followup_data(followup: Followup) -> dict[str, Json]:
-    """Canonical validated model data; source bytes are stored separately."""
+def followup_claims(followup: Followup) -> FollowupClaims:
+    """The canonical claims that resolve to exactly this follow-up; source bytes are stored separately."""
     bundle = followup.sources
 
-    def evidence(citations: tuple[Citation, ...]) -> list[Json]:
-        return [_citation_data(bundle, item) for item in citations]
+    def evidence(citations: Iterable[Citation]) -> tuple[QuoteClaim, ...]:
+        return tuple(_quote(bundle, item) for item in citations)
 
-    def statement(item: CitedText) -> Json:
-        return {"text": item.text, "citations": evidence(item.citations)}
+    def statement(item: CitedText) -> StatementClaim:
+        return StatementClaim(item.text, evidence(item.citations))
 
-    actions: list[Json] = []
-    for action in followup.actions:
-        owner: Json
-        match action.owner:
+    def action(item: ActionItem) -> ActionClaim:
+        owner: UnstatedClaim | OwnerClaim
+        match item.owner:
             case NamedOwner(name=name, evidence=citation):
-                owner = {"kind": "named", "name": name, "evidence": _citation_data(bundle, citation)}
+                owner = OwnerClaim("named", name, _quote(bundle, citation))
             case Unspecified.NOT_STATED:
-                owner = {"kind": "unspecified"}
+                owner = UnstatedClaim("unspecified")
             case _:
-                assert_never(action.owner)
-        due: Json
-        match action.due:
-            case StatedDue(text=due_text, evidence=citation):
-                due = {"kind": "stated", "text": due_text, "evidence": _citation_data(bundle, citation)}
+                assert_never(item.owner)
+        due: UnstatedClaim | DueClaim
+        match item.due:
+            case StatedDue(text=wording, evidence=citation):
+                due = DueClaim("stated", wording, _quote(bundle, citation))
             case Unspecified.NOT_STATED:
-                due = {"kind": "unspecified"}
+                due = UnstatedClaim("unspecified")
             case _:
-                assert_never(action.due)
-        actions.append({"id": action.id, "text": action.text, "citations": evidence(action.citations), "owner": owner, "due": due})
-    drafts: list[Json] = []
-    for draft in followup.drafts:
-        recipients: list[Json] = []
-        for recipient in draft.recipients:
-            email = recipient.addressee.email
-            recipients.append(
-                {
-                    "name": recipient.addressee.name,
-                    "email": email.value if isinstance(email, EmailAddress) else None,
-                    "citations": evidence(recipient.citations),
-                }
-            )
-        drafts.append(
-            {
-                "id": draft.id,
-                "subject": draft.subject,
-                "body": draft.body,
-                "recipients": recipients,
-                "citations": evidence(draft.citations),
-                "action_ids": list(draft.action_ids),
-            }
+                assert_never(item.due)
+        return ActionClaim(item.id, item.text, evidence(item.citations), owner, due)
+
+    def recipient(item: SourceRecipient) -> RecipientClaim:
+        match item.addressee.email:
+            case EmailAddress(value=email):
+                address: str | None = email
+            case Unspecified.NOT_STATED:
+                address = None
+            case _:
+                assert_never(item.addressee.email)
+        return RecipientClaim(item.addressee.name, address, evidence(item.citations))
+
+    def draft(item: EmailDraft) -> DraftClaim:
+        return DraftClaim(
+            item.id, item.subject, item.body, tuple(recipient(value) for value in item.recipients), evidence(item.citations), item.action_ids
         )
-    return {
-        "source_digest": bundle.fingerprint,
-        "title": followup.title,
-        "notes": [statement(item) for item in followup.notes],
-        "decisions": [statement(item) for item in followup.decisions],
-        "actions": actions,
-        "drafts": drafts,
-    }
 
-
-def draft_data(content: DraftContent) -> dict[str, Json]:
-    recipients: list[Json] = [
-        {"name": recipient.name, "email": recipient.email.value if isinstance(recipient.email, EmailAddress) else None}
-        for recipient in content.recipients
-    ]
-    return {"subject": content.subject, "body": content.body, "recipients": recipients}
-
-
-def draft_of(value: object) -> DraftContent:
-    data = _object(value, {"subject", "body", "recipients"})
-    recipients: list[Addressee] = []
-    for item in _array(data["recipients"], "draft recipients", 30):
-        row = _object(item, {"name", "email"})
-        email = Unspecified.NOT_STATED if row["email"] is None else EmailAddress(_header(row["email"], "email address", 320))
-        recipients.append(Addressee(_header(row["name"], "recipient name", 240), email))
-    return DraftContent(_header(data["subject"], "draft subject", 500), _text(data["body"], "draft body", MAX_BODY), tuple(recipients))
-
-
-def action_data(content: ActionContent) -> dict[str, Json]:
-    return {
-        "text": content.text,
-        "owner": content.owner.name if isinstance(content.owner, AssignedOwner) else None,
-        "due": content.due.text if isinstance(content.due, AssignedDue) else None,
-        "status": "done" if content.status is ActionStatus.DONE else "open",
-    }
-
-
-def action_of(value: object) -> ActionContent:
-    data = _object(value, {"text", "owner", "due", "status"})
-    owner = Unspecified.NOT_STATED if data["owner"] is None else AssignedOwner(_header(data["owner"], "assigned owner", 240))
-    due = Unspecified.NOT_STATED if data["due"] is None else AssignedDue(_header(data["due"], "assigned due text", 240))
-    if data["status"] not in ("open", "done"):
-        raise ValueError("Invalid action completion state.")
-    return ActionContent(
-        _text(data["text"], "edited action text", 4000), owner, due, ActionStatus.DONE if data["status"] == "done" else ActionStatus.OPEN
+    return FollowupClaims(
+        bundle.fingerprint,
+        followup.title,
+        tuple(statement(item) for item in followup.notes),
+        tuple(statement(item) for item in followup.decisions),
+        tuple(action(item) for item in followup.actions),
+        tuple(draft(item) for item in followup.drafts),
     )

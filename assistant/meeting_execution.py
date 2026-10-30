@@ -7,7 +7,16 @@ from pydantic import ConfigDict, TypeAdapter
 
 from assistant import outlook
 from assistant.llm import Json
-from assistant.meeting_followup import CaptureNotice, EmailAddress, NoCaptureNotice, draft_data, followup_data, parse_followup
+from assistant.meeting_followup import (
+    DRAFT_CONTENT,
+    FOLLOWUP_CLAIMS,
+    CaptureNotice,
+    EmailAddress,
+    FollowupClaims,
+    NoCaptureNotice,
+    followup_claims,
+    resolve_followup,
+)
 from assistant.meeting_followup_store import FollowupStore, Publication, PublishedFollowup
 from assistant.meeting_preparation import Preparations, PreparedFollowup
 from automation.actions import ActionError
@@ -123,10 +132,9 @@ class MeetingRun:
             "next_offset": end if end < len(selected.text) else None,
         }
 
-    def publication(self, value: Json) -> Publication:
+    def publication(self, claims: FollowupClaims) -> Publication:
         # Validation precedes action registration and any artifact writes.
-        result = parse_followup(self.request.bundle, _JSON.dump_json(value).decode())
-        return self.packages.plan(self.request.task_id, result)
+        return self.packages.plan(self.request.task_id, resolve_followup(self.request.bundle, claims))
 
     def publish(self, publication: Publication) -> dict[str, Json]:
         if publication.task_id != self.request.task_id or publication.followup.sources != self.request.bundle:
@@ -145,7 +153,7 @@ class MeetingRun:
             {
                 "draft_id": value.id,
                 "revision": value.revision,
-                "content": draft_data(value.content),
+                "content": _JSON.validate_json(DRAFT_CONTENT.dump_json(value.content)),
                 "email_file": str(value.files.eml),
                 "markdown_file": str(value.files.markdown),
             }
@@ -156,7 +164,7 @@ class MeetingRun:
             "source_digest": package.followup.sources.fingerprint,
             "notes_path": str(package.notes_path),
             "actions_path": str(package.actions_path),
-            "followup": followup_data(package.followup),
+            "followup": _JSON.validate_json(FOLLOWUP_CLAIMS.dump_json(followup_claims(package.followup))),
             "drafts": drafts,
             "verified": True,
         }
