@@ -5,7 +5,7 @@ Replaying the same events against a session always gives the same result.
 """
 
 from dataclasses import dataclass, field, replace
-from enum import Enum, auto
+from enum import Enum
 from typing import Literal, assert_never
 from urllib.parse import urlencode
 
@@ -48,9 +48,9 @@ class ChatMessage:
 
 
 class StreamState(Enum):
-    RUNNING = auto()
-    COMPLETE = auto()
-    INTERRUPTED = auto()
+    RUNNING = "running"
+    COMPLETE = "complete"
+    INTERRUPTED = "interrupted"
 
 
 @dataclass(frozen=True, slots=True)
@@ -59,6 +59,7 @@ class Answer:
     text: str
     created_at: float
     state: StreamState = StreamState.RUNNING
+    kind: Literal["answer"] = "answer"
 
 
 @dataclass(frozen=True, slots=True)
@@ -67,21 +68,24 @@ class ReasoningSummary:
     text: str
     created_at: float
     state: StreamState = StreamState.RUNNING
+    kind: Literal["reasoning"] = "reasoning"
 
 
 class ToolStatus(Enum):
-    RUNNING = auto()
-    CANCELLED = auto()
+    RUNNING = "running"
+    CANCELLED = "cancelled"
 
 
 @dataclass(frozen=True, slots=True)
 class Succeeded:
     text: str
+    kind: Literal["succeeded"] = "succeeded"
 
 
 @dataclass(frozen=True, slots=True)
 class Failed:
     text: str
+    kind: Literal["failed"] = "failed"
 
 
 type ToolOutcome = ToolStatus | Succeeded | Failed
@@ -94,6 +98,7 @@ class ToolActivity:
     detail: str
     created_at: float
     outcome: ToolOutcome = ToolStatus.RUNNING
+    kind: Literal["tool"] = "tool"
 
     @property
     def text(self) -> str:
@@ -156,6 +161,7 @@ class Begin:
     at: float
     queued: bool = field(default=False, kw_only=True)
     source: FeedRequest | None = None
+    kind: Literal["begin"] = "begin"
 
 
 @dataclass(frozen=True, slots=True)
@@ -166,12 +172,14 @@ class Enqueued:
 @dataclass(frozen=True, slots=True)
 class Progress:
     text: str
+    kind: Literal["progress"] = "progress"
 
 
 @dataclass(frozen=True, slots=True)
 class Said:
     text: str
     at: float
+    kind: Literal["said"] = "said"
 
 
 @dataclass(frozen=True, slots=True)
@@ -190,17 +198,19 @@ class CanvasSettled:
 class Done:
     text: str
     at: float
+    kind: Literal["done"] = "done"
 
 
 @dataclass(frozen=True, slots=True)
 class Problem:
     text: str
     at: float
+    kind: Literal["problem"] = "problem"
 
 
 @dataclass(frozen=True, slots=True)
 class Finished:
-    pass
+    kind: Literal["finished"] = "finished"
 
 
 @dataclass(frozen=True, slots=True)
