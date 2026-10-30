@@ -177,7 +177,11 @@ Measured nested containers and scoped placement are in `work_canvas_layout.py`.
 routing, reply reconciliation, quiet presentation and material-change policy.
 `work_canvas.py`'s `WorkCanvas` is the single owner of the local document: it
 saves every edit, observes work, sessions and the catalog, and returns the
-documents and announcements that `Ui` renders. `work_canvas_view.py` owns native
+documents and announcements that `Ui` renders. The panel never saves its rendered
+copy. Each user edit is a `work_canvas_edits.py` intent that the owner applies to
+the latest document, so an agent's update committed since the last render survives.
+A measured layout is dropped when its view changed since that render; the next
+render measures again. `work_canvas_view.py` owns native
 spatial interaction, and `work_canvas_detail.py` owns in-place drafts and controls.
 `work_canvas_window.py` owns the dedicated frame and optional administration
 window. `personal_work_panel.py` composes these with the existing immutable
