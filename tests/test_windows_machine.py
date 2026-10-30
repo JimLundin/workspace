@@ -9,6 +9,8 @@ from pathlib import Path
 if sys.platform != "win32":
     raise unittest.SkipTest("Windows machine ownership")
 
+from pydantic import TypeAdapter
+
 from assistant.agent_tools import Machine
 from assistant.browser import BrowserResult
 from assistant.geometry import Shot
@@ -56,6 +58,7 @@ class Recording:
         return "Recording owner status"
 
 
+WIRE = TypeAdapter(dict[str, Json])
 TEAMS_PAGE = TeamsPage("", "", (), (), editor_ready=False)
 
 
@@ -118,6 +121,18 @@ def test_machine_keeps_browser_cleanup_with_its_owner() -> None:
         assert str(error) == "Meeting recording is unavailable."
     else:
         raise AssertionError("A missing recording owner must be reported.")
+
+
+def test_desktop_state_reports_the_real_monitors_windows_and_foreground() -> None:
+    # Defect: the typed desktop observation drops or misassigns monitor and
+    # window rows, so the model receives coordinates for the wrong surface.
+    state = WIRE.validate_json(WinMachine(Desktop(), browser=Browser()).desktop_state())
+    match state:
+        case {"coordinates": "physical screen pixels", "monitors": [*monitors], "windows": [*rows], "foreground": int()}:
+            assert monitors and sum(1 for monitor in monitors if isinstance(monitor, dict) and monitor["primary"] is True) == 1
+            assert all(isinstance(row, dict) and isinstance(row["handle"], int) and isinstance(row["bounds"], dict) for row in rows)
+        case _:
+            raise AssertionError(f"Unexpected desktop observation: {state}")
 
 
 def test_machine_import_and_construction_do_not_load_ui_or_audio() -> None:
