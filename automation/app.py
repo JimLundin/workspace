@@ -54,7 +54,9 @@ def report(message: str, *, folder: Path = DIRECTORY / "work") -> None:
 
 
 @dataclass(frozen=True, slots=True)
-class MeetingRun:
+class MeetingOwner:
+    """The work run whose meeting requests the assistant answers, and its Stop."""
+
     run: RunRef
     stop: threading.Event
 
@@ -66,7 +68,7 @@ class RemoteMeetings:
 
     def __init__(self, bridge: BridgeServer) -> None:
         self.bridge = bridge
-        self.current: MeetingRun | None = None
+        self.current: MeetingOwner | None = None
 
     def request(self, operation: ipc.MeetingOperation) -> str:
         if self.current is None:
@@ -155,7 +157,7 @@ class NativeExecution:
         self.execution, self.bridge, self.meetings = execution, bridge, meetings
 
     def run_work(self, claim: Claim, store: TaskStore, log: Log, stop: threading.Event) -> Outcome:
-        self.meetings.current = MeetingRun(claim.run, stop)
+        self.meetings.current = MeetingOwner(claim.run, stop)
 
         def review(preview: ApprovalReview) -> bool:
             try:
