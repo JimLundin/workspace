@@ -9,25 +9,22 @@ from typing import TYPE_CHECKING
 
 lazy import shiboken6
 lazy from PySide6 import QtCore, QtWidgets
-lazy from PySide6.QtCore import QPoint, QRectF, Qt
+lazy from PySide6.QtCore import QPoint, QRect, QRectF, Qt
 lazy from PySide6.QtGui import (
-    QColor,
     QContextMenuEvent,
     QEnterEvent,
     QFontMetricsF,
     QKeyEvent,
     QMouseEvent,
     QPainter,
-    QPainterPath,
     QPaintEvent,
-    QPen,
     QTextCharFormat,
     QTextCursor,
 )
 lazy from PySide6.QtWidgets import QAbstractButton, QLabel, QTextEdit, QWidget
 
 from assistant import notification_reading, notification_text, step_view
-from assistant.feed_origin import Origin
+from assistant.feed_origin import App
 from assistant.notifications import (
     REVEAL_SECONDS,
     Busy,
@@ -52,20 +49,35 @@ from assistant.notifications import (
 )
 from assistant.qt_runtime import prepare
 from assistant.rich_text import Span
-from assistant.ui_components.appearance import INK, Ink, Palette, palette
+from assistant.ui_components import bubble
+from assistant.ui_components.appearance import Scheme, Shade
 from assistant.ui_components.bubble import (
-    TITLE_SIZE,
-    BubbleAppearance,
+    ACTION,
+    ACTIONS_TOP,
+    BADGE,
+    BOTTOM,
+    CONTROL,
+    CONTROL_GAP,
+    LEFT,
+    RIGHT,
+    TEXT_LEFT,
+    TOP,
     FeedTitle,
-    badge_origins,
-    badge_width,
-    heading_width,
-    paint_origins,
-    paint_surface,
+    Look,
+    Spinning,
+    action_face,
+    action_geometry,
+    action_style,
+    meta_face,
+    paint_badge,
+    paint_card,
+    title_height,
+    title_width,
 )
 from assistant.ui_components.canvas_jump import CanvasJumpButton
 from assistant.ui_components.press_feedback import paint_feedback
-from assistant.ui_components.text import INSET, TEXT_PADDING, Document, TextView, font, units
+from assistant.ui_components.text import BODY, Document, TextView, color, face, line_height, units
+from assistant.vector_icons import icon
 from assistant.view_publication import log_view
 from automation.presentation import StreamState
 from winapi import appearance, windows
@@ -76,6 +88,18 @@ prepare()
 
 if TYPE_CHECKING:
     from assistant.agent_toasts import AgentToasts
+
+SECTION = 4  # logical padding above and below each text region
+CANVAS_ROW = ACTION + 8  # one persistent canvas action below the text
+THUMB = 6  # the overlay scroll bar's thumb, 2 px inside the card's trailing edge
+
+
+@dataclass(frozen=True, slots=True)
+class Finish:
+    """What the desktop asks a card to look like: the material preference and Windows' app scheme."""
+
+    preference: appearance.Preference
+    scheme: Scheme
 
 
 @dataclass(frozen=True, slots=True)
@@ -116,17 +140,23 @@ class Reveal:
     started: float
 
 
-def choice_geometry(labels: tuple[str, ...], width: float) -> tuple[tuple[int, int, int], ...]:
-    metrics = QFontMetricsF(font(8.5))
-    x = y = 0
-    result: list[tuple[int, int, int]] = []
-    for label in labels:
-        wide = min(round(width), math.ceil(metrics.horizontalAdvance(label) + 20))
-        if x and x + wide > width:
-            x, y = 0, y + 30
-        result.append((x, y, wide))
-        x += wide + 6
-    return tuple(result)
+def _text_height(text: str, width: float) -> float:
+    metrics = QFontMetricsF(meta_face())
+    return metrics.boundingRect(QRectF(0, 0, max(1, width), 10000), Qt.TextFlag.TextWordWrap.value, text).height() if text else 0
+
+
+def _meta_height(text: str) -> int:
+    return math.ceil(QFontMetricsF(meta_face()).height()) if text else 0
+
+
+def _controls(content: Content) -> int:
+    """Dismiss, Stop and the disclosure sit at the head's trailing edge."""
+    user = tone(content) is Tone.USER
+    return (0 if user else 1) + (1 if can_stop(content) else 0) + (1 if notification_text.expandable(content) else 0)
+
+
+def _title(content: Content) -> str:
+    return notification_text.title_text(content) if _turn(content) else heading(content)
 
 
 class Measure:
@@ -136,66 +166,43 @@ class Measure:
         self.body, self.details = Document(), step_view.Measure()
         self.scale = 1.0
 
-    def text_height(self, text: str, size: float, width: float, *, bold: bool = False) -> float:
-        metrics = QFontMetricsF(font(size, bold=bold))
-        return metrics.boundingRect(QRectF(0, 0, max(1, width), 10000), Qt.TextFlag.TextWordWrap.value, text).height() if text else 0
-
     def prepare(self, content: Content, maximum: int, *, expanded: bool = False) -> Prepared:
         scale = self.scale
         user = tone(content) is Tone.USER
         compact = _settled_turn(content)
-        inset = 8
         maximum_width = min(maximum / scale, 280 if user else maximum / scale)
         presentation = notification_text.bubble_text(notification_text.spans(content))
         spans = presentation.body
         details = notification_text.step_blocks(content, expanded=expanded)
-        meta, footer = "" if compact else caption(content), "You" if user else hint(content)
+        meta, footer = "" if compact else caption(content), hint(content)
         match content:
             case Entry() | Turn():
                 # Agent questions use the bubble's voice tooltip, with no input footer.
                 footer = ""
             case Response() | Recording():
                 pass
-        badge = badge_width(BUBBLE_ORIGINS)
-        controls = (26 if not user else 0) + (26 if notification_text.expandable(content) else 0) + (32 if can_stop(content) else 0)
-        label = notification_text.title_text(content) if _turn(content) else "" if compact else heading(content)
-        body_padding = INSET * 2 + 8
+        body_padding = TEXT_LEFT + RIGHT
         # The feed has one column width. Only the person's speech uses a smaller
-        # bubble; standalone replies must match conversation and proposal cards.
+        # card; standalone replies must match conversation and proposal cards.
         width = maximum_width
         if user:
             body_width = self.body.intrinsic_width(spans, max(1, maximum_width - body_padding))
-            width = min(maximum_width, max(100, badge + INSET * 2, body_width + body_padding))
+            width = min(maximum_width, max(120, body_width + body_padding))
         labels = tuple(span.text for span in notification_text.options(content))
-        text_width = max(1, round(math.ceil(width * scale) / scale) - body_padding)
-        body_height = self.body.load(spans, text_width) + TEXT_PADDING * 2 if spans else 0
-        details_height = self.details.total(details, text_width) + TEXT_PADDING * 2 if details else 0
-        label_width: float = max(1, round(math.ceil(width * scale) / scale) - controls - badge - INSET * 2)
-        if _turn(content):
-            label_width = heading_width(
-                round(math.ceil(width * scale) / scale),
-                badge,
-                stopping=can_stop(content),
-                disclosing=notification_text.expandable(content),
-            )
-            title_height = (
-                self.text_height(label, TITLE_SIZE, label_width, bold=True) if expanded else QFontMetricsF(font(TITLE_SIZE, bold=True)).height()
-            )
-            header: float = 16 + max(24, math.ceil(title_height)) + 6
-        else:
-            header = (
-                20
-                if user
-                else 36
-                if compact
-                else inset + 14 + max(28, self.text_height(label, 9.5, label_width, bold=True) + self.text_height(meta, 8.5, label_width)) + 8
-            )
-        footer_height = self.text_height(footer, 8.5, text_width) + 8 if footer and not user else 0
+        logical = round(math.ceil(width * scale) / scale)
+        text_width = max(1, logical - body_padding)
+        body_height = self.body.load(spans, text_width) + SECTION * 2 if spans else 0
+        details_height = self.details.total(details, text_width) + SECTION * 2 if details else 0
+        label_width = title_width(logical, _controls(content))
+        # Collapsed turns elide their title to one line; other headings wrap.
+        title = title_height(_title(content), label_width, expanded=expanded or not _turn(content))
+        header = TOP + max(BADGE, title + _meta_height(meta))
+        footer_height = _text_height(footer, text_width) + SECTION * 2 if footer else 0
         if labels:
-            geometry = choice_geometry(labels, text_width)
-            footer_height = geometry[-1][1] + 30
+            geometry = action_geometry(labels, text_width)
+            footer_height = ACTIONS_TOP + geometry[-1][1] + ACTION
             footer = ""
-        footer_height += 42 * len(presentation.canvas_actions)
+        footer_height += CANVAS_ROW * len(presentation.canvas_actions)
         return Prepared(
             math.ceil(width * scale),
             spans,
@@ -209,7 +216,7 @@ class Measure:
             details,
             math.ceil(details_height * scale),
             round(200 * scale),
-            round(8 * scale),
+            round(BOTTOM * scale),
             math.floor(text_width * scale),
         )
 
@@ -217,8 +224,8 @@ class Measure:
         if not spans:
             return 0
         document.load(spans, max(1, width / self.scale))
-        fitted = document.fit(available / self.scale - TEXT_PADDING * 2)
-        return math.ceil((fitted + TEXT_PADDING * 2) * self.scale) if fitted else 0
+        fitted = document.fit(available / self.scale - SECTION * 2)
+        return math.ceil((fitted + SECTION * 2) * self.scale) if fitted else 0
 
     def layout(self, prepared: Prepared, width: int, maximum: int) -> Layout:
         available = max(0, maximum - prepared.header_height - prepared.hint_height - prepared.padding)
@@ -243,41 +250,37 @@ class Icon(Enum):
 
 
 class IconButton(QAbstractButton):
-    __slots__ = ("expanded", "ink", "key_click", "kind")
+    __slots__ = ("controls", "expanded", "key_click", "kind")
 
-    def __init__(self, parent: QWidget, icon: Icon, key_click: Callable[[], None]) -> None:
+    def __init__(self, parent: QWidget, kind: Icon, key_click: Callable[[], None]) -> None:
         super().__init__(parent)
-        self.kind = icon
+        self.kind = kind
         self.key_click = key_click
         self.expanded = False
-        self.ink = INK
+        self.controls = bubble.look(appearance.Material.SOLID, Scheme.DARK).controls
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
-        self.setAccessibleName("Dismiss item" if icon is Icon.DISMISS else "Stop agent" if icon is Icon.STOP else "Show steps")
+        self.setAccessibleName("Dismiss item" if kind is Icon.DISMISS else "Stop agent" if kind is Icon.STOP else "Show steps")
         self.setToolTip(self.accessibleName())
 
     def paintEvent(self, event: QPaintEvent) -> None:
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        paint_feedback(self, painter, self.ink)
-        painter.setPen(QPen(QColor(self.ink), 1.6, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
-        painter.setOpacity(0.45 if not self.isEnabled() else 1)
-        cx, cy = self.width() / 2, self.height() / 2
-        path = QPainterPath()
+        paint_feedback(self, painter, self.controls)
+        ink = self.controls.ink
+        painter.setOpacity(ink.opacity * (0.45 if not self.isEnabled() else 1))
+        cx, cy = self.width() // 2, self.height() // 2
         match self.kind:
             case Icon.STOP:
-                path.addRoundedRect(QRectF(cx - 4, cy - 4, 8, 8), 1, 1)
+                name = "stop"
             case Icon.DISMISS:
-                path.moveTo(cx - 4, cy - 4)
-                path.lineTo(cx + 4, cy + 4)
-                path.moveTo(cx + 4, cy - 4)
-                path.lineTo(cx - 4, cy + 4)
+                name = "close"
             case Icon.DISCLOSURE:
-                direction = -1 if self.expanded else 1
-                path.moveTo(cx - 3.5, cy - direction * 1.5)
-                path.lineTo(cx, cy + direction * 2)
-                path.lineTo(cx + 3.5, cy - direction * 1.5)
-        painter.drawPath(path)
+                name = "down"
+                if self.expanded:
+                    painter.translate(cx * 2, cy * 2)
+                    painter.rotate(180)
+        icon(name, ink.color).paint(painter, QRect(cx - 8, cy - 8, 16, 16))
 
     def enterEvent(self, event: QEnterEvent) -> None:
         super().enterEvent(event)
@@ -305,6 +308,8 @@ class IconButton(QAbstractButton):
 
 
 class SourceBadge(QWidget):
+    """The card's app badge. Every feed card is Workspace's own: the agent's direction, never an app arrival."""
+
     __slots__ = ("card",)
 
     def __init__(self, card: Card) -> None:
@@ -313,28 +318,19 @@ class SourceBadge(QWidget):
         self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
 
     def source(self, content: Content) -> None:
-        sources = BUBBLE_ORIGINS
-        names = ", ".join(origin.name for origin in sources)
-        names += " · You" if tone(content) is Tone.USER else ""
+        names = App.WORKSPACE.value + (" · You" if tone(content) is Tone.USER else "")
         self.setAccessibleName("From " + names)
         self.setToolTip(escape(names))
-        self.setGeometry(0, 0, badge_width(sources), 28)
+        self.setGeometry(LEFT, TOP, BADGE, BADGE)
         self.show()
         self.raise_()
         self.update()
 
     def paintEvent(self, event: QPaintEvent) -> None:
         content = self.card.content
+        working = content is not None and spinning(content)
         painter = QPainter(self)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        paint_origins(painter, BUBBLE_ORIGINS, self.card.colors)
-        if content is not None and spinning(content):
-            painter.setPen(QPen(QColor(self.card.ink.foreground), 1.6))
-            painter.drawArc(QRectF(1.5, 1.5, 25, 25), round(self.card.spin_angle * 16), 240 * 16)
-
-
-# Every bubble is Workspace's own: the agent's direction, never an app arrival.
-BUBBLE_ORIGINS: tuple[Origin, ...] = badge_origins(())
+        paint_badge(painter, QRectF(self.rect()), Spinning(App.WORKSPACE, self.card.spin_angle) if working else App.WORKSPACE)
 
 
 class Bubble(QWidget):
@@ -352,22 +348,21 @@ class Bubble(QWidget):
     def paintEvent(self, event: QPaintEvent) -> None:
         card = self.card
         painter = QPainter(self)
-        edge = paint_surface(painter, QRectF(self.rect()), BubbleAppearance(card.colors, glass=card.glass))
-        if card.content is None or card.prepared is None or tone(card.content) is Tone.USER:
+        paint_card(painter, QRectF(self.rect()), card.style.surface)
+        if not card.hovered:
             return
-        if card.text.isVisible() and _turn(card.content) and (not card.label.isHidden() or card.details.isVisible()):
-            painter.setPen(QPen(edge, 1))
-            top = card.text.y() - TEXT_PADDING
-            painter.drawLine(INSET, top, self.width() - INSET, top)
+        # Overlay scroll bars: only while the pointer can scroll, never a permanent track.
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(color(card.style.thumb))
         for text in (card.text, card.details):
             scroll = text.verticalScrollBar()
-            if text.isVisible() and scroll.maximum() > 0:
+            if not text.isHidden() and scroll.maximum() > 0:
                 height = text.height()
                 total = height + scroll.maximum()
-                start = text.y() + height * scroll.value() / total
-                end = start + max(8, height * height / total)
-                painter.setPen(QPen(QColor(card.ink.secondary), 2, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
-                painter.drawLine(self.width() - 6, round(start), self.width() - 6, min(text.y() + height, round(end)))
+                length = min(height, max(24, height * height / total))
+                start = text.y() + (height - length) * scroll.value() / scroll.maximum()
+                painter.drawRoundedRect(QRectF(self.width() - 4 - THUMB, start, THUMB, length), THUMB / 2, THUMB / 2)
 
     def mouseReleaseEvent(self, event: QMouseEvent) -> None:
         prepared = self.card.prepared
@@ -400,7 +395,6 @@ class Card:
         "choice_options",
         "choices",
         "closed",
-        "colors",
         "content",
         "create_glass",
         "detail_offset",
@@ -408,20 +402,18 @@ class Card:
         "disclosure",
         "dismiss",
         "expanded",
+        "finish",
         "frame",
-        "frost",
         "glass",
         "handle",
         "height",
         "hint",
         "hovered",
-        "ink",
         "key",
         "label",
         "layer",
         "layout",
         "line_height",
-        "look",
         "maximum",
         "motion",
         "move",
@@ -437,6 +429,7 @@ class Card:
         "speed",
         "spin_angle",
         "stop",
+        "style",
         "tail_pending",
         "text",
         "width",
@@ -460,13 +453,12 @@ class Card:
         self.prepared: tuple[Content, int, Prepared] | None = None
         self.layout: Layout | None = None
         self.bounds: Rect | None = None
-        self.look: tuple[Tone, appearance.Preference, appearance.Frost] | None = None
-        self.frost = appearance.Frost.SMOKED
+        self.finish: Finish | None = None
         self.glass = self.closed = self.hovered = self.retiring = self.expanded = self.tail_pending = False
         self.motion: Motion | None = None
         self.reader: notification_reading.State = notification_reading.Waiting(0, owner.clock() + notification_reading.START_SECONDS)
         self.page_origin = self.speed = self.spin_angle = 0.0
-        self.line_height = round(QFontMetricsF(font()).height() * owner.scale * 1.38)
+        self.line_height = round(line_height(face(BODY)) * owner.scale)
         self.width, self.height, self.maximum, self.right = width, 1, 0, 0
         self.frame = Frame(0, width, 1, 0)
         self.spans: tuple[Span, ...] = ()
@@ -474,15 +466,16 @@ class Card:
         # the compact latest-call document in the same native view.
         self.detail_offset = 0
         self.reveals: tuple[Reveal, ...] = ()
-        self.colors, self.ink = palette(tone(toast.content)), Ink()
+        self.style: Look = bubble.look(appearance.Material.SOLID, Scheme.DARK)
         self.layer: Glass | None = None
         self.window = Bubble(self)
         self.badge = SourceBadge(self)
         self.window.setWindowOpacity(0)
         self.label = FeedTitle(self.window)
         self.caption, self.hint = (QLabel(self.window) for _ in range(2))
-        for label, face in ((self.label, font(9.5, bold=True)), (self.caption, font(8.5)), (self.hint, font(8.5))):
-            label.setFont(face)
+        for label in (self.caption, self.hint):
+            label.setFont(meta_face())
+        for label in (self.label, self.caption, self.hint):
             label.setWordWrap(True)
             label.setTextFormat(Qt.TextFormat.PlainText)
             label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
@@ -501,7 +494,7 @@ class Card:
         self.dismiss = IconButton(self.window, Icon.DISMISS, lambda: self.owner.dismiss_card(self.key))
         self.dismiss.clicked.connect(lambda: self.owner.dismiss_card(self.key))
         self.canvas_actions: tuple[tuple[Span, CanvasJumpButton], ...] = ()
-        self.choices: list[QtWidgets.QPushButton] = []
+        self.choices: tuple[QtWidgets.QPushButton, ...] = ()
         self.choice_options: tuple[Span, ...] = ()
         self.handle = int(self.window.winId())
         windows.make_overlay(self.handle, click_through=False)
@@ -536,7 +529,7 @@ class Card:
         self.details.clear()
         for button in self.choices:
             shiboken6.delete(button)
-        self.choices = []
+        self.choices = ()
         self.choice_options = ()
 
     def bind(self, toast: Toast, width: int) -> None:
@@ -548,7 +541,7 @@ class Card:
         self.reader = notification_reading.Waiting(0, self.owner.clock() + notification_reading.START_SECONDS)
         self.detail_offset = 0
         self.page_origin = self.speed = self.spin_angle = 0.0
-        self.line_height = round(QFontMetricsF(font()).height() * self.owner.scale * 1.38)
+        self.line_height = round(line_height(face(BODY)) * self.owner.scale)
         self.width, self.height, self.maximum, self.right = width, 1, 0, 0
         self.frame = Frame(0, width, 1, 0)
         self.window.setWindowOpacity(0)
@@ -563,9 +556,8 @@ class Card:
 
     @property
     def surface_bounds(self) -> Rect:
-        bounds = self.bounds if self.bounds is not None else windows.outer_rect(self.handle)
-        inset = round(8 * self.owner.scale)
-        return Rect(min(bounds.left + inset, bounds.right), min(bounds.top + inset, bounds.bottom), bounds.right, bounds.bottom)
+        """The glass fills the card's whole window; the badge sits inside it."""
+        return self.bounds if self.bounds is not None else windows.outer_rect(self.handle)
 
     def history(self) -> None:
         self.owner.show_history()
@@ -588,15 +580,18 @@ class Card:
             return
         for button in self.choices:
             shiboken6.delete(button)
-        self.choices = []
         self.choice_options = options
-        for option in options:
+
+        def create(index: int, option: Span) -> QtWidgets.QPushButton:
             button = QtWidgets.QPushButton(option.text, self.window)
-            button.setFont(font(8.5))
+            button.setFont(action_face(primary=not index))
             button.setCursor(Qt.CursorShape.PointingHandCursor)
             button.setAccessibleName(option.text)
             button.clicked.connect(self.link_action(option.link))
-            self.choices.append(button)
+            return button
+
+        # The card owns the native buttons; the first option is the primary action.
+        self.choices = tuple(create(index, option) for index, option in enumerate(options))
         self.style_choices()
 
     def update_canvas_actions(self, actions: tuple[Span, ...]) -> None:
@@ -606,8 +601,7 @@ class Card:
             shiboken6.delete(old)
 
         def create(span: Span) -> tuple[Span, CanvasJumpButton]:
-            button = CanvasJumpButton(self.window)
-            button.recolor(self.ink)
+            button = CanvasJumpButton(self.window, self.style.controls)
             button.clicked.connect(self.link_action(span.link))
             return span, button
 
@@ -623,13 +617,7 @@ class Card:
 
     def style_choices(self) -> None:
         for index, button in enumerate(self.choices):
-            button.setStyleSheet(
-                f"QPushButton {{ color: {self.ink.foreground}; background: transparent; "
-                f"border: 1px solid {self.ink.link if index == 0 else self.ink.secondary}; "
-                "border-radius: 10px; padding: 2px 8px; } "
-                "QPushButton:hover { background: rgba(128,128,160,40); } "
-                "QPushButton:disabled { color: #888888; }"
-            )
+            button.setStyleSheet(action_style(self.style.controls, primary=not index))
 
     def toggle(self, *, animate: bool = True) -> None:
         if self.closed or self.retiring or self.content is None or not notification_text.expandable(self.content):
@@ -682,44 +670,36 @@ class Card:
             case notification_reading.Waiting() | notification_reading.Scrolling() | notification_reading.Paused():
                 return True
 
-    def apply_style(self, content: Content, preference: appearance.Preference) -> None:
-        look = (tone(content), preference, self.frost)
-        if self.look == look:
+    def apply_style(self, finish: Finish) -> None:
+        if self.finish == finish:
             return
-        self.look = look
-        self.colors, self.ink = palette(tone(content)), Ink()
-        match preference:
-            case appearance.Contrast(background=background, foreground=foreground):
-                self.colors = Palette(background, foreground, foreground, background)
-                self.ink = Ink(*(foreground for _ in range(4)))
-            case appearance.Material.GLASS if self.frost is appearance.Frost.BRIGHT:
-                self.ink = Ink("#202435", "#3b3d50", "#234782", "#8e3144")
-            case appearance.Material():
-                pass
+        self.finish = finish
+        preference = finish.preference
         if preference is appearance.Material.GLASS and self.layer is None and self.owner.loop.composition is not None:
             try:
                 self.layer = self.create_glass(self.owner.loop.composition)
             except OSError as error:
                 log_view(f"Rounded glass unavailable; using the solid material: {error}")
         self.glass = preference is appearance.Material.GLASS and self.layer is not None
-        if self.layer is not None:
-            self.layer.color(self.colors.tint, 0.82 if self.frost is appearance.Frost.SMOKED else 0.22)
-            if not self.glass:
-                self.layer.hide()
-        if not self.glass and not _contrast(preference):
-            self.ink = Ink()
-        title_size = TITLE_SIZE if _turn(content) else 9.5
-        for label, color in ((self.label, self.ink.foreground), (self.caption, self.ink.secondary), (self.hint, self.ink.secondary)):
-            face = (f"font-size: {title_size}pt; font-weight: 600; font-family: 'Segoe UI';") if label is self.label else ""
-            label.setStyleSheet(f"background: transparent; color: {color}; padding: 0; margin: 0; border: none; {face}")
+        # Without a composition layer, requested glass falls back to the solid material.
+        self.style = bubble.look(preference if self.glass or _contrast(preference) else appearance.Material.SOLID, finish.scheme)
+        match self.style.surface:
+            case bubble.Glass(veil=veil) if self.layer is not None:
+                self.layer.color(veil.color, veil.opacity)
+            case _:
+                if self.layer is not None:
+                    self.layer.hide()
+        ink = self.style.text
+        for label, shade in ((self.label, ink.ink), (self.caption, ink.quiet), (self.hint, ink.quiet)):
+            label.setStyleSheet(f"background: transparent; color: {shade.css}; padding: 0; margin: 0; border: none;")
         for button in (self.stop, self.disclosure, self.dismiss):
-            button.ink = self.ink.foreground
+            button.controls = self.style.controls
             button.update()
         self.style_choices()
         for _span, canvas_button in self.canvas_actions:
-            canvas_button.recolor(self.ink)
-        self.text.recolor(self.ink)
-        self.details.recolor(self.ink)
+            canvas_button.recolor(self.style.controls)
+        self.text.recolor(ink)
+        self.details.recolor(ink)
         self.badge.update()
         self.window.update()
         if self.bounds is not None and self.layer is not None and self.glass:
@@ -733,30 +713,22 @@ class Card:
         return self.prepared[2]
 
     def render_heading(self, content: Content, prepared: Prepared) -> None:
-        user = tone(content) is Tone.USER
-        compact = _settled_turn(content)
-        self.label.flow = _turn(content)
-        self.label.expanded = self.expanded
-        self.label.setFont(font(TITLE_SIZE if self.label.flow else 9.5, bold=True))
-        self.label.setText(notification_text.title_text(content))
+        # Collapsed turns elide their title to one line; other headings wrap.
+        self.label.expanded = self.expanded or not _turn(content)
+        self.label.setText(_title(content))
         self.caption.setText(prepared.caption)
-        self.label.setVisible(self.label.flow or (not user and not compact))
-        self.caption.setVisible(not user and bool(prepared.caption))
+        self.label.show()
+        self.caption.setVisible(bool(prepared.caption))
 
-    def render(self, content: Content, maximum_width: int, maximum: int, preference: appearance.Preference) -> None:
+    def render(self, content: Content, maximum_width: int, maximum: int) -> None:
+        """Lay out content within the stack's allotment; `apply_style` has already chosen its look."""
         prepared = self.measure(content, maximum_width)
         width = prepared.width
-        if (
-            content == self.content
-            and (width, maximum) == (self.width, self.maximum)
-            and self.look == (tone(content), preference, self.frost)
-            and self.layout is not None
-        ):
+        if content == self.content and (width, maximum) == (self.width, self.maximum) and self.layout is not None:
             return
         previous = self.content
         self.layout = self.owner.measure.layout(prepared, width, maximum)
         self.content, self.width, self.maximum, self.height = content, width, maximum, self.layout.height
-        self.apply_style(content, preference)
         user = tone(content) is Tone.USER
         self.render_heading(content, prepared)
         self.badge.source(content)
@@ -764,7 +736,6 @@ class Card:
         self.update_canvas_actions(prepared.canvas_actions)
         self.hint.setTextFormat(Qt.TextFormat.PlainText)
         self.hint.setText(self.layout.hint)
-        self.hint.setAlignment((Qt.AlignmentFlag.AlignRight if user else Qt.AlignmentFlag.AlignLeft) | Qt.AlignmentFlag.AlignVCenter)
         self.stop.setVisible(can_stop(content))
         self.dismiss.setVisible(not user)
         self.stop.setEnabled(not _stopping(content))
@@ -787,7 +758,7 @@ class Card:
                 and before.identity == after.identity
                 and after.state is not StreamState.INTERRUPTED
                 and self.owner.environment.animations()
-                and not _contrast(preference)
+                and not (self.finish is not None and _contrast(self.finish.preference))
             ):
                 end = units("".join(span.text for span in self.spans))
                 if end > offset:
@@ -804,73 +775,55 @@ class Card:
 
     def fade_text(self, now: float, *, animate: bool) -> bool:
         self.reveals = tuple(reveal for reveal in self.reveals if animate and now - reveal.started < REVEAL_SECONDS)
-        selections: list[QTextEdit.ExtraSelection] = []
-        start, end = QColor(self.ink.secondary), QColor(self.ink.foreground)
-        for reveal in self.reveals:
+        # Streamed text materializes into the body's ink from a fainter one.
+        body = self.style.text.quiet
+
+        def selection(reveal: Reveal) -> QTextEdit.ExtraSelection:
             amount = max(0.0, min(1.0, (now - reveal.started) / REVEAL_SECONDS))
-            selection = QTextEdit.ExtraSelection()
-            selection.cursor = QTextCursor(self.text.document())
-            selection.cursor.setPosition(min(reveal.start, self.text.document().characterCount() - 1))
-            selection.cursor.setPosition(min(reveal.end, self.text.document().characterCount() - 1), QTextCursor.MoveMode.KeepAnchor)
-            pairs = ((start.red(), end.red()), (start.green(), end.green()), (start.blue(), end.blue()))
-            color = QColor(*(round(a + (b - a) * amount) for a, b in pairs))
-            selection.format = QTextCharFormat()
-            selection.format.setForeground(color)
-            selections.append(selection)
-        self.text.setExtraSelections(selections)
+            value = QTextEdit.ExtraSelection()
+            value.cursor = QTextCursor(self.text.document())
+            value.cursor.setPosition(min(reveal.start, self.text.document().characterCount() - 1))
+            value.cursor.setPosition(min(reveal.end, self.text.document().characterCount() - 1), QTextCursor.MoveMode.KeepAnchor)
+            value.format = QTextCharFormat()
+            value.format.setForeground(color(Shade(body.color, body.opacity * (0.35 + 0.65 * amount))))
+            return value
+
+        self.text.setExtraSelections([selection(reveal) for reveal in self.reveals])
         return bool(self.reveals)
 
-    def match_background(self, sample: appearance.Backdrop, preference: appearance.Preference) -> None:
-        if not self.glass or self.bounds != sample.bounds or self.content is None or self.retiring:
-            return
-        if sample.frost is not self.frost:
-            self.frost = sample.frost
-            self.apply_style(self.content, preference)
-
-    def place_heading(self, wide: float, header: float, controls: int, caption: str) -> None:
-        label_width = max(1, round(wide) - INSET * 2 - self.badge.width() - controls)
-        caption_height = round(QFontMetricsF(font(8.5)).height()) if caption else 0
-        self.label.setGeometry(INSET + self.badge.width(), 14, label_width, max(1, round(header - 22) - caption_height))
-        if self.label.flow:
-            left = INSET + self.badge.width()
-            title_width = heading_width(round(wide), self.badge.width(), stopping=not self.stop.isHidden(), disclosing=not self.disclosure.isHidden())
-            self.label.setGeometry(left, 16, title_width, max(1, round(header - 22)))
-        self.caption.setGeometry(INSET + self.badge.width(), round(header - 8) - caption_height, label_width, max(1, caption_height))
+    def place_heading(self, wide: int, header: float, controls: int) -> None:
+        """Titles and meta stack beside the badge, centred on it when they are shorter."""
+        width = title_width(wide, controls)
+        title = title_height(self.label.text(), width, expanded=self.label.expanded)
+        meta = _meta_height(self.caption.text()) if not self.caption.isHidden() else 0
+        top = TOP + max(0, round((header - TOP - title - meta) / 2))
+        self.label.setGeometry(TEXT_LEFT, top, width, max(1, title))
+        self.caption.setGeometry(TEXT_LEFT, top + title, width, max(1, meta))
 
     def place_content(self, width: float, height: float, details: float) -> None:
         if self.layout is None or self.prepared is None:
             return
         scale = self.owner.scale
         layout, prepared = self.layout, self.prepared[2]
-        wide = width / scale
+        wide = round(width / scale)
         header = prepared.header_height / scale
-        right = round(wide) - INSET
-        controls = 0
-        if not self.dismiss.isHidden():
-            self.dismiss.setGeometry(round(wide) - 32, 16, 24, 24)
-            right -= 26
-            controls += 26
-        if not self.stop.isHidden():
-            self.stop.setGeometry(right - 28, 14, 28, max(28, round(header - 20)))
-            right -= 32
-            controls += 32
-        if not self.disclosure.isHidden():
-            if _turn(self.content) and prepared.header_height <= 36 * scale:
-                self.disclosure.setGeometry(right - 22, 14, 22, 20)
-            else:
-                self.disclosure.setGeometry(right - 28, 14, 28, max(28, round(header - 20)))
-            right -= 26
-            controls += 26
-        self.badge.move(0, 0)
-        self.place_heading(wide, header, controls, prepared.caption)
+        # Controls run leftwards from the trailing edge, centred on the badge.
+        right, controls = wide - RIGHT, 0
+        for button in (self.dismiss, self.stop, self.disclosure):
+            if not button.isHidden():
+                button.setGeometry(right - CONTROL, TOP + (BADGE - CONTROL) // 2, CONTROL, CONTROL)
+                right -= CONTROL + CONTROL_GAP
+                controls += 1
+        self.badge.move(LEFT, TOP)
+        self.place_heading(wide, header, controls)
         detail_height = max(0, min(details, height - prepared.header_height - layout.hint_height - prepared.padding))
         top = prepared.header_height + detail_height
         body_height = max(0, min(layout.body_height, height - top - layout.hint_height - prepared.padding))
-        text_width = max(1, round(wide) - INSET * 2 - 8)
+        text_width = max(1, wide - TEXT_LEFT - RIGHT)
         for text, start, visible in ((self.details, prepared.header_height, detail_height), (self.text, top, body_height)):
-            if visible > TEXT_PADDING * 2 * scale:
+            if visible > SECTION * 2 * scale:
                 offset = self.detail_offset if text is self.details and self.expanded else text.offset
-                text.setGeometry(INSET + 8, round(start / scale) + TEXT_PADDING, text_width, max(1, round(visible / scale) - TEXT_PADDING * 2))
+                text.setGeometry(TEXT_LEFT, round(start / scale) + SECTION, text_width, max(1, round(visible / scale) - SECTION * 2))
                 text.fit_width()
                 text.show()
                 text.verticalScrollBar().setValue(offset)
@@ -884,24 +837,25 @@ class Card:
         scale = self.owner.scale
         layout, prepared = self.layout, self.prepared[2]
         footer_top = top
+        canvas = len(prepared.canvas_actions) * CANVAS_ROW
         if self.choices:
             self.hint.hide()
-            geometry = choice_geometry(tuple(button.text() for button in self.choices), width)
+            geometry = action_geometry(tuple(button.text() for button in self.choices), width)
             for button, (x, y, button_width) in zip(self.choices, geometry, strict=True):
-                button.setGeometry(INSET + 8 + x, footer_top + y, button_width, 24)
+                button.setGeometry(TEXT_LEFT + x, footer_top + ACTIONS_TOP + y, button_width, ACTION)
                 button.show()
-            footer_top += geometry[-1][1] + 30
-        elif layout.hint_height > len(prepared.canvas_actions) * 42 * scale:
-            hint_height = layout.hint_height / scale - len(prepared.canvas_actions) * 42
-            self.hint.setGeometry(INSET + 8, footer_top, width, max(1, round(hint_height) - 4))
+            footer_top += ACTIONS_TOP + geometry[-1][1] + ACTION
+        elif layout.hint_height > canvas * scale:
+            hint_height = round(layout.hint_height / scale) - canvas
+            self.hint.setGeometry(TEXT_LEFT, footer_top + SECTION, width, max(1, hint_height - SECTION * 2))
             self.hint.show()
-            footer_top += round(hint_height)
+            footer_top += hint_height
         else:
             self.hint.hide()
         for _span, button in self.canvas_actions:
-            button.setGeometry(INSET + 8, footer_top + 6, min(width, button.sizeHint().width()), 32)
+            button.setGeometry(TEXT_LEFT, footer_top + CANVAS_ROW - ACTION, min(width, button.sizeHint().width()), ACTION)
             button.show()
-            footer_top += 42
+            footer_top += CANVAS_ROW
         self.window.update()
 
     def pulse(self, now: float) -> None:

@@ -17,12 +17,12 @@ lazy from PySide6.QtGui import QWheelEvent
 from assistant import notification_text, tool_call_view, tool_text
 from assistant.notifications import Content
 from assistant.qt_runtime import prepare
-from assistant.ui_components.appearance import Ink
-from assistant.ui_components.text import Document, TextView
+from assistant.ui_components.appearance import DARK
+from assistant.ui_components.text import Document, TextInk, TextView, text_ink
 
 prepare()
 
-GAP = 8
+GAP = 2  # quiet rows sit close, as the kit's steps
 
 
 @dataclass(frozen=True, slots=True)
@@ -75,7 +75,7 @@ class HistoryView(QtWidgets.QWidget):
         self.text.fit_width()
         return height
 
-    def recolor(self, ink: Ink) -> None:
+    def recolor(self, ink: TextInk) -> None:
         self.text.recolor(ink)
 
     def toPlainText(self) -> str:
@@ -91,17 +91,20 @@ class StepsView(QtWidgets.QScrollArea):
     def __init__(self, parent: QtWidgets.QWidget, scroll: Callable[[int], None], history: Callable[[], None]) -> None:
         super().__init__(parent)
         self.callbacks = Callbacks(scroll, history)
-        self.ink = Ink()
+        self.ink = text_ink(DARK)
         self.elements: tuple[Element, ...] = ()
         self.visible_blocks: tuple[notification_text.Step, ...] = ()
         self.setObjectName("agentSteps")
         self.setFrameShape(QtWidgets.QFrame.Shape.NoFrame)
-        self.setStyleSheet("QScrollArea#agentSteps { background: transparent; border: none; }")
+        self.setStyleSheet(
+            "QScrollArea#agentSteps, QScrollArea#agentSteps > QWidget, QWidget#agentStepsCanvas { background: transparent; border: none; }"
+        )
         self.viewport().setAutoFillBackground(False)
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.setWidgetResizable(False)
         self.canvas = QtWidgets.QWidget(self)
+        self.canvas.setObjectName("agentStepsCanvas")
         self.canvas.setAutoFillBackground(False)
         self.setWidget(self.canvas)
         self.setAccessibleName("Agent tool calls and steps")
@@ -194,7 +197,7 @@ class StepsView(QtWidgets.QScrollArea):
         super().resizeEvent(event)
         self.fit_width()
 
-    def recolor(self, ink: Ink) -> None:
+    def recolor(self, ink: TextInk) -> None:
         self.ink = ink
         for element in self.elements:
             element.recolor(ink)

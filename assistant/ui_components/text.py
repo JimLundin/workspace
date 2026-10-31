@@ -2,6 +2,8 @@
 
 import math
 from collections.abc import Callable
+from dataclasses import dataclass
+from typing import Final
 
 lazy import shiboken6
 lazy from PySide6.QtCore import QPoint, QPointF, Qt
@@ -25,15 +27,62 @@ lazy from PySide6.QtWidgets import QFrame, QMenu, QTextBrowser, QWidget
 
 from assistant.qt_runtime import prepare
 from assistant.rich_text import Span, changed_tail
-from assistant.ui_components.appearance import Ink
+from assistant.ui_components import typeface
+from assistant.ui_components.appearance import DARK, GLASS_ACCENT, GREEN, RED, Shade, Tokens
 
 prepare()
 
-INSET = 16
-TEXT_PADDING = 8
+BODY: Final = 13.0  # pixels, as the kit's body text
+STEP: Final = 12.0
+META: Final = 11.5
+LEADING: Final = 114  # percent of Inter's font height: the kit's 1.38 line height
+MONOSPACE: Final = "Consolas"
+
+
+@dataclass(frozen=True, slots=True)
+class TextInk:
+    """Ink for text inside a surface: body and secondary, meaning, code wells and selection."""
+
+    ink: Shade
+    quiet: Shade  # body text and meta, as the kit's ink2
+    link: Shade
+    error: Shade
+    success: Shade
+    well: Shade  # inline code
+    selection: Shade
+    selected: Shade  # selected text
+
+
+def text_ink(theme: Tokens) -> TextInk:
+    return TextInk(theme.ink, theme.ink2, Shade(GLASS_ACCENT), Shade(RED), Shade(GREEN), theme.fill, Shade(GLASS_ACCENT, 0.42), theme.ink)
+
+
+def contrast_ink(foreground: str, background: str) -> TextInk:
+    """High contrast keeps every role in the system foreground; selection swaps the system colours."""
+    ink = Shade(foreground)
+    return TextInk(ink, ink, ink, ink, ink, Shade(foreground, 0.12), ink, Shade(background))
+
+
+def color(shade: Shade) -> QColor:
+    value = QColor(shade.color)
+    value.setAlphaF(shade.opacity)
+    return value
+
+
+def face(pixels: float, weight: int = 400, family: str = typeface.FAMILY) -> QFont:
+    """Inter at a pixel size and CSS weight; Qt's 96 logical DPI makes a point 4/3 pixels."""
+    value = QFont(family)
+    value.setPointSizeF(pixels * 0.75)
+    value.setWeight(QFont.Weight(weight))
+    return value
+
+
+def line_height(value: QFont) -> float:
+    return QFontMetricsF(value).height() * LEADING / 100
 
 
 def font(size: float = 10.5, *, bold: bool = False, family: str = "Segoe UI") -> QFont:
+    """The canvas's point-sized face, until the canvas adopts `face`."""
     value = QFont(family)
     value.setPointSizeF(size)
     value.setWeight(QFont.Weight.DemiBold if bold else QFont.Weight.Normal)
@@ -45,48 +94,48 @@ def units(text: str) -> int:
     return len(text.encode("utf-16-le")) // 2
 
 
-def character_style(span: Span, ink: Ink) -> QTextCharFormat:
-    style = QTextCharFormat()
-    size = 10.5
-    if "feed_title" in span.tags or ("feed" in span.tags and "heading" in span.tags):
-        size = 11.5
-    elif "heading" in span.tags:
-        size = 15 if "h1" in span.tags else 13 if "h2" in span.tags else 11.5
-    elif any(tag in span.tags for tag in ("step", "step_detail", "step_error")):
-        size = 9.5
-    face = font(size, bold="bold" in span.tags or "heading" in span.tags, family="Consolas" if "code" in span.tags else "Segoe UI")
-    face.setItalic("italic" in span.tags)
-    face.setStrikeOut("strike" in span.tags)
-    style.setFont(face)
-    color = ink.foreground
-    if any(tag in span.tags for tag in ("muted", "quote", "table_label", "rule", "step_detail")):
-        color = ink.secondary
-    if "step_error" in span.tags:
-        color = ink.error
-    if "feed_question" in span.tags:
-        color = ink.link
-        style.setFontWeight(QFont.Weight.DemiBold)
+def _size(tags: tuple[str, ...]) -> float:
+    if "heading" in tags:
+        return 17 if "h1" in tags else 15 if "h2" in tags else BODY
+    if any(tag in tags for tag in ("step", "step_detail", "step_error")):
+        return STEP
+    return BODY
+
+
+def _ink(span: Span, ink: TextInk) -> Shade:
     if span.link:
-        color = ink.link
+        return ink.link
+    if "step_error" in span.tags:
+        return ink.error
+    if any(tag in span.tags for tag in ("bold", "heading", "step")):
+        return ink.ink
+    return ink.quiet
+
+
+def character_style(span: Span, ink: TextInk) -> QTextCharFormat:
+    style = QTextCharFormat()
+    code = "code" in span.tags
+    weight = 600 if "bold" in span.tags or "heading" in span.tags else 400
+    value = face(_size(span.tags) - (1 if code else 0), weight, MONOSPACE if code else typeface.FAMILY)
+    value.setItalic("italic" in span.tags)
+    value.setStrikeOut("strike" in span.tags)
+    style.setFont(value)
+    if span.link:
         style.setAnchor(True)
         style.setAnchorHref(span.link)
         style.setFontUnderline(True)
-    if "code" in span.tags:
-        style.setBackground(QColor(118, 106, 154, 32))
-    style.setForeground(QColor(color))
+    if code:
+        style.setBackground(color(ink.well))
+    style.setForeground(color(_ink(span, ink)))
     return style
 
 
 def paragraph_style(span: Span) -> QTextBlockFormat:
     style = QTextBlockFormat()
-    hanging = QFontMetricsF(font()).horizontalAdvance(span.hanging)
+    hanging = QFontMetricsF(face(BODY)).horizontalAdvance(span.hanging)
     style.setLeftMargin(min(span.indent, 6) * 16 + hanging + (4 if "codeblock" in span.tags else 0))
     style.setTextIndent(-hanging)
-    style.setLineHeight(125, QTextBlockFormat.LineHeightTypes.ProportionalHeight.value)
-    if "feed" in span.tags:
-        style.setBottomMargin(5 if "feed_title" in span.tags else 4)
-        if "feed_suggestion" in span.tags or "feed_question" in span.tags:
-            style.setTopMargin(4)
+    style.setLineHeight(LEADING, QTextBlockFormat.LineHeightTypes.ProportionalHeight.value)
     return style
 
 
@@ -134,7 +183,7 @@ class PlainLayout:
         return self.height
 
     def draw(self, painter: QPainter) -> None:
-        painter.setPen(QColor(Ink().foreground))
+        painter.setPen(color(DARK.ink))
         for line in self.lines:
             line.draw(painter, QPointF())
 
@@ -144,14 +193,14 @@ class Document:
 
     def __init__(self, parent: QWidget | None = None) -> None:
         self.qt = QTextDocument(parent)
-        self.qt.setDefaultFont(font())
+        self.qt.setDefaultFont(face(BODY))
         self.qt.setDocumentMargin(0)
         self.qt.setUndoRedoEnabled(False)
         option = QTextOption()
         option.setWrapMode(QTextOption.WrapMode.WrapAtWordBoundaryOrAnywhere)
         self.qt.setDefaultTextOption(option)
         self.spans: tuple[Span, ...] = ()
-        self.ink = Ink()
+        self.ink = text_ink(DARK)
 
     def load(self, spans: tuple[Span, ...], width: float) -> float:
         if spans != self.spans:
@@ -214,7 +263,7 @@ class Document:
             block = block.next()
         return math.ceil(used)
 
-    def recolor(self, ink: Ink) -> None:
+    def recolor(self, ink: TextInk) -> None:
         if self.ink == ink:
             return
         self.ink = ink
@@ -272,13 +321,13 @@ class TextView(QTextBrowser):
         """Use the actual viewport even when new content leaves widget geometry unchanged."""
         self.content.load(self.content.spans, max(1, self.viewport().width()))
 
-    def recolor(self, ink: Ink) -> None:
+    def recolor(self, ink: TextInk) -> None:
         offset = self.offset
         self.content.recolor(ink)
         colors = self.palette()
-        colors.setColor(QPalette.ColorRole.Text, QColor(ink.foreground))
-        colors.setColor(QPalette.ColorRole.Highlight, QColor("#556797"))
-        colors.setColor(QPalette.ColorRole.HighlightedText, QColor("#ffffff"))
+        colors.setColor(QPalette.ColorRole.Text, color(ink.quiet))
+        colors.setColor(QPalette.ColorRole.Highlight, color(ink.selection))
+        colors.setColor(QPalette.ColorRole.HighlightedText, color(ink.selected))
         colors.setColor(QPalette.ColorRole.Base, QColor(0, 0, 0, 0))
         self.setPalette(colors)
         self.content.qt.size()  # Resolve layout before restoring a pixel position.

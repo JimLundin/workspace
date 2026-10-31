@@ -202,15 +202,6 @@
     {
       "key": {
         "rule": "PLR0913",
-        "path": "assistant/ui_components/bubble.py",
-        "scope": "heading_width",
-        "signature": "09b8251c69d514e2e9582db2b46a92bb926aa40d582fd999a3c13ef91bbc3ecc"
-      },
-      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
-    },
-    {
-      "key": {
-        "rule": "PLR0913",
         "path": "assistant/feed_triage.py",
         "scope": "selected",
         "signature": "cbf4f83f1e7bc924a1495ac7b5353dd78901c54932a78c91ecaffcb0fee153f8"
@@ -491,24 +482,6 @@
       "key": {
         "rule": "PLR0913",
         "path": "assistant/toast_card.py",
-        "scope": "Card.place_heading",
-        "signature": "9d02fe09a0b39479591ad4d56387c92ae7e7a7812a3ddb1114ade1ba3bc8c843"
-      },
-      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
-    },
-    {
-      "key": {
-        "rule": "PLR0913",
-        "path": "assistant/toast_card.py",
-        "scope": "Card.render",
-        "signature": "6d3cca786f82fc27983e0eae60aa3c68a0ed0622e116f29b03c7f358e3235e24"
-      },
-      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
-    },
-    {
-      "key": {
-        "rule": "PLR0913",
-        "path": "assistant/toast_card.py",
         "scope": "Card.target",
         "signature": "f72e5bc61be5698324de31f1f38f23cdc89f98c2af169aa07fd48f633d041d9f"
       },
@@ -520,15 +493,6 @@
         "path": "assistant/toast_card.py",
         "scope": "Measure.fit_body",
         "signature": "64274d51f14ec2fc4a576ce5bcb359f84fcd5b0806f18d7ce8afadb792087d88"
-      },
-      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
-    },
-    {
-      "key": {
-        "rule": "PLR0913",
-        "path": "assistant/toast_card.py",
-        "scope": "Measure.text_height",
-        "signature": "49f5f43c34e271775b100a8f1eb889f1ae6611b71c71a3119ad3f78c26bc7a9d"
       },
       "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
     },

@@ -240,7 +240,7 @@ class Glass:
             windows.move(self.handle, outer)
         if self.size != (bounds.width, bounds.height, scale):
             self.size = (bounds.width, bounds.height, scale)
-            radius = min(26 * scale, bounds.height / 2, bounds.width / 2)
+            radius = min(22 * scale, bounds.height / 2, bounds.width / 2)  # the feed card's 22 px corners
             size = Vector2(bounds.width, bounds.height)
             self.bindings.rounded.Size = size
             self.bindings.rounded.CornerRadius = Vector2(radius, radius)
