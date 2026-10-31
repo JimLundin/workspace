@@ -110,7 +110,7 @@ class Preview:
                     lambda: self.action("Stop"), post=self.jobs.put, create_view=self.build_feed, on_submit=self.submitted, on_problem=self.action
                 )
                 self.drain()
-                if not self.agent.ready.is_set():
+                if not self.agent.publication.ready.is_set():
                     raise RuntimeError("The preview feed did not initialize.")
             if surface in ("toolbar", "both"):
                 actions = BarActions(
@@ -173,7 +173,7 @@ class Preview:
             self.bar.state(states[index])
         if self.agent is not None:
             self.agent.reset()
-            self.agent.begin("Review the sample workbook", lambda: self.action("Stop"))
+            self.agent.begin("Review the sample workbook")
             publish = self.agent.updates()
             publish(
                 ToolActivity(

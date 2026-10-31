@@ -244,6 +244,15 @@ def answers(request: Question | Approval, reply: Reply) -> bool:
             return False
 
 
+def requested(task: Task) -> Question | Approval | None:
+    """The question or approval a waiting task needs the person to answer."""
+    match task.state:
+        case Waiting(Question() | Approval() as request):
+            return request
+        case _:
+            return None
+
+
 @dataclass(frozen=True, slots=True)
 class Response:
     request: Question | Approval

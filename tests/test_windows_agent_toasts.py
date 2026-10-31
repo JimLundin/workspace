@@ -98,7 +98,7 @@ class Notifications:
             on_recording=self.recorded.append,
         )
         self.pump()
-        assert self.agent.ready.is_set(), self.agent.all_text()
+        assert self.agent.publication.ready.is_set(), self.agent.all_text()
         # Card mechanics run on explicit history, where every turn and message is
         # its own card; live-progress checks call `view.resume()` first.
         self.view.show_history()
@@ -238,7 +238,7 @@ def test_long_replies_take_turns_scrolling() -> None:
 
 def test_wheel_pauses_reading_and_streaming_preserves_the_chosen_position() -> None:
     with notifications(animated=True) as panel:
-        panel.agent.begin("Read the notes", panel.stop)
+        panel.agent.begin("Read the notes")
         publish = panel.agent.updates()
         text = "A useful detail. " * 220
         publish(Answer("stream", text, 1))
@@ -305,7 +305,7 @@ def test_wheel_over_empty_glass_reaches_text_without_focusing_other_apps() -> No
 def test_compact_header_and_native_stop_padding_are_clickable_without_activation() -> None:
     with notifications() as panel:
         panel.preference = appearance.Material.GLASS
-        panel.agent.begin("Check the notes", panel.stop)
+        panel.agent.begin("Check the notes")
         panel.pump()
         card = panel.view.cards[TurnKey(0)]
         bounds, stop = windows.outer_rect(card.handle), widget_rect(card.stop)
@@ -348,7 +348,7 @@ def test_bubble_icon_controls_share_hover_press_and_disabled_feedback() -> None:
     # Defects: dismiss/disclosure skip the common feedback paint, hovering
     # changes hit geometry, or a disabled action still looks interactive.
     with notifications() as panel:
-        panel.agent.begin("Check the notes", panel.stop)
+        panel.agent.begin("Check the notes")
         panel.pump()
         card = panel.view.cards[TurnKey(0)]
         for button in (card.stop, card.dismiss, card.disclosure):
@@ -444,7 +444,7 @@ def test_material_changes_preserve_the_native_scroll_range_and_reading_position(
 
 def test_one_bubble_keeps_its_result_when_finished_and_when_steps_collapse() -> None:
     with notifications() as panel:
-        panel.agent.begin("Read the workbook", panel.stop)
+        panel.agent.begin("Read the workbook")
         panel.pump()
         card = panel.view.cards[TurnKey(0)]
         handle, text = card.handle, card.text
@@ -479,7 +479,7 @@ def test_one_bubble_keeps_its_result_when_finished_and_when_steps_collapse() -> 
 
 def test_reversing_disclosure_preserves_selection_and_visible_attached_result() -> None:
     with notifications(animated=True) as panel:
-        panel.agent.begin("Check the workbook", panel.stop)
+        panel.agent.begin("Check the workbook")
         publish = panel.agent.updates()
         for index in range(4):
             publish(ToolActivity(str(index), "read_file", f"sheet-{index}.xlsx", index + 1, Succeeded("Read 24 rows.")))
@@ -514,7 +514,7 @@ def test_reversing_disclosure_preserves_selection_and_visible_attached_result() 
 
 def test_long_steps_scroll_independently_and_keep_the_result_on_reopen() -> None:
     with notifications() as panel:
-        panel.agent.begin("Check the workbooks", panel.stop)
+        panel.agent.begin("Check the workbooks")
         publish = panel.agent.updates()
         for index in range(15):
             publish(ToolActivity(str(index), "read_file", f"sheet-{index}.xlsx", index + 1, Succeeded("Read 24 rows.")))
@@ -541,7 +541,7 @@ def test_long_steps_scroll_independently_and_keep_the_result_on_reopen() -> None
 
 def test_keyboard_disclosure_is_immediate_and_keeps_the_result_attached() -> None:
     with notifications(animated=True) as panel:
-        panel.agent.begin("Read the workbook", panel.stop)
+        panel.agent.begin("Read the workbook")
         publish = panel.agent.updates()
         publish(ToolActivity("read", "read_file", "budget.xlsx", 1, Succeeded("24 rows")))
         publish(Answer("reply", "The workbook is ready.", 2, StreamState.COMPLETE))
@@ -557,7 +557,7 @@ def test_keyboard_disclosure_is_immediate_and_keeps_the_result_attached() -> Non
 
 def test_long_result_keeps_its_reading_position_while_steps_open_and_close() -> None:
     with notifications() as panel:
-        panel.agent.begin("Read the workbook", panel.stop)
+        panel.agent.begin("Read the workbook")
         publish = panel.agent.updates()
         publish(ToolActivity("read", "read_file", "budget.xlsx", 1, Succeeded("24 rows")))
         publish(Answer("reply", "A useful detail. " * 220, 2, StreamState.COMPLETE))
@@ -690,7 +690,7 @@ def test_streaming_never_resizes_a_visible_card_for_measurement() -> None:
         return Card(owner, toast, width, move=move)
 
     with notifications(animated=True, create_card=create) as panel:
-        panel.agent.begin("Read the notes", panel.stop)
+        panel.agent.begin("Read the notes")
         publish = panel.agent.updates()
         publish(Answer("stream", "A short answer.", 1))
         panel.pump()
@@ -705,7 +705,7 @@ def test_streaming_never_resizes_a_visible_card_for_measurement() -> None:
 def test_stream_growth_moves_neighbors_together_without_overlap() -> None:
     with notifications(animated=True) as panel:
         panel.agent.say("Earlier context. " * 25)
-        panel.agent.begin("Summarize the notes", panel.stop)
+        panel.agent.begin("Summarize the notes")
         publish = panel.agent.updates()
         text = "The summary follows."
         publish(Answer("stream", text, 1))
@@ -727,7 +727,7 @@ def test_stream_growth_moves_neighbors_together_without_overlap() -> None:
 
 def test_streaming_unicode_and_closing_markup_preserve_the_unchanged_selection() -> None:
     with notifications() as panel:
-        panel.agent.begin("Summarize the notes", panel.stop)
+        panel.agent.begin("Summarize the notes")
         publish = panel.agent.updates()
         prefix = "Åäö 👩🏽‍💻 e\u0301: "
         publish(Answer("stream", prefix + "**bold", 1))
@@ -751,7 +751,7 @@ def test_streaming_unicode_and_closing_markup_preserve_the_unchanged_selection()
 
 def test_streaming_reveals_only_new_text_and_releases_animation_timing() -> None:
     with notifications(animated=True) as panel:
-        panel.agent.begin("Summarize the notes", panel.stop)
+        panel.agent.begin("Summarize the notes")
         publish = panel.agent.updates()
         publish(Answer("stream", "First.", 1))
         panel.pump()
@@ -790,7 +790,7 @@ class Period:
 def test_motion_timing_is_balanced_on_reduced_motion_history_and_close() -> None:
     period = Period()
     with notifications(animated=True, timing=appearance.TimerResolution(period)) as panel:
-        panel.agent.begin("Read the notes", panel.stop)
+        panel.agent.begin("Read the notes")
         panel.pump()
         assert (panel.view.environment.timer.active, period.calls) == (True, ("begin",))
         panel.animated = False
@@ -840,7 +840,7 @@ def test_live_phases_grow_push_up_and_fade_with_one_opaque_bubble() -> None:
     with notifications(animated=True) as panel:
         view = panel.view
         view.resume()
-        panel.agent.begin("Compare deployment plans", panel.stop)
+        panel.agent.begin("Compare deployment plans")
         publish = panel.agent.updates()
         publish(ReasoningSummary("read", "Reading the deployment plans", 1))
         publish(ToolActivity("a", "read_file", "plan.md", 2))
@@ -889,7 +889,7 @@ def test_notifications_are_idle_until_needed_and_leave_focus_untouched() -> None
         view = panel.view
         assert not view.cards and not view.loop.timer.isActive()
         foreground = windows.foreground()
-        panel.agent.begin("Find my workbook", panel.stop)
+        panel.agent.begin("Find my workbook")
         panel.pump()
         work = view.cards[TurnKey(0)]
         assert windows.is_visible(work.handle) and work.stop.isVisible()
@@ -973,7 +973,7 @@ def recording(replies: list[Reply]) -> Callable[[Reply], bool]:
 
 def test_spinner_reuses_widgets_and_stops_timers_for_reduced_motion_and_input() -> None:
     with notifications(animated=True) as panel:
-        panel.agent.begin("Find **the workbook**", panel.stop)
+        panel.agent.begin("Find **the workbook**")
         panel.pump()
         panel.advance(0.3)
         work = panel.view.cards[TurnKey(0)]
@@ -1009,7 +1009,7 @@ def test_solid_and_high_contrast_materials_keep_all_content_readable() -> None:
 
     with notifications(create_card=create) as panel:
         panel.preference = appearance.Material.SOLID
-        panel.agent.begin("Read the workbook", panel.stop)
+        panel.agent.begin("Read the workbook")
         panel.pump()
         work = panel.view.cards[TurnKey(0)]
         assert not work.glass and work.dismiss.isVisible()
@@ -1061,7 +1061,7 @@ def test_hovering_glass_pauses_expiry_and_close_cancels_all_observation() -> Non
 
 def test_questions_can_be_answered_or_stopped_by_voice_without_history() -> None:
     with notifications() as panel:
-        panel.agent.begin("Open the workbook", panel.stop)
+        panel.agent.begin("Open the workbook")
         replies: list[Reply] = []
         panel.agent.request_input(asked("open", "Open this?", "budget.xlsx", panel.now), recording(replies))
         assert panel.requested.wait(timeout=2)
@@ -1105,7 +1105,7 @@ def test_history_uses_the_existing_feed_and_returns_to_current_work() -> None:
 
 def test_recording_stop_is_independent_and_shutdown_closes_every_native_layer() -> None:
     with notifications(animated=True) as panel:
-        panel.agent.begin("Find the workbook", panel.stop)
+        panel.agent.begin("Find the workbook")
         panel.agent.recording(RecordingState(phase="recording", identity="meeting", seconds=3723, preview="**00:00:00**  First sentence."))
         panel.pump()
         recording = panel.view.cards[Kind.RECORDING]
@@ -1119,7 +1119,7 @@ def test_recording_stop_is_independent_and_shutdown_closes_every_native_layer() 
                 handles.append(card.layer.handle)
         panel.agent.close()
         panel.pump()
-        assert panel.agent.closed_ready.is_set() and not panel.view.cards
+        assert panel.agent.publication.closed_ready.is_set() and not panel.view.cards
         assert panel.view.animation_timer is None and panel.view.expiry_timer is None and not shiboken6.isValid(panel.view.loop.timer)
         assert all(not windows.exists(handle) for handle in handles)
 

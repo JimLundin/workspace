@@ -3,7 +3,7 @@
 import threading
 import time
 import uuid
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from enum import Enum, auto
 from typing import Annotated, Protocol, assert_never
@@ -91,6 +91,11 @@ def review_matches(task: Task, review: ApprovalReview) -> bool:
         and isinstance(task.state, Waiting)
         and task.state.reason == review.request
     )
+
+
+def current_review(task: Task, reviews: Iterable[ApprovalReview]) -> ApprovalReview | None:
+    """The live review that still matches this task's waiting approval, if any."""
+    return next((review for review in reviews if review_matches(task, review)), None)
 
 
 class Log(Protocol):

@@ -258,6 +258,8 @@ models = [
     "assistant.notification_sources",
     "assistant.recording_state",
     "assistant.system_notices",
+    "assistant.work_commands",
+    "assistant.work_snapshot",
     "automation.task",
 ]
 

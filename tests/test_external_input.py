@@ -44,7 +44,7 @@ def test_durable_questions_share_typed_voice_and_button_routing_without_waiting_
     assert has_pending_input(panel)
     panel.withdraw_input()
     assert not has_pending_input(panel) and panel.submit("Start a follow-up") and submitted == ["Start a follow-up"]
-    panel.begin("Find the workbook", lambda: None)
+    panel.begin("Find the workbook")
     panel.request_input(asked("fifth", "Which year?", "", 5.0), accept)
     panel.stopping()
     assert not has_pending_input(panel) and not panel.respond("fifth", TextAnswer("Too late"))
@@ -208,7 +208,7 @@ def test_failed_native_creation_never_authorizes_a_projected_approval() -> None:
     panel.request_input(reviewed("approval", "Write the workbook", "Complete preview.", 1.0), accept)
     while jobs:
         jobs.popleft()()
-    assert errors and not panel.ready.is_set()
+    assert errors and not panel.publication.ready.is_set()
     assert not panel.respond("approval", ApprovalDecision.APPROVED) and not replies
     assert any(isinstance(message, AgentRequest) and pending(message) for message in panel.state.messages)
     panel.close()

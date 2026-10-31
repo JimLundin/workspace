@@ -23,7 +23,7 @@ from assistant.overlay import KeyHighlights, fit_position, nearest_work_area
 from assistant.qt_runtime import prepare
 from assistant.work_canvas_commands import CanvasCommand, CanvasRefused, CanvasResponse, CanvasUpdated
 from assistant.work_canvas_model import CanvasDocument
-from assistant.work_window import AnswerTask
+from assistant.work_commands import AnswerTask
 from automation.personal_work import Catalog
 from automation.task import TextAnswer
 from winapi import windows
@@ -54,7 +54,9 @@ lazy from assistant.vector_icons import icon
 lazy from assistant.window_switcher import WindowSwitcher
 lazy from assistant.work_canvas import AnswerQuestion, CanvasChange, SpeechRoute, WorkCanvas
 lazy from assistant.work_canvas_window import CanvasWindow
-lazy from assistant.work_window import WorkCommand, WorkSnapshot, WorkWindow
+lazy from assistant.work_commands import WorkCommand
+lazy from assistant.work_snapshot import WorkSnapshot
+lazy from assistant.work_window import WorkWindow
 lazy from miryoku.layout import Layer, Scancode
 lazy from protocol import Tool
 
@@ -260,12 +262,9 @@ class Ui:
         try:
             self.close_desktop()
         finally:
-            self.close_agent()
-            self.close_work()
+            self.close_windows()
             self._work_view = None
-            while (self._agent is not None and not self._agent.closed_ready.is_set()) or (
-                self._work is not None and not self._work.closed_ready.is_set()
-            ):
+            while not all(window.publication.closed_ready.is_set() for window in self._windows()):
                 self.drain()
 
     def _close_inputs(self) -> None:
@@ -445,7 +444,6 @@ class Ui:
 
     def agent(
         self,
-        task: str | None,
         stop: Callable[[], None],
         *,
         on_problem: Callable[[str], None] | None = None,
@@ -454,7 +452,6 @@ class Ui:
         on_work: Callable[[], None] | None = None,
         focus: bool = False,
         reveal: bool = True,
-        queued: bool = False,
     ) -> AgentWindow:
         with self._agent_lock:
             if self._agent is None:
@@ -471,8 +468,6 @@ class Ui:
                     on_snapshot=self.refresh_inbox,
                 )
             panel = self._agent
-        if task is not None:
-            panel.begin(task, stop, queued=queued)
         if reveal:
             panel.show(focus=focus)
         return panel
@@ -527,13 +522,18 @@ class Ui:
         self._observe_feed(NoticesObserved(notifications.state))
         return True
 
-    def close_agent(self) -> None:
-        if self._agent is not None:
-            self._agent.close()
+    def _windows(self) -> tuple[AgentWindow | WorkWindow, ...]:
+        return tuple(window for window in (self._agent, self._work) if window is not None)
+
+    def close_windows(self) -> None:
+        """Close the agent and work windows; off the Qt thread, wait briefly for each view to release."""
+        for window in self._windows():
+            window.close()
+        for window in self._windows():
             if self._closed.is_set():
-                self._agent.closed_ready.set()
+                window.publication.abandon()
             elif threading.current_thread() is not self._thread:
-                self._agent.closed_ready.wait(timeout=3)
+                window.publication.closed_ready.wait(timeout=3)
 
     def work(
         self,
@@ -752,14 +752,6 @@ class Ui:
                 self._work_view.show_meetings()
 
         self.post(reveal)
-
-    def close_work(self) -> None:
-        if self._work is not None:
-            self._work.close()
-            if self._closed.is_set():
-                self._work.closed_ready.set()
-            elif threading.current_thread() is not self._thread:
-                self._work.closed_ready.wait(timeout=3)
 
     def open_inbox(self, show_agent: Callable[[], None]) -> None:
         """Bell and keyboard requests share Qt-owned initialization and inbox focus."""

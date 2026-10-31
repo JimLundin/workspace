@@ -63,7 +63,8 @@ lazy from assistant.work_agent import WorkAgent
 lazy from assistant.work_bridge import WorkOwners
 lazy from assistant.work_bridge_contracts import WORK_BRIDGE, BridgeCommand, BridgeResponse
 lazy from assistant.work_canvas import WorkCanvas, instruction_prompt
-lazy from assistant.work_window import ControlTask, WorkCommand, WorkSnapshot
+lazy from assistant.work_commands import ControlTask, WorkCommand
+lazy from assistant.work_snapshot import WorkSnapshot
 lazy from automation.bridge import BridgeClient
 lazy from automation.context import ContextStore
 lazy from automation.ipc import MeetingCommand, MeetingFailed, MeetingSucceeded, StartMeeting
@@ -260,7 +261,6 @@ class AssistantApp:
             saved_context,
             BridgeClient(work_folder),
             lambda runner: self.ui.agent(
-                None,
                 runner.stop,
                 on_problem=self.problem,
                 on_reset=runner.new_conversation,
@@ -446,8 +446,7 @@ class AssistantApp:
             log("The work frontend did not finish closing before assistant shutdown.")
         timings.mark("meetings and work frontend")
         self.activity.close()
-        self.ui.close_agent()
-        self.ui.close_work()
+        self.ui.close_windows()
         self.ui.close()
         timings.mark("Qt shutdown")
         self.jobs.put(None)

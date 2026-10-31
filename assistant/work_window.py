@@ -1,301 +1,16 @@
-"""Immutable work projections and the thread-safe connection to the work view."""
+"""The thread-safe connection to the work view: publication, commands and approval acknowledgement."""
 
 import threading
 import traceback
 from collections.abc import Callable
-from dataclasses import dataclass, field, replace
-from datetime import datetime
-from typing import Protocol, assert_never
+from dataclasses import replace
+from typing import Protocol
 
-from assistant.agent_window import log_view
-from automation.context import ContextRecord
-from automation.execution import ApprovalReview, review_matches
-from automation.personal_work import (
-    AddDocument,
-    AddWebPage,
-    DismissWork,
-    OpenWorkSource,
-    PersonalView,
-    RefreshPersonalWork,
-    RestoreWork,
-    SaveWork,
-    UnlinkWork,
-)
-from automation.routines import EventTrigger, Every, FileChanged, Once, RoutineSummary, Trigger
-from automation.task import (
-    Action,
-    Approval,
-    ApprovalDecision,
-    Blocked,
-    Completed,
-    Control,
-    Failed,
-    Interrupted,
-    Question,
-    RequestSource,
-    RoutineSource,
-    Running,
-    Task,
-    TaskStatus,
-    TextAnswer,
-    Until,
-    Waiting,
-    identifier,
-    phase,
-    text,
-)
-
-
-@dataclass(frozen=True, slots=True)
-class Submit:
-    prompt: str
-
-
-@dataclass(frozen=True, slots=True)
-class FollowUp:
-    task_id: str
-    prompt: str
-
-
-@dataclass(frozen=True, slots=True)
-class Redirect:
-    task_id: str
-    prompt: str
-
-
-@dataclass(frozen=True, slots=True)
-class ControlTask:
-    task_id: str
-    control: Control
-
-
-@dataclass(frozen=True, slots=True)
-class AnswerTask:
-    task_id: str
-    request_id: str
-    answer: TextAnswer | ApprovalDecision
-
-
-@dataclass(frozen=True, slots=True)
-class RefreshApproval:
-    task_id: str
-    request_id: str
-
-
-@dataclass(frozen=True, slots=True)
-class CreateRoutine:
-    title: str
-    instruction: str
-    trigger: Trigger
-
-
-@dataclass(frozen=True, slots=True)
-class UpdateRoutine:
-    routine_id: str
-    revision: int
-    title: str
-    instruction: str
-    trigger: Trigger
-
-
-@dataclass(frozen=True, slots=True)
-class EnableRoutine:
-    routine_id: str
-
-
-@dataclass(frozen=True, slots=True)
-class DisableRoutine:
-    routine_id: str
-
-
-@dataclass(frozen=True, slots=True)
-class AddPreference:
-    name: str
-    value: str
-    source: str
-
-
-@dataclass(frozen=True, slots=True)
-class UpdatePreference:
-    identity: str
-    name: str
-    value: str
-    source: str
-
-
-@dataclass(frozen=True, slots=True)
-class AddProjectNote:
-    project: str
-    text: str
-    source: str
-    valid_for: int
-
-
-@dataclass(frozen=True, slots=True)
-class UpdateProjectNote:
-    identity: str
-    project: str
-    text: str
-    source: str
-    valid_for: int
-
-
-@dataclass(frozen=True, slots=True)
-class RemoveContext:
-    identity: str
-
-
-type WorkCommand = (
-    Submit
-    | FollowUp
-    | Redirect
-    | ControlTask
-    | AnswerTask
-    | RefreshApproval
-    | CreateRoutine
-    | UpdateRoutine
-    | EnableRoutine
-    | DisableRoutine
-    | AddPreference
-    | UpdatePreference
-    | AddProjectNote
-    | UpdateProjectNote
-    | RemoveContext
-    | AddDocument
-    | AddWebPage
-    | DismissWork
-    | RestoreWork
-    | SaveWork
-    | UnlinkWork
-    | OpenWorkSource
-    | RefreshPersonalWork
-)
-
-
-@dataclass(frozen=True, slots=True)
-class SubmissionProblem:
-    task_id: str
-    reason: str
-
-    def __post_init__(self) -> None:
-        identifier(self.task_id, "submission identity")
-        text(self.reason, "submission problem", maximum=8_000)
-
-
-@dataclass(frozen=True, slots=True, kw_only=True)
-class ReplyProblem:
-    task_id: str
-    request_id: str
-    receipt_id: str
-    reason: str
-
-    def __post_init__(self) -> None:
-        identifier(self.task_id, "reply task identity")
-        identifier(self.request_id, "reply request identity")
-        identifier(self.receipt_id, "reply receipt identity")
-        text(self.reason, "reply problem", maximum=8_000)
-
-
-@dataclass(frozen=True, slots=True)
-class WorkSnapshot:
-    tasks: tuple[Task, ...] = ()
-    routines: tuple[RoutineSummary, ...] = ()
-    context: tuple[ContextRecord, ...] = ()
-    status: str = ""
-    reviews: tuple[ApprovalReview, ...] = ()
-    submission_problems: tuple[SubmissionProblem, ...] = ()
-    reply_problems: tuple[ReplyProblem, ...] = ()
-    personal: PersonalView = field(default_factory=PersonalView)
-    actions: tuple[Action, ...] = ()
-
-
-def when(at: float | None) -> str:
-    if at is None:
-        return "—"
-    try:
-        return datetime.fromtimestamp(at).strftime("%Y-%m-%d %H:%M")
-    except OverflowError, OSError, ValueError:
-        return "Outside the local calendar"
-
-
-def task_label(task: Task) -> str:
-    match task.state:
-        case Waiting(Question()):
-            return "Your reply"
-        case Waiting(Approval()):
-            return "Approval"
-        case Waiting(Blocked()):
-            return "Needs attention"
-        case _:
-            return phase(task.state).capitalize()
-
-
-def current_review(task: Task, reviews: tuple[ApprovalReview, ...]) -> ApprovalReview | None:
-    return next((review for review in reviews if review_matches(task, review)), None)
-
-
-def task_detail(task: Task, reviews: tuple[ApprovalReview, ...] = ()) -> str:
-    match task.source:
-        case RequestSource():
-            origin = "Your request"
-        case RoutineSource(routine_id=identity):
-            origin = f"Standing instruction · {identity}"
-        case _:
-            assert_never(task.source)
-    sections = [
-        task.title,
-        f"{task_label(task)} · {origin}\nCreated {when(task.created_at)} · Updated {when(task.updated_at)}",
-        f"Instructions\n{task.prompt}",
-    ]
-    if task.checkpoint is not None:
-        sections.append(f"Progress · {when(task.checkpoint.at)}\n{task.checkpoint.summary}")
-    match task.state:
-        case Completed(result, evidence):
-            sections.append(f"Result\n{result}")
-            if evidence:
-                sections.append("Evidence\n" + "\n".join(f"• {item}" for item in evidence))
-        case Failed(reason):
-            sections.append(f"Needs attention\n{reason}")
-        case Interrupted(_, reason):
-            sections.append(f"Recovery\n{reason}\n\nResume checks the interrupted work before continuing.")
-        case Waiting(reason):
-            match reason:
-                case Question(_, question, detail):
-                    sections.append(f"Your reply\n{question}" + (f"\n\n{detail}" if detail else ""))
-                case Approval():
-                    if review := current_review(task, reviews):
-                        sections.append(f"Approval\n{review.title}\n\n{review.detail}")
-                    else:
-                        sections.append("Approval\nRequest a fresh preview of this action before deciding.")
-                case Until(at, explanation):
-                    sections.append(f"Waiting until {when(at)}\n{explanation}")
-                case Blocked(explanation):
-                    sections.append(f"Waiting\n{explanation}")
-                case _:
-                    assert_never(reason)
-        case TaskStatus.PAUSED:
-            sections.append("Paused\nResume continues this saved task.")
-        case TaskStatus.CANCELLED:
-            sections.append("Cancelled\nThe task and its saved progress remain available.")
-        case TaskStatus.READY | Running():
-            pass
-        case _:
-            assert_never(task.state)
-    return "\n\n".join(sections)
-
-
-def trigger_label(trigger: Trigger) -> str:
-    match trigger:
-        case EventTrigger.TRANSCRIPT_COMPLETED:
-            return "After a transcript finishes"
-        case Once(at):
-            return f"Once · {when(at)}"
-        case Every(seconds=seconds):
-            return f"Every {seconds / 60:g} minutes"
-        case FileChanged(path):
-            return f"File changes · {path}"
-        case _:
-            assert_never(trigger)
+from assistant.view_publication import Post, Unavailable, ViewPublication, log_view
+from assistant.work_commands import AnswerTask, WorkCommand
+from assistant.work_snapshot import WorkSnapshot
+from automation.execution import ApprovalReview, current_review
+from automation.task import ApprovalDecision, answers, requested
 
 
 class WorkView(Protocol):
@@ -318,19 +33,14 @@ class WorkWindow:
 
     __slots__ = (
         "_create_loading",
-        "_create_view",
         "_loading",
         "_lock",
         "_opening",
-        "_pending",
-        "_post",
         "_presented",
         "_shown",
-        "_view",
-        "closed",
-        "closed_ready",
         "on_command",
         "on_problem",
+        "publication",
         "state",
     )
 
@@ -338,7 +48,7 @@ class WorkWindow:
         self,
         on_command: Callable[[WorkCommand], None],
         *,
-        post: Callable[[Callable[[], None]], None],
+        post: Post,
         create_view: Callable[[WorkWindow], WorkView],
         on_problem: Callable[[str], None] | None = None,
         create_loading: Callable[[], WorkOpening] | None = None,
@@ -346,54 +56,40 @@ class WorkWindow:
         # Commands, dispatch, the durable view, failure reporting and transient
         # loading have independent effect owners; each enters at composition.
         self.on_command, self.on_problem = on_command, on_problem
-        self._post, self._create_view = post, create_view
         self._create_loading: Callable[[], WorkOpening] | None = create_loading
         self._lock = threading.Lock()
-        self._pending = self.closed = False
         self._opening: bool = False
         self._shown: bool = False
         self._loading: WorkOpening | None = None
-        self._view: WorkView | None = None
         self._presented: ApprovalReview | None = None
         self.state = WorkSnapshot()
-        self.closed_ready = threading.Event()
+        self.publication: ViewPublication[WorkView] = ViewPublication(post, lambda: create_view(self), self._render)
 
     def publish(self, snapshot: WorkSnapshot) -> None:
         with self._lock:
-            if self.closed or snapshot == self.state:
+            if self.publication.closed or snapshot == self.state:
                 return
             self.state = snapshot
             if self._presented is not None and not any(current_review(task, snapshot.reviews) == self._presented for task in snapshot.tasks):
                 self._presented = None
-            if self._pending or self._view is None:
-                return
-            self._pending = True
-        self._post(self._render)
+        self.publication.changed()
 
-    def _render(self) -> None:
+    def _render(self, view: WorkView | None) -> None:
         with self._lock:
-            self._pending = False
-            snapshot, view, closed = self.state, self._view, self.closed
-        if view is not None and not closed:
+            snapshot = self.state
+        if view is not None:
             view.render(snapshot)
 
     def _prepare(self) -> WorkView | None:
-        with self._lock:
-            if self.closed:
+        opened = self.publication.opened()
+        match opened:
+            case Unavailable.CLOSED:
                 return None
-            view = self._view
-        if view is None:
-            try:
-                view = self._create_view(self)
-            except Exception:
-                log_view(traceback.format_exc())
+            case Unavailable.FAILED:
                 self.problem("The work overview could not open. Try Work again; details are in agent-ui.log.")
                 return None
-            if not self._attach(view):
-                view.close()
-                return None
-        self._render()
-        return view
+            case _:
+                return opened
 
     def prepare(self) -> None:
         """Prepare the native view on its owner thread without showing/focusing it."""
@@ -401,12 +97,12 @@ class WorkWindow:
         def prepare() -> None:
             self._prepare()
 
-        self._post(prepare)
+        self.publication.post(prepare)
 
     def show(self, *, focus: bool = True) -> None:
         def reveal() -> None:
             with self._lock:
-                if self.closed or self._opening:
+                if self._opening:
                     return
                 self._opening = True
                 first_open = not self._shown
@@ -427,19 +123,19 @@ class WorkWindow:
                 self.cancel_show()
                 raise
 
-        self._post(reveal)
+        self.publication.post(reveal)
 
     def _presented_view(self) -> None:
         with self._lock:
-            if not self.closed:
+            if not self.publication.closed:
                 self._shown = True
         self.cancel_show()
 
     def cancel_show(self, view: WorkView | None = None) -> None:
         """Release transient presentation on its UI thread, including cancellation."""
+        if view is not None and not self.publication.holds(view):
+            return
         with self._lock:
-            if view is not None and view is not self._view:
-                return
             loading, self._loading = self._loading, None
         try:
             if loading is not None:
@@ -450,17 +146,10 @@ class WorkWindow:
             with self._lock:
                 self._opening = False
 
-    def _attach(self, view: WorkView) -> bool:
-        with self._lock:
-            if self.closed:
-                return False
-            self._view = view
-            return True
-
     def approval_presented(self, task_id: str, request_id: str) -> bool:
         """The native view acknowledges the exact live preview in its viewport."""
         with self._lock:
-            if self.closed:
+            if self.publication.closed:
                 return False
             task = next((task for task in self.state.tasks if task.id == task_id), None)
             review = current_review(task, self.state.reviews) if task is not None else None
@@ -471,33 +160,28 @@ class WorkWindow:
 
     def problem(self, message: str) -> None:
         with self._lock:
-            if self.closed:
+            if self.publication.closed:
                 return
             self.state = replace(self.state, status=message)
-            schedule = not self._pending and self._view is not None
-            if schedule:
-                self._pending = True
-        if schedule:
-            self._post(self._render)
+        self.publication.changed()
         if self.on_problem is not None:
             self.on_problem(message)
 
     def send(self, command: WorkCommand) -> bool:
         with self._lock:
-            if self.closed:
+            if self.publication.closed:
                 return False
-            if isinstance(command, AnswerTask):
-                task = next((task for task in self.state.tasks if task.id == command.task_id), None)
-                if task is None or not isinstance(task.state, Waiting) or not isinstance(task.state.reason, (Question, Approval)):
-                    return False
-                if task.state.reason.id != command.request_id:
-                    return False
-                if isinstance(task.state.reason, Question) != isinstance(command.answer, TextAnswer):
-                    return False
-                if command.answer is ApprovalDecision.APPROVED:
-                    review = current_review(task, self.state.reviews)
-                    if review is None or review != self._presented:
+            match command:
+                case AnswerTask(task_id=task_id, request_id=request_id, answer=answer):
+                    task = next((task for task in self.state.tasks if task.id == task_id), None)
+                    request = requested(task) if task is not None else None
+                    if task is None or request is None or request.id != request_id or not answers(request, answer):
                         return False
+                    review = current_review(task, self.state.reviews)
+                    if answer is ApprovalDecision.APPROVED and (review is None or review != self._presented):
+                        return False
+                case _:
+                    pass
         try:
             self.on_command(command)
         except Exception as error:
@@ -507,20 +191,6 @@ class WorkWindow:
         return True
 
     def close(self) -> None:
-        with self._lock:
-            if self.closed:
-                return
-            self.closed = True
-            self._presented = None
-
-        def destroy() -> None:
-            try:
-                self.cancel_show()
-                with self._lock:
-                    view, self._view = self._view, None
-                if view is not None:
-                    view.close()
-            finally:
-                self.closed_ready.set()
-
-        self._post(destroy)
+        if self.publication.close(release=self.cancel_show):
+            with self._lock:
+                self._presented = None

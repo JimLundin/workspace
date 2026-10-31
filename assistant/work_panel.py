@@ -18,7 +18,7 @@ lazy from assistant.ui_components.controls import button, label
 lazy from assistant.ui_components.paint_ready import PaintReady
 lazy from assistant.ui_components.text import units
 lazy from assistant.ui_components.widgets import Editor, Window, column, replace_text, row, show_window
-lazy from assistant.work_window import (
+lazy from assistant.work_commands import (
     AddPreference,
     AddProjectNote,
     AnswerTask,
@@ -34,15 +34,12 @@ lazy from assistant.work_window import (
     UpdatePreference,
     UpdateProjectNote,
     UpdateRoutine,
-    WorkSnapshot,
-    WorkWindow,
-    current_review,
-    task_detail,
-    task_label,
-    trigger_label,
-    when,
 )
+lazy from assistant.work_snapshot import WorkSnapshot
+lazy from assistant.work_text import task_detail, task_label, trigger_label, when
+lazy from assistant.work_window import WorkWindow
 lazy from automation.context import ContextRecord, Preference, ProjectNote
+lazy from automation.execution import current_review
 lazy from automation.routines import EventTrigger, Every, FileChanged, Once, Routine, RoutineSummary, Trigger
 lazy from automation.task import (
     Approval,

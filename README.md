@@ -646,7 +646,8 @@ prompts, answers, reviews, the key map and overlays. Qt owns the event loop;
 leaves that loop available to the remaining views. The hidden Windows message
 window and its message loop have their own application control thread.
 `assistant/agent_window.py` owns the session controller and queues
-immutable snapshots for painting. The model and inline questions stay on worker
+immutable snapshots for painting through `assistant/view_publication.py`, the
+lifecycle it shares with the work window. The model and inline questions stay on worker
 threads. `assistant/notifications.py` projects bounded notifications with pure
 lifetime transitions; expiry never removes session messages. Background updates
 preserve keyboard focus; history preserves selection and scroll position.
