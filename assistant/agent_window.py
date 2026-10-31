@@ -10,7 +10,8 @@ import time
 import traceback
 import uuid
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
+from enum import Enum, auto
 from typing import Final, Protocol
 
 from assistant.agent_session import (
@@ -26,15 +27,12 @@ from assistant.agent_session import (
     Session,
     Snapshot,
     StopRequested,
-    acceptable,
-    pending,
-    resolution,
     transition,
 )
 from assistant.feed_origin import FeedRequest
 from assistant.recording_state import RecordingAction, RecordingState
 from automation.presentation import Done, Finished, LiveMessage, Problem, Progress, Said
-from automation.task import Approval, Question
+from automation.task import Approval, ApprovalDecision, Question, Reply, TextAnswer
 from usage import DIRECTORY
 
 VIEW_LOG: Final = DIRECTORY / "agent-ui.log"
@@ -56,25 +54,41 @@ class View(Protocol):
     def close(self) -> None: ...
 
 
+class InputState(Enum):
+    SHOWN = auto()
+    # A native view acknowledged that this exact approval preview is visible.
+    PRESENTED = auto()
+    # A reply was accepted; work owns it until it withdraws or restores the request.
+    SUBMITTED = auto()
+
+
 @dataclass(frozen=True, slots=True)
-class _ExternalRequest:
+class _Projected:
+    """The one durable request this view projects, and where its parsed reply goes."""
+
     message: AgentRequest
-    respond: Callable[[str], bool]
+    reply: Callable[[Reply], bool]
+    state: InputState
 
 
-@dataclass(frozen=True, slots=True)
-class _ExternalAnswer:
-    request_id: str
+def spoken_decision(text: str) -> ApprovalDecision | None:
+    """Only the complete utterance "approve" or "decline" decides an approval."""
+    match text.strip().casefold().rstrip(".!?").strip():
+        case "approve":
+            return ApprovalDecision.APPROVED
+        case "decline":
+            return ApprovalDecision.DECLINED
+        case _:
+            return None
 
 
 class AgentWindow:
     __slots__ = (
         "__weakref__",
         "_create_view",
-        "_external",
+        "_input",
         "_pending",
         "_post",
-        "_presented",
         "_view",
         "closed",
         "closed_ready",
@@ -114,8 +128,7 @@ class AgentWindow:
         self.on_recording = on_recording
         self.on_work = on_work
         self.on_snapshot: Callable[[Snapshot], None] | None = on_snapshot
-        self._external: _ExternalRequest | _ExternalAnswer | None = None
-        self._presented: str | None = None
+        self._input: _Projected | None = None
         self.state = Session(identity=uuid.uuid4().hex)
         self.lock = threading.RLock()
         self.ready = threading.Event()
@@ -199,9 +212,12 @@ class AgentWindow:
         with self.lock:
             if self.closed or self.state.stopping:
                 return False
-            question = self.state.question
-        if question is not None:
-            return self.respond(question.id, text)
+            request = self.state.request
+        match request:
+            case AgentRequest(request=Question(id=identity)):
+                return self.respond(identity, TextAnswer(text))
+            case _:
+                pass
         if self.on_submit is None:
             return False
         self.on_submit(text)
@@ -210,60 +226,55 @@ class AgentWindow:
     def reply_by_voice(self, text: str) -> bool:
         """Consume a spoken reply to the pending request, or leave it as a task.
 
-        Approvals accept only the complete utterance "approve" or "decline".
         Unrecognized or racing replies stay out of the task queue.
         """
         with self.lock:
             if self.closed or self.state.stopping:
                 return True
-            request = next((message for message in self.state.messages if isinstance(message, AgentRequest) and pending(message)), None)
+            request = self.state.request
         if request is None:
             return False
         match request.request:
             case Question(id=identity):
-                self.respond(identity, text.strip())
+                with contextlib.suppress(ValueError):
+                    self.respond(identity, TextAnswer(text.strip()))
             case Approval(id=identity):
-                answer = text.strip().casefold().rstrip(".!?").strip()
-                if answer in ("approve", "decline"):
-                    self.respond(identity, answer)
+                decision = spoken_decision(text)
+                if decision is not None:
+                    self.respond(identity, decision)
                 else:
                     self.say("Approval is still waiting. Hold N and say just “approve” or “decline”, then release to send.")
         return True
 
-    def request_input(self, message: AgentRequest, respond: Callable[[str], bool]) -> None:
+    def request_input(self, message: AgentRequest, reply: Callable[[Reply], bool]) -> None:
         """Project an exact durable request without starting a waiting thread."""
         with self.lock:
             if self.closed:
                 return
-            old = self._external
-            if isinstance(old, _ExternalAnswer) and old.request_id == message.id:
+            old = self._input
+            if old is not None and old.message.id == message.id:
+                if old.state is not InputState.SUBMITTED:
+                    self._input = replace(old, reply=reply)
                 return
-            if isinstance(old, _ExternalRequest) and old.message.id == message.id:
-                self._external = _ExternalRequest(old.message, respond)
-                return
-            self._external = _ExternalRequest(message, respond)
-            self._presented = None
+            self._input = _Projected(message, reply, InputState.SHOWN)
             was_waiting = self.state.waiting
             if old is not None:
-                old_id = old.message.id if isinstance(old, _ExternalRequest) else old.request_id
-                self.state = transition(self.state, Resolution(old_id, Cancelled()))
+                self.state = transition(self.state, Resolution(old.message.id, Cancelled()))
             self.state = transition(self.state, message)
             waiting = self.state.waiting
             self._changed()
         if was_waiting != waiting and self.on_waiting is not None:
             self.on_waiting(waiting)
 
-    def clear_external_input(self, request_id: str) -> None:
-        """Remove only this view's matching request; durable state stays owned by work."""
+    def withdraw_input(self) -> None:
+        """Remove the projected request; durable state stays owned by work."""
         with self.lock:
-            request = self._external
-            identity = request.message.id if isinstance(request, _ExternalRequest) else request.request_id if request is not None else None
-            if identity != request_id:
+            request = self._input
+            if request is None:
                 return
-            self._external = None
-            self._presented = None
+            self._input = None
             was_waiting = self.state.waiting
-            self.state = transition(self.state, Resolution(request_id, Cancelled()))
+            self.state = transition(self.state, Resolution(request.message.id, Cancelled()))
             waiting = self.state.waiting
             self._changed()
         if was_waiting != waiting and self.on_waiting is not None:
@@ -272,41 +283,37 @@ class AgentWindow:
     def input_presented(self, request_id: str) -> None:
         """A native view acknowledges that this exact approval preview is visible."""
         with self.lock:
-            request = self._external
-            if isinstance(request, _ExternalRequest) and isinstance(request.message.request, Approval) and request.message.id == request_id:
-                self._presented = request_id
+            match self._input:
+                case _Projected(message=AgentRequest(request=Approval(id=identity)), state=InputState.SHOWN) as request if identity == request_id:
+                    self._input = replace(request, state=InputState.PRESENTED)
+                case _:
+                    pass
 
-    def respond(self, identity: str, answer: str) -> bool:
-        """Route a reply to the exact durable request this view projects."""
-        submitted = _ExternalAnswer(identity)
+    def respond(self, identity: str, reply: Reply) -> bool:
+        """Route a parsed reply to the exact durable request this view projects."""
         with self.lock:
-            if self.closed:
+            request = self._input
+            if self.closed or request is None or request.message.id != identity or request.state is InputState.SUBMITTED:
                 return False
-            request = self._external
-            presented = self._presented == identity
-            if not isinstance(request, _ExternalRequest) or request.message.id != identity or not acceptable(request.message.request, answer):
-                return False
-            if isinstance(request.message.request, Approval) and answer == "approve" and not presented:
+            if reply is ApprovalDecision.APPROVED and request.state is not InputState.PRESENTED:
                 self.say("Open the current action preview before approving it.")
                 return False
-            self._external = submitted
-            self._presented = None
+            submitted = self._input = replace(request, state=InputState.SUBMITTED)
         accepted = False
         try:
-            accepted = request.respond(answer)
+            accepted = request.reply(reply)
         finally:
             if not accepted:
                 with self.lock:
-                    if self._external is submitted:
-                        self._external = request
-                        self._presented = identity if presented else None
+                    if self._input is submitted:
+                        self._input = request
         if not accepted:
             return False
         with self.lock:
-            if self._external is not submitted:
+            if self._input is not submitted:
                 return True
             was_waiting = self.state.waiting
-            self.state = transition(self.state, resolution(request.message, answer))
+            self.state = transition(self.state, Resolution(identity, reply))
             waiting = self.state.waiting
             self._changed()
         if was_waiting != waiting and self.on_waiting is not None:
@@ -367,8 +374,7 @@ class AgentWindow:
 
     def reset(self) -> None:
         with self.lock:
-            self._external = None
-            self._presented = None
+            self._input = None
             recording = self.state.recording
             self.state = Session(identity=uuid.uuid4().hex)
             if recording.phase not in ("idle", "saved", "interrupted"):
@@ -379,10 +385,7 @@ class AgentWindow:
         self._event(RecordingUpdated(state, time.time()))
 
     def stopping(self) -> None:
-        with self.lock:
-            request = self._external
-        if isinstance(request, _ExternalRequest):
-            self.clear_external_input(request.message.id)
+        self.withdraw_input()
         self._event(StopRequested())
 
     def all_text(self) -> str:
@@ -392,8 +395,7 @@ class AgentWindow:
     def close(self) -> None:
         with self.lock:
             self.closed = True
-            self._external = None
-            self._presented = None
+            self._input = None
         self.ready.clear()
 
         def destroy() -> None:

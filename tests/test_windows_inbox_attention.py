@@ -27,6 +27,7 @@ from assistant.ui import Ui, Views
 from assistant.work_canvas import WorkCanvas
 from assistant.work_canvas_window import CanvasWindow
 from assistant.work_window import WorkWindow
+from automation.task import Reply, TextAnswer
 from tests.agent_requests import asked
 from tests.communications_fixture import communication_feed
 from tests.test_communications_service import LocalCipher
@@ -86,7 +87,7 @@ class InboxUi(Ui):
         self.pump()
 
 
-def accept_answer(answer: str) -> bool:
+def accept_answer(answer: Reply) -> bool:
     return True
 
 
@@ -176,7 +177,7 @@ def test_app_context_stays_quiet_and_only_agent_questions_change_toolbar_attenti
         ui.pump()
         assert not ui.bar.inbox.text() and not ui.bar.inbox.isHidden()
         assert "1 clarification needs" in ui.bar.inbox.accessibleName()
-        assert agent.respond("owned", "Revenue")
+        assert agent.respond("owned", TextAnswer("Revenue"))
         ui.pump()
         assert ui.bar.inbox.isHidden()
     finally:

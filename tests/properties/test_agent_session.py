@@ -4,8 +4,8 @@ from dataclasses import dataclass, field, replace
 
 from hypothesis import strategies
 
-from assistant.agent_session import Answered, Cancelled, Resolution, Session, transition
-from automation.task import ApprovalDecision
+from assistant.agent_session import Cancelled, Resolution, Session, transition
+from automation.task import ApprovalDecision, TextAnswer
 from tests.agent_requests import asked, reviewed
 from tests.properties.generation import cases, property_test
 
@@ -23,7 +23,8 @@ def reply_cases(draw: strategies.DrawFn) -> ReplyCase:
     return ReplyCase(
         # Requests are validated durable values: their identities contain no NUL.
         draw(strategies.text(min_size=1, max_size=32)).replace("\0", "·"),
-        draw(strategies.text(max_size=96)),
+        # Replies are validated task answers: some visible text, no NUL.
+        "a" + draw(strategies.text(max_size=95)).replace("\0", "·"),
         question=draw(strategies.booleans()),
         decision=draw(strategies.sampled_from(tuple(ApprovalDecision))),
         stopping=draw(strategies.booleans()),
@@ -37,14 +38,14 @@ def test_only_the_matching_pending_request_accepts_a_reply(case: ReplyCase) -> N
     request = asked(current, "Reply?", "", 1) if case.question else reviewed(current, "Proceed?", "", 1)
     other = asked("other/" + case.identity, "Another request", "", 2)
     session = Session(messages=(other, request), phase="stopping" if case.stopping else "running", status="Waiting")
-    for event in (Resolution(stale, Answered(case.text)), Resolution(stale, case.decision), Resolution(stale, Cancelled())):
+    for event in (Resolution(stale, TextAnswer(case.text)), Resolution(stale, case.decision), Resolution(stale, Cancelled())):
         assert transition(session, event) == session
-    mismatch = Resolution(current, case.decision) if case.question else Resolution(current, Answered(case.text))
+    mismatch = Resolution(current, case.decision) if case.question else Resolution(current, TextAnswer(case.text))
     assert transition(session, mismatch) == session
 
-    reply = Answered(case.text) if case.question else case.decision
+    reply = TextAnswer(case.text) if case.question else case.decision
     updated = transition(session, Resolution(current, reply))
     assert updated == replace(session, messages=(other, replace(request, reply=reply)), status="Stopping…" if case.stopping else "Working…")
-    for event in (Resolution(current, Answered(case.text + " later")), Resolution(current, case.decision), Resolution(current, Cancelled())):
+    for event in (Resolution(current, TextAnswer(case.text + " later")), Resolution(current, case.decision), Resolution(current, Cancelled())):
         assert transition(updated, event) == updated
     assert session.messages == (other, request)

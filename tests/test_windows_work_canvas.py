@@ -18,7 +18,6 @@ lazy from PySide6 import QtCore, QtGui, QtTest, QtWidgets
 lazy from PySide6.QtCore import Qt
 
 import automation.task
-from assistant.agent_session import Answered
 from assistant.canvas_activity import ROOT_CONTEXT, Attention, CanvasInstruction, CanvasQuestion, CanvasRun, SessionRequest, TaskRequest
 from assistant.card_actions import OpenCanvas, parse
 from assistant.feed_agent_tools import request
@@ -73,7 +72,7 @@ from automation.personal_work import (
     WorkThread,
 )
 from automation.store import TaskStore
-from automation.task import ActionNotApplied, ActionVerified
+from automation.task import ActionNotApplied, ActionVerified, Reply, TextAnswer
 from automation.work_documents import WebDocument
 from tests.agent_requests import asked
 from tests.feed_fixture import feed_unavailable, no_personal_work
@@ -945,9 +944,9 @@ def test_canvas_clarification_redirect_submits_context_to_the_waiting_agent(tmp_
     ui.pump()
     agent.show(focus=False)
     ui.pump()
-    resumed: list[str] = []
+    resumed: list[Reply] = []
 
-    def resume(answer: str) -> bool:
+    def resume(answer: Reply) -> bool:
         resumed.append(answer)
         return True
 
@@ -969,11 +968,11 @@ def test_canvas_clarification_redirect_submits_context_to_the_waiting_agent(tmp_
         fallback: list[str] = []
         ui.voice_agent("Contoso owns the handoff.", fallback.append)
         pump_until(ui, lambda: bool(resumed))
-        assert resumed == ["Contoso owns the handoff."]
+        assert resumed == [TextAnswer("Contoso owns the handoff.")]
         ui.pump()
         assert "Contoso owns the handoff." in detail.response.text() and not fallback
         answered = store.read().activity[0]
-        assert isinstance(answered, CanvasQuestion) and answered.reply == Answered("Contoso owns the handoff.")
+        assert isinstance(answered, CanvasQuestion) and answered.reply == TextAnswer("Contoso owns the handoff.")
         card = canvas.card(question.id)
         assert card is not None and card.detail_proxy is not None
         assert card.rect().contains(card.detail_proxy.boundingRect().translated(card.detail_proxy.pos()))

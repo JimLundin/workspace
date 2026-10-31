@@ -713,25 +713,23 @@ class Ui:
     def answer_canvas(self, request: CanvasRequest, value: str) -> bool:
         if self._canvas is None:
             return False
-        document = self._canvas.answer(request, value, self._deliver_answer)
+        try:
+            answer = TextAnswer(value)
+        except ValueError:
+            return False
+        document = self._canvas.answer(request, answer, self._deliver_answer)
         if document is None:
             return False
         self.render_canvas_document(document)
         self.refresh_canvas_attention()
         return True
 
-    def _deliver_answer(self, request: CanvasRequest, value: str) -> bool:
+    def _deliver_answer(self, request: CanvasRequest, answer: TextAnswer) -> bool:
         match request:
             case SessionRequest(session_id=identity, request_id=key):
-                return self._agent is not None and self._agent.state.identity == identity and self._agent.respond(key, value)
+                return self._agent is not None and self._agent.state.identity == identity and self._agent.respond(key, answer)
             case TaskRequest(task_id=task, request_id=key):
-                if self._work is None:
-                    return False
-                try:
-                    answer = TextAnswer(value)
-                except ValueError:
-                    return False
-                return self._work.send(AnswerTask(task, key, answer))
+                return self._work is not None and self._work.send(AnswerTask(task, key, answer))
 
     def _attach_meetings(self) -> None:
         connection, view = self._meetings, self._work_view
