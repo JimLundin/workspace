@@ -51,6 +51,27 @@ Edges snap to device pixels, shared by Qt and composition.
 agent work, agent work under the pointer, a recording, dictation with a
 recording and inbox, a waiting question, and a locked layer with a full inbox.
 
+## Motion
+
+Capsules move on springs, described as Apple does by a damping ratio and a
+response: a width morphs at (0.86, 0.42 s), an arriving capsule grows from
+nothing at (0.78, 0.42 s) with a little overshoot, and a leaving one collapses
+critically damped at (1.0, 0.3 s), keeping its last content until it's gone.
+Springs advance in closed form, so a stalled frame lands exactly where the
+spring would be. Any change retargets from the value and velocity on screen;
+a capsule called back while leaving reverses without a flicker. New parts fade
+in over the previous ones at their own measured size, centred while the width
+morphs; a reading whose text changes, such as the timer, updates in place.
+
+The frame loop runs only while a spring moves or the spinner turns, and holds a
+fine timer resolution only while springs move. Windows' reduced-motion setting
+moves every capsule straight to its target, including mid-flight.
+
+`scripts/benchmark_island.py` drives the real bar and glass through rest, agent
+work, dictation with a recording and inbox, a question and rest. On this laptop
+untraced frame work measured a median of 0.55–0.7 ms and a 95th percentile of
+3.5–4.9 ms, with about 11 KB allocated per frame and no frames at rest.
+
 ## Material
 
 Glass has no colour of its own. Small glass takes its scheme from the desktop
@@ -78,8 +99,8 @@ three properties. Changes within one Qt turn publish one final glass frame, and
 capsule changes never move a window.
 
 `island_model` turns observations into capsule views, `island_layout` arranges
-parts and frames capsules, and `ui_components.appearance.look` decides how each
-reads. All three are pure. `DesktopBar` owns the observations and timers, and
+parts and frames capsules, `island_motion` and `motion` carry capsules between
+views, and `ui_components.appearance.look` decides how each reads. All are pure. `DesktopBar` owns the observations and timers, and
 `island_surface` owns the Qt window and glass.
 
 ## Observations

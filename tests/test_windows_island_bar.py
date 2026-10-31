@@ -149,7 +149,7 @@ def test_pointer_reaches_capsules_and_their_edge_strip_but_passes_through_elsewh
     # Defect: the screen-wide window swallows clicks meant for the desktop, or the
     # pointer thrown against the screen edge above the island misses it.
     app = application()
-    bar = DesktopBar(recorded([]), native_shell=False)
+    bar = DesktopBar(recorded([]), native_shell=False, observations=BarObservations(motion=lambda: False))
     try:
         bar.visible = True
         bar.render()
@@ -169,6 +169,41 @@ def test_pointer_reaches_capsules_and_their_edge_strip_but_passes_through_elsewh
         assert owner(island.center().x(), 1) == handle
         assert owner(island.left() - 40, TOP + 17) != handle
         assert owner(4, 4) != handle
+    finally:
+        closed(app, bar)
+
+
+def test_capsules_spring_between_views_and_the_frame_loop_stops_once_settled() -> None:
+    # Defects: a capsule appears or vanishes at full size, its neighbour jumps, the
+    # frame loop keeps running at rest, or reduced motion still animates.
+    app = application()
+    now, motion = [100.0], [True]
+    bar = DesktopBar(recorded([]), native_shell=False, observations=BarObservations(clock=lambda: now[0], motion=lambda: motion[0]))
+    try:
+        bar.timer.stop()
+        bar.visible = True
+        bar.render()
+        island = bar.window.capsules[Key.ISLAND].geometry()
+        bar.inbox_changed(2)
+        now[0] += 0.08
+        bar.paint_frames()
+        inbox = bar.window.capsules[Key.INBOX].geometry()
+        assert 1 < inbox.width() < 36 and bar.loop.timer.isActive()
+        assert bar.window.capsules[Key.ISLAND].geometry() == island, "The island moved for a trailing capsule."
+        now[0] += 2
+        bar.paint_frames()
+        assert bar.window.capsules[Key.INBOX].geometry().width() == 36 and not bar.loop.timer.isActive()
+        bar.inbox_changed(0)
+        now[0] += 0.05
+        bar.paint_frames()
+        assert Key.INBOX in shown(bar) and bar.window.capsules[Key.INBOX].geometry().width() < 36
+        now[0] += 2
+        bar.paint_frames()
+        assert shown(bar) == [Key.ISLAND] and not bar.loop.timer.isActive()
+        motion[0] = False
+        bar.inbox_changed(5)
+        assert shown(bar) == [Key.ISLAND, Key.INBOX] and bar.window.capsules[Key.INBOX].geometry().width() == 36
+        assert not bar.loop.timer.isActive()
     finally:
         closed(app, bar)
 
@@ -262,6 +297,8 @@ def test_the_spinner_turns_only_while_processing_and_motion_allows() -> None:
         assert bar.window.spin_angle == 90 and not bar.loop.timer.isActive()
         motion[0] = True
         bar.state(State.READY)
+        now[0] += 2  # The island's width settles back to rest.
+        bar.paint_frames()
         assert not bar.loop.timer.isActive()
     finally:
         closed(app, bar)
