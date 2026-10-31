@@ -157,6 +157,13 @@ transcript completed after it is enabled. It responds to one transcript per
 trigger occurrence and does not prepare a meeting follow-up.
 _Avoid_: Meeting follow-up, follow-up drafts
 
+**Journal**:
+A local SQLite file that one owner keeps durably: the work database, each
+recording's journal and a meeting follow-up's edit history. A write is all or
+nothing and a read sees one moment. Reading a journal that does not exist
+reports it absent instead of creating it.
+_Avoid_: Database (for the owner's records), log
+
 **Run**:
 One period of execution of a task. A task can have several runs as it waits,
 resumes, or recovers from an interruption.
