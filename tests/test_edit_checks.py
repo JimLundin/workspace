@@ -4,15 +4,15 @@ import contextlib
 import io
 import sys
 from pathlib import Path
-from typing import cast
 
-from automation.json_value import Json
 from scripts.architecture import Report, dependencies
 from scripts.check import (
+    COST_RECORD,
+    SUMMARY_LIMIT,
     CheckRun,
     ExecutionPlan,
     Options,
-    Selection,
+    RecordedFailure,
     combined_results,
     execute,
     execution_plan,
@@ -21,7 +21,7 @@ from scripts.check import (
     windows_only,
     worker_result,
 )
-from tests.json_fixture import json_fields, json_object
+from scripts.check_results import Failure, Results, Selection
 
 
 def tree(root: Path) -> dict[str, str]:
@@ -84,6 +84,9 @@ def test_editing_checks_do_not_hide_local_import_or_runtime_failures() -> None:
     assert windows_only(ImportError("PySide6 missing")) is (sys.platform != "win32")
 
 
+REJECTION = "expected 2 drafts, saw 3 " + "x" * 600
+
+
 class SourceFixture:
     """Own the fixture's ordered load observations; no process globals change."""
 
@@ -111,14 +114,18 @@ class SourceFixture:
         self.order.append("generated")
         assert "sdk" not in self.order and "imports" not in self.order
 
+    def test_rejected(self) -> None:
+        raise AssertionError(REJECTION)
+
 
 def test_function_selection_runs_the_requested_case_and_rejects_typos(tmp_path: Path) -> None:
     runtime = SourceFixture()
     name = __name__.replace(".", "/") + ".py"
-    passed, skipped, failures, _ = execute(Selection((name + "::test_requested",), (), "explicit iteration scope"), tmp_path, runtime)
-    assert (passed, skipped, failures) == (1, 0, ()) and runtime.order == ["generated"]
-    passed, _, failures, _ = execute(Selection((name + "::test_missing",), (), "explicit iteration scope"), tmp_path, runtime)
-    assert passed == 0 and failures == ("No test function matched " + name + "::test_missing",)
+    result = execute(Selection((name + "::test_requested",), (), "explicit iteration scope"), tmp_path, runtime)
+    assert (result.passed, result.skipped, result.failures) == (1, 0, ()) and runtime.order == ["generated"]
+    missing = name + "::test_missing"
+    result = execute(Selection((missing,), (), "explicit iteration scope"), tmp_path, runtime)
+    assert result.passed == 0 and result.failures == (Failure(missing, "No test function matched", "No test function matched " + missing),)
 
 
 def test_generated_checks_precede_broad_dependency_imports_and_keep_import_gate(tmp_path: Path) -> None:
@@ -149,33 +156,33 @@ def test_generated_checks_precede_broad_dependency_imports_and_keep_import_gate(
             sdk = tmp_path / "assistant" / "sdk.py"
             sdk.parent.mkdir()
             sdk.write_text("# SDK boundary")
-        passed, skipped, failures, _ = execute(Selection((name,), (), "full source checks"), tmp_path, runtime)
+        result = execute(Selection((name,), (), "full source checks"), tmp_path, runtime)
         assert runtime.order == (["generated", "sdk", "imports"] if sdk_present else ["generated", "imports"])
-        assert (passed, skipped, failures) == (1, 0, ("A dependency does not import",))
+        problem = Failure("import all production modules", "A dependency does not import", "A dependency does not import")
+        assert (result.passed, result.skipped, result.failures) == (1, 0, (problem,))
     runtime = PropertyRuntime()
-    passed, skipped, failures, _ = execute(Selection((name,), (), "explicit iteration scope"), tmp_path, runtime)
-    assert runtime.order == ["generated"] and (passed, skipped, failures) == (1, 0, ())
+    result = execute(Selection((name,), (), "explicit iteration scope"), tmp_path, runtime)
+    assert runtime.order == ["generated"] and (result.passed, result.skipped, result.failures) == (1, 0, ())
 
 
-def test_failed_checks_keep_complete_cost_evidence_without_a_success_receipt(tmp_path: Path) -> None:
-    # The previous runner discarded every duration except five printed bodies
-    # when a check failed, preventing attribution of the full suite's overhead.
+def test_failed_checks_keep_cost_evidence_naming_each_failure_without_a_receipt(tmp_path: Path) -> None:
+    # Defects: a failed check discarded its durations, or its retained record
+    # could not say which test failed or why once console output was lost.
     report, receipt = tmp_path / "timings.json", tmp_path / "receipt.json"
-    current = frozendict({"tests/test_requested.py": "checked-source"})
-    durations = (
-        *tuple((float(index), f"tests.test_requested.test_case_{index}") for index in range(1, 8)),
-        (50.0, "worker:tests.test_agent.test_refusal"),
-    )
-    selected = Selection(tuple(current), (), "explicit iteration scope")
+    name = __name__.replace(".", "/") + ".py"
+    selected = Selection((name + "::test_rejected",), (), "explicit iteration scope")
+    result = execute(selected, tmp_path, SourceFixture())
+    durations = (*result.durations, (50.0, "worker:tests.test_agent.test_refusal"))
+    current = frozendict({name: "checked-source"})
     options = Options(full=False, native=False, tests=selected.tests, timings=report, receipt=receipt, baseline=tmp_path)
-    run = CheckRun(current, selected, (6, 0, ("Fixture failure",), durations), Report((), (), ()), 80)
-    with contextlib.redirect_stdout(io.StringIO()):
+    run = CheckRun(current, selected, Results(result.passed, result.skipped, result.failures, durations), Report((), (), ()), 80)
+    console = io.StringIO()
+    with contextlib.redirect_stdout(console):
         assert publish_check(options, run)
-    evidence = json_object(report.read_text())
-    assert evidence["failed"] == 1 and json_fields(evidence["files"]) == dict(current)
-    assert all([seconds, name] in cast(list[Json], evidence["durations"]) for seconds, name in durations)
-    assert evidence["worker_seconds"] == 50.0
-    assert not receipt.exists()
+    record = COST_RECORD.validate_json(report.read_bytes())
+    assert record.failures == (RecordedFailure(name + "::test_rejected", f"AssertionError: {REJECTION}"[:SUMMARY_LIMIT]),)
+    assert (record.passed, record.failed, record.files, record.durations, record.worker_seconds) == (0, 1, current, durations, 50.0)
+    assert "Traceback" in console.getvalue() and not receipt.exists()
 
 
 def test_broad_workers_keep_desktop_ownership_exact_selection_and_failures() -> None:
@@ -191,10 +198,11 @@ def test_broad_workers_keep_desktop_ownership_exact_selection_and_failures() -> 
     assert execution_plan(selectors[:2]) == ExecutionPlan((), selectors[:2])
     # Our aggregation must preserve failed child assertions and attribute child
     # costs separately from the sequential desktop lane's elapsed work.
-    child = worker_result((1, 0, ("Refusal failed",), ((2.0, "tests.test_agent.test_declined"),)))
-    other = worker_result((3, 1, (), ((1.0, "module:tests.test_work_store"),)))
-    parent = (4, 0, (), ((3.0, "tests.test_windows_browser.test_owned"),))
-    passed, skipped, failures, durations = combined_results((parent, child, other))
-    assert (passed, skipped, failures) == (8, 1, ("Refusal failed",))
-    assert (2.0, "worker:tests.test_agent.test_declined") in durations
-    assert (1.0, "worker:module:tests.test_work_store") in durations
+    refusal = Failure("tests/test_agent.py::test_declined", "AssertionError", "Refusal failed")
+    child = worker_result(Results(1, 0, (refusal,), ((2.0, "tests.test_agent.test_declined"),)))
+    other = worker_result(Results(3, 1, (), ((1.0, "module:tests.test_work_store"),)))
+    parent = Results(4, 0, (), ((3.0, "tests.test_windows_browser.test_owned"),))
+    combined = combined_results((parent, child, other))
+    assert (combined.passed, combined.skipped, combined.failures) == (8, 1, (refusal,))
+    assert (2.0, "worker:tests.test_agent.test_declined") in combined.durations
+    assert (1.0, "worker:module:tests.test_work_store") in combined.durations

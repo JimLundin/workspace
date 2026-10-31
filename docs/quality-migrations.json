@@ -942,15 +942,6 @@
     {
       "key": {
         "rule": "PLR0913",
-        "path": "scripts/check_native.py",
-        "scope": "execute_native",
-        "signature": "ada2f713ec75a997eef76d0466ffc52dde4f49d785aa3a344b164f1164c6485c"
-      },
-      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
-    },
-    {
-      "key": {
-        "rule": "PLR0913",
         "path": "scripts/deploy_archive.py",
         "scope": "repack",
         "signature": "a50db121137dd56077c03092feea561986d900329d834eb9a4e6df483e12596c"

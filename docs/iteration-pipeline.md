@@ -95,8 +95,13 @@ import failure, under `%LOCALAPPDATA%\workspace\development\timings\check-*.json
 Use `--timings "$env:TEMP\workspace-cost.json"` to choose the destination. Reports
 contain source identities, the selected scope, all phase/test-module import/test
 body durations, counts and unattributed overhead. Bodies include fixture setup
-and cleanup. Evidence excludes source/response content
-and exception messages. It is separate from the success-only deployment receipt.
+and cleanup. Each failure is listed with its node id (`tests/test_x.py::test_name`,
+a test or source module that did not import, or the check step that found it)
+and a summary of its exception type and message, truncated to 300 and 500
+characters. Tracebacks stay on the console, so a failure whose output was lost
+can still be identified from its record. Evidence excludes source/response
+content, tracebacks and environment variables. It is separate from the
+success-only deployment receipt.
 Runner startup before its timer, report-writing cost, early preflight failures
 and interrupted processes are outside this accounting. See the [full-suite investigation](test-speed-investigation.md)
 for measured portable costs and the limits of current full-run attribution.
