@@ -379,13 +379,15 @@ def test_questions_resume_only_the_exact_waiting_task_and_voice_uses_the_same_ro
         rig.tasks.finish(claim.run, Waiting(Question("which-sheet", "Which sheet?", "Choose a sheet in this workbook.")), at=rig.clock())
         rig.refresh()
         assert rig.panel.waiting
+        # Defect: work accepts an approval decision for a question, since the window does not check the kind.
+        assert not rig.panel.respond("which-sheet", ApprovalDecision.DECLINED) and rig.panel.waiting
         rig.agent.voice("Use revenue")
         rig.refresh()
         task = rig.tasks.get(claim.task.id)
         assert task is not None and task.state is TaskStatus.READY
         assert len(rig.tasks.list_tasks()) == 1
         assert [response.reply for response in rig.tasks.responses(task.id)] == [TextAnswer("Use revenue")]
-        assert not rig.panel.respond("which-sheet", "Late answer")
+        assert not rig.panel.respond("which-sheet", TextAnswer("Late answer"))
 
 
 def test_a_blocked_task_yields_to_queued_work_and_can_be_resumed_later(tmp_path: Path) -> None:
@@ -425,7 +427,7 @@ def test_redirect_fences_a_visible_old_question_and_keeps_the_new_goal(tmp_path:
         assert task is not None and task.prompt == "Changed goal" and task.state is TaskStatus.READY
         assert rig.tasks.responses(task.id) == ()
         assert "no longer waiting" in snapshot.status
-        assert not rig.panel.respond("old-question", "Late UI answer")
+        assert not rig.panel.respond("old-question", TextAnswer("Late UI answer"))
 
 
 def test_approvals_require_the_exact_live_preview_and_expire_on_worker_restart(tmp_path: Path) -> None:
@@ -461,7 +463,7 @@ def test_wrong_run_and_old_epoch_previews_cannot_authorize_a_waiting_operation(t
         assert rig.refresh().reviews == ()
         rig.bridge.publish(ReviewEvent(run, review))
         assert rig.refresh().reviews == (review,)
-        assert not rig.panel.respond(review.request.id, "approve")
+        assert not rig.panel.respond(review.request.id, ApprovalDecision.APPROVED)
         rig.panel.input_presented(review.request.id)
         rig.agent.voice("Approve.")
         rig.refresh()
