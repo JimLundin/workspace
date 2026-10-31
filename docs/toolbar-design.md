@@ -7,27 +7,52 @@ primary screen, in the Liquid Glass design
 stays centred 8 px below the screen edge. Only temporary or active things sit
 beside it, and every capsule acts on what it shows.
 
+## What the bar shows
+
+The bar is the application's main surface: it is where Workspace shows what it
+is doing for you. Its policy decides what may change it.
+
+1. **The island is your point of attention.** Only a *moment* takes it over:
+   something live from you (dictation) or waiting on you (a question). Dictation
+   wins over a question; the question then waits beside it, tinted.
+2. **Activities run concurrently, each with one identity wherever it shows.**
+   Agent work is a ring spinner with its current phase. A quick job is three
+   pulsing dots: transcription after dictation, or a rewrite or question about
+   the selection or screen. A meeting recording is a red dot with its timer.
+   They never stand in for each other, and any combination can run at once.
+3. **At rest, activities join the island.** The agent's spinner and phase lead,
+   then a job's dots, the time and battery, and the recording last. During a
+   moment they detach beside the island as compact capsules in the same order;
+   a detached agent keeps its phase in its label.
+4. **Only temporary or active things sit beside the island:** the keyboard layer
+   before it, the inbox after it while items wait. Nothing persistent, nothing
+   decorative.
+5. **Each activity that can stop reveals Stop under the pointer.** A quick job
+   can't be stopped, so it has no Stop.
+6. **Each fact has one owner, and only that owner changes it.** Dictation and
+   quick jobs come from the voice controller (`Desktop.busy`), the agent's phase
+   from its live session (the step it is running, or the heading of its latest
+   reasoning summary), the recording from meetings, the inbox from triage and
+   the layer from the keyboard. Notifications are cards, never bar content.
+
 | Situation | Island | Beside it |
 | --- | --- | --- |
 | Rest | Time and battery, with speaker and Wi-Fi alerts before them | — |
-| Transcribing | A spinner in the leading slot, then the time | — |
-| Agent working | A spinner in the leading slot; hovering reveals Stop | — |
-| Meeting recording | A red dot and timer in the trailing slot; hovering reveals Stop | — |
-| Dictating | The live microphone and its trace; no text | The recording, detached after the island |
-| Agent needs input | "Needs you", tinted orange | The recording, detached after the island |
+| Agent working | Spinner and phase lead; hovering reveals Stop | — |
+| Quick job | Pulsing dots before the time | — |
+| Meeting recording | Red dot and timer last; hovering reveals Stop | — |
+| Dictating | The live microphone and its trace; no text | Agent, job and recording, detached |
+| A question waits | "Needs you", tinted orange | Job and recording, detached |
 | Items wait in the inbox | — | A bell with a count badge, last |
 | Temporary layer or layout off | — | The layer name (or Colemak), first |
 
-Dictation and a waiting question are moments: they take the island over, and the
-recording detaches beside it. The bar receives one Workspace state, so dictation,
-transcription and agent work never show at once. Transcription offers no Stop
-because it cannot be stopped. "Starting…", "Stopping…" and "Saving…" replace the
-timer; "Check recording" turns it red and the detached capsule orange.
+"Starting…", "Stopping…" and "Saving…" replace the recording's timer; "Check
+recording" turns it red and the detached capsule orange.
 
 Pressing the island at rest expands it into the controls menu: 272 px wide with a
 21 px radius, its rows concentric inside it. Running activities lead as live rows
-with their own Stop; the detached agent and recording capsules leave the bar while
-the menu is open. The canvas comes first, then the feed and recording, the
+with their own Stop, the agent's with its phase; the detached agent and recording
+capsules leave the bar while the menu is open. The canvas comes first, then the feed and recording, the
 keyboard, and the desktop tools. Window tiling discloses its items in place.
 Arrows wrap and skip separators, Right and Left open and close tiling, Enter
 chooses, a letter jumps to the next row starting with it, and Escape closes.
