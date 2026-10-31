@@ -1,8 +1,0 @@
-/* Atoms: <lg-spinner>, <lg-dot>, <lg-wave>. */
-
-lg-spinner { display: inline-block; width: 14px; height: 14px; border-radius: 50%; border: 1.8px solid var(--lg-ink-3); border-top-color: var(--lg-ink); animation: lg-spin 1.2s linear infinite; flex: none; }
-@keyframes lg-spin { to { transform: rotate(360deg); } }
-lg-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--lg-red); box-shadow: 0 0 0 3px color-mix(in srgb, var(--lg-red) 25%, transparent); animation: lg-breathe 2s ease-in-out infinite; flex: none; }
-@keyframes lg-breathe { 50% { opacity: .55; } }
-lg-wave { display: inline-flex; align-items: center; gap: 2px; height: 18px; flex: none; }
-lg-wave > i { width: 2px; border-radius: 1px; background: var(--lg-ink); height: 3px; }

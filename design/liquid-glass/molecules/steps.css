@@ -1,7 +1,0 @@
-/* Molecules: <lg-steps>, <lg-step>. */
-
-/* Steps: an agent's tool calls, pending → running → done. */
-lg-steps { display: grid; gap: 6px; margin-top: 10px; }
-lg-step { display: flex; align-items: center; gap: 8px; color: var(--lg-ink-2); font-size: 12px; transition: opacity .25s ease, transform .25s var(--lg-ease); }
-lg-step[state="pending"] { opacity: 0; transform: translateY(4px); }
-lg-step > .lg-done { color: var(--lg-green); display: inline-flex; }

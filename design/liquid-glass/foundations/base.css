@@ -1,6 +1,0 @@
-/* Foundations: the root and a zero-specificity reset. */
-
-.lg-root, .lg-root * { box-sizing: border-box; }
-.lg-root { font: 13px/1.38 var(--lg-font); font-optical-sizing: auto; letter-spacing: -.003em; -webkit-font-smoothing: antialiased; }
-/* A zero-specificity reset, so every component's own button styles win. */
-:where(.lg-root) :where(button) { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: default; }

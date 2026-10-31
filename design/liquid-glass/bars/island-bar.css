@@ -1,9 +1,0 @@
-/* Bars: <lg-island-bar>. */
-
-/* Island bar: lead · island · trail. The island stays centred; zones grow outward from it. */
-lg-island-bar { display: grid; grid-template-columns: 1fr auto 1fr; pointer-events: none; }
-lg-island-bar > .lg-zone { display: flex; align-items: flex-start; }
-lg-island-bar > .lg-lead { justify-content: flex-end; padding-right: var(--lg-gap); }
-lg-island-bar > .lg-trail { justify-content: flex-start; padding-left: var(--lg-gap); }
-lg-island-bar[edge="bottom"] > .lg-zone { align-items: flex-end; }
-lg-island-bar[edge="bottom"] .lg-cap > .lg-content { top: auto; bottom: 0; }

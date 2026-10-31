@@ -1,11 +1,10 @@
 # Liquid Glass study
 
 31 October 2026. A design study for restyling Workspace in Apple's current
-language. The design is built as a reusable component kit,
-[design/liquid-glass](../../design/liquid-glass/README.md), and the Workspace
-demo is [design/liquid-glass/demo/index.html](../../design/liquid-glass/demo/index.html).
-Open it in Edge; it has no dependencies or build step. Nothing here changes the
-Qt runtime yet.
+language. The design is built as a reusable component kit in its own
+repository, [JimLundin/liquid-glass](https://github.com/JimLundin/liquid-glass),
+which also carries the Workspace demo (`demo/index.html`, no dependencies or
+build step). Nothing here changes the Qt runtime yet.
 
 Earlier single-file versions are preserved as tags:
 
@@ -309,7 +308,7 @@ this maps to a transient `QScrollBar` overlay rather than today's always-visible
 
 ## Components
 
-The kit in `design/liquid-glass` encodes these rules as pre-built custom
+The kit encodes these rules as pre-built custom
 elements in six tiers, each built only from the tiers before it:
 foundations, atoms, controls, molecules, containers and bars. Every component
 is a CSS and JS pair in its tier's folder. One stylesheet entry imports each

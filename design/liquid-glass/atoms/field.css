@@ -1,6 +1,0 @@
-/* Atom: <lg-field>. */
-
-lg-field { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; color: var(--lg-ink); }
-lg-field > lg-icon { color: var(--lg-ink-2); }
-lg-field > input { all: unset; flex: 1; min-width: 0; font: 13px var(--lg-font); color: var(--lg-ink); }
-lg-field > input::placeholder { color: var(--lg-ink-2); }
