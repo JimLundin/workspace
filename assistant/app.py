@@ -244,8 +244,11 @@ class AssistantApp:
             self.window.handle, mic, self.ui, on_state=self.show, on_notify=self.tray.notify, on_problem=self.problem, tiling=self.tiling
         )
         self.timings.mark("control window and microphone")
-        missing = settings if isinstance(settings, Missing) else None
-        self.settings = settings if isinstance(settings, Settings) else Settings("", "", "", "", "", "", "")
+        match settings:
+            case Missing():
+                missing, self.settings = settings, Settings("", "", "", "", "", "", "")
+            case Settings():
+                missing, self.settings = None, settings
         self.activity: ActivityTracker
 
         def context() -> ContextSnapshot:
@@ -356,8 +359,11 @@ class AssistantApp:
             # Recover only the crash window between binding and task commit.
             # Existing task prompts may have been redirected by the user.
             for run in self.canvas.read().runs:
-                if (run.evidence is not None or isinstance(run.intent, CanvasInstruction)) and tasks.get(run.task_id) is None:
-                    self.ui.post(self.canvas_recovery(run))
+                match run:
+                    case CanvasRun(intent=CanvasInstruction()) | CanvasRun(evidence=str()) if tasks.get(run.task_id) is None:
+                        self.ui.post(self.canvas_recovery(run))
+                    case _:
+                        pass
         return PersonalWork(
             PersonalStore(tasks.path),
             BrowserSources(Browser(DIRECTORY / "browser-profile", source=Product.EDGE)),

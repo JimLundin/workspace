@@ -88,6 +88,20 @@ def test_meeting_preview_updates_without_adding_messages_or_changing_the_agent_t
     assert session.recording.seconds == 499
 
 
+def test_meeting_message_states_whether_its_transcript_was_saved_or_interrupted() -> None:
+    # Defect: an interrupted recording is reported as saved, or the reverse.
+    state = RecordingState(phase="recording", identity="meeting-1", preview="First sentence.")
+    session = transition(Session(), RecordingUpdated(state, 0))
+    saved = transition(session, RecordingUpdated(replace(state, phase="saved", detail="12 minutes."), 1))
+    assert message_body(saved.messages[0]) == ("**Meeting**\n\nFirst sentence.\n\n12 minutes.\n\n*Transcript saved. Use Open for the full text.*")
+    interrupted = transition(session, RecordingUpdated(replace(state, phase="interrupted", preview=""), 1))
+    assert message_body(interrupted.messages[0]) == (
+        "**Meeting**\n\nThe transcript will appear here as speech is transcribed.\n\n*Open the transcript for the saved part.*"
+    )
+    silent = transition(session, RecordingUpdated(replace(state, phase="saved", preview=""), 1))
+    assert message_body(silent.messages[0]).startswith("**Meeting**\n\nNo speech was transcribed.")
+
+
 def test_follow_ups_keep_messages_and_only_deduplicate_the_current_turns_final_answer() -> None:
     session = Session()
     for prompt in ("Find my workbook", "Look for it again"):

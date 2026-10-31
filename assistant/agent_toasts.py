@@ -22,7 +22,7 @@ from usage import DIRECTORY
 from winapi import appearance, windows
 from winapi.shapes import Rect
 lazy from assistant import notification_reading
-lazy from assistant.agent_session import AgentRequest, Session, Snapshot, pending
+lazy from assistant.agent_session import AgentRequest, Message, Session, Snapshot, pending
 lazy from assistant.agent_window import AgentWindow
 lazy from assistant.card_actions import AnswerApproval, OpenCanvas, parse
 lazy from assistant.feed_desktop import Desktop, NativeDesktop
@@ -34,6 +34,7 @@ lazy from assistant.notifications import (
     Key,
     PhaseKey,
     Recording,
+    Response,
     Stack,
     Toast,
     Turn,
@@ -192,11 +193,11 @@ class AgentToasts:
             return
         self.progress = advance_progress(retain_lifetimes(self.progress, self.stack), self.session, now)
         self.stack = visible(self.progress, self.capacity)
-        latest = next((toast.key for toast in reversed(self.stack.toasts) if isinstance(toast.key, PhaseKey)), None)
+        latest = next((phase for toast in reversed(self.stack.toasts) if (phase := _phase(toast.key)) is not None), None)
         if latest != self.progress_head:
             self.progress_head = latest
             for key, card in self.cards.items():
-                if isinstance(key, PhaseKey) and card.expanded:
+                if _phase(key) is not None and card.expanded:
                     card.expanded = key == latest
                     card.prepared = card.layout = None
 
@@ -293,8 +294,9 @@ class AgentToasts:
                     card.text.verticalScrollBar().setValue(card.text.verticalScrollBar().maximum())
                     card.tail_pending = False
         for message in self.session.messages:
-            if isinstance(message, AgentRequest) and isinstance(message.request, Approval) and pending(message) and self.approval_visible(message.id):
-                self.agent.input_presented(message.id)
+            identity = _pending_approval(message)
+            if identity is not None and self.approval_visible(identity):
+                self.agent.input_presented(identity)
 
     def approval_visible(self, request_id: str) -> bool:
         """A painted, opaque card or visible history entry contains this review."""
@@ -303,16 +305,14 @@ class AgentToasts:
         for card in self.cards.values():
             if card.closed or card.retiring or card.alpha < 0.99 or not card.window.isVisible() or not card.text.isVisible():
                 continue
-            content = card.content
-            entries = results(content) if isinstance(content, Turn) else (content,) if isinstance(content, Entry) else ()
-            if any(
-                isinstance(entry, Entry)
-                and isinstance(entry.message, AgentRequest)
-                and isinstance(entry.message.request, Approval)
-                and entry.message.id == request_id
-                and pending(entry.message)
-                for entry in entries
-            ):
+            match card.content:
+                case Turn() as turn:
+                    entries = results(turn)
+                case Entry() as entry:
+                    entries = (entry,)
+                case _:
+                    entries = ()
+            if any(_entry_approval(entry) == request_id for entry in entries):
                 return True
         return False
 
@@ -328,7 +328,7 @@ class AgentToasts:
             card = self.spares[-1]
             self.spares = self.spares[:-1]
             card.bind(toast, width)
-        if self.live_progress and isinstance(toast.key, PhaseKey):
+        if self.live_progress and _phase(toast.key) is not None:
             card.expanded = toast.key == self.progress_head
         return card
 
@@ -387,7 +387,7 @@ class AgentToasts:
             if key in desired:
                 # Reusing a fading recording restores its controls immediately;
                 # fixed-width content may need no geometric change at all.
-                immediate = immediate or (card.retiring and isinstance(card.content, Recording))
+                immediate = immediate or (card.retiring and _recording(card.content))
                 card.retiring = False
             elif not card.retiring:
                 card.retiring = True
@@ -406,7 +406,7 @@ class AgentToasts:
             # A resumed recording must restore usable controls immediately,
             # even when its fixed-width geometry matches the fading saved card.
             resized = before != (current.width, current.height)
-            immediate = immediate or (toast.key not in created and isinstance(toast.content, Recording) and (resized or current.alpha < 1))
+            immediate = immediate or (toast.key not in created and _recording(toast.content) and (resized or current.alpha < 1))
             if toast.key in created:
                 current.position(
                     work.right - viewport.margin,
@@ -441,7 +441,7 @@ class AgentToasts:
 
     def order_for(self, toast: Toast) -> tuple[int, float, int, int]:
         # Live phases lead; history keeps chronology.
-        group = (0 if isinstance(toast.key, PhaseKey) else 1) if self.live_progress else 0
+        group = (0 if _phase(toast.key) is not None else 1) if self.live_progress else 0
         return (group, *order_of(toast))
 
     def layout(self, now: float, *, animate: bool, pushing: bool = False) -> None:
@@ -557,9 +557,7 @@ class AgentToasts:
                         removed = True
                         continue
             if not card.closed:
-                revealing = (
-                    card.fade_text(now, animate=animate and card.look is not None and not isinstance(card.look[2], appearance.Contrast)) or revealing
-                )
+                revealing = card.fade_text(now, animate=animate) or revealing
                 reading_now = card.read(now, paused=card.hovered or card is not reader, smooth=animate)
                 self.stack = reading_hold(
                     self.stack, key, reading=reading_now, now=now, busy=self.session.busy or self.session.waiting, hovered=card.hovered
@@ -573,7 +571,7 @@ class AgentToasts:
         self.schedule_pointer()
         moving = any(card.motion is not None for card in self.cards.values())
         scrolling = reader is not None and not reader.hovered
-        sliding = reader is not None and scrolling and animate and isinstance(reader.reader, notification_reading.Scrolling)
+        sliding = scrolling and animate and _sliding(reader)
         self.environment.timer.update(active=moving or revealing or sliding)
         if self.stack is not before:
             self.schedule_expiry()
@@ -649,6 +647,47 @@ class AgentToasts:
         self.materials.close()
         self.measure.close()
         self.loop.close()
+
+
+def _phase(key: Key) -> PhaseKey | None:
+    match key:
+        case PhaseKey():
+            return key
+        case _:
+            return None
+
+
+def _pending_approval(message: Message) -> str | None:
+    """The identity of an approval still waiting for the person's decision."""
+    match message:
+        case AgentRequest(request=Approval()) if pending(message):
+            return message.id
+        case _:
+            return None
+
+
+def _entry_approval(entry: Entry | Response) -> str | None:
+    match entry:
+        case Entry(message=message):
+            return _pending_approval(message)
+        case Response():
+            return None
+
+
+def _recording(content: Content | None) -> bool:
+    match content:
+        case Recording():
+            return True
+        case _:
+            return False
+
+
+def _sliding(reader: Card | None) -> bool:
+    match reader:
+        case Card(reader=notification_reading.Scrolling()):
+            return True
+        case _:
+            return False
 
 
 def card_order(card: Card) -> tuple[int, float, int, int]:
