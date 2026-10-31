@@ -1,9 +1,9 @@
-/* Workspace in Liquid Glass: the desktop island bar, agent bubbles and the work canvas,
-   built on the kit. Everything Workspace-specific lives here; the kit stays generic. */
+/* Workspace in Liquid Glass: the desktop island bar, agent cards and the work canvas,
+   composed from kit elements. Only Workspace's behaviour and content live here. */
 (() => {
   "use strict";
   const LG = window.LiquidGlass;
-  const { $, $$, clamp, Spring, ui, icon } = LG;
+  const { $, $$, clamp, Spring, h, html } = LG;
   const body = document.body;
 
   const state = { moment: "none", agent: "off", recording: false, layer: false, inbox: true, wallpaper: "vivid", appearance: "dark" };
@@ -11,8 +11,10 @@
   for (const key of ["moment", "agent", "wallpaper", "appearance"]) if (params.has(key)) state[key] = params.get(key);
   for (const key of ["recording", "layer", "inbox"]) if (params.has(key)) state[key] = params.get(key) === "1";
   if (!params.has("appearance")) state.appearance = matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+  // The recording's start, so a re-rendered timer keeps counting from the same moment.
+  let recordingSince = Date.now() - 125_000;
 
-  const app = {
+  const apps = {
     workspace: { glyph: "✦", color: "linear-gradient(145deg,#7d6bff,#4b9dff)" },
     teams: { glyph: "T", color: "linear-gradient(145deg,#7b83eb,#4f52b2)" },
     outlook: { glyph: "O", color: "linear-gradient(145deg,#28a8ea,#0c64c4)" },
@@ -21,207 +23,178 @@
     note: { glyph: "✎", color: "linear-gradient(145deg,#ffd60a,#f2b705)" },
     question: { glyph: "?", color: "linear-gradient(145deg,#7d6bff,#4b9dff)" },
   };
-  const badge = (name, small = false) => ui.app({ ...app[name], small });
+  const badge = (name, size) => h("lg-app", { slot: "badge", ...apps[name], size });
 
-  /* ── Live readings: recording clock and audio meter ───────────────── */
-  let seconds = 125;
-  const clock = total => {
-    const h = total / 3600 | 0, m = (total / 60 | 0) % 60, s = String(total % 60).padStart(2, "0");
-    return h ? `${h}:${String(m).padStart(2, "0")}:${s}` : `${String(m).padStart(2, "0")}:${s}`;
+  // A synthetic microphone level for the demo's waveforms.
+  LG.audio.level = (i, t) => {
+    const envelope = 0.35 + 0.65 * Math.abs(Math.sin(t * 2.6 + i * 0.22));
+    return envelope * Math.abs(Math.sin(t * 8.6 + i * 0.9) * Math.cos(t * 3.4 + i * 0.3));
   };
-  // Markup carries zeroed digits so a capsule keeps its identity; the timer writes the live value in place.
-  const clockFact = () => `<span class="lg-fact lg-num" data-live="clock">${clock(seconds).replace(/\d/g, "0")}</span>`;
-  const writeClocks = () => $$('[data-live="clock"]').forEach(el => { el.textContent = clock(seconds); });
-  setInterval(() => {
-    const before = clock(seconds).length;
-    seconds++;
-    // A longer reading needs a wider capsule; same-length readings update in place.
-    if (clock(seconds).length !== before) renderBars(); else writeClocks();
-  }, 1000);
-  let phase = 0;
-  (function meter() {
-    phase += 0.16;
-    $$('[data-live="audio"]').forEach(wave => [...wave.children].forEach((bar, i) => {
-      const envelope = 0.35 + 0.65 * Math.abs(Math.sin(phase * 0.7 + i * 0.22));
-      bar.style.height = `${3 + 12 * envelope * Math.abs(Math.sin(phase * 2.3 + i * 0.9) * Math.cos(phase * 0.9 + i * 0.3))}px`;
-    }));
-    setTimeout(meter, 60);
-  })();
 
   /* ── Desktop bar ─────────────────────────────────────────────────────
-     At rest the island shows the time and battery. Ongoing work joins the island's
-     own leading and trailing slots (agent, recording), so it grows the centre.
-     A moment (dictation, a question, the menu) takes the island over; ongoing work
-     then detaches beside it. The inbox appears only while items wait. */
-  const desktop = new LG.IslandBar($("#bar"), {
-    order: ["layer", "agent", "island", "recording", "inbox"],
-    view: desktopView,
-    onAction: desktopAction,
-  });
+     At rest the island shows the time and battery. Processing (transcription or agent
+     work) takes its leading slot as a spinner, and a meeting recording its trailing
+     slot. A moment (dictation, a question, the menu) takes the island over; processing
+     and recording then detach beside it. The inbox appears only while items wait. */
+  const desktop = $("#bar");
   Object.assign(desktop, { menuOpen: false, expandedQ: false, prevAgent: "off" });
+  const agentPhase = "Comparing sheets";
 
-  const agentLabel = "Comparing sheets";
-  function desktopView(bar) {
-    const views = [];
-    const add = (zone, key, html, o = {}) => views.push({ zone, key, html, kind: "lg-text", ...o });
-    const dictating = state.moment === "dictating", transcribing = state.moment === "transcribing";
-    const asking = state.agent === "needs", working = state.agent === "working";
-    if (asking && bar.prevAgent !== "needs") expandQuestion(bar);
+  function processing() {
+    const parts = [state.moment === "transcribing" && "Transcribing", state.agent === "working" && `Agent: ${agentPhase}`].filter(Boolean);
+    return parts.length ? h("lg-spinner", { label: parts.join(" · ") }) : null;
+  }
+  const recordingFacts = () => html(h("lg-dot"), h("lg-timer", { since: recordingSince }));
+
+  desktop.view = bar => {
+    const views = [], add = (zone, key, content, more = {}) => views.push({ zone, key, content, kind: "text", ...more });
+    const dictating = state.moment === "dictating", asking = state.agent === "needs";
+    if (asking && bar.prevAgent !== "needs") expandQuestion();
     if (!asking) bar.expandedQ = false;
     bar.prevAgent = state.agent;
-    const resting = !bar.menuOpen && state.moment === "none" && !asking;
+    const resting = !bar.menuOpen && !dictating && !asking;
+    const spinner = processing();
 
-    if (state.layer) add("lead", "layer", ui.fact("NAV", { icon: "kbd" }));
-    if (!resting && !bar.menuOpen && working) add("lead", "agent", ui.spinner("Agent working"), { kind: "lg-min" });
-    if (!resting && !bar.menuOpen && state.recording) add("trail", "recording", ui.dot() + clockFact());
-    if (state.inbox) add("trail", "inbox", ui.button({ act: "inbox", icon: "bell", label: "Open your work feed, 3 items", title: "Your work feed · Hold V + T", badge: 3 }), { kind: "" });
+    if (state.layer) add("lead", "layer", h("lg-fact", { icon: "kbd" }, "NAV"));
+    if (!resting && !bar.menuOpen && spinner) add("lead", "agent", spinner, { kind: "min" });
+    if (!resting && !bar.menuOpen && state.recording) add("trail", "recording", recordingFacts());
+    if (state.inbox) add("trail", "inbox", h("lg-button", { icon: "bell", act: "inbox", label: "Open your work feed, 3 items", title: "Your work feed · Hold V + T", badge: 3 }), { kind: "icons" });
 
-    const expanded = (html, cls, width, radius) => add("island", "island", html, { kind: `lg-expanded ${cls}`, width, height: bar.measure("island", html, `lg-expanded ${cls}`, width).height, radius });
     if (bar.menuOpen) {
-      const now = [];
-      if (working) now.push(ui.nowRow({ glyph: ui.spinner("Agent working"), label: agentLabel, control: ui.stop("Stop agent work", "stop-agent") }));
-      if (state.recording) now.push(ui.nowRow({ glyph: ui.dot(), label: "Recording", detail: clock(seconds), control: ui.stop("Stop recording", "stop-recording") }));
-      expanded(ui.menu({ title: "Workspace", detail: "Layout on", now, items: [
-        { act: "canvas", icon: "canvas", label: "Your work canvas" },
-        { act: "feed", icon: "feed", label: "Your work feed", key: "V T" },
-        { act: "record", icon: "rec", label: state.recording ? "Stop recording" : "Record a meeting" },
-        "-",
-        { act: "close-menu", icon: "map", label: "Keyboard map" },
-        { act: "close-menu", icon: "overlay", label: "Keyboard overlay" },
-        { act: "close-menu", icon: "task", label: "Windows taskbar", check: true },
-        "-",
-        { act: "close-menu", icon: "copy", label: "Copy latest transcript" },
-        { sub: "tiling", icon: "tile", label: "Window tiling" },
-        { act: "close-menu", icon: "gear", label: "Notification settings" },
-      ] }), "", 272, 21);
+      views.push(bar.expanded("island", "island", h("lg-menu", { heading: "Workspace", detail: "Layout on" }, [
+        state.agent === "working" && h("lg-live-row", { label: agentPhase }, [h("lg-spinner", { slot: "glyph", label: "Agent working" }), h("lg-button", { slot: "control", icon: "stop", act: "stop-agent", label: "Stop agent work" })]),
+        state.recording && h("lg-live-row", { label: "Recording" }, [h("lg-dot", { slot: "glyph" }), h("lg-timer", { slot: "detail", since: recordingSince }), h("lg-button", { slot: "control", icon: "stop", act: "stop-recording", label: "Stop recording" })]),
+        h("lg-menu-item", { icon: "canvas", act: "canvas" }, "Your work canvas"),
+        h("lg-menu-item", { icon: "feed", act: "feed", key: "V T" }, "Your work feed"),
+        h("lg-menu-item", { icon: "rec", act: "record" }, state.recording ? "Stop recording" : "Record a meeting"),
+        h("lg-menu-separator"),
+        h("lg-menu-item", { icon: "map", act: "close-menu" }, "Keyboard map"),
+        h("lg-menu-item", { icon: "overlay", act: "close-menu" }, "Keyboard overlay"),
+        h("lg-menu-item", { icon: "task", act: "close-menu", check: true }, "Windows taskbar"),
+        h("lg-menu-separator"),
+        h("lg-menu-item", { icon: "copy", act: "close-menu" }, "Copy latest transcript"),
+        h("lg-menu-item", { icon: "tile", sub: "tiling" }, "Window tiling"),
+        h("lg-menu-item", { icon: "gear", act: "close-menu" }, "Notification settings"),
+      ]), 272, 21));
     } else if (dictating) {
-      add("island", "island", `<span class="lg-fact lg-mic">${icon("mic", { filled: true })}</span>${ui.wave()}${bar.hover === "island" ? ui.stop("Stop dictation", "stop-dictation") : ""}`);
-    } else if (transcribing) {
-      add("island", "island", ui.spinner("Transcribing"), { kind: "lg-min" });
+      add("island", "island", html(h("lg-fact", { icon: "mic", filled: true, tone: "mic" }), h("lg-wave", { live: true }),
+        bar.hover === "island" && h("lg-button", { icon: "stop", act: "stop-dictation", label: "Stop dictation" })));
     } else if (asking && bar.expandedQ) {
-      expanded(ui.question({ badge: badge("workspace"), title: "Which sheet should the reply cover?", meta: "now", body: "Costs includes deferred licences; Revenue doesn't.",
-        actions: [{ act: "answer", label: "Revenue", primary: true }, { act: "answer", label: "Costs" }, { act: "canvas", label: "Open on canvas" }] }), "", 372, 28);
+      views.push(bar.expanded("island", "island", h("lg-question", { heading: "Which sheet should the reply cover?", meta: "now" }, [
+        badge("workspace", "medium"), h("span", { slot: "body" }, "Costs includes deferred licences; Revenue doesn't."),
+        h("lg-button", { variant: "accent", act: "answer" }, "Revenue"), h("lg-button", { act: "answer" }, "Costs"), h("lg-button", { act: "canvas" }, "Open on canvas"),
+      ]), 372, 28));
     } else if (asking) {
-      add("island", "island", `<span class="lg-fact" style="font-weight:600">Needs you</span><span class="lg-fact lg-quiet">Which sheet?</span>${icon("chevdown")}`, { tint: "lg-tint" });
+      add("island", "island", html(h("lg-fact", { strong: true }, "Needs you"), h("lg-fact", { quiet: true }, "Which sheet?"), h("lg-icon", { name: "chevdown" })), { tint: "attention" });
     } else {
-      const facts = ui.fact("10:22", { num: true }) + ui.fact("73%", { icon: "battery", num: true });
-      add("island", "island", (working ? ui.slot(ui.spinner(`Agent working: ${agentLabel}`)) : "") + ui.slot(facts) + (state.recording ? ui.slot(ui.dot() + clockFact()) : ""));
+      add("island", "island", html(
+        spinner && h("lg-slot", {}, spinner),
+        h("lg-slot", {}, [h("lg-fact", { num: true }, "10:22"), h("lg-fact", { icon: "battery", num: true }, "73%")]),
+        state.recording && h("lg-slot", {}, recordingFacts())));
     }
     return views;
-  }
+  };
 
-  function expandQuestion(bar) {
-    bar.expandedQ = true;
-    clearTimeout(bar.qTimer);
+  function expandQuestion() {
+    desktop.expandedQ = true;
+    clearTimeout(desktop.qTimer);
     // The question settles into its compact pill after a few seconds, unless the pointer rests on it.
-    bar.qTimer = setTimeout(function settle() {
-      if (bar.hover === "island") { bar.qTimer = setTimeout(settle, 600); return; }
-      bar.expandedQ = false; bar.render();
+    desktop.qTimer = setTimeout(function settle() {
+      if (desktop.hover === "island") { desktop.qTimer = setTimeout(settle, 600); return; }
+      desktop.expandedQ = false; desktop.render();
     }, 5000);
   }
-
   function setMenu(open) {
     if (desktop.menuOpen === open) return;
     desktop.menuOpen = open;
-    if (!open) $("#submenu").style.display = "none";
+    if (!open) submenu.hide();
     desktop.render();
   }
-
-  function desktopAction(action, { key, event }) {
+  desktop.addEventListener("lg-action", ({ detail: { action, key, event } }) => {
     if (action === "press" && key === "island") {
       if (desktop.menuOpen) return;
       event.stopPropagation();
       if (state.moment === "dictating") return stopDictation();
-      if (state.agent === "needs") { expandQuestion(desktop); return desktop.render(); }
-      if (state.moment === "none") return setMenu(true);
-      return;
+      if (state.agent === "needs") { expandQuestion(); return desktop.render(); }
+      return setMenu(true);
     }
     if (desktop.menuOpen) setMenu(false);
     switch (action) {
       case "canvas": return openCanvas();
       case "feed": case "inbox": return runAgent();
-      case "record": state.recording = !state.recording; break;
-      case "answer": state.agent = "off"; bubbles.clear(); break;
+      case "record": state.recording = !state.recording; if (state.recording) recordingSince = Date.now(); break;
+      case "answer": state.agent = "off"; phases.clear(); break;
       case "stop-agent": state.agent = "off"; break;
       case "stop-recording": state.recording = false; break;
       case "stop-dictation": return stopDictation();
       default: return;
     }
     sync();
-  }
+  });
   function stopDictation() {
     state.moment = "transcribing"; sync();
     setTimeout(() => { if (state.moment === "transcribing") { state.moment = "none"; sync(); } }, 1600);
   }
-
   document.addEventListener("pointerdown", e => {
-    if (desktop.menuOpen && !desktop.root.contains(e.target) && !e.target.closest("#submenu")) setMenu(false);
+    if (desktop.menuOpen && !desktop.contains(e.target) && !e.target.closest("#submenu")) setMenu(false);
   });
-  // Window tiling opens beside its menu item, as a submenu.
+  // Window tiling opens beside its menu item.
   const submenu = $("#submenu");
-  LG.glass(submenu, { large: true });
-  submenu.innerHTML = ui.menu({ items: [
-    { act: "close-menu", label: "Spread windows across screens" }, "-",
-    { act: "close-menu", label: "Focus left", key: "Alt ←" }, { act: "close-menu", label: "Focus right", key: "Alt →" },
-    { act: "close-menu", label: "Float or tile the active window" }, { act: "close-menu", label: "Change split direction" },
-    { act: "close-menu", label: "Pause automatic tiling" },
-  ] });
-  submenu.addEventListener("click", e => { if (e.target.closest("[data-act]")) setMenu(false); });
+  submenu.addEventListener("click", e => { if (e.target.closest("[act]")) setMenu(false); });
   document.addEventListener("pointerover", e => {
-    const item = e.target.closest("#bar .lg-item");
+    const item = e.target.closest("#bar lg-menu-item");
     if (!item) return;
-    if (item.dataset.sub !== "tiling") { submenu.style.display = "none"; return; }
-    const box = item.getBoundingClientRect();
-    Object.assign(submenu.style, { display: "block", left: `${box.right + 12}px`, top: `${box.top - 6}px` });
+    if (item.getAttribute("sub") === "tiling") submenu.showBeside(item); else submenu.hide();
   });
 
-  /* ── Agent bubbles ───────────────────────────────────────────────── */
-  const bubbles = new LG.BubbleStack($("#phases"), { limit: 3 });
+  /* ── Agent cards ─────────────────────────────────────────────────── */
+  const phases = $("#phases");
   let run = 0;
-  function bubble({ who, title, meta = "now", body: text = "", calls = [], actions = [] }) {
-    const html = ui.head({ app: badge(who), title, meta: "", body: text, trailing: `<span class="lg-meta">${meta}</span>` })
-      + (calls.length ? `<div class="lg-calls">${calls.map(c => `<div class="lg-call lg-pending">${ui.spinner(c)}<span>${LG.escape(c)}</span></div>`).join("")}</div>` : "")
-      + (actions.length ? `<div class="lg-actions">${actions.map(a => `<button class="lg-pill ${a.primary ? "lg-accent" : "lg-filled"}" data-act="${a.act}">${LG.escape(a.label)}</button>`).join("")}</div>` : "");
-    return bubbles.push(html);
+  function phase({ who, heading, meta, steps = [], actions = [] }) {
+    return phases.push(LG.fragment(h("lg-card", { variant: "glass", heading, time: "now" }, [
+      badge(who), h("span", { slot: "body" }, meta),
+      steps.length > 0 && h("lg-steps", {}, steps.map(s => h("lg-step", { state: "pending" }, s))),
+      actions.length > 0 && h("lg-actions", { slot: "actions" }, actions.map(a => h("lg-button", { variant: a.primary ? "accent" : "filled", act: a.act }, a.label))),
+    ])));
   }
-  function finishCalls(el, step = 650) {
-    const calls = $$(".lg-call", el);
-    calls.forEach((c, i) => setTimeout(() => c.classList.remove("lg-pending"), 120 * (i + 1)));
-    calls.forEach((c, i) => setTimeout(() => { $(".lg-spinner", c).outerHTML = `<span class="lg-ok">${icon("checkc")}</span>`; }, step * (i + 1)));
-    return step * (calls.length + 1);
+  function playSteps(card, step = 650) {
+    const steps = $$("lg-step", card);
+    steps.forEach((s, i) => setTimeout(() => s.setAttribute("state", "running"), 120 * (i + 1)));
+    steps.forEach((s, i) => setTimeout(() => s.setAttribute("state", "done"), step * (i + 1)));
+    return step * (steps.length + 1);
   }
   function runAgent() {
     const token = ++run, later = (ms, fn) => setTimeout(() => token === run && fn(), ms);
-    bubbles.clear();
+    phases.clear();
     state.agent = "working"; sync();
-    const first = bubble({ who: "workspace", title: "Reading Anna's request", body: "Teams · Q4 budget review", calls: ["Read Teams conversation", "Find budget.xlsx in Outlook"] });
-    later(finishCalls(first), () => {
-      const second = bubble({ who: "excel", title: "Comparing both sheets", body: "budget.xlsx · Revenue and Costs", calls: ["Open budget.xlsx", "Compare totals across sheets"] });
-      later(finishCalls(second), () => {
-        bubble({ who: "workspace", title: "Which sheet should Anna's reply cover?", body: "Costs includes deferred licences; Revenue doesn't.",
+    const first = phase({ who: "workspace", heading: "Reading Anna's request", meta: "Teams · Q4 budget review", steps: ["Read Teams conversation", "Find budget.xlsx in Outlook"] });
+    later(playSteps(first), () => {
+      const second = phase({ who: "excel", heading: "Comparing both sheets", meta: "budget.xlsx · Revenue and Costs", steps: ["Open budget.xlsx", "Compare totals across sheets"] });
+      later(playSteps(second), () => {
+        phase({ who: "workspace", heading: "Which sheet should Anna's reply cover?", meta: "Costs includes deferred licences; Revenue doesn't.",
           actions: [{ act: "answer", label: "Revenue", primary: true }, { act: "answer", label: "Costs" }, { act: "show", label: "Open on canvas" }] });
         state.agent = "needs"; sync();
       });
     });
   }
-  $("#phases").addEventListener("click", e => {
-    const act = e.target.closest("[data-act]")?.dataset.act;
+  phases.addEventListener("click", e => {
+    const act = e.target.closest("[act]")?.getAttribute("act");
     if (!act) return;
     if (act === "show") { openCanvas(); select($("#c-question"), true); }
-    bubbles.clear(); state.agent = "off"; sync();
+    phases.clear(); state.agent = "off"; sync();
   });
 
   /* ── Work canvas ─────────────────────────────────────────────────── */
-  const win = $("#canvas"), scene = $("#scene"), world = $("#world");
+  const win = $("#canvas"), scene = $("#scene"), world = $("#world"), inspector = $("#inspector");
   const groups = [
     { x: 120, y: 140, w: 740, h: 470, t: "Q4 budget review", s: "4 pieces" },
     { x: 940, y: 140, w: 380, h: 500, t: "Release 4.2", s: "3 pieces" },
   ];
   const cards = [
-    { id: "c-work", g: 0, x: 40, y: 64, who: "workspace", t: "Q4 budget review", s: "Work context", html: `<dl class="kv"><dt>Goal</dt><dd>Send Anna reviewed totals by Thursday</dd><dt>Now</dt><dd>Waiting for your sheet choice</dd><dt>Next</dt><dd>Draft the reply with both totals</dd></dl>` },
+    { id: "c-work", g: 0, x: 40, y: 64, who: "workspace", t: "Q4 budget review", s: "Work context", extra: `<dl class="kv"><dt>Goal</dt><dd>Send Anna reviewed totals by Thursday</dd><dt>Now</dt><dd>Waiting for your sheet choice</dd><dt>Next</dt><dd>Draft the reply with both totals</dd></dl>` },
     { id: "c-teams", g: 0, x: 380, y: 64, who: "teams", t: "Anna Berg", s: "Teams · 9:41", body: "Can you review the budget totals before Thursday? Both sheets are in budget.xlsx." },
     { id: "c-doc", g: 0, x: 380, y: 230, who: "excel", t: "budget.xlsx", s: "SharePoint · edited 2 h ago", body: "Revenue €4.81M · Costs €3.07M. Costs includes deferred licences." },
-    { id: "c-question", g: 0, x: 40, y: 250, who: "question", t: "Which sheet should the reply cover?", s: "Question · waiting for you", q: true, html: `<div class="chips"><span class="chip primary">Revenue</span><span class="chip">Costs</span><span class="chip">Both</span></div>` },
+    { id: "c-question", g: 0, x: 40, y: 250, who: "question", t: "Which sheet should the reply cover?", s: "Question · waiting for you", q: true, extra: `<div class="chips"><span class="chip primary">Revenue</span><span class="chip">Costs</span><span class="chip">Both</span></div>` },
     { id: "c-mail", g: 1, x: 40, y: 64, who: "outlook", t: "Release notes before Friday", s: "Outlook · Priya Shah", body: "The release review needs your comments on the changelog." },
     { id: "c-ticket", g: 1, x: 40, y: 210, who: "kanban", t: "REL-118 · Update changelog", s: "Kanban · In review", body: "Two items need wording from you." },
     { id: "c-note", g: 1, x: 40, y: 340, who: "note", t: "Draft reply ready", s: "Note from Workspace", body: "A short reply to Priya is ready for review." },
@@ -230,15 +203,17 @@
   for (const g of groups) {
     const el = document.createElement("div"); el.className = "group";
     Object.assign(el.style, { left: `${g.x}px`, top: `${g.y}px`, width: `${g.w}px`, height: `${g.h}px` });
-    el.innerHTML = `<div class="gtitle">${g.t}<small>${g.s}</small></div>`;
+    el.innerHTML = `<div class="gtitle">${LG.escape(g.t)}<small>${LG.escape(g.s)}</small></div>`;
     world.append(el);
   }
   for (const c of cards) {
-    // Canvas cards are content: the bubbles' anatomy on a solid surface.
-    const el = document.createElement("div"); el.className = `lg-card${c.q ? " question" : ""}`; el.id = c.id;
+    // Canvas cards are content: the agent cards' anatomy on a solid surface.
+    const el = LG.fragment(h("lg-card", { variant: "solid", id: c.id, class: c.q ? "question" : false, heading: c.t, meta: c.s }, [
+      badge(c.who, "small"), c.body && h("span", { slot: "body" }, c.body), c.extra && LG.markup(c.extra),
+    ]));
+    world.append(el);
+    c.el = el;
     c.x += groups[c.g].x; c.y += groups[c.g].y;
-    el.innerHTML = ui.head({ app: badge(c.who, true), title: c.t, meta: c.s, body: c.body || "" }) + (c.html || "");
-    world.append(el); c.el = el;
     c.sx = new Spring(c.x, v => { c.x = v; place(c); }, LG.motion.throw);
     c.sy = new Spring(c.y, v => { c.y = v; place(c); }, LG.motion.throw);
     place(c);
@@ -267,24 +242,24 @@
     scene.style.backgroundSize = `${22 * cam.z}px ${22 * cam.z}px`;
     scene.style.backgroundPosition = `${cam.x}px ${cam.y}px`;
     // Recenter appears only once the view has left the work.
-    const off = canvasOpen && Math.hypot(cam.x - restCam().x, cam.y - restCam().y) > 120;
+    const off = win.open && Math.hypot(cam.x - restCam().x, cam.y - restCam().y) > 120;
     if (off !== canvasBar.offCenter) { canvasBar.offCenter = off; canvasBar.render(); }
   }
   const bounds = () => ({ minX: scene.clientWidth - 1500 * cam.z, maxX: 160, minY: scene.clientHeight - 820 * cam.z, maxY: 120 });
   function centerCam(animated = true) { const r = restCam(); animated ? (camX.to(r.x), camY.to(r.y)) : (camX.set(r.x), camY.set(r.y)); }
-  function history() {
-    const h = [];
+  function pointerHistory() {
+    const points = [];
     return {
-      add(x, y) { const t = performance.now(); h.push({ x, y, t }); while (h.length > 1 && t - h[0].t > 100) h.shift(); },
-      velocity() { if (h.length < 2) return { vx: 0, vy: 0 }; const a = h[0], b = h.at(-1), dt = Math.max(1, b.t - a.t) / 1000; return { vx: (b.x - a.x) / dt, vy: (b.y - a.y) / dt }; },
+      add(x, y) { const t = performance.now(); points.push({ x, y, t }); while (points.length > 1 && t - points[0].t > 100) points.shift(); },
+      velocity() { if (points.length < 2) return { vx: 0, vy: 0 }; const a = points[0], b = points.at(-1), dt = Math.max(1, b.t - a.t) / 1000; return { vx: (b.x - a.x) / dt, vy: (b.y - a.y) / dt }; },
     };
   }
   let drag = null;
   scene.addEventListener("pointerdown", e => {
     if (e.button !== 0) return;
     scene.setPointerCapture(e.pointerId);
-    const hist = history(); hist.add(e.clientX, e.clientY);
-    const card = cards.find(c => c.el === e.target.closest(".lg-card"));
+    const hist = pointerHistory(); hist.add(e.clientX, e.clientY);
+    const card = cards.find(c => c.el === e.target.closest("lg-card"));
     if (card) { card.sx.set(card.x); card.sy.set(card.y); drag = { card, hist, sx: e.clientX, sy: e.clientY, ox: card.x, oy: card.y, moved: false }; }
     else { camX.set(cam.x); camY.set(cam.y); drag = { hist, sx: e.clientX, sy: e.clientY, ox: cam.x, oy: cam.y, moved: false }; }
   });
@@ -333,55 +308,52 @@
     } else { camX.set(cam.x - e.deltaX); camY.set(cam.y - e.deltaY); }
   }, { passive: false });
 
-  /* Canvas bar: the desktop bar's rule at the window's bottom edge.
-     At rest the island holds three symbols (speak, search, more), no instructions:
-     their tooltips carry them. A moment morphs the island; only temporary things sit beside it. */
-  const canvasBar = new LG.IslandBar($("#cbar"), {
-    edge: "bottom",
-    order: ["recenter", "island", "questions"],
-    view: canvasView,
-    onAction: canvasAction,
-  });
-  Object.assign(canvasBar, { mode: "rest", query: "", working: false, offCenter: false });
+  /* Canvas bar: the desktop bar's rule at the window's bottom edge. At rest the island
+     holds three symbols (speak, search, more) and their tooltips carry the instructions.
+     Transcription and agent work take its leading slot; only temporary things sit beside it. */
+  const canvasBar = $("#cbar");
+  Object.assign(canvasBar, { mode: "rest", query: "", working: false, transcribing: false, offCenter: false });
+  let selected = null;
   const scope = () => selected ? cards.find(c => c.el === selected).t : "the whole canvas";
-  function canvasView(bar) {
-    const views = [], add = (zone, key, html, o = {}) => views.push({ zone, key, html, kind: "", ...o });
-    if (bar.offCenter && bar.mode === "rest") add("lead", "recenter", ui.button({ act: "center", icon: "center", label: "Recenter" }));
-    switch (bar.mode) {
-      case "menu": {
-        const html = ui.menu({ title: "Work canvas", detail: "7 contexts", items: [
-          { act: "search", icon: "search", label: "Search", key: "Ctrl F" }, { act: "center", icon: "center", label: "Center" }, { act: "close-menu", icon: "canvas", label: "Arrange" }, "-",
-          { act: "close-menu", icon: "spark", label: "New work context" }, { act: "close-menu", icon: "copy", label: "New note" }, { act: "close-menu", icon: "edge", label: "Connect a source" }, "-",
-          { act: "close-menu", icon: "tile", label: "Collapse groups" }, { act: "close-menu", icon: "gear", label: "Agent tasks and settings" }, { act: "close", icon: "x", label: "Close canvas" },
-        ] });
-        add("island", "island", html, { kind: "lg-expanded", width: 272, height: bar.measure("island", html, "lg-expanded", 272).height, radius: 21 });
-        break;
-      }
-      case "search":
-        add("island", "island", `<span class="lg-fact lg-quiet" style="padding-left:9px">${icon("search")}</span><input class="lg-field" placeholder="Search the canvas" aria-label="Search the canvas" value="${LG.escape(bar.query)}"><span style="width:12px"></span>`, { width: 300 });
-        break;
-      case "voice":
-        add("island", "island", `<span class="lg-fact lg-mic" style="padding-left:9px">${icon("mic", { filled: true })}</span>${ui.wave()}${ui.stop("Send", "send")}`, { kind: "lg-text" });
-        break;
-      case "transcribing":
-        add("island", "island", ui.spinner("Transcribing"), { kind: "lg-min" });
-        break;
-      default:
-        add("island", "island", (bar.working ? ui.slot(`<span style="padding:0 4px 0 7px;display:inline-flex">${ui.spinner("Agent working")}</span>`) : "")
-          + ui.button({ act: "speak", icon: "mic", label: `Speak about ${scope()}`, title: `Hold N to speak about ${scope()}` })
-          + ui.button({ act: "search", icon: "search", label: "Search", title: "Search · Ctrl F" })
-          + ui.button({ act: "menu", icon: "more", label: "Canvas options" }));
+  canvasBar.view = bar => {
+    const views = [], add = (zone, key, content, more = {}) => views.push({ zone, key, content, kind: "icons", ...more });
+    if (bar.offCenter && bar.mode === "rest") add("lead", "recenter", h("lg-button", { icon: "center", act: "center", label: "Recenter" }));
+    if (bar.mode === "menu") {
+      views.push(bar.expanded("island", "island", h("lg-menu", { heading: "Work canvas", detail: "7 contexts" }, [
+        h("lg-menu-item", { icon: "search", act: "search", key: "Ctrl F" }, "Search"),
+        h("lg-menu-item", { icon: "center", act: "center" }, "Center"),
+        h("lg-menu-item", { icon: "canvas", act: "close-menu" }, "Arrange"),
+        h("lg-menu-separator"),
+        h("lg-menu-item", { icon: "spark", act: "close-menu" }, "New work context"),
+        h("lg-menu-item", { icon: "copy", act: "close-menu" }, "New note"),
+        h("lg-menu-item", { icon: "edge", act: "close-menu" }, "Connect a source"),
+        h("lg-menu-separator"),
+        h("lg-menu-item", { icon: "tile", act: "close-menu" }, "Collapse groups"),
+        h("lg-menu-item", { icon: "gear", act: "close-menu" }, "Agent tasks and settings"),
+        h("lg-menu-item", { icon: "x", act: "close" }, "Close canvas"),
+      ]), 272, 21));
+    } else if (bar.mode === "search") {
+      add("island", "island", h("lg-field", { icon: "search", placeholder: "Search the canvas", value: bar.query }), { kind: "text", width: 300 });
+    } else if (bar.mode === "voice") {
+      add("island", "island", html(h("lg-fact", { icon: "mic", filled: true, tone: "mic" }), h("lg-wave", { live: true }), h("lg-button", { icon: "stop", act: "send", label: "Send" })), { kind: "text" });
+    } else {
+      const labels = [bar.transcribing && "Transcribing", bar.working && "Agent working"].filter(Boolean);
+      add("island", "island", html(
+        labels.length > 0 && h("lg-slot", {}, h("lg-spinner", { label: labels.join(" · ") })),
+        h("lg-button", { icon: "mic", act: "speak", label: `Speak about ${scope()}`, title: `Hold N to speak about ${scope()}` }),
+        h("lg-button", { icon: "search", act: "search", label: "Search", title: "Search · Ctrl F" }),
+        h("lg-button", { icon: "more", act: "menu", label: "Canvas options" })));
     }
-    add("trail", "questions", ui.button({ act: "questions", icon: "q", label: "2 questions waiting", text: "2" }), { tint: "lg-tint" });
+    add("trail", "questions", h("lg-button", { icon: "q", act: "questions", label: "2 questions waiting" }, "2"), { tint: "attention" });
     return views;
-  }
+  };
   function setMode(mode) {
     canvasBar.mode = mode;
     if (mode !== "search") { canvasBar.query = ""; cards.forEach(c => c.el.classList.remove("dim")); }
     canvasBar.render();
-    if (mode === "search") requestAnimationFrame(() => canvasBar.contentOf("island")?.querySelector(".lg-field")?.focus());
+    if (mode === "search") requestAnimationFrame(() => canvasBar.content("island")?.querySelector("lg-field")?.focus());
   }
-  function canvasAction(action, { event }) {
+  canvasBar.addEventListener("lg-action", ({ detail: { action, event } }) => {
     if (canvasBar.mode === "menu" && action !== "press") setMode("rest");
     switch (action) {
       case "menu": event.stopPropagation(); return setMode("menu");
@@ -390,88 +362,70 @@
       case "send": return send();
       case "center": return centerCam();
       case "questions": return select($("#c-question"), true);
-      case "close": return closeCanvas();
+      case "close": win.open = false; return select(null);
     }
-  }
+  });
+  // Releasing the microphone transcribes in the island's leading slot; agent work continues there.
   function send() {
-    setMode("transcribing");
+    canvasBar.transcribing = true; setMode("rest");
     setTimeout(() => {
-      canvasBar.working = true; setMode("rest");
+      canvasBar.transcribing = false; canvasBar.working = true; canvasBar.render();
       setTimeout(() => { canvasBar.working = false; canvasBar.render(); }, 4000);
     }, 1300);
   }
-  $("#cbar").addEventListener("input", e => {
-    if (!e.target.matches(".lg-field")) return;
+  canvasBar.addEventListener("input", e => {
     canvasBar.query = e.target.value;
     const q = e.target.value.trim().toLowerCase();
     cards.forEach(c => c.el.classList.toggle("dim", !!q && !(c.t + c.s).toLowerCase().includes(q)));
   });
-  document.addEventListener("pointerdown", e => { if (canvasBar.mode === "menu" && !canvasBar.root.contains(e.target)) setMode("rest"); });
+  document.addEventListener("pointerdown", e => { if (canvasBar.mode === "menu" && !canvasBar.contains(e.target)) setMode("rest"); });
   // Holding N speaks; releasing sends.
   addEventListener("keydown", e => {
-    if (!canvasOpen || e.repeat || e.key.toLowerCase() !== "n" || e.target.matches("input")) return;
+    if (!win.open || e.repeat || e.key.toLowerCase() !== "n" || e.target.matches("input")) return;
     setMode("voice");
   });
-  addEventListener("keyup", e => { if (canvasOpen && e.key.toLowerCase() === "n" && canvasBar.mode === "voice") send(); });
+  addEventListener("keyup", e => { if (win.open && e.key.toLowerCase() === "n" && canvasBar.mode === "voice") send(); });
 
-  let canvasOpen = false;
-  const winSpring = new Spring(0, p => {
-    win.style.opacity = clamp(p * 1.5, 0, 1);
-    win.style.transform = `translateX(-50%) translateY(${(1 - p) * -24}px) scale(${0.9 + 0.1 * p})`;
-  }, { damping: 0.9, response: 0.42 });
   function openCanvas() {
     setMenu(false);
-    if (canvasOpen) return;
-    canvasOpen = true; win.style.display = "block";
-    $("#panel").open = false;
+    if (win.open) return;
+    win.open = true;
+    panel.open = false;
     canvasBar.refresh(); setMode("rest"); centerCam(false); drawLinks();
-    winSpring.to(1);
   }
-  function closeCanvas() {
-    if (!canvasOpen) return;
-    canvasOpen = false; select(null);
-    winSpring.to(0, { damping: 1, response: 0.3, done: () => { if (!canvasOpen) win.style.display = "none"; } });
-  }
-  $("#closeLight").addEventListener("click", closeCanvas);
+  win.addEventListener("close", () => select(null));
 
-  /* Inspector: slides in from the trailing edge and leaves the same way; actions sit at the top. */
-  const inspector = $("#inspector");
-  LG.glass(inspector, { large: true });
-  const inspectorSpring = new Spring(0, p => { inspector.style.transform = `translateX(${(1 - p) * 360}px)`; inspector.style.opacity = clamp(p * 2, 0, 1); }, { damping: 0.9, response: 0.4 });
-  let selected = null;
+  /* Inspector: details for the selected card, with its actions at the top. */
+  const notes = ["Anna prefers totals rounded to thousands.", "Thursday's sign-off moved to 14:00.", "Costs tab added deferred licences on Monday.", "Last quarter's reply used the Revenue sheet.", "Priya reviews the same figures for the board pack.", "The Contoso renewal date is still open."];
   function select(el, center = false) {
     if (selected) selected.classList.remove("selected");
     selected = el;
-    win.classList.toggle("inspecting", !!el);
-    if (canvasOpen) canvasBar.render();
-    if (!el) { inspectorSpring.to(0, { done: () => { if (!selected) inspector.style.display = "none"; } }); return; }
+    if (win.open) canvasBar.render();
+    if (!el) { inspector.open = false; return; }
     el.classList.add("selected");
     const c = cards.find(k => k.el === el);
-    const notes = ["Anna prefers totals rounded to thousands.", "Thursday's sign-off moved to 14:00.", "Costs tab added deferred licences on Monday.", "Last quarter's reply used the Revenue sheet.", "Priya reviews the same figures for the board pack.", "The Contoso renewal date is still open."];
-    $("lg-scroll", inspector).viewport.innerHTML = `<button class="lg-btn insp-close" data-act="close-details" aria-label="Close details">${icon("x")}</button>
-      ${badge(c.who)}<h2>${LG.escape(c.t)}</h2><div class="sub">${LG.escape(c.s)}</div>
-      <div class="acts"><button class="lg-pill lg-accent">${icon("spark")}Ask about this</button><button class="lg-pill lg-filled">${icon("edge")}Open in Edge</button></div>
-      <section><h3>Current situation</h3><div class="field">${c.q ? "Workspace compared both sheets. Costs includes deferred licences; Revenue doesn't. Anna asked for reviewed totals." : "Anna needs reviewed totals before Thursday's sign-off. Both sheets are in budget.xlsx."}</div></section>
-      <section><h3>Next step</h3><div class="field">${c.q ? "Choose a sheet so Workspace can draft the reply." : "Draft a short reply with both totals for your review."}</div></section>
-      <section><h3>Connected</h3>
-        <div class="src">${badge("teams", true)}<div><div>Anna Berg</div><div class="sub" style="font-size:12px">Teams · asked for the review</div></div></div>
-        <div class="src">${badge("excel", true)}<div><div>budget.xlsx</div><div class="sub" style="font-size:12px">Evidence for both totals</div></div></div>
-      </section>
-      <section><h3>Notes</h3>${notes.concat(notes).map(n => `<div class="note">${n}</div>`).join("")}</section>`;
-    if (inspector.style.display !== "block") { inspector.style.display = "block"; inspectorSpring.set(0); }
-    inspectorSpring.to(1);
+    inspector.content = html(
+      h("lg-app", { ...apps[c.who] }), h("h2", {}, c.t), h("div", { class: "lg-sub" }, c.s),
+      h("lg-actions", { class: "lg-actions" }, [h("lg-button", { variant: "accent", size: "large", icon: "spark" }, "Ask about this"), h("lg-button", { variant: "filled", size: "large", icon: "edge" }, "Open in Edge")]),
+      h("h3", {}, "Current situation"), h("div", { class: "lg-well" }, c.q ? "Workspace compared both sheets. Costs includes deferred licences; Revenue doesn't. Anna asked for reviewed totals." : "Anna needs reviewed totals before Thursday's sign-off. Both sheets are in budget.xlsx."),
+      h("h3", {}, "Next step"), h("div", { class: "lg-well" }, c.q ? "Choose a sheet so Workspace can draft the reply." : "Draft a short reply with both totals for your review."),
+      h("h3", {}, "Connected"),
+      h("div", { class: "src" }, [h("lg-app", { ...apps.teams, size: "small" }), h("div", {}, [h("div", {}, "Anna Berg"), h("div", { class: "lg-sub" }, "Teams · asked for the review")])]),
+      h("div", { class: "src" }, [h("lg-app", { ...apps.excel, size: "small" }), h("div", {}, [h("div", {}, "budget.xlsx"), h("div", { class: "lg-sub" }, "Evidence for both totals")])]),
+      h("h3", {}, "Notes"), notes.concat(notes).map(n => h("div", { class: "note" }, n)));
+    inspector.open = true;
     if (center) { const W = scene.clientWidth - 360, H = scene.clientHeight; camX.to(W / 2 - (c.x + 150) * cam.z); camY.to(H / 2 - (c.y + el.offsetHeight / 2) * cam.z); }
   }
-  inspector.addEventListener("click", e => { if (e.target.closest('[data-act="close-details"]')) select(null); });
+  inspector.addEventListener("close", () => select(null));
 
   addEventListener("keydown", e => {
     if (e.key === "Escape") {
       if (desktop.menuOpen) return setMenu(false);
-      if (canvasOpen && canvasBar.mode !== "rest") return setMode("rest");
+      if (win.open && canvasBar.mode !== "rest") return setMode("rest");
       if (selected) return select(null);
-      if (canvasOpen) return closeCanvas();
+      if (win.open) { win.open = false; return select(null); }
     }
-    if (e.key === "f" && e.ctrlKey && canvasOpen) { e.preventDefault(); setMode("search"); }
+    if (e.key === "f" && e.ctrlKey && win.open) { e.preventDefault(); setMode("search"); }
   });
 
   /* ── Study controls ──────────────────────────────────────────────── */
@@ -480,64 +434,32 @@
     const key = e.target.dataset.key;
     if (!key) return;
     state[key] = e.target.tagName === "LG-SWITCH" ? e.target.checked : e.target.value;
-    if (key === "agent") bubbles.clear();
+    if (key === "agent") phases.clear();
+    if (key === "recording" && state.recording) recordingSince = Date.now();
     sync();
   });
   $("#runAgent").addEventListener("click", runAgent);
-  $("#openCanvas").addEventListener("click", () => canvasOpen ? closeCanvas() : openCanvas());
+  $("#openCanvas").addEventListener("click", () => { if (win.open) { win.open = false; select(null); } else openCanvas(); });
 
   /* Small glass reads the content beneath it; everything large follows the appearance. */
-  function renderBars() {
-    const beneath = state.wallpaper === "vivid" ? state.appearance : { light: "light", dark: "dark" }[state.wallpaper];
-    LG.scheme($("#bar"), beneath);
-    desktop.render();
-    if (canvasOpen) canvasBar.render();
-    writeClocks();
-  }
   function sync() {
     body.dataset.wallpaper = state.wallpaper;
     body.dataset.appearance = state.appearance;
-    for (const el of [panel, $("#phases"), win, submenu]) LG.scheme(el, state.appearance);
+    for (const el of [panel, phases, win, submenu]) LG.scheme(el, state.appearance);
+    LG.scheme(desktop, state.wallpaper === "vivid" ? state.appearance : state.wallpaper);
     for (const el of $$("[data-key]", panel)) {
       const value = state[el.dataset.key];
       if (el.tagName === "LG-SWITCH") { if (el.checked !== value) el.checked = value; }
       else if (el.value !== value) el.value = value;
     }
-    renderBars();
+    desktop.render();
+    if (win.open) canvasBar.render();
   }
-
-  /* Code behind the dark-app backdrop. */
-  (function code() {
-  const lines = [
-    `<span class="k">from</span> dataclasses <span class="k">import</span> <span class="t">dataclass</span>`,
-    `<span class="k">from</span> assistant.feed_origin <span class="k">import</span> <span class="t">App</span>`, ``,
-    `<span class="c"># Glass has no colour of its own; tint carries meaning only.</span>`,
-    `<span class="f">@dataclass</span>(<span class="v">frozen</span>=<span class="k">True</span>, <span class="v">slots</span>=<span class="k">True</span>)`,
-    `<span class="k">class</span> <span class="t">Material</span>:`,
-    `    <span class="v">fill</span>: <span class="t">float</span>`, `    <span class="v">blur</span>: <span class="t">float</span>`, `    <span class="v">rim</span>: <span class="t">float</span>`, ``,
-    `<span class="k">def</span> <span class="f">material</span>(<span class="v">size</span>: <span class="t">Size</span>, <span class="v">look</span>: <span class="t">Look</span>) -> <span class="t">Material</span>:`,
-    `    <span class="k">match</span> size, look:`,
-    `        <span class="k">case</span> <span class="t">Size</span>.SMALL, <span class="t">Look</span>.CLEAR:`,
-    `            <span class="k">return</span> <span class="t">Material</span>(<span class="n">0.20</span>, <span class="n">10</span>, <span class="n">0.9</span>)`,
-    `        <span class="k">case</span> <span class="t">Size</span>.LARGE, <span class="t">Look</span>.CLEAR:`,
-    `            <span class="k">return</span> <span class="t">Material</span>(<span class="n">0.66</span>, <span class="n">28</span>, <span class="n">0.9</span>)`,
-    `        <span class="k">case</span> _, <span class="t">Look</span>.TINTED:`,
-    `            <span class="k">return</span> <span class="t">Material</span>(<span class="n">0.86</span>, <span class="n">28</span>, <span class="n">0.6</span>)`, ``,
-    `<span class="k">def</span> <span class="f">concentric</span>(<span class="v">outer</span>: <span class="t">float</span>, <span class="v">inset</span>: <span class="t">float</span>) -> <span class="t">float</span>:`,
-    `    <span class="s">"""Nested corners share a centre."""</span>`,
-    `    <span class="k">return</span> <span class="f">max</span>(<span class="n">0.0</span>, outer - inset)`, ``,
-    `<span class="k">def</span> <span class="f">scheme_for</span>(<span class="v">luma</span>: <span class="t">float</span>) -> <span class="t">Scheme</span>:`,
-    `    <span class="k">return</span> <span class="t">Scheme</span>.DARK <span class="k">if</span> luma &lt; <span class="n">0.5</span> <span class="k">else</span> <span class="t">Scheme</span>.LIGHT`,
-  ];
-  const all = [...lines, ...lines, ...lines];
-  $("#src").innerHTML = all.join("\n"); $("#gutter").textContent = all.map((_, i) => i + 1).join("\n");
-})();
-
 
   /* ── Start ──────────────────────────────────────────────────────── */
   sync();
   // Widths depend on the typeface: re-measure once it has loaded.
-  document.fonts.ready.then(() => { desktop.refresh(); if (canvasOpen) canvasBar.refresh(); writeClocks(); });
+  document.fonts.ready.then(() => { desktop.refresh(); if (win.open) canvasBar.refresh(); });
   requestAnimationFrame(() => {
     if (params.has("canvas")) openCanvas();
     if (params.has("menu")) setMenu(true);
@@ -546,5 +468,5 @@
     if (params.get("sidebar") === "0") panel.open = false;
   });
   // For tests and measurement.
-  window.workspaceDemo = { state, sync, desktop, canvasBar, openCanvas, select, setMenu, setSeconds: s => { seconds = s; renderBars(); } };
+  window.workspaceDemo = { state, sync, desktop, canvasBar, openCanvas, select, setMenu, startRecording: since => { recordingSince = since; sync(); } };
 })();

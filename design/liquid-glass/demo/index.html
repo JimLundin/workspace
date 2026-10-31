@@ -41,50 +41,65 @@
 </div>
 
 
-<div id="bar" role="toolbar" aria-label="Workspace"></div>
-<div id="submenu" class="lg-popover" role="menu"></div>
-<div id="phases"></div>
+<!-- Everything below is composed from kit elements; demo.css only lays out the page's own content. -->
+<lg-island-bar id="bar" edge="top" order="layer agent island recording inbox" aria-label="Workspace"></lg-island-bar>
+<lg-popover id="submenu">
+  <lg-menu>
+    <lg-menu-item act="close-menu">Spread windows across screens</lg-menu-item>
+    <lg-menu-separator></lg-menu-separator>
+    <lg-menu-item act="close-menu" key="Alt ←">Focus left</lg-menu-item>
+    <lg-menu-item act="close-menu" key="Alt →">Focus right</lg-menu-item>
+    <lg-menu-item act="close-menu">Float or tile the active window</lg-menu-item>
+    <lg-menu-item act="close-menu">Change split direction</lg-menu-item>
+    <lg-menu-item act="close-menu">Pause automatic tiling</lg-menu-item>
+  </lg-menu>
+</lg-popover>
+<lg-stack id="phases" limit="3"></lg-stack>
 
-<div id="canvas" class="lg-window" role="dialog" aria-label="Work canvas">
+<lg-window id="canvas" heading="Work canvas" detail="7 contexts · 2 questions">
   <div id="scene"><div id="world"><svg id="links" width="1" height="1"></svg></div></div>
-  <div class="lg-edge-top"></div><div class="lg-edge-bottom"></div>
-  <div class="lg-traffic"><i id="closeLight" title="Close"></i><i title="Minimise"></i><i title="Zoom"></i></div>
-  <div class="wtitle">Work canvas<small>7 contexts · 2 questions</small></div>
-  <div id="cbar" role="toolbar" aria-label="Canvas"></div>
-  <aside id="inspector" class="lg-inspector inspector" aria-label="Details"><lg-scroll></lg-scroll></aside>
-</div>
+  <lg-island-bar id="cbar" edge="bottom" order="recenter island questions" aria-label="Canvas"></lg-island-bar>
+  <lg-inspector id="inspector" label="Details"></lg-inspector>
+</lg-window>
 
 <lg-sidebar id="panel" label="Study controls">
-  <header class="lg-side-head"><h1>Liquid Glass study</h1><p>Workspace's surfaces in Apple's current design language</p></header>
-  <div class="actions-row"><button class="lg-pill lg-filled" id="runAgent">Run agent</button><button class="lg-pill lg-accent" id="openCanvas">Open canvas</button></div>
-  <h2>Toolbar</h2>
-  <div class="lg-field-row"><span>Dictation</span>
-    <lg-segmented data-key="moment" value="none"><button value="none">Off</button><button value="dictating">Dictating</button><button value="transcribing">Transcribing</button></lg-segmented></div>
-  <div class="lg-field-row"><span>Agent</span>
-    <lg-segmented data-key="agent" value="off"><button value="off">Idle</button><button value="working">Working</button><button value="needs">Needs you</button></lg-segmented></div>
-  <div class="lg-rows">
-    <div class="lg-row"><span>Meeting recording</span><lg-switch data-key="recording" aria-label="Meeting recording"></lg-switch></div>
-    <div class="lg-row"><span>Keyboard layer</span><lg-switch data-key="layer" aria-label="Keyboard layer"></lg-switch></div>
-    <div class="lg-row"><span>Inbox items</span><lg-switch data-key="inbox" checked aria-label="Inbox items"></lg-switch></div>
-  </div>
-  <h2>Surroundings</h2>
-  <div class="lg-field-row"><span>Behind the glass</span>
-    <lg-segmented data-key="wallpaper" value="vivid"><button value="vivid">Wallpaper</button><button value="light">Light app</button><button value="dark">Dark app</button></lg-segmented></div>
-  <div class="lg-field-row"><span>Appearance</span>
-    <lg-segmented data-key="appearance" value="dark"><button value="light">Light</button><button value="dark">Dark</button></lg-segmented></div>
-  <p class="study-note">Hold N in the canvas to speak. Edge refraction bends what sits under a glass rim, so it shows over detail such as text and window edges, not smooth wallpaper.</p>
+  <header><h1>Liquid Glass study</h1><p>Workspace's surfaces in Apple's current design language</p></header>
+  <lg-actions>
+    <lg-button id="runAgent" variant="filled" size="pill">Run agent</lg-button>
+    <lg-button id="openCanvas" variant="accent" size="pill">Open canvas</lg-button>
+  </lg-actions>
+  <lg-section heading="Toolbar">
+    <lg-field-row label="Dictation">
+      <lg-segmented data-key="moment" value="none"><button value="none">Off</button><button value="dictating">Dictating</button><button value="transcribing">Transcribing</button></lg-segmented>
+    </lg-field-row>
+    <lg-field-row label="Agent">
+      <lg-segmented data-key="agent" value="off"><button value="off">Idle</button><button value="working">Working</button><button value="needs">Needs you</button></lg-segmented>
+    </lg-field-row>
+    <lg-rows>
+      <lg-row label="Meeting recording"><lg-switch data-key="recording"></lg-switch></lg-row>
+      <lg-row label="Keyboard layer"><lg-switch data-key="layer"></lg-switch></lg-row>
+      <lg-row label="Inbox items"><lg-switch data-key="inbox" checked></lg-switch></lg-row>
+    </lg-rows>
+  </lg-section>
+  <lg-section heading="Surroundings">
+    <lg-field-row label="Behind the glass">
+      <lg-segmented data-key="wallpaper" value="vivid"><button value="vivid">Wallpaper</button><button value="light">Light app</button><button value="dark">Dark app</button></lg-segmented>
+    </lg-field-row>
+    <lg-field-row label="Appearance">
+      <lg-segmented data-key="appearance" value="dark"><button value="light">Light</button><button value="dark">Dark</button></lg-segmented>
+    </lg-field-row>
+  </lg-section>
+  <lg-footnote>Hold N in the canvas to speak. Edge refraction bends what sits under a glass rim, so it shows over detail such as text and window edges, not smooth wallpaper. <a href="../gallery.html">Component gallery</a></lg-footnote>
 </lg-sidebar>
 
-<script src="../src/core.js"></script>
-<script src="../src/material.js"></script>
-<script src="../src/capsule.js"></script>
-<script src="../src/island.js"></script>
-<script src="../src/ui.js"></script>
+<script src="../src/1-foundations.js"></script>
 <script src="../icons/fluent.js"></script>
-<script src="../src/controls.js"></script>
-<script src="../src/scroll.js"></script>
-<script src="../src/sidebar.js"></script>
-<script src="../src/stack.js"></script>
+<script src="../src/2-atoms.js"></script>
+<script src="../src/3-controls.js"></script>
+<script src="../src/4-molecules.js"></script>
+<script src="../src/5-containers.js"></script>
+<script src="../src/6-bars.js"></script>
+<script src="backdrop.js"></script>
 <script src="workspace.js"></script>
 </body>
 </html>

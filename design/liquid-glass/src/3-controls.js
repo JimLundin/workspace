@@ -1,4 +1,4 @@
-/* Controls: <lg-segmented> and <lg-switch>.
+/* Layer 3: controls. <lg-segmented> and <lg-switch>.
 
      <lg-segmented value="dark"><button value="light">Light</button><button value="dark">Dark</button></lg-segmented>
      <lg-switch checked aria-label="Inbox items"></lg-switch>
@@ -25,7 +25,9 @@
         this.value = button.value;
         this.dispatchEvent(new Event("change", { bubbles: true }));
       });
-      requestAnimationFrame(() => this.sync(true));
+      // Re-measure when the control resizes or the typeface loads, without animating.
+      new ResizeObserver(() => this.sync(true)).observe(this);
+      document.fonts.ready.then(() => this.sync(true));
     }
     get value() { return this.getAttribute("value"); }
     set value(value) { this.setAttribute("value", value); this.sync(false); }
