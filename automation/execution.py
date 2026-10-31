@@ -29,12 +29,14 @@ from automation.task import (
     Failed,
     FileDigest,
     Outcome,
+    OutcomeKind,
     Question,
     Response,
     Task,
     TextAnswer,
     Until,
     Waiting,
+    outcome_kind,
     text,
 )
 
@@ -147,7 +149,7 @@ class _LedgerEntry:
 
     id: str
     tool: str
-    outcome: str
+    outcome: OutcomeKind
     started_at: float
     updated_at: float
     file: Annotated[str | None, Field(exclude_if=_absent)] = None
@@ -191,7 +193,7 @@ def _ledger_entry(action: Action) -> _LedgerEntry:
             file, digest = path, sha256
         case _:
             file = digest = None
-    return _LedgerEntry(action.id, action.specification.tool, type(action.outcome).__name__, action.started_at, action.updated_at, file, digest)
+    return _LedgerEntry(action.id, action.specification.tool, outcome_kind(action.outcome), action.started_at, action.updated_at, file, digest)
 
 
 class WorkExecution:

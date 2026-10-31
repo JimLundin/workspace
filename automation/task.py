@@ -498,6 +498,20 @@ class Action:
         variant(self.outcome, (ActionPending, ActionReturned, ActionVerified, ActionNotApplied, ActionUncertain), "action outcome")
 
 
+type OutcomeKind = Literal["running", "returned", "verified", "not_applied", "uncertain"]
+
+
+def outcome_kind(outcome: ActionOutcome) -> OutcomeKind:
+    """The wire tag that names an action outcome in the journal's index and the agent's ledger."""
+    match outcome:
+        case ActionPending.RUNNING:
+            return "running"
+        case ActionReturned() | ActionVerified() | ActionNotApplied() | ActionUncertain():
+            return outcome.kind
+        case _:
+            assert_never(outcome)
+
+
 def phase(state: State) -> Phase:
     match state:
         case TaskStatus.READY:

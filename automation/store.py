@@ -4,7 +4,7 @@ import sqlite3
 from collections.abc import Generator, Sequence
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Protocol, assert_never, cast
+from typing import Protocol, cast
 
 from pydantic import ConfigDict, TypeAdapter
 
@@ -53,6 +53,7 @@ from automation.task import (
     identifier,
     integer,
     interrupted,
+    outcome_kind,
     owns,
     phase,
     progressed,
@@ -134,16 +135,6 @@ def _specification(value: object) -> ActionSpec:
             raise ValueError("Invalid stored action specification.")
 
 
-def _outcome_kind(outcome: ActionOutcome) -> str:
-    match outcome:
-        case ActionPending():
-            return outcome.value
-        case ActionReturned() | ActionVerified() | ActionNotApplied() | ActionUncertain():
-            return outcome.kind
-        case _:
-            assert_never(outcome)
-
-
 def _task_values(task: Task) -> tuple[object, ...]:
     routine = task.source if isinstance(task.source, RoutineSource) else None
     wake = task.state.reason.at if isinstance(task.state, Waiting) and isinstance(task.state.reason, Until) else None
@@ -201,7 +192,7 @@ def _action(row: tuple[object, ...]) -> Action:
         timestamp(row[5]),
         _decoded(_OUTCOME, row[6]),
     )
-    if row[7] != _outcome_kind(action.outcome) or row[8] != action.specification.fingerprint:
+    if row[7] != outcome_kind(action.outcome) or row[8] != action.specification.fingerprint:
         raise ValueError("Stored action indexes disagree with the action.")
     return action
 
@@ -752,7 +743,7 @@ class TaskStore:
                 return None
             connection.execute(
                 "UPDATE actions SET updated_at=?,outcome=?,outcome_kind=? WHERE id=?",
-                (result.updated_at, _stored(_OUTCOME, result.outcome), _outcome_kind(result.outcome), action_id),
+                (result.updated_at, _stored(_OUTCOME, result.outcome), outcome_kind(result.outcome), action_id),
             )
             return result
 
