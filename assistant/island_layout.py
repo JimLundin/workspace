@@ -12,6 +12,7 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import Final, assert_never
 
+from assistant.island_menu import Disclosure, Entry, Item, Live, Menu, Rule, rows
 from assistant.island_model import Badge, Control, Glyph, Key, Marker, Part, Slot, Spinner, Text, Zone
 
 # A 34 px capsule with a 3 px inset holds concentric 28 px controls.
@@ -26,6 +27,14 @@ PART_GAP: Final = 6
 SLOT_GAP: Final = 12
 TEXT_PAD: Final = 12
 ICON_PAD: Final = 10
+# The island expanded into its menu: concentric rows inside a larger radius.
+MENU_WIDTH: Final = 272
+MENU_RADIUS: Final = 21
+MENU_PAD: Final = 6
+MENU_HEAD: Final = 34
+MENU_ITEM: Final = 30
+MENU_LIVE: Final = 34
+MENU_RULE: Final = 11
 
 
 @dataclass(frozen=True, slots=True)
@@ -41,6 +50,54 @@ class Spot:
 class Content:
     width: float
     spots: tuple[Spot, ...]
+    height: float = HEIGHT
+
+
+@dataclass(frozen=True, slots=True)
+class Line:
+    """A menu row's place, below the menu's heading."""
+
+    index: int
+    row: Entry
+    y: float
+    height: float
+
+
+def row_height(row: Entry) -> float:
+    match row:
+        case Item() | Disclosure():
+            return MENU_ITEM
+        case Live():
+            return MENU_LIVE
+        case Rule.SEPARATOR:
+            return MENU_RULE
+        case _:
+            assert_never(row)
+
+
+def live(row: Entry) -> bool:
+    match row:
+        case Live():
+            return True
+        case _:
+            return False
+
+
+def lines(menu: Menu) -> tuple[Line, ...]:
+    placed: list[Line] = []
+    y = MENU_PAD + MENU_HEAD
+    for index, row in enumerate(rows(menu)):
+        if placed and live(placed[-1].row) and live(row):
+            y += 4  # Live rows read as separate activities.
+        placed.append(Line(index, row, y, row_height(row)))
+        y += row_height(row)
+    return tuple(placed)
+
+
+def expansion(menu: Menu) -> Content:
+    """The island's content while it is the menu: no compact parts, the menu's full height."""
+    shown = lines(menu)
+    return Content(MENU_WIDTH, (), (shown[-1].y + shown[-1].height if shown else MENU_PAD + MENU_HEAD) + MENU_PAD)
 
 
 def extent(part: Part, measure: Callable[[Text], float]) -> float:

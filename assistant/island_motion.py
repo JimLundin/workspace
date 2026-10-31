@@ -29,6 +29,7 @@ class Moving:
     content: Content
     previous: Content | None  # Fading out under `content`, until the fade rests.
     width: Motion
+    height: Motion
     presence: Motion
     fade: Motion
 
@@ -44,7 +45,8 @@ class IslandMotion:
 
 def arrive(shown: Shown, *, animate: bool) -> Moving:
     presence = toward(still(0.0, APPEAR), 1.0, APPEAR)
-    return Moving(shown.view, shown.content, None, still(shown.content.width, MORPH), presence if animate else jump(presence, 1.0), still(1.0, FADE))
+    width, height = still(shown.content.width, MORPH), still(shown.content.height, MORPH)
+    return Moving(shown.view, shown.content, None, width, height, presence if animate else jump(presence, 1.0), still(1.0, FADE))
 
 
 def outline(part: Part) -> object:
@@ -57,14 +59,14 @@ def outline(part: Part) -> object:
 
 
 def follow(moving: Moving, shown: Shown, *, animate: bool) -> Moving:
-    width = toward(moving.width, shown.content.width, MORPH)
+    width, height = toward(moving.width, shown.content.width, MORPH), toward(moving.height, shown.content.height, MORPH)
     presence = toward(moving.presence, 1.0, APPEAR)
     before, after = (tuple(outline(spot.part) for spot in content.spots) for content in (moving.content, shown.content))
     if before == after:
         fade, previous = moving.fade, moving.previous
     else:
         fade, previous = toward(still(0.0, FADE), 1.0, FADE), moving.content
-    changed = Moving(shown.view, shown.content, previous, width, presence, fade)
+    changed = Moving(shown.view, shown.content, previous, width, height, presence, fade)
     return changed if animate else rest(changed)
 
 
@@ -78,6 +80,7 @@ def rest(moving: Moving) -> Moving:
         moving,
         previous=None,
         width=jump(moving.width, moving.width.target),
+        height=jump(moving.height, moving.height.target),
         presence=jump(moving.presence, moving.presence.target),
         fade=jump(moving.fade, 1.0),
     )
@@ -114,6 +117,7 @@ def advance(motion: IslandMotion, seconds: float) -> IslandMotion:
         replace(
             moving,
             width=settle(moving.width, seconds),
+            height=settle(moving.height, seconds),
             presence=settle(moving.presence, seconds),
             fade=(fade := settle(moving.fade, seconds)),
             previous=None if resting(fade) else moving.previous,
@@ -129,8 +133,11 @@ def finish(motion: IslandMotion) -> IslandMotion:
 
 
 def settled(motion: IslandMotion) -> bool:
-    return all(resting(moving.width) and resting(moving.presence) and resting(moving.fade) for moving in motion.capsules)
+    return all(all(resting(spring) for spring in (moving.width, moving.height, moving.presence, moving.fade)) for moving in motion.capsules)
 
 
 def placed(motion: IslandMotion) -> tuple[Placed, ...]:
-    return tuple(Placed(moving.key, moving.view.zone, max(0.0, moving.width.value), HEIGHT, moving.presence.value) for moving in motion.capsules)
+    return tuple(
+        Placed(moving.key, moving.view.zone, max(0.0, moving.width.value), max(float(HEIGHT), moving.height.value), moving.presence.value)
+        for moving in motion.capsules
+    )

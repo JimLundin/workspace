@@ -58,8 +58,11 @@ def test_new_parts_fade_over_the_old_but_a_changing_reading_updates_in_place() -
 
 
 def test_reduced_motion_finishes_every_capsule_at_once() -> None:
-    # Defect: turning motion off mid-flight leaves capsules half-shown with the loop running.
+    # Defects: turning motion off mid-flight leaves capsules half-shown with the
+    # loop running, or the menu opens collapsed.
     both = retarget(IslandMotion(), (ISLAND, INBOX), animate=False)
     flight = run(retarget(both, (shown(Key.ISLAND, Zone.ISLAND, 160, Glyph("wifi-off"), Text("10:22")),), animate=True), 0.05)
     done = finish(flight)
     assert settled(done) and [(each.key, each.width, each.presence) for each in placed(done)] == [(Key.ISLAND, 160, 1)]
+    menu = Shown(ISLAND.view, Content(272, (), 300))
+    assert [(each.width, each.height) for each in placed(retarget(both, (menu,), animate=False))] == [(272, 300)]
