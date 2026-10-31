@@ -3,7 +3,9 @@
 from collections.abc import Callable, Mapping
 from typing import Final
 
-from assistant.agent_tools import Args, Display, Output, Session, Tool
+from pydantic import ValidationError
+
+from assistant.agent_tools import Args, Display, Output, Session, Tool, rejected
 from assistant.business_tools import spec
 from assistant.llm import ToolSpec
 from assistant.work_bridge_contracts import BridgeCommand
@@ -157,5 +159,8 @@ class PersonalWork:
         return tuple(Tool(spec, self.catalog, _classify(spec), Display.PRIVATE) for spec in SPECS)
 
     def catalog(self, args: Args) -> Output:
-        request = validated(args.tool, args.values)
+        try:
+            request = validated(args.tool, args.values)
+        except ValidationError as error:
+            raise rejected(args.tool, error) from error
         return self.session.effect(args.operation, lambda: Output(self.request(request)), lambda output: verified(output.text))
