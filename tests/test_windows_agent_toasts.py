@@ -413,7 +413,7 @@ def test_material_modes_choose_readable_ink_and_reject_stale_backgrounds() -> No
             return
         assert card.bounds is not None
         select(card.text, "workbook")
-        for frost, foreground in ((appearance.Frost.LIGHT, "#f6f3ff"), (appearance.Frost.BRIGHT, "#202435"), (appearance.Frost.SMOKED, "#f6f3ff")):
+        for frost, foreground in ((appearance.Frost.LIGHT, "#f0f0f0"), (appearance.Frost.BRIGHT, "#202435"), (appearance.Frost.SMOKED, "#f0f0f0")):
             card.match_background(appearance.Backdrop(card.bounds, frost), appearance.Material.GLASS)
             assert card.ink.foreground == foreground
             assert card.text.textCursor().selectedText() == "workbook"

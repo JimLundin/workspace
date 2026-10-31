@@ -1,168 +1,28 @@
-"""Workspace's colour tokens, bubble palettes and the Qt stylesheets generated from them.
+"""Workspace's Liquid Glass tokens and the Qt stylesheets generated from them.
 
-Quiet blue and lilac glass, with opaque ink and a dark solid fallback.
+Glass and content have no colour of their own: neutral surfaces and monochrome
+ink in a dark and a light scheme, after the kit at JimLundin/liquid-glass.
+Colour carries meaning only: the soft-blue accent for the primary action and
+selection, orange for a question, red for recording and errors, and each app's
+own colour on its badge.
 """
 
 from dataclasses import dataclass
+from enum import Enum, auto
 from typing import Final, assert_never
 
 from assistant import island_model
 from assistant.feed_origin import App
 from assistant.island_model import Tint
 from assistant.notifications import Tone
+from assistant.ui_components import typeface
 from winapi import appearance
 from winapi.shapes import Stop, Veil
 
-ACCENT: Final = "#d9c8f3"  # primary actions and the voice legend
-INK: Final = "#f6f3ff"
-SECONDARY: Final = "#e0dced"
-USER: Final = "#c7dcff"
-SURFACE: Final = "#262337"
-EDGE: Final = "#716a87"
-
-# The keyboard overlay keeps its neutral charcoal and blue held-key accent.
-OVERLAY_BACKGROUND: Final = "#1f2124"
-OVERLAY_INK: Final = "#e8e6e3"
-OVERLAY_MUTED: Final = "#9a9893"
-OVERLAY_ACCENT: Final = "#6aa9ff"
-OVERLAY_SURFACE: Final = "#2b2e33"
-
-CONTROL_STYLE: Final = f"""
-QWidget {{ color: #d8e0ea; font-family: 'Segoe UI'; font-size: 12px; }}
-QLabel {{ background: transparent; border: none; }}
-QLabel#muted {{ color: #95a5b7; font-size: 10px; }}
-QLabel#title {{ font-size: 12px; font-weight: 600; }}
-QLabel#status {{ color: #f0cc8c; font-size: 10px; }}
-QToolButton, QPushButton {{ border: 1px solid transparent; border-radius: 6px; background: transparent; padding: 6px 9px; font-size: 11px; }}
-QToolButton:hover, QPushButton:hover {{ background: rgba(255,255,255,15); }}
-QToolButton:pressed, QPushButton:pressed {{ background: rgba(184,210,255,35); }}
-QToolButton:focus, QPushButton:focus, QComboBox:focus {{ border: 1px solid #b8d2ff; }}
-QToolButton:disabled, QPushButton:disabled {{ color: #687584; }}
-QToolButton#primary, QPushButton#primary {{ background: {ACCENT}; color: #272534; padding: 8px 12px; font-weight: 600; }}
-QToolButton#primary:hover, QPushButton#primary:hover {{ background: #ecddff; }}
-QToolButton#chip {{ background: rgba(200,212,240,12); border: 1px solid rgba(188,204,228,32); padding: 3px 6px; font-size: 9px; }}
-QToolButton:checked {{ background: rgba(255,255,255,14); color: #dce5f3; }}
-QLineEdit, QPlainTextEdit, QTextBrowser, QTableWidget {{
- background: #202832; border: 1px solid #3c4754; border-radius: 7px; padding: 8px;
-}}
-QPlainTextEdit:focus, QLineEdit:focus {{ border: 1px solid #a5bde4; }}
-QLineEdit {{ selection-background-color: #536888; }}
-QTextBrowser {{ selection-background-color: #67567d; }}
-QScrollBar:vertical {{ background: transparent; width: 6px; margin: 2px; }}
-QScrollBar::handle:vertical {{ background: #606c7a; border-radius: 2px; min-height: 24px; }}
-QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{ height: 0; }}
-QScrollBar:horizontal {{ background: transparent; height: 6px; }}
-QScrollBar::handle:horizontal {{ background: #606c7a; border-radius: 2px; min-width: 24px; }}
-QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {{ width: 0; }}
-QComboBox {{ background: #26313d; border: 1px solid #44515f; border-radius: 6px; padding: 5px 12px; }}
-QComboBox QAbstractItemView {{ background: #26313d; selection-background-color: #40516b; }}
-QListWidget, QTreeWidget {{ background: #232b34; border: none; outline: none; }}
-QTreeWidget::item {{ padding: 8px 4px; }}
-QTreeWidget::item:selected {{ background: #35465b; }}
-QListWidget::item {{ padding: 10px 14px; border-radius: 8px; }}
-QListWidget::item:selected {{ background: #35465b; color: #eaf0fa; }}
-QListWidget::item:hover {{ background: #29394b; }}
-QDialog, QMenu {{ background: #252d37; }}
-QMenu {{ border: 1px solid #5b6980; padding: 6px; }}
-QMenu::item {{ padding: 8px 22px; border-radius: 5px; }}
-QMenu::item:selected {{ background: #435371; }}
-QHeaderView::section {{ background: #252c34; color: #8fa2b5; padding: 8px; border: none; font-size: 10px; }}
-QTableWidget {{ gridline-color: #39454e; selection-background-color: #344b51; border: none; background: transparent; }}
-QTableWidget::item {{ padding: 8px; border-bottom: 1px solid #323d47; }}
-QCheckBox {{ spacing: 7px; }}
-QTabWidget::pane {{ border: 1px solid #3b4755; border-radius: 8px; }}
-QTabBar::tab {{ background: #232b34; color: #a3b0c1; padding: 10px 16px; }}
-QTabBar::tab:selected {{ background: #354252; color: #e9e8e4; }}
-QToolTip {{ background: #253140; color: #eef2f7; border: 1px solid #71819c; padding: 6px; }}
-"""
-
-CANVAS_STYLE: Final = f"""
-QWidget {{ color: {INK}; font-family: 'Segoe UI'; font-size: 13px; background: transparent; }}
-QFrame#canvasPill {{ background: #25212f; border: 1px solid #494055; border-radius: 18px; }}
-QLabel {{ background: transparent; border: none; }}
-QLabel#muted {{ color: #a49aae; font-size: 11px; }}
-QLabel#title {{ font-size: 14px; font-weight: 600; }}
-QToolButton {{ border: 1px solid transparent; border-radius: 12px; padding: 5px 9px; background: transparent; }}
-QToolButton:hover {{ background: #3a3148; }}
-QToolButton:pressed {{ background: #4a3d5c; }}
-QToolButton:checked {{ background: #3a3148; }}
-QToolButton:focus {{ border-color: #ba9de3; }}
-QToolButton:disabled {{ color: #70677d; }}
-QToolButton#primary {{ background: {ACCENT}; color: #262131; font-weight: 600; padding: 7px 12px; }}
-QToolButton#primary:hover {{ background: #e6d8fa; }}
-QLineEdit, QPlainTextEdit, QComboBox {{ background: #211e29; border: 1px solid #4a405b; border-radius: 9px; padding: 7px; }}
-QLineEdit:focus, QPlainTextEdit:focus {{ border-color: #b697df; }}
-QPlainTextEdit:read-only {{ background: transparent; border: none; padding: 0; }}
-QLineEdit#canvasSearch {{ background: transparent; border: none; padding: 5px 8px; }}
-QComboBox QAbstractItemView {{ background: #292332; selection-background-color: #4a3a61; }}
-QMenu {{ background: #292332; border: 1px solid #574968; padding: 7px; }}
-QMenu::item {{ padding: 8px 20px; border-radius: 7px; }}
-QMenu::item:selected {{ background: #443454; }}
-QScrollBar:vertical {{ background: transparent; width: 5px; }}
-QScrollBar::handle:vertical {{ background: #665372; border-radius: 2px; min-height: 20px; }}
-QScrollBar::add-line, QScrollBar::sub-line {{ height: 0; width: 0; }}
-QToolTip {{ background: #292332; color: {INK}; border: 1px solid #675576; padding: 7px; }}
-"""
-
-
-@dataclass(frozen=True, slots=True)
-class Ink:
-    foreground: str = INK
-    secondary: str = SECONDARY
-    link: str = USER
-    error: str = "#ffb7b2"
-
-
-@dataclass(frozen=True, slots=True)
-class Palette:
-    surface: str
-    edge: str
-    accent: str
-    tint: str
-
-
-def palette(tone: Tone, app: App | None = None) -> Palette:
-    match app:
-        case App.TEAMS:
-            return Palette("#292540", "#8076b2", "#d8d1ff", "#6655a0")
-        case App.OUTLOOK:
-            return Palette("#1d2c40", "#587fa7", "#c2e4ff", "#2869a2")
-        case App.CODEX:
-            return Palette("#222e31", "#68878b", "#d0eaeb", "#416f74")
-        case App.CLAUDE:
-            return Palette("#372922", "#a47c69", "#f4d2be", "#9c6049")
-        case App.EDGE:
-            return Palette("#203332", "#5e9690", "#c4f1e9", "#267e76")
-        case App.WEB_PAGE:
-            return Palette("#23313b", "#6e91a8", "#c6e4f3", "#456f88")
-        case App.DOCUMENT:
-            return Palette("#26312a", "#72967a", "#d2ead3", "#52795c")
-        case App.KANBAN:
-            return Palette("#332d25", "#9b8159", "#f1d5a2", "#816234")
-        case App.WINDOWS:
-            return Palette("#252c3a", "#6e83a5", "#d4e3ff", "#486a9c")
-        case App.WORKSPACE | None:
-            pass
-        case _:
-            assert_never(app)
-    match tone:
-        case Tone.USER | Tone.RECORDING:
-            return Palette("#222c42", "#62738e", "#d3e3ff", "#335ba5")
-        case Tone.THINKING | Tone.ACTION | Tone.REPLY:
-            return Palette(SURFACE, EDGE, "#e8e1ff", "#4e4173")
-        case Tone.QUESTION:
-            return Palette(SURFACE, EDGE, "#f2ddb9", "#4e4173")
-        case Tone.ERROR:
-            return Palette(SURFACE, EDGE, "#ffb7b2", "#4e4173")
-        case _:
-            assert_never(tone)
-
-
-# Liquid Glass: glass has no colour of its own. Thin neutral veils carry
-# monochrome ink; colour appears only where it means something.
 GLASS_ACCENT: Final = "#4b8fe8"  # a soft blue, lighter and less saturated than system blue
 ATTENTION: Final = "#f08a00"  # a question waits
-RED: Final = "#ff453a"  # recording, low battery
+RED: Final = "#ff453a"  # recording, low battery, errors
+GREEN: Final = "#30d158"  # switches, success
 MICROPHONE: Final = "#ff9f0a"  # the microphone is live, as Apple's privacy indicator
 
 
@@ -171,7 +31,227 @@ class Shade:
     color: str
     opacity: float = 1.0
 
+    @property
+    def css(self) -> str:
+        """For Qt stylesheets, which take rgba() but not #AARRGGBB."""
+        red, green, blue = (int(self.color[index : index + 2], 16) for index in (1, 3, 5))
+        return f"rgba({red},{green},{blue},{round(self.opacity * 255)})"
 
+    @property
+    def argb(self) -> str:
+        """For QColor."""
+        return f"#{round(self.opacity * 255):02x}{self.color[1:]}"
+
+
+class Scheme(Enum):
+    DARK = auto()
+    LIGHT = auto()
+
+
+@dataclass(frozen=True, slots=True)
+class Tokens:
+    """One scheme's neutral surfaces and ink."""
+
+    scheme: Scheme
+    ink: Shade
+    ink2: Shade  # secondary text, symbols beside text
+    ink3: Shade  # tertiary text, placeholders, shortcut hints
+    fill: Shade  # a quiet well inside a surface
+    hover: Shade
+    press: Shade
+    separator: Shade
+    solid: str  # a content card
+    solid_edge: Shade
+    window: str  # a content window's background
+    thumb: Shade  # overlay scroll bars
+
+
+def tokens(scheme: Scheme) -> Tokens:
+    match scheme:
+        case Scheme.DARK:
+            white = "#ffffff"
+            return Tokens(
+                scheme, Shade(white, 0.94), Shade(white, 0.58), Shade(white, 0.30), Shade(white, 0.06), Shade(white, 0.08), Shade(white, 0.14),
+                Shade(white, 0.12), "#26262a", Shade(white, 0.07), "#161618", Shade(white, 0.40),
+            )  # fmt: skip
+        case Scheme.LIGHT:
+            black = "#000000"
+            return Tokens(
+                scheme, Shade(black, 0.86), Shade(black, 0.54), Shade(black, 0.28), Shade(black, 0.05), Shade(black, 0.06), Shade(black, 0.10),
+                Shade(black, 0.10), "#ffffff", Shade(black, 0.07), "#f3f3f6", Shade(black, 0.36),
+            )  # fmt: skip
+        case _:
+            assert_never(scheme)
+
+
+DARK: Final = tokens(Scheme.DARK)
+
+
+def scheme() -> Scheme:
+    """Large glass and content windows follow Windows' app mode."""
+    return Scheme.LIGHT if appearance.light_apps() else Scheme.DARK
+
+
+def control_style(theme: Tokens) -> str:
+    """Workspace's dialogs and controls: Inter, capsule buttons, quiet wells and overlay scroll bars."""
+    ink, ink2, ink3 = theme.ink.css, theme.ink2.css, theme.ink3.css
+    fill, hover, press, line = theme.fill.css, theme.hover.css, theme.press.css, theme.separator.css
+    return f"""
+QWidget {{ color: {ink}; font-family: '{typeface.FAMILY}'; font-size: 13px; }}
+QDialog, QMainWindow {{ background: {theme.window}; }}
+QLabel {{ background: transparent; border: none; }}
+QLabel#muted {{ color: {ink2}; font-size: 11px; }}
+QLabel#title {{ font-size: 15px; font-weight: 600; }}
+QLabel#status {{ color: {ATTENTION}; font-size: 11px; }}
+QToolButton, QPushButton {{ border: none; border-radius: 14px; background: transparent; padding: 5px 11px; font-weight: 500; min-height: 18px; }}
+QToolButton:hover, QPushButton:hover {{ background: {hover}; }}
+QToolButton:pressed, QPushButton:pressed {{ background: {press}; }}
+QToolButton:focus, QPushButton:focus {{ outline: none; border: 2px solid {GLASS_ACCENT}; padding: 3px 9px; }}
+QToolButton:disabled, QPushButton:disabled {{ color: {ink3}; }}
+QToolButton:checked {{ background: {hover}; }}
+QToolButton#primary, QPushButton#primary {{ background: {GLASS_ACCENT}; color: #ffffff; font-weight: 600; }}
+QToolButton#primary:hover, QPushButton#primary:hover {{ background: #6aa2ec; }}
+QToolButton#chip {{ background: {fill}; border-radius: 10px; padding: 2px 8px; font-size: 11px; }}
+QLineEdit, QPlainTextEdit, QTextBrowser, QComboBox {{
+ background: {fill}; border: none; border-radius: 10px; padding: 7px 10px; selection-background-color: {GLASS_ACCENT}; selection-color: #ffffff;
+}}
+QLineEdit:focus, QPlainTextEdit:focus, QComboBox:focus {{ border: 2px solid {GLASS_ACCENT}; padding: 5px 8px; }}
+QComboBox QAbstractItemView {{ background: {theme.solid}; border: none; selection-background-color: {GLASS_ACCENT}; selection-color: #ffffff; }}
+QTableWidget {{ background: transparent; border: none; gridline-color: {line}; selection-background-color: {fill}; }}
+QTableWidget::item {{ padding: 7px; border-bottom: 1px solid {line}; }}
+QHeaderView::section {{ background: transparent; color: {ink2}; padding: 7px; border: none; font-size: 11px; font-weight: 600; }}
+QListWidget, QTreeWidget {{ background: transparent; border: none; outline: none; }}
+QListWidget::item, QTreeWidget::item {{ padding: 8px 12px; border-radius: 15px; }}
+QListWidget::item:hover, QTreeWidget::item:hover {{ background: {hover}; }}
+QListWidget::item:selected, QTreeWidget::item:selected {{ background: {GLASS_ACCENT}; color: #ffffff; }}
+QMenu {{ background: {theme.solid}; border: 1px solid {line}; border-radius: 12px; padding: 6px; }}
+QMenu::item {{ padding: 6px 14px; border-radius: 15px; }}
+QMenu::item:selected {{ background: {GLASS_ACCENT}; color: #ffffff; }}
+QMenu::separator {{ height: 1px; background: {line}; margin: 5px 10px; }}
+QCheckBox {{ spacing: 8px; }}
+QTabWidget::pane {{ border: none; }}
+QTabBar::tab {{ background: transparent; color: {ink2}; padding: 6px 14px; border-radius: 14px; margin: 2px; }}
+QTabBar::tab:selected {{ background: {hover}; color: {ink}; }}
+QScrollBar:vertical {{ background: transparent; width: 8px; margin: 4px 2px; }}
+QScrollBar::handle:vertical {{ background: {theme.thumb.css}; border-radius: 3px; min-height: 24px; }}
+QScrollBar:horizontal {{ background: transparent; height: 8px; margin: 2px 4px; }}
+QScrollBar::handle:horizontal {{ background: {theme.thumb.css}; border-radius: 3px; min-width: 24px; }}
+QScrollBar::add-line, QScrollBar::sub-line, QScrollBar::add-page, QScrollBar::sub-page {{ width: 0; height: 0; background: transparent; }}
+QToolTip {{ background: {theme.solid}; color: {ink}; border: 1px solid {line}; border-radius: 8px; padding: 5px 8px; }}
+"""
+
+
+def canvas_style(theme: Tokens) -> str:
+    """The canvas: a solid content window; its toolbars and inspector carry the floating controls."""
+    ink2, fill, hover, press, line = theme.ink2.css, theme.fill.css, theme.hover.css, theme.press.css, theme.separator.css
+    return f"""
+QWidget {{ color: {theme.ink.css}; font-family: '{typeface.FAMILY}'; font-size: 13px; background: transparent; }}
+QFrame#canvasPill {{ background: {theme.solid}; border: 1px solid {theme.solid_edge.css}; border-radius: 18px; }}
+QLabel {{ background: transparent; border: none; }}
+QLabel#muted {{ color: {ink2}; font-size: 11.5px; }}
+QLabel#title {{ font-size: 14px; font-weight: 600; }}
+QToolButton {{ border: none; border-radius: 14px; padding: 5px 11px; background: transparent; font-weight: 500; }}
+QToolButton:hover {{ background: {hover}; }}
+QToolButton:pressed {{ background: {press}; }}
+QToolButton:checked {{ background: {hover}; }}
+QToolButton:focus {{ border: 2px solid {GLASS_ACCENT}; padding: 3px 9px; }}
+QToolButton:disabled {{ color: {theme.ink3.css}; }}
+QToolButton#primary {{ background: {GLASS_ACCENT}; color: #ffffff; font-weight: 600; }}
+QToolButton#primary:hover {{ background: #6aa2ec; }}
+QLineEdit, QPlainTextEdit, QComboBox {{
+ background: {fill}; border: none; border-radius: 10px; padding: 7px 10px; selection-background-color: {GLASS_ACCENT};
+}}
+QLineEdit:focus, QPlainTextEdit:focus {{ border: 2px solid {GLASS_ACCENT}; padding: 5px 8px; }}
+QPlainTextEdit:read-only {{ background: transparent; border: none; padding: 0; }}
+QLineEdit#canvasSearch {{ background: transparent; border: none; padding: 5px 8px; }}
+QComboBox QAbstractItemView {{ background: {theme.solid}; selection-background-color: {GLASS_ACCENT}; }}
+QMenu {{ background: {theme.solid}; border: 1px solid {line}; border-radius: 12px; padding: 6px; }}
+QMenu::item {{ padding: 6px 14px; border-radius: 15px; }}
+QMenu::item:selected {{ background: {GLASS_ACCENT}; color: #ffffff; }}
+QScrollBar:vertical {{ background: transparent; width: 8px; margin: 4px 2px; }}
+QScrollBar::handle:vertical {{ background: {theme.thumb.css}; border-radius: 3px; min-height: 20px; }}
+QScrollBar::add-line, QScrollBar::sub-line, QScrollBar::add-page, QScrollBar::sub-page {{ height: 0; width: 0; background: transparent; }}
+QToolTip {{ background: {theme.solid}; color: {theme.ink.css}; border: 1px solid {line}; border-radius: 8px; padding: 5px 8px; }}
+"""
+
+
+# Migration: these names carry the dark scheme until each surface reads its tokens.
+ACCENT: Final = GLASS_ACCENT
+INK: Final = "#f0f0f0"
+SECONDARY: Final = "#a1a1a4"
+USER: Final = "#8fb7ef"
+SURFACE: Final = DARK.solid
+EDGE: Final = "#3a3a3e"
+OVERLAY_BACKGROUND: Final = DARK.window
+OVERLAY_INK: Final = INK
+OVERLAY_MUTED: Final = SECONDARY
+OVERLAY_ACCENT: Final = GLASS_ACCENT
+OVERLAY_SURFACE: Final = DARK.solid
+CONTROL_STYLE: Final = control_style(DARK)
+CANVAS_STYLE: Final = canvas_style(DARK)
+
+
+@dataclass(frozen=True, slots=True)
+class Ink:
+    foreground: str = INK
+    secondary: str = SECONDARY
+    link: str = USER
+    error: str = "#ff8a80"
+
+
+@dataclass(frozen=True, slots=True)
+class Palette:
+    """A card: neutral surface and edge; `accent` is its meaning or its app's colour, for the badge."""
+
+    surface: str
+    edge: str
+    accent: str
+    tint: str
+
+
+def brand(app: App) -> str:
+    """Each app's own colour, shown only on its badge."""
+    match app:
+        case App.TEAMS:
+            return "#6264a7"
+        case App.OUTLOOK:
+            return "#0f6cbd"
+        case App.CODEX:
+            return "#10a37f"
+        case App.CLAUDE:
+            return "#d97757"
+        case App.EDGE:
+            return "#1b9de2"
+        case App.WEB_PAGE:
+            return "#5e9ad6"
+        case App.DOCUMENT:
+            return "#2b7cd3"
+        case App.KANBAN:
+            return "#c28a2c"
+        case App.WINDOWS:
+            return "#0078d4"
+        case App.WORKSPACE:
+            return GLASS_ACCENT
+        case _:
+            assert_never(app)
+
+
+def palette(tone: Tone, app: App | None = None) -> Palette:
+    neutral = (SURFACE, EDGE)
+    if app is not None:
+        return Palette(*neutral, brand(app), "#1c1c20")
+    match tone:
+        case Tone.USER | Tone.RECORDING | Tone.THINKING | Tone.ACTION | Tone.REPLY:
+            return Palette(*neutral, GLASS_ACCENT, "#1c1c20")
+        case Tone.QUESTION:
+            return Palette(*neutral, ATTENTION, "#1c1c20")
+        case Tone.ERROR:
+            return Palette(*neutral, RED, "#1c1c20")
+        case _:
+            assert_never(tone)
+
+
+# Small glass: thin neutral veils with monochrome ink.
 @dataclass(frozen=True, slots=True)
 class Lettering:
     """Ink for a surface: primary and quiet text, and the control fills under the pointer."""

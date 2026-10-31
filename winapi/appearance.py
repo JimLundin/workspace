@@ -157,6 +157,16 @@ def preference() -> Preference:
     return Material.GLASS if enabled == 1 else Material.SOLID
 
 
+def light_apps() -> bool:
+    """Windows' app mode: large glass and content windows follow it."""
+    try:
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize") as key:
+            light, _kind = winreg.QueryValueEx(key, "AppsUseLightTheme")
+    except OSError:
+        return False
+    return light == 1
+
+
 @dataclass(frozen=True, slots=True)
 class Environment:
     """How the desktop asks a view to look and move: animation setting, material and frame timer."""
