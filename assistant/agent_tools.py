@@ -91,7 +91,8 @@ class ArgumentError(Exception):
 
 def rejected(tool: str, error: ValidationError) -> ArgumentError:
     """A tool seam's validation failure, phrased for the model by argument name."""
-    problems = "; ".join(f"{'.'.join(str(part) for part in item['loc']) or 'arguments'}: {item['msg']}" for item in error.errors())
+    # A request union's tag is the tool itself, so it is dropped from each location.
+    problems = "; ".join(f"{'.'.join(str(part) for part in item['loc'] if part != tool) or 'arguments'}: {item['msg']}" for item in error.errors())
     return ArgumentError(f"{tool} arguments are invalid: {problems}.")
 
 
