@@ -14,7 +14,7 @@ $env:PATH = "C:\Program Files\Git\cmd;$env:PATH"
 Push-Location $root
 try {
     switch ($Command) {
-        'check' { & $python -m scripts.check --native @Arguments }
+        'check' { & $python -m scripts.check --native --standards @Arguments }
         'watch' { & $python -B -m scripts.watch @Arguments }
         'preview' { & $python -B -m scripts.watch --preview-only --preview both @Arguments }
         'deploy' { & $python -m scripts.deploy deploy @Arguments }

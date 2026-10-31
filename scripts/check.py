@@ -1,6 +1,6 @@
 """Source-bound editing checks. The keeper's protected full gate is unchanged.
 
-python -m scripts.check [--full] [--native] [--tests tests/test_x.py ...]
+python -m scripts.check [--full] [--native] [--standards] [--tests tests/test_x.py ...]
                        [--receipt /tmp/workspace-check.json]
 """
 
@@ -15,7 +15,7 @@ import tempfile
 import time
 import unittest
 from collections.abc import Callable, Generator, Iterator, Mapping
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal, Protocol, runtime_checkable
@@ -30,7 +30,7 @@ from scripts.development_paths import LIVE, PROFILE
 from scripts.source_analysis import Cache
 lazy import selfcheck
 lazy from runtime import activate
-lazy from scripts import quality
+lazy from scripts import check_standards, quality
 lazy from scripts.check_native import execute_native
 lazy from scripts.native_desktop import current_name
 
@@ -88,6 +88,7 @@ AFTER_WORKERS = frozenset(
 class Options:
     full: bool
     native: bool
+    standards: bool
     tests: tuple[str, ...]
     receipt: Path | None
     baseline: Path
@@ -409,23 +410,33 @@ def check_quality(root: Path, current: Mapping[str, str], cache: Cache) -> None:
         raise SystemExit(1)
 
 
+def check_lint(root: Path) -> None:
+    failures = check_standards.run((check_standards.LINT, check_standards.FORMAT), root)
+    for failure in failures:
+        print(failure.report)
+    if failures:
+        raise SystemExit(1)
+
+
 def arguments(parser: argparse.ArgumentParser) -> Options:
     raw = dict(inspect.getmembers(parser.parse_args()))
     match raw:
         case {
             "full": bool() as full,
             "native": bool() as native,
+            "standards": bool() as standards,
             "tests": requested,
             "receipt": (Path() | None) as receipt,
             "baseline": Path() as baseline,
             "timings": (Path() | None) as timings,
         }:
             if requested is None:
-                return Options(full=full, native=native, tests=(), receipt=receipt, baseline=baseline, timings=timings)
+                return Options(full=full, native=native, standards=standards, tests=(), receipt=receipt, baseline=baseline, timings=timings)
             try:
                 return Options(
                     full=full,
                     native=native,
+                    standards=standards,
                     tests=tuple(TEST_NAMES.validate_python(requested, strict=True)),
                     receipt=receipt,
                     baseline=baseline,
@@ -559,6 +570,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--full", action="store_true")
     parser.add_argument("--native", action="store_true", help="include affected native modules; Windows only, one runner")
+    parser.add_argument("--standards", action="store_true", help="also apply the whole-tree Ruff and pyright standards; Dev.cmd check does")
     parser.add_argument("--tests", nargs="+", help="explicit test modules for an in-progress iteration")
     parser.add_argument("--receipt", type=Path)
     parser.add_argument("--timings", type=Path, help="diagnostic cost report, retained on test/import failure")
@@ -579,18 +591,27 @@ def main() -> None:
         architecture = check_architecture(ROOT, current, cache)
     with timed("phase:quality review", overhead):
         check_quality(ROOT, current, cache)
+    if args.standards:
+        with timed("phase:lint standards", overhead):
+            check_lint(ROOT)
     with timed("phase:baseline and test selection", overhead):
         selection = choose(args, current, parser)
     scope: dict[str, str | int] = {"profile": selection.reason, "test_modules": len(selection.tests), "changed_files": len(selection.changed)}
     print(json.dumps(scope), flush=True)
-    # Desktop isolation may relaunch the executor. Keep policy review, source
-    # identity and receipt publication in this coordinator, outside that handoff.
-    if os.name == "nt" and current_name() == os.environ.get("WORKSPACE_TEST_DESKTOP"):
-        results = execute(selection, ROOT)
-    elif os.name == "nt" or args.native:
-        results = execute_native(ROOT, selection)
-    else:
-        results = execute(selection, ROOT)
+    # Type checking the whole tree takes minutes; it overlaps test execution and
+    # its failures block the receipt like test failures.
+    types = check_standards.background(check_standards.TYPES, ROOT) if args.standards else nullcontext(check_standards.unchecked)
+    with types as typed:
+        # Desktop isolation may relaunch the executor. Keep policy review, source
+        # identity and receipt publication in this coordinator, outside that handoff.
+        if os.name == "nt" and current_name() == os.environ.get("WORKSPACE_TEST_DESKTOP"):
+            results = execute(selection, ROOT)
+        elif os.name == "nt" or args.native:
+            results = execute_native(ROOT, selection)
+        else:
+            results = execute(selection, ROOT)
+        with timed("phase:type standards", overhead):
+            results = combined_results((results, Results(0, 0, typed(), ())))
     with timed("phase:final source manifest", overhead):
         final = source_files()
     if final != current:

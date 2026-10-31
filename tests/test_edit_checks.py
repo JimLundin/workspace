@@ -174,7 +174,7 @@ def test_failed_checks_keep_cost_evidence_naming_each_failure_without_a_receipt(
     result = execute(selected, tmp_path, SourceFixture())
     durations = (*result.durations, (50.0, "worker:tests.test_agent.test_refusal"))
     current = frozendict({name: "checked-source"})
-    options = Options(full=False, native=False, tests=selected.tests, timings=report, receipt=receipt, baseline=tmp_path)
+    options = Options(full=False, native=False, standards=False, tests=selected.tests, timings=report, receipt=receipt, baseline=tmp_path)
     run = CheckRun(current, selected, Results(result.passed, result.skipped, result.failures, durations), Report((), (), ()), 80)
     console = io.StringIO()
     with contextlib.redirect_stdout(console):

@@ -10,6 +10,7 @@ from collections.abc import Iterable
 from dataclasses import replace
 from pathlib import Path
 
+from scripts.check_standards import Standard, background
 from scripts.quality import Entry, Finding, Key, compare, imports, load, scan
 from tests.check_fixture import copy_check_scripts
 
@@ -173,6 +174,40 @@ def test_explicit_test_scope_cannot_bypass_quality_or_write_a_receipt(tmp_path: 
     )
     assert result.returncode == 1 and "FBT001" in result.stdout, result.stdout + result.stderr
     assert "must not execute" not in result.stdout and not receipt.exists()
+
+
+def test_standards_fail_on_a_lint_error_outside_the_selected_tests_before_tests_or_a_receipt(tmp_path: Path) -> None:
+    # Detect Dev.cmd check passing tree-wide lint errors again: the flag not
+    # wired, a failing standard not blocking, or scope limited to the selection.
+    development_lint()
+    source_tree(tmp_path, "import os\n")
+    migrations(tmp_path)
+    copy_check_scripts(tmp_path, ("check.py",))
+    (tmp_path / "tests").mkdir()
+    (tmp_path / "tests" / "test_requested.py").write_text('def test_requested():\n    raise AssertionError("must not execute")\n')
+    subprocess.run(("git", "init", "--quiet", str(tmp_path)), check=True, capture_output=True)
+    receipt = tmp_path / "checked.json"
+    result = subprocess.run(
+        (sys.executable, "-m", "scripts.check", "--standards", "--tests", "tests/test_requested.py", "--receipt", str(receipt)),
+        cwd=tmp_path,
+        text=True,
+        capture_output=True,
+        check=False,
+        timeout=30,
+    )
+    assert result.returncode == 1 and "F401" in result.stdout, result.stdout + result.stderr
+    assert "must not execute" not in result.stdout and not receipt.exists()
+
+
+def test_background_standard_reports_its_failure_and_output_only_when_it_fails(tmp_path: Path) -> None:
+    # Detect the overlapped type check losing its exit status or report.
+    failing = Standard("types", (sys.executable, "-c", "print('api.py:1 - error: unknown'); raise SystemExit(1)"))
+    with background(failing, tmp_path) as collect:
+        failures = collect()
+    assert [(failure.node, failure.summary) for failure in failures] == [("types", "types exited with status 1")]
+    assert "api.py:1 - error: unknown" in failures[0].report
+    with background(Standard("types", (sys.executable, "-c", "print('0 errors')")), tmp_path) as collect:
+        assert collect() == ()
 
 
 def test_reviewed_native_interface_remains_exact_and_cannot_excuse_boolean_or_import_violations(tmp_path: Path) -> None:

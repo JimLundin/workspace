@@ -140,6 +140,16 @@ imports and direct forwarding exports.
 Read [code-quality-policies.md](code-quality-policies.md) when changing a
 signature or its exact migration entry. Architecture migration exceptions
 are printed as cleanup debt. A policy failure stops before tests or a receipt.
+`Dev.cmd check` also passes `--standards`, which applies the same whole-tree
+`ruff check`, `ruff format --check` and pyright runs as `Dev.cmd lint`,
+`format --check` and `typecheck`, whatever the test selection. Ruff runs
+before tests and stops the check on failure. Pyright takes about two minutes on
+the full tree, so it runs alongside the tests; its errors fail the check and
+block the receipt. Before this, the editing quality review ran only Ruff's
+signature rules, so type and lint errors outside those rules still produced
+deployable receipts. Plain `python -m scripts.check`, the watcher and CI's
+property run omit the flag; CI's standards job still runs these tools. mypy is
+not yet part of this gate because the tree has existing mypy errors.
 The full protected selfcheck also exercises the review through its ordinary flat
 test discovery. Source discovery and the static data-record declaration checks recurse into nested
 modules without scanning interpreter/dependency folders; deployed copies need no
