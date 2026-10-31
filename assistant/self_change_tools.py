@@ -6,13 +6,28 @@ import time
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Final, Protocol
+from typing import Annotated, Final, Protocol
 
-from assistant.agent_tools import DECLINED, TEXT, Args, ArgumentError, Display, Output, Session, Tool, fixed, schema
-from assistant.llm import tool_spec
+from pydantic import Field, TypeAdapter
+
+from assistant.agent_tools import (
+    DECLINED,
+    NO_ARGUMENTS,
+    Args,
+    ArgumentError,
+    Display,
+    NoArguments,
+    Output,
+    Session,
+    Tool,
+    argument_spec,
+    fixed,
+    typed_classification,
+    typed_run,
+)
 from assistant.publishing import DEFAULT_REMOTE, publish_source
 from assistant.workspace import CheckCompleted, CheckInterrupted, CheckResult, SourceError, Workspace
-from automation.actions import Change, Observation, Operation, target
+from automation.actions import Change, Classification, Observation, Operation, target
 from automation.json_value import Json
 from automation.store import TaskStore
 from automation.task import ActionUncertain, ActionVerified, Blocked, Claim, Waiting
@@ -41,12 +56,44 @@ _INSTALLATION: Final = "apply_changes"
 _SOURCE_TREE: Final = target("source-tree", "workspace")
 
 
-def _source_file(arguments: Mapping[str, Json]) -> tuple[str, ...]:
-    match arguments.get("path"):
-        case str() as path:
-            return ("source", target("source", os.path.normcase(os.path.normpath(path.replace("\\", "/")))))
-        case _:
-            return ("source",)
+type Text = Annotated[str, Field(strict=True)]
+
+
+@dataclass(frozen=True, slots=True)
+class PathArguments:
+    path: Text
+
+
+@dataclass(frozen=True, slots=True)
+class WriteArguments:
+    path: Text
+    content: Text
+
+
+@dataclass(frozen=True, slots=True)
+class EditArguments:
+    path: Text
+    old: Text
+    new: Text
+
+
+@dataclass(frozen=True, slots=True)
+class SummaryArguments:
+    summary: Text
+
+
+_PATH: Final = TypeAdapter(PathArguments)
+_WRITE: Final = TypeAdapter(WriteArguments)
+_EDIT: Final = TypeAdapter(EditArguments)
+_SUMMARY: Final = TypeAdapter(SummaryArguments)
+
+
+def _source_file(path: str) -> tuple[str, ...]:
+    return ("source", target("source", os.path.normcase(os.path.normpath(path.replace("\\", "/")))))
+
+
+def _source_change[A: PathArguments | WriteArguments | EditArguments](arguments: TypeAdapter[A]) -> Callable[[Mapping[str, Json]], Classification]:
+    return typed_classification(arguments, lambda request: Change(_source_file(request.path)), Change(("source",)))
 
 
 def _installation(arguments: Mapping[str, Json]) -> tuple[str, ...]:
@@ -107,87 +154,77 @@ class SelfChange:
         self.check_failed = False
 
     def tools(self) -> tuple[Tool, ...]:
-        path = schema({"path": TEXT}, ("path",))
-        summary = schema({"summary": TEXT}, ("summary",))
         return (
             Tool(
-                tool_spec("list_source", "List Workspace's own source files (your workspace copy).", schema({}, ())),
-                self.list_source,
+                argument_spec("list_source", "List Workspace's own source files (your workspace copy).", NO_ARGUMENTS),
+                typed_run(NO_ARGUMENTS, self.list_source),
                 fixed(Observation(("source",))),
                 Display.PUBLIC,
             ),
             Tool(
-                tool_spec("read_source", "Read one of Workspace's source files. Start with README.md and AGENTS.md.", path),
-                self.read_source,
-                lambda arguments: Observation(_source_file(arguments)),
+                argument_spec("read_source", "Read one of Workspace's source files. Start with README.md and AGENTS.md.", _PATH),
+                typed_run(_PATH, self.read_source),
+                typed_classification(_PATH, lambda request: Observation(_source_file(request.path)), Observation(("source",))),
                 Display.PUBLIC,
             ),
             Tool(
-                tool_spec(
-                    "write_source",
-                    "Write a whole source file in your workspace (new or replaced).",
-                    schema({"path": TEXT, "content": TEXT}, ("path", "content")),
-                ),
-                self.write_source,
-                lambda arguments: Change(_source_file(arguments)),
+                argument_spec("write_source", "Write a whole source file in your workspace (new or replaced).", _WRITE),
+                typed_run(_WRITE, self.write_source),
+                _source_change(_WRITE),
                 Display.PUBLIC,
             ),
             Tool(
-                tool_spec(
-                    "edit_source",
-                    "Replace text that appears exactly once in a source file in your workspace.",
-                    schema({"path": TEXT, "old": TEXT, "new": TEXT}, ("path", "old", "new")),
-                ),
-                self.edit_source,
-                lambda arguments: Change(_source_file(arguments)),
+                argument_spec("edit_source", "Replace text that appears exactly once in a source file in your workspace.", _EDIT),
+                typed_run(_EDIT, self.edit_source),
+                _source_change(_EDIT),
                 Display.PUBLIC,
             ),
             Tool(
-                tool_spec("delete_source", "Delete a source file in your workspace.", path),
-                self.delete_source,
-                lambda arguments: Change(_source_file(arguments)),
+                argument_spec("delete_source", "Delete a source file in your workspace.", _PATH),
+                typed_run(_PATH, self.delete_source),
+                _source_change(_PATH),
                 Display.PUBLIC,
             ),
             Tool(
-                tool_spec("show_changes", "Your changes so far, as a diff against the running workspace.", schema({}, ())),
-                self.show_changes,
+                argument_spec("show_changes", "Your changes so far, as a diff against the running workspace.", NO_ARGUMENTS),
+                typed_run(NO_ARGUMENTS, self.show_changes),
                 fixed(Observation(("source", _SOURCE_TREE))),
                 Display.PUBLIC,
             ),
             Tool(
-                tool_spec(
+                argument_spec(
                     "check_changes",
                     "Run fast editing checks. The keeper runs full Windows checks before install; in approval mode, checks follow review.",
-                    schema({}, ()),
+                    NO_ARGUMENTS,
                 ),
-                self.check_changes,
+                typed_run(NO_ARGUMENTS, self.check_changes),
                 fixed(Change(("exclusive", _SOURCE_TREE))),
                 Display.PUBLIC,
             ),
             Tool(
-                tool_spec(
+                argument_spec(
                     "apply_changes",
                     "Submit checked changes to the keeper: it tests a frozen copy and installs if they pass. "
                     "If they fail to start or crash, they're undone automatically.",
-                    summary,
+                    _SUMMARY,
                 ),
-                self.apply_changes,
+                typed_run(_SUMMARY, self.apply_changes),
                 lambda arguments: Change(_installation(arguments)),
                 Display.PUBLIC,
             ),
             Tool(
-                tool_spec(
+                argument_spec(
                     "publish_changes",
                     "Test, commit and push requested source changes to a new Git branch; main and running source stay unchanged.",
-                    summary,
+                    _SUMMARY,
                 ),
-                self.publish_changes,
+                typed_run(_SUMMARY, self.publish_changes),
                 fixed(Change(("exclusive",))),
                 Display.PUBLIC,
             ),
             Tool(
-                tool_spec("discard_changes", "Throw away your changes: back to the running version.", schema({}, ())),
-                self.discard_changes,
+                argument_spec("discard_changes", "Throw away your changes: back to the running version.", NO_ARGUMENTS),
+                typed_run(NO_ARGUMENTS, self.discard_changes),
                 fixed(Change(("source", _SOURCE_TREE))),
                 Display.PUBLIC,
             ),
@@ -204,11 +241,11 @@ class SelfChange:
 
         return self.session.effect(args.operation, execute)
 
-    def list_source(self, args: Args) -> Output:
+    def list_source(self, args: Args, _request: NoArguments) -> Output:
         return self.session.effect(args.operation, lambda: Output("\n".join(self.source().files())))
 
-    def read_source(self, args: Args) -> Output:
-        name = args.text("path")
+    def read_source(self, args: Args, request: PathArguments) -> Output:
+        name = request.path
 
         def read() -> Output:
             text = self.source().read(name)
@@ -218,19 +255,19 @@ class SelfChange:
 
         return self.session.effect(args.operation, read)
 
-    def write_source(self, args: Args) -> Output:
-        path, content = args.text("path"), args.text("content")
+    def write_source(self, args: Args, request: WriteArguments) -> Output:
+        path, content = request.path, request.content
         return self.change(args, lambda: self.source().write(path, content), "Written.")
 
-    def edit_source(self, args: Args) -> Output:
-        path, old, new = args.text("path"), args.text("old"), args.text("new")
+    def edit_source(self, args: Args, request: EditArguments) -> Output:
+        path, old, new = request.path, request.old, request.new
         return self.change(args, lambda: self.source().replace(path, old, new), "Edited.")
 
-    def delete_source(self, args: Args) -> Output:
-        path = args.text("path")
+    def delete_source(self, args: Args, request: PathArguments) -> Output:
+        path = request.path
         return self.change(args, lambda: self.source().delete(path), "Deleted.")
 
-    def show_changes(self, args: Args) -> Output:
+    def show_changes(self, args: Args, _request: NoArguments) -> Output:
         def read() -> Output:
             changes = self.source().changes()
             if not changes:
@@ -239,7 +276,7 @@ class SelfChange:
 
         return self.session.effect(args.operation, read)
 
-    def check_changes(self, args: Args) -> Output:
+    def check_changes(self, args: Args, _request: NoArguments) -> Output:
         source = self.source()
         diff = source.diff()
         passed, report = source.validate()
@@ -275,8 +312,8 @@ class SelfChange:
             return Output("Stopped by the user.", ok=False)
         return Output(report[-6000:], ok=passed)
 
-    def apply_changes(self, args: Args) -> Output:
-        summary, diff = args.text("summary"), self.source().diff()
+    def apply_changes(self, args: Args, request: SummaryArguments) -> Output:
+        summary, diff = request.summary, self.source().diff()
         if not diff:
             raise ArgumentError("there are no changes to install.")
         if self.checked is None:
@@ -314,7 +351,7 @@ class SelfChange:
 
         return self.session.effect(operation, execute)
 
-    def publish_changes(self, args: Args) -> Output:
+    def publish_changes(self, args: Args, request: SummaryArguments) -> Output:
         source = self.source()
         passed, report = source.validate()
         if not passed:
@@ -337,7 +374,7 @@ class SelfChange:
         result = publish_source(
             source.live,
             source.root,
-            args.text("summary"),
+            request.summary,
             approve,
             self.session.stop.is_set,
             remote=os.environ.get("WORKSPACE_GIT_REMOTE", DEFAULT_REMOTE),
@@ -347,7 +384,7 @@ class SelfChange:
         )
         return Output(result)
 
-    def discard_changes(self, args: Args) -> Output:
+    def discard_changes(self, args: Args, _request: NoArguments) -> Output:
         def execute() -> Output:
             self.source().reset()
             self.checked, self.check_failed = None, False

@@ -6,7 +6,6 @@ resources it holds, how its effect is proven, and what the visible log may show.
 The agent dispatches and records through this interface; it never matches tool names.
 """
 
-import math
 import threading
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
@@ -16,7 +15,7 @@ from typing import Final, Protocol
 from pydantic import ConfigDict, TypeAdapter, ValidationError
 
 from assistant.geometry import Shot
-from assistant.llm import ToolSpec
+from assistant.llm import ToolSpec, tool_spec
 from automation.actions import Classification, Operation
 from automation.execution import Proof, Readback, Targets
 from automation.json_value import Json
@@ -111,35 +110,49 @@ class Args:
         """The operation exactly as requested; tools that resolve targets describe their own."""
         return Operation(self.tool, self.payload)
 
-    def text(self, name: str, default: str | None = None) -> str:
-        value = self.values.get(name, default)
-        if not isinstance(value, str):
-            raise ArgumentError(f"{self.tool} needs {name} (text).")
-        return value
 
-    def number(self, name: str, default: int | None = None) -> int:
-        value = self.values.get(name, default)
-        if isinstance(value, bool) or not isinstance(value, (int, float)):
-            raise ArgumentError(f"{self.tool} needs {name} (a number).")
-        if isinstance(value, float) and not math.isfinite(value):
-            raise ArgumentError(f"{self.tool} needs a finite {name}.")
-        return round(value)
+_SCHEMA: Final = TypeAdapter(dict[str, Json])
 
-    def integer(self, name: str, default: int | None = None) -> int:
-        value = self.values.get(name, default)
-        if isinstance(value, bool) or not isinstance(value, int):
-            raise ArgumentError(f"{self.tool} needs {name} (an integer).")
-        return value
 
-    def bounded(self, name: str, default: int, bounds: tuple[int, int]) -> int:
-        minimum, maximum = bounds
-        value = self.number(name, default)
-        if not minimum <= value <= maximum:
-            raise ArgumentError(f"{name} must be between {minimum} and {maximum}.")
-        return value
+@dataclass(frozen=True, slots=True)
+class NoArguments:
+    """A tool that takes no arguments; any it is given are ignored."""
 
-    def flag(self, name: str) -> bool:
-        return self.values.get(name) is True
+
+NO_ARGUMENTS: Final = TypeAdapter(NoArguments)
+
+
+def argument_spec[A](name: str, description: str, arguments: TypeAdapter[A]) -> ToolSpec:
+    """A tool's model schema, generated from the record its arguments validate into."""
+    observed: object = arguments.json_schema()
+    return tool_spec(name, description, _SCHEMA.validate_python(observed))
+
+
+def typed_run[A](arguments: TypeAdapter[A], handler: Callable[[Args, A], Output]) -> Callable[[Args], Output]:
+    """Validate a call's arguments into their record before the handler approves or acts."""
+
+    def run(args: Args) -> Output:
+        try:
+            request = arguments.validate_json(args.payload)
+        except ValidationError as error:
+            raise rejected(args.tool, error) from error
+        return handler(args, request)
+
+    return run
+
+
+def typed_classification[A](
+    arguments: TypeAdapter[A], classify: Callable[[A], Classification], fallback: Classification
+) -> Callable[[Mapping[str, Json]], Classification]:
+    """Targets come from the validated record; unparseable arguments keep only the tool's locks."""
+
+    def classified(raw: Mapping[str, Json]) -> Classification:
+        try:
+            return classify(arguments.validate_json(_SCHEMA.dump_json(dict(raw))))
+        except ValueError:
+            return fallback
+
+    return classified
 
 
 type Verifier = Callable[[Output], ActionVerified | ActionUncertain | ActionNotApplied]

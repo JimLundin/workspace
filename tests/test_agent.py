@@ -800,6 +800,26 @@ def test_source_edits_survive_follow_up_requests(tmp_path: Path) -> None:
         assert not (workspace.live / "draft.py").exists()
 
 
+def test_invalid_task_and_source_arguments_never_reach_the_journal_or_source(tmp_path: Path) -> None:
+    # Defect: a malformed self-change or task call reaches approval, an action
+    # record or the workspace before its arguments are validated at the seam.
+    work = durable(tmp_path)
+    workspace = source(tmp_path)
+    rig = ToolRig(approvals=True, workspace=workspace, work=work)
+    invalid: tuple[tuple[str, dict[str, Json]], ...] = (
+        ("write_source", {"path": "draft.py"}),
+        ("edit_source", {"path": "config.py", "old": "'hej'"}),
+        ("apply_changes", {"summary": 5}),
+        ("reconcile_action", {"action_id": "a", "observation_id": "o", "applied": "yes"}),
+        ("ask_user", {"question": 5}),
+    )
+    for name, arguments in invalid:
+        result = rig.call(name, **arguments)
+        assert not result.ok and result.text.startswith(f"Error: {name} arguments are invalid"), (name, result.text)
+    assert work.disposition is None and not work.store.actions(work.claim.task.id)
+    assert not workspace.root.exists() or "draft.py" not in workspace.files()
+
+
 def test_reading_and_listing_the_source(tmp_path: Path) -> None:
     rig = ToolRig(workspace=source(tmp_path), work=durable(tmp_path))
     listing = rig.call("list_source")
