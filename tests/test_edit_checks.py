@@ -22,7 +22,7 @@ from scripts.check import (
     windows_only,
     worker_result,
 )
-from scripts.check_results import Failure
+from scripts.check_results import Failure, Results
 
 
 def tree(root: Path) -> dict[str, str]:
@@ -122,11 +122,11 @@ class SourceFixture:
 def test_function_selection_runs_the_requested_case_and_rejects_typos(tmp_path: Path) -> None:
     runtime = SourceFixture()
     name = __name__.replace(".", "/") + ".py"
-    passed, skipped, failures, _ = execute(Selection((name + "::test_requested",), (), "explicit iteration scope"), tmp_path, runtime)
-    assert (passed, skipped, failures) == (1, 0, ()) and runtime.order == ["generated"]
-    passed, _, failures, _ = execute(Selection((name + "::test_missing",), (), "explicit iteration scope"), tmp_path, runtime)
+    result = execute(Selection((name + "::test_requested",), (), "explicit iteration scope"), tmp_path, runtime)
+    assert (result.passed, result.skipped, result.failures) == (1, 0, ()) and runtime.order == ["generated"]
     missing = name + "::test_missing"
-    assert passed == 0 and failures == (Failure(missing, "No test function matched", "No test function matched " + missing),)
+    result = execute(Selection((missing,), (), "explicit iteration scope"), tmp_path, runtime)
+    assert result.passed == 0 and result.failures == (Failure(missing, "No test function matched", "No test function matched " + missing),)
 
 
 def test_generated_checks_precede_broad_dependency_imports_and_keep_import_gate(tmp_path: Path) -> None:
@@ -157,13 +157,13 @@ def test_generated_checks_precede_broad_dependency_imports_and_keep_import_gate(
             sdk = tmp_path / "assistant" / "sdk.py"
             sdk.parent.mkdir()
             sdk.write_text("# SDK boundary")
-        passed, skipped, failures, _ = execute(Selection((name,), (), "full source checks"), tmp_path, runtime)
+        result = execute(Selection((name,), (), "full source checks"), tmp_path, runtime)
         assert runtime.order == (["generated", "sdk", "imports"] if sdk_present else ["generated", "imports"])
         problem = Failure("import all production modules", "A dependency does not import", "A dependency does not import")
-        assert (passed, skipped, failures) == (1, 0, (problem,))
+        assert (result.passed, result.skipped, result.failures) == (1, 0, (problem,))
     runtime = PropertyRuntime()
-    passed, skipped, failures, _ = execute(Selection((name,), (), "explicit iteration scope"), tmp_path, runtime)
-    assert runtime.order == ["generated"] and (passed, skipped, failures) == (1, 0, ())
+    result = execute(Selection((name,), (), "explicit iteration scope"), tmp_path, runtime)
+    assert runtime.order == ["generated"] and (result.passed, result.skipped, result.failures) == (1, 0, ())
 
 
 def test_failed_checks_keep_cost_evidence_naming_each_failure_without_a_receipt(tmp_path: Path) -> None:
@@ -172,11 +172,11 @@ def test_failed_checks_keep_cost_evidence_naming_each_failure_without_a_receipt(
     report, receipt = tmp_path / "timings.json", tmp_path / "receipt.json"
     name = __name__.replace(".", "/") + ".py"
     selected = Selection((name + "::test_rejected",), (), "explicit iteration scope")
-    passed, skipped, failures, timings = execute(selected, tmp_path, SourceFixture())
-    durations = (*timings, (50.0, "worker:tests.test_agent.test_refusal"))
+    result = execute(selected, tmp_path, SourceFixture())
+    durations = (*result.durations, (50.0, "worker:tests.test_agent.test_refusal"))
     current = frozendict({name: "checked-source"})
     options = Options(full=False, native=False, tests=selected.tests, timings=report, receipt=receipt, baseline=tmp_path)
-    run = CheckRun(current, selected, (passed, skipped, failures, durations), Report((), (), ()), 80)
+    run = CheckRun(current, selected, Results(result.passed, result.skipped, result.failures, durations), Report((), (), ()), 80)
     console = io.StringIO()
     with contextlib.redirect_stdout(console):
         assert publish_check(options, run)
@@ -200,10 +200,10 @@ def test_broad_workers_keep_desktop_ownership_exact_selection_and_failures() -> 
     # Our aggregation must preserve failed child assertions and attribute child
     # costs separately from the sequential desktop lane's elapsed work.
     refusal = Failure("tests/test_agent.py::test_declined", "AssertionError", "Refusal failed")
-    child = worker_result((1, 0, (refusal,), ((2.0, "tests.test_agent.test_declined"),)))
-    other = worker_result((3, 1, (), ((1.0, "module:tests.test_work_store"),)))
-    parent = (4, 0, (), ((3.0, "tests.test_windows_browser.test_owned"),))
-    passed, skipped, failures, durations = combined_results((parent, child, other))
-    assert (passed, skipped, failures) == (8, 1, (refusal,))
-    assert (2.0, "worker:tests.test_agent.test_declined") in durations
-    assert (1.0, "worker:module:tests.test_work_store") in durations
+    child = worker_result(Results(1, 0, (refusal,), ((2.0, "tests.test_agent.test_declined"),)))
+    other = worker_result(Results(3, 1, (), ((1.0, "module:tests.test_work_store"),)))
+    parent = Results(4, 0, (), ((3.0, "tests.test_windows_browser.test_owned"),))
+    combined = combined_results((parent, child, other))
+    assert (combined.passed, combined.skipped, combined.failures) == (8, 1, (refusal,))
+    assert (2.0, "worker:tests.test_agent.test_declined") in combined.durations
+    assert (1.0, "worker:module:tests.test_work_store") in combined.durations

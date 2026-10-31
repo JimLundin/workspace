@@ -10,19 +10,18 @@ import shutil
 import subprocess
 import sys
 import tempfile
-from dataclasses import dataclass
 from pathlib import Path
 
-from pydantic import StrictFloat, StrictInt, StrictStr, TypeAdapter, ValidationError
+from pydantic import TypeAdapter, ValidationError
 
-from scripts.check_results import Failure, Results
+from scripts.check_results import Results
 from scripts.deploy_files import write
 from scripts.development_paths import LIVE, TEMP
 
 RUNNER = """import json, os, sys
 from pathlib import Path
 lazy from scripts.check import Selection, execute
-lazy from scripts.check_native import NATIVE_RESULT, NativeResult
+lazy from scripts.check_native import NATIVE_RESULT
 if __name__ == "__main__":
     configuration = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
     root = Path(configuration["root"])
@@ -30,21 +29,13 @@ if __name__ == "__main__":
     os.environ["WORKSPACE_BUNDLED_RUNTIME"] = configuration["runtime"]
     sys.path.insert(0, str(root))
     selection = Selection(tuple(configuration["tests"]), tuple(configuration["changed"]), configuration["reason"])
-    passed, skipped, failures, timings = execute(selection, root)
-    Path(configuration["output"]).write_bytes(NATIVE_RESULT.dump_json(NativeResult(passed, skipped, failures, timings)))
-    sys.exit(bool(failures))
+    results = execute(selection, root)
+    Path(configuration["output"]).write_bytes(NATIVE_RESULT.dump_json(results))
+    sys.exit(bool(results.failures))
 """
 
 
-@dataclass(frozen=True, slots=True)
-class NativeResult:
-    passed: StrictInt
-    skipped: StrictInt
-    failures: tuple[Failure, ...]
-    timings: tuple[tuple[StrictFloat, StrictStr], ...]
-
-
-NATIVE_RESULT = TypeAdapter[NativeResult](NativeResult)
+NATIVE_RESULT = TypeAdapter(Results)
 
 
 def windows_path(path: Path) -> str:
@@ -79,11 +70,11 @@ def execute_native(
         if not output.exists():
             raise RuntimeError("The Windows test process did not write its result; no receipt can be produced.")
         try:
-            record = NATIVE_RESULT.validate_json(output.read_bytes())
+            record = NATIVE_RESULT.validate_json(output.read_bytes(), strict=True)
         except ValidationError as error:
             raise ValueError("Invalid Windows check result.") from error
         if result.returncode and not record.failures:
             raise RuntimeError("Windows checks exited unsuccessfully; no success receipt can be produced.")
-        return record.passed, record.skipped, record.failures, record.timings
+        return record
     finally:
         shutil.rmtree(scratch)

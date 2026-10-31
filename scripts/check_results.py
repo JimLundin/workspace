@@ -17,7 +17,14 @@ class Failure:
     report: str
 
 
-type Results = tuple[int, int, tuple[Failure, ...], tuple[tuple[float, str], ...]]
+@dataclass(frozen=True, slots=True)
+class Results:
+    """Counts, failures and labelled durations from one executor."""
+
+    passed: int
+    skipped: int
+    failures: tuple[Failure, ...]
+    durations: tuple[tuple[float, str], ...]
 
 
 def raised(node: str, error: BaseException) -> Failure:

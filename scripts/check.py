@@ -235,16 +235,15 @@ def execution_plan(tests: tuple[str, ...]) -> ExecutionPlan:
 
 
 def worker_result(result: Results) -> Results:
-    passed, skipped, failures, timings = result
-    return passed, skipped, failures, tuple((seconds, "worker:" + label) for seconds, label in timings)
+    return Results(result.passed, result.skipped, result.failures, tuple((seconds, "worker:" + label) for seconds, label in result.durations))
 
 
 def combined_results(results: tuple[Results, ...], phases: tuple[tuple[float, str], ...] = ()) -> Results:
-    return (
-        sum(result[0] for result in results),
-        sum(result[1] for result in results),
-        tuple(failure for result in results for failure in result[2]),
-        (*phases, *(duration for result in results for duration in result[3])),
+    return Results(
+        sum(result.passed for result in results),
+        sum(result.skipped for result in results),
+        tuple(failure for result in results for failure in result.failures),
+        (*phases, *(duration for result in results for duration in result.durations)),
     )
 
 
@@ -269,7 +268,7 @@ def execute(selection: Selection, root: Path, runtime: SourceRuntime = NATIVE_SO
         with timed("phase:compile all source", phases):
             failures.extend(step_failures("compile all source", runtime.compile, root))
         if failures:
-            return 0, 0, tuple(failures), tuple(phases)
+            return Results(0, 0, tuple(failures), tuple(phases))
     # Hypothesis inspects loaded modules for local constants. Keep generated
     # domain checks ahead of the eager SDK/native import review, so bundled
     # dependencies do not become their generation catalog. Full compile/import
@@ -288,10 +287,10 @@ def execute(selection: Selection, root: Path, runtime: SourceRuntime = NATIVE_SO
         with timed("phase:import changed source", phases):
             import_changed(selection.changed, root, failures, runtime.load)
     if failures:
-        return first[0], first[1], (*first[2], *failures), (*phases, *first[3])
+        return combined_results((first, Results(0, 0, tuple(failures), ())), tuple(phases))
     remaining = tuple(name for name in selection.tests if not name.startswith("tests/properties/"))
     following = execute_overlapped(remaining, root) if broad else execute_tests(remaining, root, runtime.load)
-    return first[0] + following[0], first[1] + following[1], (*first[2], *following[2]), (*phases, *first[3], *following[3])
+    return combined_results((first, following), tuple(phases))
 
 
 def prepare_worker(root: Path) -> None:
@@ -326,7 +325,7 @@ def execute_overlapped(tests: tuple[str, ...], root: Path) -> Results:
                 try:
                     results.append(worker_result(future.result(timeout=240)))
                 except Exception as error:
-                    results.append((0, 0, (raised(name, error),), ()))
+                    results.append(Results(0, 0, (raised(name, error),), ()))
     finally:
         with timed("phase:portable worker shutdown", phases):
             pool.shutdown(wait=True, cancel_futures=True)
@@ -387,7 +386,7 @@ def execute_tests(tests: tuple[str, ...], root: Path, load: Callable[[str], obje
                 timings.append((time.perf_counter() - started, module + "." + label))
         if separator and not matched:
             failures.append(Failure(selector, "No test function matched", f"No test function matched {selector}"))
-    return passed, skipped, tuple(failures), tuple(timings)
+    return Results(passed, skipped, tuple(failures), tuple(timings))
 
 
 def check_architecture(root: Path, current: dict[str, str], cache: Cache) -> Report:
@@ -521,7 +520,8 @@ COST_RECORD = TypeAdapter(CostRecord)
 
 
 def publish_check(options: Options, run: CheckRun) -> bool:
-    passed, skipped, failures, observations = run.results
+    results = run.results
+    failures, observations = results.failures, results.durations
     for failure in failures:
         print(failure.report)
     evidence = options.timings or PROFILE / "development" / "timings" / f"check-{time.time_ns()}.json"
@@ -530,9 +530,9 @@ def publish_check(options: Options, run: CheckRun) -> bool:
         files=run.files,
         tests=run.selection.tests,
         profile=run.selection.reason,
-        passed=passed,
+        passed=results.passed,
         failed=len(failures),
-        skipped=skipped,
+        skipped=results.skipped,
         failures=tuple(RecordedFailure(failure.node[:NODE_LIMIT], failure.summary[:SUMMARY_LIMIT]) for failure in failures),
         elapsed_seconds=run.elapsed,
         durations=observations,
@@ -540,7 +540,7 @@ def publish_check(options: Options, run: CheckRun) -> bool:
         unattributed_seconds=max(0.0, run.elapsed - sum(seconds for seconds, label in observations if not label.startswith("worker:"))),
     )
     write(evidence, COST_RECORD.dump_python(record, mode="json"))
-    print(f"{passed} passed, {len(failures)} failed, {skipped} skipped in {run.elapsed:.2f}s; source-bound editing profile")
+    print(f"{results.passed} passed, {len(failures)} failed, {results.skipped} skipped in {run.elapsed:.2f}s; source-bound editing profile")
     print(f"Complete cost evidence: {evidence}", flush=True)
     for seconds, name in sorted((item for item in observations if not item[1].startswith(("phase:", "module:", "worker:module:"))), reverse=True)[:5]:
         print(f"{seconds:.3f}s {name}")
@@ -552,8 +552,8 @@ def publish_check(options: Options, run: CheckRun) -> bool:
                 tests=run.selection.tests,
                 profile=run.selection.reason,
                 platform="win32" if options.native else sys.platform,
-                passed=passed,
-                skipped=skipped,
+                passed=results.passed,
+                skipped=results.skipped,
                 architecture=CheckedArchitecture(sources=len(run.architecture.sources), exceptions=len(run.architecture.exceptions)),
                 elapsed_seconds=run.elapsed,
                 checked_at_ns=time.time_ns(),
@@ -593,19 +593,19 @@ def main() -> None:
     # Desktop isolation may relaunch the executor. Keep policy review, source
     # identity and receipt publication in this coordinator, outside that handoff.
     if os.name == "nt" and current_name() == os.environ.get("WORKSPACE_TEST_DESKTOP"):
-        passed, skipped, failures, timings = execute(selection, ROOT)
+        results = execute(selection, ROOT)
     elif os.name == "nt" or args.native:
-        passed, skipped, failures, timings = execute_native(ROOT, selection.tests, selection.changed, selection.reason)
+        results = execute_native(ROOT, selection.tests, selection.changed, selection.reason)
     else:
-        passed, skipped, failures, timings = execute(selection, ROOT)
+        results = execute(selection, ROOT)
     with timed("phase:final source manifest", overhead):
         final = source_files()
     if final != current:
         changed = tuple(name for name in sorted(final.keys() | current.keys()) if final.get(name) != current.get(name))
         message = "Working source changed during checks; no receipt written."
-        failures = (*failures, Failure("working source", message, f"{message} Changed: " + ", ".join(changed)))
+        results = combined_results((results, Results(0, 0, (Failure("working source", message, f"{message} Changed: " + ", ".join(changed)),), ())))
     elapsed = time.perf_counter() - started
-    run = CheckRun(frozendict(current), selection, (passed, skipped, failures, (*overhead, *timings)), architecture, elapsed)
+    run = CheckRun(frozendict(current), selection, combined_results((results,), tuple(overhead)), architecture, elapsed)
     raise SystemExit(publish_check(args, run))
 
 
