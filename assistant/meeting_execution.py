@@ -1,19 +1,19 @@
 """Prepared meeting execution and exact artifact/mail recovery, outside the UI."""
 
 import threading
-from typing import Protocol, assert_never
+from dataclasses import dataclass
+from typing import Annotated, Literal, Protocol, assert_never
 
-from pydantic import ConfigDict, TypeAdapter
+from pydantic import Field, TypeAdapter
 
 from assistant import outlook
-from assistant.llm import Json
 from assistant.meeting_followup import (
-    DRAFT_CONTENT,
-    FOLLOWUP_CLAIMS,
     CaptureNotice,
+    DraftContent,
     EmailAddress,
     FollowupClaims,
     NoCaptureNotice,
+    Transcript,
     followup_claims,
     resolve_followup,
 )
@@ -41,11 +41,113 @@ from automation.task import (
 SOURCE_PAGE = 32_000
 
 
-_JSON = TypeAdapter(Json, config=ConfigDict(allow_inf_nan=False))
+def _absent(value: object) -> bool:
+    return value is None
 
 
-def encoded(data: dict[str, Json]) -> str:
-    return _JSON.dump_json(data).decode()
+@dataclass(frozen=True, slots=True)
+class SourceSummary:
+    source_id: str
+    title: str
+    sha256: str
+    started_at: float
+    duration_seconds: float
+    capture_notice: str | None
+    characters: int
+
+
+@dataclass(frozen=True, slots=True)
+class SourceListing:
+    source_digest: str
+    sources: tuple[SourceSummary, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class SourcePage:
+    """One bounded page of a selected transcript; `next_offset` continues it."""
+
+    source_digest: str
+    source_id: str
+    sha256: str
+    offset: int
+    text: str
+    next_offset: int | None
+
+
+@dataclass(frozen=True, slots=True)
+class DraftView:
+    draft_id: str
+    revision: int
+    content: DraftContent
+    email_file: str
+    markdown_file: str
+
+
+@dataclass(frozen=True, slots=True)
+class PackageView:
+    """A verified package as the meeting worker inspects it: its claims, files and current draft revisions."""
+
+    version: str
+    source_digest: str
+    notes_path: str
+    actions_path: str
+    followup: FollowupClaims
+    drafts: tuple[DraftView, ...]
+    verified: Literal[True] = True
+
+
+@dataclass(frozen=True, slots=True)
+class VersionSummary:
+    version: str
+    title: str
+    source_digest: str
+
+
+@dataclass(frozen=True, slots=True)
+class VersionListing:
+    versions: tuple[VersionSummary, ...]
+    source_digest: str
+
+
+@dataclass(frozen=True, slots=True)
+class SavedMail:
+    version: str
+    draft_id: str
+    revision: int
+    destination: Literal["outlook", "email_file"]
+    message: str
+    path: Annotated[str | None, Field(exclude_if=_absent)] = None
+    saved: Literal[True] = True
+
+
+@dataclass(frozen=True, slots=True)
+class UnsavedMail:
+    version: str
+    draft_id: str
+    revision: int
+    problem: str
+    saved: Literal[False] = False
+
+
+type MeetingResult = SourceListing | SourcePage | PackageView | VersionListing | SavedMail | UnsavedMail
+_RESULT = TypeAdapter(MeetingResult)
+
+
+def encoded(result: MeetingResult) -> str:
+    """The tool output the meeting worker reads; each result's record is its shape."""
+    return _RESULT.dump_json(result).decode()
+
+
+def _summary(transcript: Transcript) -> SourceSummary:
+    source = transcript.source
+    match source.notice:
+        case CaptureNotice(text=notice):
+            capture_notice: str | None = notice
+        case NoCaptureNotice.NONE:
+            capture_notice = None
+        case _:
+            assert_never(source.notice)
+    return SourceSummary(source.id, source.title, source.sha256, source.started_at, source.duration_seconds, capture_notice, len(transcript.text))
 
 
 class Drafts(Protocol):
@@ -89,34 +191,13 @@ class MeetingRun:
         self.selected: PublishedFollowup | None = None
         self.mail_results: dict[MailTarget, outlook.DraftResult] = {}
 
-    def sources(self, source_id: str = "", offset: int = 0) -> dict[str, Json]:
+    def sources(self, source_id: str = "", offset: int = 0) -> SourceListing | SourcePage:
         integer(offset, "transcript offset", maximum=2 * 1024 * 1024)
         bundle = self.request.bundle
         if not source_id:
             if offset:
                 raise ValueError("Choose a source before requesting a text offset.")
-            sources: list[Json] = []
-            for transcript in bundle.transcripts:
-                source = transcript.source
-                match source.notice:
-                    case CaptureNotice(text=notice):
-                        capture_notice: str | None = notice
-                    case NoCaptureNotice.NONE:
-                        capture_notice = None
-                    case _:
-                        assert_never(source.notice)
-                sources.append(
-                    {
-                        "source_id": source.id,
-                        "title": source.title,
-                        "sha256": source.sha256,
-                        "started_at": source.started_at,
-                        "duration_seconds": source.duration_seconds,
-                        "capture_notice": capture_notice,
-                        "characters": len(transcript.text),
-                    }
-                )
-            return {"source_digest": bundle.fingerprint, "sources": sources}
+            return SourceListing(bundle.fingerprint, tuple(_summary(transcript) for transcript in bundle.transcripts))
         source_id = identifier(source_id, "selected recording identity")
         selected = next((value for value in bundle.transcripts if value.source.id == source_id), None)
         if selected is None:
@@ -124,20 +205,14 @@ class MeetingRun:
         if offset > len(selected.text):
             raise ValueError("The requested text offset is outside the selected recording.")
         end = min(len(selected.text), offset + SOURCE_PAGE)
-        return {
-            "source_digest": bundle.fingerprint,
-            "source_id": source_id,
-            "sha256": selected.source.sha256,
-            "offset": offset,
-            "text": selected.text[offset:end],
-            "next_offset": end if end < len(selected.text) else None,
-        }
+        following = end if end < len(selected.text) else None
+        return SourcePage(bundle.fingerprint, source_id, selected.source.sha256, offset, selected.text[offset:end], following)
 
     def publication(self, claims: FollowupClaims) -> Publication:
         # Validation precedes action registration and any artifact writes.
         return self.packages.plan(self.request.task_id, resolve_followup(self.request.bundle, claims))
 
-    def publish(self, publication: Publication) -> dict[str, Json]:
+    def publish(self, publication: Publication) -> PackageView:
         if publication.task_id != self.request.task_id or publication.followup.sources != self.request.bundle:
             raise ValueError("The prepared artifacts belong to different meeting work.")
         self.selected = self.packages.publish(publication)
@@ -149,34 +224,27 @@ class MeetingRun:
             raise ValueError("The saved package belongs to different recording snapshots.")
         return package
 
-    def _package(self, package: PublishedFollowup) -> dict[str, Json]:
-        drafts: list[Json] = [
-            {
-                "draft_id": value.id,
-                "revision": value.revision,
-                "content": _JSON.validate_json(DRAFT_CONTENT.dump_json(value.content)),
-                "email_file": str(value.files.eml),
-                "markdown_file": str(value.files.markdown),
-            }
+    def _package(self, package: PublishedFollowup) -> PackageView:
+        drafts = tuple(
+            DraftView(value.id, value.revision, value.content, str(value.files.eml), str(value.files.markdown))
             for value in self.packages.drafts(package.task_id, package.version)
-        ]
-        return {
-            "version": package.version,
-            "source_digest": package.followup.sources.fingerprint,
-            "notes_path": str(package.notes_path),
-            "actions_path": str(package.actions_path),
-            "followup": _JSON.validate_json(FOLLOWUP_CLAIMS.dump_json(followup_claims(package.followup))),
-            "drafts": drafts,
-            "verified": True,
-        }
+        )
+        return PackageView(
+            package.version,
+            package.followup.sources.fingerprint,
+            str(package.notes_path),
+            str(package.actions_path),
+            followup_claims(package.followup),
+            drafts,
+        )
 
-    def result(self, version: str = "") -> dict[str, Json]:
+    def result(self, version: str = "") -> VersionListing | PackageView:
         if not version:
-            versions: list[Json] = [
-                {"version": package.version, "title": package.followup.title, "source_digest": package.followup.sources.fingerprint}
+            versions = tuple(
+                VersionSummary(package.version, package.followup.title, package.followup.sources.fingerprint)
                 for package in self.packages.versions(self.request.task_id)
-            ]
-            return {"versions": versions, "source_digest": self.request.bundle.fingerprint}
+            )
+            return VersionListing(versions, self.request.bundle.fingerprint)
         self.selected = self._read(version)
         return self._package(self.selected)
 
@@ -202,20 +270,19 @@ class MeetingRun:
         self.mail_results[target] = result
         return result
 
-    def mail_result(self, target: MailTarget, result: outlook.DraftResult) -> dict[str, Json]:
-        data: dict[str, Json] = {"version": target.version, "draft_id": target.draft_id, "revision": target.revision}
+    def mail_result(self, target: MailTarget, result: outlook.DraftResult) -> SavedMail | UnsavedMail:
+        version, draft_id, revision = target.version, target.draft_id, target.revision
         match result:
             case outlook.SavedOutlookDraft():
-                data.update(saved=True, destination="outlook", message="Saved an unsent Outlook draft and verified its complete contents.")
+                return SavedMail(version, draft_id, revision, "outlook", "Saved an unsent Outlook draft and verified its complete contents.")
             case outlook.SavedEmlDraft(path=path, unavailable=unavailable):
-                data.update(saved=True, destination="email_file", path=str(path), message=unavailable.reason)
+                return SavedMail(version, draft_id, revision, "email_file", unavailable.reason, str(path))
             case outlook.DraftConflict(reason) | outlook.DraftUncertain(reason):
-                data.update(saved=False, problem=reason)
+                return UnsavedMail(version, draft_id, revision, reason)
             case outlook.Cancelled.BEFORE_EFFECT:
-                data.update(saved=False, problem="Stopped before the mail draft was saved.")
+                return UnsavedMail(version, draft_id, revision, "Stopped before the mail draft was saved.")
             case _:
                 assert_never(result)
-        return data
 
     def recover(self, work: WorkExecution, stop: threading.Event) -> None:
         """An uncertain native Save can only be resolved by its exact readback."""
