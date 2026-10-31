@@ -11,6 +11,7 @@ from winapi import audio, clipboard, inputs, screen, windows
 from winapi.shapes import Rect, Window
 lazy from assistant.geometry import Shot, fit, half, to_monitor
 lazy from assistant.icons import State
+lazy from assistant.island_model import Job
 lazy from assistant.png import encode_png
 lazy from assistant.textio import paste_text
 lazy from assistant.tiling import GlazeWM
@@ -127,6 +128,9 @@ class WinDesktop:
 
     def show_state(self, state: State) -> None:
         self.on_state(state)
+
+    def busy(self, job: Job | None) -> None:
+        self.ui.desktop_job(job)
 
     def notify(self, title: str, text: str) -> None:
         self.on_notify(title, text)

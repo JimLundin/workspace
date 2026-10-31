@@ -17,6 +17,7 @@ from typing import Final, Literal, Protocol
 from assistant import prompts
 from assistant.geometry import Shot
 from assistant.icons import State
+from assistant.island_model import Job
 from assistant.llm import (
     MAX_SECONDS,
     Failure,
@@ -85,6 +86,9 @@ class Desktop(Protocol):
 
     def answer(self, title: str, follow_up: Callable[[str], None]) -> Answer: ...
     def show_state(self, state: State) -> None: ...
+    def busy(self, job: Job | None) -> None:
+        """The quick job now running, for the bar; None once it has finished."""
+
     def notify(self, title: str, text: str) -> None: ...
     def problem(self, message: str) -> None:
         """Something went wrong that the user should hear about."""
@@ -275,7 +279,12 @@ class Assistant:
                     self.submit(lambda: self.timed(request.name.lower(), lambda: self.act(request)))
 
     def idle(self) -> None:
+        self.desktop.busy(None)
         self.desktop.show_state(State.READY if self.layout_on else State.LAYOUT_OFF)
+
+    def working(self, job: Job) -> None:
+        self.desktop.busy(job)
+        self.desktop.show_state(State.WORKING)
 
     def timed(self, feature: str, job: Callable[[], Failure | Outcome], *, extra: Mapping[str, Detail] | None = None) -> None:
         """Runs a job, reports a failure, and logs the use (never the content)."""
@@ -379,7 +388,7 @@ class Assistant:
             self.record("voice_capture", {**lengths, "phase": "cancelled" if discard else "too_short"})
             self.idle()
             return False
-        self.desktop.show_state(State.WORKING)
+        self.working(Job.TRANSCRIBING)
         tool = capture.tool
         self.record("voice_capture", {**lengths, "phase": "queued"})
         try:
@@ -475,7 +484,7 @@ class Assistant:
                 raise AssertionError(f"{tool} isn't a tool that acts on press")
 
     def rewrite(self, instruction: str) -> Failure | Outcome:
-        self.desktop.show_state(State.WORKING)
+        self.working(Job.ANSWERING)
         if not (text := self.desktop.copy_selection()):
             return Failure("Select some text first.")
         if isinstance(result := ask(self.settings, prompts.rewrite(instruction), text), Failure):
@@ -487,7 +496,7 @@ class Assistant:
         selection = self.desktop.copy_selection()
         if not (question := self.desktop.prompt("Ask")):
             return Outcome.CANCELLED
-        self.desktop.show_state(State.WORKING)
+        self.working(Job.ANSWERING)
         content = f"{question}\n\nSelected text:\n{selection}" if selection else question
         return Conversation(self.settings, [Text(content)], question, self.desktop, self.submit).run()
 
@@ -498,7 +507,7 @@ class Assistant:
     def screen_text(self) -> Failure | Outcome:
         if (png := self.screenshot()) is None:
             return Outcome.CANCELLED
-        self.desktop.show_state(State.WORKING)
+        self.working(Job.ANSWERING)
         if isinstance(result := ask(self.settings, prompts.SCREEN_TEXT, [Image(png)]), Failure):
             return result
         text = unwrap(result)
@@ -511,7 +520,7 @@ class Assistant:
             return Outcome.CANCELLED
         if (question := self.desktop.prompt("Ask about this (Enter: explain it)")) is None:
             return Outcome.CANCELLED
-        self.desktop.show_state(State.WORKING)
+        self.working(Job.ANSWERING)
         question = question or prompts.SCREEN_QUESTION
         return Conversation(self.settings, [Text(question), Image(png)], question, self.desktop, self.submit).run()
 

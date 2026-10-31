@@ -8,6 +8,7 @@ lazy from dataclasses import replace
 from assistant.features import Assistant, pick_window, switcher_windows
 from assistant.geometry import Shot
 from assistant.icons import State
+from assistant.island_model import Job
 from assistant.llm import MAX_SECONDS, Missing, Settings
 from automation.json_value import Json
 from protocol import App, Tool
@@ -60,11 +61,12 @@ class FakeAnswer:
 
 
 class FakeDesktop:
-    __slots__ = ("follow_up", "input_error", "log", "prompts", "recording_error", "region", "selection", "speech", "windows_open")
+    __slots__ = ("follow_up", "input_error", "jobs", "log", "prompts", "recording_error", "region", "selection", "speech", "windows_open")
 
     def __init__(self, *, input_error: OSError | None = None, recording_error: OSError | None = None) -> None:
         self.input_error, self.recording_error = input_error, recording_error
         self.log: list[str] = []
+        self.jobs: list[Job | None] = []
         self.speech = SPEECH
         self.selection: str | None = None
         self.prompts: list[str | None] = []
@@ -113,6 +115,9 @@ class FakeDesktop:
 
     def show_state(self, state: State) -> None:
         self.log.append(f"state {state.name}")
+
+    def busy(self, job: Job | None) -> None:
+        self.jobs.append(job)
 
     def notify(self, title: str, text: str) -> None:
         self.log.append(f"notify {title}: {text}")
@@ -194,16 +199,29 @@ def test_dictate_types_what_was_said() -> None:
         assert rig.ok("dictate")
 
 
+def test_quick_jobs_announce_what_they_are_and_end_when_finished() -> None:
+    # Defects: transcription and a quick request read the same on the bar, or a job never ends.
+    with fake_endpoint() as endpoint:
+        endpoint.replies = [said("hej")]
+        rig = Rig(endpoint)
+        rig.hold(Tool.DICTATE)
+        assert rig.desktop.jobs[-2:] == [Job.TRANSCRIBING, None]
+        rig.desktop.prompts = ["Is it Friday?"]
+        endpoint.replies = [streamed("Ja")]
+        rig.press(Tool.ASK)
+        assert Job.ANSWERING in rig.desktop.jobs and rig.desktop.jobs[-1] is None
+
+
 def test_clipboard_failure_keeps_a_recoverable_transcript_and_still_types() -> None:
     class BusyClipboard(FakeDesktop):
-        __slots__ = ("busy",)
+        __slots__ = ("refusing",)
 
         def __init__(self) -> None:
             super().__init__()
-            self.busy = True
+            self.refusing = True
 
         def set_clipboard(self, text: str) -> None:
-            if self.busy:
+            if self.refusing:
                 raise OSError("Busy")
             super().set_clipboard(text)
 
@@ -214,7 +232,7 @@ def test_clipboard_failure_keeps_a_recoverable_transcript_and_still_types() -> N
         rig.hold(Tool.DICTATE)
         assert rig.assistant.latest_transcription == "The complete transcript."
         assert "type 'The complete transcript. '" in desktop.log
-        desktop.busy = False
+        desktop.refusing = False
         rig.assistant.handle(Tool.COPY_TRANSCRIPT, down=True)
         assert desktop.log[-1] == "clipboard The complete transcript."
 
