@@ -82,9 +82,23 @@ def spoken_decision(text: str) -> ApprovalDecision | None:
             return None
 
 
+@dataclass(frozen=True, slots=True)
+class _Callbacks:
+    """The effect owners this conversation drives, fixed when it is composed."""
+
+    problem: Callable[[str], None] | None
+    reset: Callable[[], bool] | None
+    submit: Callable[[str], None] | None
+    waiting: Callable[[bool], None] | None
+    recording: Callable[[RecordingAction], None] | None
+    work: Callable[[], None] | None
+    snapshot: Callable[[Snapshot], None] | None
+
+
 class AgentWindow:
     __slots__ = (
         "__weakref__",
+        "_callbacks",
         "_create_view",
         "_input",
         "_pending",
@@ -93,13 +107,6 @@ class AgentWindow:
         "closed",
         "closed_ready",
         "lock",
-        "on_problem",
-        "on_recording",
-        "on_reset",
-        "on_snapshot",
-        "on_submit",
-        "on_waiting",
-        "on_work",
         "ready",
         "started",
         "state",
@@ -123,11 +130,8 @@ class AgentWindow:
         # This conversation owns one view, request lifetime and snapshot stream.
         # Its independent interaction callbacks are composed together here so a
         # caller can connect the actual effect owners before the first render.
-        self.stop, self.on_problem, self.on_reset, self.on_submit = stop, on_problem, on_reset, on_submit
-        self.on_waiting = on_waiting
-        self.on_recording = on_recording
-        self.on_work = on_work
-        self.on_snapshot: Callable[[Snapshot], None] | None = on_snapshot
+        self.stop = stop
+        self._callbacks = _Callbacks(on_problem, on_reset, on_submit, on_waiting, on_recording, on_work, on_snapshot)
         self._input: _Projected | None = None
         self.state = Session(identity=uuid.uuid4().hex)
         self.lock = threading.RLock()
@@ -165,10 +169,14 @@ class AgentWindow:
             self._pending = False
             state = self.state
         if not self.closed:
-            if self.on_snapshot is not None:
-                self.on_snapshot(state)
+            if self._callbacks.snapshot is not None:
+                self._callbacks.snapshot(state)
             if self._view is not None:
                 self._view.render(state)
+
+    def _waiting_changed(self, *, before: bool, after: bool) -> None:
+        if before != after and self._callbacks.waiting is not None:
+            self._callbacks.waiting(after)
 
     def _changed(self) -> None:
         if not self._pending:
@@ -183,8 +191,7 @@ class AgentWindow:
             self.state = transition(self.state, event)
             waiting = self.state.waiting
             self._changed()
-        if was_waiting != waiting and self.on_waiting is not None:
-            self.on_waiting(waiting)
+        self._waiting_changed(before=was_waiting, after=waiting)
 
     def show(self, *, focus: bool = False) -> None:
         def reveal() -> None:
@@ -218,9 +225,9 @@ class AgentWindow:
                 return self.respond(identity, TextAnswer(text))
             case _:
                 pass
-        if self.on_submit is None:
+        if self._callbacks.submit is None:
             return False
-        self.on_submit(text)
+        self._callbacks.submit(text)
         return True
 
     def reply_by_voice(self, text: str) -> bool:
@@ -263,8 +270,7 @@ class AgentWindow:
             self.state = transition(self.state, message)
             waiting = self.state.waiting
             self._changed()
-        if was_waiting != waiting and self.on_waiting is not None:
-            self.on_waiting(waiting)
+        self._waiting_changed(before=was_waiting, after=waiting)
 
     def withdraw_input(self) -> None:
         """Remove the projected request; durable state stays owned by work."""
@@ -277,8 +283,7 @@ class AgentWindow:
             self.state = transition(self.state, Resolution(request.message.id, Cancelled()))
             waiting = self.state.waiting
             self._changed()
-        if was_waiting != waiting and self.on_waiting is not None:
-            self.on_waiting(waiting)
+        self._waiting_changed(before=was_waiting, after=waiting)
 
     def input_presented(self, request_id: str) -> None:
         """A native view acknowledges that this exact approval preview is visible."""
@@ -316,13 +321,12 @@ class AgentWindow:
             self.state = transition(self.state, Resolution(identity, reply))
             waiting = self.state.waiting
             self._changed()
-        if was_waiting != waiting and self.on_waiting is not None:
-            self.on_waiting(waiting)
+        self._waiting_changed(before=was_waiting, after=waiting)
         return True
 
     def show_work(self) -> None:
-        if self.on_work is not None:
-            self.on_work()
+        if self._callbacks.work is not None:
+            self._callbacks.work()
 
     def notify_canvas(self, title: str, target: str) -> None:
         self._event(CanvasNotice(title, target, time.time()))
@@ -334,7 +338,7 @@ class AgentWindow:
         with self.lock:
             if self.closed or self.state.busy:
                 return False
-        return self.on_reset() if self.on_reset is not None else False
+        return self._callbacks.reset() if self._callbacks.reset is not None else False
 
     def begin(self, task: str, stop: Callable[[], None], *, queued: bool = False, source: FeedRequest | None = None) -> None:
         self.stop = stop
@@ -363,8 +367,8 @@ class AgentWindow:
 
     def problem(self, text: str) -> None:
         self._event(Problem(text, time.time()))
-        if self.on_problem is not None:
-            self.on_problem(text)
+        if self._callbacks.problem is not None:
+            self._callbacks.problem(text)
 
     def done(self, text: str) -> None:
         self._event(Done(text, time.time()))
@@ -380,6 +384,10 @@ class AgentWindow:
             if recording.phase not in ("idle", "saved", "interrupted"):
                 self.state = transition(self.state, RecordingUpdated(recording, time.time()))
             self._changed()
+
+    def stop_recording(self) -> None:
+        if self._callbacks.recording is not None:
+            self._callbacks.recording("stop")
 
     def recording(self, state: RecordingState) -> None:
         self._event(RecordingUpdated(state, time.time()))
