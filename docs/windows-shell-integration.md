@@ -8,9 +8,13 @@ platform limits.
 
 ## Implemented behavior
 
-`winapi/notifications.py` polls Notification Center on a bounded MTA worker and
+`winapi/notifications.py` reads Notification Center on a bounded MTA worker and
 converts the pinned SDK's aware Python datetime projection into a typed creation
-identity. `system_notices.py` seeds history quietly and deduplicates later changes.
+identity. The listener's change event fails with "Element not found" without
+package identity, so the worker stats Windows' `wpndatabase.db` and its WAL every
+250 ms and reads only after they change, with a 30-second fallback read. A full
+read costs about 0.2 s of process CPU for 50 notices; reads reuse known notices
+by key because each row's app display name costs about 40 ms. `system_notices.py` seeds history quietly and deduplicates later changes.
 `system_toasts.py` renders source-labeled glass cards using Workspace's existing
 material and composition, with local source-app opening and individual dismissal.
 The Notification Center remains the durable history; Workspace does not save or

@@ -3,13 +3,13 @@
 import sys
 import threading
 import unittest
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 
 if sys.platform != "win32":
     raise unittest.SkipTest("Native notification observer")
 
 from winapi.notification_banners import Coverage
-from winapi.notifications import NotificationObserver
+from winapi.notifications import NotificationObserver, Stamp
 from winapi.system_notices import Banners, Notice, NoticeKey, Observation, Observed, Unavailable
 
 
@@ -32,17 +32,25 @@ class Lease:
 class Source:
     """Own fixture poll callbacks and lifecycle counters across the real worker thread."""
 
-    __slots__ = ("closes", "observe", "opens")
+    __slots__ = ("closes", "known", "observe", "opens", "version", "writing")
 
-    def __init__(self, observe: Callable[[], Observation]) -> None:
+    def __init__(self, observe: Callable[[], Observation], *, writing: bool = True) -> None:
         self.observe = observe
-        self.opens = self.closes = 0
+        self.opens = self.closes = self.version = 0
+        self.writing = writing  # Whether Windows' database changes before every poll.
+        self.known: list[Mapping[NoticeKey, Notice]] = []
 
     def open(self) -> bool:
         self.opens += 1
         return True
 
-    def read(self, stopped: threading.Event) -> Observation:
+    def stamp(self) -> Stamp:
+        if self.writing:
+            self.version += 1
+        return ((self.version, 0),)
+
+    def read(self, stopped: threading.Event, known: Mapping[NoticeKey, Notice]) -> Observation:
+        self.known.append(dict(known))
         return self.observe()
 
     def dismiss(self, key: NoticeKey) -> None:
@@ -75,4 +83,26 @@ def test_banner_failure_keeps_notice_delivery_and_repeated_read_failures_release
     assert all(isinstance(result, Unavailable) for result in results[2:])
     assert lease.closes == 2  # Repeated failure recovery, followed by owner shutdown.
     assert source.opens == source.closes == 1
+    # Each read reuses the last successful observation; failed reads keep it.
+    assert source.known[:5] == [{}] + [{notice.key: notice}] * 4
 
+
+
+def test_notification_reads_follow_database_changes_instead_of_every_poll() -> None:
+    reads = 0
+
+    def observe() -> Observation:
+        nonlocal reads
+        reads += 1
+        return Observed(())
+
+    source = Source(observe, writing=False)
+    observer = NotificationObserver(source=source, banner_policy=Lease())
+    try:
+        observer.results.get(timeout=2)
+        assert not observer.stopped.wait(0.8) and reads == 1
+        source.version += 1
+        observer.results.get(timeout=2)
+    finally:
+        observer.close()
+    assert reads == 2
