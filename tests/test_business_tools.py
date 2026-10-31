@@ -42,7 +42,7 @@ from assistant.web_apps import (
     WebAppOperation,
 )
 from automation.actions import Change, Observation, Resources, target
-from automation.execution import WorkExecution
+from automation.execution import ApprovalReview, WorkExecution
 from automation.json_value import Json
 from automation.task import ActionUncertain, ActionVerified
 from tests.test_agent import FakeMachine, ToolRig, durable
@@ -264,3 +264,30 @@ def test_conflicting_app_receipts_cannot_verify_an_effect() -> None:
                     assert isinstance(confirm(query, conflict), ActionUncertain), (name, field)
             case Read():
                 raise AssertionError(f"{name} changes application state.")
+
+
+def test_approval_reviews_name_the_exact_card_or_chat(tmp_path: Path) -> None:
+    # Defect: approval mode asks the user to approve an edit or reply without
+    # naming the card or chat it changes.
+    reviews: list[ApprovalReview] = []
+
+    def review(item: ApprovalReview) -> bool:
+        reviews.append(item)
+        return False
+
+    for name in ("kanban_comment", "teams_web_draft_reply"):
+        rig = ToolRig(approvals=True, work=durable(tmp_path, review=review))
+        assert not rig.call(name, **arguments(name)).ok
+    # The journal appends the exact operation after the family's own summary.
+    assert [item.detail.split("\n\nExact operation:")[0] for item in reviews] == ["kanban_comment\ntask-1", "teams_web_draft_reply\nchat-1"]
+
+
+def test_personal_work_changes_target_the_exact_work(tmp_path: Path) -> None:
+    # Defect: a dismissal, restoration or attached page loses its work target,
+    # so evidence about another work item could reconcile it.
+    tools = ToolRig(work=durable(tmp_path)).agent.tools
+    work = target("personal-work", "work-1")
+    page: Mapping[str, Json] = {"title": "Guide", "reference": {"kind": "web", "url": "https://contoso.example.test/guide"}, "work_id": "work-1"}
+    assert tools["work_items_add_web_page"].classify(page).resources == ("personal-work", work)
+    assert tools["work_items_restore"].classify({"work_id": "work-1"}).resources == ("personal-work", work)
+    assert tools["work_items_list"].classify({}).resources == ("personal-work",)
