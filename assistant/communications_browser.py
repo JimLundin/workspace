@@ -6,10 +6,10 @@ import time
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Literal, Protocol
+from typing import Annotated, Literal, Protocol
 from urllib.parse import quote, urlsplit
 
-from pydantic import TypeAdapter, ValidationError
+from pydantic import Field, TypeAdapter, ValidationError
 
 from assistant.browser import Browser, BrowserResult
 from assistant.browser_requests import BrowserRequest, Evaluate, Open
@@ -34,11 +34,11 @@ from assistant.communications import (
     Update,
     UpdateKind,
 )
-from assistant.llm import Json
 from assistant.web_apps import ACTIVITY_OBSERVE, ACTIVITY_PAGE, OBSERVE, TEAMS_READ, ActivityItem, ActivityPage, ChatIdentity, TeamsPage, decoded
 
 HOSTS = frozenset({"teams.microsoft.com", "teams.cloud.microsoft"})
-_JSON = TypeAdapter(Json)
+_CONFIRMED = TypeAdapter(Annotated[bool, Field(strict=True)])
+_LABEL = TypeAdapter(Annotated[str, Field(strict=True)])
 _STATUS = TypeAdapter(BrowserStatus)
 _TEXT = TypeAdapter(str)
 
@@ -164,7 +164,7 @@ class TeamsWeb:
                     found = activity_observation(page, time.time())
                     if found.ready:
                         return found
-                    self.evaluate(
+                    self.confirmed(
                         """(() => {
                       const button=document.querySelector('[data-tid="app-layout-area--nav"] button[aria-label="Activity"]');
                       if(!button)return false;button.click();return true;
@@ -182,7 +182,7 @@ class TeamsWeb:
         """Use the exact activity menu, and verify its resulting read action label."""
         self.activity(cancel)
         with self.browser.awake(self.target, cancel):
-            opened = self.evaluate(
+            opened = self.confirmed(
                 """(() => {
               const wrap=document.getElementById("""
                 + _literal(identity)
@@ -196,16 +196,16 @@ class TeamsWeb:
                 cancel,
                 target=self.target,
             )
-            if opened is not True or cancel.wait(0.2):
+            if not opened or cancel.wait(0.2):
                 return False
-            label = self.evaluate("document.querySelector('[data-tid=\"toggleActivityRead\"]')?.innerText || ''", cancel, target=self.target)
+            label = self.label("document.querySelector('[data-tid=\"toggleActivityRead\"]')?.innerText || ''", cancel, target=self.target)
             if label == "Mark as unread":
                 self.dismiss_activity_menu(cancel)
                 return True
             if label != "Mark as read":
                 self.dismiss_activity_menu(cancel)
                 return False
-            self.evaluate(
+            self.confirmed(
                 """(() => {
               const item=document.querySelector('[data-tid="toggleActivityRead"]');
               if(item?.innerText!=='Mark as read')return false;item.click();return true;
@@ -216,7 +216,7 @@ class TeamsWeb:
             if cancel.wait(0.4):
                 return False
             # Reopen that same menu. A disappeared item or unchanged label is not confirmation.
-            self.evaluate(
+            self.confirmed(
                 """(() => {
               document.getElementById("""
                 + _literal(identity)
@@ -229,14 +229,14 @@ class TeamsWeb:
             if cancel.wait(0.2):
                 return False
             verified = (
-                self.evaluate("document.querySelector('[data-tid=\"toggleActivityRead\"]')?.innerText || ''", cancel, target=self.target)
+                self.label("document.querySelector('[data-tid=\"toggleActivityRead\"]')?.innerText || ''", cancel, target=self.target)
                 == "Mark as unread"
             )
             self.dismiss_activity_menu(cancel)
             return verified
 
     def dismiss_activity_menu(self, cancel: threading.Event) -> None:
-        self.evaluate(
+        self.confirmed(
             """(() => {
           document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',code:'Escape',bubbles:true}));return true;
         })()""",
@@ -247,7 +247,7 @@ class TeamsWeb:
     def open_activity(self, identity: str, cancel: threading.Event) -> None:
         self.activity(cancel)
         with self.browser.awake(self.target, cancel):
-            result = self.evaluate(
+            result = self.confirmed(
                 """(() => {
               const wrap=document.getElementById("""
                 + _literal(identity)
@@ -259,15 +259,20 @@ class TeamsWeb:
                 cancel,
                 target=self.target,
             )
-            if result is not True:
+            if not result:
                 raise BrowserError("That Teams activity is no longer rendered. Refresh before opening it.")
         self.browser.activate_page(self.target, cancel)
 
     def evaluated(self, expression: str, cancel: threading.Event, *, target: str = "") -> str:
         return self.browser.request(Evaluate(target or self.target, expression), cancel).text
 
-    def evaluate(self, expression: str, cancel: threading.Event, *, target: str = "") -> Json:
-        return _JSON.validate_json(self.evaluated(expression, cancel, target=target))
+    def confirmed(self, expression: str, cancel: threading.Event, *, target: str = "") -> bool:
+        """Run a script that reports whether the page accepted its step."""
+        return decoded(_CONFIRMED, self.evaluated(expression, cancel, target=target))
+
+    def label(self, expression: str, cancel: threading.Event, *, target: str = "") -> str:
+        """Read one piece of visible text, such as a menu item's label."""
+        return decoded(_LABEL, self.evaluated(expression, cancel, target=target))
 
     def pages(self, cancel: threading.Event) -> tuple[PageRow, ...]:
         rows: tuple[PageRow, ...] = ()
@@ -307,7 +312,7 @@ class TeamsWeb:
     def available(self, cancel: threading.Event) -> bool:
         match self.browser.owner:
             case Attached():
-                return self.evaluate("document.visibilityState", cancel) == "hidden"
+                return self.label("document.visibilityState", cancel) == "hidden"
             case _:
                 return True
 
@@ -322,18 +327,15 @@ class TeamsWeb:
         raise ChatUnavailableError("loading")
 
     def show_chats(self, cancel: threading.Event, *, target: str = "") -> bool:
-        return (
-            self.evaluate(
-                """(() => {
+        return self.confirmed(
+            """(() => {
           if(document.querySelector('[role="treeitem"][data-fui-tree-item-value]'))return false;
           const chat=document.querySelector('[data-tid="app-layout-area--nav"] button[aria-label="Chat"]');
           if(!chat)return false;
           chat.click();return true;
         })()""",
-                cancel,
-                target=target,
-            )
-            is True
+            cancel,
+            target=target,
         )
 
     def discover(self, cancel: threading.Event) -> Observation:
@@ -384,8 +386,8 @@ class TeamsWeb:
           if(!row) return false;
           row.click(); return true;
         }})()"""
-        result = self.evaluate(expression, cancel, target=target)
-        if result is not True:
+        result = self.confirmed(expression, cancel, target=target)
+        if not result:
             opened = self.show_chats(cancel, target=target)
             if opened:
                 deadline = time.monotonic() + 15
@@ -394,10 +396,10 @@ class TeamsWeb:
                     if current.current == identity and current.editor_ready:
                         self.opening.pop(target or self.target, None)
                         return current
-                    result = self.evaluate(expression, cancel, target=target)
-                    if result is True or len(current.conversations) > 1 or time.monotonic() >= deadline:
+                    result = self.confirmed(expression, cancel, target=target)
+                    if result or len(current.conversations) > 1 or time.monotonic() >= deadline:
                         break
-        if result is not True:
+        if not result:
             return self._reopen(identity, cancel, target=target)
         deadline = time.monotonic() + 15
         while not cancel.wait(0.3):
@@ -426,7 +428,7 @@ class TeamsWeb:
         deadline = time.monotonic() + 20
         while not cancel.wait(0.3):
             try:
-                self.evaluate(
+                self.confirmed(
                     """(() => {
                   if(location.pathname!=='/dl/launcher/launcher.html')return false;
                   const web=document.querySelector('#openTeamsClientInBrowser');
@@ -456,7 +458,7 @@ class TeamsWeb:
         before = self._select(identity, cancel)
         known = {message.identity for message in before.messages}
         encoded, content = _literal(identity), _literal(text)
-        prepared = self.evaluate(
+        prepared = self.confirmed(
             f"""(() => {{
           const send=document.querySelector('[data-tid="sendMessageCommands-send"]');
           const editor=document.querySelector('[data-tid="ckeditor"][contenteditable="true"]');
@@ -466,9 +468,9 @@ class TeamsWeb:
         }})()""",
             cancel,
         )
-        if prepared is not True:
+        if not prepared:
             raise BrowserError("The Teams reply editor is unavailable or already contains a draft. Nothing was sent.")
-        sent = self.evaluate(
+        sent = self.confirmed(
             f"""(() => {{
           const send=document.querySelector('[data-tid="sendMessageCommands-send"]');
           const editor=document.querySelector('[data-tid="ckeditor"][contenteditable="true"]');
@@ -479,7 +481,7 @@ class TeamsWeb:
         }})()""",
             cancel,
         )
-        if sent is not True:
+        if not sent:
             raise BrowserError("Teams did not accept the prepared reply. Inspect its editor before trying again.")
         deadline = time.monotonic() + 12
         while not cancel.wait(0.4):
@@ -487,8 +489,8 @@ class TeamsWeb:
             if after.current != identity:
                 break
             candidates = tuple(message for message in after.messages if message.identity not in known and message.text.strip() == text.strip())
-            cleared = self.evaluate('!document.querySelector(\'[data-tid="ckeditor"][contenteditable="true"]\')?.innerText.trim()', cancel)
-            if len(candidates) == 1 and cleared is True:
+            cleared = self.confirmed('!document.querySelector(\'[data-tid="ckeditor"][contenteditable="true"]\')?.innerText.trim()', cancel)
+            if len(candidates) == 1 and cleared:
                 return candidates
             if time.monotonic() >= deadline:
                 break
