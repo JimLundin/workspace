@@ -3,7 +3,7 @@
 31 October 2026. A design study for restyling Workspace in Apple's current
 language. Interactive demo: [liquid-glass-demo.html](liquid-glass-demo.html)
 (open in Edge; it has no dependencies). Nothing here changes the Qt runtime yet.
-The first version is preserved as the `liquid-glass-prototype-v1` tag.
+Earlier versions are preserved as tags: `liquid-glass-prototype-v1` (first study) and `liquid-glass-prototype-v2` (the toolbar pattern comparison, with alternative patterns and accessibility switches).
 
 ## Sources
 
@@ -51,16 +51,23 @@ The first version is preserved as the `liquid-glass-prototype-v1` tag.
 
 | Surface | Today | Proposed |
 | --- | --- | --- |
-| Desktop bar | One lilac capsule fused to the screen edge with flared shoulders and internal dividers | A floating island between one Canvas button and the inbox. See *Toolbar pattern* |
+| Desktop bar | One lilac capsule fused to the screen edge with flared shoulders and internal dividers | A floating island alone at rest; only temporary or active things appear beside it. See *Toolbar pattern* |
 | "Needs you" | Label in the shared capsule | The island expands into the question, then settles into an orange pill: the bar's only coloured state |
 | Controls menu | Qt `QMenu` with a solid background | The island expands into the menu: large glass, an icon per item, an accent highlight row |
 | Agent phase bubbles | Lilac bubbles with app palettes | Large regular glass, like macOS notifications. App identity moves to a rounded app badge. Earlier phases collapse and recede. Prominent glass marks the primary answer |
 | Work canvas | Lilac-tinted dark window, lilac work bubbles | Neutral content layer with solid cards. App colour appears only in badges and the amber question card. The floating bottom toolbar is the only glass. Soft scroll-edge effects. An inset inspector with a concentric radius slides in from the trailing edge |
 | Motion | 160 ms slides and fixed-duration animation | Critically damped springs by default. Bounce only after a throw. Pans project momentum and rubber-band at edges. Every transition can be interrupted |
-| Typography | Segoe UI, 12 px | Inter, 13 px body, optical sizing, negative tracking on titles |
+| Typography | Segoe UI, 12 px | Inter: 12 px in the toolbar, 13 px body, optical sizing, negative tracking on titles |
 | Symbols | Hand-drawn Feather-style paths | Lucide at a 1.75 stroke, with a filled variant for active states |
 
-The accent is system blue.
+The accent is a soft blue, `#4B8FE8`: lighter and less saturated than system
+blue `#0A84FF`. White text on it measures 3.3:1, against 3.65:1 on Apple's
+own blue. The demo also offers a lighter mist blue, `#6A9FE0`, where white
+text drops to 2.75:1.
+
+Decided and removed from the demo: the island pattern (the alternatives live
+in the v2 tag), the floating edge, and full transparency, motion and
+refraction. The demo no longer offers switches for these.
 
 ## Typeface
 
@@ -80,18 +87,28 @@ size rather than as one letter-spacing value.
 ## Symbols
 
 SF Symbols carry the same platform restriction, and the HIG prohibits
-look-alikes in trademarked uses. The demo compares two open sets at toolbar
-size. **Lucide** (ISC) at a 1.75 stroke matches Inter's medium weight best, and
-its geometry is closest to SF's rounded terminals. **Phosphor** (MIT) has true
-filled variants, like SF's `.fill` states, but its regular weight is slightly
-light next to Inter. The recommendation is Lucide. Fill the microphone and
-recording glyphs when they're active, and use a small rounded square for Stop,
-as `stop.fill` does. Vendor only the paths Workspace uses into
-`assistant/vector_icons.py`, which already renders SVG paths.
+look-alikes in trademarked uses. The demo's **Compare symbols side by side**
+sheet draws six open sets at 16 px beside 12 px Inter, then at 2×:
+
+| Set | Licence | Observation |
+| --- | --- | --- |
+| Lucide | ISC | 1.75 strokes; the closest weight match to Inter. No filled set |
+| Phosphor | MIT | Regular and fill from one design, like SF's `.fill` states; slightly light |
+| Tabler | MIT | 1.75 strokes with a filled subset; geometric, a little technical |
+| Fluent | MIT | Microsoft's Windows 11 symbols, regular and filled; native to Windows, not to Apple |
+| Material Symbols Rounded | Apache 2.0 | A variable system like SF Symbols (weight, fill, grade, optical size); shapes read as Google |
+| Iconoir | MIT | Thin 1.6 strokes; elegant large, faint at 16 px |
+
+SF Symbols match their weight to the adjacent text and switch to filled
+variants for active states. No open set does both. The current recommendation
+is Lucide for its weight match. The alternative is a set with true fills
+(Phosphor or Fluent), to get filled active states. Whichever set wins, use a
+small rounded square for Stop, as `stop.fill` does. Vendor only the paths
+Workspace uses into `assistant/vector_icons.py`.
 
 ## Toolbar pattern
 
-The demo's **Compare toolbar patterns** view runs one scenario through three
+The `liquid-glass-prototype-v2` demo's **Compare toolbar patterns** view ran one scenario through three
 arrangements. The scenario is idle, dictate, transcribe, agent working,
 meeting starts, dictate meanwhile, agent asks, keyboard layer, and done. For
 each arrangement it measures how far the menu and inbox buttons move from their
@@ -121,12 +138,14 @@ Measured results (largest leading-button displacement over the scenario):
 | Glass groups | 231 px | 252 px | Each activity adds a pill; ambient never yields |
 | Island | 0 px for durations; 31 px dictating; 70 px transcribing; 99 px question expanded | same | Moments resize the centre; durations detach |
 
-**Recommendation: the island, floating, with an edge-to-edge hit target.**
+**Decision: the island, floating, with an edge-to-edge hit target.**
 
-- *One control each side.* Canvas sits on the left and the inbox on the right.
-  The island between them is the Workspace menu, so the leading side no longer
-  carries two buttons. The inbox stays visible with no badge when nothing is
-  waiting, which keeps the arrangement balanced.
+- *Nothing persistent beside the island.* At rest the island stands alone.
+  Things appear beside it only while they're temporary or active: the inbox
+  while items wait, and the agent, recording and keyboard-layer pills. Canvas
+  moves into the island's menu as its first item. This follows the HIG's
+  guidance to keep bars uncluttered, and Live Activities, which exist only
+  while their activity runs.
 - *Click the island to act on what it shows.* At rest it expands into the
   Workspace menu, while dictating it stops, and with a question it opens the
   answers. This follows the Dynamic Island, where tapping acts on the current
@@ -170,13 +189,13 @@ Workspace's bar today (`assistant/bar_model.py`, `assistant/ambient.py`,
 | Item | Today | Proposed |
 | --- | --- | --- |
 | Workspace menu | Leading button | The island at rest; clicking it expands the menu |
-| Canvas | Leading button beside the menu | The single leading button |
+| Canvas | Leading button beside the menu | First item in the island menu |
 | Clock | Resting readout | Island at rest |
 | Battery | Resting readout; hidden above 95% on power | Island at rest, same rule |
-| Weather | Resting readout | Move into the expanded island menu's header. Like macOS, keep ambient facts that aren't status out of the resting bar. This matches the bar's own rule: "Only active work earns space in the desktop toolbar." |
+| Weather | Resting readout | Removed. macOS keeps weather in widgets, and the bar's own rule is "Only active work earns space in the desktop toolbar." |
 | Speakers unmuted | Alert glyph in the readout | Island at rest, as an exception glyph |
 | Wi-Fi disconnected | Alert glyph in the readout | Island at rest, as an exception glyph |
-| Inbox | Bell with count, hidden at zero | Trailing button, always present; badge only with items |
+| Inbox | Bell with count, hidden at zero | Trailing pill with count while items wait; hidden at zero |
 | Listening | Microphone, waveform, Stop | Island moment: orange microphone (Apple's microphone-in-use colour) and waveform; Stop on hover or by clicking the island |
 | Transcribing | Spinner | Island moment: spinner only |
 | Agent working | "Working" and Stop in the main capsule | Detached minimal pill: spinner; hover shows the current phase and Stop |
@@ -201,7 +220,6 @@ shader path. Measure that before committing to it.
 
 ## Open decisions
 
-- Should weather leave the resting bar for the island menu's header?
 
 - Should the lower-right agent phase bubbles remain? The expanded island could
   show the current phase instead, so agent progress would live in one place.
