@@ -4,31 +4,23 @@ from dataclasses import replace
 
 from assistant.agent_session import (
     AgentRequest,
-    Answer,
     Answered,
     ApprovalControls,
     Begin,
     Cancelled,
-    Done,
     Enqueued,
     Event,
-    Failed,
-    Finished,
-    Progress,
-    ReasoningSummary,
     RecordingUpdated,
     Resolution,
     ResponseText,
-    Said,
     Session,
     StopRequested,
-    StreamState,
-    Succeeded,
-    ToolActivity,
+    message_body,
     presentation,
     transition,
 )
 from assistant.recording_state import RecordingState
+from automation.presentation import Answer, Done, Failed, Finished, Progress, ReasoningSummary, Said, StreamState, Succeeded, ToolActivity
 from automation.task import ApprovalDecision
 from tests.agent_requests import asked, reviewed
 
@@ -41,7 +33,7 @@ def test_live_messages_replace_their_row_and_final_completion_is_not_duplicated(
     session = transition(session, ReasoningSummary("summary", "Checking the files.", 4, StreamState.COMPLETE))
     session = transition(session, Answer("answer", "Found budget.xlsx.", 5, StreamState.COMPLETE))
     assert [message.created_at for message in session.messages] == [1, 2, 3]
-    assert before.messages[-1].text == "Found"
+    assert message_body(before.messages[-1]) == "Found"
     assert len(session.messages) == 3 and session.last_said == "Found budget.xlsx."
     assert transition(session, Answer("answer", "A late chunk", 6)) is session
     session = transition(session, Done("Found budget.xlsx.", 6))
@@ -92,8 +84,8 @@ def test_meeting_preview_updates_without_adding_messages_or_changing_the_agent_t
     for index in range(500):
         session = transition(session, RecordingUpdated(replace(state, seconds=index, preview=f"Recent sentence {index}."), 0))
     assert len(session.messages) == 3 and session.busy and session.last_said == "Found it."
-    assert previous.messages[1].text.endswith("First sentence.")
-    assert "Recent sentence 499" in session.messages[1].text
+    assert message_body(previous.messages[1]).endswith("First sentence.")
+    assert "Recent sentence 499" in message_body(session.messages[1])
     assert session.recording.seconds == 499
 
 
@@ -104,7 +96,7 @@ def test_follow_ups_keep_messages_and_only_deduplicate_the_current_turns_final_a
         session = transition(session, Said("I found budget.xlsx.", 0))
         session = transition(session, Done("I found budget.xlsx.", 0))
         session = transition(session, Finished())
-    assert [message.text for message in session.messages] == [
+    assert [message_body(message) for message in session.messages] == [
         "Find my workbook",
         "I found budget.xlsx.",
         "Look for it again",

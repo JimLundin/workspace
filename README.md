@@ -349,11 +349,16 @@ context, and a rejected submission keeps your text available for retry.
 
 Floating bubbles use the existing Windows glass, contrast and motion treatment.
 They present clarification redirects, important canvas additions or state changes,
-and guarded action approvals. Routine app arrivals and agent progress remain
-quiet. Important-change prompts expire normally; clarification redirects remain
-until answered or closed. If approval mode is enabled, the existing exact-preview
-and explicit approve/decline rules still apply. Meeting recording retains its own
-control. **Hold V + L** or **Agent session** opens explicit conversation history.
+and guarded action approvals. Routine app arrivals stay quiet. While the agent
+works, its progress forms a trail of at most three phases: your request, each
+public update and each reasoning summary opens a phase that collects the tool
+calls after it. The newest phase is opaque and expanded and remains while the
+agent is busy; earlier phases fade behind it in compact form. Each phase expires
+after a reading delay once it is no longer current work. Important-change
+prompts expire normally; clarification redirects remain until answered or
+closed. If approval mode is enabled, the existing exact-preview and explicit
+approve/decline rules still apply. Meeting recording retains its own control.
+**Hold V + L** or **Agent session** opens explicit conversation history.
 
 Workspace reuses one existing Teams tab on the approved Edge connection for
 chat collection, Activity and opening conversations. Collection pauses while
@@ -369,16 +374,6 @@ its exact source context before researching and updating it. Incoming content
 is evidence; it does not authorize sends or command approvals. Outlook, Teams
 and Kanban tools use their signed-in Edge pages and preserve existing drafts.
 Rendered pages and active filters bound source coverage.
-
-Both Codex CLI and Claude Code have installed hooks for questions, permission
-requests and turn attention. Answers stay attached to the exact provider,
-session and request. Timeout, cancellation or Workspace exit restores ordinary
-console interaction without granting permissions. New CLI sessions load the
-configuration. Codex's installed definitions have completed its one-time trust
-review. Claude receives answers through updatedInput; Codex receives the user's
-answer as model-visible hook feedback because its protocol does not support
-native question-result replacement. `scripts/install_inbox_hooks.py` preserves
-other handlers and backs up changes.
 
 Handling an activity tries its exact **Mark as read** action and checks the
 result. The source status reports an unconfirmed read action explicitly.

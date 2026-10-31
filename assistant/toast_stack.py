@@ -16,11 +16,6 @@ PENDING_HEIGHT: Final = 480  # logical preference for pending input
 HEIGHT: Final = 360
 
 
-class Preview(Enum):
-    LINES = auto()  # two body lines carry the gist when space is short
-    COMPLETE = auto()  # a collapsed assessment keeps its complete title
-
-
 @dataclass(frozen=True, slots=True)
 class Measured:
     """One desired card's native measurement, in physical pixels."""
@@ -29,7 +24,6 @@ class Measured:
     chrome: int  # header, hint and padding
     body: int
     priority: int
-    preview: Preview
 
 
 @dataclass(frozen=True, slots=True)
@@ -108,12 +102,9 @@ def reservable(desired: int) -> int:
 
 
 def space(card: Measured, viewport: Viewport) -> Space:
-    match card.preview:
-        case Preview.COMPLETE:
-            return Space(min(card.preferred, card.chrome + card.body), card.preferred, card.priority)
-        case Preview.LINES:
-            preferred = min(card.preferred, round((PENDING_HEIGHT if card.priority == 2 else HEIGHT) * viewport.scale))
-            return Space(min(preferred, card.chrome + min(card.body, viewport.line * 2 + 16)), preferred, card.priority)
+    # Two body lines carry the gist when space is short.
+    preferred = min(card.preferred, round((PENDING_HEIGHT if card.priority == 2 else HEIGHT) * viewport.scale))
+    return Space(min(preferred, card.chrome + min(card.body, viewport.line * 2 + 16)), preferred, card.priority)
 
 
 def allocate(spaces: tuple[Space, ...], available: int) -> tuple[int, ...]:

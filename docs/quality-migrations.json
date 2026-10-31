@@ -202,15 +202,6 @@
     {
       "key": {
         "rule": "PLR0913",
-        "path": "assistant/console_requests.py",
-        "scope": "request",
-        "signature": "ce8d369dd6abf707491d891e3a29fde0e6cc14329217139eac5cbc981be1fe43"
-      },
-      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
-    },
-    {
-      "key": {
-        "rule": "PLR0913",
         "path": "assistant/desktop.py",
         "scope": "WinDesktop.__init__",
         "signature": "8afb51115d56226bd7259633fee9c2ecd4dc74b94400c0f0abb216618f6ca89b"
@@ -502,15 +493,6 @@
         "path": "assistant/notification_reading.py",
         "scope": "displayed",
         "signature": "378fb959a2489930a4598e2c00542178cfc8c74c39d916fce0e13e52237efe59"
-      },
-      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
-    },
-    {
-      "key": {
-        "rule": "PLR0913",
-        "path": "assistant/notifications.py",
-        "scope": "advance",
-        "signature": "5f8258c21010969b894a161e19a568a919b1f036152116f795ccd5a805095fd9"
       },
       "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
     },

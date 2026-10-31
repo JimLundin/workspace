@@ -17,7 +17,6 @@ from assistant.canvas_activity import (
     CanvasRun,
     CanvasUpdate,
     TaskRequest,
-    history_session,
     important_changes,
     redirect_session,
 )
@@ -111,7 +110,6 @@ def test_floating_attention_has_exact_persistent_redirects_and_retains_approval_
     assert isinstance(prompt, ChatMessage) and "target=question%3Aquestion+with+spaces" in prompt.text
     assert prompt.source is not None and prompt.source.identity == "canvas:question:question with spaces"
     assert not redirected.busy
-    assert history_session(session).messages == session.messages
     content = observe(redirected)[0]
     assert active(content) and tone(content) is Tone.QUESTION
     announced = transition(Session(), CanvasNotice("Needs you", "question:request", 10))

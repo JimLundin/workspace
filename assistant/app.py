@@ -30,7 +30,6 @@ lazy from assistant.canvas_activity import CanvasInstruction, CanvasRun
 lazy from assistant.communications_browser import TeamsWeb
 lazy from assistant.communications_service import Communications
 lazy from assistant.communications_state import COMMUNICATIONS_STATE
-lazy from assistant.console_inbox import ConsoleInbox
 lazy from assistant.desktop import WinDesktop
 lazy from assistant.features import Assistant, switcher_windows
 lazy from assistant.feed_contracts import STORED_BOARD
@@ -200,7 +199,6 @@ class AssistantApp:
         "canvas",
         "capture_timer",
         "communications",
-        "consoles",
         "desktop",
         "followups",
         "jobs",
@@ -288,16 +286,13 @@ class AssistantApp:
             windows_store(DIRECTORY / "communications.bin", COMMUNICATIONS_STATE),
             self.ui.communications_changed,
         )
-        self.ui.configure_communications(self.communications.submit, windows_store(DIRECTORY / "notifications.bin", NOTIFICATION_STATE))
-        self.consoles = ConsoleInbox(DIRECTORY / "inbox-bridge.json", self.ui.console_changed)
-        self.ui.configure_console(self.consoles.command)
         self.canvas: WorkCanvas = WorkCanvas(
             work_folder / "canvas.sqlite3", self.continue_thread, autonomous=bool(self.settings.api_key and self.settings.base_url)
         )
         self.personal = self.create_personal(tasks)
         self.triage, self.work_bridge = self.create_feed(FeedWork(tasks, saved_context, context))
-        self.ui.configure_triage(self.triage.observe, self.triage.dismiss, self.triage.choose_from_ui)
-        self.timings.mark("communications and feed bridges")
+        self.ui.configure_feed(windows_store(DIRECTORY / "notifications.bin", NOTIFICATION_STATE), self.triage.observe)
+        self.timings.mark("communications and feed bridge")
         archive = MeetingArchive(DIRECTORY / "meetings")
         followup_folder = work_folder / "meeting-followups"
         self.followups = MeetingWorkflow(
@@ -373,9 +368,7 @@ class AssistantApp:
         """The feed owner, then the work bridge that routes agent tools to it, personal work and the canvas."""
         triage = Triage(
             windows_store(DIRECTORY / "work-feed.bin", STORED_BOARD),
-            self.ui.triage_changed,
             self.review_feed,
-            self.consoles.command,
             submit=self.agent.submit_identified,
             work=work,
             personal=self.personal,
@@ -434,8 +427,6 @@ class AssistantApp:
         timings.mark("personal work")
         self.triage.close()
         timings.mark("feed triage")
-        self.consoles.close()
-        timings.mark("console bridge")
         self.communications.close()
         timings.mark("Teams worker")
         self.monitor_layout.close()

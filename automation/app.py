@@ -23,7 +23,6 @@ from winapi import screen, system, windows
 from winapi.shapes import Window
 lazy from assistant.activity import ContextSnapshot, Observation, Sample, observed
 lazy from assistant.agent_execution import AgentExecution
-lazy from assistant.agent_session import Begin, Done, Finished, LiveMessage, Problem, Progress, Said
 lazy from assistant.browser import Browser
 lazy from assistant.browser_session import Product
 lazy from assistant.llm import Missing, Settings
@@ -38,10 +37,11 @@ lazy from automation import ipc
 lazy from automation.bridge import BridgeServer, ProfileLease
 lazy from automation.context import ContextStore, select_context
 lazy from automation.controller import ControllerSnapshot, Fault, Idle, Stopping, WorkController, WorkExecution, Working
-lazy from automation.execution import ApprovalReview, Log, Outcome
+lazy from automation.execution import ApprovalReview, Log
+lazy from automation.presentation import Done, Finished, LiveMessage, Problem, Progress, Said
 lazy from automation.routines import RoutineStore
 lazy from automation.store import TaskStore
-lazy from automation.task import Claim, RunRef, Task, owns
+lazy from automation.task import Claim, Outcome, RunRef, Task, owns
 
 
 def report(message: str, *, folder: Path = DIRECTORY / "work") -> None:
@@ -53,7 +53,9 @@ def report(message: str, *, folder: Path = DIRECTORY / "work") -> None:
 
 
 @dataclass(frozen=True, slots=True)
-class MeetingRun:
+class MeetingOwner:
+    """The work run whose meeting requests the assistant answers, and its Stop."""
+
     run: RunRef
     stop: threading.Event
 
@@ -65,7 +67,7 @@ class RemoteMeetings:
 
     def __init__(self, bridge: BridgeServer) -> None:
         self.bridge = bridge
-        self.current: MeetingRun | None = None
+        self.current: MeetingOwner | None = None
 
     def request(self, operation: ipc.MeetingOperation) -> str:
         if self.current is None:
@@ -154,7 +156,7 @@ class NativeExecution:
         self.execution, self.bridge, self.meetings = execution, bridge, meetings
 
     def run_work(self, claim: Claim, store: TaskStore, log: Log, stop: threading.Event) -> Outcome:
-        self.meetings.current = MeetingRun(claim.run, stop)
+        self.meetings.current = MeetingOwner(claim.run, stop)
 
         def review(preview: ApprovalReview) -> bool:
             try:
@@ -309,9 +311,7 @@ class WorkEvents:
         self.previous = active
 
     def log(self, claim: Claim) -> Log:
-        result = VolatileLog(self.bridge, claim.run)
-        result.publish(Begin(claim.task.prompt, time.time()))
-        return result
+        return VolatileLog(self.bridge, claim.run)
 
 
 def stop_work(controller: WorkController, bridge: BridgeServer) -> None:

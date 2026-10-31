@@ -5,8 +5,8 @@ import webbrowser
 from collections.abc import Callable
 from dataclasses import replace
 from pathlib import Path
-from typing import Annotated, Final, TypedDict
-from urllib.parse import parse_qs, urlsplit
+from typing import Annotated, Final, TypedDict, assert_never
+from urllib.parse import urlsplit
 
 from pydantic import Field, StrictInt, TypeAdapter
 lazy from PySide6 import QtCore
@@ -15,20 +15,17 @@ lazy from PySide6.QtGui import QFontMetricsF
 lazy from PySide6.QtWidgets import QApplication
 
 from assistant.agent_progress import Progress, advance_progress, compact, retain_lifetimes, visible
-from assistant.canvas_activity import history_session, redirect_session
+from assistant.canvas_activity import redirect_session
 from assistant.qt_runtime import prepare
-from assistant.toast_stack import Active, Column, Measured, Preview, Retiring, Stacking, Viewport, fit, frames, reservable
+from assistant.toast_stack import Active, Column, Measured, Retiring, Stacking, Viewport, fit, frames, reservable
 from usage import DIRECTORY
 from winapi import appearance, windows
 from winapi.shapes import Rect
-lazy from assistant import console_requests, notification_reading
+lazy from assistant import notification_reading
 lazy from assistant.agent_session import AgentRequest, Session, Snapshot, pending
 lazy from assistant.agent_window import AgentWindow
+lazy from assistant.card_actions import AnswerApproval, OpenCanvas, parse
 lazy from assistant.feed_desktop import Desktop, NativeDesktop
-lazy from assistant.feed_items import Verb, WorkItem, act, help_request
-lazy from assistant.feed_sources import Attention, SourceKey, SourceKind, listed
-lazy from assistant.feed_triage import Assessment
-lazy from assistant.inbox import Query, review_prompt
 lazy from assistant.notifications import (
     MAX_VISIBLE,
     Content,
@@ -41,11 +38,10 @@ lazy from assistant.notifications import (
     Toast,
     Turn,
     advance,
-    display_order,
     hide,
     hover,
     next_expiry,
-    origin_item,
+    order_of,
     priority,
     reading_hold,
     results,
@@ -93,26 +89,24 @@ class AgentToasts:
         "closed",
         "create_card",
         "desktop",
+        "environment",
         "expiry_timer",
+        "history",
         "loop",
-        "material_preference",
         "materials",
         "measure",
         "monitor",
-        "motion_enabled",
         "next_material",
         "page",
         "pointer_timer",
         "progress",
         "progress_head",
-        "query",
         "reveal",
         "root",
         "scale",
         "session",
         "spares",
         "stack",
-        "timing",
         "viewport",
         "wheel",
         "work",
@@ -122,22 +116,23 @@ class AgentToasts:
         self,
         root: QApplication,
         agent: AgentWindow,
+        open_canvas: Callable[[str], None],
         *,
         monitor: Rect | None = None,
         clock: Callable[[], float] = time.monotonic,
-        motion_enabled: Callable[[], bool] = appearance.animations_enabled,
-        material_preference: Callable[[], appearance.Preference] = appearance.preference,
         desktop: Desktop | None = None,
         create_card: Callable[[AgentToasts, Toast, int], Card] | None = None,
-        timing: appearance.TimerResolution | None = None,
+        environment: appearance.Environment | None = None,
     ) -> None:
         # One view owns cards, desktop observation and motion timer lifetimes.
-        # Independent monitor hint, clock and native adapters enter at construction
-        # so every card shares that ownership; tests consume the same contracts.
-        self.root, self.agent, self.clock, self.motion_enabled = root, agent, clock, motion_enabled
+        # Independent monitor hint, clock, desktop and appearance environment enter
+        # at construction so every card shares that ownership; tests consume the
+        # same contracts.
+        # Bubbles direct the person to the canvas; its opener enters here.
+        self.root, self.agent, self.canvas_open, self.clock = root, agent, open_canvas, clock
+        self.environment: appearance.Environment = appearance.Environment() if environment is None else environment
         self.desktop: Desktop = NativeDesktop() if desktop is None else desktop
         self.create_card = Card if create_card is None else create_card
-        self.material_preference = material_preference
         self.materials = appearance.FrostSampler()
         self.monitor = monitor if monitor is not None else saved_monitor()
         self.session = Session()
@@ -146,15 +141,13 @@ class AgentToasts:
         self.progress_head: PhaseKey | None = None
         self.loop = EventLoop(root, self.sync_layers)
         self.measure = Measure()
-        self.timing = appearance.TimerResolution() if timing is None else timing
         self.wheel = WheelRouter()
         self.cards: dict[Key, Card] = {}
         # Qt owns these native resources. Keep at most MAX_VISIBLE surfaces for
         # this view's lifetime; replacing logical content must not rebuild them.
         self.spares: tuple[Card, ...] = ()
         self.closed = False
-        self.query = Query()
-        self.canvas_open: Callable[[str], None] | None = None
+        self.history = False
         self.page = 0
         self.capacity = MAX_VISIBLE
         self.viewport: Viewport | None = None
@@ -174,13 +167,9 @@ class AgentToasts:
         self.session = state
         self.refresh()
 
-    def use_canvas(self, open_at: Callable[[str], None]) -> None:
-        self.canvas_open = open_at
-
     def observation(self) -> Snapshot:
-        if self.canvas_open is None:
-            return self.session
-        return history_session(self.session) if self.query.history else redirect_session(self.session)
+        # History shows the agent's work as it was; live bubbles only redirect.
+        return self.session if self.history else redirect_session(self.session)
 
     def refresh(self) -> None:
         if self.closed:
@@ -195,11 +184,11 @@ class AgentToasts:
 
     @property
     def live_progress(self) -> bool:
-        return self.canvas_open is not None and not self.query.history
+        return not self.history
 
     def project(self, now: float, *, reveal: bool = False) -> None:
         if not self.live_progress:
-            self.stack = advance(self.stack, self.observation(), now, query=self.query, page=self.page, reveal=reveal, limit=self.capacity)
+            self.stack = advance(self.stack, self.observation(), now, history=True, page=self.page, reveal=reveal, limit=self.capacity)
             return
         self.progress = advance_progress(retain_lifetimes(self.progress, self.stack), self.session, now)
         self.stack = visible(self.progress, self.capacity)
@@ -259,7 +248,7 @@ class AgentToasts:
         if not any(card.motion is not None or card.reveals for card in self.cards.values()):
             samples = {sample.bounds: sample for sample in self.materials.read()}
             if samples:
-                preference = self.material_preference()
+                preference = self.environment.material()
                 for card in self.cards.values():
                     if card.bounds is not None and (sample := samples.get(card.bounds)) is not None:
                         card.match_background(sample, preference)
@@ -289,13 +278,8 @@ class AgentToasts:
     def measured(self, toast: Toast, width: int) -> Measured:
         card = self.cards[toast.key]
         prepared = card.measure(self.content_for(toast), width)
-        match toast.content:
-            case WorkItem(item=Assessment()) if not card.expanded:
-                preview = Preview.COMPLETE
-            case _:
-                preview = Preview.LINES
         chrome = prepared.header_height + prepared.hint_height + prepared.padding
-        return Measured(prepared.preferred, chrome, prepared.body_height, priority(toast.content), preview)
+        return Measured(prepared.preferred, chrome, prepared.body_height, priority(toast.content))
 
     def sync_layers(self) -> None:
         # Qt rounds device-independent bounds during its layered paint. Align
@@ -383,8 +367,8 @@ class AgentToasts:
         if not self.cards and not self.stack.toasts:
             self.work = None
             return
-        animate = self.motion_enabled() if animate is None else animate
-        preference = self.material_preference()
+        animate = self.environment.animations() if animate is None else animate
+        preference = self.environment.material()
         work = self.area()
         scale = self.loop.scale(work)
         immediate = self.work is not None and (self.work != work or self.scale != scale)
@@ -422,13 +406,7 @@ class AgentToasts:
             # A resumed recording must restore usable controls immediately,
             # even when its fixed-width geometry matches the fading saved card.
             resized = before != (current.width, current.height)
-            immediate = immediate or (
-                toast.key not in created
-                and (
-                    (isinstance(toast.content, Recording) and (resized or current.alpha < 1))
-                    or (resized and isinstance(toast.content, WorkItem) and isinstance(toast.content.item, Assessment))
-                )
-            )
+            immediate = immediate or (toast.key not in created and isinstance(toast.content, Recording) and (resized or current.alpha < 1))
             if toast.key in created:
                 current.position(
                     work.right - viewport.margin,
@@ -462,10 +440,9 @@ class AgentToasts:
                 return toast.content
 
     def order_for(self, toast: Toast) -> tuple[int, float, int, int]:
-        order = display_order(toast, curated=self.session.triage.enabled and not self.query.history)
-        if self.live_progress:
-            return (0 if isinstance(toast.key, PhaseKey) else 1, *order[1:])
-        return order
+        # Live phases lead; history keeps chronology.
+        group = (0 if isinstance(toast.key, PhaseKey) else 1) if self.live_progress else 0
+        return (group, *order_of(toast))
 
     def layout(self, now: float, *, animate: bool, pushing: bool = False) -> None:
         if self.work is None or self.viewport is None:
@@ -502,13 +479,20 @@ class AgentToasts:
         self.reveal = True
         self.refresh()
 
-    def review_feed(self) -> None:
-        if self.agent.on_submit is not None:
-            prompt = review_prompt(listed(self.session.communications, self.session.console_requests, history=False), self.query)
-            self.agent.on_submit(prompt)
-
-    def action_link(self, url: str) -> None:
-        self.action(QtCore.QUrl(url))
+    def action_link(self, link: str) -> None:
+        if urlsplit(link).scheme in ("http", "https", "mailto"):
+            webbrowser.open(link)
+            return
+        action = parse(link)
+        match action:
+            case OpenCanvas(target=target):
+                self.canvas_open(target)
+            case AnswerApproval(request=request, decision=decision):
+                self.agent.respond(request, decision.value)
+            case None:
+                pass
+            case _:
+                assert_never(action)
 
     def toggle_card(self, selected: Card, *, animate: bool) -> None:
         """Qt owns disclosure state; collapse and expand on one layout clock."""
@@ -520,62 +504,19 @@ class AgentToasts:
             if card.expanded:
                 card.detail_offset = card.details.offset
             card.expanded = desired
-            if isinstance(card.content, WorkItem):
-                card.text.verticalScrollBar().setValue(0)
             card.prepared = None
             card.layout = None
-        self.sync(self.clock(), animate=animate and self.motion_enabled())
+        self.sync(self.clock(), animate=animate and self.environment.animations())
 
     def dismiss_card(self, key: Key) -> None:
         card = self.cards.get(key)
         if card is None:
             return
-        if isinstance(card.content, WorkItem) and isinstance(card.content.item, Assessment):
-            action = self.agent.on_dismiss_work
-            if action is None or not action(card.content.item.identity):
-                if self.agent.on_problem is not None:
-                    self.agent.on_problem("That item could not be dismissed. It remains in your feed.")
-                return
         self.stack = hide(self.stack, key)
         self.refresh()
 
     def action(self, url: QtCore.QUrl) -> None:
-        parsed = urlsplit(url.toString())
-        if parsed.scheme in ("http", "https", "mailto"):
-            webbrowser.open(url.toString())
-            return
-        if parsed.scheme != "workspace":
-            return
-        if parsed.netloc == "canvas" and self.canvas_open is not None:
-            target = parse_qs(parsed.query).get("target", [""])[0]
-            if target:
-                self.canvas_open(target)
-            return
-        if parsed.netloc == "agent-option":
-            self.answer_option(parsed.query)
-            return
-        values = parse_qs(parsed.query)
-        if parsed.netloc == "console-option":
-            self.answer_console(values.get("message", [""])[0], values)
-            return
-        if parsed.netloc == "console-dismiss" and self.agent.on_console is not None:
-            self.agent.on_console(console_requests.Dismiss(values.get("message", [""])[0]))
-            return
-        verb = next((verb for verb in Verb if verb.value == parsed.netloc), None)
-        kind = next((kind for kind in SourceKind if kind.value == values.get("source", [""])[0]), None)
-        key = SourceKey(kind, values.get("item", [""])[0]) if kind is not None else None
-        row = next((card.content for card in self.cards.values() if isinstance(card.content, WorkItem) and card.content.key == key), None)
-        if verb is None or row is None:
-            return
-        if verb is Verb.HELP:
-            prompt = help_request(row)
-            if prompt and self.agent.on_submit is not None:
-                self.query = Query()
-                self.agent.on_submit(prompt)
-            return
-        command = act(row, verb)
-        if command is not None and self.agent.on_communication is not None:
-            self.agent.on_communication(command)
+        self.action_link(url.toString(QtCore.QUrl.ComponentFormattingOption.FullyEncoded))
 
     def sync_wheel(self) -> None:
         regions: list[Region] = []
@@ -600,7 +541,7 @@ class AgentToasts:
         removed = False
         spin = False
         revealing = False
-        animate = self.motion_enabled()
+        animate = self.environment.animations()
         reader = next(
             (card for card in sorted(self.cards.values(), key=card_order) if card.needs_reading() and (not self.live_progress or card.alpha >= 0.99)),
             None,
@@ -627,13 +568,13 @@ class AgentToasts:
                 card.pulse(now if animate else 0)
                 spin = spin or animate
         if removed:
-            self.layout(now, animate=self.motion_enabled())
+            self.layout(now, animate=self.environment.animations())
         self.sync_wheel()
         self.schedule_pointer()
         moving = any(card.motion is not None for card in self.cards.values())
         scrolling = reader is not None and not reader.hovered
         sliding = reader is not None and scrolling and animate and isinstance(reader.reader, notification_reading.Scrolling)
-        self.timing.update(active=moving or revealing or sliding)
+        self.environment.timer.update(active=moving or revealing or sliding)
         if self.stack is not before:
             self.schedule_expiry()
             self.schedule_pointer()
@@ -660,7 +601,7 @@ class AgentToasts:
         if self.closed:
             return
         self.stack = replace(self.stack, hidden=frozenset())
-        self.query = Query()
+        self.history = False
         self.page = 0
         self.reveal = True
         self.show(focus=True)
@@ -669,18 +610,18 @@ class AgentToasts:
         if self.closed:
             return
         self.stack = replace(self.stack, hidden=frozenset())
-        self.query = replace(self.query, history=True)
+        self.history = True
         self.page = 0
         self.reveal = True
         self.refresh()
 
     def resume(self) -> None:
-        self.query = replace(self.query, history=False)
+        self.history = False
         self.page = 0
         self.refresh()
 
     def clear_cards(self) -> None:
-        self.timing.update(active=False)
+        self.environment.timer.update(active=False)
         self.wheel.update(())
         if self.pointer_timer is not None:
             cancel(self.pointer_timer)
@@ -708,33 +649,6 @@ class AgentToasts:
         self.materials.close()
         self.measure.close()
         self.loop.close()
-
-    def answer_console(self, identity: str, values: dict[str, list[str]]) -> None:
-        index = values.get("question", ["0"])[0]
-        if not index.isdecimal():
-            return
-        question = int(index)
-        answer = values.get("answer", [""])[0]
-        for card in self.cards.values():
-            origin = origin_item(card.content)
-            match origin:
-                case WorkItem(item=console_requests.Request(identity=request_id, questions=questions), attention=Attention.DIRECT):
-                    if (
-                        not card.retiring
-                        and request_id == identity
-                        and 0 <= question < len(questions)
-                        and not questions[question].multiple
-                        and answer in (option.label for option in questions[question].options)
-                        and self.agent.on_console is not None
-                    ):
-                        self.agent.on_console(console_requests.Answer(identity, question, answer))
-                        break
-                case _:
-                    pass
-
-    def answer_option(self, query: str) -> None:
-        values = parse_qs(query)
-        self.agent.respond(values.get("request", [""])[0], values.get("answer", [""])[0])
 
 
 def card_order(card: Card) -> tuple[int, float, int, int]:

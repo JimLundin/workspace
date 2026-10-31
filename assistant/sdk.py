@@ -38,9 +38,9 @@ from pydantic import AfterValidator, BeforeValidator, TypeAdapter
 
 from assistant.agent import KEPT_SCREENSHOTS
 from assistant.agent_history import History
-from assistant.agent_session import Answer, LiveMessage, ReasoningSummary, StreamState
 from assistant.llm import Json, ToolCall, ToolSpec
 from automation.execution import Incomplete, InstallationRequested, InvalidConfiguration, Reported, ReportStatus
+from automation.presentation import Answer, LiveMessage, ReasoningSummary, StreamState
 lazy from assistant.agent import Agent
 
 set_tracing_disabled(True)

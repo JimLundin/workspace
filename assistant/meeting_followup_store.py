@@ -123,13 +123,14 @@ def observe_transcript(store: MeetingStore) -> Transcript:
     return Transcript(source, content)
 
 
-def _component(value: str, field: str) -> str:
-    identifier(value, field)
-    if re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}", value) is None or value.endswith("."):
-        raise ValueError(f"Invalid {field} for an artifact directory.")
-    if ntpath.isreserved(value):
-        raise ValueError(f"Reserved {field} for an artifact directory.")
-    return value
+def _short(identity: str) -> str:
+    """A fixed-length directory name: paths stay at most 58 characters below the store root.
+
+    Shell targets and other programs open the store's paths without the extended
+    path form, so a name never embeds a full identity. Reads verify the full task
+    identity and package digest, so a name collision fails closed.
+    """
+    return hashlib.sha256(identity.encode("utf-8")).hexdigest()[:16]
 
 
 def _relative(value: str) -> str:
@@ -426,10 +427,10 @@ class FollowupStore:
         self.install = install
 
     def _task(self, task_id: str) -> Path:
-        return self.root / _component(task_id, "task identity")
+        return self.root / _short(identifier(task_id, "task identity"))
 
     def _directory(self, task_id: str, version: str) -> Path:
-        return self._task(task_id) / "versions" / digest(version, "package version")
+        return self._task(task_id) / "versions" / _short(digest(version, "package version"))
 
     def plan(self, task_id: str, followup: Followup) -> Publication:
         """Pure publication bytes and digest, prepared before the durable action gate."""
@@ -558,15 +559,18 @@ class FollowupStore:
         native = filesystem_path(directory)
         if not native.exists():
             return ()
-        paths: list[Path] = []
+        versions: list[str] = []
         for path in native.iterdir():
             if path.name.startswith("."):
                 continue
-            if len(paths) >= MAX_VERSIONS:
+            if len(versions) >= MAX_VERSIONS:
                 raise ValueError("The task has too many follow-through versions.")
-            digest(path.name, "saved package version")
-            paths.append(path)
-        return tuple(self.read(task_id, path.name) for path in sorted(paths))
+            # The directory names only a prefix; the package's own digest is its version.
+            version = hashlib.sha256(_read_file(directory / path.name / "package.zip", MAX_PACKAGE_BYTES)).hexdigest()
+            if _short(version) != path.name:
+                raise ArtifactChangedError("A saved package no longer matches its version directory.")
+            versions.append(version)
+        return tuple(self.read(task_id, version) for version in sorted(versions))
 
     @contextlib.contextmanager
     def _connection(self, task_id: str, *, writing: bool = False) -> Generator[_Connection]:
@@ -601,7 +605,7 @@ class FollowupStore:
     def _edit_directory(self, task_id: str, version: str, kind: str, item_id: str, *, revision: int, fingerprint: str) -> Path:
         # One content-derived directory keeps native Windows draft paths short.
         key = _json({"version": version, "kind": kind, "id": item_id, "revision": revision, "digest": fingerprint})
-        return self._task(task_id) / "edits" / hashlib.sha256(key).hexdigest()
+        return self._task(task_id) / "edits" / _short(key.decode("utf-8"))
 
     def _edit(
         self,

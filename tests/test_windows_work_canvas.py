@@ -20,6 +20,7 @@ lazy from PySide6.QtCore import Qt
 import automation.task
 from assistant.agent_session import Answered
 from assistant.canvas_activity import ROOT_CONTEXT, Attention, CanvasInstruction, CanvasQuestion, CanvasRun, SessionRequest, TaskRequest
+from assistant.card_actions import OpenCanvas, parse
 from assistant.feed_agent_tools import request
 from assistant.feed_origin import App
 from assistant.icons import State
@@ -883,7 +884,7 @@ def click_canvas_notification(ui: InboxUi) -> None:
     ui.pump()
     assert len(card.canvas_actions) == 1
     span, button = card.canvas_actions[0]
-    assert span.link.startswith("workspace://canvas?")
+    assert isinstance(parse(span.link), OpenCanvas)
     assert button.isVisible() and not button.icon().isNull()
     assert card.window.rect().contains(button.geometry())
     assert card.text.document().find("Open on canvas").isNull()

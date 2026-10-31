@@ -110,7 +110,7 @@ class LocalCipher:
 def service(path: Path) -> tuple[Communications, Web]:
     web = Web()
     store = SavedState(path, COMMUNICATIONS_STATE, cipher=LocalCipher())
-    controller = Communications(web, store, lambda feed, drafts: None)
+    controller = Communications(web, store, lambda feed: None)
     controller.feed = Feed(status=Status.CONNECTED, conversations=(Conversation("19:one@thread.v2", "Anna"),), followed=("19:one@thread.v2",))
     return controller, web
 

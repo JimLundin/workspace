@@ -7,10 +7,11 @@ from typing import cast
 
 from assistant import browser_tools, business_tools, meeting_tools
 from assistant.agent import Agent
-from assistant.agent_session import ToolActivity
+from assistant.agent_session import activity_text, message_body
 from assistant.agent_toolsets import General
 from assistant.geometry import Shot
 from assistant.llm import Json, Settings, ToolCall
+from automation.presentation import ToolActivity
 from tests.fake_endpoint import fake_endpoint
 from tests.test_agent import FakeMachine, FakeWindow, Rig, calls, durable, says
 from winapi.shapes import Rect
@@ -29,7 +30,7 @@ def test_meeting_voice_commands_use_the_recording_service_without_default_approv
         rig.run("Record this meeting, check its progress, and then stop it.")
         assert "meeting start both Private planning" in rig.machine.log
         assert any(line.startswith("meeting stop") for line in rig.machine.log)
-        assert all("Private planning" not in item.text for item in rig.window.live if isinstance(item, ToolActivity))
+        assert all("Private planning" not in activity_text(item) for item in rig.window.live if isinstance(item, ToolActivity))
         request = cast(dict[str, Json], json.loads(endpoint.received[0].body))
         specs = cast(list[dict[str, Json]], request["tools"])
         assert {spec.name for spec in meeting_tools.CAPTURE_SPECS} <= {spec["name"] for spec in specs if isinstance(spec["name"], str)}
@@ -66,7 +67,7 @@ def test_background_tools_are_exposed_to_the_model_and_run_without_default_promp
         assert not any("fixture-private" in line for line in rig.window.log)
         activities = [item for item in rig.window.live if isinstance(item, ToolActivity)]
         assert activities and all(item.detail == "" for item in activities)
-        assert all("fixture-private" not in item.text for item in activities)
+        assert all("fixture-private" not in activity_text(item) for item in activities)
 
 
 def test_explicit_approval_mode_can_decline_browser_changes(tmp_path: Path) -> None:
@@ -128,4 +129,4 @@ def test_stopped_agent_does_not_start_background_tools_or_show_their_arguments(t
         assert not result.ok
     assert not machine.log
     assert "private-secret" not in str(window.log)
-    assert all("private-secret" not in item.text for item in window.live)
+    assert all("private-secret" not in message_body(item) for item in window.live)
