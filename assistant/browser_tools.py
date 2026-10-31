@@ -57,9 +57,10 @@ from assistant.browser_values import (
     destination,
 )
 from assistant.desktop_tools import Screen
-from assistant.llm import Json, ToolSpec, tool_spec
+from assistant.llm import ToolSpec, tool_spec
 from automation.actions import Change, Evidence, Observation, target
 from automation.execution import Readback, Targets
+from automation.json_value import Json
 
 type TabIds = Annotated[tuple[Identifier, ...], Field(min_length=1, max_length=200)]
 type Title = Annotated[str, Field(strict=True, max_length=300)]

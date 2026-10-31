@@ -10,7 +10,7 @@ from pathlib import Path
 
 from assistant.browser import Browser
 from assistant.browser_session import NativeSessions, Product, edge_path
-from assistant.llm import Json
+from automation.json_value import Json
 from tests.test_browser import command, decoded
 
 

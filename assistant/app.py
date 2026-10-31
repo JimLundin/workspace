@@ -20,10 +20,11 @@ import components
 import keeper
 import keeper_control
 import usage
-from assistant.activity import ActivityTracker, ContextSnapshot, Observation
+from assistant.activity import ActivityTracker
+from automation.activity import ContextSnapshot, Observation, Policy
 from config import APPS
 from usage import DIRECTORY, Detail
-lazy from assistant import activity, control_policy
+lazy from assistant import control_policy
 lazy from assistant.browser import Browser
 lazy from assistant.browser_session import Product
 lazy from assistant.canvas_activity import CanvasInstruction, CanvasRun
@@ -40,7 +41,7 @@ lazy from assistant.feed_work import FeedWork
 lazy from assistant.icons import State, dot
 lazy from assistant.keymap import indicator_text
 lazy from assistant.lifecycle import Timings
-lazy from assistant.llm import MAX_SECONDS, RATE, Missing, Settings
+lazy from assistant.llm import MAX_SECONDS, Missing, Settings
 lazy from assistant.local_bridge import LocalBridge
 lazy from assistant.meeting_events import TranscriptEvents
 lazy from assistant.meeting_followup_store import FollowupStore
@@ -88,6 +89,7 @@ lazy from automation.task import Control, RequestKind
 lazy from miryoku.layout import Layer
 lazy from protocol import WM_INDICATOR, WM_KEY_STATE, WM_LAYOUT_STATE, WM_REQUEST, LayoutState, Tool, decode_indicator
 lazy from winapi import audio, recording, screen, shell, system, windows
+lazy from winapi.pcm import RATE
 lazy from winapi.shapes import Rect, Window
 
 ROOT: Final = Path(__file__).resolve().parent.parent
@@ -279,7 +281,7 @@ class AssistantApp:
         self.activity = ActivityTracker(
             foreground_context,
             self.agent.running,
-            policy=activity.Policy(enabled=os.environ.get("WORKSPACE_AGENT_CONTEXT", "recent").lower() != "off"),
+            policy=Policy(enabled=os.environ.get("WORKSPACE_AGENT_CONTEXT", "recent").lower() != "off"),
         )
         self.communications = Communications(
             TeamsWeb(DIRECTORY / "browser-profile"),

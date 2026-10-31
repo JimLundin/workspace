@@ -1,19 +1,21 @@
 """Task execution dispositions, bounded recovery context, and transient human reviews."""
 
-import json
 import threading
 import time
 import uuid
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import Enum, auto
-from typing import Protocol, assert_never
+from typing import Annotated, Protocol, assert_never
 
-from assistant.llm import Json
+from pydantic import Field, TypeAdapter
+
 from automation.actions import Actions, Evidence, Observation, Operation, Resources
+from automation.json_value import Json
 from automation.presentation import LiveMessage
 from automation.store import TaskStore
 from automation.task import (
+    Action,
     ActionNotApplied,
     ActionReturned,
     ActionSpec,
@@ -27,12 +29,14 @@ from automation.task import (
     Failed,
     FileDigest,
     Outcome,
+    OutcomeKind,
     Question,
     Response,
     Task,
     TextAnswer,
     Until,
     Waiting,
+    outcome_kind,
     text,
 )
 
@@ -135,6 +139,27 @@ class Reconciliation:
     applied: bool = field(kw_only=True)
 
 
+def _absent(value: object) -> bool:
+    return value is None
+
+
+@dataclass(frozen=True, slots=True)
+class _LedgerEntry:
+    """One recorded action as the agent's ledger shows it; file actions name their verified digest."""
+
+    id: str
+    tool: str
+    outcome: OutcomeKind
+    started_at: float
+    updated_at: float
+    file: Annotated[str | None, Field(exclude_if=_absent)] = None
+    sha256: Annotated[str | None, Field(exclude_if=_absent)] = None
+
+
+_LEDGER = TypeAdapter(tuple[_LedgerEntry, ...])
+_REVIEWED = TypeAdapter(dict[str, Json])
+
+
 @dataclass(frozen=True, slots=True)
 class Observed:
     id: str
@@ -160,6 +185,15 @@ def covers(proof: Proof, pending: ActionSpec, observed: Observed) -> bool:
         return bool(set(pending.resources).intersection(observed.resources))
     complete = bool(listing) and "all:" + listing in observed.resources
     return all(item in observed.resources or (complete and item.startswith(f"target:{listing}:")) for item in expected)
+
+
+def _ledger_entry(action: Action) -> _LedgerEntry:
+    match action.specification.verification:
+        case FileDigest(path=path, sha256=sha256):
+            file, digest = path, sha256
+        case _:
+            file = digest = None
+    return _LedgerEntry(action.id, action.specification.tool, outcome_kind(action.outcome), action.started_at, action.updated_at, file, digest)
 
 
 class WorkExecution:
@@ -237,19 +271,7 @@ class WorkExecution:
             f"Approve the exact {operation.tool} operation shown in its live review. Its full content is kept only in memory.",
             fingerprint,
         )
-        exact = (
-            detail
-            + "\n\nExact operation: "
-            + operation.tool
-            + "\n"
-            + json.dumps(
-                operation.arguments,
-                ensure_ascii=False,
-                sort_keys=True,
-                indent=2,
-                allow_nan=False,
-            )
-        )
+        exact = detail + "\n\nExact operation: " + operation.tool + "\n" + _REVIEWED.dump_json(operation.arguments, indent=2).decode()
         if self.review is None or len(exact) > 128_000:
             self.block("A live review is required for this operation. Open the work overview and resume to review its full content.")
             return False
@@ -284,23 +306,10 @@ class WorkExecution:
         return observed.id
 
     def describe_actions(self) -> str:
-        values: list[dict[str, Json]] = []
         unverified = self.store.unverified_actions(self.claim.task.id)
         recent = self.store.actions(self.claim.task.id, limit=100)
         ordered = {action.id: action for action in (*unverified, *recent)}
-        for action in tuple(ordered.values())[:100]:
-            item: dict[str, Json] = {
-                "id": action.id,
-                "tool": action.specification.tool,
-                "outcome": type(action.outcome).__name__,
-                "started_at": action.started_at,
-                "updated_at": action.updated_at,
-            }
-            if isinstance(action.specification.verification, FileDigest):
-                item["file"] = action.specification.verification.path
-                item["sha256"] = action.specification.verification.sha256
-            values.append(item)
-        return json.dumps(values, ensure_ascii=False)
+        return _LEDGER.dump_json(tuple(_ledger_entry(action) for action in tuple(ordered.values())[:100])).decode()
 
     def reconcile(self, request: Reconciliation, proof: Callable[[str], Proof]) -> str:
         """`proof` is the tool families' rule for the pending action's tool."""

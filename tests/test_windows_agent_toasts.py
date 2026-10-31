@@ -34,6 +34,7 @@ from assistant.rich_text import formatted
 from assistant.toast_card import Card
 from assistant.ui_components.text import TextView
 from automation.presentation import Answer, Failed, ReasoningSummary, Said, StreamState, Succeeded, ToolActivity
+from automation.task import Reply, TextAnswer
 from tests.agent_requests import asked, reviewed
 from winapi import appearance, screen, system, windows
 from winapi.composition import DesktopComposition, Glass
@@ -960,10 +961,10 @@ def test_repeating_a_frame_keeps_native_geometry_stable_after_dpi_rounding() -> 
         assert not moves and windows.outer_rect(card.handle) == bounds
 
 
-def recording(replies: list[str]) -> Callable[[str], bool]:
+def recording(replies: list[Reply]) -> Callable[[Reply], bool]:
     """Accept every reply to a projected durable request, in order."""
 
-    def accept(reply: str) -> bool:
+    def accept(reply: Reply) -> bool:
         replies.append(reply)
         return True
 
@@ -985,14 +986,14 @@ def test_spinner_reuses_widgets_and_stops_timers_for_reduced_motion_and_input() 
         panel.view.tick()
         assert panel.view.animation_timer is None
         panel.animated = True
-        replies: list[str] = []
+        replies: list[Reply] = []
         panel.agent.request_input(asked("open", "Open this?", "budget.xlsx", panel.now), recording(replies))
         assert panel.requested.wait(timeout=2)
         panel.pump()
         panel.advance(0.3)
         assert panel.view.animation_timer is None
         assert panel.agent.reply_by_voice("The workbook on my desktop")
-        assert replies == ["The workbook on my desktop"]
+        assert replies == [TextAnswer("The workbook on my desktop")]
         panel.agent.finish()
         panel.pump()
         panel.advance(0.3)
@@ -1061,7 +1062,7 @@ def test_hovering_glass_pauses_expiry_and_close_cancels_all_observation() -> Non
 def test_questions_can_be_answered_or_stopped_by_voice_without_history() -> None:
     with notifications() as panel:
         panel.agent.begin("Open the workbook", panel.stop)
-        replies: list[str] = []
+        replies: list[Reply] = []
         panel.agent.request_input(asked("open", "Open this?", "budget.xlsx", panel.now), recording(replies))
         assert panel.requested.wait(timeout=2)
         panel.pump()
@@ -1070,7 +1071,7 @@ def test_questions_can_be_answered_or_stopped_by_voice_without_history() -> None
         assert "agent voice-to-text button" in question.window.toolTip()
         assert "Open this?" in question.text.toPlainText()
         assert panel.agent.reply_by_voice("The revenue sheet.")
-        assert replies == ["The revenue sheet."]
+        assert replies == [TextAnswer("The revenue sheet.")]
         panel.pump()
         assert panel.view.cards[TurnKey(0)] is question
         assert "The revenue sheet." in question.text.toPlainText() and "Open this?" in question.text.toPlainText()
@@ -1081,7 +1082,7 @@ def test_questions_can_be_answered_or_stopped_by_voice_without_history() -> None
         approval = panel.view.cards[TurnKey(0)]
         assert [button.text() for button in approval.choices] == ["Approve", "Decline"]
         approval.stop.click()
-        assert not panel.agent.waiting and replies == ["The revenue sheet."]
+        assert not panel.agent.waiting and replies == [TextAnswer("The revenue sheet.")]
         panel.pump()
         assert not approval.stop.isEnabled()
 

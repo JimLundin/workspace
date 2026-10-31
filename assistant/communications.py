@@ -6,7 +6,7 @@ from datetime import date
 from enum import Enum, auto
 from typing import Literal
 
-from assistant.system_notices import NoticeKey
+from winapi.system_notices import NoticeKey
 
 MAX_MESSAGES = 300
 MAX_FOLLOWED = 8

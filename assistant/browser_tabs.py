@@ -43,7 +43,7 @@ from assistant.browser_values import (
     decoded,
     evaluated,
 )
-from assistant.llm import Json
+from automation.json_value import Json
 
 _PROBE = """({ready: location.protocol === 'edge:' && location.hostname === 'favorites' &&
     typeof chrome.tabs?.query === 'function' && typeof chrome.tabGroups?.update === 'function', url: location.href})"""

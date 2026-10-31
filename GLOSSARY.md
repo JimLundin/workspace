@@ -108,6 +108,9 @@ _Avoid_: Duplicate task, copied conversation
 A question or approval that an agent needs the person to answer before work can
 continue. An approval covers one exact operation. Its answer belongs to the
 originating task and its current goal; the conversation shows that same request.
+A reply is text for a question, or approve or decline for an approval; typed,
+spoken and clicked replies become that one reply at the input edge. Approving
+needs the exact preview to be visible first.
 _Avoid_: Notification, task, chat message
 
 **Notification filter**:
@@ -143,6 +146,13 @@ sources and the follow-up's tools, and it completes only after its package is
 published and each draft's save is verified by reading back the exact draft
 revision it wrote. The person reviews and edits the resulting actions and drafts.
 _Avoid_: Meeting-notes routine, meeting summary
+
+**Follow-up claims**:
+What a meeting follow-up's agent proposes: statements, actions and drafts, each
+with literal quotes from the selected recordings. Claims carry no offsets; they
+become a follow-up only after every quote, owner, due date and address resolves
+against the frozen transcripts. A package stores the claims that resolve to it.
+_Avoid_: Model response, follow-up data
 
 **Meeting-notes routine**:
 A standing instruction, installed disabled, that writes notes for each

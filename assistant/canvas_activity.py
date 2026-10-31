@@ -48,16 +48,16 @@ class Attention(Enum):
     CLOSED = "closed"
 
 
-type CanvasReply = Attention | assistant.agent_session.Answered
+type CanvasReply = Attention | automation.task.TextAnswer
 
 
-def canvas_reply(reply: assistant.agent_session.Reply) -> CanvasReply:
+def canvas_reply(reply: assistant.agent_session.RequestReply) -> CanvasReply:
     match reply:
         case assistant.agent_session.Pending():
             return Attention.WAITING
         case assistant.agent_session.Cancelled() | automation.task.ApprovalDecision():
             return Attention.CLOSED
-        case assistant.agent_session.Answered():
+        case automation.task.TextAnswer():
             return reply
         case _:
             assert_never(reply)
@@ -253,7 +253,7 @@ def merge_activity(previous: CanvasActivity, current: CanvasActivity) -> CanvasA
             request = old.request if isinstance(old.request, TaskRequest) else new.request
             reply: CanvasReply
             match old.request, new.request, old.reply, new.reply:
-                case _, _, assistant.agent_session.Answered(), _:
+                case _, _, automation.task.TextAnswer(), _:
                     reply = old.reply
                 case TaskRequest(), SessionRequest(), _, Attention.CLOSED:
                     reply = old.reply

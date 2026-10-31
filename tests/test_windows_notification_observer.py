@@ -8,9 +8,9 @@ from collections.abc import Awaitable, Callable
 if sys.platform != "win32":
     raise unittest.SkipTest("Native notification observer")
 
-from assistant.system_notices import Banners, Notice, NoticeKey, Observation, Observed, Unavailable
 from winapi.notification_banners import Coverage
 from winapi.notifications import NotificationObserver
+from winapi.system_notices import Banners, Notice, NoticeKey, Observation, Observed, Unavailable
 
 
 class Lease:

@@ -14,8 +14,8 @@ from multiprocessing.connection import Client
 from pathlib import Path
 from unittest import TestCase
 
-from assistant.activity import Activity, ContextSnapshot
 from automation import ipc
+from automation.activity import Activity, ContextSnapshot
 from automation.bridge import BridgeClient, BridgeServer, Channel, LocalChannel, ProfileLease, read_discovery
 from automation.execution import ApprovalReview
 from automation.presentation import Answer, Done, Progress, StreamState
@@ -86,8 +86,14 @@ def disconnected(read: Future[bytes]) -> None:
 
 
 def test_unavailable_worker_retains_invocation_and_replays_after_restart(tmp_path: Path) -> None:
+    # An untitled background window is ordinary desktop context, not malformed data.
     context = ContextSnapshot(
-        12, "active", (Activity(Window(41, "Private project context", "editor.exe", minimized=False), 10, 12, agent_active=False),)
+        12,
+        "active",
+        (
+            Activity(Window(40, "", "", minimized=True), 9, 10, agent_active=False),
+            Activity(Window(41, "Private project context", "editor.exe", minimized=False), 10, 12, agent_active=False),
+        ),
     )
     client = BridgeClient(tmp_path, timeout_s=0.5)
     with TestCase().assertRaises(OSError):
@@ -272,12 +278,13 @@ def test_malformed_and_partial_frames_do_not_hold_the_listener(tmp_path: Path) -
 
 
 def test_codec_rejects_unknown_versions_invalid_scalars_and_stale_batches() -> None:
-    request = b'{"version":1,"epoch":"worker","client":"assistant","operation":{"kind":"poll","after":0,"limit":64}}'
+    request = ipc.encode_request(ipc.Request("worker", "assistant", ipc.Poll(0, 64)))
     assert ipc.decode_request(request).operation == ipc.Poll(0, 64)
     bounded = request.ljust(ipc.MAX_FRAME, b" ")
     assert ipc.decode_request(bounded).operation == ipc.Poll(0, 64)
     for broken in (
-        request.replace(b'"version":1', b'"version":2'),
+        request.replace(b'"version":2', b'"version":3'),
+        request.replace(b'"after":0', b'"after":0,"private":"sdk object"'),
         request.replace(b'"after":0', b'"after":true'),
         request.replace(b'"limit":64', b'"limit":129'),
         request.replace(b'"poll"', b'"execute-private-sdk-object"'),

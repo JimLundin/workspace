@@ -1,11 +1,12 @@
 """Transactional, validated persistence for tasks, inputs, and action outcomes."""
 
-import json
 import sqlite3
 from collections.abc import Generator, Sequence
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Protocol, assert_never, cast
+from typing import Protocol, cast
+
+from pydantic import ConfigDict, TypeAdapter
 
 from automation.task import (
     Action,
@@ -24,18 +25,11 @@ from automation.task import (
     Completed,
     Control,
     Failed,
-    FeedHandoff,
-    FileDigest,
     GoalRevision,
     Interrupted,
-    MailTarget,
-    MeetingFollowup,
-    NoVerification,
     Outcome,
-    Profile,
     Question,
     Reply,
-    RequestKind,
     RequestSource,
     Response,
     RoutineSource,
@@ -47,7 +41,6 @@ from automation.task import (
     TaskStatus,
     TextAnswer,
     Until,
-    Verification,
     Waiting,
     WaitReason,
     action_finished,
@@ -60,6 +53,7 @@ from automation.task import (
     identifier,
     integer,
     interrupted,
+    outcome_kind,
     owns,
     phase,
     progressed,
@@ -70,7 +64,7 @@ from automation.task import (
     variant,
 )
 
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 _UNBOUND_APPROVAL = "This approval was saved before approvals recorded their operation. Resume the task to review it again."
 MAX_PAGE = 1_000
 _TASK_COLUMNS: tuple[str, ...] = (
@@ -93,7 +87,7 @@ _TASK_COLUMNS: tuple[str, ...] = (
 )
 _TASK_SELECT = ", ".join(_TASK_COLUMNS)
 # Queries by profile repeat this exact expression so SQLite uses the index.
-_PROFILE = "json_extract(source,'$.profile')"
+_PROFILE = "json_extract(source,'$.profile.kind')"
 _PROFILE_INDEX = f"CREATE INDEX IF NOT EXISTS request_profile ON tasks({_PROFILE},created_at,id)"
 _ACTION_COLUMNS = "id, task_id, run_id, specification, started_at, updated_at, outcome, outcome_kind, fingerprint"
 
@@ -112,203 +106,49 @@ class _Connection(Protocol):
     def close(self) -> None: ...
 
 
-def _dump(value: dict[str, object]) -> str:
-    return json.dumps(value, ensure_ascii=True, allow_nan=False, separators=(",", ":"))
+# Records are stored in their domain shapes as strict JSON: a variant record's
+# `kind` and a payload-free variant's value identify it, and unknown fields are refused.
+_STORED = ConfigDict(strict=True, extra="forbid")
+_SOURCE = TypeAdapter(Source, config=_STORED)
+_STATE = TypeAdapter(State, config=_STORED)
+_WAIT = TypeAdapter(WaitReason, config=_STORED)
+_REPLY = TypeAdapter(Reply, config=_STORED)
+_CHECKPOINT = TypeAdapter(Checkpoint | None, config=_STORED)
+# A dataclass adapter takes no config; the optional union carries it, and an absent specification is refused.
+_SPECIFICATION = TypeAdapter(ActionSpec | None, config=_STORED)
+_OUTCOME = TypeAdapter(ActionOutcome, config=_STORED)
 
 
-def _load(value: object) -> dict[str, object]:
-    payload = cast(object, json.loads(text(value, "stored record", maximum=512_000)))
-    if not isinstance(payload, dict):
-        raise ValueError("Invalid stored work record.")
-    fields = cast(dict[object, object], payload)
-    if not all(isinstance(key, str) for key in fields):
-        raise ValueError("Invalid stored work record.")
-    return cast(dict[str, object], fields)
+def _stored[T](adapter: TypeAdapter[T], value: T) -> str:
+    return adapter.dump_json(value).decode()
 
 
-def _fields(value: dict[str, object], *names: str) -> None:
-    if value.keys() != set(names):
-        raise ValueError("Unexpected fields in a stored work record.")
+def _decoded[T](adapter: TypeAdapter[T], value: object) -> T:
+    return adapter.validate_json(text(value, "stored record", maximum=512_000))
 
 
-def _strings(value: object, name: str, *, maximum: int, count: int) -> tuple[str, ...]:
-    if not isinstance(value, list):
-        raise ValueError(f"Invalid {name}.")
-    values = cast(list[object], value)
-    if len(values) > count:
-        raise ValueError(f"Invalid {name}.")
-    return tuple(text(item, name, maximum=maximum) for item in values)
-
-
-def _profile_data(profile: Profile) -> dict[str, object]:
-    match profile:
-        case RequestKind.GENERAL:
-            return {"profile": "general"}
-        case MeetingFollowup(bundle):
-            return {"profile": "meeting_followup", "bundle": bundle}
-        case FeedHandoff(item, title):
-            return {"profile": "feed", "item": item, "title": title}
-        case _:
-            assert_never(profile)
-
-
-def _profile(data: dict[str, object]) -> Profile:
-    match data.get("profile"):
-        case "general":
-            _fields(data, "kind", "conversation_id", "profile")
-            return RequestKind.GENERAL
-        case "meeting_followup":
-            _fields(data, "kind", "conversation_id", "profile", "bundle")
-            return MeetingFollowup(digest(data["bundle"], "meeting bundle digest"))
-        case "feed":
-            _fields(data, "kind", "conversation_id", "profile", "item", "title")
-            return FeedHandoff(identifier(data["item"], "feed item identity"), text(data["title"], "feed item title", maximum=240))
-        case _:
-            raise ValueError("Invalid stored request profile.")
-
-
-def _source_data(source: Source) -> dict[str, object]:
-    match source:
-        case RequestSource(conversation_id, profile):
-            return {"kind": "request", "conversation_id": conversation_id, **_profile_data(profile)}
-        case RoutineSource(routine_id, revision, occurrence_id):
-            return {"kind": "routine", "routine_id": routine_id, "revision": revision, "occurrence_id": occurrence_id}
-        case _:
-            assert_never(source)
-
-
-def _source(value: object) -> Source:
-    data = _load(value)
-    match data.get("kind"):
-        case "request":
-            return RequestSource(identifier(data["conversation_id"], "conversation identity"), _profile(data))
-        case "routine":
-            _fields(data, "kind", "routine_id", "revision", "occurrence_id")
-            return RoutineSource(
-                identifier(data["routine_id"], "routine identity"),
-                integer(data["revision"], "routine revision"),
-                text(data["occurrence_id"], "routine occurrence", maximum=512),
-            )
-        case _:
-            raise ValueError("Invalid stored task source.")
-
-
-def _wait_data(reason: WaitReason) -> dict[str, object]:
-    match reason:
-        case Question(id, content, detail):
-            return {"kind": "question", "id": id, "text": content, "detail": detail}
-        case Approval(id, title, detail, fingerprint):
-            return {"kind": "approval", "id": id, "title": title, "detail": detail, "fingerprint": fingerprint}
-        case Until(at, explanation):
-            return {"kind": "until", "at": at, "reason": explanation}
-        case Blocked(explanation):
-            return {"kind": "blocked", "reason": explanation}
-        case _:
-            assert_never(reason)
-
-
-def _wait(value: object) -> WaitReason:
-    data = _load(value)
-    match data.get("kind"):
-        case "question":
-            _fields(data, "kind", "id", "text", "detail")
-            return Question(
-                identifier(data["id"], "question identity"),
-                text(data["text"], "question", maximum=8_000),
-                text(data["detail"], "question detail", maximum=16_000, empty=True),
-            )
-        case "approval":
-            _fields(data, "kind", "id", "title", "detail", "fingerprint")
-            return Approval(
-                identifier(data["id"], "approval identity"),
-                text(data["title"], "approval title", maximum=240),
-                text(data["detail"], "approval detail", maximum=16_000, empty=True),
-                digest(data["fingerprint"], "approved operation"),
-            )
-        case "until":
-            _fields(data, "kind", "at", "reason")
-            return Until(timestamp(data["at"]), text(data["reason"], "waiting reason", maximum=8_000))
-        case "blocked":
-            _fields(data, "kind", "reason")
-            return Blocked(text(data["reason"], "blocking reason", maximum=8_000))
-        case _:
-            raise ValueError("Invalid stored waiting reason.")
-
-
-def _state_data(state: State) -> dict[str, object]:
-    match state:
-        case TaskStatus():
-            return {"kind": phase(state)}
-        case Running(run, owner, at):
-            return {"kind": "running", "run_id": run.run_id, "owner": owner, "started_at": at}
-        case Waiting(reason):
-            return {"kind": "waiting", "reason": _wait_data(reason)}
-        case Interrupted(run, reason):
-            return {"kind": "interrupted", "run_id": run.run_id, "reason": reason}
-        case Completed(result, evidence):
-            return {"kind": "completed", "result": result, "evidence": evidence}
-        case Failed(reason):
-            return {"kind": "failed", "reason": reason}
-        case _:
-            assert_never(state)
-
-
-def _state(value: object, task_id: str) -> State:
-    data = _load(value)
-    match data.get("kind"):
-        case "ready" | "paused" | "cancelled" as status:
-            _fields(data, "kind")
-            return {"ready": TaskStatus.READY, "paused": TaskStatus.PAUSED, "cancelled": TaskStatus.CANCELLED}[text(status, "task status")]
-        case "running":
-            _fields(data, "kind", "run_id", "owner", "started_at")
-            return Running(
-                RunRef(task_id, identifier(data["run_id"], "run identity")),
-                identifier(data["owner"], "worker owner"),
-                timestamp(data["started_at"], "run start"),
-            )
-        case "waiting":
-            _fields(data, "kind", "reason")
-            if not isinstance(data["reason"], dict):
-                raise ValueError("Invalid stored waiting reason.")
-            return Waiting(_wait(_dump(cast(dict[str, object], data["reason"]))))
-        case "interrupted":
-            _fields(data, "kind", "run_id", "reason")
-            return Interrupted(
-                RunRef(task_id, identifier(data["run_id"], "run identity")), text(data["reason"], "interruption reason", maximum=8_000)
-            )
-        case "completed":
-            _fields(data, "kind", "result", "evidence")
-            return Completed(text(data["result"], "task result"), _strings(data["evidence"], "completion evidence", maximum=8_000, count=64))
-        case "failed":
-            _fields(data, "kind", "reason")
-            return Failed(text(data["reason"], "failure reason", maximum=8_000))
-        case _:
-            raise ValueError("Invalid stored task state.")
-
-
-def _checkpoint(value: object) -> Checkpoint | None:
-    if value is None:
-        return None
-    data = _load(value)
-    _fields(data, "summary", "at")
-    return Checkpoint(text(data["summary"], "checkpoint summary", maximum=16_000), timestamp(data["at"]))
+def _specification(value: object) -> ActionSpec:
+    match _decoded(_SPECIFICATION, value):
+        case ActionSpec() as specification:
+            return specification
+        case None:
+            raise ValueError("Invalid stored action specification.")
 
 
 def _task_values(task: Task) -> tuple[object, ...]:
     routine = task.source if isinstance(task.source, RoutineSource) else None
     wake = task.state.reason.at if isinstance(task.state, Waiting) and isinstance(task.state.reason, Until) else None
-    checkpoint = _dump({"summary": task.checkpoint.summary, "at": task.checkpoint.at}) if task.checkpoint is not None else None
     return (
         task.id,
         task.title,
         task.prompt,
-        _dump(_source_data(task.source)),
+        _stored(_SOURCE, task.source),
         task.priority,
         task.created_at,
         task.updated_at,
         task.revision,
-        _dump(_state_data(task.state)),
-        checkpoint,
+        _stored(_STATE, task.state),
+        _stored(_CHECKPOINT, task.checkpoint) if task.checkpoint is not None else None,
         task.goal_revision,
         phase(task.state),
         routine.routine_id if routine is not None else None,
@@ -321,143 +161,23 @@ def _task_values(task: Task) -> tuple[object, ...]:
 def _task(row: tuple[object, ...]) -> Task:
     if len(row) != len(_TASK_COLUMNS):
         raise ValueError("Incomplete stored task.")
-    identity = identifier(row[0], "task identity")
     task = Task(
-        identity,
+        identifier(row[0], "task identity"),
         text(row[1], "task title", maximum=240),
         text(row[2], "task prompt"),
-        _source(row[3]),
+        _decoded(_SOURCE, row[3]),
         integer(row[4], "task priority", minimum=-10_000, maximum=10_000),
         timestamp(row[5]),
         timestamp(row[6]),
         integer(row[7], "task revision"),
-        _state(row[8], identity),
-        _checkpoint(row[9]),
+        _decoded(_STATE, row[8]),
+        _decoded(_CHECKPOINT, row[9]) if row[9] is not None else None,
         integer(row[10], "goal revision"),
     )
     expected = _task_values(task)
     if row[11:] != expected[11:]:
         raise ValueError("Stored task indexes disagree with task state.")
     return task
-
-
-def _reply_data(reply: Reply) -> dict[str, object]:
-    match reply:
-        case TextAnswer(content):
-            return {"kind": "answer", "text": content}
-        case ApprovalDecision.APPROVED:
-            return {"kind": "approved"}
-        case ApprovalDecision.DECLINED:
-            return {"kind": "declined"}
-        case _:
-            assert_never(reply)
-
-
-def _reply(value: object) -> Reply:
-    data = _load(value)
-    match data.get("kind"):
-        case "answer":
-            _fields(data, "kind", "text")
-            return TextAnswer(text(data["text"], "answer", maximum=16_000))
-        case "approved" | "declined" as decision:
-            _fields(data, "kind")
-            return ApprovalDecision.APPROVED if decision == "approved" else ApprovalDecision.DECLINED
-        case _:
-            raise ValueError("Invalid stored reply.")
-
-
-def _verification_data(verification: Verification) -> dict[str, object]:
-    match verification:
-        case NoVerification.NONE:
-            return {"kind": "none"}
-        case FileDigest(path, sha256):
-            return {"kind": "file_digest", "path": path, "sha256": sha256}
-        case MailTarget(version, draft_id, revision, fingerprint):
-            return {"kind": "mail_target", "version": version, "draft_id": draft_id, "revision": revision, "fingerprint": fingerprint}
-        case _:
-            assert_never(verification)
-
-
-def _specification_data(specification: ActionSpec) -> dict[str, object]:
-    return {
-        "tool": specification.tool,
-        "label": specification.label,
-        "fingerprint": specification.fingerprint,
-        "resources": specification.resources,
-        "verification": _verification_data(specification.verification),
-    }
-
-
-def _specification(value: object) -> ActionSpec:
-    data = _load(value)
-    _fields(data, "tool", "label", "fingerprint", "resources", "verification")
-    raw = data["verification"]
-    if not isinstance(raw, dict):
-        raise ValueError("Invalid stored action verification.")
-    check = cast(dict[str, object], raw)
-    verification: Verification
-    match check.get("kind"):
-        case "none":
-            _fields(check, "kind")
-            verification = NoVerification.NONE
-        case "file_digest":
-            _fields(check, "kind", "path", "sha256")
-            verification = FileDigest(text(check["path"], "verification path", maximum=32_768), digest(check["sha256"], "file digest"))
-        case "mail_target":
-            _fields(check, "kind", "version", "draft_id", "revision", "fingerprint")
-            verification = MailTarget(
-                digest(check["version"], "meeting package version"),
-                identifier(check["draft_id"], "meeting draft identity"),
-                integer(check["revision"], "meeting draft revision"),
-                digest(check["fingerprint"], "mail content fingerprint"),
-            )
-        case _:
-            raise ValueError("Invalid stored action verification.")
-    return ActionSpec(
-        text(data["tool"], "action tool", maximum=128),
-        text(data["label"], "action label", maximum=1_024),
-        digest(data["fingerprint"]),
-        _strings(data["resources"], "action resource", maximum=1_024, count=32),
-        verification,
-    )
-
-
-def _outcome_data(outcome: ActionOutcome) -> dict[str, object]:
-    match outcome:
-        case ActionPending.RUNNING:
-            return {"kind": "running"}
-        case ActionReturned(summary):
-            return {"kind": "returned", "summary": summary}
-        case ActionVerified(evidence):
-            return {"kind": "verified", "evidence": evidence}
-        case ActionNotApplied(reason):
-            return {"kind": "not_applied", "reason": reason}
-        case ActionUncertain(reason):
-            return {"kind": "uncertain", "reason": reason}
-        case _:
-            assert_never(outcome)
-
-
-def _outcome(value: object) -> ActionOutcome:
-    data = _load(value)
-    match data.get("kind"):
-        case "running":
-            _fields(data, "kind")
-            return ActionPending.RUNNING
-        case "returned":
-            _fields(data, "kind", "summary")
-            return ActionReturned(text(data["summary"], "action summary", maximum=8_000))
-        case "verified":
-            _fields(data, "kind", "evidence")
-            return ActionVerified(text(data["evidence"], "action evidence", maximum=8_000))
-        case "not_applied":
-            _fields(data, "kind", "reason")
-            return ActionNotApplied(text(data["reason"], "action rejection", maximum=8_000))
-        case "uncertain":
-            _fields(data, "kind", "reason")
-            return ActionUncertain(text(data["reason"], "action uncertainty", maximum=8_000))
-        case _:
-            raise ValueError("Invalid stored action outcome.")
 
 
 def _action(row: tuple[object, ...]) -> Action:
@@ -470,9 +190,9 @@ def _action(row: tuple[object, ...]) -> Action:
         _specification(row[3]),
         timestamp(row[4]),
         timestamp(row[5]),
-        _outcome(row[6]),
+        _decoded(_OUTCOME, row[6]),
     )
-    if row[7] != _outcome_data(action.outcome)["kind"] or row[8] != action.specification.fingerprint:
+    if row[7] != outcome_kind(action.outcome) or row[8] != action.specification.fingerprint:
         raise ValueError("Stored action indexes disagree with the action.")
     return action
 
@@ -501,6 +221,8 @@ class TaskStore:
                 self._migrate_from_version_2(connection)
             if version in (2, 3):
                 self._migrate_from_version_3(connection)
+            if version in (2, 3, 4):
+                self._migrate_from_version_4(connection)
                 return
             if version != 0:
                 raise ValueError("This work database requires a different Workspace schema version.")
@@ -539,7 +261,7 @@ class TaskStore:
         operation is reviewed again; nothing is approved without its fingerprint.
         Feed handoffs become general requests: only their feed label is lost.
         """
-        blocked = _dump(_state_data(Waiting(Blocked(_UNBOUND_APPROVAL))))
+        blocked = _stored(_STATE, Waiting(Blocked(_UNBOUND_APPROVAL)))
         connection.execute(
             "UPDATE requests SET closed_at=(SELECT updated_at FROM tasks WHERE tasks.id=requests.task_id) "
             "WHERE closed_at IS NULL AND json_extract(request,'$.kind')='approval'"
@@ -570,6 +292,45 @@ class TaskStore:
         for table in ("actions", "requests", "responses", "goals", "runs"):
             connection.execute(f"DELETE FROM {table} WHERE task_id IN ({legacy})")
         connection.execute(f"DELETE FROM tasks WHERE id IN ({legacy})")
+
+    @staticmethod
+    def _migrate_from_version_4(connection: _Connection) -> None:
+        """Version 4 hand-built its records; version 5 stores the domain records themselves.
+
+        The conversion is mechanical, so every task, request, reply and action is
+        kept: a payload-free variant's `{"kind": ...}` object becomes its value, a
+        request's profile fields move into a tagged profile record, and a run
+        named by its identity becomes a run reference with its task.
+        """
+        for table, column, task in (("tasks", "state", "id"), ("runs", "previous_state", "task_id")):
+            connection.execute(
+                f"UPDATE {table} SET {column}=json_quote(json_extract({column},'$.kind')) "
+                f"WHERE json_extract({column},'$.kind') IN ('ready','paused','cancelled')"
+            )
+            connection.execute(
+                f"UPDATE {table} SET {column}=json_set(json_remove({column},'$.run_id'),'$.run',"
+                f"json_object('task_id',{task},'run_id',json_extract({column},'$.run_id'))) "
+                f"WHERE json_extract({column},'$.kind') IN ('running','interrupted') AND json_extract({column},'$.run_id') IS NOT NULL"
+            )
+        connection.execute(
+            "UPDATE tasks SET source=json_set(json_remove(source,'$.bundle'),'$.profile',"
+            "json_object('bundle',json_extract(source,'$.bundle'),'kind','meeting_followup')) "
+            "WHERE json_extract(source,'$.kind')='request' AND json_extract(source,'$.profile')='meeting_followup'"
+        )
+        connection.execute(
+            "UPDATE tasks SET source=json_set(json_remove(source,'$.item','$.title'),'$.profile',"
+            "json_object('item',json_extract(source,'$.item'),'title',json_extract(source,'$.title'),'kind','feed')) "
+            "WHERE json_extract(source,'$.kind')='request' AND json_extract(source,'$.profile')='feed'"
+        )
+        connection.execute(
+            "UPDATE responses SET reply=json_quote(json_extract(reply,'$.kind')) WHERE json_extract(reply,'$.kind') IN ('approved','declined')"
+        )
+        connection.execute("UPDATE actions SET outcome=json_quote('running') WHERE json_extract(outcome,'$.kind')='running'")
+        connection.execute(
+            "UPDATE actions SET specification=json_set(specification,'$.verification','none') "
+            "WHERE json_extract(specification,'$.verification.kind')='none'"
+        )
+        connection.execute("DROP INDEX IF EXISTS request_profile")
         connection.execute(_PROFILE_INDEX)
         connection.execute(f"PRAGMA user_version={SCHEMA_VERSION}")
 
@@ -605,7 +366,7 @@ class TaskStore:
             ).fetchone()
             if request is None or len(request) != 5 or integer(request[0], "goal revision") != task.goal_revision:
                 raise ValueError("The task references a missing input request.")
-            if _wait(request[1]) != task.state.reason or request[3] is not None:
+            if _decoded(_WAIT, request[1]) != task.state.reason or request[3] is not None:
                 raise ValueError("The task disagrees with its pending input request.")
             timestamp(request[2], "request time")
             origin = connection.execute("SELECT task_id FROM runs WHERE id=?", (identifier(request[4], "run identity"),)).fetchone()
@@ -727,7 +488,7 @@ class TaskStore:
                 return None
             connection.execute(
                 "INSERT INTO runs(id,task_id,owner,started_at,previous_state) VALUES (?,?,?,?,?)",
-                (run_id, task.id, owner, at, _dump(_state_data(previous))),
+                (run_id, task.id, owner, at, _stored(_STATE, previous)),
             )
             self._put(connection, task, running)
             return Claim(running, run, previous)
@@ -763,7 +524,7 @@ class TaskStore:
                     raise ValueError("An input request identity cannot be reused.")
                 connection.execute(
                     "INSERT INTO requests(task_id,id,goal_revision,run_id,request,at) VALUES (?,?,?,?,?,?)",
-                    (task.id, outcome.reason.id, task.goal_revision, run.run_id, _dump(_wait_data(outcome.reason)), at),
+                    (task.id, outcome.reason.id, task.goal_revision, run.run_id, _stored(_WAIT, outcome.reason), at),
                 )
             self._put(connection, task, result)
             return result
@@ -841,7 +602,7 @@ class TaskStore:
             result, response = update
             connection.execute(
                 "INSERT INTO responses(task_id,request_id,goal_revision,request,reply,at) VALUES (?,?,?,?,?,?)",
-                (task.id, request_id, task.goal_revision, _dump(_wait_data(response.request)), _dump(_reply_data(reply)), at),
+                (task.id, request_id, task.goal_revision, _stored(_WAIT, response.request), _stored(_REPLY, reply), at),
             )
             self._put(connection, task, result)
             return result
@@ -890,10 +651,10 @@ class TaskStore:
         for row in rows:
             if len(row) != 4:
                 raise ValueError("Incomplete stored input response.")
-            request = _wait(row[0])
+            request = _decoded(_WAIT, row[0])
             if not isinstance(request, (Question, Approval)) or request.id != identifier(row[3], "request identity"):
                 raise ValueError("Invalid stored input request.")
-            replies.append(Response(request, _reply(row[1]), timestamp(row[2])))
+            replies.append(Response(request, _decoded(_REPLY, row[1]), timestamp(row[2])))
         return tuple(replies)
 
     def revisions(self, task_id: str, *, limit: int = 100) -> tuple[GoalRevision, ...]:
@@ -958,10 +719,10 @@ class TaskStore:
                     action_id,
                     run.task_id,
                     run.run_id,
-                    _dump(_specification_data(specification)),
+                    _stored(_SPECIFICATION, specification),
                     at,
                     at,
-                    _dump(_outcome_data(action.outcome)),
+                    _stored(_OUTCOME, action.outcome),
                     "running",
                     specification.fingerprint,
                 ),
@@ -980,9 +741,9 @@ class TaskStore:
             result = action_finished(action, outcome, at=at)
             if result is None:
                 return None
-            data = _outcome_data(result.outcome)
             connection.execute(
-                "UPDATE actions SET updated_at=?,outcome=?,outcome_kind=? WHERE id=?", (result.updated_at, _dump(data), data["kind"], action_id)
+                "UPDATE actions SET updated_at=?,outcome=?,outcome_kind=? WHERE id=?",
+                (result.updated_at, _stored(_OUTCOME, result.outcome), outcome_kind(result.outcome), action_id),
             )
             return result
 

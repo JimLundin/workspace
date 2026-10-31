@@ -21,7 +21,6 @@ import usage
 from usage import DIRECTORY
 from winapi import screen, system, windows
 from winapi.shapes import Window
-lazy from assistant.activity import ContextSnapshot, Observation, Sample, observed
 lazy from assistant.agent_execution import AgentExecution
 lazy from assistant.browser import Browser
 lazy from assistant.browser_session import Product
@@ -31,10 +30,11 @@ lazy from assistant.meeting_execution import MeetingWork
 lazy from assistant.meeting_followup_store import FollowupStore
 lazy from assistant.meeting_preparation import Preparations
 lazy from assistant.outlook import OutlookDrafts
-lazy from assistant.recording_state import AudioSource
 lazy from assistant.task_profiles import RequestContext
 lazy from automation import ipc
+lazy from automation.activity import ContextSnapshot, Observation, Sample, observed
 lazy from automation.bridge import BridgeServer, ProfileLease
+lazy from automation.capture import AudioSource
 lazy from automation.context import ContextStore, select_context
 lazy from automation.controller import ControllerSnapshot, Fault, Idle, Stopping, WorkController, WorkExecution, Working
 lazy from automation.execution import ApprovalReview, Log

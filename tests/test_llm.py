@@ -6,7 +6,6 @@ from typing import cast
 
 import tests.fake_endpoint
 from assistant.llm import (
-    RATE,
     Failure,
     Image,
     Missing,
@@ -26,6 +25,7 @@ from assistant.llm import (
     wav,
 )
 from tests.fake_endpoint import fake_endpoint, sse
+from winapi.pcm import RATE
 
 ENV = {"OPENAI_BASE_URL": "https://ai.example/v1/", "OPENAI_API_KEY": "k"}
 

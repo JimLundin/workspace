@@ -8,6 +8,7 @@ from assistant.agent_session import Snapshot, message_body, pending
 from assistant.agent_window import AgentWindow, View
 from assistant.recording_state import RecordingAction
 from automation.presentation import Answer, StreamState
+from automation.task import TextAnswer
 from tests.agent_requests import asked
 
 
@@ -168,35 +169,12 @@ def test_live_publishers_cannot_update_a_later_turn_or_a_reset_conversation() ->
     panel.paint()
 
 
-def test_inline_answer_uses_the_same_composer_and_stopping_restores_submission() -> None:
-    replies: list[str] = []
-    submitted: list[str] = []
-    panel = RecordingWindow(lambda: None, on_submit=submitted.append)
-    answer = "The revenue sheet\nwith the entire ending. Åäö."
-
-    def accept(reply: str) -> bool:
-        replies.append(reply)
-        return True
-
-    assert not panel.reply_by_voice("Start a task")
-    panel.request_input(asked("first", "Which workbook?", "", 1), accept)
-    assert panel.submit(answer) and replies == [answer] and not submitted
-    panel.request_input(asked("second", "Which sheet?", "", 2), accept)
-    panel.stopping()
-    assert not panel.waiting and not panel.respond("second", "Too late")
-    panel.finish()
-    assert panel.submit("Continue with the same workbook")
-    assert submitted == ["Continue with the same workbook"] and replies == [answer]
-    panel.close()
-    panel.paint()
-
-
 def test_quitting_during_ui_warmup_withdraws_requests_and_never_creates_a_late_window() -> None:
     panel = RecordingWindow(lambda: None)
     panel.show()
     panel.request_input(asked("open", "Open this?", "budget.xlsx", 1), lambda _reply: True)
     panel.close()
-    assert not panel.respond("open", "Yes")
+    assert not panel.respond("open", TextAnswer("Yes"))
     panel.paint()
     assert not panel.view.states and not panel.view.shown and not panel.ready.is_set()
 
@@ -251,7 +229,7 @@ def test_snapshot_callbacks_follow_the_ui_queue_and_stop_after_close() -> None:
         while jobs:
             jobs.popleft()()
         assert observed_counts() == (0, 1)
-        assert panel.respond("owned", "Revenue")
+        assert panel.respond("owned", TextAnswer("Revenue"))
         while jobs:
             jobs.popleft()()
         assert observed_counts() == (0, 1, 0)
