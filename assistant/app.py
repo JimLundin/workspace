@@ -451,7 +451,7 @@ class AssistantApp:
         self.ui.close()
         timings.mark("Qt shutdown")
         self.jobs.put(None)
-        self.desktop.mic.close()
+        self.desktop.close_microphone()
         try:
             self.tiling.close()
         except OSError as error:
