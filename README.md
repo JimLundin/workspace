@@ -125,7 +125,7 @@ embedded browser are paused; Workspace retains its Windows desktop runtime.
 - **Keyboard overlay**: a faded, click-through key map near the bottom of the
   main screen. It stays visible while the layout is on and follows held or
   locked layers. Small labels identify the printed keycaps; large labels show
-  their new outputs, with hold actions below. Keys glow gold while you press them,
+  their new outputs, with hold actions below. Keys light up while you press them,
   including every key held in a chord; quick taps leave a brief flash.
   Hide or show it with **Keyboard
   overlay** in the tray menu. Use the **Drag to move** handle above it to place it
