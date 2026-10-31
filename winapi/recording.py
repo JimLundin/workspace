@@ -12,10 +12,9 @@ from collections.abc import Callable, Iterator
 from ctypes import wintypes
 from typing import Final, Protocol
 
-from assistant.llm import RATE
-from assistant.pcm import Converter, Mixer, PcmFormat
 from winapi._core import fn, kernel32
 from winapi.audio import WAVEFORMATEX
+from winapi.pcm import RATE, Converter, Mixer, PcmFormat
 
 _ole32 = ctypes.WinDLL("ole32", use_last_error=True)
 _CoInitializeEx = fn(_ole32, "CoInitializeEx", ctypes.c_long, ctypes.c_void_p, wintypes.DWORD)

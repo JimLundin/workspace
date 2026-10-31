@@ -8,11 +8,12 @@ from pydantic import ConfigDict, TypeAdapter
 
 from assistant import outlook
 from assistant.agent_tools import DECLINED, TEXT, AdapterReadback, Args, ArgumentError, Display, Output, Session, Tool, fixed, schema
-from assistant.llm import Json, ToolSpec, tool_spec
+from assistant.llm import ToolSpec, tool_spec
 from assistant.meeting_execution import MeetingRun, encoded, verified_mail
 from assistant.meeting_followup import FOLLOWUP_CLAIMS, MAX_MODEL_BYTES, FollowupClaims
 from automation.actions import Change, Evidence, Observation, Operation, target
 from automation.execution import ProofRule
+from automation.json_value import Json
 
 
 def _object(properties: dict[str, Json], required: tuple[str, ...]) -> dict[str, Json]:

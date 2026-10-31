@@ -16,9 +16,10 @@ from typing import Final, Protocol
 from pydantic import ConfigDict, TypeAdapter
 
 from assistant.geometry import Shot
-from assistant.llm import Json, ToolSpec
+from assistant.llm import ToolSpec
 from automation.actions import Classification, Operation
 from automation.execution import Proof, Readback, Targets
+from automation.json_value import Json
 from automation.task import ActionNotApplied, ActionUncertain, ActionVerified, FileDigest, MailTarget, NoVerification
 from winapi.shapes import Rect, Window
 lazy from assistant.browser_requests import BrowserRequest

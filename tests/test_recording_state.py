@@ -2,7 +2,6 @@
 
 from dataclasses import replace
 
-from assistant.llm import RATE
 from assistant.recording_state import (
     Batch,
     Exhausted,
@@ -16,6 +15,7 @@ from assistant.recording_state import (
     duration,
     published,
 )
+from winapi.pcm import RATE
 
 
 def test_transcription_retries_back_off_while_capturing_and_pause_after_capture() -> None:

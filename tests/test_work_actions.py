@@ -15,9 +15,10 @@ from assistant.agent import Agent
 from assistant.agent_tools import Output
 from assistant.agent_toolsets import General
 from assistant.browser_values import STRIP_PAGE, StripPage, TabRow
-from assistant.llm import Json, Settings
+from assistant.llm import Settings
 from automation.actions import ActionCancelledError, Actions, Change, LostRunError, Operation, Resources, UncertainEffectError
 from automation.execution import ApprovalReview, Reconciliation, Reported, WorkExecution
+from automation.json_value import Json
 from automation.store import TaskStore
 from automation.task import (
     Action,

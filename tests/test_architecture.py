@@ -71,6 +71,32 @@ def test_keyboard_rejection_follows_lazy_imports_and_package_initializers(tmp_pa
     assert not review(tmp_path).failures
 
 
+def test_lower_layers_reach_assistant_only_through_declared_seams(tmp_path: Path) -> None:
+    # Defect: an automation or winapi module imports a UI-side module, directly or
+    # through a shared helper, or a seam outlives the dependency it documents.
+    write_tree(
+        tmp_path,
+        {
+            "automation/__init__.py": "",
+            "automation/ipc.py": "from helper import value\n",
+            "winapi/__init__.py": "",
+            "winapi/status.py": "from assistant.model import Model\n",
+            "automation/app.py": "lazy from assistant.model import Model\n",
+            "helper.py": "from assistant import model\nvalue = 1\n",
+            "assistant/__init__.py": "",
+            "assistant/model.py": "",
+        },
+    )
+    with (tmp_path / "pyproject.toml").open("a", encoding="utf-8") as output:
+        output.write('\n[[tool.workspace.architecture.seams]]\nmodule = "automation.app"\nreason = "The composition root."\n')
+    assert [finding.detail for finding in review(tmp_path).failures] == ["automation.ipc → helper → assistant", "winapi.status → assistant"]
+    (tmp_path / "helper.py").write_text("value = 1\n")
+    (tmp_path / "winapi/status.py").write_text("")
+    assert not review(tmp_path).failures
+    (tmp_path / "automation/app.py").write_text("")
+    assert [finding.rule for finding in review(tmp_path).failures] == ["stale-seam"]
+
+
 def test_relative_lazy_and_aliased_dynamic_imports_select_their_consumers() -> None:
     imported = dependencies(
         "app/nested/owner.py", 'lazy from .. import model\nfrom importlib import import_module as load\nload("app.effects.native")\n'

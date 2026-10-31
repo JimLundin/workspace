@@ -5,9 +5,10 @@ from typing import Final
 
 from assistant.agent_tools import Args, Display, Output, Session, Tool
 from assistant.business_tools import spec
-from assistant.llm import Json, ToolSpec
+from assistant.llm import ToolSpec
 from assistant.work_bridge_contracts import BridgeCommand
 from automation.actions import Change, Classification, Observation, target
+from automation.json_value import Json
 from automation.personal_work import (
     PERSONAL_REQUEST,
     PERSONAL_RESPONSE,

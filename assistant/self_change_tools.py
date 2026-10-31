@@ -9,10 +9,11 @@ from pathlib import Path
 from typing import Final, Protocol
 
 from assistant.agent_tools import DECLINED, TEXT, Args, ArgumentError, Display, Output, Session, Tool, fixed, schema
-from assistant.llm import Json, tool_spec
+from assistant.llm import tool_spec
 from assistant.publishing import DEFAULT_REMOTE, publish_source
 from assistant.workspace import CheckCompleted, CheckInterrupted, CheckResult, SourceError, Workspace
 from automation.actions import Change, Observation, Operation, target
+from automation.json_value import Json
 from automation.store import TaskStore
 from automation.task import ActionUncertain, ActionVerified, Blocked, Claim, Waiting
 from keeper import copy_source, source_digest

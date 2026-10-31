@@ -7,7 +7,6 @@ from unittest import TestCase
 
 from pydantic import TypeAdapter
 
-from assistant.activity import Activity, ContextSnapshot
 from assistant.feed_agent_tools import request
 from assistant.feed_contracts import REVIEW_INPUT, DismissItem, Disposition, FeedRejected, FeedReply, StoredBoard
 from assistant.feed_history import Decision, Handoff
@@ -15,10 +14,12 @@ from assistant.feed_sources import Excerpt
 from assistant.feed_triage import Board, decode, proposal_revision, restored, saved, unassessed
 from assistant.feed_triage_service import classify
 from assistant.feed_work import FeedWork
-from assistant.llm import Json, Settings
+from assistant.llm import Settings
 from automation.actions import Resources
+from automation.activity import Activity, ContextSnapshot
 from automation.context import ContextStore, Preference, ProjectNote
 from automation.execution import WorkExecution
+from automation.json_value import Json
 from automation.store import TaskStore
 from automation.task import Completed, FeedHandoff, Profile, Question, RequestSource, TextAnswer, Waiting
 from tests.fake_endpoint import fake_endpoint

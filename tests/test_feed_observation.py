@@ -3,8 +3,8 @@
 from assistant.communications import Feed, NotificationFilter, Update, WindowsNotice
 from assistant.feed_observation import FeedObservation, NoticesObserved, TeamsObserved, observe
 from assistant.notification_sources import Notices, joined
-from assistant.system_notices import NoticeKey
 from tests.communications_fixture import communication_feed
+from winapi.system_notices import NoticeKey
 
 
 def test_each_report_keeps_the_others_in_the_joined_feed() -> None:

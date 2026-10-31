@@ -9,8 +9,8 @@ lazy from win32more.Windows.Win32.Media.Audio import IMMDevice, IMMDeviceEnumera
 lazy from win32more.Windows.Win32.Media.Audio.Endpoints import IAudioEndpointVolume
 lazy from win32more.Windows.Win32.System.Com import CLSCTX_ALL, COINIT_MULTITHREADED, CoCreateInstance, CoInitializeEx, CoUninitialize
 
-from assistant.ambient import Speakers, Wifi
 from winapi._core import fn
+from winapi.machine_status import Speakers, Wifi
 
 _wlan = ctypes.WinDLL("wlanapi", use_last_error=True)
 _WlanOpenHandle = fn(

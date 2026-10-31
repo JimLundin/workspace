@@ -16,11 +16,11 @@ from typing import assert_never
 
 lazy import automation.presentation
 lazy from assistant import agent_session
-lazy from assistant.activity import ContextSnapshot
 lazy from assistant.agent_window import AgentWindow
 lazy from assistant.feed_origin import FeedRequest
 lazy from assistant.work_service import IdentifiedSubmission, Issued, WorkBridge, WorkService
 lazy from assistant.work_window import AnswerTask, FollowUp, Redirect, Submit, WorkCommand, WorkSnapshot
+lazy from automation.activity import ContextSnapshot
 lazy from automation.context import ContextStore
 lazy from automation.execution import ApprovalReview, review_matches
 lazy from automation.ipc import (

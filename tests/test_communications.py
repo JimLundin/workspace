@@ -23,8 +23,8 @@ from assistant.communications import (
     updates_observed,
 )
 from assistant.communications_browser import TeamsWeb, activity_observation
-from assistant.llm import Json
 from assistant.web_apps import ActivityItem, ActivityPage
+from automation.json_value import Json
 from tests.teams_fixture import Browser
 
 

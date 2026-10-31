@@ -6,7 +6,7 @@ from unittest import TestCase
 
 from assistant.browser_values import BrowserError, PageRow
 from assistant.communications_browser import TeamsWeb
-from assistant.llm import Json
+from automation.json_value import Json
 from tests.teams_fixture import Browser
 
 
