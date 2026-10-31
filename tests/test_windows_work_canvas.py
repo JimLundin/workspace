@@ -18,8 +18,8 @@ lazy from PySide6 import QtCore, QtGui, QtTest, QtWidgets
 lazy from PySide6.QtCore import Qt
 
 import automation.task
-from assistant.agent_session import Answered
 from assistant.canvas_activity import ROOT_CONTEXT, Attention, CanvasInstruction, CanvasQuestion, CanvasRun, SessionRequest, TaskRequest
+from assistant.card_actions import OpenCanvas, parse
 from assistant.feed_agent_tools import request
 from assistant.feed_origin import App
 from assistant.icons import State
@@ -49,7 +49,9 @@ from assistant.work_canvas_model import (
 )
 from assistant.work_canvas_view import CanvasGroup
 from assistant.work_canvas_window import CanvasWindow
-from assistant.work_window import AnswerTask, ReplyProblem, WorkCommand, WorkOpening, WorkSnapshot, WorkView, WorkWindow
+from assistant.work_commands import AnswerTask, WorkCommand
+from assistant.work_snapshot import ReplyProblem, WorkSnapshot
+from assistant.work_window import WorkOpening, WorkView, WorkWindow
 from automation.actions import Resources
 from automation.execution import WorkExecution
 from automation.personal_work import (
@@ -72,7 +74,7 @@ from automation.personal_work import (
     WorkThread,
 )
 from automation.store import TaskStore
-from automation.task import ActionNotApplied, ActionVerified
+from automation.task import ActionNotApplied, ActionVerified, Reply, TextAnswer
 from automation.work_documents import WebDocument
 from tests.agent_requests import asked
 from tests.feed_fixture import feed_unavailable, no_personal_work
@@ -883,7 +885,7 @@ def click_canvas_notification(ui: InboxUi) -> None:
     ui.pump()
     assert len(card.canvas_actions) == 1
     span, button = card.canvas_actions[0]
-    assert span.link.startswith("workspace://canvas?")
+    assert isinstance(parse(span.link), OpenCanvas)
     assert button.isVisible() and not button.icon().isNull()
     assert card.window.rect().contains(button.geometry())
     assert card.text.document().find("Open on canvas").isNull()
@@ -940,13 +942,13 @@ def test_canvas_clarification_redirect_submits_context_to_the_waiting_agent(tmp_
     store = local_canvas(tmp_path)
     ui.configure_canvas(store, lambda _title, _target: None)
     work = ui.work(lambda _command: None, reveal=False)
-    agent = ui.agent(None, lambda: None, on_work=lambda: work.show(focus=False), reveal=False)
+    agent = ui.agent(lambda: None, on_work=lambda: work.show(focus=False), reveal=False)
     ui.pump()
     agent.show(focus=False)
     ui.pump()
-    resumed: list[str] = []
+    resumed: list[Reply] = []
 
-    def resume(answer: str) -> bool:
+    def resume(answer: Reply) -> bool:
         resumed.append(answer)
         return True
 
@@ -968,11 +970,11 @@ def test_canvas_clarification_redirect_submits_context_to_the_waiting_agent(tmp_
         fallback: list[str] = []
         ui.voice_agent("Contoso owns the handoff.", fallback.append)
         pump_until(ui, lambda: bool(resumed))
-        assert resumed == ["Contoso owns the handoff."]
+        assert resumed == [TextAnswer("Contoso owns the handoff.")]
         ui.pump()
         assert "Contoso owns the handoff." in detail.response.text() and not fallback
         answered = store.read().activity[0]
-        assert isinstance(answered, CanvasQuestion) and answered.reply == Answered("Contoso owns the handoff.")
+        assert isinstance(answered, CanvasQuestion) and answered.reply == TextAnswer("Contoso owns the handoff.")
         card = canvas.card(question.id)
         assert card is not None and card.detail_proxy is not None
         assert card.rect().contains(card.detail_proxy.boundingRect().translated(card.detail_proxy.pos()))

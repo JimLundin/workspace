@@ -205,12 +205,42 @@ class DraftConflict:
         _text(self.reason, "draft conflict", 2_000)
 
 
+class DraftStep(Enum):
+    """The draft store's own operation that was running when a save or inspection failed."""
+
+    OWNERSHIP = auto()
+    IDENTITY_READ = auto()
+    IDENTITY_WRITE = auto()
+    FILE_WRITE = auto()
+    FILE_READ = auto()
+    UNATTRIBUTED = auto()
+
+
+@dataclass(frozen=True, slots=True)
+class StoreFault:
+    """Why the draft store stopped: its operation and the error's class and OS code, never a path or content."""
+
+    step: DraftStep
+    error: str
+    code: int | None
+
+    def __post_init__(self) -> None:
+        _variant(self.step, (DraftStep,), "draft store step")
+        _text(self.error, "draft store error", 128, header=True)
+        if self.code is not None:
+            _variant(self.code, (int,), "draft store error code")
+
+
 @dataclass(frozen=True, slots=True)
 class DraftUncertain:
+    """`fault` names the store's failing operation; a transport or readback uncertainty has none."""
+
     reason: str
+    fault: StoreFault | None = None
 
     def __post_init__(self) -> None:
         _text(self.reason, "uncertain draft", 2_000)
+        _variant(self.fault, (StoreFault, type(None)), "draft store fault")
 
 
 class Cancelled(Enum):
@@ -522,6 +552,57 @@ def decode_record(data: bytes) -> DraftRecord:
     return DraftRecord(_digest(value.get("key")), _digest(value.get("fingerprint")), destination)
 
 
+def store_fault(step: DraftStep, error: OSError | ValueError) -> StoreFault:
+    """Keep the error class and its OS code; messages can name paths, so they are dropped."""
+    match error:
+        case OSError():
+            # A Windows error code distinguishes sharing violations from access denial; errno does not.
+            code = (error.winerror or error.errno) if sys.platform == "win32" else error.errno
+        case ValueError():
+            code = None
+    return StoreFault(step, type(error).__name__, code)
+
+
+def _described(summary: str, fault: StoreFault) -> DraftUncertain:
+    match fault.step:
+        case DraftStep.OWNERSHIP:
+            operation = "acquiring this draft's ownership"
+        case DraftStep.IDENTITY_READ:
+            operation = "reading the draft identity"
+        case DraftStep.IDENTITY_WRITE:
+            operation = "saving the draft identity"
+        case DraftStep.FILE_WRITE:
+            operation = "writing the file draft"
+        case DraftStep.FILE_READ:
+            operation = "reading the file draft"
+        case DraftStep.UNATTRIBUTED:
+            operation = "an unattributed draft store operation"
+        case _:
+            assert_never(fault.step)
+    code = "" if fault.code is None else f", code {fault.code}"
+    return DraftUncertain(f"{summary} It failed while {operation} ({fault.error}{code}).", fault)
+
+
+_UNSAVED = "The draft could not be saved and verified durably. Its original identity must be inspected before retrying."
+_UNREAD = "The recorded draft could not be read completely; its outcome remains uncertain."
+
+
+class _StoreError(Exception):
+    """Carries a typed fault from the failing store operation to the result its caller returns."""
+
+    def __init__(self, fault: StoreFault) -> None:
+        super().__init__(fault.step.name)
+        self.fault = fault
+
+
+@contextlib.contextmanager
+def _during(step: DraftStep) -> Generator[None]:
+    try:
+        yield
+    except (OSError, ValueError) as error:
+        raise _StoreError(store_fault(step, error)) from error
+
+
 def _atomic(path: Path, data: bytes, *, create: bool = False) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.NamedTemporaryFile(prefix=".draft-", dir=path.parent, delete=False) as temporary:
@@ -545,8 +626,9 @@ def _atomic(path: Path, data: bytes, *, create: bool = False) -> None:
 
 @contextlib.contextmanager
 def _hold(path: Path, cancel: threading.Event) -> Generator[None]:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    descriptor = os.open(path, os.O_RDWR | os.O_CREAT, 0o600)
+    with _during(DraftStep.OWNERSHIP):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        descriptor = os.open(path, os.O_RDWR | os.O_CREAT, 0o600)
     with os.fdopen(descriptor, "r+b") as lock:
         # Windows byte locks also forbid reads by competing owners. Locking
         # beyond EOF is supported, so the ownership file needs no contents.
@@ -563,16 +645,18 @@ def _hold(path: Path, cancel: threading.Event) -> Generator[None]:
                 break
             except OSError:
                 if time.monotonic() >= deadline:
-                    raise TimeoutError("Another process still owns this draft.") from None
+                    # Another process still owns this draft.
+                    raise _StoreError(StoreFault(DraftStep.OWNERSHIP, "TimeoutError", None)) from None
                 cancel.wait(0.05)
         try:
             yield
         finally:
-            lock.seek(0)
-            if sys.platform == "win32":
-                msvcrt.locking(lock.fileno(), msvcrt.LK_UNLCK, 1)
-            else:
-                fcntl.flock(lock, fcntl.LOCK_UN)
+            with _during(DraftStep.OWNERSHIP):
+                lock.seek(0)
+                if sys.platform == "win32":
+                    msvcrt.locking(lock.fileno(), msvcrt.LK_UNLCK, 1)
+                else:
+                    fcntl.flock(lock, fcntl.LOCK_UN)
 
 
 class OutlookDrafts:
@@ -588,21 +672,23 @@ class OutlookDrafts:
         return self.transport.status(cancel)
 
     def _record(self, record: DraftRecord) -> None:
-        _atomic(self.folder / "index" / (record.key + ".json"), _json(record_data(record)).encode("utf-8"))
+        with _during(DraftStep.IDENTITY_WRITE):
+            _atomic(self.folder / "index" / (record.key + ".json"), _json(record_data(record)).encode("utf-8"))
 
     def _load(self, key: str) -> DraftRecord | None:
         path = self.folder / "index" / (key + ".json")
-        try:
-            with path.open("rb") as source:
-                data = source.read(65_537)
-        except FileNotFoundError:
-            return None
-        if len(data) > 65_536:
-            raise ValueError("The draft identity record is invalid.")
-        record = decode_record(data)
-        if record.key != key:
-            raise ValueError("The saved draft identity does not match its record.")
-        return record
+        with _during(DraftStep.IDENTITY_READ):
+            try:
+                with path.open("rb") as source:
+                    data = source.read(65_537)
+            except FileNotFoundError:
+                return None
+            if len(data) > 65_536:
+                raise ValueError("The draft identity record is invalid.")
+            record = decode_record(data)
+            if record.key != key:
+                raise ValueError("The saved draft identity does not match its record.")
+            return record
 
     def _eml(self, request: DraftRequest, record: DraftRecord, cancel: threading.Event) -> DraftResult:
         destination = record.destination
@@ -611,10 +697,11 @@ class OutlookDrafts:
         path = self.folder / "drafts" / (record.key + ".eml")
         if cancel.is_set():
             return Cancelled.BEFORE_EFFECT
-        if isinstance(destination, PendingEml) and not path.exists():
-            # A writer may already have published it; readback must decide.
-            with contextlib.suppress(FileExistsError):
-                _atomic(path, eml_bytes(request), create=True)
+        with _during(DraftStep.FILE_WRITE):
+            if isinstance(destination, PendingEml) and not path.exists():
+                # A writer may already have published it; readback must decide.
+                with contextlib.suppress(FileExistsError):
+                    _atomic(path, eml_bytes(request), create=True)
         result = self._read_eml(request, record)
         if isinstance(result, SavedEmlDraft) and isinstance(destination, PendingEml):
             # A ready binding already records this verified identity. Replacing
@@ -634,6 +721,8 @@ class OutlookDrafts:
             if isinstance(destination, ReadyEml):
                 return DraftConflict("The previously saved file draft is missing; it was not recreated.")
             return DraftUncertain("The pending file draft has no complete saved artifact to verify.")
+        except OSError as error:
+            raise _StoreError(store_fault(DraftStep.FILE_READ, error)) from error
         try:
             key, digest, content = read_eml(data)
         except ValueError:
@@ -706,8 +795,10 @@ class OutlookDrafts:
                 return self._save(request, cancel)
         except InterruptedError:
             return Cancelled.BEFORE_EFFECT
-        except OSError, ValueError:
-            return DraftUncertain("The draft could not be saved and verified durably. Its original identity must be inspected before retrying.")
+        except _StoreError as error:
+            return _described(_UNSAVED, error.fault)
+        except (OSError, ValueError) as error:
+            return _described(_UNSAVED, store_fault(DraftStep.UNATTRIBUTED, error))
 
     def inspect(self, request: DraftRequest, cancel: threading.Event) -> DraftResult | Missing:
         """Read an existing binding; never choose a destination, save, or update it."""
@@ -729,5 +820,7 @@ class OutlookDrafts:
                     return self._read_eml(request, record)
                 case _:
                     assert_never(record.destination)
-        except OSError, ValueError:
-            return DraftUncertain("The recorded draft could not be read completely; its outcome remains uncertain.")
+        except _StoreError as error:
+            return _described(_UNREAD, error.fault)
+        except (OSError, ValueError) as error:
+            return _described(_UNREAD, store_fault(DraftStep.UNATTRIBUTED, error))

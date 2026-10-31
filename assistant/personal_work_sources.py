@@ -14,8 +14,8 @@ from urllib.parse import urlsplit
 from pydantic import TypeAdapter
 
 from assistant.browser import BrowserResult
-from assistant.browser_values import BrowserError
-from assistant.llm import Json
+from assistant.browser_requests import BrowserRequest
+from assistant.browser_values import BrowserError, BrowserStatus, PageList
 from assistant.web_apps import (
     KANBAN_BOARD,
     OUTLOOK_READ,
@@ -34,7 +34,7 @@ from automation.personal_work import SourceKind, WorkSource, source_id, source_r
 
 class BrowserPort(Protocol):
     def connect(self, cancel: threading.Event) -> None: ...
-    def request(self, operation: str, args: dict[str, Json], cancel: threading.Event) -> BrowserResult: ...
+    def request(self, request: BrowserRequest, cancel: threading.Event) -> BrowserResult: ...
     def web_app[Q: Located, R](self, operation: WebAppOperation[Q, R], query: Q, cancel: threading.Event) -> R: ...
     def close(self) -> None: ...
 
@@ -57,18 +57,13 @@ class Tab:
 
 
 @dataclass(frozen=True, slots=True)
-class Tabs:
-    tabs: tuple[Tab, ...]
-
-
-@dataclass(frozen=True, slots=True)
 class Observations:
     sources: tuple[WorkSource, ...]
     coverage: tuple[str, ...]
     problems: tuple[str, ...] = ()
 
 
-_TABS = TypeAdapter(Tabs)
+_STATUS = TypeAdapter(BrowserStatus)
 
 
 def kind_for(url: str) -> SourceKind | None:
@@ -176,7 +171,8 @@ class BrowserSources:
             if not self.connected:
                 self.browser.connect(cancel)
                 self.connected = True
-            tabs = _TABS.validate_json(self.browser.request("tabs", {"limit": 40}, cancel).text).tabs
+            pages = _STATUS.validate_json(self.browser.request(PageList(limit=40), cancel).text).tabs
+            tabs = tuple(Tab(page.id, page.url) for page in pages)
         except BrowserError, OSError, ValueError:
             self.failed = "Browser evidence is unavailable. Open signed-in Teams, Outlook and Kanban tabs, then Refresh My work."
             return Observations((), (), (self.failed,))

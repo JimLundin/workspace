@@ -6,7 +6,6 @@ from assistant.toast_stack import (
     Fit,
     Measured,
     Placement,
-    Preview,
     Retiring,
     Space,
     Stacking,
@@ -20,7 +19,7 @@ from winapi.shapes import Rect
 
 TALL = Viewport(Rect(0, 0, 400, 800), 1.0, 20)
 SHORT = Viewport(Rect(0, 0, 400, 300), 1.0, 20)
-READING = Measured(200, 60, 140, 0, Preview.LINES)
+READING = Measured(200, 60, 140, 0)
 
 
 def test_space_allocation_reserves_previews_and_prioritizes_pending_input() -> None:
@@ -36,12 +35,11 @@ def test_space_allocation_reserves_previews_and_prioritizes_pending_input() -> N
 
 
 def test_pending_input_prefers_more_height_and_previews_keep_two_lines() -> None:
-    # Defect: the rank caps swap or ignore scale, or a preview truncates a complete assessment title.
-    assert space(Measured(700, 60, 600, 2, Preview.LINES), TALL) == Space(116, 480, 2)
-    assert space(Measured(700, 60, 600, 3, Preview.LINES), TALL) == Space(116, 360, 3)
-    assert space(Measured(700, 60, 600, 0, Preview.LINES), Viewport(TALL.area, 2.0, 20)) == Space(116, 700, 0)
-    assert space(Measured(700, 60, 600, 1, Preview.COMPLETE), TALL) == Space(660, 700, 1)
-    assert space(Measured(90, 60, 30, 0, Preview.LINES), TALL) == Space(90, 90, 0)
+    # Defect: the rank caps swap or ignore scale, or a preview loses its two lines.
+    assert space(Measured(700, 60, 600, 2), TALL) == Space(116, 480, 2)
+    assert space(Measured(700, 60, 600, 3), TALL) == Space(116, 360, 3)
+    assert space(Measured(700, 60, 600, 0), Viewport(TALL.area, 2.0, 20)) == Space(116, 700, 0)
+    assert space(Measured(90, 60, 30, 0), TALL) == Space(90, 90, 0)
 
 
 def test_retiring_cards_hold_their_space_until_an_arrival_needs_it() -> None:
@@ -49,14 +47,14 @@ def test_retiring_cards_hold_their_space_until_an_arrival_needs_it() -> None:
     # or retiring windows exceed the bounded native pool.
     assert fit(Column((READING, READING), (100,), 5), TALL) == Fit((200, 200), 1, 5)
     assert fit(Column((READING, READING), (100,), 5), SHORT) == Fit((116, 142), 0, 5)
-    small = Measured(50, 50, 0, 0, Preview.LINES)
+    small = Measured(50, 50, 0, 0)
     assert fit(Column((small,) * 4, (50, 40, 30), 5), TALL) == Fit((50,) * 4, 1, 5)
 
 
 def test_capacity_drops_to_the_cards_that_fit_but_keeps_one() -> None:
     # Defect: an overfull stack keeps its capacity and never re-projects, or reduces to zero cards.
     assert fit(Column((READING,) * 3, (), 5), SHORT) == Fit((0, 116, 132), 0, 2)
-    tall = Measured(400, 300, 100, 0, Preview.LINES)
+    tall = Measured(400, 300, 100, 0)
     assert fit(Column((tall,), (), 3), SHORT) == Fit((0,), 0, 1)
     assert fit(Column((tall,), (), 1), SHORT) == Fit((0,), 0, 1)
 

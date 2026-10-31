@@ -4,17 +4,21 @@ Each instance owns its document transitions and effect receipts. Mutation stays
 local to that test's browser lifetime; observations and receipts are tuples.
 """
 
-import json
 import threading
 from collections.abc import Generator
 from contextlib import contextmanager
 
+from pydantic import TypeAdapter
+
 from assistant.browser import BrowserResult
+from assistant.browser_requests import BrowserRequest, Evaluate, Open
 from assistant.browser_session import Attached, BrowserConnection, Owner, Product, Stopped
-from assistant.browser_values import BrowserError
-from assistant.communications_browser import ACTIVITY_OBSERVE
-from assistant.llm import Json
-from assistant.web_apps import OBSERVE
+from assistant.browser_values import BrowserError, BrowserStatus, PageList, PageRow
+from assistant.web_apps import ACTIVITY_OBSERVE, OBSERVE
+from automation.json_value import Json
+
+WIRE = TypeAdapter(Json)
+STATUS = TypeAdapter(BrowserStatus)
 
 
 class Connection:
@@ -39,7 +43,7 @@ class Connection:
 
 
 class Browser:
-    def __init__(self, pages: tuple[dict[str, Json], ...] = ()) -> None:
+    def __init__(self, pages: tuple[PageRow, ...] = ()) -> None:
         self.pages = pages
         self.document: Json = {"current": "", "title": "", "conversations": [], "messages": [], "editor_ready": False}
         self.documents: tuple[Json | Exception, ...] = ()
@@ -47,7 +51,7 @@ class Browser:
         self.visibility = "hidden"
         self.sidebar_click = False
         self.navigation_failure: BrowserError | None = None
-        self.opens: tuple[dict[str, Json], ...] = ()
+        self.opens: tuple[Open, ...] = ()
         self.wakes: tuple[str, ...] = ()
         self.activations: tuple[str, ...] = ()
         self.reads = 0
@@ -73,19 +77,16 @@ class Browser:
     def activate_page(self, target: str, cancel: threading.Event) -> None:
         self.activations += (target,)
 
-    def request(self, operation: str, args: dict[str, Json], cancel: threading.Event) -> BrowserResult:
-        match operation:
-            case "tabs":
-                result: dict[str, object] = {"tabs": self.pages}
-                return BrowserResult(json.dumps(result))
-            case "open":
-                self.opens += (dict(args),)
+    def request(self, request: BrowserRequest, cancel: threading.Event) -> BrowserResult:
+        match request:
+            case PageList():
+                return BrowserResult(STATUS.dump_json(BrowserStatus("attached", self.pages), exclude_none=True).decode())
+            case Open():
+                self.opens += (request,)
                 if self.navigation_failure is not None:
                     raise self.navigation_failure
                 return BrowserResult("Opened")
-            case "evaluate":
-                expression = args["expression"]
-                assert isinstance(expression, str)
+            case Evaluate(expression=expression):
                 if expression == OBSERVE:
                     self.reads += 1
                     if self.documents:
@@ -93,18 +94,18 @@ class Browser:
                         if isinstance(value, Exception):
                             raise value
                         self.document = value
-                    return BrowserResult(json.dumps(self.document))
+                    return BrowserResult(WIRE.dump_json(self.document).decode())
                 if expression == ACTIVITY_OBSERVE:
-                    return BrowserResult(json.dumps(self.activity))
+                    return BrowserResult(WIRE.dump_json(self.activity).decode())
                 if expression == "document.visibilityState":
-                    return BrowserResult(json.dumps(self.visibility))
+                    return BrowserResult(WIRE.dump_json(self.visibility).decode())
                 if "row.click()" in expression:
-                    return BrowserResult(json.dumps(self.sidebar_click))
+                    return BrowserResult(WIRE.dump_json(self.sidebar_click).decode())
                 # The fixture has no Teams launcher or selectable sidebar. Exact
                 # chat recovery must therefore navigate the existing tab.
                 return BrowserResult("false")
             case _:
-                raise AssertionError(f"Unexpected Teams browser operation: {operation}")
+                raise AssertionError(f"Unexpected Teams browser request: {request}")
 
     def close(self) -> None:
         self.connected = False

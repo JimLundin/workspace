@@ -42,8 +42,9 @@ from assistant.meeting_workflow import (
     RecoveryProblem,
     WorkPending,
     WorkUnavailable,
+    package_values,
 )
-from assistant.work_window import WorkSnapshot
+from assistant.work_snapshot import WorkSnapshot
 from automation.task import Completed, MeetingFollowup, Profile, RequestSource, RoutineSource, Running
 from tests.test_meeting_events import saved_meeting
 from tests.test_meetings import SPEECH
@@ -51,7 +52,7 @@ from tests.test_work_agent import WorkRig
 
 
 class WorkflowRig:
-    __slots__ = ("archive", "errors", "followups", "preparations", "snapshots", "work", "workflow")
+    __slots__ = ("archive", "errors", "followups", "preparations", "published", "snapshots", "work", "workflow")
 
     def __init__(
         self,
@@ -68,6 +69,7 @@ class WorkflowRig:
         self.work = work or WorkRig(folder / "work")
         self.errors: list[str] = []
         self.snapshots: list[MeetingSnapshot] = []
+        self.published = threading.Condition()
         self.workflow = MeetingWorkflow(
             self.archive,
             self.preparations,
@@ -75,12 +77,23 @@ class WorkflowRig:
             submit_identified=submit or self.work.agent.submit_identified,
             read_work=read_work or self.work.agent.snapshot,
             journal=self.work.tasks.meeting_followups,
-            publish=self.snapshots.append,
+            publish=self.publish,
             report_error=self.errors.append,
             clock=self.work.clock,
         )
         if start:
             self.workflow.start()
+
+    def publish(self, snapshot: MeetingSnapshot) -> None:
+        with self.published:
+            self.snapshots.append(snapshot)
+            self.published.notify_all()
+
+    def published_where(self, matches: Callable[[MeetingSnapshot], bool]) -> MeetingSnapshot:
+        """Wait for the observer's own publication, without asking it to refresh."""
+        with self.published:
+            assert self.published.wait_for(lambda: any(matches(snapshot) for snapshot in self.snapshots), 10)
+            return next(snapshot for snapshot in self.snapshots if matches(snapshot))
 
     def refresh(self) -> MeetingSnapshot:
         assert self.workflow.refresh().wait(10), "The meeting observer did not finish its queued storage work."
@@ -400,6 +413,28 @@ def test_foreign_task_and_source_packages_cannot_attach_to_a_meeting_preparation
         failed = rig.refresh().changes[-1]
         assert isinstance(failed, DraftSaveProblem) and failed.change == change
         assert rig.followups.drafts(identity, wrong.version)[0].revision == 0
+    finally:
+        rig.close()
+
+
+def test_open_followup_shows_a_new_package_version_when_its_task_changes_without_a_refresh(tmp_path: Path) -> None:
+    # Defect: the periodic observation keeps the opened follow-up's packages
+    # after its task changes, so an open panel never shows the newer version.
+    rig = WorkflowRig(tmp_path)
+    try:
+        prepared = prepare_meeting(rig)
+        first = publish_package(rig, prepared.request)
+        assert [item.publication for item in package_values(opened(rig.refresh()).packages)] == [first]
+        # Only the observer's periodic pass runs from here: no command or refresh is queued.
+        with rig.published:
+            rig.snapshots.clear()
+        later = publish_package(rig, prepared.request, title="A later generated package")
+        claim = rig.work.tasks.claim("meeting-worker", "meeting-run", at=rig.work.clock())
+        assert claim is not None
+        changed = rig.published_where(
+            lambda snapshot: isinstance(snapshot.preparations[0].work, ObservedWork) and isinstance(snapshot.preparations[0].work.task.state, Running)
+        )
+        assert {item.publication.version for item in package_values(opened(changed).packages)} == {first.version, later.version}
     finally:
         rig.close()
 

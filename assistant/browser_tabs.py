@@ -4,24 +4,30 @@ import contextlib
 import threading
 import time
 from collections.abc import Callable
-from dataclasses import dataclass
-from typing import Literal, NotRequired, Protocol, TypedDict, assert_never
+from dataclasses import dataclass, field
+from typing import Annotated, Literal, Protocol, assert_never
 
-from pydantic import TypeAdapter
+from pydantic import Field, TypeAdapter
 
 from assistant.browser_values import (
+    CREATED_TARGET,
+    GROUP,
+    TAB,
+    TAB_STATE,
+    TARGET_SESSION,
     BrowserError,
     ChangeTab,
     CloseGroup,
     CloseTabs,
     ClosureResult,
+    Color,
     CreateGroup,
     DisconnectedError,
     EditGroup,
+    Flag,
     Group,
-    GroupProperties,
     GroupRequest,
-    GroupStyle,
+    Identifier,
     InGroup,
     InterruptedError,
     Move,
@@ -34,16 +40,10 @@ from assistant.browser_values import (
     TabState,
     Ungrouped,
     UngroupResult,
-    boolean,
+    decoded,
     evaluated,
-    group_of,
-    mapping,
-    tab_ids,
-    tab_of,
-    tab_state,
-    text,
 )
-from assistant.llm import Json
+from automation.json_value import Json
 
 _PROBE = """({ready: location.protocol === 'edge:' && location.hostname === 'favorites' &&
     typeof chrome.tabs?.query === 'function' && typeof chrome.tabGroups?.update === 'function', url: location.href})"""
@@ -149,123 +149,121 @@ class Control:
     session: str
 
 
-class MoveData(TypedDict):
+# Commands for the controller script. Absent optional fields are omitted from
+# its JSON, which the script reads as "not requested".
+
+
+@dataclass(frozen=True, slots=True)
+class MoveData:
     index: int
-    windowId: NotRequired[int]
+    window_id: Annotated[int | None, Field(serialization_alias="windowId")] = None
 
 
-class ListCommand(TypedDict):
-    operation: Literal["list"]
+@dataclass(frozen=True, slots=True)
+class StyleData:
+    title: str | None = None
+    color: Color | None = None
+    collapsed: bool | None = field(default=None, kw_only=True)
 
 
-class OpenCommand(TypedDict):
-    operation: Literal["open"]
+@dataclass(frozen=True, slots=True)
+class ListCommand:
+    operation: Literal["list"] = "list"
+
+
+@dataclass(frozen=True, slots=True)
+class OpenCommand:
     url: str
     window_id: int
+    group_id: int | None = None
+    new_group: StyleData | None = None
+    operation: Literal["open"] = "open"
 
 
-class OpenInGroupCommand(OpenCommand):
-    group_id: int
+@dataclass(frozen=True, slots=True)
+class GroupCommand:
+    tab_ids: tuple[int, ...]
+    properties: StyleData
+    group_id: int | None = None
+    window_id: int | None = None
+    move: MoveData | None = None
+    operation: Literal["group"] = "group"
 
 
-class OpenNewGroupCommand(OpenCommand):
-    new_group: GroupStyle
-
-
-class CreateGroupCommand(TypedDict):
-    operation: Literal["group"]
-    tab_ids: list[int]
-    properties: GroupStyle
-    window_id: NotRequired[int]
-    move: NotRequired[MoveData]
-
-
-class EditGroupCommand(TypedDict):
-    operation: Literal["group"]
-    group_id: int
-    tab_ids: list[int]
-    properties: GroupProperties
-    move: NotRequired[MoveData]
-
-
-type TabActionName = Literal["activate", "pin", "unpin", "reload"]
-
-
-class ChangeTabCommand(TypedDict):
-    operation: Literal["tab"]
+@dataclass(frozen=True, slots=True)
+class TabCommand:
     tab_id: int
-    action: TabActionName
+    action: Literal["activate", "pin", "unpin", "reload", "move"]
+    move: MoveData | None = None
+    operation: Literal["tab"] = "tab"
 
 
-class MoveTabCommand(TypedDict):
-    operation: Literal["tab"]
-    tab_id: int
-    action: Literal["move"]
-    move: MoveData
+@dataclass(frozen=True, slots=True)
+class UngroupCommand:
+    tab_ids: tuple[int, ...]
+    operation: Literal["ungroup"] = "ungroup"
 
 
-class UngroupCommand(TypedDict):
-    operation: Literal["ungroup"]
-    tab_ids: list[int]
+@dataclass(frozen=True, slots=True)
+class CloseTabsCommand:
+    tab_ids: tuple[int, ...]
+    operation: Literal["close"] = "close"
 
 
-class CloseTabsCommand(TypedDict):
-    operation: Literal["close"]
-    tab_ids: list[int]
-
-
-class CloseGroupCommand(TypedDict):
-    operation: Literal["close_group"]
+@dataclass(frozen=True, slots=True)
+class CloseGroupCommand:
     group_id: int
+    operation: Literal["close_group"] = "close_group"
 
 
-type NativeCommand = (
-    ListCommand
-    | OpenCommand
-    | OpenInGroupCommand
-    | OpenNewGroupCommand
-    | CreateGroupCommand
-    | EditGroupCommand
-    | ChangeTabCommand
-    | MoveTabCommand
-    | UngroupCommand
-    | CloseTabsCommand
-    | CloseGroupCommand
-)
+type NativeCommand = ListCommand | OpenCommand | GroupCommand | TabCommand | UngroupCommand | CloseTabsCommand | CloseGroupCommand
 _COMMANDS = TypeAdapter[NativeCommand](NativeCommand)
 
 
+@dataclass(frozen=True, slots=True)
+class Probe:
+    ready: Flag
+
+
+@dataclass(frozen=True, slots=True)
+class UngroupReply:
+    tab_ids: tuple[Identifier, ...]
+    group_id: Literal[-1]
+
+
+@dataclass(frozen=True, slots=True)
+class Closed:
+    closed_tab_ids: Annotated[tuple[Identifier, ...], Field(max_length=20000)]
+
+
+_PROBE_REPLY = TypeAdapter(Probe)
+_UNGROUPED = TypeAdapter(UngroupReply)
+_CLOSED = TypeAdapter(Closed)
+_INVALID = "Edge's tab controller returned an unexpected result. Inspect browser_tabs with view=strip before retrying."
+
+
 def move_data(move: Move) -> MoveData:
-    result: MoveData = {"index": move.index}
-    if move.window_id is not None:
-        result["windowId"] = move.window_id
-    return result
+    return MoveData(move.index, move.window_id)
 
 
-def group_command(request: GroupRequest) -> CreateGroupCommand | EditGroupCommand:
+def group_command(request: GroupRequest) -> GroupCommand:
     match request:
         case CreateGroup(identities, style, window, move):
-            created: CreateGroupCommand = {"operation": "group", "tab_ids": list(identities), "properties": style.data()}
-            if window is not None:
-                created["window_id"] = window
-            if move is not None:
-                created["move"] = move_data(move)
-            return created
+            properties = StyleData(style.title, style.color, collapsed=style.collapsed)
+            return GroupCommand(identities, properties, window_id=window, move=None if move is None else move_data(move))
         case EditGroup(identity, identities, changes, move):
-            edited: EditGroupCommand = {"operation": "group", "group_id": identity, "tab_ids": list(identities), "properties": changes.data()}
-            if move is not None:
-                edited["move"] = move_data(move)
-            return edited
+            properties = StyleData(changes.title, changes.color, collapsed=changes.collapsed)
+            return GroupCommand(identities, properties, group_id=identity, move=None if move is None else move_data(move))
         case _:
             assert_never(request)
 
 
-def tab_command(request: TabRequest) -> ChangeTabCommand | MoveTabCommand:
+def tab_command(request: TabRequest) -> TabCommand:
     match request:
         case ChangeTab(identity, action):
-            return {"operation": "tab", "tab_id": identity, "action": action.value}
+            return TabCommand(identity, action.value)
         case MoveTab(identity, move):
-            return {"operation": "tab", "tab_id": identity, "action": "move", "move": move_data(move)}
+            return TabCommand(identity, "move", move_data(move))
         case _:
             assert_never(request)
 
@@ -290,18 +288,16 @@ class TabStrip:
     def _ensure(self, call: Call, cancel: threading.Event) -> Control:
         if self.control is not None:
             return self.control
-        target = text(call("Target.createTarget", {"url": "edge://favorites/", "background": True, "hidden": True}, cancel), "targetId")
-        if not target:
-            raise BrowserError("Edge did not create its hidden tab controller.")
+        created = call("Target.createTarget", {"url": "edge://favorites/", "background": True, "hidden": True}, cancel)
+        target = decoded(CREATED_TARGET, created, "Edge did not create its hidden tab controller.").target_id
         try:
-            session = text(call("Target.attachToTarget", {"targetId": target, "flatten": True}, cancel), "sessionId")
-            if not session:
-                raise BrowserError("Edge did not attach its tab controller.")
+            attached = call("Target.attachToTarget", {"targetId": target, "flatten": True}, cancel)
+            session = decoded(TARGET_SESSION, attached, "Edge did not attach its tab controller.").session_id
             deadline = self.clock() + 5
             while True:
                 try:
-                    result = mapping(self._evaluate(call, session, _PROBE, cancel))
-                    if boolean(result, "ready"):
+                    probe = decoded(_PROBE_REPLY, self._evaluate(call, session, _PROBE, cancel), "Edge's tab controller is not ready.")
+                    if probe.ready:
                         self.control = Control(target, session)
                         return self.control
                 except InterruptedError, DisconnectedError:
@@ -322,33 +318,34 @@ class TabStrip:
 
     def _command(self, call: Call, request: NativeCommand, cancel: threading.Event) -> Json:
         control = self._ensure(call, cancel)
-        return self._evaluate(call, control.session, f"({_COMMAND})({_COMMANDS.dump_json(request).decode()})", cancel)
+        return self._evaluate(
+            call, control.session, f"({_COMMAND})({_COMMANDS.dump_json(request, exclude_none=True, by_alias=True).decode()})", cancel
+        )
 
     def snapshot(self, call: Call, cancel: threading.Event) -> TabState:
-        return tab_state(self._command(call, ListCommand(operation="list"), cancel))
+        return decoded(TAB_STATE, self._command(call, ListCommand(), cancel), _INVALID).state()
 
     def open(self, call: Call, url: str, plan: Opening, cancel: threading.Event) -> Tab:
-        request: OpenCommand | OpenInGroupCommand | OpenNewGroupCommand
         match plan.group:
             case InGroup(identity):
-                request = OpenInGroupCommand(operation="open", url=url, window_id=plan.window_id, group_id=identity)
-            case NewGroup() as style:
-                request = OpenNewGroupCommand(operation="open", url=url, window_id=plan.window_id, new_group=style.data())
+                request = OpenCommand(url, plan.window_id, group_id=identity)
+            case NewGroup(title, color, collapsed=collapsed):
+                request = OpenCommand(url, plan.window_id, new_group=StyleData(title, color, collapsed=collapsed))
             case Ungrouped.TABS:
-                request = OpenCommand(operation="open", url=url, window_id=plan.window_id)
+                request = OpenCommand(url, plan.window_id)
             case _:
                 assert_never(plan.group)
-        return tab_of(self._command(call, request, cancel))
+        return decoded(TAB, self._command(call, request, cancel), _INVALID).tab()
 
     def group(self, call: Call, request: GroupRequest, cancel: threading.Event) -> Group:
-        return group_of(self._command(call, group_command(request), cancel))
+        return decoded(GROUP, self._command(call, group_command(request), cancel), _INVALID).group()
 
     def tab(self, call: Call, request: TabRequest, cancel: threading.Event) -> Tab:
-        return tab_of(self._command(call, tab_command(request), cancel))
+        return decoded(TAB, self._command(call, tab_command(request), cancel), _INVALID).tab()
 
     def ungroup(self, call: Call, identities: tuple[int, ...], cancel: threading.Event) -> UngroupResult:
-        result = mapping(self._command(call, UngroupCommand(operation="ungroup", tab_ids=list(identities)), cancel))
-        if tab_ids(result) != identities or result.get("group_id") != -1:
+        result = decoded(_UNGROUPED, self._command(call, UngroupCommand(identities), cancel), _INVALID)
+        if result.tab_ids != identities:
             raise BrowserError("The browser did not confirm the ungrouped tabs. Inspect browser_tabs before retrying.")
         return UngroupResult(identities)
 
@@ -356,13 +353,14 @@ class TabStrip:
         command: CloseTabsCommand | CloseGroupCommand
         match request:
             case CloseTabs(identities):
-                command = CloseTabsCommand(operation="close", tab_ids=list(identities))
+                command = CloseTabsCommand(identities)
             case CloseGroup(identity):
-                command = CloseGroupCommand(operation="close_group", group_id=identity)
+                command = CloseGroupCommand(identity)
             case _:
                 assert_never(request)
-        result = mapping(self._command(call, command, cancel))
-        closed = tab_ids({"tab_ids": result.get("closed_tab_ids")}, required=False, limit=20000)
-        if isinstance(request, CloseTabs) and closed != request.tab_ids:
-            raise BrowserError("The browser did not confirm the closed tabs. Inspect browser_tabs before retrying.")
-        return ClosureResult(request, closed)
+        closed = decoded(_CLOSED, self._command(call, command, cancel), _INVALID).closed_tab_ids
+        match request:
+            case CloseTabs(identities) if closed != identities:
+                raise BrowserError("The browser did not confirm the closed tabs. Inspect browser_tabs before retrying.")
+            case _:
+                return ClosureResult(request, closed)

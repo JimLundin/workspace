@@ -95,8 +95,13 @@ import failure, under `%LOCALAPPDATA%\workspace\development\timings\check-*.json
 Use `--timings "$env:TEMP\workspace-cost.json"` to choose the destination. Reports
 contain source identities, the selected scope, all phase/test-module import/test
 body durations, counts and unattributed overhead. Bodies include fixture setup
-and cleanup. Evidence excludes source/response content
-and exception messages. It is separate from the success-only deployment receipt.
+and cleanup. Each failure is listed with its node id (`tests/test_x.py::test_name`,
+a test or source module that did not import, or the check step that found it)
+and a summary of its exception type and message, truncated to 300 and 500
+characters. Tracebacks stay on the console, so a failure whose output was lost
+can still be identified from its record. Evidence excludes source/response
+content, tracebacks and environment variables. It is separate from the
+success-only deployment receipt.
 Runner startup before its timer, report-writing cost, early preflight failures
 and interrupted processes are outside this accounting. See the [full-suite investigation](test-speed-investigation.md)
 for measured portable costs and the limits of current full-run attribution.
@@ -121,7 +126,9 @@ with one worker and 60.86 seconds with two, including startup and shutdown.
 
 Every `Dev.cmd check` first runs the source architecture review, including when
 `--tests` selects individual behavioral checks. The review parses source without
-importing the application. It enforces transitive keyboard isolation, immutable
+importing the application. It enforces transitive keyboard isolation, the
+independence of the automation and winapi layers from assistant modules (apart
+from the composition-root seams declared in `pyproject.toml`), immutable
 dataclass defaults, concrete mutable-field and reflection restrictions, and exact
 explained exceptions declared in `pyproject.toml`. It also rejects patch/mock
 frameworks and monkeypatch fixtures across production and test source; explicit
@@ -211,7 +218,7 @@ check results are tuples, including the validated native handoff.
    including relative imports, package initialization, static dynamic imports,
    test fixtures and deleted modules. Bootstrap/configuration/pin changes,
    application assets and a missing baseline fall back to the full source suite.
-2. During implementation, narrow further with `--tests tests/test_feed_items.py`
+2. During implementation, narrow further with `--tests tests/test_feed_triage.py`
    (or multiple files). A specific check can be selected with
    `tests/test_windows_runtime.py::test_shutdown_resolves_pending_and_late_ui_requests`.
    This is an explicit editing scope; it does not claim a
@@ -235,7 +242,7 @@ check results are tuples, including the validated native handoff.
 
 Retired standalone notification, manual-inbox/history and native canvas UI
 implementations, embedded canvas assets and their UI tests are removed. History uses the same floating
-feed; console answers and approvals are tested through that feed. Shared panel controls and vector icons have independent modules. Current
+feed; approvals are tested through that feed. Shared panel controls and vector icons have independent modules. Current
 work/meeting tools and their domain checks remain. Ordinary Windows tests attach
 to a private desktop before their fixtures import, so real Qt/WPF/browser windows
 do not flash on the user's screen. Native children share that desktop. The
@@ -264,6 +271,25 @@ the changed decision through its callers. Review survivors for missing scenarios
 redundant checks and equivalent behavior before adding tests. Keep reports in
 Temp; test setup should batch large fixture catalogs instead of repeating
 already-covered creation transactions.
+
+To seed exact mutants instead, list them in a TOML file and pass
+`--replacements`. Each `before` fragment must match the source exactly once.
+Use literal strings (`'...'`, or `'''...'''` across lines, which drops a
+newline right after the opening delimiter), so quotes and backslashes reach
+the runner unchanged:
+
+```toml
+[[replacement]]
+before = 'return "uncertain"'
+after = 'return "verified"'
+```
+
+```powershell
+.\Dev.cmd mutate assistant/action_text.py --replacements "$env:TEMP\seeds.toml" --tests tests/test_action_text.py --output "$env:TEMP\workspace-mutations.json"
+```
+
+Fragments never travel on the command line: Windows quoting through `Dev.cmd`
+and PowerShell strips embedded double quotes.
 
 ## Source deployment
 
@@ -304,10 +330,7 @@ requests normal WM_CLOSE and checks every core process's clean exit.
 Windows readers can briefly deny command deletion or acknowledgment replacement.
 The protected control owner retries on later ticks and retains committed
 acknowledgments, so retries never repeat a pause or restart.
-It preserves the separately owned Edge connection host and exact installed
-console-hook command. Normal inbox closure expires pending hook requests and
-restores the original console prompt without approving them; the external client
-finishes through that transport and does not belong to the keeper's process tree.
+It preserves the separately owned Edge connection host.
 Windows venv launchers
 can report their shared base interpreter's executable path. The native CLI runs
 one coordinator inside the verified staging cwd, with source checks before and

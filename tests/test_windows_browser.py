@@ -20,15 +20,15 @@ lazy from PySide6.QtGui import QImage
 
 from assistant.browser import MAX_OUTPUT, Browser
 from assistant.browser_session import read_endpoint
-from assistant.browser_values import BrowserError, Group, InterruptedError, Tab, group_of, tab_of
-from assistant.llm import Json
+from assistant.browser_values import BrowserError, Group, InterruptedError, Tab
 from assistant.qt_runtime import prepare
+from automation.json_value import Json
 from tests.browser_fixture import fixture
 from tests.native_browser_fixture import borrowed, disposable, dispose, request
 from tests.native_browser_tabs import verify_native_tabs
 from tests.native_business_apps import verify_business_apps
 from tests.native_communications_browser import NativeTrace, verify_communications
-from tests.test_browser import decoded
+from tests.test_browser import command, decoded, group_of, tab_of
 
 prepare()
 
@@ -41,7 +41,7 @@ def control(page: dict[str, Json], name: str) -> str:
 
 
 def act(browser: Browser, target: str, page: dict[str, Json], name: str, action: str, **args: Json) -> None:
-    browser.request("action", {"target_id": target, "id": control(page, name), "action": action, **args}, threading.Event())
+    browser.request(command("action", **{"target_id": target, "id": control(page, name), "action": action, **args}), threading.Event())
 
 
 def test_disposable_browser_fixture_waits_for_late_native_profile_release(tmp_path: Path) -> None:
@@ -107,12 +107,14 @@ def verify_dom_and_saved_profile(browser: Browser, url: str) -> None:
     target = cast(str, page["target_id"])
     # Opening returns at main-document readiness; iframe controls need the full load event.
     browser.request(
-        "evaluate",
-        {
-            "target_id": target,
-            "expression": "new Promise(resolve => document.readyState === 'complete' ? resolve(true) : "
-            "window.addEventListener('load', () => resolve(true), {once: true}))",
-        },
+        command(
+            "evaluate",
+            **{
+                "target_id": target,
+                "expression": "new Promise(resolve => document.readyState === 'complete' ? resolve(true) : "
+                "window.addEventListener('load', () => resolve(true), {once: true}))",
+            },
+        ),
         threading.Event(),
     )
     assert "fixture-private" not in json.dumps(page)
@@ -131,15 +133,15 @@ def verify_dom_and_saved_profile(browser: Browser, url: str) -> None:
     inner = request(browser, "snapshot", target_id=target, frame_id=frame["id"])
     act(browser, target, inner, "Frame action", "click", frame_id=frame["id"])
     assert "Frame clicked" in cast(str, request(browser, "snapshot", target_id=target, frame_id=frame["id"])["text"])
-    shot = browser.request("screenshot", {"target_id": target}, threading.Event()).image
+    shot = browser.request(command("screenshot", **{"target_id": target}), threading.Event()).image
     assert shot is not None and shot.startswith(b"\x89PNG")
     with TestCase().assertRaisesRegex(BrowserError, "TrustedHTML"):
-        browser.request("evaluate", {"target_id": target, "expression": "document.body.innerHTML = '<p>blocked</p>'"}, threading.Event())
+        browser.request(command("evaluate", **{"target_id": target, "expression": "document.body.innerHTML = '<p>blocked</p>'"}), threading.Event())
     page = request(browser, "snapshot", target_id=target)
     original = control(page, "Save")
     request(browser, "snapshot", target_id=target)
     with TestCase().assertRaisesRegex(BrowserError, "stale"):
-        browser.request("action", {"target_id": target, "id": original, "action": "click"}, threading.Event())
+        browser.request(command("action", **{"target_id": target, "id": original, "action": "click"}), threading.Event())
     expression = """(() => {
         const text = document.createElement('p'); text.textContent = 'long content '.repeat(2000); document.body.append(text);
         for (let i = 0; i < 150; i++) {
@@ -147,8 +149,8 @@ def verify_dom_and_saved_profile(browser: Browser, url: str) -> None:
         }
         return true;
     })()"""
-    browser.request("evaluate", {"target_id": target, "expression": expression}, threading.Event())
-    output = browser.request("snapshot", {"target_id": target, "limit": 100}, threading.Event()).text
+    browser.request(command("evaluate", **{"target_id": target, "expression": expression}), threading.Event())
+    output = browser.request(command("snapshot", **{"target_id": target, "limit": 100}), threading.Event()).text
     assert len(output) <= MAX_OUTPUT
     first = decoded(output)
     second = request(browser, "snapshot", target_id=target, offset=first["next_control_offset"], text_offset=first["next_text_offset"])
@@ -158,7 +160,7 @@ def verify_dom_and_saved_profile(browser: Browser, url: str) -> None:
     browser.close()
     assert process is not None and process.poll() is not None
     page = request(browser, "open", url=url)
-    saved = browser.request("evaluate", {"target_id": page["target_id"], "expression": "localStorage.getItem('saved')"}, threading.Event())
+    saved = browser.request(command("evaluate", **{"target_id": page["target_id"], "expression": "localStorage.getItem('saved')"}), threading.Event())
     assert cast(Json, json.loads(saved.text)) == 'Åäö "literal":beta:true'
 
 
@@ -168,7 +170,7 @@ def verify_managed_cancellation(browser: Browser) -> None:
         page = request(browser, "open", url="about:blank")
         process = browser.process
         with ThreadPoolExecutor(max_workers=1) as worker:
-            pending = worker.submit(browser.request, "evaluate", {"target_id": page["target_id"], "expression": "new Promise(() => {})"}, cancel)
+            pending = worker.submit(browser.request, command("evaluate", target_id=page["target_id"], expression="new Promise(() => {})"), cancel)
             time.sleep(0.15)
             started = time.monotonic()
             cancel.set()
@@ -224,12 +226,12 @@ def verify_inactive_screenshots(browser: Browser, target: str, identity: int) ->
             document.body.style.cssText = 'margin:0;min-height:100vh;background:' + COLOR;
             return document.visibilityState;
         })()""".replace("COLOR", json.dumps(css))
-        painted = browser.request("evaluate", {"target_id": target, "expression": expression}, threading.Event())
+        painted = browser.request(command("evaluate", **{"target_id": target, "expression": expression}), threading.Event())
         visibility = cast(Json, json.loads(painted.text))
         assert visibility in ("hidden", "visible")
-        shot = browser.request("screenshot", {"target_id": target}, threading.Event()).image
+        shot = browser.request(command("screenshot", **{"target_id": target}), threading.Event()).image
         assert shot is not None
-        restored = browser.request("evaluate", {"target_id": target, "expression": "document.visibilityState"}, threading.Event())
+        restored = browser.request(command("evaluate", **{"target_id": target, "expression": "document.visibilityState"}), threading.Event())
         assert cast(Json, json.loads(restored.text)) == visibility
         image = QImage()
         assert image.loadFromData(shot)
@@ -245,8 +247,7 @@ def verify_inactive_screenshots(browser: Browser, target: str, identity: int) ->
 def verify_attached_dom(personal: Browser, attached: Browser, url: str) -> None:
     original = request(personal, "open", url=url)
     personal.request(
-        "evaluate",
-        {"target_id": original["target_id"], "expression": "localStorage.setItem('fixture-session', 'already-signed-in')"},
+        command("evaluate", **{"target_id": original["target_id"], "expression": "localStorage.setItem('fixture-session', 'already-signed-in')"}),
         threading.Event(),
     )
     blank = request(personal, "open", url="about:blank")
@@ -255,12 +256,12 @@ def verify_attached_dom(personal: Browser, attached: Browser, url: str) -> None:
     page = request(attached, "open", url=url)
     target = cast(str, page["target_id"])
     assert target not in (original["target_id"], blank["target_id"]) and attached.connection is connection
-    value = attached.request("evaluate", {"target_id": target, "expression": "localStorage.getItem('fixture-session')"}, threading.Event())
+    value = attached.request(command("evaluate", **{"target_id": target, "expression": "localStorage.getItem('fixture-session')"}), threading.Event())
     assert cast(Json, json.loads(value.text)) == "already-signed-in"
     act(attached, target, page, "Name", "fill", value="Attached fixture")
     act(attached, target, page, "Save", "click")
     assert "Attached fixture" in cast(str, request(attached, "snapshot", target_id=target)["text"])
-    shot = attached.request("screenshot", {"target_id": target}, threading.Event()).image
+    shot = attached.request(command("screenshot", **{"target_id": target}), threading.Event()).image
     assert shot is not None and shot.startswith(b"\x89PNG")
     # Repaint the same attached, inactive tab without changing user selection.
     inactive_target, identity = page["target_id"], page["tab_id"]
@@ -268,7 +269,7 @@ def verify_attached_dom(personal: Browser, attached: Browser, url: str) -> None:
 
     verify_inactive_screenshots(attached, inactive_target, identity)
 
-    assert "remain open" in attached.request("close", {}, threading.Event()).text
+    assert "remain open" in attached.request(command("close"), threading.Event()).text
     rows = request(personal, "tabs")["tabs"]
     assert isinstance(rows, list)
     tabs = [tab for tab in rows if isinstance(tab, dict)]
@@ -290,7 +291,7 @@ def verify_attached_cancellation(personal: Browser, attached: Browser) -> None:
         page = request(personal, "snapshot", target_id=blank["id"])
         request(attached, "attach")
         with ThreadPoolExecutor(max_workers=1) as worker:
-            pending = worker.submit(attached.request, "evaluate", {"target_id": page["target_id"], "expression": "new Promise(() => {})"}, cancel)
+            pending = worker.submit(attached.request, command("evaluate", target_id=page["target_id"], expression="new Promise(() => {})"), cancel)
             time.sleep(0.15)
             cancel.set()
             with TestCase().assertRaises(InterruptedError):

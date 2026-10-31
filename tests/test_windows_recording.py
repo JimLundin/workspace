@@ -14,13 +14,13 @@ from typing import cast
 if sys.platform != "win32":
     raise unittest.SkipTest("Windows continuous audio bindings")
 
-from assistant.llm import RATE
 from assistant.meeting_store import MeetingArchive, MeetingStore
 from assistant.meetings import Meetings
 from tests.fake_endpoint import fake_endpoint
 from tests.test_llm import settings
 from tests.test_meetings import wait_for
 from winapi import audio, recording
+from winapi.pcm import RATE
 
 
 def test_transcript_refresh_waits_for_a_real_windows_reader_to_release_the_file(tmp_path: Path) -> None:

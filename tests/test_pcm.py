@@ -4,8 +4,7 @@ import math
 from array import array
 from unittest import TestCase
 
-from assistant.llm import RATE
-from assistant.pcm import Converter, Mixer, PcmFormat, quiet_tail
+from winapi.pcm import RATE, Converter, Mixer, PcmFormat, quiet_tail
 
 
 def test_resampling_is_identical_across_arbitrary_packet_boundaries() -> None:

@@ -24,10 +24,12 @@ from pathlib import Path
 from types import TracebackType
 from typing import BinaryIO, Final, Protocol, assert_never
 
-from assistant.activity import ContextSnapshot
+from pydantic import ConfigDict, TypeAdapter
+
 from automation import ipc
+from automation.activity import ContextSnapshot
 from automation.presentation import Answer, Progress, ReasoningSummary, StreamState, ToolActivity, ToolStatus
-from automation.task import RunRef, digest, identifier, integer
+from automation.task import RunRef, identifier, integer
 
 if sys.platform == "win32":
     import _winapi
@@ -137,6 +139,16 @@ class Discovery:
     key: bytes
 
 
+@dataclass(frozen=True, slots=True)
+class _DiscoveryFile:
+    version: int
+    discovery: Discovery
+    __pydantic_config__ = ConfigDict(strict=True, extra="forbid", ser_json_bytes="hex", val_json_bytes="hex")
+
+
+_DISCOVERY = TypeAdapter(_DiscoveryFile)
+
+
 def _address(folder: Path, epoch: str) -> str:
     profile = hashlib.sha256(str(folder.resolve()).encode("utf-8")).hexdigest()[:16]
     name = f"workspace-work-{profile}-{epoch}"
@@ -149,28 +161,24 @@ def read_discovery(folder: Path) -> Discovery:
         frame = file.read(4097)
     if len(frame) > 4096:
         raise ValueError("Worker discovery is too large.")
-    data = ipc.record(ipc.unpack(frame), "version epoch pid address key")
-    if integer(data["version"], "discovery version") != ipc.VERSION:
+    published = _DISCOVERY.validate_json(frame)
+    if published.version != ipc.VERSION:
         raise ValueError("Unsupported worker discovery version.")
-    epoch = identifier(data["epoch"])
+    discovery = published.discovery
+    epoch = identifier(discovery.epoch)
     if len(epoch) != 32 or any(char not in "0123456789abcdef" for char in epoch):
         raise ValueError("Invalid worker epoch.")
-    address = _address(folder, epoch)
-    if data["address"] != address:
+    if discovery.address != _address(folder, epoch):
         raise ValueError("Worker discovery does not identify this local profile.")
-    return Discovery(
-        epoch,
-        integer(data["pid"], "worker PID", minimum=1, maximum=2**32 - 1),
-        address,
-        bytes.fromhex(digest(data["key"], "worker authentication key")),
-    )
+    integer(discovery.pid, "worker PID", minimum=1, maximum=2**32 - 1)
+    if len(discovery.key) != 32:
+        raise ValueError("Invalid worker authentication key.")
+    return discovery
 
 
 def _publish_discovery(folder: Path, discovery: Discovery) -> None:
     folder.mkdir(parents=True, exist_ok=True)
-    frame = ipc.pack(
-        {"version": ipc.VERSION, "epoch": discovery.epoch, "pid": discovery.pid, "address": discovery.address, "key": discovery.key.hex()}
-    )
+    frame = _DISCOVERY.dump_json(_DiscoveryFile(ipc.VERSION, discovery))
     descriptor, temporary = tempfile.mkstemp(prefix=".worker-", dir=folder)
     path = Path(temporary)
     try:
@@ -293,9 +301,7 @@ def _replaceable(payload: ipc.BridgeEvent) -> bool:
 def enqueue(state: Outbox, epoch: str, payload: ipc.BridgeEvent) -> tuple[Outbox, bool]:
     """Coalesce unfinished updates; explicitly reset after any other data loss."""
     message = ipc.Envelope(epoch, state.sequence + 1, payload)
-    data = ipc.event_data(message)
-    ipc.decode_event(data)
-    size = len(ipc.pack(data))
+    size = len(ipc.encode_event(message))
     if size > ipc.MAX_FRAME - 4096:
         raise ValueError("The event is too large for a bounded IPC reply.")
     key = _update_key(payload)
@@ -305,7 +311,7 @@ def enqueue(state: Outbox, epoch: str, payload: ipc.BridgeEvent) -> tuple[Outbox
     lost = len(entries) >= ipc.MAX_EVENTS or sum(item.size for item in entries) + size > MAX_BUFFER_BYTES
     if lost:
         resync = ipc.Envelope(epoch, state.sequence + 1, ipc.Resync("Live updates were discarded; reload work and request fresh approval previews."))
-        entries = (Queued(resync, len(ipc.pack(ipc.event_data(resync)))),)
+        entries = (Queued(resync, len(ipc.encode_event(resync))),)
         message = replace(message, sequence=state.sequence + 2)
     return Outbox(message.sequence, state.acknowledged, (*entries, Queued(message, size))), lost
 

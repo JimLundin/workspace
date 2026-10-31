@@ -7,18 +7,19 @@ from unittest import TestCase
 
 from pydantic import TypeAdapter
 
-from assistant.activity import Activity, ContextSnapshot
 from assistant.feed_agent_tools import request
-from assistant.feed_contracts import REVIEW_INPUT, Disposition, FeedRejected, FeedReply, StoredBoard
+from assistant.feed_contracts import REVIEW_INPUT, DismissItem, Disposition, FeedRejected, FeedReply, StoredBoard
 from assistant.feed_history import Decision, Handoff
 from assistant.feed_sources import Excerpt
 from assistant.feed_triage import Board, decode, proposal_revision, restored, saved, unassessed
 from assistant.feed_triage_service import classify
 from assistant.feed_work import FeedWork
-from assistant.llm import Json, Settings
+from assistant.llm import Settings
 from automation.actions import Resources
+from automation.activity import Activity, ContextSnapshot
 from automation.context import ContextStore, Preference, ProjectNote
 from automation.execution import WorkExecution
+from automation.json_value import Json
 from automation.store import TaskStore
 from automation.task import Completed, FeedHandoff, Profile, Question, RequestSource, TextAnswer, Waiting
 from tests.fake_endpoint import fake_endpoint
@@ -136,7 +137,7 @@ def test_registered_reply_tool_saves_instruction_before_handoff_and_reuses_it_af
         tasks.submit(task, item.title, prompt, RequestSource("feed", profile), at=clock())
 
     endpoint = tmp_path / "bridge.json"
-    triage = TriageFixture(feed_store, lambda _: None, lambda _batch, _rules: "{}", lambda _: False, submit=queue)
+    triage = TriageFixture(feed_store, lambda _batch, _rules: "{}", submit=queue)
     bridge = feed_bridge(endpoint, triage)
     rig = ToolRig(work=WorkExecution(claim, tasks, Resources(), clock=clock), feed_request=lambda data: request(data, endpoint))
     reply = FeedReply(item.identity, proposal_revision(item), "user-turn-one", words)
@@ -154,7 +155,7 @@ def test_registered_reply_tool_saves_instruction_before_handoff_and_reuses_it_af
     finally:
         bridge.close()
         triage.close()
-    restarted = TriageFixture(feed_store, lambda _: None, lambda _batch, _rules: "{}", lambda _: False, submit=queue)
+    restarted = TriageFixture(feed_store, lambda _batch, _rules: "{}", submit=queue)
     try:
         restarted.command(reply)
         assert len(submitted) == 2 and submitted[0] == submitted[1]
@@ -185,9 +186,7 @@ def test_failed_feed_save_cannot_start_reply_work_and_failed_queue_keeps_retryab
     command = FeedReply(item.identity, proposal_revision(item), "reply", "Check the totals.")
     failed = TriageFixture(
         broken,
-        lambda _: None,
         lambda _batch, _rules: "{}",
-        lambda _: False,
         submit=lambda task, _prompt, _profile: submitted.append(task),
     )
     try:
@@ -202,7 +201,7 @@ def test_failed_feed_save_cannot_start_reply_work_and_failed_queue_keeps_retryab
 
     store = MemoryStore()
     store.data = saved(Board(enabled=True, items=(item,)))
-    queued = TriageFixture(store, lambda _: None, lambda _batch, _rules: "{}", lambda _: False, submit=unavailable)
+    queued = TriageFixture(store, lambda _batch, _rules: "{}", submit=unavailable)
     try:
         with TestCase().assertRaises(OSError):
             queued.command(command)
@@ -220,7 +219,7 @@ def test_context_changes_reconsider_open_work_without_reopening_handled_items(tm
     item = replace(decode(output(([source.identity], "action")), (source,))[0], reviewed_on=day)
     store = MemoryStore()
     store.data = saved(Board(enabled=True, items=(replace(item, disposition=Disposition.QUIET),)))
-    triage = TriageFixture(store, lambda _: None, lambda _batch, _rules: "{}", lambda _: False)
+    triage = TriageFixture(store, lambda _batch, _rules: "{}")
     try:
         assert not unassessed(triage.board, (source,), today=day)
         triage.context_changed((), ())
@@ -229,7 +228,7 @@ def test_context_changes_reconsider_open_work_without_reopening_handled_items(tm
         assert triage.epoch == epoch
         triage.context_changed((), (Preference("style", "Style", "Use the baseline.", "Jim", 10),))
         assert triage.epoch == epoch + 1 and unassessed(triage.board, (source,), today=day) == (source,)
-        triage.dismiss(item.identity)
+        triage.edit(DismissItem(item.identity))
         triage.context_changed((), ())
         assert not triage.board.actions
         assert triage.board.history[-1].kind == "dismiss"

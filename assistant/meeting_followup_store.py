@@ -1,20 +1,17 @@
 """Observe meeting publications and own atomic follow-through packages and edits."""
 
-import contextlib
 import csv
 import hashlib
 import io
-import json
 import ntpath
 import os
 import re
 import shutil
-import sqlite3
 import stat
 import tempfile
 import time
 import zipfile
-from collections.abc import Callable, Generator, Sequence
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from email.message import EmailMessage
@@ -22,11 +19,14 @@ from email.policy import EmailPolicy
 from email.utils import formataddr
 from enum import Enum, auto
 from pathlib import Path, PurePosixPath, PureWindowsPath
-from typing import Literal, Protocol, assert_never, cast
+from typing import Literal, assert_never
 from urllib.parse import quote
 
-from assistant.llm import RATE, Json
+from pydantic import ConfigDict, TypeAdapter
+
 from assistant.meeting_followup import (
+    ACTION_CONTENT,
+    DRAFT_CONTENT,
     MAX_MODEL_BYTES,
     MAX_TRANSCRIPT_BYTES,
     RECIPE_VERSION,
@@ -39,25 +39,23 @@ from assistant.meeting_followup import (
     DraftContent,
     EmailAddress,
     Followup,
+    FollowupClaims,
     NamedOwner,
     NoCaptureNotice,
     StatedDue,
     Transcript,
+    TranscriptBundle,
     TranscriptSource,
     Unspecified,
-    action_data,
-    action_of,
-    bundle_data,
-    bundle_of,
-    draft_data,
-    draft_of,
-    followup_data,
-    parse_followup,
+    followup_claims,
+    resolve_followup,
 )
 from assistant.meeting_store import MeetingStore
 from assistant.recording_state import source_name
+from automation import journal
 from automation.files import filesystem_path
 from automation.task import FileDigest, digest, identifier, integer, text, timestamp, variant
+from winapi.pcm import RATE
 
 MAX_PACKAGE_BYTES = 16 * 1024 * 1024
 MAX_VERSIONS = 128
@@ -123,13 +121,14 @@ def observe_transcript(store: MeetingStore) -> Transcript:
     return Transcript(source, content)
 
 
-def _component(value: str, field: str) -> str:
-    identifier(value, field)
-    if re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}", value) is None or value.endswith("."):
-        raise ValueError(f"Invalid {field} for an artifact directory.")
-    if ntpath.isreserved(value):
-        raise ValueError(f"Reserved {field} for an artifact directory.")
-    return value
+def _short(identity: str) -> str:
+    """A fixed-length directory name: paths stay at most 58 characters below the store root.
+
+    Shell targets and other programs open the store's paths without the extended
+    path form, so a name never embeds a full identity. Reads verify the full task
+    identity and package digest, so a name collision fails closed.
+    """
+    return hashlib.sha256(identity.encode("utf-8")).hexdigest()[:16]
 
 
 def _relative(value: str) -> str:
@@ -146,8 +145,20 @@ def _relative(value: str) -> str:
     return value
 
 
-def _json(value: object) -> bytes:
-    return (json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False) + "\n").encode("utf-8")
+@dataclass(frozen=True, slots=True)
+class _Manifest:
+    """Package format 2: the frozen recordings and the canonical claims resolved against them."""
+
+    format: Literal[2]
+    recipe: int
+    task_id: str
+    sources: TranscriptBundle
+    followup: FollowupClaims
+    __pydantic_config__ = ConfigDict(extra="forbid", strict=True)
+
+
+_MANIFEST = TypeAdapter(_Manifest)
+_EDIT_KEY = TypeAdapter(tuple[str, str, str, int, str])
 
 
 def _markdown(value: str) -> str:
@@ -298,14 +309,8 @@ def _render(task_id: str, followup: Followup) -> tuple[Artifact, ...]:
         artifacts.append(Artifact(_draft_name(index, "eml"), _email(draft.content)))
         artifacts.append(Artifact(_draft_name(index, "md"), _draft_markdown(draft.content)))
     artifacts.extend((Artifact("notes.md", ("\n\n".join(notes) + "\n").encode("utf-8")), Artifact("actions.csv", _csv(tuple(rows)))))
-    manifest: dict[str, Json] = {
-        "format": 1,
-        "recipe": RECIPE_VERSION,
-        "task_id": task_id,
-        "sources": bundle_data(followup.sources),
-        "followup": followup_data(followup),
-    }
-    artifacts.append(Artifact("manifest.json", _json(manifest)))
+    manifest = _Manifest(2, RECIPE_VERSION, task_id, followup.sources, followup_claims(followup))
+    artifacts.append(Artifact("manifest.json", _MANIFEST.dump_json(manifest)))
     ordered = sorted(artifacts, key=_artifact_name)
     return tuple(ordered)
 
@@ -403,15 +408,23 @@ class ActionRevision:
         return self.origin.revision if isinstance(self.origin, Edited) else 0
 
 
-class _Cursor(Protocol):
-    def fetchone(self) -> tuple[object, ...] | None: ...
+@dataclass(frozen=True, slots=True)
+class _Item:
+    """One generated draft or action of a published package, as its edit journal keys it."""
+
+    task_id: str
+    version: str
+    kind: Literal["draft", "action"]
+    id: str
 
 
-class _Connection(Protocol):
-    def execute(self, sql: str, parameters: Sequence[object] = ()) -> _Cursor: ...
-    def commit(self) -> None: ...
-    def rollback(self) -> None: ...
-    def close(self) -> None: ...
+@dataclass(frozen=True, slots=True)
+class _Edit:
+    """A proposed revision: its item, canonical content and rendered files, including that content."""
+
+    item: _Item
+    content: bytes
+    artifacts: tuple[Artifact, ...]
 
 
 def _install(source: Path, destination: Path) -> None:
@@ -426,10 +439,10 @@ class FollowupStore:
         self.install = install
 
     def _task(self, task_id: str) -> Path:
-        return self.root / _component(task_id, "task identity")
+        return self.root / _short(identifier(task_id, "task identity"))
 
     def _directory(self, task_id: str, version: str) -> Path:
-        return self._task(task_id) / "versions" / digest(version, "package version")
+        return self._task(task_id) / "versions" / _short(digest(version, "package version"))
 
     def plan(self, task_id: str, followup: Followup) -> Publication:
         """Pure publication bytes and digest, prepared before the durable action gate."""
@@ -529,19 +542,12 @@ class FollowupStore:
                 size += entry.file_size
             if size > MAX_PACKAGE_BYTES:
                 raise ValueError("The package exceeds its supported artifact size.")
-            manifest: object = json.loads(archive.read("manifest.json"))
-        if not isinstance(manifest, dict):
-            raise ValueError("Invalid follow-through package manifest.")
-        data = cast(dict[str, object], manifest)
-        if set(data) != {"format", "recipe", "task_id", "sources", "followup"} or data["format"] != 1 or data["recipe"] != RECIPE_VERSION:
-            raise ValueError("Unsupported follow-through package format.")
-        if data["task_id"] != task_id:
+            manifest = _MANIFEST.validate_json(archive.read("manifest.json"))
+        if manifest.recipe != RECIPE_VERSION:
+            raise ValueError("Unsupported follow-through package recipe.")
+        if manifest.task_id != task_id:
             raise ValueError("The package belongs to another task.")
-        bundle = bundle_of(data["sources"])
-        encoded = _json(data["followup"])
-        if len(encoded) > MAX_MODEL_BYTES:
-            raise ValueError("The saved follow-through data exceeds its supported size.")
-        followup = parse_followup(bundle, encoded.decode("utf-8"))
+        followup = resolve_followup(manifest.sources, manifest.followup)
         expected = self.plan(task_id, followup)
         if expected.version != version:
             raise ArtifactChangedError("The package contents differ from its validated artifacts.")
@@ -558,61 +564,34 @@ class FollowupStore:
         native = filesystem_path(directory)
         if not native.exists():
             return ()
-        paths: list[Path] = []
+        versions: list[str] = []
         for path in native.iterdir():
             if path.name.startswith("."):
                 continue
-            if len(paths) >= MAX_VERSIONS:
+            if len(versions) >= MAX_VERSIONS:
                 raise ValueError("The task has too many follow-through versions.")
-            digest(path.name, "saved package version")
-            paths.append(path)
-        return tuple(self.read(task_id, path.name) for path in sorted(paths))
+            # The directory names only a prefix; the package's own digest is its version.
+            version = hashlib.sha256(_read_file(directory / path.name / "package.zip", MAX_PACKAGE_BYTES)).hexdigest()
+            if _short(version) != path.name:
+                raise ArtifactChangedError("A saved package no longer matches its version directory.")
+            versions.append(version)
+        return tuple(self.read(task_id, version) for version in sorted(versions))
 
-    @contextlib.contextmanager
-    def _connection(self, task_id: str, *, writing: bool = False) -> Generator[_Connection]:
+    def _journal(self, task_id: str) -> Path:
         task = self._task(task_id)
         self._safe(task / "edits.sqlite3")
-        filesystem_path(task).mkdir(parents=True, exist_ok=True)
-        connection = cast(_Connection, sqlite3.connect(filesystem_path(task / "edits.sqlite3"), timeout=5, isolation_level=None))
-        try:
-            connection.execute("PRAGMA synchronous=FULL")
-            connection.execute(
-                "CREATE TABLE IF NOT EXISTS edits (version TEXT NOT NULL, kind TEXT NOT NULL, id TEXT NOT NULL, "
-                "revision INTEGER NOT NULL, at REAL NOT NULL, content TEXT NOT NULL, digest TEXT NOT NULL, "
-                "PRIMARY KEY (version,kind,id))"
-            )
-            connection.execute(
-                "CREATE TABLE IF NOT EXISTS edit_history (version TEXT NOT NULL, kind TEXT NOT NULL, id TEXT NOT NULL, "
-                "revision INTEGER NOT NULL, at REAL NOT NULL, content TEXT NOT NULL, digest TEXT NOT NULL, "
-                "PRIMARY KEY (version,kind,id,revision))"
-            )
-            if writing:
-                connection.execute("BEGIN IMMEDIATE")
-            yield connection
-            if writing:
-                connection.commit()
-        except BaseException:
-            if writing:
-                connection.rollback()
-            raise
-        finally:
-            connection.close()
+        return filesystem_path(task / "edits.sqlite3")
 
-    def _edit_directory(self, task_id: str, version: str, kind: str, item_id: str, *, revision: int, fingerprint: str) -> Path:
+    def _edit_directory(self, item: _Item, *, revision: int, fingerprint: str) -> Path:
         # One content-derived directory keeps native Windows draft paths short.
-        key = _json({"version": version, "kind": kind, "id": item_id, "revision": revision, "digest": fingerprint})
-        return self._task(task_id) / "edits" / hashlib.sha256(key).hexdigest()
+        key = _EDIT_KEY.dump_json((item.version, item.kind, item.id, revision, fingerprint))
+        return self._task(item.task_id) / "edits" / _short(key.decode("utf-8"))
 
-    def _edit(
-        self,
-        task_id: str,
-        version: str,
-        kind: Literal["draft", "action"],
-        item_id: str,
-        *,
-        revision: int | None = None,
-    ) -> tuple[Edited, object, Path] | None:
-        with self._connection(task_id) as connection:
+    def _edit(self, item: _Item, *, revision: int | None = None) -> tuple[Edited, bytes, Path] | None:
+        version, kind, item_id = item.version, item.kind, item.id
+        with journal.reading_existing(self._journal(item.task_id)) as connection:
+            if connection is journal.Absent.JOURNAL:
+                return None  # no edit of this task has been saved yet
             if revision is None:
                 row = connection.execute(
                     "SELECT revision,at,content,digest FROM edits WHERE version=? AND kind=? AND id=?",
@@ -637,8 +616,7 @@ class FollowupStore:
         fingerprint = digest(row[3], "saved user edit digest")
         if hashlib.sha256(encoded).hexdigest() != fingerprint:
             raise ValueError("The saved user edit does not match its recorded digest.")
-        value: object = json.loads(encoded)
-        return origin, value, self._edit_directory(task_id, version, kind, item_id, revision=origin.revision, fingerprint=fingerprint)
+        return origin, encoded, self._edit_directory(item, revision=origin.revision, fingerprint=fingerprint)
 
     def draft_revision(self, task_id: str, version: str, draft_id: str, revision: int) -> DraftRevision:
         integer(revision, "requested draft revision", maximum=MAX_EDIT_REVISIONS)
@@ -649,17 +627,17 @@ class FollowupStore:
         if revision == 0:
             files = next(item for item in published.drafts if item.id == draft_id)
             return DraftRevision(draft_id, draft.content, Original.GENERATED, files)
-        saved = self._edit(task_id, version, "draft", draft_id, revision=revision)
+        saved = self._edit(_Item(task_id, version, "draft", draft_id), revision=revision)
         if saved is None:
             raise ValueError("That draft revision has no committed history record.")
         origin, data, directory = saved
-        content = draft_of(data)
+        content = DRAFT_CONTENT.validate_json(data)
         self._verify(
             directory,
             (
                 Artifact("draft.eml", _email(content)),
                 Artifact("draft.md", _draft_markdown(content)),
-                Artifact("content.json", _json(draft_data(content))),
+                Artifact("content.json", DRAFT_CONTENT.dump_json(content)),
             ),
         )
         return DraftRevision(draft_id, content, origin, DraftFiles(draft_id, directory / "draft.eml", directory / "draft.md"))
@@ -672,11 +650,11 @@ class FollowupStore:
             raise ValueError("The action does not belong to this generated package.")
         if revision == 0:
             return ActionRevision(action_id, action.content, Original.GENERATED, published.actions_path)
-        saved = self._edit(task_id, version, "action", action_id, revision=revision)
+        saved = self._edit(_Item(task_id, version, "action", action_id), revision=revision)
         if saved is None:
             raise ValueError("That action revision has no committed history record.")
         origin, data, directory = saved
-        content = action_of(data)
+        content = ACTION_CONTENT.validate_json(data)
         self._verify(directory, self._action_artifacts(action_id, content))
         return ActionRevision(action_id, content, origin, directory / "action.csv")
 
@@ -684,18 +662,18 @@ class FollowupStore:
         published = self.read(task_id, version)
         revisions: list[DraftRevision] = []
         for draft, files in zip(published.followup.drafts, published.drafts, strict=True):
-            saved = self._edit(task_id, version, "draft", draft.id)
+            saved = self._edit(_Item(task_id, version, "draft", draft.id))
             if saved is None:
                 revisions.append(DraftRevision(draft.id, draft.content, Original.GENERATED, files))
             else:
                 origin, data, directory = saved
-                content = draft_of(data)
+                content = DRAFT_CONTENT.validate_json(data)
                 self._verify(
                     directory,
                     (
                         Artifact("draft.eml", _email(content)),
                         Artifact("draft.md", _draft_markdown(content)),
-                        Artifact("content.json", _json(draft_data(content))),
+                        Artifact("content.json", DRAFT_CONTENT.dump_json(content)),
                     ),
                 )
                 revisions.append(DraftRevision(draft.id, content, origin, DraftFiles(draft.id, directory / "draft.eml", directory / "draft.md")))
@@ -705,12 +683,12 @@ class FollowupStore:
         published = self.read(task_id, version)
         revisions: list[ActionRevision] = []
         for action in published.followup.actions:
-            saved = self._edit(task_id, version, "action", action.id)
+            saved = self._edit(_Item(task_id, version, "action", action.id))
             if saved is None:
                 revisions.append(ActionRevision(action.id, action.content, Original.GENERATED, published.actions_path))
             else:
                 origin, data, directory = saved
-                content = action_of(data)
+                content = ACTION_CONTENT.validate_json(data)
                 self._verify(directory, self._action_artifacts(action.id, content))
                 revisions.append(ActionRevision(action.id, content, origin, directory / "action.csv"))
         return tuple(revisions)
@@ -720,25 +698,26 @@ class FollowupStore:
             ("id", "action", "owner", "due", "status"),
             (action_id, content.text, _owner(content.owner), _due(content.due), "done" if content.status is ActionStatus.DONE else "open"),
         )
-        return (Artifact("action.csv", _csv(rows)), Artifact("content.json", _json(action_data(content))))
+        return (Artifact("action.csv", _csv(rows)), Artifact("content.json", ACTION_CONTENT.dump_json(content)))
 
-    def _save(
-        self,
-        task_id: str,
-        version: str,
-        kind: Literal["draft", "action"],
-        item_id: str,
-        data: dict[str, Json],
-        *,
-        artifacts: tuple[Artifact, ...],
-        expected_revision: int,
-        at: float,
-    ) -> int:
+    def _save(self, edit: _Edit, *, expected_revision: int, at: float) -> int:
         integer(expected_revision, "expected edit revision", maximum=MAX_EDIT_REVISIONS)
         timestamp(at, "edit time")
-        encoded = _json(data)
+        version, kind, item_id, encoded = edit.item.version, edit.item.kind, edit.item.id, edit.content
         fingerprint = hashlib.sha256(encoded).hexdigest()
-        with self._connection(task_id, writing=True) as connection:
+        database = self._journal(edit.item.task_id)
+        database.parent.mkdir(parents=True, exist_ok=True)
+        with journal.writing(database) as connection:
+            connection.execute(
+                "CREATE TABLE IF NOT EXISTS edits (version TEXT NOT NULL, kind TEXT NOT NULL, id TEXT NOT NULL, "
+                "revision INTEGER NOT NULL, at REAL NOT NULL, content TEXT NOT NULL, digest TEXT NOT NULL, "
+                "PRIMARY KEY (version,kind,id))"
+            )
+            connection.execute(
+                "CREATE TABLE IF NOT EXISTS edit_history (version TEXT NOT NULL, kind TEXT NOT NULL, id TEXT NOT NULL, "
+                "revision INTEGER NOT NULL, at REAL NOT NULL, content TEXT NOT NULL, digest TEXT NOT NULL, "
+                "PRIMARY KEY (version,kind,id,revision))"
+            )
             row = connection.execute(
                 "SELECT revision,at,content,digest FROM edits WHERE version=? AND kind=? AND id=?",
                 (version, kind, item_id),
@@ -758,8 +737,8 @@ class FollowupStore:
             if row is not None and at < timestamp(row[1], "prior edit time"):
                 raise EditConflictError("This edit predates the currently saved changes.")
             revision = integer(current + 1, "edit revision", minimum=1, maximum=MAX_EDIT_REVISIONS)
-            directory = self._edit_directory(task_id, version, kind, item_id, revision=revision, fingerprint=fingerprint)
-            self._publish(directory, artifacts)
+            directory = self._edit_directory(edit.item, revision=revision, fingerprint=fingerprint)
+            self._publish(directory, edit.artifacts)
             connection.execute(
                 "INSERT INTO edit_history VALUES (?,?,?,?,?,?,?)", (version, kind, item_id, revision, at, encoded.decode("utf-8"), fingerprint)
             )
@@ -783,9 +762,10 @@ class FollowupStore:
         published = self.read(task_id, version)
         if not any(draft.id == draft_id for draft in published.followup.drafts):
             raise ValueError("The draft does not belong to this generated package.")
-        data = draft_data(content)
-        artifacts = (Artifact("draft.eml", _email(content)), Artifact("draft.md", _draft_markdown(content)), Artifact("content.json", _json(data)))
-        revision = self._save(task_id, version, "draft", draft_id, data, artifacts=artifacts, expected_revision=expected_revision, at=at)
+        encoded = DRAFT_CONTENT.dump_json(content)
+        artifacts = (Artifact("draft.eml", _email(content)), Artifact("draft.md", _draft_markdown(content)), Artifact("content.json", encoded))
+        edit = _Edit(_Item(task_id, version, "draft", draft_id), encoded, artifacts)
+        revision = self._save(edit, expected_revision=expected_revision, at=at)
         return self.draft_revision(task_id, version, draft_id, revision)
 
     def save_action(
@@ -801,14 +781,6 @@ class FollowupStore:
         published = self.read(task_id, version)
         if not any(action.id == action_id for action in published.followup.actions):
             raise ValueError("The action does not belong to this generated package.")
-        revision = self._save(
-            task_id,
-            version,
-            "action",
-            action_id,
-            action_data(content),
-            artifacts=self._action_artifacts(action_id, content),
-            expected_revision=expected_revision,
-            at=at,
-        )
+        edit = _Edit(_Item(task_id, version, "action", action_id), ACTION_CONTENT.dump_json(content), self._action_artifacts(action_id, content))
+        revision = self._save(edit, expected_revision=expected_revision, at=at)
         return self.action_revision(task_id, version, action_id, revision)

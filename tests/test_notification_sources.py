@@ -17,8 +17,8 @@ from assistant.notification_sources import (
     observed,
 )
 from assistant.state_store import SavedState
-from assistant.system_notices import Notice, NoticeKey, Observed
 from tests.test_communications_service import LocalCipher
+from winapi.system_notices import Notice, NoticeKey, Observed
 
 
 def owner(path: Path, dismissed: list[NoticeKey]) -> NotificationSources:

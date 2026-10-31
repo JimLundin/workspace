@@ -21,7 +21,6 @@ from runtime import activate
 lazy from assistant.agent_toasts import AgentToasts
 lazy from assistant.agent_window import AgentWindow
 lazy from assistant.desktop_bar import BarActions, DesktopBar
-lazy from assistant.feed_triage import Assessment, Board
 lazy from assistant.icons import State
 lazy from assistant.qt_ui import application
 lazy from assistant.recording_state import RecordingState
@@ -111,7 +110,7 @@ class Preview:
                     lambda: self.action("Stop"), post=self.jobs.put, create_view=self.build_feed, on_submit=self.submitted, on_problem=self.action
                 )
                 self.drain()
-                if not self.agent.ready.is_set():
+                if not self.agent.publication.ready.is_set():
                     raise RuntimeError("The preview feed did not initialize.")
             if surface in ("toolbar", "both"):
                 actions = BarActions(
@@ -143,8 +142,11 @@ class Preview:
             raise
 
     def build_feed(self, agent: AgentWindow) -> AgentToasts:
-        self.feed = AgentToasts(self.root, agent, monitor=Rect(40, 200, 440, 900))
+        self.feed = AgentToasts(self.root, agent, self.open_canvas, monitor=Rect(40, 200, 440, 900))
         return self.feed
+
+    def open_canvas(self, target: str) -> None:
+        self.action("Open canvas at " + target)
 
     def action(self, text: str) -> None:
         self.status.setText("Preview action: " + text)
@@ -171,34 +173,7 @@ class Preview:
             self.bar.state(states[index])
         if self.agent is not None:
             self.agent.reset()
-            self.agent.triage(
-                Board(
-                    enabled=True,
-                    items=(
-                        Assessment(
-                            "preview-budget",
-                            (),
-                            "Review the sample budget",
-                            "Check **the totals** in `FY27`.",
-                            "Compare the two sample sheets.",
-                            "",
-                            2,
-                            time.time(),
-                        ),
-                        Assessment(
-                            "preview-brief",
-                            (),
-                            "Prepare the Friday brief",
-                            "A fictional teammate asks for a short summary.",
-                            "Draft three points for review.",
-                            "",
-                            1,
-                            time.time(),
-                        ),
-                    ),
-                )
-            )
-            self.agent.begin("Review the sample workbook", lambda: self.action("Stop"))
+            self.agent.begin("Review the sample workbook")
             publish = self.agent.updates()
             publish(
                 ToolActivity(

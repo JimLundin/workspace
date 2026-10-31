@@ -10,7 +10,8 @@ from assistant.agent import Agent
 from assistant.agent_session import activity_text, message_body
 from assistant.agent_toolsets import General
 from assistant.geometry import Shot
-from assistant.llm import Json, Settings, ToolCall
+from assistant.llm import Settings, ToolCall
+from automation.json_value import Json
 from automation.presentation import ToolActivity
 from tests.fake_endpoint import fake_endpoint
 from tests.test_agent import FakeMachine, FakeWindow, Rig, calls, durable, says
@@ -57,7 +58,7 @@ def test_background_tools_are_exposed_to_the_model_and_run_without_default_promp
             work=durable(tmp_path),
         )
         rig.run("Fill the fixture form.")
-        assert any(line.startswith("browser action") for line in rig.machine.log)
+        assert any(line.startswith("browser PageAction(") for line in rig.machine.log)
         request = cast(dict[str, Json], json.loads(endpoint.received[0].body))
         specs = cast(list[dict[str, Json]], request["tools"])
         names = {spec["name"] for spec in specs if isinstance(spec["name"], str)}

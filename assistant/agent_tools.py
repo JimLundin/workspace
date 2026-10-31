@@ -13,14 +13,17 @@ from dataclasses import dataclass, field
 from enum import Enum, auto
 from typing import Final, Protocol
 
-from pydantic import ConfigDict, TypeAdapter
+from pydantic import ConfigDict, TypeAdapter, ValidationError
 
 from assistant.geometry import Shot
-from assistant.llm import Json, ToolSpec
+from assistant.llm import ToolSpec
 from automation.actions import Classification, Operation
 from automation.execution import Proof, Readback, Targets
+from automation.json_value import Json
 from automation.task import ActionNotApplied, ActionUncertain, ActionVerified, FileDigest, MailTarget, NoVerification
 from winapi.shapes import Rect, Window
+lazy from assistant.browser_requests import BrowserRequest
+lazy from assistant.uia import UiRequest
 lazy from assistant.web_apps import Located, WebAppOperation
 
 _ARGUMENTS = TypeAdapter(dict[str, Json], config=ConfigDict(allow_inf_nan=False))
@@ -45,8 +48,8 @@ class Machine(Protocol):
     def screenshot(self, *, area: Rect | None = None, handle: int = 0, monitor: int = -1, longest: int = 1280) -> tuple[bytes, Shot]: ...
     def desktop_state(self) -> str: ...
     def window_action(self, handle: int, action: str, bounds: Rect | None = None) -> str: ...
-    def inspect_ui(self, request: dict[str, Json], cancel: threading.Event) -> tuple[int, str]: ...
-    def browse(self, operation: str, arguments: dict[str, Json], cancel: threading.Event) -> tuple[str, bytes | None]: ...
+    def inspect_ui(self, request: UiRequest, cancel: threading.Event) -> tuple[int, str]: ...
+    def browse(self, request: BrowserRequest, cancel: threading.Event) -> tuple[str, bytes | None]: ...
     def web_app[Q: Located, R](self, operation: WebAppOperation[Q, R], query: Q, cancel: threading.Event) -> R:
         """A typed Teams, Outlook or Kanban operation in the signed-in browser."""
         ...
@@ -85,6 +88,12 @@ class Output:
 
 class ArgumentError(Exception):
     pass
+
+
+def rejected(tool: str, error: ValidationError) -> ArgumentError:
+    """A tool seam's validation failure, phrased for the model by argument name."""
+    problems = "; ".join(f"{'.'.join(str(part) for part in item['loc']) or 'arguments'}: {item['msg']}" for item in error.errors())
+    return ArgumentError(f"{tool} arguments are invalid: {problems}.")
 
 
 @dataclass(frozen=True, slots=True)

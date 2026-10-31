@@ -1,0 +1,3 @@
+"""Consumed jsonschema API: validating one instance against a draft-detected schema."""
+
+def validate(instance: object, schema: object) -> None: ...

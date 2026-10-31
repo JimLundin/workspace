@@ -7,7 +7,7 @@ from pathlib import Path
 
 import assistant.agent_session
 import automation.task
-from assistant.agent_session import Answered, CanvasNotice, CanvasSettled, ChatMessage, Session, transition
+from assistant.agent_session import CanvasNotice, CanvasSettled, ChatMessage, Session, transition
 from assistant.canvas_activity import (
     ActionState,
     Attention,
@@ -17,18 +17,17 @@ from assistant.canvas_activity import (
     CanvasRun,
     CanvasUpdate,
     TaskRequest,
-    history_session,
     important_changes,
     redirect_session,
 )
-from assistant.llm import Json
 from assistant.notifications import Tone, active, observe, tone
 from assistant.work_canvas import WorkCanvas
 from assistant.work_canvas_model import DOCUMENT, CanvasCollection, CanvasDocument, CanvasNote, Placement, observe_activity
-from assistant.work_window import ReplyProblem, WorkSnapshot
+from assistant.work_snapshot import ReplyProblem, WorkSnapshot
 from automation.actions import Change, Operation
+from automation.json_value import Json
 from automation.personal_work import Catalog, SourceKind, WorkDefinition, WorkState, WorkThread
-from automation.task import ActionReturned, ActionSpec, ActionUncertain, ActionVerified, Completed, NoVerification, RequestSource, Waiting
+from automation.task import ActionReturned, ActionSpec, ActionUncertain, ActionVerified, Completed, NoVerification, RequestSource, TextAnswer, Waiting
 from tests.agent_requests import asked, reviewed
 from tests.personal_work_fixture import source
 from tests.test_work_agent import WorkRig
@@ -68,7 +67,7 @@ def test_saved_questions_keep_their_route_state_and_thread_after_session_mirrori
     document = observed_session(store, session)
     mirrored = document.activity[0]
     assert isinstance(mirrored, CanvasQuestion) and mirrored.request == question.request
-    accepted = replace(question, reply=Answered("Use Contoso"))
+    accepted = replace(question, reply=TextAnswer("Use Contoso"))
     seeded(store, observe_activity(document, (accepted,)))
     cancelled = replace(session, messages=(replace(mirror, reply=assistant.agent_session.Cancelled()),))
     document = observed_session(store, cancelled)
@@ -111,12 +110,13 @@ def test_floating_attention_has_exact_persistent_redirects_and_retains_approval_
     assert isinstance(prompt, ChatMessage) and "target=question%3Aquestion+with+spaces" in prompt.text
     assert prompt.source is not None and prompt.source.identity == "canvas:question:question with spaces"
     assert not redirected.busy
-    assert history_session(session).messages == session.messages
     content = observe(redirected)[0]
     assert active(content) and tone(content) is Tone.QUESTION
-    announced = transition(Session(), CanvasNotice("Needs you", "question:request", 10))
+    # Settling retires only that redirect; the rest of the conversation stays.
+    conversation = (ChatMessage("You", "Compare the suppliers", 8), ChatMessage("Workspace", "Fetched the next mail", 9))
+    announced = transition(Session(messages=conversation), CanvasNotice("Needs you", "question:request", 10))
     settled = transition(announced, CanvasSettled(frozenset(("question:request",))))
-    assert not redirect_session(settled).messages
+    assert settled.messages == conversation and not redirect_session(settled).messages
 
 
 def test_classification_stays_quiet_and_state_transitions_redirect_to_the_context() -> None:

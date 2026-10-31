@@ -5,7 +5,7 @@ from pathlib import Path
 from unittest import TestCase
 
 import automation.task
-from assistant.agent_session import Answered, Session
+from assistant.agent_session import Session
 from assistant.canvas_activity import CanvasInstruction, CanvasQuestion, CanvasRequest, CanvasRun, CanvasUpdate, SessionRequest
 from assistant.work_canvas import (
     Announcement,
@@ -22,9 +22,9 @@ from assistant.work_canvas_context import CanvasScope, context_path
 from assistant.work_canvas_edits import ArrangeView, RenameGroup, UserEdit
 from assistant.work_canvas_gestures import NestBubble, PlaceBubbles
 from assistant.work_canvas_model import CanvasCollection, CanvasDocument, CanvasNote, CanvasRelation, Placement, view_state
-from assistant.work_window import WorkSnapshot
+from assistant.work_snapshot import WorkSnapshot
 from automation.personal_work import DismissedWork, WorkState
-from automation.task import Blocked, Completed, Waiting
+from automation.task import Blocked, Completed, TextAnswer, Waiting
 from tests.agent_requests import asked
 from tests.test_work_canvas import catalog, local_canvas, nested_bubbles, seeded
 from tests.test_work_window import work_task
@@ -82,27 +82,27 @@ def test_answers_reach_only_visible_waiting_questions_and_record_one_reply(tmp_p
     document = canvas.observe_work(WorkSnapshot(tasks=(current, hidden))).document
     assert [question.id for question in canvas.waiting()] == ["question:chat", "question:current"]
     assert canvas.settled(document) == frozenset(("question:hidden",))
-    delivered: list[tuple[CanvasRequest, str]] = []
+    delivered: list[tuple[CanvasRequest, TextAnswer]] = []
 
-    def accept(request: CanvasRequest, value: str) -> bool:
+    def accept(request: CanvasRequest, value: TextAnswer) -> bool:
         delivered.append((request, value))
         return True
 
-    def reject(_request: CanvasRequest, _value: str) -> bool:
+    def reject(_request: CanvasRequest, _value: TextAnswer) -> bool:
         return False
 
     hidden_request = next(item.request for item in document.activity if isinstance(item, CanvasQuestion) and item.id == "question:hidden")
-    assert canvas.answer(SessionRequest("expired", "chat"), "Contoso", accept) is None
-    assert canvas.answer(hidden_request, "Contoso", accept) is None and not delivered
-    assert canvas.answer(SessionRequest("session", "chat"), "Contoso", reject) is None
+    assert canvas.answer(SessionRequest("expired", "chat"), TextAnswer("Contoso"), accept) is None
+    assert canvas.answer(hidden_request, TextAnswer("Contoso"), accept) is None and not delivered
+    assert canvas.answer(SessionRequest("session", "chat"), TextAnswer("Contoso"), reject) is None
     assert [question.id for question in canvas.waiting()] == ["question:chat", "question:current"]
-    answered = canvas.answer(SessionRequest("session", "chat"), "Contoso", accept)
+    answered = canvas.answer(SessionRequest("session", "chat"), TextAnswer("Contoso"), accept)
     assert answered is not None and answered == canvas.read()
     chat = next(item for item in answered.activity if item.id == "question:chat")
-    assert isinstance(chat, CanvasQuestion) and chat.reply == Answered("Contoso")
+    assert isinstance(chat, CanvasQuestion) and chat.reply == TextAnswer("Contoso")
     assert finding in answered.activity
-    assert canvas.answer(SessionRequest("session", "chat"), "Fabrikam", accept) is None
-    assert delivered == [(SessionRequest("session", "chat"), "Contoso")]
+    assert canvas.answer(SessionRequest("session", "chat"), TextAnswer("Fabrikam"), accept) is None
+    assert delivered == [(SessionRequest("session", "chat"), TextAnswer("Contoso"))]
 
 
 def test_speech_answers_the_selected_question_or_instructs_only_an_open_canvas(tmp_path: Path) -> None:

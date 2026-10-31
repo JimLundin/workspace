@@ -1,12 +1,12 @@
 """Policy behavior through the same source review used by editing checks."""
 
 import json
-import shutil
 import subprocess
 import sys
 from pathlib import Path
 
 from scripts.architecture import dependencies, python_sources, review
+from tests.check_fixture import copy_check_scripts
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -69,6 +69,32 @@ def test_keyboard_rejection_follows_lazy_imports_and_package_initializers(tmp_pa
     assert any("miryoku.engine → helper → assistant" in finding.detail for finding in report.failures)
     (tmp_path / "helper/__init__.py").write_text("")
     assert not review(tmp_path).failures
+
+
+def test_lower_layers_reach_assistant_only_through_declared_seams(tmp_path: Path) -> None:
+    # Defect: an automation or winapi module imports a UI-side module, directly or
+    # through a shared helper, or a seam outlives the dependency it documents.
+    write_tree(
+        tmp_path,
+        {
+            "automation/__init__.py": "",
+            "automation/ipc.py": "from helper import value\n",
+            "winapi/__init__.py": "",
+            "winapi/status.py": "from assistant.model import Model\n",
+            "automation/app.py": "lazy from assistant.model import Model\n",
+            "helper.py": "from assistant import model\nvalue = 1\n",
+            "assistant/__init__.py": "",
+            "assistant/model.py": "",
+        },
+    )
+    with (tmp_path / "pyproject.toml").open("a", encoding="utf-8") as output:
+        output.write('\n[[tool.workspace.architecture.seams]]\nmodule = "automation.app"\nreason = "The composition root."\n')
+    assert [finding.detail for finding in review(tmp_path).failures] == ["automation.ipc → helper → assistant", "winapi.status → assistant"]
+    (tmp_path / "helper.py").write_text("value = 1\n")
+    (tmp_path / "winapi/status.py").write_text("")
+    assert not review(tmp_path).failures
+    (tmp_path / "automation/app.py").write_text("")
+    assert [finding.rule for finding in review(tmp_path).failures] == ["stale-seam"]
 
 
 def test_relative_lazy_and_aliased_dynamic_imports_select_their_consumers() -> None:
@@ -163,16 +189,13 @@ def test_explicit_test_scope_cannot_bypass_architecture_or_write_a_receipt(tmp_p
     write_tree(
         tmp_path,
         {
-            "scripts/__init__.py": "",
-            "scripts/deploy_files.py": "",
             "miryoku/__init__.py": "",
             "miryoku/engine.py": "import assistant\n",
             "assistant/__init__.py": "",
             "tests/test_requested.py": 'def test_requested():\n    raise AssertionError("must not execute")\n',
         },
     )
-    for name in ("architecture.py", "quality.py", "check.py", "deploy_files.py", "development_paths.py", "source_analysis.py"):
-        shutil.copyfile(ROOT / "scripts" / name, tmp_path / "scripts" / name)
+    copy_check_scripts(tmp_path, ("check.py",))
     subprocess.run(["git", "init", "--quiet", str(tmp_path)], check=True, capture_output=True)
     receipt = tmp_path / "checked.json"
     result = subprocess.run(

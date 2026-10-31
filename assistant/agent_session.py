@@ -6,13 +6,10 @@ Replaying the same events against a session always gives the same result.
 
 from dataclasses import dataclass, field, replace
 from typing import Literal, assert_never
-from urllib.parse import urlencode
 
-import assistant.console_requests
 from assistant import action_text
-from assistant.communications import Feed
+from assistant.card_actions import OpenCanvas, encode
 from assistant.feed_origin import FeedRequest
-from assistant.feed_triage import Board
 from assistant.recording_state import RecordingState
 from automation.presentation import (
     Answer,
@@ -29,7 +26,7 @@ from automation.presentation import (
     ToolActivity,
     ToolStatus,
 )
-from automation.task import Approval, ApprovalDecision, Question
+from automation.task import Approval, ApprovalDecision, Question, Reply, TextAnswer, answers
 
 type Result = Literal["Ready", "Stopped", "Needs attention"]
 
@@ -40,17 +37,13 @@ class Pending:
 
 
 @dataclass(frozen=True, slots=True)
-class Answered:
-    text: str
-
-
-@dataclass(frozen=True, slots=True)
 class Cancelled:
     pass
 
 
-type Resolved = Answered | ApprovalDecision | Cancelled
-type Reply = Pending | Resolved
+# The timeline row reuses the task's reply; a withdrawn request is cancelled.
+type Resolved = Reply | Cancelled
+type RequestReply = Pending | Resolved
 
 
 @dataclass(frozen=True, slots=True)
@@ -79,7 +72,7 @@ class AgentRequest:
     request: Question | Approval
     detail: str
     created_at: float
-    reply: Reply = Pending()
+    reply: RequestReply = Pending()
 
     @property
     def id(self) -> str:
@@ -176,10 +169,6 @@ class Session:
     activity: tuple[str, ...] = ()
     phase: Literal["idle", "running", "stopping"] = "idle"
     status: str = "Ready"
-    triage: Board = field(default_factory=Board)
-    communications: Feed = field(default_factory=Feed)
-    console_requests: tuple[assistant.console_requests.Request, ...] = ()
-    communication_drafts: tuple[tuple[str, str], ...] = ()
     last_said: str = ""
     result: Result = "Ready"
     recording: RecordingState = field(default_factory=RecordingState)
@@ -197,15 +186,15 @@ class Session:
         return any(pending(message) for message in self.messages)
 
     @property
-    def question(self) -> AgentRequest | None:
-        return next(
-            (
-                message
-                for message in self.messages
-                if isinstance(message, AgentRequest) and isinstance(message.request, Question) and pending(message)
-            ),
-            None,
-        )
+    def request(self) -> AgentRequest | None:
+        """The pending question or approval the person can answer now."""
+        for message in self.messages:
+            match message:
+                case AgentRequest(reply=Pending()):
+                    return message
+                case _:
+                    pass
+        return None
 
     def all_text(self) -> str:
         return "\n\n".join(message_text(message) for message in self.messages)
@@ -216,7 +205,7 @@ type Snapshot = Session
 
 
 def notice_text(title: str, target: str) -> str:
-    return title + "\n\n[Open on canvas](workspace://canvas?" + urlencode({"target": target}) + ")"
+    return title + "\n\n[Open on canvas](" + encode(OpenCanvas(target)) + ")"
 
 
 def transition(state: Session, event: Event) -> Session:
@@ -225,11 +214,7 @@ def transition(state: Session, event: Event) -> Session:
             identities = frozenset("canvas:" + target for target in targets)
             return replace(
                 state,
-                messages=tuple(
-                    message
-                    for message in state.messages
-                    if not (isinstance(message, ChatMessage) and message.source is not None and message.source.identity in identities)
-                ),
+                messages=tuple(message for message in state.messages if not _redirects_to(message, identities)),
             )
         case CanvasNotice(title, target, at):
             text = notice_text(title, target)
@@ -267,9 +252,12 @@ def transition(state: Session, event: Event) -> Session:
         case StopRequested():
             return replace(state, queued=(), phase="stopping" if state.busy else state.phase, status="Stopping…" if state.busy else state.status)
         case AgentRequest(request=request):
-            return replace(
-                state, messages=(*state.messages, event), status="Waiting for your reply" if isinstance(request, Question) else "Needs your approval"
-            )
+            match request:
+                case Question():
+                    status = "Waiting for your reply"
+                case Approval():
+                    status = "Needs your approval"
+            return replace(state, messages=(*state.messages, event), status=status)
         case Resolution():
             return resolve(state, event)
         case RecordingUpdated(recording, at):
@@ -278,6 +266,14 @@ def transition(state: Session, event: Event) -> Session:
             return update_live(state, event)
         case _:
             assert_never(event)
+
+
+def _redirects_to(message: Message, identities: frozenset[str]) -> bool:
+    match message:
+        case ChatMessage(source=FeedRequest(identity=identity)):
+            return identity in identities
+        case _:
+            return False
 
 
 def interrupt(message: Message) -> Message:
@@ -292,18 +288,19 @@ def interrupt(message: Message) -> Message:
 
 def update_live(state: Session, event: LiveMessage) -> Session:
     """Replace one live row without duplicating it when the final item arrives."""
-    if not state.busy or (state.stopping and not isinstance(event, ToolActivity)):
+    if not state.busy:
         return state
-    if state.stopping and isinstance(event, ToolActivity) and event.outcome is ToolStatus.RUNNING:
-        return state
+    match event:
+        # Stopping keeps only completions of tools already running.
+        case Answer() | ReasoningSummary() | ToolActivity(outcome=ToolStatus.RUNNING) if state.stopping:
+            return state
+        case Answer() | ReasoningSummary() | ToolActivity():
+            pass
     for index, message in enumerate(state.messages):
-        if (
-            not isinstance(message, (Answer, ReasoningSummary, ToolActivity))
-            or message.identity != event.identity
-            or type(message) is not type(event)
-        ):
+        row = _live_row(message, event)
+        if row is None:
             continue
-        match message:
+        match row:
             case (
                 Answer(state=StreamState.COMPLETE | StreamState.INTERRUPTED) | ReasoningSummary(state=StreamState.COMPLETE | StreamState.INTERRUPTED)
             ):
@@ -312,8 +309,8 @@ def update_live(state: Session, event: LiveMessage) -> Session:
                 return state
             case Answer() | ReasoningSummary() | ToolActivity():
                 pass
-        updated = replace(event, created_at=message.created_at)
-        if updated == message:
+        updated = replace(event, created_at=row.created_at)
+        if updated == row:
             return state
         messages = (*state.messages[:index], updated, *state.messages[index + 1 :])
         break
@@ -321,46 +318,50 @@ def update_live(state: Session, event: LiveMessage) -> Session:
         if state.stopping:
             return state
         messages = (*state.messages, event)
-    last_said = event.text.strip() if isinstance(event, Answer) and event.state is StreamState.COMPLETE else state.last_said
-    return replace(state, messages=messages, last_said=last_said)
+    match event:
+        case Answer(text=text, state=StreamState.COMPLETE):
+            return replace(state, messages=messages, last_said=text.strip())
+        case Answer() | ReasoningSummary() | ToolActivity():
+            return replace(state, messages=messages)
 
 
-def acceptable(request: Question | Approval, answer: str) -> bool:
-    match request:
-        case Question():
-            return bool(answer.strip())
-        case Approval():
-            return answer in ("approve", "decline")
+def _live_row(message: Message, event: LiveMessage) -> LiveMessage | None:
+    """The live row this event updates: the same variant with the same identity."""
+    match message, event:
+        case (Answer(identity=row) as live, Answer(identity=update)) if row == update:
+            return live
+        case (ReasoningSummary(identity=row) as live, ReasoningSummary(identity=update)) if row == update:
+            return live
+        case (ToolActivity(identity=row) as live, ToolActivity(identity=update)) if row == update:
+            return live
         case _:
-            assert_never(request)
+            return None
 
 
-def resolution(message: AgentRequest, answer: str) -> Resolution:
-    """The reply to an answer `acceptable` already admitted for this request."""
-    match message.request:
-        case Question():
-            return Resolution(message.id, Answered(answer))
-        case Approval():
-            return Resolution(message.id, ApprovalDecision.APPROVED if answer == "approve" else ApprovalDecision.DECLINED)
+def resolves(request: Question | Approval, reply: Resolved) -> bool:
+    match reply:
+        case Cancelled():
+            return True
+        case TextAnswer() | ApprovalDecision():
+            return answers(request, reply)
         case _:
-            assert_never(message.request)
+            assert_never(reply)
 
 
 def resolve(state: Session, event: Resolution) -> Session:
     for index, message in enumerate(state.messages):
-        if not isinstance(message, AgentRequest) or message.id != event.request_id or not pending(message):
-            continue
-        match message.request, event.reply:
-            case Question(), Answered() | Cancelled():
-                pass
-            case Approval(), ApprovalDecision() | Cancelled():
-                pass
+        match message:
+            case AgentRequest(reply=Pending()) if message.id == event.request_id:
+                if not resolves(message.request, event.reply):
+                    return state  # a response for another kind of input cannot resolve this one
+                updated = replace(message, reply=event.reply)
+                return replace(
+                    state,
+                    messages=(*state.messages[:index], updated, *state.messages[index + 1 :]),
+                    status="Stopping…" if state.stopping else "Working…",
+                )
             case _:
-                return state  # a response for another kind of input cannot resolve this one
-        updated = replace(message, reply=event.reply)
-        return replace(
-            state, messages=(*state.messages[:index], updated, *state.messages[index + 1 :]), status="Stopping…" if state.stopping else "Working…"
-        )
+                pass
     return state
 
 
@@ -381,19 +382,22 @@ def update_recording(state: Session, recording: RecordingState, at: float) -> Se
         case _:
             assert_never(recording.phase)
     for index, message in enumerate(state.messages):
-        if isinstance(message, MeetingMessage) and message.recording_id == recording.identity:
-            messages = (
-                state.messages if message.text == text else (*state.messages[:index], replace(message, text=text), *state.messages[index + 1 :])
-            )
-            return replace(state, recording=recording, messages=messages)
+        match message:
+            case MeetingMessage(recording_id=identity) if identity == recording.identity:
+                messages = (
+                    state.messages if message.text == text else (*state.messages[:index], replace(message, text=text), *state.messages[index + 1 :])
+                )
+                return replace(state, recording=recording, messages=messages)
+            case _:
+                pass
     return replace(state, recording=recording, messages=(*state.messages, MeetingMessage(recording.identity, text, at)))
 
 
-def reply_text(reply: Reply) -> str:
+def reply_text(reply: RequestReply) -> str:
     match reply:
         case Pending():
             return "pending"
-        case Answered(text):
+        case TextAnswer(text):
             return text
         case ApprovalDecision.APPROVED:
             return "approved"
@@ -442,7 +446,7 @@ def message_text(message: Message) -> str:
             parts = (name, activity_text(message))
         case MeetingMessage(text=text):
             parts = ("Meeting", text)
-        case AgentRequest(detail=detail, reply=Answered(answer)):
+        case AgentRequest(detail=detail, reply=TextAnswer(answer)):
             parts = ("You", message.text, detail, "answered", answer)
         case AgentRequest(detail=detail, reply=reply):
             parts = ("You", message.text, detail, reply_text(reply))
@@ -502,10 +506,14 @@ def presentation(message: Message) -> Presentation:
             return Presentation("Question", detail=detail)
         case AgentRequest(request=Approval(id=identity), detail=detail, reply=Pending()):
             return Presentation("Approval", detail=detail, response=ApprovalControls(identity))
-        case AgentRequest(request=Question(), detail=detail, reply=Answered(text)):
+        case AgentRequest(request=Question(), detail=detail, reply=TextAnswer(text)):
             return Presentation("Question", detail=detail, response=ResponseText(text))
         case AgentRequest(request=request, detail=detail, reply=reply):
-            role = "Question" if isinstance(request, Question) else "Approval"
+            match request:
+                case Question():
+                    role = "Question"
+                case Approval():
+                    role = "Approval"
             return Presentation(role, detail=detail, response=ResponseText(reply_text(reply).capitalize()))
         case _:
             assert_never(message)

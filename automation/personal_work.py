@@ -6,9 +6,7 @@ source identity, stale edits, association corrections and model reconciliation.
 """
 
 import hashlib
-import sqlite3
-from collections.abc import Generator, Sequence
-from contextlib import contextmanager
+from collections.abc import Sequence
 from dataclasses import dataclass, field, replace
 from enum import StrEnum
 from pathlib import Path
@@ -17,6 +15,7 @@ from urllib.parse import urlsplit
 
 from pydantic import Field, StringConstraints, TypeAdapter
 
+from automation import journal
 from automation.work_documents import DocumentReference, WebDocument, checked_url, document_identity
 
 type Identity = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=500)]
@@ -501,7 +500,7 @@ class PersonalStore:
     """Each call owns one real SQLite transaction; observations are immutable.
 
     This uses the existing work database, with an independent catalog table and
-    revision. BEGIN IMMEDIATE protects edits from concurrent model results.
+    revision. Each write transaction protects edits from concurrent model results.
     """
 
     __slots__ = ("path",)
@@ -509,20 +508,11 @@ class PersonalStore:
     def __init__(self, path: Path) -> None:
         self.path = path
         path.parent.mkdir(parents=True, exist_ok=True)
-        with self.connection() as connection:
+        with journal.writing(self.path) as connection:
             connection.execute("CREATE TABLE IF NOT EXISTS personal_work (id INTEGER PRIMARY KEY CHECK(id=1), payload BLOB NOT NULL)")
             connection.execute("INSERT OR IGNORE INTO personal_work VALUES (1, ?)", (CATALOG.dump_json(Catalog()),))
 
-    @contextmanager
-    def connection(self) -> Generator[sqlite3.Connection]:
-        connection = sqlite3.connect(self.path, timeout=10)
-        try:
-            with connection:
-                yield connection
-        finally:
-            connection.close()
-
-    def loaded(self, connection: sqlite3.Connection) -> Catalog:
+    def loaded(self, connection: journal.Connection) -> Catalog:
         observed: object = connection.execute("SELECT payload FROM personal_work WHERE id=1").fetchone()
         match observed:
             case (bytes() as payload,):
@@ -530,24 +520,22 @@ class PersonalStore:
             case _:
                 raise ValueError("The personal work catalog is unavailable.")
 
-    def persist(self, connection: sqlite3.Connection, catalog: Catalog) -> None:
+    def persist(self, connection: journal.Connection, catalog: Catalog) -> None:
         state = CATALOG.validate_json(CATALOG.dump_json(catalog))
         connection.execute("UPDATE personal_work SET payload=? WHERE id=1", (CATALOG.dump_json(state),))
 
     def read(self) -> Catalog:
-        with self.connection() as connection:
+        with journal.reading(self.path) as connection:
             return self.loaded(connection)
 
     def observe(self, sources: tuple[WorkSource, ...]) -> Catalog:
-        with self.connection() as connection:
-            connection.execute("BEGIN IMMEDIATE")
+        with journal.writing(self.path) as connection:
             state = observe_sources(self.loaded(connection), sources)
             self.persist(connection, state)
             return state
 
     def reconcile(self, request: CorrelationInput, plan: WorkPlan, at: float) -> Catalog:
-        with self.connection() as connection:
-            connection.execute("BEGIN IMMEDIATE")
+        with journal.writing(self.path) as connection:
             state = self.loaded(connection)
             if state.revision != request.catalog_revision:
                 raise ValueError("Work or source evidence changed during this review. A fresh review is needed.")
@@ -561,8 +549,7 @@ class PersonalStore:
             return state
 
     def handle(self, request: PersonalRequest, at: float) -> PersonalResponse:
-        with self.connection() as connection:
-            connection.execute("BEGIN IMMEDIATE")
+        with journal.writing(self.path) as connection:
             state = self.loaded(connection)
             match request:
                 case ListWork() | ListSources():

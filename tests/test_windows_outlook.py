@@ -9,7 +9,7 @@ from unittest import SkipTest, TestCase
 if sys.platform != "win32":
     raise SkipTest("Windows draft binding sharing")
 
-from assistant.outlook import DraftConflict, DraftUncertain, SavedEmlDraft, SavedOutlookDraft, draft_key, eml_bytes
+from assistant.outlook import DraftConflict, DraftStep, DraftUncertain, SavedEmlDraft, SavedOutlookDraft, draft_key, eml_bytes
 from tests.test_outlook import adapter, request
 
 
@@ -44,7 +44,9 @@ def test_pending_bindings_stay_uncertain_when_a_reader_blocks_the_required_ready
                 probe.unlink(missing_ok=True)
             assert drafts.inspect(original, threading.Event()) == observed
             result = drafts.save(original, threading.Event())
-            assert isinstance(result, DraftUncertain), result
+            assert isinstance(result, DraftUncertain) and result.fault is not None, result
+            assert result.fault.step is DraftStep.IDENTITY_WRITE and result.fault.error == "PermissionError", result
+            assert result.fault.code in (5, 32, 33) and f"code {result.fault.code}" in result.reason, result
             assert index.read_bytes() == pending and os.path.samestat(identity, index.stat())
             assert drafts.inspect(original, threading.Event()) == observed
         committed = drafts.save(original, threading.Event())

@@ -10,8 +10,8 @@ import unittest
 import uuid
 from pathlib import Path
 
-from scripts.install_inbox_hooks import configuration
-from tests.json_fixture import json_value
+from automation.json_value import Json
+from tests.json_fixture import json_object, json_value
 
 if sys.platform != "win32":
     raise unittest.SkipTest("Native development tools")
@@ -20,6 +20,7 @@ lazy import shiboken6
 
 from assistant.qt_runtime import prepare
 from scripts.preview import Files, Preview
+from tests.check_fixture import copy_check_scripts
 from tests.test_quality import migrations
 
 prepare()
@@ -27,14 +28,14 @@ prepare()
 ROOT = Path(__file__).resolve().parent.parent
 
 
-def wait_for(path: Path, condition: str, process: subprocess.Popen[bytes]) -> dict[str, object]:
+def wait_for(path: Path, condition: str, process: subprocess.Popen[bytes]) -> dict[str, Json]:
     deadline = time.monotonic() + 30
     while time.monotonic() < deadline:
         if process.poll() is not None:
             raise AssertionError("Watch exited before " + condition)
         if path.exists():
             try:
-                record: dict[str, object] = configuration(json_value(path.read_text()))
+                record = json_object(path.read_text())
             except OSError, ValueError:
                 pass
             else:
@@ -44,21 +45,7 @@ def wait_for(path: Path, condition: str, process: subprocess.Popen[bytes]) -> di
 
 
 def write_watch_source(root: Path, output: Path) -> None:
-    scripts = root / "scripts"
-    scripts.mkdir(parents=True)
-    (scripts / "__init__.py").write_text("")
-    for name in (
-        "watch.py",
-        "check.py",
-        "source_analysis.py",
-        "architecture.py",
-        "quality.py",
-        "deploy_files.py",
-        "development_paths.py",
-        "check_native.py",
-        "native_desktop.py",
-    ):
-        shutil.copyfile(ROOT / "scripts" / name, scripts / name)
+    copy_check_scripts(root, ("watch.py", "check.py"))
     shutil.copyfile(ROOT / "runtime.py", root / "runtime.py")
     (root / "pyproject.toml").write_text(
         '[tool.workspace.architecture]\nmodels=[]\n[tool.ruff]\ntarget-version="py315"\n[tool.ruff.lint.pylint]\nmax-args=3\nmax-positional-args=5\n'

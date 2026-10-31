@@ -4,14 +4,14 @@ import threading
 from pathlib import Path
 from unittest import TestCase
 
-from assistant.browser_values import BrowserError
+from assistant.browser_values import BrowserError, PageRow
 from assistant.communications_browser import TeamsWeb
-from assistant.llm import Json
+from automation.json_value import Json
 from tests.teams_fixture import Browser
 
 
 def web(folder: Path) -> tuple[TeamsWeb, Browser]:
-    browser = Browser(({"id": "existing", "url": "https://teams.cloud.microsoft/v2/"},))
+    browser = Browser((PageRow("existing", "", "https://teams.cloud.microsoft/v2/"),))
     return TeamsWeb(folder, browser=browser), browser
 
 

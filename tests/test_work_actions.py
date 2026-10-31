@@ -14,9 +14,11 @@ from unittest import TestCase
 from assistant.agent import Agent
 from assistant.agent_tools import Output
 from assistant.agent_toolsets import General
-from assistant.llm import Json, Settings
+from assistant.browser_values import STRIP_PAGE, StripPage, TabRow
+from assistant.llm import Settings
 from automation.actions import ActionCancelledError, Actions, Change, LostRunError, Operation, Resources, UncertainEffectError
 from automation.execution import ApprovalReview, Reconciliation, Reported, WorkExecution
+from automation.json_value import Json
 from automation.store import TaskStore
 from automation.task import (
     Action,
@@ -273,18 +275,22 @@ def test_script_result_requires_explicit_inspection_and_reconciliation(tmp_path:
     assert isinstance(work.outcome(Reported("The output was inspected."), threading.Event()), Completed)
 
 
+def strip_listing(tab_id: int, offset: int) -> str:
+    """One pinned tab on a page of a longer native strip listing."""
+    row = TabRow(tab_id, 1, offset, -1, "", "", active=False, pinned=True, muted=False)
+    return STRIP_PAGE.dump_json(StripPage("attached", (row,), (), 3, offset, offset + 1), exclude_none=True).decode()
+
+
 def test_native_tab_verification_uses_the_listed_target_even_when_the_strip_is_paged(tmp_path: Path) -> None:
     store, claim, clock = claimed(tmp_path)
     work = WorkExecution(claim, store, Resources(), clock=clock)
     agent = families(work)
     attempt(agent, "browser_tab", {"tab_id": 17, "action": "pin"})
     action = store.actions("task")[0]
-    wrong = observe(agent, Operation.of("browser_tabs", {"view": "strip"}), '{"view":"strip","tabs":[{"tab_id":18,"pinned":true}],"next_offset":1}')
+    wrong = observe(agent, Operation.of("browser_tabs", {"view": "strip"}), strip_listing(18, 0))
     with TestCase().assertRaisesRegex(ValueError, "target"):
         reconcile(agent, Reconciliation(action.id, wrong, applied=True))
-    correct = observe(
-        agent, Operation.of("browser_tabs", {"view": "strip", "offset": 1}), '{"view":"strip","tabs":[{"tab_id":17,"pinned":true}],"next_offset":2}'
-    )
+    correct = observe(agent, Operation.of("browser_tabs", {"view": "strip", "offset": 1}), strip_listing(17, 1))
     reconcile(agent, Reconciliation(action.id, correct, applied=True))
     assert isinstance(work.outcome(Reported("Pinned the requested tab."), threading.Event()), Completed)
 

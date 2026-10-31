@@ -4,7 +4,6 @@ from dataclasses import replace
 
 from assistant.agent_session import (
     AgentRequest,
-    Answered,
     ApprovalControls,
     Begin,
     Cancelled,
@@ -21,7 +20,7 @@ from assistant.agent_session import (
 )
 from assistant.recording_state import RecordingState
 from automation.presentation import Answer, Done, Failed, Finished, Progress, ReasoningSummary, Said, StreamState, Succeeded, ToolActivity
-from automation.task import ApprovalDecision
+from automation.task import ApprovalDecision, TextAnswer
 from tests.agent_requests import asked, reviewed
 
 
@@ -89,6 +88,20 @@ def test_meeting_preview_updates_without_adding_messages_or_changing_the_agent_t
     assert session.recording.seconds == 499
 
 
+def test_meeting_message_states_whether_its_transcript_was_saved_or_interrupted() -> None:
+    # Defect: an interrupted recording is reported as saved, or the reverse.
+    state = RecordingState(phase="recording", identity="meeting-1", preview="First sentence.")
+    session = transition(Session(), RecordingUpdated(state, 0))
+    saved = transition(session, RecordingUpdated(replace(state, phase="saved", detail="12 minutes."), 1))
+    assert message_body(saved.messages[0]) == ("**Meeting**\n\nFirst sentence.\n\n12 minutes.\n\n*Transcript saved. Use Open for the full text.*")
+    interrupted = transition(session, RecordingUpdated(replace(state, phase="interrupted", preview=""), 1))
+    assert message_body(interrupted.messages[0]) == (
+        "**Meeting**\n\nThe transcript will appear here as speech is transcribed.\n\n*Open the transcript for the saved part.*"
+    )
+    silent = transition(session, RecordingUpdated(replace(state, phase="saved", preview=""), 1))
+    assert message_body(silent.messages[0]).startswith("**Meeting**\n\nNo speech was transcribed.")
+
+
 def test_follow_ups_keep_messages_and_only_deduplicate_the_current_turns_final_answer() -> None:
     session = Session()
     for prompt in ("Find my workbook", "Look for it again"):
@@ -146,10 +159,10 @@ def test_session_events_can_be_replayed_and_branched_without_a_clock_or_shared_m
         replay = transition(replay, event)
     assert replay == pending and original.messages == ()
     answer = "  Budget.xlsx\nKeep the full answer.  "
-    answered = transition(pending, Resolution("q1", Answered(answer)))
+    answered = transition(pending, Resolution("q1", TextAnswer(answer)))
     cancelled = transition(pending, Resolution("q1", Cancelled()))
-    assert pending.question is not None and answered.question is None and cancelled.question is None
-    assert isinstance(answered.messages[-1], AgentRequest) and answered.messages[-1].reply == Answered(answer)
+    assert pending.request is not None and answered.request is None and cancelled.request is None
+    assert isinstance(answered.messages[-1], AgentRequest) and answered.messages[-1].reply == TextAnswer(answer)
     assert isinstance(cancelled.messages[-1], AgentRequest) and cancelled.messages[-1].reply == Cancelled()
     assert answered.messages[0] is pending.messages[0]
     assert [message.created_at for message in answered.messages] == [10, 12]
@@ -157,7 +170,7 @@ def test_session_events_can_be_replayed_and_branched_without_a_clock_or_shared_m
 
 def test_mismatched_and_late_responses_cannot_change_another_input_or_its_controls() -> None:
     approval = transition(Session(), reviewed("a1", "Open this?", "budget.xlsx", 10))
-    assert transition(approval, Resolution("a1", Answered("approve"))) is approval
+    assert transition(approval, Resolution("a1", TextAnswer("approve"))) is approval
     assert transition(approval, Resolution("old", ApprovalDecision.APPROVED)) is approval
     assert presentation(approval.messages[0]).response == ApprovalControls("a1")
     declined = transition(approval, Resolution("a1", ApprovalDecision.DECLINED))

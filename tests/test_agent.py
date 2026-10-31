@@ -14,16 +14,19 @@ from assistant.agent_history import History
 from assistant.agent_session import activity_text
 from assistant.agent_tools import Output
 from assistant.agent_toolsets import General
+from assistant.browser_requests import BrowserRequest, Screenshot
 from assistant.browser_values import BrowserError
 from assistant.desktop_tools import allowed, key_strokes
 from assistant.feed_agent_tools import request
 from assistant.geometry import Shot
-from assistant.llm import Json, Settings, ToolCall, settings_from
+from assistant.llm import Settings, ToolCall, settings_from
+from assistant.uia import UiRequest
 from assistant.web_apps import Located, WebAppOperation
 from assistant.work_bridge_contracts import BridgeCommand
 from assistant.workspace import Workspace
 from automation.actions import Resources
 from automation.execution import ApprovalReview, WorkExecution
+from automation.json_value import Json
 from automation.presentation import LiveMessage, Succeeded, ToolActivity, ToolStatus
 from automation.store import TaskStore
 from automation.task import RequestSource
@@ -139,13 +142,17 @@ class FakeMachine:
         self.log.append(f"window {handle} {action} {bounds}")
         return "Done."
 
-    def inspect_ui(self, request: dict[str, Json], cancel: threading.Event) -> tuple[int, str]:
-        self.log.append("ui " + json.dumps(request))
+    def inspect_ui(self, request: UiRequest, cancel: threading.Event) -> tuple[int, str]:
+        self.log.append(f"ui {request}")
         return 0, '{"controls":[{"id":"1.2.3","name":"Save","actions":["invoke"]}]}'
 
-    def browse(self, operation: str, arguments: dict[str, Json], cancel: threading.Event) -> tuple[str, bytes | None]:
-        self.log.append("browser " + operation + " " + json.dumps(arguments))
-        return "Browser operation completed.", b"\x89PNG" if operation == "screenshot" else None
+    def browse(self, request: BrowserRequest, cancel: threading.Event) -> tuple[str, bytes | None]:
+        self.log.append(f"browser {request}")
+        match request:
+            case Screenshot():
+                return "Browser operation completed.", b"\x89PNG"
+            case _:
+                return "Browser operation completed.", None
 
     def web_app[Q: Located, R](self, operation: WebAppOperation[Q, R], query: Q, cancel: threading.Event) -> R:
         self.log.append("web_app " + query.target_id)
@@ -486,7 +493,7 @@ def test_every_call_gets_a_result_even_bad_ones(tmp_path: Path) -> None:
     with fake_endpoint() as endpoint:
         rig = Rig(endpoint, calls(("no_such_tool", {}), ("read_file", {})), says("Sorry."), work=durable(tmp_path))
         rig.run()
-        assert "Error: read_file needs path (text)." in rig.results()
+        assert "Error: read_file arguments are invalid: path: Field required." in rig.results()
         assert any("no_such_tool" in result for result in rig.results())
 
 

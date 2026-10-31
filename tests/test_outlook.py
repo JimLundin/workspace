@@ -21,6 +21,7 @@ from assistant.outlook import (
     DraftContent,
     DraftReadback,
     DraftRequest,
+    DraftStep,
     DraftUncertain,
     Missing,
     OutlookDrafts,
@@ -291,7 +292,11 @@ def test_failed_identity_publication_prevents_native_save_or_fallback(tmp_path: 
     drafts, command = adapter(tmp_path)
     index = drafts.folder / "index" / (draft_key(original) + ".json")
     saving = OutlookDrafts(drafts.folder, transport=PowerShellOutlook(BlocksIndexCommit(command, index)))
-    assert isinstance(saving.save(original, threading.Event()), DraftUncertain)
+    # Defect: an uncertain save drops which store operation failed, or exposes its path.
+    uncertain = saving.save(original, threading.Event())
+    assert isinstance(uncertain, DraftUncertain) and uncertain.fault is not None, uncertain
+    assert uncertain.fault.step is DraftStep.IDENTITY_WRITE and uncertain.fault.error in ("PermissionError", "IsADirectoryError")
+    assert "saving the draft identity" in uncertain.reason and str(tmp_path) not in uncertain.reason
     assert index.is_dir() and not command.files() and not (drafts.folder / "drafts").exists()
     calls = [cast("dict[str, object]", json.loads(line)) for line in (command.root / "calls.jsonl").read_text(encoding="utf-8").splitlines()]
     assert [entry["operation"] for entry in calls] == ["status"]
@@ -322,8 +327,9 @@ def test_malformed_existing_identity_fails_closed_without_probing_or_mutating_dr
         index = drafts.folder / "index" / (draft_key(original) + ".json")
         index.parent.mkdir(parents=True)
         index.write_bytes(content)
-        assert isinstance(drafts.inspect(original, threading.Event()), DraftUncertain)
-        assert isinstance(drafts.save(original, threading.Event()), DraftUncertain)
+        for uncertain in (drafts.inspect(original, threading.Event()), drafts.save(original, threading.Event())):
+            assert isinstance(uncertain, DraftUncertain) and uncertain.fault is not None, uncertain
+            assert uncertain.fault.step is DraftStep.IDENTITY_READ and uncertain.fault.code is None, uncertain
         assert index.read_bytes() == content and not (command.root / "calls.jsonl").exists()
         assert not command.files() and not (drafts.folder / "drafts").exists()
 

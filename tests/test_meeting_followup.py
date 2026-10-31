@@ -3,7 +3,6 @@
 import csv
 import hashlib
 import io
-import json
 import os
 import shutil
 import sqlite3
@@ -19,9 +18,11 @@ from pathlib import Path
 from typing import Literal, cast
 from unittest import SkipTest, TestCase
 
-from assistant.llm import Json
+import jsonschema
+from pydantic import TypeAdapter
+
 from assistant.meeting_followup import (
-    MAX_MODEL_BYTES,
+    FOLLOWUP_CLAIMS,
     MAX_TRANSCRIPT_BYTES,
     ActionContent,
     ActionStatus,
@@ -29,17 +30,17 @@ from assistant.meeting_followup import (
     AssignedDue,
     AssignedOwner,
     CaptureNotice,
+    CitedText,
     DraftContent,
     EmailAddress,
+    Followup,
     NamedOwner,
     StatedDue,
     TranscriptBundle,
     Unspecified,
-    bundle_data,
-    bundle_of,
-    followup_data,
-    parse_followup,
+    followup_claims,
     resolve_citation,
+    resolve_followup,
 )
 from assistant.meeting_followup_store import (
     ArtifactChangedError,
@@ -51,8 +52,10 @@ from assistant.meeting_followup_store import (
     observe_transcript,
 )
 from assistant.meeting_store import MeetingArchive, MeetingStore
+from assistant.meeting_tools import SPECS
 from automation.actions import FileVerifier
 from automation.files import filesystem_path
+from automation.json_value import Json
 from automation.task import ActionVerified
 from tests.test_meetings import SPEECH
 
@@ -122,6 +125,14 @@ def followup_response(bundle: TranscriptBundle) -> dict[str, Json]:
     }
 
 
+_WIRE = TypeAdapter(Json)
+
+
+def resolved(bundle: TranscriptBundle, response: Json) -> Followup:
+    """Validate a model payload as the publish tool does, then bind it to the selected sources."""
+    return resolve_followup(bundle, FOLLOWUP_CLAIMS.validate_json(_WIRE.dump_json(response)))
+
+
 def response_item(data: dict[str, Json], key: str, index: int = 0) -> dict[str, Json]:
     collection = data[key]
     assert isinstance(collection, list)
@@ -174,12 +185,6 @@ def test_observation_keeps_corrected_bytes_capture_notices_and_ordered_source_id
     assert changed.text == "# Corrected transcript\r\n\r\nÅsa corrected the wording.\r\n"
     assert isinstance(changed.source.notice, CaptureNotice) and changed.source.notice.text == NOTICE
     assert changed.source.sha256 != original.source.sha256
-    restored = bundle_of(bundle_data(TranscriptBundle((changed, bundle.transcripts[1]))))
-    assert restored.transcripts[0].content == corrected
-    damaged_snapshot = bundle_data(restored)
-    response_item(damaged_snapshot, "sources")["text"] = "A different transcript with the old digest."
-    with TestCase().assertRaisesRegex(ValueError, "source digest"):
-        bundle_of(damaged_snapshot)
     assert TranscriptBundle(tuple(reversed(bundle.transcripts))).fingerprint != bundle.fingerprint
     with TestCase().assertRaisesRegex(ValueError, "more than once"):
         TranscriptBundle((original, original))
@@ -187,7 +192,7 @@ def test_observation_keeps_corrected_bytes_capture_notices_and_ordered_source_id
 
 def test_notes_assignments_and_addresses_resolve_to_their_own_source_quotes(tmp_path: Path) -> None:
     bundle, _ = followup_sources(tmp_path)
-    followup = parse_followup(bundle, json.dumps(followup_response(bundle)))
+    followup = resolved(bundle, followup_response(bundle))
     assigned, unknown = followup.actions
     assert isinstance(assigned.owner, NamedOwner) and assigned.owner.name == "Ada"
     assert isinstance(assigned.due, StatedDue) and assigned.due.text == "Thursday"
@@ -195,7 +200,7 @@ def test_notes_assignments_and_addresses_resolve_to_their_own_source_quotes(tmp_
     assert unknown.owner is Unspecified.NOT_STATED and unknown.due is Unspecified.NOT_STATED
     assert followup.drafts[0].recipients[0].addressee.email == EmailAddress("ada@example.test")
     assert followup.drafts[0].body == BODY and followup.drafts[0].action_ids == ("notes", "review")
-    assert parse_followup(bundle, json.dumps(followup_data(followup))) == followup
+    assert resolve_followup(bundle, followup_claims(followup)) == followup
 
 
 def test_repeated_quotes_need_disambiguation_and_cannot_switch_sources(tmp_path: Path) -> None:
@@ -207,6 +212,11 @@ def test_repeated_quotes_need_disambiguation_and_cannot_switch_sources(tmp_path:
         resolve_citation(current, observed.source.id, "Please follow up.")
     selected = resolve_citation(current, observed.source.id, "Please follow up.", occurrence=1)
     assert selected.line == 5 and selected.start == 32 and selected.end == 49
+    # A saved package stores claims; a repeated quote must keep the occurrence that resolves to its own citation.
+    repeated = Followup(current, "Repeated request", (CitedText("A follow-up was requested twice.", (selected,)),), (), (), ())
+    claims = followup_claims(repeated)
+    assert claims.notes[0].citations[0].occurrence == 1
+    assert resolve_followup(current, claims) == repeated
     with TestCase().assertRaisesRegex(ValueError, "does not occur"):
         resolve_citation(current, bundle.transcripts[1].source.id, "Please follow up.")
     with TestCase().assertRaisesRegex(ValueError, "does not exist"):
@@ -255,12 +265,12 @@ def test_model_cannot_invent_assignments_addresses_sources_or_unattached_evidenc
     invalid.append(candidate)
     for response in invalid:
         with TestCase().assertRaises(ValueError):
-            parse_followup(bundle, json.dumps(response))
+            resolved(bundle, response)
 
 
 def test_typed_citations_cannot_replace_source_digests_offsets_or_line_numbers(tmp_path: Path) -> None:
     bundle, _ = followup_sources(tmp_path)
-    followup = parse_followup(bundle, json.dumps(followup_response(bundle)))
+    followup = resolved(bundle, followup_response(bundle))
     note = followup.notes[0]
     citation = note.citations[0]
     invalid = (
@@ -274,13 +284,17 @@ def test_typed_citations_cannot_replace_source_digests_offsets_or_line_numbers(t
             replace(followup, notes=(replaced_note,))
 
 
-def test_duplicate_fields_nested_payloads_and_oversized_model_data_are_rejected(tmp_path: Path) -> None:
+def test_offered_publication_schema_accepts_every_payload_shape_the_validator_accepts(tmp_path: Path) -> None:
     bundle, _ = followup_sources(tmp_path)
-    encoded = json.dumps(followup_response(bundle))
-    invalid = ('{"title":"replacement",' + encoded[1:], "[" * 2000 + "]" * 2000, " " * (MAX_MODEL_BYTES + 1), '{"x":NaN}')
-    for response in invalid:
-        with TestCase().assertRaises(ValueError):
-            parse_followup(bundle, response)
+    response = followup_response(bundle)
+    disambiguated = response_item(response, "decisions")["citations"]
+    assert isinstance(disambiguated, list) and isinstance(disambiguated[0], dict)
+    disambiguated[0]["occurrence"] = 0
+    followup = resolved(bundle, response)
+    publish = next(spec for spec in SPECS if spec.name == "meeting_publish_followup")
+    offered: object = _WIRE.validate_json(publish.parameters)
+    for payload in (response, _WIRE.validate_json(FOLLOWUP_CLAIMS.dump_json(followup_claims(followup)))):
+        jsonschema.validate({"followup": payload}, offered)
 
 
 def test_only_finished_published_regular_transcripts_can_be_selected(tmp_path: Path) -> None:
@@ -314,7 +328,7 @@ def test_only_finished_published_regular_transcripts_can_be_selected(tmp_path: P
 
 def test_publication_writes_complete_deterministic_artifacts_and_verifies_every_file(tmp_path: Path) -> None:
     bundle, _ = followup_sources(tmp_path)
-    followup = parse_followup(bundle, json.dumps(followup_response(bundle)))
+    followup = resolved(bundle, followup_response(bundle))
     store = FollowupStore(tmp_path / "packages")
     plan = store.plan("release-task", followup)
     assert not store.root.exists(), "Planning must precede the recorded filesystem effect."
@@ -343,7 +357,7 @@ def test_publication_writes_complete_deterministic_artifacts_and_verifies_every_
 
 def test_deep_publications_preserve_paths_and_bytes_through_failure_retry_and_readback(tmp_path: Path) -> None:
     bundle, _ = followup_sources(tmp_path)
-    followup = parse_followup(bundle, json.dumps(followup_response(bundle)))
+    followup = resolved(bundle, followup_response(bundle))
     ordinary = FollowupStore(tmp_path / "packages").plan("release-task", followup)
 
     def unavailable(source: Path, destination: Path) -> None:
@@ -377,13 +391,50 @@ def test_deep_publications_preserve_paths_and_bytes_through_failure_retry_and_re
         assert notes.read_bytes() == b"User-edited notes must survive a long-path retry.\n"
 
 
+def test_exposed_paths_stay_openable_without_extended_paths_under_a_long_data_root(tmp_path: Path) -> None:
+    # Defect: directory names embed full task and package digests, so the notes,
+    # drafts and edits handed to shell targets exceed MAX_PATH under a longer root.
+    bundle, _ = followup_sources(tmp_path)
+    followup = resolved(bundle, followup_response(bundle))
+    root = tmp_path / ("data-root-" + "r" * max(1, 110 - len(str(tmp_path))))
+    assert len(str(root)) >= 100
+    store = FollowupStore(root)
+    published = store.publish(store.plan("meeting-followup-" + "c" * 64, followup))
+    draft = store.save_draft(
+        published.task_id, published.version, "follow-up", DraftContent("Saved subject", "Saved message.", ()), expected_revision=0, at=10
+    )
+    action = store.save_action(
+        published.task_id,
+        published.version,
+        "review",
+        ActionContent("Arrange the review.", AssignedOwner("Mina"), Unspecified.NOT_STATED, ActionStatus.OPEN),
+        expected_revision=0,
+        at=10,
+    )
+    exposed = (
+        published.notes_path,
+        published.actions_path,
+        Path(published.verification.path),
+        *(path for files in published.drafts for path in (files.eml, files.markdown)),
+        draft.files.eml,
+        draft.files.markdown,
+        action.path,
+    )
+    for path in exposed:
+        assert len(str(path)) <= len(str(root)) + 58, path
+        assert path.read_bytes(), path
+    reopened = FollowupStore(root)
+    assert reopened.versions(published.task_id) == (published,)
+    assert reopened.read(published.task_id, published.version) == published
+
+
 def test_deep_edit_journals_commit_exact_revisions_without_changing_generated_artifacts(tmp_path: Path) -> None:
     bundle, _ = followup_sources(tmp_path)
-    followup = parse_followup(bundle, json.dumps(followup_response(bundle)))
+    followup = resolved(bundle, followup_response(bundle))
     with long_package_root(tmp_path) as (root, accessible):
         store = FollowupStore(root)
         published = store.publish(store.plan("release-task", followup))
-        assert len(str(root / published.task_id / "edits.sqlite3")) > 260
+        assert len(str(root)) > 260
         first = DraftContent("First saved subject", "First saved message.", ())
         draft = store.save_draft(published.task_id, published.version, "follow-up", first, expected_revision=0, at=10)
         revised = replace(first, body="The current saved message.")
@@ -404,7 +455,7 @@ def test_deep_edit_journals_commit_exact_revisions_without_changing_generated_ar
 
 def test_failed_atomic_publication_exposes_no_partial_package_and_retry_reuses_content(tmp_path: Path) -> None:
     bundle, _ = followup_sources(tmp_path)
-    followup = parse_followup(bundle, json.dumps(followup_response(bundle)))
+    followup = resolved(bundle, followup_response(bundle))
 
     def unavailable(source: Path, destination: Path) -> None:
         raise OSError("Fixture: directory publication failed")
@@ -421,7 +472,7 @@ def test_failed_atomic_publication_exposes_no_partial_package_and_retry_reuses_c
 
 def test_changed_source_or_existing_generated_file_is_preserved_and_never_overwritten(tmp_path: Path) -> None:
     bundle, journals = followup_sources(tmp_path)
-    followup = parse_followup(bundle, json.dumps(followup_response(bundle)))
+    followup = resolved(bundle, followup_response(bundle))
     store = FollowupStore(tmp_path / "packages")
     plan = store.plan("release-task", followup)
     journals[0].transcript.write_bytes(bundle.transcripts[0].content + b"\nA manual correction.\n")
@@ -440,7 +491,7 @@ def test_changed_source_or_existing_generated_file_is_preserved_and_never_overwr
 
 def test_package_read_detects_changed_mime_drafts_without_rewriting_them(tmp_path: Path) -> None:
     bundle, _ = followup_sources(tmp_path)
-    followup = parse_followup(bundle, json.dumps(followup_response(bundle)))
+    followup = resolved(bundle, followup_response(bundle))
     store = FollowupStore(tmp_path / "packages")
     published = store.publish(store.plan("release-task", followup))
     changed = b"Subject: A manual draft edit\r\n\r\nKeep this changed message.\r\n"
@@ -452,7 +503,7 @@ def test_package_read_detects_changed_mime_drafts_without_rewriting_them(tmp_pat
 
 def test_user_draft_revisions_survive_regeneration_and_exact_history_remains_recoverable(tmp_path: Path) -> None:
     bundle, _ = followup_sources(tmp_path)
-    followup = parse_followup(bundle, json.dumps(followup_response(bundle)))
+    followup = resolved(bundle, followup_response(bundle))
     store = FollowupStore(tmp_path / "packages")
     generated = store.publish(store.plan("release-task", followup))
     first = DraftContent("My subject", "My first full draft.", (Addressee("Åsa", EmailAddress("asa@example.test")),))
@@ -476,7 +527,7 @@ def test_user_draft_revisions_survive_regeneration_and_exact_history_remains_rec
 
 def test_assigning_and_completing_an_action_preserves_the_generated_evidence(tmp_path: Path) -> None:
     bundle, _ = followup_sources(tmp_path)
-    followup = parse_followup(bundle, json.dumps(followup_response(bundle)))
+    followup = resolved(bundle, followup_response(bundle))
     store = FollowupStore(tmp_path / "packages")
     generated = store.publish(store.plan("release-task", followup))
     assigned = ActionContent("Arrange the agreed customer review.", AssignedOwner("Mina"), AssignedDue("Next week"), ActionStatus.DONE)
@@ -492,7 +543,7 @@ def test_assigning_and_completing_an_action_preserves_the_generated_evidence(tmp
 
 def test_an_uncommitted_edit_directory_is_not_history_and_retry_commits_it_once(tmp_path: Path) -> None:
     bundle, _ = followup_sources(tmp_path)
-    followup = parse_followup(bundle, json.dumps(followup_response(bundle)))
+    followup = resolved(bundle, followup_response(bundle))
     store = FollowupStore(tmp_path / "packages")
     generated = store.publish(store.plan("release-task", followup))
     destinations: list[Path] = []
@@ -517,16 +568,15 @@ def test_an_uncommitted_edit_directory_is_not_history_and_retry_commits_it_once(
 
 def test_output_paths_remain_task_owned_and_spreadsheet_cells_remain_text(tmp_path: Path) -> None:
     bundle, _ = followup_sources(tmp_path)
-    followup = parse_followup(bundle, json.dumps(followup_response(bundle)))
+    followup = resolved(bundle, followup_response(bundle))
     store = FollowupStore(tmp_path / "packages")
-    with TestCase().assertRaises(ValueError):
-        store.plan("../escape", followup)
+    assert store.plan("../escape", followup).directory.parent.parent.parent == store.root
     generated = store.publish(store.plan("release-task", followup))
     content = ActionContent('=HYPERLINK("https://fixture.invalid")', Unspecified.NOT_STATED, Unspecified.NOT_STATED, ActionStatus.OPEN)
     saved = store.save_action("release-task", generated.version, "review", content, expected_revision=0, at=10)
     rows = list(csv.reader(io.StringIO(saved.path.read_text(encoding="utf-8-sig"))))
     assert rows[1][1] == '\'=HYPERLINK("https://fixture.invalid")'
-    assert saved.path.is_relative_to(store.root / "release-task")
+    assert saved.path.is_relative_to(generated.directory.parent.parent)
 
 
 class CommittedReadGate(FollowupStore):
@@ -563,7 +613,7 @@ class CommittedReadGate(FollowupStore):
 
 def test_draft_save_receipt_identifies_its_own_commit_after_a_newer_edit(tmp_path: Path) -> None:
     bundle, _ = followup_sources(tmp_path)
-    followup = parse_followup(bundle, json.dumps(followup_response(bundle)))
+    followup = resolved(bundle, followup_response(bundle))
     store = FollowupStore(tmp_path / "packages")
     published = store.publish(store.plan("release-task", followup))
     entered, release = threading.Event(), threading.Event()
@@ -586,7 +636,7 @@ def test_draft_save_receipt_identifies_its_own_commit_after_a_newer_edit(tmp_pat
 
 def test_action_save_receipt_identifies_its_own_commit_after_a_newer_edit(tmp_path: Path) -> None:
     bundle, _ = followup_sources(tmp_path)
-    followup = parse_followup(bundle, json.dumps(followup_response(bundle)))
+    followup = resolved(bundle, followup_response(bundle))
     store = FollowupStore(tmp_path / "packages")
     published = store.publish(store.plan("release-task", followup))
     entered, release = threading.Event(), threading.Event()
@@ -609,12 +659,12 @@ def test_action_save_receipt_identifies_its_own_commit_after_a_newer_edit(tmp_pa
 
 def test_missing_history_is_reported_and_never_reconstructed_by_a_read(tmp_path: Path) -> None:
     bundle, _ = followup_sources(tmp_path)
-    followup = parse_followup(bundle, json.dumps(followup_response(bundle)))
+    followup = resolved(bundle, followup_response(bundle))
     store = FollowupStore(tmp_path / "packages")
     published = store.publish(store.plan("release-task", followup))
     content = DraftContent("Committed subject", "Committed message.", ())
     store.save_draft(published.task_id, published.version, "follow-up", content, expected_revision=0, at=10)
-    database = store.root / published.task_id / "edits.sqlite3"
+    database = published.directory.parent.parent / "edits.sqlite3"
     with closing(sqlite3.connect(database)) as connection, connection:
         connection.execute("DELETE FROM edit_history WHERE version=? AND kind='draft' AND id='follow-up' AND revision=1", (published.version,))
     with TestCase().assertRaisesRegex(ValueError, "committed history"):
@@ -627,12 +677,12 @@ def test_missing_history_is_reported_and_never_reconstructed_by_a_read(tmp_path:
 
 def test_current_edit_state_must_agree_with_its_immutable_committed_history(tmp_path: Path) -> None:
     bundle, _ = followup_sources(tmp_path)
-    followup = parse_followup(bundle, json.dumps(followup_response(bundle)))
+    followup = resolved(bundle, followup_response(bundle))
     store = FollowupStore(tmp_path / "packages")
     published = store.publish(store.plan("release-task", followup))
     draft = store.save_draft(published.task_id, published.version, "follow-up", DraftContent("Saved", "Saved body.", ()), expected_revision=0, at=10)
     action = store.save_action(published.task_id, published.version, "review", published.followup.actions[1].content, expected_revision=0, at=10)
-    database = store.root / published.task_id / "edits.sqlite3"
+    database = published.directory.parent.parent / "edits.sqlite3"
     with closing(sqlite3.connect(database)) as connection, connection:
         connection.execute("UPDATE edits SET at=11 WHERE version=?", (published.version,))
     with TestCase().assertRaisesRegex(ValueError, "committed history"):

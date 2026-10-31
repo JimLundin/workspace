@@ -22,13 +22,18 @@ remain pending. A ticket is independent of any agent task requested from it.
 _Avoid_: Teams unread badge, agent task
 
 **Feed source**:
-One kind of feed item: a chat ticket, a history message, a Teams activity or
-Windows notice, a sent reply, or a console request. Each kind defines its key,
-origin application, attention and triage evidence once. Attention is the single
-pending rule. Triage assesses unresolved work. A console question waits for a
-direct answer and triage cannot hide it. A reply still sending is settling. The
-feed shows every source that is not resolved.
+One kind of feed item: a chat ticket, a Teams activity or Windows notice, or a
+sent reply. Each kind defines its key, origin application,
+attention and triage evidence once. Attention is the single pending rule.
+Triage assesses unresolved work. A reply still sending is settling. The feed
+shows every source that is not resolved.
 _Avoid_: Source string, identity prefix
+
+**Card action**:
+What a floating bubble's link or button does: open the canvas at a target or
+decide the agent's pending approval. Bubbles direct the person; app arrivals
+never become cards. A link that is not exactly one card action does nothing.
+_Avoid_: Action URL, link string, feed card
 
 **Work thread**:
 The context for an ongoing outcome or responsibility, containing its related
@@ -103,6 +108,9 @@ _Avoid_: Duplicate task, copied conversation
 A question or approval that an agent needs the person to answer before work can
 continue. An approval covers one exact operation. Its answer belongs to the
 originating task and its current goal; the conversation shows that same request.
+A reply is text for a question, or approve or decline for an approval; typed,
+spoken and clicked replies become that one reply at the input edge. Approving
+needs the exact preview to be visible first.
 _Avoid_: Notification, task, chat message
 
 **Notification filter**:
@@ -139,11 +147,25 @@ published and each draft's save is verified by reading back the exact draft
 revision it wrote. The person reviews and edits the resulting actions and drafts.
 _Avoid_: Meeting-notes routine, meeting summary
 
+**Follow-up claims**:
+What a meeting follow-up's agent proposes: statements, actions and drafts, each
+with literal quotes from the selected recordings. Claims carry no offsets; they
+become a follow-up only after every quote, owner, due date and address resolves
+against the frozen transcripts. A package stores the claims that resolve to it.
+_Avoid_: Model response, follow-up data
+
 **Meeting-notes routine**:
 A standing instruction, installed disabled, that writes notes for each
 transcript completed after it is enabled. It responds to one transcript per
 trigger occurrence and does not prepare a meeting follow-up.
 _Avoid_: Meeting follow-up, follow-up drafts
+
+**Journal**:
+A local SQLite file that one owner keeps durably: the work database, each
+recording's journal and a meeting follow-up's edit history. A write is all or
+nothing and a read sees one moment. Reading a journal that does not exist
+reports it absent instead of creating it.
+_Avoid_: Database (for the owner's records), log
 
 **Run**:
 One period of execution of a task. A task can have several runs as it waits,
@@ -177,6 +199,13 @@ page, declared once with its typed query, page script, application and typed
 result. In-process readers perform it with typed values; the business tool
 family offers it to the model. A model's call of one is an operation.
 _Avoid_: App command, operation name
+
+**Browser request**:
+One typed operation on the automation browser: open, list, snapshot, act,
+evaluate, capture, or edit and close tabs and groups. The browser tool family
+validates the model's arguments into one before approval; in-process readers
+construct them directly. A model's call of one is an operation.
+_Avoid_: Browser command string, operation name
 
 **Observed outcome**:
 Evidence about what an action actually did. An interrupted attempt can retain
@@ -223,9 +252,8 @@ _Avoid_: Program, role, miryoku (as a component name)
 **Local bridge**:
 The authenticated loopback listener through which a local client reaches
 Workspace owners. The work bridge carries the agents' feed, work and canvas
-tool requests; the hook bridge carries console CLI hook events. Each bridge
-publishes an endpoint file with its address and token. An owner's refusal is a
-typed reply, not a transport error.
+tool requests. A bridge publishes an endpoint file with its address and token.
+An owner's refusal is a typed reply, not a transport error.
 _Avoid_: Feed bridge, console server
 
 **Keeper request**:

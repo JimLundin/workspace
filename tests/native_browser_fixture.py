@@ -10,12 +10,12 @@ from pathlib import Path
 
 from assistant.browser import Browser
 from assistant.browser_session import NativeSessions, Product, edge_path
-from assistant.llm import Json
-from tests.test_browser import decoded
+from automation.json_value import Json
+from tests.test_browser import command, decoded
 
 
 def request(browser: Browser, operation: str, **args: Json) -> dict[str, Json]:
-    return decoded(browser.request(operation, args, threading.Event()).text)
+    return decoded(browser.request(command(operation, **args), threading.Event()).text)
 
 
 def installed() -> None:

@@ -71,7 +71,7 @@ def test_desktop_bootstrap_preserves_arguments_streams_and_failure_status(tmp_pa
     script.write_text(
         "import json, os, sys\nfrom pathlib import Path\n"
         "from runtime import activate\nactivate()\n"
-        "from scripts.check import Selection, execute\n"
+        "from scripts.check import execute\nfrom scripts.check_results import Selection\n"
         "execute(Selection((), (), 'explicit iteration scope'), Path.cwd())\n"
         "from scripts.native_desktop import current_name\n"
         "assert current_name() == os.environ['WORKSPACE_TEST_DESKTOP']\n"

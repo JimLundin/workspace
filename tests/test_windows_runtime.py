@@ -162,21 +162,22 @@ def test_work_window_closes_with_its_ui_owner_in_a_fresh_process(tmp_path: Path)
         prepare()
         from PySide6.QtWidgets import QApplication
         from assistant.qt_ui import later
-        from assistant.ui import Ui
+        from assistant.ui import Ui, Views
         from assistant.work_canvas import WorkCanvas
+        from assistant.work_canvas_window import CanvasWindow
         from usage import DIRECTORY
 
         faulthandler.enable()
 
-        class OffscreenUi(Ui):
-            __slots__ = ()
+        def offscreen_canvas(root, work, canvas):
+            view = CanvasWindow(root, work, canvas)
+            view.window.move(-4000, -3000)
+            return view
 
-            def _create_work(self, work):
-                view = super()._create_work(work)
-                view.window.move(-4000, -3000)
-                return view
+        def offscreen_ui():
+            return Ui(views=Views(canvas=offscreen_canvas))
 
-        ui = OffscreenUi()
+        ui = offscreen_ui()
         ui.configure_canvas(WorkCanvas(DIRECTORY / "work" / "canvas.sqlite3", lambda run: None, autonomous=False), lambda title, target: None)
         failures = []
         owners = []
@@ -190,8 +191,8 @@ def test_work_window_closes_with_its_ui_owner_in_a_fresh_process(tmp_path: Path)
                     later(root, 40, ready.set)
                 ui.post(opened)
                 assert ready.wait(10), "Work did not open on the UI thread"
-                ui.close_work()
-                assert work.closed_ready.is_set(), "Work did not acknowledge closing"
+                ui.close_windows()
+                assert work.publication.closed_ready.is_set(), "Work did not acknowledge closing"
             except BaseException as error:
                 failures.append(error)
             finally:
@@ -233,8 +234,9 @@ def _native_controller_lifetime(tmp_path: Path, *, qt_first: bool) -> None:
         from assistant.qt_runtime import prepare
         prepare()
         from PySide6.QtWidgets import QApplication
-        from assistant.ui import Ui
+        from assistant.ui import Ui, Views
         from assistant.work_canvas import WorkCanvas
+        from assistant.work_canvas_window import CanvasWindow
         from usage import DIRECTORY
         from winapi import shell, system
 
@@ -242,13 +244,13 @@ def _native_controller_lifetime(tmp_path: Path, *, qt_first: bool) -> None:
         title = "Workspace controller lifetime " + uuid.uuid4().hex
         observed = []
 
-        class OffscreenUi(Ui):
-            __slots__ = ()
+        def offscreen_canvas(root, work, canvas):
+            view = CanvasWindow(root, work, canvas)
+            view.window.move(-4000, -3000)
+            return view
 
-            def _create_work(self, work):
-                view = super()._create_work(work)
-                view.window.move(-4000, -3000)
-                return view
+        def offscreen_ui():
+            return Ui(views=Views(canvas=offscreen_canvas))
 
         class Controller:
             __slots__ = ("owner", "ui", "window")
@@ -260,7 +262,7 @@ def _native_controller_lifetime(tmp_path: Path, *, qt_first: bool) -> None:
                 self.window = shell.AppWindow(title, self.message)
 
             def run(self):
-                self.ui.agent(None, lambda: None, reveal=False)
+                self.ui.agent(lambda: None, reveal=False)
                 canvas = WorkCanvas(DIRECTORY / "work" / "canvas.sqlite3", lambda run: None, autonomous=False)
                 self.ui.configure_canvas(canvas, lambda title, target: None)
                 self.ui.work(lambda command: None, focus=False)
@@ -278,15 +280,14 @@ def _native_controller_lifetime(tmp_path: Path, *, qt_first: bool) -> None:
                 if message == system.WM_CLOSE:
                     observed.append(("control", threading.get_ident() == self.owner))
                     self.ui.close_desktop()
-                    self.ui.close_agent()
-                    self.ui.close_work()
+                    self.ui.close_windows()
                     self.ui.close()
                     self.window.destroy()
                     system.post_quit()
                     return 0
                 return None
 
-        runtime = app.Runtime(title, "Local" + chr(92) + title, OffscreenUi, Controller)
+        runtime = app.Runtime(title, "Local" + chr(92) + title, offscreen_ui, Controller)
         assert app.run(Missing(()), runtime=runtime) is app.Exit.QUIT
         assert observed == [("qt", True), ("control", True)], observed
         assert QApplication.instance() is None

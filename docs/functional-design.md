@@ -28,20 +28,22 @@ The main places to read are:
 | `assistant/ui_components/` | Shared bubble outline, palette/ink, text presentation, headings and controls | Native component owners paint Qt surfaces and adapt Windows window behavior; feature controllers consume components directly |
 | `assistant/work_canvas_commands.py`, `work_canvas_tools.py`, `work_canvas.py` | Atomic structural edits, paged reads, editable fingerprints, bounded evidence-driven scheduling and durable run retention | `Ui` marshals bridge commands to Qt and refreshes the native panel after `WorkCanvas` confirms persistence; `App` constructs the one `WorkCanvas`, submits identified research or exact saved user instructions and recovers uncommitted bindings |
 | `assistant/work_bridge_contracts.py`, `work_bridge.py`, `browser_documents.py` | Validated desktop bridge variants, their routing to each owner and document stream contracts | The contracts join feed, catalog and canvas wire variants without a feed-to-canvas import cycle; `WorkOwners` routes each variant to its owner's typed handler; `local_bridge.py` owns every loopback listener, bearer check, request bound and endpoint file; `Browser` owns authenticated CDP streams and exclusive bounded file collection |
-| `assistant/work_window.py`, `work_canvas_window.py`, `ui_components/bubble.py`, `ui_components/text.py` | Current observations and bounded preview presentation | Desktop startup prepares the hidden native canvas; Qt retains group/header identities, materializes visible nested bubbles and shapes previews during viewport painting |
+| `assistant/work_snapshot.py`, `work_canvas_window.py`, `ui_components/bubble.py`, `ui_components/text.py` | Current observations and bounded preview presentation | Desktop startup prepares the hidden native canvas; Qt retains group/header identities, materializes visible nested bubbles and shapes previews during viewport painting |
 | `assistant/llm.py` | System, user, assistant, and tool-result message variants; request serialization | HTTP client functions |
 | `automation/presentation.py` | Progress, result and live-row values a work run publishes | `automation/app.py` publishes them; `ipc.py` carries them; the timeline renders them |
 | `assistant/agent_session.py` | Typed events, messages, agent request rows over the durable questions and approvals, session transitions, and presentation | `agent_window.py`, `agent_toasts.py`, `toast_card.py` |
 | `assistant/agent.py`, `agent_toolsets.py`, `task_profiles.py`, `agent_execution.py` | Tool dispatch, approval and observation recording for one durable work claim; each task profile's toolset and execution (conversation, admitted desktop context, recovery and completion check) | `AgentExecution` selects the profile run and owns per-conversation SDK history, source drafts and run cleanup; `WorkExecution` owns the claim's effects |
 | `assistant/agent_tools.py`, `desktop_tools.py`, `browser_tools.py`, `business_tools.py`, `self_change_tools.py`, `meeting_tools.py`, `feed_agent_tools.py`, `work_canvas_tools.py`, `personal_work_tools.py`, `task_tools.py` | Tool families: each `Tool` declares its schema, handler, read/change classification with resources, reconciliation proof, readback evidence and visible display; handlers describe each exact `Operation` to approval and effect | The agent composes the families over its `Session`; `Screen` and `SelfChange` own the latest screenshot and the source draft's check/install state |
-| `automation/task.py`, `store.py` | Durable task, request profile, agent request, reply, action, and run variants; controls and stale-run decisions | `TaskStore` owns SQLite transactions and validates stored records |
+| `automation/task.py`, `store.py` | Durable task, request profile, agent request, reply, action, and run variants, each tagged by its `kind` or enum value; controls and stale-run decisions | `TaskStore` owns the task journal's queries and stores those records through strict Pydantic adapters; schema version 5 converts version 4 journals in place |
+| `automation/journal.py` | Schema versions: creation, ordered migration steps and refusal of unknown or unversioned journals | Every SQLite owner (task, routine, context, personal-work, canvas, meeting and edit journals) opens its file through one connection interface: write transactions, single read snapshots, rollback on any exception, one busy wait and durability policy, and reads that report an absent journal without creating it |
 | `automation/controller.py`, `execution.py`, `actions.py` | Work outcomes, recovery context, exact operations, observation evidence, reconciliation proof and verification decisions | `WorkController` owns execution lifetime; `Actions` owns cancellable effect coordination |
 | `automation/routines.py`, `context.py` | Trigger occurrences, accepted handoffs, context relevance and freshness | The routine/context stores own persistence; `meeting_events.py` owns transcript delivery and startup scanning |
-| `assistant/work_window.py`, `work_agent.py`, `work_service.py` | Work commands, immutable projections, conversation/task selection and meeting RPC acceptance | `WorkAgent` owns frontend observation and asynchronous UI delivery; `WorkService` composes journal/transport calls and RPC replies; `WorkWindow` schedules its native view |
+| `assistant/work_commands.py`, `work_snapshot.py`, `work_text.py`, `work_agent.py`, `work_service.py` | Work commands, the published work snapshot, readable task labels, conversation/task selection and meeting RPC acceptance | `WorkAgent` owns frontend observation and asynchronous UI delivery; `WorkService` composes journal/transport calls and RPC replies; `WorkWindow` schedules its native view |
+| `assistant/view_publication.py` | One view per owner: coalesced renders, lazy creation with retry, a single confirmed close | `AgentWindow` and `WorkWindow` keep their immutable state and post through it; `Ui.close_windows` closes both and waits for each confirmation |
 | `automation/ipc.py`, `bridge.py` | Validated process messages and bounded event projections | Bridge client/server own authenticated byte transport; `automation/app.py` composes the native worker |
 | `assistant/action_text.py` | Readable action targets and results, formatted before preview limits | `agent.py` publishes previews; session presentation handles raw payloads too |
 | `assistant/notifications.py`, `notification_text.py`, `notification_reading.py`, `toast_style.py` | Grouped turns, attached results, optional steps, reading states, lifetimes, tints, and motion sampling | `agent_toasts.py`, `toast_card.py`, `qt_text.py`, `qt_ui.py`, `winapi/composition.py`, `winapi/appearance.py`, `winapi/notification_input.py` |
-| `assistant/browser_values.py`, `browser_session.py`, `browser.py` | Browser ownership, immutable page/tab/group observations and command variants, group selection, typed paginated projections | `Browser`, `NativeSessions`, `Cdp`, `browser_tabs.TabStrip` and a cancellable connection wait |
+| `assistant/browser_requests.py`, `browser_values.py`, `browser_session.py`, `browser.py` | Browser requests (one typed variant per operation, validated once at the browser tool seam), immutable page/tab/group observations, validated DevTools and tab-API replies, group selection, typed paginated projections | `Browser`, `NativeSessions`, `Cdp`, `browser_tabs.TabStrip`, the `browser_host` exchange of typed flat requests, and a cancellable connection wait |
 | `assistant/recording_state.py` | Audio batches, stored observations, completion rules, retry policy, stale-update rejection, and recording controls | `meetings.py` and `meeting_store.py` |
 | `assistant/meeting_followup.py`, `meeting_preparation.py` | Frozen transcript bundles, exact citations, sourced actions and drafts, preparation identity | `meeting_followup_store.py` owns verified publications and revision-checked edits; `Preparations` owns content-addressed bundle files |
 | `assistant/meeting_workflow.py` | Catalog, work and package observations; identified edit commands and receipts | `MeetingWorkflow` owns background I/O; `meeting_panel.py` owns Qt selection, local edits and explicit handoff |
@@ -49,14 +51,16 @@ The main places to read are:
 | `assistant/web_apps.py`, `business_tools.py` | Web-app operations, each declared once with its typed query, page script, application and typed result; exact task/chat/mail conversation identities and expected-value checks. The business family is the only model-tool adapter: private schemas, JSON text and typed readback confirmation | `WebApps` runs an operation through the browser's wake/evaluate lifecycle and the applications' own controls; `Browser.web_app` serializes it with other page work; native browser fixtures decode every script's real output with its result type |
 | `runtime.py` | Dependency ABI validation | `activate` |
 | `assistant/control_policy.py` | Immutable native message actions and tray observations, menu projection, press-only control routing, startup ordering and queued file handoff | `AssistantApp` owns native interpretation, layout transport, UI feedback and worker lifetime |
-| `assistant/activity.py` | Bounded window history reduced from a window or desktop-state observation | `ActivityTracker` and the Windows foreground reader |
+| `automation/activity.py` | Bounded window history reduced from a window or desktop-state observation, shared by both processes | `ActivityTracker` in `assistant/activity.py` and the work process's `DesktopContext` own sampling |
 | `assistant/communications.py` | Source identities, grouped pending chat tickets, captured handling revisions and reply evidence | `communications_service.py` owns encrypted settings/drafts/handling, collection and effects; `communications_browser.py` owns exact-chat and Activity DOM boundaries and reads chats with the Teams web-app operation's result type; `Ui` supplies source observations as agent context; canvas activity owns user attention |
-| `assistant/feed_sources.py` | Feed source variants, each owning its key, origin, attention (the one pending rule) and triage evidence; pending and history listings | Every consumer reads the same list: `feed_items.py` renders rows, `feed_triage_service.py` collects evidence, `inbox.py` filters and freezes reviews |
-| `assistant/inbox.py`, `feed_items.py`, `notifications.py`, `console_requests.py` | Optional history selection, shared agent/proposal bubble projection, bounded console requests and exact answer transitions | `agent_toasts.py` and `toast_card.py` own the read-only floating feed, history and action buttons; `console_inbox.py` owns the hook contract and pending lifetime, served by a `LocalBridge`; `scripts/inbox_hook.py` returns supported CLI hook responses |
-| `assistant/feed_triage.py` | Revision-bound grouped assessments with their captured origins, quiet/action/completed/dismissed dispositions, explicit feedback and stale-result rejection | `feed_triage_service.py` owns coalesced background model calls, DPAPI plan/preferences and the feed commands the work bridge routes to it, with an explicit cancellable-wait dependency; `feed_agent_tools.py` lets the main voice agent inspect and maintain the same plan; `Ui` retains immutable boards as agent context; ordinary arrivals do not become floating cards |
-| `assistant/feed_origin.py`, `feed_items.py` | Source application identity, assessment provenance, formatted body spans and compact reaction counts | `feed_icons.py` owns native vector marks; `toast_card.py` anchors badges over the upper-left glass edge; the triage board keeps reaction counts quiet |
-| `assistant/notification_sources.py` | Windows notice updates, their captured handling marks, the notification filter and the joined pending feed | `NotificationSources` owns the encrypted filter/handling store and native dismissal on Qt's thread, apart from the Teams worker; `feed_items.act` addresses it with the revisions a card rendered |
-| `assistant/system_notices.py` | Native notification identities, quiet history baselines, banner coverage and validated timestamps | `winapi/notifications.py` owns observations and native dismissal; `notification_banners.py` owns the recoverable banner-setting lease; `desktop_bar.py` forwards observations to `Ui`, whose `notification_sources.py` owner keeps them |
+| `assistant/feed_sources.py` | Feed source variants, each owning its key, origin, attention (the one pending rule) and triage evidence; the pending listing | Every consumer reads the same list: `feed_triage_service.py` collects evidence and `feed_agent_tools.py` shows the voice agent the feed |
+| `assistant/notifications.py` | The bounded bubble projection of canvas redirects, approvals and agent turns | `agent_toasts.py` and `toast_card.py` own the floating bubbles, explicit history and approval buttons |
+| `assistant/feed_triage.py` | Revision-bound grouped assessments with their captured origins, quiet/action/completed/dismissed dispositions, explicit feedback and stale-result rejection | `feed_triage_service.py` owns coalesced background model calls, DPAPI plan/preferences and the feed commands the work bridge routes to it, with an explicit cancellable-wait dependency; `feed_agent_tools.py` lets the main voice agent inspect and maintain the same plan; ordinary arrivals do not become floating cards |
+| `assistant/feed_origin.py` | Source application identity and assessment provenance | `feed_icons.py` owns native vector marks; canvas bubbles and the Workspace badge on floating bubbles paint them; the triage board keeps reaction counts quiet |
+| `assistant/notification_sources.py` | Windows notice updates, their captured handling marks, the notification filter and the joined pending feed | `NotificationSources` owns the encrypted filter/handling store and native dismissal on Qt's thread, apart from the Teams worker; the toolbar's notice handling addresses it with the notice it showed |
+| `assistant/feed_observation.py` | Teams work and Windows notices joined from each observer's latest report | `Ui` marshals each report onto Qt's thread and hands the joined feed to triage; routine arrivals never reach the floating bubbles |
+| `assistant/card_actions.py` | Card action variants (open the canvas, decide an approval) and their one `workspace://` encoding; a link that is not exactly one variant parses to nothing | `notification_text.py` and `agent_session.notice_text` build variants; `rich_text.py` keeps only canvas redirects clickable in Markdown; `agent_toasts.py` matches the parsed variant |
+| `winapi/system_notices.py` | Native notification identities, quiet history baselines, banner coverage and validated timestamps | `winapi/notifications.py` owns observations and native dismissal; `notification_banners.py` owns the recoverable banner-setting lease; `desktop_bar.py` forwards observations to `Ui`, whose `notification_sources.py` owner keeps them |
 | `assistant/monitor_layout.py`, `tiling.py`, `tiling_commands.py` | Monitor observations, window distribution and native window command mapping | `MonitorLayout` owns automatic redistribution; `GlazeWM` owns manager startup and ordinary window tiling |
 | `assistant/shell_state.py` | Windows-key tap decisions | `shell_controls.py` owns taskbar recovery and a dedicated Windows-key message thread; keyboard callbacks post toggles and pass other input through |
 | `assistant/geometry.py`, `panel.py`, `rich_text.py` | Geometry, preferences, and Markdown values | Qt views and preference files |
@@ -68,51 +72,21 @@ public snapshots and handoff receipts from stored retry prompts;
 `communications_state.py` owns saved communication contracts and `state_store.py`
 serializes their immutable values at encrypted IO.
 
-The curated side feed exposes at most three source work items, chosen by
-importance and laid out with the highest priority at the top. Equal priorities
-favor waiting work over newer arrivals. The complete plan stays in the triage
-board for the voice agent; dismissing a visible proposal advances the next item
-into view. Dismissal saves the exact observed revisions without completing work
-or replying to its source. Polls, restart and preference edits preserve it; new
-source evidence gets reviewed again. Storage failure leaves the proposal visible.
-Dismissal sits fully inside the bubble at a fixed upper-right position, so
-successive cards keep the same click target. Clicking a proposal bubble expands
-or collapses its details. Source badges overlap
-the upper-left edge of the bubble. Text and action rows use the full
-inner width with symmetric padding. Collapsed curated cards reserve space for
-their header and actions; crowded feeds show fewer cards instead of clipping controls. During card
-resizing, text geometry uses the current visible width and its document wraps
-to the actual Qt viewport, including the first frame after content changes.
-The thin painted scroll indicator stays outside that viewport; the hidden
-native scrollbar reserves no text gutter. Floating text explicitly clears the
-application theme's padding and corner radius, so its viewport matches the
-measured text area. Regression coverage applies the production theme.
-Curated proposals place their meaningful title in the compact header beside
-the app icon and right-aligned controls, with no duplicated title in the body.
-Feed cards use a consistent width and a 13-point title. Compact titles
-end in an ellipsis; expanding a card wraps the complete title above its details.
-The full title remains available to accessibility and in a tooltip.
-The title font explicitly overrides the global theme and matches measurement.
-Clicking the bubble reveals details without a separate expand button; suggested
-actions and the corner-aligned dismiss button keep their independent behavior.
-Collapsed cards show the header, a bounded recommendation preview and one to
-three concrete agent solutions, with the recommendation first. Native buttons and voice selection use
-the same exact proposal revision and choice identity. Selecting a solution queues
-an identified investigation or preparation task; repeated selection reuses that
-identity. Source and model text cannot extend the fixed preparation scope into
-sending, console approval or external changes. Queue acknowledgment is distinct
-from completion, and a failed submission leaves choices available. Old proposals
-without choices expose their saved agent recommendation as a preparation action,
-and are reconsidered when their matching source evidence is present. This
-presentation fallback does not fabricate live source evidence. An explicit disclosure
-expands the summary, suggested action and captured source content whose revision
-matches the proposal. Missing original evidence is labeled as unavailable.
-Each pending chat message is its own evidence candidate. The model may group
-messages only when they concern the same request; expansion never dumps an entire
-chat merely because the request came from it. Request and suggested approach have
-separate formatting. Meaningful rejection records the user's reason against the
-captured proposal revision, distinct from dismissal and without sending a reply.
-The agent considers refusals, corrections and no action as well as agreement.
+Routine arrivals stay quiet: the floating bubbles only direct the person to the
+canvas, report important changes and carry guarded approvals. The triage plan
+belongs to the voice agent, which reads, dismisses, chooses solutions and
+answers through `feed_agent_tools.py`. Dismissal saves the exact observed
+revisions without completing work or replying to its source. Polls, restart and
+preference edits preserve it; new source evidence gets reviewed again. Each
+solution keeps the exact proposal revision and choice identity, and choosing it
+queues an identified investigation or preparation task; repeated selection reuses
+that identity. Source and model text cannot extend the fixed preparation scope
+into sending, approval or external changes. Queue acknowledgment is
+distinct from completion. Each pending chat message is its own evidence
+candidate. The model may group messages only when they concern the same request.
+Meaningful rejection records the user's reason against the captured proposal
+revision, distinct from dismissal and without sending a reply. The agent
+considers refusals, corrections and no action as well as agreement.
 
 The feed is a work queue with accumulated context. `feed_work.py` reads relevant
 fresh project notes and explicit preferences from the existing context store,
@@ -123,7 +97,7 @@ context to the configured agent model. `feed_research.py` uses the existing Agen
 SDK for a bounded background investigation before options appear. Its tools can
 retrieve topic-specific saved context, captured conversation history including own
 and handled replies, relevant local text files/directories, and public web research.
-It has no general agent, desktop control, write, send or console-answer tools.
+It has no general agent, desktop control, write or send tools.
 Hosted web research runs only when requested; a provider failure returns an explicit
 access limitation to the investigation rather than discarding local work. Binary
 and Office documents are explicitly unavailable through the text-file adapter.
@@ -135,8 +109,8 @@ Task state, saved context or captured conversation changes invalidate open
 recommendations; handled work stays handled. A changed review recipe refreshes
 cached recommendations when their sources are available.
 
-`feed_history.py` owns immutable scoped decisions and exact handoffs. A selected
-pill retains its preparation scope. `work_feed_reply` saves the user's actual
+`feed_history.py` owns immutable scoped decisions and exact handoffs. A chosen
+solution retains its preparation scope. `work_feed_reply` saves the user's actual
 instruction before queueing a task that can act within that instruction's scope.
 An instruction to draft still authorizes a draft. Each reply identity belongs to
 one exact item, captured revision and text; retries reuse its original prompt.
@@ -150,9 +124,8 @@ Pydantic `TypeAdapter`; application decisions operate on typed values. Every fee
 operation is one `FeedCommand` variant, validated by the agent tool adapter and
 again at the bridge. `feed_triage.edited` is the single pure transition for explicit
 board edits: it owns dispositions, rule preservation, reconciliation and the
-recorded decision, so `Triage` only persists and publishes the result.
+recorded decision, so `Triage` only persists the result.
 History stays in the same floating feed; the separate legacy panel is removed.
-Source work never scrolls automatically; expanded overflow uses manual scrolling.
 Typed input is available on explicit request and closes after submitting to Workspace.
 The reply composer begins with one row and grows to four rows before scrolling.
 Its submit action sits inside the same rounded surface, aligned with the last row.

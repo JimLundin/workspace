@@ -9,7 +9,7 @@ lazy from PySide6.QtCore import QCoreApplication, QEvent
 lazy from PySide6.QtWidgets import QApplication
 
 from assistant.qt_runtime import prepare
-lazy from assistant.agent_window import log_view
+lazy from assistant.view_publication import log_view
 lazy from winapi import screen
 lazy from winapi.composition import DesktopComposition
 lazy from winapi.shapes import Rect

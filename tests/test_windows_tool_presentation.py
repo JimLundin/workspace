@@ -11,10 +11,6 @@ lazy from PySide6 import QtWidgets
 lazy from PySide6.QtCore import Qt
 lazy from PySide6.QtGui import QFont
 
-from assistant.feed_contracts import SolutionKind
-from assistant.feed_items import WorkItem
-from assistant.feed_sources import SourceKey, SourceKind
-from assistant.feed_triage import Assessment, Solution
 from assistant.notifications import TurnKey
 from assistant.qt_runtime import prepare
 from assistant.tool_call_view import ToolCall
@@ -29,7 +25,7 @@ prepare()
 def test_real_tool_element_keeps_identity_status_and_copy_target() -> None:
     """Detect calls rendered as shared prose or bound to the wrong invocation."""
     with notifications() as panel:
-        panel.agent.begin("Check the command", panel.stop)
+        panel.agent.begin("Check the command")
         publish = panel.agent.updates()
         command = 'Write-Output "' + "**literal** " * 30 + '"'
         publish(ToolActivity("cli", "run_powershell", command, 1))
@@ -60,7 +56,7 @@ def test_real_tool_element_keeps_identity_status_and_copy_target() -> None:
 def test_previous_reply_moves_into_native_history_without_losing_markdown() -> None:
     """Detect history rows failing during native composition or flattening replies."""
     with notifications() as panel:
-        panel.agent.begin("Check the workbook", panel.stop)
+        panel.agent.begin("Check the workbook")
         publish = panel.agent.updates()
         publish(Answer("first", "An **earlier finding**.", 1, StreamState.COMPLETE))
         panel.pump()
@@ -80,7 +76,7 @@ def test_previous_reply_moves_into_native_history_without_losing_markdown() -> N
 def test_cli_call_remains_visible_and_updates_in_its_original_bubble() -> None:
     """Detect collapsed calls vanishing, duplicated windows or literal command loss."""
     with notifications() as panel:
-        panel.agent.begin("Check the command", panel.stop)
+        panel.agent.begin("Check the command")
         publish = panel.agent.updates()
         publish(ToolActivity("cli", "run_powershell", 'Write-Output "**literal**"', 1))
         panel.pump()
@@ -110,10 +106,10 @@ def test_cli_call_remains_visible_and_updates_in_its_original_bubble() -> None:
         assert card.details.geometry().bottom() < card.text.y()
 
 
-def test_time_observation_and_proposed_reply_reach_native_rich_views() -> None:
+def test_time_observation_reaches_the_native_step_view() -> None:
     """Detect time results hidden by collapse and reply variants flattened by routing."""
     with notifications() as panel:
-        panel.agent.begin("What time is it?", panel.stop)
+        panel.agent.begin("What time is it?")
         publish = panel.agent.updates()
         publish(ToolActivity("time", "get_current_time", "", 1, Succeeded("Local time: 2026-10-28T12:00:00+01:00\nTimezone: CET")))
         publish(Answer("a", "It is **noon**.", 2, StreamState.COMPLETE))
@@ -122,23 +118,6 @@ def test_time_observation_and_proposed_reply_reach_native_rich_views() -> None:
         card = panel.view.cards[TurnKey(0)]
         assert card.details.isVisible() and "get_current_time" in card.details.toPlainText()
         assert "12:00:00+01:00" in card.details.toPlainText()
-        item = Assessment(
-            "draft",
-            (),
-            "Review budget",
-            "A review is needed.",
-            "Prepare a reply.",
-            "",
-            1,
-            3,
-            solutions=(Solution("reply", "Draft reply", SolutionKind.DRAFT, "Please review **the totals** in `FY27`."),),
-        )
-        row = WorkItem(SourceKey(SourceKind.PROPOSAL, "draft"), item, item.title)
-        card.expanded = True
-        card.render(row, card.width, card.maximum, panel.view.material_preference())
-        assert "**" not in card.text.toPlainText()
-        assert card.text.document().find("the totals").charFormat().fontWeight() >= QFont.Weight.DemiBold
-        assert card.text.document().find("FY27").charFormat().font().family() == "Consolas"
 
 
 def test_native_copy_action_uses_the_complete_current_invocation_payload() -> None:

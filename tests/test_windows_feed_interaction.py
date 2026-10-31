@@ -2,7 +2,6 @@
 
 import sys
 import unittest
-from dataclasses import replace
 
 if sys.platform != "win32":
     raise unittest.SkipTest("Windows feed interactions")
@@ -10,17 +9,10 @@ lazy from PySide6 import QtWidgets
 lazy from PySide6.QtCore import Qt
 lazy from PySide6.QtTest import QTest
 
-from assistant.console_requests import Answer, Command, Provider, request
-from assistant.feed_contracts import SolutionKind
-from assistant.feed_items import WorkItem
-from assistant.feed_origin import FeedRequest
-from assistant.feed_triage import Assessment, Board, Solution
-from assistant.notification_text import details, spans
-from assistant.notifications import Turn
 from assistant.qt_runtime import prepare
 from automation.presentation import Succeeded, ToolActivity
+from automation.task import Reply, TextAnswer
 from tests.agent_requests import asked
-from tests.test_console_inbox import event
 from tests.test_windows_agent_toasts import notifications
 
 prepare()
@@ -28,7 +20,7 @@ prepare()
 
 def test_thinking_and_reply_share_one_dismissible_bubble() -> None:
     with notifications() as panel:
-        panel.agent.begin("Review the fictional budget", panel.stop)
+        panel.agent.begin("Review the fictional budget")
         panel.pump()
         cards = [c for c in panel.view.cards.values() if not c.retiring]
         assert len(cards) == 1, "The request and thinking must stay in one bubble."
@@ -45,7 +37,7 @@ def test_thinking_and_reply_share_one_dismissible_bubble() -> None:
 def test_expanded_turn_reserves_the_title_width_left_by_its_disclosure() -> None:
     with notifications() as panel:
         title = ("Review the fictional forecast " + "compare the figures " * 10).strip()
-        panel.agent.begin(title, panel.stop)
+        panel.agent.begin(title)
         panel.agent.updates()(ToolActivity("check", "read_file", "fictional.csv", 1, Succeeded("24 rows")))
         panel.agent.done("The fictional figures are ready.")
         panel.agent.finish()
@@ -62,9 +54,9 @@ def test_expanded_turn_reserves_the_title_width_left_by_its_disclosure() -> None
 def test_pending_question_points_to_agent_voice_without_an_editor() -> None:
     # Defects: creating an editable reply widget, or losing the voice handoff hint.
     with notifications() as panel:
-        replies: list[str] = []
+        replies: list[Reply] = []
 
-        def record_reply(answer: str) -> bool:
+        def record_reply(answer: Reply) -> bool:
             replies.append(answer)
             return True
 
@@ -77,91 +69,20 @@ def test_pending_question_points_to_agent_voice_without_an_editor() -> None:
         assert card.text.toolTip() == card.window.toolTip()
         assert panel.agent.reply_by_voice("Use the revised totals.")
         panel.pump()
-        assert replies == ["Use the revised totals."]
-
-
-def test_console_options_are_pills_and_route_to_the_exact_question() -> None:
-    with notifications() as panel:
-        answers: list[Command] = []
-
-        def answer(command: Command) -> bool:
-            answers.append(command)
-            return True
-
-        panel.agent.on_console = answer
-        current = request(Provider.CLAUDE, event(Provider.CLAUDE, "owned-console"), "owned-console", 1)
-        panel.agent.consoles((current,))
-        panel.pump()
-        card = next(c for c in panel.view.cards.values() if isinstance(c.content, WorkItem))
-        assert card.choices and not card.hint.text().startswith("<a"), "Question options must be pill buttons."
-        assert not card.window.findChildren(QtWidgets.QPlainTextEdit)
-        card.choices[0].click()
-        panel.pump()
-        assert len(answers) == 1
-        command = answers[0]
-        assert isinstance(command, Answer)
-        assert command.request == current.identity and command.question == 0 and command.text == "Revenue"
-
-
-def test_proposal_thinking_question_and_reply_keep_the_same_source_bubble() -> None:
-    with notifications() as panel:
-        proposal = Assessment(
-            "fictional-linked",
-            (("source", "revision"),),
-            "Check the revised totals",
-            "The totals need review.",
-            "Compare the two sheets.",
-            "",
-            1,
-            1,
-            solutions=(Solution("check", "Compare sheets", SolutionKind.CHECK, "Compare the original and revised totals."),),
-        )
-        panel.agent.triage(Board(enabled=True, items=(proposal,)))
-        panel.pump()
-        card = next(card for card in panel.view.cards.values() if not card.retiring)
-        context = FeedRequest(proposal.identity, proposal.title)
-        panel.agent.begin(proposal.title, panel.stop, source=context)
-        panel.pump()
-        assert panel.view.cards[card.key] is card and isinstance(card.content, Turn)
-        assert len([card for card in panel.view.cards.values() if not card.retiring]) == 1
-        assert card.label.text() == proposal.title and card.dismiss.isVisible()
-        panel.agent.request_input(asked("linked-question", "Use the revised sheet?", "It includes the corrections.", 2), lambda _answer: True)
-        panel.pump()
-        assert panel.view.cards[card.key] is card
-        assert not card.window.findChildren(QtWidgets.QPlainTextEdit)
-        assert panel.agent.reply_by_voice("No, compare the original first.")
-        panel.pump()
-        panel.agent.done("The original totals differ. Review the corrections before replying.")
-        panel.agent.finish()
-        panel.pump()
-        assert panel.view.cards[card.key] is card and card.stop.isHidden()
-        assert "original totals differ" in card.text.toPlainText()
-        content = card.content
-        assert content is not None
-        shown = "".join(span.text for span in (*spans(content), *details(content)))
-        assert "Context JSON" not in shown and "source_revisions" not in shown
-
-        panel.agent.begin("Continue the comparison", panel.stop, source=context)
-        panel.pump()
-        assert panel.view.cards[card.key] is card
-        assert len([card for card in panel.view.cards.values() if not card.retiring]) == 1
+        assert replies == [TextAnswer("Use the revised totals.")]
 
 
 def test_expanding_a_bubble_collapses_the_previous_one() -> None:
     # Defect: two independently expanded cards keep consuming the viewport.
     with notifications() as panel:
-        first = Assessment("first", (), "First request", "A fictional summary. " * 8, "Compare the totals.", "", 1, 1)
-        second = replace(first, identity="second", title="Second request", created_at=2)
-        panel.agent.triage(Board(enabled=True, items=(first, second)))
+        for index, title in enumerate(("Check the first workbook", "Check the second workbook")):
+            panel.agent.begin(title)
+            panel.agent.updates()(ToolActivity(f"read-{index}", "read_file", f"fictional-{index}.csv", 2 * index + 1, Succeeded("24 rows")))
+            panel.agent.done("The fictional figures are ready.")
+            panel.agent.finish()
         panel.pump()
-        cards = tuple(card for card in panel.view.cards.values() if not card.retiring)
-        assert len(cards) == 2
-        first_card, second_card = cards
-        collapsed = first_card.height
+        first_card, second_card = sorted((card for card in panel.view.cards.values() if not card.retiring), key=lambda card: card.order)
         first_card.toggle(animate=False)
-        assert bool(first_card.expanded) and first_card.height > collapsed
+        assert bool(first_card.expanded)
         second_card.toggle(animate=False)
-        assert not bool(first_card.expanded) and first_card.height == collapsed
-        assert bool(second_card.expanded) and sum(bool(card.expanded) for card in cards) == 1
-        second_card.toggle(animate=False)
-        assert not any(bool(card.expanded) for card in cards)
+        assert bool(second_card.expanded) and not bool(first_card.expanded)

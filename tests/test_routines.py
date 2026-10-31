@@ -9,6 +9,7 @@ from unittest import TestCase
 
 from assistant.meeting_store import MeetingStore
 from automation.routines import (
+    MAX_PENDING,
     Accepted,
     EventTrigger,
     Every,
@@ -324,6 +325,22 @@ def test_out_of_order_file_observations_do_not_turn_old_state_into_new_work(tmp_
     assert len(routines.pending(6)) == 1
 
 
+def test_full_outbox_refuses_new_occurrences_and_keeps_pending_work(tmp_path: Path) -> None:
+    # Defect: the outbox grows past its pending capacity, or the refusal discards work already pending.
+    path = tmp_path / "work.sqlite3"
+    routines = RoutineStore(path)
+    watched = str(tmp_path / "report.txt")
+    routines.create("watch", "Watch", "Read the changed file.", FileChanged(watched), at=1)
+    routines.enable("watch", at=2)
+    routines.observe_file(FileObservation(watched, "initial", 3))
+    for change in range(MAX_PENDING):
+        routines.observe_file(FileObservation(watched, f"change-{change}", 4 + change))
+    with TestCase().assertRaisesRegex(ValueError, "outbox is full"):
+        routines.observe_file(FileObservation(watched, "one-too-many", 4 + MAX_PENDING))
+    with closing(sqlite3.connect(path)) as database:
+        assert cast(tuple[object, ...], database.execute("SELECT COUNT(*) FROM routine_firings WHERE state='pending'").fetchone()) == (MAX_PENDING,)
+
+
 def test_corrupt_saved_trigger_is_rejected_before_work_is_submitted(tmp_path: Path) -> None:
     path = tmp_path / "work.sqlite3"
     routines = RoutineStore(path)
@@ -335,6 +352,17 @@ def test_corrupt_saved_trigger_is_rejected_before_work_is_submitted(tmp_path: Pa
     with TestCase().assertRaises(ValueError):
         RoutineStore(path).dispatch(tasks, now=20)
     assert not tasks.list_tasks()
+
+
+def test_transcript_triggers_saved_before_typed_storage_still_load(tmp_path: Path) -> None:
+    # Defect: a meeting-notes routine saved as the earlier {"kind":"transcript"} object
+    # no longer loads after the upgrade, so every routine listing fails.
+    path = tmp_path / "work.sqlite3"
+    RoutineStore(path).create("meeting", "Actions", "Extract meeting actions.", EventTrigger.TRANSCRIPT_COMPLETED, at=1)
+    with closing(sqlite3.connect(path)) as external, external:
+        external.execute("UPDATE routines SET trigger=? WHERE id='meeting'", ('{"kind":"transcript"}',))
+    reopened = RoutineStore(path).get("meeting")
+    assert reopened is not None and reopened.trigger is EventTrigger.TRANSCRIPT_COMPLETED
 
 
 def test_routine_controls_and_event_history_survive_independent_store_instances(tmp_path: Path) -> None:

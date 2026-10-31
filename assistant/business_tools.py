@@ -13,7 +13,7 @@ from pydantic import TypeAdapter
 
 from assistant.agent_tools import DECLINED, Args, Display, Output, Session, Tool
 from assistant.browser_values import BrowserError
-from assistant.llm import Json, ToolSpec, tool_spec
+from assistant.llm import ToolSpec, tool_spec
 from assistant.web_apps import (
     KANBAN_BOARD,
     KANBAN_COMMENT,
@@ -55,6 +55,7 @@ from assistant.web_apps import (
     decoded,
 )
 from automation.actions import Change, Observation, target
+from automation.json_value import Json
 from automation.task import ActionNotApplied, ActionUncertain, ActionVerified
 
 _SCHEMA = TypeAdapter(dict[str, Json])

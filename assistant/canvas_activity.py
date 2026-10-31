@@ -12,9 +12,7 @@ from pydantic import Field
 
 import assistant.agent_session
 import automation.task
-from assistant.communications import Feed
 from assistant.feed_origin import App, FeedRequest, Origin
-from assistant.feed_triage import Board
 from automation.personal_work import Catalog, Identity, Title
 
 type Body = Annotated[str, Field(max_length=32000)]
@@ -50,16 +48,16 @@ class Attention(Enum):
     CLOSED = "closed"
 
 
-type CanvasReply = Attention | assistant.agent_session.Answered
+type CanvasReply = Attention | automation.task.TextAnswer
 
 
-def canvas_reply(reply: assistant.agent_session.Reply) -> CanvasReply:
+def canvas_reply(reply: assistant.agent_session.RequestReply) -> CanvasReply:
     match reply:
         case assistant.agent_session.Pending():
             return Attention.WAITING
         case assistant.agent_session.Cancelled() | automation.task.ApprovalDecision():
             return Attention.CLOSED
-        case assistant.agent_session.Answered():
+        case automation.task.TextAnswer():
             return reply
         case _:
             assert_never(reply)
@@ -255,7 +253,7 @@ def merge_activity(previous: CanvasActivity, current: CanvasActivity) -> CanvasA
             request = old.request if isinstance(old.request, TaskRequest) else new.request
             reply: CanvasReply
             match old.request, new.request, old.reply, new.reply:
-                case _, _, assistant.agent_session.Answered(), _:
+                case _, _, automation.task.TextAnswer(), _:
                     reply = old.reply
                 case TaskRequest(), SessionRequest(), _, Attention.CLOSED:
                     reply = old.reply
@@ -296,9 +294,4 @@ def redirect_session(session: assistant.agent_session.Snapshot) -> assistant.age
                 messages = (*messages, message)
             case _:
                 pass
-    return replace(session, phase="idle", messages=messages, communications=Feed(), triage=Board(), console_requests=())
-
-
-def history_session(session: assistant.agent_session.Snapshot) -> assistant.agent_session.Snapshot:
-    """Explicit history retains agent work without turning app context into cards."""
-    return replace(session, communications=Feed(), triage=Board(), console_requests=())
+    return replace(session, phase="idle", messages=messages)

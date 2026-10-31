@@ -17,7 +17,7 @@ from collections.abc import Callable, Generator
 from contextlib import contextmanager
 from pathlib import Path
 
-from assistant.llm import Json
+from automation.json_value import Json
 from tests.fake_endpoint import FakeEndpoint, Reply, fake_endpoint, sse
 from tests.test_agent import calls, says
 

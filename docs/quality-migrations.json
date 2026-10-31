@@ -40,15 +40,6 @@
     {
       "key": {
         "rule": "PLR0913",
-        "path": "assistant/agent_window.py",
-        "scope": "AgentWindow.begin",
-        "signature": "c603826b6901d73b7b120508da22e30c141e47ab811886cb1c3a243ad8684f6f"
-      },
-      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
-    },
-    {
-      "key": {
-        "rule": "PLR0913",
         "path": "assistant/app.py",
         "scope": "AssistantApp.on_message",
         "signature": "6b1c2637d86e2001144e8c96c9e112fc4668ab84bac3391b3c9b685cf66bf5bd"
@@ -121,15 +112,6 @@
     {
       "key": {
         "rule": "PLR0913",
-        "path": "assistant/browser_host.py",
-        "scope": "exchange",
-        "signature": "1550813a7277828f0062c901e144a08d1d964578fc82b0b4ae8f04c161492c70"
-      },
-      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
-    },
-    {
-      "key": {
-        "rule": "PLR0913",
         "path": "assistant/browser_session.py",
         "scope": "BrowserConnection.call",
         "signature": "0b594bea2f8d5041e49e4ecf20794600c72d91f65ad1dac64129988e7950fed6"
@@ -185,15 +167,6 @@
       "key": {
         "rule": "PLR0913",
         "path": "assistant/browser_values.py",
-        "scope": "number",
-        "signature": "a556fea38aa8f051cb943e3ed064d4caabf51cc5004a7b4a722a604a5ea54829"
-      },
-      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
-    },
-    {
-      "key": {
-        "rule": "PLR0913",
-        "path": "assistant/browser_values.py",
         "scope": "strip_page",
         "signature": "21ba81d9fd18a2a76a357f932b4c07e74ad05dbc18ff5929c4d3d12a60afc830"
       },
@@ -214,15 +187,6 @@
         "path": "assistant/commands.py",
         "scope": "run",
         "signature": "82551861461aa4b68781dca36ec991c0268f18f6638c4cbefc34dfe1f4f2f619"
-      },
-      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
-    },
-    {
-      "key": {
-        "rule": "PLR0913",
-        "path": "assistant/console_requests.py",
-        "scope": "request",
-        "signature": "ce8d369dd6abf707491d891e3a29fde0e6cc14329217139eac5cbc981be1fe43"
       },
       "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
     },
@@ -383,15 +347,6 @@
       "key": {
         "rule": "PLR0913",
         "path": "assistant/meeting_followup.py",
-        "scope": "_array",
-        "signature": "fa5284b676a4cf95b019900b4d5f8eb74936d97b69be1e30478717d2c0670740"
-      },
-      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
-    },
-    {
-      "key": {
-        "rule": "PLR0913",
-        "path": "assistant/meeting_followup.py",
         "scope": "_header",
         "signature": "284b35612693d54395864370cb78c67ae88a88491fa49aa7e810fdb376f13426"
       },
@@ -421,33 +376,6 @@
         "path": "assistant/meeting_followup.py",
         "scope": "resolve_citation",
         "signature": "609aad0e1910944b3c360801812c12972f2992b079e51217eaf51c4f68493c97"
-      },
-      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
-    },
-    {
-      "key": {
-        "rule": "PLR0913",
-        "path": "assistant/meeting_followup_store.py",
-        "scope": "FollowupStore._edit",
-        "signature": "9f1e9e1b7f2179fd5c4a49d2ccdd70c465161de0a2b5b868e151b2a6ab45374b"
-      },
-      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
-    },
-    {
-      "key": {
-        "rule": "PLR0913",
-        "path": "assistant/meeting_followup_store.py",
-        "scope": "FollowupStore._edit_directory",
-        "signature": "11e4ebcc887975cd3f776d3efd7dca3fa5ba1b6d64ca06ad4b5d6b0b8a103d9d"
-      },
-      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
-    },
-    {
-      "key": {
-        "rule": "PLR0913",
-        "path": "assistant/meeting_followup_store.py",
-        "scope": "FollowupStore._save",
-        "signature": "b9d856ca31a63cd8d871300d43e2c39422942dfee66b6aabca37d19eba925c91"
       },
       "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
     },
@@ -520,15 +448,6 @@
         "path": "assistant/notification_reading.py",
         "scope": "displayed",
         "signature": "378fb959a2489930a4598e2c00542178cfc8c74c39d916fce0e13e52237efe59"
-      },
-      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
-    },
-    {
-      "key": {
-        "rule": "PLR0913",
-        "path": "assistant/notifications.py",
-        "scope": "advance",
-        "signature": "5f8258c21010969b894a161e19a568a919b1f036152116f795ccd5a805095fd9"
       },
       "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
     },
@@ -655,15 +574,6 @@
         "path": "assistant/ui.py",
         "scope": "KeymapOverlay.show",
         "signature": "da56c5db9965405acb4c6e8084feb5570fc54e7a9202ae533397f5df9ab7c14f"
-      },
-      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
-    },
-    {
-      "key": {
-        "rule": "PLR0913",
-        "path": "assistant/ui.py",
-        "scope": "Ui.agent",
-        "signature": "f54b8741ad9554fb1fdea64863d4d29ca5ece2638f3f0ddb6ea909cad07de679"
       },
       "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
     },
@@ -851,15 +761,6 @@
       "key": {
         "rule": "PLR0913",
         "path": "automation/routines.py",
-        "scope": "RoutineStore._enqueue",
-        "signature": "b33effe275de07b701c91738c74fded2b807fedb60c47b8f5c569f4bfb36922a"
-      },
-      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
-    },
-    {
-      "key": {
-        "rule": "PLR0913",
-        "path": "automation/routines.py",
         "scope": "RoutineStore.create",
         "signature": "758960d54d09a8abbedc7d9fd21445495b04adac7b13a18ef6ba15548f5df42d"
       },
@@ -907,15 +808,6 @@
         "path": "automation/store.py",
         "scope": "TaskStore.submit",
         "signature": "02f800592eb563c53cd362715bf1f28029b4fbbfe2adcb48ed1d98b06dc210ca"
-      },
-      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
-    },
-    {
-      "key": {
-        "rule": "PLR0913",
-        "path": "automation/store.py",
-        "scope": "_strings",
-        "signature": "d9c139a41925efbd5e3267d20e1f6bfff1d79936cf6088271250162b0470bf4c"
       },
       "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
     },
@@ -1044,15 +936,6 @@
         "path": "scripts/check.py",
         "scope": "select",
         "signature": "b921a60a273f4b71771d87fc4d1d9186dd7770b2a91c769a2f516293b72c4669"
-      },
-      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
-    },
-    {
-      "key": {
-        "rule": "PLR0913",
-        "path": "scripts/check_native.py",
-        "scope": "execute_native",
-        "signature": "ada2f713ec75a997eef76d0466ffc52dde4f49d785aa3a344b164f1164c6485c"
       },
       "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
     },
@@ -1452,6 +1335,26 @@
         "signature": "930051080330bcfbbc1ad2e911eed00c3cb3ef2dc6fe3fff558c0cac482aacde"
       },
       "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "assistant/browser_session.py",
+        "scope": "Cdp.connect",
+        "signature": "d6a77c2e7481f181bb652e52fdd722a3443c155042621dce6583c28e30d58d28"
+      },
+      "reason": "One connection attempt depends on its loopback address, Stop, the consent deadline and the socket source; these are independent dependencies, not one domain record.",
+      "kind": "interface"
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "assistant/machine.py",
+        "scope": "WinMachine.__init__",
+        "signature": "f32e939e1fda5ee76fd3a57fc7fca351ca3f82a237357ea69295697474e85105"
+      },
+      "reason": "The composition root receives independent effect owners (desktop, browser, meeting capture, capture observation, file opening) that the worker selects separately.",
+      "kind": "interface"
     }
   ]
 }

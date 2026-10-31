@@ -13,11 +13,13 @@ from pydantic import TypeAdapter
 
 from assistant.agent_tools import Machine
 from assistant.browser import BrowserResult
+from assistant.browser_requests import BrowserRequest
+from assistant.browser_values import PageList
 from assistant.geometry import Shot
-from assistant.llm import Json
 from assistant.machine import WinMachine
-from assistant.recording_state import AudioSource
 from assistant.web_apps import TEAMS_READ, Located, TeamsPage, TeamsQuery, WebAppOperation
+from automation.capture import AudioSource
+from automation.json_value import Json
 from winapi.shapes import Rect
 
 
@@ -69,8 +71,8 @@ class Browser:
         self.calls: list[str] = []
         self.failure = failure
 
-    def request(self, operation: str, args: dict[str, Json], cancel: threading.Event) -> BrowserResult:
-        self.calls.append(operation)
+    def request(self, request: BrowserRequest, cancel: threading.Event) -> BrowserResult:
+        self.calls.append(f"request {request}")
         return BrowserResult("Browser observation", b"browser image")
 
     def web_app[Q: Located, R](self, operation: WebAppOperation[Q, R], query: Q, cancel: threading.Event) -> R:
@@ -106,7 +108,7 @@ def test_machine_keeps_browser_cleanup_with_its_owner() -> None:
     browser = Browser(OSError("Browser disconnect failed"))
     machine = WinMachine(Desktop(), browser=browser)
     cancel = threading.Event()
-    assert machine.browse("browser_tabs", {}, cancel) == ("Browser observation", b"browser image")
+    assert machine.browse(PageList(), cancel) == ("Browser observation", b"browser image")
     assert machine.web_app(TEAMS_READ, TeamsQuery("page"), cancel) == TEAMS_PAGE
     try:
         machine.close_background()
@@ -114,7 +116,7 @@ def test_machine_keeps_browser_cleanup_with_its_owner() -> None:
         assert str(error) == "Browser disconnect failed"
     else:
         raise AssertionError("A failed disconnect must remain visible.")
-    assert browser.calls == ["browser_tabs", "web_app page", "close"]
+    assert browser.calls == ["request PageList(offset=0, limit=20)", "web_app page", "close"]
     try:
         machine.meeting("status")
     except OSError as error:

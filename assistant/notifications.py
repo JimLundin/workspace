@@ -9,18 +9,12 @@ from dataclasses import dataclass, replace
 from enum import Enum, auto
 from typing import Final, assert_never
 
-import assistant.feed_items
-from assistant.agent_session import AgentRequest, Answered, Cancelled, ChatMessage, MeetingMessage, Snapshot, message_body, pending, presentation
-from assistant.feed_items import DEFAULT_QUERY, WorkItem, action_spans, proposal_index
-from assistant.feed_sources import Attention, SourceKey
-from assistant.feed_triage import Assessment
-from assistant.inbox import Query, Source, matches, user_caption
+from assistant.agent_session import AgentRequest, Cancelled, ChatMessage, MeetingMessage, Snapshot, message_body, pending, presentation
 from assistant.recording_state import RecordingState, duration, phase_label
 from automation.presentation import Answer, Failed, ReasoningSummary, StreamState, Succeeded, ToolActivity, ToolStatus
-from automation.task import Approval, ApprovalDecision, Question
+from automation.task import Approval, ApprovalDecision, Question, TextAnswer
 
 MAX_VISIBLE: Final = 5
-MAX_WORK_VISIBLE: Final = 3
 WIDTH: Final = 360  # maximum logical width, independent of the full history window
 MIN_SECONDS: Final = 12.0
 MAX_SECONDS: Final = 30.0
@@ -68,7 +62,7 @@ class PhaseKey:
     identity: str
 
 
-type Key = Kind | MessageKey | ResponseKey | TurnKey | PhaseKey | SourceKey
+type Key = Kind | MessageKey | ResponseKey | TurnKey | PhaseKey
 
 
 @dataclass(frozen=True, slots=True)
@@ -105,7 +99,6 @@ class Turn:
     entries: tuple[Entry | Response, ...]
     state: Working | Settled
     created_at: float = 0
-    origin: WorkItem | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -113,7 +106,7 @@ class Recording:
     state: RecordingState
 
 
-type Content = Turn | Entry | Response | Recording | WorkItem
+type Content = Turn | Entry | Response | Recording
 
 
 class Held(Enum):
@@ -154,16 +147,14 @@ class Stack:
 
 def key_of(content: Content) -> Key:
     match content:
-        case Turn(request, origin=origin):
-            return origin.key if origin is not None else TurnKey(request)
+        case Turn(request):
+            return TurnKey(request)
         case Recording():
             return Kind.RECORDING
         case Entry(index):
             return MessageKey(index)
         case Response(index):
             return ResponseKey(index)
-        case WorkItem(key=key):
-            return key
         case _:
             assert_never(content)
 
@@ -182,8 +173,6 @@ def active(content: Content) -> bool:
             return True
         case Entry() | Response():
             return False
-        case WorkItem(attention=attention):
-            return attention is not Attention.RESOLVED
         case _:
             assert_never(content)
 
@@ -194,15 +183,14 @@ def can_stop(content: Content) -> bool:
             return isinstance(state, Working)
         case Recording(state):
             return state.capturing
-        case Entry() | Response() | WorkItem():
+        case Entry() | Response():
             return False
         case _:
             assert_never(content)
 
 
-def observe(session: Snapshot, query: Query = DEFAULT_QUERY) -> tuple[Content, ...]:
+def observe(session: Snapshot) -> tuple[Content, ...]:
     result: list[Content] = []
-    proposals = proposal_index(session)
     requests = tuple(index for index, message in enumerate(session.messages) if isinstance(message, ChatMessage) and message.speaker == "You")
     latest = requests[-1] if requests else -1
     initial_input = any(isinstance(message, AgentRequest) for message in session.messages[: requests[0] if requests else None])
@@ -226,14 +214,7 @@ def observe(session: Snapshot, query: Query = DEFAULT_QUERY) -> tuple[Content, .
             if request >= 0
             else min((entry.message.created_at for entry in entries if isinstance(entry, Entry)), default=0)
         )
-        start = session.messages[request] if request >= 0 else None
-        origin = proposals.get(start.source.identity) if isinstance(start, ChatMessage) and start.source is not None else None
-        if origin is not None:
-            for index, prior in enumerate(result):
-                if isinstance(prior, Turn) and prior.origin is not None and prior.origin.key == origin.key:
-                    result[index] = Turn(prior.request, (*prior.entries, *entries), state, prior.created_at, origin)
-                    return
-        result.append(Turn(request, tuple(entries), state, at, origin))
+        result.append(Turn(request, tuple(entries), state, at))
 
     for index, message in enumerate(session.messages):
         match message:
@@ -244,7 +225,7 @@ def observe(session: Snapshot, query: Query = DEFAULT_QUERY) -> tuple[Content, .
                 target = result if request is None else entries
                 target.append(Entry(index, message))
                 match message:
-                    case AgentRequest(reply=Answered(text)):
+                    case AgentRequest(reply=TextAnswer(text)):
                         target.append(Response(index, text, message.created_at))
                     case AgentRequest(reply=ApprovalDecision() as decision):
                         target.append(Response(index, decision.name.capitalize(), message.created_at))
@@ -257,9 +238,7 @@ def observe(session: Snapshot, query: Query = DEFAULT_QUERY) -> tuple[Content, .
     finish_turn()
     if session.recording.visible:
         result.append(Recording(session.recording))
-    selected = tuple(item for item in result if visible(item, query))
-    attached = {item.origin.key for item in selected if isinstance(item, Turn) and item.origin is not None}
-    return (*selected, *(item for item in assistant.feed_items.observed(session, query, proposals=proposals) if item.key not in attached))
+    return tuple(result)
 
 
 def settled(entries: tuple[Entry | Response, ...]) -> Settled:
@@ -332,27 +311,14 @@ def reading_seconds(content: Content) -> float:
     return min(MAX_SECONDS, max(minimum, 4 + len(text.split()) / 3))
 
 
-def work_order(item: WorkItem) -> tuple[int, float, str]:
-    return -priority(item), item.created_at, item.key.identity
-
-
 def advance(
-    stack: Stack, session: Snapshot, now: float, *, query: Query = DEFAULT_QUERY, page: int = 0, reveal: bool = False, limit: int = MAX_VISIBLE
+    stack: Stack, session: Snapshot, now: float, *, history: bool = False, page: int = 0, reveal: bool = False, limit: int = MAX_VISIBLE
 ) -> Stack:
     if stack.identity != session.identity:
-        stack = Stack(
-            identity=session.identity,
-            observed=tuple(item for item in stack.observed if isinstance(item, WorkItem)),
-            toasts=tuple(toast for toast in stack.toasts if isinstance(toast.content, WorkItem)),
-            serial=stack.serial,
-        )
+        stack = Stack(identity=session.identity, serial=stack.serial)
     previous = {key_of(content): content for content in stack.observed}
     existing = {toast.key: toast for toast in stack.toasts}
-    observed = observe(session, query)
-    curated = session.triage.enabled and not query.history
-    if curated:
-        work = sorted((item for item in observed if isinstance(item, WorkItem)), key=work_order)[:MAX_WORK_VISIBLE]
-        observed = (*(item for item in observed if not isinstance(item, WorkItem)), *work)
+    observed = observe(session)
     current = next((content.request for content in reversed(observed) if isinstance(content, Turn)), None)
     remembered: list[Content] = []
     toasts: list[Toast] = []
@@ -376,13 +342,13 @@ def advance(
             continue
         toast = existing.get(key)
         changed = previous.get(key) != content
-        if toast is None and not changed and not active(content) and not reveal and not query.history:
+        if toast is None and not changed and not active(content) and not reveal and not history:
             continue
         if toast is None:
             serial += 1
             toast = Toast(key, content, Held.ACTIVE, serial)
         lifetime = toast.lifetime
-        if active(content) or query.history or ((session.busy or session.waiting) and isinstance(content, (Turn, Entry, Response))):
+        if active(content) or history or ((session.busy or session.waiting) and isinstance(content, (Turn, Entry, Response))):
             if lifetime is not Held.READING:
                 lifetime = Held.ACTIVE
         elif lifetime is Held.READING:
@@ -405,11 +371,7 @@ def advance(
     room = limit - keep
     pages = max(1, (len(ordinary) + room - 1) // room) if room else 1
     start = min(max(0, page), pages - 1) * room
-
-    def displayed(toast: Toast) -> tuple[int, float, int, int]:
-        return display_order(toast, curated=curated)
-
-    visible = tuple(sorted((*pinned[:keep], *ordinary[start : start + room]), key=displayed))
+    visible = tuple(sorted((*pinned[:keep], *ordinary[start : start + room]), key=order_of))
     return Stack(session.identity, tuple(remembered), visible, serial, pages, stack.hidden)
 
 
@@ -439,10 +401,6 @@ def priority(content: Content) -> int:
             return 3
         case Entry(message=AgentRequest() as message) if pending(message):
             return 2
-        case WorkItem(item=Assessment(priority=level)):
-            return 1 + level
-        case WorkItem(waiting=waiting):
-            return 2 if waiting else 0
         case _:
             return int(active(content))
 
@@ -456,17 +414,10 @@ def order_of(toast: Toast) -> tuple[float, int, int]:
             return at, index, 1
         case Turn(request=request):
             return toast.content.created_at, request, 2
-        case WorkItem(created_at=at):
-            return at, 0, 0
         case Recording():
             return float("inf"), 0, 0
         case _:
             assert_never(toast.content)
-
-
-def display_order(toast: Toast, *, curated: bool) -> tuple[int, float, int, int]:
-    """Curated work reads from highest importance at the top; conversation history keeps chronology."""
-    return (-priority(toast.content) if curated else 0, *order_of(toast))
 
 
 def hover(stack: Stack, key: Key, *, inside: bool, now: float) -> Stack:
@@ -496,25 +447,19 @@ def body(content: Content) -> str:
             return message.text + ("\n\n" + message.detail if message.detail else "")
         case Turn():
             return "\n\n".join(body(entry) for entry in results(content))
-        case Entry(message=ChatMessage() as message):
-            return user_caption(message)
         case Entry(message=message):
             return message_body(message)
         case Response(text=text):
             return text
         case Recording(state):
             return state.detail or state.preview or state.title
-        case WorkItem():
-            return assistant.feed_items.text(content)
         case _:
             assert_never(content)
 
 
 def heading(content: Content) -> str:
     match content:
-        case Turn(state=progress, origin=origin):
-            if origin is not None:
-                return origin.title
+        case Turn(state=progress):
             match progress:
                 case Working(phase=Busy.STOPPING):
                     return "Stopping…"
@@ -536,16 +481,12 @@ def heading(content: Content) -> str:
             return "You"
         case Recording(state):
             return f"{phase_label(state.phase)} · {duration(state.seconds)}"
-        case WorkItem():
-            return assistant.feed_items.heading(content)
         case _:
             assert_never(content)
 
 
 def hint(content: Content) -> str:
     match content:
-        case WorkItem():
-            return "".join(span.text for span in action_spans(content))
         case Turn():
             return next((text for entry in results(content) if (text := hint(entry))), "")
         case Entry(message=AgentRequest(request=Question()) as message) if pending(message):
@@ -560,7 +501,7 @@ def hint(content: Content) -> str:
 
 def plain(content: Content) -> bool:
     match content:
-        case Entry(message=ToolActivity() | ChatMessage(speaker="You" | "Error")) | Response() | WorkItem():
+        case Entry(message=ToolActivity() | ChatMessage(speaker="You" | "Error")) | Response():
             return True
         case _:
             return False
@@ -574,7 +515,7 @@ def spinning(content: Content) -> bool:
             return True
         case Recording(state=RecordingState(phase="starting" | "stopping" | "finishing")):
             return True
-        case Turn() | Entry() | Response() | Recording() | WorkItem():
+        case Turn() | Entry() | Response() | Recording():
             return False
         case _:
             assert_never(content)
@@ -590,10 +531,6 @@ def tone(content: Content) -> Tone:
             return Tone.QUESTION
         case Entry(message=AgentRequest()):
             return Tone.QUESTION
-        case WorkItem(waiting=True):
-            return Tone.QUESTION
-        case WorkItem():
-            return Tone.REPLY
         case Entry(message=ToolActivity(outcome=Failed()) | ChatMessage(speaker="Error")):
             return Tone.ERROR
         case Entry(message=ToolActivity()):
@@ -662,23 +599,5 @@ def ease_out(progress: float) -> float:
     return 3 * (1 - t) ** 2 * t * 0.72 + 3 * (1 - t) * t**2 + t**3
 
 
-def origin_item(content: Content | None) -> WorkItem | None:
-    return content if isinstance(content, WorkItem) else content.origin if isinstance(content, Turn) else None
-
-
 def hide(stack: Stack, key: Key) -> Stack:
     return replace(stack, hidden=stack.hidden | {key}, toasts=tuple(toast for toast in stack.toasts if toast.key != key))
-
-
-def visible(item: Content, query: Query) -> bool:
-    match item:
-        case Entry(message=message):
-            return matches(message, query)
-        case Turn():
-            return query == DEFAULT_QUERY or active(item) or any(isinstance(entry, Entry) and matches(entry.message, query) for entry in item.entries)
-        case Response():
-            return query.source in (Source.ALL, Source.AGENTS)
-        case Recording() | WorkItem():
-            return True
-        case _:
-            assert_never(item)

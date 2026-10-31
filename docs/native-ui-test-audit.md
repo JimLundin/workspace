@@ -20,7 +20,7 @@ the tests retain header geometry, wrapping, hit targets and DPI checks.
 | Surface | Product caller or test ownership | Decision |
 | --- | --- | --- |
 | Accessibility WPF fixture | `test_windows_computer.py::test_uia_controls_are_inspected_and_operated_across_separate_processes` | Retain the native adapter integration; contain its window. |
-| Floating bubbles, step views and tool rows | `Ui.agent`, inbox/history, communications, console approvals and recordings | Retain current rendering, input, reading and lifecycle tests. |
+| Floating bubbles, step views and tool rows | `Ui.agent`, inbox/history, communications, approvals and recordings | Retain current rendering, input, reading and lifecycle tests. |
 | Floating toolbar and its capsules | `Controller` → `Ui.desktop` | Retain native geometry, joined contours, actions and ownership tests. |
 | Work overview, routines and context editors | `Controller.show_work`; live task snapshots via `Controller.work_changed` | Retain task identity, drafts, hidden-state preservation, approval previews and controls. |
 | Meeting editors | `Controller.show_meetings` → Work tab; `Ui.configure_meetings` attaches `MeetingPanel` | Retain sourced transcripts, revision selection, draft/action edits and saved receipts. |

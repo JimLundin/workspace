@@ -7,14 +7,15 @@ from dataclasses import replace
 from pydantic import TypeAdapter
 
 from assistant.browser import BrowserResult
-from assistant.browser_values import BrowserError
-from assistant.llm import Json
-from assistant.personal_work_sources import Observations, Tab, Tabs, observed_source
+from assistant.browser_requests import BrowserRequest
+from assistant.browser_values import BrowserError, BrowserStatus, PageList, PageRow
+from assistant.personal_work_sources import Observations, Tab, observed_source
 from assistant.web_apps import Located, WebAppOperation
+from automation.json_value import Json
 from automation.personal_work import SourceKind, WorkSource
 
 WIRE = TypeAdapter(dict[str, Json])
-TABS = TypeAdapter(Tabs)
+STATUS = TypeAdapter(BrowserStatus)
 
 
 def source(kind: SourceKind, identity: str = "one", at: float = 10) -> WorkSource:
@@ -68,14 +69,15 @@ class CapturedBrowser:
     def connect(self, cancel: threading.Event) -> None:
         self.connections += 1
 
-    def request(self, operation: str, args: dict[str, Json], cancel: threading.Event) -> BrowserResult:
-        assert operation == "tabs"
+    def request(self, request: BrowserRequest, cancel: threading.Event) -> BrowserResult:
+        assert isinstance(request, PageList)
         self.tab_reads += 1
         match self.tabs:
             case BrowserError() as error:
                 raise error
             case tabs:
-                return BrowserResult(TABS.dump_json(Tabs(tabs)).decode())
+                status = BrowserStatus("attached", tuple(PageRow(tab.id, "", tab.url) for tab in tabs))
+                return BrowserResult(STATUS.dump_json(status, exclude_none=True).decode())
 
     def web_app[Q: Located, R](self, operation: WebAppOperation[Q, R], query: Q, cancel: threading.Event) -> R:
         self.queries.append(query)

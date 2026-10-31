@@ -5,7 +5,7 @@ from typing import assert_never
 
 from pydantic import TypeAdapter
 
-from assistant.llm import Json
+from automation.json_value import Json
 
 _JSON = TypeAdapter(Json)
 
@@ -71,9 +71,6 @@ def arguments(name: str, text: str, *, limit: int = 0) -> str:
         case "work_feed_reply":
             value = fields.get("text")
             description = "Carry out your instruction" + (": " + value if isinstance(value, str) and value else ".")
-        case "work_feed_answer":
-            value = fields.get("text")
-            description = "Answer the pending question" + (": " + value if isinstance(value, str) and value else ".")
         case "inspect_ui":
             query = fields.get("query")
             description = f"Find controls matching “{query}”" if isinstance(query, str) and query else "Inspect the selected window."
@@ -113,7 +110,6 @@ def result(name: str, text: str, *, limit: int = 0) -> str:
         return {
             "work_feed_choose": "The selected solution is queued.",
             "work_feed_reply": "Your instruction is saved and queued.",
-            "work_feed_answer": "Your answer was delivered.",
             "work_feed_update": "The work feed was updated.",
         }.get(name, "The work feed was read.")
     if name == "inspect_ui" and (fields := object_fields(text)) is not None and isinstance(controls := fields.get("controls"), list):

@@ -14,7 +14,7 @@ if sys.platform != "win32":
 lazy from PySide6 import QtCore, QtGui, QtWidgets
 lazy from PySide6.QtTest import QTest
 
-from assistant.ambient import Battery, Speakers, SystemStatus, Weather, Wifi
+from assistant.ambient import SystemStatus, Weather
 from assistant.bar_surface import painter_path
 from assistant.desktop_bar import BarActions, BarObservations, DesktopBar
 from assistant.icons import State
@@ -26,6 +26,7 @@ from miryoku.win import Keyboard, maintain_keyboard
 from protocol import LAYOUT_MAGIC, WM_TOGGLE_LAYOUT, Tool
 from tests.test_windows_bindings import KeyboardFixture
 from winapi import inputs, keyboard_language, system
+from winapi.machine_status import Battery, Speakers, Wifi
 lazy from assistant.notifications import Tone
 lazy from assistant.qt_ui import EventLoop
 lazy from assistant.window_switcher import WindowSwitcher

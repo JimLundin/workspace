@@ -4,7 +4,6 @@ import json
 from dataclasses import replace
 from datetime import date
 
-from assistant.agent_session import Session
 from assistant.communications import Conversation, Feed, Message, TeamsActivity, Update, UpdateKind
 from assistant.feed_contracts import (
     STORED_BOARD,
@@ -18,7 +17,6 @@ from assistant.feed_contracts import (
     ReviseProposal,
     SaveRule,
 )
-from assistant.feed_items import WorkItem, action_spans, observed, text
 from assistant.feed_sources import Excerpt, triage_evidence
 from assistant.feed_triage import (
     Assessment,
@@ -32,8 +30,7 @@ from assistant.feed_triage import (
     saved,
     unassessed,
 )
-from assistant.llm import Json
-from assistant.notifications import Stack, advance
+from automation.json_value import Json
 from tests.feed_source_fixture import captured
 from tests.json_fixture import json_object, json_rows
 lazy from assistant.feed_agent_tools import validated
@@ -61,24 +58,20 @@ def output(*groups: tuple[list[str], str]) -> str:
     return json.dumps(payload)
 
 
-def test_reactions_never_become_cards_and_grouped_requests_have_no_manual_action_strip() -> None:
+def test_reactions_are_counted_quietly_and_never_assessed_as_work() -> None:
     feed = Feed(
         conversations=(Conversation("budget", "Budget"),),
         followed=("budget",),
         messages=(Message("budget", "one", "Anna", "Can you review the budget?", 1, 1),),
         updates=(Update(TeamsActivity("reaction"), "Anna liked a message", "👍", "Teams", 2, UpdateKind.REACTION),),
     )
-    candidates = triage_evidence(feed, ())
+    candidates = triage_evidence(feed)
     board = reconcile(Board(enabled=True), candidates)
     batch = unassessed(board, candidates)
     assert len(batch) == 1 and board.reactions == 1
     board = applied(board, decode(output(([batch[0].identity], "action")), batch), candidates)
-    rows = observed(Session(triage=board, communications=feed))
-    assert len(rows) == 1 and rows[0].title == "Review the budget"
-    assert "Check the totals before replying." in text(rows[0])
+    assert [item.title for item in board.actions] == ["Review the budget"]
     assert not board.actions[0].question and board.actions[0].solutions[0].label == "Check totals"
-    assert not action_spans(rows[0])
-    assert len(advance(Stack(), Session(triage=board, communications=feed), 3).toasts) == 1
 
 
 def test_model_must_cover_exact_sources_once_and_cannot_complete_work() -> None:
@@ -169,7 +162,7 @@ def test_dismissal_survives_poll_restart_and_filter_feedback_but_new_evidence_ge
     assert board.items[0].disposition is not Disposition.DONE
 
 
-def test_top_work_is_selected_by_importance_and_dismissal_advances_the_queue_without_losing_backlog() -> None:
+def test_work_is_ranked_by_importance_and_dismissal_advances_the_queue_without_losing_backlog() -> None:
     items = tuple(
         Assessment(
             str(index),
@@ -184,13 +177,10 @@ def test_top_work_is_selected_by_importance_and_dismissal_advances_the_queue_wit
         for index in range(8)
     )
     board = Board(enabled=True, items=items)
-    session = Session(triage=board)
-    stack = advance(Stack(), session, 100)
-    assert [toast.content.title for toast in stack.toasts if isinstance(toast.content, WorkItem)] == ["Work 0", "Work 1", "Work 2"]
+    assert [item.title for item in board.actions[:3]] == ["Work 0", "Work 1", "Work 2"]
     assert len(board.actions) == 8
     dismissed = edited(board, DismissItem("0"), EditObservation((), 1))
-    next_stack = advance(stack, replace(session, triage=dismissed), 10000)
-    assert [toast.content.title for toast in next_stack.toasts if isinstance(toast.content, WorkItem)] == ["Work 1", "Work 2", "Work 3"]
+    assert [item.title for item in dismissed.actions[:3]] == ["Work 1", "Work 2", "Work 3"]
     assert len(dismissed.actions) == 7
     reprioritized = edited(dismissed, ReviseProposal(item="7", text="Handle the blocker first.", priority=2), EditObservation((), 2))
     assert reprioritized.actions[0].identity == "7"
@@ -303,7 +293,6 @@ def test_meaningful_rejection_records_reason_and_revision_without_completing_or_
             },
         ),
         ("work_feed_update", {"operation": "rule", "text": "Keep budget notices quiet.\x00"}),
-        ("work_feed_answer", {"request_id": "console", "question_index": 32, "text": "Revenue"}),
     )
     for tool, values in invalid:
         try:

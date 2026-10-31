@@ -10,13 +10,13 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Final, Protocol
 
-from assistant.activity import ContextSnapshot
 from assistant.agent import Agent, Toolset
 from assistant.agent_history import History
 from assistant.agent_toolsets import General, MeetingFollowupTools
 from assistant.meeting_execution import MeetingRun
 from assistant.self_change_tools import verified_installation
 from assistant.workspace import Workspace
+from automation.activity import ContextSnapshot
 from automation.execution import WorkExecution
 from automation.task import Outcome, Waiting
 

@@ -20,17 +20,17 @@ import components
 import keeper
 import keeper_control
 import usage
-from assistant.activity import ActivityTracker, ContextSnapshot, Observation
+from assistant.activity import ActivityTracker
+from automation.activity import ContextSnapshot, Observation, Policy
 from config import APPS
 from usage import DIRECTORY, Detail
-lazy from assistant import activity, control_policy
+lazy from assistant import control_policy
 lazy from assistant.browser import Browser
 lazy from assistant.browser_session import Product
 lazy from assistant.canvas_activity import CanvasInstruction, CanvasRun
 lazy from assistant.communications_browser import TeamsWeb
 lazy from assistant.communications_service import Communications
 lazy from assistant.communications_state import COMMUNICATIONS_STATE
-lazy from assistant.console_inbox import ConsoleInbox
 lazy from assistant.desktop import WinDesktop
 lazy from assistant.features import Assistant, switcher_windows
 lazy from assistant.feed_contracts import STORED_BOARD
@@ -41,7 +41,7 @@ lazy from assistant.feed_work import FeedWork
 lazy from assistant.icons import State, dot
 lazy from assistant.keymap import indicator_text
 lazy from assistant.lifecycle import Timings
-lazy from assistant.llm import MAX_SECONDS, RATE, Missing, Settings
+lazy from assistant.llm import MAX_SECONDS, Missing, Settings
 lazy from assistant.local_bridge import LocalBridge
 lazy from assistant.meeting_events import TranscriptEvents
 lazy from assistant.meeting_followup_store import FollowupStore
@@ -64,7 +64,8 @@ lazy from assistant.work_agent import WorkAgent
 lazy from assistant.work_bridge import WorkOwners
 lazy from assistant.work_bridge_contracts import WORK_BRIDGE, BridgeCommand, BridgeResponse
 lazy from assistant.work_canvas import WorkCanvas, instruction_prompt
-lazy from assistant.work_window import ControlTask, WorkCommand, WorkSnapshot
+lazy from assistant.work_commands import ControlTask, WorkCommand
+lazy from assistant.work_snapshot import WorkSnapshot
 lazy from automation.bridge import BridgeClient
 lazy from automation.context import ContextStore
 lazy from automation.ipc import MeetingCommand, MeetingFailed, MeetingSucceeded, StartMeeting
@@ -89,6 +90,7 @@ lazy from automation.task import Control, RequestKind
 lazy from miryoku.layout import Layer
 lazy from protocol import WM_INDICATOR, WM_KEY_STATE, WM_LAYOUT_STATE, WM_REQUEST, LayoutState, Tool, decode_indicator
 lazy from winapi import audio, recording, screen, shell, system, windows
+lazy from winapi.pcm import RATE
 lazy from winapi.shapes import Rect, Window
 
 ROOT: Final = Path(__file__).resolve().parent.parent
@@ -200,7 +202,6 @@ class AssistantApp:
         "canvas",
         "capture_timer",
         "communications",
-        "consoles",
         "desktop",
         "followups",
         "jobs",
@@ -244,8 +245,11 @@ class AssistantApp:
             self.window.handle, mic, self.ui, on_state=self.show, on_notify=self.tray.notify, on_problem=self.problem, tiling=self.tiling
         )
         self.timings.mark("control window and microphone")
-        missing = settings if isinstance(settings, Missing) else None
-        self.settings = settings if isinstance(settings, Settings) else Settings("", "", "", "", "", "", "")
+        match settings:
+            case Missing():
+                missing, self.settings = settings, Settings("", "", "", "", "", "", "")
+            case Settings():
+                missing, self.settings = None, settings
         self.activity: ActivityTracker
 
         def context() -> ContextSnapshot:
@@ -262,7 +266,6 @@ class AssistantApp:
             saved_context,
             BridgeClient(work_folder),
             lambda runner: self.ui.agent(
-                None,
                 runner.stop,
                 on_problem=self.problem,
                 on_reset=runner.new_conversation,
@@ -281,23 +284,20 @@ class AssistantApp:
         self.activity = ActivityTracker(
             foreground_context,
             self.agent.running,
-            policy=activity.Policy(enabled=os.environ.get("WORKSPACE_AGENT_CONTEXT", "recent").lower() != "off"),
+            policy=Policy(enabled=os.environ.get("WORKSPACE_AGENT_CONTEXT", "recent").lower() != "off"),
         )
         self.communications = Communications(
             TeamsWeb(DIRECTORY / "browser-profile"),
             windows_store(DIRECTORY / "communications.bin", COMMUNICATIONS_STATE),
             self.ui.communications_changed,
         )
-        self.ui.configure_communications(self.communications.submit, windows_store(DIRECTORY / "notifications.bin", NOTIFICATION_STATE))
-        self.consoles = ConsoleInbox(DIRECTORY / "inbox-bridge.json", self.ui.console_changed)
-        self.ui.configure_console(self.consoles.command)
         self.canvas: WorkCanvas = WorkCanvas(
             work_folder / "canvas.sqlite3", self.continue_thread, autonomous=bool(self.settings.api_key and self.settings.base_url)
         )
         self.personal = self.create_personal(tasks)
         self.triage, self.work_bridge = self.create_feed(FeedWork(tasks, saved_context, context))
-        self.ui.configure_triage(self.triage.observe, self.triage.dismiss, self.triage.choose_from_ui)
-        self.timings.mark("communications and feed bridges")
+        self.ui.configure_feed(windows_store(DIRECTORY / "notifications.bin", NOTIFICATION_STATE), self.triage.observe)
+        self.timings.mark("communications and feed bridge")
         archive = MeetingArchive(DIRECTORY / "meetings")
         followup_folder = work_folder / "meeting-followups"
         self.followups = MeetingWorkflow(
@@ -359,8 +359,11 @@ class AssistantApp:
             # Recover only the crash window between binding and task commit.
             # Existing task prompts may have been redirected by the user.
             for run in self.canvas.read().runs:
-                if (run.evidence is not None or isinstance(run.intent, CanvasInstruction)) and tasks.get(run.task_id) is None:
-                    self.ui.post(self.canvas_recovery(run))
+                match run:
+                    case CanvasRun(intent=CanvasInstruction()) | CanvasRun(evidence=str()) if tasks.get(run.task_id) is None:
+                        self.ui.post(self.canvas_recovery(run))
+                    case _:
+                        pass
         return PersonalWork(
             PersonalStore(tasks.path),
             BrowserSources(Browser(DIRECTORY / "browser-profile", source=Product.EDGE)),
@@ -373,9 +376,7 @@ class AssistantApp:
         """The feed owner, then the work bridge that routes agent tools to it, personal work and the canvas."""
         triage = Triage(
             windows_store(DIRECTORY / "work-feed.bin", STORED_BOARD),
-            self.ui.triage_changed,
             self.review_feed,
-            self.consoles.command,
             submit=self.agent.submit_identified,
             work=work,
             personal=self.personal,
@@ -434,8 +435,6 @@ class AssistantApp:
         timings.mark("personal work")
         self.triage.close()
         timings.mark("feed triage")
-        self.consoles.close()
-        timings.mark("console bridge")
         self.communications.close()
         timings.mark("Teams worker")
         self.monitor_layout.close()
@@ -455,12 +454,11 @@ class AssistantApp:
             log("The work frontend did not finish closing before assistant shutdown.")
         timings.mark("meetings and work frontend")
         self.activity.close()
-        self.ui.close_agent()
-        self.ui.close_work()
+        self.ui.close_windows()
         self.ui.close()
         timings.mark("Qt shutdown")
         self.jobs.put(None)
-        self.desktop.mic.close()
+        self.desktop.close_microphone()
         try:
             self.tiling.close()
         except OSError as error:

@@ -295,7 +295,7 @@ def test_a_failed_answer_commit_restores_the_exact_question_for_a_new_reply(tmp_
             assert rig.agent.refresh().wait(5)
             assert not has_pending_input(rig.panel)
         rig.refresh()
-        question = rig.panel.state.question
+        question = rig.panel.state.request
         assert has_pending_input(rig.panel) and question is not None and question.id == "which-file"
         assert rig.panel.submit("Use the revenue workbook")
         rig.refresh()
@@ -320,7 +320,7 @@ def test_a_later_confirmed_answer_is_not_reopened_after_a_failed_observation(tmp
             assert rig.agent.refresh().wait(5)
         rig.tasks.answer("question-task", "which-year", TextAnswer("2026"), at=rig.clock())
         rig.refresh()
-        assert not rig.panel.waiting and not rig.panel.respond("which-year", "A duplicate")
+        assert not rig.panel.waiting and not rig.panel.respond("which-year", TextAnswer("A duplicate"))
         assert [response.reply for response in rig.tasks.responses("question-task")] == [TextAnswer("2026")]
     finally:
         rig.close()

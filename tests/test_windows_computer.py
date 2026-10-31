@@ -17,8 +17,9 @@ if sys.platform != "win32":
 
 from assistant import commands, uia
 from assistant.geometry import Shot, fit
-from assistant.llm import Json
 from assistant.machine import CaptureSources, WinMachine
+from assistant.uia import Act, Inspect, UiRequest
+from automation.json_value import Json
 from tests.test_windows_machine import Browser, Desktop
 from winapi.shapes import Rect
 
@@ -60,7 +61,7 @@ def fixture(folder: Path) -> Generator[int]:
 
 
 def inspect(handle: int, *, query: str = "", limit: int = 100, offset: int = 0) -> dict[str, Json]:
-    request: dict[str, Json] = {"operation": "inspect", "handle": handle, "query": query, "limit": limit, "offset": offset, "depth": 10}
+    request = Inspect(handle, query, limit, 10, offset)
     code, text = WinMachine(Desktop(), browser=Browser()).inspect_ui(request, threading.Event())
     assert code == 0, text
     return decoded(text)
@@ -76,7 +77,7 @@ def control(page: dict[str, Json], name: str) -> dict[str, Json]:
     return next(row for row in controls(page) if row["automation_id"] == f"fixture_{name}")
 
 
-def batch(folder: Path, requests: list[dict[str, Json]]) -> list[tuple[bool, str]]:
+def batch(folder: Path, requests: list[UiRequest]) -> list[tuple[bool, str]]:
     """Run real UIA scripts in fresh scopes, sharing only PowerShell startup.
 
     IDs come from an earlier process; a later process verifies the resulting UI.
@@ -169,8 +170,10 @@ def test_uia_controls_are_inspected_and_operated_across_separate_processes(tmp_p
         assert password["password"] is True and password["value"] is None, password
         assert "fixture-only-secret" not in json.dumps(page)
 
-        def action(row: dict[str, Json], operation: str, text: str = "") -> dict[str, Json]:
-            return {"operation": "act", "handle": handle, "id": row["id"], "action": operation, "value": text}
+        def action(row: dict[str, Json], operation: str, text: str = "") -> Act:
+            identity = row["id"]
+            assert isinstance(identity, str)
+            return Act(handle, identity, operation, text)
 
         results = batch(
             tmp_path,
@@ -186,8 +189,8 @@ def test_uia_controls_are_inspected_and_operated_across_separate_processes(tmp_p
                 action(password, "read"),
                 action(control(page, "disabled"), "invoke"),
                 action({"id": "42.2147483647.2147483646"}, "invoke"),
-                {"operation": "inspect", "handle": handle, "limit": 2, "offset": 0, "depth": 10},
-                {"operation": "inspect", "handle": handle, "limit": 2, "offset": 2, "depth": 10},
+                Inspect(handle, limit=2, depth=10, offset=0),
+                Inspect(handle, limit=2, depth=10, offset=2),
                 # Exceed both the text and encoded-JSON caps without asking WPF to
                 # lay out 10,000 lines. The earlier value retains multiline/UTF-8.
                 action(editor, "set_value", '"' * 12001),

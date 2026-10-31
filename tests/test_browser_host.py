@@ -5,10 +5,10 @@ import time
 from pathlib import Path
 from unittest import TestCase
 
-from assistant.browser_host import Host, HostedConnection, Server, exchange
+from assistant.browser_host import ConnectRequest, Host, HostedConnection, Server, StatusRequest
 from assistant.browser_session import Attached, BrowserSession, Product, Source
 from assistant.browser_values import BrowserError, DisconnectedError, InterruptedError, NavigationContextError
-from assistant.llm import Json
+from automation.json_value import Json
 
 
 class Connection:
@@ -62,7 +62,7 @@ class Opener:
 
 def client(server: Server) -> HostedConnection:
     connection = HostedConnection(server.location)
-    exchange(server.location, {"operation": "connect", "client": connection.identity}, threading.Event(), timeout=1)
+    server.location.exchange(ConnectRequest(server.location.token, connection.identity), threading.Event(), timeout=1)
     return connection
 
 
@@ -81,7 +81,7 @@ def test_reloaded_clients_share_one_connection_and_release_only_their_sessions(t
         assert third.call("Browser.getVersion", {}, threading.Event()) == {"value": "observed"}
         assert opener.opens == 1 and opener.connection.closed == 0
         assert "Target.detachFromTarget" in opener.connection.calls
-        status = exchange(server.location, {"operation": "status"}, threading.Event(), timeout=1)
+        status = server.location.exchange(StatusRequest(server.location.token), threading.Event(), timeout=1)
         assert status["generation"] == 1 and status["clients"] == 2
         second.close()
         third.close()
@@ -127,7 +127,7 @@ def test_lost_browser_requires_explicit_reconnection_and_status_never_connects(t
     server = Server(tmp_path, Host(Product.EDGE, opener))
     server.start()
     try:
-        assert exchange(server.location, {"operation": "status"}, threading.Event(), timeout=1)["connected"] is False
+        assert server.location.exchange(StatusRequest(server.location.token), threading.Event(), timeout=1)["connected"] is False
         assert opener.opens == 0
         connection = client(server)
         with TestCase().assertRaises(DisconnectedError):
@@ -136,7 +136,7 @@ def test_lost_browser_requires_explicit_reconnection_and_status_never_connects(t
             with TestCase().assertRaises(DisconnectedError):
                 connection.call("Browser.getVersion", {}, threading.Event())
         assert opener.opens == 1
-        assert exchange(server.location, {"operation": "status"}, threading.Event(), timeout=1)["connected"] is False
+        assert server.location.exchange(StatusRequest(server.location.token), threading.Event(), timeout=1)["connected"] is False
         replacement = client(server)
         assert opener.opens == 2
         replacement.close()

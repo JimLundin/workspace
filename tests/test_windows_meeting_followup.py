@@ -1,7 +1,6 @@
 """Real Windows sharing handles exercise atomic package publication and cleanup."""
 
 import ctypes
-import json
 import sys
 from collections.abc import Callable, Generator
 from contextlib import contextmanager
@@ -14,12 +13,11 @@ from unittest import SkipTest, TestCase
 if sys.platform != "win32":
     raise SkipTest("Windows directory sharing")
 
-from assistant.meeting_followup import parse_followup
 from assistant.meeting_followup_store import FollowupStore
 from automation.actions import FileVerifier
 from automation.files import filesystem_path
 from automation.task import ActionVerified
-from tests.test_meeting_followup import followup_response, followup_sources
+from tests.test_meeting_followup import followup_response, followup_sources, resolved
 from winapi._core import fn, kernel32
 
 _open_directory = cast(
@@ -56,7 +54,7 @@ def directory_reader(path: Path) -> Generator[None]:
 
 def test_publication_recovers_after_a_directory_reader_releases_its_handle(tmp_path: Path) -> None:
     bundle, _ = followup_sources(tmp_path)
-    followup = parse_followup(bundle, json.dumps(followup_response(bundle)))
+    followup = resolved(bundle, followup_response(bundle))
     attempts: list[tuple[Path, Path]] = []
     blocked: list[int] = []
 
@@ -80,12 +78,12 @@ def test_publication_recovers_after_a_directory_reader_releases_its_handle(tmp_p
     assert attempts[0][1] == plan.directory
     assert store.read(plan.task_id, plan.version) == published
     assert isinstance(FileVerifier().verify(plan.verification), ActionVerified)
-    assert {path.name for path in filesystem_path(plan.directory.parent).iterdir()} == {plan.version}
+    assert {path.name for path in filesystem_path(plan.directory.parent).iterdir()} == {plan.directory.name}
 
 
 def test_persistent_directory_readers_exhaust_retries_without_losing_prior_versions(tmp_path: Path) -> None:
     bundle, _ = followup_sources(tmp_path)
-    followup = parse_followup(bundle, json.dumps(followup_response(bundle)))
+    followup = resolved(bundle, followup_response(bundle))
     original_store = FollowupStore(tmp_path / "packages")
     original = original_store.publish(original_store.plan("release-task", followup))
     failures: list[OSError] = []
@@ -107,7 +105,7 @@ def test_persistent_directory_readers_exhaust_retries_without_losing_prior_versi
     assert 2 <= len(failures) <= 6 and raised.exception is failures[-1]
     assert all(error.winerror in (5, 32, 33) for error in failures)
     assert store.versions(original.task_id) == (original,)
-    assert {path.name for path in filesystem_path(plan.directory.parent).iterdir()} == {original.version}
+    assert {path.name for path in filesystem_path(plan.directory.parent).iterdir()} == {original.directory.name}
     recovered = original_store.publish(plan)
     assert recovered.version == plan.version
     assert original_store.read(original.task_id, original.version) == original
@@ -115,7 +113,7 @@ def test_persistent_directory_readers_exhaust_retries_without_losing_prior_versi
 
 def test_native_access_and_lock_errors_retry_the_same_atomic_publication(tmp_path: Path) -> None:
     bundle, _ = followup_sources(tmp_path)
-    followup = parse_followup(bundle, json.dumps(followup_response(bundle)))
+    followup = resolved(bundle, followup_response(bundle))
     for code in (5, 33):  # Access denied and lock violation use the sharing retry policy.
         failure = ctypes.WinError(code)
         attempts: list[tuple[Path, Path]] = []
@@ -142,7 +140,7 @@ def test_native_access_and_lock_errors_retry_the_same_atomic_publication(tmp_pat
 
 def test_nonsharing_windows_install_errors_propagate_without_retry(tmp_path: Path) -> None:
     bundle, _ = followup_sources(tmp_path)
-    followup = parse_followup(bundle, json.dumps(followup_response(bundle)))
+    followup = resolved(bundle, followup_response(bundle))
     for code in (3, 87, 112):  # Missing path, invalid parameter, disk full.
         failure = ctypes.WinError(code)
         attempts: list[Path] = []

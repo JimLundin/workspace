@@ -33,6 +33,11 @@ Both checkers select it through their supported typeshed-directory settings;
 runtime uses the builtin directly. Python's frozen mapping implementation is
 trusted, without library tests.
 
+The jsonschema stub exposes only `validate`, which raises for an instance the
+schema rejects. A meeting test uses it to check the tool schema offered to the
+model against payloads the follow-up validator accepts; schema evaluation
+belongs to jsonschema.
+
 Watchdog's stubs expose its consumed event fields and observer lifecycle. The
 handler protocol records the actual dispatch call used by the native observer;
 Workspace owns filtering, batching, check sequencing and preview shutdown.

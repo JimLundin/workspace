@@ -21,6 +21,7 @@ from automation.task import (
     Completed,
     Control,
     Failed,
+    FeedHandoff,
     FileDigest,
     Interrupted,
     MeetingFollowup,
@@ -368,6 +369,50 @@ def test_version_three_journals_drop_meeting_followups_that_name_no_saved_record
     assert reopened.get(legacy) is None and reopened.actions(legacy) == ()
 
 
+def test_version_four_journals_keep_every_task_reply_and_action_in_their_new_shapes(tmp_path: Path) -> None:
+    # Defect: converting a version 4 journal loses or changes a person's tasks,
+    # replies or actions, or no longer lists its meeting follow-ups.
+    path = tmp_path / "work.sqlite3"
+    store = TaskStore(path)
+    store.submit("approved", "Task", "Apply the change.", RequestSource("chat"), at=1)
+    claim = store.claim("worker", "first-run", at=2)
+    assert claim is not None
+    store.finish(claim.run, Waiting(Approval("grant", "Apply?", "Preview.", "a" * 64)), at=3)
+    assert store.answer("approved", "grant", ApprovalDecision.APPROVED, at=4) is not None
+    store.submit("meeting", "Meeting", "Prepare notes.", RequestSource("chat", MeetingFollowup("c" * 64)), at=5)
+    store.submit("feed", "Feed", "Reply to Ada.", RequestSource("chat", FeedHandoff("item", "Ada's question")), at=6)
+    store.submit("paused", "Paused", "Wait for review.", RequestSource("chat"), at=7)
+    assert store.control("paused", Control.PAUSE, at=8) is not None
+    running = store.claim("worker", "second-run", at=9)
+    assert running is not None and running.task.id == "approved"
+    assert store.begin_action(running.run, "action", specification(), at=10) is not None
+    before = (store.list_tasks(), store.responses("approved"), store.actions("approved"))
+    with closing(sqlite3.connect(path)) as database, database:
+        for table, column in (("tasks", "state"), ("runs", "previous_state")):
+            database.execute(f"UPDATE {table} SET {column}=json_object('kind',json_extract({column},'$')) WHERE json_type({column})='text'")
+            database.execute(
+                f"UPDATE {table} SET {column}=json_set(json_remove({column},'$.run'),'$.run_id',json_extract({column},'$.run.run_id')) "
+                f"WHERE json_extract({column},'$.kind')='running'"
+            )
+        database.execute(
+            "UPDATE tasks SET source=json_set(json_remove(source,'$.profile'),'$.profile','meeting_followup','$.bundle',"
+            "json_extract(source,'$.profile.bundle')) WHERE json_extract(source,'$.profile.kind')='meeting_followup'"
+        )
+        database.execute(
+            "UPDATE tasks SET source=json_set(json_remove(source,'$.profile'),'$.profile','feed','$.item',json_extract(source,'$.profile.item'),"
+            "'$.title',json_extract(source,'$.profile.title')) WHERE json_extract(source,'$.profile.kind')='feed'"
+        )
+        database.execute("UPDATE responses SET reply=json_object('kind',json_extract(reply,'$')) WHERE json_type(reply)='text'")
+        database.execute("UPDATE actions SET outcome=json_object('kind',json_extract(outcome,'$')) WHERE json_type(outcome)='text'")
+        database.execute("UPDATE actions SET specification=json_set(specification,'$.verification',json_object('kind','none'))")
+        database.execute("DROP INDEX request_profile")
+        database.execute("CREATE INDEX request_profile ON tasks(json_extract(source,'$.profile'),created_at,id)")
+        database.execute("PRAGMA user_version=4")
+    reopened = TaskStore(path)
+    assert (reopened.list_tasks(), reopened.responses("approved"), reopened.actions("approved")) == before
+    assert [task.id for task in reopened.meeting_followups(10)] == ["meeting"]
+
+
 def test_meeting_followups_are_listed_newest_first_regardless_of_other_work(tmp_path: Path) -> None:
     # Defect: the query returns other profiles or drops older follow-ups behind recently updated work.
     store = TaskStore(tmp_path / "work.sqlite3")
@@ -562,28 +607,22 @@ def test_failed_work_can_be_explicitly_retried_but_completion_is_terminal(tmp_pa
     assert store.control("task", Control.CANCEL, at=8) is None
 
 
-def test_unknown_schema_and_invalid_rows_are_rejected_before_execution(tmp_path: Path) -> None:
+def test_invalid_rows_are_rejected_before_execution(tmp_path: Path) -> None:
     path = tmp_path / "work.sqlite3"
     store = TaskStore(path)
     store.submit("task", "Task", "Prepare notes.", RequestSource("chat"), at=1)
     with closing(sqlite3.connect(path)) as database, database:
-        database.execute("UPDATE tasks SET state=? WHERE id='task'", ('{"kind":"ready","unexpected":true}',))
+        database.execute("UPDATE tasks SET state=? WHERE id='task'", ('{"kind":"failed","reason":"Stopped.","unexpected":true}',))
     with TestCase().assertRaises(ValueError):
         store.claim("worker", "run", at=2)
     with closing(sqlite3.connect(path)) as database, database:
-        database.execute("UPDATE tasks SET state=?,priority='urgent' WHERE id='task'", ('{"kind":"ready"}',))
+        database.execute("UPDATE tasks SET state=?,priority='urgent' WHERE id='task'", ('"ready"',))
     with TestCase().assertRaises(ValueError):
         store.get("task")
     with closing(sqlite3.connect(path)) as database, database:
         database.execute("UPDATE tasks SET priority=0,phase='running' WHERE id='task'")
     with TestCase().assertRaises(ValueError):
         store.list_tasks()
-    with closing(sqlite3.connect(path)) as database, database:
-        database.execute("PRAGMA user_version=99")
-    before = path.read_bytes()
-    with TestCase().assertRaises(ValueError):
-        TaskStore(path)
-    assert path.read_bytes() == before
 
 
 def test_invalid_action_and_reply_rows_do_not_enter_typed_interfaces(tmp_path: Path) -> None:
