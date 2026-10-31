@@ -56,6 +56,7 @@ def write_watch_source(root: Path, output: Path) -> None:
         "deploy_files.py",
         "development_paths.py",
         "check_native.py",
+        "check_results.py",
         "native_desktop.py",
     ):
         shutil.copyfile(ROOT / "scripts" / name, scripts / name)
