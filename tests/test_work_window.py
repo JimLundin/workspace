@@ -125,6 +125,9 @@ def test_loading_remains_until_the_view_presents_its_first_frame() -> None:
         while jobs:
             jobs.popleft()()
         assert loading.visible and not loading.closed
+        # Defect: hiding a replaced view releases the loading surface of the current one.
+        work.cancel_show(DeferredWorkView())
+        assert loading.visible and not loading.closed
         view.paint_frame()
         assert loading.closed and not loading.visible
     finally:
@@ -244,6 +247,9 @@ def test_startup_preparation_reuses_the_hidden_view_and_latest_snapshot() -> Non
     ui.paint()
     assert ui.created == 1 and not ui.view.shown
     assert ui.view.states[-1].status == "Latest work"
+    # Defect: an unchanged poll re-renders the whole native view.
+    ui.work.publish(WorkSnapshot(status="Latest work"))
+    assert not ui.jobs
     ui.work.show(focus=False)
     ui.paint()
     assert ui.created == 1 and ui.view.shown == [False]

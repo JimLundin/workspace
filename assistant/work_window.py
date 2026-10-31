@@ -191,6 +191,4 @@ class WorkWindow:
         return True
 
     def close(self) -> None:
-        if self.publication.close(release=self.cancel_show):
-            with self._lock:
-                self._presented = None
+        self.publication.close(release=self.cancel_show)
