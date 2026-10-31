@@ -12,17 +12,38 @@ from pathlib import Path
 from typing import cast
 from unittest import TestCase
 
+from pydantic import TypeAdapter
 from websockets.sync.server import ServerConnection, serve
 
-from assistant.browser import MAX_OUTPUT, Browser, web_url
+from assistant import browser_tools, browser_values
+from assistant.browser import MAX_OUTPUT, Browser
+from assistant.browser_requests import BrowserRequest, web_url
 from assistant.browser_session import MAX_RESPONSE, Attached, BrowserSession, Cdp, Managed, Product, Separate, Source
 from assistant.browser_tabs import TabStrip
-from assistant.browser_values import BrowserError, InterruptedError, NavigationContextError
+from assistant.browser_values import GROUP, TAB, BrowserError, Group, InterruptedError, NavigationContextError, Tab, evaluated
 from assistant.llm import Json
 
 VIEWPORT_PNG = base64.b64decode(
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFAAH/iZk9HQAAAABJRU5ErkJggg==",
 )
+
+
+WIRE = TypeAdapter(dict[str, Json])
+
+
+def command(operation: str, **arguments: Json) -> BrowserRequest:
+    """A browser request validated through the model's tool seam, as the agent sends it."""
+    tool = next(tool for tool in browser_tools.TOOLS if tool.spec.name == "browser_" + operation)
+    return tool.parse(WIRE.dump_json(arguments))
+
+
+def tab_of(row: Json) -> Tab:
+    """A tab row of a browser tool result, read with Edge's tab-reply contract."""
+    return browser_values.decoded(TAB, row, "invalid tab").tab()
+
+
+def group_of(row: Json) -> Group:
+    return browser_values.decoded(GROUP, row, "invalid group").group()
 
 
 def decoded(value: str) -> dict[str, Json]:
@@ -189,10 +210,10 @@ def test_slow_page_keeps_the_connection_and_accepts_the_next_response(tmp_path: 
     connection = browser.connection
     try:
         with TestCase().assertRaisesRegex(BrowserError, "timed out") as raised:
-            browser.request("evaluate", {"target_id": "fixture", "expression": "1"}, threading.Event())
+            browser.request(command("evaluate", **{"target_id": "fixture", "expression": "1"}), threading.Event())
         assert not isinstance(raised.exception, InterruptedError)
         assert browser.connection is connection and not channel.closed
-        assert decoded(browser.request("tabs", {}, threading.Event()).text)["mode"] == "attached"
+        assert decoded(browser.request(command("tabs"), threading.Event()).text)["mode"] == "attached"
         assert [call["method"] for call in channel.sent].count("Runtime.evaluate") == 1
     finally:
         browser.close()
@@ -201,7 +222,7 @@ def test_slow_page_keeps_the_connection_and_accepts_the_next_response(tmp_path: 
 def test_cdp_rejects_malformed_oversized_and_error_replies() -> None:
     for response, message in (
         ("not JSON", "invalid data"),
-        ("[]", "unexpected response"),
+        ("[]", "invalid data"),
         ('{"id":1,"error":{"message":"Page is closed"}}', "Page is closed"),
         ("x" * (MAX_RESPONSE + 1), "size limit"),
     ):
@@ -270,12 +291,12 @@ def test_cdp_refuses_non_loopback_debugging_and_proxy_use() -> None:
 
 def test_browser_initialization_and_status_do_not_launch_or_create_a_profile(tmp_path: Path) -> None:
     browser = Browser(tmp_path / "profile")
-    assert decoded(browser.request("tabs", {}, threading.Event()).text) == {"mode": "stopped", "tabs": []}
+    assert decoded(browser.request(command("tabs"), threading.Event()).text) == {"mode": "stopped", "tabs": [], "view": "pages"}
     assert not browser.profile.exists()
     stop = threading.Event()
     stop.set()
     with TestCase().assertRaisesRegex(InterruptedError, "Stopped"):
-        browser.request("open", {"url": "https://example.com"}, stop)
+        browser.request(command("open", **{"url": "https://example.com"}), stop)
     assert browser.process is None and not browser.profile.exists()
 
 
@@ -311,7 +332,7 @@ def test_browser_snapshot_limits_keep_valid_json_and_progress_offsets(tmp_path: 
         {"result": {"value": source}},
     )
     browser = connected_browser(tmp_path, channel)
-    output = browser.request("snapshot", {"target_id": "fixture", "offset": 4}, threading.Event()).text
+    output = browser.request(command("snapshot", **{"target_id": "fixture", "offset": 4}), threading.Event()).text
     assert len(output) <= MAX_OUTPUT
     page = decoded(output)
     assert page["more_controls"] and page["next_text_offset"] == len(cast(str, page["text"]))
@@ -323,7 +344,7 @@ def test_browser_screenshot_resets_focus_before_returning_the_image(tmp_path: Pa
     channel = screenshot_channel()
     browser = connected_browser(tmp_path, channel)
     try:
-        result = browser.request("screenshot", {"target_id": "fixture"}, threading.Event())
+        result = browser.request(command("screenshot", **{"target_id": "fixture"}), threading.Event())
         assert result.image == VIEWPORT_PNG
         assert "viewport" in result.text
         assert not channel.replies, "The focus reset must be acknowledged before the image is returned."
@@ -349,7 +370,7 @@ def test_browser_bad_screenshot_resets_focus_before_reporting_a_tool_error(tmp_p
         browser = connected_browser(tmp_path, channel)
         try:
             with TestCase().assertRaisesRegex(BrowserError, "invalid"):
-                browser.request("screenshot", {"target_id": "fixture"}, threading.Event())
+                browser.request(command("screenshot", **{"target_id": "fixture"}), threading.Event())
             assert not channel.replies and channel.sent[-1]["params"] == {"enabled": False}
             assert browser.connection is not None and not channel.closed
         finally:
@@ -362,7 +383,7 @@ def test_browser_capture_failure_is_preserved_after_successful_focus_reset(tmp_p
     browser = connected_browser(tmp_path, channel)
     try:
         with TestCase().assertRaisesRegex(BrowserError, "^Screenshot capture failed$"):
-            browser.request("screenshot", {"target_id": "fixture"}, threading.Event())
+            browser.request(command("screenshot", **{"target_id": "fixture"}), threading.Event())
         assert not channel.replies and channel.sent[-1]["params"] == {"enabled": False}
         assert browser.connection is not None and not channel.closed
         assert [call["method"] for call in channel.sent].count("Page.captureScreenshot") == 1
@@ -376,7 +397,7 @@ def test_browser_failed_focus_enable_still_resets_without_capturing(tmp_path: Pa
     browser = connected_browser(tmp_path, channel)
     try:
         with TestCase().assertRaisesRegex(BrowserError, "^Focus enable failed$"):
-            browser.request("screenshot", {"target_id": "fixture"}, threading.Event())
+            browser.request(command("screenshot", **{"target_id": "fixture"}), threading.Event())
         assert not channel.replies and channel.sent[-1]["params"] == {"enabled": False}
         assert "Page.captureScreenshot" not in [call["method"] for call in channel.sent]
         assert browser.connection is not None and not channel.closed
@@ -389,10 +410,10 @@ def test_browser_failed_focus_reset_discards_the_image_and_detaches_a_personal_b
     channel.replies[4] = '{"id":5,"error":{"message":"Focus reset failed"}}'
     browser = connected_browser(tmp_path, channel)
     with TestCase().assertRaisesRegex(BrowserError, "^Focus reset failed$"):
-        browser.request("screenshot", {"target_id": "fixture"}, threading.Event())
+        browser.request(command("screenshot", **{"target_id": "fixture"}), threading.Event())
     assert not channel.replies and channel.closed
     assert browser.connection is None and not browser.sessions
-    assert decoded(browser.request("tabs", {}, threading.Event()).text)["mode"] == "stopped"
+    assert decoded(browser.request(command("tabs"), threading.Event()).text)["mode"] == "stopped"
     assert "Browser.close" not in [call["method"] for call in channel.sent]
 
 
@@ -422,7 +443,7 @@ def test_browser_preserves_focus_reset_failure_when_owned_process_cleanup_also_f
     channel.replies.append('{"id":6,"result":{}}')
     browser = connected_browser(tmp_path, channel, owner=Managed(FinishedProcess(), FailedJobCleanup(), visible=False))
     with TestCase().assertRaisesRegex(BrowserError, "^Focus reset failed$") as failure:
-        browser.request("screenshot", {"target_id": "fixture"}, threading.Event())
+        browser.request(command("screenshot", **{"target_id": "fixture"}), threading.Event())
     assert any("owned browser processes did not finish exiting" in note for note in failure.exception.__notes__)
     assert not channel.replies and channel.closed
     assert browser.connection is None and not browser.sessions
@@ -444,7 +465,7 @@ def test_browser_preserves_the_primary_failure_when_focus_reset_also_fails(tmp_p
             ]
         browser = connected_browser(tmp_path, channel)
         with TestCase().assertRaisesRegex(BrowserError, "^Primary failure$") as failure:
-            browser.request("screenshot", {"target_id": "fixture"}, threading.Event())
+            browser.request(command("screenshot", **{"target_id": "fixture"}), threading.Event())
         assert any("Focus reset failed" in note for note in failure.exception.__notes__)
         assert not channel.replies and channel.closed and browser.connection is None
         assert "Browser.close" not in [call["method"] for call in channel.sent]
@@ -491,7 +512,7 @@ def test_browser_canceled_capture_closes_only_its_owned_browser(tmp_path: Path) 
         channel = CancelCaptureChannel(stop)
         browser = connected_browser(tmp_path, channel, owner=owner)
         with TestCase().assertRaisesRegex(InterruptedError, "may already have completed"):
-            browser.request("screenshot", {"target_id": "fixture"}, stop)
+            browser.request(command("screenshot", **{"target_id": "fixture"}), stop)
         assert stop.is_set() and channel.closed and browser.connection is None
         assert not browser.sessions
         methods = [call["method"] for call in channel.sent]
@@ -509,7 +530,7 @@ def test_closing_a_tab_does_not_require_page_scripting_access(tmp_path: Path) ->
     )
     browser = connected_browser(tmp_path / "unused", channel)
     try:
-        closed = decoded(browser.request("close", {"target_id": "settings"}, threading.Event()).text)
+        closed = decoded(browser.request(command("close", **{"target_id": "settings"}), threading.Event()).text)
         assert closed == {"target_id": "settings", "state": "closed"}
         assert [command["method"] for command in channel.sent] == ["Target.getTargets", "Target.closeTarget", "Target.getTargets"]
     finally:
@@ -522,7 +543,7 @@ def test_close_waits_for_removal_without_repeating_the_request(tmp_path: Path) -
     channel = Channel(*(json.dumps(dict[str, Json](id=index, result=reply)) for index, reply in enumerate(replies, 1)))
     browser = connected_browser(tmp_path / "unused", channel)
     try:
-        result = decoded(browser.request("close", {"target_id": "closing"}, threading.Event()).text)
+        result = decoded(browser.request(command("close", **{"target_id": "closing"}), threading.Event()).text)
         assert result["state"] == "closed"
         assert [command["method"] for command in channel.sent].count("Target.closeTarget") == 1
     finally:
@@ -605,3 +626,48 @@ def test_browser_allows_normal_shutdown_before_forcing_its_owned_job(tmp_path: P
     browser = connected_browser(tmp_path / "profile", Channel.results({}), owner=Managed(process, job, visible=False))
     browser.close()
     assert process.poll() == 0 and job.closed and not job.terminated_running_root
+
+
+def test_a_script_failure_without_details_reports_its_callers_failure() -> None:
+    # Defect: an exception with neither description nor text reaches the
+    # model as an empty error, or replaces the browser's own message.
+    with TestCase().assertRaisesRegex(BrowserError, "^JavaScript failed.$"):
+        evaluated({"exceptionDetails": {"text": ""}}, "JavaScript failed.")
+    with TestCase().assertRaisesRegex(BrowserError, "^Uncaught$"):
+        evaluated({"exceptionDetails": {"text": "Uncaught"}}, "JavaScript failed.")
+
+
+def page_action(path: Path, reply: Json, **arguments: Json) -> list[dict[str, Json]]:
+    """Run one browser_action against a scripted page; return the CDP commands it sent."""
+    channel = Channel.results(
+        {"targetInfos": [{"type": "page", "targetId": "fixture"}]},
+        {"sessionId": "page-session"},
+        {"frameTree": {"frame": {"id": "main"}}},
+        {"executionContextId": 1},
+        {"result": {"value": reply}},
+        {},
+        {},
+    )
+    browser = connected_browser(path, channel)
+    browser.request(command("action", target_id="fixture", id="control-0", **arguments), threading.Event())
+    return channel.sent
+
+
+def test_clicks_reach_the_viewport_point_unless_the_control_is_in_a_frame(tmp_path: Path) -> None:
+    # Defect: a top-page click is not dispatched at its control's point, or a
+    # frame control's frame-relative coordinates are clicked on the top page.
+    sent = page_action(tmp_path / "top", {"x": 5, "y": 7}, action="click")
+    clicks = [message["params"] for message in sent if message["method"] == "Input.dispatchMouseEvent"]
+    assert clicks == [
+        {"type": "mousePressed", "x": 5, "y": 7, "button": "left", "clickCount": 1},
+        {"type": "mouseReleased", "x": 5, "y": 7, "button": "left", "clickCount": 1},
+    ]
+    framed = page_action(tmp_path / "frame", {"clicked": True}, action="click", frame_id="child")
+    assert not any(message["method"] == "Input.dispatchMouseEvent" for message in framed)
+
+
+def test_check_without_a_requested_state_checks_the_control(tmp_path: Path) -> None:
+    # Defect: an omitted checked argument unchecks the control instead.
+    sent = page_action(tmp_path, {"checked": True}, action="check")
+    evaluation = next(message["params"] for message in sent if message["method"] == "Runtime.evaluate")
+    assert isinstance(evaluation, dict) and '"checked":true' in str(evaluation["expression"])

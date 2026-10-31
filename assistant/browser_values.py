@@ -3,7 +3,7 @@
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from enum import Enum, auto
-from typing import Annotated, Literal, NotRequired, TypedDict, assert_never
+from typing import Annotated, Literal, assert_never
 
 from pydantic import Field, TypeAdapter, ValidationError
 
@@ -12,67 +12,6 @@ from assistant.llm import Json
 MAX_ID = 2**31 - 1
 type Color = Literal["grey", "blue", "red", "yellow", "green", "pink", "purple", "cyan", "orange"]
 COLORS: tuple[Color, ...] = ("grey", "blue", "red", "yellow", "green", "pink", "purple", "cyan", "orange")
-
-
-class TabData(TypedDict):
-    tab_id: int
-    window_id: int
-    index: int
-    group_id: int
-    title: str
-    url: str
-    active: bool
-    pinned: bool
-    muted: bool
-
-
-class TabRow(TabData):
-    target_id: NotRequired[str]
-
-
-class GroupStyle(TypedDict):
-    title: str
-    color: Color
-    collapsed: bool
-
-
-class GroupData(GroupStyle):
-    group_id: int
-    window_id: int
-    shared: bool
-
-
-class GroupProperties(TypedDict, total=False):
-    title: str
-    color: Color
-    collapsed: bool
-
-
-class StripData(TypedDict):
-    mode: Literal["attached", "sign_in", "background"]
-    view: Literal["strip"]
-    browser: Literal["edge"]
-    tabs: list[TabRow]
-    groups: list[GroupData]
-    total: int
-    offset: int
-    next_offset: NotRequired[int]
-
-
-class UngroupedData(TypedDict):
-    tab_ids: list[int]
-    group_id: Literal[-1]
-
-
-class ClosedTabsData(TypedDict):
-    closed_tab_ids: list[int]
-    closed_count: int
-    group_id: NotRequired[int]
-
-
-class PageClosureData(TypedDict):
-    target_id: str
-    state: Literal["closed", "requested"]
 
 
 class BrowserError(OSError):
@@ -106,57 +45,23 @@ def navigation_context_error(message: str) -> bool:
     )
 
 
-def mapping(value: Json) -> dict[str, Json]:
-    if not isinstance(value, dict):
-        raise BrowserError("The browser returned an unexpected response.")
-    return value
-
-
-def text(data: dict[str, Json], name: str, default: str = "") -> str:
-    value = data.get(name, default)
-    if not isinstance(value, str):
-        raise BrowserError(f"{name} must be text.")
-    return value
-
-
-def number(data: dict[str, Json], name: str, default: int, lower: int, upper: int) -> int:
-    value = data.get(name, default)
-    if isinstance(value, bool) or not isinstance(value, int) or not lower <= value <= upper:
-        raise BrowserError(f"{name} must be an integer between {lower} and {upper}.")
-    return value
-
-
-def boolean(data: dict[str, Json], name: str, *, default: bool = False) -> bool:
-    value = data.get(name, default)
-    if not isinstance(value, bool):
-        raise BrowserError(f"{name} must be a boolean.")
-    return value
-
-
 type Identifier = Annotated[int, Field(strict=True, ge=0, le=MAX_ID)]
-_IDENTIFIERS = TypeAdapter(tuple[Identifier, ...])
+"""A native tab, group or window ID."""
+type GroupSelector = Annotated[int, Field(strict=True, ge=-1, le=MAX_ID)]
+"""A group ID, or -1 for ungrouped tabs."""
+type Position = Annotated[int, Field(strict=True, ge=-1, le=20000)]
+"""A tab or group index within its window, or -1 for the end."""
+type Offset = Annotated[int, Field(strict=True, ge=0, le=20000)]
+type Flag = Annotated[bool, Field(strict=True)]
+type Text = Annotated[str, Field(strict=True)]
 
 
-def identifiers(value: Json) -> tuple[int, ...] | None:
-    """Native tab or window IDs, or None when any entry is not one."""
+def decoded[T](shape: TypeAdapter[T], value: object, failure: str) -> T:
+    """Validate a browser reply before any later step relies on it."""
     try:
-        return _IDENTIFIERS.validate_python(value)
-    except ValidationError:
-        return None
-
-
-def tab_ids(data: dict[str, Json], *, required: bool = True, limit: int = 200) -> tuple[int, ...]:
-    values = identifiers(data.get("tab_ids", []))
-    if values is None or len(values) > limit or (required and not values):
-        raise BrowserError(f"tab_ids must contain 1 to {limit} integer tab IDs from browser_tabs with view=strip.")
-    return tuple(dict.fromkeys(values))
-
-
-def color_of(value: str) -> Color:
-    for color in COLORS:
-        if value == color:
-            return color
-    raise BrowserError("color must be one of " + ", ".join(COLORS) + ".")
+        return shape.validate_python(value)
+    except ValidationError as error:
+        raise BrowserError(failure) from error
 
 
 @dataclass(frozen=True, slots=True)
@@ -188,6 +93,7 @@ class BrowserStatus:
     total: int | None = None
     offset: int | None = None
     next_offset: int | None = None
+    view: Literal["pages"] = "pages"
 
 
 @dataclass(frozen=True, slots=True)
@@ -240,12 +146,56 @@ class FrameInfo:
     id: str
     url: str = ""
     name: str = ""
+    loader_id: Annotated[str, Field(alias="loaderId")] = ""
 
 
 @dataclass(frozen=True, slots=True)
 class FrameTree:
     frame: FrameInfo
     children: Annotated[tuple[FrameTree, ...], Field(alias="childFrames")] = ()
+
+
+# DevTools Protocol replies, validated where each command's result is used.
+
+
+@dataclass(frozen=True, slots=True)
+class FrameTreeReply:
+    tree: Annotated[FrameTree, Field(alias="frameTree")]
+
+
+@dataclass(frozen=True, slots=True)
+class CreatedTarget:
+    target_id: Annotated[str, Field(alias="targetId", strict=True, min_length=1)]
+
+
+@dataclass(frozen=True, slots=True)
+class TargetSession:
+    session_id: Annotated[str, Field(alias="sessionId", strict=True, min_length=1)]
+
+
+@dataclass(frozen=True, slots=True)
+class World:
+    context: Annotated[int, Field(alias="executionContextId", strict=True, ge=1, le=2**53)]
+
+
+@dataclass(frozen=True, slots=True)
+class Navigated:
+    error_text: Annotated[str, Field(alias="errorText")] = ""
+    loader_id: Annotated[str, Field(alias="loaderId")] = ""
+
+
+@dataclass(frozen=True, slots=True)
+class Capture:
+    data: Text
+
+
+@dataclass(frozen=True, slots=True)
+class ClosedTarget:
+    success: Flag = False
+
+
+CREATED_TARGET = TypeAdapter(CreatedTarget)
+TARGET_SESSION = TypeAdapter(TargetSession)
 
 
 @dataclass(frozen=True, slots=True)
@@ -312,7 +262,7 @@ class TargetList:
 _TARGETS = TypeAdapter(TargetList)
 
 
-def pages_of(reply: Json) -> tuple[Page, ...]:
+def pages_of(reply: object) -> tuple[Page, ...]:
     """The browser's pages from a Target.getTargets reply; other target types are ignored."""
     try:
         targets = _TARGETS.validate_python(reply).targets
@@ -348,7 +298,7 @@ class Evaluation:
 _EVALUATION = TypeAdapter(Evaluation)
 
 
-def evaluated(reply: Json, failed: str) -> Json:
+def evaluated(reply: object, failed: str) -> Json:
     """The script's value; its exception, or `failed` without a description, becomes a BrowserError."""
     try:
         evaluation = _EVALUATION.validate_python(reply)
@@ -361,6 +311,35 @@ def evaluated(reply: Json, failed: str) -> Json:
             raise BrowserError((message or failed)[:700])
         case None:
             return evaluation.result.value
+
+
+class DefaultGroup(Enum):
+    WORKSPACE = auto()
+
+
+class Ungrouped(Enum):
+    TABS = auto()
+
+
+@dataclass(frozen=True, slots=True)
+class InGroup:
+    id: int
+
+
+@dataclass(frozen=True, slots=True)
+class TabRow:
+    """One native tab as the model sees it, with its page when Workspace knows it."""
+
+    tab_id: int
+    window_id: int
+    index: int
+    group_id: int
+    title: str
+    url: str
+    target_id: str | None = None
+    active: bool = field(kw_only=True)
+    pinned: bool = field(kw_only=True)
+    muted: bool = field(kw_only=True)
 
 
 @dataclass(frozen=True, slots=True)
@@ -385,36 +364,58 @@ class Tab:
             case _:
                 assert_never(self.group)
 
-    def data(self) -> TabRow:
-        return {
-            "tab_id": self.id,
-            "window_id": self.window_id,
-            "index": self.index,
-            "group_id": self.group_id,
-            "title": self.title,
-            "url": self.url,
-            "active": self.active,
-            "pinned": self.pinned,
-            "muted": self.muted,
-        }
+    def row(self, target: str | None = None) -> TabRow:
+        return TabRow(
+            self.id,
+            self.window_id,
+            self.index,
+            self.group_id,
+            self.title,
+            self.url,
+            target,
+            active=self.active,
+            pinned=self.pinned,
+            muted=self.muted,
+        )
 
 
-def tab_of(value: Json) -> Tab:
-    data = mapping(value)
-    if not {"tab_id", "window_id", "index", "group_id", "title", "url", "active", "pinned", "muted"} <= data.keys():
-        raise BrowserError("The browser returned an incomplete tab.")
-    group = number(data, "group_id", -2, -1, MAX_ID)
-    return Tab(
-        number(data, "tab_id", -1, 0, MAX_ID),
-        number(data, "window_id", -1, 0, MAX_ID),
-        number(data, "index", -1, 0, MAX_ID),
-        Ungrouped.TABS if group == -1 else InGroup(group),
-        text(data, "title")[:300],
-        text(data, "url")[:1000],
-        active=boolean(data, "active"),
-        pinned=boolean(data, "pinned"),
-        muted=boolean(data, "muted"),
-    )
+@dataclass(frozen=True, slots=True)
+class TabReply:
+    """A tab as Edge's tab API reports it."""
+
+    tab_id: Identifier
+    window_id: Identifier
+    index: Identifier
+    group_id: GroupSelector
+    title: Text
+    url: Text
+    active: Flag = field(kw_only=True)
+    pinned: Flag = field(kw_only=True)
+    muted: Flag = field(kw_only=True)
+
+    def tab(self) -> Tab:
+        group = Ungrouped.TABS if self.group_id == -1 else InGroup(self.group_id)
+        return Tab(
+            self.tab_id,
+            self.window_id,
+            self.index,
+            group,
+            self.title[:300],
+            self.url[:1000],
+            active=self.active,
+            pinned=self.pinned,
+            muted=self.muted,
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class GroupRow:
+    group_id: int
+    window_id: int
+    title: str
+    color: Color
+    collapsed: bool = field(kw_only=True)
+    shared: bool = field(kw_only=True)
 
 
 @dataclass(frozen=True, slots=True)
@@ -426,29 +427,21 @@ class Group:
     collapsed: bool = field(kw_only=True)
     shared: bool = field(kw_only=True)
 
-    def data(self) -> GroupData:
-        return {
-            "group_id": self.id,
-            "window_id": self.window_id,
-            "title": self.title,
-            "color": self.color,
-            "collapsed": self.collapsed,
-            "shared": self.shared,
-        }
+    def row(self) -> GroupRow:
+        return GroupRow(self.id, self.window_id, self.title, self.color, collapsed=self.collapsed, shared=self.shared)
 
 
-def group_of(value: Json) -> Group:
-    data = mapping(value)
-    if not {"group_id", "window_id", "title", "color", "collapsed", "shared"} <= data.keys():
-        raise BrowserError("The browser returned an incomplete tab group.")
-    return Group(
-        number(data, "group_id", -1, 0, MAX_ID),
-        number(data, "window_id", -1, 0, MAX_ID),
-        text(data, "title")[:300],
-        color_of(text(data, "color")),
-        collapsed=boolean(data, "collapsed"),
-        shared=boolean(data, "shared"),
-    )
+@dataclass(frozen=True, slots=True)
+class GroupReply:
+    group_id: Identifier
+    window_id: Identifier
+    title: Text
+    color: Color
+    collapsed: Flag = field(kw_only=True)
+    shared: Flag = field(kw_only=True)
+
+    def group(self) -> Group:
+        return Group(self.group_id, self.window_id, self.title[:300], self.color, collapsed=self.collapsed, shared=self.shared)
 
 
 @dataclass(frozen=True, slots=True)
@@ -459,30 +452,20 @@ class TabState:
     last_window: int | None
 
 
-def tab_state(value: Json) -> TabState:
-    data = mapping(value)
-    match data.get("tabs"), data.get("groups"), identifiers(data.get("windows")):
-        case list() as tabs, list() as groups, tuple() as windows:
-            pass
-        case _:
-            raise BrowserError("The browser did not provide its tabs, groups and windows.")
-    if len(tabs) > 20000 or len(groups) > 20000 or len(windows) > 20000:
-        raise BrowserError("The browser returned an invalid tab list.")
-    last = None if data.get("last_window") is None else number(data, "last_window", -1, 0, MAX_ID)
-    return TabState(tuple(tab_of(tab) for tab in tabs), tuple(group_of(group) for group in groups), windows, last)
-
-
-class DefaultGroup(Enum):
-    WORKSPACE = auto()
-
-
-class Ungrouped(Enum):
-    TABS = auto()
-
-
 @dataclass(frozen=True, slots=True)
-class InGroup:
-    id: int
+class TabStateReply:
+    tabs: Annotated[tuple[TabReply, ...], Field(max_length=20000)]
+    groups: Annotated[tuple[GroupReply, ...], Field(max_length=20000)]
+    windows: Annotated[tuple[Identifier, ...], Field(max_length=20000)]
+    last_window: Identifier | None = None
+
+    def state(self) -> TabState:
+        return TabState(tuple(tab.tab() for tab in self.tabs), tuple(group.group() for group in self.groups), self.windows, self.last_window)
+
+
+TAB = TypeAdapter(TabReply)
+GROUP = TypeAdapter(GroupReply)
+TAB_STATE = TypeAdapter(TabStateReply)
 
 
 @dataclass(frozen=True, slots=True)
@@ -491,18 +474,19 @@ class NewGroup:
     color: Color
     collapsed: bool = field(kw_only=True)
 
-    def data(self) -> GroupStyle:
-        return {"title": self.title, "color": self.color, "collapsed": self.collapsed}
-
 
 type Destination = DefaultGroup | Ungrouped | InGroup
 
 
-def destination(args: dict[str, Json]) -> Destination:
-    if "group_id" not in args:
-        return DefaultGroup.WORKSPACE
-    identity = number(args, "group_id", -2, -1, MAX_ID)
-    return Ungrouped.TABS if identity == -1 else InGroup(identity)
+def destination(selector: int | None) -> Destination:
+    """A new tab's placement: the Workspace group by default, -1 for ungrouped, or an exact group."""
+    match selector:
+        case None:
+            return DefaultGroup.WORKSPACE
+        case -1:
+            return Ungrouped.TABS
+        case identity:
+            return InGroup(identity)
 
 
 @dataclass(frozen=True, slots=True)
@@ -550,25 +534,36 @@ def opening(state: TabState, requested: Destination, window: int | None) -> Open
 
 
 @dataclass(frozen=True, slots=True)
+class PageList:
+    """Connected pages, without connecting or requesting consent."""
+
+    offset: int = 0
+    limit: int = 20
+
+
+@dataclass(frozen=True, slots=True)
 class StripQuery:
+    """Edge's native tab strip, optionally filtered to one window or group."""
+
     offset: int
     limit: int
     window_id: int | None
     group: InGroup | Ungrouped | None
 
 
-def strip_query(args: dict[str, Json]) -> StripQuery:
-    identity = number(args, "group_id", -2, -1, MAX_ID) if "group_id" in args else None
-    group = None if identity is None else Ungrouped.TABS if identity == -1 else InGroup(identity)
-    return StripQuery(
-        number(args, "offset", 0, 0, 20000),
-        number(args, "limit", 20, 1, 40),
-        number(args, "window_id", -1, 0, MAX_ID) if "window_id" in args else None,
-        group,
-    )
+@dataclass(frozen=True, slots=True)
+class StripPage:
+    mode: Literal["attached", "sign_in", "background"]
+    tabs: tuple[TabRow, ...]
+    groups: tuple[GroupRow, ...]
+    total: int
+    offset: int
+    next_offset: int | None = None
+    view: Literal["strip"] = "strip"
+    browser: Literal["edge"] = "edge"
 
 
-_STRIP = TypeAdapter(StripData)
+STRIP_PAGE = TypeAdapter(StripPage)
 
 
 def strip_page(
@@ -578,7 +573,7 @@ def strip_page(
     targets: Mapping[str, int],
     *,
     maximum: int,
-) -> StripData:
+) -> StripPage:
     """Project an immutable observation into a bounded, typed response for tools or UI."""
     known = {identity: target for target, identity in targets.items()}
     tabs = tuple(
@@ -588,25 +583,15 @@ def strip_page(
     )
     page = tabs[query.offset : query.offset + query.limit]
     while True:
-        rows: list[TabRow] = []
-        for tab in page:
-            row = tab.data()
-            if tab.id in known:
-                row["target_id"] = known[tab.id]
-            rows.append(row)
-        groups = [item.data() for item in state.groups if any(tab.group_id == item.id for tab in page)]
-        result: StripData = {
-            "mode": mode,
-            "view": "strip",
-            "browser": "edge",
-            "tabs": rows,
-            "groups": groups,
-            "total": len(tabs),
-            "offset": query.offset,
-        }
-        if query.offset + len(page) < len(tabs):
-            result["next_offset"] = query.offset + len(page)
-        if len(_STRIP.dump_json(result).decode()) <= maximum:
+        result = StripPage(
+            mode,
+            tuple(tab.row(known.get(tab.id)) for tab in page),
+            tuple(item.row() for item in state.groups if any(tab.group_id == item.id for tab in page)),
+            len(tabs),
+            query.offset,
+            query.offset + len(page) if query.offset + len(page) < len(tabs) else None,
+        )
+        if len(STRIP_PAGE.dump_json(result, exclude_none=True).decode()) <= maximum:
             return result
         if len(page) <= 1:
             raise BrowserError("The browser tab summary exceeded its output limit.")
@@ -615,29 +600,17 @@ def strip_page(
 
 @dataclass(frozen=True, slots=True)
 class GroupChanges:
+    """Only the properties the request names; the others keep their current values."""
+
     title: str | None
     color: Color | None
     collapsed: bool | None = field(kw_only=True)
-
-    def data(self) -> GroupProperties:
-        result: GroupProperties = {}
-        if self.title is not None:
-            result["title"] = self.title
-        if self.color is not None:
-            result["color"] = self.color
-        if self.collapsed is not None:
-            result["collapsed"] = self.collapsed
-        return result
 
 
 @dataclass(frozen=True, slots=True)
 class Move:
     index: int
     window_id: int | None
-
-
-def move_of(args: dict[str, Json]) -> Move:
-    return Move(number(args, "index", -1, -1, 20000), number(args, "window_id", -1, 0, MAX_ID) if "window_id" in args else None)
 
 
 @dataclass(frozen=True, slots=True)
@@ -657,26 +630,6 @@ class EditGroup:
 
 
 type GroupRequest = CreateGroup | EditGroup
-
-
-def group_request(args: dict[str, Json]) -> GroupRequest:
-    existing = "group_id" in args
-    identities = tab_ids(args, required=not existing)
-    title = text(args, "title") if "title" in args else None
-    if title is not None and len(title) > 300:
-        raise BrowserError("Group titles may contain at most 300 characters.")
-    color = color_of(text(args, "color")) if "color" in args else None
-    collapsed = boolean(args, "collapsed") if "collapsed" in args else None
-    move = move_of(args) if "index" in args or (existing and "window_id" in args) else None
-    if existing:
-        return EditGroup(number(args, "group_id", -1, 0, MAX_ID), identities, GroupChanges(title, color, collapsed=collapsed), move)
-    window = number(args, "window_id", -1, 0, MAX_ID) if "window_id" in args else None
-    return CreateGroup(
-        identities,
-        NewGroup(title if title is not None else "Workspace", color or "blue", collapsed=collapsed if collapsed is not None else True),
-        window,
-        move,
-    )
 
 
 class TabAction(Enum):
@@ -701,39 +654,12 @@ class MoveTab:
 type TabRequest = ChangeTab | MoveTab
 
 
-def tab_request(args: dict[str, Json]) -> TabRequest:
-    identity = number(args, "tab_id", -1, 0, MAX_ID)
-    action = text(args, "action")
-    if action == "move":
-        if "index" not in args:
-            raise BrowserError("Moving a tab requires index; use -1 for the end of its window.")
-        return MoveTab(identity, move_of(args))
-    if "index" in args or "window_id" in args:
-        raise BrowserError("index and window_id only apply to the move action.")
-    try:
-        return ChangeTab(identity, TabAction(action))
-    except ValueError as error:
-        raise BrowserError("Tab action must be activate, pin, unpin, move or reload.") from error
-
-
 @dataclass(frozen=True, slots=True)
 class UngroupTabs:
     tab_ids: tuple[int, ...]
 
 
 type TabEdit = GroupRequest | TabRequest | UngroupTabs
-
-
-def tab_edit(operation: str, args: dict[str, Json]) -> TabEdit:
-    match operation:
-        case "group":
-            return group_request(args)
-        case "tab":
-            return tab_request(args)
-        case "ungroup":
-            return UngroupTabs(tab_ids(args))
-        case _:
-            raise BrowserError("Unknown tab operation.")
 
 
 @dataclass(frozen=True, slots=True)
@@ -750,9 +676,6 @@ class CloseState(Enum):
 class PageClosure:
     target_id: str
     state: CloseState
-
-    def data(self) -> PageClosureData:
-        return {"target_id": self.target_id, "state": self.state.value}
 
 
 @dataclass(frozen=True, slots=True)
@@ -773,17 +696,11 @@ type NativeClosure = CloseTabs | CloseGroup
 type Closure = ClosePage | NativeClosure | Disconnect
 
 
-def closure(args: dict[str, Json]) -> Closure:
-    target = text(args, "target_id")
-    if bool(target) + ("tab_ids" in args) + ("group_id" in args) > 1:
-        raise BrowserError("Choose target_id, tab_ids or group_id for closure, not more than one.")
-    if target:
-        return ClosePage(target)
-    if "tab_ids" in args:
-        return CloseTabs(tab_ids(args))
-    if "group_id" in args:
-        return CloseGroup(number(args, "group_id", -1, 0, MAX_ID))
-    return Disconnect.BROWSER
+@dataclass(frozen=True, slots=True)
+class ClosedTabs:
+    closed_tab_ids: tuple[int, ...]
+    closed_count: int
+    group_id: int | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -791,21 +708,17 @@ class ClosureResult:
     request: NativeClosure
     tab_ids: tuple[int, ...]
 
-    def data(self) -> ClosedTabsData:
-        result: ClosedTabsData = {"closed_count": len(self.tab_ids), "closed_tab_ids": list(self.tab_ids[:200])}
+    def row(self) -> ClosedTabs:
         match self.request:
             case CloseGroup(identity):
-                result["group_id"] = identity
+                return ClosedTabs(self.tab_ids[:200], len(self.tab_ids), identity)
             case CloseTabs():
-                pass
+                return ClosedTabs(self.tab_ids[:200], len(self.tab_ids))
             case _:
                 assert_never(self.request)
-        return result
 
 
 @dataclass(frozen=True, slots=True)
 class UngroupResult:
     tab_ids: tuple[int, ...]
-
-    def data(self) -> UngroupedData:
-        return {"tab_ids": list(self.tab_ids), "group_id": -1}
+    group_id: Literal[-1] = -1

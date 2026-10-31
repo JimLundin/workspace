@@ -18,7 +18,7 @@ from assistant.browser import MAX_OUTPUT, Browser
 from assistant.browser_session import Attached, Cdp, NativeSessions, Product, SocketConnector, connect_socket, endpoint
 from assistant.browser_values import BrowserError, InterruptedError
 from assistant.llm import Json
-from tests.test_browser import Channel, ScriptedSessions, connected_browser, decoded
+from tests.test_browser import Channel, ScriptedSessions, command, connected_browser, decoded
 
 
 @contextmanager
@@ -82,7 +82,7 @@ def test_attachment_waits_for_consent_then_reuses_the_approved_connection(tmp_pa
         consent_browser(tmp_path, approval, sockets=connecting) as (browser, approvals, requested),
         ThreadPoolExecutor(max_workers=1) as worker,
     ):
-        pending = worker.submit(browser.request, "attach", {}, threading.Event())
+        pending = worker.submit(browser.request, command("attach"), threading.Event())
         try:
             assert requested.wait(timeout=3) and not pending.done()
             # A TCP connection deadline must not expire while consent is pending,
@@ -90,7 +90,7 @@ def test_attachment_waits_for_consent_then_reuses_the_approved_connection(tmp_pa
             assert len(sockets) == 1 and sockets[0].gettimeout() is None
             approval.set()
             first = decoded(pending.result(timeout=3).text)
-            second = decoded(browser.request("attach", {}, threading.Event()).text)
+            second = decoded(browser.request(command("attach"), threading.Event()).text)
             assert first == second and first["mode"] == "attached"
             assert sockets[0].gettimeout() is None and approvals == ["/devtools/browser/fixture"]
         finally:
@@ -117,7 +117,7 @@ def test_endpoint_discovery_is_bounded_and_accepts_only_a_local_browser_path() -
 def test_status_does_not_read_profiles_or_request_a_connection(tmp_path: Path) -> None:
     opener = ScriptedSessions()
     browser = Browser(tmp_path / "separate", source=Product.EDGE, opener=opener)
-    status = decoded(browser.request("tabs", {}, threading.Event()).text)
+    status = decoded(browser.request(command("tabs"), threading.Event()).text)
     assert not opener.opened
     assert status["mode"] == "stopped" and status["browser"] == "edge" and status["tabs"] == []
     assert "edge://inspect/#remote-debugging" in str(status["setup"])
@@ -142,8 +142,8 @@ def test_attach_reuses_one_connection_and_never_closes_the_personal_browser(tmp_
         source=Product.EDGE,
         opener=NativeSessions(tmp_path / "unused", profiles=lambda _: tmp_path, connect=connect),
     )
-    first = decoded(browser.request("attach", {}, cancel).text)
-    second = decoded(browser.request("attach", {}, cancel).text)
+    first = decoded(browser.request(command("attach"), cancel).text)
+    second = decoded(browser.request(command("attach"), cancel).text)
     assert first == second and first["mode"] == "attached"
     assert opened == [("ws://127.0.0.1:12345/devtools/browser/fixture-123", cancel, 60)]
     assert browser.owner == Attached(Product.EDGE) and browser.process is None
@@ -169,7 +169,7 @@ def test_attached_tab_pages_identify_created_tabs_and_keep_late_targets_accessib
     browser.created.add("page-64")
     cancel = threading.Event()
 
-    output = browser.request("tabs", {"limit": 40}, cancel).text
+    output = browser.request(command("tabs", **{"limit": 40}), cancel).text
     assert len(output) <= MAX_OUTPUT
     first = decoded(output)
     first_tabs = first["tabs"]
@@ -177,11 +177,11 @@ def test_attached_tab_pages_identify_created_tabs_and_keep_late_targets_accessib
     assert first["total"] == 65 and first["next_offset"] == len(first_tabs)
     assert all(isinstance(tab, dict) and tab["created_in_session"] is False for tab in first_tabs)
 
-    final = decoded(browser.request("tabs", {"offset": 60}, cancel).text)
+    final = decoded(browser.request(command("tabs", **{"offset": 60}), cancel).text)
     final_tabs = final["tabs"]
     assert isinstance(final_tabs, list) and len(final_tabs) == 5 and "next_offset" not in final
     assert isinstance(final_tabs[-1], dict) and final_tabs[-1]["id"] == "page-64" and final_tabs[-1]["created_in_session"] is True
-    browser.request("close", {"target_id": "page-64"}, cancel)
+    browser.request(command("close", **{"target_id": "page-64"}), cancel)
     close = [command for command in channel.sent if command["method"] == "Target.closeTarget"]
     assert len(close) == 1 and close[0]["params"] == {"targetId": "page-64"}
     assert "page-64" not in browser.created
@@ -202,11 +202,11 @@ def test_missing_or_denied_attachment_does_not_launch_a_separate_browser(tmp_pat
         opener=NativeSessions(tmp_path / "unused", profiles=lambda _: tmp_path, connect=denied),
     )
     with TestCase().assertRaisesRegex(BrowserError, "chrome://inspect"):
-        browser.request("open", {"url": "https://example.com"}, threading.Event())
+        browser.request(command("open", **{"url": "https://example.com"}), threading.Event())
     assert not attempts and not browser.profile.exists()
     (tmp_path / "DevToolsActivePort").write_text("12345\n/devtools/browser/fixture\n")
     with TestCase().assertRaisesRegex(BrowserError, "Could not attach to Chrome"):
-        browser.request("attach", {}, threading.Event())
+        browser.request(command("attach"), threading.Event())
     assert attempts == ["ws://127.0.0.1:12345/devtools/browser/fixture"]
     assert browser.connection is None and browser.source is Product.CHROME and not browser.profile.exists()
 

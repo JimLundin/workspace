@@ -25,6 +25,7 @@ from assistant.agent_tools import (
 )
 from assistant.geometry import Shot
 from assistant.llm import Json, tool_spec
+from assistant.uia import Act, Inspect
 from automation.actions import Change, Classification, Evidence, Observation, Operation, target
 from automation.execution import ProofRule, Readback, Targets
 from automation.task import FileDigest
@@ -554,14 +555,13 @@ class Desktop:
         else:
             snapshot = self.context()
             handle = snapshot.window.handle if snapshot is not None and snapshot.window is not None else 0
-        request: dict[str, Json] = {
-            "operation": "inspect",
-            "handle": handle,
-            "query": args.text("query", ""),
-            "limit": args.bounded("limit", 60, (1, 100)),
-            "depth": args.bounded("depth", 8, (1, 20)),
-            "offset": args.bounded("offset", 0, (0, 4000)),
-        }
+        request = Inspect(
+            handle,
+            args.text("query", ""),
+            args.bounded("limit", 60, (1, 100)),
+            args.bounded("depth", 8, (1, 20)),
+            args.bounded("offset", 0, (0, 4000)),
+        )
 
         def read() -> Output:
             code, text = self.session.machine.inspect_ui(request, self.session.stop)
@@ -577,15 +577,14 @@ class Desktop:
         value = args.text("value") if action in ("set_value", "set_range") else ""
         if action != "read" and not self.may_control(args.operation):
             return Output(DECLINED, ok=False)
-        request: dict[str, Json] = {
-            "operation": "act",
-            "handle": args.number("handle"),
-            "id": args.text("id"),
-            "action": action,
-            "value": value,
-            "horizontal": args.bounded("horizontal", -1, (-1, 100)),
-            "vertical": args.bounded("vertical", -1, (-1, 100)),
-        }
+        request = Act(
+            args.number("handle"),
+            args.text("id"),
+            action,
+            value,
+            args.bounded("horizontal", -1, (-1, 100)),
+            args.bounded("vertical", -1, (-1, 100)),
+        )
 
         def execute() -> Output:
             code, text = self.session.machine.inspect_ui(request, self.session.stop)

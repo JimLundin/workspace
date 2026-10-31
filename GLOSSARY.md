@@ -183,6 +183,13 @@ result. In-process readers perform it with typed values; the business tool
 family offers it to the model. A model's call of one is an operation.
 _Avoid_: App command, operation name
 
+**Browser request**:
+One typed operation on the automation browser: open, list, snapshot, act,
+evaluate, capture, or edit and close tabs and groups. The browser tool family
+validates the model's arguments into one before approval; in-process readers
+construct them directly. A model's call of one is an operation.
+_Avoid_: Browser command string, operation name
+
 **Observed outcome**:
 Evidence about what an action actually did. An interrupted attempt can retain
 an uncertain outcome until the affected state is inspected.
