@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from scripts.mutate import replacements, seeded
+from scripts.mutate import Replacement, replacements, seeded
 
 SOURCE = b'def outcome(ready):\n    if ready:\n        return "verified"\n    return "uncertain"\n'
 SEEDS = """\
@@ -29,3 +29,13 @@ def test_replacements_file_seeds_quoted_and_multiline_fragments_exactly(tmp_path
         b'def outcome(ready):\n    if ready:\n        return "verified"\n    return "verified"\n',
         b'def outcome(ready):\n    if not ready:\n        return "verified"\n    return "uncertain"\n',
     ]
+
+
+def test_an_ambiguous_seed_is_refused_instead_of_mutating_its_first_match() -> None:
+    # Defect: a fragment that occurs twice silently mutates whichever comes first.
+    try:
+        replacements(SOURCE, (Replacement("return", "yield"),))
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("An ambiguous seed was accepted.")
