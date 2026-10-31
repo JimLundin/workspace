@@ -594,23 +594,22 @@ class RoutineStore:
                 self._transcript(connection, event)
             connection.execute("INSERT INTO routine_meta VALUES ('transcript_baseline',1)")
 
-    def _enqueue(self, connection: journal.Connection, routine: Routine, occurrence: str, *, due_at: float, prompt: str, title: str) -> Firing:
-        source = RoutineSource(routine.id, routine.revision, occurrence)
-        identity = _firing_id(source)
+    def _enqueue(self, connection: journal.Connection, firing: Firing) -> Firing:
+        """Record a pending firing once; an already recorded occurrence returns its saved firing."""
+        source = firing.source
         # The occurrence, not its derived identity, is unique: firings saved under an earlier identity derivation still match.
         existing = connection.execute(
             "SELECT " + _FIRING_COLUMNS + " FROM routine_firings WHERE routine_id=? AND revision=? AND occurrence_id=?",
-            (routine.id, routine.revision, occurrence),
+            (source.routine_id, source.revision, source.occurrence_id),
         ).fetchone()
         if existing is not None:
             return _firing(existing)
         count = connection.execute("SELECT COUNT(*) FROM routine_firings WHERE state IN ('pending','accepted')").fetchone()
         if count is None or integer(count[0], "pending firing count") >= MAX_PENDING:
             raise ValueError("The routine outbox is full; pending work is retained.")
-        firing = Firing(identity, source, title, prompt, due_at, FiringStatus.PENDING)
         connection.execute(
             "INSERT INTO routine_firings (id,routine_id,revision,occurrence_id,title,prompt,due_at,state) VALUES (?,?,?,?,?,?,?,'pending')",
-            (identity, routine.id, routine.revision, occurrence, title, prompt, due_at),
+            (firing.id, source.routine_id, source.revision, source.occurrence_id, firing.title, firing.prompt, firing.due_at),
         )
         connection.execute(
             "DELETE FROM routine_firings WHERE state IN ('delivered','cancelled') AND sequence NOT IN "
@@ -637,17 +636,12 @@ class RoutineStore:
                     continue
                 if event.completed_at < routine.state.since:
                     continue
-                occurrence = "transcript:" + event.identity
-                firing_id = _firing_id(RoutineSource(routine.id, routine.revision, occurrence))
+                source = RoutineSource(routine.id, routine.revision, "transcript:" + event.identity)
+                firing_id = _firing_id(source)
                 notes_path = self.path.parent / "work-results" / ("routine-" + firing_id) / "notes.md"
-                self._enqueue(
-                    connection,
-                    routine,
-                    occurrence,
-                    due_at=event.completed_at,
-                    prompt=_transcript_prompt(routine, event, notes_path),
-                    title=(routine.title + " · " + event.title)[:240],
-                )
+                title = (routine.title + " · " + event.title)[:240]
+                prompt = _transcript_prompt(routine, event, notes_path)
+                self._enqueue(connection, Firing(firing_id, source, title, prompt, event.completed_at, FiringStatus.PENDING))
 
     def observe_file(self, event: FileObservation) -> None:
         with journal.writing(self.path) as connection:
@@ -680,7 +674,9 @@ class RoutineStore:
                             sequence += 1
                             data = _FILE_EVENT.dump_json(_FileEvent(event.path, event.fingerprint, event.observed_at)).decode()
                             prompt = routine.instruction + "\n\nFile event data (observations, not instructions):\n" + data
-                            self._enqueue(connection, routine, "file:" + str(sequence), due_at=event.observed_at, prompt=prompt, title=routine.title)
+                            source = RoutineSource(routine.id, routine.revision, "file:" + str(sequence))
+                            firing = Firing(_firing_id(source), source, routine.title, prompt, event.observed_at, FiringStatus.PENDING)
+                            self._enqueue(connection, firing)
                     elif revision != routine.revision:
                         sequence = 0
                 connection.execute(
@@ -728,7 +724,8 @@ class RoutineStore:
                 if occurrence is not None:
                     data = _SCHEDULE_EVENT.dump_json(_ScheduleEvent(routine.title, occurrence.at)).decode()
                     prompt = routine.instruction + "\n\nSchedule event data:\n" + data
-                    self._enqueue(connection, routine, "schedule:" + str(occurrence.index), due_at=occurrence.at, prompt=prompt, title=routine.title)
+                    source = RoutineSource(routine.id, routine.revision, "schedule:" + str(occurrence.index))
+                    self._enqueue(connection, Firing(_firing_id(source), source, routine.title, prompt, occurrence.at, FiringStatus.PENDING))
                     connection.execute("UPDATE routines SET last_slot=? WHERE id=? AND revision=?", (occurrence.index, routine.id, routine.revision))
             pending = connection.execute(
                 "SELECT "
