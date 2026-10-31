@@ -66,7 +66,7 @@ from tests.fake_endpoint import Reply, fake_endpoint
 from tests.feed_fixture import feed_unavailable, no_canvas
 from tests.personal_work_fixture import WIRE, CapturedBrowser, CapturedSources, source
 from tests.test_work_actions import claimed
-lazy from tests.test_agent import ToolRig, message
+lazy from tests.test_agent import ToolRig, durable, message
 
 
 def test_dismissal_is_durable_blocks_reclassification_and_can_be_restored(tmp_path: Path) -> None:
@@ -545,3 +545,13 @@ def test_individual_mail_preserves_the_conversation_reference(tmp_path: Path) ->
     refreshed = store.observe((replace(second, excerpt="Friday at 18:00 is approved.", observed_at=3),))
     assert refreshed.works[0].links == saved.work.links
     assert frozenset(item.id for item in refreshed.sources) == frozenset(item.id for item in sources)
+
+
+def test_invalid_catalog_calls_name_their_arguments_and_start_nothing(tmp_path: Path) -> None:
+    # Defect: an invalid catalog call starts an action, or hands the model a
+    # raw validation dump instead of the invalid argument's name.
+    work = durable(tmp_path)
+    rig = ToolRig(work=work)
+    result = rig.call("work_items_restore")
+    assert not result.ok and result.text.startswith("Error: work_items_restore arguments are invalid: work_id"), result.text
+    assert not work.store.actions(work.claim.task.id)

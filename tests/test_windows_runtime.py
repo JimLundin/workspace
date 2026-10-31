@@ -13,7 +13,7 @@ from pathlib import Path
 if sys.platform != "win32":
     raise unittest.SkipTest("Windows bundle integration")
 
-from components import ASSISTANT, Window
+from components import ASSISTANT, Window, read_marker
 from keeper import Process, WindowsUser32
 from runtime import activate
 from scripts.deploy_processes import inventory
@@ -71,7 +71,9 @@ def test_shared_installed_python_processes_are_bound_to_workspace_ownership(tmp_
     script.write_text(
         "from pathlib import Path; import subprocess,sys\n"
         "child=subprocess.Popen([sys.executable,'-m','child_fixture'])\n"
-        "Path('ready.tmp').write_text(str(child.pid)); Path('ready.tmp').replace('ready')\nchild.wait()\n"
+        # Written in place, as components.write_marker does: renaming a finished
+        # file over the name lets a reader open it while the rename still holds it.
+        "Path('ready').write_text(f'{child.pid} 0', encoding='ascii')\nchild.wait()\n"
     )
     with (
         subprocess.Popen([str(python), str(script)], cwd=tmp_path) as parent,
@@ -79,11 +81,11 @@ def test_shared_installed_python_processes_are_bound_to_workspace_ownership(tmp_
     ):
         try:
             deadline = time.monotonic() + 10
-            while not ready.is_file():
+            while (marker := read_marker(ready)) is None:
                 if time.monotonic() >= deadline:
                     raise AssertionError("The installed-interpreter fixture did not start")
                 time.sleep(0.01)
-            child = int(ready.read_text())
+            child = marker.pid
             rows = inventory(tmp_path)
             assert {row.pid for row in rows} == {parent.pid, child}
             assert unrelated.pid not in {row.pid for row in rows}

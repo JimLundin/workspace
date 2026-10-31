@@ -41,8 +41,8 @@ from assistant.web_apps import (
     TeamsPage,
     WebAppOperation,
 )
-from automation.actions import Change, Observation, Resources
-from automation.execution import WorkExecution
+from automation.actions import Change, Observation, Resources, target
+from automation.execution import ApprovalReview, WorkExecution
 from automation.json_value import Json
 from automation.task import ActionUncertain, ActionVerified
 from tests.test_agent import FakeMachine, ToolRig, durable
@@ -168,13 +168,23 @@ def test_business_reads_and_mutations_have_exact_resource_markers(tmp_path: Path
         assert isinstance(tools[name].classify({}), Observation)
     assert isinstance(tools["kanban_update_task"].classify({}), Change)
     assert "filesystem" in resources("outlook_web_download_document", {}) and "filesystem" not in resources("outlook_web_open_document", {})
-    first = resources("kanban_update_task", {"target_id": "page-1", "task_id": "task-1"})
-    second = resources("kanban_read_task", {"target_id": "page-1", "task_id": "task-2"})
-    assert "browser" in first and first[-1] != second[-1]
-    assert resources("teams_web_draft_reply", {"target_id": "page-1", "chat_id": "chat-1"}) != resources(
-        "teams_web_read", {"target_id": "page-1", "chat_id": "chat-2"}
+    page = target("browser-page", "page-1")
+    assert resources("kanban_update_task", arguments("kanban_update_task")) == ("browser", page, target("kanban-task", "task-1"))
+    assert resources("kanban_read_task", {"target_id": "page-1", "task_id": "task-2"}) == ("browser", page, target("kanban-task", "task-2"))
+    assert resources("teams_web_draft_reply", arguments("teams_web_draft_reply")) == ("browser", page, target("teams-chat", "chat-1"))
+    assert resources("teams_web_read", {"target_id": "page-1"}) == ("browser", page)
+    assert resources("outlook_web_open_mail", {"target_id": "page-1", "conversation_id": "mail-2"}) == (
+        "browser",
+        page,
+        target("outlook-conversation", "mail-2"),
     )
-    assert resources("outlook_web_draft_reply", {"conversation_id": "mail-1"}) != resources("outlook_web_open_mail", {"conversation_id": "mail-2"})
+    assert resources("outlook_web_download_document", arguments("outlook_web_download_document")) == (
+        "browser",
+        "filesystem",
+        page,
+        target("outlook-conversation", "mail-1"),
+        target("outlook-attachment", "attachment-1"),
+    )
 
 
 def test_approval_mode_declines_business_writes_before_the_machine(tmp_path: Path) -> None:
@@ -254,3 +264,30 @@ def test_conflicting_app_receipts_cannot_verify_an_effect() -> None:
                     assert isinstance(confirm(query, conflict), ActionUncertain), (name, field)
             case Read():
                 raise AssertionError(f"{name} changes application state.")
+
+
+def test_approval_reviews_name_the_exact_card_or_chat(tmp_path: Path) -> None:
+    # Defect: approval mode asks the user to approve an edit or reply without
+    # naming the card or chat it changes.
+    reviews: list[ApprovalReview] = []
+
+    def review(item: ApprovalReview) -> bool:
+        reviews.append(item)
+        return False
+
+    for name in ("kanban_comment", "teams_web_draft_reply"):
+        rig = ToolRig(approvals=True, work=durable(tmp_path, review=review))
+        assert not rig.call(name, **arguments(name)).ok
+    # The journal appends the exact operation after the family's own summary.
+    assert [item.detail.split("\n\nExact operation:")[0] for item in reviews] == ["kanban_comment\ntask-1", "teams_web_draft_reply\nchat-1"]
+
+
+def test_personal_work_changes_target_the_exact_work(tmp_path: Path) -> None:
+    # Defect: a dismissal, restoration or attached page loses its work target,
+    # so evidence about another work item could reconcile it.
+    tools = ToolRig(work=durable(tmp_path)).agent.tools
+    work = target("personal-work", "work-1")
+    page: Mapping[str, Json] = {"title": "Guide", "reference": {"kind": "web", "url": "https://contoso.example.test/guide"}, "work_id": "work-1"}
+    assert tools["work_items_add_web_page"].classify(page).resources == ("personal-work", work)
+    assert tools["work_items_restore"].classify({"work_id": "work-1"}).resources == ("personal-work", work)
+    assert tools["work_items_list"].classify({}).resources == ("personal-work",)

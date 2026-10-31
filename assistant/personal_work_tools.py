@@ -3,7 +3,9 @@
 from collections.abc import Callable, Mapping
 from typing import Final
 
-from assistant.agent_tools import Args, Display, Output, Session, Tool
+from pydantic import ValidationError
+
+from assistant.agent_tools import Args, Display, Output, Session, Tool, rejected
 from assistant.business_tools import spec
 from assistant.llm import ToolSpec
 from assistant.work_bridge_contracts import BridgeCommand
@@ -115,9 +117,16 @@ def verified(output: str) -> ActionVerified | ActionUncertain | ActionNotApplied
             return ActionUncertain("The work catalog did not confirm the change.")
 
 
-def _resources(arguments: Mapping[str, Json]) -> tuple[str, ...]:
-    match arguments.get("work_id"):
-        case str() as work_id:
+def _resources(tool: str, arguments: Mapping[str, Json]) -> tuple[str, ...]:
+    """The catalog lock, and the exact work a validated request names."""
+    try:
+        request = validated(tool, dict(arguments))
+    except ValueError:
+        return ("personal-work",)
+    match request:
+        case SaveWork(work_id=str() as work_id) | AddDocument(work_id=str() as work_id) | AddWebPage(work_id=str() as work_id):
+            return ("personal-work", target("personal-work", work_id))
+        case UnlinkWork(work_id=work_id) | DismissWork(work_id=work_id) | RestoreWork(work_id=work_id):
             return ("personal-work", target("personal-work", work_id))
         case _:
             return ("personal-work",)
@@ -126,7 +135,7 @@ def _resources(arguments: Mapping[str, Json]) -> tuple[str, ...]:
 def _classify(spec: ToolSpec) -> Callable[[Mapping[str, Json]], Classification]:
     match spec.name:
         case "work_items_list" | "work_items_sources":
-            return lambda arguments: Observation(_resources(arguments))
+            return lambda arguments: Observation(_resources(spec.name, arguments))
         case (
             "work_items_add_web_page"
             | "work_items_dismiss"
@@ -135,7 +144,7 @@ def _classify(spec: ToolSpec) -> Callable[[Mapping[str, Json]], Classification]:
             | "work_items_save"
             | "work_items_unlink"
         ):
-            return lambda arguments: Change(_resources(arguments))
+            return lambda arguments: Change(_resources(spec.name, arguments))
         case _:
             raise ValueError(f"The personal work tool {spec.name} has no classification.")
 
@@ -150,5 +159,8 @@ class PersonalWork:
         return tuple(Tool(spec, self.catalog, _classify(spec), Display.PRIVATE) for spec in SPECS)
 
     def catalog(self, args: Args) -> Output:
-        request = validated(args.tool, args.values)
+        try:
+            request = validated(args.tool, args.values)
+        except ValidationError as error:
+            raise rejected(args.tool, error) from error
         return self.session.effect(args.operation, lambda: Output(self.request(request)), lambda output: verified(output.text))

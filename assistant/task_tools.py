@@ -1,12 +1,33 @@
 """The task tool family: the durable task's questions, action records, reconciliation and the current time."""
 
 from collections.abc import Callable
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
+from typing import Annotated, Final
 
-from assistant.agent_tools import BOOL, TEXT, Args, ArgumentError, Display, Output, Session, Tool, fixed, schema
-from assistant.llm import tool_spec
+from pydantic import Field, TypeAdapter
+
+from assistant.agent_tools import NO_ARGUMENTS, Args, ArgumentError, Display, NoArguments, Output, Session, Tool, argument_spec, fixed, typed_run
 from automation.actions import Evidence, Observation
 from automation.execution import Proof, Reconciliation, WorkExecution
+
+type Text = Annotated[str, Field(strict=True)]
+
+
+@dataclass(frozen=True, slots=True)
+class QuestionArguments:
+    question: Text
+
+
+@dataclass(frozen=True, slots=True)
+class ReconcileArguments:
+    action_id: Text
+    observation_id: Text
+    applied: Annotated[bool, Field(strict=True)] = field(kw_only=True)
+
+
+_QUESTION: Final = TypeAdapter(QuestionArguments)
+_RECONCILE: Final = TypeAdapter(ReconcileArguments)
 
 
 class TaskTools:
@@ -20,53 +41,53 @@ class TaskTools:
         unobserved = fixed(Observation((), Evidence.NONE))
         return (
             Tool(
-                tool_spec(
+                argument_spec(
                     "get_current_time",
                     "Read the current local date/time with UTC offset and timezone, UTC time and Unix timestamp. "
                     "Use a fresh observation for time-sensitive decisions; the prompt time is only a starting snapshot.",
-                    schema({}, ()),
+                    NO_ARGUMENTS,
                 ),
-                self.get_current_time,
+                typed_run(NO_ARGUMENTS, self.get_current_time),
                 fixed(Observation((), Evidence.GENERAL)),
                 Display.PUBLIC,
             ),
             Tool(
-                tool_spec(
+                argument_spec(
                     "ask_user",
                     "Ask for essential missing information that you cannot find or reasonably infer. Do not use for routine approval.",
-                    schema({"question": TEXT}, ("question",)),
+                    _QUESTION,
                 ),
-                self.ask_user,
+                typed_run(_QUESTION, self.ask_user),
                 unobserved,
                 display,
             ),
             Tool(
-                tool_spec(
+                argument_spec(
                     "work_actions",
                     "Inspect this durable task's action records and unresolved operations. "
                     "Recorded tool success alone does not prove that the requested outcome was achieved.",
-                    schema({}, ()),
+                    NO_ARGUMENTS,
                 ),
-                self.work_actions,
+                typed_run(NO_ARGUMENTS, self.work_actions),
                 unobserved,
                 display,
             ),
             Tool(
-                tool_spec(
+                argument_spec(
                     "reconcile_action",
                     "Verify a returned action or resolve an uncertain action after inspecting its actual target. "
                     "Use the action ID from work_actions and an observation_id from a successful inspection in this run. "
                     "Set applied=true only when that fresh observation establishes the intended effect; applied=false requires "
                     "proof it was not applied. File writes additionally require an exact content digest match.",
-                    schema({"action_id": TEXT, "observation_id": TEXT, "applied": BOOL}, ("action_id", "observation_id", "applied")),
+                    _RECONCILE,
                 ),
-                lambda args: self.reconcile_action(args, proof),
+                typed_run(_RECONCILE, lambda args, request: self.reconcile_action(request, proof)),
                 unobserved,
                 display,
             ),
         )
 
-    def get_current_time(self, args: Args) -> Output:
+    def get_current_time(self, args: Args, _request: NoArguments) -> Output:
         """The tool owner samples the clock once and publishes that observation."""
 
         def read() -> Output:
@@ -80,17 +101,15 @@ class TaskTools:
 
         return self.session.effect(args.operation, read)
 
-    def ask_user(self, args: Args) -> Output:
-        answer = self.work.ask(args.text("question"))
+    def ask_user(self, _args: Args, request: QuestionArguments) -> Output:
+        answer = self.work.ask(request.question)
         return Output(answer if answer else "The user didn't answer.", ok=bool(answer))
 
-    def work_actions(self, _: Args) -> Output:
+    def work_actions(self, _args: Args, _request: NoArguments) -> Output:
         return Output(self.work.describe_actions())
 
-    def reconcile_action(self, args: Args, proof: Callable[[str], Proof]) -> Output:
-        if not isinstance(args.values.get("applied"), bool):
-            raise ArgumentError("applied must be true or false.")
-        request = Reconciliation(args.text("action_id"), args.text("observation_id"), applied=args.flag("applied"))
+    def reconcile_action(self, arguments: ReconcileArguments, proof: Callable[[str], Proof]) -> Output:
+        request = Reconciliation(arguments.action_id, arguments.observation_id, applied=arguments.applied)
         try:
             return Output(self.work.reconcile(request, proof))
         except ValueError as error:

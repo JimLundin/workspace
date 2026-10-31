@@ -3,7 +3,9 @@
 from collections.abc import Callable
 from typing import Final
 
-from assistant.agent_tools import Args, Display, Output, Session, Tool, fixed
+from pydantic import ValidationError
+
+from assistant.agent_tools import Args, Display, Output, Session, Tool, fixed, rejected
 from assistant.business_tools import spec
 from assistant.work_bridge_contracts import BridgeCommand
 from assistant.work_canvas_commands import CANVAS_COMMAND, CANVAS_RESPONSE, CanvasCommand, CanvasRefused, CanvasUpdated, ReadCanvas, UpdateCanvas
@@ -91,5 +93,8 @@ class Canvas:
         )
 
     def canvas(self, args: Args) -> Output:
-        command = validated(args.tool, args.values)
+        try:
+            command = validated(args.tool, args.values)
+        except ValidationError as error:
+            raise rejected(args.tool, error) from error
         return self.session.effect(args.operation, lambda: Output(self.request(command)), lambda output: verified(command, output.text))

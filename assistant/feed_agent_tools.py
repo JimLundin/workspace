@@ -8,6 +8,9 @@ from http.client import HTTPResponse
 from pathlib import Path
 from typing import Final, override
 
+from pydantic import ValidationError
+
+from assistant import agent_tools
 from assistant.agent_tools import TEXT, Args, Display, Output, Session, Tool, fixed, schema
 from assistant.feed_contracts import BOARD_EDIT, FEED_COMMAND, FeedCommand, FeedRejected, reply_schema
 from assistant.llm import tool_spec
@@ -179,7 +182,10 @@ class Feed:
         )
 
     def feed(self, args: Args) -> Output:
-        command = validated(args.tool, args.values)
+        try:
+            command = validated(args.tool, args.values)
+        except ValidationError as error:
+            raise agent_tools.rejected(args.tool, error) from error
 
         def perform() -> Output:
             reply = self.request(command)

@@ -355,6 +355,19 @@ def _tabs_readback(arguments: Mapping[str, Json], result: str) -> Readback:
             return Readback(("all:browser-page",) if unfiltered and following is None else ())
 
 
+def _review_subject(request: BrowserRequest) -> str:
+    """The address or exact page an approval review names."""
+    match request:
+        case Open(url=url) | SignIn(url=url) if url:
+            return url
+        case Open(target_id=page) | PageSnapshot(target_id=page) | PageAction(target_id=page) | Evaluate(target_id=page) if page:
+            return page
+        case Screenshot(target_id=page) | ClosePage(page) if page:
+            return page
+        case _:
+            return "Workspace browser"
+
+
 def _classify(tool: BrowserTool) -> Callable[[Mapping[str, Json]], Change | Observation]:
     """Reads observe their target; every other operation is a change the journal records."""
 
@@ -401,7 +414,7 @@ class Browser:
             case Change() if not self.session.approve(
                 args.operation,
                 "Use the automation browser?",
-                f"{args.tool.removeprefix('browser_')}: {args.text('url', '') or args.text('target_id', 'Workspace browser')}",
+                f"{args.tool.removeprefix('browser_')}: {_review_subject(request)}",
             ):
                 return Output(DECLINED, ok=False)
             case _:

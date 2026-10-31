@@ -5,13 +5,13 @@ place their queries are read from tool arguments and their typed results become
 tool text; in-process callers perform the same operations with typed values.
 """
 
-from collections.abc import Callable, Mapping
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Final
 
-from pydantic import TypeAdapter
+from pydantic import TypeAdapter, ValidationError
 
-from assistant.agent_tools import DECLINED, Args, Display, Output, Session, Tool
+from assistant.agent_tools import DECLINED, Args, Display, Output, Session, Tool, rejected, typed_classification
 from assistant.browser_values import BrowserError
 from assistant.llm import ToolSpec, tool_spec
 from assistant.web_apps import (
@@ -30,6 +30,7 @@ from assistant.web_apps import (
     TEAMS_DRAFT_REPLY,
     TEAMS_OPEN_CHAT,
     TEAMS_READ,
+    BoardQuery,
     ChatDraft,
     ChatDrafted,
     ChatOpened,
@@ -43,14 +44,18 @@ from assistant.web_apps import (
     MailDownload,
     MailDraft,
     MailDrafted,
+    MailList,
     MailOpened,
     MailQuery,
+    MailSearch,
     PreviewOpened,
     TaskComment,
     TaskEdit,
     TaskEdited,
     TaskMove,
     TaskMoved,
+    TaskQuery,
+    TeamsQuery,
     WebAppOperation,
     decoded,
 )
@@ -171,25 +176,33 @@ class Collection[Q: Located, R]:
 
 type Effect[Q: Located, R] = Read[Q, R] | Selection[Q, R] | Edit[Q, R] | Collection[Q, R]
 
-_WEB_MARKERS: Final = (
-    ("target_id", "browser-page"),
-    ("task_id", "kanban-task"),
-    ("chat_id", "teams-chat"),
-    ("conversation_id", "outlook-conversation"),
-    ("attachment_id", "outlook-attachment"),
-)
 
-
-def _marker(kind: str, value: Json) -> tuple[str, ...]:
-    match value:
-        case str() as identity if identity:
-            return (target(kind, identity),)
+def _markers(query: object) -> tuple[str, ...]:
+    """The exact page, card, chat, conversation and attachment a validated query names."""
+    match query:
+        case TaskQuery(page, task) | TaskEdit(page, task) | TaskMove(page, task) | TaskComment(page, task):
+            return (target("browser-page", page), target("kanban-task", task))
+        case ChatQuery(page, chat) | ChatDraft(page, chat):
+            return (target("browser-page", page), target("teams-chat", chat))
+        case MailDocument(page, conversation, attachment) | MailDownload(page, conversation, attachment):
+            return (target("browser-page", page), target("outlook-conversation", conversation), target("outlook-attachment", attachment))
+        case MailQuery(page, conversation) | MailDraft(page, conversation):
+            return (target("browser-page", page), target("outlook-conversation", conversation))
+        case BoardQuery(page) | TeamsQuery(page) | MailList(page) | MailSearch(page):
+            return (target("browser-page", page),)
         case _:
             return ()
 
 
-def _web_resources(locks: tuple[str, ...], arguments: Mapping[str, Json]) -> tuple[str, ...]:
-    return (*locks, *(marker for name, kind in _WEB_MARKERS for marker in _marker(kind, arguments.get(name))))
+def _review_subject(query: object) -> str:
+    """The exact task or chat an approval review names; mail replies are named by the tool alone."""
+    match query:
+        case TaskEdit(task_id=task) | TaskMove(task_id=task) | TaskComment(task_id=task):
+            return task
+        case ChatDraft(chat_id=chat):
+            return chat
+        case _:
+            return ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -203,11 +216,12 @@ class AppTool[Q: Located, R]:
         effect, operation = self.effect, self.effect.operation
 
         def run(args: Args) -> Output:
-            query = operation.query.validate_python(args.values)
+            try:
+                query = operation.query.validate_json(args.payload)
+            except ValidationError as error:
+                raise rejected(args.tool, error) from error
             match effect:
-                case Edit() if not session.approve(
-                    args.operation, "Use the application?", args.tool + "\n" + args.text("task_id", args.text("chat_id", ""))
-                ):
+                case Edit() if not session.approve(args.operation, "Use the application?", args.tool + "\n" + _review_subject(query)):
                     return Output(DECLINED, ok=False)
                 case _:
                     pass
@@ -230,11 +244,15 @@ class AppTool[Q: Located, R]:
 
         match effect:
             case Read():
-                return Tool(self.spec, run, lambda arguments: Observation(_web_resources(("browser",), arguments)), Display.PRIVATE)
+                classify = typed_classification(operation.query, lambda query: Observation(("browser", *_markers(query))), Observation(("browser",)))
+                return Tool(self.spec, run, classify, Display.PRIVATE)
             case Selection() | Edit():
-                return Tool(self.spec, run, lambda arguments: Change(_web_resources(("browser",), arguments)), Display.PRIVATE)
+                classify = typed_classification(operation.query, lambda query: Change(("browser", *_markers(query))), Change(("browser",)))
+                return Tool(self.spec, run, classify, Display.PRIVATE)
             case Collection():
-                return Tool(self.spec, run, lambda arguments: Change(_web_resources(("browser", "filesystem"), arguments)), Display.PRIVATE)
+                locks = ("browser", "filesystem")
+                classify = typed_classification(operation.query, lambda query: Change((*locks, *_markers(query))), Change(locks))
+                return Tool(self.spec, run, classify, Display.PRIVATE)
 
 
 def app_tool[Q: Located, R](name: str, description: str, effect: Effect[Q, R]) -> AppTool[Q, R]:

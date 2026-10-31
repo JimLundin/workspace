@@ -475,7 +475,11 @@ release owner and each child read it. `scripts/deploy_policy.py` makes
 the restart selection from immutable manifests and both versions' import graphs.
 The release owner verifies clean selected exits and retained process identities,
 then requires every readiness marker to name the observed process (id and
-creation time) of its component, replaced or retained. Failed
+creation time) of its component, replaced or retained. A child writes its
+marker in place, so a reader sees no marker, an empty one or the complete one;
+readers poll and treat an empty or unreadable marker as not yet ready. Renaming
+a finished temporary file over the name is avoided: on Windows a reader that
+opens the name while the rename still holds it gets a sharing violation. Failed
 replacement restores only changed source before resuming. The protected full
 selfcheck and trial-based agent update path keep their full checks and rollback.
 Assistant unavailability produces shortcut feedback without disabling the keyboard
