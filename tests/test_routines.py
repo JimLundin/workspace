@@ -337,6 +337,17 @@ def test_corrupt_saved_trigger_is_rejected_before_work_is_submitted(tmp_path: Pa
     assert not tasks.list_tasks()
 
 
+def test_transcript_triggers_saved_before_typed_storage_still_load(tmp_path: Path) -> None:
+    # Defect: a meeting-notes routine saved as the earlier {"kind":"transcript"} object
+    # no longer loads after the upgrade, so every routine listing fails.
+    path = tmp_path / "work.sqlite3"
+    RoutineStore(path).create("meeting", "Actions", "Extract meeting actions.", EventTrigger.TRANSCRIPT_COMPLETED, at=1)
+    with closing(sqlite3.connect(path)) as external, external:
+        external.execute("UPDATE routines SET trigger=? WHERE id='meeting'", ('{"kind":"transcript"}',))
+    reopened = RoutineStore(path).get("meeting")
+    assert reopened is not None and reopened.trigger is EventTrigger.TRANSCRIPT_COMPLETED
+
+
 def test_routine_controls_and_event_history_survive_independent_store_instances(tmp_path: Path) -> None:
     path = tmp_path / "work.sqlite3"
     first = RoutineStore(path)
