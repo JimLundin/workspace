@@ -121,7 +121,9 @@ with one worker and 60.86 seconds with two, including startup and shutdown.
 
 Every `Dev.cmd check` first runs the source architecture review, including when
 `--tests` selects individual behavioral checks. The review parses source without
-importing the application. It enforces transitive keyboard isolation, immutable
+importing the application. It enforces transitive keyboard isolation, the
+independence of the automation and winapi layers from assistant modules (apart
+from the composition-root seams declared in `pyproject.toml`), immutable
 dataclass defaults, concrete mutable-field and reflection restrictions, and exact
 explained exceptions declared in `pyproject.toml`. It also rejects patch/mock
 frameworks and monkeypatch fixtures across production and test source; explicit
@@ -264,6 +266,25 @@ the changed decision through its callers. Review survivors for missing scenarios
 redundant checks and equivalent behavior before adding tests. Keep reports in
 Temp; test setup should batch large fixture catalogs instead of repeating
 already-covered creation transactions.
+
+To seed exact mutants instead, list them in a TOML file and pass
+`--replacements`. Each `before` fragment must match the source exactly once.
+Use literal strings (`'...'`, or `'''...'''` across lines, which drops a
+newline right after the opening delimiter), so quotes and backslashes reach
+the runner unchanged:
+
+```toml
+[[replacement]]
+before = 'return "uncertain"'
+after = 'return "verified"'
+```
+
+```powershell
+.\Dev.cmd mutate assistant/action_text.py --replacements "$env:TEMP\seeds.toml" --tests tests/test_action_text.py --output "$env:TEMP\workspace-mutations.json"
+```
+
+Fragments never travel on the command line: Windows quoting through `Dev.cmd`
+and PowerShell strips embedded double quotes.
 
 ## Source deployment
 

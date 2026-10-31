@@ -26,7 +26,6 @@ from urllib.parse import quote
 
 from pydantic import ConfigDict, TypeAdapter
 
-from assistant.llm import RATE
 from assistant.meeting_followup import (
     ACTION_CONTENT,
     DRAFT_CONTENT,
@@ -57,6 +56,7 @@ from assistant.meeting_store import MeetingStore
 from assistant.recording_state import source_name
 from automation.files import filesystem_path
 from automation.task import FileDigest, digest, identifier, integer, text, timestamp, variant
+from winapi.pcm import RATE
 
 MAX_PACKAGE_BYTES = 16 * 1024 * 1024
 MAX_VERSIONS = 128

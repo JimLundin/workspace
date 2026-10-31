@@ -5,10 +5,10 @@ from typing import Final
 
 from assistant.agent_tools import Args, Display, Output, Session, Tool, fixed
 from assistant.business_tools import spec
-from assistant.llm import Json
 from assistant.work_bridge_contracts import BridgeCommand
 from assistant.work_canvas_commands import CANVAS_COMMAND, CANVAS_RESPONSE, CanvasCommand, CanvasRefused, CanvasUpdated, ReadCanvas, UpdateCanvas
 from automation.actions import Change, Observation
+from automation.json_value import Json
 from automation.task import ActionNotApplied, ActionUncertain, ActionVerified
 
 INSTRUCTIONS = """You build and maintain the local desktop canvas; the user is not expected to populate or arrange it.

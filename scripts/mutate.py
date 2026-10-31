@@ -15,6 +15,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import tomllib
 from collections.abc import Collection, Iterable, Iterator, Mapping
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import suppress
@@ -171,9 +172,34 @@ def mutation_order(mutation: Mutation) -> tuple[int, int, str]:
     return mutation.line, mutation.start, mutation.after
 
 
-def replacements(source: bytes, changes: Iterable[tuple[str, str]]) -> list[Mutation]:
+@dataclass(frozen=True, slots=True)
+class Replacement:
+    before: str
+    after: str
+
+
+@dataclass(frozen=True, slots=True)
+class Seeds:
+    """A --replacements file: [[replacement]] TOML tables of exact fragments.
+
+    A file keeps fragments out of command lines, whose Windows quoting through
+    Dev.cmd and PowerShell strips embedded double quotes.
+    """
+
+    replacement: tuple[Replacement, ...]
+
+
+SEEDS = TypeAdapter(Seeds)
+
+
+def seeded(path: Path) -> tuple[Replacement, ...]:
+    return SEEDS.validate_python(tomllib.loads(path.read_text(encoding="utf-8"))).replacement
+
+
+def replacements(source: bytes, changes: Iterable[Replacement]) -> list[Mutation]:
     found: list[Mutation] = []
-    for before, after in changes:
+    for change in changes:
+        before, after = change.before, change.after
         fragment = before.encode("utf-8")
         if not fragment or source.count(fragment) != 1:
             raise ValueError(f"A seeded replacement must match exactly once: {before!r}")
@@ -368,7 +394,7 @@ class Options:
     root: Path
     tests: tuple[str, ...]
     function: tuple[str, ...] | None
-    replace: tuple[tuple[str, str], ...] | None
+    replacements: Path | None
     limit: int
     seed: int
     timeout: float
@@ -392,7 +418,7 @@ def main() -> None:
     parser.add_argument("--root", type=Path, default=ROOT)
     parser.add_argument("--tests", nargs="+", required=True, help="explicit pytest paths or node IDs")
     parser.add_argument("--function", action="append", default=None, help="qualified function name; repeat to select several")
-    parser.add_argument("--replace", nargs=2, action="append", metavar=("BEFORE", "AFTER"), help="seed an exact replacement instead of AST mutations")
+    parser.add_argument("--replacements", type=Path, help="TOML file of exact seeded replacements instead of AST mutations")
     parser.add_argument("--limit", type=int, default=50, help="deterministic sample size; 0 runs every generated mutation")
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--timeout", type=float, default=30, help="seconds per subprocess; timeouts are reported separately")
@@ -410,12 +436,12 @@ def main() -> None:
     if limit < 0 or workers < 1 or timeout <= 0:
         parser.error("limit must be nonnegative; workers and timeout must be positive")
     original = (root / source).read_bytes()
-    changes, functions = options.replace, options.function
+    changes, functions = options.replacements, options.function
     if changes and functions:
         parser.error("choose either seeded replacements or function selection")
     try:
-        candidates = replacements(original, changes) if changes else mutations(original, functions or ())
-    except (ValueError, SyntaxError) as error:
+        candidates = replacements(original, seeded(changes)) if changes else mutations(original, functions or ())
+    except (OSError, ValueError, SyntaxError) as error:
         parser.error(str(error))
     if not candidates:
         parser.error("no mutations matched the selected source/functions")

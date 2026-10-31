@@ -10,8 +10,8 @@ from typing import Annotated, Protocol, assert_never
 
 from pydantic import Field, TypeAdapter
 
-from assistant.llm import Json
 from automation.actions import Actions, Evidence, Observation, Operation, Resources
+from automation.json_value import Json
 from automation.presentation import LiveMessage
 from automation.store import TaskStore
 from automation.task import (

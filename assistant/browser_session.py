@@ -26,7 +26,7 @@ from assistant.browser_values import (
     NavigationContextError,
     navigation_context_error,
 )
-from assistant.llm import Json
+from automation.json_value import Json
 lazy from assistant.browser_host import connect_shared
 lazy from usage import DIRECTORY
 lazy from winapi.processes import ProcessJob

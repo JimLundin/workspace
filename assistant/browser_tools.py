@@ -10,7 +10,7 @@ from typing import Annotated, Final, Literal
 
 from pydantic import Field, TypeAdapter, ValidationError
 
-from assistant.agent_tools import DECLINED, Args, Display, Output, Session, Tool
+from assistant.agent_tools import DECLINED, Args, Display, Output, Session, Tool, rejected
 from assistant.browser_requests import (
     Activate,
     Attach,
@@ -57,9 +57,10 @@ from assistant.browser_values import (
     destination,
 )
 from assistant.desktop_tools import Screen
-from assistant.llm import Json, ToolSpec, tool_spec
+from assistant.llm import ToolSpec, tool_spec
 from automation.actions import Change, Evidence, Observation, target
 from automation.execution import Readback, Targets
+from automation.json_value import Json
 
 type TabIds = Annotated[tuple[Identifier, ...], Field(min_length=1, max_length=200)]
 type Title = Annotated[str, Field(strict=True, max_length=300)]
@@ -392,7 +393,10 @@ class Browser:
                 return Tool(declared.spec, lambda args: self.browse(declared, args), classify, Display.PRIVATE)
 
     def browse(self, declared: BrowserTool, args: Args) -> Output:
-        request = declared.parse(args.payload)
+        try:
+            request = declared.parse(args.payload)
+        except ValidationError as error:
+            raise rejected(args.tool, error) from error
         match _classify(declared)(args.values):
             case Change() if not self.session.approve(
                 args.operation,
