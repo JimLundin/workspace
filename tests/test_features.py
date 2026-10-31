@@ -8,11 +8,12 @@ lazy from dataclasses import replace
 from assistant.features import Assistant, pick_window, switcher_windows
 from assistant.geometry import Shot
 from assistant.icons import State
-from assistant.llm import MAX_SECONDS, RATE, Missing, Settings
+from assistant.llm import MAX_SECONDS, Missing, Settings
 from automation.json_value import Json
 from protocol import App, Tool
 from tests.fake_endpoint import FakeEndpoint, Reply, fake_endpoint, sse
 from usage import Detail
+from winapi.pcm import RATE
 from winapi.shapes import InputRejectedError, Rect, Window
 
 SPEECH = bytes(2 * RATE)  # a second of silence: long enough to send

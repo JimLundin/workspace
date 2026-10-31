@@ -17,9 +17,8 @@ from typing import Final, Literal, NotRequired, TypedDict, assert_never
 from pydantic import ConfigDict, TypeAdapter
 
 from automation.json_value import Json
+from winapi.pcm import RATE
 
-RATE: Final = 16_000
-"""Samples per second. Speech models work at 16 kHz; more only makes uploads bigger."""
 MAX_SECONDS: Final = 300
 """Longest recording; the buffer for it (9.6 MB) is allocated once, at start."""
 MIN_SECONDS: Final = 0.3
