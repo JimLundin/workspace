@@ -20,6 +20,7 @@ lazy import shiboken6
 
 from assistant.qt_runtime import prepare
 from scripts.preview import Files, Preview
+from tests.check_fixture import copy_check_scripts
 from tests.test_quality import migrations
 
 prepare()
@@ -44,22 +45,7 @@ def wait_for(path: Path, condition: str, process: subprocess.Popen[bytes]) -> di
 
 
 def write_watch_source(root: Path, output: Path) -> None:
-    scripts = root / "scripts"
-    scripts.mkdir(parents=True)
-    (scripts / "__init__.py").write_text("")
-    for name in (
-        "watch.py",
-        "check.py",
-        "source_analysis.py",
-        "architecture.py",
-        "quality.py",
-        "deploy_files.py",
-        "development_paths.py",
-        "check_native.py",
-        "check_results.py",
-        "native_desktop.py",
-    ):
-        shutil.copyfile(ROOT / "scripts" / name, scripts / name)
+    copy_check_scripts(root, ("watch.py", "check.py"))
     shutil.copyfile(ROOT / "runtime.py", root / "runtime.py")
     (root / "pyproject.toml").write_text(
         '[tool.workspace.architecture]\nmodels=[]\n[tool.ruff]\ntarget-version="py315"\n[tool.ruff.lint.pylint]\nmax-args=3\nmax-positional-args=5\n'
