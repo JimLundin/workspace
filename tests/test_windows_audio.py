@@ -52,6 +52,7 @@ class InputDevice:
         "opened",
         "opens",
         "position_bytes",
+        "position_kind",
         "positions",
         "release",
         "reset_entered",
@@ -73,6 +74,8 @@ class InputDevice:
         self.completion = Completion.RETURNED
         self.waits = self.positions = 0
         self.position_bytes = 0
+        self.position_kind = 4
+        """TIME_BYTES, or TIME_SAMPLES (2) as some drivers report instead."""
         self.reset_entered: threading.Event | None = None
         self.release: threading.Event | None = None
         self.default: str | None = "headset"
@@ -145,7 +148,8 @@ class InputDevice:
 
     def position(self, handle: wintypes.HANDLE, result: audio.MMTIME) -> int:
         self.positions += 1
-        result.kind, result.value = 4, self.position_bytes
+        result.kind = self.position_kind
+        result.value = self.position_bytes // 2 if self.position_kind == 2 else self.position_bytes
         return 5 if self.failure is Failure.POSITION else 0
 
     def wait(self, event: EventHandle, timeout_ms: int) -> bool:
@@ -325,6 +329,11 @@ def test_live_meter_reads_recorded_pcm_without_trusting_the_unfinished_header() 
     ctypes.memmove(cast("int", device.header.lpData) + 640, b"\x00\x40" * 320, 640)
     device.position_bytes = 1280
     assert mic.level() == 0.5, "Only the PCM recorded since the previous read is measured."
+    # Defect: a driver reporting TIME_SAMPLES is read as bytes, so the meter lags at half the data.
+    ctypes.memmove(cast("int", device.header.lpData) + 1280, b"\x00\x20" * 320, 640)
+    device.position_kind, device.position_bytes = 2, 1920
+    assert mic.level() == 0.25
+    device.position_kind = 4
     device.failure = Failure.POSITION
     assert mic.level() is None
     device.failure = Failure.NONE
