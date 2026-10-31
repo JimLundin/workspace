@@ -15,7 +15,7 @@ from collections import deque
 from collections.abc import Iterable, Iterator, Mapping
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Annotated, Literal
+from typing import Annotated, Final, Literal
 
 from pydantic import StrictStr, StringConstraints, TypeAdapter
 
@@ -91,7 +91,7 @@ class Configuration:
     models: tuple[Text, ...]
     exceptions: tuple[ExceptionSpec, ...] = ()
     seams: tuple[Seam, ...] = ()
-    """Automation modules that may import assistant modules."""
+    """Lower-layer modules that may import assistant modules."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -211,10 +211,15 @@ def _within(module: str, package: str) -> bool:
     return module == package or module.startswith(package + ".")
 
 
+LOWER_LAYERS: Final = ("automation", "winapi")
+"""Packages the assistant builds on; they reach no assistant module except through declared seams."""
+
+
 def layering(graph: Mapping[str, frozenset[str]], seams: Iterable[Seam]) -> Iterator[Finding]:
-    """The automation layer reaches no assistant module, except through declared seams."""
+    """No lower-layer module reaches the assistant, except through a declared seam."""
     allowed = frozenset(seam.module for seam in seams)
-    for start in sorted(module for module in graph if _within(module, "automation") and module not in allowed):
+    starts = (module for module in graph if any(_within(module, layer) for layer in LOWER_LAYERS) and module not in allowed)
+    for start in sorted(starts):
         pending: deque[tuple[str, ...]] = deque([(start,)])
         visited: set[str] = set()
         while pending:
@@ -224,7 +229,7 @@ def layering(graph: Mapping[str, frozenset[str]], seams: Iterable[Seam]) -> Iter
                 continue
             visited.add(module)
             if _within(module, "assistant"):
-                yield Finding("automation-layering", start, "", "", 0, " → ".join(route))
+                yield Finding("layering", start, "", "", 0, " → ".join(route))
                 break
             pending.extend((*route, target) for target in sorted(graph[module]) if target not in visited)
     for seam in sorted(allowed):
