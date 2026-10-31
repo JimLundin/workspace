@@ -13,7 +13,6 @@ from scripts.check import (
     ExecutionPlan,
     Options,
     RecordedFailure,
-    Selection,
     combined_results,
     execute,
     execution_plan,
@@ -22,7 +21,7 @@ from scripts.check import (
     windows_only,
     worker_result,
 )
-from scripts.check_results import Failure, Results
+from scripts.check_results import Failure, Results, Selection
 
 
 def tree(root: Path) -> dict[str, str]:

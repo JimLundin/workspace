@@ -1,7 +1,18 @@
-"""Test outcomes of one edit check, shared by its in-process and Windows executors."""
+"""What one edit check asks its executors to run, and what they report back.
+
+Shared by the in-process executor in scripts.check and the Windows runner in
+scripts.check_native.
+"""
 
 import traceback
 from dataclasses import dataclass
+
+
+@dataclass(frozen=True, slots=True)
+class Selection:
+    tests: tuple[str, ...]
+    changed: tuple[str, ...]
+    reason: str
 
 
 @dataclass(frozen=True, slots=True)

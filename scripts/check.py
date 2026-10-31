@@ -24,7 +24,7 @@ lazy from concurrent.futures import ProcessPoolExecutor
 from pydantic import TypeAdapter, ValidationError
 
 from scripts.architecture import Report, dependencies, module_name, review
-from scripts.check_results import Failure, Results, raised, reported
+from scripts.check_results import Failure, Results, Selection, raised, reported
 from scripts.deploy_files import CheckedArchitecture, CheckReceipt, file_at, read, sha, source_map, write, write_receipt
 from scripts.development_paths import LIVE, PROFILE
 from scripts.source_analysis import Cache
@@ -82,13 +82,6 @@ AFTER_WORKERS = frozenset(
         "tests/test_agent_streaming.py",
     }
 )
-
-
-@dataclass(frozen=True, slots=True)
-class Selection:
-    tests: tuple[str, ...]
-    changed: tuple[str, ...]
-    reason: str
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -595,7 +588,7 @@ def main() -> None:
     if os.name == "nt" and current_name() == os.environ.get("WORKSPACE_TEST_DESKTOP"):
         results = execute(selection, ROOT)
     elif os.name == "nt" or args.native:
-        results = execute_native(ROOT, selection.tests, selection.changed, selection.reason)
+        results = execute_native(ROOT, selection)
     else:
         results = execute(selection, ROOT)
     with timed("phase:final source manifest", overhead):
