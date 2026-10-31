@@ -10,20 +10,31 @@ from assistant.browser import MAX_OUTPUT
 from assistant.browser_tabs import Call, Control, TabStrip
 from assistant.browser_tools import GroupArguments, group_request
 from assistant.browser_values import (
+    STRIP_PAGE,
     BrowserError,
+    BrowserStatus,
+    CreateGroup,
     DefaultGroup,
+    EditGroup,
     Group,
+    GroupChanges,
     GroupRow,
     InGroup,
+    Move,
     NewGroup,
     Opening,
+    StripPage,
+    StripQuery,
     Tab,
     TabRow,
     TabState,
     Ungrouped,
     opening,
+    strip_page,
 )
 from assistant.llm import Json
+from automation.actions import target
+from tests.test_agent import ToolRig, durable
 from tests.test_browser import WIRE, Channel, command, connected_browser, decoded, group_of, tab_of
 
 
@@ -179,3 +190,61 @@ def test_a_failed_group_change_is_not_replayed() -> None:
     with TestCase().assertRaisesRegex(BrowserError, "Inspect browser_tabs"):
         strip.group(call, group_request(GroupArguments(group_id=7, title="Research", window_id=8)), threading.Event())
     assert commands == ["Runtime.evaluate"]
+
+
+def test_group_requests_fill_new_group_defaults_and_change_only_what_was_named() -> None:
+    # Defect: a new group loses its Workspace defaults, an edit resets
+    # unnamed properties, or a group is moved when no position was requested.
+    created = group_request(GroupArguments(tab_ids=(2, 1, 2)))
+    assert created == CreateGroup((2, 1), NewGroup("Workspace", "blue", collapsed=True), None, None)
+    placed = group_request(GroupArguments(tab_ids=(1,), title="Review", color="red", collapsed=False, index=3, window_id=8))
+    assert placed == CreateGroup((1,), NewGroup("Review", "red", collapsed=False), 8, Move(3, None))
+    assert group_request(GroupArguments(group_id=7, title="Ready")) == EditGroup(7, (), GroupChanges("Ready", None, collapsed=None), None)
+    assert group_request(GroupArguments(group_id=7, window_id=8)) == EditGroup(7, (), GroupChanges(None, None, collapsed=None), Move(-1, 8))
+    assert group_request(GroupArguments(group_id=7, index=2)) == EditGroup(7, (), GroupChanges(None, None, collapsed=None), Move(2, None))
+    with TestCase().assertRaises(BrowserError):
+        group_request(GroupArguments())
+
+
+def test_strip_filters_select_only_the_requested_window_and_group() -> None:
+    # Defect: a filtered listing includes tabs from another window or group,
+    # so a later reconciliation reads the wrong tab as the requested one.
+    tabs = (
+        Tab(1, 1, 0, InGroup(5), "a", "https://a.example", active=False, pinned=False, muted=False),
+        Tab(2, 1, 1, Ungrouped.TABS, "b", "https://b.example", active=False, pinned=False, muted=False),
+        Tab(3, 2, 0, InGroup(5), "c", "https://c.example", active=False, pinned=False, muted=False),
+    )
+    state = TabState(tabs, (Group(5, 1, "Workspace", "blue", collapsed=False, shared=False),), (1, 2), 1)
+
+    def listed(window: int | None, group: InGroup | Ungrouped | None) -> tuple[int, ...]:
+        page = strip_page(state, StripQuery(0, 40, window, group), "attached", {}, maximum=MAX_OUTPUT)
+        return tuple(row.tab_id for row in page.tabs)
+
+    assert listed(None, None) == (1, 2, 3)
+    assert listed(1, None) == (1, 2)
+    assert listed(None, InGroup(5)) == (1, 3)
+    assert listed(1, Ungrouped.TABS) == (2,)
+
+
+def test_only_a_complete_unfiltered_listing_proves_unlisted_tabs_closed(tmp_path: Path) -> None:
+    # Defect: a paged or filtered listing marks every omitted tab or page as
+    # closed, letting an unrelated observation reconcile a pending close.
+    readback = ToolRig(work=durable(tmp_path)).agent.tools["browser_tabs"].readback
+    row = TabRow(1, 1, 0, -1, "", "", active=False, pinned=False, muted=False)
+
+    def strip(following: int | None) -> str:
+        return STRIP_PAGE.dump_json(StripPage("attached", (row,), (), 1, 0, following), exclude_none=True).decode()
+
+    def pages(following: int | None) -> str:
+        return TypeAdapter(BrowserStatus).dump_json(BrowserStatus("attached", (), next_offset=following), exclude_none=True).decode()
+
+    complete = target("browser-strip", "tabs")
+    assert complete in readback({"view": "strip"}, strip(None)).resources
+    for arguments in ({"view": "strip", "offset": 1}, {"view": "strip", "window_id": 1}, {"view": "strip", "group_id": -1}):
+        assert complete not in readback(arguments, strip(None)).resources, arguments
+    assert complete not in readback({"view": "strip"}, strip(1)).resources
+    assert readback({}, pages(None)).resources == ("all:browser-page",)
+    empty = STRIP_PAGE.dump_json(StripPage("attached", (), (), 0, 0), exclude_none=True).decode()
+    assert readback({"view": "strip"}, empty).resources == (complete,)
+    assert readback({}, pages(1)).resources == ()
+    assert readback({"offset": 1}, pages(None)).resources == ()

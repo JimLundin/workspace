@@ -93,6 +93,7 @@ class BrowserStatus:
     total: int | None = None
     offset: int | None = None
     next_offset: int | None = None
+    view: Literal["pages"] = "pages"
 
 
 @dataclass(frozen=True, slots=True)

@@ -8,6 +8,8 @@ from assistant.communications import (
     Acknowledgement,
     Feed,
     Message,
+    SourceDateHint,
+    SourceDateStatus,
     TeamsActivity,
     Update,
     UpdateKind,
@@ -20,8 +22,9 @@ from assistant.communications import (
     update_fingerprint,
     updates_observed,
 )
-from assistant.communications_browser import TeamsWeb
+from assistant.communications_browser import TeamsWeb, activity_observation
 from assistant.llm import Json
+from assistant.web_apps import ActivityItem, ActivityPage
 from tests.teams_fixture import Browser
 
 
@@ -98,3 +101,21 @@ def test_activity_repeats_replace_one_ticket_and_handled_items_can_be_reopened()
     assert reopen(repeated, update.key).pending_update(update)
     edited = updates_observed(done, (replace(update, text="Changed context"),))
     assert edited.pending_update(edited.updates[0])
+
+
+def test_an_undated_activity_keeps_its_visible_date_hint_or_stays_unknown() -> None:
+    # Defect: Teams' visible relative date is dropped, or collection time
+    # stands in for a date the page never showed.
+    observed = activity_observation(
+        ActivityPage(
+            (
+                ActivityItem("1", "Reminder", "Tomorrow.", "update", 0, "Yesterday"),
+                ActivityItem("2", "Reminder", "Tomorrow.", "update", 0),
+            ),
+            ready=True,
+        ),
+        86_400,
+    )
+    hinted, unknown = (update.source_time for update in observed.items)
+    assert isinstance(hinted, SourceDateHint) and hinted.label == "Yesterday"
+    assert unknown is SourceDateStatus.UNKNOWN

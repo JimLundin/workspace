@@ -313,7 +313,7 @@ TOOLS: Final = (
 
 
 SPECS: Final = tuple(tool.spec for tool in TOOLS)
-_LISTING = TypeAdapter[BrowserStatus | StripPage](BrowserStatus | StripPage)
+_LISTING = TypeAdapter[BrowserStatus | StripPage](Annotated[BrowserStatus | StripPage, Field(discriminator="view")])
 
 
 def _resources(request: BrowserRequest | None) -> tuple[str, ...]:
