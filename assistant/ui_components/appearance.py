@@ -9,6 +9,7 @@ own colour on its badge.
 
 from dataclasses import dataclass
 from enum import Enum, auto
+from functools import lru_cache
 from typing import Final, assert_never
 
 from assistant import island_model
@@ -293,6 +294,7 @@ def _rim(high: float, low: float, end: float) -> tuple[Stop, ...]:
     return (Stop(0, "#ffffff", high), Stop(0.34, "#ffffff", low), Stop(0.72, "#ffffff", low), Stop(1, "#ffffff", end))
 
 
+@lru_cache(maxsize=32)  # Every frame asks again for each capsule; the answers are a handful of values.
 def look(preference: appearance.Preference, frost: appearance.Frost, tint: Tint) -> Look:
     """Small glass takes its scheme from the desktop beneath it; a tint replaces the veil only for meaning."""
     match preference:
@@ -333,6 +335,7 @@ def look(preference: appearance.Preference, frost: appearance.Frost, tint: Tint)
             assert_never(frost)
 
 
+@lru_cache(maxsize=16)
 def large(look: Look) -> Look:
     """Large glass is thicker, so a menu's text stays legible over any desktop."""
     match look:

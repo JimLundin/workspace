@@ -459,7 +459,7 @@ class DesktopBar:
         if self.spinning():
             for key, capsule in self.window.capsules.items():
                 if key in (Key.ISLAND, Key.AGENT, Key.JOB):
-                    capsule.update()
+                    capsule.update_indicators()
         running = moving or spinning
         self.last_frame = now if running else None
         self.resolution.update(active=moving)
@@ -524,7 +524,7 @@ class DesktopBar:
             self.window.samples.append(level(self.audio_meter.level() if self.audio_meter is not None else None))
             capsule = self.window.capsules.get(Key.ISLAND)
             if capsule is not None and any(Marker.WAVE in slot for view in self.views for slot in view.slots):
-                capsule.update()
+                capsule.update_indicators()
 
     def close(self) -> None:
         if self.closed:

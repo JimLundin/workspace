@@ -21,7 +21,7 @@ lazy from PySide6.QtCore import Qt
 from assistant import island_menu
 from assistant.island_layout import HEIGHT, MENU_HEAD, MENU_PAD, MENU_RADIUS, MENU_WIDTH, WAVE_BARS, Content, Framed, Line, Spot, arrange, lines, live
 from assistant.island_menu import Disclosure, Item, Live, Menu, Rule, within
-from assistant.island_model import Action, Badge, CapsuleView, Control, Glyph, Key, Marker, Spinner, Text, Tint, Tone
+from assistant.island_model import Action, Badge, CapsuleView, Control, Glyph, Key, Marker, Part, Spinner, Text, Tint, Tone
 from assistant.qt_runtime import prepare
 from assistant.qt_ui import EventLoop
 from assistant.ui_components import typeface
@@ -60,6 +60,7 @@ class KeyboardFocus(QtWidgets.QAbstractButton):
         self.update()
 
 
+@lru_cache(maxsize=128)  # Painters copy colours they're given; callers never change the shared one.
 def color(shade: Shade) -> QtGui.QColor:
     value = QtGui.QColor(shade.color)
     value.setAlphaF(shade.opacity)
@@ -108,6 +109,15 @@ def radius(height: float) -> float:
 def visibility(presence: float) -> float:
     """Glass and content become opaque before a capsule reaches its full width."""
     return min(1.0, max(0.0, presence * 1.6))
+
+
+def animated(part: Part) -> bool:
+    """Parts that move on their own, painted every frame rather than kept as a still."""
+    match part:
+        case Spinner() | Marker.DOTS | Marker.WAVE:
+            return True
+        case _:
+            return False
 
 
 def controls(content: Content) -> tuple[tuple[Control, float], ...]:
@@ -347,6 +357,8 @@ class Capsule(KeyboardFocus):
         self.contrast = False
         self.controls: tuple[ControlButton, ...] = ()
         self.rows: tuple[MenuRow, ...] = ()
+        self.placed: tuple[QtCore.QRect, float, float, Content, tuple[Line, ...]] | None = None
+        self.stills: frozendict[tuple[Content, Look, bool, float], QtGui.QPixmap] = frozendict()
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self.clicked.connect(self.pressed_capsule)
@@ -406,9 +418,21 @@ class Capsule(KeyboardFocus):
 
     def frame(self, framed: Framed) -> None:
         """The widget spans the edge strip and the capsule below it."""
-        self.setGeometry(round(framed.box.x), 0, max(1, round(framed.box.width)), TOP + round(framed.box.height))
+        geometry = QtCore.QRect(round(framed.box.x), 0, max(1, round(framed.box.width)), TOP + round(framed.box.height))
+        placed = (geometry, self.fade, self.presence, self.content, tuple(row.line for row in self.rows))
+        if placed == self.placed:
+            return
+        self.placed = placed
+        self.setGeometry(geometry)
         self.place_controls()
         self.place_rows()
+
+    def update_indicators(self) -> None:
+        """Repaint only the live indicators (spinner, dots, trace); the rest of the capsule is unchanged."""
+        shift = self.shift(self.content)
+        for spot in self.content.spots:
+            if animated(spot.part):
+                self.update(QtCore.QRect(math.floor(shift + spot.x) - 2, TOP, math.ceil(spot.width) + 4, HEIGHT))
 
     def enterEvent(self, event: QtGui.QEnterEvent) -> None:
         super().enterEvent(event)
@@ -461,13 +485,36 @@ class Capsule(KeyboardFocus):
             painter.save()
             painter.setOpacity(opacity)
             painter.translate(self.shift(content), 0)
-            previous: Spot | None = None
+            painter.drawPixmap(QtCore.QPointF(0, 0), self.still(content))
             for spot in content.spots:
-                self.paint_part(painter, spot, previous, TOP + HEIGHT / 2)
-                previous = spot
+                if animated(spot.part):
+                    self.paint_part(painter, spot, None, TOP + HEIGHT / 2)
             if content.height > HEIGHT:
                 self.paint_heading(painter)
             painter.restore()
+
+    def still(self, content: Content) -> QtGui.QPixmap:
+        """The content's unmoving parts, rendered once: a morphing capsule blits them each frame."""
+        key = (content, self.look, self.contrast, self.devicePixelRatioF())
+        cached = self.stills.get(key)
+        if cached is not None:
+            return cached
+        scale = self.devicePixelRatioF()
+        image = QtGui.QPixmap(max(1, math.ceil(content.width * scale)), math.ceil((TOP + HEIGHT) * scale))
+        image.setDevicePixelRatio(scale)
+        image.fill(Qt.GlobalColor.transparent)
+        painter = QtGui.QPainter(image)
+        painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
+        previous: Spot | None = None
+        for spot in content.spots:
+            if not animated(spot.part):
+                self.paint_part(painter, spot, previous, TOP + HEIGHT / 2)
+            previous = spot
+        painter.end()
+        # Only the content showing now and the content fading out are kept.
+        kept = {(c, self.look, self.contrast, scale) for c in (self.content, self.previous) if c is not None}
+        self.stills = frozendict({**{k: v for k, v in self.stills.items() if k in kept}, key: image})
+        return image
 
     def paint_heading(self, painter: QtGui.QPainter) -> None:
         menu = self.window_.menu
