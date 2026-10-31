@@ -1,15 +1,14 @@
 """Explicit saved preferences and project notes, with pure bounded retrieval."""
 
-import json
 import re
-import sqlite3
-from collections.abc import Generator, Sequence
-from contextlib import contextmanager
 from dataclasses import dataclass, field
 from math import isfinite
 from pathlib import Path
-from typing import Protocol, assert_never, cast
+from typing import Literal, assert_never
 
+from pydantic import TypeAdapter
+
+from automation import journal
 from automation.store import TaskStore
 from automation.task import integer
 
@@ -127,24 +126,50 @@ def _rank(item: tuple[int, float, str, ContextRecord]) -> tuple[int, float, str]
     return -item[0], -item[1], item[2]
 
 
+@dataclass(frozen=True, slots=True)
+class _PreferenceText:
+    name: str
+    value: str
+    source: str
+    updated_at: float
+    kind: Literal["user_preference"] = "user_preference"
+
+
+@dataclass(frozen=True, slots=True)
+class _ObservationText:
+    project: str
+    source: str
+    observed_at: float
+    valid_until: float
+    text: str
+    kind: Literal["project_observation"] = "project_observation"
+
+
+@dataclass(frozen=True, slots=True)
+class _StaleText:
+    """A stale note names its project and source but no longer quotes its observation."""
+
+    project: str
+    source: str
+    observed_at: float
+    valid_until: float
+    kind: Literal["stale_reference"] = "stale_reference"
+
+
+_RECORD_TEXT = TypeAdapter(_PreferenceText | _ObservationText | _StaleText)
+
+
 def _record_text(record: ContextRecord, *, stale: bool = False) -> str:
-    data: dict[str, str | float]
     match record:
         case Preference():
-            data = {"kind": "user_preference", "name": record.name, "value": record.value, "source": record.source, "updated_at": record.updated_at}
+            shown: _PreferenceText | _ObservationText | _StaleText = _PreferenceText(record.name, record.value, record.source, record.updated_at)
+        case ProjectNote() if stale:
+            shown = _StaleText(record.project, record.source, record.observed_at, record.valid_until)
         case ProjectNote():
-            data = {
-                "kind": "stale_reference" if stale else "project_observation",
-                "project": record.project,
-                "source": record.source,
-                "observed_at": record.observed_at,
-                "valid_until": record.valid_until,
-            }
-            if not stale:
-                data["text"] = record.text
+            shown = _ObservationText(record.project, record.source, record.observed_at, record.valid_until, record.text)
         case _:
             assert_never(record)
-    return json.dumps(data, ensure_ascii=False, separators=(",", ":"))
+    return _RECORD_TEXT.dump_json(shown).decode()
 
 
 @dataclass(frozen=True, slots=True)
@@ -224,20 +249,6 @@ def select_context(
     return ContextSelection(tuple(chosen), tuple(stale), truncated=truncated)
 
 
-class _Cursor(Protocol):
-    @property
-    def rowcount(self) -> int: ...
-    def fetchone(self) -> tuple[object, ...] | None: ...
-    def fetchall(self) -> list[tuple[object, ...]]: ...
-
-
-class _Connection(Protocol):
-    def execute(self, sql: str, parameters: Sequence[object] = ()) -> _Cursor: ...
-    def commit(self) -> None: ...
-    def rollback(self) -> None: ...
-    def close(self) -> None: ...
-
-
 def _decode(row: tuple[object, ...]) -> ContextRecord:
     if len(row) != 7:
         raise ValueError("The saved context record is incomplete.")
@@ -264,29 +275,11 @@ class ContextStore:
         self.path = path
         TaskStore(path)
         path.parent.mkdir(parents=True, exist_ok=True)
-        with self._connection(writing=True) as connection:
+        with journal.writing(self.path) as connection:
             connection.execute(
                 "CREATE TABLE IF NOT EXISTS project_context (id TEXT PRIMARY KEY, kind TEXT NOT NULL, "
                 "label TEXT NOT NULL, content TEXT NOT NULL, source TEXT NOT NULL, observed REAL NOT NULL, expires REAL)",
             )
-
-    @contextmanager
-    def _connection(self, *, writing: bool = False) -> Generator[_Connection]:
-        connection = cast(_Connection, sqlite3.connect(self.path, timeout=2, isolation_level=None))
-        try:
-            connection.execute("PRAGMA busy_timeout=2000")
-            connection.execute("PRAGMA secure_delete=ON")
-            connection.execute("PRAGMA synchronous=FULL")
-            if writing:
-                connection.execute("BEGIN IMMEDIATE")
-            yield connection
-            if writing:
-                connection.commit()
-        except BaseException:
-            connection.rollback()
-            raise
-        finally:
-            connection.close()
 
     def save(self, record: ContextRecord) -> None:
         values: tuple[object, ...]
@@ -297,7 +290,7 @@ class ContextStore:
                 values = (record.id, "project", record.project, record.text, record.source, record.observed_at, record.valid_until)
             case _:
                 assert_never(record)
-        with self._connection(writing=True) as connection:
+        with journal.writing(self.path) as connection:
             existing = connection.execute(
                 "SELECT id,kind,label,content,source,observed,expires FROM project_context WHERE id=?",
                 (record.id,),
@@ -317,7 +310,7 @@ class ContextStore:
 
     def get(self, identity: str) -> ContextRecord | None:
         _text(identity, "Context identity", 128)
-        with self._connection() as connection:
+        with journal.reading(self.path) as connection:
             row = connection.execute(
                 "SELECT id,kind,label,content,source,observed,expires FROM project_context WHERE id=?",
                 (identity,),
@@ -327,7 +320,7 @@ class ContextStore:
     def list(self, project: str | None = None) -> tuple[ContextRecord, ...]:
         if project is not None:
             _text(project, "Project name", 160)
-        with self._connection() as connection:
+        with journal.reading(self.path) as connection:
             rows = connection.execute(
                 "SELECT id,kind,label,content,source,observed,expires FROM project_context ORDER BY observed DESC,id LIMIT ?",
                 (MAX_RECORDS + 1,),
@@ -341,5 +334,5 @@ class ContextStore:
 
     def remove(self, identity: str) -> bool:
         _text(identity, "Context identity", 128)
-        with self._connection(writing=True) as connection:
+        with journal.writing(self.path) as connection:
             return connection.execute("DELETE FROM project_context WHERE id=?", (identity,)).rowcount > 0

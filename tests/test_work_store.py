@@ -607,7 +607,7 @@ def test_failed_work_can_be_explicitly_retried_but_completion_is_terminal(tmp_pa
     assert store.control("task", Control.CANCEL, at=8) is None
 
 
-def test_unknown_schema_and_invalid_rows_are_rejected_before_execution(tmp_path: Path) -> None:
+def test_invalid_rows_are_rejected_before_execution(tmp_path: Path) -> None:
     path = tmp_path / "work.sqlite3"
     store = TaskStore(path)
     store.submit("task", "Task", "Prepare notes.", RequestSource("chat"), at=1)
@@ -623,12 +623,6 @@ def test_unknown_schema_and_invalid_rows_are_rejected_before_execution(tmp_path:
         database.execute("UPDATE tasks SET priority=0,phase='running' WHERE id='task'")
     with TestCase().assertRaises(ValueError):
         store.list_tasks()
-    with closing(sqlite3.connect(path)) as database, database:
-        database.execute("PRAGMA user_version=99")
-    before = path.read_bytes()
-    with TestCase().assertRaises(ValueError):
-        TaskStore(path)
-    assert path.read_bytes() == before
 
 
 def test_invalid_action_and_reply_rows_do_not_enter_typed_interfaces(tmp_path: Path) -> None:

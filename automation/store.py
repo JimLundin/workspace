@@ -1,13 +1,10 @@
 """Transactional, validated persistence for tasks, inputs, and action outcomes."""
 
-import sqlite3
-from collections.abc import Generator, Sequence
-from contextlib import contextmanager
 from pathlib import Path
-from typing import Protocol, cast
 
 from pydantic import ConfigDict, TypeAdapter
 
+from automation import journal
 from automation.task import (
     Action,
     ActionNotApplied,
@@ -90,20 +87,6 @@ _TASK_SELECT = ", ".join(_TASK_COLUMNS)
 _PROFILE = "json_extract(source,'$.profile.kind')"
 _PROFILE_INDEX = f"CREATE INDEX IF NOT EXISTS request_profile ON tasks({_PROFILE},created_at,id)"
 _ACTION_COLUMNS = "id, task_id, run_id, specification, started_at, updated_at, outcome, outcome_kind, fingerprint"
-
-
-class _Cursor(Protocol):
-    @property
-    def rowcount(self) -> int: ...
-    def fetchone(self) -> tuple[object, ...] | None: ...
-    def fetchall(self) -> list[tuple[object, ...]]: ...
-
-
-class _Connection(Protocol):
-    def execute(self, sql: str, parameters: Sequence[object] = ()) -> _Cursor: ...
-    def commit(self) -> None: ...
-    def rollback(self) -> None: ...
-    def close(self) -> None: ...
 
 
 # Records are stored in their domain shapes as strict JSON: a variant record's
@@ -197,6 +180,114 @@ def _action(row: tuple[object, ...]) -> Action:
     return action
 
 
+def _migrate_from_version_2(connection: journal.Connection) -> None:
+    """Version 2 packed an approval's operation into its identity and recorded no request profiles.
+
+    Its pending approvals become blocked and its grants are dropped, so each
+    operation is reviewed again; nothing is approved without its fingerprint.
+    Feed handoffs become general requests: only their feed label is lost.
+    """
+    blocked = _stored(_STATE, Waiting(Blocked(_UNBOUND_APPROVAL)))
+    connection.execute(
+        "UPDATE requests SET closed_at=(SELECT updated_at FROM tasks WHERE tasks.id=requests.task_id) "
+        "WHERE closed_at IS NULL AND json_extract(request,'$.kind')='approval'"
+    )
+    connection.execute(
+        "UPDATE tasks SET revision=revision+1, state=? WHERE phase='waiting' AND json_extract(state,'$.reason.kind')='approval'",
+        (blocked,),
+    )
+    connection.execute("DELETE FROM responses WHERE json_extract(request,'$.kind')='approval'")
+    # Before profiles, the meeting workflow reserved this task identity namespace.
+    connection.execute(
+        "UPDATE tasks SET source=json_set(source,'$.profile','meeting_followup') "
+        "WHERE json_extract(source,'$.kind')='request' AND id LIKE 'meeting-followup-%'"
+    )
+    connection.execute(
+        "UPDATE tasks SET source=json_set(source,'$.profile','general') "
+        "WHERE json_extract(source,'$.kind')='request' AND json_extract(source,'$.profile') IS NULL"
+    )
+
+
+def _migrate_from_version_3(connection: journal.Connection) -> None:
+    """Version 3 meeting follow-ups bound their recordings in a separate preparation store.
+
+    Their profiles name no bundle, so those tasks and their journal rows are
+    dropped. Published packages and mail files stay on disk, unlisted.
+    """
+    legacy = "SELECT id FROM tasks WHERE json_extract(source,'$.profile')='meeting_followup'"
+    for table in ("actions", "requests", "responses", "goals", "runs"):
+        connection.execute(f"DELETE FROM {table} WHERE task_id IN ({legacy})")
+    connection.execute(f"DELETE FROM tasks WHERE id IN ({legacy})")
+
+
+def _migrate_from_version_4(connection: journal.Connection) -> None:
+    """Version 4 hand-built its records; version 5 stores the domain records themselves.
+
+    The conversion is mechanical, so every task, request, reply and action is
+    kept: a payload-free variant's `{"kind": ...}` object becomes its value, a
+    request's profile fields move into a tagged profile record, and a run
+    named by its identity becomes a run reference with its task.
+    """
+    for table, column, task in (("tasks", "state", "id"), ("runs", "previous_state", "task_id")):
+        connection.execute(
+            f"UPDATE {table} SET {column}=json_quote(json_extract({column},'$.kind')) "
+            f"WHERE json_extract({column},'$.kind') IN ('ready','paused','cancelled')"
+        )
+        connection.execute(
+            f"UPDATE {table} SET {column}=json_set(json_remove({column},'$.run_id'),'$.run',"
+            f"json_object('task_id',{task},'run_id',json_extract({column},'$.run_id'))) "
+            f"WHERE json_extract({column},'$.kind') IN ('running','interrupted') AND json_extract({column},'$.run_id') IS NOT NULL"
+        )
+    connection.execute(
+        "UPDATE tasks SET source=json_set(json_remove(source,'$.bundle'),'$.profile',"
+        "json_object('bundle',json_extract(source,'$.bundle'),'kind','meeting_followup')) "
+        "WHERE json_extract(source,'$.kind')='request' AND json_extract(source,'$.profile')='meeting_followup'"
+    )
+    connection.execute(
+        "UPDATE tasks SET source=json_set(json_remove(source,'$.item','$.title'),'$.profile',"
+        "json_object('item',json_extract(source,'$.item'),'title',json_extract(source,'$.title'),'kind','feed')) "
+        "WHERE json_extract(source,'$.kind')='request' AND json_extract(source,'$.profile')='feed'"
+    )
+    connection.execute(
+        "UPDATE responses SET reply=json_quote(json_extract(reply,'$.kind')) WHERE json_extract(reply,'$.kind') IN ('approved','declined')"
+    )
+    connection.execute("UPDATE actions SET outcome=json_quote('running') WHERE json_extract(outcome,'$.kind')='running'")
+    connection.execute(
+        "UPDATE actions SET specification=json_set(specification,'$.verification','none') "
+        "WHERE json_extract(specification,'$.verification.kind')='none'"
+    )
+    connection.execute("DROP INDEX IF EXISTS request_profile")
+    connection.execute(_PROFILE_INDEX)
+
+
+_SCHEMA = journal.Schema(
+    SCHEMA_VERSION,
+    (
+        "CREATE TABLE tasks (id TEXT PRIMARY KEY, title TEXT NOT NULL, prompt TEXT NOT NULL, source TEXT NOT NULL, "
+        "priority INTEGER NOT NULL, created_at REAL NOT NULL, updated_at REAL NOT NULL, revision INTEGER NOT NULL, "
+        "state TEXT NOT NULL, checkpoint TEXT, goal_revision INTEGER NOT NULL, phase TEXT NOT NULL, "
+        "routine_id TEXT, routine_revision INTEGER, occurrence_id TEXT, wake_at REAL)",
+        "CREATE UNIQUE INDEX routine_occurrence ON tasks(routine_id,routine_revision,occurrence_id) WHERE routine_id IS NOT NULL",
+        "CREATE INDEX runnable_work ON tasks(phase,priority DESC,created_at,id)",
+        _PROFILE_INDEX,
+        "CREATE TABLE runs (id TEXT PRIMARY KEY, task_id TEXT NOT NULL REFERENCES tasks(id), owner TEXT NOT NULL, "
+        "started_at REAL NOT NULL, previous_state TEXT NOT NULL, ended_at REAL, disposition TEXT, UNIQUE(id,task_id))",
+        "CREATE TABLE goals (task_id TEXT NOT NULL REFERENCES tasks(id), revision INTEGER NOT NULL, prompt TEXT NOT NULL, "
+        "at REAL NOT NULL, PRIMARY KEY(task_id,revision))",
+        "CREATE TABLE requests (task_id TEXT NOT NULL REFERENCES tasks(id), id TEXT NOT NULL, goal_revision INTEGER NOT NULL, "
+        "run_id TEXT NOT NULL REFERENCES runs(id), request TEXT NOT NULL, at REAL NOT NULL, closed_at REAL, PRIMARY KEY(task_id,id))",
+        "CREATE TABLE responses (task_id TEXT NOT NULL REFERENCES tasks(id), request_id TEXT NOT NULL, goal_revision INTEGER NOT NULL, "
+        "request TEXT NOT NULL, reply TEXT NOT NULL, at REAL NOT NULL, PRIMARY KEY(task_id,goal_revision,request_id))",
+        "CREATE TABLE actions (id TEXT PRIMARY KEY, task_id TEXT NOT NULL REFERENCES tasks(id), run_id TEXT NOT NULL, "
+        "specification TEXT NOT NULL, started_at REAL NOT NULL, updated_at REAL NOT NULL, outcome TEXT NOT NULL, "
+        "outcome_kind TEXT NOT NULL, fingerprint TEXT NOT NULL, FOREIGN KEY(run_id,task_id) REFERENCES runs(id,task_id))",
+        "CREATE INDEX action_identity ON actions(task_id,fingerprint,started_at)",
+        "CREATE INDEX unresolved_work ON actions(task_id,outcome_kind,started_at)",
+    ),
+    {2: _migrate_from_version_2, 3: _migrate_from_version_3, 4: _migrate_from_version_4},
+)
+
+
 class TaskStore:
     """One durable work database, shared by the exclusive worker and its clients.
 
@@ -212,146 +303,10 @@ class TaskStore:
     def __init__(self, path: Path) -> None:
         self.path = path
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        with self._connection(writing=True) as connection:
-            row = connection.execute("PRAGMA user_version").fetchone()
-            version = integer(row[0], "work schema version") if row is not None else -1
-            if version == SCHEMA_VERSION:
-                return
-            if version == 2:
-                self._migrate_from_version_2(connection)
-            if version in (2, 3):
-                self._migrate_from_version_3(connection)
-            if version in (2, 3, 4):
-                self._migrate_from_version_4(connection)
-                return
-            if version != 0:
-                raise ValueError("This work database requires a different Workspace schema version.")
-            if connection.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'").fetchone() is not None:
-                raise ValueError("The unversioned work database already contains tables.")
-            for statement in (
-                "CREATE TABLE tasks (id TEXT PRIMARY KEY, title TEXT NOT NULL, prompt TEXT NOT NULL, source TEXT NOT NULL, "
-                "priority INTEGER NOT NULL, created_at REAL NOT NULL, updated_at REAL NOT NULL, revision INTEGER NOT NULL, "
-                "state TEXT NOT NULL, checkpoint TEXT, goal_revision INTEGER NOT NULL, phase TEXT NOT NULL, "
-                "routine_id TEXT, routine_revision INTEGER, occurrence_id TEXT, wake_at REAL)",
-                "CREATE UNIQUE INDEX routine_occurrence ON tasks(routine_id,routine_revision,occurrence_id) WHERE routine_id IS NOT NULL",
-                "CREATE INDEX runnable_work ON tasks(phase,priority DESC,created_at,id)",
-                _PROFILE_INDEX,
-                "CREATE TABLE runs (id TEXT PRIMARY KEY, task_id TEXT NOT NULL REFERENCES tasks(id), owner TEXT NOT NULL, "
-                "started_at REAL NOT NULL, previous_state TEXT NOT NULL, ended_at REAL, disposition TEXT, UNIQUE(id,task_id))",
-                "CREATE TABLE goals (task_id TEXT NOT NULL REFERENCES tasks(id), revision INTEGER NOT NULL, prompt TEXT NOT NULL, "
-                "at REAL NOT NULL, PRIMARY KEY(task_id,revision))",
-                "CREATE TABLE requests (task_id TEXT NOT NULL REFERENCES tasks(id), id TEXT NOT NULL, goal_revision INTEGER NOT NULL, "
-                "run_id TEXT NOT NULL REFERENCES runs(id), request TEXT NOT NULL, at REAL NOT NULL, closed_at REAL, PRIMARY KEY(task_id,id))",
-                "CREATE TABLE responses (task_id TEXT NOT NULL REFERENCES tasks(id), request_id TEXT NOT NULL, goal_revision INTEGER NOT NULL, "
-                "request TEXT NOT NULL, reply TEXT NOT NULL, at REAL NOT NULL, PRIMARY KEY(task_id,goal_revision,request_id))",
-                "CREATE TABLE actions (id TEXT PRIMARY KEY, task_id TEXT NOT NULL REFERENCES tasks(id), run_id TEXT NOT NULL, "
-                "specification TEXT NOT NULL, started_at REAL NOT NULL, updated_at REAL NOT NULL, outcome TEXT NOT NULL, "
-                "outcome_kind TEXT NOT NULL, fingerprint TEXT NOT NULL, FOREIGN KEY(run_id,task_id) REFERENCES runs(id,task_id))",
-                "CREATE INDEX action_identity ON actions(task_id,fingerprint,started_at)",
-                "CREATE INDEX unresolved_work ON actions(task_id,outcome_kind,started_at)",
-                f"PRAGMA user_version={SCHEMA_VERSION}",
-            ):
-                connection.execute(statement)
+        with journal.writing(self.path) as connection:
+            journal.prepare(connection, _SCHEMA)
 
-    @staticmethod
-    def _migrate_from_version_2(connection: _Connection) -> None:
-        """Version 2 packed an approval's operation into its identity and recorded no request profiles.
-
-        Its pending approvals become blocked and its grants are dropped, so each
-        operation is reviewed again; nothing is approved without its fingerprint.
-        Feed handoffs become general requests: only their feed label is lost.
-        """
-        blocked = _stored(_STATE, Waiting(Blocked(_UNBOUND_APPROVAL)))
-        connection.execute(
-            "UPDATE requests SET closed_at=(SELECT updated_at FROM tasks WHERE tasks.id=requests.task_id) "
-            "WHERE closed_at IS NULL AND json_extract(request,'$.kind')='approval'"
-        )
-        connection.execute(
-            "UPDATE tasks SET revision=revision+1, state=? WHERE phase='waiting' AND json_extract(state,'$.reason.kind')='approval'",
-            (blocked,),
-        )
-        connection.execute("DELETE FROM responses WHERE json_extract(request,'$.kind')='approval'")
-        # Before profiles, the meeting workflow reserved this task identity namespace.
-        connection.execute(
-            "UPDATE tasks SET source=json_set(source,'$.profile','meeting_followup') "
-            "WHERE json_extract(source,'$.kind')='request' AND id LIKE 'meeting-followup-%'"
-        )
-        connection.execute(
-            "UPDATE tasks SET source=json_set(source,'$.profile','general') "
-            "WHERE json_extract(source,'$.kind')='request' AND json_extract(source,'$.profile') IS NULL"
-        )
-
-    @staticmethod
-    def _migrate_from_version_3(connection: _Connection) -> None:
-        """Version 3 meeting follow-ups bound their recordings in a separate preparation store.
-
-        Their profiles name no bundle, so those tasks and their journal rows are
-        dropped. Published packages and mail files stay on disk, unlisted.
-        """
-        legacy = "SELECT id FROM tasks WHERE json_extract(source,'$.profile')='meeting_followup'"
-        for table in ("actions", "requests", "responses", "goals", "runs"):
-            connection.execute(f"DELETE FROM {table} WHERE task_id IN ({legacy})")
-        connection.execute(f"DELETE FROM tasks WHERE id IN ({legacy})")
-
-    @staticmethod
-    def _migrate_from_version_4(connection: _Connection) -> None:
-        """Version 4 hand-built its records; version 5 stores the domain records themselves.
-
-        The conversion is mechanical, so every task, request, reply and action is
-        kept: a payload-free variant's `{"kind": ...}` object becomes its value, a
-        request's profile fields move into a tagged profile record, and a run
-        named by its identity becomes a run reference with its task.
-        """
-        for table, column, task in (("tasks", "state", "id"), ("runs", "previous_state", "task_id")):
-            connection.execute(
-                f"UPDATE {table} SET {column}=json_quote(json_extract({column},'$.kind')) "
-                f"WHERE json_extract({column},'$.kind') IN ('ready','paused','cancelled')"
-            )
-            connection.execute(
-                f"UPDATE {table} SET {column}=json_set(json_remove({column},'$.run_id'),'$.run',"
-                f"json_object('task_id',{task},'run_id',json_extract({column},'$.run_id'))) "
-                f"WHERE json_extract({column},'$.kind') IN ('running','interrupted') AND json_extract({column},'$.run_id') IS NOT NULL"
-            )
-        connection.execute(
-            "UPDATE tasks SET source=json_set(json_remove(source,'$.bundle'),'$.profile',"
-            "json_object('bundle',json_extract(source,'$.bundle'),'kind','meeting_followup')) "
-            "WHERE json_extract(source,'$.kind')='request' AND json_extract(source,'$.profile')='meeting_followup'"
-        )
-        connection.execute(
-            "UPDATE tasks SET source=json_set(json_remove(source,'$.item','$.title'),'$.profile',"
-            "json_object('item',json_extract(source,'$.item'),'title',json_extract(source,'$.title'),'kind','feed')) "
-            "WHERE json_extract(source,'$.kind')='request' AND json_extract(source,'$.profile')='feed'"
-        )
-        connection.execute(
-            "UPDATE responses SET reply=json_quote(json_extract(reply,'$.kind')) WHERE json_extract(reply,'$.kind') IN ('approved','declined')"
-        )
-        connection.execute("UPDATE actions SET outcome=json_quote('running') WHERE json_extract(outcome,'$.kind')='running'")
-        connection.execute(
-            "UPDATE actions SET specification=json_set(specification,'$.verification','none') "
-            "WHERE json_extract(specification,'$.verification.kind')='none'"
-        )
-        connection.execute("DROP INDEX IF EXISTS request_profile")
-        connection.execute(_PROFILE_INDEX)
-        connection.execute(f"PRAGMA user_version={SCHEMA_VERSION}")
-
-    @contextmanager
-    def _connection(self, *, writing: bool = False) -> Generator[_Connection]:
-        # Narrow SQLite's untyped values to object, then decode every public row.
-        connection = cast(_Connection, sqlite3.connect(self.path, timeout=5, isolation_level=None))
-        try:
-            connection.execute("PRAGMA foreign_keys=ON")
-            connection.execute("PRAGMA synchronous=FULL")
-            connection.execute("PRAGMA busy_timeout=5000")
-            connection.execute("BEGIN IMMEDIATE" if writing else "BEGIN")
-            yield connection
-            connection.commit()
-        except BaseException:
-            connection.rollback()
-            raise
-        finally:
-            connection.close()
-
-    def _read_task(self, connection: _Connection, row: tuple[object, ...]) -> Task:
+    def _read_task(self, connection: journal.Connection, row: tuple[object, ...]) -> Task:
         task = _task(row)
         if isinstance(task.state, (Running, Interrupted)):
             run = connection.execute("SELECT task_id,owner,started_at FROM runs WHERE id=?", (task.state.run.run_id,)).fetchone()
@@ -374,11 +329,11 @@ class TaskStore:
                 raise ValueError("The pending input references a different execution.")
         return task
 
-    def _get(self, connection: _Connection, identity: str) -> Task | None:
+    def _get(self, connection: journal.Connection, identity: str) -> Task | None:
         row = connection.execute(f"SELECT {_TASK_SELECT} FROM tasks WHERE id=?", (identity,)).fetchone()
         return self._read_task(connection, row) if row is not None else None
 
-    def _put(self, connection: _Connection, previous: Task, task: Task) -> None:
+    def _put(self, connection: journal.Connection, previous: Task, task: Task) -> None:
         assignments = ", ".join(f"{name}=?" for name in _TASK_COLUMNS[1:])
         values = _task_values(task)
         cursor = connection.execute(f"UPDATE tasks SET {assignments} WHERE id=? AND revision=?", (*values[1:], task.id, previous.revision))
@@ -391,7 +346,7 @@ class TaskStore:
 
     def submit(self, id: str, title: str, prompt: str, source: Source, *, at: float, priority: int = 0) -> Task:
         task = Task(id, title, prompt, source, priority, at, at, 0, TaskStatus.READY, None)
-        with self._connection(writing=True) as connection:
+        with journal.writing(self.path) as connection:
             existing = self._get(connection, id)
             if existing is not None:
                 if existing.source != source:
@@ -411,7 +366,7 @@ class TaskStore:
 
     def get(self, id: str) -> Task | None:
         identifier(id, "task identity")
-        with self._connection() as connection:
+        with journal.reading(self.path) as connection:
             return self._get(connection, id)
 
     def get_many(self, task_ids: tuple[str, ...]) -> tuple[Task, ...]:
@@ -423,7 +378,7 @@ class TaskStore:
         if not identities:
             return ()
         marks = ",".join("?" for _ in identities)
-        with self._connection() as connection:
+        with journal.reading(self.path) as connection:
             rows = connection.execute(f"SELECT {_TASK_SELECT} FROM tasks WHERE id IN ({marks})", identities).fetchall()
             selected: dict[str, Task] = {}
             for row in rows:
@@ -433,14 +388,14 @@ class TaskStore:
 
     def list_tasks(self, *, limit: int = 100) -> tuple[Task, ...]:
         integer(limit, "task page size", minimum=1, maximum=MAX_PAGE)
-        with self._connection() as connection:
+        with journal.reading(self.path) as connection:
             rows = connection.execute(f"SELECT {_TASK_SELECT} FROM tasks ORDER BY updated_at DESC,id LIMIT ?", (limit,)).fetchall()
             return tuple(self._read_task(connection, row) for row in rows)
 
     def meeting_followups(self, limit: int) -> tuple[Task, ...]:
         """The newest meeting follow-ups, however many other tasks were updated since."""
         integer(limit, "meeting follow-up page size", minimum=1, maximum=MAX_PAGE)
-        with self._connection() as connection:
+        with journal.reading(self.path) as connection:
             rows = connection.execute(
                 f"SELECT {_TASK_SELECT} FROM tasks WHERE {_PROFILE}='meeting_followup' ORDER BY created_at DESC,id DESC LIMIT ?", (limit,)
             ).fetchall()
@@ -448,7 +403,7 @@ class TaskStore:
 
     def active_for_routine(self, routine_id: str) -> Task | None:
         identifier(routine_id, "routine identity")
-        with self._connection() as connection:
+        with journal.reading(self.path) as connection:
             row = connection.execute(
                 f"SELECT {_TASK_SELECT} FROM tasks WHERE routine_id=? AND phase NOT IN ('completed','failed','cancelled') "
                 "ORDER BY created_at,id LIMIT 1",
@@ -460,7 +415,7 @@ class TaskStore:
         identifier(owner, "worker owner")
         identifier(run_id, "run identity")
         timestamp(at)
-        with self._connection(writing=True) as connection:
+        with journal.writing(self.path) as connection:
             if connection.execute("SELECT id FROM runs WHERE id=?", (run_id,)).fetchone() is not None:
                 return None
             if connection.execute("SELECT id FROM tasks WHERE phase='running' LIMIT 1").fetchone() is not None:
@@ -495,7 +450,7 @@ class TaskStore:
 
     def progress(self, run: RunRef, summary: str, *, at: float) -> Task | None:
         Checkpoint(summary, at)
-        with self._connection(writing=True) as connection:
+        with journal.writing(self.path) as connection:
             task = self._get(connection, run.task_id)
             result = progressed(task, run, summary, at=at) if task is not None else None
             if result is not None and task is not None:
@@ -505,7 +460,7 @@ class TaskStore:
     def finish(self, run: RunRef, outcome: Outcome, *, at: float) -> Task | None:
         timestamp(at)
         variant(outcome, (Completed, Failed, Waiting), "task execution outcome")
-        with self._connection(writing=True) as connection:
+        with journal.writing(self.path) as connection:
             task = self._get(connection, run.task_id)
             result = finished(task, run, outcome, at=at) if task is not None else None
             if result is None or task is None:
@@ -532,7 +487,7 @@ class TaskStore:
     def interrupt(self, run: RunRef, reason: str, *, at: float) -> Task | None:
         Interrupted(run, reason)
         timestamp(at)
-        with self._connection(writing=True) as connection:
+        with journal.writing(self.path) as connection:
             task = self._get(connection, run.task_id)
             result = interrupted(task, run, reason, at=at) if task is not None else None
             if result is not None and task is not None:
@@ -543,7 +498,7 @@ class TaskStore:
         identifier(id, "task identity")
         timestamp(at)
         variant(command, Control, "task control")
-        with self._connection(writing=True) as connection:
+        with journal.writing(self.path) as connection:
             task = self._get(connection, id)
             result = controlled(task, command, at=at) if task is not None else None
             if result is not None and task is not None:
@@ -556,7 +511,7 @@ class TaskStore:
         timestamp(at)
         variant(command, Control, "task control")
         count, cursor = 0, ""
-        with self._connection(writing=True) as connection:
+        with journal.writing(self.path) as connection:
             while True:
                 rows = connection.execute(
                     f"SELECT {_TASK_SELECT} FROM tasks WHERE id>? AND phase NOT IN ('completed','cancelled') "
@@ -580,7 +535,7 @@ class TaskStore:
         identifier(task_id, "task identity")
         text(prompt, "task prompt")
         timestamp(at)
-        with self._connection(writing=True) as connection:
+        with journal.writing(self.path) as connection:
             task = self._get(connection, task_id)
             if task is None:
                 return None
@@ -594,7 +549,7 @@ class TaskStore:
         identifier(request_id, "request identity")
         timestamp(at)
         variant(reply, (TextAnswer, ApprovalDecision), "input reply")
-        with self._connection(writing=True) as connection:
+        with journal.writing(self.path) as connection:
             task = self._get(connection, id)
             update = answered(task, request_id, reply, at=at) if task is not None else None
             if update is None or task is None:
@@ -612,7 +567,7 @@ class TaskStore:
         identifier(task_id, "task identity")
         identifier(request_id, "request identity")
         timestamp(at)
-        with self._connection(writing=True) as connection:
+        with journal.writing(self.path) as connection:
             task = self._get(connection, task_id)
             result = approval_refreshed(task, request_id, at=at) if task is not None else None
             if result is not None and task is not None:
@@ -623,7 +578,7 @@ class TaskStore:
         """Identify the run that produced this exact, still-pending input."""
         identifier(task_id, "task identity")
         identifier(request_id, "request identity")
-        with self._connection() as connection:
+        with journal.reading(self.path) as connection:
             task = self._get(connection, task_id)
             if task is None or not isinstance(task.state, Waiting) or not isinstance(task.state.reason, (Question, Approval)):
                 return None
@@ -637,7 +592,7 @@ class TaskStore:
     def responses(self, task_id: str) -> tuple[Response, ...]:
         """Current-goal replies only; a redirection cannot inherit old approvals."""
         identifier(task_id, "task identity")
-        with self._connection() as connection:
+        with journal.reading(self.path) as connection:
             task = self._get(connection, task_id)
             if task is None:
                 return ()
@@ -660,7 +615,7 @@ class TaskStore:
     def revisions(self, task_id: str, *, limit: int = 100) -> tuple[GoalRevision, ...]:
         identifier(task_id, "task identity")
         integer(limit, "goal page size", minimum=1, maximum=MAX_PAGE)
-        with self._connection() as connection:
+        with journal.reading(self.path) as connection:
             rows = connection.execute(
                 "SELECT revision,prompt,at FROM goals WHERE task_id=? ORDER BY revision DESC LIMIT ?", (task_id, limit)
             ).fetchall()
@@ -675,7 +630,7 @@ class TaskStore:
         identifier(owner, "worker owner")
         timestamp(at)
         recovered: list[Task] = []
-        with self._connection(writing=True) as connection:
+        with journal.writing(self.path) as connection:
             rows = connection.execute(f"SELECT {_TASK_SELECT} FROM tasks WHERE phase='running' ORDER BY created_at,id").fetchall()
             for row in rows:
                 task = self._read_task(connection, row)
@@ -689,7 +644,7 @@ class TaskStore:
                     recovered.append(result)
         return tuple(recovered)
 
-    def _read_action(self, connection: _Connection, row: tuple[object, ...]) -> Action:
+    def _read_action(self, connection: journal.Connection, row: tuple[object, ...]) -> Action:
         action = _action(row)
         run = connection.execute("SELECT task_id FROM runs WHERE id=?", (action.run_id,)).fetchone()
         if run is None or len(run) != 1 or identifier(run[0], "task identity") != action.task_id:
@@ -698,7 +653,7 @@ class TaskStore:
 
     def begin_action(self, run: RunRef, action_id: str, specification: ActionSpec, *, at: float) -> Action | None:
         action = Action(action_id, run.task_id, run.run_id, specification, at, at, ActionPending.RUNNING)
-        with self._connection(writing=True) as connection:
+        with journal.writing(self.path) as connection:
             task = self._get(connection, run.task_id)
             if task is None or not owns(task, run):
                 return None
@@ -733,7 +688,7 @@ class TaskStore:
         identifier(action_id, "action identity")
         timestamp(at)
         variant(outcome, (ActionPending, ActionReturned, ActionVerified, ActionNotApplied, ActionUncertain), "action outcome")
-        with self._connection(writing=True) as connection:
+        with journal.writing(self.path) as connection:
             row = connection.execute(f"SELECT {_ACTION_COLUMNS} FROM actions WHERE id=?", (action_id,)).fetchone()
             if row is None:
                 return None
@@ -750,7 +705,7 @@ class TaskStore:
     def actions(self, task_id: str, *, limit: int = 100) -> tuple[Action, ...]:
         identifier(task_id, "task identity")
         integer(limit, "action page size", minimum=1, maximum=MAX_PAGE)
-        with self._connection() as connection:
+        with journal.reading(self.path) as connection:
             rows = connection.execute(
                 f"SELECT {_ACTION_COLUMNS} FROM actions WHERE task_id=? ORDER BY started_at DESC,id DESC LIMIT ?", (task_id, limit)
             ).fetchall()
@@ -758,7 +713,7 @@ class TaskStore:
 
     def unresolved_actions(self, task_id: str) -> tuple[Action, ...]:
         identifier(task_id, "task identity")
-        with self._connection() as connection:
+        with journal.reading(self.path) as connection:
             rows = connection.execute(
                 f"SELECT {_ACTION_COLUMNS} FROM actions WHERE task_id=? AND outcome_kind IN ('running','uncertain') ORDER BY started_at,id LIMIT ?",
                 (task_id, MAX_PAGE + 1),
@@ -770,7 +725,7 @@ class TaskStore:
     def unverified_actions(self, task_id: str) -> tuple[Action, ...]:
         """All actions still needing verification, independent of display pages."""
         identifier(task_id, "task identity")
-        with self._connection() as connection:
+        with journal.reading(self.path) as connection:
             rows = connection.execute(
                 f"SELECT {_ACTION_COLUMNS} FROM actions WHERE task_id=? AND outcome_kind IN ('running','uncertain','returned') "
                 "ORDER BY started_at,id LIMIT ?",
@@ -785,7 +740,7 @@ class TaskStore:
         identifier(task_id, "task identity")
         digest(fingerprint)
         timestamp(after)
-        with self._connection() as connection:
+        with journal.reading(self.path) as connection:
             row = connection.execute(
                 f"SELECT {_ACTION_COLUMNS} FROM actions WHERE task_id=? AND fingerprint=? AND started_at>=? ORDER BY started_at,id LIMIT 1",
                 (task_id, fingerprint, after),

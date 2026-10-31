@@ -13,7 +13,8 @@ from assistant.ui_components.controls import button, label
 from assistant.ui_components.widgets import Editor, column, replace_text, row
 from assistant.work_canvas_context import context_path
 from assistant.work_canvas_model import CanvasDocument, CanvasNote
-from assistant.work_window import WorkWindow, when
+from assistant.work_text import when
+from assistant.work_window import WorkWindow
 from automation.personal_work import (
     Catalog,
     DismissWork,

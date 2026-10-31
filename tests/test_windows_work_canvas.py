@@ -49,7 +49,9 @@ from assistant.work_canvas_model import (
 )
 from assistant.work_canvas_view import CanvasGroup
 from assistant.work_canvas_window import CanvasWindow
-from assistant.work_window import AnswerTask, ReplyProblem, WorkCommand, WorkOpening, WorkSnapshot, WorkView, WorkWindow
+from assistant.work_commands import AnswerTask, WorkCommand
+from assistant.work_snapshot import ReplyProblem, WorkSnapshot
+from assistant.work_window import WorkOpening, WorkView, WorkWindow
 from automation.actions import Resources
 from automation.execution import WorkExecution
 from automation.personal_work import (
@@ -940,7 +942,7 @@ def test_canvas_clarification_redirect_submits_context_to_the_waiting_agent(tmp_
     store = local_canvas(tmp_path)
     ui.configure_canvas(store, lambda _title, _target: None)
     work = ui.work(lambda _command: None, reveal=False)
-    agent = ui.agent(None, lambda: None, on_work=lambda: work.show(focus=False), reveal=False)
+    agent = ui.agent(lambda: None, on_work=lambda: work.show(focus=False), reveal=False)
     ui.pump()
     agent.show(focus=False)
     ui.pump()

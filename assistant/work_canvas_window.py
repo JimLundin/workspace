@@ -15,7 +15,8 @@ from assistant.ui_components.paint_ready import PaintReady
 from assistant.ui_components.text import font
 from assistant.ui_components.widgets import column, show_window
 from assistant.work_canvas import WorkCanvas
-from assistant.work_window import WorkSnapshot, WorkWindow
+from assistant.work_snapshot import WorkSnapshot
+from assistant.work_window import WorkWindow
 lazy from assistant.meeting_panel import MeetingPanel
 lazy from assistant.work_panel import WorkPanel
 

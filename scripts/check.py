@@ -13,18 +13,18 @@ import subprocess
 import sys
 import tempfile
 import time
-import traceback
 import unittest
 from collections.abc import Callable, Generator, Iterator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Protocol, runtime_checkable
+from typing import Literal, Protocol, runtime_checkable
 lazy from concurrent.futures import ProcessPoolExecutor
 
 from pydantic import TypeAdapter, ValidationError
 
 from scripts.architecture import Report, dependencies, module_name, review
+from scripts.check_results import Failure, Results, Selection, raised, reported
 from scripts.deploy_files import CheckedArchitecture, CheckReceipt, file_at, read, sha, source_map, write, write_receipt
 from scripts.development_paths import LIVE, PROFILE
 from scripts.source_analysis import Cache
@@ -82,13 +82,6 @@ AFTER_WORKERS = frozenset(
         "tests/test_agent_streaming.py",
     }
 )
-
-
-@dataclass(frozen=True, slots=True)
-class Selection:
-    tests: tuple[str, ...]
-    changed: tuple[str, ...]
-    reason: str
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -158,7 +151,7 @@ def windows_only(error: BaseException) -> bool:
             return False
 
 
-def import_changed(changed: tuple[str, ...], root: Path, failures: list[str], load: Callable[[str], object] = importlib.import_module) -> None:
+def import_changed(changed: tuple[str, ...], root: Path, failures: list[Failure], load: Callable[[str], object] = importlib.import_module) -> None:
     # Changed source, its root and failure ledger identify one import review;
     # the loader belongs to the check runtime, shared with test discovery.
 
@@ -171,7 +164,7 @@ def import_changed(changed: tuple[str, ...], root: Path, failures: list[str], lo
                 load(module_name(name))
             except Exception as error:
                 if not windows_only(error):
-                    failures.append(f"{name} does not import\n{traceback.format_exc()}")
+                    failures.append(raised(name, error))
 
 
 def selected_tests(module: str, loaded: object, requested: str = "") -> Iterator[tuple[str, Test]]:
@@ -183,9 +176,6 @@ def selected_tests(module: str, loaded: object, requested: str = "") -> Iterator
                 yield label, test
             case _:
                 pass
-
-
-type Results = tuple[int, int, tuple[str, ...], tuple[tuple[float, str], ...]]
 
 
 @contextmanager
@@ -238,20 +228,26 @@ def execution_plan(tests: tuple[str, ...]) -> ExecutionPlan:
 
 
 def worker_result(result: Results) -> Results:
-    passed, skipped, failures, timings = result
-    return passed, skipped, failures, tuple((seconds, "worker:" + label) for seconds, label in timings)
+    return Results(result.passed, result.skipped, result.failures, tuple((seconds, "worker:" + label) for seconds, label in result.durations))
 
 
 def combined_results(results: tuple[Results, ...], phases: tuple[tuple[float, str], ...] = ()) -> Results:
-    return (
-        sum(result[0] for result in results),
-        sum(result[1] for result in results),
-        tuple(failure for result in results for failure in result[2]),
-        (*phases, *(duration for result in results for duration in result[3])),
+    return Results(
+        sum(result.passed for result in results),
+        sum(result.skipped for result in results),
+        tuple(failure for result in results for failure in result.failures),
+        (*phases, *(duration for result in results for duration in result.durations)),
     )
 
 
 NATIVE_SOURCE_RUNTIME = NativeSourceRuntime()
+
+
+def step_failures(node: str, step: Callable[[Path, list[str]], None], root: Path) -> tuple[Failure, ...]:
+    # selfcheck's source steps append free text to a ledger owned by this call.
+    problems: list[str] = []
+    step(root, problems)
+    return tuple(reported(node, problem) for problem in problems)
 
 
 def execute(selection: Selection, root: Path, runtime: SourceRuntime = NATIVE_SOURCE_RUNTIME) -> Results:
@@ -259,13 +255,13 @@ def execute(selection: Selection, root: Path, runtime: SourceRuntime = NATIVE_SO
     os.environ.pop("WORKSPACE_E2E", None)
     with timed("phase:runtime activation", phases):
         runtime.activate()
-    failures: list[str] = []
+    failures: list[Failure] = []
     broad = selection.reason not in ("transitive Python import dependencies", "explicit iteration scope")
     if broad:
         with timed("phase:compile all source", phases):
-            runtime.compile(root, failures)
+            failures.extend(step_failures("compile all source", runtime.compile, root))
         if failures:
-            return 0, 0, tuple(failures), tuple(phases)
+            return Results(0, 0, tuple(failures), tuple(phases))
     # Hypothesis inspects loaded modules for local constants. Keep generated
     # domain checks ahead of the eager SDK/native import review, so bundled
     # dependencies do not become their generation catalog. Full compile/import
@@ -279,15 +275,15 @@ def execute(selection: Selection, root: Path, runtime: SourceRuntime = NATIVE_SO
             # Narrow/Qt-only checks never pay this preload; generic source
             # fixtures without the SDK keep their existing import inventory.
             import_changed(("assistant/sdk.py",), root, failures, runtime.load)
-            runtime.import_all(root, failures)
+            failures.extend(step_failures("import all production modules", runtime.import_all, root))
     if not failures:
         with timed("phase:import changed source", phases):
             import_changed(selection.changed, root, failures, runtime.load)
     if failures:
-        return first[0], first[1], (*first[2], *failures), (*phases, *first[3])
+        return combined_results((first, Results(0, 0, tuple(failures), ())), tuple(phases))
     remaining = tuple(name for name in selection.tests if not name.startswith("tests/properties/"))
     following = execute_overlapped(remaining, root) if broad else execute_tests(remaining, root, runtime.load)
-    return first[0] + following[0], first[1] + following[1], (*first[2], *following[2]), (*phases, *first[3], *following[3])
+    return combined_results((first, following), tuple(phases))
 
 
 def prepare_worker(root: Path) -> None:
@@ -321,8 +317,8 @@ def execute_overlapped(tests: tuple[str, ...], root: Path) -> Results:
             for name, future in pending:
                 try:
                     results.append(worker_result(future.result(timeout=240)))
-                except Exception:
-                    results.append((0, 0, (f"Portable worker failed for {name}\n{traceback.format_exc()}",), ()))
+                except Exception as error:
+                    results.append(Results(0, 0, (raised(name, error),), ()))
     finally:
         with timed("phase:portable worker shutdown", phases):
             pool.shutdown(wait=True, cancel_futures=True)
@@ -344,7 +340,7 @@ def scratch_directory() -> Generator[Path]:
 def execute_tests(tests: tuple[str, ...], root: Path, load: Callable[[str], object] = importlib.import_module) -> Results:
     # Same small test-function protocol as selfcheck, sequential within its owner.
     # Accumulators belong to this executor; only immutable observations leave it.
-    failures: list[str] = []
+    failures: list[Failure] = []
     timings: list[tuple[float, str]] = []
     passed = skipped = 0
     for selector in tests:
@@ -360,7 +356,7 @@ def execute_tests(tests: tuple[str, ...], root: Path, load: Callable[[str], obje
             if windows_only(error):
                 skipped += 1
             else:
-                failures.append(traceback.format_exc())
+                failures.append(raised(name, error))
             continue
         finally:
             timings.append((time.perf_counter() - import_started, "module:" + module))
@@ -377,13 +373,13 @@ def execute_tests(tests: tuple[str, ...], root: Path, load: Callable[[str], obje
                 passed += 1
             except unittest.SkipTest:
                 skipped += 1
-            except Exception:
-                failures.append(f"{module}.{label}\n{traceback.format_exc()}")
+            except Exception as error:
+                failures.append(raised(f"{name}::{label}", error))
             finally:
                 timings.append((time.perf_counter() - started, module + "." + label))
         if separator and not matched:
-            failures.append(f"No test function matched {selector}")
-    return passed, skipped, tuple(failures), tuple(timings)
+            failures.append(Failure(selector, "No test function matched", f"No test function matched {selector}"))
+    return Results(passed, skipped, tuple(failures), tuple(timings))
 
 
 def check_architecture(root: Path, current: dict[str, str], cache: Cache) -> Report:
@@ -482,29 +478,62 @@ class CheckRun:
     elapsed: float
 
 
+# Records outlive their console output; bound what a failure contributes.
+NODE_LIMIT = 300
+SUMMARY_LIMIT = 500
+
+
+@dataclass(frozen=True, slots=True)
+class RecordedFailure:
+    """A failure's node id and bounded exception summary; no tracebacks or environment."""
+
+    node: str
+    summary: str
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class CostRecord:
+    """The diagnostic check record, retained whether or not the check passed."""
+
+    files: frozendict[str, str]
+    tests: tuple[str, ...]
+    profile: str
+    passed: int
+    failed: int
+    skipped: int
+    failures: tuple[RecordedFailure, ...]
+    elapsed_seconds: float
+    durations: tuple[tuple[float, str], ...]
+    worker_seconds: float
+    unattributed_seconds: float
+    kind: Literal["workspace-check-timings-v1"] = "workspace-check-timings-v1"
+
+
+COST_RECORD = TypeAdapter(CostRecord)
+
+
 def publish_check(options: Options, run: CheckRun) -> bool:
-    passed, skipped, failures, observations = run.results
+    results = run.results
+    failures, observations = results.failures, results.durations
     for failure in failures:
-        print(failure)
+        print(failure.report)
     evidence = options.timings or PROFILE / "development" / "timings" / f"check-{time.time_ns()}.json"
     evidence.parent.mkdir(parents=True, exist_ok=True)
-    write(
-        evidence,
-        {
-            "kind": "workspace-check-timings-v1",
-            "files": dict(run.files),
-            "tests": run.selection.tests,
-            "profile": run.selection.reason,
-            "passed": passed,
-            "failed": len(failures),
-            "skipped": skipped,
-            "elapsed_seconds": run.elapsed,
-            "durations": observations,
-            "worker_seconds": sum(seconds for seconds, label in observations if label.startswith("worker:")),
-            "unattributed_seconds": max(0.0, run.elapsed - sum(seconds for seconds, label in observations if not label.startswith("worker:"))),
-        },
+    record = CostRecord(
+        files=run.files,
+        tests=run.selection.tests,
+        profile=run.selection.reason,
+        passed=results.passed,
+        failed=len(failures),
+        skipped=results.skipped,
+        failures=tuple(RecordedFailure(failure.node[:NODE_LIMIT], failure.summary[:SUMMARY_LIMIT]) for failure in failures),
+        elapsed_seconds=run.elapsed,
+        durations=observations,
+        worker_seconds=sum(seconds for seconds, label in observations if label.startswith("worker:")),
+        unattributed_seconds=max(0.0, run.elapsed - sum(seconds for seconds, label in observations if not label.startswith("worker:"))),
     )
-    print(f"{passed} passed, {len(failures)} failed, {skipped} skipped in {run.elapsed:.2f}s; source-bound editing profile")
+    write(evidence, COST_RECORD.dump_python(record, mode="json"))
+    print(f"{results.passed} passed, {len(failures)} failed, {results.skipped} skipped in {run.elapsed:.2f}s; source-bound editing profile")
     print(f"Complete cost evidence: {evidence}", flush=True)
     for seconds, name in sorted((item for item in observations if not item[1].startswith(("phase:", "module:", "worker:module:"))), reverse=True)[:5]:
         print(f"{seconds:.3f}s {name}")
@@ -516,8 +545,8 @@ def publish_check(options: Options, run: CheckRun) -> bool:
                 tests=run.selection.tests,
                 profile=run.selection.reason,
                 platform="win32" if options.native else sys.platform,
-                passed=passed,
-                skipped=skipped,
+                passed=results.passed,
+                skipped=results.skipped,
                 architecture=CheckedArchitecture(sources=len(run.architecture.sources), exceptions=len(run.architecture.exceptions)),
                 elapsed_seconds=run.elapsed,
                 checked_at_ns=time.time_ns(),
@@ -557,18 +586,19 @@ def main() -> None:
     # Desktop isolation may relaunch the executor. Keep policy review, source
     # identity and receipt publication in this coordinator, outside that handoff.
     if os.name == "nt" and current_name() == os.environ.get("WORKSPACE_TEST_DESKTOP"):
-        passed, skipped, failures, timings = execute(selection, ROOT)
+        results = execute(selection, ROOT)
     elif os.name == "nt" or args.native:
-        passed, skipped, failures, timings = execute_native(ROOT, selection.tests, selection.changed, selection.reason)
+        results = execute_native(ROOT, selection)
     else:
-        passed, skipped, failures, timings = execute(selection, ROOT)
+        results = execute(selection, ROOT)
     with timed("phase:final source manifest", overhead):
         final = source_files()
     if final != current:
         changed = tuple(name for name in sorted(final.keys() | current.keys()) if final.get(name) != current.get(name))
-        failures = (*failures, "Working source changed during checks; no receipt written. Changed: " + ", ".join(changed))
+        message = "Working source changed during checks; no receipt written."
+        results = combined_results((results, Results(0, 0, (Failure("working source", message, f"{message} Changed: " + ", ".join(changed)),), ())))
     elapsed = time.perf_counter() - started
-    run = CheckRun(frozendict(current), selection, (passed, skipped, failures, (*overhead, *timings)), architecture, elapsed)
+    run = CheckRun(frozendict(current), selection, combined_results((results,), tuple(overhead)), architecture, elapsed)
     raise SystemExit(publish_check(args, run))
 
 

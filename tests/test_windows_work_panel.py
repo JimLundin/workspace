@@ -17,8 +17,7 @@ lazy from PySide6.QtCore import Qt
 
 from assistant.qt_runtime import prepare
 from assistant.qt_ui import application
-from assistant.work_panel import WorkPanel
-from assistant.work_window import (
+from assistant.work_commands import (
     AddPreference,
     AddProjectNote,
     AnswerTask,
@@ -34,9 +33,10 @@ from assistant.work_window import (
     UpdatePreference,
     UpdateRoutine,
     WorkCommand,
-    WorkSnapshot,
-    WorkWindow,
 )
+from assistant.work_panel import WorkPanel
+from assistant.work_snapshot import WorkSnapshot
+from assistant.work_window import WorkWindow
 from automation.context import Preference, ProjectNote
 from automation.routines import Disabled, Enabled, Every, Routine, RoutineSummary
 from automation.task import ApprovalDecision, Completed, Control, Question, TaskStatus, TextAnswer, Waiting

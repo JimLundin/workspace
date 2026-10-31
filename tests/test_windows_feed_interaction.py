@@ -20,7 +20,7 @@ prepare()
 
 def test_thinking_and_reply_share_one_dismissible_bubble() -> None:
     with notifications() as panel:
-        panel.agent.begin("Review the fictional budget", panel.stop)
+        panel.agent.begin("Review the fictional budget")
         panel.pump()
         cards = [c for c in panel.view.cards.values() if not c.retiring]
         assert len(cards) == 1, "The request and thinking must stay in one bubble."
@@ -37,7 +37,7 @@ def test_thinking_and_reply_share_one_dismissible_bubble() -> None:
 def test_expanded_turn_reserves_the_title_width_left_by_its_disclosure() -> None:
     with notifications() as panel:
         title = ("Review the fictional forecast " + "compare the figures " * 10).strip()
-        panel.agent.begin(title, panel.stop)
+        panel.agent.begin(title)
         panel.agent.updates()(ToolActivity("check", "read_file", "fictional.csv", 1, Succeeded("24 rows")))
         panel.agent.done("The fictional figures are ready.")
         panel.agent.finish()
@@ -76,7 +76,7 @@ def test_expanding_a_bubble_collapses_the_previous_one() -> None:
     # Defect: two independently expanded cards keep consuming the viewport.
     with notifications() as panel:
         for index, title in enumerate(("Check the first workbook", "Check the second workbook")):
-            panel.agent.begin(title, panel.stop)
+            panel.agent.begin(title)
             panel.agent.updates()(ToolActivity(f"read-{index}", "read_file", f"fictional-{index}.csv", 2 * index + 1, Succeeded("24 rows")))
             panel.agent.done("The fictional figures are ready.")
             panel.agent.finish()

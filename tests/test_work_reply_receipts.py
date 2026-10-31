@@ -5,7 +5,8 @@ from collections.abc import Callable, Generator
 from contextlib import contextmanager
 from pathlib import Path
 
-from assistant.work_window import AnswerTask, RemoveContext, WorkSnapshot
+from assistant.work_commands import AnswerTask, RemoveContext
+from assistant.work_snapshot import WorkSnapshot
 from automation.context import Preference
 from automation.task import Question, RequestSource, TaskStatus, TextAnswer, Waiting
 from tests.test_external_input import has_pending_input

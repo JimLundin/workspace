@@ -44,7 +44,7 @@ from assistant.meeting_workflow import (
     WorkUnavailable,
     package_values,
 )
-from assistant.work_window import WorkSnapshot
+from assistant.work_snapshot import WorkSnapshot
 from automation.task import Completed, MeetingFollowup, Profile, RequestSource, RoutineSource, Running
 from tests.test_meeting_events import saved_meeting
 from tests.test_meetings import SPEECH

@@ -27,7 +27,6 @@ lazy from PySide6.QtGui import (
 lazy from PySide6.QtWidgets import QAbstractButton, QLabel, QTextEdit, QWidget
 
 from assistant import notification_reading, notification_text, step_view
-from assistant.agent_window import log_view
 from assistant.feed_origin import Origin
 from assistant.notifications import (
     REVEAL_SECONDS,
@@ -37,6 +36,7 @@ from assistant.notifications import (
     Frame,
     Motion,
     Recording,
+    Response,
     Settled,
     Toast,
     Tone,
@@ -66,6 +66,7 @@ from assistant.ui_components.bubble import (
 from assistant.ui_components.canvas_jump import CanvasJumpButton
 from assistant.ui_components.press_feedback import paint_feedback
 from assistant.ui_components.text import INSET, TEXT_PADDING, Document, TextView, font, units
+from assistant.view_publication import log_view
 from automation.presentation import StreamState
 from winapi import appearance, windows
 from winapi.composition import DesktopComposition, Glass
@@ -142,19 +143,22 @@ class Measure:
     def prepare(self, content: Content, maximum: int, *, expanded: bool = False) -> Prepared:
         scale = self.scale
         user = tone(content) is Tone.USER
-        compact = isinstance(content, Turn) and isinstance(content.state, Settled)
+        compact = _settled_turn(content)
         inset = 8
         maximum_width = min(maximum / scale, 280 if user else maximum / scale)
         presentation = notification_text.bubble_text(notification_text.spans(content))
         spans = presentation.body
         details = notification_text.step_blocks(content, expanded=expanded)
         meta, footer = "" if compact else caption(content), "You" if user else hint(content)
-        if isinstance(content, (Entry, Turn)):
-            # Agent questions use the bubble's voice tooltip, with no input footer.
-            footer = ""
+        match content:
+            case Entry() | Turn():
+                # Agent questions use the bubble's voice tooltip, with no input footer.
+                footer = ""
+            case Response() | Recording():
+                pass
         badge = badge_width(BUBBLE_ORIGINS)
         controls = (26 if not user else 0) + (26 if notification_text.expandable(content) else 0) + (32 if can_stop(content) else 0)
-        label = notification_text.title_text(content) if isinstance(content, Turn) else "" if compact else heading(content)
+        label = notification_text.title_text(content) if _turn(content) else "" if compact else heading(content)
         body_padding = INSET * 2 + 8
         # The feed has one column width. Only the person's speech uses a smaller
         # bubble; standalone replies must match conversation and proposal cards.
@@ -167,7 +171,7 @@ class Measure:
         body_height = self.body.load(spans, text_width) + TEXT_PADDING * 2 if spans else 0
         details_height = self.details.total(details, text_width) + TEXT_PADDING * 2 if details else 0
         label_width: float = max(1, round(math.ceil(width * scale) / scale) - controls - badge - INSET * 2)
-        if isinstance(content, Turn):
+        if _turn(content):
             label_width = heading_width(
                 round(math.ceil(width * scale) / scale),
                 badge,
@@ -351,7 +355,7 @@ class Bubble(QWidget):
         edge = paint_surface(painter, QRectF(self.rect()), BubbleAppearance(card.colors, glass=card.glass))
         if card.content is None or card.prepared is None or tone(card.content) is Tone.USER:
             return
-        if card.text.isVisible() and isinstance(card.content, Turn) and (not card.label.isHidden() or card.details.isVisible()):
+        if card.text.isVisible() and _turn(card.content) and (not card.label.isHidden() or card.details.isVisible()):
             painter.setPen(QPen(edge, 1))
             top = card.text.y() - TEXT_PADDING
             painter.drawLine(INSET, top, self.width() - INSET, top)
@@ -660,10 +664,10 @@ class Card:
         return max(0, self.prepared[2].body_height - self.layout.body_height)
 
     def needs_reading(self) -> bool:
-        return not self.retiring and not isinstance(self.content, Recording) and self.reader.offset < self.overflow()
+        return not self.retiring and not _recording(self.content) and self.reader.offset < self.overflow()
 
     def read(self, now: float, *, paused: bool, smooth: bool) -> bool:
-        if isinstance(self.content, Recording) or self.prepared is None or self.layout is None:
+        if _recording(self.content) or self.prepared is None or self.layout is None:
             return False
         limit = self.overflow()
         self.reader = notification_reading.advance(self.reader, now, limit, self.speed, paused=paused)
@@ -672,7 +676,11 @@ class Card:
                 self.reader.offset, limit, self.layout.body_height, self.line_height, smooth=smooth, origin=self.page_origin
             )
             self.text.verticalScrollBar().setValue(round(offset / self.owner.scale))
-        return not isinstance(self.reader, notification_reading.Finished)
+        match self.reader:
+            case notification_reading.Finished():
+                return False
+            case notification_reading.Waiting() | notification_reading.Scrolling() | notification_reading.Paused():
+                return True
 
     def apply_style(self, content: Content, preference: appearance.Preference) -> None:
         look = (tone(content), preference, self.frost)
@@ -680,11 +688,14 @@ class Card:
             return
         self.look = look
         self.colors, self.ink = palette(tone(content)), Ink()
-        if isinstance(preference, appearance.Contrast):
-            self.colors = Palette(preference.background, preference.foreground, preference.foreground, preference.background)
-            self.ink = Ink(*(preference.foreground for _ in range(4)))
-        elif preference is appearance.Material.GLASS and self.frost is appearance.Frost.BRIGHT:
-            self.ink = Ink("#202435", "#3b3d50", "#234782", "#8e3144")
+        match preference:
+            case appearance.Contrast(background=background, foreground=foreground):
+                self.colors = Palette(background, foreground, foreground, background)
+                self.ink = Ink(*(foreground for _ in range(4)))
+            case appearance.Material.GLASS if self.frost is appearance.Frost.BRIGHT:
+                self.ink = Ink("#202435", "#3b3d50", "#234782", "#8e3144")
+            case appearance.Material():
+                pass
         if preference is appearance.Material.GLASS and self.layer is None and self.owner.loop.composition is not None:
             try:
                 self.layer = self.create_glass(self.owner.loop.composition)
@@ -695,9 +706,9 @@ class Card:
             self.layer.color(self.colors.tint, 0.82 if self.frost is appearance.Frost.SMOKED else 0.22)
             if not self.glass:
                 self.layer.hide()
-        if not self.glass and not isinstance(preference, appearance.Contrast):
+        if not self.glass and not _contrast(preference):
             self.ink = Ink()
-        title_size = TITLE_SIZE if isinstance(content, Turn) else 9.5
+        title_size = TITLE_SIZE if _turn(content) else 9.5
         for label, color in ((self.label, self.ink.foreground), (self.caption, self.ink.secondary), (self.hint, self.ink.secondary)):
             face = (f"font-size: {title_size}pt; font-weight: 600; font-family: 'Segoe UI';") if label is self.label else ""
             label.setStyleSheet(f"background: transparent; color: {color}; padding: 0; margin: 0; border: none; {face}")
@@ -723,8 +734,8 @@ class Card:
 
     def render_heading(self, content: Content, prepared: Prepared) -> None:
         user = tone(content) is Tone.USER
-        compact = isinstance(content, Turn) and isinstance(content.state, Settled)
-        self.label.flow = isinstance(content, Turn)
+        compact = _settled_turn(content)
+        self.label.flow = _turn(content)
         self.label.expanded = self.expanded
         self.label.setFont(font(TITLE_SIZE if self.label.flow else 9.5, bold=True))
         self.label.setText(notification_text.title_text(content))
@@ -756,10 +767,7 @@ class Card:
         self.hint.setAlignment((Qt.AlignmentFlag.AlignRight if user else Qt.AlignmentFlag.AlignLeft) | Qt.AlignmentFlag.AlignVCenter)
         self.stop.setVisible(can_stop(content))
         self.dismiss.setVisible(not user)
-        self.stop.setEnabled(
-            not (isinstance(content, Turn) and isinstance(content.state, Working) and content.state.phase is Busy.STOPPING)
-            and not (isinstance(content, Recording) and content.state.phase == "stopping")
-        )
+        self.stop.setEnabled(not _stopping(content))
         self.disclosure.setVisible(notification_text.expandable(content))
         self.disclosure.expanded = self.expanded
         self.disclosure.setAccessibleName(("Hide " if self.expanded else "Show ") + "steps")
@@ -779,7 +787,7 @@ class Card:
                 and before.identity == after.identity
                 and after.state is not StreamState.INTERRUPTED
                 and self.owner.environment.animations()
-                and not isinstance(preference, appearance.Contrast)
+                and not _contrast(preference)
             ):
                 end = units("".join(span.text for span in self.spans))
                 if end > offset:
@@ -789,7 +797,7 @@ class Card:
             self.frame.height if previous is not None else self.height,
             self.frame.details if previous is not None else self.layout.details_height,
         )
-        if isinstance(content, Recording):
+        if _recording(content):
             self.tail_pending = True  # Follow the newest transcript after Qt resolves the final viewport.
         self.window.setAccessibleName(f"{heading(content)}. {prepared.caption}".strip())
         self.window.update()
@@ -847,7 +855,7 @@ class Card:
             right -= 32
             controls += 32
         if not self.disclosure.isHidden():
-            if isinstance(self.content, Turn) and prepared.header_height <= 36 * scale:
+            if _turn(self.content) and prepared.header_height <= 36 * scale:
                 self.disclosure.setGeometry(right - 22, 14, 22, 20)
             else:
                 self.disclosure.setGeometry(right - 28, 14, 28, max(28, round(header - 20)))
@@ -944,3 +952,47 @@ class Card:
         if self.layer is not None:
             self.layer.close()
         shiboken6.delete(self.window)
+
+
+def _turn(content: Content | None) -> bool:
+    match content:
+        case Turn():
+            return True
+        case _:
+            return False
+
+
+def _settled_turn(content: Content) -> bool:
+    """A finished turn shows a compact header."""
+    match content:
+        case Turn(state=Settled()):
+            return True
+        case _:
+            return False
+
+
+def _recording(content: Content | None) -> bool:
+    match content:
+        case Recording():
+            return True
+        case _:
+            return False
+
+
+def _stopping(content: Content) -> bool:
+    """Stop is already underway, so its control stays disabled."""
+    match content:
+        case Turn(state=Working(phase=Busy.STOPPING)):
+            return True
+        case Recording(state=state):
+            return state.phase == "stopping"
+        case _:
+            return False
+
+
+def _contrast(preference: appearance.Preference) -> bool:
+    match preference:
+        case appearance.Contrast():
+            return True
+        case appearance.Material():
+            return False

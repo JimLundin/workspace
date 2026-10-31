@@ -5,8 +5,8 @@ from collections.abc import Callable
 lazy from PySide6 import QtCore, QtGui, QtWidgets
 lazy from PySide6.QtCore import Qt
 
-from assistant.agent_window import log_view
 from assistant.qt_ui import EventLoop
+from assistant.view_publication import log_view
 from winapi.appearance import animations_enabled
 lazy from winapi.composition_spinner import CompositionSpinner
 

@@ -47,7 +47,7 @@ lazy from assistant.meeting_workflow import (
 lazy from assistant.recording_state import duration
 lazy from assistant.ui_components.controls import button, label
 lazy from assistant.ui_components.widgets import Browser, Editor, column, replace_text, row
-lazy from assistant.work_window import task_label
+lazy from assistant.work_text import task_label
 
 prepare()
 

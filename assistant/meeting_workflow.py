@@ -25,7 +25,7 @@ from assistant.meeting_followup_store import (
 )
 from assistant.meeting_preparation import Preparations, PreparedFollowup, followup_title
 from assistant.meeting_store import MeetingArchive
-from assistant.work_window import WorkSnapshot
+from assistant.work_snapshot import WorkSnapshot
 from automation.task import (
     Completed,
     FeedHandoff,
