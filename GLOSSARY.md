@@ -108,6 +108,9 @@ _Avoid_: Duplicate task, copied conversation
 A question or approval that an agent needs the person to answer before work can
 continue. An approval covers one exact operation. Its answer belongs to the
 originating task and its current goal; the conversation shows that same request.
+A reply is text for a question, or approve or decline for an approval; typed,
+spoken and clicked replies become that one reply at the input edge. Approving
+needs the exact preview to be visible first.
 _Avoid_: Notification, task, chat message
 
 **Notification filter**:

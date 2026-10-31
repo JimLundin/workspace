@@ -6,7 +6,6 @@ from dataclasses import replace
 lazy from PySide6 import QtCore, QtGui, QtWidgets
 lazy from PySide6.QtCore import Qt
 
-from assistant.agent_session import Answered
 from assistant.canvas_activity import Attention, CanvasAction, CanvasQuestion, CanvasUpdate
 from assistant.keymap import PHYSICAL_NAMES
 from assistant.ui_components.appearance import ACCENT, CANVAS_STYLE
@@ -27,6 +26,7 @@ from automation.personal_work import (
     WorkState,
     WorkThread,
 )
+from automation.task import TextAnswer
 from miryoku.layout import AGENT
 
 
@@ -335,7 +335,7 @@ class QuestionDetail:
             case Attention.WAITING:
                 self.status.setText("Hold " + PHYSICAL_NAMES[AGENT] + " to reply · release to send")
                 self.response.setText("Previous reply\n" + self.last_reply if self.last_reply is not None else "")
-            case Answered(text=text):
+            case TextAnswer(text=text):
                 self.last_reply = text
                 self.response.setText("You replied\n" + text)
                 self.status.setText("Context sent to the agent.")

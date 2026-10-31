@@ -1,13 +1,14 @@
 """A card link acts only when it is exactly one card action; anything else does nothing."""
 
-from assistant.card_actions import AnswerApproval, Decision, encode, parse
+from assistant.card_actions import AnswerApproval, encode, parse
+from automation.task import ApprovalDecision
 
 
 def test_partial_or_altered_links_are_refused_instead_of_acting_on_defaults() -> None:
     # Defect: a missing field falls back to an empty target or answer, or an
     # unknown action or decision still reaches the agent.
-    decline = encode(AnswerApproval("request", Decision.DECLINE))
-    assert parse(decline) == AnswerApproval("request", Decision.DECLINE)
+    decline = encode(AnswerApproval("request", ApprovalDecision.DECLINED))
+    assert parse(decline) == AnswerApproval("request", ApprovalDecision.DECLINED)
     refused = (
         "workspace://canvas",
         "workspace://canvas?target=",

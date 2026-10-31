@@ -5,11 +5,11 @@ from dataclasses import dataclass, replace
 from assistant import tool_text
 from assistant.action_text import readable
 from assistant.agent_session import AgentRequest, ChatMessage, pending
-from assistant.card_actions import AnswerApproval, Decision, OpenCanvas, encode, parse
+from assistant.card_actions import AnswerApproval, OpenCanvas, encode, parse
 from assistant.notifications import Content, Entry, Response, Turn, body, heading, plain, results, steps
 from assistant.rich_text import Span, formatted
 from automation.presentation import Answer, ToolActivity
-from automation.task import Approval
+from automation.task import Approval, ApprovalDecision
 
 
 def answer(content: Content | None) -> Answer | None:
@@ -149,8 +149,8 @@ def options(content: Content) -> tuple[Span, ...]:
         match entry:
             case Entry(message=AgentRequest(request=Approval()) as message) if pending(message):
                 return (
-                    Span("Approve", ("link",), encode(AnswerApproval(message.id, Decision.APPROVE))),
-                    Span("Decline", ("link",), encode(AnswerApproval(message.id, Decision.DECLINE))),
+                    Span("Approve", ("link",), encode(AnswerApproval(message.id, ApprovalDecision.APPROVED))),
+                    Span("Decline", ("link",), encode(AnswerApproval(message.id, ApprovalDecision.DECLINED))),
                 )
             case _:
                 pass

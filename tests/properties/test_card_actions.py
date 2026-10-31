@@ -2,7 +2,8 @@
 
 from hypothesis import strategies
 
-from assistant.card_actions import AnswerApproval, CardAction, Decision, OpenCanvas, encode, parse
+from assistant.card_actions import AnswerApproval, CardAction, OpenCanvas, encode, parse
+from automation.task import ApprovalDecision
 from tests.properties.generation import cases, property_test
 
 
@@ -13,7 +14,7 @@ def card_actions(draw: strategies.DrawFn) -> CardAction:
     )
     if draw(strategies.booleans()):
         return OpenCanvas(identity)
-    return AnswerApproval(identity, draw(strategies.sampled_from(tuple(Decision))))
+    return AnswerApproval(identity, draw(strategies.sampled_from(tuple(ApprovalDecision))))
 
 
 @property_test(cases(card_actions))
