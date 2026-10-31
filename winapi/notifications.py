@@ -1,14 +1,15 @@
 """Bounded, local Notification Center reads and explicit individual dismissal."""
 
-import asyncio
 import queue
 import threading
+import time
 from contextlib import suppress
 from dataclasses import replace
 from itertools import islice
 from typing import Protocol
 
 lazy from win32more import FAILED
+lazy from win32more.Windows.Foundation import AsyncStatus, IAsyncInfo
 lazy from win32more.Windows.UI.Notifications import NotificationKinds
 lazy from win32more.Windows.UI.Notifications.Management import UserNotificationListener, UserNotificationListenerAccessStatus
 lazy from win32more.Windows.Win32.System.WinRT import RO_INIT_MULTITHREADED, RoInitialize, RoUninitialize
@@ -21,7 +22,7 @@ class NotificationSource(Protocol):
     """The notification worker owns one source's apartment and observation lifetime."""
 
     def open(self) -> bool: ...
-    async def read(self) -> Observation: ...
+    def read(self, stopped: threading.Event) -> Observation: ...
     def dismiss(self, key: NoticeKey) -> None: ...
     def close(self) -> None: ...
 
@@ -37,11 +38,21 @@ class NativeNotifications:
     def open(self) -> bool:
         return not FAILED(RoInitialize(RO_INIT_MULTITHREADED))
 
-    async def read(self) -> Observation:
+    def read(self, stopped: threading.Event) -> Observation:
         listener = UserNotificationListener.get_Current()
         if listener.GetAccessStatus() != UserNotificationListenerAccessStatus.Allowed:
             return Unavailable(Access.DENIED)
-        rows = await asyncio.wait_for(listener.GetNotificationsAsync(NotificationKinds.Toast), 3)
+        # Poll instead of awaiting: win32more's awaitable completes a cancelled future when a timed-out read finishes.
+        operation = listener.GetNotificationsAsync(NotificationKinds.Toast)
+        info = operation.as_(IAsyncInfo)
+        deadline = time.monotonic() + 3
+        while info.Status == AsyncStatus.Started:
+            if stopped.wait(0.05) or time.monotonic() >= deadline:
+                info.Cancel()
+                raise TimeoutError("Notification Center read did not finish")
+        if info.Status != AsyncStatus.Completed:
+            raise OSError("Notification Center read failed")
+        rows = operation.GetResults()
         found: list[Notice] = []
         for index, row in enumerate(rows):
             if index >= 256:
@@ -108,37 +119,35 @@ class NotificationObserver:
             self.publish(Unavailable(Access.UNAVAILABLE))
             return
         try:
-            with asyncio.Runner() as runner:
-                failures = 0
-                while not self.stopped.is_set():
-                    try:
-                        while not self.dismissals.empty():
-                            key = self.dismissals.get_nowait()
-                            with suppress(OSError):
-                                self.source.dismiss(key)
-                        observation = runner.run(self.source.read())
-                        match observation:
-                            case Observed():
-                                failures = 0
-                                try:
-                                    coverage = self.banner_policy.sync()
-                                    observation = replace(observation, banners=Banners.PARTIAL if coverage.unavailable else Banners.SUPPRESSED)
-                                except OSError:
-                                    observation = replace(observation, banners=Banners.PARTIAL)
-                            case Unavailable(access=access):
-                                failures += 1
-                                if access is Access.DENIED or failures >= 3:
-                                    self.banner_policy.close()
-                        self.publish(observation)
-                    except OSError, TimeoutError:
-                        failures += 1
-                        if failures >= 3:
-                            with suppress(OSError):
+            failures = 0
+            while not self.stopped.is_set():
+                try:
+                    while not self.dismissals.empty():
+                        key = self.dismissals.get_nowait()
+                        with suppress(OSError):
+                            self.source.dismiss(key)
+                    observation = self.source.read(self.stopped)
+                    match observation:
+                        case Observed():
+                            failures = 0
+                            try:
+                                coverage = self.banner_policy.sync()
+                                observation = replace(observation, banners=Banners.PARTIAL if coverage.unavailable else Banners.SUPPRESSED)
+                            except OSError:
+                                observation = replace(observation, banners=Banners.PARTIAL)
+                        case Unavailable(access=access):
+                            failures += 1
+                            if access is Access.DENIED or failures >= 3:
                                 self.banner_policy.close()
-                        self.publish(Unavailable(Access.UNAVAILABLE))
-                    if self.stopped.wait(1):
-                        break
-
+                    self.publish(observation)
+                except OSError, TimeoutError:
+                    failures += 1
+                    if failures >= 3:
+                        with suppress(OSError):
+                            self.banner_policy.close()
+                    self.publish(Unavailable(Access.UNAVAILABLE))
+                if self.stopped.wait(1):
+                    break
         finally:
             try:
                 self.banner_policy.close()

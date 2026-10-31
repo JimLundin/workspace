@@ -1,9 +1,9 @@
 """Notification mirroring must retain delivery when banner control fails."""
 
-import asyncio
 import sys
+import threading
 import unittest
-from collections.abc import Awaitable, Callable
+from collections.abc import Callable
 
 if sys.platform != "win32":
     raise unittest.SkipTest("Native notification observer")
@@ -34,7 +34,7 @@ class Source:
 
     __slots__ = ("closes", "observe", "opens")
 
-    def __init__(self, observe: Callable[[], Awaitable[Observation]]) -> None:
+    def __init__(self, observe: Callable[[], Observation]) -> None:
         self.observe = observe
         self.opens = self.closes = 0
 
@@ -42,8 +42,8 @@ class Source:
         self.opens += 1
         return True
 
-    async def read(self) -> Observation:
-        return await self.observe()
+    def read(self, stopped: threading.Event) -> Observation:
+        return self.observe()
 
     def dismiss(self, key: NoticeKey) -> None:
         pass
@@ -56,7 +56,7 @@ def test_banner_failure_keeps_notice_delivery_and_repeated_read_failures_release
     notice = Notice(NoticeKey(1, 10), "Fixture", "Fixture", "Update", "Local test")
     calls = 0
 
-    async def read_fixture() -> Observation:
+    def read_fixture() -> Observation:
         nonlocal calls
         calls += 1
         if calls > 2:
@@ -76,23 +76,3 @@ def test_banner_failure_keeps_notice_delivery_and_repeated_read_failures_release
     assert lease.closes == 2  # Repeated failure recovery, followed by owner shutdown.
     assert source.opens == source.closes == 1
 
-
-def test_notification_polls_share_one_event_loop_for_late_winrt_callbacks() -> None:
-    loops: list[asyncio.AbstractEventLoop] = []
-    completed: list[bool] = []
-
-    async def observe() -> Observation:
-        loop = asyncio.get_running_loop()
-        loops.append(loop)
-        if len(loops) == 1:
-            loop.call_later(0.02, completed.append, True)
-        return Observed(())
-
-    observer = NotificationObserver(source=Source(observe), banner_policy=Lease())
-    try:
-        for _ in range(2):
-            observer.results.get(timeout=2)
-    finally:
-        observer.close()
-    assert not observer.thread.is_alive() and len(loops) == 2
-    assert loops[0] is loops[1] and completed == [True]
