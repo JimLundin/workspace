@@ -11,6 +11,8 @@ invisible (alpha 1) hit fill; without glass, Qt paints the capsule itself.
 import math
 from collections import deque
 from collections.abc import Callable, Mapping
+from dataclasses import dataclass
+from functools import lru_cache
 from typing import Final, assert_never
 
 lazy from PySide6 import QtCore, QtGui, QtWidgets
@@ -42,6 +44,23 @@ def color(shade: Shade) -> QtGui.QColor:
     return value
 
 
+@dataclass(frozen=True, slots=True)
+class Drawn:
+    """One capsule's frame: its view and content, any content fading out under it, and how it reads."""
+
+    view: CapsuleView
+    content: Content
+    previous: Content | None
+    fade: float
+    look: Look
+    framed: Framed
+
+
+def visibility(presence: float) -> float:
+    """Glass and content become opaque before a capsule reaches its full width."""
+    return min(1.0, max(0.0, presence * 1.6))
+
+
 def controls(content: Content) -> tuple[tuple[Control, float], ...]:
     """The controls a capsule shows, with their left edges."""
 
@@ -60,18 +79,27 @@ def pane(key: Key, look: Look, framed: Framed, scale: float) -> Pane | None:
         case GlassLook(veil=veil):
             box = framed.box
             bounds = Rect(round(box.x * scale), round(box.y * scale), round((box.x + box.width) * scale), round((box.y + box.height) * scale))
-            return Pane(key.name, bounds, RADIUS * scale, framed.presence, veil)
+            return Pane(key.name, bounds, RADIUS * scale, visibility(framed.presence), veil)
         case SolidLook():
             return None
         case _:
             assert_never(look)
 
 
+@lru_cache(maxsize=2)
 def font(*, strong: bool) -> QtGui.QFont:
     value = QtGui.QFont(typeface.FAMILY)
     value.setPixelSize(12)
     value.setWeight(QtGui.QFont.Weight.DemiBold if strong else QtGui.QFont.Weight.Medium)
     value.setFeature(QtGui.QFont.Tag("tnum"), 1)  # Readings keep their width as digits change.
+    return value
+
+
+@lru_cache(maxsize=2)
+def badge_font() -> QtGui.QFont:
+    value = QtGui.QFont(typeface.FAMILY)
+    value.setPixelSize(10)
+    value.setWeight(QtGui.QFont.Weight.Bold)
     return value
 
 
@@ -121,6 +149,9 @@ class Capsule(QtWidgets.QAbstractButton):
         self.key = key
         self.view: CapsuleView | None = None
         self.content = Content(HEIGHT, ())
+        self.previous: Content | None = None
+        self.fade = 1.0
+        self.presence = 1.0
         self.look: Look = window.look
         self.contrast = False
         self.controls: tuple[ControlButton, ...] = ()
@@ -135,28 +166,38 @@ class Capsule(QtWidgets.QAbstractButton):
         if self.view is not None:
             self.press(self.view.action)
 
-    def show_view(self, view: CapsuleView, content: Content, look: Look, *, contrast: bool) -> None:
-        if (self.view, self.content, self.look, self.contrast) == (view, content, look, contrast):
+    def show_view(self, drawn: Drawn, *, contrast: bool) -> None:
+        state = (drawn.view, drawn.content, drawn.previous, drawn.fade, drawn.look, drawn.framed.presence, contrast)
+        if (self.view, self.content, self.previous, self.fade, self.look, self.presence, self.contrast) == state:
             return
-        self.view, self.content, self.look, self.contrast = view, content, look, contrast
-        self.setToolTip(view.label)
-        self.setAccessibleName(view.label)
-        wanted = controls(content)
+        if self.view is None or self.view.label != drawn.view.label:
+            # Each change raises an accessibility event; frames of a fade keep the label.
+            self.setToolTip(drawn.view.label)
+            self.setAccessibleName(drawn.view.label)
+        self.view, self.content, self.previous, self.fade, self.look, self.presence, self.contrast = state
+        wanted = controls(drawn.content)
         if tuple(button.control for button in self.controls) != tuple(control for control, _ in wanted):
             for button in self.controls:
                 # Deletion waits for the event loop; the replaced control must leave this frame.
                 button.hide()
                 button.deleteLater()
             self.controls = tuple(ControlButton(self, control) for control, _ in wanted)
-        for button, (_, x) in zip(self.controls, wanted, strict=True):
-            button.move(round(x), TOP + (HEIGHT - 28) // 2)
-            button.show()
-            button.update()
         self.update()
+
+    def place_controls(self) -> None:
+        shift = self.shift(self.content)
+        for button, (_, x) in zip(self.controls, controls(self.content), strict=True):
+            button.move(round(shift + x), TOP + (HEIGHT - 28) // 2)
+            button.setVisible(self.fade > 0.5 and visibility(self.presence) == 1)
+
+    def shift(self, content: Content) -> float:
+        """Content keeps its measured layout, centred while the capsule's width morphs around it."""
+        return (self.width() - content.width) / 2
 
     def frame(self, framed: Framed) -> None:
         """The widget spans the edge strip and the capsule below it."""
         self.setGeometry(round(framed.box.x), 0, max(1, round(framed.box.width)), TOP + round(framed.box.height))
+        self.place_controls()
 
     def enterEvent(self, event: QtGui.QEnterEvent) -> None:
         super().enterEvent(event)
@@ -179,13 +220,16 @@ class Capsule(QtWidgets.QAbstractButton):
         strip.addRect(QtCore.QRectF(0, 0, self.width(), TOP))
         hit = QtGui.QColor(0, 0, 0, 1)  # Invisible, but Windows routes the pointer here.
         painter.fillPath(strip, hit)
+        alpha = visibility(self.presence)
         match self.look:
             case GlassLook():
                 painter.fillPath(outline, hit)
             case SolidLook(fill=fill, edge=edge):
+                painter.setOpacity(alpha)
                 painter.fillPath(outline, color(fill))
                 painter.setPen(QtGui.QPen(color(edge), 1))
                 painter.drawPath(outline)
+                painter.setOpacity(1)
             case _:
                 assert_never(self.look)
         lettering = self.look.lettering
@@ -195,11 +239,21 @@ class Capsule(QtWidgets.QAbstractButton):
             painter.setPen(QtGui.QPen(color(lettering.ink), 1.5))
             painter.setBrush(Qt.BrushStyle.NoBrush)
             painter.drawRoundedRect(shape.adjusted(1.5, 1.5, -1.5, -1.5), radius - 1.5, radius - 1.5)
-        middle = TOP + HEIGHT / 2
-        previous: Spot | None = None
-        for spot in self.content.spots:
-            self.paint_part(painter, spot, previous, middle)
-            previous = spot
+        painter.setClipPath(outline)
+        layers: tuple[tuple[Content, float], ...] = (
+            ((self.previous, alpha * (1 - self.fade)), (self.content, alpha * self.fade)) if self.previous is not None else ((self.content, alpha),)
+        )
+        for content, opacity in layers:
+            if opacity <= 0:
+                continue
+            painter.save()
+            painter.setOpacity(opacity)
+            painter.translate(self.shift(content), 0)
+            previous: Spot | None = None
+            for spot in content.spots:
+                self.paint_part(painter, spot, previous, TOP + HEIGHT / 2)
+                previous = spot
+            painter.restore()
 
     def paint_part(self, painter: QtGui.QPainter, spot: Spot, previous: Spot | None, middle: float) -> None:
         lettering = self.look.lettering
@@ -218,11 +272,9 @@ class Capsule(QtWidgets.QAbstractButton):
                 self.paint_spinner(painter, spot, middle)
             case Badge(text=text):
                 anchor = previous.x + previous.width if previous is not None else spot.x
-                badge = QtGui.QFont(typeface.FAMILY)
-                badge.setPixelSize(10)
-                badge.setWeight(QtGui.QFont.Weight.Bold)
+                badge = badge_font()
                 width = max(15.0, QtGui.QFontMetricsF(badge).horizontalAdvance(text) + 8)
-                rect = QtCore.QRectF(min(anchor - 7, self.width() - width - 1), TOP + 1, width, 15)
+                rect = QtCore.QRectF(min(anchor - 7, self.content.width - width - 1), TOP + 1, width, 15)
                 painter.setPen(Qt.PenStyle.NoPen)
                 painter.setBrush(QtGui.QColor(RED) if not self.contrast else color(lettering.ink))
                 painter.drawRoundedRect(rect, 7.5, 7.5)
@@ -300,24 +352,24 @@ class BarWindow(QtWidgets.QWidget):
         self.capsules = frozendict({**self.capsules, key: created})
         return created
 
-    def present(self, shown: tuple[tuple[CapsuleView, Content, Look, Framed], ...], *, contrast: bool, glass: bool) -> None:
-        """Show exactly these capsules where the frame puts them; other pooled capsules hide."""
+    def present(self, drawn: tuple[Drawn, ...], *, contrast: bool, glass: bool) -> None:
+        """Show exactly these capsules where their frames put them; other pooled capsules hide."""
         area = QtGui.QGuiApplication.primaryScreen().geometry()
-        height = TOP + max((round(framed.box.height) for *_, framed in shown), default=HEIGHT)
+        height = TOP + max((round(each.framed.box.height) for each in drawn), default=HEIGHT)
         if self.geometry() != QtCore.QRect(area.x(), area.y(), area.width(), height):
             self.setGeometry(area.x(), area.y(), area.width(), height)
-        keys = frozenset(view.key for view, *_ in shown)
-        for view, content, style, framed in shown:
-            capsule = self.capsule(view.key)
-            capsule.show_view(view, content, style, contrast=contrast)
-            capsule.frame(framed)
+        keys = frozenset(each.view.key for each in drawn)
+        for each in drawn:
+            capsule = self.capsule(each.view.key)
+            capsule.show_view(each, contrast=contrast)
+            capsule.frame(each.framed)
             capsule.show()
         for key, capsule in self.capsules.items():
             if key not in keys:
                 capsule.hide()
         scale = self.devicePixelRatioF()
         self.glass = glass
-        self.panes = tuple(found for view, _, shade, framed in shown if (found := pane(view.key, shade, framed, scale)) is not None)
+        self.panes = tuple(found for each in drawn if (found := pane(each.view.key, each.look, each.framed, scale)) is not None)
         if not self.glass_timer.isActive():
             self.glass_timer.start(0)
 

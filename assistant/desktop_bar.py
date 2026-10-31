@@ -25,9 +25,10 @@ lazy from assistant.ambient import Ambient, SystemStatus
 lazy from assistant.audio_meter import AudioMeter
 lazy from assistant.bar_status import StatusObserver
 lazy from assistant.icons import State
-lazy from assistant.island_layout import HEIGHT, Metrics, Placed, frame, snap
+lazy from assistant.island_layout import Metrics, frame, snap
 lazy from assistant.island_model import Action, CapsuleView, Key, Marker, Observed, Spinner, island, keyboard
-lazy from assistant.island_surface import TOP, BarWindow, font
+lazy from assistant.island_motion import IslandMotion, Shown, advance, finish, placed, retarget, settled
+lazy from assistant.island_surface import TOP, BarWindow, Drawn, font
 lazy from assistant.qt_ui import EventLoop, application
 lazy from assistant.recording_state import RecordingAction, RecordingState
 lazy from assistant.shell_controls import TASKBAR_TOGGLE, TaskbarControl, WindowsKeyObserver
@@ -89,10 +90,12 @@ class DesktopBar:
         "hovered",
         "inbox",
         "keys",
+        "last_frame",
         "layout_enabled",
         "loop",
         "materials",
         "menu",
+        "motion",
         "next_material",
         "next_power",
         "notification_access",
@@ -102,6 +105,7 @@ class DesktopBar:
         "power",
         "preference",
         "recording",
+        "resolution",
         "sample_bounds",
         "status_service",
         "system",
@@ -134,6 +138,10 @@ class DesktopBar:
         self.inbox = 0
         self.hovered: Key | None = None
         self.views: tuple[CapsuleView, ...] = ()
+        # Reassigned each frame; the bar mutates no motion or view record.
+        self.motion = IslandMotion()
+        self.last_frame: float | None = None
+        self.resolution = appearance.TimerResolution()
         self.errors: queue.Queue[str] = queue.Queue()
         self.taskbar = TaskbarControl()
         self.controls: shell.AppWindow | None = None
@@ -141,8 +149,7 @@ class DesktopBar:
         self.worker: threading.Thread | None = None
         self.loop = EventLoop(application(), self.paint_frames)
         self.materials = appearance.FrostSampler()
-        self.next_material = 0.0
-        self.next_power = 0.0
+        self.next_material, self.next_power = 0.0, 0.0
         self.power: Power = PowerUnavailable.UNKNOWN
         self.system = SystemStatus()
         self.status_service: StatusObserver | None = None
@@ -161,12 +168,7 @@ class DesktopBar:
             if audio_level is not None:
                 self.audio_meter = AudioMeter(audio_level)
             if native_shell:
-                self.notification_service = NotificationObserver()
-                self.status_service = StatusObserver()
-                self.controls = shell.AppWindow("workspace shell controls", self.message)
-                self.keys = WindowsKeyObserver(self.controls.handle)
-                self.worker = threading.Thread(target=self.start_taskbar, name="taskbar recovery", daemon=True)
-                self.worker.start()
+                self.start_shell()
             self.timer.start()
             self.render()
             self.tick()
@@ -182,6 +184,15 @@ class DesktopBar:
         audio.setInterval(50)
         audio.timeout.connect(self.sample_audio)
         return tick, audio
+
+    def start_shell(self) -> None:
+        """The production desktop: notifications, system status, shell controls and taskbar recovery."""
+        self.notification_service = NotificationObserver()
+        self.status_service = StatusObserver()
+        self.controls = shell.AppWindow("workspace shell controls", self.message)
+        self.keys = WindowsKeyObserver(self.controls.handle)
+        self.worker = threading.Thread(target=self.start_taskbar, name="taskbar recovery", daemon=True)
+        self.worker.start()
 
     def start_taskbar(self) -> None:
         try:
@@ -300,28 +311,12 @@ class DesktopBar:
         )
 
     def render(self) -> None:
+        """Retarget the capsules at what the bar should show now; frames carry them there."""
         if self.closed:
             return
         self.views = island(self.observed(), hovered=self.hovered)
-        contents = tuple(self.window.measure(view) for view in self.views)
-        width = QtGui.QGuiApplication.primaryScreen().geometry().width()
-        placed = tuple(Placed(view.key, view.zone, content.width, HEIGHT) for view, content in zip(self.views, contents, strict=True))
-        framed = frozendict((each.key, each) for each in snap(frame(placed, Metrics(width, top=TOP)), self.window.devicePixelRatioF()))
-        match self.preference:
-            case appearance.Contrast():
-                contrast = True
-            case appearance.Material.GLASS | appearance.Material.SOLID:
-                contrast = False
-            case _:
-                assert_never(self.preference)
-        self.window.present(
-            tuple(
-                (view, content, look(self.preference, self.frost, view.tint), framed[view.key])
-                for view, content in zip(self.views, contents, strict=True)
-            ),
-            contrast=contrast,
-            glass=self.preference is appearance.Material.GLASS,
-        )
+        shown = tuple(Shown(view, self.window.measure(view)) for view in self.views)
+        self.motion = retarget(self.motion, shown, animate=self.visible and self.observations.motion())
         listening = self.activity is State.LISTENING
         if listening and not self.audio_timer.isActive():
             self.window.samples.extend(0.0 for _ in range(len(self.window.samples)))
@@ -332,6 +327,33 @@ class DesktopBar:
             self.audio_meter.listen(enabled=listening)
         self.window.setVisible(self.visible)
         self.paint_frames()
+
+    def draw(self) -> None:
+        width = QtGui.QGuiApplication.primaryScreen().geometry().width()
+        framed = frozendict((each.key, each) for each in snap(frame(placed(self.motion), Metrics(width, top=TOP)), self.window.devicePixelRatioF()))
+        match self.preference:
+            case appearance.Contrast():
+                contrast = True
+            case appearance.Material.GLASS | appearance.Material.SOLID:
+                contrast = False
+            case _:
+                assert_never(self.preference)
+        self.window.present(
+            tuple(
+                Drawn(
+                    moving.view,
+                    moving.content,
+                    moving.previous,
+                    moving.fade.value,
+                    look(self.preference, self.frost, moving.view.tint),
+                    framed[moving.key],
+                )
+                for moving in self.motion.capsules
+                if moving.key in framed
+            ),
+            contrast=contrast,
+            glass=self.preference is appearance.Material.GLASS,
+        )
 
     def spinning(self) -> bool:
         def spinner(part: object) -> bool:
@@ -346,13 +368,22 @@ class DesktopBar:
     def paint_frames(self) -> None:
         if self.closed:
             return
-        animate = self.visible and self.observations.motion() and self.spinning()
-        self.window.spin_angle = (90 - self.observations.clock() * 300) % 360 if animate else 90.0
+        now, animate = self.observations.clock(), self.visible and self.observations.motion()
+        # A frame after the loop was idle starts the motion now, rather than from the last frame.
+        elapsed = now - (self.last_frame if self.last_frame is not None else now)
+        self.motion = advance(self.motion, elapsed) if animate else finish(self.motion)
+        moving = not settled(self.motion)
+        spinning = animate and self.spinning()
+        self.window.spin_angle = (90 - now * 300) % 360 if spinning else 90.0
+        self.draw()
         if self.spinning():
             for key, capsule in self.window.capsules.items():
                 if key in (Key.ISLAND, Key.AGENT):
                     capsule.update()
-        self.loop.watch(visible=animate)
+        running = moving or spinning
+        self.last_frame = now if running else None
+        self.resolution.update(active=moving)
+        self.loop.watch(visible=running)
 
     def tick(self) -> None:
         if self.closed:
@@ -438,6 +469,7 @@ class DesktopBar:
         finally:
             if self.controls is not None:
                 self.controls.destroy()
+            self.resolution.update(active=False)
             self.window.dispose()
             self.loop.close()
 
