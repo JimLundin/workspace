@@ -80,16 +80,49 @@ class Observe:
 type Job = Issued | IdentifiedSubmission | StopConversation | Observe
 
 
+def conversation_of(task: Task) -> str | None:
+    match task.source:
+        case RequestSource(conversation_id=conversation_id):
+            return conversation_id
+        case RoutineSource():
+            return None
+
+
 def in_conversation(task: Task, conversation_id: str | None) -> bool:
-    return isinstance(task.source, RequestSource) and task.source.conversation_id == conversation_id
+    return conversation_id is not None and conversation_of(task) == conversation_id
 
 
 def active(task: Task) -> bool:
-    return (
-        not terminal(task.state)
-        and task.state is not TaskStatus.PAUSED
-        and not (isinstance(task.state, Waiting) and isinstance(task.state.reason, (Blocked, Until)))
-    )
+    match task.state:
+        case TaskStatus.PAUSED | Waiting(Blocked() | Until()):
+            return False
+        case _:
+            return not terminal(task.state)
+
+
+def new_turn(previous: Task, task: Task) -> bool:
+    """A changed goal, leaving a wait or a different run starts a fresh turn for the same task."""
+    if task.goal_revision != previous.goal_revision:
+        return True
+    match previous.state, task.state:
+        case Waiting(), Waiting():
+            return False
+        case Waiting(), _:
+            return True
+        case Running(run=before) | Interrupted(run=before), Running(run=after):
+            return before != after
+        case _:
+            return False
+
+
+def turn_ended(task: Task) -> bool:
+    match task.state:
+        case Waiting() | Completed() | Failed() | TaskStatus.PAUSED | TaskStatus.CANCELLED:
+            return True
+        case TaskStatus.READY | Running() | Interrupted():
+            return False
+        case _:
+            assert_never(task.state)
 
 
 def requested(task: Task) -> Question | Approval | None:
@@ -225,17 +258,25 @@ class WorkAgent:
                 return False
             self._ordinary_pending += 1
             self._sequence += 1
-            if isinstance(job, IdentifiedSubmission) or (isinstance(job, Issued) and isinstance(job.command, (Submit, FollowUp))):
-                self._pending[job.identity] = job.source.conversation_id
-                self._last_submission_source = job.source.conversation_id
+            match job:
+                case IdentifiedSubmission() | Issued(command=Submit() | FollowUp()):
+                    self._pending[job.identity] = job.source.conversation_id
+                    self._last_submission_source = job.source.conversation_id
+                case _:
+                    pass
             self._wake.set()
         return True
 
     def command(self, command: WorkCommand) -> None:
-        if isinstance(command, AnswerTask):
-            identifier(command.task_id, "reply task identity")
-            identifier(command.request_id, "reply request identity")
-        captured = self.context() if self.context is not None and isinstance(command, (Submit, FollowUp, Redirect)) else None
+        captured: ContextSnapshot | None = None
+        match command:
+            case AnswerTask(task_id=task_id, request_id=request_id):
+                identifier(task_id, "reply task identity")
+                identifier(request_id, "reply request identity")
+            case Submit() | FollowUp() | Redirect() if self.context is not None:
+                captured = self.context()
+            case _:
+                pass
         with self._lock:
             issued = Issued(command, self.identity(), self._source(), captured)
             if not self._enqueue(issued):
@@ -415,11 +456,7 @@ class WorkAgent:
             window.begin(source.title if source is not None else task.prompt, self.stop, queued=task.id in self._queued, source=source)
             self._queued.discard(task.id)
             self._live = window.updates()
-        elif (
-            task.goal_revision != previous.goal_revision
-            or (isinstance(previous.state, Waiting) and not isinstance(task.state, Waiting))
-            or (isinstance(previous.state, (Running, Interrupted)) and isinstance(task.state, Running) and previous.state.run != task.state.run)
-        ):
+        elif new_turn(previous, task):
             self._clear_input()
             if active(task):
                 window.finish()
@@ -453,7 +490,7 @@ class WorkAgent:
                 window.say("Paused. Resume this task from Work.")
             case _:
                 assert_never(task.state)
-        if isinstance(task.state, (Waiting, Completed, Failed)) or task.state in (TaskStatus.PAUSED, TaskStatus.CANCELLED):
+        if turn_ended(task):
             window.finish()
             self._queued.clear()
 
@@ -482,7 +519,7 @@ class WorkAgent:
             self._restore_reply(snapshot)
             if self._conversation is None:
                 self._conversation = next(
-                    (task.source.conversation_id for task in snapshot.tasks if isinstance(task.source, RequestSource) and not terminal(task.state)),
+                    (conversation for task in snapshot.tasks if (conversation := conversation_of(task)) is not None and not terminal(task.state)),
                     None,
                 )
             tasks = sorted((task for task in snapshot.tasks if in_conversation(task, self._conversation)), key=chronological)
@@ -607,9 +644,12 @@ class WorkAgent:
                 job = self._jobs.get_nowait()
             except queue.Empty:
                 break
-            if not isinstance(job, StopConversation):
-                with self._lock:
-                    self._ordinary_pending -= 1
+            match job:
+                case StopConversation():
+                    pass
+                case Issued() | IdentifiedSubmission() | Observe():
+                    with self._lock:
+                        self._ordinary_pending -= 1
             try:
                 match job:
                     case Issued() | IdentifiedSubmission():
@@ -622,24 +662,34 @@ class WorkAgent:
                         assert_never(job)
             except Exception as error:
                 self._service.problem = str(error) or "The work request could not be saved."
-                if isinstance(job, (Issued, IdentifiedSubmission)):
-                    watched, _ = self._observed_ids()
-                    self._service.submission_failed(job, self._service.problem, watched=watched)
-                    if isinstance(job, Issued) and isinstance(job.command, AnswerTask):
-                        self._service.reply_failed(job, self._service.problem, watched=watched)
-                        with self._lock:
-                            if self._displayed is not None and self._displayed.id == job.command.task_id:
-                                self._rejected_input = job.command.task_id, job.command.request_id
+                match job:
+                    case Issued() | IdentifiedSubmission():
+                        self._record_failure(job)
+                    case StopConversation() | Observe():
+                        pass
                 self.report_error(traceback.format_exc())
             finally:
-                if isinstance(job, (Issued, IdentifiedSubmission)):
-                    with self._lock:
-                        self._pending.pop(job.identity, None)
-                elif isinstance(job, StopConversation):
-                    with self._lock:
-                        if self._last_stop == job:
+                with self._lock:
+                    match job:
+                        case Issued() | IdentifiedSubmission():
+                            self._pending.pop(job.identity, None)
+                        case StopConversation() if self._last_stop == job:
                             self._last_stop = None
+                        case _:
+                            pass
         return tuple(observed)
+
+    def _record_failure(self, job: Issued | IdentifiedSubmission) -> None:
+        watched, _ = self._observed_ids()
+        self._service.submission_failed(job, self._service.problem, watched=watched)
+        match job:
+            case Issued(command=AnswerTask(task_id=task_id, request_id=request_id)) as reply:
+                self._service.reply_failed(reply, self._service.problem, watched=watched)
+                with self._lock:
+                    if self._displayed is not None and self._displayed.id == task_id:
+                        self._rejected_input = task_id, request_id
+            case _:
+                pass
 
     def _observe(self) -> None:
         previous_context: ContextSnapshot | None = None
