@@ -8,7 +8,7 @@ from unittest import TestCase
 from assistant.browser_host import ConnectRequest, Host, HostedConnection, Server, StatusRequest
 from assistant.browser_session import Attached, BrowserSession, Product, Source
 from assistant.browser_values import BrowserError, DisconnectedError, InterruptedError, NavigationContextError
-from assistant.llm import Json
+from automation.json_value import Json
 
 
 class Connection:

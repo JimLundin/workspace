@@ -98,7 +98,7 @@ from assistant.browser_values import (
     pages_of,
     strip_page,
 )
-from assistant.llm import Json
+from automation.json_value import Json
 lazy from assistant.web_apps import Located, WebAppOperation, WebApps
 
 MAX_OUTPUT = 20_000

@@ -3,8 +3,10 @@
 import math
 from array import array
 from dataclasses import dataclass, field
+from typing import Final
 
-from assistant.llm import RATE
+RATE: Final = 16_000
+"""Samples per second Workspace records and sends. Speech models work at 16 kHz; more only makes uploads bigger."""
 
 
 @dataclass(frozen=True, slots=True)

@@ -16,12 +16,11 @@ from typing import cast
 
 import tests.test_outlook
 from assistant import outlook
-from assistant.activity import Activity, ContextSnapshot
 from assistant.agent import Agent
 from assistant.agent_execution import AgentExecution, unseen
 from assistant.agent_tools import Output
 from assistant.agent_toolsets import MeetingFollowupTools
-from assistant.llm import Json, Settings, ToolCall
+from assistant.llm import Settings, ToolCall
 from assistant.meeting_execution import MeetingWork
 from assistant.meeting_followup_store import FollowupStore
 from assistant.meeting_preparation import Preparations
@@ -29,8 +28,10 @@ from assistant.outlook import OutlookDrafts, PowerShellOutlook, read_eml
 from assistant.task_profiles import RequestContext
 from assistant.workspace import Workspace
 from automation.actions import Resources
+from automation.activity import Activity, ContextSnapshot
 from automation.execution import WorkExecution
 from automation.files import filesystem_path
+from automation.json_value import Json
 from automation.store import TaskStore
 from automation.task import (
     Action,

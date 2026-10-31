@@ -14,10 +14,12 @@ from dataclasses import replace
 from pathlib import Path
 from typing import Protocol
 
-from assistant.llm import RATE, Failure, Settings, transcribe, wav
+from assistant.llm import Failure, Settings, transcribe, wav
 from assistant.meeting_store import MeetingArchive, MeetingStore
-from assistant.recording_state import AudioSource, Exhausted, Phase, Publication, RecordingState, RetryPolicy, published, source_name
+from assistant.recording_state import Exhausted, Phase, Publication, RecordingState, RetryPolicy, published, source_name
+from automation.capture import AudioSource
 from usage import DIRECTORY
+from winapi.pcm import RATE
 
 
 class Transcriber(Protocol):

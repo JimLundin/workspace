@@ -5,13 +5,17 @@ import threading
 import time
 from pathlib import Path
 
-from assistant.activity import Activity, ContextSnapshot
 from assistant.agent import Agent
 from assistant.agent_toolsets import General
 from assistant.geometry import Shot
-from assistant.llm import Json, Settings, ToolCall
+from assistant.llm import Settings, ToolCall
+from automation.actions import Change, Observation, Resources, target
+from automation.activity import Activity, ContextSnapshot
+from automation.execution import WorkExecution
+from automation.json_value import Json
 from tests.fake_endpoint import fake_endpoint
-from tests.test_agent import FakeMachine, FakeWindow, Rig, calls, durable, says
+from tests.test_agent import FakeMachine, FakeWindow, Rig, ToolRig, calls, durable, says
+from tests.test_work_actions import claimed
 from winapi.shapes import Rect, Window
 
 
@@ -182,3 +186,77 @@ def test_context_tool_refreshes_the_current_app_without_taking_a_screenshot(tmp_
     assert "Report.docx - Word" in call(agent, "get_context", {})
     assert "Report.docx" not in json.dumps(journal)
     assert not machine.log
+
+
+def test_invalid_desktop_arguments_never_reach_approval_or_the_journal(tmp_path: Path) -> None:
+    # Defect: a malformed call is approved, recorded as an attempted change, or
+    # reaches the machine before its arguments are validated at the tool seam.
+    store, claim, clock = claimed(tmp_path)
+    rig = ToolRig(approvals=True, work=WorkExecution(claim, store, Resources(), clock=clock))
+    invalid: tuple[tuple[str, dict[str, Json]], ...] = (
+        ("write_file", {"path": "note.txt"}),
+        ("manage_window", {"handle": 7, "action": "explode"}),
+        ("manage_window", {"handle": 7, "action": "move", "x": 0, "y": 0}),
+        ("press_keys", {"keys": "enter", "repeat": 51}),
+        ("ui_action", {"handle": 7, "id": "1.2", "action": "set_value"}),
+        ("run_powershell", {"command": "dir", "timeout_seconds": "60"}),
+        ("screenshot", {"handle": 7, "monitor": 1}),
+        ("type_text", {"text": 5}),
+    )
+    for name, arguments in invalid:
+        result = rig.call(name, **arguments)
+        # Approval mode would suspend the task on any reviewed operation.
+        assert not result.ok and result.text.startswith("Error:") and rig.agent.work.disposition is None, (name, result.text)
+    assert not store.actions(claim.task.id) and not rig.machine.log
+
+
+def test_desktop_targets_reads_and_regions_follow_the_validated_arguments(tmp_path: Path) -> None:
+    # Defect: a UI read becomes a pending change (or an action a read), a
+    # window target is dropped or invented, a move region is mis-sized, or a
+    # single screenshot source is refused.
+    rig = ToolRig(work=durable(tmp_path))
+    tools = rig.agent.tools
+    read, invoke = (
+        tools["ui_action"].classify({"handle": 7, "id": "1", "action": "read"}),
+        tools["ui_action"].classify({"handle": 7, "id": "1", "action": "invoke"}),
+    )
+    assert isinstance(read, Observation) and isinstance(invoke, Change)
+    assert read.resources == invoke.resources == ("foreground", target("window", 7))
+    assert tools["focus_window"].classify({"handle": 0}).resources == ("foreground",)
+    assert rig.call("manage_window", handle=7, action="move", x=10, y=20, width=100, height=200).ok
+    assert rig.machine.log[-1] == f"window 7 move {Rect(10, 20, 110, 220)}"
+    assert rig.call("screenshot", handle=7).ok
+    assert not rig.call("screenshot", handle=7, desktop=True).ok
+
+
+def test_inspection_defaults_to_the_work_window_and_only_ui_changes_need_approval(tmp_path: Path) -> None:
+    # Defect: an inspection without a handle reads another window, or approval
+    # mode interrupts a control read while letting a control change through.
+    machine = FakeMachine()
+    agent = Agent(
+        Settings("", "", "", "", "", "", "", agent_approvals=True),
+        machine,
+        FakeWindow(),
+        threading.Event(),
+        work=durable(tmp_path),
+        toolset=General,
+        context=context(),
+        context_reader=context,
+    )
+    call(agent, "inspect_ui", {})
+    assert machine.log[-1].startswith("ui Inspect(handle=7,")
+    call(agent, "ui_action", {"handle": 7, "id": "1.2", "action": "read"})
+    assert machine.log[-1].startswith("ui Act(handle=7, id='1.2', action='read'")
+    before = tuple(machine.log)
+    assert not agent.call(ToolCall("fixture", "ui_action", json.dumps({"handle": 7, "id": "1.2", "action": "invoke"}))).ok
+    assert tuple(machine.log) == before and agent.work.disposition is not None
+
+
+def test_declined_window_changes_fail_and_inspection_without_context_reads_the_foreground(tmp_path: Path) -> None:
+    # Defect: a declined window change reports success, or an inspection with
+    # no work window invents a handle instead of letting the machine use the foreground.
+    rig = ToolRig(approvals=True, work=durable(tmp_path))
+    assert not rig.call("manage_window", handle=7, action="minimize").ok
+    unattended = ToolRig(work=durable(tmp_path))
+    assert unattended.call("inspect_ui").ok
+    assert unattended.machine.log[-1].startswith("ui Inspect(handle=0,")

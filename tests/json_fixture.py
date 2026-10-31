@@ -3,7 +3,7 @@
 import json
 from typing import cast
 
-from assistant.llm import Json
+from automation.json_value import Json
 
 
 def json_object(encoded: str | bytes) -> dict[str, Json]:

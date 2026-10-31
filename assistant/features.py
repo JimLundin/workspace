@@ -19,7 +19,6 @@ from assistant.geometry import Shot
 from assistant.icons import State
 from assistant.llm import (
     MAX_SECONDS,
-    RATE,
     Failure,
     Image,
     Message,
@@ -42,6 +41,7 @@ from config import REWRITES
 from diagnostics import failure_info
 from protocol import App, Request, Tool
 from usage import Detail
+from winapi.pcm import RATE
 from winapi.shapes import Rect, Window
 
 

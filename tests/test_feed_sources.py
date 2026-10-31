@@ -30,7 +30,7 @@ from assistant.feed_sources import (
     origin,
     triage_evidence,
 )
-from assistant.system_notices import NoticeKey
+from winapi.system_notices import NoticeKey
 
 CHAT = Conversation("chat", "Planning")
 FIRST = Message("chat", "one", "Anna", "Review the figures", 1, 1)

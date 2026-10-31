@@ -20,12 +20,12 @@ from assistant.canvas_activity import (
     important_changes,
     redirect_session,
 )
-from assistant.llm import Json
 from assistant.notifications import Tone, active, observe, tone
 from assistant.work_canvas import WorkCanvas
 from assistant.work_canvas_model import DOCUMENT, CanvasCollection, CanvasDocument, CanvasNote, Placement, observe_activity
 from assistant.work_snapshot import ReplyProblem, WorkSnapshot
 from automation.actions import Change, Operation
+from automation.json_value import Json
 from automation.personal_work import Catalog, SourceKind, WorkDefinition, WorkState, WorkThread
 from automation.task import ActionReturned, ActionSpec, ActionUncertain, ActionVerified, Completed, NoVerification, RequestSource, TextAnswer, Waiting
 from tests.agent_requests import asked, reviewed

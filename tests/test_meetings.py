@@ -10,12 +10,14 @@ from collections.abc import Callable
 from pathlib import Path
 from unittest import TestCase
 
-from assistant.llm import RATE, Failure
+from assistant.llm import Failure
 from assistant.meeting_store import BacklogFullError, MeetingArchive, MeetingStore
 from assistant.meetings import Meetings
-from assistant.recording_state import AudioSource, RecordingState, RetryPolicy
+from assistant.recording_state import RecordingState, RetryPolicy
+from automation.capture import AudioSource
 from tests.fake_endpoint import Received, Reply, fake_endpoint
 from tests.test_llm import settings
+from winapi.pcm import RATE
 
 SPEECH = array("h", [1400] * RATE).tobytes()
 
@@ -70,7 +72,7 @@ def test_journal_orders_chunks_prefers_pauses_and_flushes_the_final_partial_seco
     assert transcript.count("First part") == 1 and "retry must not" not in transcript
     assert "00:00:00 - 00:00:23" in transcript and "The last sentence." in transcript
     assert store.state().pending == 0 and store.batch() is None
-    with store.connection() as connection:
+    with store.reading() as connection:
         assert connection.execute("SELECT COUNT(*) FROM audio").fetchone() == (0,)
         assert connection.execute("PRAGMA auto_vacuum").fetchone() == (1,)
     assert (store.folder / "session.sqlite3").stat().st_size < len(first.pcm) // 4

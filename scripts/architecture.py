@@ -15,7 +15,7 @@ from collections import deque
 from collections.abc import Iterable, Iterator, Mapping
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Annotated, Literal
+from typing import Annotated, Final, Literal
 
 from pydantic import StrictStr, StringConstraints, TypeAdapter
 
@@ -72,6 +72,14 @@ class ExceptionSpec:
 
 
 @dataclass(frozen=True, slots=True)
+class Seam:
+    """A module allowed to import upward, such as a process's composition root."""
+
+    module: Text
+    reason: Text
+
+
+@dataclass(frozen=True, slots=True)
 class Report:
     sources: tuple[str, ...]
     failures: tuple[Finding, ...]
@@ -82,6 +90,8 @@ class Report:
 class Configuration:
     models: tuple[Text, ...]
     exceptions: tuple[ExceptionSpec, ...] = ()
+    seams: tuple[Seam, ...] = ()
+    """Lower-layer modules that may import assistant modules."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -179,7 +189,7 @@ def dependencies(name: str, text: str, *, cache: Cache | None = None) -> frozens
     return result
 
 
-def _configuration(root: Path) -> tuple[tuple[str, ...], tuple[ExceptionSpec, ...]]:
+def _configuration(root: Path) -> Configuration:
     match tomllib.loads((root / "pyproject.toml").read_text(encoding="utf-8")):
         case {"tool": {"workspace": {"architecture": object() as value}}}:
             configuration = CONFIGURATION.validate_python(value)
@@ -192,7 +202,39 @@ def _configuration(root: Path) -> tuple[tuple[str, ...], tuple[ExceptionSpec, ..
     for entry in exceptions:
         if any("*" in value for value in (entry.module, entry.declaration)):
             raise ValueError("Architecture exceptions require a supported rule and an exact declaration.")
-    return configuration.models, exceptions
+    if len(frozenset(seam.module for seam in configuration.seams)) != len(configuration.seams):
+        raise ValueError("Duplicate layering seam.")
+    return replace(configuration, exceptions=exceptions)
+
+
+def _within(module: str, package: str) -> bool:
+    return module == package or module.startswith(package + ".")
+
+
+LOWER_LAYERS: Final = ("automation", "winapi")
+"""Packages the assistant builds on; they reach no assistant module except through declared seams."""
+
+
+def layering(graph: Mapping[str, frozenset[str]], seams: Iterable[Seam]) -> Iterator[Finding]:
+    """No lower-layer module reaches the assistant, except through a declared seam."""
+    allowed = frozenset(seam.module for seam in seams)
+    starts = (module for module in graph if any(_within(module, layer) for layer in LOWER_LAYERS) and module not in allowed)
+    for start in sorted(starts):
+        pending: deque[tuple[str, ...]] = deque([(start,)])
+        visited: set[str] = set()
+        while pending:
+            route = pending.popleft()
+            module = route[-1]
+            if module in visited:
+                continue
+            visited.add(module)
+            if _within(module, "assistant"):
+                yield Finding("layering", start, "", "", 0, " → ".join(route))
+                break
+            pending.extend((*route, target) for target in sorted(graph[module]) if target not in visited)
+    for seam in sorted(allowed):
+        if not any(_within(target, "assistant") for target in graph.get(seam, frozenset())):
+            yield Finding("stale-seam", seam, "", "", 0, "Remove the seam: this module no longer imports an assistant module.")
 
 
 def _scope_aliases(tree: ast.AST, inherited: Mapping[str, str]) -> dict[str, str]:
@@ -379,7 +421,8 @@ def testing_dependencies(source: Source) -> Iterator[Finding]:
 
 def review(root: Path, names: Iterable[str] | None = None, *, cache: Cache | None = None) -> Report:
     sources = python_sources(root, names)
-    models, exceptions = _configuration(root)
+    configuration = _configuration(root)
+    models, exceptions = configuration.models, configuration.exceptions
     all_source = tuple(Source(name, (root / name).read_text(encoding="utf-8")) for name in sources)
     loaded = tuple(source for source in all_source if not source.name.startswith("tests/"))
     observations = {module_name(source.name): observation(source, cache) for source in loaded}
@@ -404,6 +447,7 @@ def review(root: Path, names: Iterable[str] | None = None, *, cache: Cache | Non
             continue
         findings.extend(observations[module].dynamic_imports)
         pending.extend((*route, target) for target in sorted(graph[module]) if target not in visited)
+    findings.extend(layering(graph, configuration.seams))
     accepted = tuple(exception for exception in exceptions if any(exception.matches(finding) for finding in findings))
     failures = [finding for finding in findings if not any(exception.matches(finding) for exception in accepted)]
     failures.extend(

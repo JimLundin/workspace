@@ -6,10 +6,11 @@ from collections import deque
 lazy from PySide6 import QtCore, QtGui, QtWidgets
 lazy from PySide6.QtCore import Qt
 
-from assistant.ambient import Ambient, Battery, SystemStatus
+from assistant.ambient import Ambient, SystemStatus
 from assistant.bar_surface import CONTROL_HEIGHT, Pill
 from assistant.qt_runtime import prepare
 from assistant.vector_icons import icon
+from winapi.machine_status import Battery
 
 prepare()
 

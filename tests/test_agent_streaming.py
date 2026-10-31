@@ -10,8 +10,9 @@ from pathlib import Path
 from assistant.agent import Agent
 from assistant.agent_session import message_body
 from assistant.agent_toolsets import General
-from assistant.llm import Json, Settings
+from assistant.llm import Settings
 from automation.execution import WorkExecution
+from automation.json_value import Json
 from automation.presentation import Answer, LiveMessage, ReasoningSummary, StreamState, Succeeded, ToolActivity, ToolStatus
 from tests.fake_endpoint import FakeEndpoint, Received, fake_endpoint
 from tests.test_agent import FakeMachine, FakeWindow, calls, durable, message, response, says

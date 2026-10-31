@@ -17,7 +17,7 @@ from websockets.sync.server import ServerConnection, serve
 from assistant.browser import MAX_OUTPUT, Browser
 from assistant.browser_session import Attached, Cdp, NativeSessions, Product, SocketConnector, connect_socket, endpoint
 from assistant.browser_values import BrowserError, InterruptedError
-from assistant.llm import Json
+from automation.json_value import Json
 from tests.test_browser import Channel, ScriptedSessions, command, connected_browser, decoded
 
 

@@ -20,7 +20,6 @@ from assistant.notification_sources import NOTIFICATION_STATE
 from assistant.qt_runtime import prepare
 from assistant.qt_ui import application
 from assistant.state_store import SavedState
-from assistant.system_notices import Notice, NoticeKey, Observed
 from assistant.ui import Ui, Views
 from assistant.work_canvas import WorkCanvas
 from assistant.work_canvas_window import CanvasWindow
@@ -30,6 +29,7 @@ from tests.agent_requests import asked
 from tests.communications_fixture import communication_feed
 from tests.test_communications_service import LocalCipher
 from tests.test_work_canvas import local_canvas
+from winapi.system_notices import Notice, NoticeKey, Observed
 
 prepare()
 

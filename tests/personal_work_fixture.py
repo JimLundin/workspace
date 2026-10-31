@@ -9,9 +9,9 @@ from pydantic import TypeAdapter
 from assistant.browser import BrowserResult
 from assistant.browser_requests import BrowserRequest
 from assistant.browser_values import BrowserError, BrowserStatus, PageList, PageRow
-from assistant.llm import Json
 from assistant.personal_work_sources import Observations, Tab, observed_source
 from assistant.web_apps import Located, WebAppOperation
+from automation.json_value import Json
 from automation.personal_work import SourceKind, WorkSource
 
 WIRE = TypeAdapter(dict[str, Json])

@@ -15,8 +15,8 @@ from typing import Protocol
 
 from pydantic import ConfigDict, TypeAdapter
 
-from assistant.llm import Json
 from automation.files import filesystem_path
+from automation.json_value import Json
 from automation.task import (
     Action,
     ActionNotApplied,

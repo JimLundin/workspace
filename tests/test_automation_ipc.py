@@ -14,8 +14,8 @@ from multiprocessing.connection import Client
 from pathlib import Path
 from unittest import TestCase
 
-from assistant.activity import Activity, ContextSnapshot
 from automation import ipc
+from automation.activity import Activity, ContextSnapshot
 from automation.bridge import BridgeClient, BridgeServer, Channel, LocalChannel, ProfileLease, read_discovery
 from automation.execution import ApprovalReview
 from automation.presentation import Answer, Done, Progress, StreamState

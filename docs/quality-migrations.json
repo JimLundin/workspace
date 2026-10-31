@@ -761,15 +761,6 @@
       "key": {
         "rule": "PLR0913",
         "path": "automation/routines.py",
-        "scope": "RoutineStore._enqueue",
-        "signature": "b33effe275de07b701c91738c74fded2b807fedb60c47b8f5c569f4bfb36922a"
-      },
-      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
-    },
-    {
-      "key": {
-        "rule": "PLR0913",
-        "path": "automation/routines.py",
         "scope": "RoutineStore.create",
         "signature": "758960d54d09a8abbedc7d9fd21445495b04adac7b13a18ef6ba15548f5df42d"
       },

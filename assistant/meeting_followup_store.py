@@ -1,6 +1,5 @@
 """Observe meeting publications and own atomic follow-through packages and edits."""
 
-import contextlib
 import csv
 import hashlib
 import io
@@ -8,12 +7,11 @@ import ntpath
 import os
 import re
 import shutil
-import sqlite3
 import stat
 import tempfile
 import time
 import zipfile
-from collections.abc import Callable, Generator, Sequence
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from email.message import EmailMessage
@@ -21,12 +19,11 @@ from email.policy import EmailPolicy
 from email.utils import formataddr
 from enum import Enum, auto
 from pathlib import Path, PurePosixPath, PureWindowsPath
-from typing import Literal, Protocol, assert_never, cast
+from typing import Literal, assert_never
 from urllib.parse import quote
 
 from pydantic import ConfigDict, TypeAdapter
 
-from assistant.llm import RATE
 from assistant.meeting_followup import (
     ACTION_CONTENT,
     DRAFT_CONTENT,
@@ -55,8 +52,10 @@ from assistant.meeting_followup import (
 )
 from assistant.meeting_store import MeetingStore
 from assistant.recording_state import source_name
+from automation import journal
 from automation.files import filesystem_path
 from automation.task import FileDigest, digest, identifier, integer, text, timestamp, variant
+from winapi.pcm import RATE
 
 MAX_PACKAGE_BYTES = 16 * 1024 * 1024
 MAX_VERSIONS = 128
@@ -428,17 +427,6 @@ class _Edit:
     artifacts: tuple[Artifact, ...]
 
 
-class _Cursor(Protocol):
-    def fetchone(self) -> tuple[object, ...] | None: ...
-
-
-class _Connection(Protocol):
-    def execute(self, sql: str, parameters: Sequence[object] = ()) -> _Cursor: ...
-    def commit(self) -> None: ...
-    def rollback(self) -> None: ...
-    def close(self) -> None: ...
-
-
 def _install(source: Path, destination: Path) -> None:
     filesystem_path(source).rename(filesystem_path(destination))
 
@@ -589,35 +577,10 @@ class FollowupStore:
             versions.append(version)
         return tuple(self.read(task_id, version) for version in sorted(versions))
 
-    @contextlib.contextmanager
-    def _connection(self, task_id: str, *, writing: bool = False) -> Generator[_Connection]:
+    def _journal(self, task_id: str) -> Path:
         task = self._task(task_id)
         self._safe(task / "edits.sqlite3")
-        filesystem_path(task).mkdir(parents=True, exist_ok=True)
-        connection = cast(_Connection, sqlite3.connect(filesystem_path(task / "edits.sqlite3"), timeout=5, isolation_level=None))
-        try:
-            connection.execute("PRAGMA synchronous=FULL")
-            connection.execute(
-                "CREATE TABLE IF NOT EXISTS edits (version TEXT NOT NULL, kind TEXT NOT NULL, id TEXT NOT NULL, "
-                "revision INTEGER NOT NULL, at REAL NOT NULL, content TEXT NOT NULL, digest TEXT NOT NULL, "
-                "PRIMARY KEY (version,kind,id))"
-            )
-            connection.execute(
-                "CREATE TABLE IF NOT EXISTS edit_history (version TEXT NOT NULL, kind TEXT NOT NULL, id TEXT NOT NULL, "
-                "revision INTEGER NOT NULL, at REAL NOT NULL, content TEXT NOT NULL, digest TEXT NOT NULL, "
-                "PRIMARY KEY (version,kind,id,revision))"
-            )
-            if writing:
-                connection.execute("BEGIN IMMEDIATE")
-            yield connection
-            if writing:
-                connection.commit()
-        except BaseException:
-            if writing:
-                connection.rollback()
-            raise
-        finally:
-            connection.close()
+        return filesystem_path(task / "edits.sqlite3")
 
     def _edit_directory(self, item: _Item, *, revision: int, fingerprint: str) -> Path:
         # One content-derived directory keeps native Windows draft paths short.
@@ -626,7 +589,9 @@ class FollowupStore:
 
     def _edit(self, item: _Item, *, revision: int | None = None) -> tuple[Edited, bytes, Path] | None:
         version, kind, item_id = item.version, item.kind, item.id
-        with self._connection(item.task_id) as connection:
+        with journal.reading_existing(self._journal(item.task_id)) as connection:
+            if connection is journal.Absent.JOURNAL:
+                return None  # no edit of this task has been saved yet
             if revision is None:
                 row = connection.execute(
                     "SELECT revision,at,content,digest FROM edits WHERE version=? AND kind=? AND id=?",
@@ -740,7 +705,19 @@ class FollowupStore:
         timestamp(at, "edit time")
         version, kind, item_id, encoded = edit.item.version, edit.item.kind, edit.item.id, edit.content
         fingerprint = hashlib.sha256(encoded).hexdigest()
-        with self._connection(edit.item.task_id, writing=True) as connection:
+        database = self._journal(edit.item.task_id)
+        database.parent.mkdir(parents=True, exist_ok=True)
+        with journal.writing(database) as connection:
+            connection.execute(
+                "CREATE TABLE IF NOT EXISTS edits (version TEXT NOT NULL, kind TEXT NOT NULL, id TEXT NOT NULL, "
+                "revision INTEGER NOT NULL, at REAL NOT NULL, content TEXT NOT NULL, digest TEXT NOT NULL, "
+                "PRIMARY KEY (version,kind,id))"
+            )
+            connection.execute(
+                "CREATE TABLE IF NOT EXISTS edit_history (version TEXT NOT NULL, kind TEXT NOT NULL, id TEXT NOT NULL, "
+                "revision INTEGER NOT NULL, at REAL NOT NULL, content TEXT NOT NULL, digest TEXT NOT NULL, "
+                "PRIMARY KEY (version,kind,id,revision))"
+            )
             row = connection.execute(
                 "SELECT revision,at,content,digest FROM edits WHERE version=? AND kind=? AND id=?",
                 (version, kind, item_id),

@@ -7,7 +7,7 @@ from unittest import SkipTest, TestCase
 
 from assistant.browser_documents import Download, download
 from assistant.browser_values import BrowserError
-from assistant.llm import Json
+from automation.json_value import Json
 from automation.work_documents import LocalDocument
 
 if sys.platform != "win32":
