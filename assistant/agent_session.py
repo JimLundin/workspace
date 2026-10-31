@@ -214,11 +214,7 @@ def transition(state: Session, event: Event) -> Session:
             identities = frozenset("canvas:" + target for target in targets)
             return replace(
                 state,
-                messages=tuple(
-                    message
-                    for message in state.messages
-                    if not (isinstance(message, ChatMessage) and message.source is not None and message.source.identity in identities)
-                ),
+                messages=tuple(message for message in state.messages if not _redirects_to(message, identities)),
             )
         case CanvasNotice(title, target, at):
             text = notice_text(title, target)
@@ -256,9 +252,12 @@ def transition(state: Session, event: Event) -> Session:
         case StopRequested():
             return replace(state, queued=(), phase="stopping" if state.busy else state.phase, status="Stopping…" if state.busy else state.status)
         case AgentRequest(request=request):
-            return replace(
-                state, messages=(*state.messages, event), status="Waiting for your reply" if isinstance(request, Question) else "Needs your approval"
-            )
+            match request:
+                case Question():
+                    status = "Waiting for your reply"
+                case Approval():
+                    status = "Needs your approval"
+            return replace(state, messages=(*state.messages, event), status=status)
         case Resolution():
             return resolve(state, event)
         case RecordingUpdated(recording, at):
@@ -267,6 +266,14 @@ def transition(state: Session, event: Event) -> Session:
             return update_live(state, event)
         case _:
             assert_never(event)
+
+
+def _redirects_to(message: Message, identities: frozenset[str]) -> bool:
+    match message:
+        case ChatMessage(source=FeedRequest(identity=identity)):
+            return identity in identities
+        case _:
+            return False
 
 
 def interrupt(message: Message) -> Message:
@@ -281,18 +288,19 @@ def interrupt(message: Message) -> Message:
 
 def update_live(state: Session, event: LiveMessage) -> Session:
     """Replace one live row without duplicating it when the final item arrives."""
-    if not state.busy or (state.stopping and not isinstance(event, ToolActivity)):
+    if not state.busy:
         return state
-    if state.stopping and isinstance(event, ToolActivity) and event.outcome is ToolStatus.RUNNING:
-        return state
+    match event:
+        # Stopping keeps only completions of tools already running.
+        case Answer() | ReasoningSummary() | ToolActivity(outcome=ToolStatus.RUNNING) if state.stopping:
+            return state
+        case Answer() | ReasoningSummary() | ToolActivity():
+            pass
     for index, message in enumerate(state.messages):
-        if (
-            not isinstance(message, (Answer, ReasoningSummary, ToolActivity))
-            or message.identity != event.identity
-            or type(message) is not type(event)
-        ):
+        row = _live_row(message, event)
+        if row is None:
             continue
-        match message:
+        match row:
             case (
                 Answer(state=StreamState.COMPLETE | StreamState.INTERRUPTED) | ReasoningSummary(state=StreamState.COMPLETE | StreamState.INTERRUPTED)
             ):
@@ -301,8 +309,8 @@ def update_live(state: Session, event: LiveMessage) -> Session:
                 return state
             case Answer() | ReasoningSummary() | ToolActivity():
                 pass
-        updated = replace(event, created_at=message.created_at)
-        if updated == message:
+        updated = replace(event, created_at=row.created_at)
+        if updated == row:
             return state
         messages = (*state.messages[:index], updated, *state.messages[index + 1 :])
         break
@@ -310,8 +318,24 @@ def update_live(state: Session, event: LiveMessage) -> Session:
         if state.stopping:
             return state
         messages = (*state.messages, event)
-    last_said = event.text.strip() if isinstance(event, Answer) and event.state is StreamState.COMPLETE else state.last_said
-    return replace(state, messages=messages, last_said=last_said)
+    match event:
+        case Answer(text=text, state=StreamState.COMPLETE):
+            return replace(state, messages=messages, last_said=text.strip())
+        case Answer() | ReasoningSummary() | ToolActivity():
+            return replace(state, messages=messages)
+
+
+def _live_row(message: Message, event: LiveMessage) -> LiveMessage | None:
+    """The live row this event updates: the same variant with the same identity."""
+    match message, event:
+        case (Answer(identity=row) as live, Answer(identity=update)) if row == update:
+            return live
+        case (ReasoningSummary(identity=row) as live, ReasoningSummary(identity=update)) if row == update:
+            return live
+        case (ToolActivity(identity=row) as live, ToolActivity(identity=update)) if row == update:
+            return live
+        case _:
+            return None
 
 
 def resolves(request: Question | Approval, reply: Resolved) -> bool:
@@ -358,11 +382,14 @@ def update_recording(state: Session, recording: RecordingState, at: float) -> Se
         case _:
             assert_never(recording.phase)
     for index, message in enumerate(state.messages):
-        if isinstance(message, MeetingMessage) and message.recording_id == recording.identity:
-            messages = (
-                state.messages if message.text == text else (*state.messages[:index], replace(message, text=text), *state.messages[index + 1 :])
-            )
-            return replace(state, recording=recording, messages=messages)
+        match message:
+            case MeetingMessage(recording_id=identity) if identity == recording.identity:
+                messages = (
+                    state.messages if message.text == text else (*state.messages[:index], replace(message, text=text), *state.messages[index + 1 :])
+                )
+                return replace(state, recording=recording, messages=messages)
+            case _:
+                pass
     return replace(state, recording=recording, messages=(*state.messages, MeetingMessage(recording.identity, text, at)))
 
 
@@ -482,7 +509,11 @@ def presentation(message: Message) -> Presentation:
         case AgentRequest(request=Question(), detail=detail, reply=TextAnswer(text)):
             return Presentation("Question", detail=detail, response=ResponseText(text))
         case AgentRequest(request=request, detail=detail, reply=reply):
-            role = "Question" if isinstance(request, Question) else "Approval"
+            match request:
+                case Question():
+                    role = "Question"
+                case Approval():
+                    role = "Approval"
             return Presentation(role, detail=detail, response=ResponseText(reply_text(reply).capitalize()))
         case _:
             assert_never(message)

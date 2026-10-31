@@ -112,9 +112,11 @@ def test_floating_attention_has_exact_persistent_redirects_and_retains_approval_
     assert not redirected.busy
     content = observe(redirected)[0]
     assert active(content) and tone(content) is Tone.QUESTION
-    announced = transition(Session(), CanvasNotice("Needs you", "question:request", 10))
+    # Settling retires only that redirect; the rest of the conversation stays.
+    conversation = (ChatMessage("You", "Compare the suppliers", 8), ChatMessage("Workspace", "Fetched the next mail", 9))
+    announced = transition(Session(messages=conversation), CanvasNotice("Needs you", "question:request", 10))
     settled = transition(announced, CanvasSettled(frozenset(("question:request",))))
-    assert not redirect_session(settled).messages
+    assert settled.messages == conversation and not redirect_session(settled).messages
 
 
 def test_classification_stays_quiet_and_state_transitions_redirect_to_the_context() -> None:
