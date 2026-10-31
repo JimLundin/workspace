@@ -1,0 +1,1079 @@
+<!doctype html>
+<html lang="en" data-appearance="dark" data-wallpaper="vivid" data-look="clear" data-accent="blue">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>Workspace — Liquid Glass study</title>
+<style>
+/* ── Tokens ─────────────────────────────────────────────────────────────
+   Glass has no colour of its own: fills are thin neutral veils, ink is
+   monochrome and vibrant, colour appears only as meaning (tint) or in content. */
+:root {
+  --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+  --font-display: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif;
+  --mono: ui-monospace, "SF Mono", "Cascadia Code", Consolas, monospace;
+  --blue: #0a84ff; --purple: #bf5af2; --orange: #ff9f0a; --red: #ff453a; --green: #30d158; --teal: #40c8e0;
+  --accent: var(--blue);
+  --spring-ease: cubic-bezier(.2, .8, .2, 1);
+}
+html[data-accent="lilac"] { --accent: #a98be6; }
+
+/* Each surface declares its own scheme so a small bar can flip with the
+   content beneath while large surfaces follow the system appearance. */
+.scheme-light {
+  --ink: rgba(0,0,0,.86); --ink-2: rgba(0,0,0,.54); --ink-3: rgba(0,0,0,.28);
+  --fill-hover: rgba(0,0,0,.06); --fill-press: rgba(0,0,0,.10); --separator: rgba(0,0,0,.10);
+  --g-small: rgba(255,255,255,.20); --g-large: rgba(250,250,252,.66);
+  --g-shadow: 0 0 0 .5px rgba(0,0,0,.10), 0 8px 28px rgba(0,0,0,.14), 0 1px 3px rgba(0,0,0,.08);
+  --g-inner: inset 0 1px 1.5px rgba(255,255,255,.75), inset 0 -1px 1px rgba(255,255,255,.25);
+  --rim-hi: rgba(255,255,255,.95); --rim-lo: rgba(255,255,255,.18);
+  --g-bright: 1.08; --g-sat: 1.8;
+  --solid: #f2f2f6; --solid-2: #ffffff; --contrast-edge: #000;
+  --card: #ffffff; --card-edge: rgba(0,0,0,.07); --card-shadow: 0 1px 2px rgba(0,0,0,.06), 0 4px 14px rgba(0,0,0,.06);
+  --canvas-bg: #f3f3f6; --canvas-dot: rgba(0,0,0,.13);
+  color: var(--ink);
+}
+.scheme-dark {
+  --ink: rgba(255,255,255,.94); --ink-2: rgba(255,255,255,.58); --ink-3: rgba(255,255,255,.30);
+  --fill-hover: rgba(255,255,255,.08); --fill-press: rgba(255,255,255,.14); --separator: rgba(255,255,255,.12);
+  --g-small: rgba(28,28,32,.26); --g-large: rgba(34,34,38,.64);
+  --g-shadow: 0 0 0 .5px rgba(0,0,0,.45), 0 10px 32px rgba(0,0,0,.36), 0 1px 3px rgba(0,0,0,.3);
+  --g-inner: inset 0 1px 1px rgba(255,255,255,.22), inset 0 -1px 1px rgba(255,255,255,.06);
+  --rim-hi: rgba(255,255,255,.55); --rim-lo: rgba(255,255,255,.06);
+  --g-bright: .92; --g-sat: 1.7;
+  --solid: #232327; --solid-2: #2c2c30; --contrast-edge: #fff;
+  --card: #26262a; --card-edge: rgba(255,255,255,.07); --card-shadow: 0 1px 2px rgba(0,0,0,.35), 0 6px 18px rgba(0,0,0,.25);
+  --canvas-bg: #161618; --canvas-dot: rgba(255,255,255,.12);
+  color: var(--ink);
+}
+html[data-look="tinted"] .scheme-light { --g-small: rgba(255,255,255,.62); --g-large: rgba(250,250,252,.86); }
+html[data-look="tinted"] .scheme-dark { --g-small: rgba(30,30,34,.66); --g-large: rgba(30,30,34,.86); }
+
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; overflow: hidden; }
+body { font: 13px/1.38 var(--font); letter-spacing: -.003em; -webkit-font-smoothing: antialiased; user-select: none; }
+button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: default; }
+svg.i { width: 15px; height: 15px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.num { font-variant-numeric: tabular-nums; }
+
+/* ── Glass ──────────────────────────────────────────────────────────── */
+.glass {
+  position: relative; isolation: isolate;
+  background: var(--g-small);
+  -webkit-backdrop-filter: blur(var(--blur, 10px)) saturate(var(--g-sat)) brightness(var(--g-bright));
+  backdrop-filter: blur(var(--blur, 10px)) saturate(var(--g-sat)) brightness(var(--g-bright));
+  box-shadow: var(--g-inner), var(--g-shadow);
+}
+.glass.large { background: var(--g-large); --blur: 28px; }
+html[data-refraction="on"] .glass.lens { backdrop-filter: var(--lens) blur(var(--blur, 10px)) saturate(var(--g-sat)) brightness(var(--g-bright)); }
+/* Rim light: a 1px ring brightest where light would catch the curved edge. */
+.glass::before {
+  content: ""; position: absolute; inset: 0; border-radius: inherit; padding: 1px; pointer-events: none; z-index: 2;
+  background: linear-gradient(var(--rim-angle, 160deg), var(--rim-hi), var(--rim-lo) 32%, var(--rim-lo) 68%, var(--rim-hi));
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
+  opacity: .9;
+}
+/* Interactive glass illuminates from the touch point. */
+.glass::after {
+  content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; z-index: 1;
+  background: radial-gradient(120px circle at var(--px, 50%) var(--py, 50%), rgba(255,255,255,.34), transparent 70%);
+  opacity: var(--glow, 0); transition: opacity .35s ease;
+}
+.tint-orange { background: color-mix(in srgb, #f08a00 80%, transparent) !important; --ink: #fff; --ink-2: rgba(255,255,255,.88); color: #fff; }
+.prominent { background: color-mix(in srgb, var(--accent) 88%, transparent) !important; color: #fff; --ink: #fff; font-weight: 600; }
+
+/* Accessibility: frostier, then solid with defined edges. */
+html.reduce-transparency .glass, html.reduce-transparency .glass.large { background: var(--solid) !important; backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }
+html.reduce-transparency .glass::before { opacity: .25; }
+html.reduce-transparency .glass.tint-orange { background: #c76d00 !important; }
+html.reduce-transparency .glass.prominent { background: var(--accent) !important; }
+html.increase-contrast .scheme-light { --ink: #000; --ink-2: rgba(0,0,0,.78); --separator: rgba(0,0,0,.5); }
+html.increase-contrast .scheme-dark { --ink: #fff; --ink-2: rgba(255,255,255,.82); --separator: rgba(255,255,255,.5); }
+html.increase-contrast .glass { background: var(--solid-2) !important; backdrop-filter: none !important; box-shadow: 0 0 0 1.5px var(--contrast-edge), 0 6px 20px rgba(0,0,0,.25) !important; }
+html.increase-contrast .glass::before { display: none; }
+html.increase-contrast .glass.tint-orange { background: #a35300 !important; }
+html.increase-contrast .glass.prominent { background: var(--accent) !important; }
+
+/* ── Desktop wallpapers (the content beneath the functional layer) ───── */
+#desktop { position: fixed; inset: 0; overflow: hidden; }
+.wall { position: absolute; inset: 0; opacity: 0; transition: opacity .5s ease; }
+html[data-wallpaper="vivid"] .wall.vivid, html[data-wallpaper="light"] .wall.light, html[data-wallpaper="dark"] .wall.dark { opacity: 1; }
+.wall.vivid {
+  background:
+    radial-gradient(60% 50% at 18% 12%, #6d5dfc 0%, transparent 60%),
+    radial-gradient(50% 45% at 82% 8%, #1e9bd7 0%, transparent 62%),
+    radial-gradient(55% 55% at 78% 82%, #ff7a45 0%, transparent 60%),
+    radial-gradient(60% 60% at 12% 88%, #e0337a 0%, transparent 60%),
+    radial-gradient(40% 40% at 50% 50%, #8a3ffc 0%, transparent 70%),
+    #1b1640;
+}
+.wall.vivid svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+.wall.light { background: #fbfbfd; color: #1d1d1f; font: 15px/1.6 var(--font); }
+.wall.dark { background: #1e1f22; color: #d4d4d4; font: 13px/1.7 var(--mono); }
+.doc { position: absolute; inset: 0; padding: 18px 9vw 0; }
+.doc .nav { display: flex; gap: 22px; align-items: center; height: 44px; font-size: 13px; color: #333; border-bottom: 1px solid #e6e6ea; }
+.doc .nav b { font-size: 15px; margin-right: auto; }
+.doc h1 { font: 700 44px/1.08 var(--font-display); letter-spacing: -.025em; margin: 48px 0 12px; }
+.doc .lede { font-size: 19px; color: #515154; max-width: 760px; }
+.doc .row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; margin-top: 32px; }
+.doc .tile { height: 220px; border-radius: 18px; padding: 18px; color: #fff; font-weight: 600; font-size: 17px; }
+.doc p { max-width: 760px; color: #333; }
+.code { position: absolute; inset: 0; padding: 10px 0 0 0; display: grid; grid-template-columns: 52px 1fr; }
+.code .gutter { color: #6e7681; text-align: right; padding-right: 16px; white-space: pre; }
+.code .src { white-space: pre; }
+.k { color: #c586c0 } .f { color: #dcdcaa } .s { color: #ce9178 } .c { color: #6a9955 } .t { color: #4ec9b0 } .n { color: #b5cea8 } .v { color: #9cdcfe }
+.tabs { display: flex; height: 36px; background: #181818; border-bottom: 1px solid #2b2b2b; font: 12px/36px var(--font); color: #9d9d9d; }
+.tabs span { padding: 0 16px; border-right: 1px solid #2b2b2b; } .tabs span.on { background: #1e1f22; color: #fff; }
+
+/* ── Workspace bar: separate glass groups in one container ──────────── */
+#bar { position: fixed; top: 8px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; z-index: 30; }
+.cap { height: 34px; border-radius: 17px; display: flex; align-items: center; overflow: hidden; flex: none; --blur: 8px; }
+.cap[hidden] { display: none; }
+.cap + .cap { margin-left: 6px; }
+.cap .content { position: absolute; left: 0; top: 0; height: 34px; display: flex; align-items: center; gap: 2px; padding: 0 3px; white-space: nowrap; transition: opacity .18s ease, filter .18s ease, transform .18s ease; z-index: 3; }
+.cap .content.text { padding: 0 6px 0 12px; gap: 8px; }
+.cap .content.leaving, .cap .content.entering { opacity: 0; filter: blur(4px); transform: scale(.94); }
+/* Concentric: 34px capsule, 3px inset, 28px inner capsule. */
+.btn { height: 28px; min-width: 28px; border-radius: 14px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; color: var(--ink); position: relative; transition: background-color .12s ease; }
+.btn.text { padding: 0 11px; }
+.btn:hover { background: var(--fill-hover); }
+.btn:active { background: var(--fill-press); }
+.btn:focus-visible { outline: 2px solid var(--accent); outline-offset: -1px; }
+.ambient { display: inline-flex; align-items: center; gap: 5px; color: var(--ink); font-weight: 500; }
+.ambient + .ambient { margin-left: 6px; }
+.badge { position: absolute; top: 1px; right: 0; min-width: 15px; height: 15px; padding: 0 4px; border-radius: 8px; background: var(--red); color: #fff; font-size: 10px; font-weight: 700; line-height: 15px; text-align: center; }
+.wave { display: inline-flex; align-items: center; gap: 2px; height: 18px; width: 74px; }
+.wave i { width: 2px; border-radius: 1px; background: var(--ink); height: 3px; }
+.wave.frozen i { background: var(--ink-3); }
+.spinner { width: 14px; height: 14px; border-radius: 50%; border: 1.8px solid var(--ink-3); border-top-color: var(--ink); animation: spin 1.2s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.rec-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--red); box-shadow: 0 0 0 3px color-mix(in srgb, var(--red) 25%, transparent); animation: breathe 2s ease-in-out infinite; }
+@keyframes breathe { 50% { opacity: .55; } }
+.mic-on { color: var(--orange); }
+html.reduce-motion .rec-dot { animation: none; }
+html.reduce-motion .spinner { animation-duration: 0s; border-top-color: var(--ink); }
+
+/* ── Menu morphs out of its button ──────────────────────────────────── */
+.menu { position: fixed; z-index: 40; min-width: 248px; padding: 6px; border-radius: 18px; display: none; transform-origin: top left; }
+.menu .item { display: flex; align-items: center; gap: 10px; height: 30px; padding: 0 10px; border-radius: 12px; color: var(--ink); width: 100%; text-align: left; }
+.menu .item:hover, .menu .item.hot { background: color-mix(in srgb, var(--accent) 92%, transparent); color: #fff; }
+.menu .item:hover svg, .menu .item.hot svg { color: #fff; }
+.menu .item svg { color: var(--ink-2); }
+.menu .item .key { margin-left: auto; color: var(--ink-3); font-size: 12px; }
+.menu .item:hover .key { color: rgba(255,255,255,.75); }
+.menu .item .check { margin-left: auto; color: var(--accent); }
+.menu .sep { height: 1px; background: var(--separator); margin: 5px 10px; }
+.menu .menu-body { transition: opacity .16s ease; }
+#submenu { min-width: 260px; }
+
+/* ── Agent phase bubbles, lower right ───────────────────────────────── */
+#phases { position: fixed; right: 18px; bottom: 18px; width: 360px; z-index: 25; display: flex; flex-direction: column; justify-content: flex-end; gap: 8px; pointer-events: none; }
+.phase { border-radius: 22px; padding: 12px 14px 12px 12px; pointer-events: auto; transform-origin: bottom right; }
+.phase .head { display: flex; gap: 10px; align-items: flex-start; }
+.app { width: 30px; height: 30px; border-radius: 9px; flex: none; display: grid; place-items: center; color: #fff; font: 700 13px/1 var(--font-display); box-shadow: inset 0 0 0 .5px rgba(255,255,255,.3), 0 1px 2px rgba(0,0,0,.15); }
+.app.workspace { background: linear-gradient(145deg, #7d6bff, #4b9dff); }
+.app.teams { background: linear-gradient(145deg, #7b83eb, #4f52b2); }
+.app.outlook { background: linear-gradient(145deg, #28a8ea, #0c64c4); }
+.app.kanban { background: linear-gradient(145deg, #ffb340, #e08600); }
+.app.excel { background: linear-gradient(145deg, #33c481, #107c41); }
+.app.claude { background: linear-gradient(145deg, #e8956c, #c15f3c); }
+.app.note { background: linear-gradient(145deg, #ffd60a, #f2b705); color: #5a4400; }
+.app.small { width: 22px; height: 22px; border-radius: 7px; font-size: 11px; }
+.phase .title { font-weight: 600; font-size: 13px; }
+.phase .meta { color: var(--ink-2); font-size: 11.5px; margin-left: auto; white-space: nowrap; padding-left: 8px; }
+.phase .body { color: var(--ink-2); margin-top: 2px; }
+.phase .calls { margin: 10px 0 0 40px; display: grid; gap: 6px; }
+.call { display: flex; align-items: center; gap: 8px; color: var(--ink-2); font-size: 12px; transition: opacity .25s ease, transform .25s var(--spring-ease); }
+.call.pending { opacity: 0; transform: translateY(4px); }
+.call .ok { color: var(--green); }
+.phase .actions { display: flex; gap: 6px; margin: 12px 0 2px 40px; }
+.pill { height: 28px; padding: 0 12px; border-radius: 14px; display: inline-flex; align-items: center; gap: 6px; font-weight: 500; color: var(--ink); }
+.phase.past .calls, .phase.past .actions, .phase.past .body { display: none; }
+
+/* ── Work canvas window ─────────────────────────────────────────────── */
+#canvasWin { position: fixed; z-index: 20; left: 50%; top: 56px; width: min(1220px, 94vw); height: min(780px, calc(100vh - 76px)); transform: translateX(-50%); border-radius: 26px; overflow: hidden; display: none; background: var(--canvas-bg); box-shadow: 0 0 0 .5px rgba(0,0,0,.4), 0 30px 80px rgba(0,0,0,.45), 0 8px 24px rgba(0,0,0,.25); transform-origin: 50% 0; }
+#scene { position: absolute; inset: 0; cursor: grab; touch-action: none; background-image: radial-gradient(var(--canvas-dot) 1.1px, transparent 1.3px); }
+#scene.panning { cursor: grabbing; }
+#world { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
+.group { position: absolute; border-radius: 28px; background: color-mix(in srgb, var(--ink) 4%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ink) 7%, transparent); }
+.group .gtitle { position: absolute; left: 20px; top: 14px; font: 600 15px/1.2 var(--font-display); letter-spacing: -.01em; display: flex; align-items: center; gap: 8px; }
+.group .gtitle small { font: 500 12px var(--font); color: var(--ink-2); }
+.card { position: absolute; width: 300px; padding: 14px 16px 15px; border-radius: 18px; background: var(--card); box-shadow: 0 0 0 .5px var(--card-edge), var(--card-shadow); cursor: default; transition: box-shadow .2s ease, opacity .25s ease; }
+.card.dragging { box-shadow: 0 0 0 .5px var(--card-edge), 0 18px 44px rgba(0,0,0,.22), 0 4px 10px rgba(0,0,0,.1); z-index: 5; }
+.card.selected { box-shadow: 0 0 0 2px var(--accent), var(--card-shadow); }
+.card.dim { opacity: .28; }
+.card .ch { display: flex; align-items: center; gap: 9px; margin-bottom: 7px; }
+.card .ct { font: 600 14px/1.25 var(--font-display); letter-spacing: -.008em; }
+.card .cs { font-size: 11.5px; color: var(--ink-2); }
+.card p { margin: 0; color: var(--ink-2); font-size: 13px; }
+.card .kv { display: grid; grid-template-columns: 74px 1fr; gap: 4px 10px; font-size: 12.5px; margin-top: 6px; }
+.card .kv dt { color: var(--ink-2); } .card .kv dd { margin: 0; }
+.card.question { background: color-mix(in srgb, var(--orange) 14%, var(--card)); box-shadow: 0 0 0 1px color-mix(in srgb, var(--orange) 45%, transparent), var(--card-shadow); }
+.chips { display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap; }
+.chip { height: 26px; padding: 0 11px; border-radius: 13px; background: color-mix(in srgb, var(--ink) 7%, transparent); font-weight: 500; font-size: 12.5px; display: inline-flex; align-items: center; }
+.chip.primary { background: var(--accent); color: #fff; }
+#links { position: absolute; left: 0; top: 0; overflow: visible; pointer-events: none; }
+#links path { fill: none; stroke: color-mix(in srgb, var(--accent) 55%, transparent); stroke-width: 1.6; stroke-dasharray: 0; }
+
+/* Window chrome floats over content; a soft scroll-edge effect replaces a title bar. */
+.edge-top { position: absolute; left: 0; right: 0; top: 0; height: 64px; pointer-events: none; z-index: 6;
+  -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);
+  -webkit-mask: linear-gradient(#000 30%, transparent); mask: linear-gradient(#000 30%, transparent);
+  background: linear-gradient(color-mix(in srgb, var(--canvas-bg) 80%, transparent), transparent); }
+.edge-bottom { position: absolute; left: 0; right: 0; bottom: 0; height: 90px; pointer-events: none; z-index: 6;
+  -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);
+  -webkit-mask: linear-gradient(transparent, #000 70%); mask: linear-gradient(transparent, #000 70%);
+  background: linear-gradient(transparent, color-mix(in srgb, var(--canvas-bg) 70%, transparent)); }
+.lights { position: absolute; left: 20px; top: 20px; z-index: 8; display: flex; gap: 8px; align-items: center; }
+.lights i { width: 13px; height: 13px; border-radius: 50%; display: block; box-shadow: inset 0 0 0 .5px rgba(0,0,0,.2); }
+.lights i:nth-child(1) { background: #ff5f57; } .lights i:nth-child(2) { background: #febc2e; } .lights i:nth-child(3) { background: #28c840; }
+.wtitle { position: absolute; left: 92px; top: 15px; z-index: 8; font: 600 15px/24px var(--font-display); letter-spacing: -.01em; }
+.wtitle small { font: 500 12px var(--font); color: var(--ink-2); margin-left: 6px; }
+
+/* Bottom toolbar: groups share a background; text and icons don't mix in one group. */
+#ctool { position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%); z-index: 9; display: flex; align-items: center; }
+#ctool .cap { height: 40px; border-radius: 20px; }
+#ctool .cap .content { height: 40px; padding: 0 4px; }
+#ctool .btn { height: 32px; min-width: 32px; border-radius: 16px; }
+#ctool .cap + .cap { margin-left: 8px; }
+#searchCap input { all: unset; width: 100%; font: 13px var(--font); color: var(--ink); }
+#searchCap input::placeholder { color: var(--ink-2); }
+.hint { display: inline-flex; gap: 7px; align-items: center; padding: 0 12px 0 10px; color: var(--ink); font-weight: 500; }
+kbd { font: 600 11px/18px var(--font); padding: 0 6px; border-radius: 6px; background: color-mix(in srgb, var(--ink) 10%, transparent); color: var(--ink); }
+
+/* Inspector: inset from the window edges, radius concentric with the window (26 − 8 = 18). */
+#inspector { position: absolute; top: 8px; right: 8px; bottom: 8px; width: 340px; border-radius: 18px; z-index: 10; padding: 16px 18px; display: none; overflow: hidden; }
+#inspector .x { position: absolute; top: 10px; right: 10px; }
+#inspector h2 { font: 700 20px/1.2 var(--font-display); letter-spacing: -.02em; margin: 14px 0 4px; }
+#inspector .sub { color: var(--ink-2); }
+#inspector section { margin-top: 18px; }
+#inspector h3 { font: 600 12px var(--font); color: var(--ink-2); margin: 0 0 6px; }
+#inspector .field { background: color-mix(in srgb, var(--ink) 6%, transparent); border-radius: 12px; padding: 9px 11px; }
+#inspector .src { display: flex; gap: 10px; align-items: center; padding: 7px 4px; border-radius: 10px; }
+#inspector .src + .src { border-top: 1px solid var(--separator); border-radius: 0; }
+#inspector .foot { position: absolute; left: 18px; right: 18px; bottom: 16px; display: flex; gap: 8px; }
+#inspector .foot .pill { flex: 1; justify-content: center; height: 34px; border-radius: 17px; }
+
+/* ── Demo controls (not part of the design) ─────────────────────────── */
+#panel { position: fixed; left: 18px; bottom: 18px; width: 324px; z-index: 50; border-radius: 22px; padding: 14px; max-height: calc(100vh - 80px); overflow: auto; scrollbar-width: none; }
+#panel h1 { font: 700 15px/1.2 var(--font-display); margin: 0 0 2px; letter-spacing: -.01em; }
+#panel .lead { color: var(--ink-2); font-size: 12px; margin: 0 0 10px; }
+#panel .lbl { font-size: 11.5px; font-weight: 600; color: var(--ink-2); margin: 12px 2px 6px; }
+#panel.collapsed > :not(.always) { display: none; }
+#panel .collapse { position: absolute; top: 10px; right: 10px; }
+.seg { position: relative; display: flex; padding: 2px; border-radius: 10px; background: color-mix(in srgb, var(--ink) 8%, transparent); }
+.seg button { position: relative; z-index: 1; flex: 1 1 auto; height: 26px; padding: 0 6px; border-radius: 8px; font-size: 11.5px; font-weight: 500; color: var(--ink); white-space: nowrap; }
+.seg .thumb { position: absolute; top: 2px; bottom: 2px; left: 0; border-radius: 8px; background: var(--solid-2); box-shadow: 0 1px 3px rgba(0,0,0,.18), 0 0 0 .5px rgba(0,0,0,.08); }
+.scheme-dark .seg .thumb { background: rgba(255,255,255,.22); }
+.toggle { display: flex; align-items: center; justify-content: space-between; height: 30px; padding: 0 2px; }
+.switch { width: 38px; height: 22px; border-radius: 11px; background: color-mix(in srgb, var(--ink) 16%, transparent); position: relative; transition: background-color .25s ease; flex: none; }
+.switch.on { background: var(--green); }
+.switch .knob { position: absolute; top: 2px; left: 2px; height: 18px; width: 22px; border-radius: 9px; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.25); transition: background-color .15s ease, box-shadow .15s ease; }
+/* The knob becomes glass while held. */
+.switch.held .knob { background: rgba(255,255,255,.35); -webkit-backdrop-filter: blur(2px) saturate(2); backdrop-filter: blur(2px) saturate(2); box-shadow: inset 0 0 0 1px rgba(255,255,255,.85), inset 0 1px 2px rgba(255,255,255,.9), 0 2px 8px rgba(0,0,0,.25); }
+.actions-row { display: flex; gap: 6px; margin-top: 4px; }
+.actions-row .pill { flex: 1; justify-content: center; }
+.note { font-size: 11.5px; color: var(--ink-2); margin: 10px 2px 0; }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs id="lensDefs"></defs>
+  <symbol id="i-menu" viewBox="0 0 16 16"><path d="M3 4.5h10M3 8h10M3 11.5h10"/></symbol>
+  <symbol id="i-canvas" viewBox="0 0 16 16"><rect x="2" y="2.5" width="5" height="5" rx="1.6"/><rect x="9" y="2.5" width="5" height="3.5" rx="1.4"/><rect x="9" y="8" width="5" height="5.5" rx="1.6"/><rect x="2" y="9.5" width="5" height="4" rx="1.4"/></symbol>
+  <symbol id="i-bell" viewBox="0 0 16 16"><path d="M4 11.5V7.2a4 4 0 0 1 8 0v4.3l1.2 1.1H2.8zM6.6 13.8a1.5 1.5 0 0 0 2.8 0"/></symbol>
+  <symbol id="i-battery" viewBox="0 0 20 16"><rect x="1.5" y="4" width="15" height="8" rx="2.4"/><rect x="3.2" y="5.7" width="8" height="4.6" rx="1" fill="currentColor" stroke="none"/><path d="M18.3 6.6v2.8"/></symbol>
+  <symbol id="i-cloud" viewBox="0 0 16 16"><path d="M4.6 12.5h7a2.9 2.9 0 0 0 .3-5.8 4 4 0 0 0-7.6.9 2.5 2.5 0 0 0 .3 4.9z"/></symbol>
+  <symbol id="i-mic" viewBox="0 0 16 16"><rect x="5.6" y="1.8" width="4.8" height="8" rx="2.4"/><path d="M3.4 7.6a4.6 4.6 0 0 0 9.2 0M8 12.3v2"/></symbol>
+  <symbol id="i-x" viewBox="0 0 16 16"><path d="M4.5 4.5l7 7M11.5 4.5l-7 7"/></symbol>
+  <symbol id="i-stop" viewBox="0 0 16 16"><rect x="4.5" y="4.5" width="7" height="7" rx="1.6" fill="currentColor" stroke="none"/></symbol>
+  <symbol id="i-kbd" viewBox="0 0 18 16"><rect x="1.5" y="3.5" width="15" height="9" rx="2"/><path d="M4.5 6.5h.01M7.5 6.5h.01M10.5 6.5h.01M13.5 6.5h.01M5.5 9.5h7"/></symbol>
+  <symbol id="i-search" viewBox="0 0 16 16"><circle cx="7" cy="7" r="4.3"/><path d="M10.2 10.2L13.5 13.5"/></symbol>
+  <symbol id="i-center" viewBox="0 0 16 16"><circle cx="8" cy="8" r="2.2"/><path d="M8 1.8v2.4M8 11.8v2.4M1.8 8h2.4M11.8 8h2.4"/></symbol>
+  <symbol id="i-q" viewBox="0 0 16 16"><path d="M2.8 7.6a5.2 5.2 0 1 1 2.4 4.4L2.5 13l.9-2.6a5.2 5.2 0 0 1-.6-2.8zM6.4 6.2a1.7 1.7 0 1 1 2.2 1.6c-.4.2-.6.5-.6 1M8 10.6h.01"/></symbol>
+  <symbol id="i-more" viewBox="0 0 16 16"><path d="M3.5 8h.01M8 8h.01M12.5 8h.01" stroke-width="2.4"/></symbol>
+  <symbol id="i-feed" viewBox="0 0 16 16"><rect x="2.5" y="2.5" width="11" height="11" rx="3"/><path d="M5 6h6M5 8.5h4"/></symbol>
+  <symbol id="i-rec" viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.5"/><circle cx="8" cy="8" r="2.4" fill="currentColor" stroke="none"/></symbol>
+  <symbol id="i-map" viewBox="0 0 16 16"><path d="M2 4l4-1.5 4 1.5 4-1.5v9.5L10 13.5 6 12l-4 1.5zM6 2.5V12M10 4v9.5"/></symbol>
+  <symbol id="i-overlay" viewBox="0 0 16 16"><rect x="2" y="3" width="12" height="10" rx="2.5"/><path d="M2 9.5h12"/></symbol>
+  <symbol id="i-task" viewBox="0 0 16 16"><rect x="2" y="3" width="12" height="9" rx="2"/><path d="M5.5 14h5"/></symbol>
+  <symbol id="i-copy" viewBox="0 0 16 16"><rect x="5" y="5" width="8.5" height="8.5" rx="2"/><path d="M3 10.5V4.5A2 2 0 0 1 5 2.5h5.5"/></symbol>
+  <symbol id="i-tile" viewBox="0 0 16 16"><rect x="2" y="2.5" width="12" height="11" rx="2.4"/><path d="M8 2.5v11M8 8h6"/></symbol>
+  <symbol id="i-gear" viewBox="0 0 16 16"><circle cx="8" cy="8" r="2.2"/><path d="M8 1.8v1.6M8 12.6v1.6M3.6 3.6l1.1 1.1M11.3 11.3l1.1 1.1M1.8 8h1.6M12.6 8h1.6M3.6 12.4l1.1-1.1M11.3 4.7l1.1-1.1"/></symbol>
+  <symbol id="i-chev" viewBox="0 0 16 16"><path d="M6 3.5L10.5 8 6 12.5"/></symbol>
+  <symbol id="i-check" viewBox="0 0 16 16"><path d="M3.5 8.5l3 3 6-7"/></symbol>
+  <symbol id="i-checkc" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6"/><path d="M5.4 8.2l1.8 1.8 3.5-3.8"/></symbol>
+  <symbol id="i-edge" viewBox="0 0 16 16"><path d="M9 3h4v4M13 3L7.5 8.5M11.5 9.5v3a1 1 0 0 1-1 1h-7a1 1 0 0 1-1-1v-7a1 1 0 0 1 1-1h3"/></symbol>
+  <symbol id="i-spark" viewBox="0 0 16 16"><path d="M8 1.8l1.5 4.7L14.2 8l-4.7 1.5L8 14.2 6.5 9.5 1.8 8l4.7-1.5z"/></symbol>
+  <symbol id="i-side" viewBox="0 0 16 16"><path d="M2.5 4.5h3M2.5 8h3M2.5 11.5h3"/><rect x="7" y="2.5" width="7" height="11" rx="2"/></symbol>
+</svg>
+
+<div id="desktop" aria-hidden="true">
+  <div class="wall vivid">
+    <svg viewBox="0 0 1600 900" preserveAspectRatio="xMidYMid slice">
+      <path d="M-50 640 C 300 520, 520 760, 820 600 S 1350 380, 1700 520 L1700 950 L-50 950Z" fill="rgba(255,255,255,.10)"/>
+      <path d="M-50 720 C 260 640, 560 860, 900 700 S 1400 560, 1700 640 L1700 950 L-50 950Z" fill="rgba(20,10,60,.30)"/>
+      <path d="M-50 160 C 300 60, 600 260, 900 120 S 1400 20, 1700 120" stroke="rgba(255,255,255,.30)" stroke-width="2" fill="none"/>
+      <path d="M-50 210 C 320 110, 620 300, 920 170 S 1420 70, 1700 170" stroke="rgba(255,255,255,.18)" stroke-width="1.5" fill="none"/>
+      <circle cx="1240" cy="250" r="120" fill="rgba(255,210,120,.22)"/>
+      <circle cx="380" cy="420" r="70" fill="rgba(120,220,255,.18)"/>
+    </svg>
+  </div>
+  <div class="wall light">
+    <div class="doc">
+      <div class="nav"><b>Northwind Finance</b><span>Overview</span><span>Budgets</span><span>Reports</span><span>Team</span></div>
+      <h1>Q4 budget, revised totals</h1>
+      <div class="lede">Revenue is tracking 4.2% above plan. Costs in infrastructure and travel need review before Thursday's sign-off with Anna.</div>
+      <div class="row">
+        <div class="tile" style="background:linear-gradient(135deg,#ff7a45,#e0337a)">Revenue<br><span style="font-size:34px">€4.81M</span></div>
+        <div class="tile" style="background:linear-gradient(135deg,#1e9bd7,#6d5dfc)">Costs<br><span style="font-size:34px">€3.07M</span></div>
+        <div class="tile" style="background:linear-gradient(135deg,#30d158,#1e9bd7)">Margin<br><span style="font-size:34px">36.2%</span></div>
+      </div>
+      <p>Infrastructure spending rose after the September migration. Travel is within policy but concentrated in two teams. The revised sheet separates one-off migration costs so the run rate is comparable with last quarter.</p>
+      <p>Open questions: whether the Costs tab should include deferred licences, and which revenue recognition date applies to the Contoso renewal.</p>
+    </div>
+  </div>
+  <div class="wall dark">
+    <div class="tabs"><span class="on">work_canvas.py</span><span>appearance.py</span><span>desktop_bar.py</span><span>toast_card.py</span></div>
+    <div class="code"><div class="gutter" id="gutter"></div><div class="src" id="src"></div></div>
+  </div>
+</div>
+
+<!-- Workspace bar -->
+<div id="bar" role="toolbar" aria-label="Workspace">
+  <div class="cap glass lens interactive" id="kbdCap" hidden></div>
+  <div class="cap glass lens" id="ctlCap"></div>
+  <div class="cap glass lens" id="readCap"></div>
+  <div class="cap glass lens interactive" id="bellCap"></div>
+  <div class="cap glass lens" id="recCap" hidden></div>
+</div>
+
+<div class="menu glass large lens" id="menu" role="menu">
+  <div class="menu-body">
+    <button class="item" data-act="feed"><svg class="i"><use href="#i-feed"/></svg>Your work feed<span class="key">V T</span></button>
+    <button class="item" data-act="canvas"><svg class="i"><use href="#i-canvas"/></svg>Your work canvas</button>
+    <button class="item" data-act="record"><svg class="i"><use href="#i-rec"/></svg><span id="recLabel">Record a meeting</span></button>
+    <div class="sep"></div>
+    <button class="item"><svg class="i"><use href="#i-map"/></svg>Keyboard map</button>
+    <button class="item"><svg class="i"><use href="#i-overlay"/></svg>Keyboard overlay</button>
+    <button class="item"><svg class="i"><use href="#i-task"/></svg>Windows taskbar<svg class="i check"><use href="#i-check"/></svg></button>
+    <div class="sep"></div>
+    <button class="item"><svg class="i"><use href="#i-copy"/></svg>Copy latest transcript</button>
+    <button class="item" id="tilingItem"><svg class="i"><use href="#i-tile"/></svg>Window tiling<svg class="i" style="margin-left:auto"><use href="#i-chev"/></svg></button>
+    <button class="item"><svg class="i"><use href="#i-gear"/></svg>Notification settings</button>
+  </div>
+</div>
+<div class="menu glass large" id="submenu" role="menu">
+  <button class="item">Spread windows across screens</button>
+  <div class="sep"></div>
+  <button class="item">Focus left<span class="key">⌥ ←</span></button>
+  <button class="item">Focus right<span class="key">⌥ →</span></button>
+  <button class="item">Float or tile the active window</button>
+  <button class="item">Change split direction</button>
+  <button class="item">Pause automatic tiling</button>
+</div>
+
+<div id="phases" aria-live="polite"></div>
+
+<!-- Work canvas -->
+<div id="canvasWin" role="dialog" aria-label="Work canvas">
+  <div id="scene"><div id="world"><svg id="links" width="1" height="1"></svg></div></div>
+  <div class="edge-top"></div><div class="edge-bottom"></div>
+  <div class="lights" title="Close, minimise, zoom"><i id="closeLight"></i><i></i><i></i></div>
+  <div class="wtitle">Work canvas<small>7 contexts · 2 questions</small></div>
+  <div id="ctool">
+    <div class="cap glass lens" id="voiceCap"></div>
+    <div class="cap glass lens interactive" id="searchCap"></div>
+    <div class="cap glass lens interactive" id="toolsCap"></div>
+    <div class="cap glass lens interactive" id="closeCap"></div>
+  </div>
+  <aside id="inspector" class="glass large lens"></aside>
+</div>
+
+<!-- Demo controls -->
+<div id="panel" class="glass large">
+  <div class="always"><h1>Liquid Glass study</h1><p class="lead">Workspace's surfaces in Apple's current design language.</p></div>
+  <button class="btn always collapse" id="collapse" aria-label="Collapse demo controls"><svg class="i"><use href="#i-side"/></svg></button>
+  <div class="lbl">Toolbar state</div>
+  <div class="seg" data-key="state"><button data-v="idle">Idle</button><button data-v="dictating">Dictate</button><button data-v="transcribing">Transcribe</button><button data-v="working">Working</button><button data-v="needs">Needs you</button></div>
+  <div class="toggle"><span>Meeting recording</span><button class="switch" data-key="recording" role="switch"><span class="knob"></span></button></div>
+  <div class="toggle"><span>Keyboard layer</span><button class="switch" data-key="layer" role="switch"><span class="knob"></span></button></div>
+  <div class="toggle"><span>Inbox items</span><button class="switch on" data-key="inbox" role="switch"><span class="knob"></span></button></div>
+  <div class="actions-row"><button class="pill glass interactive" id="runAgent">Run agent</button><button class="pill glass prominent interactive" id="openCanvas">Open canvas</button></div>
+  <div class="lbl">Behind the glass</div>
+  <div class="seg" data-key="wallpaper"><button data-v="vivid">Wallpaper</button><button data-v="light">Light app</button><button data-v="dark">Dark app</button></div>
+  <div class="lbl">Appearance</div>
+  <div class="seg" data-key="appearance"><button data-v="light">Light</button><button data-v="dark">Dark</button></div>
+  <div class="lbl">Glass look</div>
+  <div class="seg" data-key="look"><button data-v="clear">Clear</button><button data-v="tinted">Tinted</button></div>
+  <div class="lbl">Accent</div>
+  <div class="seg" data-key="accent"><button data-v="blue">System blue</button><button data-v="lilac">Workspace lilac</button></div>
+  <div class="lbl">Accessibility and fidelity</div>
+  <div class="toggle"><span>Reduce transparency</span><button class="switch" data-key="reduce-transparency" role="switch"><span class="knob"></span></button></div>
+  <div class="toggle"><span>Increase contrast</span><button class="switch" data-key="increase-contrast" role="switch"><span class="knob"></span></button></div>
+  <div class="toggle"><span>Reduce motion</span><button class="switch" data-key="reduce-motion" role="switch"><span class="knob"></span></button></div>
+  <div class="toggle"><span>Edge refraction</span><button class="switch on" data-key="refraction" role="switch"><span class="knob"></span></button></div>
+  <p class="note">Edge refraction is the one effect Windows composition can't reproduce over the desktop. Turn it off to see what Workspace can ship natively.</p>
+</div>
+
+<script>
+"use strict";
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+const root = document.documentElement;
+const icon = (name, cls = "") => `<svg class="i ${cls}"><use href="#i-${name}"/></svg>`;
+const reduceMotion = () => root.classList.contains("reduce-motion");
+
+/* ── Springs: Apple's damping ratio + response, integrated per frame ── */
+const active = new Set();
+let last = 0;
+function tick(now) {
+  const dt = Math.min(.064, (now - (last || now)) / 1000); last = now;
+  for (const s of [...active]) s.step(dt);
+  if (active.size) requestAnimationFrame(tick); else last = 0;
+}
+class Spring {
+  constructor(value, onUpdate, { damping = 1, response = .4 } = {}) {
+    Object.assign(this, { value, target: value, velocity: 0, onUpdate, damping, response, done: null });
+  }
+  to(target, { velocity, damping, response, done } = {}) {
+    this.target = target; this.done = done || null;
+    if (velocity !== undefined) this.velocity = velocity;
+    if (damping !== undefined) this.damping = damping;
+    if (response !== undefined) this.response = response;
+    if (reduceMotion()) return this.set(target);
+    if (!active.size) requestAnimationFrame(tick);
+    active.add(this);
+    return this;
+  }
+  set(value) {
+    this.value = this.target = value; this.velocity = 0; active.delete(this);
+    this.onUpdate(value); const d = this.done; this.done = null; d && d();
+    return this;
+  }
+  step(dt) {
+    const w = 2 * Math.PI / this.response, k = w * w, c = 2 * this.damping * w;
+    const n = Math.ceil(dt * 240), h = dt / n;
+    for (let i = 0; i < n; i++) {
+      this.velocity += (-k * (this.value - this.target) - c * this.velocity) * h;
+      this.value += this.velocity * h;
+    }
+    const scale = Math.max(1, Math.abs(this.target));
+    if (Math.abs(this.velocity) < .002 * scale && Math.abs(this.value - this.target) < .0005 * scale) return this.set(this.target);
+    this.onUpdate(this.value);
+  }
+}
+const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+// Apple's projection: where a flick would come to rest under exponential deceleration.
+const project = (v, rate = .998) => (v / 1000) * rate / (1 - rate);
+const rubberband = (over, dim, c = .55) => (over * dim * c) / (dim + c * Math.abs(over));
+
+/* ── Lens refraction: one displacement map per glass shape ──────────── */
+const lensDefs = $("#lensDefs");
+let lensId = 0;
+function lensMap(w, h, r, bezel) {
+  const s = 0.5, cw = Math.max(2, Math.round(w * s)), chh = Math.max(2, Math.round(h * s));
+  const cv = document.createElement("canvas"); cv.width = cw; cv.height = chh;
+  const ctx = cv.getContext("2d"), img = ctx.createImageData(cw, chh), d = img.data;
+  const hx = w / 2, hy = h / 2, rr = Math.min(r, hx, hy);
+  for (let y = 0; y < chh; y++) for (let x = 0; x < cw; x++) {
+    const px = (x + .5) / s - hx, py = (y + .5) / s - hy;
+    const qx = Math.abs(px) - (hx - rr), qy = Math.abs(py) - (hy - rr);
+    const ox = Math.max(qx, 0), oy = Math.max(qy, 0), ol = Math.hypot(ox, oy);
+    const dist = ol + Math.min(Math.max(qx, qy), 0) - rr;          // signed distance, negative inside
+    let nx = 0, ny = 0;
+    if (ol > 0) { nx = ox / ol; ny = oy / ol; } else if (qx > qy) nx = 1; else ny = 1;
+    nx *= Math.sign(px) || 1; ny *= Math.sign(py) || 1;
+    const t = clamp(-dist / bezel, 0, 1), k = (1 - t) ** 2;          // strongest at the rim, flat in the middle
+    const i = (y * cw + x) * 4;
+    d[i] = 128 - nx * k * 127; d[i + 1] = 128 - ny * k * 127; d[i + 2] = 128; d[i + 3] = 255;
+  }
+  ctx.putImageData(img, 0, 0);
+  return cv.toDataURL();
+}
+function applyLens(el) {
+  const { width: w, height: h } = el.getBoundingClientRect();
+  if (w < 4 || h < 4) return;
+  const key = `${Math.round(w)}x${Math.round(h)}`;
+  if (el.dataset.lensKey === key) return;
+  el.dataset.lensKey = key;
+  const r = parseFloat(getComputedStyle(el).borderTopLeftRadius) || 0;
+  const id = el.dataset.lensId || (el.dataset.lensId = `lens${lensId++}`);
+  const bezel = Math.min(h / 2, el.classList.contains("large") ? 22 : 12);
+  const scale = el.classList.contains("large") ? 46 : 30;
+  let f = document.getElementById(id);
+  if (!f) { f = document.createElementNS("http://www.w3.org/2000/svg", "filter"); f.id = id; lensDefs.append(f); }
+  f.setAttribute("x", 0); f.setAttribute("y", 0); f.setAttribute("width", w); f.setAttribute("height", h);
+  f.setAttribute("filterUnits", "userSpaceOnUse"); f.setAttribute("primitiveUnits", "userSpaceOnUse");
+  f.setAttribute("color-interpolation-filters", "sRGB");
+  f.innerHTML = `<feImage href="${lensMap(w, h, r, bezel)}" x="0" y="0" width="${w}" height="${h}" preserveAspectRatio="none" result="m"/>
+    <feDisplacementMap in="SourceGraphic" in2="m" scale="${scale}" xChannelSelector="R" yChannelSelector="G"/>`;
+  el.style.setProperty("--lens", `url(#${id})`);
+}
+const lensTimers = new WeakMap();
+const lensObserver = new ResizeObserver(entries => {
+  for (const { target } of entries) {
+    clearTimeout(lensTimers.get(target));
+    lensTimers.set(target, setTimeout(() => applyLens(target), 90));
+  }
+});
+const watchLens = el => lensObserver.observe(el);
+$$(".lens").forEach(watchLens);
+
+/* ── Interactive glass: illuminates at the touch point, flexes on press ── */
+function interactive(el) {
+  const s = new Spring(1, v => { el.style.scale = v; }, { damping: .62, response: .32 });
+  el.addEventListener("pointermove", e => {
+    const r = el.getBoundingClientRect();
+    el.style.setProperty("--px", `${e.clientX - r.left}px`); el.style.setProperty("--py", `${e.clientY - r.top}px`);
+  });
+  el.addEventListener("pointerenter", () => el.style.setProperty("--glow", .45));
+  el.addEventListener("pointerleave", () => { el.style.setProperty("--glow", 0); s.to(1); });
+  el.addEventListener("pointerdown", () => { el.style.setProperty("--glow", 1); s.to(el.offsetHeight > 60 ? 1.015 : 1.07, { damping: .7, response: .22 }); });
+  addEventListener("pointerup", () => { if (s.target !== 1) { el.style.setProperty("--glow", .45); s.to(1, { damping: .55, response: .38 }); } });
+}
+$$(".interactive").forEach(interactive);
+
+/* ── Capsule morphing: width springs, content materializes ──────────── */
+const caps = new Map();
+function capState(cap) {
+  if (!caps.has(cap)) {
+    const st = { width: 0, shown: !cap.hidden, html: null };
+    st.w = new Spring(0, v => { cap.style.width = `${Math.max(0, v)}px`; }, { damping: .86, response: .42 });
+    st.p = new Spring(cap.hidden ? 0 : 1, v => {
+      cap.style.opacity = clamp(v * 1.6, 0, 1);
+      cap.style.transform = `scale(${.6 + .4 * clamp(v, 0, 1.2)})`;
+      cap.style.marginLeft = cap.previousElementSibling && !cap.matches(":first-child") ? `${(cap.closest("#ctool") ? 8 : 6) * clamp(v, 0, 1) - 0}px` : "";
+      cap.style.filter = v < .98 ? `blur(${(1 - clamp(v, 0, 1)) * 6}px)` : "";
+    }, { damping: .8, response: .42 });
+    caps.set(cap, st);
+  }
+  return caps.get(cap);
+}
+function measure(html, cls) {
+  const probe = document.createElement("div");
+  probe.className = `content ${cls}`; probe.style.cssText = "position:absolute;visibility:hidden;transition:none";
+  probe.innerHTML = html;
+  const host = document.createElement("div"); host.className = "cap"; host.style.cssText = "position:fixed;left:-9999px;top:0;width:auto";
+  host.append(probe); document.body.append(host);
+  for (const sch of ["scheme-light", "scheme-dark"]) if (document.querySelector("#bar").classList.contains(sch)) host.classList.add(sch);
+  const w = Math.ceil(probe.getBoundingClientRect().width);
+  host.remove();
+  return w;
+}
+function morph(cap, html, { cls = "", width, instant = false } = {}) {
+  const st = capState(cap);
+  if (st.html === html + cls) return;
+  st.html = html + cls;
+  const old = $(".content:not(.leaving)", cap);
+  const next = document.createElement("div");
+  next.className = `content ${cls}`; next.innerHTML = html;
+  const w = width ?? measure(html, cls);
+  if (old && !instant && !reduceMotion()) {
+    old.classList.add("leaving");
+    setTimeout(() => old.remove(), 200);
+    next.classList.add("entering");
+    cap.append(next);
+    requestAnimationFrame(() => requestAnimationFrame(() => next.classList.remove("entering")));
+  } else { old && old.remove(); cap.append(next); }
+  if (instant || !st.width) st.w.set(w); else st.w.to(w);
+  st.width = w;
+  $$(".interactive", next).forEach(interactive);
+  return next;
+}
+function showCap(cap, show) {
+  const st = capState(cap);
+  if (st.shown === show) return;
+  st.shown = show;
+  if (show) { cap.hidden = false; st.p.to(1, { damping: .78 }); }
+  else st.p.to(0, { damping: 1, response: .3, done: () => { cap.hidden = true; } });
+}
+
+/* ── Workspace bar ─────────────────────────────────────────────────── */
+const state = { state: "idle", recording: false, layer: false, inbox: true, wallpaper: "vivid", appearance: "dark", look: "clear", accent: "blue" };
+const bar = $("#bar");
+const contentLuma = { vivid: "dark", light: "light", dark: "dark" };
+
+function setScheme(el, scheme) { el.classList.toggle("scheme-light", scheme === "light"); el.classList.toggle("scheme-dark", scheme === "dark"); }
+
+function renderBar() {
+  // Small glass flips with the content beneath it, independent of the system appearance.
+  setScheme(bar, contentLuma[state.wallpaper]);
+  morph($("#ctlCap"), `<button class="btn" id="menuBtn" aria-label="Open Workspace controls" title="Workspace controls">${icon("menu")}</button>
+    <button class="btn" id="canvasBtn" aria-label="Open your work canvas" title="Your work canvas">${icon("canvas")}</button>`);
+  const read = $("#readCap");
+  read.classList.remove("tint-orange");
+  const stopBtn = label => `<button class="btn" aria-label="${label}" title="${label}">${icon("stop")}</button>`;
+  switch (state.state) {
+    case "idle":
+      morph(read, `<span class="ambient num">10:22</span><span class="ambient">${icon("battery")}<span class="num">73%</span></span><span class="ambient">${icon("cloud")}<span class="num">12°</span></span>`, { cls: "text" }); break;
+    case "dictating":
+      morph(read, `<span class="ambient mic-on" title="Listening">${icon("mic")}</span><span class="wave" id="wave">${"<i></i>".repeat(24)}</span>${stopBtn("Stop dictation")}`, { cls: "text" }); break;
+    case "transcribing":
+      morph(read, `<span class="spinner" title="Transcribing" role="status" aria-label="Transcribing"></span><span class="wave frozen">${"<i></i>".repeat(24)}</span>`, { cls: "text" });
+      $$("#readCap .wave.frozen i").forEach((b, i) => b.style.height = `${3 + 9 * Math.abs(Math.sin(i * 1.7))}px`); break;
+    case "working":
+      morph(read, `<span class="spinner"></span><span class="ambient">Working</span>${stopBtn("Stop agent work")}`, { cls: "text" }); break;
+    case "needs":
+      read.classList.add("tint-orange");
+      morph(read, `<span class="ambient" style="font-weight:600">Needs you</span><span class="ambient" style="color:var(--ink-2)">Which sheet?</span><button class="btn" aria-label="Open the question">${icon("chev")}</button>`, { cls: "text" }); break;
+  }
+  morph($("#bellCap"), `<button class="btn" aria-label="Open your work feed, 3 items" title="Your work feed · Hold V + T">${icon("bell")}<span class="badge num">3</span></button>`);
+  showCap($("#bellCap"), state.inbox);
+  morph($("#recCap"), `<span class="rec-dot"></span><span class="ambient num" id="recTime">02:05</span><button class="btn" aria-label="Stop recording" title="Stop recording">${icon("stop")}</button>`, { cls: "text" });
+  showCap($("#recCap"), state.recording);
+  morph($("#kbdCap"), `<span class="ambient">${icon("kbd")}NAV</span>`, { cls: "text" });
+  showCap($("#kbdCap"), state.layer);
+  $("#recLabel").textContent = state.recording ? "Stop recording" : "Record a meeting";
+  wireBar();
+}
+function wireBar() {
+  $("#menuBtn").onclick = e => { e.stopPropagation(); menuOpen ? closeMenu() : openMenu(); };
+  $("#canvasBtn").onclick = () => openCanvas();
+}
+// Live audio meter and recording timer.
+let seconds = 125, phase = 0;
+setInterval(() => { seconds++; const t = $("#recTime"); if (t) t.textContent = `${String(seconds / 60 | 0).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`; }, 1000);
+(function meter() {
+  phase += .16;
+  const bars = $$("#wave i");
+  bars.forEach((b, i) => {
+    const env = .35 + .65 * Math.abs(Math.sin(phase * .7 + i * .22));
+    b.style.height = `${3 + 12 * env * Math.abs(Math.sin(phase * 2.3 + i * .9) * Math.cos(phase * .9 + i * .3))}px`;
+  });
+  setTimeout(meter, 60);
+})();
+
+/* ── Menu: the button becomes the menu, and back ───────────────────── */
+const menu = $("#menu"), sub = $("#submenu");
+let menuOpen = false, from = null;
+const menuSpring = new Spring(0, p => {
+  if (!from) return;
+  const m = menu.getBoundingClientRect(), W = menu.offsetWidth, H = menu.offsetHeight;
+  const top = (from.top - parseFloat(menu.style.top)) * (1 - p), left = (from.left - parseFloat(menu.style.left)) * (1 - p);
+  const right = (W - (from.left - parseFloat(menu.style.left) + from.width)) * (1 - p);
+  const bottom = (H - (from.top - parseFloat(menu.style.top) + from.height)) * (1 - p);
+  const r = 14 + (18 - 14) * clamp(p, 0, 1);
+  menu.style.clipPath = `inset(${top}px ${Math.max(0, right)}px ${Math.max(0, bottom)}px ${left}px round ${r}px)`;
+  $(".menu-body", menu).style.opacity = clamp((p - .35) / .45, 0, 1);
+  menu.style.filter = p < .5 ? `blur(${(1 - p * 2) * 3}px)` : "";
+  const btn = $("#menuBtn"); if (btn) btn.style.opacity = clamp(1 - p * 3, 0, 1);
+}, { damping: .84, response: .36 });
+function openMenu() {
+  const btn = $("#menuBtn");
+  from = btn.getBoundingClientRect();
+  setScheme(menu, state.appearance); setScheme(sub, state.appearance);
+  menu.style.display = "block";
+  menu.style.left = `${from.left - 3}px`; menu.style.top = `${from.bottom + 9}px`;
+  // The menu grows from where the button sits: start clipped to the button's rect.
+  from = { left: from.left, top: from.top, width: from.width, height: from.height };
+  menuOpen = true;
+  menuSpring.to(1);
+}
+function closeMenu() {
+  if (!menuOpen) return;
+  menuOpen = false; sub.style.display = "none";
+  menuSpring.to(0, { done: () => { if (!menuOpen) { menu.style.display = "none"; const b = $("#menuBtn"); if (b) b.style.opacity = ""; } } });
+}
+menu.addEventListener("click", e => {
+  const a = e.target.closest(".item")?.dataset.act;
+  if (e.target.closest("#tilingItem")) return;
+  if (a === "canvas") openCanvas();
+  if (a === "record") { state.recording = !state.recording; syncControls(); renderBar(); }
+  if (a === "feed") runAgent();
+  closeMenu();
+});
+$("#tilingItem").addEventListener("pointerenter", e => {
+  const r = e.currentTarget.getBoundingClientRect();
+  sub.style.display = "block"; sub.style.left = `${r.right + 6}px`; sub.style.top = `${r.top - 6}px`;
+  sub.animate(reduceMotion() ? [{ opacity: 0 }, { opacity: 1 }] : [{ opacity: 0, transform: "scale(.96) translateX(-6px)", filter: "blur(4px)" }, { opacity: 1, transform: "none", filter: "none" }], { duration: 220, easing: "cubic-bezier(.2,.8,.2,1)" });
+  watchLens(sub);
+});
+$$(".menu-body .item:not(#tilingItem)").forEach(i => i.addEventListener("pointerenter", () => { sub.style.display = "none"; }));
+document.addEventListener("pointerdown", e => { if (menuOpen && !e.target.closest(".menu") && !e.target.closest("#menuBtn")) closeMenu(); });
+
+/* ── Agent phases: temporary bubbles, earlier phases recede ────────── */
+const phases = $("#phases");
+let runToken = 0;
+function addPhase({ app, letter, title, body, calls = [], actions = "" }) {
+  setScheme(phases, state.appearance);
+  for (const p of $$(".phase", phases)) p.classList.add("past");
+  const el = document.createElement("div");
+  el.className = "phase glass large lens interactive";
+  el.innerHTML = `<div class="head"><div class="app ${app}">${letter}</div><div style="flex:1;min-width:0"><div style="display:flex"><span class="title">${title}</span><span class="meta">now</span></div><div class="body">${body}</div></div></div>
+    <div class="calls">${calls.map(c => `<div class="call pending"><span class="spinner" style="width:12px;height:12px"></span><span>${c}</span></div>`).join("")}</div>${actions}`;
+  phases.append(el);
+  watchLens(el); interactive(el);
+  const s = new Spring(0, v => {
+    el.style.opacity = clamp(v, 0, 1);
+    el.style.transform = `translateX(${(1 - v) * 40}px) scale(${.94 + .06 * v})`;
+    el.style.filter = v < .98 ? `blur(${(1 - clamp(v, 0, 1)) * 10}px)` : "";
+  }, { damping: .82, response: .45 });
+  s.to(1);
+  restack();
+  return el;
+}
+function restack() {
+  const all = $$(".phase", phases);
+  all.forEach((p, i) => {
+    const age = all.length - 1 - i;
+    p.style.opacity = age === 0 ? 1 : Math.max(.35, .72 - age * .18);
+    if (age > 2) { p.animate([{ opacity: p.style.opacity }, { opacity: 0, transform: "translateX(40px) scale(.94)" }], { duration: 260, easing: "ease-in" }).onfinish = () => p.remove(); }
+  });
+}
+function finishCalls(el, delay = 650) {
+  const calls = $$(".call", el); let t = 0;
+  calls.forEach(c => { setTimeout(() => c.classList.remove("pending"), t += 120); });
+  calls.forEach((c, i) => setTimeout(() => { $(".spinner", c).outerHTML = icon("checkc", "ok"); }, delay * (i + 1)));
+  return delay * (calls.length + 1);
+}
+function runAgent() {
+  const token = ++runToken;
+  phases.innerHTML = "";
+  state.state = "working"; syncControls(); renderBar();
+  const later = (ms, fn) => setTimeout(() => token === runToken && fn(), ms);
+  const a = addPhase({ app: "workspace", letter: "✦", title: "Reading Anna's request", body: "Teams · Q4 budget review", calls: ["Read Teams conversation", "Find budget.xlsx in Outlook"] });
+  const t1 = finishCalls(a);
+  later(t1, () => {
+    const b = addPhase({ app: "excel", letter: "X", title: "Comparing both sheets", body: "budget.xlsx · Revenue and Costs", calls: ["Open budget.xlsx", "Compare totals across sheets"] });
+    later(finishCalls(b), () => {
+      addPhase({ app: "workspace", letter: "✦", title: "Which sheet should Anna's reply cover?", body: "Costs includes deferred licences; Revenue doesn't.",
+        actions: `<div class="actions"><button class="pill glass prominent interactive">Revenue</button><button class="pill glass interactive">Costs</button><button class="pill glass interactive">Open on canvas</button></div>` });
+      $$(".phase:last-child .interactive", phases).forEach(interactive);
+      state.state = "needs"; syncControls(); renderBar();
+    });
+  });
+}
+phases.addEventListener("click", e => {
+  const p = e.target.closest(".pill"); if (!p) return;
+  if (p.textContent === "Open on canvas") { openCanvas(); select($("#c-question")); }
+  phases.innerHTML = ""; state.state = "idle"; syncControls(); renderBar();
+});
+
+/* ── Work canvas ───────────────────────────────────────────────────── */
+const win = $("#canvasWin"), scene = $("#scene"), world = $("#world");
+const cards = [
+  { id: "c-work", g: 0, x: 40, y: 64, app: "workspace", l: "✦", t: "Q4 budget review", s: "Work context", html: `<dl class="kv"><dt>Goal</dt><dd>Send Anna reviewed totals by Thursday</dd><dt>Now</dt><dd>Waiting for your sheet choice</dd><dt>Next</dt><dd>Draft the reply with both totals</dd></dl>` },
+  { id: "c-teams", g: 0, x: 380, y: 64, app: "teams", l: "T", t: "Anna Berg", s: "Teams · 9:41", html: `<p>Can you review the budget totals before Thursday? Both sheets are in budget.xlsx.</p>` },
+  { id: "c-doc", g: 0, x: 380, y: 230, app: "excel", l: "X", t: "budget.xlsx", s: "SharePoint · edited 2 h ago", html: `<p>Revenue €4.81M · Costs €3.07M. Costs includes deferred licences.</p>` },
+  { id: "c-question", g: 0, x: 40, y: 250, app: "workspace", l: "?", t: "Which sheet should the reply cover?", s: "Question · waiting for you", q: true, html: `<div class="chips"><span class="chip primary">Revenue</span><span class="chip">Costs</span><span class="chip">Both</span></div>` },
+  { id: "c-mail", g: 1, x: 40, y: 64, app: "outlook", l: "O", t: "Release notes before Friday", s: "Outlook · Priya Shah", html: `<p>The release review needs your comments on the changelog.</p>` },
+  { id: "c-ticket", g: 1, x: 40, y: 210, app: "kanban", l: "K", t: "REL-118 · Update changelog", s: "Kanban · In review", html: `<p>Two items need wording from you.</p>` },
+  { id: "c-note", g: 1, x: 40, y: 340, app: "note", l: "✎", t: "Draft reply ready", s: "Note from Workspace", html: `<p>A short reply to Priya is ready for review.</p>` },
+];
+const groups = [
+  { x: 120, y: 140, w: 740, h: 470, t: "Q4 budget review", s: "4 pieces" },
+  { x: 940, y: 140, w: 380, h: 500, t: "Release 4.2", s: "3 pieces" },
+];
+const links = [["c-work", "c-teams"], ["c-teams", "c-doc"], ["c-doc", "c-question"], ["c-mail", "c-ticket"], ["c-ticket", "c-note"]];
+groups.forEach(g => {
+  const el = document.createElement("div"); el.className = "group";
+  Object.assign(el.style, { left: `${g.x}px`, top: `${g.y}px`, width: `${g.w}px`, height: `${g.h}px` });
+  el.innerHTML = `<div class="gtitle">${g.t}<small>${g.s}</small></div>`;
+  world.append(el);
+});
+cards.forEach(c => {
+  const el = document.createElement("div"); el.className = "card" + (c.q ? " question" : ""); el.id = c.id;
+  c.x += groups[c.g].x; c.y += groups[c.g].y;
+  el.innerHTML = `<div class="ch"><div class="app small ${c.app}">${c.l}</div><div><div class="ct">${c.t}</div><div class="cs">${c.s}</div></div></div>${c.html}`;
+  world.append(el); c.el = el;
+  c.sx = new Spring(c.x, v => { c.x = v; place(c); }, { damping: .8, response: .4 });
+  c.sy = new Spring(c.y, v => { c.y = v; place(c); }, { damping: .8, response: .4 });
+  place(c);
+});
+function place(c) { c.el.style.transform = `translate(${c.x}px, ${c.y}px)`; c.el.style.left = 0; c.el.style.top = 0; drawLinks(); }
+function drawLinks() {
+  const svg = $("#links");
+  svg.innerHTML = links.map(([a, b]) => {
+    const A = cards.find(c => c.id === a), B = cards.find(c => c.id === b);
+    if (!A?.el?.offsetHeight || !B?.el?.offsetHeight) return "";
+    const ax = A.x + 150, ay = A.y + A.el.offsetHeight / 2, bx = B.x + 150, by = B.y + B.el.offsetHeight / 2;
+    const horizontal = Math.abs(bx - ax) > Math.abs(by - ay);
+    const [x1, y1, x2, y2] = horizontal ? [ax + 150 * Math.sign(bx - ax), ay, bx - 150 * Math.sign(bx - ax), by] : [ax, ay + A.el.offsetHeight / 2 * Math.sign(by - ay), bx, by - B.el.offsetHeight / 2 * Math.sign(by - ay)];
+    const mx = (x1 + x2) / 2, my = (y1 + y2) / 2;
+    return horizontal ? `<path d="M${x1} ${y1} C ${mx} ${y1}, ${mx} ${y2}, ${x2} ${y2}"/>` : `<path d="M${x1} ${y1} C ${x1} ${my}, ${x2} ${my}, ${x2} ${y2}"/>`;
+  }).join("");
+}
+
+// Camera: pan follows 1:1, flings project momentum, edges rubber-band.
+const cam = { x: 0, y: 0, z: 1 };
+const camX = new Spring(0, v => { cam.x = v; applyCam(); }), camY = new Spring(0, v => { cam.y = v; applyCam(); });
+function applyCam() {
+  world.style.transform = `translate(${cam.x}px, ${cam.y}px) scale(${cam.z})`;
+  const step = 22 * cam.z;
+  scene.style.backgroundSize = `${step}px ${step}px`; scene.style.backgroundPosition = `${cam.x}px ${cam.y}px`;
+}
+function panBounds() {
+  const W = scene.clientWidth, H = scene.clientHeight;
+  return { minX: W - 1500 * cam.z, maxX: 160, minY: H - 820 * cam.z, maxY: 120 };
+}
+function centerCam(animated = true) {
+  const W = scene.clientWidth, H = scene.clientHeight;
+  const tx = W / 2 - 720 * cam.z, ty = H / 2 - 400 * cam.z;
+  animated ? (camX.to(tx), camY.to(ty)) : (camX.set(tx), camY.set(ty));
+}
+function track() {
+  const h = [];
+  return { add(x, y) { const t = performance.now(); h.push({ x, y, t }); while (h.length > 1 && t - h[0].t > 100) h.shift(); },
+    velocity() { if (h.length < 2) return { vx: 0, vy: 0 }; const a = h[0], b = h.at(-1), dt = Math.max(1, b.t - a.t) / 1000; return { vx: (b.x - a.x) / dt, vy: (b.y - a.y) / dt }; } };
+}
+let drag = null;
+scene.addEventListener("pointerdown", e => {
+  if (e.button !== 0) return;
+  const cardEl = e.target.closest(".card");
+  scene.setPointerCapture(e.pointerId);
+  const hist = track(); hist.add(e.clientX, e.clientY);
+  if (cardEl) {
+    const c = cards.find(k => k.el === cardEl);
+    c.sx.set(c.x); c.sy.set(c.y);
+    drag = { kind: "card", c, hist, sx: e.clientX, sy: e.clientY, ox: c.x, oy: c.y, moved: false };
+  } else {
+    camX.set(cam.x); camY.set(cam.y);
+    drag = { kind: "pan", hist, sx: e.clientX, sy: e.clientY, ox: cam.x, oy: cam.y, moved: false };
+  }
+});
+scene.addEventListener("pointermove", e => {
+  if (!drag) return;
+  const dx = e.clientX - drag.sx, dy = e.clientY - drag.sy;
+  drag.hist.add(e.clientX, e.clientY);
+  if (!drag.moved && Math.hypot(dx, dy) < 4) return;
+  drag.moved = true;
+  if (drag.kind === "card") {
+    drag.c.el.classList.add("dragging");
+    drag.c.x = drag.ox + dx / cam.z; drag.c.y = drag.oy + dy / cam.z; place(drag.c);
+  } else {
+    scene.classList.add("panning");
+    const b = panBounds();
+    let x = drag.ox + dx, y = drag.oy + dy;
+    if (x > b.maxX) x = b.maxX + rubberband(x - b.maxX, scene.clientWidth); if (x < b.minX) x = b.minX - rubberband(b.minX - x, scene.clientWidth);
+    if (y > b.maxY) y = b.maxY + rubberband(y - b.maxY, scene.clientHeight); if (y < b.minY) y = b.minY - rubberband(b.minY - y, scene.clientHeight);
+    cam.x = x; cam.y = y; applyCam();
+  }
+});
+scene.addEventListener("pointerup", e => {
+  if (!drag) return;
+  const { vx, vy } = drag.hist.velocity();
+  if (drag.kind === "card") {
+    const c = drag.c; c.el.classList.remove("dragging");
+    if (!drag.moved) select(c.el);
+    else {
+      // A card carries a short throw; bounce only because momentum preceded it.
+      c.sx.value = c.x; c.sy.value = c.y;
+      c.sx.to(c.x + project(vx / cam.z, .99), { velocity: vx / cam.z, damping: .8 });
+      c.sy.to(c.y + project(vy / cam.z, .99), { velocity: vy / cam.z, damping: .8 });
+    }
+  } else {
+    scene.classList.remove("panning");
+    if (!drag.moved) select(null);
+    const b = panBounds();
+    camX.value = cam.x; camY.value = cam.y;
+    camX.to(clamp(cam.x + project(vx), b.minX, b.maxX), { velocity: vx, damping: 1, response: .55 });
+    camY.to(clamp(cam.y + project(vy), b.minY, b.maxY), { velocity: vy, damping: 1, response: .55 });
+  }
+  drag = null;
+});
+scene.addEventListener("wheel", e => {
+  e.preventDefault();
+  if (e.ctrlKey) {
+    const r = scene.getBoundingClientRect(), mx = e.clientX - r.left, my = e.clientY - r.top;
+    const z = clamp(cam.z * Math.exp(-e.deltaY * .0025), .4, 1.8), k = z / cam.z;
+    camX.set(mx - (mx - cam.x) * k); camY.set(my - (my - cam.y) * k); cam.z = z; applyCam();
+  } else {
+    camX.set(cam.x - e.deltaX); camY.set(cam.y - e.deltaY);
+  }
+}, { passive: false });
+
+/* Canvas toolbar */
+function renderCanvasTools() {
+  morph($("#voiceCap"), `<span class="hint">${icon("mic")}Hold <kbd>N</kbd> to speak</span>`, { cls: "" });
+  renderSearch(false);
+  morph($("#toolsCap"), `<button class="btn" id="centerBtn" aria-label="Center" title="Center">${icon("center")}</button>
+    <button class="btn" id="qBtn" aria-label="Questions, 2 waiting" title="2 questions waiting">${icon("q")}<span class="badge num" style="background:var(--orange)">2</span></button>
+    <button class="btn" aria-label="Options" title="Arrange, connections, groups">${icon("more")}</button>`);
+  morph($("#closeCap"), `<button class="btn" id="closeBtn" aria-label="Close canvas" title="Close">${icon("x")}</button>`);
+  $("#centerBtn").onclick = () => centerCam();
+  $("#qBtn").onclick = () => select($("#c-question"), true);
+  $("#closeBtn").onclick = closeCanvas;
+}
+let searching = false;
+function renderSearch(open) {
+  searching = open;
+  const cap = $("#searchCap");
+  if (open) {
+    morph(cap, `<span class="btn" style="pointer-events:none">${icon("search")}</span><input id="q" placeholder="Search the canvas" aria-label="Search the canvas" style="width:220px">`, { width: 266 });
+    setTimeout(() => $("#q")?.focus(), 30);
+    $("#q").addEventListener("input", e => {
+      const q = e.target.value.trim().toLowerCase();
+      cards.forEach(c => c.el.classList.toggle("dim", !!q && !(c.t + c.s).toLowerCase().includes(q)));
+    });
+  } else {
+    morph(cap, `<button class="btn" id="searchBtn" aria-label="Search" title="Search · Ctrl F">${icon("search")}</button>`);
+    $("#searchBtn").onclick = () => renderSearch(true);
+    cards.forEach(c => c.el.classList.remove("dim"));
+  }
+}
+let canvasOpen = false;
+const winSpring = new Spring(0, p => {
+  win.style.opacity = clamp(p * 1.5, 0, 1);
+  win.style.transform = `translateX(-50%) translateY(${(1 - p) * -24}px) scale(${.9 + .1 * p})`;
+}, { damping: .9, response: .42 });
+function openCanvas() {
+  closeMenu();
+  setScheme(win, state.appearance);
+  if (!canvasOpen) {
+    canvasOpen = true; win.style.display = "block";
+    $("#panel").classList.add("collapsed");
+    renderCanvasTools(); centerCam(false); drawLinks();
+    $$(".lens", win).forEach(watchLens);
+    winSpring.to(1);
+  }
+}
+function closeCanvas() {
+  if (!canvasOpen) return;
+  canvasOpen = false; closeInspector();
+  winSpring.to(0, { damping: 1, response: .3, done: () => { if (!canvasOpen) win.style.display = "none"; } });
+}
+$("#closeLight").onclick = closeCanvas;
+
+/* Inspector slides in from the trailing edge and leaves the same way. */
+const insp = $("#inspector");
+const inspSpring = new Spring(0, p => {
+  insp.style.transform = `translateX(${(1 - p) * 360}px)`;
+  insp.style.opacity = clamp(p * 2, 0, 1);
+}, { damping: .9, response: .4 });
+let selected = null;
+function select(el, center = false) {
+  if (selected) selected.classList.remove("selected");
+  selected = el;
+  if (!el) return closeInspector();
+  el.classList.add("selected");
+  const c = cards.find(k => k.el === el);
+  insp.innerHTML = `<button class="btn x" aria-label="Close details">${icon("x")}</button>
+    <div class="app ${c.app}">${c.l}</div><h2>${c.t}</h2><div class="sub">${c.s}</div>
+    <section><h3>Current situation</h3><div class="field">${c.q ? "Workspace compared both sheets. Costs includes deferred licences; Revenue doesn't. Anna asked for reviewed totals." : "Anna needs reviewed totals before Thursday's sign-off. Both sheets are in budget.xlsx."}</div></section>
+    <section><h3>Next step</h3><div class="field">${c.q ? "Choose a sheet so Workspace can draft the reply." : "Draft a short reply with both totals for your review."}</div></section>
+    <section><h3>Connected</h3>
+      <div class="src"><div class="app small teams">T</div><div><div>Anna Berg</div><div class="sub" style="font-size:12px">Teams · asked for the review</div></div></div>
+      <div class="src"><div class="app small excel">X</div><div><div>budget.xlsx</div><div class="sub" style="font-size:12px">Evidence for both totals</div></div></div>
+    </section>
+    <div class="foot"><button class="pill glass interactive">${icon("edge")}Open in Edge</button><button class="pill glass prominent interactive">${icon("spark")}Ask about this</button></div>`;
+  $(".x", insp).onclick = () => select(null);
+  $$(".interactive", insp).forEach(interactive);
+  if (insp.style.display !== "block") { insp.style.display = "block"; inspSpring.set(0); }
+  inspSpring.to(1);
+  watchLens(insp);
+  if (center) { const W = scene.clientWidth - 360, H = scene.clientHeight; camX.to(W / 2 - (c.x + 150) * cam.z); camY.to(H / 2 - (c.y + el.offsetHeight / 2) * cam.z); }
+}
+function closeInspector() { inspSpring.to(0, { done: () => { if (!selected) insp.style.display = "none"; } }); }
+
+addEventListener("keydown", e => {
+  if (e.key === "Escape") {
+    if (menuOpen) return closeMenu();
+    if (searching) return renderSearch(false);
+    if (selected) return select(null);
+    if (canvasOpen) return closeCanvas();
+  }
+  if (e.key === "f" && e.ctrlKey && canvasOpen) { e.preventDefault(); renderSearch(true); }
+});
+
+/* ── Demo controls ─────────────────────────────────────────────────── */
+const segSprings = new Map();
+function syncSeg(seg, instant) {
+  const v = seg.dataset.key in state ? state[seg.dataset.key] : null;
+  const btn = $(`button[data-v="${v}"]`, seg) || $("button", seg);
+  let thumb = $(".thumb", seg);
+  if (!thumb) { thumb = document.createElement("div"); thumb.className = "thumb"; seg.prepend(thumb); }
+  if (!segSprings.has(seg)) {
+    segSprings.set(seg, { x: new Spring(0, x => thumb.style.left = `${x}px`, { damping: .82, response: .34 }), w: new Spring(0, w => thumb.style.width = `${w}px`, { damping: .82, response: .34 }) });
+  }
+  const s = segSprings.get(seg);
+  instant ? (s.x.set(btn.offsetLeft), s.w.set(btn.offsetWidth)) : (s.x.to(btn.offsetLeft), s.w.to(btn.offsetWidth));
+}
+function syncControls(instant = false) {
+  $$(".seg").forEach(s => syncSeg(s, instant));
+  $$(".switch").forEach(sw => {
+    const k = sw.dataset.key;
+    const on = k in state ? state[k] : k === "refraction" ? root.dataset.refraction === "on" : root.classList.contains(k);
+    sw.classList.toggle("on", on); sw.setAttribute("aria-checked", on);
+    const knob = $(".knob", sw);
+    if (!sw._s) sw._s = new Spring(on ? 1 : 0, p => { knob.style.left = `${2 + 12 * p}px`; }, { damping: .7, response: .3 });
+    instant ? sw._s.set(on ? 1 : 0) : sw._s.to(on ? 1 : 0);
+  });
+}
+function applyGlobals() {
+  root.dataset.wallpaper = state.wallpaper; root.dataset.appearance = state.appearance; root.dataset.look = state.look; root.dataset.accent = state.accent;
+  setScheme($("#panel"), state.appearance); setScheme(menu, state.appearance); setScheme(sub, state.appearance); setScheme(phases, state.appearance); setScheme(win, state.appearance);
+}
+$$(".seg").forEach(seg => seg.addEventListener("click", e => {
+  const b = e.target.closest("button[data-v]"); if (!b) return;
+  state[seg.dataset.key] = b.dataset.v;
+  if (seg.dataset.key === "state") phases.innerHTML = "";
+  applyGlobals(); syncControls(); renderBar();
+}));
+$$(".switch").forEach(sw => {
+  sw.addEventListener("pointerdown", () => sw.classList.add("held"));
+  sw.addEventListener("pointerup", () => setTimeout(() => sw.classList.remove("held"), 160));
+  sw.addEventListener("pointerleave", () => sw.classList.remove("held"));
+  sw.addEventListener("click", () => {
+    const k = sw.dataset.key;
+    if (k in state) state[k] = !state[k];
+    else if (k === "refraction") root.dataset.refraction = root.dataset.refraction === "on" ? "off" : "on";
+    else root.classList.toggle(k);
+    syncControls(); renderBar();
+  });
+});
+$("#runAgent").onclick = runAgent;
+$("#openCanvas").onclick = () => canvasOpen ? closeCanvas() : openCanvas();
+$("#collapse").onclick = () => $("#panel").classList.toggle("collapsed");
+
+/* Fake code for the dark wallpaper. */
+(function code() {
+  const lines = [
+    `<span class="k">from</span> dataclasses <span class="k">import</span> <span class="t">dataclass</span>`,
+    `<span class="k">from</span> assistant.feed_origin <span class="k">import</span> <span class="t">App</span>`, ``,
+    `<span class="c"># Glass has no colour of its own; tint carries meaning only.</span>`,
+    `<span class="f">@dataclass</span>(<span class="v">frozen</span>=<span class="k">True</span>, <span class="v">slots</span>=<span class="k">True</span>)`,
+    `<span class="k">class</span> <span class="t">Material</span>:`,
+    `    <span class="v">fill</span>: <span class="t">float</span>`, `    <span class="v">blur</span>: <span class="t">float</span>`, `    <span class="v">rim</span>: <span class="t">float</span>`, ``,
+    `<span class="k">def</span> <span class="f">material</span>(<span class="v">size</span>: <span class="t">Size</span>, <span class="v">look</span>: <span class="t">Look</span>) -> <span class="t">Material</span>:`,
+    `    <span class="k">match</span> size, look:`,
+    `        <span class="k">case</span> <span class="t">Size</span>.SMALL, <span class="t">Look</span>.CLEAR:`,
+    `            <span class="k">return</span> <span class="t">Material</span>(<span class="n">0.20</span>, <span class="n">10</span>, <span class="n">0.9</span>)`,
+    `        <span class="k">case</span> <span class="t">Size</span>.LARGE, <span class="t">Look</span>.CLEAR:`,
+    `            <span class="k">return</span> <span class="t">Material</span>(<span class="n">0.66</span>, <span class="n">28</span>, <span class="n">0.9</span>)`,
+    `        <span class="k">case</span> _, <span class="t">Look</span>.TINTED:`,
+    `            <span class="k">return</span> <span class="t">Material</span>(<span class="n">0.86</span>, <span class="n">28</span>, <span class="n">0.6</span>)`, ``,
+    `<span class="k">def</span> <span class="f">concentric</span>(<span class="v">outer</span>: <span class="t">float</span>, <span class="v">inset</span>: <span class="t">float</span>) -> <span class="t">float</span>:`,
+    `    <span class="s">"""Nested corners share a centre."""</span>`,
+    `    <span class="k">return</span> <span class="f">max</span>(<span class="n">0.0</span>, outer - inset)`, ``,
+    `<span class="k">def</span> <span class="f">scheme_for</span>(<span class="v">luma</span>: <span class="t">float</span>) -> <span class="t">Scheme</span>:`,
+    `    <span class="k">return</span> <span class="t">Scheme</span>.DARK <span class="k">if</span> luma &lt; <span class="n">0.5</span> <span class="k">else</span> <span class="t">Scheme</span>.LIGHT`,
+  ];
+  const all = [...lines, ...lines, ...lines];
+  $("#src").innerHTML = all.join("\n"); $("#gutter").textContent = all.map((_, i) => i + 1).join("\n");
+})();
+
+/* Start from the viewer's own settings. */
+const mq = q => matchMedia(q).matches;
+state.appearance = mq("(prefers-color-scheme: light)") ? "light" : "dark";
+if (mq("(prefers-reduced-motion: reduce)")) root.classList.add("reduce-motion");
+if (mq("(prefers-reduced-transparency: reduce)")) root.classList.add("reduce-transparency");
+if (mq("(prefers-contrast: more)")) root.classList.add("increase-contrast");
+root.dataset.refraction = "on";
+const params = new URLSearchParams(location.search);
+for (const k of ["state", "wallpaper", "appearance", "look", "accent"]) if (params.has(k)) state[k] = params.get(k);
+for (const k of ["recording", "layer", "inbox"]) if (params.has(k)) state[k] = params.get(k) === "1";
+for (const k of ["reduce-transparency", "increase-contrast", "reduce-motion"]) if (params.get(k) === "1") root.classList.add(k);
+if (params.get("refraction") === "0") root.dataset.refraction = "off";
+applyGlobals(); renderBar();
+requestAnimationFrame(() => {
+  syncControls(true);
+  if (params.has("canvas")) openCanvas();
+  if (params.has("menu")) openMenu();
+  if (params.has("agent")) runAgent();
+  if (params.has("select")) setTimeout(() => select($(`#${params.get("select")}`)), 50);
+});
+</script>
+</body>
+</html>
