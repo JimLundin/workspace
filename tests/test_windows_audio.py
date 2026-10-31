@@ -43,18 +43,23 @@ class InputDevice:
     """
 
     __slots__ = (
+        "bound",
         "completion",
+        "default",
         "failure",
         "header",
         "now",
         "opened",
+        "opens",
         "position_bytes",
+        "position_kind",
         "positions",
         "release",
         "reset_entered",
         "speech",
         "spoken_at",
         "started_at",
+        "voices",
         "waits",
     )
 
@@ -69,8 +74,16 @@ class InputDevice:
         self.completion = Completion.RETURNED
         self.waits = self.positions = 0
         self.position_bytes = 0
+        self.position_kind = 4
+        """TIME_BYTES, or TIME_SAMPLES (2) as some drivers report instead."""
         self.reset_entered: threading.Event | None = None
         self.release: threading.Event | None = None
+        self.default: str | None = "headset"
+        """The endpoint Windows currently selects as the default capture device."""
+        self.bound: str | None = None
+        self.opens = 0
+        self.voices: dict[str | None, bytes] = {}
+        """What each endpoint other than the startup one hears."""
 
     def microphone(self) -> audio.Microphone:
         return audio.Microphone(RATE, 300, EventHandle(1), driver=self)
@@ -86,7 +99,8 @@ class InputDevice:
         self.now += 1.0
         if self.failure is Failure.OPEN:
             return 5, wintypes.HANDLE()
-        self.opened = True
+        self.opened, self.bound = True, self.default
+        self.opens += 1
         return 0, wintypes.HANDLE(1)
 
     def prepare(self, handle: wintypes.HANDLE, header: audio.WAVEHDR) -> int:
@@ -114,7 +128,8 @@ class InputDevice:
         if self.header is not None and self.started_at is not None:
             beginning = round((self.started_at - self.spoken_at) * RATE) * 2
             end = round((self.now - self.spoken_at) * RATE) * 2
-            recorded = self.speech[beginning:end]
+            speech = self.voices.get(self.bound, self.speech)
+            recorded = speech[beginning:end]
             ctypes.memmove(cast("int", self.header.lpData), recorded, len(recorded))
             self.header.dwBytesRecorded = len(recorded)
         if self.header is not None:
@@ -133,7 +148,8 @@ class InputDevice:
 
     def position(self, handle: wintypes.HANDLE, result: audio.MMTIME) -> int:
         self.positions += 1
-        result.kind, result.value = 4, self.position_bytes
+        result.kind = self.position_kind
+        result.value = self.position_bytes // 2 if self.position_kind == 2 else self.position_bytes
         return 5 if self.failure is Failure.POSITION else 0
 
     def wait(self, event: EventHandle, timeout_ms: int) -> bool:
@@ -146,6 +162,9 @@ class InputDevice:
             self.header.dwBytesRecorded = len(self.speech)
             self.header.dwFlags = 1
         return True
+
+    def device(self) -> str | None:
+        return self.default
 
     def say(self, mic: audio.Microphone) -> bytes:
         self.spoken_at = self.now  # speech starts with the key press
@@ -172,6 +191,34 @@ def test_captures_the_first_words_again_after_an_idle_pause() -> None:
         device.now += 60
         device.speech = SPEECH[::-1]
         assert device.say(mic) == device.speech
+    finally:
+        mic.close()
+
+
+def test_capture_follows_a_changed_default_device_without_losing_the_first_words() -> None:
+    # Defect: the handle opened at startup stays bound to the old default device,
+    # so dictation and the level meter keep observing a microphone Windows no longer selects.
+    device = InputDevice()
+    mic = device.microphone()
+    try:
+        assert device.say(mic) == SPEECH and device.opens == 1
+        device.voices["usb"] = SPEECH[::-1]
+        device.default = "usb"
+        mic.follow_default()
+        assert device.opens == 2
+        assert device.say(mic) == SPEECH[::-1], "Reopened while idle, so the press loses nothing."
+        mic.follow_default()
+        device.default = None
+        mic.follow_default()
+        assert device.opens == 2, "An unchanged or unobservable default keeps the ready handle."
+        device.voices["laptop"] = SPEECH[RATE:]
+        device.default = "laptop"
+        assert device.say(mic) == SPEECH[RATE:][RATE * 2 :] and device.opens == 3, "A press before the follower reopens on the new default."
+        assert mic.start() == 0
+        device.default = "usb"
+        mic.follow_default()
+        assert device.opens == 3, "A recording keeps its device until it stops."
+        mic.stop()
     finally:
         mic.close()
 
@@ -274,6 +321,19 @@ def test_live_meter_reads_recorded_pcm_without_trusting_the_unfinished_header() 
     device.position_bytes = len(pcm)
     assert mic.level() == 0.5
     assert mic.level() == 0  # No new data: don't invent continued activity.
+    ctypes.memmove(cast("int", device.header.lpData), b"\x00\x20" * 320, 640)
+    # Defect: after a default-device switch restarts the stream's position, the
+    # meter reports silence until the new position passes the old one.
+    device.position_bytes = 640
+    assert mic.level() == 0.25
+    ctypes.memmove(cast("int", device.header.lpData) + 640, b"\x00\x40" * 320, 640)
+    device.position_bytes = 1280
+    assert mic.level() == 0.5, "Only the PCM recorded since the previous read is measured."
+    # Defect: a driver reporting TIME_SAMPLES is read as bytes, so the meter lags at half the data.
+    ctypes.memmove(cast("int", device.header.lpData) + 1280, b"\x00\x20" * 320, 640)
+    device.position_kind, device.position_bytes = 2, 1920
+    assert mic.level() == 0.25
+    device.position_kind = 4
     device.failure = Failure.POSITION
     assert mic.level() is None
     device.failure = Failure.NONE

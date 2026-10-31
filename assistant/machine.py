@@ -25,10 +25,10 @@ lazy from assistant.browser_requests import BrowserRequest
 lazy from assistant.browser_session import Product
 lazy from assistant.geometry import Shot, fit, half
 lazy from assistant.png import encode_png
-lazy from assistant.recording_state import AudioSource
 lazy from assistant.textio import paste_text
 lazy from assistant.uia import UiRequest
 lazy from assistant.web_apps import Located, WebAppOperation
+lazy from automation.capture import AudioSource
 lazy from winapi import clipboard, inputs, screen, system, windows
 
 _EXTENDED_VKS: Final = frozenset({0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27, 0x28, 0x2C, 0x2D, 0x2E, 0x5B, 0x5D, 0x90})

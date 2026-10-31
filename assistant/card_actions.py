@@ -7,16 +7,14 @@ parses to None and does nothing.
 
 from collections.abc import Mapping
 from dataclasses import dataclass
-from enum import Enum
 from typing import assert_never
 from urllib.parse import parse_qs, urlencode, urlsplit
 
+from automation.task import ApprovalDecision
+
 _SCHEME = "workspace"
-
-
-class Decision(Enum):
-    APPROVE = "approve"
-    DECLINE = "decline"
+# The link's wire words for each decision; parsing accepts exactly these.
+_DECISIONS: Mapping[ApprovalDecision, str] = frozendict({ApprovalDecision.APPROVED: "approve", ApprovalDecision.DECLINED: "decline"})
 
 
 @dataclass(frozen=True, slots=True)
@@ -29,7 +27,7 @@ class AnswerApproval:
     """Decide the agent's pending approval this card previews."""
 
     request: str
-    decision: Decision
+    decision: ApprovalDecision
 
 
 type CardAction = OpenCanvas | AnswerApproval
@@ -40,7 +38,7 @@ def encode(action: CardAction) -> str:
         case OpenCanvas(target=target):
             return _link("canvas", {"target": target})
         case AnswerApproval(request=request, decision=decision):
-            return _link("agent-option", {"request": request, "answer": decision.value})
+            return _link("agent-option", {"request": request, "answer": _DECISIONS[decision]})
         case _:
             assert_never(action)
 
@@ -62,9 +60,7 @@ def parse(link: str) -> CardAction | None:
         case "canvas", {"target": str(target)} if len(values) == 1 and target:
             return OpenCanvas(target)
         case "agent-option", {"request": str(request), "answer": str(answer)} if len(values) == 2:
-            try:
-                return AnswerApproval(request, Decision(answer))
-            except ValueError:
-                return None
+            decision = next((decision for decision, word in _DECISIONS.items() if word == answer), None)
+            return AnswerApproval(request, decision) if decision is not None else None
         case _:
             return None

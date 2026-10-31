@@ -1,7 +1,7 @@
 from datetime import UTC, datetime
 from unittest import TestCase
 
-from assistant.system_notices import Notice, NoticeKey, Observed, arrivals, creation_time
+from winapi.system_notices import Notice, NoticeKey, Observed, arrivals, creation_time
 
 
 def notice(identity: int, created: int, body: str = "Message") -> Notice:

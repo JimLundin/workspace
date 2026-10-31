@@ -5,9 +5,9 @@ from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from typing import assert_never
 
-from assistant.activity import ContextSnapshot
 from assistant.feed_history import Decision
 from assistant.feed_triage import Board
+from automation.activity import ContextSnapshot
 from automation.context import ContextSelection, ContextStore, ProjectNote, select_context
 from automation.store import TaskStore
 from automation.task import (

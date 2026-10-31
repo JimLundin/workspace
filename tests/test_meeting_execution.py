@@ -16,22 +16,22 @@ from typing import cast
 
 import tests.test_outlook
 from assistant import outlook
-from assistant.activity import Activity, ContextSnapshot
 from assistant.agent import Agent
 from assistant.agent_execution import AgentExecution, unseen
 from assistant.agent_tools import Output
 from assistant.agent_toolsets import MeetingFollowupTools
-from assistant.llm import Json, Settings, ToolCall
+from assistant.llm import Settings, ToolCall
 from assistant.meeting_execution import MeetingWork
-from assistant.meeting_followup import parse_followup
 from assistant.meeting_followup_store import FollowupStore
 from assistant.meeting_preparation import Preparations
 from assistant.outlook import OutlookDrafts, PowerShellOutlook, read_eml
 from assistant.task_profiles import RequestContext
 from assistant.workspace import Workspace
 from automation.actions import Resources
+from automation.activity import Activity, ContextSnapshot
 from automation.execution import WorkExecution
 from automation.files import filesystem_path
+from automation.json_value import Json
 from automation.store import TaskStore
 from automation.task import (
     Action,
@@ -49,7 +49,7 @@ from automation.task import (
 )
 from tests.fake_endpoint import FakeEndpoint, fake_endpoint
 from tests.test_agent import FakeMachine, FakeWindow, calls, says
-from tests.test_meeting_followup import BODY, NOTICE, followup_response, followup_sources, response_item
+from tests.test_meeting_followup import BODY, NOTICE, followup_response, followup_sources, resolved, response_item
 from tests.test_workspace import live_tree
 from winapi.shapes import Window
 
@@ -175,7 +175,7 @@ def test_sdk_publishes_sourced_notes_complete_email_and_verified_durable_actions
     rig = MeetingRig(tmp_path)
     body = BODY + "\n\n" + "Please review the recorded actions. Åäö.\n" * 550 + "Complete final sentence.\n"
     response_item(rig.response, "drafts")["body"] = body
-    planned = rig.packages.plan(rig.prepared.task_id, parse_followup(rig.bundle, json.dumps(rig.response)))
+    planned = rig.packages.plan(rig.prepared.task_id, resolved(rig.bundle, rig.response))
     claim = rig.claim()
     with fake_endpoint() as endpoint:
         endpoint.replies = [
@@ -244,7 +244,7 @@ def test_published_package_without_verified_mail_save_cannot_complete(tmp_path: 
             rig.response["drafts"] = [first, {**first, "id": "review-reminder", "subject": "Customer review reminder"}]
         try:
             claim = rig.claim()
-            planned = rig.packages.plan(claim.task.id, parse_followup(rig.bundle, json.dumps(rig.response)))
+            planned = rig.packages.plan(claim.task.id, resolved(rig.bundle, rig.response))
             with fake_endpoint() as endpoint:
                 endpoint.replies = [
                     calls(("meeting_publish_followup", {"followup": rig.response})),
@@ -271,8 +271,8 @@ def test_saved_mail_receipt_must_belong_to_the_selected_package_version(tmp_path
     rig = MeetingRig(tmp_path)
     claim = rig.claim()
     updated: dict[str, Json] = {**rig.response, "title": "Reviewed release planning follow-through"}
-    first_plan = rig.packages.plan(claim.task.id, parse_followup(rig.bundle, json.dumps(rig.response)))
-    second_plan = rig.packages.plan(claim.task.id, parse_followup(rig.bundle, json.dumps(updated)))
+    first_plan = rig.packages.plan(claim.task.id, resolved(rig.bundle, rig.response))
+    second_plan = rig.packages.plan(claim.task.id, resolved(rig.bundle, updated))
     assert first_plan.version != second_plan.version
     assert first_plan.followup.drafts == second_plan.followup.drafts
     first_mail = DraftEffects(rig.drafts)

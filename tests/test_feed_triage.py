@@ -30,7 +30,7 @@ from assistant.feed_triage import (
     saved,
     unassessed,
 )
-from assistant.llm import Json
+from automation.json_value import Json
 from tests.feed_source_fixture import captured
 from tests.json_fixture import json_object, json_rows
 lazy from assistant.feed_agent_tools import validated

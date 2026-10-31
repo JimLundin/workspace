@@ -488,7 +488,7 @@ class AgentToasts:
             case OpenCanvas(target=target):
                 self.canvas_open(target)
             case AnswerApproval(request=request, decision=decision):
-                self.agent.respond(request, decision.value)
+                self.agent.respond(request, decision)
             case None:
                 pass
             case _:

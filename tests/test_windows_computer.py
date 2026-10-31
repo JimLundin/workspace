@@ -17,9 +17,9 @@ if sys.platform != "win32":
 
 from assistant import commands, uia
 from assistant.geometry import Shot, fit
-from assistant.llm import Json
 from assistant.machine import CaptureSources, WinMachine
 from assistant.uia import Act, Inspect, UiRequest
+from automation.json_value import Json
 from tests.test_windows_machine import Browser, Desktop
 from winapi.shapes import Rect
 

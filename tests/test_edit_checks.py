@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 from typing import cast
 
-from assistant.llm import Json
+from automation.json_value import Json
 from scripts.architecture import Report, dependencies
 from scripts.check import (
     CheckRun,

@@ -19,13 +19,14 @@ from assistant.browser_values import BrowserError
 from assistant.desktop_tools import allowed, key_strokes
 from assistant.feed_agent_tools import request
 from assistant.geometry import Shot
-from assistant.llm import Json, Settings, ToolCall, settings_from
+from assistant.llm import Settings, ToolCall, settings_from
 from assistant.uia import UiRequest
 from assistant.web_apps import Located, WebAppOperation
 from assistant.work_bridge_contracts import BridgeCommand
 from assistant.workspace import Workspace
 from automation.actions import Resources
 from automation.execution import ApprovalReview, WorkExecution
+from automation.json_value import Json
 from automation.presentation import LiveMessage, Succeeded, ToolActivity, ToolStatus
 from automation.store import TaskStore
 from automation.task import RequestSource

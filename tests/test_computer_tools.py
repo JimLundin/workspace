@@ -5,13 +5,14 @@ import threading
 import time
 from pathlib import Path
 
-from assistant.activity import Activity, ContextSnapshot
 from assistant.agent import Agent
 from assistant.agent_toolsets import General
 from assistant.geometry import Shot
-from assistant.llm import Json, Settings, ToolCall
+from assistant.llm import Settings, ToolCall
 from automation.actions import Change, Observation, Resources, target
+from automation.activity import Activity, ContextSnapshot
 from automation.execution import WorkExecution
+from automation.json_value import Json
 from tests.fake_endpoint import fake_endpoint
 from tests.test_agent import FakeMachine, FakeWindow, Rig, ToolRig, calls, durable, says
 from tests.test_work_actions import claimed

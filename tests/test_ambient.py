@@ -2,8 +2,9 @@
 
 import unittest
 
-from assistant.ambient import Ambient, Battery, PowerUnavailable, Speakers, SystemStatus, Weather, Wifi
+from assistant.ambient import Ambient, SystemStatus, Weather
 from assistant.bar_weather import weather_response
+from winapi.machine_status import Battery, PowerUnavailable, Speakers, Wifi
 
 
 def test_idle_facts_have_time_and_real_battery_or_explicit_unavailability() -> None:

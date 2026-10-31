@@ -20,7 +20,7 @@ from assistant.browser_session import BrowserConnection, BrowserSession, NativeS
 from assistant.browser_values import BrowserError, BrowserStatus, PageList
 from assistant.communications import SourceDate, SourceDateHint, SourceDateStatus, TeamsActivity, UpdateKind
 from assistant.communications_browser import TeamsWeb
-from assistant.llm import Json
+from automation.json_value import Json
 from tests.browser_fixture import fixture
 from tests.native_browser_fixture import request
 

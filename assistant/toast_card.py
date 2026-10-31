@@ -573,8 +573,8 @@ class Card:
         match self.content:
             case Turn(state=Working()):
                 self.owner.agent.stop()
-            case Recording() if self.owner.agent.on_recording is not None:
-                self.owner.agent.on_recording("stop")
+            case Recording():
+                self.owner.agent.stop_recording()
             case _:
                 pass
 

@@ -1,91 +1,45 @@
 """The meeting tool family: capture by voice, and the bounded tools of a prepared follow-through task."""
 
 from collections.abc import Callable, Mapping
+from dataclasses import dataclass
 from typing import Final
 
 from pydantic import ConfigDict, TypeAdapter
 
 from assistant import outlook
 from assistant.agent_tools import DECLINED, TEXT, AdapterReadback, Args, ArgumentError, Display, Output, Session, Tool, fixed, schema
-from assistant.llm import Json, ToolSpec, tool_spec
+from assistant.llm import ToolSpec, tool_spec
 from assistant.meeting_execution import MeetingRun, encoded, verified_mail
+from assistant.meeting_followup import FOLLOWUP_CLAIMS, MAX_MODEL_BYTES, FollowupClaims
 from automation.actions import Change, Evidence, Observation, Operation, target
 from automation.execution import ProofRule
+from automation.json_value import Json
 
 
 def _object(properties: dict[str, Json], required: tuple[str, ...]) -> dict[str, Json]:
     return {"type": "object", "properties": properties, "required": list(required), "additionalProperties": False}
 
 
-def _array(items: dict[str, Json], maximum: int, *, minimum: int = 0) -> dict[str, Json]:
-    return {"type": "array", "items": items, "minItems": minimum, "maxItems": maximum}
-
-
 _VALUE = TypeAdapter(Json, config=ConfigDict(allow_inf_nan=False))
+_SCHEMA = TypeAdapter(dict[str, Json])
 _TEXT: Final[dict[str, Json]] = {"type": "string"}
-_CITATION: Final = _object(
-    {
-        "source_id": _TEXT,
-        "quote": {"type": "string", "minLength": 1, "maxLength": 4000},
-        "occurrence": {"type": "integer", "minimum": 0, "description": "Zero-based occurrence, needed only when the exact quote repeats."},
-    },
-    ("source_id", "quote"),
-)
-_CITATIONS: Final = _array(_CITATION, 8, minimum=1)
-_STATEMENT: Final = _object({"text": _TEXT, "citations": _CITATIONS}, ("text", "citations"))
-_UNSPECIFIED: Final = _object({"kind": {"type": "string", "enum": ["unspecified"]}}, ("kind",))
-_OWNER: Final[dict[str, Json]] = {
-    "anyOf": [
-        _UNSPECIFIED,
-        _object({"kind": {"type": "string", "enum": ["named"]}, "name": _TEXT, "evidence": _CITATION}, ("kind", "name", "evidence")),
-    ]
-}
-_DUE: Final[dict[str, Json]] = {
-    "anyOf": [
-        _UNSPECIFIED,
-        _object({"kind": {"type": "string", "enum": ["stated"]}, "text": _TEXT, "evidence": _CITATION}, ("kind", "text", "evidence")),
-    ]
-}
-_ACTION: Final = _object(
-    {
-        "id": _TEXT,
-        "text": _TEXT,
-        "citations": _CITATIONS,
-        "owner": _OWNER,
-        "due": _DUE,
-    },
-    ("id", "text", "citations", "owner", "due"),
-)
-_RECIPIENT: Final = _object(
-    {
-        "name": _TEXT,
-        "email": {"type": ["string", "null"]},
-        "citations": _CITATIONS,
-    },
-    ("name", "email", "citations"),
-)
-_DRAFT: Final = _object(
-    {
-        "id": _TEXT,
-        "subject": _TEXT,
-        "body": _TEXT,
-        "recipients": _array(_RECIPIENT, 30),
-        "citations": _CITATIONS,
-        "action_ids": _array(_TEXT, 100),
-    },
-    ("id", "subject", "body", "recipients", "citations", "action_ids"),
-)
-_FOLLOWUP: Final = _object(
-    {
-        "source_digest": _TEXT,
-        "title": _TEXT,
-        "notes": _array(_STATEMENT, 64, minimum=1),
-        "decisions": _array(_STATEMENT, 64),
-        "actions": _array(_ACTION, 100),
-        "drafts": _array(_DRAFT, 24),
-    },
-    ("source_digest", "title", "notes", "decisions", "actions", "drafts"),
-)
+
+
+@dataclass(frozen=True, slots=True)
+class _Publication:
+    """The publish tool's arguments; the follow-up claims adapter owns their contract."""
+
+    followup: FollowupClaims
+    __pydantic_config__ = ConfigDict(extra="forbid", strict=True)
+
+
+_PUBLICATION = TypeAdapter(_Publication)
+
+
+def _publication_schema() -> dict[str, Json]:
+    observed: object = _PUBLICATION.json_schema()
+    return _SCHEMA.validate_python(observed)
+
 
 CAPTURE_SPECS: Final = (
     tool_spec(
@@ -117,7 +71,7 @@ SPECS: Final = (
         "when not stated. Do not infer a speaker's identity from unlabeled speech. Recipient names and any email address "
         "need literal evidence attached to the draft. Unknown addresses are null; an unaddressed draft is valid. "
         "Draft action_ids must refer to the included actions. Same content reuses its verified package; user edits are preserved.",
-        _object({"followup": _FOLLOWUP}, ("followup",)),
+        _publication_schema(),
     ),
     tool_spec(
         "meeting_followup_result",
@@ -235,11 +189,14 @@ class MeetingFollowup:
         return self.session.effect(operation, lambda: Output(encoded(result)))
 
     def publish(self, args: Args) -> Output:
-        publication = self.run.publication(args.values.get("followup"))
+        if len(args.payload) > MAX_MODEL_BYTES:
+            raise ArgumentError("The follow-up exceeds its size limit.")
+        claims = _PUBLICATION.validate_json(args.payload).followup
+        publication = self.run.publication(claims)
         operation = Operation.of(
             args.tool, {"task_id": self.run.request.task_id, "version": publication.version, "path": publication.verification.path}
         )
-        preview = _VALUE.dump_json(args.values.get("followup"), indent=2).decode()
+        preview = FOLLOWUP_CLAIMS.dump_json(claims, indent=2).decode()
         if not self.session.approve(operation, "Save this meeting follow-up?", preview):
             return Output(DECLINED, ok=False)
         return self.session.effect(operation, lambda: Output(encoded(self.run.publish(publication))), publication.verification)

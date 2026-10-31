@@ -2,7 +2,7 @@
 
 from dataclasses import replace
 
-from assistant.agent_session import Answered, Begin, ChatMessage, Enqueued, RecordingUpdated, Resolution, Result, Session, StopRequested, transition
+from assistant.agent_session import Begin, ChatMessage, Enqueued, RecordingUpdated, Resolution, Result, Session, StopRequested, transition
 from assistant.notification_text import details, spans
 from assistant.notifications import (
     MAX_VISIBLE,
@@ -37,7 +37,7 @@ from assistant.notifications import (
 )
 from assistant.recording_state import RecordingState
 from automation.presentation import Answer, Failed, Finished, Progress, ReasoningSummary, Said, StreamState, Succeeded, ToolActivity
-from automation.task import ApprovalDecision
+from automation.task import ApprovalDecision, TextAnswer
 from tests.agent_requests import asked, reviewed
 
 
@@ -240,7 +240,7 @@ def test_voice_response_stays_with_its_question_then_moves_into_steps() -> None:
     session = transition(Session(identity="one"), Begin("Find it", 1))
     session = transition(session, asked("question", "Which workbook?", "Choose a filename.", 2))
     stack = advance(Stack(), session, 100)
-    session = transition(session, Resolution("question", Answered("The revenue sheet")))
+    session = transition(session, Resolution("question", TextAnswer("The revenue sheet")))
     stack = advance(stack, session, 101)
     turn = bubble(stack)
     assert [toast.key for toast in stack.toasts] == [TurnKey(0)]
@@ -261,7 +261,7 @@ def test_standalone_question_keeps_its_answer_in_the_same_bubble() -> None:
     assert [toast.key for toast in stack.toasts] == [TurnKey(-1)]
     turn = bubble(stack, -1)
     assert isinstance(turn.state, Working) and turn.state.phase is Busy.WAITING and not spinning(turn)
-    session = transition(session, Resolution("question", Answered("Yes")))
+    session = transition(session, Resolution("question", TextAnswer("Yes")))
     stack = advance(stack, session, 101)
     assert [toast.key for toast in stack.toasts] == [TurnKey(-1)]
     assert body(bubble(stack, -1)) == "Open the workbook?\n\nbudget.xlsx\n\nYes"

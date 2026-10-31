@@ -179,7 +179,9 @@ tiles; Apps + Esc opens the keyboard window switcher.
 
 
 The dictation microphone is opened when Workspace starts and kept ready between
-captures, so you can speak as soon as you press a talk key. Dictation records only
+captures, so you can speak as soon as you press a talk key. When the Windows
+default microphone changes, Workspace reopens it on the new default within a few
+seconds, or at the next press; dictation and the bar's waveform share it. Dictation records only
 while the key is held, and the microphone is released when Workspace quits. On release,
 Workspace waits for Windows to return the complete recording before transcribing
 it. A failed or incomplete buffer is reported instead of sending partial audio.

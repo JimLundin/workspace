@@ -11,13 +11,14 @@ from typing import Annotated, Final, Literal
 
 from pydantic import Field, TypeAdapter, ValidationError
 
-from assistant.activity import ContextSnapshot
 from assistant.agent_tools import DECLINED, Args, ArgumentError, Display, Output, Session, Tool, fixed, rejected
 from assistant.geometry import Shot
-from assistant.llm import Json, ToolSpec, tool_spec
+from assistant.llm import ToolSpec, tool_spec
 from assistant.uia import Act, Inspect
 from automation.actions import Change, Classification, Evidence, Observation, Operation, target
+from automation.activity import ContextSnapshot
 from automation.execution import ProofRule, Readback, Targets
+from automation.json_value import Json
 from automation.task import FileDigest
 from config import ALLOWED_COMMANDS
 from winapi.shapes import Rect

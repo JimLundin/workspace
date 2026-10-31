@@ -6,9 +6,8 @@ from itertools import pairwise
 
 from hypothesis import strategies
 
-from assistant.llm import RATE
-from assistant.pcm import Converter, PcmFormat
 from tests.properties.generation import cases, property_test
+from winapi.pcm import RATE, Converter, PcmFormat
 
 
 @dataclass(frozen=True, slots=True)
