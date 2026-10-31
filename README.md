@@ -375,16 +375,6 @@ is evidence; it does not authorize sends or command approvals. Outlook, Teams
 and Kanban tools use their signed-in Edge pages and preserve existing drafts.
 Rendered pages and active filters bound source coverage.
 
-Both Codex CLI and Claude Code have installed hooks for questions, permission
-requests and turn attention. Answers stay attached to the exact provider,
-session and request. Timeout, cancellation or Workspace exit restores ordinary
-console interaction without granting permissions. New CLI sessions load the
-configuration. Codex's installed definitions have completed its one-time trust
-review. Claude receives answers through updatedInput; Codex receives the user's
-answer as model-visible hook feedback because its protocol does not support
-native question-result replacement. `scripts/install_inbox_hooks.py` preserves
-other handlers and backs up changes.
-
 Handling an activity tries its exact **Mark as read** action and checks the
 result. The source status reports an unconfirmed read action explicitly.
 Handling a Windows notification dismisses that exact notification. Handling a

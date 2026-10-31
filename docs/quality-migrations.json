@@ -220,15 +220,6 @@
     {
       "key": {
         "rule": "PLR0913",
-        "path": "assistant/console_requests.py",
-        "scope": "request",
-        "signature": "ce8d369dd6abf707491d891e3a29fde0e6cc14329217139eac5cbc981be1fe43"
-      },
-      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
-    },
-    {
-      "key": {
-        "rule": "PLR0913",
         "path": "assistant/desktop.py",
         "scope": "WinDesktop.__init__",
         "signature": "8afb51115d56226bd7259633fee9c2ecd4dc74b94400c0f0abb216618f6ca89b"

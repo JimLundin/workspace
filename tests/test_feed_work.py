@@ -136,7 +136,7 @@ def test_registered_reply_tool_saves_instruction_before_handoff_and_reuses_it_af
         tasks.submit(task, item.title, prompt, RequestSource("feed", profile), at=clock())
 
     endpoint = tmp_path / "bridge.json"
-    triage = TriageFixture(feed_store, lambda _batch, _rules: "{}", lambda _: False, submit=queue)
+    triage = TriageFixture(feed_store, lambda _batch, _rules: "{}", submit=queue)
     bridge = feed_bridge(endpoint, triage)
     rig = ToolRig(work=WorkExecution(claim, tasks, Resources(), clock=clock), feed_request=lambda data: request(data, endpoint))
     reply = FeedReply(item.identity, proposal_revision(item), "user-turn-one", words)
@@ -154,7 +154,7 @@ def test_registered_reply_tool_saves_instruction_before_handoff_and_reuses_it_af
     finally:
         bridge.close()
         triage.close()
-    restarted = TriageFixture(feed_store, lambda _batch, _rules: "{}", lambda _: False, submit=queue)
+    restarted = TriageFixture(feed_store, lambda _batch, _rules: "{}", submit=queue)
     try:
         restarted.command(reply)
         assert len(submitted) == 2 and submitted[0] == submitted[1]
@@ -186,7 +186,6 @@ def test_failed_feed_save_cannot_start_reply_work_and_failed_queue_keeps_retryab
     failed = TriageFixture(
         broken,
         lambda _batch, _rules: "{}",
-        lambda _: False,
         submit=lambda task, _prompt, _profile: submitted.append(task),
     )
     try:
@@ -201,7 +200,7 @@ def test_failed_feed_save_cannot_start_reply_work_and_failed_queue_keeps_retryab
 
     store = MemoryStore()
     store.data = saved(Board(enabled=True, items=(item,)))
-    queued = TriageFixture(store, lambda _batch, _rules: "{}", lambda _: False, submit=unavailable)
+    queued = TriageFixture(store, lambda _batch, _rules: "{}", submit=unavailable)
     try:
         with TestCase().assertRaises(OSError):
             queued.command(command)
@@ -219,7 +218,7 @@ def test_context_changes_reconsider_open_work_without_reopening_handled_items(tm
     item = replace(decode(output(([source.identity], "action")), (source,))[0], reviewed_on=day)
     store = MemoryStore()
     store.data = saved(Board(enabled=True, items=(replace(item, disposition=Disposition.QUIET),)))
-    triage = TriageFixture(store, lambda _batch, _rules: "{}", lambda _: False)
+    triage = TriageFixture(store, lambda _batch, _rules: "{}")
     try:
         assert not unassessed(triage.board, (source,), today=day)
         triage.context_changed((), ())

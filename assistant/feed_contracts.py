@@ -93,14 +93,6 @@ class ChooseSolution:
 
 
 @dataclass(frozen=True, slots=True)
-class AnswerConsole:
-    request_id: ItemIdentity
-    question_index: Annotated[int, Field(strict=True, ge=0, lt=32)]
-    text: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=4096, pattern=r"^[^\x00]+$")]
-    operation: Literal["console_answer"] = "console_answer"
-
-
-@dataclass(frozen=True, slots=True)
 class SaveRule:
     text: CommandText
     operation: Literal["rule"] = "rule"
@@ -160,7 +152,7 @@ type BoardEdit = Annotated[
     SaveRule | ForgetRule | ClearRules | CompleteItem | QuietItem | DismissItem | RejectProposal | ReviseProposal,
     Field(discriminator="operation"),
 ]
-type FeedCommand = Annotated[ReadFeed | ChooseSolution | AnswerConsole | FeedReply | BoardEdit, Field(discriminator="operation")]
+type FeedCommand = Annotated[ReadFeed | ChooseSolution | FeedReply | BoardEdit, Field(discriminator="operation")]
 
 
 @dataclass(frozen=True, slots=True)
@@ -252,25 +244,6 @@ class StoredBoard:
 STORED_BOARD = TypeAdapter(StoredBoard)
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class ConsoleOptionQuestion:
-    index: int
-    text: str
-    multiple: bool
-    options: tuple[str, ...]
-
-
-@dataclass(frozen=True, slots=True, kw_only=True)
-class ConsolePendingRequest:
-    id: str
-    provider: str
-    title: str
-    detail: str
-    created_at: str | None
-    approval: bool
-    questions: tuple[ConsoleOptionQuestion, ...]
-
-
 @dataclass(frozen=True, slots=True)
 class RejectedDecision:
     item: str
@@ -296,7 +269,6 @@ class FeedSnapshot:
     unavailable_items: tuple[str, ...]
     quiet_reactions: int
     sources: tuple[SourceEvidence, ...]
-    console_questions: tuple[ConsolePendingRequest, ...]
 
 
 @dataclass(frozen=True, slots=True)
@@ -314,12 +286,6 @@ class ChosenHandoff:
     decision: str
     choice: str
     accepted: Literal[True] = field(default=True, kw_only=True)
-
-
-@dataclass(frozen=True, slots=True)
-class ConsoleAnswered:
-    answered: str
-    question_index: int
 
 
 @dataclass(frozen=True, slots=True)

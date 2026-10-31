@@ -449,7 +449,6 @@ Use only supplied or actually retrieved evidence. Never claim an action was perf
 not unrelated requests or a quiet source alongside actionable work merely because they arrived together.
 Hide reactions, thanks, acknowledgements, duplicate notices, routine status updates and FYI with no next action as quiet.
 Surface direct questions, requests, meaningful deadlines, meeting decisions and failed or uncertain sends. Be selective.
-Explicit console questions and approvals are routed separately and cannot be hidden by this triage.
 Rank work by consequence, actual deadlines and whether another person is blocked, not by newest arrival.
 Priority 2: time-critical, a meaningful risk or a person blocked on the user. Priority 1: a useful next action today.
 Priority 0: actionable but can wait. reviewed_at is the current local date/time in ISO 8601, with its UTC offset.

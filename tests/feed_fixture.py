@@ -11,7 +11,6 @@ from collections.abc import Callable
 from pathlib import Path
 from queue import Queue
 
-from assistant.console_requests import Command
 from assistant.feed_contracts import FeedCommand, FeedRejected
 from assistant.feed_sources import Candidate
 from assistant.feed_triage_service import Store, Triage
@@ -48,7 +47,6 @@ class TriageFixture(Triage):
         self,
         store: Store,
         model: Callable[[tuple[Candidate, ...], tuple[str, ...]], str],
-        console: Callable[[Command], bool],
         *,
         submit: Callable[[str, str, Profile], None] | None = None,
         clock: Callable[[], float] = time.time,
@@ -56,7 +54,7 @@ class TriageFixture(Triage):
     ) -> None:
         # Preserve the real owner's dependency interface rather than hide it in options.
         self.delays: Queue[tuple[float, threading.Event]] = Queue()
-        super().__init__(store, model, console, submit=submit, wait=self.wait_for_stop, clock=clock, work=work)
+        super().__init__(store, model, submit=submit, wait=self.wait_for_stop, clock=clock, work=work)
 
     def wait_for_stop(self, stopped: threading.Event, timeout: float) -> bool:
         released = threading.Event()

@@ -135,23 +135,6 @@ def test_native_development_tools_can_coexist_with_deployment_only_from_the_revi
     assert role_for((str(interpreter), "-m", "unrelated"), windowed=False, editor=editor) == "runtime"
 
 
-def test_only_the_exact_installed_console_hook_is_external_to_the_application_process_tree() -> None:
-    root = PureWindowsPath(r"C:\Users\Jim.Lundin\Downloads\workspace-sdk\workspace")
-    interpreter = str(PYTHON)
-    hook = str(root / "scripts" / "inbox_hook.py")
-    for provider in ((), ("--codex",), ("--claude",)):
-        assert role_for((interpreter, hook, *provider), windowed=False) is None
-    for command in (
-        (interpreter, hook, "--other"),
-        (interpreter, hook, "--codex", "extra"),
-        (interpreter, str(root / "scripts" / "unrelated.py"), "--codex"),
-        (r"C:\elsewhere\python.exe", hook, "--codex"),
-        (interpreter, "-c", hook),
-    ):
-        assert role_for(command, windowed=False) == "runtime"
-    assert role_for((interpreter, hook), windowed=True) == "runtime"
-
-
 def test_staging_includes_nested_native_helpers_and_the_checked_source(tmp_path: Path) -> None:
     # Adding a native helper must not leave the release unable to create its stage.
     if shutil.which("git") is None:
