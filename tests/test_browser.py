@@ -109,11 +109,19 @@ def connected_browser(
     return browser
 
 
+PRESENTED: tuple[dict[str, Json], ...] = (
+    {"frameTree": {"frame": {"id": "main", "url": "https://example.com"}}},
+    {"executionContextId": 1},
+    {"result": {"value": True}},
+)
+
+
 def screenshot_channel() -> Channel:
     return Channel.results(
         {"targetInfos": [{"type": "page", "targetId": "fixture"}]},
         {"sessionId": "page-session"},
         {},
+        *PRESENTED,
         {"data": base64.b64encode(VIEWPORT_PNG).decode("ascii")},
         {},
     )
@@ -349,11 +357,19 @@ def test_browser_screenshot_resets_focus_before_returning_the_image(tmp_path: Pa
         assert "viewport" in result.text
         assert not channel.replies, "The focus reset must be acknowledged before the image is returned."
         assert not channel.closed and browser.connection is not None
-        assert [(call["method"], call["params"], call.get("sessionId")) for call in channel.sent[2:]] == [
-            ("Emulation.setFocusEmulationEnabled", {"enabled": True}, "page-session"),
-            ("Page.captureScreenshot", {"format": "png", "captureBeyondViewport": False}, "page-session"),
-            ("Emulation.setFocusEmulationEnabled", {"enabled": False}, "page-session"),
+        # Defect: capturing a just-shown background tab before it presents a
+        # frame, which Chromium answers with an empty copy.
+        assert [(call["method"], call.get("sessionId")) for call in channel.sent[2:]] == [
+            ("Emulation.setFocusEmulationEnabled", "page-session"),
+            ("Page.getFrameTree", "page-session"),
+            ("Page.createIsolatedWorld", "page-session"),
+            ("Runtime.evaluate", "page-session"),
+            ("Page.captureScreenshot", "page-session"),
+            ("Emulation.setFocusEmulationEnabled", "page-session"),
         ]
+        presented = channel.sent[5]["params"]
+        assert isinstance(presented, dict) and presented["contextId"] == 1 and "requestAnimationFrame" in cast(str, presented["expression"])
+        assert [call["params"] for call in channel.sent[2::5]] == [{"enabled": True}, {"enabled": False}]
     finally:
         browser.close()
 
@@ -364,6 +380,7 @@ def test_browser_bad_screenshot_resets_focus_before_reporting_a_tool_error(tmp_p
             {"targetInfos": [{"type": "page", "targetId": "fixture"}]},
             {"sessionId": "page-session"},
             {},
+            *PRESENTED,
             {"data": data},
             {},
         )
@@ -379,7 +396,7 @@ def test_browser_bad_screenshot_resets_focus_before_reporting_a_tool_error(tmp_p
 
 def test_browser_capture_failure_is_preserved_after_successful_focus_reset(tmp_path: Path) -> None:
     channel = screenshot_channel()
-    channel.replies[3] = '{"id":4,"error":{"message":"Screenshot capture failed"}}'
+    channel.replies[6] = '{"id":7,"error":{"message":"Screenshot capture failed"}}'
     browser = connected_browser(tmp_path, channel)
     try:
         with TestCase().assertRaisesRegex(BrowserError, "^Screenshot capture failed$"):
@@ -407,7 +424,7 @@ def test_browser_failed_focus_enable_still_resets_without_capturing(tmp_path: Pa
 
 def test_browser_failed_focus_reset_discards_the_image_and_detaches_a_personal_browser(tmp_path: Path) -> None:
     channel = screenshot_channel()
-    channel.replies[4] = '{"id":5,"error":{"message":"Focus reset failed"}}'
+    channel.replies[7] = '{"id":8,"error":{"message":"Focus reset failed"}}'
     browser = connected_browser(tmp_path, channel)
     with TestCase().assertRaisesRegex(BrowserError, "^Focus reset failed$"):
         browser.request(command("screenshot", **{"target_id": "fixture"}), threading.Event())
@@ -439,8 +456,8 @@ def test_browser_preserves_focus_reset_failure_when_owned_process_cleanup_also_f
             raise OSError("The owned browser processes did not finish exiting in time.")
 
     channel = screenshot_channel()
-    channel.replies[4] = '{"id":5,"error":{"message":"Focus reset failed"}}'
-    channel.replies.append('{"id":6,"result":{}}')
+    channel.replies[7] = '{"id":8,"error":{"message":"Focus reset failed"}}'
+    channel.replies.append('{"id":9,"result":{}}')
     browser = connected_browser(tmp_path, channel, owner=Managed(FinishedProcess(), FailedJobCleanup(), visible=False))
     with TestCase().assertRaisesRegex(BrowserError, "^Focus reset failed$") as failure:
         browser.request(command("screenshot", **{"target_id": "fixture"}), threading.Event())
@@ -459,9 +476,9 @@ def test_browser_preserves_the_primary_failure_when_focus_reset_also_fails(tmp_p
                 '{"id":4,"error":{"message":"Focus reset failed"}}',
             ]
         else:
-            channel.replies[3:] = [
-                '{"id":4,"error":{"message":"Primary failure"}}',
-                '{"id":5,"error":{"message":"Focus reset failed"}}',
+            channel.replies[6:] = [
+                '{"id":7,"error":{"message":"Primary failure"}}',
+                '{"id":8,"error":{"message":"Focus reset failed"}}',
             ]
         browser = connected_browser(tmp_path, channel)
         with TestCase().assertRaisesRegex(BrowserError, "^Primary failure$") as failure:
@@ -495,8 +512,8 @@ def test_browser_canceled_capture_closes_only_its_owned_browser(tmp_path: Path) 
 
         def __init__(self, stop: threading.Event) -> None:
             super().__init__(
-                *Channel.results({"targetInfos": [{"type": "page", "targetId": "fixture"}]}, {"sessionId": "page-session"}, {}).replies,
-                '{"id":5,"result":{}}',
+                *Channel.results({"targetInfos": [{"type": "page", "targetId": "fixture"}]}, {"sessionId": "page-session"}, {}, *PRESENTED).replies,
+                '{"id":8,"result":{}}',
             )
             self.stop = stop
 
