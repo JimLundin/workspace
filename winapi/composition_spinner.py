@@ -13,9 +13,37 @@ from win32more.Windows.Win32.Foundation import GetLastError
 from win32more.Windows.Win32.System.LibraryLoader import GetModuleHandleW
 from win32more.Windows.Win32.UI.WindowsAndMessaging import CreateWindowExW
 
-from winapi import screen, windows
+from winapi import appearance, screen, windows
 from winapi.composition import DesktopComposition, borderless
 from winapi.shapes import Rect
+
+
+def scheme() -> tuple[Color, int]:
+    """The canvas's solid content surface and its ink level, in Windows' app mode."""
+    if appearance.light_apps():
+        return Color(255, 255, 255, 255), 0
+    return Color(255, 0x26, 0x26, 0x2A), 255
+
+
+def wheel(compositor: Compositor, scale: float, ink: int) -> ContainerVisual:
+    """Eight dots in the surface's ink, fading around the wheel."""
+    visual = compositor.CreateContainerVisual()
+    visual.Size = Vector2(40 * scale, 40 * scale)
+    visual.Offset = Vector3(20 * scale, 20 * scale, 0)
+    visual.CenterPoint = Vector3(20 * scale, 20 * scale, 0)
+    for index in range(8):
+        angle = index * math.tau / 8
+        geometry = compositor.CreateRoundedRectangleGeometry()
+        geometry.Offset = Vector2((18 + 15 * math.cos(angle)) * scale, (18 + 15 * math.sin(angle)) * scale)
+        geometry.Size = Vector2(4 * scale, 4 * scale)
+        geometry.CornerRadius = Vector2(2 * scale, 2 * scale)
+        dot_shape = compositor.CreateSpriteShapeWithGeometry(geometry)
+        dot_shape.FillBrush = compositor.CreateColorBrushWithColor(Color(round(220 * (index + 1) / 8), ink, ink, ink))
+        dot = compositor.CreateShapeVisual()
+        dot.Size = Vector2(40 * scale, 40 * scale)
+        dot.Shapes.Append(dot_shape)
+        visual.Children.InsertAtTop(dot)
+    return visual
 
 
 class CompositionSpinner:
@@ -52,27 +80,13 @@ class CompositionSpinner:
                 background.Size = Vector2(self.size, self.size)
                 background.CornerRadius = Vector2(20 * scale, 20 * scale)
                 shape = compositor.CreateSpriteShapeWithGeometry(background)
-                shape.FillBrush = compositor.CreateColorBrushWithColor(Color(255, 37, 33, 47))
+                fill, ink = scheme()
+                shape.FillBrush = compositor.CreateColorBrushWithColor(fill)
                 surface = compositor.CreateShapeVisual()
                 surface.Size = Vector2(self.size, self.size)
                 surface.Shapes.Append(shape)
                 self.root.Children.InsertAtTop(surface)
-                self.wheel: ContainerVisual = compositor.CreateContainerVisual()
-                self.wheel.Size = Vector2(40 * scale, 40 * scale)
-                self.wheel.Offset = Vector3(20 * scale, 20 * scale, 0)
-                self.wheel.CenterPoint = Vector3(20 * scale, 20 * scale, 0)
-                for index in range(8):
-                    angle = index * math.tau / 8
-                    geometry = compositor.CreateRoundedRectangleGeometry()
-                    geometry.Offset = Vector2((18 + 15 * math.cos(angle)) * scale, (18 + 15 * math.sin(angle)) * scale)
-                    geometry.Size = Vector2(4 * scale, 4 * scale)
-                    geometry.CornerRadius = Vector2(2 * scale, 2 * scale)
-                    dot_shape = compositor.CreateSpriteShapeWithGeometry(geometry)
-                    dot_shape.FillBrush = compositor.CreateColorBrushWithColor(Color(round(255 * (index + 1) / 8), 217, 200, 243))
-                    dot = compositor.CreateShapeVisual()
-                    dot.Size = Vector2(40 * scale, 40 * scale)
-                    dot.Shapes.Append(dot_shape)
-                    self.wheel.Children.InsertAtTop(dot)
+                self.wheel: ContainerVisual = wheel(compositor, scale, ink)
                 self.root.Children.InsertAtTop(self.wheel)
                 self.target.Root = self.root
             except BaseException:
