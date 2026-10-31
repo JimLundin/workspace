@@ -103,14 +103,12 @@ sheet draws six open sets at 16 px beside 12 px Inter, then at 2×:
 SF Symbols match their weight to the adjacent text and switch to filled
 variants for active states. No open set does both.
 
-The shortlist is **Fluent** and **Tabler**; the demo now offers only these.
-Fluent looked thin at first because the demo drew its 20 px artwork at 16 px,
-thinning every stroke by 20%. It now uses Fluent's 16 px artwork, which is
-drawn for that size; only battery and Wi-Fi off fall back to the 20 px grid.
-Fluent has true filled variants for active states. Tabler's stroke width can
-be tuned; the sheet compares 1.75 and 1.5. Whichever set wins, use a small
-rounded square for Stop, as `stop.fill` does. Vendor only the paths Workspace
-uses into `assistant/vector_icons.py`.
+**Decision: Fluent** (MIT), Microsoft's Windows 11 symbols, using the 16 px
+artwork drawn for toolbar size; only battery, cloud and Wi-Fi off fall back to
+the 20 px grid. It looked thin at first because the 20 px artwork was being
+scaled to 16 px. Fluent has true filled variants, used for active states such
+as the dictation microphone. Stop is a small rounded square, as `stop.fill`
+is. Vendor only the paths Workspace uses into `assistant/vector_icons.py`.
 
 ## Toolbar pattern
 
@@ -231,6 +229,46 @@ Workspace sidebar should follow:
 
 The agent phase bubbles stay as they are: earlier phases fade and recede as
 new ones arrive.
+
+## Appearance and the toolbar
+
+Small glass follows the content beneath it, not the system setting: the HIG
+says toolbars and tab bars adapt between light and dark to the underlying
+content, and the macOS menu bar flips its text with the wallpaper. Large
+surfaces (menus, cards, the canvas, the sidebar) follow the system appearance.
+The demo's wallpaper now has light and dark variants that follow the
+appearance, as macOS's dynamic wallpapers do, so in light mode the island turns
+light because the desktop beneath it does. Over a dark app it stays dark in
+either mode.
+
+## Work canvas
+
+The canvas toolbar follows the desktop bar's rule, anchored to the window's
+bottom edge:
+
+- *One island at rest.* It names the voice scope: "Hold N to ask about the
+  whole canvas", or the selected context. Clicking it expands upward into the
+  canvas menu: Search, Center, Arrange, new contexts and notes, connections,
+  collapse, agent tasks and settings, and Close.
+- *Moments morph the island.* Ctrl+F turns it into a search field; holding N
+  shows the microphone, a live waveform and the scope; release shows the
+  transcription spinner.
+- *Only temporary things sit beside it.* A tinted Questions pill with its count
+  while questions wait; a Recenter button only after the view leaves the work,
+  as Maps shows its location button; a working pill while the agent acts.
+- *No duplicate Close.* The window's own close control closes the canvas.
+- *The toolbar belongs to the content column*, so it recentres beside an open
+  inspector.
+
+The inspector stays a floating glass column inset from the window, with
+corners concentric to it. Its actions (Ask about this, Open in Edge) now sit
+under the title instead of at the bottom, following the sidebar guidance.
+
+Canvas cards are content, so they use a solid material. Agent phase bubbles
+and notifications are functional UI, so they're glass. Both share one anatomy:
+app badge, title, meta line and body. Workspace's canvas today reuses the
+floating notification bubble; under Liquid Glass it should reuse the same
+component with the content material.
 
 ## What ports to Qt on Windows
 
