@@ -5,7 +5,6 @@ import unittest
 from collections.abc import Callable
 from pathlib import Path
 
-import assistant.console_requests
 import assistant.icons
 
 if sys.platform != "win32":
@@ -16,7 +15,6 @@ lazy from PySide6 import QtCore, QtWidgets
 from assistant.agent_toasts import AgentToasts
 from assistant.agent_window import AgentWindow
 from assistant.communications import Feed, WindowsNotice
-from assistant.console_requests import Provider, Request
 from assistant.desktop_bar import BarActions, DesktopBar
 from assistant.notification_sources import NOTIFICATION_STATE
 from assistant.qt_runtime import prepare
@@ -155,20 +153,6 @@ def test_app_context_stays_quiet_and_only_agent_questions_change_toolbar_attenti
             show_agent=lambda: None, show_work=lambda: None, stop=lambda: None, overlay=lambda: None, menu=lambda: None, on_problem=lambda _: None
         )
         ui.system_notices(Observed((Notice(NoticeKey(11, 100), "mail", "Outlook", "Review", "Budget review"),)))
-        ui.console_changed(
-            (
-                Request(
-                    "console",
-                    Provider.CODEX,
-                    "session",
-                    "C:/fictional",
-                    "Choose a sheet",
-                    "",
-                    (assistant.console_requests.Question("Which sheet?"),),
-                    2,
-                ),
-            )
-        )
         ui.pump()
         assert ui.bar.inbox.isHidden()
         agent = ui.agent(None, lambda: None, reveal=False)
@@ -192,7 +176,7 @@ def test_app_arrivals_reach_triage_joined_without_floating_alerts(tmp_path: Path
     ui = InboxUi()
     ui.configure_feed(
         SavedState(tmp_path / "notifications.bin", NOTIFICATION_STATE, cipher=LocalCipher()),
-        lambda feed, _requests: assessed.append(feed),
+        assessed.append,
     )
     try:
         agent = ui.agent(None, lambda: None, reveal=False)
