@@ -48,6 +48,9 @@ COM wrappers inherit `ComPtr`; their mixin properties do not imply Python
 inheritance between native visual/geometry classes. Pointer output annotations
 describe the SDK's concrete COM pointer conversion and callback ABI. Workspace
 callback logic consumes only a writable output slot through a protocol.
+The Notification Center listener returns the SDK's `IAsyncOperation`; Workspace
+polls it through `IAsyncInfo` and `AsyncStatus` instead of awaiting it, and its
+results stay an iterable of `UserNotification` rows.
 Unknown external observations remain `object` until validated, with no `Any`,
 casts or checker suppressions in the composition logic. These stubs retain the
 native API names; runtime still loads the installed dependency.

@@ -20,7 +20,6 @@ lazy from win32more.Windows.Win32.System.WinRT import RO_INIT_MULTITHREADED, RoI
 from winapi.notification_banners import BannerPolicy, Coverage
 from winapi.system_notices import Access, Banners, Notice, NoticeKey, Observation, Observed, Unavailable, creation_time
 
-
 # Modification time and size of Windows' notification database files; None when they cannot be read.
 type Stamp = tuple[tuple[int, int], ...] | None
 
