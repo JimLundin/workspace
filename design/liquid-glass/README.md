@@ -62,6 +62,7 @@ icons/fluent.js       the Fluent symbols the kit uses, and their licence
 fonts/                Inter, and its licence
 gallery/  demo/       pages built from the kit
 tools/                check_structure.py
+tests/                spacing.html: invariants checked in a real browser
 ```
 
 A component is a pair of files with the same name in its tier's folder, for
@@ -117,6 +118,23 @@ share a pair: `atoms/indicators.*` holds the spinner, dot and waveform.
 5. Run `python design/liquid-glass/tools/check_structure.py`. It fails when a
    file is missing from an entry point, the tiers are out of order, or a
    stylesheet uses an unprefixed class.
+
+## Tests
+
+- **`tests/spacing.html`** runs in any browser, with no dependencies. It drives
+  a real `lg-island-bar` through every transition between 32 states: each
+  combination of two lead and two trail capsules, with a short or a long
+  island. That's 1,024 transitions, so every order of arrival is covered. At
+  rest, neighbouring capsules and the island must be exactly one `--lg-gap`
+  apart; on every frame in between, no two capsules may overlap. It shows the
+  result on the page and in `window.lgTest`. Motion runs at
+  `LiquidGlass.timeScale = 10` during the test; users always see 1.
+- **`tools/check_structure.py`** checks that the entry files, tiers and class
+  prefixes stay consistent.
+
+Spacing between capsules is owned by the bar alone (`IslandBar.space`). A
+capsule reports its presence as it enters and leaves, and never sets its own
+margin, because the gap belongs to a pair of neighbours.
 
 ## Rules the components encode
 

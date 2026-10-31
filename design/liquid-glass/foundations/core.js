@@ -37,7 +37,8 @@
   const active = new Set();
   let last = 0;
   function tick(now) {
-    const dt = Math.min(0.064, (now - (last || now)) / 1000);
+    // Tests may run motion faster; what users see always runs at timeScale 1.
+    const dt = Math.min(0.064, (now - (last || now)) / 1000) * LG.timeScale;
     last = now;
     for (const spring of [...active]) spring.step(dt);
     if (active.size) requestAnimationFrame(tick);
@@ -80,6 +81,7 @@
     }
   }
   LG.Spring = Spring;
+  LG.timeScale = 1;
   // True while any spring is in flight; tests and measurements wait for rest.
   LG.moving = () => active.size > 0;
   // Presets from Apple's fluid-interface guidance.
