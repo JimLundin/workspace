@@ -5,8 +5,9 @@ from typing import Protocol, override
 lazy from PySide6 import QtGui, QtWidgets
 lazy from PySide6.QtCore import Qt
 
-from assistant.ui_components.appearance import SURFACE
+from assistant.ui_components.appearance import GLASS_ACCENT, Shade, Tokens
 from assistant.ui_components.canvas_controls import CanvasControl, ControlAction
+from assistant.ui_components.canvas_look import CONTROL, Surface, color, paint_selection, paint_surface, surface_fill
 from assistant.work_canvas_gestures import PointerMoved, PointerReleased, PressConnector, ScenePoint
 
 
@@ -22,6 +23,9 @@ class CanvasEvents(Protocol):
     @property
     def interaction(self) -> CanvasPointer: ...
 
+    @property
+    def theme(self) -> Tokens: ...
+
     def reflow(self) -> None: ...
     def open_context(self, identity: str) -> None: ...
     def context_menu(self, identity: str) -> None: ...
@@ -35,35 +39,40 @@ class CanvasBubble(QtWidgets.QGraphicsRectItem):
         super().__init__()
         self.identity: str = identity
         self.events: CanvasEvents = events
+        self.theme: Tokens = events.theme
         self.drop_target: bool = False
+        self.surface: Surface = Surface.CARD
         self.setFlags(QtWidgets.QGraphicsItem.GraphicsItemFlag.ItemIsSelectable)
         self.setAcceptedMouseButtons(Qt.MouseButton.LeftButton | Qt.MouseButton.RightButton)
         self.setCursor(Qt.CursorShape.OpenHandCursor)
-        self.options: CanvasControl = CanvasControl(self, ControlAction("Bubble options", lambda: events.context_menu(identity), "more"))
+        self.options: CanvasControl = CanvasControl(self, ControlAction("Bubble options", lambda: events.context_menu(identity), "more"), self.theme)
+        # The relationship port: an accent ring, as relationships are drawn in the accent.
         self.connector: QtWidgets.QGraphicsEllipseItem = QtWidgets.QGraphicsEllipseItem(self)
-        self.connector.setRect(-6, -6, 12, 12)
-        self.connector.setPen(QtGui.QPen(QtGui.QColor("#ba9de3"), 1.5))
-        self.connector.setBrush(QtGui.QColor(SURFACE))
+        self.connector.setRect(-5, -5, 10, 10)
+        self.connector.setPen(QtGui.QPen(color(Shade(GLASS_ACCENT, 0.75)), 1.5))
+        self.connector.setBrush(QtGui.QColor(self.theme.solid))
         self.connector.setAcceptedMouseButtons(Qt.MouseButton.NoButton)
         self.connector.setCursor(Qt.CursorShape.CrossCursor)
         self.connector.setToolTip("Drag to another bubble to create a relationship")
 
     def resize_controls(self) -> None:
-        self.options.setPos(self.rect().width() - 48, 16)
-        self.connector.setPos(self.rect().width() - 18, 64)
+        width = self.rect().width()
+        self.options.setPos(width - 12 - CONTROL, 8)
+        self.connector.setPos(width - 12 - CONTROL / 2, 46)
 
     def highlight_drop(self, *, active: bool) -> None:
         if self.drop_target != active:
             self.drop_target = active
             self.update()
 
-    def paint_selection(self, painter: QtGui.QPainter) -> None:
+    def paint_bubble(self, painter: QtGui.QPainter) -> None:
+        paint_surface(painter, self.rect(), self.theme, self.surface)
         if self.drop_target or self.isSelected():
-            painter.save()
-            painter.setBrush(Qt.BrushStyle.NoBrush)
-            painter.setPen(QtGui.QPen(QtGui.QColor("#c4a5e8"), 2 if self.drop_target else 1.5))
-            painter.drawRoundedRect(self.rect().adjusted(8.5, 8.5, -1, -1), 26, 26)
-            painter.restore()
+            paint_selection(painter, self.rect(), self.surface, drop=self.drop_target)
+
+    def surface_color(self) -> QtGui.QColor:
+        """The ring that separates stacked badges takes the surface beneath it."""
+        return QtGui.QColor(self.theme.window) if self.surface is Surface.GROUP else surface_fill(self.theme, self.surface)
 
     @override
     def contextMenuEvent(self, event: QtWidgets.QGraphicsSceneContextMenuEvent) -> None:

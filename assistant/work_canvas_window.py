@@ -9,10 +9,11 @@ from collections.abc import Callable
 lazy from PySide6 import QtCore, QtGui, QtWidgets
 lazy from PySide6.QtCore import Qt
 
-from assistant.personal_work_panel import PersonalPanel
-from assistant.ui_components.canvas_chrome import CanvasFrame, icon_button
+from assistant.personal_work_panel import PersonalPanel, rounded
+from assistant.ui_components.appearance import scheme, tokens
+from assistant.ui_components.canvas_chrome import CanvasFrame
+from assistant.ui_components.canvas_look import Role, face
 from assistant.ui_components.paint_ready import PaintReady
-from assistant.ui_components.text import font
 from assistant.ui_components.widgets import column, show_window
 from assistant.work_canvas import WorkCanvas
 from assistant.work_snapshot import WorkSnapshot
@@ -30,14 +31,12 @@ class CanvasWindow:
         self.presentation: PaintReady | None = None
         self.administration: WorkPanel | None = None
         self.meetings: MeetingPanel | None = None
-        self.window: CanvasFrame = CanvasFrame(self.hide, self.escape)
+        self.window: CanvasFrame = CanvasFrame(self.hide, self.escape, tokens(scheme()))
         # Qt resolves native fonts once during desktop preparation. The first
         # visible source preview must not pay that setup cost on a user click.
-        QtGui.QFontMetricsF(font()).horizontalAdvance("Workspace")
+        QtGui.QFontMetricsF(face(Role.BODY)).horizontalAdvance("Workspace")
         self.window.setWindowState(Qt.WindowState.WindowMaximized)
         self.personal: PersonalPanel = PersonalPanel(self.window, work, canvas)
-        self.exit_button: QtWidgets.QToolButton = icon_button("close", "Close canvas", self.hide)
-        self.personal.toolbar_layout.addWidget(self.exit_button)
         self.personal.position_chrome()
         layout = column(self.window)
         self.layout: QtWidgets.QVBoxLayout = layout
@@ -48,9 +47,11 @@ class CanvasWindow:
         self.personal.menu.addAction("Agent tasks and settings").triggered.connect(self.show_administration)
         self.personal.menu.addAction("Meetings").triggered.connect(self.show_meetings)
         self.personal.menu.addSeparator()
-        window_menu = self.personal.menu.addMenu("Window")
+        # Window controls live in the options menu; the island carries no duplicate Close.
+        window_menu = rounded(self.personal.menu.addMenu("Window"))
         window_menu.addAction("Maximize or restore canvas").triggered.connect(self.maximize)
-        window_menu.addAction("Close canvas").triggered.connect(self.hide)
+        self.close_action: QtGui.QAction = window_menu.addAction("Close canvas")
+        self.close_action.triggered.connect(self.hide)
         self.personal.frame.resized.connect(self.position_controls)
         self.position_controls()
 

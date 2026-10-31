@@ -8,7 +8,6 @@ lazy from PySide6.QtCore import Qt
 
 from assistant.canvas_activity import Attention, CanvasAction, CanvasQuestion, CanvasUpdate
 from assistant.keymap import PHYSICAL_NAMES
-from assistant.ui_components.appearance import ACCENT, CANVAS_STYLE
 from assistant.ui_components.controls import button, label
 from assistant.ui_components.widgets import Editor, column, replace_text, row
 from assistant.work_canvas_context import context_path
@@ -31,21 +30,27 @@ from automation.task import TextAnswer
 from miryoku.layout import AGENT
 
 
-def detail_frame(height: int) -> QtWidgets.QWidget:
-    """Set the final canvas style/width before source text triggers Qt layout."""
+def detail_frame(height: int, style: str) -> QtWidgets.QWidget:
+    """Set the final canvas style/width before source text triggers Qt layout.
+
+    Details live in graphics proxies, which inherit no stylesheet, so each
+    receives the canvas scheme's style before it loads any text.
+    """
     frame = QtWidgets.QWidget()
-    frame.setStyleSheet(CANVAS_STYLE)
-    frame.setFixedSize(432, height)
+    frame.setStyleSheet(style)
+    frame.setFixedSize(448, height)
     return frame
 
 
 class WorkDetail:
-    def __init__(self, work: WorkWindow, content: WorkThread | WorkDefinition, *, on_continue: Callable[[], None] | None = None) -> None:
+    # Four inputs: the command owner, the content, the canvas style that must
+    # precede text layout, and the optional continuation only a saved work offers.
+    def __init__(self, work: WorkWindow, content: WorkThread | WorkDefinition, style: str, *, on_continue: Callable[[], None] | None = None) -> None:
         self.work: WorkWindow = work
         self.current: WorkThread | WorkDefinition = content
         self.original: WorkThread | None = None
         self.pending: SaveWork | None = None
-        self.frame: QtWidgets.QWidget = detail_frame(475)
+        self.frame: QtWidgets.QWidget = detail_frame(475, style)
         layout = column(self.frame)
         self.info: QtWidgets.QWidget = QtWidgets.QWidget()
         info = column(self.info)
@@ -164,12 +169,13 @@ class WorkDetail:
 
 
 class SourceDetail:
-    def __init__(self, work: WorkWindow, content: WorkSource, *, on_context: Callable[[str], None] | None = None) -> None:
+    # Four inputs, as WorkDetail: the canvas style must precede the source text's layout.
+    def __init__(self, work: WorkWindow, content: WorkSource, style: str, *, on_context: Callable[[str], None] | None = None) -> None:
         self.work: WorkWindow = work
         self.current: WorkSource = content
         self.catalog: Catalog = Catalog()
         self.ancestry: frozenset[str] = frozenset()
-        self.frame: QtWidgets.QWidget = detail_frame(475)
+        self.frame: QtWidgets.QWidget = detail_frame(475, style)
         layout = column(self.frame)
         self.text: Editor = Editor(readonly=True)
         self.text.setAccessibleName("Observed source content")
@@ -258,10 +264,10 @@ class SourceDetail:
 
 
 class NoteDetail:
-    def __init__(self, content: CanvasNote, save: Callable[[CanvasNote], None]) -> None:
+    def __init__(self, content: CanvasNote, save: Callable[[CanvasNote], None], style: str) -> None:
         self.current: CanvasNote = content
         self.save: Callable[[CanvasNote], None] = save
-        self.frame: QtWidgets.QWidget = detail_frame(475)
+        self.frame: QtWidgets.QWidget = detail_frame(475, style)
         layout = column(self.frame)
         self.title: QtWidgets.QLineEdit = QtWidgets.QLineEdit(content.title)
         self.title.setAccessibleName("Note title")
@@ -277,10 +283,10 @@ class NoteDetail:
 
 
 class UpdateDetail:
-    def __init__(self, content: CanvasUpdate | CanvasAction, locate: Callable[[str], None]) -> None:
+    def __init__(self, content: CanvasUpdate | CanvasAction, locate: Callable[[str], None], style: str) -> None:
         self.current: CanvasUpdate | CanvasAction = content
         self.locate: Callable[[str], None] = locate
-        self.frame: QtWidgets.QWidget = detail_frame(300)
+        self.frame: QtWidgets.QWidget = detail_frame(300, style)
         layout = column(self.frame)
         self.text: Editor = Editor(readonly=True)
         self.text.setAccessibleName("Agent findings")
@@ -306,10 +312,10 @@ class QuestionDetail:
     last reply stays visible if the task transport rejects it after submission.
     """
 
-    def __init__(self, content: CanvasQuestion) -> None:
+    def __init__(self, content: CanvasQuestion, style: str) -> None:
         self.current: CanvasQuestion = content
         self.last_reply: str | None = None
-        self.frame: QtWidgets.QWidget = detail_frame(1)
+        self.frame: QtWidgets.QWidget = detail_frame(1, style)
         layout = column(self.frame)
         layout.setSpacing(12)
         self.question: QtWidgets.QLabel = label(content.text)
@@ -324,7 +330,6 @@ class QuestionDetail:
         layout.addWidget(self.response)
         self.status: QtWidgets.QLabel = label("", "muted")
         self.status.setWordWrap(True)
-        self.status.setStyleSheet(f"QLabel {{ color: {ACCENT}; font-size: 11px; }}")
         layout.addWidget(self.status)
         self.frame.ensurePolished()
         self.refresh(content)

@@ -6,12 +6,12 @@ from dataclasses import dataclass, field
 lazy from PySide6 import QtGui
 lazy from PySide6.QtCore import QRect, QRectF, Qt
 lazy from PySide6.QtGui import QColor, QFontMetricsF, QPainter, QPainterPath, QPaintEvent, QPen
-lazy from PySide6.QtWidgets import QGraphicsItem, QGraphicsRectItem, QLabel, QStyleOptionGraphicsItem, QWidget
+lazy from PySide6.QtWidgets import QLabel, QWidget
 
 import assistant.feed_icons
 from assistant.feed_origin import App, Origin
 from assistant.qt_runtime import prepare
-from assistant.ui_components.appearance import INK, Palette
+from assistant.ui_components.appearance import Palette
 from assistant.ui_components.text import INSET, font
 
 prepare()
@@ -90,32 +90,6 @@ def heading_width(width: int, badge: int, *, stopping: bool, disclosing: bool) -
     if disclosing:
         edge = right - 28
     return max(1, edge - 8 - INSET - badge)
-
-
-class CanvasHeading(QGraphicsRectItem):
-    """The graphics scene owns this painted heading without an embedded QWidget."""
-
-    def __init__(self, parent: QGraphicsItem) -> None:
-        super().__init__(parent)
-        self.value: str = ""
-        self.expanded: bool = False
-        self.setCacheMode(QGraphicsItem.CacheMode.DeviceCoordinateCache)
-        self.setAcceptedMouseButtons(Qt.MouseButton.NoButton)
-
-    def load(self, text: str, width: float, *, expanded: bool) -> int:
-        self.value, self.expanded = text, expanded
-        height = heading_height(text, round(width), expanded=expanded)
-        self.setRect(0, 0, width, height)
-        self.setToolTip(text)
-        self.update()
-        return height
-
-    def paint(self, painter: QPainter, option: QStyleOptionGraphicsItem, widget: QWidget | None = None) -> None:
-        painter.save()
-        painter.setClipRect(self.rect())
-        painter.setPen(QColor(INK))
-        paint_heading(painter, self.rect(), self.value, expanded=self.expanded)
-        painter.restore()
 
 
 class FeedTitle(QLabel):
