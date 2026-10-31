@@ -11,8 +11,8 @@ lazy from win32more.Windows.Devices.Geolocation import BasicGeoposition, Geoloca
 lazy from win32more.Windows.Foundation import IAsyncInfo, IAsyncOperation, TimeSpan
 lazy from win32more.Windows.Win32.System.WinRT import RO_INIT_MULTITHREADED, RoInitialize, RoUninitialize
 
-from assistant.ambient import Battery, Power, PowerUnavailable
 from winapi._core import fn, kernel32
+from winapi.machine_status import Battery, Power, PowerUnavailable
 
 
 class PowerStatus(ctypes.Structure):
