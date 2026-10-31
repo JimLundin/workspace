@@ -379,6 +379,8 @@ def test_questions_resume_only_the_exact_waiting_task_and_voice_uses_the_same_ro
         rig.tasks.finish(claim.run, Waiting(Question("which-sheet", "Which sheet?", "Choose a sheet in this workbook.")), at=rig.clock())
         rig.refresh()
         assert rig.panel.waiting
+        # Defect: work accepts an approval decision for a question, since the window does not check the kind.
+        assert not rig.panel.respond("which-sheet", ApprovalDecision.DECLINED) and rig.panel.waiting
         rig.agent.voice("Use revenue")
         rig.refresh()
         task = rig.tasks.get(claim.task.id)

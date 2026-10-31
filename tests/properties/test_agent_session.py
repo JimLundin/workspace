@@ -37,7 +37,8 @@ def test_only_the_matching_pending_request_accepts_a_reply(case: ReplyCase) -> N
     stale = "stale/" + case.identity
     request = asked(current, "Reply?", "", 1) if case.question else reviewed(current, "Proceed?", "", 1)
     other = asked("other/" + case.identity, "Another request", "", 2)
-    session = Session(messages=(other, request), phase="stopping" if case.stopping else "running", status="Waiting")
+    # The request precedes another, so resolving it must keep later messages.
+    session = Session(messages=(request, other), phase="stopping" if case.stopping else "running", status="Waiting")
     for event in (Resolution(stale, TextAnswer(case.text)), Resolution(stale, case.decision), Resolution(stale, Cancelled())):
         assert transition(session, event) == session
     mismatch = Resolution(current, case.decision) if case.question else Resolution(current, TextAnswer(case.text))
@@ -45,7 +46,7 @@ def test_only_the_matching_pending_request_accepts_a_reply(case: ReplyCase) -> N
 
     reply = TextAnswer(case.text) if case.question else case.decision
     updated = transition(session, Resolution(current, reply))
-    assert updated == replace(session, messages=(other, replace(request, reply=reply)), status="Stopping…" if case.stopping else "Working…")
+    assert updated == replace(session, messages=(replace(request, reply=reply), other), status="Stopping…" if case.stopping else "Working…")
     for event in (Resolution(current, TextAnswer(case.text + " later")), Resolution(current, case.decision), Resolution(current, Cancelled())):
         assert transition(updated, event) == updated
-    assert session.messages == (other, request)
+    assert session.messages == (request, other)

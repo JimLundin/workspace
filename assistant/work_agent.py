@@ -529,9 +529,8 @@ class WorkAgent:
         self._rejected_input = None
         task = next((task for task in snapshot.tasks if task.id == task_id), None)
         request = requested(task) if task is not None else None
-        if self.window is None or self._displayed is None or self._displayed.id != task_id:
-            return
-        if task is not None and request is not None and request.id == request_id:
+        # A failure is only recorded for the displayed task, and publishing restores it before redisplaying.
+        if self.window is not None and task is not None and request is not None and request.id == request_id:
             review = next((review for review in snapshot.reviews if review_matches(task, review)), None)
             self.window.withdraw_input()
             message = input_message(task, review)

@@ -1,5 +1,6 @@
 """Durable input uses the same exact-request seam for native, typed, and voice replies."""
 
+import contextlib
 import threading
 from collections import deque
 from collections.abc import Callable
@@ -43,9 +44,12 @@ def test_durable_questions_share_typed_voice_and_button_routing_without_waiting_
     assert has_pending_input(panel)
     panel.withdraw_input()
     assert not has_pending_input(panel) and panel.submit("Start a follow-up") and submitted == ["Start a follow-up"]
+    panel.begin("Find the workbook", lambda: None)
     panel.request_input(asked("fifth", "Which year?", "", 5.0), accept)
     panel.stopping()
     assert not has_pending_input(panel) and not panel.respond("fifth", TextAnswer("Too late"))
+    # Defect: speech while stopping becomes a new task instead of being consumed.
+    assert panel.reply_by_voice("Start another task") and submitted == ["Start a follow-up"]
     panel.close()
     panel.paint()
 
@@ -136,13 +140,18 @@ def test_rejected_replies_can_retry_without_resolving_or_reopening_the_request()
 
     def accept(answer: Reply) -> bool:
         replies.append(answer)
-        return len(replies) > 1
+        if len(replies) == 1:
+            raise RuntimeError("Fixture: the work queue refused the reply.")
+        return len(replies) > 2
 
     panel.request_input(request, accept)
     panel.input_presented(request.id)
+    # Defect: a reply sink that raises leaves the request submitted and unanswerable.
+    with contextlib.suppress(RuntimeError):
+        panel.respond(request.id, ApprovalDecision.APPROVED)
     assert not panel.respond(request.id, ApprovalDecision.APPROVED) and has_pending_input(panel)
     assert panel.respond(request.id, ApprovalDecision.APPROVED) and not has_pending_input(panel)
-    assert replies == [ApprovalDecision.APPROVED, ApprovalDecision.APPROVED]
+    assert replies == [ApprovalDecision.APPROVED] * 3
     panel.request_input(request, accept)
     assert not has_pending_input(panel)
     panel.close()
