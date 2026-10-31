@@ -12,27 +12,29 @@ import threading
 import time
 from collections.abc import Callable
 from contextlib import suppress
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime
 from typing import assert_never
 lazy import os
 
-lazy from PySide6 import QtCore, QtGui, QtWidgets
+lazy from PySide6 import QtCore, QtGui
 
 from assistant.qt_runtime import prepare
 lazy import winapi.ambient
+lazy from assistant import island_menu
 lazy from assistant.ambient import Ambient, SystemStatus
 lazy from assistant.audio_meter import AudioMeter
 lazy from assistant.bar_status import StatusObserver
 lazy from assistant.icons import State
-lazy from assistant.island_layout import Metrics, frame, snap
-lazy from assistant.island_model import Action, CapsuleView, Key, Marker, Observed, Spinner, island, keyboard
+lazy from assistant.island_layout import HEIGHT, Metrics, expansion, frame, snap
+lazy from assistant.island_menu import Chosen, Command, Dismissed, Menu, Tiling, entries, restores_focus, rows
+lazy from assistant.island_model import Action, CapsuleView, Key, Marker, Observed, Spinner, Tint, capture, island, keyboard, processing
 lazy from assistant.island_motion import IslandMotion, Shown, advance, finish, placed, retarget, settled
-lazy from assistant.island_surface import TOP, BarWindow, Drawn, font
+lazy from assistant.island_surface import TOP, BarWindow, Drawn, Presented
 lazy from assistant.qt_ui import EventLoop, application
 lazy from assistant.recording_state import RecordingAction, RecordingState
 lazy from assistant.shell_controls import TASKBAR_TOGGLE, TaskbarControl, WindowsKeyObserver
-lazy from assistant.ui_components.appearance import GLASS_ACCENT, look
+lazy from assistant.ui_components.appearance import Look, large, look
 lazy from protocol import Tool
 lazy from winapi import appearance, shell, system_notices, windows
 lazy from winapi.machine_status import Power, PowerUnavailable
@@ -60,10 +62,11 @@ class BarActions:
 
 @dataclass(frozen=True, slots=True)
 class BarObservations:
-    """Native facts and presentation preferences, supplied at UI composition."""
+    """Native facts, the desktop's focus and presentation preferences, supplied at UI composition."""
 
     clock: Callable[[], float] = time.monotonic
     foreground: Callable[[], int] = windows.foreground
+    focus: Callable[[int], bool] = windows.focus
     power: Callable[[], Power] = winapi.ambient.power
     material: Callable[[], appearance.Preference] = appearance.preference
     motion: Callable[[], bool] = appearance.animations_enabled
@@ -86,6 +89,7 @@ class DesktopBar:
         "controls",
         "current_layer",
         "errors",
+        "expanded",
         "frost",
         "hovered",
         "inbox",
@@ -94,7 +98,7 @@ class DesktopBar:
         "layout_enabled",
         "loop",
         "materials",
-        "menu",
+        "menu_target",
         "motion",
         "next_material",
         "next_power",
@@ -137,6 +141,9 @@ class DesktopBar:
         self.current_layer: str | None = None
         self.inbox = 0
         self.hovered: Key | None = None
+        # The open menu, and the window that had the keyboard before it opened.
+        self.expanded: Menu | None = None
+        self.menu_target = 0
         self.views: tuple[CapsuleView, ...] = ()
         # Reassigned each frame; the bar mutates no motion or view record.
         self.motion = IslandMotion()
@@ -158,8 +165,7 @@ class DesktopBar:
         self.sample_bounds: Rect | None = None
         self.preference: appearance.Preference = self.observations.material()
         self.frost = appearance.Frost.SMOKED
-        self.window = BarWindow(self.loop, self.press, self.hover)
-        self.menu = QtWidgets.QMenu(self.window)
+        self.window = BarWindow(self.loop, self)
         self.notification_service: NotificationObserver | None = None
         self.notification_access = system_notices.Access.UNAVAILABLE
         self.notification_observation: system_notices.Observed | None = None
@@ -216,6 +222,8 @@ class DesktopBar:
         match action:
             case Action.OPEN_MENU:
                 self.open_menu()
+            case Action.CLOSE_MENU:
+                self.close_menu(restore=True)
             case Action.STOP_DICTATION | Action.STOP_AGENT:
                 self.actions.stop()
             case Action.OPEN_QUESTION | Action.OPEN_INBOX:
@@ -234,53 +242,96 @@ class DesktopBar:
             self.hovered = key
             self.render()
 
+    def menu(self) -> Menu:
+        """The menu for what's happening now, keeping the current selection and disclosure."""
+        recorded = capture(self.recording) if self.recording.capturing else None
+        working = processing(self.activity) if self.activity is State.AGENT else None
+        menu = Menu(
+            # The bar has no agent phase to read yet; the row names the activity alone.
+            entries(recording=recorded.title if recorded is not None else None, agent="" if working is not None else None),
+            "Layout on" if self.layout_enabled else "Layout off",
+        )
+        if self.expanded is None:
+            return menu
+        return replace(menu, selected=self.expanded.selected, disclosed=self.expanded.disclosed)
+
     def open_menu(self) -> None:
-        target = self.observations.foreground()
-        self.menu.clear()
+        """The island expands into the menu and takes the keyboard from the window that had it."""
+        if self.closed:
+            return
+        self.menu_target = self.observations.foreground()
+        self.expanded = self.menu()
+        handle = int(self.window.winId())
+        windows.allow_activation(handle, allowed=True)
+        self.window.activateWindow()
+        self.window.setFocus()
+        self.render()
 
-        def item(label: str, action: Callable[[], None]) -> None:
-            def triggered() -> None:
-                action()
+    def close_menu(self, *, restore: bool) -> None:
+        if self.expanded is None:
+            return
+        self.expanded = None
+        windows.allow_activation(int(self.window.winId()), allowed=False)
+        self.render()
+        if restore and self.menu_target:
+            self.observations.focus(self.menu_target)
 
-            self.menu.addAction(label).triggered.connect(triggered)
+    def select(self, index: int) -> None:
+        if self.expanded is not None and self.expanded.selected != index:
+            self.expanded = replace(self.expanded, selected=index)
+            self.render()
 
-        item("Your work canvas", self.actions.work)
-        item("Your work feed", self.actions.agent)
-        record_action: RecordingAction = "stop" if self.recording.capturing else "start"
-        item("Stop recording" if self.recording.capturing else "Record a meeting", lambda: self.actions.record(record_action))
-        self.menu.addSeparator()
-        item("Keyboard map", self.actions.keyboard)
-        item("Keyboard overlay", self.actions.overlay)
-        item("Windows taskbar", self.toggle_taskbar)
-        item("Switch windows · Apps + Esc", lambda: self.actions.tiling(Tool.WINDOW_SWITCHER, target))
-        item("Copy latest transcript", lambda: self.actions.tiling(Tool.COPY_TRANSCRIPT, target))
-        item("Windows notification settings", self.notification_settings)
-        tiling = self.menu.addMenu("Window tiling")
-        tiling.addAction("Spread windows across screens").triggered.connect(lambda: self.actions.tiling(Tool.TILE_BALANCE, target))
+    def pick(self, index: int) -> None:
+        if self.expanded is not None:
+            self.settle_menu(island_menu.choose(self.expanded, rows(self.expanded)[index]))
 
-        def tile_action(selected: Tool) -> Callable[[object], None]:
-            def triggered(_checked: object) -> None:
-                self.actions.tiling(selected, target)
+    def key(self, press: island_menu.Press) -> None:
+        if self.expanded is not None:
+            self.settle_menu(island_menu.press(self.expanded, press))
 
-            return triggered
+    def deactivated(self) -> None:
+        """Another window took the keyboard: the menu closes without taking it back."""
+        self.close_menu(restore=False)
 
-        for label, tool in (
-            ("Focus left", Tool.TILE_FOCUS_LEFT),
-            ("Focus right", Tool.TILE_FOCUS_RIGHT),
-            ("Previous workspace", Tool.TILE_PREVIOUS_WORKSPACE),
-            ("Next workspace", Tool.TILE_NEXT_WORKSPACE),
-            ("Float or tile the active window", Tool.TILE_FLOAT),
-            ("Change split direction", Tool.TILE_DIRECTION),
-            ("Pause or resume automatic tiling", Tool.TILE_PAUSE),
-        ):
-            tiling.addAction(label).triggered.connect(tile_action(tool))
-        self.menu.addSeparator()
-        item("All Workspace controls…", self.actions.menu)
-        self.menu.setFont(font(strong=False))
-        self.menu.setStyleSheet(menu_style(self.preference))
-        anchor = self.window.capsules.get(Key.ISLAND)
-        origin = anchor.mapToGlobal(QtCore.QPoint(0, anchor.height() + 6)) if anchor is not None else self.window.mapToGlobal(QtCore.QPoint())
-        self.menu.popup(origin)
+    def settle_menu(self, outcome: island_menu.Outcome) -> None:
+        match outcome:
+            case Menu() as menu:
+                self.expanded = menu
+                self.render()
+            case Chosen(choice=choice):
+                self.close_menu(restore=restores_focus(choice))
+                self.run(choice)
+            case Dismissed.ESCAPE:
+                self.close_menu(restore=True)
+            case _:
+                assert_never(outcome)
+
+    def run(self, choice: island_menu.Choice) -> None:
+        match choice:
+            case Tiling(tool=tool):
+                self.actions.tiling(tool, self.menu_target)
+            case Command.CANVAS:
+                self.actions.work()
+            case Command.FEED:
+                self.actions.agent()
+            case Command.RECORD:
+                self.actions.record("start")
+            case Command.STOP_RECORDING:
+                self.actions.record("stop")
+            case Command.STOP_AGENT:
+                self.actions.stop()
+            case Command.KEYMAP:
+                self.actions.keyboard()
+            case Command.OVERLAY:
+                self.actions.overlay()
+            case Command.TASKBAR:
+                self.toggle_taskbar()
+            case Command.NOTIFICATIONS:
+                self.notification_settings()
+            case Command.ALL_CONTROLS:
+                self.actions.menu()
+            case _:
+                assert_never(choice)
 
     def state(self, state: State) -> None:
         if self.activity != state:
@@ -314,8 +365,13 @@ class DesktopBar:
         """Retarget the capsules at what the bar should show now; frames carry them there."""
         if self.closed:
             return
-        self.views = island(self.observed(), hovered=self.hovered)
-        shown = tuple(Shown(view, self.window.measure(view)) for view in self.views)
+        if self.expanded is not None:
+            self.expanded = self.menu()
+        menu = self.expanded
+        self.views = island(self.observed(), hovered=self.hovered, expanded=menu is not None)
+        shown = tuple(
+            Shown(view, expansion(menu) if menu is not None and view.key is Key.ISLAND else self.window.measure(view)) for view in self.views
+        )
         self.motion = retarget(self.motion, shown, animate=self.visible and self.observations.motion())
         listening = self.activity is State.LISTENING
         if listening and not self.audio_timer.isActive():
@@ -338,22 +394,25 @@ class DesktopBar:
                 contrast = False
             case _:
                 assert_never(self.preference)
-        self.window.present(
-            tuple(
-                Drawn(
-                    moving.view,
-                    moving.content,
-                    moving.previous,
-                    moving.fade.value,
-                    look(self.preference, self.frost, moving.view.tint),
-                    framed[moving.key],
-                )
-                for moving in self.motion.capsules
-                if moving.key in framed
-            ),
-            contrast=contrast,
-            glass=self.preference is appearance.Material.GLASS,
+        drawn = tuple(
+            Drawn(
+                moving.view,
+                moving.content,
+                moving.previous,
+                moving.fade.value,
+                self.style(moving.view.tint, moving.content.height),
+                framed[moving.key],
+            )
+            for moving in self.motion.capsules
+            if moving.key in framed
         )
+        # The window keeps the room a capsule is heading for, so it resizes only as an expansion starts and settles.
+        reach = max((max(moving.height.value, moving.height.target) for moving in self.motion.capsules), default=float(HEIGHT))
+        self.window.present(Presented(drawn, reach, self.expanded, contrast=contrast, glass=self.preference is appearance.Material.GLASS))
+
+    def style(self, tint: Tint, height: float) -> Look:
+        small = look(self.preference, self.frost, tint)
+        return large(small) if height > HEIGHT else small
 
     def spinning(self) -> bool:
         def spinner(part: object) -> bool:
@@ -456,7 +515,6 @@ class DesktopBar:
             self.audio_meter.close()
         if self.status_service is not None:
             self.status_service.close()
-        self.menu.close()
         if self.notification_service is not None:
             self.notification_service.close()
         self.materials.close()
@@ -472,20 +530,3 @@ class DesktopBar:
             self.resolution.update(active=False)
             self.window.dispose()
             self.loop.close()
-
-
-def menu_style(preference: appearance.Preference) -> str:
-    """The controls menu stays a solid Qt menu until it becomes the island's expansion."""
-    match preference:
-        case appearance.Contrast(background=background, foreground=foreground):
-            surface, ink, edge, selected = background, foreground, foreground, foreground
-        case appearance.Material.GLASS | appearance.Material.SOLID:
-            surface, ink, edge, selected = "#26262a", "rgba(255,255,255,240)", "rgba(255,255,255,24)", GLASS_ACCENT
-        case _:
-            assert_never(preference)
-    return f"""
-QMenu {{ background: {surface}; color: {ink}; border: 1px solid {edge}; border-radius: 12px; padding: 5px; }}
-QMenu::item {{ padding: 6px 16px; border-radius: 7px; }}
-QMenu::item:selected {{ background: {selected}; color: #ffffff; }}
-QMenu::separator {{ height: 1px; background: {edge}; margin: 4px 10px; }}
-"""

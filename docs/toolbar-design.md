@@ -24,8 +24,20 @@ transcription and agent work never show at once. Transcription offers no Stop
 because it cannot be stopped. "Starting…", "Stopping…" and "Saving…" replace the
 timer; "Check recording" turns it red and the detached capsule orange.
 
-Pressing the island at rest opens the controls menu, below the island with the
-canvas first. Pressing it while dictating stops dictation; pressing "Needs you"
+Pressing the island at rest expands it into the controls menu: 272 px wide with a
+21 px radius, its rows concentric inside it. Running activities lead as live rows
+with their own Stop; the detached agent and recording capsules leave the bar while
+the menu is open. The canvas comes first, then the feed and recording, the
+keyboard, and the desktop tools. Window tiling discloses its items in place.
+Arrows wrap and skip separators, Right and Left open and close tiling, Enter
+chooses, a letter jumps to the next row starting with it, and Escape closes.
+Opening the menu takes the keyboard; a window tool, a quiet toggle or Escape hands
+it back to the window that had it, a Workspace view keeps it, and clicking
+elsewhere closes the menu without taking it back. Window tools act on the window
+captured as the menu opened. Large glass is thicker than the capsules, so the
+menu's text stays legible over any desktop.
+
+Pressing the island while dictating stops dictation; pressing "Needs you"
 opens the question. The recording opens the canvas, the layer opens the key map
 and the bell opens the inbox. The bell's badge reads `99+` above 99; its tooltip
 and accessible name keep the exact count and the **Hold V + T** shortcut. Hold
@@ -98,9 +110,10 @@ each group's offset, size and opacity, so publishing a frame writes only those
 three properties. Changes within one Qt turn publish one final glass frame, and
 capsule changes never move a window.
 
-`island_model` turns observations into capsule views, `island_layout` arranges
-parts and frames capsules, `island_motion` and `motion` carry capsules between
-views, and `ui_components.appearance.look` decides how each reads. All are pure. `DesktopBar` owns the observations and timers, and
+`island_model` turns observations into capsule views, `island_menu` holds the
+menu's entries and navigation, `island_layout` arranges parts, rows and capsules,
+`island_motion` and `motion` carry capsules between views, and
+`ui_components.appearance.look` decides how each reads. All are pure. `DesktopBar` owns the observations and timers, and
 `island_surface` owns the Qt window and glass.
 
 ## Observations

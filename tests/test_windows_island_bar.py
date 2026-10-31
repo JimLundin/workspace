@@ -18,7 +18,7 @@ lazy from PySide6.QtTest import QTest
 from assistant.desktop_bar import BarActions, BarObservations, DesktopBar
 from assistant.icons import State
 from assistant.island_model import Key
-from assistant.island_surface import TOP, ControlButton
+from assistant.island_surface import TOP, ControlButton, MenuRow
 from assistant.qt_runtime import prepare
 from assistant.qt_ui import EventLoop, application
 from assistant.recording_state import RecordingState
@@ -72,6 +72,10 @@ def sampled(app: QtWidgets.QApplication, bar: DesktopBar, reached: Callable[[], 
     assert reached(), "The microphone level did not reach the trace."
 
 
+def menu_row(bar: DesktopBar, label: str) -> MenuRow:
+    return next(row for row in bar.window.capsules[Key.ISLAND].rows if row.accessibleName().split(" · ")[0] == label)
+
+
 def closed(app: QtWidgets.QApplication, bar: DesktopBar) -> None:
     bar.close()
     QtCore.QCoreApplication.sendPostedEvents(None, QtCore.QEvent.Type.DeferredDelete)
@@ -91,8 +95,8 @@ def test_the_island_rests_alone_and_each_capsule_acts_on_what_it_shows() -> None
         island = bar.window.capsules[Key.ISLAND]
         assert "20:59" in island.accessibleName() and "73%" in island.accessibleName()
         press(bar, Key.ISLAND)
-        assert bar.menu.isVisible() and bar.menu.actions()[0].text() == "Your work canvas"
-        bar.menu.close()
+        assert bar.expanded is not None and bar.window.capsules[Key.ISLAND].rows[0].accessibleName() == "Your work canvas"
+        QTest.keyClick(bar.window, QtCore.Qt.Key.Key_Escape)
         bar.state(State.AGENT)
         bar.hover(Key.ISLAND)
         stop_button(bar, Key.ISLAND).click()
@@ -304,17 +308,56 @@ def test_the_spinner_turns_only_while_processing_and_motion_allows() -> None:
         closed(app, bar)
 
 
-def test_tiling_menu_keeps_the_window_captured_before_the_popup() -> None:
+def test_tiling_acts_on_the_window_captured_before_the_menu_opened() -> None:
+    # Defect: a window tool acts on whatever window is in front after the menu
+    # took the keyboard, or the keyboard isn't handed back to that window.
     app = application()
     invoked: list[tuple[Tool, int]] = []
-    foreground = [42]
-    bar = DesktopBar(recorded([], tiling=invoked), native_shell=False, observations=BarObservations(foreground=lambda: foreground[0]))
+    foreground, focused = [42], list[int]()
+    observations = BarObservations(foreground=lambda: foreground[0], focus=lambda hwnd: focused.append(hwnd) is None)
+    bar = DesktopBar(recorded([], tiling=invoked), native_shell=False, observations=observations)
     try:
         bar.open_menu()
-        submenu = next(action.menu() for action in bar.menu.actions() if action.text() == "Window tiling")
-        assert isinstance(submenu, QtWidgets.QMenu)
         foreground[0] = 999
-        next(action for action in submenu.actions() if action.text() == "Float or tile the active window").trigger()
-        assert invoked == [(Tool.TILE_FLOAT, 42)]
+        QTest.mouseClick(menu_row(bar, "Window tiling"), QtCore.Qt.MouseButton.LeftButton)
+        QTest.mouseClick(menu_row(bar, "Float or tile the active window"), QtCore.Qt.MouseButton.LeftButton)
+        assert invoked == [(Tool.TILE_FLOAT, 42)] and focused == [42] and bar.expanded is None
+    finally:
+        closed(app, bar)
+
+
+def test_the_menu_takes_the_keyboard_and_hands_it_back_only_when_a_choice_calls_for_it() -> None:
+    # Defects: arrows or letters don't reach the menu, Escape strands the keyboard
+    # on the bar, opening a Workspace view gives the keyboard back to the old window,
+    # clicking elsewhere steals it back, or a live row stops its activity from
+    # anywhere but its Stop.
+    app = application()
+    invoked: list[str] = []
+    focused: list[int] = []
+    observations = BarObservations(foreground=lambda: 42, focus=lambda hwnd: focused.append(hwnd) is None)
+    bar = DesktopBar(recorded(invoked), native_shell=False, observations=observations)
+    try:
+        bar.open_menu()
+        island = bar.window.capsules[Key.ISLAND]
+        assert island.height() > TOP + 34 and bar.window.height() >= island.height()
+        QTest.keyClick(bar.window, QtCore.Qt.Key.Key_Down)
+        assert bar.expanded is not None and bar.expanded.selected == 0
+        QTest.keyClick(bar.window, QtCore.Qt.Key.Key_Escape)
+        assert bar.expanded is None and focused == [42] and bar.window.capsules[Key.ISLAND].height() == TOP + 34
+        bar.open_menu()
+        QTest.keyClicks(bar.window, "k")
+        QTest.keyClick(bar.window, QtCore.Qt.Key.Key_Return)
+        assert invoked == ["keymap"] and focused == [42]
+        bar.open_menu()
+        bar.deactivated()
+        assert bar.expanded is None and focused == [42]
+        bar.recording_changed(RecordingState(phase="recording", seconds=125))
+        bar.open_menu()
+        live = menu_row(bar, "Recording")
+        assert "02:05" in live.accessibleName() and "Stop recording" in live.accessibleName()
+        QTest.mouseClick(live, QtCore.Qt.MouseButton.LeftButton, pos=QtCore.QPoint(40, live.height() // 2))
+        assert invoked == ["keymap"], "Clicking the live row's reading stopped the recording."
+        QTest.mouseClick(live, QtCore.Qt.MouseButton.LeftButton, pos=QtCore.QPoint(live.width() - 17, live.height() // 2))
+        assert invoked == ["keymap", "record-stop"] and bar.expanded is None
     finally:
         closed(app, bar)
