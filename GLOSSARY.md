@@ -22,8 +22,8 @@ remain pending. A ticket is independent of any agent task requested from it.
 _Avoid_: Teams unread badge, agent task
 
 **Feed source**:
-One kind of feed item: a chat ticket, a history message, a Teams activity or
-Windows notice, or a sent reply. Each kind defines its key, origin application,
+One kind of feed item: a chat ticket, a Teams activity or Windows notice, or a
+sent reply. Each kind defines its key, origin application,
 attention and triage evidence once. Attention is the single pending rule.
 Triage assesses unresolved work. A reply still sending is settling. The feed
 shows every source that is not resolved.

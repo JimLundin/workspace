@@ -17,7 +17,6 @@ from assistant.communications import (
 from assistant.feed_origin import App
 from assistant.feed_sources import (
     Attention,
-    ChatMessageSource,
     ChatTicketSource,
     FeedSource,
     ReplySource,
@@ -47,8 +46,6 @@ def test_each_source_variant_owns_its_attention_key_origin_and_evidence() -> Non
     # send is quoted to triage, or a source is badged wrongly.
     table: tuple[tuple[FeedSource, Attention, SourceKind, App, int], ...] = (
         (ChatTicketSource(ChatTicket("chat", (FIRST, SECOND)), CHAT), Attention.TRIAGE, SourceKind.CHAT, App.TEAMS, 2),
-        (ChatMessageSource(FIRST, CHAT, unseen=True), Attention.TRIAGE, SourceKind.CHAT_MESSAGE, App.TEAMS, 1),
-        (ChatMessageSource(FIRST, CHAT, unseen=False), Attention.RESOLVED, SourceKind.CHAT_MESSAGE, App.TEAMS, 0),
         (UpdateSource(ACTIVITY, handled=False), Attention.TRIAGE, SourceKind.ACTIVITY, App.TEAMS, 1),
         (UpdateSource(MAIL, handled=False), Attention.TRIAGE, SourceKind.WINDOWS, App.OUTLOOK, 1),
         (UpdateSource(OTHER, handled=True), Attention.RESOLVED, SourceKind.WINDOWS, App.WINDOWS, 0),
@@ -74,13 +71,10 @@ def test_pending_listing_keeps_filtered_notices_unhandled_and_replies_until_they
         replies=(replace(REPLY, delivery=Delivery.OBSERVED),),
         notification_filter=NotificationFilter(frozenset({"contoso"})),
     )
-    pending = tuple(key(source) for source in listed(feed, history=False))
+    pending = tuple(key(source) for source in listed(feed))
     # The filtered notice is visible elsewhere, never quoted to triage.
     assert [item.kind for item in triage_evidence(feed)] == [SourceKind.CHAT, SourceKind.WINDOWS]
     assert [item.kind for item in pending] == [SourceKind.CHAT, SourceKind.WINDOWS, SourceKind.REPLY]
-    history = tuple(listed(feed, history=True))
-    assert [attention(source) for source in history if isinstance(source, UpdateSource)] == [Attention.TRIAGE, Attention.TRIAGE]
-    assert len(history) == 4
 
 
 def test_chat_evidence_names_its_exact_message_for_research() -> None:

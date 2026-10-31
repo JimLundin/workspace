@@ -32,15 +32,12 @@ _TEAMS = Origin(App.TEAMS, App.TEAMS.value)
 
 
 class SourceKind(Enum):
-    """Wire names for rendered links and the prefix of triage evidence identities."""
+    """The prefix of triage evidence identities."""
 
     CHAT = "chat"
-    CHAT_MESSAGE = "chat-message"
     ACTIVITY = "activity"
     WINDOWS = "windows"
     REPLY = "reply"
-    # A triage proposal groups sources; its rendered row needs a key of its own.
-    PROPOSAL = "triage"
 
 
 @dataclass(frozen=True, slots=True)
@@ -58,15 +55,6 @@ class ChatTicketSource:
 
 
 @dataclass(frozen=True, slots=True)
-class ChatMessageSource:
-    """One captured message in history, seen or not."""
-
-    message: Message
-    chat: Conversation | None
-    unseen: bool = field(kw_only=True)
-
-
-@dataclass(frozen=True, slots=True)
 class UpdateSource:
     """A Teams activity or Windows notice; `Update.source` already names which."""
 
@@ -79,7 +67,7 @@ class ReplySource:
     reply: Reply
 
 
-type FeedSource = ChatTicketSource | ChatMessageSource | UpdateSource | ReplySource
+type FeedSource = ChatTicketSource | UpdateSource | ReplySource
 
 
 class Attention(Enum):
@@ -118,8 +106,6 @@ def attention(source: FeedSource) -> Attention:
     match source:
         case ChatTicketSource():
             return Attention.TRIAGE
-        case ChatMessageSource(unseen=unseen):
-            return Attention.TRIAGE if unseen else Attention.RESOLVED
         case UpdateSource(handled=handled):
             return Attention.RESOLVED if handled else Attention.TRIAGE
         case ReplySource(reply=reply):
@@ -141,12 +127,10 @@ def _delivery(delivery: Delivery) -> Attention:
 
 
 def key(source: FeedSource) -> SourceKey:
-    """The rendered row's identity; a click names it to act on what the person saw."""
+    """The source's identity in the pending listing and its triage evidence."""
     match source:
         case ChatTicketSource(ticket=ticket):
             return SourceKey(SourceKind.CHAT, ticket.conversation)
-        case ChatMessageSource(message=message):
-            return SourceKey(SourceKind.CHAT_MESSAGE, message.conversation + "/" + message.identity)
         case UpdateSource(update=update):
             return _update_key(update)
         case ReplySource(reply=reply):
@@ -166,7 +150,7 @@ def _update_key(update: Update) -> SourceKey:
 
 def origin(source: FeedSource) -> Origin:
     match source:
-        case ChatTicketSource() | ChatMessageSource() | ReplySource():
+        case ChatTicketSource() | ReplySource():
             return _TEAMS
         case UpdateSource(update=update):
             match update.source:
@@ -180,7 +164,7 @@ def origin(source: FeedSource) -> Origin:
 
 def title(source: FeedSource) -> str:
     match source:
-        case ChatTicketSource(chat=chat) | ChatMessageSource(chat=chat):
+        case ChatTicketSource(chat=chat):
             return chat.title if chat is not None else "Teams"
         case UpdateSource(update=update):
             return update.app_name
@@ -197,8 +181,6 @@ def evidence(source: FeedSource) -> tuple[Candidate, ...]:
     match source:
         case ChatTicketSource(ticket=ticket, chat=chat):
             return tuple(_message_evidence(message, chat) for message in ticket.messages)
-        case ChatMessageSource(message=message, chat=chat):
-            return (_message_evidence(message, chat),)
         case UpdateSource(update=update):
             excerpt = Excerpt(update.app_name + ": " + update.title, update.text, update.created_at)
             captured = replace(_captured(_update_key(update), origin(source), excerpt), reaction=update.kind is UpdateKind.REACTION)
@@ -242,26 +224,22 @@ def _captured(source: SourceKey, at: Origin, excerpt: Excerpt) -> Candidate:
     )
 
 
-def listed(feed: Feed, *, history: bool) -> Iterator[FeedSource]:
-    """The feed's sources in display order: pending work, or with history every captured source.
+def listed(feed: Feed) -> Iterator[FeedSource]:
+    """The feed's pending sources in display order.
 
     Filtered notices stay out of pending work without being handled. Replies remain
     listed after delivery, so the person sees each outcome before it retires.
     """
-    if history:
-        for message in feed.messages:
-            yield ChatMessageSource(message, feed.conversation(message.conversation), unseen=feed.unseen(message))
-    else:
-        for ticket in chat_tickets(feed):
-            yield ChatTicketSource(ticket, feed.conversation(ticket.conversation))
+    for ticket in chat_tickets(feed):
+        yield ChatTicketSource(ticket, feed.conversation(ticket.conversation))
     for update in feed.updates:
-        if history or feed.needs_attention(update):
+        if feed.needs_attention(update):
             yield UpdateSource(update, handled=not feed.pending_update(update))
     yield from map(ReplySource, feed.replies)
 
 
 def triage_evidence(feed: Feed) -> tuple[Candidate, ...]:
-    return tuple(chain.from_iterable(map(evidence, listed(feed, history=False))))
+    return tuple(chain.from_iterable(map(evidence, listed(feed))))
 
 
 def chat_message(feed: Feed, identity: str) -> Message | None:
