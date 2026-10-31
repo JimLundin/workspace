@@ -141,6 +141,11 @@ def typed_run[A](arguments: TypeAdapter[A], handler: Callable[[Args, A], Output]
     return run
 
 
+def described[A](tool: str, arguments: TypeAdapter[A], record: A) -> Operation:
+    """An operation a handler resolved itself, recorded from its typed record."""
+    return Operation(tool, arguments.dump_json(record, exclude_none=True))
+
+
 def typed_classification[A](
     arguments: TypeAdapter[A], classify: Callable[[A], Classification], fallback: Classification
 ) -> Callable[[Mapping[str, Json]], Classification]:

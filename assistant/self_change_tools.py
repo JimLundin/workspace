@@ -21,6 +21,7 @@ from assistant.agent_tools import (
     Session,
     Tool,
     argument_spec,
+    described,
     fixed,
     typed_classification,
     typed_run,
@@ -96,13 +97,22 @@ def _source_change[A: PathArguments | WriteArguments | EditArguments](arguments:
     return typed_classification(arguments, lambda request: Change(_source_file(request.path)), Change(("source",)))
 
 
-def _installation(arguments: Mapping[str, Json]) -> tuple[str, ...]:
+@dataclass(frozen=True, slots=True)
+class InstallOperation:
+    """The install apply_changes requests: its summary, the reviewed digest and the destination."""
+
+    summary: str
+    source_digest: Annotated[str, Field(min_length=64, max_length=64)]
+    destination: str
+    diff_sha256: str
+
+
+_INSTALL_OPERATION: Final = TypeAdapter(InstallOperation)
+
+
+def _installation(operation: InstallOperation) -> tuple[str, ...]:
     """The reviewed digest and destination let a later run verify what the keeper installed."""
-    match arguments.get("source_digest"), arguments.get("destination"):
-        case str() as digest, str() as destination if len(digest) == 64:
-            return ("source", target("installed-root", destination), "source-digest:" + digest)
-        case _:
-            return ("source",)
+    return ("source", target("installed-root", operation.destination), "source-digest:" + operation.source_digest)
 
 
 def verified_installation(store: TaskStore, claim: Claim, live: Path) -> Waiting | None:
@@ -209,7 +219,7 @@ class SelfChange:
                     _SUMMARY,
                 ),
                 typed_run(_SUMMARY, self.apply_changes),
-                lambda arguments: Change(_installation(arguments)),
+                typed_classification(_INSTALL_OPERATION, lambda operation: Change(_installation(operation)), Change(("source",))),
                 Display.PUBLIC,
             ),
             Tool(
@@ -325,15 +335,8 @@ class SelfChange:
         if diff != self.checked:
             raise ArgumentError("the changes have changed since they were checked; run check_changes again.")
         digest = source_digest(self.source().root)
-        operation = Operation.of(
-            args.tool,
-            {
-                **args.values,
-                "source_digest": digest,
-                "destination": str(self.source().live.absolute()),
-                "diff_sha256": hashlib.sha256(diff.encode("utf-8")).hexdigest(),
-            },
-        )
+        install = InstallOperation(summary, digest, str(self.source().live.absolute()), hashlib.sha256(diff.encode("utf-8")).hexdigest())
+        operation = described(args.tool, _INSTALL_OPERATION, install)
         if not self.session.approve(operation, "Install workspace changes?", summary + "\n\n" + diff):
             return Output(DECLINED, ok=False)
         if self.session.stop.is_set():

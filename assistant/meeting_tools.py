@@ -1,6 +1,6 @@
 """The meeting tool family: capture by voice, and the bounded tools of a prepared follow-through task."""
 
-from collections.abc import Callable, Mapping
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Annotated, Final, Literal
 
@@ -18,13 +18,15 @@ from assistant.agent_tools import (
     Session,
     Tool,
     argument_spec,
+    described,
     fixed,
+    typed_classification,
     typed_run,
 )
 from assistant.llm import ToolSpec
 from assistant.meeting_execution import MeetingRun, encoded, verified_mail
 from assistant.meeting_followup import FOLLOWUP_CLAIMS, MAX_MODEL_BYTES, FollowupClaims
-from automation.actions import Change, Evidence, Observation, Operation, target
+from automation.actions import Change, Evidence, Observation, target
 from automation.execution import ProofRule
 from automation.json_value import Json
 
@@ -184,20 +186,41 @@ class MeetingCapture:
         return self.session.effect(args.operation, lambda: Output(self.session.machine.meeting(operation, request.source, request.title)))
 
 
-def _package(arguments: Mapping[str, Json]) -> tuple[str, ...]:
-    match arguments.get("task_id"), arguments.get("version"):
-        case str() as task_id, str() as version if version:
-            return (target("meeting-package", (task_id, version)),)
-        case _:
-            return ()
+# The operations a follow-up run records describe what its handlers resolved:
+# the run's task and the exact package, revision and mail they act on.
 
 
-def _mail(arguments: Mapping[str, Json]) -> tuple[str, ...]:
-    match arguments.get("task_id"), arguments.get("draft_id"):
-        case str() as task_id, str() as draft_id:
-            return (target("meeting-mail", (task_id, draft_id)),)
-        case _:
-            return ()
+@dataclass(frozen=True, slots=True)
+class SourcesOperation:
+    task_id: str
+    source_digest: str
+
+
+@dataclass(frozen=True, slots=True)
+class PackageOperation:
+    """A published package (with its path) or an inspected one (with or without a version)."""
+
+    task_id: str
+    version: str
+    path: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class MailOperation:
+    task_id: str
+    version: str
+    draft_id: str
+    revision: int
+    mail_fingerprint: str
+
+
+_SOURCES_OPERATION = TypeAdapter(SourcesOperation)
+_PACKAGE_OPERATION = TypeAdapter(PackageOperation)
+_MAIL_OPERATION = TypeAdapter(MailOperation)
+
+
+def _package(operation: PackageOperation) -> tuple[str, ...]:
+    return (target("meeting-package", (operation.task_id, operation.version)),) if operation.version else ()
 
 
 class MeetingFollowup:
@@ -212,14 +235,30 @@ class MeetingFollowup:
         read_sources, publish, result, save = SPECS
         return (
             Tool(read_sources, typed_run(_SOURCES, self.read_sources), fixed(Observation(("filesystem",))), Display.PRIVATE),
-            Tool(publish, self.publish, lambda arguments: Change(("filesystem", *_package(arguments))), Display.PRIVATE),
-            Tool(result, typed_run(_RESULT, self.result), lambda arguments: Observation(("filesystem", *_package(arguments))), Display.PRIVATE),
+            Tool(
+                publish,
+                self.publish,
+                typed_classification(_PACKAGE_OPERATION, lambda operation: Change(("filesystem", *_package(operation))), Change(("filesystem",))),
+                Display.PRIVATE,
+            ),
+            Tool(
+                result,
+                typed_run(_RESULT, self.result),
+                typed_classification(
+                    _PACKAGE_OPERATION, lambda operation: Observation(("filesystem", *_package(operation))), Observation(("filesystem",))
+                ),
+                Display.PRIVATE,
+            ),
             # The adapter verifies the exact saved revision and original mailbox.
             # A model assertion about another observation cannot replace that proof.
             Tool(
                 save,
                 typed_run(_DRAFT, self.save_draft),
-                lambda arguments: Change(("outlook", "filesystem", *_mail(arguments))),
+                typed_classification(
+                    _MAIL_OPERATION,
+                    lambda operation: Change(("outlook", "filesystem", target("meeting-mail", (operation.task_id, operation.draft_id)))),
+                    Change(("outlook", "filesystem")),
+                ),
                 Display.PRIVATE,
                 proof=ProofRule.ADAPTER,
             ),
@@ -227,7 +266,7 @@ class MeetingFollowup:
 
     def read_sources(self, args: Args, request: SourcesArguments) -> Output:
         result = self.run.sources(request.source_id, request.offset)
-        operation = Operation.of(args.tool, {"task_id": self.run.request.task_id, "source_digest": self.run.request.bundle.fingerprint})
+        operation = described(args.tool, _SOURCES_OPERATION, SourcesOperation(self.run.request.task_id, self.run.request.bundle.fingerprint))
         return self.session.effect(operation, lambda: Output(encoded(result)))
 
     def publish(self, args: Args) -> Output:
@@ -235,9 +274,8 @@ class MeetingFollowup:
             raise ArgumentError("The follow-up exceeds its size limit.")
         claims = _PUBLICATION.validate_json(args.payload).followup
         publication = self.run.publication(claims)
-        operation = Operation.of(
-            args.tool, {"task_id": self.run.request.task_id, "version": publication.version, "path": publication.verification.path}
-        )
+        package = PackageOperation(self.run.request.task_id, publication.version, publication.verification.path)
+        operation = described(args.tool, _PACKAGE_OPERATION, package)
         preview = FOLLOWUP_CLAIMS.dump_json(claims, indent=2).decode()
         if not self.session.approve(operation, "Save this meeting follow-up?", preview):
             return Output(DECLINED, ok=False)
@@ -246,21 +284,13 @@ class MeetingFollowup:
     def result(self, args: Args, request: ResultArguments) -> Output:
         version = request.version
         result = self.run.result(version)
-        operation = Operation.of(args.tool, {"task_id": self.run.request.task_id, "version": version})
+        operation = described(args.tool, _PACKAGE_OPERATION, PackageOperation(self.run.request.task_id, version))
         return self.session.effect(operation, lambda: Output(encoded(result)))
 
     def save_draft(self, args: Args, arguments: DraftArguments) -> Output:
         target, request = self.run.prepare_mail(arguments.version, arguments.draft_id, arguments.revision)
-        operation = Operation.of(
-            args.tool,
-            {
-                "task_id": self.run.request.task_id,
-                "version": target.version,
-                "draft_id": target.draft_id,
-                "revision": target.revision,
-                "mail_fingerprint": target.fingerprint,
-            },
-        )
+        mail = MailOperation(self.run.request.task_id, target.version, target.draft_id, target.revision, target.fingerprint)
+        operation = described(args.tool, _MAIL_OPERATION, mail)
         content = _VALUE.validate_python(outlook.content_data(request.content))
         preview = _VALUE.dump_json(content, indent=2).decode()
         if not self.session.approve(operation, "Save this unsent mail draft?", preview):
