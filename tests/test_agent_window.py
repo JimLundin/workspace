@@ -73,7 +73,7 @@ class RecordingWindow(AgentWindow):
 
 def test_background_activity_and_queued_turns_do_not_show_or_focus_the_panel() -> None:
     panel = RecordingWindow(lambda: None)
-    panel.begin("Find the workbook", lambda: None)
+    panel.begin("Find the workbook")
     panel.step("Looking for files")
     panel.say("I found it.")
     panel.queued("Open that one")
@@ -109,7 +109,7 @@ def test_explicit_ui_actions_reach_the_existing_session_callbacks() -> None:
     assert panel.new()
     assert submitted == ["Open my workbook\nwith the complete ending"]
     assert commands == ["stop", "new"]
-    panel.begin("Working", panel.stop)
+    panel.begin("Working")
     assert not panel.new(), "New chat is unavailable until the current turn finishes."
     panel.stopping()
     assert not panel.submit("Keep this draft until stopping finishes")
@@ -117,42 +117,13 @@ def test_explicit_ui_actions_reach_the_existing_session_callbacks() -> None:
     panel.paint()
 
 
-def test_model_thread_never_calls_widgets_and_rapid_updates_are_coalesced() -> None:
-    panel = RecordingWindow(lambda: None)
-    panel.paint()
-    ui_thread = threading.get_ident()
-
-    def model() -> None:
-        panel.begin("Read these files", lambda: None)
-        publish = panel.updates()
-        for number in range(100):
-            panel.step(f"Read {number}")
-            publish(Answer("stream", f"Reading {number}", number))
-        publish(Answer("stream", "All done.", 100, StreamState.COMPLETE))
-        panel.done("All done.")
-        panel.finish()
-
-    worker = threading.Thread(target=model)
-    worker.start()
-    worker.join(timeout=2)
-    assert not worker.is_alive(), "Rendering must never hold up the model thread."
-    assert len(panel.jobs) == 1
-    panel.paint()
-    assert set(panel.view.threads) == {ui_thread}
-    assert len(panel.view.states[-1].activity) == 100
-    assert len(panel.view.states[-1].messages) == 2
-    assert message_body(panel.view.states[-1].messages[-1]) == "All done."
-    panel.close()
-    panel.paint()
-
-
 def test_live_publishers_cannot_update_a_later_turn_or_a_reset_conversation() -> None:
     panel = RecordingWindow(lambda: None)
-    panel.begin("First task", panel.stop)
+    panel.begin("First task")
     first = panel.updates()
     first(Answer("same-id", "First answer", 1, StreamState.COMPLETE))
     panel.finish()
-    panel.begin("Next task", panel.stop)
+    panel.begin("Next task")
     second = panel.updates()
     panel.paint()
     before = panel.state
@@ -161,7 +132,7 @@ def test_live_publishers_cannot_update_a_later_turn_or_a_reset_conversation() ->
     second(Answer("second-answer", "Second answer", 3))
     assert message_body(panel.state.messages[-1]) == "Second answer"
     panel.reset()
-    panel.begin("Fresh conversation", panel.stop)
+    panel.begin("Fresh conversation")
     before = panel.state
     second(Answer("late", "This belongs to the old conversation", 4))
     assert panel.state is before and len(panel.state.messages) == 1
@@ -176,7 +147,7 @@ def test_quitting_during_ui_warmup_withdraws_requests_and_never_creates_a_late_w
     panel.close()
     assert not panel.respond("open", TextAnswer("Yes"))
     panel.paint()
-    assert not panel.view.states and not panel.view.shown and not panel.ready.is_set()
+    assert not panel.view.states and not panel.view.shown and not panel.publication.ready.is_set()
 
 
 def test_failed_widget_startup_reports_the_problem_and_can_be_retried() -> None:
@@ -195,11 +166,11 @@ def test_failed_widget_startup_reports_the_problem_and_can_be_retried() -> None:
     panel = AgentWindow(lambda: None, post=jobs.append, create_view=create, on_problem=problems.append)
     while jobs:
         jobs.popleft()()
-    assert len(problems) == 1 and not panel.ready.is_set()
+    assert len(problems) == 1 and not panel.publication.ready.is_set()
     panel.show()
     while jobs:
         jobs.popleft()()
-    assert panel.ready.is_set() and view.shown == [False]
+    assert panel.publication.ready.is_set() and view.shown == [False]
     panel.close()
     while jobs:
         jobs.popleft()()

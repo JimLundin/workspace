@@ -6,9 +6,7 @@ read. Callers render the returned document and deliver the returned notices.
 """
 
 import hashlib
-import sqlite3
-from collections.abc import Callable, Generator, Sequence
-from contextlib import contextmanager
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, replace
 from enum import Enum
 from pathlib import Path
@@ -53,7 +51,8 @@ from assistant.work_canvas_model import (
     observe_activity,
     result_document,
 )
-from assistant.work_window import WorkSnapshot
+from assistant.work_snapshot import WorkSnapshot
+from automation import journal
 from automation.personal_work import Catalog, SourceKind, WorkState, WorkThread
 from automation.task import Blocked, Task, TextAnswer, Waiting, phase
 
@@ -125,7 +124,7 @@ class WorkCanvas:
         self._session: tuple[CanvasActivity, ...] | None = None
         self._task_activity: tuple[CanvasActivity, ...] = ()
         path.parent.mkdir(parents=True, exist_ok=True)
-        with self._connection() as connection:
+        with journal.writing(path) as connection:
             connection.execute("CREATE TABLE IF NOT EXISTS canvas (id INTEGER PRIMARY KEY CHECK(id=1), payload BLOB NOT NULL)")
             connection.execute("INSERT OR IGNORE INTO canvas VALUES (1, ?)", (DOCUMENT.dump_json(CanvasDocument()),))
             document = _loaded(connection)
@@ -139,13 +138,13 @@ class WorkCanvas:
         return self._catalog or Catalog()
 
     def read(self) -> CanvasDocument:
-        with self._connection() as connection:
+        with journal.reading(self.path) as connection:
             document = _loaded(connection)
         return result_document(document)
 
     def _save(self, document: CanvasDocument) -> None:
         checked = result_document(DOCUMENT.validate_python(document))
-        with self._connection() as connection:
+        with journal.writing(self.path) as connection:
             connection.execute("UPDATE canvas SET payload=? WHERE id=1", (DOCUMENT.dump_json(checked),))
 
     def _persist(self, previous: CanvasDocument, current: CanvasDocument) -> CanvasDocument:
@@ -278,17 +277,8 @@ class WorkCanvas:
         )
         return self._persist(document, replace(document, activity=activity))
 
-    @contextmanager
-    def _connection(self) -> Generator[sqlite3.Connection]:
-        connection = sqlite3.connect(self.path)
-        try:
-            with connection:
-                yield connection
-        finally:
-            connection.close()
 
-
-def _loaded(connection: sqlite3.Connection) -> CanvasDocument:
+def _loaded(connection: journal.Connection) -> CanvasDocument:
     observed: object = connection.execute("SELECT payload FROM canvas WHERE id=1").fetchone()
     match observed:
         case (bytes() as payload,):

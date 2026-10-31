@@ -18,11 +18,12 @@ lazy import automation.presentation
 lazy from assistant import agent_session
 lazy from assistant.agent_window import AgentWindow
 lazy from assistant.feed_origin import FeedRequest
+lazy from assistant.work_commands import AnswerTask, FollowUp, Redirect, Submit, WorkCommand
 lazy from assistant.work_service import IdentifiedSubmission, Issued, WorkBridge, WorkService
-lazy from assistant.work_window import AnswerTask, FollowUp, Redirect, Submit, WorkCommand, WorkSnapshot
+lazy from assistant.work_snapshot import WorkSnapshot
 lazy from automation.activity import ContextSnapshot
 lazy from automation.context import ContextStore
-lazy from automation.execution import ApprovalReview, review_matches
+lazy from automation.execution import ApprovalReview, current_review, review_matches
 lazy from automation.ipc import (
     Envelope,
     LogEvent,
@@ -59,6 +60,7 @@ lazy from automation.task import (
     answers,
     identifier,
     owns,
+    requested,
     terminal,
     text,
 )
@@ -123,15 +125,6 @@ def turn_ended(task: Task) -> bool:
             return False
         case _:
             assert_never(task.state)
-
-
-def requested(task: Task) -> Question | Approval | None:
-    """The question or approval a waiting task needs the person to answer."""
-    match task.state:
-        case Waiting(Question() | Approval() as request):
-            return request
-        case _:
-            return None
 
 
 def chronological(task: Task) -> tuple[float, str]:
@@ -430,7 +423,7 @@ class WorkAgent:
             request = requested(task) if task is not None else None
             if task is None or request is None or request.id != request_id or not answers(request, reply):
                 return False
-            if reply is ApprovalDecision.APPROVED and not any(review_matches(task, review) for review in self._snapshot.reviews):
+            if reply is ApprovalDecision.APPROVED and current_review(task, self._snapshot.reviews) is None:
                 return False
             return self._enqueue(Issued(AnswerTask(task_id, request_id, reply), self.identity(), self._source(), None))
 
@@ -453,14 +446,14 @@ class WorkAgent:
         window = self._panel()
         if previous is None or previous.id != task.id:
             self._clear_input()
-            window.begin(source.title if source is not None else task.prompt, self.stop, queued=task.id in self._queued, source=source)
+            window.begin(source.title if source is not None else task.prompt, queued=task.id in self._queued, source=source)
             self._queued.discard(task.id)
             self._live = window.updates()
         elif new_turn(previous, task):
             self._clear_input()
             if active(task):
                 window.finish()
-                window.begin(f"Continue: {task.title}", self.stop, source=source)
+                window.begin(f"Continue: {task.title}", source=source)
                 self._live = window.updates()
         self._displayed, self._displayed_review = task, review
         if task.checkpoint is not None and (previous is None or previous.checkpoint != task.checkpoint):
@@ -535,7 +528,7 @@ class WorkAgent:
             candidates = [task for task in tasks if self._settled.get(task.id) != task.revision]
             while selected is not None or candidates:
                 selected = selected if selected is not None else candidates[0]
-                review = next((review for review in snapshot.reviews if review_matches(selected, review)), None)
+                review = current_review(selected, snapshot.reviews)
                 self._display(selected, review)
                 if active(selected):
                     break
@@ -568,7 +561,7 @@ class WorkAgent:
         request = requested(task) if task is not None else None
         # A failure is only recorded for the displayed task, and publishing restores it before redisplaying.
         if self.window is not None and task is not None and request is not None and request.id == request_id:
-            review = next((review for review in snapshot.reviews if review_matches(task, review)), None)
+            review = current_review(task, snapshot.reviews)
             self.window.withdraw_input()
             message = input_message(task, review)
             if message is not None:

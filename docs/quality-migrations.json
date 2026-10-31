@@ -40,15 +40,6 @@
     {
       "key": {
         "rule": "PLR0913",
-        "path": "assistant/agent_window.py",
-        "scope": "AgentWindow.begin",
-        "signature": "c603826b6901d73b7b120508da22e30c141e47ab811886cb1c3a243ad8684f6f"
-      },
-      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
-    },
-    {
-      "key": {
-        "rule": "PLR0913",
         "path": "assistant/app.py",
         "scope": "AssistantApp.on_message",
         "signature": "6b1c2637d86e2001144e8c96c9e112fc4668ab84bac3391b3c9b685cf66bf5bd"
@@ -590,15 +581,6 @@
       "key": {
         "rule": "PLR0913",
         "path": "assistant/ui.py",
-        "scope": "Ui.agent",
-        "signature": "f54b8741ad9554fb1fdea64863d4d29ca5ece2638f3f0ddb6ea909cad07de679"
-      },
-      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
-    },
-    {
-      "key": {
-        "rule": "PLR0913",
-        "path": "assistant/ui.py",
         "scope": "Ui.desktop",
         "signature": "1a92684a03c2add67191b73f83ca3e14a876ba42d50191ae947918fcbd3e40c7"
       },
@@ -772,15 +754,6 @@
         "path": "automation/execution.py",
         "scope": "WorkExecution.__init__",
         "signature": "ae68b1bbce90905d0dde12954edff97446fd0e003360ef2b5598b82009c0ff80"
-      },
-      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
-    },
-    {
-      "key": {
-        "rule": "PLR0913",
-        "path": "automation/routines.py",
-        "scope": "RoutineStore._enqueue",
-        "signature": "b33effe275de07b701c91738c74fded2b807fedb60c47b8f5c569f4bfb36922a"
       },
       "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
     },

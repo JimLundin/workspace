@@ -64,7 +64,8 @@ lazy from assistant.work_agent import WorkAgent
 lazy from assistant.work_bridge import WorkOwners
 lazy from assistant.work_bridge_contracts import WORK_BRIDGE, BridgeCommand, BridgeResponse
 lazy from assistant.work_canvas import WorkCanvas, instruction_prompt
-lazy from assistant.work_window import ControlTask, WorkCommand, WorkSnapshot
+lazy from assistant.work_commands import ControlTask, WorkCommand
+lazy from assistant.work_snapshot import WorkSnapshot
 lazy from automation.bridge import BridgeClient
 lazy from automation.context import ContextStore
 lazy from automation.ipc import MeetingCommand, MeetingFailed, MeetingSucceeded, StartMeeting
@@ -244,8 +245,11 @@ class AssistantApp:
             self.window.handle, mic, self.ui, on_state=self.show, on_notify=self.tray.notify, on_problem=self.problem, tiling=self.tiling
         )
         self.timings.mark("control window and microphone")
-        missing = settings if isinstance(settings, Missing) else None
-        self.settings = settings if isinstance(settings, Settings) else Settings("", "", "", "", "", "", "")
+        match settings:
+            case Missing():
+                missing, self.settings = settings, Settings("", "", "", "", "", "", "")
+            case Settings():
+                missing, self.settings = None, settings
         self.activity: ActivityTracker
 
         def context() -> ContextSnapshot:
@@ -262,7 +266,6 @@ class AssistantApp:
             saved_context,
             BridgeClient(work_folder),
             lambda runner: self.ui.agent(
-                None,
                 runner.stop,
                 on_problem=self.problem,
                 on_reset=runner.new_conversation,
@@ -356,8 +359,11 @@ class AssistantApp:
             # Recover only the crash window between binding and task commit.
             # Existing task prompts may have been redirected by the user.
             for run in self.canvas.read().runs:
-                if (run.evidence is not None or isinstance(run.intent, CanvasInstruction)) and tasks.get(run.task_id) is None:
-                    self.ui.post(self.canvas_recovery(run))
+                match run:
+                    case CanvasRun(intent=CanvasInstruction()) | CanvasRun(evidence=str()) if tasks.get(run.task_id) is None:
+                        self.ui.post(self.canvas_recovery(run))
+                    case _:
+                        pass
         return PersonalWork(
             PersonalStore(tasks.path),
             BrowserSources(Browser(DIRECTORY / "browser-profile", source=Product.EDGE)),
@@ -448,8 +454,7 @@ class AssistantApp:
             log("The work frontend did not finish closing before assistant shutdown.")
         timings.mark("meetings and work frontend")
         self.activity.close()
-        self.ui.close_agent()
-        self.ui.close_work()
+        self.ui.close_windows()
         self.ui.close()
         timings.mark("Qt shutdown")
         self.jobs.put(None)

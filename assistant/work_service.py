@@ -5,7 +5,7 @@ from dataclasses import dataclass, replace
 from itertools import islice
 from typing import Protocol, assert_never
 
-from assistant.work_window import (
+from assistant.work_commands import (
     AddPreference,
     AddProjectNote,
     AnswerTask,
@@ -17,15 +17,13 @@ from assistant.work_window import (
     Redirect,
     RefreshApproval,
     RemoveContext,
-    ReplyProblem,
-    SubmissionProblem,
     Submit,
     UpdatePreference,
     UpdateProjectNote,
     UpdateRoutine,
     WorkCommand,
-    WorkSnapshot,
 )
+from assistant.work_snapshot import ReplyProblem, SubmissionProblem, WorkSnapshot
 from automation.activity import ContextSnapshot
 from automation.context import ContextStore, Preference, ProjectNote
 from automation.execution import ApprovalReview, review_matches

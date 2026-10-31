@@ -87,7 +87,8 @@ from assistant.work_canvas_model import (
     view_state,
 )
 from assistant.work_canvas_view import CanvasCard, CanvasGroup, CanvasViewport
-from assistant.work_window import ControlTask, WorkWindow
+from assistant.work_commands import ControlTask
+from assistant.work_window import WorkWindow
 from automation.personal_work import (
     AddDocument,
     AddWebPage,

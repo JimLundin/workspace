@@ -22,7 +22,7 @@ from assistant.work_canvas_context import CanvasScope, context_path
 from assistant.work_canvas_edits import ArrangeView, RenameGroup, UserEdit
 from assistant.work_canvas_gestures import NestBubble, PlaceBubbles
 from assistant.work_canvas_model import CanvasCollection, CanvasDocument, CanvasNote, CanvasRelation, Placement, view_state
-from assistant.work_window import WorkSnapshot
+from assistant.work_snapshot import WorkSnapshot
 from automation.personal_work import DismissedWork, WorkState
 from automation.task import Blocked, Completed, TextAnswer, Waiting
 from tests.agent_requests import asked

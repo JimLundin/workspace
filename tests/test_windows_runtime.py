@@ -191,8 +191,8 @@ def test_work_window_closes_with_its_ui_owner_in_a_fresh_process(tmp_path: Path)
                     later(root, 40, ready.set)
                 ui.post(opened)
                 assert ready.wait(10), "Work did not open on the UI thread"
-                ui.close_work()
-                assert work.closed_ready.is_set(), "Work did not acknowledge closing"
+                ui.close_windows()
+                assert work.publication.closed_ready.is_set(), "Work did not acknowledge closing"
             except BaseException as error:
                 failures.append(error)
             finally:
@@ -262,7 +262,7 @@ def _native_controller_lifetime(tmp_path: Path, *, qt_first: bool) -> None:
                 self.window = shell.AppWindow(title, self.message)
 
             def run(self):
-                self.ui.agent(None, lambda: None, reveal=False)
+                self.ui.agent(lambda: None, reveal=False)
                 canvas = WorkCanvas(DIRECTORY / "work" / "canvas.sqlite3", lambda run: None, autonomous=False)
                 self.ui.configure_canvas(canvas, lambda title, target: None)
                 self.ui.work(lambda command: None, focus=False)
@@ -280,8 +280,7 @@ def _native_controller_lifetime(tmp_path: Path, *, qt_first: bool) -> None:
                 if message == system.WM_CLOSE:
                     observed.append(("control", threading.get_ident() == self.owner))
                     self.ui.close_desktop()
-                    self.ui.close_agent()
-                    self.ui.close_work()
+                    self.ui.close_windows()
                     self.ui.close()
                     self.window.destroy()
                     system.post_quit()
