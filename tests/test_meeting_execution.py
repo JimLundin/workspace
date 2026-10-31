@@ -405,6 +405,10 @@ def test_reserved_workflow_omits_unrelated_history_context_and_general_tools(tmp
         ("browser_tabs", {}),
         ("meeting_start", {}),
         ("teams_web_read", {"target_id": "unrelated"}),
+        # Invalid arguments to the run's own tools are refused before any effect.
+        ("meeting_read_sources", {"offset": "1"}),
+        ("meeting_followup_result", {"version": 3}),
+        ("meeting_save_draft", {"version": "v", "draft_id": "d", "revision": -1}),
         ("read_file", {"path": str(secret_file)}),
         ("write_file", {"path": str(tmp_path / "forbidden.txt"), "content": "Forbidden change"}),
         ("read_source", {"path": "config.py"}),

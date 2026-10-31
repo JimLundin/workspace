@@ -256,7 +256,12 @@ def test_installation_resumes_only_after_running_source_matches_the_requested_di
     workspace.write("config.py", "GREETING = 'installed update'\n")
     installation = Operation.of(
         "apply_changes",
-        {"summary": "Updated greeting", "source_digest": source_digest(workspace.root), "destination": str(workspace.live.absolute())},
+        {
+            "summary": "Updated greeting",
+            "source_digest": source_digest(workspace.root),
+            "destination": str(workspace.live.absolute()),
+            "diff_sha256": "0" * 64,
+        },
     )
     agent = Agent(
         Settings("", "", "", "", "", "", ""),
