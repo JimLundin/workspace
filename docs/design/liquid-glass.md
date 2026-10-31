@@ -164,10 +164,13 @@ Measured results (largest leading-button displacement over the scenario):
   Workspace menu, while dictating it stops, and with a question it opens the
   answers. This follows the Dynamic Island, where tapping acts on the current
   activity.
-- *Fit the moment.* Dictation shows the microphone and a short live waveform.
-  Transcription shrinks to a spinner. The island returns to the clock
-  afterwards. A fitted island moves the side buttons by half of each width
-  change. That cost is accepted for moments that last seconds.
+- *Fit the moment.* Dictation shows the microphone and a short live waveform,
+  and the island fits it. A fitted island moves the side buttons by half of
+  each width change. That cost is accepted for moments that last seconds.
+- *Transcription is processing, not a moment.* It shares the agent's spinner in
+  the island's leading slot, with the clock still showing, instead of taking
+  the whole island over. When transcription and agent work overlap, one spinner
+  carries both in its label. The canvas island does the same after you speak.
 - *Ongoing work joins the island.* Like a Live Activity's compact
   presentation, agent work takes the island's leading slot (a spinner) and a
   meeting recording its trailing slot (the red dot and timer), around the time
@@ -219,7 +222,7 @@ Workspace's bar today (`assistant/bar_model.py`, `assistant/ambient.py`,
 | Wi-Fi disconnected | Alert glyph in the readout | Island at rest, as an exception glyph |
 | Inbox | Bell with count, hidden at zero | Trailing pill with count while items wait; hidden at zero |
 | Listening | Microphone, waveform, Stop | Island moment: orange microphone (Apple's microphone-in-use colour) and waveform; Stop on hover or by clicking the island |
-| Transcribing | Spinner | Island moment: spinner only |
+| Transcribing | Spinner | Spinner in the island's leading slot, shared with agent work |
 | Agent working | "Working" and Stop in the main capsule | Spinner in the island's leading slot; detaches beside the island during a moment; the island menu shows the phase and Stop |
 | Needs input | "Needs you" in the main capsule | Island expands into the question, then settles into the orange pill |
 | Meeting recording | Separate capsule: timer and Stop | Red dot and timer in the island's trailing slot; detaches beside the island during a moment; the island menu shows Stop. "Starting…", "Stopping…" and "Saving…" replace the timer; "Check recording" tints the pill orange |
@@ -306,21 +309,25 @@ this maps to a transient `QScrollBar` overlay rather than today's always-visible
 
 ## Components
 
-The kit in `design/liquid-glass` encodes these rules as reusable pieces for
-browsers and web views: the glass material with refraction, the morphing
-capsule, the island bar, menus with live rows, the question card, card anatomy
-for solid cards and glass bubbles, the bubble stack, segmented controls and
-switches, the overlay scroll view and the floating sidebar. Workspace's demo
-is a client of the kit; nothing Workspace-specific lives in it. Its README
-lists the pieces and the rules they encode.
+The kit in `design/liquid-glass` encodes these rules as pre-built custom
+elements in six tiers, each built only from the tiers before it:
+foundations, atoms, controls, molecules, containers and bars. Every component
+is a CSS and JS pair in its tier's folder. One stylesheet entry imports each
+component into its tier's cascade layer, so precedence follows the tiers
+rather than selector specificity. One script entry loads everything in tier
+order. `tools/check_structure.py` fails when a component isn't wired into
+both entries. The gallery shows each tier on its own; the Workspace demo
+composes the elements and holds only Workspace's behaviour and content. The
+kit's README documents the conventions and how to add a component.
 
-Two rules became explicit while building it:
+Rules that became explicit while building it:
 
 - *Glass never sits on glass.* Buttons inside the sidebar, the inspector and
-  the agent bubbles are filled, not glass. The previous demo had glass
-  buttons there.
+  the agent cards are filled, not glass.
 - *Rim light follows the tint.* On tinted glass the rim fades to a faint return
   at the trailing foot instead of a white glare.
+- *Text never reflows mid-morph.* Expanded content lays out at its final size,
+  and content that grows by itself asks its capsule to re-measure.
 
 ## What ports to Qt on Windows
 
