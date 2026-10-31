@@ -74,8 +74,8 @@ def test_the_bar_publishes_one_final_glass_frame_per_qt_turn_behind_its_window()
 
 
 def test_scene_reuses_a_returning_panes_visuals_and_hides_departed_ones() -> None:
-    # Defects: a capsule that returns allocates new native visuals, or one that
-    # leaves stays on screen.
+    # Defects: a capsule that returns allocates new native visuals, one that
+    # leaves stays on screen, or a direct write targets the wrong COM slot.
     app = application()
     owner = EventLoop(app, lambda: None)
     if owner.composition is None:
@@ -91,7 +91,9 @@ def test_scene_reuses_a_returning_panes_visuals_and_hides_departed_ones() -> Non
         assert scene.published() == (island,) and group.visual.Opacity == 0
         scene.publish((island, inbox))
         assert scene.groups["INBOX"] is group, "A returning pane rebuilt its native visuals."
+        # The writes go straight through IVisual's COM slots; read back through the SDK, they must land.
         assert group.visual.Opacity == 1 and (group.visual.Size.X, group.visual.Size.Y) == (34, 34)
+        assert (group.visual.Offset.X, group.visual.Offset.Y) == (418, 8)
     finally:
         scene.close()
         owner.close()
