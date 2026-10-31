@@ -1,9 +1,19 @@
 # Liquid Glass study
 
 31 October 2026. A design study for restyling Workspace in Apple's current
-language. Interactive demo: [liquid-glass-demo.html](liquid-glass-demo.html)
-(open in Edge; it has no dependencies). Nothing here changes the Qt runtime yet.
-Earlier versions are preserved as tags: `liquid-glass-prototype-v1` (first study) and `liquid-glass-prototype-v2` (the toolbar pattern comparison, with alternative patterns and accessibility switches).
+language. The design is built as a reusable component kit,
+[design/liquid-glass](../../design/liquid-glass/README.md), and the Workspace
+demo is [design/liquid-glass/demo/index.html](../../design/liquid-glass/demo/index.html).
+Open it in Edge; it has no dependencies or build step. Nothing here changes the
+Qt runtime yet.
+
+Earlier single-file versions are preserved as tags:
+
+- `liquid-glass-prototype-v1`: the first study.
+- `liquid-glass-prototype-v2`: the toolbar pattern comparison, with the
+  alternative patterns and the accessibility switches.
+- `liquid-glass-prototype-v3`: the island bar, the canvas island, Fluent and the
+  sidebar, before the kit.
 
 ## Sources
 
@@ -146,10 +156,10 @@ Measured results (largest leading-button displacement over the scenario):
 
 - *Nothing persistent beside the island.* At rest the island stands alone.
   Things appear beside it only while they're temporary or active: the inbox
-  while items wait, and the agent, recording and keyboard-layer pills. Canvas
-  moves into the island's menu as its first item. This follows the HIG's
-  guidance to keep bars uncluttered, and Live Activities, which exist only
-  while their activity runs.
+  while items wait, the keyboard layer, and ongoing work while a moment holds
+  the island. Canvas moves into the island's menu as its first item. This
+  follows the HIG's guidance to keep bars uncluttered, and Live Activities,
+  which exist only while their activity runs.
 - *Click the island to act on what it shows.* At rest it expands into the
   Workspace menu, while dictating it stops, and with a question it opens the
   answers. This follows the Dynamic Island, where tapping acts on the current
@@ -158,13 +168,21 @@ Measured results (largest leading-button displacement over the scenario):
   Transcription shrinks to a spinner. The island returns to the clock
   afterwards. A fitted island moves the side buttons by half of each width
   change. That cost is accepted for moments that last seconds.
-- *Detach durations.* Agent work, meeting recording and the keyboard layer last
-  minutes and run independently, so each is a detached minimal pill. The
-  keyboard layer sits outside Canvas; agent and recording sit outside the inbox.
-  They move nothing else.
-- *Keep information, reveal controls.* A minimal pill shows live state: a
-  spinner, the recording timer or NAV. Hovering expands it to show its label
-  and Stop.
+- *Ongoing work joins the island.* Like a Live Activity's compact
+  presentation, agent work takes the island's leading slot (a spinner) and a
+  meeting recording its trailing slot (the red dot and timer), around the time
+  and battery, so ongoing work grows the centre. A detached pill beyond the
+  inbox read as unrelated to the island.
+- *Moments push ongoing work out beside the island.* When dictation, a question
+  or the menu takes the island over, the agent's spinner detaches to its left
+  and the recording to its right, next to the island, as a second Live Activity
+  detaches in the Dynamic Island. The inbox stays outermost. In the expanded
+  menu, ongoing work appears as live rows at the top, each with its own Stop.
+- *The keyboard layer is a mode, not work.* NAV sits as a detached pill on the
+  leading side, like the macOS input menu.
+- *The recording pill fits its reading.* The timer reads `mm:ss`, then `h:mm:ss`
+  after an hour, and its capsule re-measures whenever the reading's length
+  changes.
 - *Questions expand.* A new question expands the island into a 372 px card with
   28 px corners, a 12 px inset and concentric 32 px answer buttons, for five
   seconds. It then settles into an orange "Needs you" pill that reopens it.
@@ -202,9 +220,9 @@ Workspace's bar today (`assistant/bar_model.py`, `assistant/ambient.py`,
 | Inbox | Bell with count, hidden at zero | Trailing pill with count while items wait; hidden at zero |
 | Listening | Microphone, waveform, Stop | Island moment: orange microphone (Apple's microphone-in-use colour) and waveform; Stop on hover or by clicking the island |
 | Transcribing | Spinner | Island moment: spinner only |
-| Agent working | "Working" and Stop in the main capsule | Detached minimal pill: spinner; hover shows the current phase and Stop |
+| Agent working | "Working" and Stop in the main capsule | Spinner in the island's leading slot; detaches beside the island during a moment; the island menu shows the phase and Stop |
 | Needs input | "Needs you" in the main capsule | Island expands into the question, then settles into the orange pill |
-| Meeting recording | Separate capsule: timer and Stop | Detached minimal pill: red dot and timer; hover shows Stop. "Starting…", "Stopping…" and "Saving…" replace the timer; "Check recording" tints the pill orange |
+| Meeting recording | Separate capsule: timer and Stop | Red dot and timer in the island's trailing slot; detaches beside the island during a moment; the island menu shows Stop. "Starting…", "Stopping…" and "Saving…" replace the timer; "Check recording" tints the pill orange |
 | Keyboard layer or Colemak | Separate capsule | Detached minimal pill on the leading side, like the macOS input menu |
 | Tiling tab strip | Joins the ambient capsule on the primary screen | Out of scope here. The island should stay centred, with the strip running along the edge around it |
 
@@ -246,16 +264,17 @@ either mode.
 The canvas toolbar follows the desktop bar's rule, anchored to the window's
 bottom edge:
 
-- *One island at rest.* It names the voice scope: "Hold N to ask about the
-  whole canvas", or the selected context. Clicking it expands upward into the
-  canvas menu: Search, Center, Arrange, new contexts and notes, connections,
-  collapse, agent tasks and settings, and Close.
-- *Moments morph the island.* Ctrl+F turns it into a search field; holding N
-  shows the microphone, a live waveform and the scope; release shows the
-  transcription spinner.
+- *One island at rest, without instructions.* Three symbols: speak, search and
+  more. Their tooltips carry the instructions ("Hold N to speak about the whole
+  canvas" or about the selected context), because the gesture is learned once.
+  Clicking the microphone starts listening and clicking again sends; holding N
+  does the same. Search and more expand the island; the menu grows upward.
+- *Moments morph the island.* Ctrl+F turns it into a search field; speaking
+  shows the microphone, a live waveform and Send; release shows the
+  transcription spinner. Ongoing agent work joins the island's leading slot.
 - *Only temporary things sit beside it.* A tinted Questions pill with its count
-  while questions wait; a Recenter button only after the view leaves the work,
-  as Maps shows its location button; a working pill while the agent acts.
+  while questions wait, and a Recenter button only after the view leaves the
+  work, as Maps shows its location button.
 - *No duplicate Close.* The window's own close control closes the canvas.
 - *The toolbar belongs to the content column*, so it recentres beside an open
   inspector.
@@ -269,6 +288,39 @@ and notifications are functional UI, so they're glass. Both share one anatomy:
 app badge, title, meta line and body. Workspace's canvas today reuses the
 floating notification bubble; under Liquid Glass it should reuse the same
 component with the content material.
+
+## Scroll bars
+
+Apple's guidance: a scroll view has no appearance of its own; a translucent
+scroll indicator appears once scrolling starts and shows the position in the
+content; scrolling keeps its elastic behaviour; cut-off content hints that
+there's more; scroll edge effects go only where content passes under floating
+controls, one per view. On macOS the indicator is the overlay scroll bar.
+
+The kit's `<lg-scroll>` follows that. Bars are hidden at rest, appear while
+content moves and fade 0.9 s after it stops. Hovering thickens the 6 px thumb
+to 8 px and shows the track; the thumb drags and the track pages. An edge fades
+only when content lies beyond it. The sidebar and the inspector use it. In Qt
+this maps to a transient `QScrollBar` overlay rather than today's always-visible
+6 px handles.
+
+## Components
+
+The kit in `design/liquid-glass` encodes these rules as reusable pieces for
+browsers and web views: the glass material with refraction, the morphing
+capsule, the island bar, menus with live rows, the question card, card anatomy
+for solid cards and glass bubbles, the bubble stack, segmented controls and
+switches, the overlay scroll view and the floating sidebar. Workspace's demo
+is a client of the kit; nothing Workspace-specific lives in it. Its README
+lists the pieces and the rules they encode.
+
+Two rules became explicit while building it:
+
+- *Glass never sits on glass.* Buttons inside the sidebar, the inspector and
+  the agent bubbles are filled, not glass. The previous demo had glass
+  buttons there.
+- *Rim light follows the tint.* On tinted glass the rim fades to a faint return
+  at the trailing foot instead of a white glare.
 
 ## What ports to Qt on Windows
 

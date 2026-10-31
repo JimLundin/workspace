@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>Workspace in Liquid Glass</title>
+<link rel="stylesheet" href="../liquid-glass.css">
+<link rel="stylesheet" href="demo.css">
+</head>
+<body class="lg-root" data-wallpaper="vivid" data-appearance="dark">
+<div id="desktop" aria-hidden="true">
+  <div class="wall vivid">
+    <svg viewBox="0 0 1600 900" preserveAspectRatio="xMidYMid slice">
+      <path d="M-50 640 C 300 520, 520 760, 820 600 S 1350 380, 1700 520 L1700 950 L-50 950Z" fill="rgba(255,255,255,.10)"/>
+      <path d="M-50 720 C 260 640, 560 860, 900 700 S 1400 560, 1700 640 L1700 950 L-50 950Z" fill="rgba(20,10,60,.30)"/>
+      <path d="M-50 160 C 300 60, 600 260, 900 120 S 1400 20, 1700 120" stroke="rgba(255,255,255,.30)" stroke-width="2" fill="none"/>
+      <path d="M-50 210 C 320 110, 620 300, 920 170 S 1420 70, 1700 170" stroke="rgba(255,255,255,.18)" stroke-width="1.5" fill="none"/>
+      <circle cx="1240" cy="250" r="120" fill="rgba(255,210,120,.22)"/>
+      <circle cx="380" cy="420" r="70" fill="rgba(120,220,255,.18)"/>
+    </svg>
+  </div>
+  <div class="wall light">
+    <div class="doc">
+      <div class="nav"><b>Northwind Finance</b><span>Overview</span><span>Budgets</span><span>Reports</span><span>Team</span></div>
+      <h1>Q4 budget, revised totals</h1>
+      <div class="lede">Revenue is tracking 4.2% above plan. Costs in infrastructure and travel need review before Thursday's sign-off with Anna.</div>
+      <div class="row">
+        <div class="tile" style="background:linear-gradient(135deg,#ff7a45,#e0337a)">Revenue<br><span style="font-size:34px">€4.81M</span></div>
+        <div class="tile" style="background:linear-gradient(135deg,#1e9bd7,#6d5dfc)">Costs<br><span style="font-size:34px">€3.07M</span></div>
+        <div class="tile" style="background:linear-gradient(135deg,#30d158,#1e9bd7)">Margin<br><span style="font-size:34px">36.2%</span></div>
+      </div>
+      <p>Infrastructure spending rose after the September migration. Travel is within policy but concentrated in two teams. The revised sheet separates one-off migration costs so the run rate is comparable with last quarter.</p>
+      <p>Open questions: whether the Costs tab should include deferred licences, and which revenue recognition date applies to the Contoso renewal.</p>
+    </div>
+  </div>
+  <div class="wall dark">
+    <div class="tabs"><span class="on">work_canvas.py</span><span>appearance.py</span><span>desktop_bar.py</span><span>toast_card.py</span></div>
+    <div class="code"><div class="gutter" id="gutter"></div><div class="src" id="src"></div></div>
+  </div>
+</div>
+
+
+<div id="bar" role="toolbar" aria-label="Workspace"></div>
+<div id="submenu" class="lg-popover" role="menu"></div>
+<div id="phases"></div>
+
+<div id="canvas" class="lg-window" role="dialog" aria-label="Work canvas">
+  <div id="scene"><div id="world"><svg id="links" width="1" height="1"></svg></div></div>
+  <div class="lg-edge-top"></div><div class="lg-edge-bottom"></div>
+  <div class="lg-traffic"><i id="closeLight" title="Close"></i><i title="Minimise"></i><i title="Zoom"></i></div>
+  <div class="wtitle">Work canvas<small>7 contexts · 2 questions</small></div>
+  <div id="cbar" role="toolbar" aria-label="Canvas"></div>
+  <aside id="inspector" class="lg-inspector inspector" aria-label="Details"><lg-scroll></lg-scroll></aside>
+</div>
+
+<lg-sidebar id="panel" label="Study controls">
+  <header class="lg-side-head"><h1>Liquid Glass study</h1><p>Workspace's surfaces in Apple's current design language</p></header>
+  <div class="actions-row"><button class="lg-pill lg-filled" id="runAgent">Run agent</button><button class="lg-pill lg-accent" id="openCanvas">Open canvas</button></div>
+  <h2>Toolbar</h2>
+  <div class="lg-field-row"><span>Dictation</span>
+    <lg-segmented data-key="moment" value="none"><button value="none">Off</button><button value="dictating">Dictating</button><button value="transcribing">Transcribing</button></lg-segmented></div>
+  <div class="lg-field-row"><span>Agent</span>
+    <lg-segmented data-key="agent" value="off"><button value="off">Idle</button><button value="working">Working</button><button value="needs">Needs you</button></lg-segmented></div>
+  <div class="lg-rows">
+    <div class="lg-row"><span>Meeting recording</span><lg-switch data-key="recording" aria-label="Meeting recording"></lg-switch></div>
+    <div class="lg-row"><span>Keyboard layer</span><lg-switch data-key="layer" aria-label="Keyboard layer"></lg-switch></div>
+    <div class="lg-row"><span>Inbox items</span><lg-switch data-key="inbox" checked aria-label="Inbox items"></lg-switch></div>
+  </div>
+  <h2>Surroundings</h2>
+  <div class="lg-field-row"><span>Behind the glass</span>
+    <lg-segmented data-key="wallpaper" value="vivid"><button value="vivid">Wallpaper</button><button value="light">Light app</button><button value="dark">Dark app</button></lg-segmented></div>
+  <div class="lg-field-row"><span>Appearance</span>
+    <lg-segmented data-key="appearance" value="dark"><button value="light">Light</button><button value="dark">Dark</button></lg-segmented></div>
+  <p class="study-note">Hold N in the canvas to speak. Edge refraction bends what sits under a glass rim, so it shows over detail such as text and window edges, not smooth wallpaper.</p>
+</lg-sidebar>
+
+<script src="../src/core.js"></script>
+<script src="../src/material.js"></script>
+<script src="../src/capsule.js"></script>
+<script src="../src/island.js"></script>
+<script src="../src/ui.js"></script>
+<script src="../icons/fluent.js"></script>
+<script src="../src/controls.js"></script>
+<script src="../src/scroll.js"></script>
+<script src="../src/sidebar.js"></script>
+<script src="../src/stack.js"></script>
+<script src="workspace.js"></script>
+</body>
+</html>

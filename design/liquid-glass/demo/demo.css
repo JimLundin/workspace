@@ -1,0 +1,94 @@
+/* Workspace demo: the desktop, the canvas content and the study controls. Not part of the kit. */
+html, body { margin: 0; height: 100%; overflow: hidden; }
+body { user-select: none; }
+
+/* ── Desktop: the content beneath the functional layer ─────────────── */
+#desktop { position: fixed; inset: 0; overflow: hidden; }
+.wall { position: absolute; inset: 0; opacity: 0; transition: opacity .5s ease; }
+body[data-wallpaper="vivid"] .wall.vivid, body[data-wallpaper="light"] .wall.light, body[data-wallpaper="dark"] .wall.dark { opacity: 1; }
+.wall.vivid {
+  background:
+    radial-gradient(60% 50% at 18% 12%, #6d5dfc 0%, transparent 60%),
+    radial-gradient(50% 45% at 82% 8%, #1e9bd7 0%, transparent 62%),
+    radial-gradient(55% 55% at 78% 82%, #ff7a45 0%, transparent 60%),
+    radial-gradient(60% 60% at 12% 88%, #e0337a 0%, transparent 60%),
+    radial-gradient(40% 40% at 50% 50%, #8a3ffc 0%, transparent 70%),
+    #1b1640;
+}
+/* Like macOS's dynamic wallpapers, the desktop follows the appearance. */
+body[data-appearance="light"] .wall.vivid {
+  background:
+    radial-gradient(60% 50% at 18% 12%, #b9b2ff 0%, transparent 60%),
+    radial-gradient(50% 45% at 82% 8%, #9fd6f5 0%, transparent 62%),
+    radial-gradient(55% 55% at 78% 82%, #ffc3a3 0%, transparent 60%),
+    radial-gradient(60% 60% at 12% 88%, #f7a8c8 0%, transparent 60%),
+    radial-gradient(40% 40% at 50% 50%, #cdb4ff 0%, transparent 70%),
+    #eef0fb;
+}
+.wall.vivid svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+.wall.light { background: #fbfbfd; color: #1d1d1f; font-size: 15px; line-height: 1.6; }
+.wall.dark { background: #1e1f22; color: #d4d4d4; font: 13px/1.7 var(--lg-mono); }
+.doc { position: absolute; inset: 0; padding: 18px 9vw 0; }
+.doc .nav { display: flex; gap: 22px; align-items: center; height: 44px; font-size: 13px; color: #333; border-bottom: 1px solid #e6e6ea; }
+.doc .nav b { font-size: 15px; margin-right: auto; }
+.doc h1 { font-size: 44px; font-weight: 700; line-height: 1.08; letter-spacing: -.025em; margin: 48px 0 12px; }
+.doc .lede { font-size: 19px; color: #515154; max-width: 760px; }
+.doc .row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; margin-top: 32px; }
+.doc .tile { height: 220px; border-radius: 18px; padding: 18px; color: #fff; font-weight: 600; font-size: 17px; }
+.doc p { max-width: 760px; color: #333; }
+.code { position: absolute; inset: 0; padding-top: 10px; display: grid; grid-template-columns: 52px 1fr; }
+.code .gutter { color: #6e7681; text-align: right; padding-right: 16px; white-space: pre; }
+.code .src { white-space: pre; }
+.k { color: #c586c0 } .f { color: #dcdcaa } .s { color: #ce9178 } .c { color: #6a9955 } .t { color: #4ec9b0 } .n { color: #b5cea8 } .v { color: #9cdcfe }
+.tabs { display: flex; height: 36px; background: #181818; border-bottom: 1px solid #2b2b2b; font-size: 12px; line-height: 36px; color: #9d9d9d; }
+.tabs span { padding: 0 16px; border-right: 1px solid #2b2b2b; } .tabs span.on { background: #1e1f22; color: #fff; }
+
+/* ── Workspace surfaces ─────────────────────────────────────────────── */
+#bar { position: fixed; top: 8px; left: 0; right: 0; z-index: 30; }
+#phases { position: fixed; right: 18px; bottom: 18px; width: 360px; z-index: 25; }
+
+/* ── Work canvas ────────────────────────────────────────────────────── */
+#canvas { z-index: 20; left: 50%; top: 56px; width: min(1220px, 94vw); height: min(780px, calc(100vh - 76px)); transform: translateX(-50%); display: none; transform-origin: 50% 0; }
+#scene { position: absolute; inset: 0; cursor: grab; touch-action: none; background-image: radial-gradient(color-mix(in srgb, var(--lg-ink) 13%, transparent) 1.1px, transparent 1.3px); }
+#scene.panning { cursor: grabbing; }
+#world { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
+.group { position: absolute; border-radius: 28px; background: color-mix(in srgb, var(--lg-ink) 4%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--lg-ink) 7%, transparent); }
+.group .gtitle { position: absolute; left: 20px; top: 14px; font-size: 15px; font-weight: 600; letter-spacing: -.01em; display: flex; align-items: baseline; gap: 8px; }
+.group .gtitle small { font-size: 12px; font-weight: 500; color: var(--lg-ink-2); }
+#world .lg-card { position: absolute; left: 0; top: 0; width: 300px; transition: box-shadow .2s ease, opacity .25s ease; }
+#world .lg-card.dragging { box-shadow: 0 0 0 .5px var(--lg-solid-edge), 0 18px 44px rgba(0,0,0,.22), 0 4px 10px rgba(0,0,0,.1); z-index: 5; }
+#world .lg-card.selected { box-shadow: 0 0 0 2px var(--lg-accent), var(--lg-solid-shadow); }
+#world .lg-card.dim { opacity: .28; }
+#world .lg-card.question { background: color-mix(in srgb, var(--lg-orange) 14%, var(--lg-solid)); box-shadow: 0 0 0 1px color-mix(in srgb, var(--lg-orange) 45%, transparent), var(--lg-solid-shadow); }
+#world .lg-card .lg-body { font-size: 13px; margin-top: 7px; }
+.kv { display: grid; grid-template-columns: 74px 1fr; gap: 4px 10px; font-size: 12.5px; margin: 8px 0 0; }
+.kv dt { color: var(--lg-ink-2); } .kv dd { margin: 0; }
+.chips { display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap; }
+.chip { height: 26px; padding: 0 11px; border-radius: 13px; background: color-mix(in srgb, var(--lg-ink) 7%, transparent); font-weight: 500; font-size: 12.5px; display: inline-flex; align-items: center; }
+.chip.primary { background: var(--lg-accent); color: #fff; }
+#links { position: absolute; left: 0; top: 0; overflow: visible; pointer-events: none; }
+#links path { fill: none; stroke: color-mix(in srgb, var(--lg-accent) 55%, transparent); stroke-width: 1.6; }
+.wtitle { position: absolute; left: 92px; top: 15px; z-index: 8; font-size: 15px; font-weight: 600; line-height: 24px; letter-spacing: -.01em; }
+.wtitle small { font-size: 12px; font-weight: 500; color: var(--lg-ink-2); margin-left: 6px; }
+#cbar { position: absolute; left: 0; right: 0; bottom: 14px; z-index: 9; transition: right .4s var(--lg-ease); }
+/* The toolbar belongs to the content column, so it recentres beside an open inspector. */
+#canvas.inspecting #cbar { right: 356px; }
+
+/* Inspector content */
+.insp-close { position: absolute; top: 10px; right: 10px; z-index: 6; }
+.inspector h2 { font-size: 20px; font-weight: 700; line-height: 1.2; letter-spacing: -.02em; margin: 14px 0 4px; }
+.inspector .sub { color: var(--lg-ink-2); }
+.inspector .acts { display: flex; gap: 8px; margin-top: 14px; }
+.inspector .acts .lg-pill { flex: 1; height: 34px; border-radius: 17px; }
+.inspector section { margin-top: 18px; }
+.inspector h3 { font-size: 12px; font-weight: 600; color: var(--lg-ink-2); margin: 0 0 6px; }
+.inspector .field { background: var(--lg-fill); border-radius: 12px; padding: 9px 11px; }
+.inspector .src { display: flex; gap: 10px; align-items: center; padding: 7px 4px; }
+.inspector .src + .src { border-top: 1px solid var(--lg-separator); }
+.inspector .note { color: var(--lg-ink-2); font-size: 12.5px; padding: 6px 4px; }
+.inspector .note + .note { border-top: 1px solid var(--lg-separator); }
+
+/* Study controls in the sidebar */
+.actions-row { display: flex; gap: 6px; margin-top: 4px; }
+.actions-row .lg-pill { flex: 1; }
+.study-note { font-size: 11.5px; color: var(--lg-ink-2); margin: 14px 6px 0; }
