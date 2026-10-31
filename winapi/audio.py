@@ -319,7 +319,11 @@ class Microphone:
             if position.kind not in (2, 4):
                 return None
             end = min(len(self._buffer), int(position.value) * (2 if position.kind == 2 else 1)) & ~1
-            if end <= self._last_position:
+            if end < self._last_position:
+                # Windows reroutes an open mapper stream to a new default device and
+                # restarts its byte position; the recorded count restarts with it.
+                self._last_position = 0
+            if end == self._last_position:
                 return 0.0
             beginning = max(self._last_position, end - int(self._format.nSamplesPerSec) * 2 // 25) & ~1
             self._last_position = end
