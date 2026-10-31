@@ -1,11 +1,12 @@
 """Explicit saved preferences and project notes, with pure bounded retrieval."""
 
-import json
 import re
 from dataclasses import dataclass, field
 from math import isfinite
 from pathlib import Path
-from typing import assert_never
+from typing import Literal, assert_never
+
+from pydantic import TypeAdapter
 
 from automation import journal
 from automation.store import TaskStore
@@ -125,24 +126,50 @@ def _rank(item: tuple[int, float, str, ContextRecord]) -> tuple[int, float, str]
     return -item[0], -item[1], item[2]
 
 
+@dataclass(frozen=True, slots=True)
+class _PreferenceText:
+    name: str
+    value: str
+    source: str
+    updated_at: float
+    kind: Literal["user_preference"] = "user_preference"
+
+
+@dataclass(frozen=True, slots=True)
+class _ObservationText:
+    project: str
+    source: str
+    observed_at: float
+    valid_until: float
+    text: str
+    kind: Literal["project_observation"] = "project_observation"
+
+
+@dataclass(frozen=True, slots=True)
+class _StaleText:
+    """A stale note names its project and source but no longer quotes its observation."""
+
+    project: str
+    source: str
+    observed_at: float
+    valid_until: float
+    kind: Literal["stale_reference"] = "stale_reference"
+
+
+_RECORD_TEXT = TypeAdapter(_PreferenceText | _ObservationText | _StaleText)
+
+
 def _record_text(record: ContextRecord, *, stale: bool = False) -> str:
-    data: dict[str, str | float]
     match record:
         case Preference():
-            data = {"kind": "user_preference", "name": record.name, "value": record.value, "source": record.source, "updated_at": record.updated_at}
+            shown: _PreferenceText | _ObservationText | _StaleText = _PreferenceText(record.name, record.value, record.source, record.updated_at)
+        case ProjectNote() if stale:
+            shown = _StaleText(record.project, record.source, record.observed_at, record.valid_until)
         case ProjectNote():
-            data = {
-                "kind": "stale_reference" if stale else "project_observation",
-                "project": record.project,
-                "source": record.source,
-                "observed_at": record.observed_at,
-                "valid_until": record.valid_until,
-            }
-            if not stale:
-                data["text"] = record.text
+            shown = _ObservationText(record.project, record.source, record.observed_at, record.valid_until, record.text)
         case _:
             assert_never(record)
-    return json.dumps(data, ensure_ascii=False, separators=(",", ":"))
+    return _RECORD_TEXT.dump_json(shown).decode()
 
 
 @dataclass(frozen=True, slots=True)
