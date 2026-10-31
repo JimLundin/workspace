@@ -16,3 +16,6 @@ uv.lock
 .bundle-cache/
 dist/
 *.egg-info/
+
+# Agent worktrees and local session state
+.claude/
