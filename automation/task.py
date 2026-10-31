@@ -8,7 +8,9 @@ import math
 import re
 from dataclasses import dataclass, replace
 from enum import Enum, auto
-from typing import Literal, assert_never, cast
+from typing import Literal, assert_never
+
+from pydantic import TypeAdapter, ValidationError
 
 
 def text(value: object, field: str, *, maximum: int = 64_000, empty: bool = False) -> str:
@@ -51,10 +53,15 @@ def variant(value: object, expected: type[object] | tuple[type[object], ...], fi
         raise ValueError(f"Invalid {field}.")
 
 
+# Stored and constructed text collections must be tuples of strings, never lists.
+_STRINGS = TypeAdapter(tuple[str, ...])
+
+
 def strings(value: object, field: str, *, maximum: int, count: int) -> None:
-    if not isinstance(value, tuple):
-        raise ValueError(f"Invalid {field}.")
-    items = cast(tuple[object, ...], value)
+    try:
+        items = _STRINGS.validate_python(value, strict=True)
+    except ValidationError:
+        raise ValueError(f"Invalid {field}.") from None
     if len(items) > count:
         raise ValueError(f"Invalid {field}.")
     for item in items:

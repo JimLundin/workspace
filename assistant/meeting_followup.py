@@ -14,9 +14,9 @@ from collections.abc import Iterable
 from dataclasses import dataclass, field
 from enum import Enum, auto
 from pathlib import Path, PureWindowsPath
-from typing import Annotated, Literal, assert_never, cast
+from typing import Annotated, Literal, assert_never
 
-from pydantic import ConfigDict, Field, TypeAdapter
+from pydantic import ConfigDict, Field, TypeAdapter, ValidationError
 
 from automation.task import digest, identifier, integer, text, timestamp, variant
 
@@ -61,10 +61,15 @@ def _email_literal(value: str, quote: str) -> bool:
     return any(value == match.group().strip("'\"`") for match in _EMAIL_TOKEN.finditer(quote))
 
 
+# A record's collections must be tuples; validation refuses lists and other iterables.
+_ITEMS = TypeAdapter(tuple[object, ...])
+
+
 def _tuple(value: object, kind: type[object], field: str, maximum: int, *, empty: bool = True) -> None:
-    if not isinstance(value, tuple):
-        raise ValueError(f"Invalid {field}.")
-    items = cast(tuple[object, ...], value)
+    try:
+        items = _ITEMS.validate_python(value, strict=True)
+    except ValidationError:
+        raise ValueError(f"Invalid {field}.") from None
     if len(items) > maximum or (not empty and not items) or any(not isinstance(item, kind) for item in items):
         raise ValueError(f"Invalid {field}.")
 
