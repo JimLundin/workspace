@@ -1,19 +1,24 @@
-"""What the island bar shows: a pure view of Workspace's state, independent of Qt.
+"""What the island bar shows: a pure view of Workspace's activity, independent of Qt.
 
-At rest the island holds the time, battery and system alerts. Processing (transcription
-or agent work) takes the island's leading slot, and a meeting recording its trailing
-slot. A moment (dictation, or a question waiting for an answer) takes the island over;
-processing and recording then detach as capsules beside it. Only temporary or active
-things sit beside the island: the keyboard layer before it, and the inbox, while items
-wait, after it. Hovering the island reveals Stop beside each activity that can stop.
+The bar's policy (docs/toolbar-design.md, "What the bar shows"):
+
+- The island is the user's point of attention. Only a moment takes it over:
+  something live from the user (dictation) or waiting on the user (a question).
+- Activities run concurrently and each keeps one identity wherever it shows:
+  agent work (a ring spinner and its current phase), a quick job such as
+  transcription (pulsing dots), and a meeting recording (a red dot and timer).
+- At rest the activities join the island's slots around the time and battery.
+  During a moment they detach beside it as compact capsules, phase and all.
+- Only temporary or active things sit beside the island: the keyboard layer
+  before it, the inbox after it while items wait. Nothing persistent.
+- Each activity that can stop reveals Stop when the pointer is over it.
 """
 
 from dataclasses import dataclass, field
 from enum import Enum, auto
-from typing import assert_never
+from typing import Final, assert_never
 
 from assistant.ambient import Ambient, SystemStatus
-from assistant.icons import State
 from assistant.recording_state import RecordingState
 from winapi.machine_status import Battery
 
@@ -23,6 +28,7 @@ class Key(Enum):
 
     LAYER = auto()
     AGENT = auto()
+    JOB = auto()
     ISLAND = auto()
     RECORDING = auto()
     INBOX = auto()
@@ -65,6 +71,7 @@ class Marker(Enum):
 
     WAVE = auto()
     DOT = auto()
+    DOTS = auto()  # A quick job in progress.
 
 
 @dataclass(frozen=True, slots=True)
@@ -111,16 +118,33 @@ class CapsuleView:
     tint: Tint = Tint.NONE
 
 
+class Job(Enum):
+    """A quick job Workspace runs for you after a key press."""
+
+    TRANSCRIBING = auto()  # speech to text after dictation
+    ANSWERING = auto()  # a rewrite, a question about the selection or the screen
+
+
+@dataclass(frozen=True, slots=True)
+class Agent:
+    """Agent work in progress: its phase, and whether it waits for an answer from you."""
+
+    phase: str
+    waiting: bool = field(kw_only=True)
+
+
 @dataclass(frozen=True, slots=True)
 class Observed:
-    """Everything the island depends on, observed by the bar's owner."""
+    """Everything the island depends on, each from its own owner."""
 
-    state: State
+    agent: Agent | None
+    job: Job | None
     recording: RecordingState
     ambient: Ambient
     system: SystemStatus
     inbox: int
     keyboard: str | None
+    dictating: bool = field(kw_only=True)
 
 
 @dataclass(frozen=True, slots=True)
@@ -158,16 +182,28 @@ def keyboard(*, enabled: bool, layer: str | None) -> str | None:
     return "Colemak" if not enabled else layer
 
 
-def processing(state: State) -> Spinner | None:
-    match state:
-        case State.WORKING:
-            return Spinner("Transcribing")
-        case State.AGENT:
-            return Spinner("Agent working")
-        case State.READY | State.LAYOUT_OFF | State.LISTENING | State.RECORDING | State.NEEDS_INPUT:
-            return None
+PHASE: Final = 28  # The phase's characters in the island before it elides.
+
+
+def elided(text: str, limit: int) -> str:
+    return text if len(text) <= limit else text[: limit - 1].rstrip() + "…"
+
+
+def job_label(job: Job) -> str:
+    match job:
+        case Job.TRANSCRIBING:
+            return "Transcribing"
+        case Job.ANSWERING:
+            return "Answering"
         case _:
-            assert_never(state)
+            assert_never(job)
+
+
+def agent_slot(agent: Agent, *, hovered: bool, compact: bool) -> Slot:
+    """The agent's spinner and phase; compact capsules keep the phase for their label."""
+    stop = (Control("stop", "Stop agent work", Action.STOP_AGENT),) if hovered and not agent.waiting else ()
+    phase = () if compact else (Text(elided(agent.phase, PHASE)),)
+    return (Spinner("Agent: " + agent.phase), *phase, *stop)
 
 
 def facts(ambient: Ambient, system: SystemStatus) -> Slot:
@@ -216,10 +252,9 @@ def island(observed: Observed, *, hovered: Key | None = None, expanded: bool = F
     While `expanded`, the island is the controls menu: ongoing activities move into
     its live rows, so they leave the bar; the layer and the inbox stay.
     """
-    spinner = processing(observed.state)
-    recorded = capture(observed.recording)
-    listening, asking = observed.state is State.LISTENING, observed.state is State.NEEDS_INPUT
-    moment = (listening or asking) and not expanded
+    agent, job, recorded = observed.agent, observed.job, capture(observed.recording)
+    asking = agent is not None and agent.waiting
+    detached = (observed.dictating or asking) and not expanded
     lead: tuple[CapsuleView, ...] = ()
     if observed.keyboard is not None:
         lead += (
@@ -227,10 +262,16 @@ def island(observed: Observed, *, hovered: Key | None = None, expanded: bool = F
                 Key.LAYER, Zone.LEAD, ((Glyph("keyboard"), Text(observed.keyboard)),), f"{observed.keyboard} · Open key map", Action.OPEN_KEYMAP
             ),
         )
-    if moment and spinner is not None:
-        lead += (CapsuleView(Key.AGENT, Zone.LEAD, ((spinner,),), spinner.label, Action.OPEN_MENU),)
+    # Dictation detaches the agent; a waiting question already is the island, unless you're dictating.
+    if detached and agent is not None and observed.dictating:
+        tint = Tint.ATTENTION if agent.waiting else Tint.NONE
+        slot = agent_slot(agent, hovered=hovered is Key.AGENT, compact=True)
+        action = Action.OPEN_QUESTION if agent.waiting else Action.OPEN_MENU
+        lead += (CapsuleView(Key.AGENT, Zone.LEAD, (slot,), f"Agent · {agent.phase}", action, tint),)
+    if detached and job is not None:
+        lead += (CapsuleView(Key.JOB, Zone.LEAD, ((Marker.DOTS,),), job_label(job), Action.OPEN_MENU),)
     trail: tuple[CapsuleView, ...] = ()
-    if moment and recorded is not None:
+    if detached and recorded is not None:
         tint = Tint.ATTENTION if recorded.attention else Tint.NONE
         slot = recording_slot(recorded, hovered=hovered is Key.RECORDING)
         trail += (CapsuleView(Key.RECORDING, Zone.TRAIL, (slot,), f"{recorded.title} · Open canvas", Action.OPEN_CANVAS, tint),)
@@ -243,21 +284,26 @@ def island(observed: Observed, *, hovered: Key | None = None, expanded: bool = F
 
 
 def centre(observed: Observed, *, hovered: Key | None) -> CapsuleView:
-    """The island itself: a moment takes it over; otherwise processing and recording join its slots."""
+    """The island itself: a moment takes it over; otherwise the activities join its slots."""
     revealed = hovered is Key.ISLAND
-    if observed.state is State.LISTENING:
+    agent, job, recorded = observed.agent, observed.job, capture(observed.recording)
+    if observed.dictating:
         stop: Slot = (Control("stop", "Stop dictation", Action.STOP_DICTATION),) if revealed else ()
         slots: tuple[Slot, ...] = ((Glyph("mic.fill", Tone.MICROPHONE), Marker.WAVE, *stop),)
         return CapsuleView(Key.ISLAND, Zone.ISLAND, slots, "Listening · press to stop", Action.STOP_DICTATION)
-    if observed.state is State.NEEDS_INPUT:
+    if agent is not None and agent.waiting:
         slots = ((Text("Needs you", strong=True), Glyph("down")),)
-        return CapsuleView(Key.ISLAND, Zone.ISLAND, slots, "An agent question needs you · open it", Action.OPEN_QUESTION, Tint.ATTENTION)
-    spinner, recorded = processing(observed.state), capture(observed.recording)
-    stop = (Control("stop", "Stop agent work", Action.STOP_AGENT),) if revealed and observed.state is State.AGENT else ()
-    leading: tuple[Slot, ...] = ((spinner, *stop),) if spinner is not None else ()
+        return CapsuleView(
+            Key.ISLAND, Zone.ISLAND, slots, f"An agent question needs you: {agent.phase} · open it", Action.OPEN_QUESTION, Tint.ATTENTION
+        )
+    leading: tuple[Slot, ...] = (
+        *((agent_slot(agent, hovered=revealed, compact=False),) if agent is not None else ()),
+        *(((Marker.DOTS,),) if job is not None else ()),
+    )
     trailing: tuple[Slot, ...] = (recording_slot(recorded, hovered=revealed),) if recorded is not None else ()
     described = (
-        spinner.label if spinner is not None else "",
+        f"Agent: {agent.phase}" if agent is not None else "",
+        job_label(job) if job is not None else "",
         describe(observed.ambient, observed.system),
         recorded.title if recorded is not None else "",
     )

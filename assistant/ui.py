@@ -30,6 +30,7 @@ from winapi import windows
 from winapi.shapes import Rect
 lazy import assistant.communications
 lazy import winapi.system_notices
+lazy from assistant import island_agent, island_model
 lazy from assistant.agent_session import Session, Snapshot
 lazy from assistant.agent_toasts import AgentToasts
 lazy from assistant.agent_window import AgentWindow
@@ -501,6 +502,8 @@ class Ui:
             else:
                 with self._agent.lock:
                     session = self._agent.state
+        if self._desktop is not None:
+            self._desktop.agent_changed(island_agent.activity(session))
         document = self._canvas.observe_session(session) if self._canvas is not None else None
         if document is not None:
             self.render_canvas_document(document)
@@ -814,14 +817,19 @@ class Ui:
         self.post(create)
 
     def desktop_state(self, state: State, *, agent_speaking: bool = False) -> None:
+        """The tray's state; of it, the bar shows dictation alone: agent work comes from its session."""
+
         def display(_: QtWidgets.QApplication) -> None:
             self._agent_speaking = agent_speaking
             if self._desktop is not None:
-                self._desktop.state(state)
+                self._desktop.dictation(active=state is State.LISTENING)
             if self._work_view is not None:
                 self._work_view.personal.voice_hint.set_pressed(pressed=agent_speaking)
 
         self.post(display)
+
+    def desktop_job(self, job: island_model.Job | None) -> None:
+        self.post(lambda _: self._desktop.job_changed(job) if self._desktop is not None else None)
 
     def desktop_recording(self, recording: RecordingState) -> None:
         self.post(lambda _: self._desktop.recording_changed(recording) if self._desktop is not None else None)

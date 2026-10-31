@@ -16,8 +16,7 @@ lazy from PySide6 import QtCore, QtGui, QtWidgets
 lazy from PySide6.QtTest import QTest
 
 from assistant.desktop_bar import BarActions, BarObservations, DesktopBar
-from assistant.icons import State
-from assistant.island_model import Key
+from assistant.island_model import Agent, Job, Key
 from assistant.island_surface import TOP, ControlButton, MenuRow
 from assistant.qt_runtime import prepare
 from assistant.qt_ui import EventLoop, application
@@ -33,6 +32,15 @@ user32.WindowFromPoint.restype = wintypes.HWND
 user32.WindowFromPoint.argtypes = (wintypes.POINT,)
 user32.GetAncestor.restype = wintypes.HWND
 user32.GetAncestor.argtypes = (wintypes.HWND, wintypes.UINT)
+
+
+WORKING = Agent("Comparing both sheets", waiting=False)
+
+
+def rest(bar: DesktopBar) -> None:
+    bar.dictation(active=False)
+    bar.job_changed(None)
+    bar.agent_changed(None)
 
 
 def recorded(invoked: list[str], *, tiling: list[tuple[Tool, int]] | None = None) -> BarActions:
@@ -97,18 +105,20 @@ def test_the_island_rests_alone_and_each_capsule_acts_on_what_it_shows() -> None
         press(bar, Key.ISLAND)
         assert bar.expanded is not None and bar.window.capsules[Key.ISLAND].rows[0].accessibleName() == "Your work canvas"
         QTest.keyClick(bar.window, QtCore.Qt.Key.Key_Escape)
-        bar.state(State.AGENT)
+        bar.agent_changed(WORKING)
+        assert "Comparing both sheets" in island.accessibleName()
         bar.hover(Key.ISLAND)
         stop_button(bar, Key.ISLAND).click()
         bar.recording_changed(RecordingState(phase="recording", seconds=125))
-        bar.state(State.LISTENING)
-        assert shown(bar) == [Key.ISLAND, Key.RECORDING]
+        bar.dictation(active=True)
+        assert shown(bar) == [Key.AGENT, Key.ISLAND, Key.RECORDING]
         press(bar, Key.ISLAND)
         press(bar, Key.RECORDING)
         bar.hover(Key.RECORDING)
         stop_button(bar, Key.RECORDING).click()
         bar.hover(None)
-        bar.state(State.NEEDS_INPUT)
+        bar.dictation(active=False)
+        bar.agent_changed(Agent("Which sheet?", waiting=True))
         press(bar, Key.ISLAND)
         bar.layout(enabled=False)
         assert "Colemak" in bar.window.capsules[Key.LAYER].accessibleName()
@@ -120,7 +130,7 @@ def test_the_island_rests_alone_and_each_capsule_acts_on_what_it_shows() -> None
         bar.recording_changed(RecordingState(phase="saved"))
         bar.layout(enabled=True)
         bar.inbox_changed(0)
-        bar.state(State.READY)
+        rest(bar)
         assert shown(bar) == [Key.ISLAND]
     finally:
         closed(app, bar)
@@ -240,13 +250,14 @@ def test_dictation_traces_the_microphone_only_while_listening() -> None:
     bar = DesktopBar(recorded([]), native_shell=False, audio_level=lambda: level[0])
     try:
         assert not bar.audio_timer.isActive()
-        bar.state(State.LISTENING)
+        bar.dictation(active=True)
         assert bar.audio_timer.isActive()
         sampled(app, bar, lambda: bar.window.samples[-1] > 0)
         level[0] = 0
         sampled(app, bar, lambda: bar.window.samples[-1] == 0)
         trace = tuple(bar.window.samples)
-        bar.state(State.WORKING)
+        bar.dictation(active=False)
+        bar.job_changed(Job.TRANSCRIBING)
         assert not bar.audio_timer.isActive()
         bar.sample_audio()
         assert tuple(bar.window.samples) == trace
@@ -268,7 +279,7 @@ def test_slow_native_audio_level_does_not_block_the_waveform_ui() -> None:
 
     bar = DesktopBar(recorded([]), native_shell=False, audio_level=level)
     try:
-        bar.state(State.LISTENING)
+        bar.dictation(active=True)
         started = time.monotonic()
         bar.sample_audio()
         assert time.monotonic() - started < 0.025, "A slow driver blocked a waveform frame."
@@ -281,26 +292,35 @@ def test_slow_native_audio_level_does_not_block_the_waveform_ui() -> None:
         closed(app, bar)
 
 
-def test_the_spinner_turns_only_while_processing_and_motion_allows() -> None:
-    # Defects: the spinner is painted frozen, keeps the frame timer running after
-    # work ends, or ignores Windows' reduced-motion setting.
+def test_activity_indicators_move_only_while_work_runs_and_motion_allows() -> None:
+    # Defects: the agent's spinner or a job's dots are painted frozen, keep the
+    # frame timer running after work ends, or ignore Windows' reduced-motion setting.
     app = application()
     now, motion = [10.0], [True]
     bar = DesktopBar(recorded([]), native_shell=False, observations=BarObservations(clock=lambda: now[0], motion=lambda: motion[0]))
     bar.visible = True
     try:
-        bar.state(State.WORKING)
-        assert bar.loop.timer.isActive()
         island = bar.window.capsules[Key.ISLAND]
-        first = island.grab().toImage()
-        now[0] += 0.3
-        bar.paint_frames()
-        assert island.grab().toImage() != first, "Transcription painted a stationary indicator."
+
+        def transcribe(_: Agent) -> None:
+            bar.job_changed(Job.TRANSCRIBING)
+
+        starts: tuple[Callable[[Agent], None], ...] = (bar.agent_changed, transcribe)
+        for start in starts:
+            rest(bar)
+            start(WORKING)
+            now[0] += 2
+            bar.paint_frames()
+            assert bar.loop.timer.isActive()
+            first = island.grab().toImage()
+            now[0] += 0.3
+            bar.paint_frames()
+            assert island.grab().toImage() != first, "An activity painted a stationary indicator."
         motion[0] = False
         bar.paint_frames()
         assert bar.window.spin_angle == 90 and not bar.loop.timer.isActive()
         motion[0] = True
-        bar.state(State.READY)
+        rest(bar)
         now[0] += 2  # The island's width settles back to rest.
         bar.paint_frames()
         assert not bar.loop.timer.isActive()

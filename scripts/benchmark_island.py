@@ -1,7 +1,7 @@
 r"""Measure the island bar's frames on the real Qt window and glass scene; never sends input.
 
-Drives the bar through rest, agent work, dictation with a recording and inbox
-beside it, a waiting question, and rest again, stepping 16 ms frames on a
+Drives the bar through rest, agent work with a transcription, dictation with
+both and a recording and inbox beside it, a waiting question, and rest again, stepping 16 ms frames on a
 controlled clock. Each frame's work includes the owner's frame, Qt's paint and
 the glass publication. Reports frame-work percentiles, allocation per frame
 (tracemalloc, GC enabled) and whether the frame loop stops at rest. Run from the
@@ -24,7 +24,7 @@ lazy from PySide6 import QtCore
 
 from runtime import activate
 lazy from assistant.desktop_bar import BarActions, BarObservations, DesktopBar
-lazy from assistant.icons import State
+lazy from assistant.island_model import Agent, Job
 lazy from assistant.qt_ui import application
 lazy from assistant.recording_state import RecordingState
 lazy from winapi import appearance
@@ -58,6 +58,31 @@ def main() -> None:
         output.write_bytes(TypeAdapter(Result).dump_json(result, indent=2))
 
 
+def transitions(bar: DesktopBar) -> tuple[Callable[[], None], ...]:
+    """Agent work with a transcription, dictation beside both, a question, and rest."""
+
+    def work() -> None:
+        bar.agent_changed(Agent("Comparing both sheets", waiting=False))
+        bar.job_changed(Job.TRANSCRIBING)
+
+    def dictate() -> None:
+        bar.recording_changed(RecordingState(phase="recording", seconds=125))
+        bar.inbox_changed(3)
+        bar.dictation(active=True)
+
+    def ask() -> None:
+        bar.dictation(active=False)
+        bar.job_changed(None)
+        bar.agent_changed(Agent("Which sheet should the reply cover?", waiting=True))
+
+    def rest() -> None:
+        bar.recording_changed(RecordingState())
+        bar.inbox_changed(0)
+        bar.agent_changed(None)
+
+    return (work, dictate, ask, rest)
+
+
 def run(rounds: int) -> Result:
     app = application()
     now = [1000.0]
@@ -73,17 +98,7 @@ def run(rounds: int) -> Result:
     bar.render()
     app.processEvents()
 
-    def dictate() -> None:
-        bar.recording_changed(RecordingState(phase="recording", seconds=125))
-        bar.inbox_changed(3)
-        bar.state(State.LISTENING)
-
-    def rest() -> None:
-        bar.recording_changed(RecordingState())
-        bar.inbox_changed(0)
-        bar.state(State.READY)
-
-    steps: tuple[Callable[[], None], ...] = (lambda: bar.state(State.AGENT), dictate, lambda: bar.state(State.NEEDS_INPUT), rest)
+    steps = transitions(bar)
     durations: tuple[float, ...] = ()
     allocations: tuple[float, ...] = ()
     try:

@@ -10,7 +10,7 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal
+from typing import Final, Literal
 
 from pydantic import TypeAdapter, ValidationError
 lazy from PySide6 import QtCore, QtWidgets
@@ -21,7 +21,7 @@ from runtime import activate
 lazy from assistant.agent_toasts import AgentToasts
 lazy from assistant.agent_window import AgentWindow
 lazy from assistant.desktop_bar import BarActions, DesktopBar
-lazy from assistant.icons import State
+lazy from assistant.island_model import Agent, Job
 lazy from assistant.qt_ui import application
 lazy from assistant.recording_state import RecordingState
 lazy from automation.presentation import Answer, StreamState, Succeeded, ToolActivity
@@ -30,7 +30,10 @@ lazy from winapi.shapes import Rect
 
 prepare()
 
-SCENARIOS = ("Idle", "Agent working", "Recording", "Keyboard mode", "Needs input", "Transcribing", "Dictating")
+SCENARIOS = ("Idle", "Agent working", "Recording", "Keyboard mode", "Needs input", "Transcribing", "Dictating", "Everything at once")
+
+
+WORKING: Final = Agent("Comparing both sheets", waiting=False)
 
 
 @dataclass(frozen=True, slots=True)
@@ -164,12 +167,14 @@ class Preview:
         if self.closed:
             return
         self.files.state.write_bytes(CHOICE.dump_json(Choice(index)))
-        recording = RecordingState(phase="recording", seconds=125) if index == 2 else RecordingState()
+        recording = RecordingState(phase="recording", seconds=125) if index in (2, 7) else RecordingState()
         if self.bar is not None:
             self.bar.recording_changed(recording)
             self.bar.layout(enabled=index != 3)
-            states = (State.READY, State.AGENT, State.READY, State.READY, State.NEEDS_INPUT, State.WORKING, State.LISTENING)
-            self.bar.state(states[index])
+            asking = Agent("Which sheet should the reply cover?", waiting=True)
+            self.bar.agent_changed(WORKING if index in (1, 7) else asking if index == 4 else None)
+            self.bar.job_changed(Job.TRANSCRIBING if index in (5, 7) else None)
+            self.bar.dictation(active=index in (6, 7))
         if self.agent is not None:
             self.agent.reset()
             self.agent.begin("Review the sample workbook")

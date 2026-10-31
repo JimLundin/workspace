@@ -11,7 +11,7 @@ lazy from PySide6 import QtCore, QtWidgets
 lazy from PySide6.QtCore import Qt
 
 from assistant.desktop_bar import BarActions, BarObservations, DesktopBar
-from assistant.icons import State
+from assistant.island_model import Agent
 from assistant.qt_runtime import prepare
 from assistant.qt_ui import EventLoop, application
 from winapi import appearance
@@ -60,9 +60,9 @@ def test_the_bar_publishes_one_final_glass_frame_per_qt_turn_behind_its_window()
             raise unittest.SkipTest("Desktop composition is unavailable.")
         assert [pane.key for pane in scene.published()] == ["ISLAND"]
         published, bounds = scene.published(), scene.bounds
-        bar.state(State.AGENT)
+        bar.agent_changed(Agent("Comparing both sheets", waiting=False))
         bar.inbox_changed(3)
-        bar.state(State.READY)
+        bar.agent_changed(None)
         assert scene.published() == published, "Intermediate bar state reached Windows composition."
         app.processEvents()
         assert sorted(pane.key for pane in scene.published()) == ["INBOX", "ISLAND"]

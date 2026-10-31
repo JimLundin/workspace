@@ -21,6 +21,7 @@ CONTROL: Final = 28
 ICON: Final = 16
 SPINNER: Final = 14
 DOT: Final = 8
+DOTS: Final = 18
 WAVE_BARS: Final = 18
 WAVE: Final = WAVE_BARS * 4 - 2
 PART_GAP: Final = 6
@@ -116,6 +117,8 @@ def extent(part: Part, measure: Callable[[Text], float]) -> float:
             return WAVE
         case Marker.DOT:
             return DOT
+        case Marker.DOTS:
+            return DOTS
         case _:
             assert_never(part)
 

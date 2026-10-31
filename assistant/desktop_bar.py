@@ -25,10 +25,9 @@ lazy from assistant import island_menu
 lazy from assistant.ambient import Ambient, SystemStatus
 lazy from assistant.audio_meter import AudioMeter
 lazy from assistant.bar_status import StatusObserver
-lazy from assistant.icons import State
 lazy from assistant.island_layout import HEIGHT, Metrics, expansion, frame, snap
 lazy from assistant.island_menu import Chosen, Command, Dismissed, Menu, Tiling, entries, restores_focus, rows
-lazy from assistant.island_model import Action, CapsuleView, Key, Marker, Observed, Spinner, Tint, capture, island, keyboard, processing
+lazy from assistant.island_model import Action, Agent, CapsuleView, Job, Key, Marker, Observed, Spinner, Tint, capture, island, keyboard
 lazy from assistant.island_motion import IslandMotion, Shown, advance, finish, placed, retarget, settled
 lazy from assistant.island_surface import TOP, BarWindow, Drawn, Presented
 lazy from assistant.qt_ui import EventLoop, application
@@ -81,18 +80,20 @@ def level(value: float | None) -> float:
 class DesktopBar:
     __slots__ = (
         "actions",
-        "activity",
+        "agent",
         "ambient",
         "audio_meter",
         "audio_timer",
         "closed",
         "controls",
         "current_layer",
+        "dictating",
         "errors",
         "expanded",
         "frost",
         "hovered",
         "inbox",
+        "job",
         "keys",
         "last_frame",
         "layout_enabled",
@@ -135,7 +136,11 @@ class DesktopBar:
         self.observations = BarObservations() if observations is None else observations
         self.closed = False
         self.visible = native_shell
-        self.activity = State.READY
+        # Each activity comes from its own owner: dictation and quick jobs from the
+        # voice controller, the agent from its session.
+        self.dictating = False
+        self.job: Job | None = None
+        self.agent: Agent | None = None
         self.recording = RecordingState()
         self.layout_enabled = True
         self.current_layer: str | None = None
@@ -245,10 +250,9 @@ class DesktopBar:
     def menu(self) -> Menu:
         """The menu for what's happening now, keeping the current selection and disclosure."""
         recorded = capture(self.recording) if self.recording.capturing else None
-        working = processing(self.activity) if self.activity is State.AGENT else None
+        working = self.agent if self.agent is not None and not self.agent.waiting else None
         menu = Menu(
-            # The bar has no agent phase to read yet; the row names the activity alone.
-            entries(recording=recorded.title if recorded is not None else None, agent="" if working is not None else None),
+            entries(recording=recorded.title if recorded is not None else None, agent=working.phase if working is not None else None),
             "Layout on" if self.layout_enabled else "Layout off",
         )
         if self.expanded is None:
@@ -333,9 +337,19 @@ class DesktopBar:
             case _:
                 assert_never(choice)
 
-    def state(self, state: State) -> None:
-        if self.activity != state:
-            self.activity = state
+    def dictation(self, *, active: bool) -> None:
+        if self.dictating != active:
+            self.dictating = active
+            self.render()
+
+    def job_changed(self, job: Job | None) -> None:
+        if self.job is not job:
+            self.job = job
+            self.render()
+
+    def agent_changed(self, agent: Agent | None) -> None:
+        if self.agent != agent:
+            self.agent = agent
             self.render()
 
     def inbox_changed(self, count: int) -> None:
@@ -358,7 +372,14 @@ class DesktopBar:
 
     def observed(self) -> Observed:
         return Observed(
-            self.activity, self.recording, self.ambient, self.system, self.inbox, keyboard(enabled=self.layout_enabled, layer=self.current_layer)
+            self.agent,
+            self.job,
+            self.recording,
+            self.ambient,
+            self.system,
+            self.inbox,
+            keyboard(enabled=self.layout_enabled, layer=self.current_layer),
+            dictating=self.dictating,
         )
 
     def render(self) -> None:
@@ -373,7 +394,7 @@ class DesktopBar:
             Shown(view, expansion(menu) if menu is not None and view.key is Key.ISLAND else self.window.measure(view)) for view in self.views
         )
         self.motion = retarget(self.motion, shown, animate=self.visible and self.observations.motion())
-        listening = self.activity is State.LISTENING
+        listening = self.dictating
         if listening and not self.audio_timer.isActive():
             self.window.samples.extend(0.0 for _ in range(len(self.window.samples)))
             self.audio_timer.start()
@@ -417,7 +438,7 @@ class DesktopBar:
     def spinning(self) -> bool:
         def spinner(part: object) -> bool:
             match part:
-                case Spinner():
+                case Spinner() | Marker.DOTS:
                     return True
                 case _:
                     return False
@@ -437,7 +458,7 @@ class DesktopBar:
         self.draw()
         if self.spinning():
             for key, capsule in self.window.capsules.items():
-                if key in (Key.ISLAND, Key.AGENT):
+                if key in (Key.ISLAND, Key.AGENT, Key.JOB):
                     capsule.update()
         running = moving or spinning
         self.last_frame = now if running else None
@@ -499,7 +520,7 @@ class DesktopBar:
                         self.notification_access = access
 
     def sample_audio(self) -> None:
-        if not self.closed and self.activity is State.LISTENING:
+        if not self.closed and self.dictating:
             self.window.samples.append(level(self.audio_meter.level() if self.audio_meter is not None else None))
             capsule = self.window.capsules.get(Key.ISLAND)
             if capsule is not None and any(Marker.WAVE in slot for view in self.views for slot in view.slots):

@@ -40,6 +40,26 @@ RADIUS: Final = 17
 SHADOW: Final = 40  # Room below and beside the capsules for their composed shadow.
 
 
+class KeyboardFocus(QtWidgets.QAbstractButton):
+    """A button that rings itself only for keyboard focus, as `:focus-visible` does."""
+
+    def __init__(self, parent: QtWidgets.QWidget) -> None:
+        super().__init__(parent)
+        self.ringed = False  # Qt owns focus; the widget remembers only how focus arrived.
+
+    @override
+    def focusInEvent(self, event: QtGui.QFocusEvent) -> None:
+        super().focusInEvent(event)
+        self.ringed = event.reason() in (Qt.FocusReason.TabFocusReason, Qt.FocusReason.BacktabFocusReason)
+        self.update()
+
+    @override
+    def focusOutEvent(self, event: QtGui.QFocusEvent) -> None:
+        super().focusOutEvent(event)
+        self.ringed = False
+        self.update()
+
+
 def color(shade: Shade) -> QtGui.QColor:
     value = QtGui.QColor(shade.color)
     value.setAlphaF(shade.opacity)
@@ -140,7 +160,7 @@ def badge_font() -> QtGui.QFont:
     return value
 
 
-class ControlButton(QtWidgets.QAbstractButton):
+class ControlButton(KeyboardFocus):
     """A concentric 28 px circle inside its capsule, revealed while the pointer is over it."""
 
     def __init__(self, capsule: Capsule, control: Control) -> None:
@@ -165,7 +185,7 @@ class ControlButton(QtWidgets.QAbstractButton):
             painter.setPen(Qt.PenStyle.NoPen)
             painter.setBrush(color(lettering.press if self.isDown() else lettering.hover))
             painter.drawEllipse(QtCore.QRectF(self.rect()))
-        if self.hasFocus():
+        if self.hasFocus() and self.ringed:
             painter.setBrush(Qt.BrushStyle.NoBrush)
             painter.setPen(QtGui.QPen(color(lettering.ink), 1.5))
             painter.drawEllipse(QtCore.QRectF(self.rect()).adjusted(1, 1, -1, -1))
@@ -308,7 +328,7 @@ class MenuRow(QtWidgets.QAbstractButton):
         painter.restore()
 
 
-class Capsule(QtWidgets.QAbstractButton):
+class Capsule(KeyboardFocus):
     """One capsule: its strip to the screen edge, its shape, and its parts.
 
     A press acts on what the capsule shows; the bar's owner decides what that is.
@@ -427,7 +447,7 @@ class Capsule(QtWidgets.QAbstractButton):
         expanded = self.content.height > HEIGHT
         if (self.isDown() or self.underMouse()) and not expanded:
             painter.fillPath(outline, color(lettering.press if self.isDown() else lettering.hover))
-        if self.hasFocus():
+        if self.hasFocus() and self.ringed:
             painter.setPen(QtGui.QPen(color(lettering.ink), 1.5))
             painter.setBrush(Qt.BrushStyle.NoBrush)
             painter.drawRoundedRect(shape.adjusted(1.5, 1.5, -1.5, -1.5), corner - 1.5, corner - 1.5)
@@ -495,6 +515,8 @@ class Capsule(QtWidgets.QAbstractButton):
                 for index, sample in enumerate(self.window_.samples):
                     height = 3 + sample * 13
                     painter.drawRoundedRect(QtCore.QRectF(spot.x + index * 4, middle - height / 2, 2, height), 1, 1)
+            case Marker.DOTS:
+                self.paint_dots(painter, spot, middle)
             case Marker.DOT:
                 red = QtGui.QColor(RED) if not self.contrast else color(lettering.ink)
                 halo = QtGui.QColor(red)
@@ -506,6 +528,16 @@ class Capsule(QtWidgets.QAbstractButton):
                 painter.drawEllipse(QtCore.QPointF(spot.x + 4, middle), 4, 4)
             case _:
                 assert_never(spot.part)
+
+    def paint_dots(self, painter: QtGui.QPainter, spot: Spot, middle: float) -> None:
+        """A quick job: three dots pulsing in turn, distinct from the agent's ring."""
+        ink = self.look.lettering.ink
+        cycle = (90 - self.window_.spin_angle) % 360 / 360  # One turn of the frame clock per pulse cycle.
+        painter.setPen(Qt.PenStyle.NoPen)
+        for index in range(3):
+            lift = max(0.0, math.sin((cycle - index / 6) * 2 * math.pi))
+            painter.setBrush(color(Shade(ink.color, ink.opacity * (0.35 + 0.65 * lift))))
+            painter.drawEllipse(QtCore.QPointF(spot.x + 3 + index * 6, middle - lift * 1.5), 2.2, 2.2)
 
     def paint_spinner(self, painter: QtGui.QPainter, spot: Spot, middle: float) -> None:
         lettering = self.look.lettering

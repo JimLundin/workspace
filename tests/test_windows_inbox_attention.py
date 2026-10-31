@@ -5,8 +5,6 @@ import unittest
 from collections.abc import Callable
 from pathlib import Path
 
-import assistant.icons
-
 if sys.platform != "win32":
     raise unittest.SkipTest("Windows toolbar inbox attention")
 
@@ -17,7 +15,7 @@ from assistant.agent_toasts import AgentToasts
 from assistant.agent_window import AgentWindow
 from assistant.communications import Feed, WindowsNotice
 from assistant.desktop_bar import BarActions, DesktopBar
-from assistant.island_model import Key
+from assistant.island_model import Agent, Job, Key
 from assistant.island_surface import TOP, Capsule
 from assistant.notification_sources import NOTIFICATION_STATE
 from assistant.qt_runtime import prepare
@@ -125,10 +123,16 @@ def test_bell_opens_inbox_keeps_exact_accessible_count_and_survives_activity(tmp
         assert capsule is not None and "1 clarification needs" in capsule.accessibleName() and "Hold V + T" in capsule.toolTip()
         QTest.mouseClick(capsule, QtCore.Qt.MouseButton.LeftButton, pos=QtCore.QPoint(17, TOP + 17))
         assert invoked == ("inbox",) and bar.expanded is None
-        for state in (assistant.icons.State.AGENT, assistant.icons.State.LISTENING, assistant.icons.State.WORKING):
-            bar.state(state)
+        for start in (
+            lambda: bar.agent_changed(Agent("Comparing both sheets", waiting=False)),
+            lambda: bar.dictation(active=True),
+            lambda: bar.job_changed(Job.TRANSCRIBING),
+        ):
+            start()
             assert waiting(bar) is capsule
-        bar.state(assistant.icons.State.READY)
+        bar.dictation(active=False)
+        bar.job_changed(None)
+        bar.agent_changed(None)
         bar.inbox_changed(137)
         assert "137 clarifications need" in capsule.accessibleName()
         capsule.grab().save(str(tmp_path / "workspace-island-inbox.png"))
