@@ -71,7 +71,8 @@ svg.i { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor;
   box-shadow: var(--g-inner), var(--g-shadow);
 }
 .glass.large { background: var(--g-large); --blur: 28px; }
-html[data-refraction="on"] .glass.lens { backdrop-filter: var(--lens) blur(var(--blur, 10px)) saturate(var(--g-sat)) brightness(var(--g-bright)); }
+/* The lens filter does its own blurring: a crisp, bent rim over a blurred centre. */
+html[data-refraction="on"] .glass.lens { backdrop-filter: var(--lens) saturate(var(--g-sat)) brightness(var(--g-bright)); }
 /* Rim light: a 1px ring brightest where light would catch the curved edge. */
 .glass::before {
   content: ""; position: absolute; inset: 0; border-radius: inherit; padding: 1px; pointer-events: none; z-index: 2;
@@ -158,10 +159,20 @@ html[data-wallpaper="vivid"] .wall.vivid, html[data-wallpaper="light"] .wall.lig
 .part.text { gap: 8px; padding: 0 6px; }
 .vsep { width: 1px; height: 16px; background: var(--separator); margin: 0 4px; flex: none; }
 .tchip { display: inline-flex; gap: 6px; align-items: center; height: 28px; padding: 0 11px; border-radius: 14px; background: color-mix(in srgb, #f08a00 85%, transparent); color: #fff; }
-.qhead { display: flex; gap: 10px; align-items: flex-start; }
-.qt { font-weight: 600; } .qs { color: var(--ink-2); font-size: 12px; margin-top: 1px; }
-.qacts { display: flex; gap: 6px; padding-left: 32px; }
-.qbtn { height: 28px; padding: 0 12px; border-radius: 14px; background: var(--fill-hover); font-weight: 500; white-space: nowrap; }
+/* Expanded island: 28 px corners, 12 px inset, so 32 px capsule buttons are concentric. */
+.cap .content.col.question { padding: 13px 12px 12px; gap: 0; }
+.qtop { display: flex; align-items: center; gap: 9px; padding: 0 4px 0 2px; }
+.qtop .app { width: 26px; height: 26px; border-radius: 8px; font-size: 12px; }
+.qt { flex: 1; font: 600 14px/1.25 var(--font-display); letter-spacing: -.01em; }
+.qmeta { color: var(--ink-2); font-size: 11.5px; }
+.qs { color: var(--ink-2); padding: 3px 4px 0 37px; }
+.qacts { display: flex; gap: 6px; margin-top: 12px; }
+.qbtn { flex: 1; height: 32px; padding: 0 10px; border-radius: 16px; background: var(--fill-hover); font-weight: 500; white-space: nowrap; }
+.cap .content.col.imenu { padding: 6px; gap: 0; }
+.imenu .item { border-radius: 15px; }
+.imenu .ihead { display: flex; justify-content: space-between; align-items: baseline; padding: 6px 10px 8px; }
+.imenu .ihead b { font: 600 14px var(--font-display); } .imenu .ihead span { color: var(--ink-2); font-size: 12px; }
+.bell-quiet { color: var(--ink-2); }
 .qbtn:hover { background: var(--fill-press); }
 .qbtn.primary { background: var(--accent); color: #fff; }
 .cap .content.leaving, .cap .content.entering { opacity: 0; filter: blur(4px); transform: scale(.94); }
@@ -174,7 +185,7 @@ html[data-wallpaper="vivid"] .wall.vivid, html[data-wallpaper="light"] .wall.lig
 .ambient { display: inline-flex; align-items: center; gap: 5px; color: var(--ink); font-weight: 500; }
 .ambient + .ambient { margin-left: 6px; }
 .badge { position: absolute; top: 1px; right: 0; min-width: 15px; height: 15px; padding: 0 4px; border-radius: 8px; background: var(--red); color: #fff; font-size: 10px; font-weight: 700; line-height: 15px; text-align: center; }
-.wave { display: inline-flex; align-items: center; gap: 2px; height: 18px; width: 74px; }
+.wave { display: inline-flex; align-items: center; gap: 2px; height: 18px; }
 .wave i { width: 2px; border-radius: 1px; background: var(--ink); height: 3px; }
 .wave.frozen i { background: var(--ink-3); }
 .spinner { width: 14px; height: 14px; border-radius: 50%; border: 1.8px solid var(--ink-3); border-top-color: var(--ink); animation: spin 1.2s linear infinite; }
@@ -187,14 +198,14 @@ html.reduce-motion .spinner { animation-duration: 0s; border-top-color: var(--in
 
 /* ── Menu morphs out of its button ──────────────────────────────────── */
 .menu { position: fixed; z-index: 40; min-width: 248px; padding: 6px; border-radius: 18px; display: none; transform-origin: top left; }
-.menu .item { display: flex; align-items: center; gap: 10px; height: 30px; padding: 0 10px; border-radius: 12px; color: var(--ink); width: 100%; text-align: left; }
-.menu .item:hover, .menu .item.hot { background: color-mix(in srgb, var(--accent) 92%, transparent); color: #fff; }
-.menu .item:hover svg, .menu .item.hot svg { color: #fff; }
-.menu .item svg { color: var(--ink-2); }
-.menu .item .key { margin-left: auto; color: var(--ink-3); font-size: 12px; }
-.menu .item:hover .key { color: rgba(255,255,255,.75); }
-.menu .item .check { margin-left: auto; color: var(--accent); }
-.menu .sep { height: 1px; background: var(--separator); margin: 5px 10px; }
+:is(.menu, .imenu) .item { display: flex; align-items: center; gap: 10px; height: 30px; padding: 0 10px; border-radius: 12px; color: var(--ink); width: 100%; text-align: left; }
+:is(.menu, .imenu) .item:hover, .menu .item.hot { background: color-mix(in srgb, var(--accent) 92%, transparent); color: #fff; }
+:is(.menu, .imenu) .item:hover svg, .menu .item.hot svg { color: #fff; }
+:is(.menu, .imenu) .item svg { color: var(--ink-2); }
+:is(.menu, .imenu) .item .key { margin-left: auto; color: var(--ink-3); font-size: 12px; }
+:is(.menu, .imenu) .item:hover .key { color: rgba(255,255,255,.75); }
+:is(.menu, .imenu) .item .check { margin-left: auto; color: var(--accent); }
+:is(.menu, .imenu) .sep { height: 1px; background: var(--separator); margin: 5px 10px; }
 .menu .menu-body { transition: opacity .16s ease; }
 #submenu { min-width: 260px; }
 
@@ -311,11 +322,13 @@ kbd { font: 600 11px/18px var(--font); padding: 0 6px; border-radius: 6px; backg
 #verdict p { margin: 0; } #verdict b { color: var(--ink); }
 
 /* ── Demo controls (not part of the design) ─────────────────────────── */
-#panel { position: fixed; left: 18px; bottom: 18px; width: 324px; z-index: 50; border-radius: 22px; padding: 14px; max-height: calc(100vh - 80px); overflow: auto; scrollbar-width: none; }
+#panel { position: fixed; left: 18px; bottom: 18px; width: 324px; z-index: 50; border-radius: 22px; padding: 0; overflow: hidden; }
+#panel .scroll { padding: 14px; max-height: calc(100vh - 80px); overflow: auto; scrollbar-width: none; position: relative; z-index: 3;
+  -webkit-mask: linear-gradient(transparent, #000 14px, #000 calc(100% - 14px), transparent); mask: linear-gradient(transparent, #000 14px, #000 calc(100% - 14px), transparent); }
 #panel h1 { font: 700 15px/1.2 var(--font-display); margin: 0 0 2px; letter-spacing: -.01em; }
 #panel .lead { color: var(--ink-2); font-size: 12px; margin: 0 0 10px; }
 #panel .lbl { font-size: 11.5px; font-weight: 600; color: var(--ink-2); margin: 12px 2px 6px; }
-#panel.collapsed > :not(.always) { display: none; }
+#panel.collapsed .scroll > :not(.always) { display: none; }
 #panel .collapse { position: absolute; top: 10px; right: 10px; }
 .seg { position: relative; display: flex; padding: 2px; border-radius: 10px; background: color-mix(in srgb, var(--ink) 8%, transparent); }
 .seg button { position: relative; z-index: 1; flex: 1 1 auto; height: 26px; padding: 0 6px; border-radius: 8px; font-size: 11.5px; font-weight: 500; color: var(--ink); white-space: nowrap; }
@@ -442,20 +455,20 @@ kbd { font: 600 11px/18px var(--font); padding: 0 6px; border-radius: 6px; backg
 <!-- Toolbar pattern comparison -->
 <div id="compare" class="scheme-dark" role="dialog" aria-label="Toolbar patterns">
   <div class="top"><h1>How should the toolbar change?</h1><button class="pill glass interactive" id="play">Play scenario</button><button class="btn" id="closeCompare" aria-label="Close comparison"><svg class="i"><use href="#i-x"/></svg></button></div>
-  <p class="intro">The same scenario drives three arrangements. Each row measures how far the menu and inbox buttons move from where they sat at idle, because persistent controls that move under the pointer break spatial memory. Switch between floating and attached edges in the demo controls.</p>
+  <p class="intro">The same scenario drives three arrangements. Each row measures how far the leading button and the inbox move from where they sat at idle, because persistent controls that move under the pointer break spatial memory. Switch between floating and attached edges in the demo controls.</p>
   <div id="steps"></div>
   <div id="strips"></div>
   <div id="verdict">
     <h3>Recommendation: the island, floating, with an edge-to-edge hit target</h3>
-    <p><b>Morph for moments, detach for durations.</b> Dictation, transcription and a new question are short and hold your attention, so they take over the centre shape, as the Dynamic Island does for its single activity. Agent work, meeting recording and the keyboard layer last minutes and run independently, so each gets its own detached minimal pill. Apple uses the same split when several Live Activities run at once.</p>
-    <p><b>Keep information, reveal controls.</b> A minimal pill shows live state (a spinner, the recording timer, NAV), and hovering reveals its Stop button. Questions expand the island downward for a few seconds, then settle into the orange "Needs you" pill. Clicking that pill expands the question again.</p>
-    <p><b>Float, but keep the edge target.</b> Liquid Glass bars float inset and concentric. Apple replaced the edge-attached notch with the floating island. Workspace still owns the strip above the glass, so a cursor thrown against the top edge lands on the nearest control. That keeps the Fitts's-law benefit of attachment.</p>
-    <p><b>Measured over this scenario.</b> At the widest point, the menu moves 183 px in the single capsule, because every activity widens the one shape. It moves 233 px with glass groups (254 px attached), because the ambient readout never yields its space. In the island it moves 0 px for dictation, transcription, agent work, recording and the keyboard layer. It moves 24 px for the settled "Needs you" pill and 91 px for the five seconds the question is expanded. The island holds a minimum width equal to its idle readout, which is what makes moments free.</p>
+    <p><b>One control each side.</b> Canvas sits on the left and the inbox on the right; the island between them is the Workspace menu. Clicking the island acts on what it shows: at rest it expands into the menu, while dictating it stops, and with a question it opens the answers.</p>
+    <p><b>Morph for moments, detach for durations.</b> Dictation, transcription and a new question are short and hold your attention, so the island itself changes and fits its content: the waveform while you speak, a spinner while it transcribes. Agent work, meeting recording and the keyboard layer last minutes and run independently, so each becomes a detached minimal pill, as concurrent Live Activities do.</p>
+    <p><b>Keep information, reveal controls.</b> Minimal pills show live state (a spinner, the recording timer, NAV), and hovering reveals the label and Stop. A question expands the island into a card for five seconds, then settles into an orange "Needs you" pill that reopens it.</p>
+    <p><b>Measured over this scenario.</b> At most, the leading button moves 183 px with one capsule and 231 px with glass groups. In the island, long-running activities move nothing. Fitted moments move the side buttons by half of the island's change: 31 px for dictation, 70 px for the transcription spinner and 99 px while a question is expanded. Glass floats 8 px below the edge, and the strip above it still takes clicks.</p>
   </div>
 </div>
 
 <!-- Demo controls -->
-<div id="panel" class="glass large">
+<div id="panel" class="glass large"><div class="scroll">
   <div class="always"><h1>Liquid Glass study</h1><p class="lead">Workspace's surfaces in Apple's current design language.</p></div>
   <button class="btn always collapse" id="collapse" aria-label="Collapse demo controls"><svg class="i"><use href="#i-side"/></svg></button>
   <div class="lbl">Toolbar pattern</div>
@@ -488,7 +501,8 @@ kbd { font: 600 11px/18px var(--font); padding: 0 6px; border-radius: 6px; backg
   <div class="toggle"><span>Increase contrast</span><button class="switch" data-key="increase-contrast" role="switch"><span class="knob"></span></button></div>
   <div class="toggle"><span>Reduce motion</span><button class="switch" data-key="reduce-motion" role="switch"><span class="knob"></span></button></div>
   <div class="toggle"><span>Edge refraction</span><button class="switch on" data-key="refraction" role="switch"><span class="knob"></span></button></div>
-  <p class="note">SF Pro shows only where it is installed; Apple licenses it for Apple platforms. Edge refraction is the one effect Windows composition can't reproduce over the desktop. Turn it off to see what Workspace can ship natively.</p>
+  <p class="note">SF Pro shows only where it is installed; Apple licenses it for Apple platforms. Edge refraction bends what sits under a glass rim, so it shows over detail such as text and window edges, not smooth wallpaper. Windows composition can't reproduce it over the desktop; turn it off to see what Workspace can ship natively.</p>
+</div>
 </div>
 
 <script>
@@ -586,7 +600,8 @@ function lensMap(w, h, r, bezel) {
     nx *= Math.sign(px) || 1; ny *= Math.sign(py) || 1;
     const t = clamp(-dist / bezel, 0, 1), k = (1 - t) ** 2;          // strongest at the rim, flat in the middle
     const i = (y * cw + x) * 4;
-    d[i] = 128 - nx * k * 127; d[i + 1] = 128 - ny * k * 127; d[i + 2] = 128; d[i + 3] = 255;
+    // R and G bend toward the centre; B marks the rim band where the bent, sharper view shows.
+    d[i] = 128 - nx * k * 127; d[i + 1] = 128 - ny * k * 127; d[i + 2] = 255 * clamp((1 - t) * 1.25, 0, 1); d[i + 3] = 255;
   }
   ctx.putImageData(img, 0, 0);
   return cv.toDataURL();
@@ -599,15 +614,21 @@ function applyLens(el) {
   el.dataset.lensKey = key;
   const r = parseFloat(getComputedStyle(el).borderTopLeftRadius) || 0;
   const id = el.dataset.lensId || (el.dataset.lensId = `lens${lensId++}`);
-  const bezel = Math.min(h / 2, el.classList.contains("large") ? 22 : 12);
-  const scale = el.classList.contains("large") ? 46 : 30;
+  const bezel = Math.min(h / 2, el.classList.contains("large") ? 26 : 16);
+  const scale = el.classList.contains("large") ? 70 : 48;
   let f = document.getElementById(id);
   if (!f) { f = document.createElementNS("http://www.w3.org/2000/svg", "filter"); f.id = id; lensDefs.append(f); }
   f.setAttribute("x", 0); f.setAttribute("y", 0); f.setAttribute("width", w); f.setAttribute("height", h);
   f.setAttribute("filterUnits", "userSpaceOnUse"); f.setAttribute("primitiveUnits", "userSpaceOnUse");
   f.setAttribute("color-interpolation-filters", "sRGB");
+  const blur = parseFloat(getComputedStyle(el).getPropertyValue("--blur")) || 10;
   f.innerHTML = `<feImage href="${lensMap(w, h, r, bezel)}" x="0" y="0" width="${w}" height="${h}" preserveAspectRatio="none" result="m"/>
-    <feDisplacementMap in="SourceGraphic" in2="m" scale="${scale}" xChannelSelector="R" yChannelSelector="G"/>`;
+    <feGaussianBlur in="SourceGraphic" stdDeviation="${blur}" edgeMode="duplicate" result="soft"/>
+    <feGaussianBlur in="SourceGraphic" stdDeviation="1.2" edgeMode="duplicate" result="crisp"/>
+    <feDisplacementMap in="crisp" in2="m" scale="${scale}" xChannelSelector="R" yChannelSelector="G" result="bent"/>
+    <feColorMatrix in="m" type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 1 0 0" result="band"/>
+    <feComposite in="bent" in2="band" operator="in" result="rim"/>
+    <feComposite in="rim" in2="soft" operator="over"/>`;
   el.style.setProperty("--lens", `url(#${id})`);
 }
 const lensTimers = new WeakMap();
@@ -656,24 +677,26 @@ function capState(cap) {
   }
   return caps.get(cap);
 }
-function measure(cap, html, cls) {
+function measure(cap, html, cls, width) { return measureBox(cap, html, cls, width).w; }
+function measureBox(cap, html, cls, width) {
   const probe = document.createElement("div");
-  probe.className = `content ${cls}`; probe.style.cssText = "position:absolute;visibility:hidden;transition:none";
+  probe.className = `content ${cls}`; probe.style.cssText = `position:absolute;visibility:hidden;transition:none;${width ? `width:${width}px;` : ""}`;
   probe.innerHTML = html;
   const host = document.createElement("div"); host.className = "cap"; host.style.cssText = "position:fixed;left:-9999px;top:0;width:auto";
   const scheme = cap.closest(".scheme-light, .scheme-dark");
   const wrap = document.createElement("div"); wrap.className = scheme ? (scheme.classList.contains("scheme-light") ? "scheme-light" : "scheme-dark") : "";
   if (cap.closest("#ctool")) wrap.id = "ctool-probe";
   host.append(probe); wrap.append(host); document.body.append(wrap);
-  const w = Math.ceil(probe.getBoundingClientRect().width);
+  const box = probe.getBoundingClientRect();
   wrap.remove();
-  return w;
+  return { w: Math.ceil(box.width), h: Math.ceil(box.height) };
 }
-function morph(cap, html, { cls = "", width, height, instant = false } = {}) {
+function morph(cap, html, { cls = "", width, height, radius = 28, instant = false } = {}) {
   const st = capState(cap);
   const h = height ?? (st.h ? 34 : null);
+  st.radius = radius;
   if (h !== null) {
-    if (!st.h) st.h = new Spring(34, v => { cap.style.height = `${v}px`; cap.style.setProperty("--r", `${Math.min(v / 2, 26)}px`); }, { damping: .8, response: .42 });
+    if (!st.h) st.h = new Spring(34, v => { cap.style.height = `${v}px`; cap.style.setProperty("--r", `${Math.min(v / 2, st.radius)}px`); }, { damping: .8, response: .42 });
     instant ? st.h.set(h) : st.h.to(h);
   }
   if (st.html === html + cls) return;
@@ -711,14 +734,31 @@ const contentLuma = { vivid: "dark", light: "light", dark: "dark" };
 function setScheme(el, scheme) { el.classList.toggle("scheme-light", scheme === "light"); el.classList.toggle("scheme-dark", scheme === "dark"); }
 
 // Content pieces, shared by every pattern so only the arrangement differs.
-const bars24 = "<i></i>".repeat(24);
+const bars24 = "<i></i>".repeat(18);
 const frozen = Array.from({ length: 24 }, (_, i) => `<i style="height:${3 + 9 * Math.abs(Math.sin(i * 1.7))}px"></i>`).join("");
 const stopBtn = (label, target) => `<button class="btn" data-act="stop" data-target="${target}" aria-label="${label}" title="${label}">${icon("stop", "", true)}</button>`;
 const piece = {
   controls: main => `<button class="btn" data-act="menu" ${main ? 'id="menuBtn"' : ""} aria-label="Open Workspace controls" title="Workspace controls">${icon("menu")}</button>
     <button class="btn" data-act="canvas" aria-label="Open your work canvas" title="Your work canvas">${icon("canvas")}</button>`,
+  canvas: () => `<button class="btn" data-act="canvas" aria-label="Open your work canvas" title="Your work canvas">${icon("canvas")}</button>`,
   ambient: () => `<span class="ambient num">10:22</span><span class="ambient">${icon("battery")}<span class="num">73%</span></span><span class="ambient">${icon("cloud")}<span class="num">12°</span></span>`,
   dictating: stop => `<span class="ambient mic-on" title="Listening">${icon("mic", "", true)}</span><span class="wave live">${bars24}</span>${stop ? stopBtn("Stop dictation", "moment") : ""}`,
+  transcribingMin: () => `<span class="spinner" role="status" aria-label="Transcribing" title="Transcribing"></span>`,
+  needsIsland: () => `<span class="ambient" style="font-weight:600">Needs you</span><span class="ambient" style="color:var(--ink-2)">Which sheet?</span>${icon("chevdown")}`,
+  questionCard: () => `<div class="qtop"><div class="app workspace">✦</div><div class="qt">Which sheet should the reply cover?</div><span class="qmeta">now</span></div>
+    <div class="qs">Costs includes deferred licences; Revenue doesn't.</div>
+    <div class="qacts"><button class="qbtn primary" data-act="answer">Revenue</button><button class="qbtn" data-act="answer">Costs</button><button class="qbtn" data-act="canvas">Open on canvas</button></div>`,
+  islandMenu: () => `<div class="ihead"><b>Workspace</b><span>Layout on</span></div>
+    <button class="item" data-act="feed">${icon("feed")}Your work feed<span class="key">V T</span></button>
+    <button class="item" data-act="record">${icon("rec")}${state.recording ? "Stop recording" : "Record a meeting"}</button>
+    <div class="sep"></div>
+    <button class="item" data-act="close-menu">${icon("map")}Keyboard map</button>
+    <button class="item" data-act="close-menu">${icon("overlay")}Keyboard overlay</button>
+    <button class="item" data-act="close-menu">${icon("task")}Windows taskbar${icon("check", "check")}</button>
+    <div class="sep"></div>
+    <button class="item" data-act="close-menu">${icon("copy")}Copy latest transcript</button>
+    <button class="item" data-sub="tiling">${icon("tile")}Window tiling<svg class="i" style="margin-left:auto"><use href="#i-chev"/></svg></button>
+    <button class="item" data-act="close-menu">${icon("gear")}Notification settings</button>`,
   transcribing: () => `<span class="spinner" role="status" aria-label="Transcribing"></span><span class="wave frozen">${frozen}</span>`,
   working: stop => `<span class="spinner"></span><span class="ambient">Comparing sheets</span>${stop ? stopBtn("Stop agent work", "agent") : ""}`,
   workingMin: () => `<span class="spinner" role="status" aria-label="Agent working"></span>`,
@@ -729,13 +769,15 @@ const piece = {
     <div class="qacts"><button class="qbtn primary" data-act="answer">Revenue</button><button class="qbtn" data-act="answer">Costs</button><button class="qbtn" data-act="canvas">Open on canvas</button></div>`,
   rec: stop => `<span class="rec-dot"></span><span class="ambient num rec-time">02:05</span>${stop ? stopBtn("Stop recording", "rec") : ""}`,
   kbd: () => `<span class="ambient">${icon("kbd")}NAV</span>`,
-  bell: () => `<button class="btn" data-act="feed" aria-label="Open your work feed, 3 items" title="Your work feed · Hold V + T">${icon("bell")}<span class="badge num">3</span></button>`,
+  bell: (count = 3) => count
+    ? `<button class="btn" data-act="feed" aria-label="Open your work feed, ${count} items" title="Your work feed · Hold V + T">${icon("bell")}<span class="badge num">${count}</span></button>`
+    : `<button class="btn bell-quiet" data-act="feed" aria-label="Open your work feed, nothing waiting" title="Your work feed · Hold V + T">${icon("bell")}</button>`,
 };
-const ORDER = ["controls", "main", "island", "ambient", "moment", "agent", "rec", "kbd", "bell", "dAgent", "dRec", "dKbd"];
+const ORDER = ["dKbd", "controls", "canvas", "main", "island", "ambient", "moment", "agent", "rec", "kbd", "bell", "dAgent", "dRec"];
 const PATTERNS = {
   single: { name: "One capsule", precedent: "Today's bar, fully merged. Dynamic Island with a single activity." },
   groups: { name: "Glass groups", precedent: "macOS 26 toolbar groups, iOS 26 tab-bar accessories. Each activity adds a pill." },
-  island: { name: "Island", precedent: "Dynamic Island. Moments morph the centre, durations detach, questions expand." },
+  island: { name: "Island", precedent: "Dynamic Island. Moments morph the centre, durations detach, the island expands into questions and the menu." },
 };
 const toolbars = new Set();
 class Toolbar {
@@ -777,20 +819,22 @@ class Toolbar {
       if (s.agent === "needs" && this.prevAgent !== "needs") this.expandQuestion();
       if (s.agent !== "needs") this.expandedQ = false;
       this.prevAgent = s.agent;
-      add("lead", "controls", piece.controls(this.main), { cls: "" });
-      // The island never gets narrower than its idle readout, so short moments leave the controls in place.
-      const anchorCap = this.cap("island"), floor = measure(anchorCap, piece.ambient(), "text");
-      const compact = (html, o = {}) => add("anchor", "island", html, { width: Math.max(floor, measure(anchorCap, html, "text")), ...o });
-      if (s.moment === "dictating") compact(piece.dictating(hov("island")));
-      else if (s.moment === "transcribing") compact(piece.transcribing());
-      else if (s.agent === "needs" && this.expandedQ) add("anchor", "island", piece.question(), { cls: "col", width: 356, height: 116 });
-      else if (s.agent === "needs") compact(piece.needs(), { tint: true });
-      else compact(piece.ambient());
-      if (s.inbox) add("trail", "bell", piece.bell(), { cls: "" });
+      // One control each side of the island; the island itself is the menu.
+      if (s.layer) add("lead", "dKbd", piece.kbd());
+      add("lead", "canvas", piece.canvas(), { cls: "" });
+      const island = this.cap("island");
+      const fit = (html, cls = "text", o = {}) => add("anchor", "island", html, { cls, ...o });
+      const card = (html, cls, width, radius) => add("anchor", "island", html, { cls: `col ${cls}`, width, height: measureBox(island, html, `col ${cls}`, width).h, radius });
+      if (this.menuOpen) card(piece.islandMenu(), "imenu", 272, 21);
+      else if (s.moment === "dictating") fit(piece.dictating(hov("island")));
+      else if (s.moment === "transcribing") fit(piece.transcribingMin(), "min");
+      else if (s.agent === "needs" && this.expandedQ) card(piece.questionCard(), "question", 372, 28);
+      else if (s.agent === "needs") fit(piece.needsIsland(), "text", { tint: true });
+      else fit(piece.ambient());
+      add("trail", "bell", piece.bell(s.inbox ? 3 : 0), { cls: "" });
       if (s.agent === "working") add("trail", "dAgent", hov("dAgent") ? piece.working(true) : piece.workingMin(), { cls: hov("dAgent") ? "text" : "min" });
-      if (s.agent === "needs" && moment) add("trail", "dAgent", piece.needsMin(), { cls: "min", tint: true });
+      if (s.agent === "needs" && (moment || this.menuOpen)) add("trail", "dAgent", piece.needsMin(), { cls: "min", tint: true });
       if (s.recording) add("trail", "dRec", piece.rec(hov("dRec")));
-      if (s.layer) add("trail", "dKbd", piece.kbd());
     }
     return out;
   }
@@ -833,13 +877,29 @@ class Toolbar {
     this.first = false;
     if (this.main) $("#recLabel").textContent = state.recording ? "Stop recording" : "Record a meeting";
   }
+  setMenu(open) {
+    if (this.menuOpen === !!open) return;
+    this.menuOpen = !!open;
+    if (!open) $("#submenu").style.display = "none";
+    this.render();
+  }
   click(e) {
-    const act = e.target.closest("[data-act]")?.dataset.act;
+    let act = e.target.closest("[data-act]")?.dataset.act;
+    if (!act && this.pattern === "island" && e.target.closest('.cap[data-key="island"]')) {
+      if (this.menuOpen) return;
+      if (state.moment === "dictating") act = "stop-dictation";
+      else if (state.agent === "needs") act = "expand";
+      else if (state.moment === "none") act = "island-menu";
+    }
     if (!act) return;
+    if (act === "island-menu") { e.stopPropagation(); this.setMenu(true); return; }
+    if (act === "close-menu") { this.setMenu(false); return; }
+    if (act === "record") { state.recording = !state.recording; this.menuOpen = false; syncControls(); renderBars(); return; }
+    if (this.menuOpen) this.menuOpen = false;
     if (act === "expand") { this.expandQuestion(); this.render(); return; }
     if (act === "answer") { state.agent = "off"; syncControls(); renderBars(); return; }
-    if (act === "stop") {
-      const target = e.target.closest("[data-target]").dataset.target;
+    if (act === "stop" || act === "stop-dictation") {
+      const target = act === "stop-dictation" ? "moment" : e.target.closest("[data-target]").dataset.target;
       if (target === "moment") { state.moment = "transcribing"; setTimeout(() => { if (state.moment === "transcribing") { state.moment = "none"; syncControls(); renderBars(); } }, 1600); }
       if (target === "agent") state.agent = "off";
       if (target === "rec") state.recording = false;
@@ -852,6 +912,16 @@ class Toolbar {
   }
 }
 const mainBar = new Toolbar($("#bar"), { pattern: state.pattern, main: true });
+document.addEventListener("pointerdown", e => {
+  for (const t of toolbars) if (t.menuOpen && !t.root.contains(e.target) && !e.target.closest("#submenu")) t.setMenu(false);
+});
+document.addEventListener("pointerover", e => {
+  const item = e.target.closest(".imenu .item"); if (!item) return;
+  if (item.dataset.sub !== "tiling") { if (!e.target.closest("#submenu")) sub.style.display = "none"; return; }
+  const r = item.getBoundingClientRect();
+  setScheme(sub, state.appearance);
+  sub.style.display = "block"; sub.style.left = `${r.right + 12}px`; sub.style.top = `${r.top - 6}px`;
+});
 function renderBars() {
   // Small glass flips with the content beneath it, independent of the system appearance.
   setScheme($("#bar"), contentLuma[state.wallpaper]);
@@ -895,7 +965,7 @@ for (const key of ["single", "groups", "island"]) {
 function positions(sb) {
   const r = sb.strip.getBoundingClientRect(), mid = r.left + r.width / 2;
   const at = act => { const b = $(`.content:not(.leaving) [data-act="${act}"]`, sb.strip); if (!b) return null; const q = b.getBoundingClientRect(); return q.left + q.width / 2 - mid; };
-  return { menu: at("menu"), bell: at("feed") };
+  return { menu: at("menu") ?? at("canvas"), bell: at("feed") };
 }
 function measureStep() {
   for (const sb of stripBars) {
@@ -904,7 +974,7 @@ function measureStep() {
     const b = baseline.get(sb.key), m = maxima.get(sb.key);
     const dm = Math.abs(p.menu - b.menu), db = p.bell === null || b.bell === null ? null : Math.abs(p.bell - b.bell);
     m.menu = Math.max(m.menu, dm); if (db !== null) m.bell = Math.max(m.bell, db);
-    sb.metric.innerHTML = `menu moved <b>${Math.round(dm)} px</b> · bell <b>${db === null ? "–" : Math.round(db) + " px"}</b> <span class="max">largest so far ${Math.round(m.menu)} / ${Math.round(m.bell)} px</span>`;
+    sb.metric.innerHTML = `leading button moved <b>${Math.round(dm)} px</b> · bell <b>${db === null ? "–" : Math.round(db) + " px"}</b> <span class="max">largest so far ${Math.round(m.menu)} / ${Math.round(m.bell)} px</span>`;
   }
 }
 // Measure resting positions, not frames in flight.
@@ -1265,6 +1335,7 @@ function closeInspector() { inspSpring.to(0, { done: () => { if (!selected) insp
 addEventListener("keydown", e => {
   if (e.key === "Escape") {
     if (menuOpen) return closeMenu();
+    for (const t of toolbars) if (t.menuOpen) return t.setMenu(false);
     if (searching) return renderSearch(false);
     if (selected) return select(null);
     if (canvasOpen) return closeCanvas();

@@ -51,9 +51,9 @@ The first version is preserved as the `liquid-glass-prototype-v1` tag.
 
 | Surface | Today | Proposed |
 | --- | --- | --- |
-| Desktop bar | One lilac capsule fused to the screen edge with flared shoulders and internal dividers | Separate glass groups floating 8 px below the edge: controls, readout, inbox and auxiliary capsules. Spacing replaces dividers. Ink flips with the content beneath. Width changes spring and content materializes. Recording and keyboard capsules split out of the bar |
-| "Needs you" | Label in the shared capsule | The readout capsule tinted orange: the bar's only coloured state |
-| Controls menu | Qt `QMenu` with a solid background | Large glass morphing from the menu button, an icon per item, and an accent highlight row |
+| Desktop bar | One lilac capsule fused to the screen edge with flared shoulders and internal dividers | A floating island between one Canvas button and the inbox. See *Toolbar pattern* |
+| "Needs you" | Label in the shared capsule | The island expands into the question, then settles into an orange pill: the bar's only coloured state |
+| Controls menu | Qt `QMenu` with a solid background | The island expands into the menu: large glass, an icon per item, an accent highlight row |
 | Agent phase bubbles | Lilac bubbles with app palettes | Large regular glass, like macOS notifications. App identity moves to a rounded app badge. Earlier phases collapse and recede. Prominent glass marks the primary answer |
 | Work canvas | Lilac-tinted dark window, lilac work bubbles | Neutral content layer with solid cards. App colour appears only in badges and the amber question card. The floating bottom toolbar is the only glass. Soft scroll-edge effects. An inset inspector with a concentric radius slides in from the trailing edge |
 | Motion | 160 ms slides and fixed-duration animation | Critically damped springs by default. Bounce only after a throw. Pans project momentum and rubber-band at edges. Every transition can be interrupted |
@@ -113,34 +113,77 @@ Apple's precedents:
 - **Mac menu bar.** Status items sit at the screen edge, so a cursor thrown
   upward always hits them. iPhone Live Activities appear there on macOS 26.
 
-Measured results (largest menu displacement over the scenario):
+Measured results (largest leading-button displacement over the scenario):
 
 | Pattern | Floating | Attached | Behaviour |
 | --- | --- | --- | --- |
 | One capsule | 183 px | 183 px | Every activity widens the one shape |
-| Glass groups | 233 px | 254 px | Each activity adds a pill; ambient never yields |
-| Island | 91 px for the expanded question; 24 px settled; 0 px otherwise | same | Moments morph the centre; durations detach |
+| Glass groups | 231 px | 252 px | Each activity adds a pill; ambient never yields |
+| Island | 0 px for durations; 31 px dictating; 70 px transcribing; 99 px question expanded | same | Moments resize the centre; durations detach |
 
 **Recommendation: the island, floating, with an edge-to-edge hit target.**
 
-- *Morph for moments, detach for durations.* Dictation, transcription and a
-  new question are short and hold attention, so they take over the centre
-  island. Agent work, meeting recording and the keyboard layer last minutes and
-  are independent, so each gets a detached minimal pill beside the inbox. This
-  matches Workspace's existing rule that agent, recording and keyboard state are
-  independent.
+- *One control each side.* Canvas sits on the left and the inbox on the right.
+  The island between them is the Workspace menu, so the leading side no longer
+  carries two buttons. The inbox stays visible with no badge when nothing is
+  waiting, which keeps the arrangement balanced.
+- *Click the island to act on what it shows.* At rest it expands into the
+  Workspace menu, while dictating it stops, and with a question it opens the
+  answers. This follows the Dynamic Island, where tapping acts on the current
+  activity.
+- *Fit the moment.* Dictation shows the microphone and a short live waveform.
+  Transcription shrinks to a spinner. The island returns to the clock
+  afterwards. A fitted island moves the side buttons by half of each width
+  change. That cost is accepted for moments that last seconds.
+- *Detach durations.* Agent work, meeting recording and the keyboard layer last
+  minutes and run independently, so each is a detached minimal pill. The
+  keyboard layer sits outside Canvas; agent and recording sit outside the inbox.
+  They move nothing else.
 - *Keep information, reveal controls.* A minimal pill shows live state: a
-  spinner, the recording timer or NAV. Hovering expands it to show its label and
-  Stop. Dictation stops by clicking the island or with B, as today.
-- *Questions expand.* A new question expands the island downward with its
-  answers for five seconds. It then settles into an orange "Needs you" pill,
-  and clicking that pill expands it again.
-- *Anchor on the centre and give it a floor.* The island stays centred on the
-  screen, and its minimum width is the idle readout. That keeps every moment at
-  0 px displacement. The outermost detached pills are the only things that shift.
+  spinner, the recording timer or NAV. Hovering expands it to show its label
+  and Stop.
+- *Questions expand.* A new question expands the island into a 372 px card with
+  28 px corners, a 12 px inset and concentric 32 px answer buttons, for five
+  seconds. It then settles into an orange "Needs you" pill that reopens it.
 - *Float, keep the edge target.* Draw the glass 8 px below the edge, but let the
-  transparent strip above each pill receive clicks. A cursor thrown against
-  the top edge still lands on the nearest control.
+  transparent strip above each pill receive clicks. A cursor thrown against the
+  top edge still lands on the nearest control.
+
+## What the top bar shows
+
+macOS 26 puts these in its menu bar:
+
+- **Leading:** the Apple menu, then the active app's name and menus.
+- **Trailing:** menu bar extras chosen by the person, then the system's Wi-Fi,
+  battery, Control Center, Spotlight and Siri, and the date and time. Clicking
+  the clock opens Notification Center and widgets. The input source can appear
+  as its own extra.
+- **Indicators:** while an app uses the microphone or camera, the system shows
+  an orange or green privacy indicator. Screen recording, Now Playing and iPhone
+  Live Activities add their own items.
+- **Not there:** weather and other ambient information live in widgets. The
+  menu bar holds controls, status and alerts.
+
+Workspace's bar today (`assistant/bar_model.py`, `assistant/ambient.py`,
+`assistant/desktop_bar.py`) and the proposed home for each item:
+
+| Item | Today | Proposed |
+| --- | --- | --- |
+| Workspace menu | Leading button | The island at rest; clicking it expands the menu |
+| Canvas | Leading button beside the menu | The single leading button |
+| Clock | Resting readout | Island at rest |
+| Battery | Resting readout; hidden above 95% on power | Island at rest, same rule |
+| Weather | Resting readout | Move into the expanded island menu's header. Like macOS, keep ambient facts that aren't status out of the resting bar. This matches the bar's own rule: "Only active work earns space in the desktop toolbar." |
+| Speakers unmuted | Alert glyph in the readout | Island at rest, as an exception glyph |
+| Wi-Fi disconnected | Alert glyph in the readout | Island at rest, as an exception glyph |
+| Inbox | Bell with count, hidden at zero | Trailing button, always present; badge only with items |
+| Listening | Microphone, waveform, Stop | Island moment: orange microphone (Apple's microphone-in-use colour) and waveform; Stop on hover or by clicking the island |
+| Transcribing | Spinner | Island moment: spinner only |
+| Agent working | "Working" and Stop in the main capsule | Detached minimal pill: spinner; hover shows the current phase and Stop |
+| Needs input | "Needs you" in the main capsule | Island expands into the question, then settles into the orange pill |
+| Meeting recording | Separate capsule: timer and Stop | Detached minimal pill: red dot and timer; hover shows Stop. "Starting…", "Stopping…" and "Saving…" replace the timer; "Check recording" tints the pill orange |
+| Keyboard layer or Colemak | Separate capsule | Detached minimal pill on the leading side, like the macOS input menu |
+| Tiling tab strip | Joins the ambient capsule on the primary screen | Out of scope here. The island should stay centred, with the strip running along the edge around it |
 
 ## What ports to Qt on Windows
 
@@ -157,6 +200,8 @@ pixels, so refraction is possible there, but it would need a Qt Quick/RHI
 shader path. Measure that before committing to it.
 
 ## Open decisions
+
+- Should weather leave the resting bar for the island menu's header?
 
 - Should the lower-right agent phase bubbles remain? The expanded island could
   show the current phase instead, so agent progress would live in one place.
