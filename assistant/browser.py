@@ -122,10 +122,13 @@ _UNGROUPED = TypeAdapter(UngroupResult)
 _CLOSED_TABS = TypeAdapter(ClosedTabs)
 _CLOSED_PAGE = TypeAdapter(PageClosure)
 # Resolves after a visible page renders a new frame. Hidden pages never run
-# animation frames; Chromium's capture keeps them producing frames itself.
+# animation frames, and focus emulation can report a visible document whose
+# widget still renders none; Chromium's capture forces frames for both, so the
+# wait gives up after one second instead of failing the capture.
 _PRESENTED = (
-    "new Promise(resolve => document.visibilityState === 'visible'"
-    " ? requestAnimationFrame(() => requestAnimationFrame(() => resolve(true))) : resolve(false))"
+    "new Promise(resolve => { if (document.visibilityState !== 'visible') return resolve(false);"
+    " setTimeout(() => resolve(false), 1000);"
+    " requestAnimationFrame(() => requestAnimationFrame(() => resolve(true))); })"
 )
 
 
