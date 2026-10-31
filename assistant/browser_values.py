@@ -7,7 +7,7 @@ from typing import Annotated, Literal, assert_never
 
 from pydantic import Field, TypeAdapter, ValidationError
 
-from assistant.llm import Json
+from automation.json_value import Json
 
 MAX_ID = 2**31 - 1
 type Color = Literal["grey", "blue", "red", "yellow", "green", "pink", "purple", "cyan", "orange"]

@@ -15,10 +15,11 @@ from assistant.feed_sources import Excerpt
 from assistant.feed_triage import Board, decode, proposal_revision, restored, saved, unassessed
 from assistant.feed_triage_service import classify
 from assistant.feed_work import FeedWork
-from assistant.llm import Json, Settings
+from assistant.llm import Settings
 from automation.actions import Resources
 from automation.context import ContextStore, Preference, ProjectNote
 from automation.execution import WorkExecution
+from automation.json_value import Json
 from automation.store import TaskStore
 from automation.task import Completed, FeedHandoff, Profile, Question, RequestSource, TextAnswer, Waiting
 from tests.fake_endpoint import fake_endpoint

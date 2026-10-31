@@ -18,8 +18,9 @@ from assistant.feed_sources import triage_evidence
 from assistant.feed_triage import Board, decode, proposal_revision, restored, saved, unassessed
 from assistant.feed_triage_service import classify
 from assistant.feed_work import FeedWork
-from assistant.llm import Json, Settings
+from assistant.llm import Settings
 from automation.context import ContextStore, ProjectNote
+from automation.json_value import Json
 from automation.store import TaskStore
 from tests.fake_endpoint import Received, Reply, fake_endpoint
 from tests.feed_fixture import TriageFixture

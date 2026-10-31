@@ -16,10 +16,10 @@ from assistant.browser import BrowserResult
 from assistant.browser_requests import BrowserRequest
 from assistant.browser_values import PageList
 from assistant.geometry import Shot
-from assistant.llm import Json
 from assistant.machine import WinMachine
 from assistant.recording_state import AudioSource
 from assistant.web_apps import TEAMS_READ, Located, TeamsPage, TeamsQuery, WebAppOperation
+from automation.json_value import Json
 from winapi.shapes import Rect
 
 

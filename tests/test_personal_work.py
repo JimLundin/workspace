@@ -8,7 +8,7 @@ from unittest import TestCase
 
 from assistant.browser_values import BrowserError
 from assistant.feed_agent_tools import request
-from assistant.llm import Json, Settings
+from assistant.llm import Settings
 from assistant.local_bridge import LocalBridge
 from assistant.personal_work_model import Correlator
 from assistant.personal_work_service import PersonalWork, correlation_input
@@ -33,6 +33,7 @@ from assistant.work_bridge_contracts import WORK_BRIDGE
 from assistant.work_canvas_model import caption
 from automation.actions import Resources
 from automation.execution import WorkExecution
+from automation.json_value import Json
 from automation.personal_work import (
     PERSONAL_RESPONSE,
     WORK_PLAN,

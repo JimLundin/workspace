@@ -5,7 +5,7 @@ import threading
 from typing import cast
 
 from assistant.activity import ActivityTracker, ContextSnapshot, Observation, Policy, Sample, observed
-from assistant.llm import Json
+from automation.json_value import Json
 from winapi.shapes import Window
 
 

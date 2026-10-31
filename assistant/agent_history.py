@@ -4,7 +4,7 @@ from collections.abc import Iterable
 
 from pydantic import TypeAdapter
 
-from assistant.llm import Json
+from automation.json_value import Json
 
 _ITEM = TypeAdapter(Json)
 _ITEMS = TypeAdapter(tuple[Json, ...])

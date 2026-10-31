@@ -24,10 +24,11 @@ from assistant.agent_tools import (
     schema,
 )
 from assistant.geometry import Shot
-from assistant.llm import Json, tool_spec
+from assistant.llm import tool_spec
 from assistant.uia import Act, Inspect
 from automation.actions import Change, Classification, Evidence, Observation, Operation, target
 from automation.execution import ProofRule, Readback, Targets
+from automation.json_value import Json
 from automation.task import FileDigest
 from config import ALLOWED_COMMANDS
 from winapi.shapes import Rect

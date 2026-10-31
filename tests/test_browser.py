@@ -21,7 +21,7 @@ from assistant.browser_requests import BrowserRequest, web_url
 from assistant.browser_session import MAX_RESPONSE, Attached, BrowserSession, Cdp, Managed, Product, Separate, Source
 from assistant.browser_tabs import TabStrip
 from assistant.browser_values import GROUP, TAB, BrowserError, Group, InterruptedError, NavigationContextError, Tab, evaluated
-from assistant.llm import Json
+from automation.json_value import Json
 
 VIEWPORT_PNG = base64.b64decode(
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFAAH/iZk9HQAAAABJRU5ErkJggg==",

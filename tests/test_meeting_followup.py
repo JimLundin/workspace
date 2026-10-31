@@ -21,7 +21,6 @@ from unittest import SkipTest, TestCase
 import jsonschema
 from pydantic import TypeAdapter
 
-from assistant.llm import Json
 from assistant.meeting_followup import (
     FOLLOWUP_CLAIMS,
     MAX_TRANSCRIPT_BYTES,
@@ -56,6 +55,7 @@ from assistant.meeting_store import MeetingArchive, MeetingStore
 from assistant.meeting_tools import SPECS
 from automation.actions import FileVerifier
 from automation.files import filesystem_path
+from automation.json_value import Json
 from automation.task import ActionVerified
 from tests.test_meetings import SPEECH
 
