@@ -197,8 +197,10 @@ class Cdp:
         timeout: float = 2,
         sockets: SocketConnector = connect_socket,
     ) -> Cdp:
-        # The opening deadline and TCP acquisition are separate dependencies:
-        # this owner clears the TCP timeout and closes pending consent on Stop.
+        # Interface: the address, Stop, the consent deadline and the socket
+        # source are separate dependencies of one connection attempt; none of
+        # them is a property of the others. This owner clears the TCP timeout
+        # and closes pending consent on Stop.
         try:
             parsed = urlsplit(uri)
             port = parsed.port

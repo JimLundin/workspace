@@ -188,8 +188,9 @@ class WinMachine:
         capture_sources: CaptureObservation | None = None,
         open_target: Callable[[str], None] = open_file,
     ) -> None:
-        # Each optional capability has its own owner; worker composition selects
-        # transports independently of capture and meetings.
+        # Interface: each keyword is an independent effect owner (browser,
+        # meeting capture, capture observation, file opening). The worker selects
+        # each transport separately; no record groups them more truthfully.
         self.desktop = desktop
         self.capture_sources: CaptureObservation = NativeCaptureObservation() if capture_sources is None else capture_sources
         self.open_target = open_target

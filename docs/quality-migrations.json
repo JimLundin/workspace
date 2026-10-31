@@ -1434,6 +1434,26 @@
         "signature": "930051080330bcfbbc1ad2e911eed00c3cb3ef2dc6fe3fff558c0cac482aacde"
       },
       "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "assistant/browser_session.py",
+        "scope": "Cdp.connect",
+        "signature": "d6a77c2e7481f181bb652e52fdd722a3443c155042621dce6583c28e30d58d28"
+      },
+      "reason": "One connection attempt depends on its loopback address, Stop, the consent deadline and the socket source; these are independent dependencies, not one domain record.",
+      "kind": "interface"
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "assistant/machine.py",
+        "scope": "WinMachine.__init__",
+        "signature": "f32e939e1fda5ee76fd3a57fc7fca351ca3f82a237357ea69295697474e85105"
+      },
+      "reason": "The composition root receives independent effect owners (desktop, browser, meeting capture, capture observation, file opening) that the worker selects separately.",
+      "kind": "interface"
     }
   ]
 }
