@@ -9,6 +9,7 @@ from unittest import TestCase
 
 from assistant.meeting_store import MeetingStore
 from automation.routines import (
+    MAX_PENDING,
     Accepted,
     EventTrigger,
     Every,
@@ -322,6 +323,22 @@ def test_out_of_order_file_observations_do_not_turn_old_state_into_new_work(tmp_
     routines.observe_file(FileObservation(watched, "old", 4))
     routines.observe_file(FileObservation(watched, "new", 6))
     assert len(routines.pending(6)) == 1
+
+
+def test_full_outbox_refuses_new_occurrences_and_keeps_pending_work(tmp_path: Path) -> None:
+    # Defect: the outbox grows past its pending capacity, or the refusal discards work already pending.
+    path = tmp_path / "work.sqlite3"
+    routines = RoutineStore(path)
+    watched = str(tmp_path / "report.txt")
+    routines.create("watch", "Watch", "Read the changed file.", FileChanged(watched), at=1)
+    routines.enable("watch", at=2)
+    routines.observe_file(FileObservation(watched, "initial", 3))
+    for change in range(MAX_PENDING):
+        routines.observe_file(FileObservation(watched, f"change-{change}", 4 + change))
+    with TestCase().assertRaisesRegex(ValueError, "outbox is full"):
+        routines.observe_file(FileObservation(watched, "one-too-many", 4 + MAX_PENDING))
+    with closing(sqlite3.connect(path)) as database:
+        assert cast(tuple[object, ...], database.execute("SELECT COUNT(*) FROM routine_firings WHERE state='pending'").fetchone()) == (MAX_PENDING,)
 
 
 def test_corrupt_saved_trigger_is_rejected_before_work_is_submitted(tmp_path: Path) -> None:
