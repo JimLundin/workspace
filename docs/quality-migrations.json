@@ -121,15 +121,6 @@
     {
       "key": {
         "rule": "PLR0913",
-        "path": "assistant/browser_host.py",
-        "scope": "exchange",
-        "signature": "1550813a7277828f0062c901e144a08d1d964578fc82b0b4ae8f04c161492c70"
-      },
-      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
-    },
-    {
-      "key": {
-        "rule": "PLR0913",
         "path": "assistant/browser_session.py",
         "scope": "BrowserConnection.call",
         "signature": "0b594bea2f8d5041e49e4ecf20794600c72d91f65ad1dac64129988e7950fed6"
@@ -178,15 +169,6 @@
         "path": "assistant/browser_tabs.py",
         "scope": "TabStrip.open",
         "signature": "d3d9a813dc6fddc2c79ff1562d3fe162ce457ed259501bf8ae990e8780d4a074"
-      },
-      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
-    },
-    {
-      "key": {
-        "rule": "PLR0913",
-        "path": "assistant/browser_values.py",
-        "scope": "number",
-        "signature": "a556fea38aa8f051cb943e3ed064d4caabf51cc5004a7b4a722a604a5ea54829"
       },
       "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
     },

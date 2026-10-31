@@ -48,7 +48,7 @@ from automation.work_documents import LocalDocument
 from tests import native_communications_browser
 from tests.browser_fixture import Attachment, fixture
 from tests.native_browser_fixture import request
-from tests.test_browser import decoded
+from tests.test_browser import command, decoded
 
 KANBAN_PAGE = """<!doctype html><meta charset="utf-8"><title>AIP Kanban fixture</title>
 <button aria-label="Assignee filter: Jim">Jim</button>
@@ -201,11 +201,13 @@ def verify_business_apps(browser: Browser) -> None:
         with TestCase().assertRaisesRegex(BrowserError, "contains a draft"):
             app.run(TEAMS_OPEN_CHAT, ChatQuery(teams_target, "19:one@thread.v2"), cancel)
         received = browser.request(
-            "evaluate",
-            {
-                "target_id": teams_target,
-                "expression": "({draft:document.querySelector('[contenteditable]').innerText,sent:document.body.dataset.sent||''})",
-            },
+            command(
+                "evaluate",
+                **{
+                    "target_id": teams_target,
+                    "expression": "({draft:document.querySelector('[contenteditable]').innerText,sent:document.body.dataset.sent||''})",
+                },
+            ),
             cancel,
         )
         assert "Unsent draft Åäö" in received.text and decoded(received.text)["sent"] == ""
@@ -254,12 +256,14 @@ def verify_outlook(browser: Browser, app: WebApps, target: str) -> None:
         app.run(OUTLOOK_DRAFT_REPLY, MailDraft(target, "conversation-mail-two", "Replacement"), cancel)
     reply_state = decoded(
         browser.request(
-            "evaluate",
-            {
-                "target_id": target,
-                "expression": "({draft:document.querySelector('[aria-label=\"Message body\"]').innerText,"
-                "saved:document.body.dataset.saved,sent:document.body.dataset.sent||''})",
-            },
+            command(
+                "evaluate",
+                **{
+                    "target_id": target,
+                    "expression": "({draft:document.querySelector('[aria-label=\"Message body\"]').innerText,"
+                    "saved:document.body.dataset.saved,sent:document.body.dataset.sent||''})",
+                },
+            ),
             cancel,
         ).text
     )
@@ -298,5 +302,6 @@ def verify_mail_documents(browser: Browser, app: WebApps, target: str) -> None:
     preview = app.run(OUTLOOK_OPEN_DOCUMENT, MailDocument(target, "conversation-mail-two", "conversation-mail-two-attachment"), cancel)
     assert isinstance(preview, PreviewOpened) and "version two" in preview.preview
     browser.request(
-        "evaluate", {"target_id": target, "expression": "(()=>{document.querySelector('[role=dialog] button').click();return true;})()"}, cancel
+        command("evaluate", **{"target_id": target, "expression": "(()=>{document.querySelector('[role=dialog] button').click();return true;})()"}),
+        cancel,
     )

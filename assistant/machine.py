@@ -9,7 +9,7 @@ import os
 import threading
 import time
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Final, Literal, Protocol
 
 from pydantic import TypeAdapter
@@ -21,12 +21,13 @@ from usage import DIRECTORY
 from winapi.shapes import Rect, Window
 lazy from assistant import commands, uia
 lazy from assistant.browser import Browser, BrowserResult
+lazy from assistant.browser_requests import BrowserRequest
 lazy from assistant.browser_session import Product
 lazy from assistant.geometry import Shot, fit, half
-lazy from assistant.llm import Json
 lazy from assistant.png import encode_png
 lazy from assistant.recording_state import AudioSource
 lazy from assistant.textio import paste_text
+lazy from assistant.uia import UiRequest
 lazy from assistant.web_apps import Located, WebAppOperation
 lazy from winapi import clipboard, inputs, screen, system, windows
 
@@ -54,7 +55,7 @@ class MeetingControl(Protocol):
 
 
 class BrowserControl(Protocol):
-    def request(self, operation: str, args: dict[str, Json], cancel: threading.Event) -> BrowserResult: ...
+    def request(self, request: BrowserRequest, cancel: threading.Event) -> BrowserResult: ...
     def web_app[Q: Located, R](self, operation: WebAppOperation[Q, R], query: Q, cancel: threading.Event) -> R: ...
     def close(self) -> None: ...
 
@@ -212,8 +213,8 @@ class WinMachine:
             raise OSError("Unknown meeting action.")
         return self.meetings.describe()
 
-    def browse(self, operation: str, arguments: dict[str, Json], cancel: threading.Event) -> tuple[str, bytes | None]:
-        result = self.background_browser.request(operation, arguments, cancel)
+    def browse(self, request: BrowserRequest, cancel: threading.Event) -> tuple[str, bytes | None]:
+        result = self.background_browser.request(request, cancel)
         return result.text, result.image
 
     def web_app[Q: Located, R](self, operation: WebAppOperation[Q, R], query: Q, cancel: threading.Event) -> R:
@@ -298,11 +299,11 @@ class WinMachine:
         )
         return _WINDOW.dump_json(state).decode()
 
-    def inspect_ui(self, request: dict[str, Json], cancel: threading.Event) -> tuple[int, str]:
-        handle = request.get("handle") or windows.foreground()
-        if not isinstance(handle, int) or not windows.exists(handle):
+    def inspect_ui(self, request: UiRequest, cancel: threading.Event) -> tuple[int, str]:
+        handle = request.handle or windows.foreground()
+        if not windows.exists(handle):
             return 1, "No accessible window is available; list windows again or unlock the desktop."
-        return commands.powershell(uia.script({**request, "handle": handle}), timeout_s=20, cancel=cancel)
+        return commands.powershell(uia.script(replace(request, handle=handle)), timeout_s=20, cancel=cancel)
 
     def move_mouse(self, x: int, y: int) -> None:
         inputs.move_mouse(x, y, screen.virtual_screen(), MAGIC)

@@ -1,7 +1,6 @@
 """Browser discovery, consent, and ownership of one live CDP session."""
 
 import contextlib
-import json
 import os
 import re
 import socket
@@ -13,9 +12,10 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import Enum, auto
 from pathlib import Path
-from typing import Protocol, assert_never, cast
+from typing import Annotated, Protocol, assert_never
 from urllib.parse import urlsplit
 
+from pydantic import Field, TypeAdapter
 lazy from websockets.exceptions import WebSocketException
 lazy from websockets.sync.client import connect
 
@@ -24,9 +24,7 @@ from assistant.browser_values import (
     DisconnectedError,
     InterruptedError,
     NavigationContextError,
-    mapping,
     navigation_context_error,
-    text,
 )
 from assistant.llm import Json
 lazy from assistant.browser_host import connect_shared
@@ -155,6 +153,32 @@ def connect_socket(address: tuple[str, int], *, timeout: float) -> socket.socket
     return socket.create_connection(address, timeout=timeout)
 
 
+@dataclass(frozen=True, slots=True)
+class Command:
+    id: int
+    method: str
+    params: frozendict[str, Json]
+    session: Annotated[str | None, Field(serialization_alias="sessionId")] = None
+
+
+@dataclass(frozen=True, slots=True)
+class CommandFailure:
+    message: str = "Browser command failed."
+
+
+@dataclass(frozen=True, slots=True)
+class Reply:
+    """A command reply, or an event: events carry no id."""
+
+    id: int | None = None
+    result: frozendict[str, Json] = frozendict()
+    error: CommandFailure | None = None
+
+
+_COMMAND = TypeAdapter(Command)
+_REPLY = TypeAdapter(Reply)
+
+
 class Cdp:
     """One serialized connection; events never get mistaken for command replies."""
 
@@ -231,12 +255,10 @@ class Cdp:
             raise InterruptedError("Stopped. Inspect the page before retrying an action that may already have completed.")
         self.sequence += 1
         identity = self.sequence
-        request: dict[str, Json] = {"id": identity, "method": method, "params": params}
-        if session:
-            request["sessionId"] = session
+        request = Command(identity, method, frozendict(params), session or None)
         deadline = self.clock() + timeout
         try:
-            self.channel.send(json.dumps(request))
+            self.channel.send(_COMMAND.dump_json(request, exclude_none=True, by_alias=True).decode())
             while True:
                 if cancel.is_set():
                     raise InterruptedError("Stopped. Inspect the page before retrying an action that may already have completed.")
@@ -248,15 +270,15 @@ class Cdp:
                     continue
                 if len(raw) > MAX_RESPONSE:
                     raise BrowserError("The browser response exceeded the size limit.")
-                message = mapping(cast(Json, json.loads(raw)))
-                if message.get("id") != identity:
+                message = _REPLY.validate_json(raw)
+                if message.id != identity:
                     continue
-                if "error" in message:
-                    details = text(mapping(message["error"]), "message", "Browser command failed.")[:500]
+                if message.error is not None:
+                    details = message.error.message[:500]
                     if navigation_context_error(details):
                         raise NavigationContextError(details)
                     raise BrowserError(details)
-                return mapping(message.get("result", {}))
+                return dict(message.result)
         except BrowserError:
             raise
         except (WebSocketException, OSError) as error:
@@ -325,13 +347,16 @@ class BrowserSession:
     owner: Managed | Attached
 
     def close(self) -> None:
-        if isinstance(self.owner, Managed):
-            with contextlib.suppress(OSError):
-                self.connection.call("Browser.close", {}, threading.Event(), timeout=1)
-        with contextlib.suppress(OSError):
-            self.connection.close()
-        if isinstance(self.owner, Managed):
-            _close_process(self.owner)
+        match self.owner:
+            case Managed() as owner:
+                with contextlib.suppress(OSError):
+                    self.connection.call("Browser.close", {}, threading.Event(), timeout=1)
+                with contextlib.suppress(OSError):
+                    self.connection.close()
+                _close_process(owner)
+            case Attached():
+                with contextlib.suppress(OSError):
+                    self.connection.close()
 
 
 class SessionOpener(Protocol):

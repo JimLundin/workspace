@@ -13,7 +13,7 @@ from assistant.feed_sources import Candidate, Excerpt, triage_evidence
 from assistant.feed_triage import Board, decode, restored, saved, unassessed
 from assistant.feed_triage_service import classify, source_evidence
 from assistant.llm import Settings
-from assistant.web_apps import TeamsPage, TeamsPost
+from assistant.web_apps import ActivityItem, ActivityPage, TeamsPage, TeamsPost
 from tests import fake_endpoint
 from tests.feed_fixture import TriageFixture
 from tests.feed_source_fixture import captured
@@ -109,22 +109,8 @@ def test_voice_feed_snapshot_keeps_the_source_date_with_its_text(tmp_path: Path)
 
 
 def test_teams_activity_uses_the_provider_date_instead_of_its_collection_time() -> None:
-    observed = activity_observation(
-        {
-            "ready": True,
-            "items": [
-                {
-                    "identity": "123",
-                    "title": "Meeting reminder",
-                    "text": "The meeting is tomorrow.",
-                    "kind": "invitation",
-                    "created_at": LAST_WEEK,
-                    "date_hint": "20 October 2026",
-                }
-            ],
-        },
-        THIS_WEEK,
-    )
+    item = ActivityItem("123", "Meeting reminder", "The meeting is tomorrow.", "invitation", LAST_WEEK, "20 October 2026")
+    observed = activity_observation(ActivityPage((item,), ready=True), THIS_WEEK)
     sources = triage_evidence(Feed(updates=observed.items), ())
     with fake_endpoint.fake_endpoint() as endpoint:
         endpoint.replies = [says('{"items": []}')]

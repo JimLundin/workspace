@@ -1,25 +1,30 @@
 """Exact-chat Teams automation against fictional local DOMs in an isolated Edge."""
 
-import json
 import sys
 import threading
 import unittest
 from contextlib import AbstractContextManager
+from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import cast
+
+from pydantic import TypeAdapter
 
 if sys.platform != "win32":
     raise unittest.SkipTest("Native Teams DOM fixture")
 
 from assistant.browser import Browser, BrowserResult
+from assistant.browser_requests import BrowserRequest, Open
 from assistant.browser_session import BrowserConnection, BrowserSession, NativeSessions, Owner, Source
-from assistant.browser_values import BrowserError
+from assistant.browser_values import BrowserError, BrowserStatus, PageList
 from assistant.communications import SourceDate, SourceDateHint, SourceDateStatus, TeamsActivity, UpdateKind
 from assistant.communications_browser import TeamsWeb
 from assistant.llm import Json
 from tests.browser_fixture import fixture
 from tests.native_browser_fixture import request
+
+STATUS = TypeAdapter(BrowserStatus)
 
 PAGE = """<!doctype html><meta charset="utf-8"><title>Fictional Teams fixture</title>
 <div role="treeitem" data-item-type="chat" data-fui-tree-item-value="chat-19:one@thread.v2">Same title</div>
@@ -71,7 +76,7 @@ class FixtureBrowser:
     def __init__(self, browser: Browser, origin: str = "") -> None:
         self.browser = browser
         self.origin = origin
-        self.requests: tuple[tuple[str, frozendict[str, Json]], ...] = ()
+        self.requests: tuple[BrowserRequest, ...] = ()
 
     @property
     def connection(self) -> BrowserConnection | None:
@@ -90,19 +95,19 @@ class FixtureBrowser:
     def activate_page(self, target: str, cancel: threading.Event) -> None:
         self.browser.activate_page(target, cancel)
 
-    def request(self, operation: str, args: dict[str, Json], cancel: threading.Event) -> BrowserResult:
-        self.requests += ((operation, frozendict(args)),)
-        if operation == "open" and str(args.get("url", "")).startswith("https://teams.cloud.microsoft/l/chat/"):
-            args = {**args, "url": self.origin + "dl/launcher/launcher.html"}
-        result = self.browser.request(operation, args, cancel)
-        if operation == "tabs":
-            # Only catalog addresses cross the adapter; DOM reads and native
-            # activation still exercise the real isolated browser connection.
-            data = cast(dict[str, Json], json.loads(result.text))
-            rows = cast(list[dict[str, Json]], data["tabs"])
-            data = {**data, "tabs": [{**row, "url": "https://teams.cloud.microsoft/v2/"} for row in rows]}
-            return BrowserResult(json.dumps(data), result.image)
-        return result
+    def request(self, request: BrowserRequest, cancel: threading.Event) -> BrowserResult:
+        self.requests += (request,)
+        match request:
+            case Open(url=url) if url.startswith("https://teams.cloud.microsoft/l/chat/"):
+                return self.browser.request(replace(request, url=self.origin + "dl/launcher/launcher.html"), cancel)
+            case PageList():
+                # Only catalog addresses cross the adapter; DOM reads and native
+                # activation still exercise the real isolated browser connection.
+                status = STATUS.validate_json(self.browser.request(request, cancel).text)
+                pages = tuple(replace(row, url="https://teams.cloud.microsoft/v2/") for row in status.tabs)
+                return BrowserResult(STATUS.dump_json(replace(status, tabs=pages), exclude_none=True).decode())
+            case _:
+                return self.browser.request(request, cancel)
 
     def close(self) -> None:
         self.browser.close()
@@ -340,10 +345,7 @@ def verify_chat_navigation_recovery(browser: Browser, web: TeamsWeb, adapter: Fi
     web.target = cast(str, opened["target_id"])
     web.evaluate("(() => {for(const row of document.querySelectorAll('[role=treeitem]'))row.remove();return true;})()", cancel)
     restored = web.select("19:two@thread.v2", cancel)
-    assert (
-        "open",
-        {"target_id": web.target, "url": "https://teams.cloud.microsoft/l/chat/19:two@thread.v2/conversations?webjoin=true"},
-    ) in adapter.requests
+    assert Open("https://teams.cloud.microsoft/l/chat/19:two@thread.v2/conversations?webjoin=true", web.target) in adapter.requests
     assert restored.current == "19:two@thread.v2" and restored.messages[0].sender == "Sam"
     assert web.opening == {}
 

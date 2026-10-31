@@ -1,29 +1,30 @@
 """Tab/group contracts, ownership choices and failures before browser effects."""
 
-import json
 import threading
 from pathlib import Path
 from unittest import TestCase
 
+from pydantic import TypeAdapter
+
 from assistant.browser import MAX_OUTPUT
 from assistant.browser_tabs import Call, Control, TabStrip
+from assistant.browser_tools import GroupArguments, group_request
 from assistant.browser_values import (
     BrowserError,
     DefaultGroup,
     Group,
+    GroupRow,
     InGroup,
     NewGroup,
     Opening,
     Tab,
+    TabRow,
     TabState,
     Ungrouped,
-    group_of,
-    group_request,
     opening,
-    tab_of,
 )
 from assistant.llm import Json
-from tests.test_browser import Channel, connected_browser, decoded
+from tests.test_browser import WIRE, Channel, command, connected_browser, decoded, group_of, tab_of
 
 
 def test_default_open_reuses_the_users_expanded_workspace_group_without_changing_it() -> None:
@@ -66,6 +67,7 @@ def test_invalid_tab_edits_do_not_create_a_controller_or_change_any_tabs(tmp_pat
         ("group", {"tab_ids": [1], "window_id": -1}),
         ("group", {"tab_ids": [1], "title": "x" * 301}),
         ("ungroup", {"tab_ids": []}),
+        ("ungroup", {"tab_ids": list(range(201))}),
         ("tab", {"tab_id": 1, "action": "move"}),
         ("tab", {"tab_id": 1, "action": "pin", "index": 0}),
         # The WebUI mute API dereferences a missing extension and crashes Edge.
@@ -79,8 +81,9 @@ def test_invalid_tab_edits_do_not_create_a_controller_or_change_any_tabs(tmp_pat
     )
     try:
         for operation, arguments in cases:
-            with TestCase().assertRaises(BrowserError):
-                browser.request(operation, arguments, threading.Event())
+            # Invalid arguments are refused at the tool seam or before any browser command.
+            with TestCase().assertRaises((ValueError, BrowserError)):
+                browser.request(command(operation, **arguments), threading.Event())
             assert not channel.sent, (operation, arguments)
     finally:
         browser.close()
@@ -88,17 +91,18 @@ def test_invalid_tab_edits_do_not_create_a_controller_or_change_any_tabs(tmp_pat
 
 def test_native_observations_require_the_declared_field_types() -> None:
     tab = Tab(1, 2, 0, Ungrouped.TABS, "Page", "https://example.com", active=False, pinned=False, muted=False)
-    source = decoded(json.dumps(tab.data()))
+    source = WIRE.validate_json(TypeAdapter(TabRow).dump_json(tab.row(), exclude_none=True))
     assert tab_of(source) == tab
     for name, value in (("tab_id", True), ("active", "false"), ("group_id", -2), ("url", None)):
         with TestCase().assertRaises(BrowserError):
             tab_of({**source, name: value})
-    source.pop("active")
-    with TestCase().assertRaisesRegex(BrowserError, "incomplete"):
-        tab_of(source)
-    group = decoded(json.dumps(Group(1, 2, "Workspace", "blue", collapsed=True, shared=False).data()))
     with TestCase().assertRaises(BrowserError):
-        group_of({**group, "collapsed": 1})
+        tab_of({name: value for name, value in source.items() if name != "active"})
+    group = Group(1, 2, "Workspace", "blue", collapsed=True, shared=False)
+    row = WIRE.validate_json(TypeAdapter(GroupRow).dump_json(group.row()))
+    assert group_of(row) == group
+    with TestCase().assertRaises(BrowserError):
+        group_of({**row, "collapsed": 1})
 
 
 class FixedStrip(TabStrip):
@@ -124,7 +128,7 @@ def test_native_tab_pagination_keeps_ids_and_group_details_with_escaped_long_tit
     seen: list[int] = []
     try:
         while True:
-            output = browser.request("tabs", {"view": "strip", "offset": offset, "limit": 40}, threading.Event()).text
+            output = browser.request(command("tabs", **{"view": "strip", "offset": offset, "limit": 40}), threading.Event()).text
             assert len(output) <= MAX_OUTPUT
             data = decoded(output)
             rows, group_rows = data["tabs"], data["groups"]
@@ -173,5 +177,5 @@ def test_a_failed_group_change_is_not_replayed() -> None:
     strip = TabStrip()
     strip.control = Control("hidden", "session")
     with TestCase().assertRaisesRegex(BrowserError, "Inspect browser_tabs"):
-        strip.group(call, group_request({"group_id": 7, "title": "Research", "window_id": 8}), threading.Event())
+        strip.group(call, group_request(GroupArguments(group_id=7, title="Research", window_id=8)), threading.Event())
     assert commands == ["Runtime.evaluate"]

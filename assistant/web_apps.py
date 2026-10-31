@@ -16,8 +16,8 @@ from typing import Annotated, Final, Literal, Protocol, assert_never
 from pydantic import Field, TypeAdapter, ValidationError
 
 from assistant.browser_documents import Download, Downloaded
+from assistant.browser_requests import BrowserRequest, Evaluate
 from assistant.browser_values import BrowserError
-from assistant.llm import Json
 from automation.work_documents import LocalDocument
 lazy from assistant.browser import BrowserResult
 
@@ -39,7 +39,7 @@ class App(Enum):
 
 
 class Browser(Protocol):
-    def request(self, operation: str, args: dict[str, Json], cancel: threading.Event) -> BrowserResult: ...
+    def request(self, request: BrowserRequest, cancel: threading.Event) -> BrowserResult: ...
     def awake(self, target: str, cancel: threading.Event) -> contextlib.AbstractContextManager[None]: ...
     def download_document(self, request: Download, cancel: threading.Event) -> Downloaded: ...
 
@@ -254,6 +254,28 @@ class TeamsPage:
 
 
 @dataclass(frozen=True, slots=True)
+class ActivityItem:
+    identity: Annotated[str, Field(max_length=32, pattern=r"^[0-9]+$")]
+    title: Annotated[str, Field(max_length=512, pattern=r"\S")]
+    text: Annotated[str, Field(max_length=4000, pattern=r"\S")]
+    kind: Literal["reaction", "invitation", "mention", "update"]
+    created_at: Annotated[float, Field(strict=True, ge=0, lt=100_000_000_000)]
+    """Zero when Teams shows only a relative or partial date."""
+    date_hint: Annotated[str, Field(max_length=256)] = ""
+
+
+@dataclass(frozen=True, slots=True)
+class ActivityPage:
+    """The rendered Activity feed; `ready` once its list container exists."""
+
+    items: Annotated[tuple[ActivityItem, ...], Field(max_length=80)]
+    ready: bool = field(kw_only=True)
+
+
+ACTIVITY_PAGE = TypeAdapter(ActivityPage)
+
+
+@dataclass(frozen=True, slots=True)
 class ChatOpened:
     chat_id: str
     opened: Literal[True] = field(kw_only=True)
@@ -436,6 +458,38 @@ OBSERVE = r"""(() => {
  if (JSON.stringify(result).length > 18500 && result.messages.length) {
    result.messages[0].text = result.messages[0].text.slice(0,4000)+'\n[Message continues in Teams]';
  }
+ return result;
+})()"""
+
+
+# Read only. Each activity row is identified by its numeric list-item id.
+ACTIVITY_OBSERVE = r"""(() => {
+ const clean = value => (value || '').replace(/\u00a0/g,' ').trim();
+ const items = [];
+ for (const row of document.querySelectorAll('[data-tid="activity-feed-list-item"]')) {
+   const wrap = row.closest('[data-tid="activity-feed-list-item-wrap"]');
+   const identity = wrap?.id;
+   if (!identity || !/^\d{1,32}$/.test(identity)) continue;
+   const title = clean(row.querySelector('[data-tid="activity-feed-item-title"]')?.innerText);
+   if (!title) continue;
+   const reactionIcon = row.querySelector('[data-tid^="activity-feed-item-activity-icon-"]');
+   const reaction = !!reactionIcon;
+   const reactionLabel = clean(reactionIcon?.getAttribute('aria-label') || reactionIcon?.getAttribute('title') ||
+     reactionIcon?.querySelector('img')?.getAttribute('alt') || '');
+   const preview = clean(row.querySelector('[id^="activity-feed-item-message-preview-"]')?.innerText);
+   const place = clean(row.querySelector('[id^="activity-feed-item-location-"]')?.innerText);
+   const text = [reaction?reactionLabel:'',preview,place].filter(Boolean).join('\n').slice(0,4000) || title;
+   const kind = /\b(invited|invitation|meeting invite)\b/i.test(title+' '+text)?'invitation':
+     /\bmentioned\b/i.test(title)?'mention':reaction?'reaction':'update';
+   const clock = row.querySelector('[id^="activity-feed-item-timestamp-"]');
+   const raw = clock?.getAttribute('datetime') || clock?.querySelector('time[datetime]')?.getAttribute('datetime') ||
+     clock?.getAttribute('title') || '';
+   const parsed = /^\d{4}-\d{2}-\d{2}[T ]\d{2}:/.test(raw) ? Date.parse(raw) : NaN;
+   const date_hint = [...new Set([clean(raw),clean(clock?.innerText)].filter(Boolean))].join(' · ').slice(0,256);
+   items.push({identity,title:title.slice(0,512),text,kind,created_at:Number.isFinite(parsed)?parsed/1000:0,date_hint});
+ }
+ const result = {ready:!!document.querySelector('[data-tid="activity-list-container"]'),items:items.slice(0,80)};
+ while(JSON.stringify(result).length>18500 && result.items.length>1)result.items.pop();
  return result;
 })()"""
 
@@ -880,4 +934,4 @@ class WebApps:
         guard = f"if(!{allowed}.includes(location.origin))throw new Error('The selected tab belongs to a different application.');"
         expression = "(async()=>{" + guard + "const options=" + options + ";" + _DOM + helpers + operation.script + "})()"
         with self.browser.awake(query.target_id, cancel):
-            return self.browser.request("evaluate", {"target_id": query.target_id, "expression": expression}, cancel).text
+            return self.browser.request(Evaluate(query.target_id, expression), cancel).text

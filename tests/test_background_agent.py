@@ -56,7 +56,7 @@ def test_background_tools_are_exposed_to_the_model_and_run_without_default_promp
             work=durable(tmp_path),
         )
         rig.run("Fill the fixture form.")
-        assert any(line.startswith("browser action") for line in rig.machine.log)
+        assert any(line.startswith("browser PageAction(") for line in rig.machine.log)
         request = cast(dict[str, Json], json.loads(endpoint.received[0].body))
         specs = cast(list[dict[str, Json]], request["tools"])
         names = {spec["name"] for spec in specs if isinstance(spec["name"], str)}
