@@ -70,7 +70,7 @@ def test_journal_orders_chunks_prefers_pauses_and_flushes_the_final_partial_seco
     assert transcript.count("First part") == 1 and "retry must not" not in transcript
     assert "00:00:00 - 00:00:23" in transcript and "The last sentence." in transcript
     assert store.state().pending == 0 and store.batch() is None
-    with store.connection() as connection:
+    with store.reading() as connection:
         assert connection.execute("SELECT COUNT(*) FROM audio").fetchone() == (0,)
         assert connection.execute("PRAGMA auto_vacuum").fetchone() == (1,)
     assert (store.folder / "session.sqlite3").stat().st_size < len(first.pcm) // 4
