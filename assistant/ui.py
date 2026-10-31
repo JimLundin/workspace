@@ -11,7 +11,7 @@ from concurrent.futures import Future, TimeoutError
 from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
-from typing import Final, Protocol
+from typing import Final, Protocol, assert_never
 
 lazy import shiboken6
 lazy from PySide6 import QtCore, QtGui, QtWidgets
@@ -45,10 +45,11 @@ lazy from assistant.overlay_desktop import NativeOverlayDesktop, OverlayDesktop
 lazy from assistant.qt_ui import application, cancel, later
 lazy from assistant.recording_state import RecordingAction, RecordingState
 lazy from assistant.state_store import SavedState
-lazy from assistant.ui_components.appearance import CONTROL_STYLE, OVERLAY_ACCENT, OVERLAY_BACKGROUND, OVERLAY_INK, OVERLAY_MUTED, OVERLAY_SURFACE
+lazy from assistant.ui_components import typeface
+lazy from assistant.ui_components.appearance import GLASS_ACCENT, Scheme, Shade, Tokens, scheme, tokens
 lazy from assistant.ui_components.canvas_loading import CanvasLoading
 lazy from assistant.ui_components.controls import button, label
-lazy from assistant.ui_components.widgets import Editor, Window, column, row, show_window
+lazy from assistant.ui_components.widgets import Editor, Window, column, glyph, row, segmented, show_window, surface, window_style
 lazy from assistant.vector_icons import icon
 lazy from assistant.window_switcher import WindowSwitcher
 lazy from assistant.work_canvas import AnswerQuestion, CanvasChange, SpeechRoute, WorkCanvas
@@ -219,7 +220,7 @@ class Ui:
         self._dialogs: list[QtWidgets.QWidget] = []
         self._thread = threading.current_thread()
         self._root = application()
-        self._root.setStyleSheet(CONTROL_STYLE)
+        self._root.setStyleSheet(window_style(tokens(scheme())))
         self._poll_timer = QtCore.QTimer(self._root)
         self._poll_timer.setInterval(20)
         self._poll_timer.timeout.connect(self.drain)
@@ -356,7 +357,8 @@ class Ui:
             dialog.setWindowTitle("Workspace")
             dialog.setLabelText(title)
             dialog.setInputMode(QtWidgets.QInputDialog.InputMode.TextInput)
-            dialog.setStyleSheet(CONTROL_STYLE)
+            dialog.setStyleSheet(window_style(tokens(scheme())))
+            dialog.setContentsMargins(9, 7, 9, 5)  # around the dialog's own layout margins, as the kit's sheets breathe
             self._dialogs.append(dialog)
 
             def finish(result: int) -> None:
@@ -365,7 +367,7 @@ class Ui:
                 dialog.deleteLater()
 
             dialog.finished.connect(finish)
-            self.presentation.position(dialog, 640, 130)
+            self.presentation.position(dialog, 640, 140)
             dialog.open()
             self.presentation.reveal(dialog, dialog)
 
@@ -890,10 +892,18 @@ class RegionPicker(QtWidgets.QWidget):
 
     def paintEvent(self, event: QtGui.QPaintEvent) -> None:
         painter = QtGui.QPainter(self)
-        painter.fillRect(self.rect(), QtGui.QColor(0, 0, 0, 76))
+        painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
+        dim = QtGui.QPainterPath()
+        dim.addRect(QtCore.QRectF(self.rect()))
         if self.start is not None and self.current is not None:
-            painter.setPen(QtGui.QPen(QtGui.QColor("#ffffff"), 2))
-            painter.drawRect(QtCore.QRectF(self.start, self.current).normalized())
+            chosen = QtCore.QRectF(self.start, self.current).normalized()
+            hole = QtGui.QPainterPath()
+            hole.addRect(chosen)
+            painter.fillPath(dim.subtracted(hole), QtGui.QColor(0, 0, 0, 92))
+            painter.setPen(QtGui.QPen(QtGui.QColor(GLASS_ACCENT), 2))
+            painter.drawRect(chosen)
+        else:
+            painter.fillPath(dim, QtGui.QColor(0, 0, 0, 92))
 
     def mousePressEvent(self, event: QtGui.QMouseEvent) -> None:
         if event.button() == Qt.MouseButton.RightButton:
@@ -953,7 +963,7 @@ class AnswerWindow:
         self.entry.setEnabled(False)
         self.entry.returnPressed.connect(self.ask)
         bottom.addWidget(self.entry, 1)
-        bottom.addWidget(button("Copy answer", self.copy_all))
+        bottom.addWidget(button("Copy answer", self.copy_all, name="filled"))
         layout.addLayout(bottom)
         self.add(f"{title}\n\n", "accent")
         ui.presentation.position(self.window, 760, 540)
@@ -1008,20 +1018,23 @@ class Indicator:
         "__weakref__",
         "_flash",
         "_frame",
+        "_ink",
         "_label",
         "_steady",
         "_window",
     )
 
     def __init__(self, root: QtWidgets.QApplication) -> None:
+        theme = tokens(scheme())
+        self._ink: str = theme.ink.css
         self._window = QtWidgets.QWidget()
-        self._window.setObjectName("workspaceWindow")
         self._window.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Tool)
-        self._window.setStyleSheet(CONTROL_STYLE)
+        self._window.setStyleSheet(window_style(theme))
         self._window.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
         self._window.setWindowOpacity(0.9)
-        layout = row(self._window)
-        layout.setContentsMargins(16, 6, 16, 6)
+        # A 34 px capsule, as the island's.
+        layout = row(surface(self._window, theme, 17))
+        layout.setContentsMargins(16, 8, 16, 8)
         self._label = label("")
         layout.addWidget(self._label)
         self._frame = int(self._window.winId())
@@ -1029,12 +1042,12 @@ class Indicator:
         self._steady: tuple[str | None, Rect] | None = None
         self._flash: QtCore.QTimer | None = None
 
-    def _show(self, text: str | None, work: Rect, colour: str = OVERLAY_INK) -> None:
+    def _show(self, text: str | None, work: Rect, colour: str) -> None:
         if text is None:
             self._window.hide()
             return
         self._label.setText(text)
-        self._label.setStyleSheet(f"color: {colour}; font: 15px 'Segoe UI';")
+        self._label.setStyleSheet(f"color: {colour}; font-size: 13px; font-weight: 500;")
         self._window.adjustSize()
         scale = self._window.devicePixelRatioF()
         width, height = round(self._window.width() * scale), round(self._window.height() * scale)
@@ -1046,31 +1059,64 @@ class Indicator:
     def set(self, text: str | None, work: Rect) -> None:
         self._steady = (text, work)
         if self._flash is None:
-            self._show(text, work)
+            self._show(text, work, self._ink)
 
     def flash(self, text: str, work: Rect, seconds: float) -> None:
         cancel(self._flash)
-        self._show(text, work, OVERLAY_ACCENT)
+        self._show(text, work, GLASS_ACCENT)
         self._flash = later(self._window, round(seconds * 1000), self._end_flash)
 
     def _end_flash(self) -> None:
         self._flash = None
         if self._steady is not None:
-            self._show(*self._steady)
+            self._show(*self._steady, self._ink)
         else:
             self._window.hide()
 
 
-_COLOURS: Final = {
-    Kind.KEY: (OVERLAY_SURFACE, OVERLAY_INK),
-    Kind.MOD: ("#21403a", "#8fe3c6"),
-    Kind.LAYER: ("#22324d", "#9cc3ff"),
-    Kind.TOOL: ("#47381c", "#ffcf7a"),
-    Kind.APP: ("#2c3f23", "#b6e39a"),
-    Kind.SPECIAL: ("#3b2948", "#d7b4ff"),
-    Kind.HELD: (OVERLAY_ACCENT, OVERLAY_BACKGROUND),
-    Kind.BLANK: ("#191b1e", OVERLAY_MUTED),
+_HUES: Final = {
+    Kind.MOD: ("#64d2ff", "#0071a4"),
+    Kind.LAYER: ("#7ab0f2", "#2f6fc4"),
+    Kind.TOOL: ("#ffb340", "#b25000"),
+    Kind.APP: ("#30d158", "#248a3d"),
+    Kind.SPECIAL: ("#da8fff", "#8944ab"),
 }
+"""Each binding's hue, legible as text on the dark and the light scheme."""
+
+
+def _keycap(kind: Kind, theme: Tokens) -> tuple[str, str]:
+    """A key's fill and ink: plain keys are solid, a binding tints its key with its hue, the held thumb takes the accent."""
+    match kind:
+        case Kind.KEY:
+            return theme.solid, theme.ink.argb
+        case Kind.HELD:
+            return GLASS_ACCENT, "#ffffff"
+        case Kind.BLANK:
+            return theme.fill.argb, theme.ink3.argb
+        case Kind.MOD | Kind.LAYER | Kind.TOOL | Kind.APP | Kind.SPECIAL:
+            dark, light = _HUES[kind]
+            match theme.scheme:
+                case Scheme.DARK:
+                    return Shade(dark, 0.16).argb, dark
+                case Scheme.LIGHT:
+                    return Shade(light, 0.12).argb, light
+                case _:
+                    assert_never(theme.scheme)
+        case _:
+            assert_never(kind)
+
+
+def _pressed(theme: Tokens) -> tuple[str, str]:
+    """A pressed key lights up in the scheme's ink, unlike any binding's tint."""
+    match theme.scheme:
+        case Scheme.DARK:
+            return "#f5f5f7", "#161618"
+        case Scheme.LIGHT:
+            return "#1d1d1f", "#ffffff"
+        case _:
+            assert_never(theme.scheme)
+
+
 _LAYERS: Final[tuple[tuple[str, Layer | None], ...]] = (("Base", None), *((layer.name.title(), layer) for layer in Layer))
 _ROW_START: Final = (0.0, 1.5, 0.0, 1.25, 3.5)
 """Where each row starts, in key widths, as on an ISO keyboard."""
@@ -1078,8 +1124,9 @@ _UNIT, _GAP, _HEIGHT = 64, 5, 56
 
 
 class KeymapCanvas(QtWidgets.QWidget):
-    def __init__(self) -> None:
+    def __init__(self, theme: Tokens) -> None:
         super().__init__()
+        self.theme: Tokens = theme
         self.caps: dict[str, Cap] = {}
         self.boxes: dict[str, QtCore.QRectF] = {}
         self.highlighted: frozenset[str] = frozenset()
@@ -1101,7 +1148,7 @@ class KeymapCanvas(QtWidgets.QWidget):
         self.update()
 
     def colors(self, name: str) -> tuple[str, str]:
-        return ("#ffcf7a", OVERLAY_BACKGROUND) if name in self.highlighted else _COLOURS[self.caps[name].kind]
+        return _pressed(self.theme) if name in self.highlighted else _keycap(self.caps[name].kind, self.theme)
 
     def press(self, names: frozenset[str]) -> None:
         changed = names ^ self.highlighted
@@ -1116,16 +1163,23 @@ class KeymapCanvas(QtWidgets.QWidget):
         for name, cap in self.caps.items():
             bounds = self.boxes[name]
             fill, ink = self.colors(name)
-            painter.setPen(QtGui.QPen(QtGui.QColor("#fff0cc" if name in self.highlighted else "#424b58"), 1))
+            pressed = name in self.highlighted
+            painter.setPen(QtGui.QPen(QtGui.QColor(fill if pressed else self.theme.solid_edge.argb), 1))
             painter.setBrush(QtGui.QColor(fill))
-            painter.drawRoundedRect(bounds.adjusted(0.5, 0.5, -0.5, -0.5), 4, 4)
-            face = QtGui.QFont("Segoe UI")
+            corner = max(4.0, 9 * self.scale)
+            painter.drawRoundedRect(bounds.adjusted(0.5, 0.5, -0.5, -0.5), corner, corner)
+            face = QtGui.QFont(typeface.FAMILY)
             face.setPixelSize(max(8, round(10 * self.scale)))
             painter.setFont(face)
-            painter.setPen(QtGui.QColor(ink if name in self.highlighted else OVERLAY_MUTED))
+            painter.setPen(QtGui.QColor(ink if pressed else self.theme.ink3.argb))
             painter.drawText(bounds.adjusted(5 * self.scale, 3 * self.scale, -3, -3), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop, name)
-            face.setPixelSize(max(8, round((15 if len(cap.label) <= 5 else 11) * self.scale)))
             face.setWeight(QtGui.QFont.Weight.DemiBold)
+            # Long labels shrink until they fit their key.
+            size = round((15 if len(cap.label) <= 5 else 12) * self.scale)
+            face.setPixelSize(max(7, size))
+            while size > 7 and QtGui.QFontMetricsF(face).horizontalAdvance(cap.label) > bounds.width() - 6 * self.scale:
+                size -= 1
+                face.setPixelSize(size)
             painter.setFont(face)
             painter.setPen(QtGui.QColor(ink))
             painter.drawText(bounds, Qt.AlignmentFlag.AlignCenter, cap.label)
@@ -1142,14 +1196,25 @@ class OverlayDrag:
     end: Callable[[], None]
 
 
-class OverlayHandle(QtWidgets.QLabel):
+class OverlayHandle(QtWidgets.QWidget):
+    """A small capsule above the overlay; the overlay itself lets clicks through."""
+
     def __init__(self, drag: OverlayDrag, cursor: Callable[[], tuple[int, int]]) -> None:
-        super().__init__("≡  Drag to move")
+        super().__init__()
         self.drag: OverlayDrag = drag
         self.read_cursor: Callable[[], tuple[int, int]] = cursor
         self.setWindowFlags(Qt.WindowType.Tool | Qt.WindowType.FramelessWindowHint)
         self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
-        self.setStyleSheet("background: #26313d; color: #cbd5e1; padding: 6px 12px; border-radius: 5px; font: 11px 'Segoe UI';")
+        self.setAccessibleName("Drag to move the keyboard overlay")
+        theme = tokens(scheme())
+        self.setStyleSheet(window_style(theme))
+        layout = row(surface(self, theme, 14))
+        layout.setContentsMargins(12, 6, 14, 6)
+        layout.setSpacing(6)
+        grip = QtWidgets.QLabel()
+        grip.setPixmap(glyph("menu", theme.ink2))
+        layout.addWidget(grip)
+        layout.addWidget(label("Drag to move", "muted"))
         self.setCursor(Qt.CursorShape.SizeAllCursor)
         self.adjustSize()
 
@@ -1186,18 +1251,20 @@ class KeymapOverlay:
 
     def __init__(self, root: QtWidgets.QApplication, desktop: OverlayDesktop | None = None) -> None:
         self._desktop: OverlayDesktop = desktop if desktop is not None else NativeOverlayDesktop()
+        theme = tokens(scheme())
         self._window = QtWidgets.QWidget()
-        self._window.setObjectName("workspaceWindow")
         self._window.setWindowTitle("Workspace keyboard overlay")
         self._window.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Tool)
         self._window.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
-        self._window.setStyleSheet(CONTROL_STYLE)
+        self._window.setStyleSheet(window_style(theme))
         self._window.setWindowOpacity(0.55)
-        layout = column(self._window)
-        layout.setContentsMargins(8, 8, 8, 8)
+        layout = column(surface(self._window, theme, 20))
+        layout.setContentsMargins(12, 10, 12, 12)
+        layout.setSpacing(8)
         self._heading = label("", "muted")
+        self._heading.setContentsMargins(4, 0, 0, 0)
         layout.addWidget(self._heading)
-        self._canvas = KeymapCanvas()
+        self._canvas = KeymapCanvas(theme)
         layout.addWidget(self._canvas)
         self._frame = self._desktop.prepare(self._window, click_through=True)
         self._handle = OverlayHandle(OverlayDrag(self._start_drag, self._drag_to, self._finish_drag), self._desktop.cursor)
@@ -1314,14 +1381,14 @@ class KeymapWindow:
             choose = partial(self.draw, layer)
             key = button(name, choose)
             key.setCheckable(True)
-            buttons.addWidget(key)
             self.buttons.append(key)
             shortcut = QtGui.QShortcut(QtGui.QKeySequence(str(index + 1)), self.window)
             shortcut.activated.connect(choose)
             self.shortcuts.append(shortcut)
+        buttons.addWidget(segmented(self.buttons))
         buttons.addStretch()
         layout.addLayout(buttons)
-        self.canvas = KeymapCanvas()
+        self.canvas = KeymapCanvas(tokens(scheme()))
         layout.addWidget(self.canvas)
         layout.addWidget(
             label(
