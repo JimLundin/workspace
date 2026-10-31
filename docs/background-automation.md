@@ -83,6 +83,11 @@ selects that profile and opens it visibly. After sign-in, `browser_open` restart
 it headlessly and returns new page IDs. It has its own sign-ins; it does not
 inherit the normal browser's session. Workspace never copies cookies or tokens
 between profiles. MFA and company access policy may require further interaction.
+Managed Edge can force account sign-in and sync into every new profile (the
+`BrowserSignin` and `ForceSync` policies). Sync would then install the account's
+extensions, which open their own tabs and script pages. Workspace therefore
+launches this profile with sync and extensions disabled. The attached personal
+browser keeps its own settings.
 
 CDP connects only to `127.0.0.1`, bypassing proxies. Attachment reads only the
 bounded `DevToolsActivePort` discovery file; it never creates, rewrites or deletes

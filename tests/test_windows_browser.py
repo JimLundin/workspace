@@ -190,6 +190,10 @@ def test_managed_browser_dom_teams_persistence_and_cancellation(tmp_path: Path) 
             verify_dom_and_saved_profile(browser, url)
         verify_communications(browser, trace)
         verify_business_apps(browser)
+        # Defect: the dedicated profile accepts synced or pushed extensions,
+        # which open tabs and script the pages Workspace automates. Managed
+        # Edge installs one within seconds of launch when extensions run.
+        assert not (profile / "Default" / "Extensions").exists()
         # Cancellation terminates the shared process, so it must run last.
         verify_managed_cancellation(browser)
 

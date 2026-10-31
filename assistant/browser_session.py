@@ -418,6 +418,11 @@ class NativeSessions:
             "--no-first-run",
             "--no-default-browser-check",
             "--disable-background-mode",
+            # Managed Edge can force account sign-in and sync into every new
+            # profile. Synced or pushed extensions then open tabs and script
+            # pages Workspace automates, so this profile runs neither.
+            "--disable-sync",
+            "--disable-extensions",
             "--window-size=1280,900",
         ]
         if not visible:
