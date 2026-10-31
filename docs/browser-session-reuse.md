@@ -211,6 +211,10 @@ requests frames with `stay_hidden=true` and `stay_awake=true`. Keep
 do not capture the desktop or select the tab. This is upstream evidence, not a
 claim that every installed browser state or company site was exercised here.
 Missing render views, unloaded pages and browser refusals must still be reported.
+Focus emulation shows an inactive tab, but it may not have a compositor surface
+yet. Chromium then fails the copy at once with "Unable to capture screenshot"
+instead of waiting. Workspace therefore waits for a visible page to render two
+animation frames (bounded to 5 seconds) before it captures.
 [Sources: screenshot API][page-api], [inactive-tab test][protocol-tests],
 [screenshot implementation][page-handler].
 

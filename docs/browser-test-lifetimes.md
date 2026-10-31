@@ -66,7 +66,8 @@ connected. Each failure was observed through the grouped callers. No function
 or native implementation was patched in a running process.
 
 The first grouped check had an intermittent Edge screenshot failure before
-shared scenario state was used. A subsequent complete lifecycle probe passed
+shared scenario state was used. Its cause was capturing an inactive tab before
+the tab rendered a frame; capture now waits for one (issue #30). A subsequent complete lifecycle probe passed
 all six functions and observed exactly five launches. Unchanged sign-in timings
 also varied substantially (4.9–15.7 seconds), so a single run is insufficient
 to assign a precise wall-time improvement to the fixture refactor.

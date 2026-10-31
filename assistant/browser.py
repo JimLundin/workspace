@@ -103,6 +103,12 @@ _STRIP = TypeAdapter(StripData)
 _EDITED = TypeAdapter[GroupData | TabData | UngroupedData](GroupData | TabData | UngroupedData)
 _CLOSED_TABS = TypeAdapter(ClosedTabsData)
 _CLOSED_PAGE = TypeAdapter(PageClosureData)
+# Resolves after a visible page renders a new frame. Hidden pages never run
+# animation frames; Chromium's capture keeps them producing frames itself.
+_PRESENTED = (
+    "new Promise(resolve => document.visibilityState === 'visible'"
+    " ? requestAnimationFrame(() => requestAnimationFrame(() => resolve(true))) : resolve(false))"
+)
 
 
 def _decoded[T](shape: TypeAdapter[T], value: Json) -> T:
@@ -306,6 +312,10 @@ class Browser:
     def _capture(self, session: str, cancel: threading.Event) -> dict[str, Json]:
         try:
             self._call("Emulation.setFocusEmulationEnabled", {"enabled": True}, cancel, session=session)
+            # A background tab can be shown without a compositor surface yet;
+            # Chromium then fails the copy at once instead of waiting for it.
+            context, _tree = self._world(session, "", cancel)
+            self._evaluate(_PRESENTED, session, context, cancel, timeout=5)
             result = self._call("Page.captureScreenshot", {"format": "png", "captureBeyondViewport": False}, cancel, session=session)
         except BaseException as error:
             try:
