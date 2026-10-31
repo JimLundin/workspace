@@ -15,12 +15,14 @@ from pathlib import Path
 
 from pydantic import StrictFloat, StrictInt, StrictStr, TypeAdapter, ValidationError
 
+from scripts.check_results import Failure, Results
 from scripts.deploy_files import write
 from scripts.development_paths import LIVE, TEMP
 
 RUNNER = """import json, os, sys
 from pathlib import Path
 lazy from scripts.check import Selection, execute
+lazy from scripts.check_native import NATIVE_RESULT, NativeResult
 if __name__ == "__main__":
     configuration = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
     root = Path(configuration["root"])
@@ -29,8 +31,7 @@ if __name__ == "__main__":
     sys.path.insert(0, str(root))
     selection = Selection(tuple(configuration["tests"]), tuple(configuration["changed"]), configuration["reason"])
     passed, skipped, failures, timings = execute(selection, root)
-    Path(configuration["output"]).write_text(json.dumps({"passed": passed, "skipped": skipped,
-        "failures": failures, "timings": timings}), encoding="utf-8")
+    Path(configuration["output"]).write_bytes(NATIVE_RESULT.dump_json(NativeResult(passed, skipped, failures, timings)))
     sys.exit(bool(failures))
 """
 
@@ -39,7 +40,7 @@ if __name__ == "__main__":
 class NativeResult:
     passed: StrictInt
     skipped: StrictInt
-    failures: tuple[StrictStr, ...]
+    failures: tuple[Failure, ...]
     timings: tuple[tuple[StrictFloat, StrictStr], ...]
 
 
@@ -57,7 +58,7 @@ def execute_native(
     tests: tuple[str, ...],
     changed: tuple[str, ...],
     reason: str,
-) -> tuple[int, int, tuple[str, ...], tuple[tuple[float, str], ...]]:
+) -> Results:
     scratch = Path(tempfile.mkdtemp(prefix="workspace-native-check-", dir=TEMP))
     try:
         runner, configuration, output = scratch / "run.py", scratch / "configuration.json", scratch / "result.json"
