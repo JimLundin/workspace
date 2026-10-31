@@ -9,35 +9,51 @@ from html import escape
 from typing import assert_never
 
 lazy from PySide6 import QtWidgets
-lazy from PySide6.QtCore import QRectF, Qt
-lazy from PySide6.QtGui import QColor, QPainter, QPaintEvent, QPen
+lazy from PySide6.QtCore import QRect, QRectF, Qt
+lazy from PySide6.QtGui import QPainter, QPaintEvent, QPen
 
 from assistant.action_text import shortened
 from assistant.qt_runtime import prepare
 from assistant.tool_text import Call, State
-from assistant.ui_components.appearance import Ink
-from assistant.ui_components.text import font
+from assistant.ui_components.appearance import DARK, Shade
+from assistant.ui_components.text import META, STEP, TextInk, color, face, text_ink
+from assistant.vector_icons import icon
 
 prepare()
 
-ROW_HEIGHT = 28
+ROW_HEIGHT = 24
+GLYPH = 16  # a step's status symbol, beside 12 px text as the kit's steps
+TEXT_LEFT = GLYPH + 8
+COPY_WIDTH = 46
 
 
 def copy_text(text: str) -> None:
     QtWidgets.QApplication.clipboard().setText(text)
 
 
-def status_color(state: State, ink: Ink) -> str:
-    # High contrast supplies one foreground for every ink role; retain it.
-    if ink.foreground == ink.secondary == ink.error:
-        return ink.foreground
+def status_color(state: State, ink: TextInk) -> Shade:
     match state:
         case State.SUCCEEDED:
-            return "#76d49a"
+            return ink.success
         case State.FAILED:
             return ink.error
         case State.RUNNING | State.CANCELLED:
-            return ink.secondary
+            return ink.quiet
+        case _:
+            assert_never(state)
+
+
+def symbol(state: State) -> str | None:
+    """A finished step's Fluent symbol; a running step shows the spinner instead."""
+    match state:
+        case State.SUCCEEDED:
+            return "check"
+        case State.FAILED:
+            return "close"
+        case State.CANCELLED:
+            return "minus"
+        case State.RUNNING:
+            return None
         case _:
             assert_never(state)
 
@@ -55,28 +71,20 @@ class StatusIcon(QtWidgets.QWidget):
     def paintEvent(self, event: QPaintEvent) -> None:
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        painter.setPen(
-            QPen(
-                QColor(status_color(self.owner.call.state, self.owner.ink)),
-                1.7,
-                Qt.PenStyle.SolidLine,
-                Qt.PenCapStyle.RoundCap,
-                Qt.PenJoinStyle.RoundJoin,
-            )
-        )
-        match self.owner.call.state:
-            case State.RUNNING:
-                painter.drawArc(QRectF(2, 2, 12, 12), round(self.angle * 16), 240 * 16)
-            case State.SUCCEEDED:
-                painter.drawLine(3, 8, 7, 12)
-                painter.drawLine(7, 12, 13, 4)
-            case State.FAILED:
-                painter.drawLine(4, 4, 12, 12)
-                painter.drawLine(12, 4, 4, 12)
-            case State.CANCELLED:
-                painter.drawLine(4, 8, 12, 8)
-            case _:
-                assert_never(self.owner.call.state)
+        state, ink = self.owner.call.state, self.owner.ink
+        match symbol(state):
+            case None:
+                # The kit's spinner: a faint track with a turning head.
+                ring = QRectF(2.5, 2.5, 11, 11)
+                track = Shade(ink.ink.color, ink.ink.opacity * 0.32)
+                painter.setPen(QPen(color(track), 1.8))
+                painter.drawEllipse(ring)
+                painter.setPen(QPen(color(ink.ink), 1.8, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
+                painter.drawArc(ring, round(self.angle * 16), 90 * 16)
+            case str() as name:
+                shade = status_color(state, ink)
+                painter.setOpacity(shade.opacity)
+                icon(name, shade.color).paint(painter, QRect(0, 0, GLYPH, GLYPH))
 
 
 class ToolCall(QtWidgets.QWidget):
@@ -84,16 +92,17 @@ class ToolCall(QtWidgets.QWidget):
 
     def __init__(self, parent: QtWidgets.QWidget, call: Call, copy: Callable[[str], None] = copy_text) -> None:
         super().__init__(parent)
-        self.copy_action, self.call, self.ink = copy, call, Ink()
+        self.copy_action, self.call, self.ink = copy, call, text_ink(DARK)
         self.presented: tuple[Call, int] | None = None
         self.setObjectName("toolCall-" + call.identity)
         self.status = StatusIcon(self)
         self.title = QtWidgets.QLabel(self)
         self.title.setTextFormat(Qt.TextFormat.PlainText)
-        self.title.setFont(font(9))
+        self.title.setFont(face(STEP))
         self.title.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
         self.copy = QtWidgets.QPushButton("Copy", self)
-        self.copy.setFont(font(8))
+        self.copy.setFont(face(META, 500))
+        self.copy.setCursor(Qt.CursorShape.PointingHandCursor)
         self.copy.clicked.connect(self.copy_payload)
 
     @property
@@ -109,14 +118,14 @@ class ToolCall(QtWidgets.QWidget):
         self.call = call
         self.resize(width, ROW_HEIGHT)
         self.copy.setVisible(bool(call.copy_text))
-        copy_width = 44 if call.copy_text else 0
-        text_width = max(1, width - 24 - copy_width)
+        copy_width = COPY_WIDTH + 4 if call.copy_text else 0
+        text_width = max(1, width - TEXT_LEFT - copy_width)
         preview = call.result if call.state is State.FAILED else call.argument or call.result
         label = call.label + (" · " + shortened(" ".join(preview.split()), 240) if preview else "")
         self.title.setText(self.title.fontMetrics().elidedText(label, Qt.TextElideMode.ElideRight, text_width))
-        self.status.setGeometry(0, 6, 16, 16)
-        self.title.setGeometry(24, 0, text_width, ROW_HEIGHT)
-        self.copy.setGeometry(max(24, width - 40), 2, 40, 24)
+        self.status.setGeometry(0, (ROW_HEIGHT - GLYPH) // 2, GLYPH, GLYPH)
+        self.title.setGeometry(TEXT_LEFT, 0, text_width, ROW_HEIGHT)
+        self.copy.setGeometry(max(TEXT_LEFT, width - COPY_WIDTH), 1, COPY_WIDTH, ROW_HEIGHT - 2)
         self.setAccessibleName("Tool call: " + call.name)
         self.setAccessibleDescription(call.state.value)
         self.copy.setAccessibleName(("Copy arguments for " if call.argument else "Copy result for ") + call.name)
@@ -133,11 +142,18 @@ class ToolCall(QtWidgets.QWidget):
             self.status.angle = angle
             self.status.update()
 
-    def recolor(self, ink: Ink) -> None:
+    def recolor(self, ink: TextInk) -> None:
         self.ink = ink
+        hover, press = Shade(ink.ink.color, 0.08), Shade(ink.ink.color, 0.14)
         self.setStyleSheet(f"QWidget#{self.objectName()} {{ background: transparent; border: none; }}")
-        self.title.setStyleSheet(f"background: transparent; border: none; padding: 0; margin: 0; color: {ink.foreground};")
-        self.copy.setStyleSheet(f"background: transparent; border: none; padding: 0; margin: 0; color: {ink.secondary};")
+        self.title.setStyleSheet(f"background: transparent; border: none; padding: 0; margin: 0; color: {ink.quiet.css};")
+        # A quiet row: Copy is plain at rest and fills under the pointer, as controls inside glass do.
+        self.copy.setStyleSheet(
+            f"QPushButton {{ background: transparent; border: none; border-radius: 11px; padding: 0; margin: 0; color: {ink.quiet.css}; }}"
+            f"QPushButton:hover {{ background: {hover.css}; color: {ink.ink.css}; }}"
+            f"QPushButton:pressed {{ background: {press.css}; }}"
+            f"QPushButton:focus {{ outline: none; border: 2px solid {ink.link.css}; }}"
+        )
         self.status.update()
 
     def toPlainText(self) -> str:

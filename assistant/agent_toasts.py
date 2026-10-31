@@ -11,7 +11,6 @@ from urllib.parse import urlsplit
 from pydantic import Field, StrictInt, TypeAdapter
 lazy from PySide6 import QtCore
 lazy from PySide6.QtCore import Qt
-lazy from PySide6.QtGui import QFontMetricsF
 lazy from PySide6.QtWidgets import QApplication
 
 from assistant.agent_progress import Progress, advance_progress, compact, retain_lifetimes, visible
@@ -49,8 +48,9 @@ lazy from assistant.notifications import (
     spinning,
 )
 lazy from assistant.qt_ui import EventLoop, cancel, later
-lazy from assistant.toast_card import Card, Measure
-lazy from assistant.ui_components.text import font
+lazy from assistant.toast_card import Card, Finish, Measure
+lazy from assistant.ui_components.appearance import scheme
+lazy from assistant.ui_components.text import BODY, face, line_height
 lazy from automation.task import Approval
 lazy from winapi.notification_input import Region, WheelRouter
 
@@ -94,10 +94,8 @@ class AgentToasts:
         "expiry_timer",
         "history",
         "loop",
-        "materials",
         "measure",
         "monitor",
-        "next_material",
         "page",
         "pointer_timer",
         "progress",
@@ -134,7 +132,6 @@ class AgentToasts:
         self.environment: appearance.Environment = appearance.Environment() if environment is None else environment
         self.desktop: Desktop = NativeDesktop() if desktop is None else desktop
         self.create_card = Card if create_card is None else create_card
-        self.materials = appearance.FrostSampler()
         self.monitor = monitor if monitor is not None else saved_monitor()
         self.session = Session()
         self.stack = Stack()
@@ -158,7 +155,6 @@ class AgentToasts:
         self.expiry_timer: QtCore.QTimer | None = None
         self.animation_timer: QtCore.QTimer | None = None
         self.pointer_timer: QtCore.QTimer | None = None
-        self.next_material = 0.0
 
     def render(self, state: Snapshot) -> None:
         if self.closed:
@@ -211,7 +207,7 @@ class AgentToasts:
     def expire(self) -> None:
         self.expiry_timer = None
         if not self.closed and self.cards:
-            self.observe_pointer()  # include an arrival since the last glass hover sample
+            self.observe_pointer()  # include an arrival since the last hover sample
         self.refresh()
 
     def set_hover(self, key: Key, *, inside: bool) -> None:
@@ -220,6 +216,8 @@ class AgentToasts:
             changed = card is not None and card.hovered != inside
             if card is not None:
                 card.hovered = inside
+                if changed:
+                    card.window.update()  # overlay scroll bars show while the pointer can scroll
                 if changed and card.needs_reading():
                     card.reader = notification_reading.Paused(card.reader.offset)
             updated = hover(self.stack, key, inside=inside, now=self.clock())
@@ -245,19 +243,6 @@ class AgentToasts:
             if not card.retiring:
                 bounds = windows.outer_rect(card.handle)
                 self.set_hover(card.key, inside=bounds.left <= x < bounds.right and bounds.top <= y < bounds.bottom)
-        now = self.clock()
-        if not any(card.motion is not None or card.reveals for card in self.cards.values()):
-            samples = {sample.bounds: sample for sample in self.materials.read()}
-            if samples:
-                preference = self.environment.material()
-                for card in self.cards.values():
-                    if card.bounds is not None and (sample := samples.get(card.bounds)) is not None:
-                        card.match_background(sample, preference)
-            if now >= self.next_material:
-                self.next_material = now + 0.75
-                self.materials.submit(
-                    tuple(card.bounds for card in self.cards.values() if card.glass and not card.retiring and card.bounds is not None)
-                )
 
     def poll_pointer(self) -> None:
         self.pointer_timer = None
@@ -368,13 +353,14 @@ class AgentToasts:
             self.work = None
             return
         animate = self.environment.animations() if animate is None else animate
-        preference = self.environment.material()
+        # Large glass follows Windows' app scheme, not the desktop beneath it.
+        finish = Finish(self.environment.material(), scheme())
         work = self.area()
         scale = self.loop.scale(work)
         immediate = self.work is not None and (self.work != work or self.scale != scale)
         self.work, self.scale = work, scale
         self.measure.scale = scale
-        viewport = Viewport(work, scale, round(QFontMetricsF(font()).height() * scale * 1.38))
+        viewport = Viewport(work, scale, round(line_height(face(BODY)) * scale))
         if self.viewport != viewport:
             self.viewport = viewport
             self.capacity, self.page = MAX_VISIBLE, 0
@@ -402,7 +388,8 @@ class AgentToasts:
         for toast in self.stack.toasts:
             current = self.cards[toast.key]
             before = current.width, current.height
-            current.render(self.content_for(toast), viewport.width, limits[toast.key], preference)
+            current.apply_style(finish)
+            current.render(self.content_for(toast), viewport.width, limits[toast.key])
             # A resumed recording must restore usable controls immediately,
             # even when its fixed-width geometry matches the fading saved card.
             resized = before != (current.width, current.height)
@@ -632,7 +619,6 @@ class AgentToasts:
         self.loop.watch(visible=False)
         self.loop.pump()
         self.work = None
-        self.next_material = 0.0
 
     def close(self) -> None:
         self.closed = True
@@ -644,7 +630,6 @@ class AgentToasts:
             card.close()
         self.spares = ()
         self.wheel.close()
-        self.materials.close()
         self.measure.close()
         self.loop.close()
 

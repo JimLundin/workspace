@@ -31,7 +31,9 @@ from assistant.qt_runtime import prepare
 from assistant.qt_ui import application
 from assistant.recording_state import RecordingAction, RecordingState
 from assistant.rich_text import formatted
-from assistant.toast_card import Card
+from assistant.toast_card import Card, Finish
+from assistant.ui_components.appearance import Scheme, Shade
+from assistant.ui_components.bubble import Solid
 from assistant.ui_components.text import TextView
 from automation.presentation import Answer, Failed, ReasoningSummary, Said, StreamState, Succeeded, ToolActivity
 from automation.task import Reply, TextAnswer
@@ -367,7 +369,8 @@ def test_bubble_icon_controls_share_hover_press_and_disabled_feedback() -> None:
                 fills.append(image.pixelColor(3, button.height() // 2).alpha())
                 assert button.geometry() == geometry
             resting, hover, pressed, disabled = fills
-            assert resting == disabled == 0 and 0 < hover < pressed, fills
+            # Controls inside glass are filled at rest; a disabled one never reacts.
+            assert 0 < resting == disabled < hover < pressed, fills
 
 
 def test_background_material_sampling_never_waits_for_desktop_pixels() -> None:
@@ -398,7 +401,7 @@ def test_background_material_sampling_never_waits_for_desktop_pixels() -> None:
         sampler.close()
 
 
-def test_material_modes_choose_readable_ink_and_reject_stale_backgrounds() -> None:
+def test_large_glass_follows_the_app_scheme_and_keeps_the_selection() -> None:
     dark = tuple(map(appearance.colorref, ("#181d2a", "#353c50")))
     assert appearance.frost_for(dark) is appearance.Frost.LIGHT
     assert appearance.frost_for((appearance.colorref("#fafbfe"),)) is appearance.Frost.BRIGHT
@@ -411,14 +414,11 @@ def test_material_modes_choose_readable_ink_and_reject_stale_backgrounds() -> No
         card = panel.view.cards[MessageKey(0)]
         if not card.glass:
             return
-        assert card.bounds is not None
         select(card.text, "workbook")
-        for frost, foreground in ((appearance.Frost.LIGHT, "#f0f0f0"), (appearance.Frost.BRIGHT, "#202435"), (appearance.Frost.SMOKED, "#f0f0f0")):
-            card.match_background(appearance.Backdrop(card.bounds, frost), appearance.Material.GLASS)
-            assert card.ink.foreground == foreground
+        for scheme, ink in ((Scheme.LIGHT, Shade("#000000", 0.86)), (Scheme.DARK, Shade("#ffffff", 0.94))):
+            card.apply_style(Finish(appearance.Material.GLASS, scheme))
+            assert card.glass and card.style.text.ink == ink
             assert card.text.textCursor().selectedText() == "workbook"
-        card.match_background(appearance.Backdrop(Rect(0, 0, 1, 1), appearance.Frost.BRIGHT), appearance.Material.GLASS)
-        assert card.frost is appearance.Frost.SMOKED
         assert card.text.toPlainText() == "The workbook is ready."
 
 
@@ -432,10 +432,8 @@ def test_material_changes_preserve_the_native_scroll_range_and_reading_position(
         panel.pump()
         position, original = scroll_position(card), anchor(card.text)
         assert position > 0
-        for frost in (appearance.Frost.LIGHT, appearance.Frost.SMOKED, appearance.Frost.BRIGHT) * 3:
-            card.frost = frost
-            assert card.content is not None
-            card.apply_style(card.content, appearance.Material.GLASS)
+        for scheme in (Scheme.LIGHT, Scheme.DARK) * 3:
+            card.apply_style(Finish(appearance.Material.GLASS, scheme))
             panel.pump()
             assert scroll_position(card) == position and anchor(card.text) == original
             scroll = card.text.verticalScrollBar()
@@ -1026,8 +1024,8 @@ def test_solid_and_high_contrast_materials_keep_all_content_readable() -> None:
         panel.preference = appearance.Contrast("#ffffff", "#000000")
         panel.view.refresh()
         panel.pump()
-        assert not work.glass and work.colors.surface == "#ffffff"
-        assert work.ink.foreground == work.ink.secondary == "#000000"
+        assert not work.glass and work.style.surface == Solid(Shade("#ffffff"), Shade("#000000"))
+        assert work.style.text.ink == work.style.text.quiet == Shade("#000000")
         color = work.details.calls[0].status.grab().toImage().pixelColor(8, 8)
         assert color.name() == "#000000" and color.alpha() > 0
 

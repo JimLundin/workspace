@@ -9,11 +9,11 @@ if sys.platform != "win32":
 lazy import shiboken6
 
 from assistant.agent_toasts import AgentToasts
-from assistant.notifications import Content, Frame, Toast
+from assistant.notifications import Frame, Toast
 from assistant.qt_runtime import prepare
-from assistant.toast_card import Card
+from assistant.toast_card import Card, Finish
 from tests.test_windows_agent_toasts import notifications
-from winapi import appearance, windows
+from winapi import windows
 
 prepare()
 
@@ -49,8 +49,8 @@ def test_animation_clock_starts_after_native_preparation() -> None:
     class SlowCard(Card):
         __slots__ = ()
 
-        def apply_style(self, content: Content, preference: appearance.Preference) -> None:
-            super().apply_style(content, preference)
+        def apply_style(self, finish: Finish) -> None:
+            super().apply_style(finish)
             panel.now += 0.4
 
     with notifications(animated=True, create_card=SlowCard) as panel:
