@@ -1,0 +1,5 @@
+/* Container: <lg-popover>. */
+
+/* Popover: large glass placed beside its source. */
+lg-popover { position: fixed; z-index: 40; min-width: 248px; border-radius: 21px; display: none; }
+lg-popover[open] { display: block; }

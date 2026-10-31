@@ -1,0 +1,21 @@
+/* Molecule: <lg-card>. */
+
+/* Cards share one anatomy. Solid cards are content; glass cards are functional UI such as notifications. */
+lg-card { display: block; }
+lg-card[variant="solid"] { border-radius: 18px; padding: 14px 16px 15px; background: var(--lg-solid); box-shadow: 0 0 0 .5px var(--lg-solid-edge), var(--lg-solid-shadow); }
+lg-card[variant="glass"] { border-radius: 22px; padding: 12px 14px 12px 12px; }
+lg-card > .lg-head { display: flex; gap: 10px; align-items: flex-start; }
+lg-card > .lg-head > .lg-titles { flex: 1; min-width: 0; }
+lg-card .lg-title-row { display: flex; gap: 8px; align-items: baseline; }
+lg-card .lg-title { flex: 1; font-weight: 600; letter-spacing: -.006em; }
+lg-card[variant="solid"] .lg-title { font-size: 14px; }
+lg-card .lg-meta { color: var(--lg-ink-2); font-size: 11.5px; }
+lg-card .lg-time { color: var(--lg-ink-2); font-size: 11.5px; white-space: nowrap; }
+lg-card [slot="body"] { color: var(--lg-ink-2); margin-top: 2px; }
+lg-card[variant="solid"] [slot="body"] { margin-top: 7px; }
+lg-card > .lg-extra { margin-top: 0; }
+lg-card[variant="glass"] > .lg-extra { margin-left: 40px; }
+lg-card > [slot="actions"] { display: flex; gap: 6px; margin-top: 12px; }
+lg-card[variant="glass"] > [slot="actions"] { margin-left: 40px; }
+/* A collapsed card keeps only its head, as earlier bubbles do when they recede. */
+lg-card[collapsed] > :not(.lg-head), lg-card[collapsed] [slot="body"] { display: none; }

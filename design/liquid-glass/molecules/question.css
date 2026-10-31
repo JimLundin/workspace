@@ -1,0 +1,9 @@
+/* Molecule: <lg-question>. */
+
+/* Question card. With 28 px island corners, a 12 px inset makes its 32 px buttons concentric. */
+lg-question { display: block; padding: 13px 12px 12px; }
+lg-question > .lg-q-top { display: flex; align-items: center; gap: 9px; padding: 0 4px 0 2px; }
+lg-question > .lg-q-top > .lg-q-title { flex: 1; font-size: 14px; font-weight: 600; line-height: 1.25; letter-spacing: -.01em; }
+lg-question > .lg-q-top > .lg-q-meta { color: var(--lg-ink-2); font-size: 11.5px; }
+lg-question > .lg-q-body { color: var(--lg-ink-2); padding: 3px 4px 0 37px; }
+lg-question > .lg-q-actions { display: flex; gap: 6px; margin-top: 12px; }

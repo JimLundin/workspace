@@ -1,0 +1,4 @@
+/* Atom: <lg-badge>. */
+
+lg-badge { position: absolute; top: 1px; right: 0; min-width: 15px; height: 15px; padding: 0 4px; border-radius: 8px; background: var(--lg-red); color: #fff; font-size: 10px; font-weight: 700; line-height: 15px; text-align: center; font-variant-numeric: tabular-nums; }
+lg-badge[tone="orange"] { background: var(--lg-orange); }

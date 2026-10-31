@@ -1,0 +1,5 @@
+/* Container: <lg-stack>. */
+
+/* Stack: transient glass cards. The newest is opaque; earlier ones recede. */
+lg-stack { display: flex; flex-direction: column; justify-content: flex-end; gap: 8px; pointer-events: none; }
+lg-stack > * { pointer-events: auto; transform-origin: bottom right; }

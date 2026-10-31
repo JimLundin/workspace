@@ -1,0 +1,4 @@
+/* Atom: <lg-icon>. */
+
+lg-icon { display: inline-flex; width: 16px; height: 16px; flex: none; }
+lg-icon > svg { width: 100%; height: 100%; fill: currentColor; }

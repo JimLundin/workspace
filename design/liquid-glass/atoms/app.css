@@ -1,0 +1,5 @@
+/* Atom: <lg-app>. */
+
+lg-app { width: 30px; height: 30px; border-radius: 9px; flex: none; display: grid; place-items: center; color: #fff; font-size: 13px; font-weight: 700; background: var(--lg-app, linear-gradient(145deg, #7d6bff, #4b9dff)); box-shadow: inset 0 0 0 .5px rgba(255,255,255,.3), 0 1px 2px rgba(0,0,0,.15); }
+lg-app[size="small"] { width: 22px; height: 22px; border-radius: 7px; font-size: 11px; }
+lg-app[size="medium"] { width: 26px; height: 26px; border-radius: 8px; font-size: 12px; }

@@ -1,0 +1,11 @@
+/* Atoms: <lg-fact>, <lg-timer>, <lg-kbd>. */
+
+/* A fact: a reading with an optional symbol, such as the time or the battery level. */
+lg-fact { display: inline-flex; align-items: center; gap: 5px; color: var(--lg-ink); font-weight: 500; white-space: nowrap; }
+lg-fact[quiet] { color: var(--lg-ink-2); }
+lg-fact[strong] { font-weight: 600; }
+lg-fact[tone="mic"] { color: var(--lg-mic); }
+lg-fact + lg-fact { margin-left: 6px; }
+lg-timer, lg-fact[num] { font-variant-numeric: tabular-nums; }
+lg-timer { white-space: nowrap; font-weight: 500; }
+lg-kbd { font-size: 11px; font-weight: 600; line-height: 18px; padding: 0 6px; border-radius: 6px; background: color-mix(in srgb, var(--lg-ink) 10%, transparent); }

@@ -1,6 +1,6 @@
 /* Workspace in Liquid Glass: the desktop island bar, agent cards and the work canvas,
    composed from kit elements. Only Workspace's behaviour and content live here. */
-(() => {
+window.LiquidGlass.ready.then(() => {
   "use strict";
   const LG = window.LiquidGlass;
   const { $, $$, clamp, Spring, h, html } = LG;
@@ -469,4 +469,4 @@
   });
   // For tests and measurement.
   window.workspaceDemo = { state, sync, desktop, canvasBar, openCanvas, select, setMenu, startRecording: since => { recordingSince = since; sync(); } };
-})();
+});

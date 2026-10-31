@@ -1,0 +1,37 @@
+/* Foundations: the glass material, rim light, press glow and tints. */
+
+.lg-glass {
+  position: relative; isolation: isolate;
+  background: var(--lg-glass);
+  -webkit-backdrop-filter: blur(var(--lg-blur, 10px)) saturate(var(--lg-sat)) brightness(var(--lg-bright));
+  backdrop-filter: blur(var(--lg-blur, 10px)) saturate(var(--lg-sat)) brightness(var(--lg-bright));
+  box-shadow: var(--lg-inner), var(--lg-shadow);
+}
+.lg-glass.lg-large { background: var(--lg-glass-large); --lg-blur: 28px; }
+/* The lens filter does its own blurring: a sharper, bent rim over a blurred centre. */
+.lg-glass.lg-lens {
+  -webkit-backdrop-filter: var(--lg-lens, blur(var(--lg-blur, 10px))) saturate(var(--lg-sat)) brightness(var(--lg-bright));
+  backdrop-filter: var(--lg-lens, blur(var(--lg-blur, 10px))) saturate(var(--lg-sat)) brightness(var(--lg-bright));
+}
+/* Rim light: brightest where light catches the upper-leading curve, a softer return at the trailing foot. */
+.lg-glass::before {
+  content: ""; position: absolute; inset: 0; border-radius: inherit; padding: 1px; pointer-events: none; z-index: 2;
+  background: linear-gradient(var(--lg-rim-angle, 160deg), var(--lg-rim-hi), var(--lg-rim-lo) 34%, var(--lg-rim-lo) 72%, var(--lg-rim-end));
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
+}
+/* Interactive glass lights up where it's pressed. */
+.lg-glass::after {
+  content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; z-index: 1;
+  background: radial-gradient(120px circle at var(--lg-px, 50%) var(--lg-py, 50%), rgba(255,255,255,.34), transparent 70%);
+  opacity: var(--lg-glow, 0); transition: opacity .35s ease;
+}
+/* Tinted glass carries meaning only. Its rim takes the tint's light instead of white glare. */
+.lg-glass.lg-tint, .lg-glass.lg-prominent {
+  background: color-mix(in srgb, var(--lg-tint) 82%, transparent);
+  --lg-ink: #fff; --lg-ink-2: rgba(255,255,255,.86); color: #fff;
+  --lg-rim-hi: rgba(255,255,255,.55); --lg-rim-lo: rgba(255,255,255,.06); --lg-rim-end: rgba(255,255,255,.10);
+  --lg-fill-hover: rgba(255,255,255,.14); --lg-fill-press: rgba(255,255,255,.22);
+}
+.lg-tint { --lg-tint: var(--lg-orange); }
+.lg-prominent { --lg-tint: var(--lg-accent); font-weight: 600; }
