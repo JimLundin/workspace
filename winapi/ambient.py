@@ -1,15 +1,7 @@
-"""Windows power and optional, bounded geolocation observations."""
+"""Windows power observations."""
 
 import ctypes
-import math
-import threading
-import time
 from ctypes import wintypes
-
-lazy from win32more import FAILED
-lazy from win32more.Windows.Devices.Geolocation import BasicGeoposition, Geolocator, Geoposition, PositionStatus
-lazy from win32more.Windows.Foundation import IAsyncInfo, IAsyncOperation, TimeSpan
-lazy from win32more.Windows.Win32.System.WinRT import RO_INIT_MULTITHREADED, RoInitialize, RoUninitialize
 
 from winapi._core import fn, kernel32
 from winapi.machine_status import Battery, Power, PowerUnavailable
@@ -49,36 +41,3 @@ def power_from_status(status: PowerStatus | None) -> Power:
     if not 0 <= status.percent <= 100:
         return PowerUnavailable.UNKNOWN
     return Battery(int(status.percent), powered=status.ac == 1, charging=bool(status.flags & 8))
-
-
-def location(cancelled: threading.Event) -> tuple[float, float] | None:
-    """Use an already available Windows location; never request consent or infer IP location."""
-    if FAILED(RoInitialize(RO_INIT_MULTITHREADED)):
-        return None
-    operation: IAsyncOperation[Geoposition] | None = None
-    info: IAsyncInfo | None = None
-    locator: Geolocator | None = None
-    position: BasicGeoposition | None = None
-    try:
-        locator = Geolocator()
-        if locator.LocationStatus in (PositionStatus.Disabled, PositionStatus.NotAvailable):
-            return None
-        operation = locator.GetGeopositionAsyncWithAgeAndTimeout(TimeSpan(3_000_000_000), TimeSpan(80_000_000))
-        info = operation.as_(IAsyncInfo)
-        deadline = time.monotonic() + 9
-        while info.Status == 0:
-            if cancelled.wait(0.05) or time.monotonic() >= deadline:
-                info.Cancel()
-                return None
-        if info.Status != 1:
-            return None
-        position = operation.GetResults().Coordinate.Point.Position
-        latitude, longitude = float(position.Latitude), float(position.Longitude)
-        if math.isfinite(latitude) and math.isfinite(longitude) and -90 <= latitude <= 90 and -180 <= longitude <= 180:
-            return latitude, longitude
-        return None
-    except OSError, ValueError:
-        return None
-    finally:
-        position = info = operation = locator = None
-        RoUninitialize()

@@ -87,7 +87,6 @@ def test_banner_failure_keeps_notice_delivery_and_repeated_read_failures_release
     assert source.known[:5] == [{}] + [{notice.key: notice}] * 4
 
 
-
 def test_notification_reads_follow_database_changes_instead_of_every_poll() -> None:
     reads = 0
 

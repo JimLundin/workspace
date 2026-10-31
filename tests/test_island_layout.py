@@ -1,7 +1,7 @@
-"""Where the island bar's capsules sit."""
+"""Where the island bar's capsules sit, and where parts sit inside them."""
 
-from assistant.island_layout import Box, Framed, Metrics, Placed, frame, snap
-from assistant.island_model import Key, Zone
+from assistant.island_layout import Box, Framed, Metrics, Placed, Spot, arrange, frame, snap
+from assistant.island_model import Action, Badge, Control, Glyph, Key, Marker, Spinner, Text, Zone
 
 
 def test_the_island_alone_is_centred_with_an_edge_strip_to_the_top() -> None:
@@ -45,3 +45,31 @@ def test_snapping_puts_every_edge_on_a_device_pixel() -> None:
     (snapped,) = snap(framed, 1.25)
     edges = (snapped.box.x, snapped.box.x + snapped.box.width, snapped.box.y, snapped.box.y + snapped.box.height)
     assert all(abs(edge * 1.25 - round(edge * 1.25)) < 1e-9 for edge in edges)
+
+
+def width_of(text: Text) -> float:
+    return len(text.text) * 7
+
+
+def test_text_content_pads_twelve_and_separates_slots_and_readings_further_than_parts() -> None:
+    # Defects: readings crowd the capsule edge, two slots read as one, or two
+    # readings run together while a symbol drifts from the text it labels.
+    content = arrange(((Spinner("Transcribing"),), (Text("10:22"), Text("73%"))), width_of)
+    assert [spot.x for spot in content.spots] == [12, 38, 85]
+    assert content.width == 12 + 14 + 12 + 35 + 12 + 21 + 12
+    assert [spot.x for spot in arrange(((Text("Needs you"), Glyph("down")),), width_of).spots] == [12, 81]
+
+
+def test_a_control_at_the_edge_sits_concentric_and_a_badge_takes_no_width() -> None:
+    # Defects: Stop keeps the text padding and breaks the 3 px concentric inset,
+    # or the count badge widens the inbox capsule.
+    stop = Control("stop", "Stop agent work", Action.STOP_AGENT)
+    content = arrange(((Spinner("Agent working"), stop),), width_of)
+    assert content.spots[-1] == Spot(stop, 30, 28) and content.width == 61
+    assert arrange(((Glyph("bell"), Badge("99+")),), width_of).width == arrange(((Glyph("bell"),),), width_of).width == 36
+
+
+def test_content_narrower_than_a_circle_centres_in_one() -> None:
+    # Defect: a lone marker collapses the capsule below its height, losing its round shape.
+    content = arrange(((Marker.DOT,),), width_of)
+    assert content.width == 34 and content.spots == (Spot(Marker.DOT, 13, 8),)

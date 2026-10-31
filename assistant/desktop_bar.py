@@ -1,5 +1,12 @@
-"""Contextual desktop capsules; native glass is shared with agent messages."""
+"""The island bar: Workspace's floating capsules at the top of the primary screen.
 
+The island stays centred and acts on what it shows; temporary capsules sit beside
+it. `island_model` decides the views, `island_layout` where they sit, and
+`ui_components.appearance` how they read. This owner observes the desktop and
+publishes each result to the one bar window and its glass.
+"""
+
+import math
 import queue
 import threading
 import time
@@ -13,27 +20,23 @@ lazy import os
 lazy from PySide6 import QtCore, QtGui, QtWidgets
 
 from assistant.qt_runtime import prepare
-from components import BAR_WINDOW
 lazy import winapi.ambient
-lazy from assistant.ambient import Ambient, Weather
+lazy from assistant.ambient import Ambient, SystemStatus
 lazy from assistant.audio_meter import AudioMeter
-lazy from assistant.bar_button import Divider, StatusView
-lazy from assistant.bar_geometry import OVERLAP
-lazy from assistant.bar_model import Activity, Resting, Toolbar, toolbar
 lazy from assistant.bar_status import StatusObserver
-lazy from assistant.bar_surface import Pill
-lazy from assistant.bar_weather import LocalWeather
 lazy from assistant.icons import State
-lazy from assistant.notifications import Tone
+lazy from assistant.island_layout import HEIGHT, Metrics, Placed, frame, snap
+lazy from assistant.island_model import Action, CapsuleView, Key, Marker, Observed, Spinner, island, keyboard
+lazy from assistant.island_surface import TOP, BarWindow, font
 lazy from assistant.qt_ui import EventLoop, application
 lazy from assistant.recording_state import RecordingAction, RecordingState
 lazy from assistant.shell_controls import TASKBAR_TOGGLE, TaskbarControl, WindowsKeyObserver
+lazy from assistant.ui_components.appearance import GLASS_ACCENT, look
 lazy from protocol import Tool
-lazy from winapi import appearance, shell, windows
+lazy from winapi import appearance, shell, system_notices, windows
 lazy from winapi.machine_status import Power, PowerUnavailable
 lazy from winapi.notifications import NotificationObserver
 lazy from winapi.shapes import Rect
-lazy from winapi.system_notices import Access, NoticeKey, Observed, Unavailable
 
 prepare()
 
@@ -50,8 +53,8 @@ class BarActions:
     problem: Callable[[str], None]
     inbox: Callable[[], None] = field(kw_only=True)
     tiling: Callable[[Tool, int], None] = lambda tool, hwnd: None
-    notices: Callable[[Observed], None] = lambda _: None
-    handled_notice: Callable[[NoticeKey], bool] = lambda _: False
+    notices: Callable[[system_notices.Observed], None] = lambda _: None
+    handled_notice: Callable[[system_notices.NoticeKey], bool] = lambda _: False
 
 
 @dataclass(frozen=True, slots=True)
@@ -66,6 +69,11 @@ class BarObservations:
     local_time: Callable[[], datetime] = datetime.now
 
 
+def level(value: float | None) -> float:
+    """A microphone level as a wave bar's height, on a perceptual scale."""
+    return min(1.0, math.log10(1 + max(0.0, value or 0.0) * 90) / math.log10(91))
+
+
 class DesktopBar:
     __slots__ = (
         "actions",
@@ -73,45 +81,34 @@ class DesktopBar:
         "ambient",
         "audio_meter",
         "audio_timer",
-        "canvas",
-        "capture",
         "closed",
         "controls",
-        "controls_divider",
         "current_layer",
         "errors",
+        "frost",
+        "hovered",
         "inbox",
-        "inbox_divider",
-        "keyboard",
-        "keycaps",
         "keys",
         "layout_enabled",
         "loop",
         "materials",
         "menu",
-        "menu_button",
         "next_material",
         "next_power",
         "notification_access",
         "notification_observation",
         "notification_service",
         "observations",
-        "pills",
         "power",
         "preference",
-        "record",
-        "record_stop",
         "recording",
         "sample_bounds",
-        "status",
         "status_service",
-        "stop",
+        "system",
         "taskbar",
         "timer",
-        "view",
+        "views",
         "visible",
-        "weather",
-        "weather_service",
         "window",
         "worker",
     )
@@ -134,7 +131,9 @@ class DesktopBar:
         self.recording = RecordingState()
         self.layout_enabled = True
         self.current_layer: str | None = None
-        self.view: Toolbar | None = None
+        self.inbox = 0
+        self.hovered: Key | None = None
+        self.views: tuple[CapsuleView, ...] = ()
         self.errors: queue.Queue[str] = queue.Queue()
         self.taskbar = TaskbarControl()
         self.controls: shell.AppWindow | None = None
@@ -145,65 +144,44 @@ class DesktopBar:
         self.next_material = 0.0
         self.next_power = 0.0
         self.power: Power = PowerUnavailable.UNKNOWN
-        self.weather: Weather | None = None
-        self.weather_service: LocalWeather | None = None
+        self.system = SystemStatus()
         self.status_service: StatusObserver | None = None
         self.ambient = Ambient(self.observations.local_time().strftime("%H:%M"), self.power)
         self.audio_meter: AudioMeter | None = None
         self.sample_bounds: Rect | None = None
-        self.preference: appearance.Preference = appearance.Material.SOLID
-        self.create_surfaces()
+        self.preference: appearance.Preference = self.observations.material()
+        self.frost = appearance.Frost.SMOKED
+        self.window = BarWindow(self.loop, self.press, self.hover)
+        self.menu = QtWidgets.QMenu(self.window)
         self.notification_service: NotificationObserver | None = None
-        self.notification_access = Access.UNAVAILABLE
-        self.notification_observation: Observed | None = None
-        self.timer = QtCore.QTimer(self.window)
-        self.timer.setInterval(100)
-        self.timer.timeout.connect(self.tick)
-        self.timer.start()
+        self.notification_access = system_notices.Access.UNAVAILABLE
+        self.notification_observation: system_notices.Observed | None = None
+        self.timer, self.audio_timer = self.timers()
         try:
             if audio_level is not None:
                 self.audio_meter = AudioMeter(audio_level)
             if native_shell:
                 self.notification_service = NotificationObserver()
-                self.weather_service = LocalWeather()
                 self.status_service = StatusObserver()
                 self.controls = shell.AppWindow("workspace shell controls", self.message)
                 self.keys = WindowsKeyObserver(self.controls.handle)
                 self.worker = threading.Thread(target=self.start_taskbar, name="taskbar recovery", daemon=True)
                 self.worker.start()
-            self.render(animate=self.observations.motion())
+            self.timer.start()
+            self.render()
             self.tick()
         except BaseException:
             self.close()
             raise
 
-    def create_surfaces(self) -> None:
-        self.window = Pill(self.loop, BAR_WINDOW, attached=True)
-        self.capture = Pill(self.loop, "Workspace recording controls", attached=True)
-        self.keycaps = Pill(self.loop, "Workspace keyboard mode", attached=True)
-        self.pills = (self.window, self.capture, self.keycaps)
-        # Function boundaries are menu + canvas | status + its Stop | inbox. Auxiliary
-        # capsules already mark recording/keyboard boundaries with their shape.
-        self.menu_button = self.window.button("menu", "", "Open Workspace controls", self.open_menu)
-        self.canvas = self.window.button("canvas", "", "Open your work canvas", self.actions.work)
-        self.controls_divider = Divider(self.window)
-        self.window.row.addWidget(self.controls_divider)
-        self.status = StatusView(self.window)
-        self.window.row.addWidget(self.status)
-        self.stop = self.window.button("close", "", "Stop agent work", self.actions.stop)
-        self.stop.hide()
-        self.inbox_divider = Divider(self.window)
-        self.window.row.addWidget(self.inbox_divider)
-        self.inbox_divider.hide()
-        self.inbox: QtWidgets.QToolButton = self.window.button("bell", "", "Open agent clarifications · Hold V + T", self.actions.inbox)
-        self.inbox.hide()
-        self.record = self.capture.button("mic", "", "Open canvas · Meetings are in its menu", self.actions.work)
-        self.record_stop = self.capture.button("close", "", "Stop recording", lambda: self.actions.record("stop"))
-        self.keyboard = self.keycaps.button("keyboard", "", "Current keyboard mode · open key map", self.actions.keyboard)
-        self.menu = QtWidgets.QMenu(self.window)
-        self.audio_timer = QtCore.QTimer(self.window)
-        self.audio_timer.setInterval(50)
-        self.audio_timer.timeout.connect(self.sample_audio)
+    def timers(self) -> tuple[QtCore.QTimer, QtCore.QTimer]:
+        """The 100 ms desktop observation tick, and the 50 ms microphone trace while dictating."""
+        tick, audio = QtCore.QTimer(self.window), QtCore.QTimer(self.window)
+        tick.setInterval(100)
+        tick.timeout.connect(self.tick)
+        audio.setInterval(50)
+        audio.timeout.connect(self.sample_audio)
+        return tick, audio
 
     def start_taskbar(self) -> None:
         try:
@@ -223,6 +201,28 @@ class DesktopBar:
         except OSError as error:
             self.actions.problem(str(error))
 
+    def press(self, action: Action) -> None:
+        match action:
+            case Action.OPEN_MENU:
+                self.open_menu()
+            case Action.STOP_DICTATION | Action.STOP_AGENT:
+                self.actions.stop()
+            case Action.OPEN_QUESTION | Action.OPEN_INBOX:
+                self.actions.inbox()
+            case Action.OPEN_CANVAS:
+                self.actions.work()
+            case Action.OPEN_KEYMAP:
+                self.actions.keyboard()
+            case Action.STOP_RECORDING:
+                self.actions.record("stop")
+            case _:
+                assert_never(action)
+
+    def hover(self, key: Key | None) -> None:
+        if self.hovered is not key:
+            self.hovered = key
+            self.render()
+
     def open_menu(self) -> None:
         target = self.observations.foreground()
         self.menu.clear()
@@ -233,8 +233,8 @@ class DesktopBar:
 
             self.menu.addAction(label).triggered.connect(triggered)
 
-        item("Your work feed", self.actions.agent)
         item("Your work canvas", self.actions.work)
+        item("Your work feed", self.actions.agent)
         record_action: RecordingAction = "stop" if self.recording.capturing else "start"
         item("Stop recording" if self.recording.capturing else "Record a meeting", lambda: self.actions.record(record_action))
         self.menu.addSeparator()
@@ -265,127 +265,94 @@ class DesktopBar:
             tiling.addAction(label).triggered.connect(tile_action(tool))
         self.menu.addSeparator()
         item("All Workspace controls…", self.actions.menu)
-        colors, ink = self.window.colors, self.window.ink
-        self.menu.setStyleSheet(f"""
-QMenu {{ background: {colors.surface}; color: {ink.foreground}; border: 1px solid {colors.edge};
- border-radius: 12px; padding: 6px; font: 12px 'Segoe UI'; }}
-QMenu::item {{ padding: 8px 18px; border-radius: 7px; }}
-QMenu::item:selected {{ background: rgba(150,145,180,45); }}
-QMenu::separator {{ height: 1px; background: {colors.edge}; margin: 4px 10px; }}
-""")
-        self.menu.popup(self.window.mapToGlobal(QtCore.QPoint(0, self.window.height() + 8)))
+        self.menu.setFont(font(strong=False))
+        self.menu.setStyleSheet(menu_style(self.preference))
+        anchor = self.window.capsules.get(Key.ISLAND)
+        origin = anchor.mapToGlobal(QtCore.QPoint(0, anchor.height() + 6)) if anchor is not None else self.window.mapToGlobal(QtCore.QPoint())
+        self.menu.popup(origin)
 
     def state(self, state: State) -> None:
         if self.activity != state:
             self.activity = state
-            # Content follows input immediately; only a new segment slides in.
-            self.render(animate=self.observations.motion())
+            self.render()
 
     def inbox_changed(self, count: int) -> None:
-        """Qt requires updating its live button in place, solely on this owner thread."""
-        if self.closed:
-            return
-        description = f"{count} {'clarification needs' if count == 1 else 'clarifications need'} your input · open canvas · Hold V + T"
-        if self.inbox.toolTip() == description:
-            return
-        self.inbox.setToolTip(description)
-        self.inbox.setAccessibleName(description)
-        self.inbox.setVisible(count > 0)
-        self.inbox_divider.setVisible(count > 0)
-        self.window.fit()
-        self.position()
+        if not self.closed and self.inbox != count:
+            self.inbox = count
+            self.render()
 
     def recording_changed(self, recording: RecordingState) -> None:
         if self.recording != recording:
             self.recording = recording
-            self.render(animate=self.observations.motion())
+            self.render()
 
     def layer(self, text: str | None) -> None:
         self.current_layer = text
-        self.render(animate=self.observations.motion())
+        self.render()
 
     def layout(self, *, enabled: bool) -> None:
         self.layout_enabled = enabled
-        self.render(animate=self.observations.motion())
+        self.render()
 
-    def render(self, *, animate: bool) -> None:
+    def observed(self) -> Observed:
+        return Observed(
+            self.activity, self.recording, self.ambient, self.system, self.inbox, keyboard(enabled=self.layout_enabled, layer=self.current_layer)
+        )
+
+    def render(self) -> None:
         if self.closed:
             return
-        view = toolbar(self.activity, self.recording, enabled=self.layout_enabled, layer=self.current_layer)
-        if view != self.view:
-            self.view = view
-            self.status.capture(listening=self.activity is State.LISTENING, processing=self.activity in (State.WORKING, State.AGENT))
-            match view.activity:
-                case Resting():
-                    self.status.facts(self.ambient)
-                    self.stop.hide()
-                case Activity(title=title, icon=symbol, stop=stop):
-                    self.status.facts(None)
-                    self.status.symbol = symbol
-                    if stop is None:
-                        self.stop.hide()
-                        self.status.describe(title)
-                    else:
-                        self.stop.setToolTip(stop)
-                        self.stop.setAccessibleName(stop)
-                        self.stop.show()
-                        self.status.describe(title + " · use Stop to finish")
-                case _:
-                    assert_never(view.activity)
-            if self.activity is State.LISTENING:
-                self.audio_timer.start()
-            else:
-                self.audio_timer.stop()
-            if self.audio_meter is not None:
-                self.audio_meter.listen(enabled=self.activity is State.LISTENING)
-            if view.capture is not None:
-                self.record.setToolTip(view.capture.title + " · Open canvas · Meetings are in its menu")
-                self.record.setAccessibleName(self.record.toolTip())
-                self.record_stop.setVisible(view.capture.can_stop)
-                was_recording: object = self.record.property("recording")
-                if was_recording != self.recording.capturing:
-                    self.record.setProperty("recording", self.recording.capturing)
-                    self.capture.recolor()
-            self.keyboard.setToolTip((view.keyboard or "Current keyboard mode") + " · Open key map")
-            self.keyboard.setAccessibleName(self.keyboard.toolTip())
-            for pill in self.pills:
-                pill.fit()
-        self.position()
-        now = self.observations.clock()
-        self.window.show_activity(visible=self.visible, now=now, animate=animate)
-        self.capture.show_activity(visible=self.visible and view.capture is not None, now=now, animate=animate)
-        self.keycaps.show_activity(visible=self.visible and view.keyboard is not None, now=now, animate=animate)
+        self.views = island(self.observed(), hovered=self.hovered)
+        contents = tuple(self.window.measure(view) for view in self.views)
+        width = QtGui.QGuiApplication.primaryScreen().geometry().width()
+        placed = tuple(Placed(view.key, view.zone, content.width, HEIGHT) for view, content in zip(self.views, contents, strict=True))
+        framed = frozendict((each.key, each) for each in snap(frame(placed, Metrics(width, top=TOP)), self.window.devicePixelRatioF()))
+        match self.preference:
+            case appearance.Contrast():
+                contrast = True
+            case appearance.Material.GLASS | appearance.Material.SOLID:
+                contrast = False
+            case _:
+                assert_never(self.preference)
+        self.window.present(
+            tuple(
+                (view, content, look(self.preference, self.frost, view.tint), framed[view.key])
+                for view, content in zip(self.views, contents, strict=True)
+            ),
+            contrast=contrast,
+            glass=self.preference is appearance.Material.GLASS,
+        )
+        listening = self.activity is State.LISTENING
+        if listening and not self.audio_timer.isActive():
+            self.window.samples.extend(0.0 for _ in range(len(self.window.samples)))
+            self.audio_timer.start()
+        elif not listening:
+            self.audio_timer.stop()
+        if self.audio_meter is not None:
+            self.audio_meter.listen(enabled=listening)
+        self.window.setVisible(self.visible)
         self.paint_frames()
 
-    def position(self) -> None:
-        area = QtGui.QGuiApplication.primaryScreen().geometry()
-        x = area.x() + (area.width() - self.window.width()) // 2
-        y = area.y()
-        self.window.place(x, y)
-        right = x + self.window.width() - OVERLAP
-        left = x - self.keycaps.attached_width() + OVERLAP
-        fits_capture = right + self.capture.attached_width() <= area.right() - 12
-        fits_keyboard = left >= area.left() + 12
-        self.capture.attach(attached=fits_capture)
-        self.keycaps.attach(attached=fits_keyboard)
-        capture = fits_capture and (self.capture.presented or self.capture.alpha > 0)
-        keyboard = fits_keyboard and (self.keycaps.presented or self.keycaps.alpha > 0)
-        self.window.connections(left=keyboard, right=capture)
-        self.capture.connections(left=capture)
-        self.keycaps.connections(right=keyboard)
-        self.capture.place(right if fits_capture else x, y if fits_capture else y + self.window.height() + 6, origin=y)
-        self.keycaps.place(left if fits_keyboard else x, y if fits_keyboard else y + self.window.height() + 6, origin=y)
+    def spinning(self) -> bool:
+        def spinner(part: object) -> bool:
+            match part:
+                case Spinner():
+                    return True
+                case _:
+                    return False
+
+        return any(spinner(part) for view in self.views for slot in view.slots for part in slot)
 
     def paint_frames(self) -> None:
         if self.closed:
             return
-        now = self.observations.clock()
-        advancing = tuple(pill for pill in self.pills if pill.alpha != pill.fade_to)
-        moving = tuple(pill.advance(now) for pill in advancing)
-        spinning = self.status.pulse(now, animate=self.visible and self.observations.motion())
-        if advancing:
-            self.position()
-        self.loop.watch(visible=any(moving) or spinning)
+        animate = self.visible and self.observations.motion() and self.spinning()
+        self.window.spin_angle = (90 - self.observations.clock() * 300) % 360 if animate else 90.0
+        if self.spinning():
+            for key, capsule in self.window.capsules.items():
+                if key in (Key.ISLAND, Key.AGENT):
+                    capsule.update()
+        self.loop.watch(visible=animate)
 
     def tick(self) -> None:
         if self.closed:
@@ -401,57 +368,28 @@ QMenu::separator {{ height: 1px; background: {colors.edge}; margin: 4px 10px; }}
         if now >= self.next_power:
             self.next_power = now + 15
             self.power = self.observations.power()
-        if self.weather_service is not None:
-            with suppress(queue.Empty):
-                self.weather = self.weather_service.results.get_nowait()
         if self.status_service is not None:
             with suppress(queue.Empty):
-                system = self.status_service.results.get_nowait()
-                if system != self.status.system:
-                    self.status.system_changed(system)
-                    self.window.fit()
-        ambient = Ambient(self.observations.local_time().strftime("%H:%M"), self.power, self.weather)
-        if ambient != self.ambient:
-            self.ambient = ambient
-            match self.view.activity if self.view is not None else None:
-                case Resting():
-                    self.status.facts(ambient)
-                    self.window.fit()
-                case Activity() | None:
-                    pass
-        visible_bounds = tuple(pill.bounds for pill in self.pills if pill.isVisible() and pill.bounds is not None)
-        self.sample_bounds = (
-            Rect(
-                min(rect.left for rect in visible_bounds),
-                min(rect.top for rect in visible_bounds),
-                max(rect.right for rect in visible_bounds),
-                max(rect.bottom for rect in visible_bounds),
-            )
-            if visible_bounds
-            else None
-        )
-        # Sample outside the entire group: adjacent glass must not darken its neighbor.
+                self.system = self.status_service.results.get_nowait()
+        self.ambient = Ambient(self.observations.local_time().strftime("%H:%M"), self.power)
+        self.sample_bounds = self.window.bounds(Key.ISLAND)
+        # Small glass takes its scheme from the desktop beside the island.
         for sample in self.materials.read():
             if sample.bounds == self.sample_bounds:
-                for pill in self.pills:
-                    pill.frost = sample.frost
+                self.frost = sample.frost
         if now >= self.next_material:
             self.next_material = now + 0.75
             self.preference = self.observations.material()
             if self.preference is appearance.Material.GLASS and self.sample_bounds is not None:
                 self.materials.submit((self.sample_bounds,))
-        if self.view is not None:
-            for pill, tone in ((self.window, self.view.activity.tone), (self.capture, Tone.RECORDING), (self.keycaps, Tone.REPLY)):
-                pill.material(tone, self.preference)
-        self.position()
+        # Each tick re-measures, so a growing timer pushes its neighbours out.
+        self.render()
 
-        self.paint_frames()
-
-    def dismiss_notification(self, key: NoticeKey) -> None:
+    def dismiss_notification(self, key: system_notices.NoticeKey) -> None:
         if not self.actions.handled_notice(key):
             self.remove_notification(key)
 
-    def remove_notification(self, key: NoticeKey) -> None:
+    def remove_notification(self, key: system_notices.NoticeKey) -> None:
         if self.notification_service is not None:
             self.notification_service.dismiss(key)
 
@@ -463,16 +401,19 @@ QMenu::separator {{ height: 1px; background: {colors.edge}; margin: 4px 10px; }}
             with suppress(queue.Empty):
                 observed = self.notification_service.results.get_nowait()
                 match observed:
-                    case Observed():
-                        self.notification_access = Access.ALLOWED
+                    case system_notices.Observed():
+                        self.notification_access = system_notices.Access.ALLOWED
                         self.notification_observation = observed
                         self.actions.notices(observed)
-                    case Unavailable(access=access):
+                    case system_notices.Unavailable(access=access):
                         self.notification_access = access
 
     def sample_audio(self) -> None:
         if not self.closed and self.activity is State.LISTENING:
-            self.status.observe(self.audio_meter.level() if self.audio_meter is not None else None)
+            self.window.samples.append(level(self.audio_meter.level() if self.audio_meter is not None else None))
+            capsule = self.window.capsules.get(Key.ISLAND)
+            if capsule is not None and any(Marker.WAVE in slot for view in self.views for slot in view.slots):
+                capsule.update()
 
     def close(self) -> None:
         if self.closed:
@@ -482,8 +423,6 @@ QMenu::separator {{ height: 1px; background: {colors.edge}; margin: 4px 10px; }}
         self.audio_timer.stop()
         if self.audio_meter is not None:
             self.audio_meter.close()
-        if self.weather_service is not None:
-            self.weather_service.close()
         if self.status_service is not None:
             self.status_service.close()
         self.menu.close()
@@ -499,6 +438,22 @@ QMenu::separator {{ height: 1px; background: {colors.edge}; margin: 4px 10px; }}
         finally:
             if self.controls is not None:
                 self.controls.destroy()
-            for pill in self.pills:
-                pill.dispose()
+            self.window.dispose()
             self.loop.close()
+
+
+def menu_style(preference: appearance.Preference) -> str:
+    """The controls menu stays a solid Qt menu until it becomes the island's expansion."""
+    match preference:
+        case appearance.Contrast(background=background, foreground=foreground):
+            surface, ink, edge, selected = background, foreground, foreground, foreground
+        case appearance.Material.GLASS | appearance.Material.SOLID:
+            surface, ink, edge, selected = "#26262a", "rgba(255,255,255,240)", "rgba(255,255,255,24)", GLASS_ACCENT
+        case _:
+            assert_never(preference)
+    return f"""
+QMenu {{ background: {surface}; color: {ink}; border: 1px solid {edge}; border-radius: 12px; padding: 5px; }}
+QMenu::item {{ padding: 6px 16px; border-radius: 7px; }}
+QMenu::item:selected {{ background: {selected}; color: #ffffff; }}
+QMenu::separator {{ height: 1px; background: {edge}; margin: 4px 10px; }}
+"""

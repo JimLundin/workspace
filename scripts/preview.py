@@ -126,8 +126,7 @@ class Preview:
                 )
                 self.bar = PreviewBar(actions, native_shell=False)
                 self.bar.visible = True
-                for index, pill in enumerate(self.bar.pills):
-                    pill.setWindowTitle(f"Workspace preview toolbar {index}")
+                self.bar.window.setWindowTitle("Workspace preview toolbar")
             try:
                 choice = CHOICE.validate_json(files.state.read_bytes())
             except OSError, ValidationError:

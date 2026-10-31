@@ -42,8 +42,8 @@ Watchdog's stubs expose its consumed event fields and observer lifecycle. The
 handler protocol records the actual dispatch call used by the native observer;
 Workspace owns filtering, batching, check sequencing and preview shutdown.
 
-The win32more stubs cover the consumed desktop-composition, dispatcher and
-Direct2D calls from the pinned 0.8.7 core and Windows SDK packages. The generated
+The win32more stubs cover the consumed desktop-composition and dispatcher
+calls from the pinned 0.8.7 core and Windows SDK packages. The generated
 COM wrappers inherit `ComPtr`; their mixin properties do not imply Python
 inheritance between native visual/geometry classes. Pointer output annotations
 describe the SDK's concrete COM pointer conversion and callback ABI. Workspace
@@ -52,8 +52,7 @@ Unknown external observations remain `object` until validated, with no `Any`,
 casts or checker suppressions in the composition logic. These stubs retain the
 native API names; runtime still loads the installed dependency.
 
-Geolocation declarations cover access requests and the consumed coordinate
-fields. COM output slots carry their concrete pointer payload; ctypes prototypes
+COM output slots carry their concrete pointer payload; ctypes prototypes
 preserve scalar results through `winapi._core.NativeFunction`. Structure fields
 are explicitly declared at their effect owners. Stubs describe native contracts;
 Workspace validates nullable pointers and unknown external values before use.

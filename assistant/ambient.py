@@ -1,8 +1,7 @@
 """Validated observations for the toolbar's quiet resting presentation."""
 
-import math
-from dataclasses import dataclass, field
-from typing import Literal, assert_never
+from dataclasses import dataclass
+from typing import assert_never
 
 from winapi.machine_status import Battery, Power, PowerUnavailable, Speakers, Wifi
 
@@ -25,41 +24,10 @@ class SystemStatus:
         return ". ".join(value for value in observations if value)
 
 
-type WeatherIcon = Literal["sun", "moon", "cloud", "rain", "snow", "storm"]
-
-
-@dataclass(frozen=True, slots=True)
-class Weather:
-    celsius: float
-    code: int
-    daytime: bool = field(kw_only=True)
-
-    def __post_init__(self) -> None:
-        if not math.isfinite(self.celsius) or not -100 <= self.celsius <= 70 or not 0 <= self.code <= 99:
-            raise ValueError("Invalid weather observation.")
-
-    @property
-    def icon(self) -> WeatherIcon:
-        if self.code == 0:
-            return "sun" if self.daytime else "moon"
-        if self.code >= 95:
-            return "storm"
-        if self.code in (71, 73, 75, 77, 85, 86):
-            return "snow"
-        if self.code >= 51:
-            return "rain"
-        return "cloud"
-
-    @property
-    def text(self) -> str:
-        return f"{round(self.celsius)}°"
-
-
 @dataclass(frozen=True, slots=True)
 class Ambient:
     clock: str
     power: Power
-    weather: Weather | None = None
 
     @property
     def battery_text(self) -> str:
@@ -77,5 +45,5 @@ class Ambient:
 
     @property
     def text(self) -> str:
-        facts = (self.clock, self.battery_text, self.weather.text if self.weather is not None else "")
+        facts = (self.clock, self.battery_text)
         return "  ·  ".join(value for value in facts if value)

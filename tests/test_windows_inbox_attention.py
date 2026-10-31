@@ -11,11 +11,14 @@ if sys.platform != "win32":
     raise unittest.SkipTest("Windows toolbar inbox attention")
 
 lazy from PySide6 import QtCore, QtWidgets
+lazy from PySide6.QtTest import QTest
 
 from assistant.agent_toasts import AgentToasts
 from assistant.agent_window import AgentWindow
 from assistant.communications import Feed, WindowsNotice
 from assistant.desktop_bar import BarActions, DesktopBar
+from assistant.island_model import Key
+from assistant.island_surface import TOP, Capsule
 from assistant.notification_sources import NOTIFICATION_STATE
 from assistant.qt_runtime import prepare
 from assistant.qt_ui import application
@@ -85,6 +88,12 @@ class InboxUi(Ui):
         self.pump()
 
 
+def waiting(bar: DesktopBar) -> Capsule | None:
+    """The inbox capsule while it is shown."""
+    capsule = bar.window.capsules.get(Key.INBOX)
+    return capsule if capsule is not None and capsule.isVisibleTo(bar.window) else None
+
+
 def accept_answer(answer: Reply) -> bool:
     return True
 
@@ -110,30 +119,21 @@ def test_bell_opens_inbox_keeps_exact_accessible_count_and_survives_activity(tmp
     )
     bar = DesktopBar(actions, native_shell=False)
     try:
-        # Exercise the rendered toolbar while keeping native observers disabled.
-        # Hidden Qt windows defer resize layout when activity removes the Stop button.
-        bar.visible = True
-        bar.render(animate=False)
-        width = bar.window.width()
-        assert bar.inbox.isHidden()
+        assert waiting(bar) is None
         bar.inbox_changed(1)
-        assert not bar.inbox.isHidden() and not bar.inbox.text()
-        assert "1 clarification needs" in bar.inbox.accessibleName()
-        assert "Hold V + T" in bar.inbox.toolTip()
-        assert bar.window.width() > width
-        bar.inbox.click()
+        capsule = waiting(bar)
+        assert capsule is not None and "1 clarification needs" in capsule.accessibleName() and "Hold V + T" in capsule.toolTip()
+        QTest.mouseClick(capsule, QtCore.Qt.MouseButton.LeftButton, pos=QtCore.QPoint(17, TOP + 17))
         assert invoked == ("inbox",) and not bar.menu.isVisible()
         for state in (assistant.icons.State.AGENT, assistant.icons.State.LISTENING, assistant.icons.State.WORKING):
             bar.state(state)
-            assert not bar.inbox.isHidden()
-            assert bar.inbox.geometry().right() < bar.window.width()
+            assert waiting(bar) is capsule
         bar.state(assistant.icons.State.READY)
         bar.inbox_changed(137)
-        assert not bar.inbox.text() and "137 clarifications need" in bar.inbox.toolTip()
-        assert "137 clarifications need" in bar.inbox.accessibleName()
-        bar.window.grab().save(str(tmp_path / "workspace-toolbar-bell.png"))
+        assert "137 clarifications need" in capsule.accessibleName()
+        capsule.grab().save(str(tmp_path / "workspace-island-inbox.png"))
         bar.inbox_changed(0)
-        assert bar.inbox.isHidden() and bar.window.width() == width
+        assert waiting(bar) is None
         bar.close()
         # A late publication must return safely after native widgets are destroyed.
         bar.inbox_changed(1)
@@ -155,15 +155,15 @@ def test_app_context_stays_quiet_and_only_agent_questions_change_toolbar_attenti
         )
         ui.system_notices(Observed((Notice(NoticeKey(11, 100), "mail", "Outlook", "Review", "Budget review"),)))
         ui.pump()
-        assert ui.bar.inbox.isHidden()
+        assert waiting(ui.bar) is None
         agent = ui.agent(lambda: None, reveal=False)
         agent.request_input(asked("owned", "Which sheet?", "", 3), accept_answer)
         ui.pump()
-        assert not ui.bar.inbox.text() and not ui.bar.inbox.isHidden()
-        assert "1 clarification needs" in ui.bar.inbox.accessibleName()
+        capsule = waiting(ui.bar)
+        assert capsule is not None and "1 clarification needs" in capsule.accessibleName()
         assert agent.respond("owned", TextAnswer("Revenue"))
         ui.pump()
-        assert ui.bar.inbox.isHidden()
+        assert waiting(ui.bar) is None
     finally:
         ui.dispose()
         app.setStyleSheet(original_style)
