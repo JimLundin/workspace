@@ -356,15 +356,6 @@
       "key": {
         "rule": "PLR0913",
         "path": "assistant/meeting_followup.py",
-        "scope": "_array",
-        "signature": "fa5284b676a4cf95b019900b4d5f8eb74936d97b69be1e30478717d2c0670740"
-      },
-      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
-    },
-    {
-      "key": {
-        "rule": "PLR0913",
-        "path": "assistant/meeting_followup.py",
         "scope": "_header",
         "signature": "284b35612693d54395864370cb78c67ae88a88491fa49aa7e810fdb376f13426"
       },
@@ -394,33 +385,6 @@
         "path": "assistant/meeting_followup.py",
         "scope": "resolve_citation",
         "signature": "609aad0e1910944b3c360801812c12972f2992b079e51217eaf51c4f68493c97"
-      },
-      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
-    },
-    {
-      "key": {
-        "rule": "PLR0913",
-        "path": "assistant/meeting_followup_store.py",
-        "scope": "FollowupStore._edit",
-        "signature": "9f1e9e1b7f2179fd5c4a49d2ccdd70c465161de0a2b5b868e151b2a6ab45374b"
-      },
-      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
-    },
-    {
-      "key": {
-        "rule": "PLR0913",
-        "path": "assistant/meeting_followup_store.py",
-        "scope": "FollowupStore._edit_directory",
-        "signature": "11e4ebcc887975cd3f776d3efd7dca3fa5ba1b6d64ca06ad4b5d6b0b8a103d9d"
-      },
-      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
-    },
-    {
-      "key": {
-        "rule": "PLR0913",
-        "path": "assistant/meeting_followup_store.py",
-        "scope": "FollowupStore._save",
-        "signature": "b9d856ca31a63cd8d871300d43e2c39422942dfee66b6aabca37d19eba925c91"
       },
       "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
     },
@@ -871,15 +835,6 @@
         "path": "automation/store.py",
         "scope": "TaskStore.submit",
         "signature": "02f800592eb563c53cd362715bf1f28029b4fbbfe2adcb48ed1d98b06dc210ca"
-      },
-      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
-    },
-    {
-      "key": {
-        "rule": "PLR0913",
-        "path": "automation/store.py",
-        "scope": "_strings",
-        "signature": "d9c139a41925efbd5e3267d20e1f6bfff1d79936cf6088271250162b0470bf4c"
       },
       "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
     },
