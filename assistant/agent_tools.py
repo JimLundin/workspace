@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 from enum import Enum, auto
 from typing import Final, Protocol
 
-from pydantic import ConfigDict, TypeAdapter
+from pydantic import ConfigDict, TypeAdapter, ValidationError
 
 from assistant.geometry import Shot
 from assistant.llm import Json, ToolSpec
@@ -87,6 +87,12 @@ class Output:
 
 class ArgumentError(Exception):
     pass
+
+
+def rejected(tool: str, error: ValidationError) -> ArgumentError:
+    """A tool seam's validation failure, phrased for the model by argument name."""
+    problems = "; ".join(f"{'.'.join(str(part) for part in item['loc']) or 'arguments'}: {item['msg']}" for item in error.errors())
+    return ArgumentError(f"{tool} arguments are invalid: {problems}.")
 
 
 @dataclass(frozen=True, slots=True)

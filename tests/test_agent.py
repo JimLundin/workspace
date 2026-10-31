@@ -492,7 +492,7 @@ def test_every_call_gets_a_result_even_bad_ones(tmp_path: Path) -> None:
     with fake_endpoint() as endpoint:
         rig = Rig(endpoint, calls(("no_such_tool", {}), ("read_file", {})), says("Sorry."), work=durable(tmp_path))
         rig.run()
-        assert "Error: read_file needs path (text)." in rig.results()
+        assert "Error: read_file arguments are invalid: path: Field required." in rig.results()
         assert any("no_such_tool" in result for result in rig.results())
 
 

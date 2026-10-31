@@ -10,8 +10,11 @@ from assistant.agent import Agent
 from assistant.agent_toolsets import General
 from assistant.geometry import Shot
 from assistant.llm import Json, Settings, ToolCall
+from automation.actions import Resources
+from automation.execution import WorkExecution
 from tests.fake_endpoint import fake_endpoint
-from tests.test_agent import FakeMachine, FakeWindow, Rig, calls, durable, says
+from tests.test_agent import FakeMachine, FakeWindow, Rig, ToolRig, calls, durable, says
+from tests.test_work_actions import claimed
 from winapi.shapes import Rect, Window
 
 
@@ -182,3 +185,25 @@ def test_context_tool_refreshes_the_current_app_without_taking_a_screenshot(tmp_
     assert "Report.docx - Word" in call(agent, "get_context", {})
     assert "Report.docx" not in json.dumps(journal)
     assert not machine.log
+
+
+def test_invalid_desktop_arguments_never_reach_approval_or_the_journal(tmp_path: Path) -> None:
+    # Defect: a malformed call is approved, recorded as an attempted change, or
+    # reaches the machine before its arguments are validated at the tool seam.
+    store, claim, clock = claimed(tmp_path)
+    rig = ToolRig(approvals=True, work=WorkExecution(claim, store, Resources(), clock=clock))
+    invalid: tuple[tuple[str, dict[str, Json]], ...] = (
+        ("write_file", {"path": "note.txt"}),
+        ("manage_window", {"handle": 7, "action": "explode"}),
+        ("manage_window", {"handle": 7, "action": "move", "x": 0, "y": 0}),
+        ("press_keys", {"keys": "enter", "repeat": 51}),
+        ("ui_action", {"handle": 7, "id": "1.2", "action": "set_value"}),
+        ("run_powershell", {"command": "dir", "timeout_seconds": "60"}),
+        ("screenshot", {"handle": 7, "monitor": 1}),
+        ("type_text", {"text": 5}),
+    )
+    for name, arguments in invalid:
+        result = rig.call(name, **arguments)
+        # Approval mode would suspend the task on any reviewed operation.
+        assert not result.ok and result.text.startswith("Error:") and rig.agent.work.disposition is None, (name, result.text)
+    assert not store.actions(claim.task.id) and not rig.machine.log

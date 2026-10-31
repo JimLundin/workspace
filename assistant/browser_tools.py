@@ -10,7 +10,7 @@ from typing import Annotated, Final, Literal
 
 from pydantic import Field, TypeAdapter, ValidationError
 
-from assistant.agent_tools import DECLINED, Args, Display, Output, Session, Tool
+from assistant.agent_tools import DECLINED, Args, Display, Output, Session, Tool, rejected
 from assistant.browser_requests import (
     Activate,
     Attach,
@@ -392,7 +392,10 @@ class Browser:
                 return Tool(declared.spec, lambda args: self.browse(declared, args), classify, Display.PRIVATE)
 
     def browse(self, declared: BrowserTool, args: Args) -> Output:
-        request = declared.parse(args.payload)
+        try:
+            request = declared.parse(args.payload)
+        except ValidationError as error:
+            raise rejected(args.tool, error) from error
         match _classify(declared)(args.values):
             case Change() if not self.session.approve(
                 args.operation,
