@@ -129,6 +129,11 @@ _PRESENTED = (
 )
 
 
+def _remaining(deadline: float) -> float:
+    """Probes share their operation's budget; one hung probe cannot overrun it."""
+    return max(0.001, deadline - time.monotonic())
+
+
 def _dumped[T](shape: TypeAdapter[T], value: T) -> str:
     return shape.dump_json(value, exclude_none=True).decode()
 
@@ -325,8 +330,8 @@ class Browser:
         self._reset_capture(session, cancel)
         return decoded(_CAPTURE, result, "Edge returned an invalid or oversized viewport image.")
 
-    def _frames(self, session: str, cancel: threading.Event) -> FrameTree:
-        reply = self._call("Page.getFrameTree", {}, cancel, session=session)
+    def _frames(self, session: str, cancel: threading.Event, *, timeout: float = 15) -> FrameTree:
+        reply = self._call("Page.getFrameTree", {}, cancel, session=session, timeout=timeout)
         return decoded(_FRAME_TREE, reply, "The browser did not describe the page's frames.").tree
 
     def _world(self, session: str, frame: str, cancel: threading.Event) -> tuple[int, FrameTree]:
@@ -445,15 +450,28 @@ class Browser:
         if visible:
             message = "Sign in in the separate Edge window. After the user finishes, browser_open resumes background work with this profile."
             return BrowserResult(_dumped(_SIGN_IN, SignInPage(target, url, message)))
+        return self._settle(target, navigation, cancel)
+
+    def _settle(self, target: str, navigation: Navigated, cancel: threading.Event) -> BrowserResult:
+        """Snapshot the navigated page once its main document is ready, within one budget."""
+        session = self.sessions[target]
         deadline = time.monotonic() + 15
         while time.monotonic() < deadline:
             if cancel.wait(0.1):
                 raise InterruptedError("Stopped while navigating. The page may already have loaded.")
             try:
-                context, tree = self._world(session, "", cancel)
+                tree = self._frames(session, cancel, timeout=_remaining(deadline))
                 if navigation.loader_id and tree.frame.loader_id != navigation.loader_id:
                     continue
-                if self._evaluate("document.readyState", session, context, cancel) in ("interactive", "complete"):
+                world = self._call(
+                    "Page.createIsolatedWorld",
+                    {"frameId": tree.frame.id, "worldName": "workspace"},
+                    cancel,
+                    session=session,
+                    timeout=_remaining(deadline),
+                )
+                context = decoded(_WORLD, world, "The browser did not create the page's script world.").context
+                if self._evaluate("document.readyState", session, context, cancel, timeout=_remaining(deadline)) in ("interactive", "complete"):
                     return self._snapshot(PageSnapshot(target), cancel)
             except InterruptedError:
                 raise
