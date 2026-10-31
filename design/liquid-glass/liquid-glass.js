@@ -6,7 +6,8 @@
 
    It loads every component in tier order, so each file only uses what earlier tiers
    define. Classic scripts, no modules: pages work from disk and inside web views.
-   LiquidGlass.ready resolves once every element is defined.
+   LiquidGlass.ready resolves once every element is defined and the kit's typeface has
+   loaded, so first measurements use the right font.
 
    Adding a component: add its script here and its stylesheet in liquid-glass.css. */
 (() => {
@@ -27,7 +28,10 @@
       const script = document.createElement("script");
       script.src = base + file;
       script.async = false;  // dynamically inserted scripts then run in insertion order
-      script.onload = () => { if (--pending === 0) resolve(LG); };
+      script.onload = () => {
+        if (--pending) return;
+        Promise.all(["500 12px", "600 14px"].map(f => document.fonts.load(`${f} "LG Inter"`))).catch(() => {}).then(() => resolve(LG));
+      };
       script.onerror = () => reject(new Error(`Liquid Glass couldn't load ${file}`));
       document.head.append(script);
     }

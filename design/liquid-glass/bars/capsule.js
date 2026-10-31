@@ -51,8 +51,9 @@
         el.style.filter = v < 0.98 ? `blur(${(1 - clamp(v, 0, 1)) * 6}px)` : "";
       }, motion.appear);
       this.h = null;
-      // Content that changes its own size (a timer gaining a digit) asks the capsule to re-measure.
-      el.addEventListener("lg-resize", () => this.refit());
+      // The capsule follows its content's real width whenever it changes: a timer gaining a
+      // digit, a font arriving after first paint, a label changing in place.
+      this.sizer = new ResizeObserver(() => this.refit());
     }
 
     set(view, { instant = false } = {}) {
@@ -71,6 +72,7 @@
       this.markup = html + kind;
       this.kind = kind;
       const old = this.current();
+      if (old) this.sizer.unobserve(old);
       const next = document.createElement("div");
       next.className = `lg-content ${kind}`;
       next.innerHTML = html;
@@ -94,20 +96,18 @@
       }
       if (instant || !this.width) this.w.set(w); else this.w.to(w);
       this.width = w;
+      if (kind !== "lg-expanded") this.sizer.observe(next);
       return next;
     }
 
     current() { return LG.$(":scope > .lg-content:not(.lg-leaving)", this.el); }
 
-    // Re-measure the live content in place, without replacing it.
+    // Follow the live content's width without replacing it.
     refit() {
       const content = this.current();
       if (!content || this.kind === "lg-expanded") return;
-      const { right } = content.style;
-      content.style.right = "auto";
       const w = content.offsetWidth;  // layout width: transforms and presses don't change it
-      content.style.right = right;
-      if (w !== this.width) { this.width = w; this.w.to(w); }
+      if (w && w !== this.width) { this.width = w; this.w.to(w); }
     }
 
     show(visible, { instant = false } = {}) {

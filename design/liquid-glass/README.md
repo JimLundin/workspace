@@ -138,8 +138,8 @@ share a pair: `atoms/indicators.*` holds the spinner, dot and waveform.
   the island acts on what it shows.
 - **Text never reflows mid-morph.** Expanded content lays out at its final size
   and the growing capsule reveals it. Leaving content keeps its size while it
-  fades. Content that grows by itself, such as a timer gaining a digit, asks
-  its capsule to re-measure.
+  fades. A capsule follows its content's real width as it changes, whether a
+  timer gains a digit or a font arrives after first paint.
 - **Scroll bars** follow macOS overlay scroll bars: hidden at rest, shown while
   content moves, faded 0.9 s after it stops, thicker on hover, draggable, with
   a track that pages. Edges fade only when content lies beyond them.

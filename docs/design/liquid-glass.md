@@ -327,7 +327,8 @@ Rules that became explicit while building it:
 - *Rim light follows the tint.* On tinted glass the rim fades to a faint return
   at the trailing foot instead of a white glare.
 - *Text never reflows mid-morph.* Expanded content lays out at its final size,
-  and content that grows by itself asks its capsule to re-measure.
+  and a capsule follows its content's width whenever it changes, so a growing
+  timer or a late font pushes its neighbours out instead of overlapping them.
 
 ## What ports to Qt on Windows
 
