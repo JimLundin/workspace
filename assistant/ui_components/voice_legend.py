@@ -1,11 +1,10 @@
 """A compact microphone and physical key legend, with instructions in its tooltip."""
 
-lazy from PySide6 import QtCore, QtWidgets
+lazy from PySide6 import QtGui, QtWidgets
 lazy from PySide6.QtCore import Qt
 
-from assistant.ui_components.appearance import ACCENT
-from assistant.ui_components.widgets import row
-from assistant.vector_icons import icon
+from assistant.ui_components.appearance import MICROPHONE, Shade, scheme, tokens
+from assistant.ui_components.widgets import glyph, row
 
 
 class VoiceLegend(QtWidgets.QFrame):
@@ -14,26 +13,30 @@ class VoiceLegend(QtWidgets.QFrame):
     def __init__(self, key: str) -> None:
         super().__init__()
         self.pressed: bool = False
+        theme = tokens(scheme())
+        self.resting: QtGui.QPixmap = glyph("mic", theme.ink2)
+        self.live: QtGui.QPixmap = glyph("mic.fill", Shade(MICROPHONE))
         self.setObjectName("voiceLegend")
         self.setAccessibleName("Speak to agent · " + key)
         self.setFixedHeight(32)
         layout = row(self)
-        layout.setContentsMargins(7, 0, 7, 0)
+        layout.setContentsMargins(8, 0, 6, 0)
         layout.setSpacing(7)
         self.microphone: QtWidgets.QLabel = QtWidgets.QLabel(self)
-        self.microphone.setPixmap(icon("mic", ACCENT).pixmap(QtCore.QSize(16, 16)))
+        self.microphone.setPixmap(self.resting)
         self.microphone.setFixedSize(16, 16)
         self.keycap: QtWidgets.QLabel = QtWidgets.QLabel(key, self)
         self.keycap.setObjectName("voiceKeycap")
         self.keycap.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.keycap.setFixedSize(22, 22)
+        # A capsule from the kit: quiet at rest; while held, the microphone's privacy amber.
         self.setStyleSheet(
-            "QFrame#voiceLegend { border: 1px solid transparent; border-radius: 8px; }"
-            'QFrame#voiceLegend[pressed="true"] { background: #49345e; border-color: #956cbf; }'
-            "QLabel#voiceKeycap { color: #e6d8fa; background: #332a40; border: 1px solid #6e5b85; "
-            "border-bottom: 2px solid #6e5b85; border-radius: 5px; font-size: 11px; font-weight: 600; }"
-            'QLabel#voiceKeycap[pressed="true"] { color: #24132e; background: #d7b4ff; '
-            "border-color: #ebd8ff; border-bottom-width: 1px; padding-top: 1px; }"
+            "QFrame#voiceLegend { border: none; border-radius: 16px; background: transparent; }"
+            f'QFrame#voiceLegend[pressed="true"] {{ background: {Shade(MICROPHONE, 0.16).css}; }}'
+            f"QLabel#voiceKeycap {{ color: {theme.ink2.css}; background: {theme.fill.css}; border: 1px solid {theme.separator.css}; "
+            f"border-bottom: 2px solid {theme.separator.css}; border-radius: 6px; font-size: 11px; font-weight: 600; }}"
+            f'QLabel#voiceKeycap[pressed="true"] {{ color: #1c1c1e; background: {MICROPHONE}; '
+            f"border-color: {MICROPHONE}; border-bottom-width: 1px; padding-top: 1px; }}"
         )
         layout.addWidget(self.microphone)
         layout.addWidget(self.keycap)
@@ -49,5 +52,5 @@ class VoiceLegend(QtWidgets.QFrame):
             widget.style().unpolish(widget)
             widget.style().polish(widget)
             widget.update()
-        self.microphone.setPixmap(icon("mic", "#ebd8ff" if pressed else ACCENT).pixmap(QtCore.QSize(16, 16)))
+        self.microphone.setPixmap(self.live if pressed else self.resting)
         self.setAccessibleDescription("Listening to agent speech" if pressed else "Hold the key to speak; release to send")
