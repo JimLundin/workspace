@@ -267,6 +267,25 @@ redundant checks and equivalent behavior before adding tests. Keep reports in
 Temp; test setup should batch large fixture catalogs instead of repeating
 already-covered creation transactions.
 
+To seed exact mutants instead, list them in a TOML file and pass
+`--replacements`. Each `before` fragment must match the source exactly once.
+Use literal strings (`'...'`, or `'''...'''` across lines, which drops a
+newline right after the opening delimiter), so quotes and backslashes reach
+the runner unchanged:
+
+```toml
+[[replacement]]
+before = 'return "uncertain"'
+after = 'return "verified"'
+```
+
+```powershell
+.\Dev.cmd mutate assistant/action_text.py --replacements "$env:TEMP\seeds.toml" --tests tests/test_action_text.py --output "$env:TEMP\workspace-mutations.json"
+```
+
+Fragments never travel on the command line: Windows quoting through `Dev.cmd`
+and PowerShell strips embedded double quotes.
+
 ## Source deployment
 
 The coordinator creates a fresh `workspace-source-*` directory in Windows Temp.
