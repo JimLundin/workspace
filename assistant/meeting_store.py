@@ -16,7 +16,8 @@ from typing import Final, Protocol
 
 from assistant.llm import RATE
 from assistant.pcm import quiet_tail
-from assistant.recording_state import AudioSource, Batch, StoredState, duration, source_name
+from assistant.recording_state import Batch, StoredState, duration, source_name
+from automation.capture import AudioSource
 
 MAX_PENDING_BYTES: Final = 256 * 1024 * 1024
 MIN_CHUNK_SECONDS: Final = 20

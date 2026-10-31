@@ -13,7 +13,8 @@ from unittest import TestCase
 from assistant.llm import RATE, Failure
 from assistant.meeting_store import BacklogFullError, MeetingArchive, MeetingStore
 from assistant.meetings import Meetings
-from assistant.recording_state import AudioSource, RecordingState, RetryPolicy
+from assistant.recording_state import RecordingState, RetryPolicy
+from automation.capture import AudioSource
 from tests.fake_endpoint import Received, Reply, fake_endpoint
 from tests.test_llm import settings
 

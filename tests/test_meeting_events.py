@@ -10,7 +10,8 @@ from unittest import TestCase
 from assistant.meeting_events import TranscriptEvents
 from assistant.meeting_store import MeetingArchive, MeetingStore
 from assistant.meetings import Meetings
-from assistant.recording_state import AudioSource, RecordingState
+from assistant.recording_state import RecordingState
+from automation.capture import AudioSource
 from automation.routines import MEETING_NOTES_ID, RoutineStore, TranscriptReady
 from automation.store import TaskStore
 from automation.task import RoutineSource
