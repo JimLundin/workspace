@@ -29,9 +29,10 @@
 
   /* Capsule: a glass shape whose size springs between contents while the content
      cross-fades and materializes. Entering and leaving capsules grow from and collapse
-     to nothing, so neighbours slide rather than jump. */
+     to nothing, so neighbours slide rather than jump. Its presence (0 to 1, in
+     .size.p) is reported through onPresence, so the container can space neighbours. */
   class Capsule {
-    constructor(el) {
+    constructor(el, { onPresence = () => {} } = {}) {
       this.el = el;
       this.markup = null;
       this.width = 0;
@@ -42,13 +43,10 @@
       this.w = new Spring(0, v => { this.size.w = v; fit(); }, motion.morph);
       this.p = new Spring(this.size.p, v => {
         this.size.p = v; fit();
-        let prev = el.previousElementSibling;
-        while (prev && prev.hidden) prev = prev.previousElementSibling;
-        const gap = parseFloat(getComputedStyle(el.parentElement).getPropertyValue("--lg-gap")) || 6;
         el.style.opacity = clamp(v * 1.6, 0, 1);
         el.style.transform = `scale(${0.6 + 0.4 * clamp(v, 0, 1.2)})`;
-        el.style.marginLeft = prev ? `${gap * clamp(v, 0, 1)}px` : "0px";
         el.style.filter = v < 0.98 ? `blur(${(1 - clamp(v, 0, 1)) * 6}px)` : "";
+        onPresence();
       }, motion.appear);
       this.h = null;
       // The capsule follows its content's real width whenever it changes: a timer gaining a
@@ -114,7 +112,7 @@
       if (this.shown === visible) return;
       this.shown = visible;
       if (visible) { this.el.hidden = false; instant ? this.p.set(1) : this.p.to(1, { damping: 0.78 }); }
-      else this.p.to(0, { damping: 1, response: 0.3, done: () => { if (!this.shown) this.el.hidden = true; } });
+      else this.p.to(0, { damping: 1, response: 0.3, done: () => { if (!this.shown) { this.el.hidden = true; this.p.onUpdate(0); } } });
     }
 
     invalidate() { this.markup = null; }

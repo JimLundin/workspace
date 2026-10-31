@@ -11,7 +11,7 @@
 (() => {
   "use strict";
   const LG = window.LiquidGlass;
-  const { Element, define } = LG;
+  const { Element, define, clamp } = LG;
   const { Capsule } = LG, { KINDS, measure } = Capsule;
 
   /* The island bar: lead · island · trail. The island stays centred and zones grow
@@ -48,9 +48,24 @@
       LG.glass(el, { interactive: true });
       el.addEventListener("pointerenter", () => { clearTimeout(this.leaving); if (this.hover !== key) { this.hover = key; this.render(); } });
       el.addEventListener("pointerleave", () => { this.leaving = setTimeout(() => { this.hover = null; this.render(); }, 160); });
-      const capsule = new Capsule(el);
+      const capsule = new Capsule(el, { onPresence: () => this.space(el.parentElement) });
       this.capsules.set(key, capsule);
       return capsule;
+    }
+
+    /* Space a zone's capsules. The gap between neighbours belongs to the pair: it is the
+       full gap scaled by the less present of the two, so a capsule sliding in or out opens
+       and closes the space beside it smoothly, whichever side it's on. */
+    space(zone) {
+      if (!zone) return;
+      const gap = parseFloat(getComputedStyle(this).getPropertyValue("--lg-gap")) || 6;
+      let before = null;
+      for (const el of zone.children) {
+        if (el.hidden) continue;
+        const presence = clamp(this.capsules.get(el.dataset.key).size.p, 0, 1);
+        el.style.marginLeft = before === null ? "0px" : `${gap * Math.min(before, presence)}px`;
+        before = presence;
+      }
     }
 
     // Measure markup for a key's capsule, for views that size an expansion to its content.
@@ -83,6 +98,8 @@
         }
       }
       for (const [key, capsule] of this.capsules) if (!wanted.has(key)) capsule.show(false);
+      // Order or visibility may have changed without any capsule animating.
+      for (const zone of Object.values(this.zones)) this.space(zone);
       this.first = false;
     }
 
