@@ -2,6 +2,12 @@ import ctypes
 
 from win32more._win32 import ComPtr
 
+class AsyncStatus:
+    Started: int
+    Completed: int
+    Canceled: int
+    Error: int
+
 class IAsyncInfo(ComPtr):
     @property
     def Status(self) -> int: ...
