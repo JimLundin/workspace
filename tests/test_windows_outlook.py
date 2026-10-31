@@ -46,7 +46,7 @@ def test_pending_bindings_stay_uncertain_when_a_reader_blocks_the_required_ready
             result = drafts.save(original, threading.Event())
             assert isinstance(result, DraftUncertain) and result.fault is not None, result
             assert result.fault.step is DraftStep.IDENTITY_WRITE and result.fault.error == "PermissionError", result
-            assert result.fault.code in (5, 32, 33), result
+            assert result.fault.code in (5, 32, 33) and f"code {result.fault.code}" in result.reason, result
             assert index.read_bytes() == pending and os.path.samestat(identity, index.stat())
             assert drafts.inspect(original, threading.Event()) == observed
         committed = drafts.save(original, threading.Event())
