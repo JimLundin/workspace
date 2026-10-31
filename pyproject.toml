@@ -261,6 +261,14 @@ models = [
     "automation.task",
 ]
 
+[[tool.workspace.architecture.seams]]
+module = "automation.app"
+reason = "The work process's composition root wires the assistant-side agent execution, machine, browser and meeting adapters into the controller."
+
+[[tool.workspace.architecture.seams]]
+module = "automation.__main__"
+reason = "The work process's entry point reads the endpoint settings the assistant owns before starting the composition root."
+
 [[tool.workspace.architecture.exceptions]]
 rule = "explicit-attributes"
 module = "assistant.meeting_followup_store"

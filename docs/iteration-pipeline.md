@@ -121,7 +121,9 @@ with one worker and 60.86 seconds with two, including startup and shutdown.
 
 Every `Dev.cmd check` first runs the source architecture review, including when
 `--tests` selects individual behavioral checks. The review parses source without
-importing the application. It enforces transitive keyboard isolation, immutable
+importing the application. It enforces transitive keyboard isolation, the
+automation layer's independence from assistant modules (apart from the
+composition-root seams declared in `pyproject.toml`), immutable
 dataclass defaults, concrete mutable-field and reflection restrictions, and exact
 explained exceptions declared in `pyproject.toml`. It also rejects patch/mock
 frameworks and monkeypatch fixtures across production and test source; explicit
