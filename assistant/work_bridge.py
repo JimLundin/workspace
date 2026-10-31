@@ -5,7 +5,6 @@ from dataclasses import dataclass
 from typing import assert_never
 
 from assistant.feed_contracts import (
-    AnswerConsole,
     ChooseSolution,
     ClearRules,
     CompleteItem,
@@ -52,7 +51,6 @@ class WorkOwners:
             case (
                 ReadFeed()
                 | ChooseSolution()
-                | AnswerConsole()
                 | FeedReply()
                 | SaveRule()
                 | ForgetRule()

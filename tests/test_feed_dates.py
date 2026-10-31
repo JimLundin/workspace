@@ -43,11 +43,11 @@ def test_saved_review_dates_refresh_only_open_work_and_only_on_a_new_day() -> No
 
 def test_corrected_provider_dates_invalidate_open_work_without_reopening_handled_items(tmp_path: Path) -> None:
     """Ignoring date-only provider corrections leaves stale recommendations cached."""
-    triage = TriageFixture(MemoryStore(), lambda _: None, lambda _batch, _rules: "{}", lambda _: False)
+    triage = TriageFixture(MemoryStore(), lambda _batch, _rules: "{}")
     try:
         triage.closed.set()
         updates = tuple(Update(TeamsActivity(str(index)), "Review", "Please review.", "Teams", THIS_WEEK) for index, _kind in enumerate(Disposition))
-        triage.observe(Feed(updates=updates), ())
+        triage.observe(Feed(updates=updates))
         before = triage.candidates
         proposals = tuple(
             replace(decode(output(([source.identity], "action")), (source,))[0], disposition=kind)
@@ -55,12 +55,12 @@ def test_corrected_provider_dates_invalidate_open_work_without_reopening_handled
         )
         triage.board = Board(enabled=True, items=proposals)
         corrected = tuple(replace(item, source_time=SourceDate(LAST_WEEK)) for item in updates)
-        triage.observe(Feed(updates=corrected), ())
+        triage.observe(Feed(updates=corrected))
         assert triage.board.items == proposals[2:]
         assert triage.board.pending == 2
         assert tuple((item.identity, item.revision) for item in triage.candidates) == tuple((item.identity, item.revision) for item in before)
         assert triage.epoch == 1, "An in-flight result with the old date must be fenced out."
-        triage.observe(Feed(updates=corrected), ())
+        triage.observe(Feed(updates=corrected))
         assert triage.epoch == 1, "Unchanged dates must not keep invalidating reviews."
     finally:
         triage.close()
@@ -71,7 +71,7 @@ def test_an_undated_chat_is_not_presented_as_created_today() -> None:
     page = TeamsPage("19:one@thread.v2", "Review", (), (TeamsPost("one", "Anna", "Tomorrow.", 0, (), own=False),), editor_ready=True)
     found = observation(page, THIS_WEEK)
     feed = Feed(messages=found.messages, followed=(found.current,))
-    (source,) = triage_evidence(feed, ())
+    (source,) = triage_evidence(feed)
     assert source.source_time is SourceDateStatus.UNKNOWN
     assert source_evidence(source).created_at is None
 
@@ -97,7 +97,7 @@ def test_triage_model_receives_readable_current_and_source_dates() -> None:
 
 
 def test_voice_feed_snapshot_keeps_the_source_date_with_its_text(tmp_path: Path) -> None:
-    triage = TriageFixture(MemoryStore(), lambda _: None, lambda _batch, _rules: "{}", lambda _: False, clock=lambda: THIS_WEEK)
+    triage = TriageFixture(MemoryStore(), lambda _batch, _rules: "{}", clock=lambda: THIS_WEEK)
     try:
         source = captured("old-invite", Excerpt("Meeting reminder", "The meeting is tomorrow.", LAST_WEEK))
         triage.candidates = (source,)
@@ -125,7 +125,7 @@ def test_teams_activity_uses_the_provider_date_instead_of_its_collection_time() 
         },
         THIS_WEEK,
     )
-    sources = triage_evidence(Feed(updates=observed.items), ())
+    sources = triage_evidence(Feed(updates=observed.items))
     with fake_endpoint.fake_endpoint() as endpoint:
         endpoint.replies = [says('{"items": []}')]
         classify(Settings(endpoint.url, "fixture", "transcribe", "chat", "agent", "", ""), sources, (), clock=lambda: THIS_WEEK)
@@ -153,10 +153,10 @@ def test_a_new_day_reconsiders_cached_work_without_a_new_notification(tmp_path: 
             reconsidered.set()
         return output(([item.identity for item in batch], "action" if len(calls) == 1 else "quiet"))
 
-    triage = TriageFixture(MemoryStore(), lambda _: None, model, lambda _: False, clock=lambda: now)
+    triage = TriageFixture(MemoryStore(), model, clock=lambda: now)
     try:
         feed = Feed(updates=(Update(TeamsActivity("old-invite"), "Meeting reminder", "The meeting is tomorrow.", "Teams", LAST_WEEK),))
-        triage.observe(feed, ())
+        triage.observe(feed)
         triage.advance()
         wait_until(lambda: bool(triage.board.actions))
         now = THIS_WEEK

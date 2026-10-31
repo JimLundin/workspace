@@ -1,13 +1,11 @@
 """The answer and optional steps of a conversation bubble, without UI effects."""
 
 from dataclasses import dataclass, replace
-from textwrap import shorten
 
-from assistant import feed_items, tool_text
+from assistant import tool_text
 from assistant.action_text import readable
 from assistant.agent_session import AgentRequest, ChatMessage, pending
-from assistant.feed_items import WorkItem, action_spans, expanded_spans, link
-from assistant.feed_triage import Assessment
+from assistant.card_actions import AnswerApproval, Decision, OpenCanvas, encode, parse
 from assistant.notifications import Content, Entry, Response, Turn, body, heading, plain, results, steps
 from assistant.rich_text import Span, formatted
 from automation.presentation import Answer, ToolActivity
@@ -19,34 +17,45 @@ def answer(content: Content | None) -> Answer | None:
         case Entry(message=Answer() as message):
             return message
         case Turn():
-            return next((entry.message for entry in results(content) if isinstance(entry, Entry) and isinstance(entry.message, Answer)), None)
+            return next((answer for answer in map(_answer, results(content)) if answer is not None), None)
         case _:
             return None
 
 
+def _answer(entry: Entry | Response) -> Answer | None:
+    match entry:
+        case Entry(message=Answer() as message):
+            return message
+        case _:
+            return None
+
+
+def _yours(content: Content) -> bool:
+    """The person's own words, shown as typed rather than as agent prose."""
+    match content:
+        case Entry(message=ChatMessage(speaker="You")):
+            return True
+        case _:
+            return False
+
+
 def expandable(content: Content) -> bool:
-    return (isinstance(content, WorkItem) and isinstance(content.item, Assessment)) or (isinstance(content, Turn) and bool(steps(content)))
+    match content:
+        case Turn():
+            return bool(steps(content))
+        case _:
+            return False
 
 
-def spans(content: Content, *, expanded: bool = True) -> tuple[Span, ...]:
-    if isinstance(content, WorkItem):
-        if isinstance(content.item, Assessment):
-            if not expanded:
-                preview = shorten(content.item.suggestion, width=280, placeholder="…")
-                return (Span(content.title + "\n", ("bold", "feed", "feed_title")), *formatted(preview))
-            return expanded_spans(content)
-        return feed_items.body_spans(content)
-    if isinstance(content, Turn):
-        parts = [
-            spans(entry)
-            for entry in results(content)
-            if not (
-                content.origin is not None and isinstance(entry, Entry) and isinstance(entry.message, ChatMessage) and entry.message.speaker == "You"
-            )
-        ]
-        return tuple(span for index, part in enumerate(parts) for span in ((Span("\n\n"),) if index else ()) + part)
+def spans(content: Content) -> tuple[Span, ...]:
+    match content:
+        case Turn():
+            parts = [spans(entry) for entry in results(content)]
+            return tuple(span for index, part in enumerate(parts) for span in ((Span("\n\n"),) if index else ()) + part)
+        case _:
+            pass
     text = body(content)
-    if not (isinstance(content, Entry) and isinstance(content.message, ChatMessage) and content.message.speaker == "You"):
+    if not _yours(content):
         text = readable(text)
     return ((Span(text),) if plain(content) else tuple(formatted(text))) if text else ()
 
@@ -59,9 +68,7 @@ class BubbleText:
 
 def bubble_text(values: tuple[Span, ...]) -> BubbleText:
     """Workspace's canvas redirects are persistent controls beside the text."""
-    actions = tuple(
-        frozendict((span.link, span) for span in values if span.text == "Open on canvas" and span.link.startswith("workspace://canvas?")).values()
-    )
+    actions = tuple(frozendict((span.link, span) for span in values if span.text == "Open on canvas" and canvas_link(span)).values())
     if not actions:
         return BubbleText(values, ())
     links = frozenset(span.link for span in actions)
@@ -69,6 +76,14 @@ def bubble_text(values: tuple[Span, ...]) -> BubbleText:
     last = next((index for index in reversed(range(len(body))) if body[index].text.rstrip()), None)
     body = (*body[:last], replace(body[last], text=body[last].text.rstrip())) if last is not None else ()
     return BubbleText(body, actions)
+
+
+def canvas_link(span: Span) -> bool:
+    match parse(span.link):
+        case OpenCanvas():
+            return True
+        case _:
+            return False
 
 
 @dataclass(frozen=True, slots=True)
@@ -123,25 +138,34 @@ def block_spans(block: Step) -> tuple[Span, ...]:
 
 
 def options(content: Content) -> tuple[Span, ...]:
-    if isinstance(content, WorkItem):
-        return tuple(span for span in action_spans(content) if span.link)
-    entries = results(content) if isinstance(content, Turn) else (content,) if isinstance(content, Entry) else ()
+    match content:
+        case Turn():
+            entries = results(content)
+        case Entry():
+            entries = (content,)
+        case _:
+            return ()
     for entry in entries:
-        if (
-            isinstance(entry, Entry)
-            and isinstance(entry.message, AgentRequest)
-            and isinstance(entry.message.request, Approval)
-            and pending(entry.message)
-        ):
-            return tuple(link("agent-option", label, {"request": entry.message.id, "answer": label.casefold()}) for label in ("Approve", "Decline"))
+        match entry:
+            case Entry(message=AgentRequest(request=Approval()) as message) if pending(message):
+                return (
+                    Span("Approve", ("link",), encode(AnswerApproval(message.id, Decision.APPROVE))),
+                    Span("Decline", ("link",), encode(AnswerApproval(message.id, Decision.DECLINE))),
+                )
+            case _:
+                pass
     return ()
 
 
 def title_text(content: Content) -> str:
-    if isinstance(content, Turn):
-        if content.origin is not None:
-            return content.origin.title
-        for entry in content.entries:
-            if isinstance(entry, Entry) and isinstance(entry.message, ChatMessage) and entry.message.speaker == "You":
-                return entry.message.text
+    match content:
+        case Turn(entries=entries):
+            for entry in entries:
+                match entry:
+                    case Entry(message=ChatMessage(speaker="You", text=text)):
+                        return text
+                    case _:
+                        pass
+        case _:
+            pass
     return heading(content)

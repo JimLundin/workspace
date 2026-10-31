@@ -8,13 +8,13 @@ from typing import Annotated
 
 from pydantic import Field, TypeAdapter
 
-from assistant.feed_contracts import ChosenHandoff, ConsoleAnswered, FeedCommand, FeedRejected, FeedSnapshot, QueuedHandoff
+from assistant.feed_contracts import ChosenHandoff, FeedCommand, FeedRejected, FeedSnapshot, QueuedHandoff
 from assistant.local_bridge import Contract
 from assistant.work_canvas_commands import CanvasCommand, CanvasResponse
 from automation.personal_work import PersonalRequest, PersonalResponse
 
 type BridgeCommand = Annotated[FeedCommand | PersonalRequest | CanvasCommand, Field(discriminator="operation")]
-type FeedResponse = FeedSnapshot | QueuedHandoff | ChosenHandoff | ConsoleAnswered | FeedRejected
+type FeedResponse = FeedSnapshot | QueuedHandoff | ChosenHandoff | FeedRejected
 type BridgeResponse = FeedResponse | PersonalResponse | CanvasResponse
 BRIDGE_COMMAND = TypeAdapter(BridgeCommand)
 BRIDGE_RESPONSE = TypeAdapter(BridgeResponse)
