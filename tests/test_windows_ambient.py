@@ -6,8 +6,8 @@ import unittest
 if sys.platform != "win32":
     raise unittest.SkipTest("Windows power status")
 
-from assistant.ambient import Battery, PowerUnavailable, Wifi
 from winapi import ambient, system_status
+from winapi.machine_status import Battery, PowerUnavailable, Wifi
 
 
 def test_native_power_validates_missing_and_unknown_batteries() -> None:

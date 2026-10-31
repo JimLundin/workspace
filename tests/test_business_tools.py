@@ -8,7 +8,6 @@ from typing import Literal, cast
 from pydantic import TypeAdapter
 
 from assistant.business_tools import WEB_TOOLS, AppTool, Collection, Edit, Read, Selection
-from assistant.llm import Json
 from assistant.web_apps import (
     KANBAN_BOARD,
     KANBAN_COMMENT,
@@ -44,6 +43,7 @@ from assistant.web_apps import (
 )
 from automation.actions import Change, Observation, Resources
 from automation.execution import WorkExecution
+from automation.json_value import Json
 from automation.task import ActionUncertain, ActionVerified
 from tests.test_agent import FakeMachine, ToolRig, durable
 from tests.test_work_actions import claimed

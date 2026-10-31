@@ -11,7 +11,7 @@ from typing import Annotated
 from pydantic import Field, TypeAdapter
 
 from assistant.browser_values import BrowserError
-from assistant.llm import Json
+from automation.json_value import Json
 from automation.work_documents import LocalDocument
 
 

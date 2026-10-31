@@ -11,6 +11,7 @@ lazy from PySide6.QtTest import QTest
 
 from assistant.qt_runtime import prepare
 from automation.presentation import Succeeded, ToolActivity
+from automation.task import Reply, TextAnswer
 from tests.agent_requests import asked
 from tests.test_windows_agent_toasts import notifications
 
@@ -53,9 +54,9 @@ def test_expanded_turn_reserves_the_title_width_left_by_its_disclosure() -> None
 def test_pending_question_points_to_agent_voice_without_an_editor() -> None:
     # Defects: creating an editable reply widget, or losing the voice handoff hint.
     with notifications() as panel:
-        replies: list[str] = []
+        replies: list[Reply] = []
 
-        def record_reply(answer: str) -> bool:
+        def record_reply(answer: Reply) -> bool:
             replies.append(answer)
             return True
 
@@ -68,7 +69,7 @@ def test_pending_question_points_to_agent_voice_without_an_editor() -> None:
         assert card.text.toolTip() == card.window.toolTip()
         assert panel.agent.reply_by_voice("Use the revised totals.")
         panel.pump()
-        assert replies == ["Use the revised totals."]
+        assert replies == [TextAnswer("Use the revised totals.")]
 
 
 def test_expanding_a_bubble_collapses_the_previous_one() -> None:

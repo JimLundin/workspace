@@ -5,7 +5,6 @@ from dataclasses import dataclass, replace
 from itertools import islice
 from typing import Protocol, assert_never
 
-from assistant.activity import ContextSnapshot
 from assistant.work_window import (
     AddPreference,
     AddProjectNote,
@@ -27,6 +26,7 @@ from assistant.work_window import (
     WorkCommand,
     WorkSnapshot,
 )
+from automation.activity import ContextSnapshot
 from automation.context import ContextStore, Preference, ProjectNote
 from automation.execution import ApprovalReview, review_matches
 from automation.ipc import (

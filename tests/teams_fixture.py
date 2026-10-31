@@ -14,8 +14,8 @@ from assistant.browser import BrowserResult
 from assistant.browser_requests import BrowserRequest, Evaluate, Open
 from assistant.browser_session import Attached, BrowserConnection, Owner, Product, Stopped
 from assistant.browser_values import BrowserError, BrowserStatus, PageList, PageRow
-from assistant.llm import Json
 from assistant.web_apps import ACTIVITY_OBSERVE, OBSERVE
+from automation.json_value import Json
 
 WIRE = TypeAdapter(Json)
 STATUS = TypeAdapter(BrowserStatus)

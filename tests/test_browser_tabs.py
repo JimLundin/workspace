@@ -32,8 +32,8 @@ from assistant.browser_values import (
     opening,
     strip_page,
 )
-from assistant.llm import Json
 from automation.actions import target
+from automation.json_value import Json
 from tests.test_agent import ToolRig, durable
 from tests.test_browser import WIRE, Channel, command, connected_browser, decoded, group_of, tab_of
 

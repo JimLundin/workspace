@@ -15,7 +15,7 @@ from uuid import uuid4
 
 from pydantic import TypeAdapter
 
-from assistant.agent_session import Answered, Snapshot
+from assistant.agent_session import Snapshot
 from assistant.canvas_activity import (
     ROOT_CONTEXT,
     Attention,
@@ -54,7 +54,7 @@ from assistant.work_canvas_model import (
 from assistant.work_window import WorkSnapshot
 from automation import journal
 from automation.personal_work import Catalog, SourceKind, WorkState, WorkThread
-from automation.task import Blocked, Task, Waiting, phase
+from automation.task import Blocked, Task, TextAnswer, Waiting, phase
 
 _EVIDENCE = TypeAdapter(tuple[tuple[str, str], ...])
 _FINISHED = ("completed", "failed", "cancelled")
@@ -267,14 +267,13 @@ class WorkCanvas:
         question = next((item for item in self.waiting() if item.id == selected), None)
         return AnswerQuestion(question.request) if question is not None else SpeechRoute.INSTRUCT
 
-    def answer(self, request: CanvasRequest, value: str, deliver: Callable[[CanvasRequest, str], bool]) -> CanvasDocument | None:
+    def answer(self, request: CanvasRequest, value: TextAnswer, deliver: Callable[[CanvasRequest, TextAnswer], bool]) -> CanvasDocument | None:
         """Deliver only to a visible waiting question; record the reply once delivery accepts it."""
         if not any(item.request == request for item in self.waiting()) or not deliver(request, value):
             return None
         document = self.read()
         activity = tuple(
-            replace(item, reply=Answered(value)) if isinstance(item, CanvasQuestion) and item.request == request else item
-            for item in document.activity
+            replace(item, reply=value) if isinstance(item, CanvasQuestion) and item.request == request else item for item in document.activity
         )
         return self._persist(document, replace(document, activity=activity))
 

@@ -235,6 +235,15 @@ class ApprovalDecision(Enum):
 type Reply = TextAnswer | ApprovalDecision
 
 
+def answers(request: Question | Approval, reply: Reply) -> bool:
+    """A question takes text and an approval takes a decision; nothing else answers either."""
+    match request, reply:
+        case (Question(), TextAnswer()) | (Approval(), ApprovalDecision()):
+            return True
+        case _:
+            return False
+
+
 @dataclass(frozen=True, slots=True)
 class Response:
     request: Question | Approval
@@ -243,13 +252,8 @@ class Response:
 
     def __post_init__(self) -> None:
         timestamp(self.at)
-        match self.request, self.reply:
-            case Question(), TextAnswer():
-                pass
-            case Approval(), ApprovalDecision():
-                pass
-            case _:
-                raise ValueError("The reply does not match the input request.")
+        if not answers(self.request, self.reply):
+            raise ValueError("The reply does not match the input request.")
 
 
 class TaskStatus(Enum):

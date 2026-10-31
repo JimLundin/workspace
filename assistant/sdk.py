@@ -38,8 +38,9 @@ from pydantic import AfterValidator, BeforeValidator, TypeAdapter
 
 from assistant.agent import KEPT_SCREENSHOTS
 from assistant.agent_history import History
-from assistant.llm import Json, ToolCall, ToolSpec
+from assistant.llm import ToolCall, ToolSpec
 from automation.execution import Incomplete, InstallationRequested, InvalidConfiguration, Reported, ReportStatus
+from automation.json_value import Json
 from automation.presentation import Answer, LiveMessage, ReasoningSummary, StreamState
 lazy from assistant.agent import Agent
 

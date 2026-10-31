@@ -29,7 +29,7 @@ from automation.task import TextAnswer
 from winapi import windows
 from winapi.shapes import Rect
 lazy import assistant.communications
-lazy import assistant.system_notices
+lazy import winapi.system_notices
 lazy from assistant.agent_session import Session, Snapshot
 lazy from assistant.agent_toasts import AgentToasts
 lazy from assistant.agent_window import AgentWindow
@@ -45,7 +45,6 @@ lazy from assistant.overlay_desktop import NativeOverlayDesktop, OverlayDesktop
 lazy from assistant.qt_ui import application, cancel, later
 lazy from assistant.recording_state import RecordingAction, RecordingState
 lazy from assistant.state_store import SavedState
-lazy from assistant.system_notices import NoticeKey
 lazy from assistant.ui_components.appearance import CONTROL_STYLE, OVERLAY_ACCENT, OVERLAY_BACKGROUND, OVERLAY_INK, OVERLAY_MUTED, OVERLAY_SURFACE
 lazy from assistant.ui_components.canvas_loading import CanvasLoading
 lazy from assistant.ui_components.controls import button, label
@@ -57,6 +56,7 @@ lazy from assistant.work_canvas_window import CanvasWindow
 lazy from assistant.work_window import WorkCommand, WorkSnapshot, WorkWindow
 lazy from miryoku.layout import Layer, Scancode
 lazy from protocol import Tool
+lazy from winapi.system_notices import NoticeKey
 
 prepare()
 
@@ -491,7 +491,7 @@ class Ui:
     def communications_changed(self, feed: assistant.communications.Feed) -> None:
         self.post(lambda _: self._observe_feed(TeamsObserved(feed)))
 
-    def system_notices(self, observation: assistant.system_notices.Observed) -> None:
+    def system_notices(self, observation: winapi.system_notices.Observed) -> None:
         def update(_: QtWidgets.QApplication) -> None:
             if self._notifications is not None and self._notifications.observe(observation):
                 self._observe_feed(NoticesObserved(self._notifications.state))
@@ -709,25 +709,23 @@ class Ui:
     def answer_canvas(self, request: CanvasRequest, value: str) -> bool:
         if self._canvas is None:
             return False
-        document = self._canvas.answer(request, value, self._deliver_answer)
+        try:
+            answer = TextAnswer(value)
+        except ValueError:
+            return False
+        document = self._canvas.answer(request, answer, self._deliver_answer)
         if document is None:
             return False
         self.render_canvas_document(document)
         self.refresh_canvas_attention()
         return True
 
-    def _deliver_answer(self, request: CanvasRequest, value: str) -> bool:
+    def _deliver_answer(self, request: CanvasRequest, answer: TextAnswer) -> bool:
         match request:
             case SessionRequest(session_id=identity, request_id=key):
-                return self._agent is not None and self._agent.state.identity == identity and self._agent.respond(key, value)
+                return self._agent is not None and self._agent.state.identity == identity and self._agent.respond(key, answer)
             case TaskRequest(task_id=task, request_id=key):
-                if self._work is None:
-                    return False
-                try:
-                    answer = TextAnswer(value)
-                except ValueError:
-                    return False
-                return self._work.send(AnswerTask(task, key, answer))
+                return self._work is not None and self._work.send(AnswerTask(task, key, answer))
 
     def _attach_meetings(self) -> None:
         connection, view = self._meetings, self._work_view

@@ -13,10 +13,10 @@ from datetime import datetime
 from pathlib import Path
 from typing import Final
 
-from assistant.llm import RATE
-from assistant.pcm import quiet_tail
-from assistant.recording_state import AudioSource, Batch, StoredState, duration, source_name
+from assistant.recording_state import Batch, StoredState, duration, source_name
 from automation import journal
+from automation.capture import AudioSource
+from winapi.pcm import RATE, quiet_tail
 
 MAX_PENDING_BYTES: Final = 256 * 1024 * 1024
 MIN_CHUNK_SECONDS: Final = 20

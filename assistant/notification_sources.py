@@ -20,7 +20,7 @@ from assistant.communications import (
 )
 from assistant.communications_state import StoredAcknowledgement
 from assistant.state_store import SavedState
-from assistant.system_notices import Notice, NoticeKey, Observed
+from winapi.system_notices import Notice, NoticeKey, Observed
 
 MAX_HIDDEN_APPS = 256
 

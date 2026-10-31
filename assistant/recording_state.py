@@ -5,9 +5,9 @@ from enum import Enum, auto
 from math import isfinite
 from typing import Literal, assert_never
 
-from assistant.llm import RATE
+from automation.capture import AudioSource
+from winapi.pcm import RATE
 
-type AudioSource = Literal["both", "microphone"]
 type Phase = Literal["idle", "starting", "recording", "stopping", "finishing", "paused", "saved", "interrupted"]
 type RecordingAction = Literal["start", "start_microphone", "stop", "open", "folder", "retry"]
 type CompletionPhase = Literal["finishing", "interrupted", "saved"]

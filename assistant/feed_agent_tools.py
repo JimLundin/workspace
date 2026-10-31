@@ -10,10 +10,11 @@ from typing import Final, override
 
 from assistant.agent_tools import TEXT, Args, Display, Output, Session, Tool, fixed, schema
 from assistant.feed_contracts import BOARD_EDIT, FEED_COMMAND, FeedCommand, FeedRejected, reply_schema
-from assistant.llm import Json, tool_spec
+from assistant.llm import tool_spec
 from assistant.local_bridge import ENDPOINT
 from assistant.work_bridge_contracts import BRIDGE_COMMAND, BRIDGE_RESPONSE, WORK_BRIDGE, BridgeCommand
 from automation.actions import Change, Observation
+from automation.json_value import Json
 from automation.task import ActionNotApplied, ActionVerified
 
 INSTRUCTIONS = """The local canvas is the user's work surface; bubbles primarily carry agent clarifications and canvas redirects.

@@ -5,8 +5,9 @@ import wave
 import zlib
 
 from assistant.icons import dot
-from assistant.llm import RATE, long_enough, wav
+from assistant.llm import long_enough, wav
 from assistant.png import encode_png
+from winapi.pcm import RATE
 
 
 def test_wav_wraps_pcm() -> None:

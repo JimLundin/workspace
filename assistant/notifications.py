@@ -9,10 +9,10 @@ from dataclasses import dataclass, replace
 from enum import Enum, auto
 from typing import Final, assert_never
 
-from assistant.agent_session import AgentRequest, Answered, Cancelled, ChatMessage, MeetingMessage, Snapshot, message_body, pending, presentation
+from assistant.agent_session import AgentRequest, Cancelled, ChatMessage, MeetingMessage, Snapshot, message_body, pending, presentation
 from assistant.recording_state import RecordingState, duration, phase_label
 from automation.presentation import Answer, Failed, ReasoningSummary, StreamState, Succeeded, ToolActivity, ToolStatus
-from automation.task import Approval, ApprovalDecision, Question
+from automation.task import Approval, ApprovalDecision, Question, TextAnswer
 
 MAX_VISIBLE: Final = 5
 WIDTH: Final = 360  # maximum logical width, independent of the full history window
@@ -225,7 +225,7 @@ def observe(session: Snapshot) -> tuple[Content, ...]:
                 target = result if request is None else entries
                 target.append(Entry(index, message))
                 match message:
-                    case AgentRequest(reply=Answered(text)):
+                    case AgentRequest(reply=TextAnswer(text)):
                         target.append(Response(index, text, message.created_at))
                     case AgentRequest(reply=ApprovalDecision() as decision):
                         target.append(Response(index, decision.name.capitalize(), message.created_at))

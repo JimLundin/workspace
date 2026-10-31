@@ -2,26 +2,9 @@
 
 import math
 from dataclasses import dataclass, field
-from enum import Enum, auto
 from typing import Literal, assert_never
 
-
-class PowerUnavailable(Enum):
-    UNKNOWN = auto()
-    NO_BATTERY = auto()
-
-
-class Speakers(Enum):
-    UNKNOWN = auto()
-    AUDIBLE = auto()
-    MUTED = auto()
-
-
-class Wifi(Enum):
-    UNKNOWN = auto()
-    CONNECTED = auto()
-    DISCONNECTED = auto()
-    NO_ADAPTER = auto()
+from winapi.machine_status import Battery, Power, PowerUnavailable, Speakers, Wifi
 
 
 @dataclass(frozen=True, slots=True)
@@ -42,18 +25,6 @@ class SystemStatus:
         return ". ".join(value for value in observations if value)
 
 
-@dataclass(frozen=True, slots=True)
-class Battery:
-    percent: int
-    powered: bool = field(kw_only=True)
-    charging: bool = field(kw_only=True)
-
-    def __post_init__(self) -> None:
-        if not 0 <= self.percent <= 100:
-            raise ValueError("Battery percentage must be between 0 and 100.")
-
-
-type Power = Battery | PowerUnavailable
 type WeatherIcon = Literal["sun", "moon", "cloud", "rain", "snow", "storm"]
 
 
