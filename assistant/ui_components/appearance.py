@@ -253,6 +253,17 @@ def look(preference: appearance.Preference, frost: appearance.Frost, tint: Tint)
             assert_never(frost)
 
 
+def large(look: Look) -> Look:
+    """Large glass is thicker, so a menu's text stays legible over any desktop."""
+    match look:
+        case GlassLook(veil=veil, lettering=lettering):
+            return GlassLook(Veil(veil.tint, max(veil.opacity, 0.64), veil.rim, veil.shadow), lettering)
+        case SolidLook():
+            return look
+        case _:
+            assert_never(look)
+
+
 def reading(lettering: Lettering, tone: island_model.Tone, *, contrast: bool) -> Shade:
     """A part's ink. High contrast keeps every reading in the system foreground."""
     if contrast:

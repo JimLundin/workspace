@@ -10,20 +10,22 @@ invisible (alpha 1) hit fill; without glass, Qt paints the capsule itself.
 
 import math
 from collections import deque
-from collections.abc import Callable, Mapping
-from dataclasses import dataclass
+from collections.abc import Mapping
+from dataclasses import dataclass, field
 from functools import lru_cache
-from typing import Final, assert_never
+from typing import Final, Protocol, assert_never, override
 
 lazy from PySide6 import QtCore, QtGui, QtWidgets
 lazy from PySide6.QtCore import Qt
 
-from assistant.island_layout import HEIGHT, WAVE_BARS, Content, Framed, Spot, arrange
+from assistant import island_menu
+from assistant.island_layout import HEIGHT, MENU_HEAD, MENU_PAD, MENU_RADIUS, MENU_WIDTH, WAVE_BARS, Content, Framed, Line, Spot, arrange, lines, live
+from assistant.island_menu import Disclosure, Item, Live, Menu, Rule, within
 from assistant.island_model import Action, Badge, CapsuleView, Control, Glyph, Key, Marker, Spinner, Text, Tint, Tone
 from assistant.qt_runtime import prepare
 from assistant.qt_ui import EventLoop
 from assistant.ui_components import typeface
-from assistant.ui_components.appearance import RED, GlassLook, Look, Shade, SolidLook, look, reading
+from assistant.ui_components.appearance import GLASS_ACCENT, RED, GlassLook, Look, Shade, SolidLook, look, reading
 from assistant.vector_icons import icon
 from assistant.view_publication import log_view
 from components import BAR_WINDOW
@@ -44,6 +46,17 @@ def color(shade: Shade) -> QtGui.QColor:
     return value
 
 
+class Owner(Protocol):
+    """What the bar window reports to the bar's owner."""
+
+    def press(self, action: Action) -> None: ...
+    def hover(self, key: Key | None) -> None: ...
+    def select(self, index: int) -> None: ...
+    def pick(self, index: int) -> None: ...
+    def key(self, press: island_menu.Press) -> None: ...
+    def deactivated(self) -> None: ...
+
+
 @dataclass(frozen=True, slots=True)
 class Drawn:
     """One capsule's frame: its view and content, any content fading out under it, and how it reads."""
@@ -54,6 +67,22 @@ class Drawn:
     fade: float
     look: Look
     framed: Framed
+
+
+@dataclass(frozen=True, slots=True)
+class Presented:
+    """One frame of the bar: its capsules, the window height they may reach, and the open menu."""
+
+    drawn: tuple[Drawn, ...]
+    height: float
+    menu: Menu | None
+    contrast: bool = field(kw_only=True)
+    glass: bool = field(kw_only=True)
+
+
+def radius(height: float) -> float:
+    """The menu keeps a larger radius, concentric with its rows."""
+    return MENU_RADIUS if height > HEIGHT + 0.5 else RADIUS
 
 
 def visibility(presence: float) -> float:
@@ -79,7 +108,7 @@ def pane(key: Key, look: Look, framed: Framed, scale: float) -> Pane | None:
         case GlassLook(veil=veil):
             box = framed.box
             bounds = Rect(round(box.x * scale), round(box.y * scale), round((box.x + box.width) * scale), round((box.y + box.height) * scale))
-            return Pane(key.name, bounds, RADIUS * scale, visibility(framed.presence), veil)
+            return Pane(key.name, bounds, radius(box.height) * scale, visibility(framed.presence), veil)
         case SolidLook():
             return None
         case _:
@@ -92,6 +121,14 @@ def font(*, strong: bool) -> QtGui.QFont:
     value.setPixelSize(12)
     value.setWeight(QtGui.QFont.Weight.DemiBold if strong else QtGui.QFont.Weight.Medium)
     value.setFeature(QtGui.QFont.Tag("tnum"), 1)  # Readings keep their width as digits change.
+    return value
+
+
+@lru_cache(maxsize=1)
+def heading_font() -> QtGui.QFont:
+    value = QtGui.QFont(typeface.FAMILY)
+    value.setPixelSize(14)
+    value.setWeight(QtGui.QFont.Weight.DemiBold)
     return value
 
 
@@ -137,6 +174,140 @@ class ControlButton(QtWidgets.QAbstractButton):
         icon(self.control.icon, ink.color).paint(painter, QtCore.QRect(6, 6, 16, 16))
 
 
+class MenuRow(QtWidgets.QAbstractButton):
+    """One menu row inside the expanded island. A live row stops its activity only from its Stop circle."""
+
+    def __init__(self, capsule: Capsule, line: Line) -> None:
+        super().__init__(capsule)
+        self.capsule = capsule
+        self.line = line
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setFocusPolicy(Qt.FocusPolicy.NoFocus)  # The window navigates; rows show its selection.
+        self.clicked.connect(self.picked)
+        self.describe()
+
+    def describe(self) -> None:
+        match self.line.row:
+            case Live(label=label, detail=detail, stop=stop):
+                action = "Stop recording" if stop is island_menu.Command.STOP_RECORDING else "Stop agent work"
+                name = " · ".join(part for part in (label, detail, action) if part)
+            case Item(label=label, key=key):
+                name = f"{label} · {key}" if key else label
+            case Disclosure(label=label):
+                name = label
+            case Rule.SEPARATOR:
+                name = ""
+            case _:
+                assert_never(self.line.row)
+        if self.accessibleName() != name:
+            self.setAccessibleName(name)
+
+    def update_line(self, line: Line) -> None:
+        if line != self.line:
+            self.line = line
+            self.describe()
+            self.update()
+
+    def picked(self) -> None:
+        self.capsule.window_.owner.pick(self.line.index)
+
+    def stop_circle(self) -> QtCore.QRectF:
+        return QtCore.QRectF(self.width() - 31, (self.height() - 28) / 2, 28, 28)
+
+    @override
+    def hitButton(self, pos: QtCore.QPoint) -> bool:
+        match self.line.row:
+            case Live():
+                return self.stop_circle().contains(QtCore.QPointF(pos))
+            case Rule.SEPARATOR:
+                return False
+            case Item() | Disclosure():
+                return super().hitButton(pos)
+            case _:
+                assert_never(self.line.row)
+
+    def mousePressEvent(self, event: QtGui.QMouseEvent) -> None:
+        super().mousePressEvent(event)
+        event.accept()  # A miss on a row stays in the menu, rather than reaching the island beneath it.
+
+    def mouseReleaseEvent(self, event: QtGui.QMouseEvent) -> None:
+        super().mouseReleaseEvent(event)
+        event.accept()
+
+    def enterEvent(self, event: QtGui.QEnterEvent) -> None:
+        super().enterEvent(event)
+        self.capsule.window_.owner.select(self.line.index)
+
+    def paintEvent(self, event: QtGui.QPaintEvent) -> None:
+        painter = QtGui.QPainter(self)
+        painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
+        lettering, row = self.capsule.look.lettering, self.line.row
+        menu = self.capsule.window_.menu
+        chosen = menu is not None and menu.selected == self.line.index
+        bounds = QtCore.QRectF(self.rect())
+        painter.setPen(Qt.PenStyle.NoPen)
+        ink = color(lettering.ink)
+        quiet = color(lettering.quiet)
+        if chosen and not live(row):
+            painter.setBrush(QtGui.QColor(GLASS_ACCENT) if not self.capsule.contrast else color(lettering.ink))
+            painter.drawRoundedRect(bounds, bounds.height() / 2, bounds.height() / 2)
+            ink = quiet = QtGui.QColor("#ffffff") if not self.capsule.contrast else color(lettering.press)
+        painter.setFont(font(strong=False))
+        indent = 12 if within(row) else 0
+        match row:
+            case Rule.SEPARATOR:
+                painter.setBrush(color(Shade(lettering.ink.color, 0.12)))
+                painter.drawRect(QtCore.QRectF(10, bounds.height() / 2, bounds.width() - 20, 1))
+            case Item(label=label, icon=name, key=key):
+                if name:
+                    self.paint_icon(painter, name, quiet, 10)
+                painter.setPen(ink)
+                painter.drawText(bounds.adjusted(36 + indent, 0, -10, 0), Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, label)
+                if key:
+                    painter.setPen(quiet)
+                    painter.drawText(bounds.adjusted(0, 0, -10, 0), Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignRight, key)
+            case Disclosure(label=label, icon=name):
+                self.paint_icon(painter, name, quiet, 10)
+                painter.setPen(ink)
+                painter.drawText(bounds.adjusted(36, 0, -10, 0), Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, label)
+                self.paint_icon(painter, "down" if menu is not None and menu.disclosed else "chevron", quiet, round(bounds.width()) - 26)
+            case Live() as activity:
+                self.paint_live(painter, activity, chosen=chosen)
+            case _:
+                assert_never(row)
+
+    def paint_live(self, painter: QtGui.QPainter, activity: Live, *, chosen: bool) -> None:
+        """An activity on its own quiet fill: its glyph, its reading, and its Stop circle."""
+        lettering, bounds = self.capsule.look.lettering, QtCore.QRectF(self.rect())
+        ink, quiet = color(lettering.ink), color(lettering.quiet)
+        painter.setBrush(color(lettering.press if chosen else lettering.hover))
+        painter.drawRoundedRect(bounds, 15, 15)
+        middle = bounds.height() / 2
+        if activity.stop is island_menu.Command.STOP_RECORDING:
+            painter.setBrush(QtGui.QColor(RED) if not self.capsule.contrast else ink)
+            painter.drawEllipse(QtCore.QPointF(14, middle), 4, 4)
+        else:
+            self.capsule.paint_spinner(painter, Spot(Spinner(activity.label), 7, 14), middle)
+        painter.setPen(ink)
+        width = QtGui.QFontMetricsF(font(strong=False)).horizontalAdvance(activity.label)
+        painter.drawText(QtCore.QRectF(36, 0, width + 1, bounds.height()), Qt.AlignmentFlag.AlignVCenter, activity.label)
+        painter.setPen(quiet)
+        painter.drawText(QtCore.QRectF(44 + width, 0, bounds.width() - 80 - width, bounds.height()), Qt.AlignmentFlag.AlignVCenter, activity.detail)
+        circle = self.stop_circle()
+        painter.setPen(Qt.PenStyle.NoPen)
+        if self.underMouse():
+            painter.setBrush(color(lettering.press if self.isDown() else lettering.hover))
+            painter.drawEllipse(circle)
+        painter.setOpacity(lettering.ink.opacity)
+        icon("stop", lettering.ink.color).paint(painter, circle.adjusted(6, 6, -6, -6).toRect())
+
+    def paint_icon(self, painter: QtGui.QPainter, name: str, ink: QtGui.QColor, x: int) -> None:
+        painter.save()
+        painter.setOpacity(ink.alphaF())
+        icon(name, ink.name()).paint(painter, QtCore.QRect(x, (self.height() - 16) // 2, 16, 16))
+        painter.restore()
+
+
 class Capsule(QtWidgets.QAbstractButton):
     """One capsule: its strip to the screen edge, its shape, and its parts.
 
@@ -155,12 +326,13 @@ class Capsule(QtWidgets.QAbstractButton):
         self.look: Look = window.look
         self.contrast = False
         self.controls: tuple[ControlButton, ...] = ()
+        self.rows: tuple[MenuRow, ...] = ()
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self.clicked.connect(self.pressed_capsule)
 
     def press(self, action: Action) -> None:
-        self.window_.press(action)
+        self.window_.owner.press(action)
 
     def pressed_capsule(self) -> None:
         if self.view is not None:
@@ -184,6 +356,24 @@ class Capsule(QtWidgets.QAbstractButton):
             self.controls = tuple(ControlButton(self, control) for control, _ in wanted)
         self.update()
 
+    def show_menu(self, menu: Menu | None) -> None:
+        """The expanded island's rows, pooled for as long as the menu stays open."""
+        shown = lines(menu) if menu is not None else ()
+        if len(shown) != len(self.rows) or any(row.line.row != line.row for row, line in zip(self.rows, shown, strict=False)):
+            for row in self.rows:
+                row.hide()
+                row.deleteLater()
+            self.rows = tuple(MenuRow(self, line) for line in shown)
+        for row, line in zip(self.rows, shown, strict=True):
+            row.update_line(line)
+            row.update()
+
+    def place_rows(self) -> None:
+        left = (self.width() - MENU_WIDTH) / 2 + MENU_PAD
+        for row in self.rows:
+            row.setGeometry(round(left), TOP + round(row.line.y), MENU_WIDTH - 2 * MENU_PAD, round(row.line.height))
+            row.setVisible(TOP + row.line.y + row.line.height <= self.height())
+
     def place_controls(self) -> None:
         shift = self.shift(self.content)
         for button, (_, x) in zip(self.controls, controls(self.content), strict=True):
@@ -198,24 +388,25 @@ class Capsule(QtWidgets.QAbstractButton):
         """The widget spans the edge strip and the capsule below it."""
         self.setGeometry(round(framed.box.x), 0, max(1, round(framed.box.width)), TOP + round(framed.box.height))
         self.place_controls()
+        self.place_rows()
 
     def enterEvent(self, event: QtGui.QEnterEvent) -> None:
         super().enterEvent(event)
-        self.window_.hover(self.key)
+        self.window_.owner.hover(self.key)
         self.update()
 
     def leaveEvent(self, event: QtCore.QEvent) -> None:
         super().leaveEvent(event)
-        self.window_.hover(None)
+        self.window_.owner.hover(None)
         self.update()
 
     def paintEvent(self, event: QtGui.QPaintEvent) -> None:
         painter = QtGui.QPainter(self)
         painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
         shape = QtCore.QRectF(0, TOP, self.width(), self.height() - TOP)
-        radius = min(RADIUS, shape.height() / 2)
+        corner = min(radius(shape.height()), shape.height() / 2)
         outline = QtGui.QPainterPath()
-        outline.addRoundedRect(shape, radius, radius)
+        outline.addRoundedRect(shape, corner, corner)
         strip = QtGui.QPainterPath()
         strip.addRect(QtCore.QRectF(0, 0, self.width(), TOP))
         hit = QtGui.QColor(0, 0, 0, 1)  # Invisible, but Windows routes the pointer here.
@@ -233,12 +424,13 @@ class Capsule(QtWidgets.QAbstractButton):
             case _:
                 assert_never(self.look)
         lettering = self.look.lettering
-        if self.isDown() or self.underMouse():
+        expanded = self.content.height > HEIGHT
+        if (self.isDown() or self.underMouse()) and not expanded:
             painter.fillPath(outline, color(lettering.press if self.isDown() else lettering.hover))
         if self.hasFocus():
             painter.setPen(QtGui.QPen(color(lettering.ink), 1.5))
             painter.setBrush(Qt.BrushStyle.NoBrush)
-            painter.drawRoundedRect(shape.adjusted(1.5, 1.5, -1.5, -1.5), radius - 1.5, radius - 1.5)
+            painter.drawRoundedRect(shape.adjusted(1.5, 1.5, -1.5, -1.5), corner - 1.5, corner - 1.5)
         painter.setClipPath(outline)
         layers: tuple[tuple[Content, float], ...] = (
             ((self.previous, alpha * (1 - self.fade)), (self.content, alpha * self.fade)) if self.previous is not None else ((self.content, alpha),)
@@ -253,7 +445,20 @@ class Capsule(QtWidgets.QAbstractButton):
             for spot in content.spots:
                 self.paint_part(painter, spot, previous, TOP + HEIGHT / 2)
                 previous = spot
+            if content.height > HEIGHT:
+                self.paint_heading(painter)
             painter.restore()
+
+    def paint_heading(self, painter: QtGui.QPainter) -> None:
+        menu = self.window_.menu
+        heading = QtCore.QRectF(MENU_PAD + 10, TOP + MENU_PAD, MENU_WIDTH - 2 * MENU_PAD - 20, MENU_HEAD)
+        painter.setFont(heading_font())
+        painter.setPen(color(self.look.lettering.ink))
+        painter.drawText(heading, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, "Workspace")
+        if menu is not None:
+            painter.setFont(font(strong=False))
+            painter.setPen(color(self.look.lettering.quiet))
+            painter.drawText(heading, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignRight, menu.detail)
 
     def paint_part(self, painter: QtGui.QPainter, spot: Spot, previous: Spot | None, middle: float) -> None:
         lettering = self.look.lettering
@@ -315,11 +520,11 @@ class Capsule(QtWidgets.QAbstractButton):
 class BarWindow(QtWidgets.QWidget):
     """The bar's one window: the full width of the primary screen, as tall as the capsules."""
 
-    def __init__(self, loop: EventLoop, press: Callable[[Action], None], hover: Callable[[Key | None], None]) -> None:
+    def __init__(self, loop: EventLoop, owner: Owner) -> None:
         super().__init__()
         self.loop = loop
-        self.press = press
-        self.hover = hover
+        self.owner = owner
+        self.menu: Menu | None = None
         self.look: Look = look(appearance.Material.SOLID, appearance.Frost.SMOKED, Tint.NONE)
         self.capsules: Mapping[Key, Capsule] = frozendict()
         self.spin_angle = 90.0
@@ -332,6 +537,7 @@ class BarWindow(QtWidgets.QWidget):
         self.setWindowFlags(Qt.WindowType.Tool | Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
+        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)  # The open menu takes the keyboard here.
         borderless(int(self.winId()))
         # Several changes in one Qt turn publish one final glass frame.
         self.glass_timer = QtCore.QTimer(self)
@@ -352,26 +558,57 @@ class BarWindow(QtWidgets.QWidget):
         self.capsules = frozendict({**self.capsules, key: created})
         return created
 
-    def present(self, drawn: tuple[Drawn, ...], *, contrast: bool, glass: bool) -> None:
+    def present(self, presented: Presented) -> None:
         """Show exactly these capsules where their frames put them; other pooled capsules hide."""
         area = QtGui.QGuiApplication.primaryScreen().geometry()
-        height = TOP + max((round(each.framed.box.height) for each in drawn), default=HEIGHT)
+        height = TOP + math.ceil(presented.height)
         if self.geometry() != QtCore.QRect(area.x(), area.y(), area.width(), height):
             self.setGeometry(area.x(), area.y(), area.width(), height)
-        keys = frozenset(each.view.key for each in drawn)
-        for each in drawn:
+        self.menu = presented.menu
+        keys = frozenset(each.view.key for each in presented.drawn)
+        for each in presented.drawn:
             capsule = self.capsule(each.view.key)
-            capsule.show_view(each, contrast=contrast)
+            capsule.show_view(each, contrast=presented.contrast)
+            if each.view.key is Key.ISLAND:
+                capsule.show_menu(presented.menu if each.content.height > HEIGHT else None)
             capsule.frame(each.framed)
             capsule.show()
         for key, capsule in self.capsules.items():
             if key not in keys:
                 capsule.hide()
         scale = self.devicePixelRatioF()
-        self.glass = glass
-        self.panes = tuple(found for each in drawn if (found := pane(each.view.key, each.look, each.framed, scale)) is not None)
+        self.glass = presented.glass
+        self.panes = tuple(found for each in presented.drawn if (found := pane(each.view.key, each.look, each.framed, scale)) is not None)
         if not self.glass_timer.isActive():
             self.glass_timer.start(0)
+
+    def keyPressEvent(self, event: QtGui.QKeyEvent) -> None:
+        keys = {
+            Qt.Key.Key_Up: island_menu.Key.UP,
+            Qt.Key.Key_Down: island_menu.Key.DOWN,
+            Qt.Key.Key_Left: island_menu.Key.LEFT,
+            Qt.Key.Key_Right: island_menu.Key.RIGHT,
+            Qt.Key.Key_Return: island_menu.Key.ENTER,
+            Qt.Key.Key_Enter: island_menu.Key.ENTER,
+            Qt.Key.Key_Space: island_menu.Key.ENTER,
+            Qt.Key.Key_Escape: island_menu.Key.ESCAPE,
+        }
+        if self.menu is None:
+            super().keyPressEvent(event)
+            return
+        named = keys.get(Qt.Key(event.key()))
+        if named is not None:
+            self.owner.key(named)
+        elif event.text().isalpha():
+            self.owner.key(island_menu.Letter(event.text()[0]))
+        else:
+            super().keyPressEvent(event)
+
+    @override
+    def changeEvent(self, event: QtCore.QEvent) -> None:
+        super().changeEvent(event)
+        if event.type() is QtCore.QEvent.Type.ActivationChange and self.menu is not None and not self.isActiveWindow():
+            self.owner.deactivated()
 
     def bounds(self, key: Key) -> Rect | None:
         """A shown capsule's screen rectangle in device pixels. Capsules stay alien widgets:

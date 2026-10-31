@@ -38,6 +38,7 @@ class Action(Enum):
     """What a press does. A capsule has one; each control inside it has its own."""
 
     OPEN_MENU = auto()
+    CLOSE_MENU = auto()
     STOP_DICTATION = auto()
     OPEN_QUESTION = auto()
     OPEN_INBOX = auto()
@@ -209,12 +210,16 @@ def recording_slot(recorded: Capture, *, hovered: bool) -> Slot:
     return (Marker.DOT, Text(recorded.title, tone), *stop)
 
 
-def island(observed: Observed, *, hovered: Key | None = None) -> tuple[CapsuleView, ...]:
-    """The capsules to show, in left-to-right order, with their contents and press actions."""
+def island(observed: Observed, *, hovered: Key | None = None, expanded: bool = False) -> tuple[CapsuleView, ...]:
+    """The capsules to show, in left-to-right order, with their contents and press actions.
+
+    While `expanded`, the island is the controls menu: ongoing activities move into
+    its live rows, so they leave the bar; the layer and the inbox stay.
+    """
     spinner = processing(observed.state)
     recorded = capture(observed.recording)
     listening, asking = observed.state is State.LISTENING, observed.state is State.NEEDS_INPUT
-    moment = listening or asking
+    moment = (listening or asking) and not expanded
     lead: tuple[CapsuleView, ...] = ()
     if observed.keyboard is not None:
         lead += (
@@ -233,7 +238,8 @@ def island(observed: Observed, *, hovered: Key | None = None) -> tuple[CapsuleVi
         trail += (
             CapsuleView(Key.INBOX, Zone.TRAIL, ((Glyph("bell"), Badge(inbox_text(observed.inbox))),), inbox_label(observed.inbox), Action.OPEN_INBOX),
         )
-    return (*lead, centre(observed, hovered=hovered), *trail)
+    menu = CapsuleView(Key.ISLAND, Zone.ISLAND, (), "Workspace controls · Escape closes", Action.CLOSE_MENU)
+    return (*lead, menu if expanded else centre(observed, hovered=hovered), *trail)
 
 
 def centre(observed: Observed, *, hovered: Key | None) -> CapsuleView:

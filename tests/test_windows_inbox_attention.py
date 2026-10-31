@@ -124,7 +124,7 @@ def test_bell_opens_inbox_keeps_exact_accessible_count_and_survives_activity(tmp
         capsule = waiting(bar)
         assert capsule is not None and "1 clarification needs" in capsule.accessibleName() and "Hold V + T" in capsule.toolTip()
         QTest.mouseClick(capsule, QtCore.Qt.MouseButton.LeftButton, pos=QtCore.QPoint(17, TOP + 17))
-        assert invoked == ("inbox",) and not bar.menu.isVisible()
+        assert invoked == ("inbox",) and bar.expanded is None
         for state in (assistant.icons.State.AGENT, assistant.icons.State.LISTENING, assistant.icons.State.WORKING):
             bar.state(state)
             assert waiting(bar) is capsule

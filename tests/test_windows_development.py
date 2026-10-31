@@ -17,6 +17,8 @@ if sys.platform != "win32":
     raise unittest.SkipTest("Native development tools")
 
 lazy import shiboken6
+lazy from PySide6.QtCore import Qt
+lazy from PySide6.QtTest import QTest
 
 from assistant.island_model import Key
 from assistant.qt_runtime import prepare
@@ -194,12 +196,11 @@ def test_preview_uses_real_views_without_starting_native_services_and_closes_cle
         assert preview.feed.cards and json_value(files.state.read_text()) == {"scenario": 2}
         assert preview.control.isVisible()
         assert preview.bar.window.windowTitle().startswith("Workspace preview")
-        preview.bar.open_menu()
-        for action in preview.bar.menu.actions():
-            if action.text() in ("Windows taskbar", "Windows notification settings"):
-                action.trigger()
-                assert preview.status.text() == "Preview action: " + action.text()
-        preview.bar.menu.close()
+        for label in ("Windows taskbar", "Windows notification settings"):
+            preview.bar.open_menu()
+            row = next(row for row in preview.bar.window.capsules[Key.ISLAND].rows if row.accessibleName() == label)
+            QTest.mouseClick(row, Qt.MouseButton.LeftButton)
+            assert preview.status.text() == "Preview action: " + label
     finally:
         preview.close()
     preview.close()
