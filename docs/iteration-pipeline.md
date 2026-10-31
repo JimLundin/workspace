@@ -39,7 +39,7 @@ For continuous feedback, install the small development-only watcher once:
 
 ```powershell
 .\.venv\Scripts\python.exe -m pip install watchdog==6.0.0
-.\Dev.cmd watch --tests tests/test_bar_model.py
+.\Dev.cmd watch --tests tests/test_island_model.py
 .\Dev.cmd preview
 ```
 

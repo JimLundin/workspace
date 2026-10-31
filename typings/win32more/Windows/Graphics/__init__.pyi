@@ -1,3 +1,0 @@
-from win32more._win32 import ComPtr
-
-class IGeometrySource2D(ComPtr): ...

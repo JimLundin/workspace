@@ -9,6 +9,7 @@ lazy from PySide6.QtCore import QCoreApplication, QEvent
 lazy from PySide6.QtWidgets import QApplication
 
 from assistant.qt_runtime import prepare
+lazy from assistant.ui_components import typeface
 lazy from assistant.view_publication import log_view
 lazy from winapi import screen
 lazy from winapi.composition import DesktopComposition
@@ -21,6 +22,7 @@ def application() -> QApplication:
     existing = QApplication.instance()
     app = existing if isinstance(existing, QApplication) else QApplication([])
     app.setQuitOnLastWindowClosed(False)
+    typeface.load()
     return app
 
 

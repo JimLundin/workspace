@@ -6,8 +6,12 @@ Quiet blue and lilac glass, with opaque ink and a dark solid fallback.
 from dataclasses import dataclass
 from typing import Final, assert_never
 
+from assistant import island_model
 from assistant.feed_origin import App
+from assistant.island_model import Tint
 from assistant.notifications import Tone
+from winapi import appearance
+from winapi.shapes import Stop, Veil
 
 ACCENT: Final = "#d9c8f3"  # primary actions and the voice legend
 INK: Final = "#f6f3ff"
@@ -150,5 +154,117 @@ def palette(tone: Tone, app: App | None = None) -> Palette:
             return Palette(SURFACE, EDGE, "#f2ddb9", "#4e4173")
         case Tone.ERROR:
             return Palette(SURFACE, EDGE, "#ffb7b2", "#4e4173")
+        case _:
+            assert_never(tone)
+
+
+# Liquid Glass: glass has no colour of its own. Thin neutral veils carry
+# monochrome ink; colour appears only where it means something.
+GLASS_ACCENT: Final = "#4b8fe8"  # a soft blue, lighter and less saturated than system blue
+ATTENTION: Final = "#f08a00"  # a question waits
+RED: Final = "#ff453a"  # recording, low battery
+MICROPHONE: Final = "#ff9f0a"  # the microphone is live, as Apple's privacy indicator
+
+
+@dataclass(frozen=True, slots=True)
+class Shade:
+    color: str
+    opacity: float = 1.0
+
+
+@dataclass(frozen=True, slots=True)
+class Lettering:
+    """Ink for a surface: primary and quiet text, and the control fills under the pointer."""
+
+    ink: Shade
+    quiet: Shade
+    hover: Shade
+    press: Shade
+
+
+@dataclass(frozen=True, slots=True)
+class GlassLook:
+    """Composition draws the veil; Qt paints only content and an invisible hit fill."""
+
+    veil: Veil
+    lettering: Lettering
+
+
+@dataclass(frozen=True, slots=True)
+class SolidLook:
+    """No glass: Qt paints the whole surface."""
+
+    fill: Shade
+    edge: Shade
+    lettering: Lettering
+
+
+type Look = GlassLook | SolidLook
+
+
+def _lettering(ink: str, *, dark: bool) -> Lettering:
+    return Lettering(
+        Shade(ink, 0.94 if dark else 0.86), Shade(ink, 0.58 if dark else 0.54), Shade(ink, 0.08 if dark else 0.06), Shade(ink, 0.14 if dark else 0.10)
+    )
+
+
+def _rim(high: float, low: float, end: float) -> tuple[Stop, ...]:
+    """Brightest where light catches the upper-leading curve, a softer return at the trailing foot."""
+    return (Stop(0, "#ffffff", high), Stop(0.34, "#ffffff", low), Stop(0.72, "#ffffff", low), Stop(1, "#ffffff", end))
+
+
+def look(preference: appearance.Preference, frost: appearance.Frost, tint: Tint) -> Look:
+    """Small glass takes its scheme from the desktop beneath it; a tint replaces the veil only for meaning."""
+    match preference:
+        case appearance.Contrast(background=background, foreground=foreground):
+            # System colours, swapped when the capsule carries meaning.
+            fill, ink = (foreground, background) if tint is Tint.ATTENTION else (background, foreground)
+            return SolidLook(Shade(fill), Shade(ink), Lettering(Shade(ink), Shade(ink), Shade(ink, 0.2), Shade(ink, 0.35)))
+        case appearance.Material.SOLID:
+            match tint:
+                case Tint.ATTENTION:
+                    return SolidLook(Shade(ATTENTION), Shade("#ffffff", 0.18), _lettering("#ffffff", dark=True))
+                case Tint.NONE:
+                    return SolidLook(Shade("#26262a"), Shade("#ffffff", 0.07), _lettering("#ffffff", dark=True))
+                case _:
+                    assert_never(tint)
+        case appearance.Material.GLASS:
+            pass
+        case _:
+            assert_never(preference)
+    bright = frost is appearance.Frost.BRIGHT
+    shadow = 0.14 if bright else 0.36
+    match tint:
+        case Tint.ATTENTION:
+            return GlassLook(Veil(ATTENTION, 0.9, _rim(0.55, 0.06, 0.10), shadow), _lettering("#ffffff", dark=True))
+        case Tint.NONE:
+            pass
+        case _:
+            assert_never(tint)
+    match frost:
+        case appearance.Frost.BRIGHT:
+            return GlassLook(Veil("#ffffff", 0.2, _rim(0.95, 0.16, 0.42), shadow), _lettering("#000000", dark=False))
+        case appearance.Frost.LIGHT:
+            return GlassLook(Veil("#1c1c20", 0.26, _rim(0.55, 0.06, 0.22), shadow), _lettering("#ffffff", dark=True))
+        case appearance.Frost.SMOKED:
+            # A mixed desktop needs a heavier veil to keep small text legible.
+            return GlassLook(Veil("#1c1c20", 0.62, _rim(0.55, 0.06, 0.22), shadow), _lettering("#ffffff", dark=True))
+        case _:
+            assert_never(frost)
+
+
+def reading(lettering: Lettering, tone: island_model.Tone, *, contrast: bool) -> Shade:
+    """A part's ink. High contrast keeps every reading in the system foreground."""
+    if contrast:
+        return lettering.ink
+    match tone:
+        case island_model.Tone.INK:
+            return lettering.ink
+        case island_model.Tone.QUIET:
+            return lettering.quiet
+        case island_model.Tone.MICROPHONE:
+            return Shade(MICROPHONE)
+        case island_model.Tone.LOW:
+            return Shade(RED)
         case _:
             assert_never(tone)

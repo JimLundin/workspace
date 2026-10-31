@@ -2,15 +2,15 @@
 
 Windows composes a host backdrop through a rounded geometry. A separate,
 nonactivating window places it immediately behind the per-pixel Qt foreground;
-neither desktop captures nor color keys participate in rendering.
+neither desktop captures nor color keys participate in rendering. `Glass` gives
+one card its own window; `GlassScene` composes several panes in one window, so
+panes move without moving any window.
 """
 
 import ctypes
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
-from functools import lru_cache
-from typing import Protocol
 
 from win32more import FAILED, WinError
 from win32more.Windows.Foundation import IAsyncInfo
@@ -18,11 +18,12 @@ from win32more.Windows.Foundation.Numerics import Vector2, Vector3
 from win32more.Windows.System import DispatcherQueueController
 from win32more.Windows.UI import Color
 from win32more.Windows.UI.Composition import (
-    CompositionPath,
-    CompositionPathGeometry,
-    CompositionRoundedRectangleGeometry,
+    CompositionColorBrush,
+    CompositionLinearGradientBrush,
+    CompositionPropertySet,
     Compositor,
-    ICompositionPathGeometry,
+    ContainerVisual,
+    DropShadow,
     ICompositionRoundedRectangleGeometry,
     IVisual,
 )
@@ -41,9 +42,7 @@ from win32more.Windows.Win32.System.WinRT.Composition import ICompositorDesktopI
 from win32more.Windows.Win32.UI.WindowsAndMessaging import CreateWindowExW, GetWindow, SetWindowPos
 
 from winapi import windows
-from winapi.composition_paths import composition_path
-from winapi.contours import Contour
-from winapi.shapes import Rect
+from winapi.shapes import Pane, Rect
 
 
 def _check(result: object) -> None:
@@ -68,13 +67,6 @@ def borderless(handle: int) -> None:
 def stack_behind(handle: int, foreground: int) -> None:
     """Place native glass below its foreground without activation or movement."""
     SetWindowPos(handle, foreground, 0, 0, 0, 0, 0x0013)
-
-
-class CachedPaths(Protocol):
-    """Consume the standard cache's call and release contracts at its owner."""
-
-    def __call__(self, contour: Contour, scale: float, /) -> CompositionPath: ...
-    def cache_clear(self) -> None: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -112,6 +104,9 @@ class DesktopComposition:
     def glass(self) -> Glass:
         return Glass(self)
 
+    def scene(self, title: str) -> GlassScene:
+        return GlassScene(self, title)
+
     def close(self, pump: Callable[[], None]) -> None:
         """Drain the native dispatcher before its owning UI thread can exit."""
         if self.closed:
@@ -142,14 +137,10 @@ class Glass:
         "group",
         "handle",
         "mask",
-        "mask_shape",
         "mask_surface",
         "mask_visual",
         "opacity",
-        "path_geometry",
-        "paths",
         "root",
-        "rounded_geometry",
         "shadow",
         "shadow_visual",
         "size",
@@ -164,15 +155,8 @@ class Glass:
         self,
         owner: DesktopComposition,
         *,
-        create_path: Callable[[Contour, float], CompositionPath] = composition_path,
         stack: Callable[[int, int], None] = stack_behind,
     ) -> None:
-        # Native paths contain COM-owned callback bindings. Retain at most eight
-        # recent shape/scale variants per glass owner to avoid rebuilding those
-        # bindings on common toolbar reversals. The standard library owns cache
-        # mechanics; this owner clears its native references on close. No path
-        # crosses composition/dispatcher lifetimes or UI threads.
-        self.paths: CachedPaths = lru_cache(maxsize=8)(create_path)
         self.stack = stack
         # NOREDIRECTIONBITMAP lets composition supply the entire surface. It is
         # intentionally not a layered/color-keyed window.
@@ -183,7 +167,7 @@ class Glass:
             raise ctypes.WinError(GetLastError())
         self.closed = self.visible = False
         self.bounds: Rect | None = None
-        self.size: tuple[int, int, float, bool, Contour | None] | None = None
+        self.size: tuple[int, int, float] | None = None
         self.opacity = 1.0
         try:
             enabled = ctypes.c_int(1)
@@ -194,22 +178,19 @@ class Glass:
             borderless(self.handle)
             self.root = compositor.CreateContainerVisual()
             self.target.Root = self.root
-            # Geometry and clip identities belong to this native owner. Shape
-            # setters update their contents; rebuilding the graph on each join
-            # change repeats native allocations and SDK interface resolution.
-            self.rounded_geometry = compositor.CreateRoundedRectangleGeometry()
-            self.path_geometry: CompositionPathGeometry | None = None
-            self.geometry: CompositionPathGeometry | CompositionRoundedRectangleGeometry = self.rounded_geometry
+            # Geometry and clip identities belong to this native owner; shape
+            # setters update their contents without rebuilding the graph.
+            self.geometry = compositor.CreateRoundedRectangleGeometry()
             self.group = compositor.CreateContainerVisual()
             self.clip = compositor.CreateGeometricClipWithGeometry(self.geometry)
             self.group.Clip = self.clip
 
             # The shadow uses the same rounded silhouette as the glass. Its
             # source visual is offscreen; the compositor retains the mask.
-            self.mask_shape = compositor.CreateSpriteShapeWithGeometry(self.geometry)
-            self.mask_shape.FillBrush = compositor.CreateColorBrushWithColor(_color("#ffffff", 1))
+            mask_shape = compositor.CreateSpriteShapeWithGeometry(self.geometry)
+            mask_shape.FillBrush = compositor.CreateColorBrushWithColor(_color("#ffffff", 1))
             self.mask_visual = compositor.CreateShapeVisual()
-            self.mask_visual.Shapes.Append(self.mask_shape)
+            self.mask_visual.Shapes.Append(mask_shape)
             self.mask_surface = compositor.CreateVisualSurface()
             self.mask_surface.SourceVisual = self.mask_visual
             self.mask = compositor.CreateSurfaceBrushWithSurface(self.mask_surface)
@@ -246,49 +227,29 @@ class Glass:
             self.root.as_(IVisual),
             group,
             shadow,
-            self.rounded_geometry.as_(ICompositionRoundedRectangleGeometry),
+            self.geometry.as_(ICompositionRoundedRectangleGeometry),
             (group, self.backdrop.as_(IVisual), self.tint.as_(IVisual), self.mask_visual.as_(IVisual), shadow),
         )
 
-    def position(self, bounds: Rect, scale: float, opacity: float, *, attached: bool = False, contour: Contour | None = None) -> None:
+    def position(self, bounds: Rect, scale: float, opacity: float) -> None:
         padding = round(28 * scale)
         outer = Rect(bounds.left - padding, bounds.top - padding, bounds.right + padding, bounds.bottom + padding)
         if self.bounds != outer:
             self.bounds = outer
             windows.move(self.handle, outer)
-        if self.size != (bounds.width, bounds.height, scale, attached, contour):
-            previous = self.size
-            resized = previous is None or (previous[0], previous[1], previous[2]) != (bounds.width, bounds.height, scale)
-            geometry = self.geometry
-            self.size = (bounds.width, bounds.height, scale, attached, contour)
-            if contour is not None:
-                path = self.paths(contour, scale)
-                if self.path_geometry is None:
-                    self.path_geometry = self.compositor.CreatePathGeometryWithPath(path)
-                else:
-                    self.path_geometry.as_(ICompositionPathGeometry).Path = path
-                self.geometry = self.path_geometry
-            else:
-                rounded = self.rounded_geometry
-                self.geometry = rounded
-                radius = min(26 * scale, bounds.height / 2, bounds.width / 2)
-                self.bindings.rounded.Offset = Vector2(0, -radius if attached else 0)
-                self.bindings.rounded.Size = Vector2(bounds.width, bounds.height + radius if attached else bounds.height)
-                self.bindings.rounded.CornerRadius = Vector2(radius, radius)
-            if self.geometry is not geometry:
-                self.clip.Geometry = self.geometry
-                self.mask_shape.Geometry = self.geometry
-            # Join changes update the retained path; visual dimensions and
-            # shadow parameters only need publication after size/DPI changes.
-            if resized:
-                size = Vector2(bounds.width, bounds.height)
-                self.bindings.root.Size = Vector2(outer.width, outer.height)
-                for visual in self.bindings.sized:
-                    visual.Size = size
-                self.bindings.group.Offset = self.bindings.shadow.Offset = Vector3(padding, padding, 0)
-                self.mask_surface.SourceSize = size
-                self.shadow.BlurRadius = 24 * scale
-                self.shadow.Offset = Vector3(0, 8 * scale, 0)
+        if self.size != (bounds.width, bounds.height, scale):
+            self.size = (bounds.width, bounds.height, scale)
+            radius = min(26 * scale, bounds.height / 2, bounds.width / 2)
+            size = Vector2(bounds.width, bounds.height)
+            self.bindings.rounded.Size = size
+            self.bindings.rounded.CornerRadius = Vector2(radius, radius)
+            self.bindings.root.Size = Vector2(outer.width, outer.height)
+            for visual in self.bindings.sized:
+                visual.Size = size
+            self.bindings.group.Offset = self.bindings.shadow.Offset = Vector3(padding, padding, 0)
+            self.mask_surface.SourceSize = size
+            self.shadow.BlurRadius = 24 * scale
+            self.shadow.Offset = Vector3(0, 8 * scale, 0)
         opacity = max(0, min(1, opacity))
         if self.opacity != opacity:
             self.bindings.root.Opacity = opacity
@@ -313,7 +274,178 @@ class Glass:
         if self.closed:
             return
         self.closed = True
-        self.paths.cache_clear()
+        self.target.Root = None
+        self.target.Close()
+        windows.destroy(self.handle)
+
+
+class PaneGroup:
+    """One pane's retained native visuals, reused each time its key reappears.
+
+    Expression animations derive the clip geometry, corner radius, rim, shadow
+    and its mask from the group's own size, offset and opacity, so publishing
+    a frame writes only those three properties. Native ownership requires the
+    published state to live with the visuals it describes.
+    """
+
+    __slots__ = ("compositor", "group", "properties", "published", "rim", "shadow", "tint", "visual")
+
+    def __init__(self, compositor: Compositor, root: ContainerVisual) -> None:
+        self.compositor = compositor
+        self.group = compositor.CreateContainerVisual()
+        geometry = compositor.CreateRoundedRectangleGeometry()
+        self.group.Clip = compositor.CreateGeometricClipWithGeometry(geometry)
+        backdrop = compositor.CreateSpriteVisual()
+        backdrop.Brush = compositor.CreateHostBackdropBrush()
+        self.tint: CompositionColorBrush = compositor.CreateColorBrush()
+        tint = compositor.CreateSpriteVisual()
+        tint.Brush = self.tint
+        self.rim: CompositionLinearGradientBrush = compositor.CreateLinearGradientBrush()
+        self.rim.StartPoint, self.rim.EndPoint = Vector2(0.3, 0), Vector2(0.7, 1)
+        stroke = compositor.CreateSpriteShapeWithGeometry(geometry)
+        stroke.StrokeBrush = self.rim
+        stroke.StrokeThickness = 2  # Half lies outside the clip: one pixel of rim inside the edge.
+        rim = compositor.CreateShapeVisual()
+        rim.Shapes.Append(stroke)
+        for child in (backdrop, tint, rim):
+            child.RelativeSizeAdjustment = Vector2(1, 1)
+            self.group.Children.InsertAtTop(child)
+        fill = compositor.CreateSpriteShapeWithGeometry(geometry)
+        fill.FillBrush = compositor.CreateColorBrushWithColor(_color("#ffffff", 1))
+        mask = compositor.CreateShapeVisual()
+        mask.Shapes.Append(fill)
+        surface = compositor.CreateVisualSurface()
+        surface.SourceVisual = mask
+        self.shadow: DropShadow = compositor.CreateDropShadow()
+        self.shadow.Color = _color("#000000", 1)
+        self.shadow.Mask = compositor.CreateSurfaceBrushWithSurface(surface)
+        shadow = compositor.CreateSpriteVisual()
+        shadow.Shadow = self.shadow
+        root.Children.InsertAtTop(shadow)
+        root.Children.InsertAtTop(self.group)
+        self.properties: CompositionPropertySet = compositor.CreatePropertySet()
+        self.properties.InsertScalar("radius", 0)
+        for target, name, expression in (
+            (geometry, "Size", "g.Size"),
+            (geometry, "CornerRadius", "Vector2(Min(g.Size.Y / 2, p.radius), Min(g.Size.Y / 2, p.radius))"),
+            (mask, "Size", "g.Size"),
+            (surface, "SourceSize", "g.Size"),
+            (shadow, "Offset", "g.Offset"),
+            (shadow, "Size", "g.Size"),
+            (shadow, "Opacity", "g.Opacity"),
+        ):
+            animation = compositor.CreateExpressionAnimationWithExpression(expression)
+            animation.SetReferenceParameter("g", self.group)
+            animation.SetReferenceParameter("p", self.properties)
+            target.StartAnimation(name, animation)
+        self.visual: IVisual = self.group.as_(IVisual)
+        self.visual.Opacity = 0
+        self.published: Pane | None = None
+
+    def publish(self, pane: Pane) -> None:
+        last = self.published
+        self.published = pane
+        if last is None or (last.bounds.left, last.bounds.top) != (pane.bounds.left, pane.bounds.top):
+            self.visual.Offset = Vector3(pane.bounds.left, pane.bounds.top, 0)
+        if last is None or (last.bounds.width, last.bounds.height) != (pane.bounds.width, pane.bounds.height):
+            self.visual.Size = Vector2(pane.bounds.width, pane.bounds.height)
+        if last is None or last.radius != pane.radius:
+            self.properties.InsertScalar("radius", pane.radius)
+        if last is None or last.opacity != pane.opacity:
+            self.visual.Opacity = max(0, min(1, pane.opacity))
+        if last is None or last.veil != pane.veil:
+            self.tint.Color = _color(pane.veil.tint, pane.veil.opacity)
+            self.shadow.Opacity = pane.veil.shadow
+            stops = self.rim.ColorStops
+            stops.Clear()
+            for stop in pane.veil.rim:
+                stops.Append(self.compositor.CreateColorGradientStopWithOffsetAndColor(stop.offset, _color(stop.color, stop.opacity)))
+
+    def release(self) -> None:
+        if self.published is not None:
+            self.visual.Opacity = 0
+            self.published = None
+
+
+class GlassScene:
+    """Several glass panes composed in one nonactivating window behind their Qt foreground.
+
+    Pane groups are pooled by key for the scene's lifetime: a capsule that leaves
+    and returns reuses its native visuals instead of allocating new ones.
+    """
+
+    __slots__ = ("bounds", "closed", "compositor", "groups", "handle", "root", "scale", "stack", "target", "visible")
+
+    def __init__(self, owner: DesktopComposition, title: str, *, stack: Callable[[int, int], None] = stack_behind) -> None:
+        self.stack = stack
+        self.handle = CreateWindowExW(0x0820_00A0, "STATIC", title, 0x8000_0000, 0, 0, 1, 1, None, None, GetModuleHandleW(None), None) or 0
+        if not self.handle:
+            raise ctypes.WinError(GetLastError())
+        self.closed = self.visible = False
+        self.bounds: Rect | None = None
+        self.scale = 0.0
+        self.groups: frozendict[str, PaneGroup] = frozendict()
+        try:
+            enabled = ctypes.c_int(1)
+            _check(DwmSetWindowAttribute(self.handle, 17, ctypes.byref(enabled), ctypes.sizeof(enabled)))
+            self.target: DesktopWindowTarget = DesktopWindowTarget(own=True)
+            _check(owner.interop.CreateDesktopWindowTarget(self.handle, False, self.target))
+            self.compositor: Compositor = owner.compositor
+            borderless(self.handle)
+            self.root = self.compositor.CreateContainerVisual()
+            self.target.Root = self.root
+        except BaseException:
+            windows.destroy(self.handle)
+            raise
+
+    def place(self, bounds: Rect, scale: float) -> None:
+        """Cover the screen area the panes can reach, in device pixels."""
+        if self.bounds != bounds:
+            self.bounds = bounds
+            windows.move(self.handle, bounds)
+            self.root.as_(IVisual).Size = Vector2(bounds.width, bounds.height)
+        if self.scale != scale:
+            self.scale = scale
+            for group in self.groups.values():
+                group.shadow.BlurRadius = 24 * scale
+                group.shadow.Offset = Vector3(0, 8 * scale, 0)
+
+    def publish(self, panes: tuple[Pane, ...]) -> None:
+        """Show exactly these panes; any other pooled pane hides until its key returns."""
+        keys = frozenset(pane.key for pane in panes)
+        for pane in panes:
+            group = self.groups.get(pane.key)
+            if group is None:
+                group = PaneGroup(self.compositor, self.root)
+                group.shadow.BlurRadius = 24 * self.scale
+                group.shadow.Offset = Vector3(0, 8 * self.scale, 0)
+                self.groups = frozendict(self.groups | {pane.key: group})
+            if group.published != pane:
+                group.publish(pane)
+        for key, group in self.groups.items():
+            if key not in keys:
+                group.release()
+
+    def published(self) -> tuple[Pane, ...]:
+        return tuple(group.published for group in self.groups.values() if group.published is not None)
+
+    def show(self, foreground: int) -> None:
+        if not self.visible:
+            windows.show_quietly(self.handle, visible=True)
+            self.visible = True
+        if GetWindow(foreground, 2) != self.handle:  # GW_HWNDNEXT
+            self.stack(self.handle, foreground)
+
+    def hide(self) -> None:
+        if self.visible:
+            windows.show_quietly(self.handle, visible=False)
+            self.visible = False
+
+    def close(self) -> None:
+        if self.closed:
+            return
+        self.closed = True
+        self.groups = frozendict()
         self.target.Root = None
         self.target.Close()
         windows.destroy(self.handle)

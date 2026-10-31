@@ -25,6 +25,34 @@ class Rect:
 
 
 @dataclass(frozen=True, slots=True)
+class Stop:
+    offset: float
+    color: str
+    opacity: float
+
+
+@dataclass(frozen=True, slots=True)
+class Veil:
+    """How a pane's glass reads: its tint over the blurred desktop, its rim light and its shadow."""
+
+    tint: str
+    opacity: float
+    rim: tuple[Stop, ...]
+    shadow: float
+
+
+@dataclass(frozen=True, slots=True)
+class Pane:
+    """One rounded pane, in device pixels within its scene; the radius is capped at half the height."""
+
+    key: str
+    bounds: Rect
+    radius: float
+    opacity: float
+    veil: Veil
+
+
+@dataclass(frozen=True, slots=True)
 class Window:
     """A top-level window, as the taskbar would show it."""
 

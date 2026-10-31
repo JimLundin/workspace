@@ -1,131 +1,111 @@
-# Contextual Workspace toolbar
+# The island bar
 
-The desktop control surface uses the agent messages' native Windows backdrop,
-blue/lilac tint, opaque ink, rounded edges and adaptive light/dark contrast.
-Windows' reduced-transparency and high-contrast settings retain solid fallbacks.
+Workspace's desktop control surface is a floating island at the top of the
+primary screen, in the Liquid Glass design
+([design note](design/liquid-glass.md), kit at
+[JimLundin/liquid-glass](https://github.com/JimLundin/liquid-glass)). The island
+stays centred 8 px below the screen edge. Only temporary or active things sit
+beside it, and every capsule acts on what it shows.
 
-| Situation | Visible controls |
-| --- | --- |
-| Idle | Workspace menu button and read-only local time, battery level and available local temperature |
-| Dictating | Microphone, live audio waveform and its Stop control |
-| Transcribing | Compact rotating spinner |
-| Agent working | Activity label and Stop |
-| Agent needs input | Needs you; conversation access is in the capsule's menu |
-| Meeting recording | Separate microphone/timer capsule and its own Stop |
-| Saving or interrupted recording | Separate progress or attention capsule |
-| Temporary keyboard layer or layout disabled | Small keyboard-mode capsule |
+| Situation | Island | Beside it |
+| --- | --- | --- |
+| Rest | Time and battery, with speaker and Wi-Fi alerts before them | — |
+| Transcribing | A spinner in the leading slot, then the time | — |
+| Agent working | A spinner in the leading slot; hovering reveals Stop | — |
+| Meeting recording | A red dot and timer in the trailing slot; hovering reveals Stop | — |
+| Dictating | The live microphone and its trace; no text | The recording, detached after the island |
+| Agent needs input | "Needs you", tinted orange | The recording, detached after the island |
+| Items wait in the inbox | — | A bell with a count badge, last |
+| Temporary layer or layout off | — | The layer name (or Colemak), first |
 
-Dividers separate independent functions. The main capsule groups are the
-Workspace menu, the current readout with its applicable Stop control, and the
-inbox. Icons, labels and controls for one function stay together without an
-internal divider. Read-only ambient facts use spacing within their single group.
-Recording and keyboard capsules already establish their boundaries through their
-separate shapes, so their joins need no redundant divider. An absent inbox hides
-its divider too. Each action's hover text names its matching function.
+Dictation and a waiting question are moments: they take the island over, and the
+recording detaches beside it. The bar receives one Workspace state, so dictation,
+transcription and agent work never show at once. Transcription offers no Stop
+because it cannot be stopped. "Starting…", "Stopping…" and "Saving…" replace the
+timer; "Check recording" turns it red and the detached capsule orange.
 
-Icon-only toolbar controls use square 24-pixel targets around their 14-pixel
-icons. Adding a caption switches to icon-and-text layout with measured width;
-clearing it restores the square. Controls keep the same height and never stretch
-to fill extra space. Listening and transcription use their graphic indicators
-without visible state labels or reserved label width; tooltips and accessibility
-names retain the state descriptions.
+Pressing the island at rest opens the controls menu, below the island with the
+canvas first. Pressing it while dictating stops dictation; pressing "Needs you"
+opens the question. The recording opens the canvas, the layer opens the key map
+and the bell opens the inbox. The bell's badge reads `99+` above 99; its tooltip
+and accessible name keep the exact count and the **Hold V + T** shortcut. Hold
+V + T opens the same inbox while the layout is on, including when no bell shows.
+Space holds dictation; B toggles dictation; N toggles agent speech.
 
-Agent, recording and keyboard state are independent. Finishing a recording
-removes its capsule without hiding an active agent or dictation. Routine Work,
-recording-start, conversation and keyboard actions live in the controls menu.
-The menu has its own explicit button. Ambient facts, activity text and capsule
-padding are read-only and do not open unrelated controls. Keyboard focus and
-hover/press feedback belong to actionable buttons.
-A small bell beside the controls opens the work feed directly when inbox items
-need attention. Its count follows unhandled work and unanswered questions,
-including items beyond the visible bubble page. Curated work uses its grouped
-items; handled items and muted sources do not re-alert. The bell stays available
-during dictation and agent work, and disappears when the count reaches zero.
-Counts above 99 display `99+`; hover and accessibility retain the exact count.
-**Hold V + T** opens the same inbox while Workspace's layout is enabled, including
-when the bell is hidden. The bell tooltip and key map show the shortcut.
-Opening the inbox restores the current feed's first page and reveals locally
-hidden bubbles without reviving work that was handled or dismissed in its source.
-Space holds dictation; B toggles dictation; N toggles agent speech. These voice
-buttons work on every layer independently of held modifiers. Meeting recording
-remains available in Workspace controls.
-Speech capture continues after key release, until the next toggle or Stop.
-The menu includes Copy latest transcript, the Apps + Esc window switcher and an explicit
-action to spread visible tiles across connected screens.
-Tabbed groups add a shared glass tab strip along each occupied screen's top edge.
-On the primary screen, the ambient capsule moves to the right and joins the strip;
-active recording and keyboard capsules still expand independently. Each group's
-selected window has a filled tab; the focused group has stronger contrast. Inactive
-tabs show the app name, selected tabs show the window title, and long text elides
-with the full title available to accessibility and hover. The focused group's
-single close control closes its selected app window. Apps-layer arrows focus
-groups, Control+left/right cycles tabs, and Shift+arrows transfer windows. No
-function-key or number shortcut is required.
-The main capsule stays centered against the top screen edge and overlays tiled
-windows without reserving a full-width strip. Its outer shoulders
-curve outward into that edge, with no horizontal top outline or native window
-frame. Its height is 28 logical pixels, with 24-pixel controls and the existing
-12-pixel text. Adjacent segments meet across their upper six pixels, with curved
-cutouts below the connection. Their glass masks meet without overlapping tint or
-drawing a border through the joint. Auxiliary capsules can stack below on narrow
-screens, using the ordinary rounded shape when detached.
+## Shape
 
-Read-only system observations add an unmuted-speaker icon for the default playback
-endpoint and a disconnected-Wi-Fi icon when adapters exist but none is associated.
-They remain visible during dictation, transcription and agent work. The icons
-disappear when their conditions clear; muted playback is the quiet default. Unknown readings and absent Wi-Fi adapters
-do not imply a fault. Ethernet or internet reachability is separate from Wi-Fi
-association. A background worker refreshes the observations once per second,
-without opening an audio stream, scanning for networks or blocking the UI.
+Capsules are 34 px tall with fully round ends. A control is a 28 px circle,
+concentric 3 px inside its capsule's edge. Text is Inter at 12 px, medium weight,
+with tabular figures so a running timer keeps its width. Text content pads 12 px;
+slots and side-by-side readings sit 12 px apart; a symbol sits 6 px from its text.
+Icon-only content pads 10 px and is never narrower than a circle. Symbols are
+16 px Fluent UI System Icons.
 
-Keyboard-triggered content and layout changes take effect immediately. New
-segments enter from above the screen edge using a reversible 160 ms slide and
-opacity transition with the existing conversation curve. They exit upward; a
-reversal continues from the current position. Reduced motion uses an immediate
-transition. Windows composition follows the foreground's position and opacity,
-with the same vector silhouette for glass and shadow. Geometry changes only when
-size or joining state changes. Text stays opaque at rest, and no idle animation
-loop runs. Content changes resize immediately rather than animating dimensions.
+The bar owns the spacing between capsules: each neighbouring pair is 6 px apart,
+scaled by the less present of the two, so a capsule entering or leaving opens and
+closes the space beside it. Each capsule also owns a strip from the screen edge
+down to its glass, so a pointer thrown against the top of the screen lands on it.
+Edges snap to device pixels, shared by Qt and composition.
 
-The audio trace is a bounded 24-sample history of real RMS levels, read every
-50 ms only while dictating. `waveInGetPosition` marks recorded data in the same
-PCM buffer used for transcription. Each read copies at most 40 ms (1,280 bytes
-at 16 kHz). A nonblocking lock prevents reads during reset or release without
-making the UI wait. Silence remains flat; unavailable observations do not
-simulate activity. Stopping capture stops the meter and replaces the trace with a
-compact spinner while the transcription request runs. The existing frame loop
-rotates its arc at 300 degrees per second without sampling audio or measuring
-text. Reduced motion retains a stationary arc and the accessible state name.
-Completion restores the ambient presentation and stops the frame timer.
+[Island states with the solid material](images/workspace-island.png): rest,
+agent work, agent work under the pointer, a recording, dictation with a
+recording and inbox, a waiting question, and a locked layer with a full inbox.
+
+## Material
+
+Glass has no colour of its own. Small glass takes its scheme from the desktop
+beside the island, sampled off the UI thread: dark ink over a bright desktop, a
+thin dark veil over a uniformly dark one, and a heavier veil over a mixed desktop
+so small text stays legible. Colour appears only for meaning: orange when a
+question waits, red for recording and a low battery, and the microphone's amber
+while it listens. A rim light runs brightest along the upper-leading curve.
+
+Windows' Reduce Transparency setting gives solid capsules. High contrast uses
+the system window and text colours, swapping them on a tinted capsule so a
+waiting question still stands out; every reading keeps the system foreground.
+
+## Architecture
+
+One screen-wide, translucent Qt window (titled "Workspace floating bar") holds a
+child widget per capsule and a child button per control, so each keeps its
+accessible name, tooltip and keyboard focus. Its transparent pixels pass clicks
+through to the desktop; capsules paint an invisible hit fill. Behind it, one
+composition window (`GlassScene`) holds a pooled group of native visuals per
+capsule: a rounded clip, the blurred host backdrop, a tint, the rim and a shadow.
+Expression animations derive the geometry, corner radius, rim and shadow from
+each group's offset, size and opacity, so publishing a frame writes only those
+three properties. Changes within one Qt turn publish one final glass frame, and
+capsule changes never move a window.
+
+`island_model` turns observations into capsule views, `island_layout` arranges
+parts and frames capsules, and `ui_components.appearance.look` decides how each
+reads. All three are pure. `DesktopBar` owns the observations and timers, and
+`island_surface` owns the Qt window and glass.
+
+## Observations
 
 Windows `GetSystemPowerStatus` supplies battery percentage, charging and external
 power. Unknown readings show a dash; machines without a battery show AC. A battery
-above 95% while plugged in hides its percentage and retains the charger symbol.
-At 95% or below, or after unplugging, the percentage is visible.
-Power refreshes every fifteen seconds and the local clock updates at minute changes.
-Weather uses Windows geolocation when already available, with no consent request
-or IP-based fallback. A background worker sends coordinates rounded to a tenth
-of a degree to Open-Meteo, refreshes successful observations every fifteen minutes,
-and quietly retries missing location or network access. A failed refresh removes
-temperature rather than displaying stale or invented weather. Location and
-weather are neither persisted nor logged.
+above 95% while plugged in hides its percentage and keeps the charger symbol.
+Power refreshes every fifteen seconds; the clock follows the local minute.
 
-[Native glass previews with illustrative battery, weather and audio observations](images/workspace-toolbar.png).
-These precede the flared shoulders and joining segments.
+The speaker and Wi-Fi alerts show an unmuted default playback endpoint and Wi-Fi
+adapters with none associated. Unknown readings and absent adapters imply no fault.
+A background worker refreshes them once per second without opening an audio
+stream or scanning for networks.
 
-[Current shape and motion storyboard](images/workspace-bar-shape.png) shows the
-flared shoulders, partial connections and an entrance frame. It uses the Qt solid
-fallback with illustrative observations because the Windows desktop was locked
-during capture. Native Direct2D mask containment, composition clip creation and
-geometry-source cleanup were checked independently.
+The microphone trace is 18 bars of real RMS levels, read every 50 ms only while
+dictating, off Qt's thread. `waveInGetPosition` marks recorded data in the same
+PCM buffer used for transcription; each read copies at most 40 ms. Silence stays
+flat, and an unavailable meter doesn't simulate activity. The spinner turns on the
+existing frame loop only while work runs; reduced motion holds it still. No frame
+timer runs at rest.
 
 ## References
 
 - [Apple: Toolbars](https://developer.apple.com/design/human-interface-guidelines/toolbars):
-  deliberate item selection, logical grouping, restrained backgrounds and familiar
-  symbols; less-frequent actions belong in a More menu.
+  deliberate item selection, logical grouping and familiar symbols.
 - [Apple: Live Activities](https://developer.apple.com/design/human-interface-guidelines/live-activities):
-  compact resting presentations, independent simultaneous activities, and more
-  space only when the activity has more useful information.
-- Workspace's existing `toast_style`, `appearance`, `composition` and `qt_ui` modules
-  remain the material, motion-preference and composition-lifetime references.
+  compact, minimal and expanded presentations, and independent simultaneous activities.
+- [Apple: Materials](https://developer.apple.com/design/human-interface-guidelines/materials):
+  Liquid Glass for the functional layer, tint only for meaning.

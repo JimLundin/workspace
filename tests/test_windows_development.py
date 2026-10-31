@@ -18,6 +18,7 @@ if sys.platform != "win32":
 
 lazy import shiboken6
 
+from assistant.island_model import Key
 from assistant.qt_runtime import prepare
 from scripts.preview import Files, Preview
 from tests.check_fixture import copy_check_scripts
@@ -180,19 +181,19 @@ def test_preview_uses_real_views_without_starting_native_services_and_closes_cle
         assert preview.bar.controls is None and preview.bar.worker is None and preview.bar.audio_meter is None
         assert preview.bar.keys is None and not preview.bar.taskbar.ready
         assert preview.bar.notification_service is None
-        assert preview.bar.weather_service is None and preview.bar.status_service is None
+        assert preview.bar.status_service is None
+        island = preview.bar.window.capsules[Key.ISLAND]
         preview.selector.setCurrentIndex(2)
         preview.root.processEvents()
-        assert not preview.bar.record.text() and "02:05" in preview.bar.record.toolTip()
-        assert preview.bar.ambient.clock in preview.bar.status.text() and preview.bar.ambient.text in preview.bar.status.toolTip()
+        assert "02:05" in island.accessibleName() and preview.bar.ambient.text in island.accessibleName()
         preview.selector.setCurrentIndex(5)
         preview.root.processEvents()
-        assert not preview.bar.status.text() and preview.bar.status.processing
+        assert "Transcribing" in island.accessibleName()
         preview.selector.setCurrentIndex(2)
         preview.root.processEvents()
         assert preview.feed.cards and json_value(files.state.read_text()) == {"scenario": 2}
         assert preview.control.isVisible()
-        assert all(pill.windowTitle().startswith("Workspace preview") for pill in preview.bar.pills)
+        assert preview.bar.window.windowTitle().startswith("Workspace preview")
         preview.bar.open_menu()
         for action in preview.bar.menu.actions():
             if action.text() in ("Windows taskbar", "Windows notification settings"):

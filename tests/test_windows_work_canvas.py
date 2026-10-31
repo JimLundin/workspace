@@ -23,6 +23,7 @@ from assistant.card_actions import OpenCanvas, parse
 from assistant.feed_agent_tools import request
 from assistant.feed_origin import App
 from assistant.icons import State
+from assistant.island_model import Key
 from assistant.local_bridge import LocalBridge
 from assistant.notifications import body
 from assistant.personal_work_panel import PersonalPanel
@@ -1063,7 +1064,7 @@ def test_canvas_attention_reaches_the_desktop_and_redirects_to_its_bubble(tmp_pa
         ui.observe_canvas(data)
         ui.observe_canvas_work(snapshot)
         ui.pump()
-        assert not ui.bar.inbox.text() and "1 clarification needs" in ui.bar.inbox.accessibleName()
+        assert "1 clarification needs" in ui.bar.window.capsules[Key.INBOX].accessibleName()
         ui.open_inbox(lambda: None)
         ui.pump()
         assert ui.canvas_view.personal.selected == "question:current"

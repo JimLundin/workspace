@@ -49,33 +49,6 @@
     {
       "key": {
         "rule": "PLR0913",
-        "path": "assistant/bar_geometry.py",
-        "scope": "segment",
-        "signature": "014f69261a998d9572c52e57f040bac85857967d6ebe33583392a519c8ba851a"
-      },
-      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
-    },
-    {
-      "key": {
-        "rule": "PLR0913",
-        "path": "assistant/bar_model.py",
-        "scope": "toolbar",
-        "signature": "e4e6714d4a5b6a203e7acb22affe8bb58c778b2bf5310bc96c7708592f2fbf3a"
-      },
-      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
-    },
-    {
-      "key": {
-        "rule": "PLR0913",
-        "path": "assistant/bar_surface.py",
-        "scope": "Pill.button",
-        "signature": "ecf7c8950358fd455892f0b8ae0d99e7bff1b09c3ad536ac267e3b135be91349"
-      },
-      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
-    },
-    {
-      "key": {
-        "rule": "PLR0913",
         "path": "assistant/browser.py",
         "scope": "Browser.__init__",
         "signature": "c3ee12d98ebdb2a80e3d810d0ff884d9bb7dc7e5358079199fd646ef997bb3dd"
@@ -1225,15 +1198,6 @@
         "path": "usage.py",
         "scope": "record",
         "signature": "7380ab4d1a38f1d98f0838577efaa400169aba4d7a20140a16db99477a16ae45"
-      },
-      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
-    },
-    {
-      "key": {
-        "rule": "PLR0913",
-        "path": "winapi/composition.py",
-        "scope": "Glass.position",
-        "signature": "3830d3ad30a32ecd7a7bf92e16be374d5cb975c0eec6c74375fcdf126b4c8e7c"
       },
       "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
     },
