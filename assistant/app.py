@@ -20,10 +20,11 @@ import components
 import keeper
 import keeper_control
 import usage
-from assistant.activity import ActivityTracker, ContextSnapshot, Observation
+from assistant.activity import ActivityTracker
+from automation.activity import ContextSnapshot, Observation, Policy
 from config import APPS
 from usage import DIRECTORY, Detail
-lazy from assistant import activity, control_policy
+lazy from assistant import control_policy
 lazy from assistant.browser import Browser
 lazy from assistant.browser_session import Product
 lazy from assistant.canvas_activity import CanvasInstruction, CanvasRun
@@ -279,7 +280,7 @@ class AssistantApp:
         self.activity = ActivityTracker(
             foreground_context,
             self.agent.running,
-            policy=activity.Policy(enabled=os.environ.get("WORKSPACE_AGENT_CONTEXT", "recent").lower() != "off"),
+            policy=Policy(enabled=os.environ.get("WORKSPACE_AGENT_CONTEXT", "recent").lower() != "off"),
         )
         self.communications = Communications(
             TeamsWeb(DIRECTORY / "browser-profile"),

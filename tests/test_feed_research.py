@@ -10,7 +10,6 @@ from unittest import TestCase
 
 from pydantic import TypeAdapter
 
-from assistant.activity import ContextSnapshot
 from assistant.communications import Conversation, Feed, Message, acknowledge
 from assistant.feed_contracts import DismissItem, Disposition, StoredBoard
 from assistant.feed_research import Research
@@ -19,6 +18,7 @@ from assistant.feed_triage import Board, decode, proposal_revision, restored, sa
 from assistant.feed_triage_service import classify
 from assistant.feed_work import FeedWork
 from assistant.llm import Settings
+from automation.activity import ContextSnapshot
 from automation.context import ContextStore, ProjectNote
 from automation.json_value import Json
 from automation.store import TaskStore

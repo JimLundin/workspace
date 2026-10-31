@@ -12,7 +12,7 @@ from typing import Annotated, Final, Literal, assert_never
 
 from pydantic import ConfigDict, Field, TypeAdapter
 
-from assistant.activity import Activity, ContextSnapshot
+from automation.activity import Activity, ContextSnapshot
 from automation.capture import AudioSource
 from automation.execution import ApprovalReview
 from automation.presentation import (

@@ -7,7 +7,6 @@ from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from pathlib import Path
 
-from assistant.activity import Activity, ContextSnapshot
 from assistant.agent_session import ChatMessage
 from assistant.work_agent import MeetingControl, WorkAgent
 from assistant.work_window import (
@@ -27,6 +26,7 @@ from assistant.work_window import (
     UpdateRoutine,
     WorkSnapshot,
 )
+from automation.activity import Activity, ContextSnapshot
 from automation.bridge import BridgeClient, BridgeServer
 from automation.context import ContextStore, Preference, ProjectNote
 from automation.execution import ApprovalReview

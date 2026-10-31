@@ -20,7 +20,6 @@ from typing import Final, Protocol
 from pydantic import ConfigDict, TypeAdapter
 
 from assistant import action_text
-from assistant.activity import ContextSnapshot
 from assistant.agent_history import History
 from assistant.agent_tools import AdapterReadback, Args, ArgumentError, Display, Machine, Output, Tool, Verify
 from assistant.desktop_tools import Screen
@@ -28,6 +27,7 @@ from assistant.llm import Settings, ToolCall
 from assistant.publishing import PublishError
 from assistant.workspace import SourceError
 from automation.actions import ActionError, Change, Observation, Operation
+from automation.activity import ContextSnapshot
 from automation.execution import Log, Proof, Report, ReportStatus, Targets, WorkExecution
 from automation.json_value import Json
 from automation.presentation import Failed, Succeeded, ToolActivity, ToolStatus

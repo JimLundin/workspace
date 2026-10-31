@@ -4,7 +4,8 @@ import json
 import threading
 from typing import cast
 
-from assistant.activity import ActivityTracker, ContextSnapshot, Observation, Policy, Sample, observed
+from assistant.activity import ActivityTracker
+from automation.activity import ContextSnapshot, Observation, Policy, Sample, observed
 from automation.json_value import Json
 from winapi.shapes import Window
 

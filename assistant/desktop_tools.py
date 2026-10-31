@@ -8,7 +8,6 @@ from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Final
 
-from assistant.activity import ContextSnapshot
 from assistant.agent_tools import (
     BOOL,
     DECLINED,
@@ -27,6 +26,7 @@ from assistant.geometry import Shot
 from assistant.llm import tool_spec
 from assistant.uia import Act, Inspect
 from automation.actions import Change, Classification, Evidence, Observation, Operation, target
+from automation.activity import ContextSnapshot
 from automation.execution import ProofRule, Readback, Targets
 from automation.json_value import Json
 from automation.task import FileDigest
