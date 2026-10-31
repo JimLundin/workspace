@@ -76,8 +76,7 @@ with no surviving mutations, timeouts or collection errors. Their receipts are
 The later voice-only bubble change retires the inline editor and its draft-reset
 regression; input is now owned by the existing voice/agent path. Native interaction
 checks cover the tooltip, read-only surface, exact option routing and exclusive
-expansion. Multi-select console choices stay readable and use voice instead of
-submitting an individual choice prematurely.
+expansion.
 
 Four follow-up seeded mutations were detected: removing the voice tooltip,
 recreating an editable child, retaining the previously expanded bubble and

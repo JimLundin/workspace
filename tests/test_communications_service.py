@@ -6,7 +6,7 @@ from unittest import TestCase
 
 from pydantic import TypeAdapter
 
-from assistant.browser_values import NavigationLoadingError
+from assistant.browser_values import NavigationLoadingError, PageRow
 from assistant.communications import (
     Acknowledgement,
     Connect,
@@ -218,7 +218,7 @@ def chat_document(identity: str) -> dict[str, Json]:
 
 
 def test_rechecking_a_loading_exact_chat_does_not_restart_teams_navigation(tmp_path: Path) -> None:
-    browser = Browser(({"id": "owned-page", "url": "https://teams.cloud.microsoft/v2/"},))
+    browser = Browser((PageRow("owned-page", "", "https://teams.cloud.microsoft/v2/"),))
     web = TeamsWeb(tmp_path, browser=browser)
     web.target = "owned-page"
     identity = "19:one@thread.v2"
@@ -230,7 +230,7 @@ def test_rechecking_a_loading_exact_chat_does_not_restart_teams_navigation(tmp_p
 
 
 def test_pending_navigation_keeps_observing_the_same_exact_chat_without_reopening(tmp_path: Path) -> None:
-    browser = Browser(({"id": "owned-page", "url": "https://teams.cloud.microsoft/v2/"},))
+    browser = Browser((PageRow("owned-page", "", "https://teams.cloud.microsoft/v2/"),))
     web = TeamsWeb(tmp_path, browser=browser)
     web.target = "owned-page"
     identity = "19:one@thread.v2"
@@ -242,7 +242,7 @@ def test_pending_navigation_keeps_observing_the_same_exact_chat_without_reopenin
 
 
 def test_next_chat_waits_for_pending_navigation_instead_of_restarting_teams(tmp_path: Path) -> None:
-    browser = Browser(({"id": "owned-page", "url": "https://teams.cloud.microsoft/v2/"},))
+    browser = Browser((PageRow("owned-page", "", "https://teams.cloud.microsoft/v2/"),))
     web = TeamsWeb(tmp_path, browser=browser)
     web.target = "owned-page"
     web.opening[web.target] = "19:loading@thread.v2"

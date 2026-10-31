@@ -22,12 +22,11 @@ remain pending. A ticket is independent of any agent task requested from it.
 _Avoid_: Teams unread badge, agent task
 
 **Feed source**:
-One kind of feed item: a chat ticket, a history message, a Teams activity or
-Windows notice, a sent reply, or a console request. Each kind defines its key,
-origin application, attention and triage evidence once. Attention is the single
-pending rule. Triage assesses unresolved work. A console question waits for a
-direct answer and triage cannot hide it. A reply still sending is settling. The
-feed shows every source that is not resolved.
+One kind of feed item: a chat ticket, a Teams activity or Windows notice, or a
+sent reply. Each kind defines its key, origin application,
+attention and triage evidence once. Attention is the single pending rule.
+Triage assesses unresolved work. A reply still sending is settling. The feed
+shows every source that is not resolved.
 _Avoid_: Source string, identity prefix
 
 **Card action**:
@@ -187,6 +186,13 @@ result. In-process readers perform it with typed values; the business tool
 family offers it to the model. A model's call of one is an operation.
 _Avoid_: App command, operation name
 
+**Browser request**:
+One typed operation on the automation browser: open, list, snapshot, act,
+evaluate, capture, or edit and close tabs and groups. The browser tool family
+validates the model's arguments into one before approval; in-process readers
+construct them directly. A model's call of one is an operation.
+_Avoid_: Browser command string, operation name
+
 **Observed outcome**:
 Evidence about what an action actually did. An interrupted attempt can retain
 an uncertain outcome until the affected state is inspected.
@@ -232,9 +238,8 @@ _Avoid_: Program, role, miryoku (as a component name)
 **Local bridge**:
 The authenticated loopback listener through which a local client reaches
 Workspace owners. The work bridge carries the agents' feed, work and canvas
-tool requests; the hook bridge carries console CLI hook events. Each bridge
-publishes an endpoint file with its address and token. An owner's refusal is a
-typed reply, not a transport error.
+tool requests. A bridge publishes an endpoint file with its address and token.
+An owner's refusal is a typed reply, not a transport error.
 _Avoid_: Feed bridge, console server
 
 **Keeper request**:

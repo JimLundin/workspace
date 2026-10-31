@@ -29,13 +29,12 @@ from automation.task import TextAnswer
 from winapi import windows
 from winapi.shapes import Rect
 lazy import assistant.communications
-lazy import assistant.console_requests
 lazy import assistant.system_notices
 lazy from assistant.agent_session import Session, Snapshot
 lazy from assistant.agent_toasts import AgentToasts
 lazy from assistant.agent_window import AgentWindow
 lazy from assistant.desktop_bar import BarActions, DesktopBar
-lazy from assistant.feed_observation import ConsolesObserved, FeedObservation, FeedUpdate, NoticesObserved, TeamsObserved, observe
+lazy from assistant.feed_observation import FeedObservation, FeedUpdate, NoticesObserved, TeamsObserved, observe
 lazy from assistant.geometry import region
 lazy from assistant.icons import State
 lazy from assistant.keymap import PHYSICAL_NAMES, Cap, Kind, keymap
@@ -134,7 +133,7 @@ class Views:
     canvas: Callable[[QtWidgets.QApplication, WorkWindow, WorkCanvas], CanvasWindow] = _native_canvas_view
 
 
-type Assess = Callable[[assistant.communications.Feed, tuple[assistant.console_requests.Request, ...]], None]
+type Assess = Callable[[assistant.communications.Feed], None]
 
 
 class Ui:
@@ -487,7 +486,7 @@ class Ui:
     def _observe_feed(self, update: FeedUpdate) -> None:
         self._feed = observe(self._feed, update)
         if self._assess is not None:
-            self._assess(self._feed.communications, self._feed.console_requests)
+            self._assess(self._feed.communications)
 
     def communications_changed(self, feed: assistant.communications.Feed) -> None:
         self.post(lambda _: self._observe_feed(TeamsObserved(feed)))
@@ -498,9 +497,6 @@ class Ui:
                 self._observe_feed(NoticesObserved(self._notifications.state))
 
         self.post(update)
-
-    def console_changed(self, requests: tuple[assistant.console_requests.Request, ...]) -> None:
-        self.post(lambda _: self._observe_feed(ConsolesObserved(requests)))
 
     def refresh_inbox(self, session: Snapshot | None = None) -> None:
         """Publish attention on the Qt thread, including before the agent view exists."""

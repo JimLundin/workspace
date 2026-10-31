@@ -9,9 +9,9 @@ if sys.platform != "win32":
     raise unittest.SkipTest("Native Edge tab groups")
 
 from assistant.browser import Browser
-from assistant.browser_values import Group, Tab, group_of, tab_of
+from assistant.browser_values import Group, Tab
 from tests.native_browser_fixture import request
-from tests.test_browser import decoded
+from tests.test_browser import command, decoded, group_of, tab_of
 
 
 def strip(browser: Browser) -> tuple[dict[int, Tab], dict[int, Group]]:
@@ -53,7 +53,7 @@ def verify_native_tabs(personal: Browser, attached: Browser, url: str) -> None:
 
     # The user opens the group to collaborate. A reconnect must preserve it.
     request(attached, "group", group_id=group.id, collapsed=False)
-    attached.request("close", {}, cancel)
+    attached.request(command("close"), cancel)
     assert personal.connection is not None
     targets = personal.connection.call("Target.getTargets", {}, cancel)["targetInfos"]
     assert isinstance(targets, list) and all(not isinstance(target, dict) or target["targetId"] != control.target for target in targets)
@@ -73,7 +73,7 @@ def verify_native_tabs(personal: Browser, attached: Browser, url: str) -> None:
 
     # Each scenario restores its created tabs before the next one.
     identical_urls(attached, before)
-    assert decoded(personal.request("tabs", {}, cancel).text)["tabs"]
+    assert decoded(personal.request(command("tabs"), cancel).text)["tabs"]
     moves_between_windows(personal, attached, url)
     assert set(strip(attached)[0]) == set(before)
 
@@ -104,7 +104,7 @@ def identical_urls(attached: Browser, before: dict[int, Tab]) -> None:
     created = {row["id"]: row["created_in_session"] for row in rows if isinstance(row, dict)}
     assert created[extra["target_id"]] is True and created[first["target_id"]] is True and False in created.values()
     assert request(attached, "tabs", limit=1)["next_offset"] == 1
-    attached.request("close", {"target_id": extra["target_id"]}, cancel)
+    attached.request(command("close", **{"target_id": extra["target_id"]}), cancel)
 
     # Explicit group operations also accept tabs that Workspace did not create.
     user_id = next(tab.id for tab in before.values() if tab.active)
@@ -114,7 +114,7 @@ def identical_urls(attached: Browser, before: dict[int, Tab]) -> None:
     closed = request(attached, "close", tab_ids=[second_id])
     assert closed["closed_tab_ids"] == [second_id]
     assert first_id in strip(attached)[0]
-    attached.request("close", {"target_id": first["target_id"]}, cancel)
+    attached.request(command("close", **{"target_id": first["target_id"]}), cancel)
     tabs, _groups = strip(attached)
     assert set(tabs) == set(before), (before, tabs)
     assert tabs[user_id].url == before[user_id].url and tabs[user_id].active

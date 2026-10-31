@@ -121,15 +121,6 @@
     {
       "key": {
         "rule": "PLR0913",
-        "path": "assistant/browser_host.py",
-        "scope": "exchange",
-        "signature": "1550813a7277828f0062c901e144a08d1d964578fc82b0b4ae8f04c161492c70"
-      },
-      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
-    },
-    {
-      "key": {
-        "rule": "PLR0913",
         "path": "assistant/browser_session.py",
         "scope": "BrowserConnection.call",
         "signature": "0b594bea2f8d5041e49e4ecf20794600c72d91f65ad1dac64129988e7950fed6"
@@ -185,15 +176,6 @@
       "key": {
         "rule": "PLR0913",
         "path": "assistant/browser_values.py",
-        "scope": "number",
-        "signature": "a556fea38aa8f051cb943e3ed064d4caabf51cc5004a7b4a722a604a5ea54829"
-      },
-      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
-    },
-    {
-      "key": {
-        "rule": "PLR0913",
-        "path": "assistant/browser_values.py",
         "scope": "strip_page",
         "signature": "21ba81d9fd18a2a76a357f932b4c07e74ad05dbc18ff5929c4d3d12a60afc830"
       },
@@ -214,15 +196,6 @@
         "path": "assistant/commands.py",
         "scope": "run",
         "signature": "82551861461aa4b68781dca36ec991c0268f18f6638c4cbefc34dfe1f4f2f619"
-      },
-      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
-    },
-    {
-      "key": {
-        "rule": "PLR0913",
-        "path": "assistant/console_requests.py",
-        "scope": "request",
-        "signature": "ce8d369dd6abf707491d891e3a29fde0e6cc14329217139eac5cbc981be1fe43"
       },
       "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
     },
@@ -1443,6 +1416,26 @@
         "signature": "930051080330bcfbbc1ad2e911eed00c3cb3ef2dc6fe3fff558c0cac482aacde"
       },
       "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "assistant/browser_session.py",
+        "scope": "Cdp.connect",
+        "signature": "d6a77c2e7481f181bb652e52fdd722a3443c155042621dce6583c28e30d58d28"
+      },
+      "reason": "One connection attempt depends on its loopback address, Stop, the consent deadline and the socket source; these are independent dependencies, not one domain record.",
+      "kind": "interface"
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "assistant/machine.py",
+        "scope": "WinMachine.__init__",
+        "signature": "f32e939e1fda5ee76fd3a57fc7fca351ca3f82a237357ea69295697474e85105"
+      },
+      "reason": "The composition root receives independent effect owners (desktop, browser, meeting capture, capture observation, file opening) that the worker selects separately.",
+      "kind": "interface"
     }
   ]
 }

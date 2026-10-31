@@ -13,7 +13,7 @@ from pathlib import Path, PureWindowsPath
 
 from components import CATALOGUE, unix_ms
 from scripts.deploy_values import Identity, Role
-from scripts.development_paths import PYTHON, USER
+from scripts.development_paths import USER
 lazy from winapi._core import fn
 
 INSTALLATION = PureWindowsPath(r"C:\Users\Jim.Lundin\Downloads\workspace-sdk\workspace")
@@ -42,15 +42,6 @@ def same_processes(before: Sequence[Process], after: Sequence[Process]) -> bool:
 
 def role_for(arguments: tuple[str, ...], *, windowed: bool, editor: tuple[PureWindowsPath, PureWindowsPath] | None = None) -> Role | None:
     arguments = (arguments[0], *(value for value in arguments[1:] if value not in ("-B", "-u", "-s"))) if arguments else ()
-    # The external console owns this exact client. ConsoleInbox.close expires
-    # its pending request and restores the native prompt through the transport;
-    # it must not be mistaken for an unowned application workload before close.
-    match arguments:
-        case (interpreter, script) | (interpreter, script, "--codex" | "--claude") if not windowed:
-            if PureWindowsPath(interpreter) == PureWindowsPath(PYTHON) and PureWindowsPath(script) == INSTALLATION / "scripts" / "inbox_hook.py":
-                return None
-        case _:
-            pass
     if editor is not None and arguments and PureWindowsPath(arguments[0]) == editor[0] and not windowed:
         # Development tools use a venv launcher sharing the installed base
         # interpreter. Their fresh checks/isolated views are separately owned

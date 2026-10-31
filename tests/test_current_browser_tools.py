@@ -30,4 +30,4 @@ def test_model_receives_only_current_browser_capabilities(tmp_path: Path) -> Non
         names = {str(tool["name"]) for tool in tools}
         assert {"browser_attach", "browser_open", "browser_tabs", "browser_snapshot", "browser_action"} <= names
         assert not any(name.startswith("browser_app_") for name in names)
-        assert rig.machine.log == ["browser tabs {}"]
+        assert rig.machine.log == ["browser PageList(offset=0, limit=20)"]

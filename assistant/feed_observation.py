@@ -1,4 +1,4 @@
-"""Feed observation: Teams work, Windows notices and console requests joined for triage.
+"""Feed observation: Teams work and Windows notices joined for triage.
 
 Observers report each update as it arrives. Routine arrivals stay quiet: the
 joined feed is what triage assesses, never a floating card.
@@ -8,7 +8,6 @@ from dataclasses import dataclass, field, replace
 from typing import assert_never
 
 from assistant.communications import Feed
-from assistant.console_requests import Request
 from assistant.notification_sources import Notices, joined
 
 
@@ -18,7 +17,6 @@ class FeedObservation:
 
     teams: Feed = field(default_factory=Feed)
     notices: Notices = field(default_factory=Notices)
-    console_requests: tuple[Request, ...] = ()
     communications: Feed = field(default_factory=Feed)
 
 
@@ -32,12 +30,7 @@ class NoticesObserved:
     notices: Notices
 
 
-@dataclass(frozen=True, slots=True)
-class ConsolesObserved:
-    requests: tuple[Request, ...]
-
-
-type FeedUpdate = TeamsObserved | NoticesObserved | ConsolesObserved
+type FeedUpdate = TeamsObserved | NoticesObserved
 
 
 def observe(observation: FeedObservation, update: FeedUpdate) -> FeedObservation:
@@ -46,8 +39,6 @@ def observe(observation: FeedObservation, update: FeedUpdate) -> FeedObservation
             observation = replace(observation, teams=teams)
         case NoticesObserved(notices=notices):
             observation = replace(observation, notices=notices)
-        case ConsolesObserved(requests=requests):
-            return replace(observation, console_requests=requests)
         case _:
             assert_never(update)
     return replace(observation, communications=joined(observation.teams, observation.notices))

@@ -10,8 +10,8 @@ import unittest
 import uuid
 from pathlib import Path
 
-from scripts.install_inbox_hooks import configuration
-from tests.json_fixture import json_value
+from assistant.llm import Json
+from tests.json_fixture import json_object, json_value
 
 if sys.platform != "win32":
     raise unittest.SkipTest("Native development tools")
@@ -27,14 +27,14 @@ prepare()
 ROOT = Path(__file__).resolve().parent.parent
 
 
-def wait_for(path: Path, condition: str, process: subprocess.Popen[bytes]) -> dict[str, object]:
+def wait_for(path: Path, condition: str, process: subprocess.Popen[bytes]) -> dict[str, Json]:
     deadline = time.monotonic() + 30
     while time.monotonic() < deadline:
         if process.poll() is not None:
             raise AssertionError("Watch exited before " + condition)
         if path.exists():
             try:
-                record: dict[str, object] = configuration(json_value(path.read_text()))
+                record = json_object(path.read_text())
             except OSError, ValueError:
                 pass
             else:
