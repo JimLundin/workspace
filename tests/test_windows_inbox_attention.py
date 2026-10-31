@@ -156,7 +156,7 @@ def test_app_context_stays_quiet_and_only_agent_questions_change_toolbar_attenti
         ui.system_notices(Observed((Notice(NoticeKey(11, 100), "mail", "Outlook", "Review", "Budget review"),)))
         ui.pump()
         assert ui.bar.inbox.isHidden()
-        agent = ui.agent(None, lambda: None, reveal=False)
+        agent = ui.agent(lambda: None, reveal=False)
         agent.request_input(asked("owned", "Which sheet?", "", 3), accept_answer)
         ui.pump()
         assert not ui.bar.inbox.text() and not ui.bar.inbox.isHidden()
@@ -180,7 +180,7 @@ def test_app_arrivals_reach_triage_joined_without_floating_alerts(tmp_path: Path
         assessed.append,
     )
     try:
-        agent = ui.agent(None, lambda: None, reveal=False)
+        agent = ui.agent(lambda: None, reveal=False)
         agent.show(focus=False)
         ui.pump()
         notice = Notice(NoticeKey(11, 100), "owned", "Mail", "Review this", "Immediate fictional notice")

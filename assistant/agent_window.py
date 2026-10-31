@@ -7,12 +7,11 @@ input stay on worker threads; notifications and history stay on the UI thread.
 import contextlib
 import threading
 import time
-import traceback
 import uuid
 from collections.abc import Callable
 from dataclasses import dataclass, replace
 from enum import Enum, auto
-from typing import Final, Protocol
+from typing import Protocol
 
 from assistant.agent_session import (
     AgentRequest,
@@ -31,18 +30,9 @@ from assistant.agent_session import (
 )
 from assistant.feed_origin import FeedRequest
 from assistant.recording_state import RecordingAction, RecordingState
+from assistant.view_publication import Post, Unavailable, ViewPublication, log_view
 from automation.presentation import Done, Finished, LiveMessage, Problem, Progress, Said
 from automation.task import Approval, ApprovalDecision, Question, Reply, TextAnswer
-from usage import DIRECTORY
-
-VIEW_LOG: Final = DIRECTORY / "agent-ui.log"
-
-
-def log_view(text: str) -> None:
-    with contextlib.suppress(OSError):
-        VIEW_LOG.parent.mkdir(parents=True, exist_ok=True)
-        with VIEW_LOG.open("a", encoding="utf-8") as output:
-            output.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')} {text}\n")
 
 
 class View(Protocol):
@@ -86,6 +76,7 @@ def spoken_decision(text: str) -> ApprovalDecision | None:
 class _Callbacks:
     """The effect owners this conversation drives, fixed when it is composed."""
 
+    stop: Callable[[], None]
     problem: Callable[[str], None] | None
     reset: Callable[[], bool] | None
     submit: Callable[[str], None] | None
@@ -99,25 +90,18 @@ class AgentWindow:
     __slots__ = (
         "__weakref__",
         "_callbacks",
-        "_create_view",
         "_input",
-        "_pending",
-        "_post",
-        "_view",
-        "closed",
-        "closed_ready",
+        "_started",
         "lock",
-        "ready",
-        "started",
+        "publication",
         "state",
-        "stop",
     )
 
     def __init__(
         self,
         stop: Callable[[], None],
         *,
-        post: Callable[[Callable[[], None]], None],
+        post: Post,
         create_view: Callable[[AgentWindow], View],
         on_problem: Callable[[str], None] | None = None,
         on_reset: Callable[[], bool] | None = None,
@@ -130,94 +114,80 @@ class AgentWindow:
         # This conversation owns one view, request lifetime and snapshot stream.
         # Its independent interaction callbacks are composed together here so a
         # caller can connect the actual effect owners before the first render.
-        self.stop = stop
-        self._callbacks = _Callbacks(on_problem, on_reset, on_submit, on_waiting, on_recording, on_work, on_snapshot)
+        self._callbacks = _Callbacks(stop, on_problem, on_reset, on_submit, on_waiting, on_recording, on_work, on_snapshot)
         self._input: _Projected | None = None
         self.state = Session(identity=uuid.uuid4().hex)
         self.lock = threading.RLock()
-        self.ready = threading.Event()
-        self.closed_ready = threading.Event()
-        self.started = time.monotonic()
-        self.closed = self._pending = False
-        self._post, self._create_view = post, create_view
-        self._view: View | None = None
-        self._post(self._create)
+        self._started = time.monotonic()
+        self.publication: ViewPublication[View] = ViewPublication(post, lambda: create_view(self), self._render)
+        self.publication.post(self._prepare)
 
     @property
     def waiting(self) -> bool:
         with self.lock:
             return self.state.waiting
 
-    def _create(self) -> None:
-        if self.closed or self._view is not None:
-            return
-        try:
-            self._view = self._create_view(self)
-            self._render()
-            self.ready.set()
-            log_view(f"Agent conversation view ready in {time.monotonic() - self.started:.2f}s.")
-        except Exception:
-            if self._view is not None:
-                with contextlib.suppress(Exception):
-                    self._view.close()
-                self._view = None
-            log_view(traceback.format_exc())
-            self.problem("The agent panel couldn't open. Reopen Agent session to retry; details are in agent-ui.log.")
+    def _prepare(self) -> None:
+        self._open()
 
-    def _render(self) -> None:
+    def _open(self) -> View | None:
+        """UI thread: the conversation view, created on first use."""
+        created = not self.publication.ready.is_set()
+        opened = self.publication.opened()
+        match opened:
+            case Unavailable.CLOSED:
+                return None
+            case Unavailable.FAILED:
+                self.problem("The agent panel couldn't open. Reopen Agent session to retry; details are in agent-ui.log.")
+                return None
+            case _:
+                if created:
+                    log_view(f"Agent conversation view ready in {time.monotonic() - self._started:.2f}s.")
+                return opened
+
+    def _render(self, view: View | None) -> None:
         with self.lock:
-            self._pending = False
             state = self.state
-        if not self.closed:
-            if self._callbacks.snapshot is not None:
-                self._callbacks.snapshot(state)
-            if self._view is not None:
-                self._view.render(state)
+        if self._callbacks.snapshot is not None:
+            self._callbacks.snapshot(state)
+        if view is not None:
+            view.render(state)
 
     def _waiting_changed(self, *, before: bool, after: bool) -> None:
         if before != after and self._callbacks.waiting is not None:
             self._callbacks.waiting(after)
 
-    def _changed(self) -> None:
-        if not self._pending:
-            self._pending = True
-            self._post(self._render)
-
     def _event(self, event: Event) -> None:
         with self.lock:
-            if self.closed:
+            if self.publication.closed:
                 return
             was_waiting = self.state.waiting
             self.state = transition(self.state, event)
             waiting = self.state.waiting
-            self._changed()
+            self.publication.changed()
         self._waiting_changed(before=was_waiting, after=waiting)
 
     def show(self, *, focus: bool = False) -> None:
         def reveal() -> None:
-            if not self.closed:
-                self._create()
-                if self._view is not None:
-                    self._view.show(focus=focus)
+            if (view := self._open()) is not None:
+                view.show(focus=focus)
 
-        self._post(reveal)
+        self.publication.post(reveal)
 
     def open_inbox(self) -> None:
         """Schedule current inbox access with native view creation on the UI thread."""
 
         def reveal() -> None:
-            if not self.closed:
-                self._create()
-                if self._view is not None:
-                    self._view.open_inbox()
+            if (view := self._open()) is not None:
+                view.open_inbox()
 
-        self._post(reveal)
+        self.publication.post(reveal)
 
     def submit(self, text: str) -> bool:
         if not (text := text.strip()):
             return False
         with self.lock:
-            if self.closed or self.state.stopping:
+            if self.publication.closed or self.state.stopping:
                 return False
             request = self.state.request
         match request:
@@ -236,7 +206,7 @@ class AgentWindow:
         Unrecognized or racing replies stay out of the task queue.
         """
         with self.lock:
-            if self.closed or self.state.stopping:
+            if self.publication.closed or self.state.stopping:
                 return True
             request = self.state.request
         if request is None:
@@ -256,7 +226,7 @@ class AgentWindow:
     def request_input(self, message: AgentRequest, reply: Callable[[Reply], bool]) -> None:
         """Project an exact durable request without starting a waiting thread."""
         with self.lock:
-            if self.closed:
+            if self.publication.closed:
                 return
             old = self._input
             if old is not None and old.message.id == message.id:
@@ -269,7 +239,7 @@ class AgentWindow:
                 self.state = transition(self.state, Resolution(old.message.id, Cancelled()))
             self.state = transition(self.state, message)
             waiting = self.state.waiting
-            self._changed()
+            self.publication.changed()
         self._waiting_changed(before=was_waiting, after=waiting)
 
     def withdraw_input(self) -> None:
@@ -282,7 +252,7 @@ class AgentWindow:
             was_waiting = self.state.waiting
             self.state = transition(self.state, Resolution(request.message.id, Cancelled()))
             waiting = self.state.waiting
-            self._changed()
+            self.publication.changed()
         self._waiting_changed(before=was_waiting, after=waiting)
 
     def input_presented(self, request_id: str) -> None:
@@ -298,7 +268,7 @@ class AgentWindow:
         """Route a parsed reply to the exact durable request this view projects."""
         with self.lock:
             request = self._input
-            if self.closed or request is None or request.message.id != identity or request.state is InputState.SUBMITTED:
+            if self.publication.closed or request is None or request.message.id != identity or request.state is InputState.SUBMITTED:
                 return False
             if reply is ApprovalDecision.APPROVED and request.state is not InputState.PRESENTED:
                 self.say("Open the current action preview before approving it.")
@@ -320,7 +290,7 @@ class AgentWindow:
             was_waiting = self.state.waiting
             self.state = transition(self.state, Resolution(identity, reply))
             waiting = self.state.waiting
-            self._changed()
+            self.publication.changed()
         self._waiting_changed(before=was_waiting, after=waiting)
         return True
 
@@ -336,12 +306,14 @@ class AgentWindow:
 
     def new(self) -> bool:
         with self.lock:
-            if self.closed or self.state.busy:
+            if self.publication.closed or self.state.busy:
                 return False
         return self._callbacks.reset() if self._callbacks.reset is not None else False
 
-    def begin(self, task: str, stop: Callable[[], None], *, queued: bool = False, source: FeedRequest | None = None) -> None:
-        self.stop = stop
+    def stop(self) -> None:
+        self._callbacks.stop()
+
+    def begin(self, task: str, *, queued: bool = False, source: FeedRequest | None = None) -> None:
         self._event(Begin(task, time.time(), queued=queued, source=source))
 
     def queued(self, task: str) -> None:
@@ -383,7 +355,7 @@ class AgentWindow:
             self.state = Session(identity=uuid.uuid4().hex)
             if recording.phase not in ("idle", "saved", "interrupted"):
                 self.state = transition(self.state, RecordingUpdated(recording, time.time()))
-            self._changed()
+            self.publication.changed()
 
     def stop_recording(self) -> None:
         if self._callbacks.recording is not None:
@@ -401,17 +373,6 @@ class AgentWindow:
             return self.state.all_text()
 
     def close(self) -> None:
+        self.publication.close()
         with self.lock:
-            self.closed = True
             self._input = None
-        self.ready.clear()
-
-        def destroy() -> None:
-            try:
-                if self._view is not None:
-                    self._view.close()
-                    self._view = None
-            finally:
-                self.closed_ready.set()
-
-        self._post(destroy)

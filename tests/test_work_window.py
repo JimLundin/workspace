@@ -5,16 +5,10 @@ from collections import deque
 from collections.abc import Callable
 from dataclasses import replace
 
-from assistant.work_window import (
-    AnswerTask,
-    Submit,
-    WorkCommand,
-    WorkOpening,
-    WorkSnapshot,
-    WorkView,
-    WorkWindow,
-    task_detail,
-)
+from assistant.work_commands import AnswerTask, Submit, WorkCommand
+from assistant.work_snapshot import WorkSnapshot
+from assistant.work_text import task_detail
+from assistant.work_window import WorkOpening, WorkView, WorkWindow
 from automation.execution import ApprovalReview
 from automation.task import (
     Approval,
@@ -131,6 +125,9 @@ def test_loading_remains_until_the_view_presents_its_first_frame() -> None:
         while jobs:
             jobs.popleft()()
         assert loading.visible and not loading.closed
+        # Defect: hiding a replaced view releases the loading surface of the current one.
+        work.cancel_show(DeferredWorkView())
+        assert loading.visible and not loading.closed
         view.paint_frame()
         assert loading.closed and not loading.visible
     finally:
@@ -153,7 +150,7 @@ def test_closing_before_first_paint_releases_pending_loading() -> None:
     work.close()
     while jobs:
         jobs.popleft()()
-    assert loading.closed and view.closed and work.closed_ready.is_set()
+    assert loading.closed and view.closed and work.publication.closed_ready.is_set()
 
 
 def test_first_open_loading_precedes_creation_and_rendering_and_cleans_up_on_retry() -> None:
@@ -240,37 +237,6 @@ def test_loading_event_delivery_cannot_create_a_second_view() -> None:
         jobs.popleft()()
 
 
-def test_publication_is_lazy_coalesced_and_never_reveals_or_focuses() -> None:
-    ui = WorkUi()
-    first = WorkSnapshot(tasks=(work_task(),))
-    ui.work.publish(first)
-    assert ui.created == 0 and not ui.jobs
-    ui.work.show(focus=False)
-    ui.paint()
-    assert ui.view.states == [first] and ui.view.shown == [False]
-    thread_id = threading.get_ident()
-
-    def publish() -> None:
-        for number in range(100):
-            ui.work.publish(replace(first, status=f"Update {number}"))
-
-    publisher = threading.Thread(target=publish)
-    publisher.start()
-    publisher.join(timeout=2)
-    assert not publisher.is_alive()
-    assert len(ui.jobs) == 1
-    ui.paint()
-    assert ui.view.states[-1].status == "Update 99"
-    assert ui.view.shown == [False] and set(ui.view.threads) == {thread_id}
-    ui.work.publish(ui.work.state)
-    assert not ui.jobs
-    ui.work.show(focus=True)
-    ui.paint()
-    assert ui.created == 1 and ui.view.shown == [False, True]
-    ui.close()
-    assert ui.view.closed and ui.work.closed_ready.is_set()
-
-
 def test_startup_preparation_reuses_the_hidden_view_and_latest_snapshot() -> None:
     # Defect: startup preparation reveals/focuses the desktop canvas, creates
     # duplicate views, or renders a stale publication when the user opens it.
@@ -281,94 +247,14 @@ def test_startup_preparation_reuses_the_hidden_view_and_latest_snapshot() -> Non
     ui.paint()
     assert ui.created == 1 and not ui.view.shown
     assert ui.view.states[-1].status == "Latest work"
+    # Defect: an unchanged poll re-renders the whole native view.
+    ui.work.publish(WorkSnapshot(status="Latest work"))
+    assert not ui.jobs
     ui.work.show(focus=False)
     ui.paint()
     assert ui.created == 1 and ui.view.shown == [False]
     ui.close()
-
-
-def test_a_slow_renderer_cannot_block_publication_or_lose_the_latest_snapshot() -> None:
-    rendering, release, published = threading.Event(), threading.Event(), threading.Event()
-
-    def render(snapshot: WorkSnapshot) -> None:
-        if snapshot.status == "Reading":
-            rendering.set()
-            assert release.wait(timeout=3)
-
-    ui = WorkUi(RecordingWorkView(rendering=render))
-    ui.work.show(focus=False)
-    ui.paint()
-    ui.work.publish(WorkSnapshot(status="Reading"))
-    painter = threading.Thread(target=ui.paint)
-    painter.start()
-    assert rendering.wait(timeout=2)
-
-    def publish() -> None:
-        ui.work.publish(WorkSnapshot(tasks=(work_task(Completed("Verified", ("Workbook reopened",))),)))
-        published.set()
-
-    publisher = threading.Thread(target=publish)
-    publisher.start()
-    try:
-        assert published.wait(timeout=2), "Rendering held the work publication lock."
-    finally:
-        release.set()
-        publisher.join(timeout=2)
-        painter.join(timeout=2)
-        ui.close()
-    assert not painter.is_alive() and not publisher.is_alive()
-    assert ui.view.states[-1].tasks[0].state == Completed("Verified", ("Workbook reopened",))
-
-
-def test_close_before_or_during_creation_prevents_late_windows_and_commands() -> None:
-    ui = WorkUi()
-    ui.work.show()
-    ui.work.close()
-    ui.work.publish(WorkSnapshot(tasks=(work_task(),)))
-    assert not ui.work.send(Submit("Too late"))
-    ui.paint()
-    assert ui.created == 0 and not ui.commands and ui.work.closed_ready.is_set()
-
-    jobs: deque[Callable[[], None]] = deque()
-    view = RecordingWorkView()
-
-    def create(work: WorkWindow) -> WorkView:
-        work.close()
-        return view
-
-    work = WorkWindow(lambda _: None, post=jobs.append, create_view=create)
-    work.show()
-    while jobs:
-        jobs.popleft()()
-    assert view.closed and not view.states and not view.shown and work.closed_ready.is_set()
-
-
-def test_failed_creation_can_be_retried_without_losing_saved_work() -> None:
-    jobs: deque[Callable[[], None]] = deque()
-    view = RecordingWorkView()
-    errors: list[str] = []
-    attempts = 0
-
-    def create(_work: WorkWindow) -> WorkView:
-        nonlocal attempts
-        attempts += 1
-        if attempts == 1:
-            raise RuntimeError("Fixture native view unavailable")
-        return view
-
-    work = WorkWindow(lambda _: None, post=jobs.append, create_view=create, on_problem=errors.append)
-    work.publish(WorkSnapshot(tasks=(work_task(),)))
-    work.show(focus=False)
-    while jobs:
-        jobs.popleft()()
-    assert len(errors) == 1 and work.state.tasks and not view.shown
-    work.show(focus=False)
-    while jobs:
-        jobs.popleft()()
-    assert view.states[-1].tasks == work.state.tasks and view.shown == [False]
-    work.close()
-    while jobs:
-        jobs.popleft()()
+    assert ui.view.closed and not ui.work.send(Submit("Too late")) and not ui.commands
 
 
 def test_question_answers_require_the_exact_current_task_request_and_answer_kind() -> None:

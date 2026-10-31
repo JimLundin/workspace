@@ -51,7 +51,7 @@ from assistant.work_canvas_model import (
     observe_activity,
     result_document,
 )
-from assistant.work_window import WorkSnapshot
+from assistant.work_snapshot import WorkSnapshot
 from automation import journal
 from automation.personal_work import Catalog, SourceKind, WorkState, WorkThread
 from automation.task import Blocked, Task, TextAnswer, Waiting, phase
