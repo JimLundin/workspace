@@ -257,8 +257,8 @@ models = [
     "assistant.feed_triage",
     "assistant.notification_sources",
     "assistant.recording_state",
-    "assistant.system_notices",
     "automation.task",
+    "winapi.system_notices",
 ]
 
 [[tool.workspace.architecture.seams]]

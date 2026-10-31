@@ -13,8 +13,8 @@ lazy from win32more.Windows.UI.Notifications import NotificationKinds
 lazy from win32more.Windows.UI.Notifications.Management import UserNotificationListener, UserNotificationListenerAccessStatus
 lazy from win32more.Windows.Win32.System.WinRT import RO_INIT_MULTITHREADED, RoInitialize, RoUninitialize
 
-from assistant.system_notices import Access, Banners, Notice, NoticeKey, Observation, Observed, Unavailable, creation_time
 from winapi.notification_banners import BannerPolicy, Coverage
+from winapi.system_notices import Access, Banners, Notice, NoticeKey, Observation, Observed, Unavailable, creation_time
 
 
 class NotificationSource(Protocol):

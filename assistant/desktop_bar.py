@@ -28,12 +28,12 @@ lazy from assistant.notifications import Tone
 lazy from assistant.qt_ui import EventLoop, application
 lazy from assistant.recording_state import RecordingAction, RecordingState
 lazy from assistant.shell_controls import TASKBAR_TOGGLE, TaskbarControl, WindowsKeyObserver
-lazy from assistant.system_notices import Access, NoticeKey, Observed, Unavailable
 lazy from protocol import Tool
 lazy from winapi import appearance, shell, windows
 lazy from winapi.machine_status import Power, PowerUnavailable
 lazy from winapi.notifications import NotificationObserver
 lazy from winapi.shapes import Rect
+lazy from winapi.system_notices import Access, NoticeKey, Observed, Unavailable
 
 prepare()
 
