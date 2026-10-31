@@ -62,12 +62,13 @@ Earlier versions are preserved as tags: `liquid-glass-prototype-v1` (first study
 
 The accent is a soft blue, `#4B8FE8`: lighter and less saturated than system
 blue `#0A84FF`. White text on it measures 3.3:1, against 3.65:1 on Apple's
-own blue. The demo also offers a lighter mist blue, `#6A9FE0`, where white
-text drops to 2.75:1.
+own blue. A lighter mist blue, `#6A9FE0`, was considered; white text on it drops
+to 2.75:1.
 
 Decided and removed from the demo: the island pattern (the alternatives live
-in the v2 tag), the floating edge, and full transparency, motion and
-refraction. The demo no longer offers switches for these.
+in the v2 tag), the floating edge, full transparency, motion and refraction,
+the clear glass look, Inter and the soft blue accent. The demo no longer offers
+switches for these.
 
 ## Typeface
 
@@ -100,11 +101,16 @@ sheet draws six open sets at 16 px beside 12 px Inter, then at 2×:
 | Iconoir | MIT | Thin 1.6 strokes; elegant large, faint at 16 px |
 
 SF Symbols match their weight to the adjacent text and switch to filled
-variants for active states. No open set does both. The current recommendation
-is Lucide for its weight match. The alternative is a set with true fills
-(Phosphor or Fluent), to get filled active states. Whichever set wins, use a
-small rounded square for Stop, as `stop.fill` does. Vendor only the paths
-Workspace uses into `assistant/vector_icons.py`.
+variants for active states. No open set does both.
+
+The shortlist is **Fluent** and **Tabler**; the demo now offers only these.
+Fluent looked thin at first because the demo drew its 20 px artwork at 16 px,
+thinning every stroke by 20%. It now uses Fluent's 16 px artwork, which is
+drawn for that size; only battery and Wi-Fi off fall back to the 20 px grid.
+Fluent has true filled variants for active states. Tabler's stroke width can
+be tuned; the sheet compares 1.75 and 1.5. Whichever set wins, use a small
+rounded square for Stop, as `stop.fill` does. Vendor only the paths Workspace
+uses into `assistant/vector_icons.py`.
 
 ## Toolbar pattern
 
@@ -204,6 +210,28 @@ Workspace's bar today (`assistant/bar_model.py`, `assistant/ambient.py`,
 | Keyboard layer or Colemak | Separate capsule | Detached minimal pill on the leading side, like the macOS input menu |
 | Tiling tab strip | Joins the ambient capsule on the primary screen | Out of scope here. The island should stay centred, with the strip running along the edge around it |
 
+## Sidebar
+
+The demo's controls take the form of a macOS 26 sidebar, the pattern a future
+Workspace sidebar should follow:
+
+- It floats in the Liquid Glass layer, inset 8 px from the screen edges, with
+  24 px corners. Content extends beneath it.
+- A sidebar toggle stays in the same place whether the sidebar shows or not.
+  The HIG asks for a show/hide button on macOS. Hiding slides the sidebar out
+  along the leading edge, and showing returns it the same way, instead of
+  collapsing it into a card. Over the open sidebar the toggle is a plain
+  symbol, so glass never sits on glass. Once the sidebar hides, the toggle
+  gains its own glass.
+- Actions sit at the top. The HIG warns against putting critical actions at the
+  bottom of a sidebar, where a moved window can hide them.
+- At most two levels of hierarchy: short title-case section headers (Toolbar,
+  Surroundings, Symbols) over grouped rows, with a soft scroll-edge fade
+  instead of hard clipping.
+
+The agent phase bubbles stay as they are: earlier phases fade and recede as
+new ones arrive.
+
 ## What ports to Qt on Windows
 
 `winapi/composition.py` already composes rounded host-backdrop glass behind
@@ -221,7 +249,5 @@ shader path. Measure that before committing to it.
 ## Open decisions
 
 
-- Should the lower-right agent phase bubbles remain? The expanded island could
-  show the current phase instead, so agent progress would live in one place.
 - Should the canvas window adopt macOS-style window controls, or keep window
   controls in its options menu?
