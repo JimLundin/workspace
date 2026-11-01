@@ -280,6 +280,26 @@ def test_background_reviews_skip_timestamp_only_changes_and_retry_failures(tmp_p
     assert sources.closed == 1
 
 
+def test_queue_rejects_invalid_identity_before_admission_and_commits_valid_edits(tmp_path: Path) -> None:
+    # Defect: the owner admits an invalid UI edit before checking its identity,
+    # or moving validation prevents a valid queued edit from being committed.
+    store = PersonalStore(tmp_path / "work.sqlite3")
+    service = PersonalWork(store, CapturedSources(), lambda _: None, clock=lambda: 10)
+    definition = WorkDefinition("Atlas", "Check queued ownership")
+    try:
+        with TestCase().assertRaisesRegex(ValueError, "Invalid personal work edit"):
+            service.enqueue(SaveWork(definition, work_id=" "))
+        service.tick()
+        assert not PersonalStore(store.path).read().works
+        service.enqueue(SaveWork(definition))
+        service.tick()
+        saved = PersonalStore(store.path).read().works
+        assert len(saved) == 1 and saved[0].definition == definition
+        assert service.snapshot().catalog.works == saved
+    finally:
+        service.close()
+
+
 def test_user_correction_during_review_is_not_undone(tmp_path: Path) -> None:
     # Defect: the worker uses its pre-model catalog to publish/commit over a
     # correction made while the model's network call is in progress.

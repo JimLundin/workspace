@@ -70,7 +70,6 @@ lazy from automation.bridge import BridgeClient
 lazy from automation.context import ContextStore
 lazy from automation.ipc import MeetingCommand, MeetingFailed, MeetingSucceeded, StartMeeting
 lazy from automation.personal_work import (
-    PERSONAL_REQUEST,
     AddDocument,
     AddWebPage,
     DismissWork,
@@ -602,12 +601,7 @@ class AssistantApp:
     def work_command(self, command: WorkCommand) -> None:
         match command:
             case AddDocument() | AddWebPage() | DismissWork() | RestoreWork() | SaveWork() | UnlinkWork():
-                validated = PERSONAL_REQUEST.validate_json(PERSONAL_REQUEST.dump_json(command))
-                match validated:
-                    case AddDocument() | AddWebPage() | DismissWork() | RestoreWork() | SaveWork() | UnlinkWork():
-                        self.personal.enqueue(validated)
-                    case _:
-                        raise ValueError("Invalid personal work edit.")
+                self.personal.enqueue(command)
             case RefreshPersonalWork.REFRESH:
                 self.personal.refresh()
             case OpenWorkSource(source_id):

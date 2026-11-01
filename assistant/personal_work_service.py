@@ -11,6 +11,7 @@ from typing import Protocol
 from assistant.personal_work_sources import Observations
 from automation.personal_work import (
     CORRELATION_INPUT,
+    PERSONAL_REQUEST,
     PERSONAL_RESPONSE,
     AddDocument,
     AddWebPage,
@@ -141,6 +142,18 @@ class PersonalWork:
             self.wake.set()
 
     def enqueue(self, command: SaveWork | UnlinkWork | AddDocument | AddWebPage | DismissWork | RestoreWork) -> None:
+        # Pydantic trusts existing dataclass instances by default. The wire
+        # round-trip revalidates their constrained fields before queue admission;
+        # its parsing implementation is trusted, not part of Workspace's tests.
+        try:
+            validated = PERSONAL_REQUEST.validate_json(PERSONAL_REQUEST.dump_json(command))
+        except ValueError as error:
+            raise ValueError("Invalid personal work edit.") from error
+        match validated:
+            case SaveWork() | UnlinkWork() | AddDocument() | AddWebPage() | DismissWork() | RestoreWork():
+                command = validated
+            case _:
+                raise ValueError("Invalid personal work edit.")
         if self.closed.is_set():
             raise ValueError("My work is closing.")
         try:
