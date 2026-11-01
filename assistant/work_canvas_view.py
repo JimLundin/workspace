@@ -18,7 +18,8 @@ from assistant.ui_components.appearance import Shade, Tokens
 from assistant.ui_components.bubble import badge_origins
 from assistant.ui_components.canvas_bubble import CanvasBubble, CanvasEvents
 from assistant.ui_components.canvas_controls import CanvasControl, ControlAction
-from assistant.ui_components.canvas_look import CONTROL, PADDING, Role, Surface, badge_width, color, face, paint_badges
+from assistant.ui_components.canvas_look import CONTROL, PADDING, Role, Surface, badge_width, face, paint_badges
+from assistant.ui_components.text import color
 from assistant.work_canvas_context import ContextGroup, descendants
 from assistant.work_canvas_model import CanvasContent, caption, summary, title
 from automation.personal_work import SourceKind, WorkSource, WorkThread

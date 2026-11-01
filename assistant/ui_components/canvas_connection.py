@@ -6,7 +6,8 @@ lazy from PySide6 import QtCore, QtGui, QtWidgets
 lazy from PySide6.QtCore import Qt
 
 from assistant.ui_components.appearance import GLASS_ACCENT, Shade, Tokens
-from assistant.ui_components.canvas_look import Role, color, face
+from assistant.ui_components.canvas_look import Role, face
+from assistant.ui_components.text import color
 from assistant.work_canvas_connections import CanvasLink, RelationConnection
 from assistant.work_canvas_model import CanvasRelation
 

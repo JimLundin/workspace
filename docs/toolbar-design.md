@@ -114,8 +114,8 @@ is Qt's native painting and its layered-window flush.
 Three measured choices keep it there. Glass writes go straight through IVisual's
 COM slots: win32more's generic dispatch costs 44 µs per write, a slot call 2.2 µs.
 Each capsule renders its still content once and blits it while its shape morphs;
-spinners, dots and the trace repaint only their own rectangles. Looks and colours
-are cached values, so a frame builds only its motion records.
+spinners, dots and the trace repaint only their own rectangles. Immutable looks
+are cached; each painter adapts their shades into its own native colours.
 
 ## Material
 

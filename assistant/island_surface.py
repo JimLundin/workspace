@@ -27,6 +27,7 @@ from assistant.qt_ui import EventLoop
 from assistant.ui_components import typeface
 from assistant.ui_components.appearance import GLASS_ACCENT, RED, GlassLook, Look, Shade, SolidLook, look, reading
 from assistant.ui_components.meaning import Tint, Tone
+from assistant.ui_components.text import color
 from assistant.vector_icons import icon
 from assistant.view_publication import log_view
 from components import BAR_WINDOW
@@ -59,13 +60,6 @@ class KeyboardFocus(QtWidgets.QAbstractButton):
         super().focusOutEvent(event)
         self.ringed = False
         self.update()
-
-
-@lru_cache(maxsize=128)  # Painters copy colours they're given; callers never change the shared one.
-def color(shade: Shade) -> QtGui.QColor:
-    value = QtGui.QColor(shade.color)
-    value.setAlphaF(shade.opacity)
-    return value
 
 
 class Owner(Protocol):

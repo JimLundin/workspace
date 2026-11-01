@@ -16,7 +16,7 @@ lazy from PySide6.QtCore import Qt
 
 from assistant.feed_origin import App, Origin
 from assistant.qt_runtime import prepare
-from assistant.ui_components import typeface
+from assistant.ui_components import text, typeface
 from assistant.ui_components.appearance import ATTENTION, GLASS_ACCENT, Scheme, Shade, Tokens, brand
 from assistant.ui_components.meaning import Tint
 from assistant.vector_icons import icon
@@ -69,10 +69,6 @@ def face(role: Role) -> QtGui.QFont:
     value.setWeight(weight)
     value.setLetterSpacing(QtGui.QFont.SpacingType.AbsoluteSpacing, tracking)
     return value
-
-
-def color(shade: Shade) -> QtGui.QColor:
-    return QtGui.QColor(shade.argb)
 
 
 def mix(tint: str, amount: float, base: str) -> QtGui.QColor:
@@ -130,7 +126,7 @@ def surface_fill(theme: Tokens, surface: Surface) -> QtGui.QColor:
         case Surface.QUESTION:
             return mix(ATTENTION, 0.14, theme.solid)
         case Surface.GROUP:
-            return color(Shade(theme.ink.color, 0.04))
+            return text.color(Shade(theme.ink.color, 0.04))
         case _:
             assert_never(surface)
 
@@ -145,9 +141,9 @@ def paint_surface(painter: QtGui.QPainter, bounds: QtCore.QRectF, theme: Tokens,
             near, far = (0.30, 0.16) if theme.scheme is Scheme.DARK else (0.07, 0.04)
             painter.fillPath(rounded(shape.translated(0, 2), CARD_RADIUS), QtGui.QColor(0, 0, 0, round(far * 255)))
             painter.fillPath(rounded(shape.translated(0, 1), CARD_RADIUS), QtGui.QColor(0, 0, 0, round(near * 255)))
-            edge = color(theme.solid_edge) if surface is Surface.CARD else color(Shade(ATTENTION, 0.45))
+            edge = text.color(theme.solid_edge) if surface is Surface.CARD else text.color(Shade(ATTENTION, 0.45))
         case Surface.GROUP:
-            edge = color(Shade(theme.ink.color, 0.07))
+            edge = text.color(Shade(theme.ink.color, 0.07))
         case _:
             assert_never(surface)
     painter.fillPath(rounded(shape, radius(surface)), surface_fill(theme, surface))
@@ -163,7 +159,7 @@ def paint_selection(painter: QtGui.QPainter, bounds: QtCore.QRectF, surface: Sur
     painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
     shape = card_shape(bounds, surface).adjusted(0.5, 0.5, -0.5, -0.5)
     if drop:
-        painter.fillPath(rounded(shape, radius(surface)), color(Shade(GLASS_ACCENT, 0.10)))
+        painter.fillPath(rounded(shape, radius(surface)), text.color(Shade(GLASS_ACCENT, 0.10)))
     painter.setBrush(Qt.BrushStyle.NoBrush)
     painter.setPen(QtGui.QPen(QtGui.QColor(GLASS_ACCENT), 2))
     painter.drawPath(rounded(shape, radius(surface) - 0.5))
@@ -281,7 +277,7 @@ def paint_glass(painter: QtGui.QPainter, bounds: QtCore.QRectF, theme: Tokens, t
             veil, rim = (Shade("#1e1e22", 0.84), (0.55, 0.06, 0.22)) if dark else (Shade("#fbfbfd", 0.86), (0.95, 0.16, 0.42))
         case _:
             assert_never(tint)
-    painter.fillPath(rounded(bounds, corner), color(veil))
+    painter.fillPath(rounded(bounds, corner), text.color(veil))
     painter.setPen(QtGui.QPen(QtGui.QColor(0, 0, 0, 115 if dark else 26), 0.5))
     painter.drawPath(rounded(bounds.adjusted(-0.25, -0.25, 0.25, 0.25), corner + 0.25))
     high, low, end = rim

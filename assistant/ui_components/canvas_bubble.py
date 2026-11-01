@@ -7,7 +7,8 @@ lazy from PySide6.QtCore import Qt
 
 from assistant.ui_components.appearance import GLASS_ACCENT, Shade, Tokens
 from assistant.ui_components.canvas_controls import CanvasControl, ControlAction
-from assistant.ui_components.canvas_look import CONTROL, Surface, color, paint_selection, paint_surface, surface_fill
+from assistant.ui_components.canvas_look import CONTROL, Surface, paint_selection, paint_surface, surface_fill
+from assistant.ui_components.text import color
 from assistant.work_canvas_gestures import PointerMoved, PointerReleased, PressConnector, ScenePoint
 
 
