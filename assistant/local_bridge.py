@@ -9,10 +9,14 @@ import contextlib
 import hmac
 import secrets
 import threading
+import urllib.parse
+import urllib.request
 from collections.abc import Callable
 from dataclasses import dataclass
+from http.client import HTTPResponse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from typing import override
 
 from pydantic import TypeAdapter
 
@@ -41,6 +45,36 @@ class Contract[C, R]:
     path: str
     commands: TypeAdapter[C]
     responses: TypeAdapter[R]
+
+
+def call[C, R](endpoint: Path, contract: Contract[C, R], command: C) -> str:
+    """POST one command to a published endpoint; return validated response text."""
+    configuration = ENDPOINT.validate_json(endpoint.read_bytes())
+    url, token = configuration.url, configuration.token
+    parsed = urllib.parse.urlsplit(url)
+    if parsed.scheme != "http" or parsed.hostname != "127.0.0.1" or parsed.path != contract.path or parsed.username or parsed.password:
+        raise ValueError("Invalid local bridge endpoint.")
+    request = urllib.request.Request(
+        url, data=contract.commands.dump_json(command), headers={"Authorization": "Bearer " + token, "Content-Type": "application/json"}
+    )
+
+    # Never send a local bearer through proxy settings or follow redirects.
+    class NoRedirect(urllib.request.HTTPRedirectHandler):
+        # urllib requires the complete redirect callback signature.
+        @override
+        def redirect_request(self, req: urllib.request.Request, fp: object, code: int, msg: str, headers: object, newurl: str) -> None:
+            return None
+
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), NoRedirect())
+    response = opener.open(request, timeout=10)
+    match response:
+        case HTTPResponse():
+            with response:
+                output = response.read(600000).decode("utf-8")
+        case _:
+            raise ValueError("Invalid local bridge HTTP response.")
+    contract.responses.validate_json(output)
+    return output
 
 
 class LocalBridge[C, R]:

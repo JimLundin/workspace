@@ -7,9 +7,8 @@ from pathlib import Path
 from unittest import TestCase
 
 from assistant.browser_values import BrowserError
-from assistant.feed_agent_tools import request
 from assistant.llm import Settings
-from assistant.local_bridge import LocalBridge
+from assistant.local_bridge import LocalBridge, call
 from assistant.personal_work_model import Correlator
 from assistant.personal_work_service import PersonalWork, correlation_input
 from assistant.personal_work_sources import BrowserSources, Tab, outlook_sources
@@ -414,7 +413,7 @@ def test_agent_tools_use_the_live_bridge_and_record_confirmed_edits(tmp_path: Pa
     service = PersonalWork(store, CapturedSources(), lambda _: None)
     endpoint = tmp_path / "feed-bridge.json"
     bridge = LocalBridge(endpoint, WORK_BRIDGE, WorkOwners(feed_unavailable, service.handle, no_canvas).handle)
-    rig = ToolRig(work=WorkExecution(claim, tasks, Resources(), clock=clock), feed_request=lambda data: request(data, endpoint))
+    rig = ToolRig(work=WorkExecution(claim, tasks, Resources(), clock=clock), feed_request=lambda data: call(endpoint, WORK_BRIDGE, data))
     try:
         sources = rig.call("work_items_sources")
         assert sources.ok and evidence.id in sources.text

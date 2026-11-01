@@ -1,12 +1,7 @@
 """The feed tool family: current proposals and feedback."""
 
-import os
-import urllib.parse
-import urllib.request
 from collections.abc import Callable, Mapping
-from http.client import HTTPResponse
-from pathlib import Path
-from typing import Final, override
+from typing import Final
 
 from pydantic import ValidationError
 
@@ -14,8 +9,7 @@ from assistant import agent_tools
 from assistant.agent_tools import TEXT, Args, Display, Output, Session, Tool, fixed, schema
 from assistant.feed_contracts import BOARD_EDIT, FEED_COMMAND, FeedCommand, FeedRejected, reply_schema
 from assistant.llm import tool_spec
-from assistant.local_bridge import ENDPOINT
-from assistant.work_bridge_contracts import BRIDGE_COMMAND, BRIDGE_RESPONSE, WORK_BRIDGE, BridgeCommand
+from assistant.work_bridge_contracts import BRIDGE_RESPONSE, BridgeCommand
 from automation.actions import Change, Observation
 from automation.json_value import Json
 from automation.task import ActionNotApplied, ActionVerified
@@ -60,35 +54,6 @@ If the user corrects the reading, use propose to revise your recommendation and 
 Discuss next steps naturally and briefly; the user primarily responds by voice. Do not tell the user to operate filter boxes.
 The feed reads Teams through the signed-in browser.
 Outlook and Teams browser tools read signed-in rendered pages. Never claim full mailbox or complete Teams coverage."""
-
-
-def request(data: BridgeCommand, endpoint: Path | None = None) -> str:
-    path = endpoint or Path(os.environ.get("LOCALAPPDATA", ".")) / "workspace" / "work-feed-bridge.json"
-    configuration = ENDPOINT.validate_json(path.read_bytes())
-    url, token = configuration.url, configuration.token
-    parsed = urllib.parse.urlsplit(url)
-    if parsed.scheme != "http" or parsed.hostname != "127.0.0.1" or parsed.path != WORK_BRIDGE.path or parsed.username or parsed.password:
-        raise ValueError("Invalid local work-feed endpoint.")
-    call = urllib.request.Request(
-        url, data=BRIDGE_COMMAND.dump_json(data), headers={"Authorization": "Bearer " + token, "Content-Type": "application/json"}
-    )
-
-    # Never send a local bearer through proxy settings or follow redirects.
-    class NoRedirect(urllib.request.HTTPRedirectHandler):
-        @override
-        def redirect_request(self, req: urllib.request.Request, fp: object, code: int, msg: str, headers: object, newurl: str) -> None:
-            return None
-
-    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), NoRedirect())
-    response = opener.open(call, timeout=10)
-    match response:
-        case HTTPResponse():
-            with response:
-                output = response.read(600000).decode("utf-8")
-        case _:
-            raise ValueError("Invalid work-feed HTTP response.")
-    BRIDGE_RESPONSE.validate_json(output)
-    return output
 
 
 def validated(tool: str, arguments: Mapping[str, Json]) -> FeedCommand:

@@ -7,7 +7,6 @@ from unittest import TestCase
 
 from pydantic import TypeAdapter
 
-from assistant.feed_agent_tools import request
 from assistant.feed_contracts import REVIEW_INPUT, DismissItem, Disposition, FeedRejected, FeedReply, StoredBoard
 from assistant.feed_history import Decision, Handoff
 from assistant.feed_sources import Excerpt
@@ -15,6 +14,8 @@ from assistant.feed_triage import Board, decode, proposal_revision, restored, sa
 from assistant.feed_triage_service import classify
 from assistant.feed_work import FeedWork
 from assistant.llm import Settings
+from assistant.local_bridge import call
+from assistant.work_bridge_contracts import WORK_BRIDGE
 from automation.actions import Resources
 from automation.activity import Activity, ContextSnapshot
 from automation.context import ContextStore, Preference, ProjectNote
@@ -139,7 +140,7 @@ def test_registered_reply_tool_saves_instruction_before_handoff_and_reuses_it_af
     endpoint = tmp_path / "bridge.json"
     triage = TriageFixture(feed_store, lambda _batch, _rules: "{}", submit=queue)
     bridge = feed_bridge(endpoint, triage)
-    rig = ToolRig(work=WorkExecution(claim, tasks, Resources(), clock=clock), feed_request=lambda data: request(data, endpoint))
+    rig = ToolRig(work=WorkExecution(claim, tasks, Resources(), clock=clock), feed_request=lambda data: call(endpoint, WORK_BRIDGE, data))
     reply = FeedReply(item.identity, proposal_revision(item), "user-turn-one", words)
     arguments = {"item": reply.item, "revision": reply.revision, "reply_id": reply.reply_id, "text": reply.text}
     try:

@@ -3,11 +3,12 @@
 from dataclasses import dataclass
 from http.client import HTTPConnection
 from pathlib import Path
+from unittest import TestCase
 from urllib.parse import urlsplit
 
 from pydantic import TypeAdapter
 
-from assistant.local_bridge import ENDPOINT, MAX_REQUEST_BYTES, Contract, LocalBridge
+from assistant.local_bridge import ENDPOINT, MAX_REQUEST_BYTES, Contract, Endpoint, LocalBridge, call
 
 
 @dataclass(frozen=True, slots=True)
@@ -83,3 +84,32 @@ def test_closing_a_replaced_bridge_keeps_the_newer_endpoint(tmp_path: Path) -> N
     finally:
         newer.close()
     assert not endpoint.exists()
+
+
+def test_client_uses_the_supplied_contract_and_validates_the_response(tmp_path: Path) -> None:
+    # Defects: hard-coding the work contract or skipping the caller's response
+    # contract returns unusable data as a successful local command.
+    endpoint = tmp_path / "bridge.json"
+    bridge = LocalBridge(endpoint, ECHO, answer)
+    try:
+        assert call(endpoint, ECHO, Echo("ready")) == '{"text":"READY"}'
+        incompatible = Contract(ECHO.path, ECHO.commands, TypeAdapter(int))
+        with TestCase().assertRaises(ValueError):
+            call(endpoint, incompatible, Echo("ready"))
+    finally:
+        bridge.close()
+
+
+def test_client_refuses_a_non_loopback_endpoint_before_sending_the_bearer(tmp_path: Path) -> None:
+    # Defect: trusting the endpoint's hostname sends the bearer outside the
+    # permitted literal loopback host. localhost still reaches our own fixture
+    # if the guard regresses; no credential is sent to an external host.
+    endpoint = tmp_path / "bridge.json"
+    bridge = LocalBridge(endpoint, ECHO, answer)
+    try:
+        published = ENDPOINT.validate_json(endpoint.read_bytes())
+        endpoint.write_bytes(ENDPOINT.dump_json(Endpoint(published.url.replace("127.0.0.1", "localhost"), published.token)))
+        with TestCase().assertRaises(ValueError):
+            call(endpoint, ECHO, Echo("ready"))
+    finally:
+        bridge.close()

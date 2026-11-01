@@ -17,12 +17,11 @@ from assistant.agent_toolsets import General
 from assistant.browser_requests import BrowserRequest, Screenshot
 from assistant.browser_values import BrowserError
 from assistant.desktop_tools import allowed, key_strokes
-from assistant.feed_agent_tools import request
 from assistant.geometry import Shot
 from assistant.llm import Settings, ToolCall, settings_from
 from assistant.uia import UiRequest
 from assistant.web_apps import Located, WebAppOperation
-from assistant.work_bridge_contracts import BridgeCommand
+from assistant.work_bridge_contracts import BridgeCommand, work_bridge_request
 from assistant.workspace import Workspace
 from automation.actions import Resources
 from automation.execution import ApprovalReview, WorkExecution
@@ -309,7 +308,7 @@ class ToolRig:
         workspace: Workspace | None = None,
         machine: FakeMachine | None = None,
         clock: Callable[[], datetime] = datetime.now,
-        feed_request: Callable[[BridgeCommand], str] = request,
+        feed_request: Callable[[BridgeCommand], str] = work_bridge_request,
     ) -> None:
         self.machine = machine if machine is not None else FakeMachine()
         self.window = FakeWindow()

@@ -22,7 +22,7 @@ from assistant.meeting_tools import MeetingCapture, MeetingFollowup
 from assistant.personal_work_tools import PersonalWork
 from assistant.self_change_tools import Delivery, SelfChange
 from assistant.task_tools import TaskTools
-from assistant.work_bridge_contracts import BridgeCommand
+from assistant.work_bridge_contracts import BridgeCommand, work_bridge_request
 from assistant.work_canvas_tools import Canvas
 from assistant.workspace import Workspace
 
@@ -90,7 +90,7 @@ class General:
         workspace: Workspace | None = None,
         install_root: Path | None = None,
         clock: Callable[[], datetime] = datetime.now,
-        feed_request: Callable[[BridgeCommand], str] = feed_agent_tools.request,
+        feed_request: Callable[[BridgeCommand], str] = work_bridge_request,
     ) -> None:
         # The families act through the agent; the workspace, install root, clock
         # and feed transport are independently varying effects of this toolset.

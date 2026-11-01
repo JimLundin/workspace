@@ -64,7 +64,7 @@ lazy from assistant.tiling import GlazeWM
 lazy from assistant.ui import Ui
 lazy from assistant.work_agent import WorkAgent
 lazy from assistant.work_bridge import WorkOwners
-lazy from assistant.work_bridge_contracts import WORK_BRIDGE, BridgeCommand, BridgeResponse
+lazy from assistant.work_bridge_contracts import WORK_BRIDGE, WORK_BRIDGE_ENDPOINT, BridgeCommand, BridgeResponse
 lazy from assistant.work_canvas import WorkCanvas, run_prompt
 lazy from assistant.work_commands import ControlTask, WorkCommand
 lazy from assistant.work_snapshot import WorkSnapshot
@@ -394,7 +394,7 @@ class AssistantApp:
             personal=self.personal,
         )
         owners = WorkOwners(triage.command, self.personal.handle, self.ui.canvas_command)
-        return triage, LocalBridge(DIRECTORY / "work-feed-bridge.json", WORK_BRIDGE, owners.handle)
+        return triage, LocalBridge(WORK_BRIDGE_ENDPOINT, WORK_BRIDGE, owners.handle)
 
     def stop_dismissed_work(self, work: WorkThread) -> None:
         """The committed user dismissal owns cancellation of only its research."""

@@ -20,11 +20,10 @@ lazy from PySide6.QtCore import Qt
 import automation.task
 from assistant.canvas_activity import ROOT_CONTEXT, Attention, CanvasInstruction, CanvasQuestion, CanvasRun, SessionRequest, TaskRequest
 from assistant.card_actions import OpenCanvas, parse
-from assistant.feed_agent_tools import request
 from assistant.feed_origin import App
 from assistant.icons import State
 from assistant.island_model import Key
-from assistant.local_bridge import LocalBridge
+from assistant.local_bridge import LocalBridge, call
 from assistant.notifications import body
 from assistant.personal_work_store import PersonalStore
 from assistant.qt_runtime import prepare
@@ -857,7 +856,7 @@ def test_agent_canvas_bridge_commits_on_qt_and_refreshes_without_revealing(tmp_p
     endpoint = tmp_path / "bridge.json"
     bridge = LocalBridge(endpoint, WORK_BRIDGE, WorkOwners(feed_unavailable, no_personal_work, ui.canvas_command).handle)
     tasks, claim, clock = claimed(tmp_path)
-    rig = ToolRig(work=WorkExecution(claim, tasks, Resources(), clock=clock), feed_request=lambda data: request(data, endpoint))
+    rig = ToolRig(work=WorkExecution(claim, tasks, Resources(), clock=clock), feed_request=lambda data: call(endpoint, WORK_BRIDGE, data))
     try:
         with ThreadPoolExecutor(max_workers=1) as worker:
             reading = worker.submit(rig.call, "work_canvas_read")
