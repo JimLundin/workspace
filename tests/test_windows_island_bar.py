@@ -5,7 +5,6 @@ import threading
 import time
 import unittest
 from collections.abc import Callable
-from ctypes import wintypes
 from datetime import datetime
 
 if sys.platform != "win32":
@@ -17,20 +16,16 @@ lazy from PySide6.QtTest import QTest
 from assistant.desktop_bar import BarActions, BarObservations, DesktopBar
 from assistant.island_menu import Menu
 from assistant.island_model import Agent, Job, Key
-from assistant.island_surface import TOP, ControlButton, MenuRow
+from assistant.island_surface import SHADOW, TOP, ControlButton, MenuRow
 from assistant.qt_runtime import prepare
 from assistant.qt_ui import EventLoop, application
 from assistant.recording_state import RecordingState
 from protocol import Tool
+from tests.native_pointer import foreign_pointer
 from winapi import appearance, windows
-from winapi._core import fn, user32
 from winapi.machine_status import Battery
 
 prepare()
-
-window_from_point = fn(user32, "WindowFromPoint", wintypes.HWND, wintypes.POINT)
-get_ancestor = fn(user32, "GetAncestor", wintypes.HWND, wintypes.HWND, wintypes.UINT)
-
 
 WORKING = Agent("Comparing both sheets", waiting=False)
 
@@ -168,29 +163,53 @@ def test_capsules_float_below_the_edge_centred_and_one_gap_apart() -> None:
 
 
 def test_pointer_reaches_capsules_and_their_edge_strip_but_passes_through_elsewhere() -> None:
-    # Defect: the screen-wide window swallows clicks meant for the desktop, or the
-    # pointer thrown against the screen edge above the island misses it.
+    # Defects: a glass host intercepts another process's title-bar/drag targets
+    # in the empty strip or shadow, or capsules and their edge strip lose input.
+    # This query was qualified red against the old STATIC host; it runs on the
+    # target's own message thread and never injects input into an unshown desktop.
     app = application()
-    bar = DesktopBar(recorded([]), native_shell=False, observations=BarObservations(motion=lambda: False))
+    bar = DesktopBar(recorded([]), native_shell=False, observations=BarObservations(material=lambda: appearance.Material.GLASS, motion=lambda: False))
     try:
         bar.visible = True
         bar.render()
-        deadline = time.monotonic() + 2
-        while time.monotonic() < deadline and not bar.window.isVisible():
-            app.processEvents()
+        bar.timer.stop()
         app.processEvents()
+        if bar.loop.composition is None:
+            raise unittest.SkipTest("Desktop composition is unavailable.")
+        scene = bar.window.scene
+        assert scene is not None and scene.bounds is not None, "The bar did not create its available glass host."
         handle = int(bar.window.winId())
-        outer, scale = windows.outer_rect(handle), bar.window.devicePixelRatioF()
-        island = bar.window.capsules[Key.ISLAND].geometry()
-
-        def owner(x: float, y: float) -> int:
-            point = wintypes.POINT(outer.left + round(x * scale), outer.top + round(y * scale))
-            return get_ancestor(window_from_point(point), 2) or 0  # GA_ROOT
-
-        assert owner(island.center().x(), TOP + 17) == handle
-        assert owner(island.center().x(), 1) == handle
-        assert owner(island.left() - 40, TOP + 17) != handle
-        assert owner(4, 4) != handle
+        rest_height = windows.outer_rect(handle).height
+        with foreign_pointer(scene.bounds) as target:
+            for expanded in (False, True):
+                if expanded:
+                    # This fixture owns native hit bounds; menu activation is
+                    # covered elsewhere. Supply the immutable expanded observation
+                    # without requesting foreground on the unshown desktop.
+                    app.processEvents()
+                    bar.expanded = bar.menu()
+                    bar.render()
+                    app.processEvents()
+                    assert windows.outer_rect(handle).height > rest_height
+                    assert any(row.isVisibleTo(bar.window) for row in bar.window.capsules[Key.ISLAND].rows)
+                outer, scale = windows.outer_rect(handle), bar.window.devicePixelRatioF()
+                island = bar.window.capsules[Key.ISLAND].geometry()
+                assert scene.bounds is not None
+                windows.move(target.window.handle, scene.bounds)
+                outside = (
+                    (outer.left + round((island.left() - 40) * scale), outer.top + round((TOP + 17) * scale)),
+                    (outer.left + round(island.center().x() * scale), outer.bottom + round(SHADOW * scale / 2)),
+                    (outer.left + round((island.left() - 12) * scale), outer.top + round((TOP + 17) * scale)),
+                )
+                capsule = (
+                    (outer.left + round(island.center().x() * scale), outer.top + round((TOP + 17) * scale)),
+                    (outer.left + round(island.center().x() * scale), outer.top + round(scale)),
+                )
+                scene.hide()
+                assert tuple(target.sample(point, app.processEvents) for point in outside) == (target.window.handle,) * 3
+                scene.show(handle)
+                assert tuple(target.sample(point, app.processEvents) for point in outside) == (target.window.handle,) * 3
+                assert tuple(target.sample(point, app.processEvents) for point in capsule) == (handle,) * 2
     finally:
         closed(app, bar)
 
