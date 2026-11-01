@@ -14,15 +14,17 @@ lazy from PySide6 import QtCore, QtGui, QtWidgets
 lazy from PySide6.QtCore import Qt
 
 from assistant.canvas_activity import ROOT_CONTEXT, Attention, CanvasAction, CanvasInstruction, CanvasQuestion, CanvasRun, CanvasUpdate
+from assistant.island_model import Tint
 from assistant.keymap import PHYSICAL_NAMES
 from assistant.qt_ui import cancel, later
-from assistant.ui_components.appearance import CANVAS_STYLE, SURFACE
+from assistant.ui_components.appearance import GLASS_ACCENT, Tokens
 from assistant.ui_components.canvas_bubble import CanvasBubble
-from assistant.ui_components.canvas_chrome import CanvasSurface, CanvasToolbar, icon_button
+from assistant.ui_components.canvas_chrome import CanvasFrame, CanvasSurface, CanvasToolbar, GlassCapsule, ScrollEdge, content_style
 from assistant.ui_components.canvas_connection import ConnectionPath
+from assistant.ui_components.canvas_look import CARD_RADIUS, SHADOW, glass_ink
 from assistant.ui_components.controls import button, label
 from assistant.ui_components.voice_legend import VoiceLegend
-from assistant.ui_components.widgets import column, row
+from assistant.ui_components.widgets import column
 from assistant.work_canvas import Investigating, NotQueued, Queued, ResumeTask, WorkCanvas
 from assistant.work_canvas_commands import PutRelation, RemoveRelation
 from assistant.work_canvas_connections import connections
@@ -111,7 +113,10 @@ lazy from assistant.work_canvas_detail import CardDetail, NoteDetail, QuestionDe
 
 
 class PersonalPanel:
-    def __init__(self, parent: QtWidgets.QWidget, work: WorkWindow, canvas: WorkCanvas) -> None:
+    def __init__(self, parent: CanvasFrame, work: WorkWindow, canvas: WorkCanvas) -> None:
+        # One scheme for the canvas's lifetime, so every bubble, detail and menu agree.
+        self.theme: Tokens = parent.theme
+        self.style: str = content_style(parent.theme)
         self.work: WorkWindow = work
         self.work_canvas: WorkCanvas = canvas
         self.document: CanvasDocument = canvas.read()
@@ -135,77 +140,91 @@ class PersonalPanel:
         self.focus_timer: QtCore.QTimer | None = None
         self.instruction_run: CanvasRun | None = None
         self.frame: CanvasSurface = CanvasSurface(parent)
-        self.frame.setStyleSheet(CANVAS_STYLE)
+        self.frame.setStyleSheet(self.style)
         layout = column(self.frame)
         self.layout: QtWidgets.QVBoxLayout = layout
         layout.setContentsMargins(8, 8, 8, 8)
         self.scene: QtWidgets.QGraphicsScene = QtWidgets.QGraphicsScene(self.frame)
         self.scene.setSceneRect(-2000, -2000, 10000, 10000)
-        self.canvas: CanvasViewport = CanvasViewport(self.scene)
+        self.canvas: CanvasViewport = CanvasViewport(self.scene, self.theme)
         self.interaction: CanvasInteraction = CanvasInteraction(self)
         layout.addWidget(self.canvas)
         self.create_context_controls()
+        self.create_toolbar()
         self.create_status()
         self.frame.resized.connect(self.position_chrome)
         self.canvas.resized.connect(self.reflow)
+        for bar in (self.canvas.horizontalScrollBar(), self.canvas.verticalScrollBar()):
+            bar.valueChanged.connect(self.update_recenter)
+            bar.rangeChanged.connect(self.update_recenter)
         self.update_voice_context()
 
     def create_context_controls(self) -> None:
-        self.menu: QtWidgets.QMenu = QtWidgets.QMenu(self.frame)
+        self.menu: QtWidgets.QMenu = rounded(QtWidgets.QMenu(self.frame))
+        self.menu.addAction("Center", self.fit)
         self.contents_action: QtGui.QAction = self.menu.addAction("Collapse containers", self.toggle_contents)
-        arranging = self.menu.addMenu("Arrange")
+        arranging = rounded(self.menu.addMenu("Arrange"))
         arranging.addAction("Arrange threads", self.reflow)
         arranging.addAction("Arrange all, including moved bubbles", self.release_positions)
         self.menu.addSeparator()
         self.menu.addAction("Refresh sources", self.refresh)
-        adding = self.menu.addMenu("Add")
+        adding = rounded(self.menu.addMenu("Add"))
         adding.addAction("New work context", self.create)
         adding.addAction("New group", self.create_group)
         adding.addAction("Note", self.create_note)
         adding.addAction("Document…", self.create_document)
         adding.addAction("Document link…", self.create_document_link)
         adding.addAction("Web reference…", self.create_web_reference)
-        self.dismissed_menu: QtWidgets.QMenu = self.menu.addMenu("Dismissed work")
+        self.dismissed_menu: QtWidgets.QMenu = rounded(self.menu.addMenu("Dismissed work"))
         self.menu.aboutToShow.connect(self.refresh_dismissed)
-        connections = self.menu.addMenu("Connections")
+        connections = rounded(self.menu.addMenu("Connections"))
         connections.addAction("Connect source to this work", self.start_connection)
         connections.addAction("Put selected piece inside…", self.choose_group)
-        self.toolbar: CanvasToolbar = CanvasToolbar(self.frame)
-        heading = row(self.toolbar)
+        self.context_popup: QtWidgets.QMenu = rounded(QtWidgets.QMenu(self.frame))
+
+    def create_toolbar(self) -> None:
+        # The island bar's rule at the window's foot: one island at rest (speak, search, more);
+        # only temporary things sit beside it, Recenter once the view leaves the work and
+        # the tinted Questions pill while questions wait.
+        self.scroll_edge: ScrollEdge = ScrollEdge(self.frame, self.theme)
+        self.toolbar: CanvasToolbar = CanvasToolbar(self.frame, self.theme)
+        heading = self.toolbar.content
         self.toolbar_layout: QtWidgets.QHBoxLayout = heading
-        heading.setContentsMargins(12, 6, 12, 6)
-        heading.setSpacing(4)
         self.create_voice_controls()
-        self.search_button: QtWidgets.QToolButton = icon_button("search", "Find on canvas (Ctrl+F)", self.toggle_search)
+        self.search_button: QtWidgets.QToolButton = self.toolbar.button("search", "Find on canvas (Ctrl+F)", self.toggle_search)
         self.search_button.setCheckable(True)
         heading.addWidget(self.search_button)
         self.search: QtWidgets.QLineEdit = QtWidgets.QLineEdit(self.toolbar)
         self.search.setObjectName("canvasSearch")
         self.search.setPlaceholderText("Find on canvas")
         self.search.setAccessibleName("Find on canvas")
-        self.search.setFixedWidth(200)
+        self.search.setFixedWidth(240)
         self.search.hide()
         self.search.returnPressed.connect(self.find)
         heading.addWidget(self.search)
         self.find_shortcut: QtGui.QShortcut = QtGui.QShortcut(QtGui.QKeySequence.StandardKey.Find, self.frame)
         self.find_shortcut.activated.connect(self.show_search)
-        self.center_button: QtWidgets.QToolButton = icon_button("center", "Center this canvas", self.fit)
-        heading.addWidget(self.center_button)
-        self.questions_button: QtWidgets.QToolButton = icon_button("chat", "Agent clarifications", self.show_questions)
-        heading.addWidget(self.questions_button)
-        self.menu_button: QtWidgets.QToolButton = icon_button("more", "Canvas options", self.open_menu)
+        self.menu_button: QtWidgets.QToolButton = self.toolbar.button("more", "Canvas options", self.open_menu)
         heading.addWidget(self.menu_button)
-        self.context_popup: QtWidgets.QMenu = QtWidgets.QMenu(self.frame)
+        self.recenter: GlassCapsule = GlassCapsule(self.frame, self.theme, Tint.NONE)
+        self.center_button: QtWidgets.QToolButton = self.recenter.button("center", "Center this canvas", self.fit)
+        self.recenter.content.addWidget(self.center_button)
+        self.questions: GlassCapsule = GlassCapsule(self.frame, self.theme, Tint.ATTENTION)
+        self.questions_button: QtWidgets.QToolButton = self.questions.button("chat", "Agent clarifications", self.show_questions)
+        self.questions_button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+        self.questions_button.setProperty("caption", True)
+        self.questions.content.addWidget(self.questions_button)
+        self.recenter.hide()
+        self.questions.hide()
 
     def create_voice_controls(self) -> None:
-        self.voice_hint: VoiceLegend = VoiceLegend(PHYSICAL_NAMES[AGENT])
+        self.voice_hint: VoiceLegend = VoiceLegend(PHYSICAL_NAMES[AGENT], glass_ink(self.theme, Tint.NONE).ink)
         self.toolbar_layout.addWidget(self.voice_hint)
-        self.clear_context: QtWidgets.QToolButton = icon_button("close", "Ask about the whole canvas", self.clear_selection)
-        self.clear_context.setFixedSize(20, 20)
+        self.clear_context: QtWidgets.QToolButton = self.toolbar.button("close", "Ask about the whole canvas", self.clear_selection)
         self.clear_context.setIconSize(QtCore.QSize(12, 12))
-        self.clear_context.setStyleSheet("QToolButton { padding: 0; }")
         self.clear_context.hide()
         self.toolbar_layout.addWidget(self.clear_context)
+        self.has_context: bool = False
 
     def create_status(self) -> None:
         self.status: QtWidgets.QLabel = label("", "muted")
@@ -217,7 +236,7 @@ class PersonalPanel:
         self.voice_hint.setToolTip(
             "Ask agent · " + context + "\nHold " + PHYSICAL_NAMES[AGENT] + " with Workspace's layout enabled; release to send."
         )
-        self.clear_context.setVisible(current is not None)
+        self.has_context = current is not None
         self.position_chrome()
 
     def clear_selection(self) -> None:
@@ -256,15 +275,36 @@ class PersonalPanel:
 
     def position_chrome(self) -> None:
         self.contents_action.setText("Show group contents" if self.scope.mode is CanvasMode.CONTEXTS else "Collapse containers")
-        self.toolbar_layout.activate()
-        self.toolbar.adjustSize()
-        self.toolbar.move((self.frame.width() - self.toolbar.width()) // 2, self.frame.height() - self.toolbar.height() - 24)
+        # Searching turns the island into its field; speaking and options return afterwards.
+        searching = not self.search.isHidden()
+        self.voice_hint.setVisible(not searching)
+        self.clear_context.setVisible(self.has_context and not searching)
+        self.menu_button.setVisible(not searching)
+        for capsule in (self.toolbar, self.recenter, self.questions):
+            capsule.content.activate()
+            capsule.adjustSize()
+        # The island stays centred 14 px above the window's foot; temporary pills sit 6 px beside its glass.
+        foot = self.frame.height() - 14 + SHADOW.bottom()
+        self.toolbar.move((self.frame.width() - self.toolbar.width()) // 2, foot - self.toolbar.height())
+        gap = 6 - SHADOW.left() - SHADOW.right()
+        self.recenter.move(self.toolbar.x() - gap - self.recenter.width(), foot - self.recenter.height())
+        self.questions.move(self.toolbar.x() + self.toolbar.width() + gap, foot - self.questions.height())
         self.status.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.status.setGeometry(24, self.toolbar.y() - 28, self.frame.width() - 48, 20)
-        for widget in (self.toolbar, self.status):
+        self.status.setGeometry(24, self.toolbar.y() + SHADOW.top() - 28, self.frame.width() - 48, 20)
+        viewport = self.canvas.geometry()
+        self.scroll_edge.setGeometry(viewport.left(), viewport.bottom() + 1 - 90, viewport.width(), 90)
+        for widget in (self.scroll_edge, self.recenter, self.toolbar, self.questions, self.status):
             widget.raise_()
         if (self.visible_cards or self.group_frames) and not self.positioned:
             self.home()
+
+    def update_recenter(self) -> None:
+        """Recenter appears only once the view has left the work, as Maps shows its location button."""
+        visible = self.canvas.mapToScene(self.canvas.viewport().rect()).boundingRect()
+        bubbles = tuple(self.bubbles())
+        away = bool(bubbles) and not any(bubble.sceneBoundingRect().intersects(visible) for bubble in bubbles)
+        if away != self.recenter.isVisible():
+            self.recenter.setVisible(away)
 
     def open_menu(self) -> None:
         self.menu.popup(self.menu_button.mapToGlobal(self.menu_button.rect().topLeft()) - QtCore.QPoint(0, self.menu.sizeHint().height()))
@@ -392,11 +432,14 @@ class PersonalPanel:
         pending = len(tuple(self.pending_questions()))
         self.questions_button.setToolTip(f"{pending} needs your input" if pending else "Agent clarifications")
         self.questions_button.setAccessibleName(self.questions_button.toolTip())
+        self.questions_button.setText(str(pending))
+        self.questions.setVisible(bool(pending))
         self.reflow()
         self.position_chrome()
         self.canvas.setSceneRect(self.scene.itemsBoundingRect().adjusted(-1500, -1500, 1500, 1500))
         if not self.positioned and (self.visible_cards or self.group_frames):
             self.home()
+        self.update_recenter()
         self.reconcile_draft()
         self.rendered = (view, self.document, self.scope)
 
@@ -479,14 +522,14 @@ class PersonalPanel:
         if detail is None:
             match card.content:
                 case WorkSource() as content:
-                    detail = SourceDetail(self.work, content, on_context=self.open_context)
+                    detail = SourceDetail(self.work, content, self.style, on_context=self.open_context)
                     detail.refresh(content, self.view.catalog, self.document)
                 case CanvasNote() as content:
-                    detail = NoteDetail(content, self.save_note)
+                    detail = NoteDetail(content, self.save_note, self.style)
                 case CanvasUpdate() | CanvasAction() as content:
-                    detail = UpdateDetail(content, self.open_at)
+                    detail = UpdateDetail(content, self.open_at, self.style)
                 case CanvasQuestion() as content:
-                    detail = QuestionDetail(content)
+                    detail = QuestionDetail(content, self.style)
             self.details = (*self.details, (identity, detail))
         match detail:
             case SourceDetail():
@@ -509,11 +552,11 @@ class PersonalPanel:
         detail = self.detail(work.id)
         dialog = next((window for identity, window in self.editors if identity == work.id), None)
         if detail is None:
-            detail = WorkDetail(self.work, work, on_continue=lambda: self.study_work(work.id))
+            detail = WorkDetail(self.work, work, self.style, on_continue=lambda: self.study_work(work.id))
             self.details = (*self.details, (work.id, detail))
             dialog = QtWidgets.QDialog(self.frame)
             dialog.setWindowTitle("Work context · " + work.definition.title)
-            dialog.setStyleSheet(CANVAS_STYLE + f"QDialog {{ background: {SURFACE}; }}")
+            dialog.setStyleSheet(self.style + f"QDialog {{ background: {self.theme.window}; }}")
             dialog.resize(520, 540)
             layout = column(dialog)
             layout.setContentsMargins(20, 20, 20, 20)
@@ -663,7 +706,7 @@ class PersonalPanel:
         for connection in observed:
             edge = previous.get(connection)
             if edge is None:
-                edge = ConnectionPath(connection, self.relation_menu)
+                edge = ConnectionPath(connection, self.relation_menu, self.theme)
                 self.scene.addItem(edge)
             edge.highlight(self.selected)
             current = (*current, edge)
@@ -887,9 +930,15 @@ class PersonalPanel:
             self.canvas.centerOn(self.draft_proxy)
             return
         self.draft_known = frozenset(item.id for item in self.view.catalog.works)
-        self.draft = WorkDetail(self.work, WorkDefinition("New work", "Describe the outcome you are working towards."))
-        frame = QtWidgets.QWidget()
-        frame.setStyleSheet(CANVAS_STYLE + f"QWidget {{ background: {SURFACE}; }}")
+        self.draft = WorkDetail(self.work, WorkDefinition("New work", "Describe the outcome you are working towards."), self.style)
+        # The draft is a solid card on the canvas, like the bubble it becomes.
+        frame = QtWidgets.QFrame()
+        frame.setObjectName("draft")
+        frame.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        frame.setStyleSheet(
+            self.style
+            + f"QFrame#draft {{ background: {self.theme.solid}; border: 1px solid {self.theme.solid_edge.css}; border-radius: {CARD_RADIUS}px; }}"
+        )
         frame.setFixedWidth(400)
         layout = column(frame)
         layout.setContentsMargins(16, 16, 16, 16)
@@ -993,6 +1042,14 @@ class PersonalPanel:
             self.commit(PutInside(identity, self.selected, frozenset()))
 
 
+def rounded(menu: QtWidgets.QMenu) -> QtWidgets.QMenu:
+    """Qt menus are top-level windows; a translucent background lets their stylesheet corners show."""
+    menu.setWindowFlag(Qt.WindowType.FramelessWindowHint)
+    menu.setWindowFlag(Qt.WindowType.NoDropShadowWindowHint)
+    menu.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+    return menu
+
+
 # Qt owns pointer capture and previews; immutable decisions own the gestures.
 # No document/layout work occurs during pointer movement. The panel applies
 # the single immutable commit effect on release.
@@ -1058,7 +1115,7 @@ class CanvasInteraction:
         first = source.mapToScene(source.connector.pos())
         if self.relation_preview is None:
             self.relation_preview = QtWidgets.QGraphicsPathItem()
-            pen = QtGui.QPen(QtGui.QColor("#c4a5e8"), 2, Qt.PenStyle.DashLine)
+            pen = QtGui.QPen(QtGui.QColor(GLASS_ACCENT), 2, Qt.PenStyle.DashLine)
             pen.setCosmetic(True)
             self.relation_preview.setPen(pen)
             self.relation_preview.setZValue(30)

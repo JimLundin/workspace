@@ -1,45 +1,38 @@
-"""A compact microphone and physical key legend, with instructions in its tooltip."""
+"""The canvas island's speak symbol: a microphone whose tooltip carries the instructions."""
 
-lazy from PySide6 import QtGui, QtWidgets
+lazy from PySide6 import QtCore, QtWidgets
 lazy from PySide6.QtCore import Qt
 
-from assistant.ui_components.appearance import MICROPHONE, Shade, scheme, tokens
-from assistant.ui_components.widgets import glyph, row
+from assistant.ui_components.appearance import MICROPHONE, Shade
+from assistant.ui_components.canvas_look import CONTROL
+from assistant.ui_components.widgets import row
+from assistant.vector_icons import icon
 
 
 class VoiceLegend(QtWidgets.QFrame):
-    """Qt owns layout and the immediate painted feedback for live capture."""
+    """Qt owns layout and the immediate painted feedback for live capture.
 
-    def __init__(self, key: str) -> None:
+    At rest the symbol takes the glass's ink; while listening it fills in the
+    microphone's amber, as Apple's privacy indicator does.
+    """
+
+    def __init__(self, key: str, ink: Shade) -> None:
         super().__init__()
         self.pressed: bool = False
-        theme = tokens(scheme())
-        self.resting: QtGui.QPixmap = glyph("mic", theme.ink2)
-        self.live: QtGui.QPixmap = glyph("mic.fill", Shade(MICROPHONE))
+        self.ink: Shade = ink
         self.setObjectName("voiceLegend")
         self.setAccessibleName("Speak to agent · " + key)
-        self.setFixedHeight(32)
+        self.setFixedSize(CONTROL, CONTROL)
         layout = row(self)
-        layout.setContentsMargins(8, 0, 6, 0)
-        layout.setSpacing(7)
+        layout.setContentsMargins(0, 0, 0, 0)
         self.microphone: QtWidgets.QLabel = QtWidgets.QLabel(self)
-        self.microphone.setPixmap(self.resting)
+        self.microphone.setPixmap(icon("mic", ink.color).pixmap(QtCore.QSize(16, 16)))
         self.microphone.setFixedSize(16, 16)
-        self.keycap: QtWidgets.QLabel = QtWidgets.QLabel(key, self)
-        self.keycap.setObjectName("voiceKeycap")
-        self.keycap.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.keycap.setFixedSize(22, 22)
-        # A capsule from the kit: quiet at rest; while held, the microphone's privacy amber.
+        layout.addWidget(self.microphone, 0, Qt.AlignmentFlag.AlignCenter)
         self.setStyleSheet(
-            "QFrame#voiceLegend { border: none; border-radius: 16px; background: transparent; }"
-            f'QFrame#voiceLegend[pressed="true"] {{ background: {Shade(MICROPHONE, 0.16).css}; }}'
-            f"QLabel#voiceKeycap {{ color: {theme.ink2.css}; background: {theme.fill.css}; border: 1px solid {theme.separator.css}; "
-            f"border-bottom: 2px solid {theme.separator.css}; border-radius: 6px; font-size: 11px; font-weight: 600; }}"
-            f'QLabel#voiceKeycap[pressed="true"] {{ color: #1c1c1e; background: {MICROPHONE}; '
-            f"border-color: {MICROPHONE}; border-bottom-width: 1px; padding-top: 1px; }}"
+            f"QFrame#voiceLegend {{ border: none; border-radius: {CONTROL // 2}px; background: transparent; }}"
+            f'QFrame#voiceLegend[pressed="true"] {{ background: {Shade(MICROPHONE, 0.2).css}; }}'
         )
-        layout.addWidget(self.microphone)
-        layout.addWidget(self.keycap)
 
     def set_pressed(self, *, pressed: bool) -> None:
         # Native widgets must update in place. Capture observations arrive on
@@ -47,10 +40,9 @@ class VoiceLegend(QtWidgets.QFrame):
         if pressed == self.pressed:
             return
         self.pressed = pressed
-        for widget in (self, self.keycap):
-            widget.setProperty("pressed", pressed)
-            widget.style().unpolish(widget)
-            widget.style().polish(widget)
-            widget.update()
-        self.microphone.setPixmap(self.live if pressed else self.resting)
+        self.setProperty("pressed", pressed)
+        self.style().unpolish(self)
+        self.style().polish(self)
+        self.update()
+        self.microphone.setPixmap(icon("mic.fill" if pressed else "mic", MICROPHONE if pressed else self.ink.color).pixmap(QtCore.QSize(16, 16)))
         self.setAccessibleDescription("Listening to agent speech" if pressed else "Hold the key to speak; release to send")

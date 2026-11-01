@@ -15,7 +15,6 @@ from typing import Final, assert_never
 from assistant import island_model
 from assistant.feed_origin import App
 from assistant.island_model import Tint
-from assistant.notifications import Tone
 from assistant.ui_components import typeface
 from winapi import appearance
 from winapi.shapes import Stop, Veil
@@ -176,40 +175,6 @@ QToolTip {{ background: {theme.solid}; color: {theme.ink.css}; border: 1px solid
 """
 
 
-# Migration: these names carry the dark scheme until each surface reads its tokens.
-ACCENT: Final = GLASS_ACCENT
-INK: Final = "#f0f0f0"
-SECONDARY: Final = "#a1a1a4"
-USER: Final = "#8fb7ef"
-SURFACE: Final = DARK.solid
-EDGE: Final = "#3a3a3e"
-OVERLAY_BACKGROUND: Final = DARK.window
-OVERLAY_INK: Final = INK
-OVERLAY_MUTED: Final = SECONDARY
-OVERLAY_ACCENT: Final = GLASS_ACCENT
-OVERLAY_SURFACE: Final = DARK.solid
-CONTROL_STYLE: Final = control_style(DARK)
-CANVAS_STYLE: Final = canvas_style(DARK)
-
-
-@dataclass(frozen=True, slots=True)
-class Ink:
-    foreground: str = INK
-    secondary: str = SECONDARY
-    link: str = USER
-    error: str = "#ff8a80"
-
-
-@dataclass(frozen=True, slots=True)
-class Palette:
-    """A card: neutral surface and edge; `accent` is its meaning or its app's colour, for the badge."""
-
-    surface: str
-    edge: str
-    accent: str
-    tint: str
-
-
 def brand(app: App) -> str:
     """Each app's own colour, shown only on its badge."""
     match app:
@@ -235,21 +200,6 @@ def brand(app: App) -> str:
             return GLASS_ACCENT
         case _:
             assert_never(app)
-
-
-def palette(tone: Tone, app: App | None = None) -> Palette:
-    neutral = (SURFACE, EDGE)
-    if app is not None:
-        return Palette(*neutral, brand(app), "#1c1c20")
-    match tone:
-        case Tone.USER | Tone.RECORDING | Tone.THINKING | Tone.ACTION | Tone.REPLY:
-            return Palette(*neutral, GLASS_ACCENT, "#1c1c20")
-        case Tone.QUESTION:
-            return Palette(*neutral, ATTENTION, "#1c1c20")
-        case Tone.ERROR:
-            return Palette(*neutral, RED, "#1c1c20")
-        case _:
-            assert_never(tone)
 
 
 # Small glass: thin neutral veils with monochrome ink.

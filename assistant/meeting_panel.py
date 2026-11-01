@@ -6,6 +6,7 @@ from datetime import datetime
 from email.utils import getaddresses
 from html import escape
 from pathlib import Path
+from typing import Final
 from urllib.parse import quote
 from uuid import uuid4
 
@@ -174,11 +175,15 @@ def choices(combo: QtWidgets.QComboBox, values: tuple[tuple[str, str], ...]) -> 
     combo.blockSignals(False)
 
 
+# Apple's system grey reads as secondary text in both schemes; rich text takes no translucent ink.
+QUOTE: Final = "#8e8e93"
+
+
 def citations_html(citations: tuple[Citation, ...], sources: TranscriptBundle) -> str:
     parts = {transcript.source.id: index for index, transcript in enumerate(sources.transcripts, 1)}
     return "<br>".join(
         f'<a href="source:{quote(value.source_id, safe="")}#{value.line}">Part {parts[value.source_id]} · line {value.line}</a>'
-        f' <span style="color:#94a5b7">{escape(value.quote)}</span>'
+        f' <span style="color:{QUOTE}">{escape(value.quote)}</span>'
         for value in citations
     )
 

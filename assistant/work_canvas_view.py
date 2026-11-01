@@ -2,6 +2,8 @@
 
 Qt owns text layout, painting and drag state. Each text viewport is measured and
 clipped to its own bounds; the bubble then sizes around those measured regions.
+Cards follow the kit's solid card anatomy: app badge, title, meta line and body,
+with details and contents below.
 """
 
 import math
@@ -12,24 +14,39 @@ lazy from PySide6.QtCore import Qt
 
 from assistant.canvas_activity import Attention, CanvasAction, CanvasQuestion, CanvasUpdate
 from assistant.feed_origin import App, Origin
-from assistant.notifications import Tone
-from assistant.ui_components.appearance import Palette, palette
-from assistant.ui_components.bubble import BubbleAppearance, CanvasHeading, badge_origins, badge_width, paint_origins, paint_surface
+from assistant.ui_components.appearance import Shade, Tokens
+from assistant.ui_components.bubble import badge_origins
 from assistant.ui_components.canvas_bubble import CanvasBubble, CanvasEvents
 from assistant.ui_components.canvas_controls import CanvasControl, ControlAction
-from assistant.ui_components.text import PlainLayout, font
+from assistant.ui_components.canvas_look import CONTROL, PADDING, Role, Surface, badge_width, color, face, paint_badges
 from assistant.work_canvas_context import ContextGroup, descendants
 from assistant.work_canvas_model import CanvasContent, caption, summary, title
 from automation.personal_work import SourceKind, WorkSource, WorkThread
 
+TOP = 14  # the kit's solid card padding: 14 above, 16 beside, 15 below
+FOOT = 15
+PREVIEW = 61  # three body lines
+OPTIONS = 12 + CONTROL + 6  # the options button and its gap from the title
+
 
 class CanvasText(QtWidgets.QGraphicsRectItem):
-    """The component owns a measured viewport, not a free-floating text item."""
+    """A bounded plain-text preview; Qt lays out only its visible lines, and only when painted.
 
-    def __init__(self, parent: QtWidgets.QGraphicsItem) -> None:
+    This native owner keeps its QTextLayout and line handles. Large source
+    excerpts stay in the domain/detail editor instead of a full preview document.
+    """
+
+    def __init__(self, parent: QtWidgets.QGraphicsItem, ink: Shade) -> None:
         super().__init__(parent)
-        self.document: PlainLayout = PlainLayout()
+        self.ink: Shade = ink
         self.text: str = ""
+        self.qt: QtGui.QTextLayout = QtGui.QTextLayout()
+        self.qt.setFont(face(Role.BODY))
+        option = QtGui.QTextOption()
+        option.setWrapMode(QtGui.QTextOption.WrapMode.WrapAtWordBoundaryOrAnywhere)
+        self.qt.setTextOption(option)
+        self.lines: tuple[QtGui.QTextLine, ...] = ()
+        self.observed: tuple[str, float, float] | None = None
         self.setCacheMode(QtWidgets.QGraphicsItem.CacheMode.DeviceCoordinateCache)
         self.setAcceptedMouseButtons(Qt.MouseButton.NoButton)
 
@@ -42,12 +59,86 @@ class CanvasText(QtWidgets.QGraphicsRectItem):
         self.update()
         return height
 
+    def shape_lines(self) -> None:
+        observed = self.text, self.rect().width(), self.rect().height()
+        if observed == self.observed:
+            return
+        self.qt.clearLayout()
+        self.qt.setText(self.text)
+        self.qt.beginLayout()
+        lines: tuple[QtGui.QTextLine, ...] = ()
+        height = 0.0
+        try:
+            while True:
+                line = self.qt.createLine()
+                if not line.isValid():
+                    break
+                line.setLineWidth(max(1, self.rect().width()))
+                bottom = height + line.height() * 1.25
+                if math.ceil(bottom) > self.rect().height():
+                    break
+                line.setPosition(QtCore.QPointF(0, height))
+                lines = (*lines, line)
+                height = bottom
+        finally:
+            self.qt.endLayout()
+        self.lines, self.observed = lines, observed
+
     def paint(self, painter: QtGui.QPainter, option: QtWidgets.QStyleOptionGraphicsItem, widget: QtWidgets.QWidget | None = None) -> None:
         painter.save()
         painter.setClipRect(self.rect())
-        self.document.load(self.text, self.rect().width(), self.rect().height())
-        self.document.draw(painter)
+        self.shape_lines()
+        painter.setPen(color(self.ink))
+        for line in self.lines:
+            line.draw(painter, QtCore.QPointF())
         painter.restore()
+
+
+class CanvasHeading(QtWidgets.QGraphicsRectItem):
+    """The graphics scene owns this painted title without an embedded QWidget."""
+
+    def __init__(self, parent: QtWidgets.QGraphicsItem, role: Role, ink: Shade) -> None:
+        super().__init__(parent)
+        self.role: Role = role
+        self.ink: Shade = ink
+        self.value: str = ""
+        self.expanded: bool = False
+        self.setCacheMode(QtWidgets.QGraphicsItem.CacheMode.DeviceCoordinateCache)
+        self.setAcceptedMouseButtons(Qt.MouseButton.NoButton)
+
+    def load(self, text: str, width: float, *, expanded: bool) -> int:
+        self.value, self.expanded = text, expanded
+        metrics = QtGui.QFontMetricsF(face(self.role))
+        wrapped = metrics.boundingRect(QtCore.QRectF(0, 0, max(1, width), 10000), Qt.TextFlag.TextWordWrap.value, text).height()
+        height = math.ceil(wrapped if expanded else metrics.height())
+        self.setRect(0, 0, width, height)
+        self.setToolTip(text)
+        self.update()
+        return height
+
+    def display_text(self) -> str:
+        if self.expanded:
+            return self.value
+        return QtGui.QFontMetricsF(face(self.role)).elidedText(self.value, Qt.TextElideMode.ElideRight, round(self.rect().width()))
+
+    def paint(self, painter: QtGui.QPainter, option: QtWidgets.QStyleOptionGraphicsItem, widget: QtWidgets.QWidget | None = None) -> None:
+        painter.save()
+        painter.setClipRect(self.rect())
+        painter.setPen(color(self.ink))
+        painter.setFont(face(self.role))
+        flags = Qt.AlignmentFlag.AlignLeft.value | Qt.AlignmentFlag.AlignVCenter.value
+        if self.expanded:
+            flags |= Qt.TextFlag.TextWordWrap.value
+        painter.drawText(self.rect(), flags, self.display_text())
+        painter.restore()
+
+
+def meta_line(parent: QtWidgets.QGraphicsItem, theme: Tokens) -> QtWidgets.QGraphicsSimpleTextItem:
+    item = QtWidgets.QGraphicsSimpleTextItem(parent)
+    item.setAcceptedMouseButtons(Qt.MouseButton.NoButton)
+    item.setFont(face(Role.META))
+    item.setBrush(color(theme.ink2))
+    return item
 
 
 class CanvasContents(QtWidgets.QGraphicsRectItem):
@@ -55,22 +146,22 @@ class CanvasContents(QtWidgets.QGraphicsRectItem):
 
     def __init__(self, parent: QtWidgets.QGraphicsItem, events: CanvasEvents, identity: str) -> None:
         super().__init__(parent)
-        self.setRect(0, 0, 312, 32)
+        self.setRect(0, 0, 312, CONTROL)
         self.setPen(Qt.PenStyle.NoPen)
-        self.disclosure: CanvasControl = CanvasControl(self, ControlAction("Show contents", lambda: events.toggle_bubble(identity)))
+        self.disclosure: CanvasControl = CanvasControl(self, ControlAction("Show contents", lambda: events.toggle_bubble(identity)), events.theme)
         self.open_canvas: CanvasControl = CanvasControl(
-            self, ControlAction("Expand and center this bubble", lambda: events.open_context(identity), "center")
+            self, ControlAction("Expand and center this bubble", lambda: events.open_context(identity), "center"), events.theme
         )
         self.resize(312)
 
     def resize(self, width: float) -> None:
-        self.setRect(0, 0, width, 32)
-        self.disclosure.set_width(width - 40)
-        self.open_canvas.setPos(width - 32, 0)
+        self.setRect(0, 0, width, CONTROL)
+        self.disclosure.set_width(width - CONTROL - 8)
+        self.open_canvas.setPos(width - CONTROL, 0)
 
     def refresh(self, count: int, *, expanded: bool) -> None:
         unit = "piece" if count == 1 else "pieces"
-        self.disclosure.set_caption(("▾ Hide" if expanded else "▸ Show") + f" {count} {unit}")
+        self.disclosure.set_caption(("Hide" if expanded else "Show") + f" {count} {unit}")
         self.disclosure.setToolTip("Collapse these pieces" if expanded else "Expand these pieces on the canvas")
 
 
@@ -82,15 +173,13 @@ class CanvasCard(CanvasBubble):
         self.detail: QtWidgets.QWidget | None = None
         self.detail_proxy: QtWidgets.QGraphicsProxyWidget | None = None
         self.app: App = source_app(content)
-        self.colors: Palette = palette(Tone.REPLY, self.app)
         self.compact_height: float = 0
         self.own_size: QtCore.QSizeF = QtCore.QSizeF()
         self.setFlag(QtWidgets.QGraphicsItem.GraphicsItemFlag.ItemClipsChildrenToShape)
         self.setCursor(Qt.CursorShape.OpenHandCursor)
-        self.heading: QtWidgets.QGraphicsTextItem = QtWidgets.QGraphicsTextItem(self)
-        self.heading.setAcceptedMouseButtons(Qt.MouseButton.NoButton)
-        self.title_label: CanvasHeading = CanvasHeading(self)
-        self.preview: CanvasText = CanvasText(self)
+        self.heading: QtWidgets.QGraphicsSimpleTextItem = meta_line(self, self.theme)
+        self.title_label: CanvasHeading = CanvasHeading(self, Role.TITLE, self.theme.ink)
+        self.preview: CanvasText = CanvasText(self, self.theme.ink2)
         self.child_count: int = 0
         self.contents_expanded: bool = False
         self.contents: CanvasContents | None = None
@@ -99,49 +188,50 @@ class CanvasCard(CanvasBubble):
     def refresh(self, content: CanvasContent) -> None:
         self.content = content
         self.app = source_app(content)
-        match content:
-            case CanvasQuestion(reply=Attention.WAITING):
-                tone = Tone.QUESTION
-            case _:
-                tone = Tone.REPLY
-        self.colors = palette(tone, self.app)
         self.setToolTip(title(content) + "\nClick to read; drag to arrange")
         self.relayout()
 
+    def resolve_surface(self) -> Surface:
+        match self.content:
+            case CanvasQuestion(reply=Attention.WAITING):
+                return Surface.QUESTION
+            case _ if self.contents_expanded and self.child_count:
+                return Surface.GROUP
+            case _:
+                return Surface.CARD
+
     def relayout(self) -> None:
+        self.surface = self.resolve_surface()
         width = 480 if self.expanded else 360
-        text_width = width - 48
-        self.heading.setFont(font(8.5))
-        self.heading.setDefaultTextColor(QtGui.QColor("#b7afc9"))
-        origins = source_origins(self.content)
-        heading_x = badge_width(origins) + 16
-        title_width = width - heading_x - 64
+        title_x = PADDING + badge_width(source_origins(self.content)) + 10
+        title_width = width - title_x - OPTIONS
         title_height = self.title_label.load(title(self.content), title_width, expanded=self.expanded)
-        self.title_label.setPos(heading_x, 18)
-        self.heading.setPlainText(QtGui.QFontMetricsF(font(8.5)).elidedText(caption(self.content), Qt.TextElideMode.ElideRight, title_width))
-        self.heading.setTextWidth(title_width)
-        self.heading.setPos(heading_x, 18 + title_height + 2)
-        body_y = 18 + title_height + self.heading.boundingRect().height() + 14
+        self.title_label.setPos(title_x, TOP)
+        self.heading.setText(QtGui.QFontMetricsF(face(Role.META)).elidedText(caption(self.content), Qt.TextElideMode.ElideRight, title_width))
+        self.heading.setPos(title_x, TOP + title_height + 1)
+        body_y = TOP + title_height + 1 + math.ceil(self.heading.boundingRect().height()) + 7
         # A three-line preview must not lay out an entire mail/ticket excerpt.
         # The detail editor retains the complete source evidence.
-        preview_height = self.preview.load(summary(self.content)[:600], text_width, 52)
-        self.preview.setPos(24, body_y)
+        preview_height = self.preview.load(summary(self.content)[:600], width - title_x - PADDING, PREVIEW)
+        self.preview.setPos(title_x, body_y)
         self.preview.setVisible(not self.expanded)
-        self.compact_height = body_y + preview_height + 26
+        self.compact_height = body_y + preview_height + FOOT
         if self.expanded and self.detail_proxy is not None and self.detail is not None:
-            self.detail.setFixedWidth(round(text_width))
-            self.detail_proxy.setPos(24, body_y)
-            self.detail_proxy.resize(text_width, self.detail.height())
-            height = body_y + self.detail.height() + 26
+            # Details span the card below its head, as the kit's extra content does.
+            detail_width = width - 2 * PADDING
+            self.detail.setFixedWidth(round(detail_width))
+            self.detail_proxy.setPos(PADDING, body_y)
+            self.detail_proxy.resize(detail_width, self.detail.height())
+            height = body_y + self.detail.height() + FOOT
         else:
             height = self.compact_height
         if self.contents is not None:
             self.contents.setVisible(self.child_count > 0)
             if self.child_count:
-                self.contents.resize(text_width)
-                self.contents.setPos(24, height - 12)
-                height += 32
-        self.own_size = QtCore.QSizeF(width, max(120, height))
+                self.contents.resize(width - 2 * PADDING)
+                self.contents.setPos(PADDING, height - 4)
+                height += CONTROL + 6
+        self.own_size = QtCore.QSizeF(width, max(96, height))
         self.setRect(0, 0, self.own_size.width(), self.own_size.height())
         self.resize_controls()
         self.update()
@@ -162,12 +252,11 @@ class CanvasCard(CanvasBubble):
         self.setZValue(depth)
         self.resize_controls()
         if self.contents is not None:
-            self.contents.resize(bounds.width() - 48)
+            self.contents.resize(bounds.width() - 2 * PADDING)
 
     def paint(self, painter: QtGui.QPainter, option: QtWidgets.QStyleOptionGraphicsItem, widget: QtWidgets.QWidget | None = None) -> None:
-        paint_surface(painter, self.rect(), BubbleAppearance(self.colors))
-        paint_origins(painter, source_origins(self.content), self.colors)
-        self.paint_selection(painter)
+        self.paint_bubble(painter)
+        paint_badges(painter, source_origins(self.content), QtCore.QPointF(PADDING, TOP), self.surface_color())
 
     def show_detail(self, widget: QtWidgets.QWidget) -> None:
         if self.detail is None:
@@ -188,8 +277,9 @@ class CanvasCard(CanvasBubble):
 class CanvasViewport(QtWidgets.QGraphicsView):
     resized = QtCore.Signal()
 
-    def __init__(self, scene: QtWidgets.QGraphicsScene) -> None:
+    def __init__(self, scene: QtWidgets.QGraphicsScene, theme: Tokens) -> None:
         super().__init__(scene)
+        self.theme: Tokens = theme
         self.setAccessibleName("Your work canvas")
         self.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
         self.setDragMode(QtWidgets.QGraphicsView.DragMode.ScrollHandDrag)
@@ -198,7 +288,7 @@ class CanvasViewport(QtWidgets.QGraphicsView):
         self.setFrameShape(QtWidgets.QFrame.Shape.NoFrame)
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        self.setBackgroundBrush(QtGui.QColor("#18171e"))
+        self.setBackgroundBrush(QtGui.QColor(theme.window))
         # Qt owns the background raster and invalidates it on zoom/resize.
         # Static grid painting must not repeat during source/editor interaction.
         self.setCacheMode(QtWidgets.QGraphicsView.CacheModeFlag.CacheBackground)
@@ -230,12 +320,13 @@ class CanvasViewport(QtWidgets.QGraphicsView):
             spacing *= 2
         if self.grid_brush is None or self.grid_scale != scale:
             tile = QtGui.QPixmap(128, 128)
-            tile.fill(QtGui.QColor("#18171e"))
+            tile.fill(QtGui.QColor(self.theme.window))
             dots = QtGui.QPainter(tile)
             dots.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
             dots.setPen(Qt.PenStyle.NoPen)
-            dots.setBrush(QtGui.QColor("#4b4358"))
-            radius = 0.8 * 128 / (spacing * scale)
+            # The kit's dot grid: quiet ink, about 2 px across at any zoom.
+            dots.setBrush(color(Shade(self.theme.ink.color, 0.16)))
+            radius = 1.1 * 128 / (spacing * scale)
             for x, y in ((0, 0), (128, 0), (0, 128), (128, 128)):
                 dots.drawEllipse(QtCore.QPointF(x, y), radius, radius)
             dots.end()
@@ -301,20 +392,20 @@ def source_origins(content: CanvasContent) -> tuple[Origin, ...]:
 
 
 class CanvasGroup(CanvasBubble):
-    """A recursive context uses the same bubble surface, heading and controls."""
+    """A recursive context uses the same bubble anatomy, heading and controls.
+
+    Collapsed, it reads as a solid card; open, it becomes the quiet group well
+    around its pieces, titled at the kit's larger group size.
+    """
 
     def __init__(self, group: ContextGroup, bounds: QtCore.QRectF, events: CanvasEvents) -> None:
         super().__init__(group.id, events)
         self.context: ContextGroup = group
-        self.colors: Palette = palette(Tone.REPLY, App.WORKSPACE)
         self.origins: tuple[Origin, ...] = ()
         self.setAcceptedMouseButtons(Qt.MouseButton.LeftButton | Qt.MouseButton.RightButton)
-        self.title_label: CanvasHeading = CanvasHeading(self)
-        self.heading: QtWidgets.QGraphicsSimpleTextItem = QtWidgets.QGraphicsSimpleTextItem(self)
-        self.heading.setAcceptedMouseButtons(Qt.MouseButton.NoButton)
-        self.heading.setFont(font(8.5))
-        self.heading.setBrush(QtGui.QColor("#b7afc9"))
-        self.preview: CanvasText = CanvasText(self)
+        self.title_label: CanvasHeading = CanvasHeading(self, Role.TITLE, self.theme.ink)
+        self.heading: QtWidgets.QGraphicsSimpleTextItem = meta_line(self, self.theme)
+        self.preview: CanvasText = CanvasText(self, self.theme.ink2)
         self.contents: CanvasContents = CanvasContents(self, events, group.id)
         self.refresh(group, bounds)
 
@@ -323,14 +414,16 @@ class CanvasGroup(CanvasBubble):
             self.setPos(bounds.topLeft())
             return
         self.context = group
+        self.surface = Surface.GROUP if group.expanded and (group.children or group.items) else Surface.CARD
+        self.title_label.role = Role.GROUP if self.surface is Surface.GROUP else Role.TITLE
         self.setRect(0, 0, bounds.width(), bounds.height())
         self.setPos(bounds.topLeft())
         self.setToolTip(group.title + "\nClick to show contents; double-click to center this bubble")
         unique = frozendict((origin.app, origin) for nested in descendants(group) for item in nested.pieces for origin in source_origins(item))
         self.origins = badge_origins(tuple(unique.values()))
-        title_x = badge_width(self.origins) + 16
-        self.title_label.load(group.title, bounds.width() - title_x - 64, expanded=False)
-        self.title_label.setPos(title_x, 18)
+        title_x = PADDING + badge_width(self.origins) + 10
+        title_height = self.title_label.load(group.title, bounds.width() - title_x - OPTIONS, expanded=False)
+        self.title_label.setPos(title_x, TOP)
         count = len(group.children) + len(group.items)
         match group.container:
             case WorkThread(definition=definition):
@@ -342,18 +435,16 @@ class CanvasGroup(CanvasBubble):
                 caption_text = "Group"
                 preview = " · ".join((*tuple(child.title for child in group.children), *tuple(title(item) for item in group.items)))
         self.heading.setText(caption_text)
-        self.heading.setPos(title_x, 48)
-        self.preview.load(preview[:600], bounds.width() - 48, 52)
-        self.preview.setPos(24, 78)
+        self.heading.setPos(title_x, TOP + title_height + 1)
+        self.preview.load(preview[:600], bounds.width() - title_x - PADDING, PREVIEW)
+        self.preview.setPos(title_x, 62)
         self.contents.refresh(count, expanded=group.expanded)
-        self.contents.resize(bounds.width() - 48)
-        self.contents.setPos(24, 132)
+        self.contents.resize(bounds.width() - 2 * PADDING)
+        self.contents.setPos(PADDING, 132)
         self.resize_controls()
         self.update()
 
     @override
     def paint(self, painter: QtGui.QPainter, option: QtWidgets.QStyleOptionGraphicsItem, widget: QtWidgets.QWidget | None = None) -> None:
-        paint_surface(painter, self.rect(), BubbleAppearance(self.colors))
-        paint_origins(painter, self.origins, self.colors)
-
-        self.paint_selection(painter)
+        self.paint_bubble(painter)
+        paint_badges(painter, self.origins, QtCore.QPointF(PADDING, TOP), self.surface_color())

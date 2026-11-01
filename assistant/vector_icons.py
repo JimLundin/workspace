@@ -27,7 +27,7 @@ def symbol(name: str) -> str:
 
 
 @lru_cache(maxsize=128)
-def icon(name: str, color: str = "#adbdce", size: int = 16) -> QtGui.QIcon:
+def icon(name: str, color: str, size: int = 16) -> QtGui.QIcon:
     source = f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="{color}">{symbol(name)}</svg>'
     renderer = QtSvg.QSvgRenderer(QtCore.QByteArray(source.encode()))
     pixmap = QtGui.QPixmap(size * 2, size * 2)

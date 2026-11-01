@@ -29,8 +29,8 @@ from assistant.notifications import body
 from assistant.personal_work_panel import PersonalPanel
 from assistant.qt_runtime import prepare
 from assistant.qt_ui import application
-from assistant.ui_components.bubble import heading_text
 from assistant.ui_components.canvas_loading import CanvasLoading
+from assistant.ui_components.canvas_look import surface_fill
 from assistant.work_bridge import WorkOwners
 from assistant.work_bridge_contracts import WORK_BRIDGE
 from assistant.work_canvas import WorkCanvas, instruction_prompt
@@ -591,7 +591,7 @@ def test_escape_unwinds_bubbles_and_search_keeps_drafts_then_exits(tmp_path: Pat
         assert not native.view.window.isVisible()
         native.view.show(focus=False)
         assert detail.text.toPlainText() == "Unsent context"
-        native.view.exit_button.click()
+        native.view.close_action.trigger()
         assert not native.view.window.isVisible()
 
 
@@ -683,36 +683,29 @@ def test_canvas_toolbar_keeps_search_and_center_accessible_in_a_small_window(tmp
         canvas.search_button.click()
         native.pump()
         toolbar = canvas.toolbar
-        assert canvas.search.isVisible() and canvas.search_button.isChecked()
-        assert canvas.frame.rect().contains(toolbar.geometry())
-        assert abs(toolbar.geometry().center().x() - canvas.frame.rect().center().x()) <= 1
-        assert canvas.frame.height() - toolbar.geometry().bottom() == 25
-        controls = (
-            canvas.voice_hint,
-            canvas.clear_context,
-            canvas.search_button,
-            canvas.search,
-            canvas.center_button,
-            canvas.questions_button,
-            canvas.menu_button,
-        )
-        assert all(toolbar.rect().contains(control.geometry()) for control in controls)
-        assert all(not first.geometry().intersects(second.geometry()) for first, second in pairwise(controls))
+        assert_searching_island(canvas)
         assert work.definition.title in canvas.voice_hint.toolTip()
-        assert canvas.voice_hint.keycap.text() == "N"
         assert canvas.voice_hint.microphone.pixmap() is not None
         assert "release to send" in canvas.voice_hint.toolTip()
-        assert tuple(label.text() for label in canvas.voice_hint.findChildren(QtWidgets.QLabel)) == ("", "N")
-        assert all(abs(control.geometry().center().y() - toolbar.rect().center().y()) <= 1 for control in controls)
+        assert tuple(label.text() for label in canvas.voice_hint.findChildren(QtWidgets.QLabel)) == ("",)
         canvas.search.setText(personal.catalog.sources[0].id)
         QtTest.QTest.keyClick(canvas.search, Qt.Key.Key_Return)
         native.pump()
         assert canvas.selected == personal.catalog.sources[0].id
         assert not canvas.search.isVisible() and not canvas.search_button.isChecked()
+        island = (canvas.voice_hint, canvas.clear_context, canvas.search_button, canvas.menu_button)
+        assert all(control.isVisible() and toolbar.glass().contains(QtCore.QRectF(control.geometry())) for control in island)
+        assert all(not first.geometry().intersects(second.geometry()) for first, second in pairwise(island))
+        # Only temporary things sit beside the island: no question waits, and the view shows the work.
+        assert not canvas.questions.isVisible() and not canvas.recenter.isVisible()
         before = store.read()
         canvas.canvas.centerOn(10000, 10000)
+        native.pump()
+        assert canvas.recenter.isVisible()
+        assert canvas.recenter.x() + canvas.recenter.glass().right() + 6 == toolbar.x() + toolbar.glass().left()
         canvas.center_button.click()
         native.pump()
+        assert not canvas.recenter.isVisible()
         visible = canvas.canvas.mapToScene(canvas.canvas.viewport().rect()).boundingRect()
         assert visible.contains(canvas.scene.itemsBoundingRect())
         bottom = canvas.canvas.mapFromScene(canvas.scene.itemsBoundingRect().bottomRight())
@@ -781,7 +774,11 @@ def test_grid_remains_visible_and_spaced_when_zoomed_out_and_panned(tmp_path: Pa
                 # Sample empty canvas away from the floating controls, in
                 # native pixels (the real desktop may have a DPI scale).
                 x0, y0 = image.width() // 2 - 160, image.height() // 2 - 100
-                rows = tuple(tuple(x for x in range(x0, x0 + 320) if image.pixelColor(x, y).lightness() > 42) for y in range(y0, y0 + 200))
+                # Dots stand apart from the window in either scheme: lighter in dark, darker in light.
+                ground = QtGui.QColor(panel.view.personal.theme.window).lightness()
+                rows = tuple(
+                    tuple(x for x in range(x0, x0 + 320) if abs(image.pixelColor(x, y).lightness() - ground) > 20) for y in range(y0, y0 + 200)
+                )
                 pixels = max(rows, key=len)
                 dots = tuple(x for index, x in enumerate(pixels) if index == 0 or x > pixels[index - 1] + 1)
                 gaps = tuple(b - a for a, b in pairwise(dots))
@@ -795,12 +792,13 @@ def assert_source_mark_visible(panel: NativeCanvas, identity: str) -> None:
     view = panel.view.personal
     card = view.card(identity)
     assert card is not None
-    image = QtGui.QImage(18, 18, QtGui.QImage.Format.Format_ARGB32_Premultiplied)
+    image = QtGui.QImage(22, 22, QtGui.QImage.Format.Format_ARGB32_Premultiplied)
     image.fill(Qt.GlobalColor.transparent)
     painter = QtGui.QPainter(image)
-    view.scene.render(painter, QtCore.QRectF(0, 0, 18, 18), QtCore.QRectF(card.pos().x() + 5, card.pos().y() + 5, 18, 18))
+    view.scene.render(painter, QtCore.QRectF(0, 0, 22, 22), QtCore.QRectF(card.pos().x() + 16, card.pos().y() + 14, 22, 22))
     painter.end()
-    assert any(image.pixelColor(x, y) != QtGui.QColor(card.colors.surface) for x in range(18) for y in range(18))
+    surface = surface_fill(card.theme, card.surface)
+    assert any(image.pixelColor(x, y) != surface for x in range(22) for y in range(22))
 
 
 def assert_heading_surface(panel: NativeCanvas, identity: str) -> None:
@@ -814,7 +812,8 @@ def assert_heading_surface(panel: NativeCanvas, identity: str) -> None:
     painter = QtGui.QPainter(image)
     panel.view.personal.scene.render(painter, QtCore.QRectF(0, 0, 20, 2), QtCore.QRectF(origin.x() + 4, origin.y() + 1, 20, 2))
     painter.end()
-    assert all(image.pixelColor(x, y) == QtGui.QColor(card.colors.surface) for x in range(20) for y in range(2))
+    surface = surface_fill(card.theme, card.surface)
+    assert all(image.pixelColor(x, y) == surface for x in range(20) for y in range(2))
 
 
 def pump_until(ui: InboxUi, ready: Callable[[], bool]) -> None:
@@ -1127,7 +1126,7 @@ def test_nested_bubbles_reveal_on_one_canvas_and_retain_reading_and_pins(tmp_pat
         assert_context_header(context_frame)
         card = canvas.card(evidence.id)
         assert card is not None and card.app is App.KANBAN
-        assert card.title_label.value == evidence.title and card.heading.toPlainText() == "Kanban ticket"
+        assert card.title_label.value == evidence.title and card.heading.text() == "Kanban ticket"
         root_position = drag_bubble(panel, evidence.id)
         canvas.inspect(question.id)
         editor = canvas.detail(question.id)
@@ -1156,10 +1155,25 @@ def test_nested_bubbles_reveal_on_one_canvas_and_retain_reading_and_pins(tmp_pat
         assert canvas.selected == question.id and editor.question.text() == clarification
 
 
+def assert_searching_island(canvas: PersonalPanel) -> None:
+    # Defect: the island leaves its fixed place at the window's foot, or search
+    # crowds the speak and options symbols instead of taking the island over.
+    toolbar = canvas.toolbar
+    assert canvas.search.isVisible() and canvas.search_button.isChecked()
+    assert canvas.frame.rect().contains(toolbar.geometry())
+    assert abs(toolbar.geometry().center().x() - canvas.frame.rect().center().x()) <= 1
+    assert canvas.frame.height() - (toolbar.y() + toolbar.glass().bottom()) == 14
+    assert not canvas.voice_hint.isVisible() and not canvas.clear_context.isVisible() and not canvas.menu_button.isVisible()
+    controls = (canvas.search_button, canvas.search)
+    assert all(toolbar.glass().contains(QtCore.QRectF(control.geometry())) for control in controls)
+    assert all(not first.geometry().intersects(second.geometry()) for first, second in pairwise(controls))
+    assert all(abs(control.geometry().center().y() - toolbar.glass().center().y()) <= 1 for control in controls)
+
+
 def assert_context_header(frame: CanvasGroup) -> None:
     # Defect: a long context title clips without ellipsis or crowds the native
     # controls because elision happens before their final geometry is measured.
-    assert heading_text(frame.title_label.value, round(frame.title_label.rect().width()), expanded=False).endswith("…")
+    assert frame.title_label.display_text().endswith("…")
     assert frame.rect().contains(frame.title_label.mapRectToParent(frame.title_label.rect()))
     assert frame.rect().contains(frame.contents.mapRectToParent(frame.contents.rect()))
 
@@ -1192,7 +1206,7 @@ def test_nested_document_and_conversation_controls_keep_routes_and_drafts(tmp_pa
         canvas = native.view.personal
         conversation = data.sources[0]
         card = canvas.card(conversation.id)
-        assert card is not None and card.contents is not None and card.contents.disclosure.action.title == "▸ Show 8 pieces"
+        assert card is not None and card.contents is not None and card.contents.disclosure.action.title == "Show 8 pieces"
         card.contents.disclosure.click()
         native.pump()
         assert card.contents_expanded and card in canvas.visible_cards
@@ -1213,7 +1227,7 @@ def test_nested_document_and_conversation_controls_keep_routes_and_drafts(tmp_pa
         assert not canvas.scope.path and canvas.selected == first.id
         doc = next(item for item in data.sources if item.kind is SourceKind.DOCUMENT)
         doc_card = canvas.card(doc.id)
-        assert doc_card is not None and doc_card.app is App.DOCUMENT and doc_card.heading.toPlainText() == "Document"
+        assert doc_card is not None and doc_card.app is App.DOCUMENT and doc_card.heading.text() == "Document"
         assert doc_card.contents is not None
         open_document_context(native, doc.id, "work:one")
         canvas.inspect("note:annotation")

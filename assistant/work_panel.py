@@ -14,6 +14,7 @@ from assistant.qt_runtime import prepare
 from winapi import windows
 lazy from assistant import work_tree
 lazy from assistant.meeting_panel import MeetingPanel
+lazy from assistant.ui_components.appearance import control_style, scheme, tokens
 lazy from assistant.ui_components.controls import button, label
 lazy from assistant.ui_components.paint_ready import PaintReady
 lazy from assistant.ui_components.text import units
@@ -799,6 +800,7 @@ def composer_widgets(owner: WorkPanel) -> tuple[QtWidgets.QFrame, QtWidgets.QLab
 
 def panel_frame(owner: WorkPanel) -> tuple[Window, QtWidgets.QLabel, QtWidgets.QTabWidget]:
     window = Window("Workspace · Work", owner.hide, width=1080, height=740)
+    window.setStyleSheet(control_style(tokens(scheme())))
     window.setMinimumSize(740, 500)
     layout = column(window)
     layout.setContentsMargins(22, 18, 22, 18)

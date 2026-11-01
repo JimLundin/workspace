@@ -5,19 +5,22 @@ from collections.abc import Callable
 lazy from PySide6 import QtCore, QtGui, QtWidgets
 lazy from PySide6.QtCore import Qt
 
-from assistant.ui_components.text import font
+from assistant.ui_components.appearance import GLASS_ACCENT, Shade, Tokens
+from assistant.ui_components.canvas_look import Role, color, face
 from assistant.work_canvas_connections import CanvasLink, RelationConnection
 from assistant.work_canvas_model import CanvasRelation
 
 
 class ConnectionPath(QtWidgets.QGraphicsPathItem):
-    def __init__(self, connection: CanvasLink, menu: Callable[[CanvasRelation], None]) -> None:
+    """Relationships are drawn in the accent: quiet at rest, full beside the selected bubble."""
+
+    def __init__(self, connection: CanvasLink, menu: Callable[[CanvasRelation], None], theme: Tokens) -> None:
         super().__init__()
         self.connection: CanvasLink = connection
         self.menu: Callable[[CanvasRelation], None] = menu
         self.caption: QtWidgets.QGraphicsSimpleTextItem = QtWidgets.QGraphicsSimpleTextItem(self)
-        self.caption.setFont(font(8))
-        self.caption.setBrush(QtGui.QColor("#b7afc9"))
+        self.caption.setFont(face(Role.META))
+        self.caption.setBrush(color(theme.ink2))
         self.caption.setAcceptedMouseButtons(Qt.MouseButton.NoButton)
         self.setToolTip(connection.reason)
         match connection:
@@ -51,6 +54,6 @@ class ConnectionPath(QtWidgets.QGraphicsPathItem):
 
     def highlight(self, selected: str | None) -> None:
         active = selected in (self.connection.start, self.connection.end)
-        pen = QtGui.QPen(QtGui.QColor("#c4a5e8" if active else "#78668e"), 2.4 if active else 1.4)
+        pen = QtGui.QPen(color(Shade(GLASS_ACCENT, 1 if active else 0.55)), 2.4 if active else 1.6)
         pen.setCosmetic(True)
         self.setPen(pen)

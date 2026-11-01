@@ -44,15 +44,21 @@ Use the Canvas button beside the menu on Workspace's floating toolbar. It opens
 a dedicated native window with no tabs, maximized on first opening. Restore keeps
 a smaller window through subsequent redirects. Drag bubbles to arrange them;
 drag empty space or scroll a trackpad to pan, use Control + wheel or pinch to
-zoom, and Center to orient yourself. One compact toolbar sits at the bottom
-center: agent input, search, Center, clarifications, options and Close.
-Search expands in the same bar when clicked or with Control + F. Escape closes
-search, collapses selected inline details or contents, then closes the canvas. Close always exits the canvas.
-Drag the toolbar background to move a restored window. Window controls live in
-the options menu. Scene-anchored dots keep their visible size, using
+zoom, and Center to orient yourself. The canvas toolbar follows the desktop
+island bar's rule ([Liquid Glass](design/liquid-glass.md#work-canvas)): one
+glass island floats centred 14 px above the window's foot with speak, search and
+options. Only temporary things sit beside it: Recenter once no bubble remains in
+view, and an orange Questions pill with its count while questions wait.
+Search turns the island into its field when clicked or with Control + F. Escape closes
+search, collapses selected inline details or contents, then closes the canvas.
+Drag the island's background to move a restored window. Window controls,
+including Close canvas, live in the options menu, which also offers Center.
+Scene-anchored dots keep their visible size, using
 coarser spacing at low zoom instead of shrinking a raster tile. Click a bubble
-to open its details. Its title, upper-left badge,
-outline and palette reuse the floating notification components.
+to open its details in place. Bubbles are solid content cards with the
+notification cards' anatomy: a rounded app badge, title, meta line and body.
+App colour appears only on the badge; a waiting question tints its card orange,
+and an open container becomes a quiet well around its pieces.
 Work context details show the goal, current situation and next step and allow
 revision-bound editing.
 A background update refreshes evidence while retaining unsaved editing fields.
@@ -166,9 +172,11 @@ retains the full work timeline without presenting app observations as alerts.
 `assistant/ui_components/` owns reusable native bubble surfaces, palette/ink,
 text rendering, headings, controls, press feedback and common widgets. Feature
 controllers consume those components directly; no forwarding compatibility
-modules remain. The conversation bubbles and the canvas share the same painted
-outline and solid fallback. Native desktop glass continues to belong to the
-conversation window's compositor; the Qt scene uses the shared solid surface.
+modules remain. `canvas_look` owns the canvas's Liquid Glass look: Inter at the
+kit's sizes, solid, question and group surfaces, app badges and the toolbar's
+glass. The canvas reads one scheme's tokens for its lifetime, following Windows'
+app mode. Native desktop glass continues to belong to the conversation window's
+compositor; inside the canvas window Qt paints the toolbar's veil and rim itself.
 
 Canvas document contracts are in `assistant/work_canvas_model.py`; context
 projection, shared identity and navigation are in `work_canvas_context.py`.
@@ -223,13 +231,14 @@ the actual route, including when the same conversation supports multiple works.
 
 ## Opening and refresh cost
 
-The toolbar's voice legend is a microphone beside a styled physical N keycap.
+The island's speak symbol is a microphone that fills in amber while you speak.
 Instructions and the selected context appear in its tooltip; no visible sentence
 or agent editor takes space in the toolbar. Holding N and releasing to send use
 the existing speech route.
 
 First reveal shows a compact 80-logical-pixel native indicator before construction
-and rendering. Its lilac wheel rotates linearly once per 1.2 seconds through
+and rendering. Its neutral wheel, on the canvas's solid surface in Windows' app
+mode, rotates linearly once per 1.2 seconds through
 Windows composition. The surface uses desktop glass's top-level composition
 host and stays visible until the canvas viewport has painted its first frame;
 native show returning does not complete presentation. Windows' reduced motion
