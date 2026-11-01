@@ -14,7 +14,6 @@ from typing import Protocol
 
 lazy import shiboken6
 lazy from PySide6 import QtCore, QtGui, QtWidgets
-lazy from PySide6.QtCore import Qt
 
 import winapi.shapes
 from assistant.canvas_activity import CanvasRequest, SessionRequest, TaskRequest
@@ -23,7 +22,6 @@ from assistant.work_canvas_commands import CanvasCommand, CanvasRefused, CanvasR
 from assistant.work_commands import AnswerTask
 from automation.personal_work import Catalog
 from automation.task import TextAnswer
-from winapi import windows
 from winapi.shapes import Rect
 lazy import assistant.communications
 lazy import winapi.system_notices
@@ -32,9 +30,8 @@ lazy from assistant.agent_session import Session, Snapshot
 lazy from assistant.agent_toasts import AgentToasts
 lazy from assistant.agent_window import AgentWindow
 lazy from assistant.desktop_bar import BarActions, DesktopBar
-lazy from assistant.dialogs import NativePresentation, Presentation, bring_forward, near_pointer
+lazy from assistant.dialogs import AnswerWindow, Job, NativePresentation, Presentation, RegionPicker, bring_forward, near_pointer
 lazy from assistant.feed_observation import FeedObservation, FeedUpdate, NoticesObserved, TeamsObserved, observe
-lazy from assistant.geometry import region
 lazy from assistant.icons import State
 lazy from assistant.keymap_views import KeymapOverlay, KeymapWindow
 lazy from assistant.layer_indicator import Indicator
@@ -44,10 +41,9 @@ lazy from assistant.notification_sources import HandleNotice, NotificationSource
 lazy from assistant.qt_ui import application, later
 lazy from assistant.recording_state import RecordingAction, RecordingState
 lazy from assistant.state_store import SavedState
-lazy from assistant.ui_components.appearance import GLASS_ACCENT, scheme, tokens
+lazy from assistant.ui_components.appearance import scheme, tokens
 lazy from assistant.ui_components.canvas_loading import CanvasLoading
-lazy from assistant.ui_components.controls import button
-lazy from assistant.ui_components.widgets import Editor, Window, column, row, show_window, window_style
+lazy from assistant.ui_components.widgets import show_window, window_style
 lazy from assistant.vector_icons import icon
 lazy from assistant.window_switcher import WindowSwitcher
 lazy from assistant.work_canvas import AnswerQuestion, CanvasPublication, SpeechRoute, WorkCanvas
@@ -61,9 +57,6 @@ lazy from protocol import Tool
 lazy from winapi.system_notices import NoticeKey
 
 prepare()
-
-
-type Job = Callable[[QtWidgets.QApplication], None]
 
 
 @dataclass(frozen=True, slots=True)
@@ -355,7 +348,7 @@ class Ui:
 
     def answer(self, title: str, follow_up: Callable[[str], None]) -> AnswerWindow:
         def build(root: QtWidgets.QApplication, done: Callable[[AnswerWindow], None]) -> None:
-            done(AnswerWindow(self, root, title, follow_up))
+            done(AnswerWindow(self, title, follow_up))
 
         return self._ask(build)
 
@@ -853,138 +846,3 @@ class Ui:
                 raise OSError("The Workspace bar did not finish closing.")
         if problems:
             raise OSError("; ".join(problems))
-
-
-class RegionPicker(QtWidgets.QWidget):
-    def __init__(self, area: Rect, done: Callable[[Rect | None], object]) -> None:
-        super().__init__()
-        self.area, self.done = area, done
-        self.start: QtCore.QPointF | None = None
-        self.current: QtCore.QPointF | None = None
-        self.finished = False
-        self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Tool | Qt.WindowType.WindowStaysOnTopHint)
-        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
-        self.setCursor(Qt.CursorShape.CrossCursor)
-        windows.move(int(self.winId()), area)
-
-    def paintEvent(self, event: QtGui.QPaintEvent) -> None:
-        painter = QtGui.QPainter(self)
-        painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
-        dim = QtGui.QPainterPath()
-        dim.addRect(QtCore.QRectF(self.rect()))
-        if self.start is not None and self.current is not None:
-            chosen = QtCore.QRectF(self.start, self.current).normalized()
-            hole = QtGui.QPainterPath()
-            hole.addRect(chosen)
-            painter.fillPath(dim.subtracted(hole), QtGui.QColor(0, 0, 0, 92))
-            painter.setPen(QtGui.QPen(QtGui.QColor(GLASS_ACCENT), 2))
-            painter.drawRect(chosen)
-        else:
-            painter.fillPath(dim, QtGui.QColor(0, 0, 0, 92))
-
-    def mousePressEvent(self, event: QtGui.QMouseEvent) -> None:
-        if event.button() == Qt.MouseButton.RightButton:
-            self.finish(None)
-        else:
-            self.start = self.current = event.position()
-            self.update()
-
-    def mouseMoveEvent(self, event: QtGui.QMouseEvent) -> None:
-        self.current = event.position()
-        self.update()
-
-    def mouseReleaseEvent(self, event: QtGui.QMouseEvent) -> None:
-        if self.start is not None and event.button() == Qt.MouseButton.LeftButton:
-            scale = self.devicePixelRatioF()
-            first = (self.area.left + round(self.start.x() * scale), self.area.top + round(self.start.y() * scale))
-            last = (self.area.left + round(event.position().x() * scale), self.area.top + round(event.position().y() * scale))
-            area = region(first, last)
-            self.finish(area if area.width > 4 and area.height > 4 else None)
-
-    def keyPressEvent(self, event: QtGui.QKeyEvent) -> None:
-        if event.key() == Qt.Key.Key_Escape:
-            self.finish(None)
-
-    def closeEvent(self, event: QtGui.QCloseEvent) -> None:
-        self.finish(None)
-        event.accept()
-
-    def finish(self, area: Rect | None) -> None:
-        if not self.finished:
-            self.finished = True
-            self.hide()
-            self.done(area)
-            self.deleteLater()
-
-
-class AnswerWindow:
-    __slots__ = (
-        "__weakref__",
-        "entry",
-        "follow_up",
-        "text",
-        "ui",
-        "window",
-    )
-
-    def __init__(self, ui: Ui, root: QtWidgets.QApplication, title: str, follow_up: Callable[[str], None]) -> None:
-        self.ui, self.follow_up = ui, follow_up
-        self.window = Window(title[:80], self.close, width=760, height=540)
-        layout = column(self.window)
-        layout.setContentsMargins(20, 18, 20, 18)
-        self.text = Editor(readonly=True)
-        layout.addWidget(self.text, 1)
-        bottom = row()
-        self.entry = QtWidgets.QLineEdit()
-        self.entry.setPlaceholderText("Ask a follow-up…")
-        self.entry.setEnabled(False)
-        self.entry.returnPressed.connect(self.ask)
-        bottom.addWidget(self.entry, 1)
-        bottom.addWidget(button("Copy answer", self.copy_all, name="filled"))
-        layout.addLayout(bottom)
-        self.add(f"{title}\n\n", "accent")
-        ui.presentation.position(self.window, 760, 540)
-        ui.presentation.reveal(self.window, self.text)
-
-    def close(self) -> None:
-        self.window.hide()
-        self.window.deleteLater()
-
-    def add(self, text: str, tag: str = "") -> None:
-        def job(_: QtWidgets.QApplication) -> None:
-            if shiboken6.isValid(self.window):
-                cursor = self.text.textCursor()
-                cursor.movePosition(QtGui.QTextCursor.MoveOperation.End)
-                cursor.insertText(text)
-                self.text.setTextCursor(cursor)
-                self.text.ensureCursorVisible()
-
-        self.ui.post(job)
-
-    def all_text(self) -> str:
-        return self.text.toPlainText()
-
-    def copy_all(self) -> None:
-        QtWidgets.QApplication.clipboard().setText(self.all_text())
-
-    def ask(self) -> None:
-        if question := self.entry.text().strip():
-            self.entry.clear()
-            self.entry.setEnabled(False)
-            self.add(f"\n\n{question}\n\n", "accent")
-            self.follow_up(question)
-
-    def write(self, text: str) -> None:
-        self.add(text)
-
-    def finish(self) -> None:
-        def job(_: QtWidgets.QApplication) -> None:
-            if shiboken6.isValid(self.window):
-                self.entry.setEnabled(True)
-                self.entry.setFocus()
-
-        self.ui.post(job)
-
-    def fail(self, message: str) -> None:
-        self.add(f"\n{message}\n", "error")
-        self.finish()

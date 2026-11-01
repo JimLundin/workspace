@@ -9,6 +9,7 @@ from typing import Final, Literal
 from config import TERMINALS
 from winapi import audio, clipboard, inputs, screen, windows
 from winapi.shapes import Rect, Window
+lazy from assistant.dialogs import AnswerWindow
 lazy from assistant.geometry import Shot, fit, half, to_monitor
 lazy from assistant.icons import State
 lazy from assistant.island_model import Job
@@ -16,7 +17,7 @@ lazy from assistant.png import encode_png
 lazy from assistant.textio import paste_text
 lazy from assistant.tiling import GlazeWM
 lazy from assistant.tiling_commands import GLOBAL_TILING, TILING_COMMANDS, WINDOW_COMMANDS
-lazy from assistant.ui import AnswerWindow, Ui
+lazy from assistant.ui import Ui
 lazy from protocol import MAGIC, Tool
 
 _VK_CONTROL, _VK_C, _VK_V = 0xA2, 0x43, 0x56

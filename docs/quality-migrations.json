@@ -490,15 +490,6 @@
     {
       "key": {
         "rule": "PLR0913",
-        "path": "assistant/ui.py",
-        "scope": "AnswerWindow.__init__",
-        "signature": "7cd37fc1e83d1a37c7e999194adc6ffd685b98456fb376273031a1c8ee496c58"
-      },
-      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
-    },
-    {
-      "key": {
-        "rule": "PLR0913",
         "path": "assistant/keymap_views.py",
         "scope": "KeymapOverlay.show",
         "signature": "da56c5db9965405acb4c6e8084feb5570fc54e7a9202ae533397f5df9ab7c14f"
