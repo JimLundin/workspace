@@ -185,15 +185,6 @@
       "key": {
         "rule": "PLR0913",
         "path": "assistant/features.py",
-        "scope": "Assistant.__init__",
-        "signature": "782f53f25c6669a1c8357bb06961f7c216f9925b7af3e3c5b52059bde1c5797f"
-      },
-      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
-    },
-    {
-      "key": {
-        "rule": "PLR0913",
-        "path": "assistant/features.py",
         "scope": "Conversation.__init__",
         "signature": "29bfe2c3c2e35ba39c8cb27a696631f040ceaabe36c52e4ad183c8eea2b85cf5"
       },

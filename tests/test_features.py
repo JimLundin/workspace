@@ -142,12 +142,54 @@ class FakeDesktop:
         self.log.append(f"arrange {tool.name.lower()}")
 
 
+class FakeControls:
+    """Publish control effects to the fixture's action recorder."""
+
+    __slots__ = ("record",)
+
+    def __init__(self, record: Callable[[str], None]) -> None:
+        self.record: Callable[[str], None] = record
+
+    def run_agent(self, text: str) -> None:
+        self.record(text)
+
+    def show_agent(self) -> None:
+        self.record("SHOW")
+
+    def stop_agent(self) -> None:
+        self.record("STOP")
+
+    def open_inbox(self) -> None:
+        self.record("INBOX")
+
+    def switch_windows(self) -> None:
+        self.record("SWITCHER")
+
+    def toggle_meeting(self) -> None:
+        self.record("MEETING")
+
+    def balance_windows(self) -> None:
+        self.record("BALANCE")
+
+
+def run_immediately(job: Callable[[], None]) -> None:
+    job()
+
+
 class Rig:
     """An assistant wired to fakes: what it did is in `desktop.log`, `used` and `agent`."""
 
     __slots__ = ("agent", "assistant", "desktop", "endpoint", "used")
 
-    def __init__(self, endpoint: FakeEndpoint, missing: Missing | None = None, *, desktop: FakeDesktop | None = None) -> None:
+    # The fixture composes endpoint, credential gate, desktop effects and worker scheduling.
+    def __init__(
+        self,
+        endpoint: FakeEndpoint,
+        missing: Missing | None = None,
+        *,
+        desktop: FakeDesktop | None = None,
+        submit: Callable[[Callable[[], None]], None] = run_immediately,
+    ) -> None:
         self.endpoint = endpoint
         self.desktop = desktop if desktop is not None else FakeDesktop()
         self.used: list[tuple[str, Mapping[str, Detail]]] = []
@@ -157,10 +199,8 @@ class Rig:
             self.desktop,
             settings,
             record=lambda feature, details: self.used.append((feature, details)),
-            submit=lambda job: job(),
-            run_agent=self.agent.append,
-            show_agent=lambda: self.agent.append("SHOW"),
-            stop_agent=lambda: self.agent.append("STOP"),
+            submit=submit,
+            controls=FakeControls(self.agent.append),
             missing=missing,
         )
 
@@ -391,9 +431,8 @@ def test_queued_voice_diagnostics_belong_to_their_own_recording() -> None:
     with fake_endpoint() as endpoint:
         transcripts = ("The first recording. Its ending.", "The second recording is longer. It also keeps its last sentence.")
         endpoint.replies = [said(text) for text in transcripts]
-        rig = Rig(endpoint)
         jobs: list[Callable[[], None]] = []
-        rig.assistant.submit = jobs.append
+        rig = Rig(endpoint, submit=jobs.append)
         rig.hold(Tool.DICTATE)
         rig.desktop.speech = SPEECH * 2
         rig.hold(Tool.DICTATE)
@@ -639,6 +678,18 @@ def test_window_keys_arrange_the_window() -> None:
         assert rig.take() == ["arrange snap_left", "arrange maximize", "arrange next_monitor"]
 
 
+def test_desktop_controls_run_on_press_without_worker_submission() -> None:
+    # Detect UI actions firing on release, entering the worker, or resetting recording state through timed().
+    with fake_endpoint() as endpoint:
+        # This test owns the bounded queue of submitted effects and never executes them.
+        jobs: list[Callable[[], None]] = []
+        rig = Rig(endpoint, submit=jobs.append)
+        for tool in (Tool.OPEN_INBOX, Tool.WINDOW_SWITCHER, Tool.MEETING_TOGGLE, Tool.TILE_BALANCE):
+            rig.press(tool)
+        assert rig.agent == ["INBOX", "SWITCHER", "MEETING", "BALANCE"]
+        assert not jobs and not rig.used and not rig.desktop.jobs and not rig.take()
+
+
 # ---- without the AI settings -----------------------------------------------------------
 
 
@@ -649,16 +700,18 @@ def test_without_ai_settings_ai_tools_say_what_is_missing_and_the_rest_works() -
         rig.press(Tool.FIX)
         rig.press(TERMINAL)
         rig.press(Tool.SNAP_LEFT)
+        rig.press(Tool.OPEN_INBOX)
+        rig.press(Tool.MEETING_TOGGLE)
         problem = "problem Set OPENAI_API_KEY to use the AI tools (see the README)."
         assert rig.take() == [problem, problem, "launch wt.exe", "arrange snap_left"]
+        assert rig.agent == ["INBOX", "MEETING"]
         assert endpoint.received == []
 
 
 def test_tiling_commands_use_worker_without_ai_credentials() -> None:
     with fake_endpoint() as endpoint:
-        rig = Rig(endpoint, missing=Missing(("OPENAI_API_KEY",)))
         jobs: list[Callable[[], None]] = []
-        rig.assistant.submit = jobs.append
+        rig = Rig(endpoint, missing=Missing(("OPENAI_API_KEY",)), submit=jobs.append)
         for tool in (Tool.TILE_FOCUS_LEFT, Tool.TILE_FLOAT, Tool.TILE_NEXT_WORKSPACE, Tool.TILE_PAUSE):
             rig.press(tool)
         assert not rig.take() and len(jobs) == 4

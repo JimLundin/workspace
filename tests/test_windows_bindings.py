@@ -16,7 +16,6 @@ if sys.platform != "win32":
     raise unittest.SkipTest("Windows bindings")
 
 from assistant.control_policy import (
-    Action,
     FeatureRequest,
     Menu,
     MenuState,
@@ -629,7 +628,7 @@ def test_tools_t_opens_inbox_once_per_press_through_keyboard_and_assistant() -> 
         assert requests == ((Tool.OPEN_INBOX.value, 1), (Tool.OPEN_INBOX.value, 0))
         assert not keyboard.pressed and keyboard.engine.layer() is None
         actions = tuple(control_event(WindowInput(WM_REQUEST, tool, down), APPS) for tool, down in requests)
-        assert actions == (Action.OPEN_INBOX, None)
+        assert actions == (FeatureRequest(Tool.OPEN_INBOX, down=True), FeatureRequest(Tool.OPEN_INBOX, down=False))
 
 
 def test_overlay_handle_accepts_mouse_input_without_taking_keyboard_focus() -> None:
@@ -924,18 +923,8 @@ def test_meeting_file_handoff_keeps_canonical_path_and_reports_shell_failure(tmp
     assert problems == ["Windows could not open this file. You can still review it in Meetings."]
 
 
-def test_control_event_gates_desktop_actions_without_losing_voice_release() -> None:
-    """Detect press-only UI actions on release or dropping a capture's key-up."""
-    choices = (
-        (Tool.WINDOW_SWITCHER, Action.SWITCH_WINDOWS),
-        (Tool.OPEN_INBOX, Action.OPEN_INBOX),
-        (Tool.MEETING_TOGGLE, Action.TOGGLE_MEETING),
-        (Tool.TILE_BALANCE, Action.BALANCE_WINDOWS),
-    )
-    for tool, action in choices:
-        assert control_event(WindowInput(WM_REQUEST, tool.value, 1), APPS) is action
-        assert control_event(WindowInput(WM_REQUEST, tool.value, 0), APPS) is None
-    assert control_event(WindowInput(WM_REQUEST, Tool.DICTATE.value, 1), APPS) == FeatureRequest(Tool.DICTATE, down=True)
+def test_control_event_preserves_voice_release_and_rejects_unknown_requests() -> None:
+    """Detect dropping a capture's key-up or forwarding an invalid wire request."""
     assert control_event(WindowInput(WM_REQUEST, Tool.DICTATE.value, 0), APPS) == FeatureRequest(Tool.DICTATE, down=False)
     assert control_event(WindowInput(WM_REQUEST, 999, 1), APPS) is None
 

@@ -14,7 +14,7 @@ from typing import Protocol
 import protocol
 from components import LAYOUT
 from miryoku.layout import Scancode
-from protocol import App, LayoutState, Request, Tool
+from protocol import App, LayoutState, Request
 lazy from winapi.shell import MenuItem
 
 
@@ -156,38 +156,23 @@ class PhysicalKey:
         return self.scancode == 0
 
 
-class Action(Enum):
-    OPEN_INBOX = "open inbox"
-    SWITCH_WINDOWS = "switch windows"
-    TOGGLE_MEETING = "toggle meeting"
-    BALANCE_WINDOWS = "balance windows"
-
-
 @dataclass(frozen=True, slots=True)
 class FeatureRequest:
     request: Request
     down: bool = field(kw_only=True)
 
 
-type ControlAction = PhysicalKey | Action | FeatureRequest
+type ControlAction = PhysicalKey | FeatureRequest
 
 
 def control_event(event: WindowInput, apps: Sequence[App]) -> ControlAction | None:
-    """Separate press-only UI actions from features that own both key edges."""
+    """Decode physical keys and preserve both edges for the feature dispatcher."""
     match event:
         case WindowInput(message=protocol.WM_KEY_STATE, wparam=scancode, lparam=down):
             return PhysicalKey(Scancode(scancode), down=bool(down))
         case WindowInput(message=protocol.WM_REQUEST, wparam=code, lparam=down):
             request = protocol.decode(code, apps)
             match request:
-                case Tool.WINDOW_SWITCHER:
-                    return Action.SWITCH_WINDOWS if down else None
-                case Tool.OPEN_INBOX:
-                    return Action.OPEN_INBOX if down else None
-                case Tool.MEETING_TOGGLE:
-                    return Action.TOGGLE_MEETING if down else None
-                case Tool.TILE_BALANCE:
-                    return Action.BALANCE_WINDOWS if down else None
                 case None:
                     return None
                 case _:

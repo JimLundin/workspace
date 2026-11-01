@@ -331,9 +331,7 @@ class AssistantApp:
             self.settings,
             record=self.record,
             submit=self.jobs.put,
-            run_agent=self.voice_agent,
-            show_agent=self.agent.show,
-            stop_agent=self.agent.stop,
+            controls=self,
             missing=missing,
         )
         self.layout: LayoutState | None = None
@@ -482,7 +480,7 @@ class AssistantApp:
             self.assistant.handle(tool, down=True)
             return
         if tool is Tool.TILE_BALANCE:
-            threading.Thread(target=self.monitor_layout.balance, name="window redistribution", daemon=True).start()
+            self.balance_windows()
             return
 
         def arrange() -> None:
@@ -492,6 +490,21 @@ class AssistantApp:
                 self.problem(str(error))
 
         self.jobs.put(arrange)
+
+    def balance_windows(self) -> None:
+        threading.Thread(target=self.monitor_layout.balance, name="window redistribution", daemon=True).start()
+
+    def open_inbox(self) -> None:
+        self.ui.open_inbox(self.agent.show)
+
+    def show_agent(self) -> None:
+        self.agent.show()
+
+    def stop_agent(self) -> None:
+        self.agent.stop()
+
+    def toggle_meeting(self) -> None:
+        self.recording_action("stop" if self.meetings.snapshot().capturing else "start")
 
     def switch_windows(self) -> None:
         def focus(handle: int) -> None:
@@ -679,7 +692,7 @@ class AssistantApp:
         if self.assistant.listening is None:
             self.assistant.idle()
 
-    def voice_agent(self, text: str) -> None:
+    def run_agent(self, text: str) -> None:
         self.ui.voice_agent(text, self.agent.voice)
 
     def problem(self, message: str) -> None:
@@ -734,14 +747,6 @@ class AssistantApp:
                     case control_policy.PhysicalKey(scancode=scancode, down=down):
                         self.overlay = self.overlay.key(scancode, down=down)
                         self.ui.show_pressed_keys(self.overlay.pressed, reset=action.reset)
-                    case control_policy.Action.OPEN_INBOX:
-                        self.ui.open_inbox(self.agent.show)
-                    case control_policy.Action.SWITCH_WINDOWS:
-                        self.switch_windows()
-                    case control_policy.Action.TOGGLE_MEETING:
-                        self.recording_action("stop" if self.meetings.snapshot().capturing else "start")
-                    case control_policy.Action.BALANCE_WINDOWS:
-                        self.tile_from_menu(Tool.TILE_BALANCE, 0)
                     case control_policy.FeatureRequest(request=request, down=down):
                         self.assistant.handle(request, down=down)
                     case None:
@@ -803,7 +808,7 @@ class AssistantApp:
             case control_policy.Menu.STOP_AGENT.value:
                 self.agent.stop()
             case control_policy.Menu.MEETING.value:
-                self.recording_action("stop" if self.meetings.snapshot().capturing else "start")
+                self.toggle_meeting()
             case control_policy.Menu.TRANSCRIPTS.value:
                 self.recording_action("folder")
             case control_policy.Menu.FOLLOWUPS.value:

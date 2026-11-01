@@ -12,10 +12,11 @@ import time
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from enum import Enum, auto
-from typing import Final, Literal, Protocol
+from typing import Final, Literal, Protocol, assert_never
 
 from assistant import prompts
 from assistant.geometry import Shot
+from assistant.hotkeys import Route, needs_settings, route
 from assistant.icons import State
 from assistant.island_model import Job
 from assistant.llm import (
@@ -37,7 +38,6 @@ from assistant.llm import (
     wav,
 )
 from assistant.text import one_line_command, typed_text, unwrap
-from assistant.tiling_commands import TILING_COMMANDS
 from config import REWRITES
 from diagnostics import failure_info
 from protocol import App, Request, Tool
@@ -108,16 +108,24 @@ Recorder = Callable[[str, Mapping[str, Detail]], None]
 """Writes one use of a feature to the usage log."""
 
 
+class Controls(Protocol):
+    """Assistant-owned effects; agent callbacks marshal their own worker invocations."""
+
+    def run_agent(self, text: str) -> None: ...
+    def show_agent(self) -> None: ...
+    def stop_agent(self) -> None: ...
+    def open_inbox(self) -> None: ...
+    def switch_windows(self) -> None: ...
+    def toggle_meeting(self) -> None: ...
+    def balance_windows(self) -> None: ...
+
+
 class Outcome(Enum):
     DONE = auto()
     CANCELLED = auto()
     """The user backed out (Escape in a box, no area chosen)."""
 
 
-HOLD_TOOLS: Final = frozenset({Tool.DICTATE, Tool.DICTATE_CLEAN, Tool.DICTATE_COMMAND, Tool.REWRITE_VOICE, Tool.AGENT_VOICE})
-"""Hold the key and speak: these listen until it's released."""
-WINDOW_TOOLS: Final = frozenset({Tool.SNAP_LEFT, Tool.SNAP_RIGHT, Tool.MAXIMIZE, Tool.MINIMIZE, Tool.NEXT_MONITOR, *TILING_COMMANDS})
-LOCAL_TOOLS: Final = frozenset({*WINDOW_TOOLS, Tool.STOP, Tool.COPY_TRANSCRIPT})
 SCREENSHOT_SIZE: Final = 2048
 """Longest side of screenshots sent to the model, in pixels."""
 
@@ -159,7 +167,7 @@ class Capture:
     started: float
 
 
-def voice_tool(source: Tool) -> Tool:
+def listening_tool(source: Tool) -> Tool:
     match source:
         case Tool.DICTATE_TOGGLE:
             return Tool.DICTATE
@@ -199,18 +207,17 @@ class Assistant:
     __slots__ = (
         "capture",
         "capture_id",
+        "controls",
         "desktop",
         "latest_transcription",
         "layout_on",
         "missing",
         "record",
-        "run_agent",
         "settings",
-        "show_agent",
-        "stop_agent",
         "submit",
     )
 
+    # Desktop, settings, scheduling, usage and controls form the key-feature composition seam.
     def __init__(
         self,
         desktop: Desktop,
@@ -218,9 +225,7 @@ class Assistant:
         *,
         record: Recorder,
         submit: Callable[[Callable[[], None]], None],
-        run_agent: Callable[[str], None],
-        show_agent: Callable[[], None],
-        stop_agent: Callable[[], None],
+        controls: Controls,
         missing: Missing | None = None,
     ) -> None:
         self.desktop = desktop
@@ -228,9 +233,7 @@ class Assistant:
         self.record = record
         self.submit = submit
         """Runs a job on the worker thread, after whatever is already queued."""
-        self.run_agent = run_agent
-        self.show_agent = show_agent
-        self.stop_agent = stop_agent
+        self.controls: Controls = controls
         self.capture: Capture | None = None
         self.capture_id = 0
         self.latest_transcription: str | None = None
@@ -246,37 +249,58 @@ class Assistant:
 
     def handle(self, request: Request, *, down: bool) -> None:
         """A tool or app key went down or up. Returns quickly; slow work is submitted."""
-        if self.missing is not None and isinstance(request, Tool) and request not in LOCAL_TOOLS:
-            if down:
-                self.desktop.problem(f"Set {', '.join(self.missing.names)} to use the AI tools (see the README).")
-            return
         match request:
             case App():
                 if down:
                     self.timed(f"app:{request.name}", lambda: self.switch_to(request))
-            case Tool.STOP:
-                if down:
-                    if self.listening is not None:
-                        self.stop_capture(reason="stop")
-                    else:
-                        self.stop_agent()
-            case Tool.AGENT_VOICE_TOGGLE | Tool.DICTATE_TOGGLE:
-                if down:
-                    if self.listening is not None:
-                        self.stop_capture(reason="toggle")
-                    else:
-                        self.hold(request, down=True)
-            case Tool.COPY_TRANSCRIPT:
-                if down:
-                    self.submit(self.copy_transcript)
-            case Tool() if request in HOLD_TOOLS:
-                self.hold(request, down=down)
-            case Tool() if request in WINDOW_TOOLS:
-                if down:
-                    self.submit(lambda: self.timed(request.name.lower(), lambda: self.arrange(request)))
+                return
             case Tool():
-                if down:
-                    self.submit(lambda: self.timed(request.name.lower(), lambda: self.act(request)))
+                kind = route(request)
+            case _:
+                assert_never(request)
+        if self.missing is not None and needs_settings(kind):
+            if down:
+                self.desktop.problem(f"Set {', '.join(self.missing.names)} to use the AI tools (see the README).")
+            return
+        if kind is not Route.HOLD and not down:
+            return
+        match kind:
+            case Route.HOLD:
+                self.hold(request, down=down)
+            case Route.TOGGLE:
+                if self.listening is not None:
+                    self.stop_capture(reason="toggle")
+                else:
+                    self.hold(request, down=True)
+            case Route.STOP:
+                if self.listening is not None:
+                    self.stop_capture(reason="stop")
+                else:
+                    self.controls.stop_agent()
+            case Route.TRANSCRIPT:
+                self.submit(self.copy_transcript)
+            case Route.ARRANGE:
+                self.submit(lambda: self.timed(request.name.lower(), lambda: self.arrange(request)))
+            case Route.REWRITE:
+                self.submit(lambda: self.timed(request.name.lower(), lambda: self.rewrite(REWRITES[request])))
+            case Route.ASK:
+                self.submit(lambda: self.timed(request.name.lower(), self.ask))
+            case Route.SCREEN_TEXT:
+                self.submit(lambda: self.timed(request.name.lower(), self.screen_text))
+            case Route.SCREEN_ASK:
+                self.submit(lambda: self.timed(request.name.lower(), self.screen_ask))
+            case Route.AGENT_SESSION:
+                self.submit(lambda: self.timed(request.name.lower(), self.agent_session))
+            case Route.INBOX:
+                self.controls.open_inbox()
+            case Route.SWITCHER:
+                self.controls.switch_windows()
+            case Route.MEETING:
+                self.controls.toggle_meeting()
+            case Route.BALANCE:
+                self.controls.balance_windows()
+            case _:
+                assert_never(kind)
 
     def idle(self) -> None:
         self.desktop.busy(None)
@@ -324,7 +348,7 @@ class Assistant:
             if self.capture is not None:
                 return
             self.capture_id += 1
-            capture = Capture(self.capture_id, tool, voice_tool(tool), time.monotonic())
+            capture = Capture(self.capture_id, tool, listening_tool(tool), time.monotonic())
             try:
                 problem = self.desktop.start_listening()
             except Exception as error:
@@ -436,7 +460,7 @@ class Assistant:
                 details["phase"] = "rewriting"
                 return self.rewrite(transcript)
             case Tool.AGENT_VOICE:
-                submit_voice_text(transcript, self.run_agent, details)
+                submit_voice_text(transcript, self.controls.run_agent, details)
             case _:
                 raise AssertionError(f"{tool} doesn't listen")
         return Outcome.DONE
@@ -467,21 +491,9 @@ class Assistant:
             return Failure(str(error))
         return Outcome.DONE
 
-    def act(self, tool: Tool) -> Failure | Outcome:
-        if tool in REWRITES:
-            return self.rewrite(REWRITES[tool])
-        match tool:
-            case Tool.ASK:
-                return self.ask()
-            case Tool.SCREEN_TEXT:
-                return self.screen_text()
-            case Tool.SCREEN_ASK:
-                return self.screen_ask()
-            case Tool.AGENT_TYPED:
-                self.show_agent()
-                return Outcome.DONE
-            case _:
-                raise AssertionError(f"{tool} isn't a tool that acts on press")
+    def agent_session(self) -> Outcome:
+        self.controls.show_agent()
+        return Outcome.DONE
 
     def rewrite(self, instruction: str) -> Failure | Outcome:
         self.working(Job.ANSWERING)
