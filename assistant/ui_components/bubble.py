@@ -2,9 +2,7 @@
 
 A card is the kit's `<lg-card>`: a rounded app badge in the app's own colour, a
 title row, a meta line and the body beside it, then actions aligned with the
-text. Glass cards are functional UI such as the agent feed. The canvas still
-uses the earlier bubble surface and circular source badges at the end of this
-module until it adopts the card anatomy.
+text. Glass cards are functional UI such as the agent feed.
 """
 
 import math
@@ -16,7 +14,7 @@ lazy from PySide6.QtCore import QPointF, QRect, QRectF, Qt
 lazy from PySide6.QtGui import QColor, QFont, QFontMetricsF, QLinearGradient, QPainter, QPainterPath, QPaintEvent, QPalette, QPen
 lazy from PySide6.QtWidgets import QLabel, QWidget
 
-from assistant.feed_origin import App, Origin
+from assistant.feed_origin import App
 from assistant.qt_runtime import prepare
 from assistant.ui_components import appearance, typeface
 from assistant.ui_components.appearance import GLASS_ACCENT, GlassLook, Rim, Scheme, Shade, SolidLook, brand, rim_stops, tokens
@@ -267,13 +265,3 @@ class FeedTitle(QLabel):
             flags |= Qt.TextFlag.TextWordWrap.value
         painter.drawText(QRectF(self.rect()), flags, self.display_text())
         painter.end()
-
-
-# The canvas's bubble: its earlier surface, circular source badges and point-sized
-# heading, kept with their signatures until the canvas adopts the card anatomy.
-TITLE_SIZE = 13.0
-
-
-def badge_origins(origins: tuple[Origin, ...], app: App = App.WORKSPACE) -> tuple[Origin, ...]:
-    """A bubble without explicit sources shows the badge of the app that owns its content."""
-    return origins or (Origin(app, app.value),)

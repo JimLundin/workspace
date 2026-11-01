@@ -15,7 +15,6 @@ lazy from PySide6.QtCore import Qt
 from assistant.canvas_activity import Attention, CanvasAction, CanvasQuestion, CanvasUpdate
 from assistant.feed_origin import App, Origin
 from assistant.ui_components.appearance import Shade, Tokens
-from assistant.ui_components.bubble import badge_origins
 from assistant.ui_components.canvas_bubble import CanvasBubble, CanvasEvents
 from assistant.ui_components.canvas_controls import CanvasControl, ControlAction
 from assistant.ui_components.canvas_look import CONTROL, PADDING, Role, Surface, badge_width, face, paint_badges
@@ -383,6 +382,11 @@ def source_app(content: CanvasContent) -> App:
             return origins[0].app
         case _:
             return App.WORKSPACE
+
+
+def badge_origins(origins: tuple[Origin, ...], app: App = App.WORKSPACE) -> tuple[Origin, ...]:
+    """A bubble without explicit sources shows the badge of the app that owns its content."""
+    return origins or (Origin(app, app.value),)
 
 
 def source_origins(content: CanvasContent) -> tuple[Origin, ...]:
