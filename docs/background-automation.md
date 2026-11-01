@@ -88,7 +88,10 @@ Use control IDs from the latest snapshot of the selected page and frame. A new
 snapshot replaces that frame's IDs. Actions do not imply that the intended
 workflow succeeded: read a fresh snapshot to verify the result. Main-page clicks
 use CDP mouse events; frame clicks use the frame's DOM so local coordinates never
-become desktop or main-page coordinates. Open shadow roots are included. Sites
+become desktop or main-page coordinates. Generic actions use the same bounded
+wake/restore lifecycle as web-app operations, so inactive pages receive trusted
+input without activating the native window. A disposable minimized Edge fixture
+verifies the saved effect and unchanged window state. Open shadow roots are included. Sites
 with closed shadow roots, inaccessible frames or canvas interfaces may require
 custom JavaScript, screenshots or foreground automation.
 
@@ -141,6 +144,28 @@ Teams work runs only in the signed-in browser through `teams_web_read`,
 Graph integration, app registration or stored Teams tokens; the earlier Graph
 adapter was retired because the browser covers the same work without tenant
 consent.
+
+To record a Teams meeting, ask the assistant to start recording while the meeting
+is open in the browser. `meeting_start` defaults to `source=both`, capturing the
+Windows default microphone and playback device; `source=microphone` captures
+only the room. `meeting_stop` ends capture and finishes transcription.
+`meeting_status`, `meeting_list` and `meeting_retry` report progress, find saved
+transcripts and retry pending audio. Match Teams' selected playback device to the
+Windows default playback device. Capture continues independently of the agent
+task until stopped or Workspace exits. Transcripts live under
+`%LOCALAPPDATA%\workspace\meetings`; successfully transcribed audio is removed.
+
+The real-device browser playback check captured 19.2 seconds, transcribed the
+known spoken phrase through the configured provider, published its Markdown
+transcript and verified removal of transcribed audio. A separate 62.6-second
+capture stopped and published cleanly. Two device-policy defects found during
+these checks are covered: comparing native positions with stream packet lengths
+falsely reported microphone resets, and old timestamps on all-zero playback
+packets falsely reported missing audio. True backwards clocks and late nonzero
+audio still stop capture. This validates browser playback, capture and transcription;
+it does not establish that a live Teams call connected. The web test-call button
+received a verified trusted click but opened no call UI; the user's self-chat
+offered no call control.
 
 ## Outlook and AIP Kanban agent tools
 

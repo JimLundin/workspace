@@ -93,6 +93,11 @@ class Mixer:
 
     def add(self, start: int, pcm: bytes) -> None:
         samples = array("h", pcm)
+        # Idle WASAPI playback can timestamp silence from its last active
+        # clock. Zero contributions cannot alter published or buffered audio;
+        # ignore them before timing checks, while still rejecting late speech.
+        if not any(samples):
+            return
         if start + len(samples) > self.cursor + len(self.samples):
             raise OSError("Recording fell behind the audio device. The captured part has been saved; start a new recording.")
         offset = max(0, self.cursor - start)

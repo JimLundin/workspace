@@ -136,7 +136,7 @@ def _format(pointer: ctypes.c_void_p) -> PcmFormat:
 
 
 class Stream:
-    __slots__ = ("api", "capture", "client", "converter", "device", "frames", "label", "loopback", "started")
+    __slots__ = ("api", "capture", "client", "converter", "device", "label", "loopback", "position", "started")
 
     def __init__(self, enumerator: ctypes.c_void_p, api: WasapiApi, *, loopback: bool) -> None:
         self.api = api
@@ -144,7 +144,7 @@ class Stream:
         self.label = "Computer audio" if loopback else "Microphone"
         self.loopback = loopback
         self.started = False
-        self.frames: int | None = None
+        self.position: int | None = None
         try:
             # Multimedia default matches normal app playback and the system's
             # selected microphone. Both use shared mode, including alongside B/N.
@@ -201,15 +201,20 @@ class Stream:
             try:
                 if flags.value & _TIMESTAMP_ERROR:
                     raise OSError(f"{self.label} lost its audio clock. The captured part has been saved.")
-                if self.frames is not None and position.value < self.frames:
+                if self.position is not None and position.value < self.position:
                     raise OSError(f"{self.label} restarted its audio clock. The captured part has been saved.")
+                # Compare native positions with each other, never with stream
+                # frame counts. The real shared-mode microphone delivers 480
+                # frames at 48 kHz while its device counter advances 441; adding
+                # packet frames falsely reports a restart on the second packet.
+                # QPC timestamps independently place packets on the mix timeline.
                 # A discontinuity reports a gap before this valid packet, not a
                 # failed device. Keep the packet's clock position so the mixer
                 # leaves silence for missing samples and keeps the other source.
                 # Reset only the resampler's carried sample/phase across the gap.
-                if self.frames is not None and flags.value & _DISCONTINUITY:
+                if self.position is not None and flags.value & _DISCONTINUITY:
                     self.converter = Converter(self.converter.format)
-                self.frames = position.value + frames.value
+                self.position = position.value
                 count = frames.value * self.converter.format.frame_bytes
                 raw = bytes(count) if flags.value & _SILENT else ctypes.string_at(data, count)
                 offset = self.converter.output_frames / RATE - self.converter.input_frames / self.converter.format.rate

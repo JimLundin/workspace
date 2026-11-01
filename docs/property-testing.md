@@ -13,6 +13,13 @@ one to eight channels, and publishes continuous input/output frame clocks.
 Floating-point headroom is preserved through mixing and interpolation before
 final int16 clipping. The recording mixer owns a bounded two-second timeline,
 late-packet decisions and clipping after contributions have been accumulated.
+Zero contributions cannot change buffered or published audio and are ignored
+before timing checks: idle WASAPI playback can timestamp digital silence from
+its last active clock. Nonzero late packets still interrupt capture. The early
+return uses the existing sample adapter and introduces no new dependency. On
+native Windows with GC enabled, 5,000 silent 160-frame packets took 0.216 seconds
+before this decision and 0.009 seconds after; nonzero packets took 0.240 and
+0.192 seconds. These are focused loop measurements, not whole-app benchmarks.
 
 Primary package metadata checked on 2026-10-27:
 

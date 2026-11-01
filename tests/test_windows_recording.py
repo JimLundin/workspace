@@ -69,6 +69,7 @@ class Wasapi:
         "fail",
         "flags",
         "format",
+        "microphone_positions",
         "now",
         "origin",
         "packet_frames",
@@ -84,6 +85,7 @@ class Wasapi:
         self.dropouts: dict[tuple[int, int], int] = {}
         self.discontinuous: set[int] = set()
         self.packet_frames = 480
+        self.microphone_positions: tuple[int, ...] = ()
         self.flags = 0
         self.buffer = ctypes.create_string_buffer(0)
         self.calls: list[tuple[int, int]] = []
@@ -161,7 +163,9 @@ class Wasapi:
             set_pointer(arguments[1], ctypes.addressof(self.buffer))
             set_uint(arguments[2], self.packet_frames)
             set_uint(arguments[3], 1 if not self.delivered[handle] or handle in self.discontinuous else self.flags)
-            set_u64(arguments[4], self.delivered[handle])
+            packet = self.delivered[handle] // self.packet_frames
+            position = self.microphone_positions[packet] if handle == 30 and packet < len(self.microphone_positions) else self.delivered[handle]
+            set_u64(arguments[4], position)
             set_u64(arguments[5], round((self.origin + self.delivered[handle] / rate) * 10_000_000))
         elif index == 4:
             self.delivered[handle] += self.packet_frames
@@ -241,6 +245,27 @@ def test_meeting_service_saves_speech_after_a_microphone_dropout(tmp_path: Path)
             assert len(endpoint.received) == 1
         finally:
             service.close()
+
+
+def test_forward_device_positions_need_not_advance_by_stream_packet_frames() -> None:
+    # Defect: the real 48 kHz shared-mode stream supplies 480-frame packets
+    # while its device counter advances 441. Comparing with the preceding
+    # packet's calculated end misreports every second packet as a restart.
+    api = Wasapi()
+    api.microphone_positions = tuple(index * 441 for index in range(300))
+    blocks: list[bytes] = []
+    recording.MeetingAudio(api, computer_audio=False).record(threading.Event(), blocks.append, lambda: None)
+    result = b"".join(blocks)
+    assert len(result) == round(2.54 * RATE) * 2
+    assert result[1000:1200] == array("h", [1000] * 100).tobytes()
+
+
+def test_a_backward_device_position_still_stops_recording() -> None:
+    # Defect: relaxing the mixed-unit comparison hides a genuine clock reset.
+    api = Wasapi()
+    api.microphone_positions = (1000, 500)
+    with unittest.TestCase().assertRaisesRegex(OSError, "restarted its audio clock"):
+        recording.MeetingAudio(api).record(threading.Event(), lambda pcm: None, lambda: None)
 
 
 def test_cancelling_during_device_setup_never_starts_capture() -> None:

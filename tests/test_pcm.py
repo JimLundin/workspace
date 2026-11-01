@@ -88,6 +88,18 @@ def test_mixer_accepts_an_exactly_full_buffer_and_one_overlapping_sample() -> No
         mixer.add(mixer.cursor - 2, array("h", [111, 222, 333]).tobytes())
 
 
+def test_late_digital_silence_does_not_interrupt_or_change_recorded_audio() -> None:
+    # Defect: idle WASAPI playback reports old timestamps for silent packets;
+    # rejecting their zero contribution stops an otherwise valid recording.
+    mixer = Mixer()
+    mixer.take(100)
+    mixer.add(100, array("h", [1200, -500]).tobytes())
+    mixer.add(-RATE * 60, bytes(320))
+    assert mixer.take(102) == array("h", [1200, -500]).tobytes()
+    with TestCase().assertRaisesRegex(OSError, "arrived too late"):
+        mixer.add(0, array("h", [0, 700, 0]).tobytes())
+
+
 def test_format_limits_and_quiet_tail_keep_boundary_samples() -> None:
     for rate in (8_000, 384_000):
         for channels in (1, 8):
