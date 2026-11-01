@@ -36,7 +36,7 @@ lazy from automation.activity import ContextSnapshot, Observation, Sample, obser
 lazy from automation.bridge import BridgeServer
 lazy from automation.capture import AudioSource
 lazy from automation.context import ContextStore, select_context
-lazy from automation.controller import ControllerSnapshot, Fault, Idle, Stopping, WorkController, WorkExecution, Working
+lazy from automation.controller import ControllerSnapshot, Fault, Idle, Runner, Stopping, WorkController, Working
 lazy from automation.execution import ApprovalReview, Log
 lazy from automation.presentation import LiveMessage, Problem, Progress, Said
 lazy from automation.profile_lease import ProfileLease
@@ -199,7 +199,7 @@ def run(
     settings: Settings | Missing,
     *,
     folder: Path = WORK.root,
-    execution: WorkExecution | None = None,
+    execution: Runner | None = None,
     ready: Callable[[], None] = components.ready,
     title: str = components.AUTOMATION.window.title,
 ) -> None:

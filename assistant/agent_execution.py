@@ -109,7 +109,7 @@ class AgentExecution:
     ) -> Outcome:
         """Execute one durable claim; the controller commits the returned disposition.
 
-        The four positional inputs are the controller's `WorkExecution.run_work`
+        The four positional inputs are the controller's `Runner.run_work`
         contract; `review` is the work process's per-claim approval channel.
         """
         started = time.monotonic()

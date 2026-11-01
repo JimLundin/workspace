@@ -49,7 +49,7 @@ class ControllerSnapshot:
     tasks: tuple[Task, ...]
 
 
-class WorkExecution(Protocol):
+class Runner(Protocol):
     """Execute one claim; return only after its native resources are released."""
 
     def run_work(self, claim: Claim, store: TaskStore, log: Log, stop: threading.Event) -> Outcome: ...
@@ -106,7 +106,7 @@ class WorkController:
     def __init__(
         self,
         store: TaskStore,
-        execution: WorkExecution,
+        execution: Runner,
         *,
         owner: str,
         log: Callable[[Claim], Log],

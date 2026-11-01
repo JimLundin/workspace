@@ -636,7 +636,7 @@
         "rule": "PLR0913",
         "path": "automation/controller.py",
         "scope": "WorkController.__init__",
-        "signature": "25478ead5e0da500c5a772623c196e488e5e0e7c31de91c82ae53e61fcd87520"
+        "signature": "0286418c45044e0e4a32a1b21929a956715d309925884adc564b59ab029cdc91"
       },
       "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
     },
@@ -644,7 +644,7 @@
       "key": {
         "rule": "PLR0913",
         "path": "automation/controller.py",
-        "scope": "WorkExecution.run_work",
+        "scope": "Runner.run_work",
         "signature": "a9d7cdc1dcd348a59e1e5cdcdbe0aa64c8201d757ae8aa36e53068d5db9da404"
       },
       "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
