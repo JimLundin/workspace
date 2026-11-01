@@ -3,6 +3,8 @@
 CI's standards job runs these tools against the native Windows dependencies.
 The editing quality review runs only Ruff's signature rules, so without this
 step type and lint errors anywhere else in the tree still produced receipts.
+Both type checkers run, as CI's standards job does: pyright and mypy each
+catch errors the other accepts.
 The protected selfcheck and CI keep their own unchanged invocations.
 """
 
@@ -10,7 +12,7 @@ import subprocess
 import sys
 import tempfile
 from collections.abc import Callable, Generator, Iterable
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -31,7 +33,11 @@ class Standard:
 LINT = Standard("ruff check", (sys.executable, "-m", "ruff", "check", "--no-fix", "."))
 FORMAT = Standard("ruff format", (sys.executable, "-m", "ruff", "format", "--check", "."))
 # The same invocation as `Dev.cmd typecheck`: the development venv's dependencies.
-TYPES = Standard("pyright", (sys.executable, "-m", "pyright", "--pythonpath", sys.executable))
+PYRIGHT = Standard("pyright", (sys.executable, "-m", "pyright", "--pythonpath", sys.executable))
+# CI's `mypy .`; the development venv supplies the installed dependencies' types.
+MYPY = Standard("mypy", (sys.executable, "-m", "mypy", "."))
+# Both type checkers, overlapped with each other and with the tests.
+TYPES = (PYRIGHT, MYPY)
 
 
 def outcome(standard: Standard, status: int, output: str) -> tuple[Failure, ...]:
@@ -53,8 +59,20 @@ def run(standards: Iterable[Standard], root: Path) -> tuple[Failure, ...]:
 
 
 @contextmanager
-def background(standard: Standard, root: Path) -> Generator[Callable[[], tuple[Failure, ...]]]:
-    """Run a slow standard alongside the tests; collect it before publishing results.
+def background(standards: Iterable[Standard], root: Path) -> Generator[Callable[[], tuple[Failure, ...]]]:
+    """Run slow standards concurrently alongside the tests; collect them all before publishing results."""
+    with ExitStack() as running:
+        collectors = tuple(running.enter_context(started(standard, root)) for standard in standards)
+
+        def collect() -> tuple[Failure, ...]:
+            return tuple(failure for collector in collectors for failure in collector())
+
+        yield collect
+
+
+@contextmanager
+def started(standard: Standard, root: Path) -> Generator[Callable[[], tuple[Failure, ...]]]:
+    """One slow standard's child process, collected once its result is needed.
 
     This owner holds the child process and its spooled output file. Output goes
     to a file rather than a pipe so a long report never blocks the child while

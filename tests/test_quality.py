@@ -10,7 +10,7 @@ from collections.abc import Iterable
 from dataclasses import replace
 from pathlib import Path
 
-from scripts.check_standards import Standard, background
+from scripts.check_standards import TYPES, Standard, background
 from scripts.quality import Entry, Finding, Key, compare, imports, load, scan
 from tests.check_fixture import copy_check_scripts
 
@@ -199,15 +199,26 @@ def test_standards_fail_on_a_lint_error_outside_the_selected_tests_before_tests_
     assert "must not execute" not in result.stdout and not receipt.exists()
 
 
-def test_background_standard_reports_its_failure_and_output_only_when_it_fails(tmp_path: Path) -> None:
-    # Detect the overlapped type check losing its exit status or report.
-    failing = Standard("types", (sys.executable, "-c", "print('api.py:1 - error: unknown'); raise SystemExit(1)"))
-    with background(failing, tmp_path) as collect:
+def test_background_standards_report_each_failure_and_output_only_when_it_fails(tmp_path: Path) -> None:
+    # Detect an overlapped type checker losing its exit status or report,
+    # including the second checker when the first passes.
+    passing = Standard("pyright", (sys.executable, "-c", "print('0 errors')"))
+    failing = Standard("mypy", (sys.executable, "-c", "print('api.py:1: error: unknown'); raise SystemExit(1)"))
+    with background((passing, failing), tmp_path) as collect:
         failures = collect()
-    assert [(failure.node, failure.summary) for failure in failures] == [("types", "types exited with status 1")]
-    assert "api.py:1 - error: unknown" in failures[0].report
-    with background(Standard("types", (sys.executable, "-c", "print('0 errors')")), tmp_path) as collect:
+    assert [(failure.node, failure.summary) for failure in failures] == [("mypy", "mypy exited with status 1")]
+    assert "api.py:1: error: unknown" in failures[0].report
+    with background((passing, passing), tmp_path) as collect:
         assert collect() == ()
+
+
+def test_the_type_standards_run_both_checkers_over_the_whole_tree() -> None:
+    # Detect Dev.cmd check dropping mypy (or pyright) from its type gate, or
+    # narrowing either checker to the selected files.
+    assert [(standard.node, standard.command[1:3], standard.command[-1]) for standard in TYPES] == [
+        ("pyright", ("-m", "pyright"), sys.executable),
+        ("mypy", ("-m", "mypy"), "."),
+    ]
 
 
 def test_reviewed_native_interface_remains_exact_and_cannot_excuse_boolean_or_import_violations(tmp_path: Path) -> None:

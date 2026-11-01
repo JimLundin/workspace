@@ -570,7 +570,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--full", action="store_true")
     parser.add_argument("--native", action="store_true", help="include affected native modules; Windows only, one runner")
-    parser.add_argument("--standards", action="store_true", help="also apply the whole-tree Ruff and pyright standards; Dev.cmd check does")
+    parser.add_argument("--standards", action="store_true", help="also apply the whole-tree Ruff, pyright and mypy standards; Dev.cmd check does")
     parser.add_argument("--tests", nargs="+", help="explicit test modules for an in-progress iteration")
     parser.add_argument("--receipt", type=Path)
     parser.add_argument("--timings", type=Path, help="diagnostic cost report, retained on test/import failure")
@@ -598,8 +598,8 @@ def main() -> None:
         selection = choose(args, current, parser)
     scope: dict[str, str | int] = {"profile": selection.reason, "test_modules": len(selection.tests), "changed_files": len(selection.changed)}
     print(json.dumps(scope), flush=True)
-    # Type checking the whole tree takes minutes; it overlaps test execution and
-    # its failures block the receipt like test failures.
+    # Type checking the whole tree takes minutes; both checkers overlap test
+    # execution and their failures block the receipt like test failures.
     types = check_standards.background(check_standards.TYPES, ROOT) if args.standards else nullcontext(check_standards.unchecked)
     with types as typed:
         # Desktop isolation may relaunch the executor. Keep policy review, source
