@@ -1,4 +1,8 @@
-"""Feed sources: each variant owns its key, origin, pending rule and triage evidence."""
+"""Feed sources: each variant owns its key, origin, pending rule and triage evidence.
+
+Observer reports join Teams work and Windows notices before the pending listing.
+Routine arrivals stay quiet: triage assesses the joined feed, never a floating card.
+"""
 
 import hashlib
 from collections.abc import Iterator
@@ -24,11 +28,56 @@ from assistant.communications import (
     UpdateKind,
     WindowsNotice,
     chat_tickets,
+    update_order,
 )
 from assistant.feed_origin import App, Origin, application
+from assistant.notification_sources import Notices
 
 _CHAT_KEY = TypeAdapter(tuple[str, str])
 _TEAMS = Origin(App.TEAMS, App.TEAMS.value)
+
+
+@dataclass(frozen=True, slots=True)
+class FeedObservation:
+    """The latest report from each observer; `communications` joins Teams work and notices under one filter."""
+
+    teams: Feed = field(default_factory=Feed)
+    notices: Notices = field(default_factory=Notices)
+    communications: Feed = field(default_factory=Feed)
+
+
+@dataclass(frozen=True, slots=True)
+class TeamsObserved:
+    feed: Feed
+
+
+@dataclass(frozen=True, slots=True)
+class NoticesObserved:
+    notices: Notices
+
+
+type FeedUpdate = TeamsObserved | NoticesObserved
+
+
+def joined(feed: Feed, notices: Notices) -> Feed:
+    """The pending feed every consumer reads: Teams work plus Windows notices under one filter."""
+    return replace(
+        feed,
+        updates=tuple(sorted((*feed.updates, *notices.updates), key=update_order)),
+        handled=(*feed.handled, *notices.handled),
+        notification_filter=notices.filter,
+    )
+
+
+def observe(observation: FeedObservation, update: FeedUpdate) -> FeedObservation:
+    match update:
+        case TeamsObserved(feed=teams):
+            observation = replace(observation, teams=teams)
+        case NoticesObserved(notices=notices):
+            observation = replace(observation, notices=notices)
+        case _:
+            assert_never(update)
+    return replace(observation, communications=joined(observation.teams, observation.notices))
 
 
 class SourceKind(Enum):

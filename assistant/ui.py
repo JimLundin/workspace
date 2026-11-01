@@ -31,7 +31,7 @@ lazy from assistant.agent_toasts import AgentToasts
 lazy from assistant.agent_window import AgentWindow
 lazy from assistant.desktop_bar import BarActions, DesktopBar
 lazy from assistant.dialogs import AnswerWindow, Job, NativePresentation, Presentation, RegionPicker, bring_forward, near_pointer
-lazy from assistant.feed_observation import FeedObservation, FeedUpdate, NoticesObserved, TeamsObserved, observe
+lazy from assistant.feed_sources import FeedObservation, FeedUpdate, NoticesObserved, TeamsObserved, observe
 lazy from assistant.icons import State
 lazy from assistant.keymap_views import KeymapOverlay, KeymapWindow
 lazy from assistant.layer_indicator import Indicator

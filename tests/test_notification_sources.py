@@ -5,7 +5,8 @@ from pathlib import Path
 
 from assistant.communications import Feed, update_fingerprint
 from assistant.communications_state import StoredAcknowledgement
-from assistant.notification_sources import NOTIFICATION_STATE, NotificationSources, NotificationState, joined, notice_update
+from assistant.feed_sources import joined
+from assistant.notification_sources import NOTIFICATION_STATE, NotificationSources, NotificationState, notice_update
 from assistant.state_store import SavedState
 from tests.test_communications_service import LocalCipher
 from winapi.system_notices import Notice, NoticeKey, Observed

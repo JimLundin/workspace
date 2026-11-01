@@ -10,7 +10,6 @@ from assistant.communications import (
     MAX_HANDLED,
     MAX_MESSAGES,
     Acknowledgement,
-    Feed,
     NotificationFilter,
     Update,
     WindowsNotice,
@@ -56,16 +55,6 @@ def merged(state: Notices, updates: Iterable[Update]) -> Notices:
 def observed(state: Notices, observation: Observed) -> Notices:
     # Windows retains delivery and dismissal ownership. An unavailable read never removes history.
     return merged(state, (notice_update(notice) for notice in observation.notices))
-
-
-def joined(feed: Feed, notices: Notices) -> Feed:
-    """The pending feed every consumer reads: Teams work plus Windows notices under one filter."""
-    return replace(
-        feed,
-        updates=tuple(sorted((*feed.updates, *notices.updates), key=update_order)),
-        handled=(*feed.handled, *notices.handled),
-        notification_filter=notices.filter,
-    )
 
 
 class NotificationSources:

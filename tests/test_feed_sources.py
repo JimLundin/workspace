@@ -18,18 +18,25 @@ from assistant.feed_origin import App
 from assistant.feed_sources import (
     Attention,
     ChatTicketSource,
+    FeedObservation,
     FeedSource,
+    NoticesObserved,
     ReplySource,
     SourceKind,
+    TeamsObserved,
     UpdateSource,
     attention,
     chat_message,
     evidence,
+    joined,
     key,
     listed,
+    observe,
     origin,
     triage_evidence,
 )
+from assistant.notification_sources import Notices
+from tests.communications_fixture import communication_feed
 from winapi.system_notices import NoticeKey
 
 CHAT = Conversation("chat", "Planning")
@@ -39,6 +46,22 @@ ACTIVITY = Update(TeamsActivity("mention"), "Anna mentioned you", "Budget", "Tea
 MAIL = Update(WindowsNotice(NoticeKey(1, 2), "Microsoft.OutlookForWindows"), "Forecast", "Figures", "Outlook", 4)
 OTHER = Update(WindowsNotice(NoticeKey(3, 4), "contoso"), "Deploy", "Finished", "Contoso", 5)
 REPLY = Reply("reply", "chat", "Anna", "On it", 6)
+
+
+def test_each_report_keeps_the_others_in_the_joined_feed() -> None:
+    # Defect: one observer's report drops another's, or triage sees notices
+    # without Teams work or a stale notification filter.
+    teams = communication_feed()
+    notices = Notices(
+        updates=(Update(WindowsNotice(NoticeKey(1, 2), "mail"), "Review", "Budget", "Outlook", 3),),
+        filter=NotificationFilter(frozenset({"chat-app"})),
+    )
+    first = observe(FeedObservation(), NoticesObserved(notices))
+    assert first.communications == joined(Feed(), notices)
+    second = observe(first, TeamsObserved(teams))
+    assert second == FeedObservation(teams, notices, joined(teams, notices))
+    revised = Notices(handled=notices.handled, filter=NotificationFilter(frozenset()))
+    assert observe(second, NoticesObserved(revised)) == FeedObservation(teams, revised, joined(teams, revised))
 
 
 def test_each_source_variant_owns_its_attention_key_origin_and_evidence() -> None:
