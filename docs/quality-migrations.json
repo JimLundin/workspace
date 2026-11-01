@@ -661,15 +661,6 @@
     {
       "key": {
         "rule": "PLR0913",
-        "path": "automation/routines.py",
-        "scope": "transcript_ready",
-        "signature": "10e2a3b960cd9dbaa6ecabd8cc74f1724becdba9314ff840d1d285a09abfcf90"
-      },
-      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
-    },
-    {
-      "key": {
-        "rule": "PLR0913",
         "path": "automation/store.py",
         "scope": "TaskStore.answer",
         "signature": "a587a313426fef037f6c7de5cdc281b7fa545b66ab2252de2e98fa97e90e75bd"

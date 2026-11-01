@@ -11,7 +11,7 @@ from collections.abc import Callable
 from pathlib import Path
 
 from assistant.meeting_store import MeetingArchive, MeetingStore
-from automation.routines import MAX_TRANSCRIPTS, RoutineStore, TranscriptReady, transcript_ready
+from automation.routines import MAX_TRANSCRIPTS, RoutineStore, TranscriptReady
 
 
 class TranscriptEvents:
@@ -31,6 +31,8 @@ class TranscriptEvents:
 
     def _read(self, store: MeetingStore, *, completed_at: float | None = None) -> TranscriptReady | None:
         state = store.state()
+        if not state.complete:
+            return None
         try:
             published_file = store.transcript.stat()
         except FileNotFoundError:
@@ -39,15 +41,11 @@ class TranscriptEvents:
             return None
         # Recovery observes the file's publication time, not the restart time.
         # Otherwise a later routine enable could retroactively select an event.
-        return transcript_ready(
+        return TranscriptReady(
             store.folder.name,
             state.title,
             str(store.transcript.absolute()),
-            finished=state.finished,
-            pending=state.pending,
-            revision=state.revision,
-            exported_revision=state.exported_revision,
-            completed_at=published_file.st_mtime if completed_at is None else completed_at,
+            published_file.st_mtime if completed_at is None else completed_at,
         )
 
     def _failed(self, operation: str, error: Exception) -> None:

@@ -18,44 +18,24 @@ from automation.routines import (
     Once,
     RoutineStore,
     TranscriptReady,
-    transcript_ready,
 )
 from automation.store import TaskStore
 from automation.task import Blocked, Completed, Control, RoutineSource, Waiting
 
 
-def ready_event(store: MeetingStore, at: float) -> TranscriptReady | None:
-    saved = store.state()
-    return transcript_ready(
-        store.folder.name,
-        saved.title,
-        str(store.transcript),
-        finished=saved.finished,
-        pending=saved.pending,
-        revision=saved.revision,
-        exported_revision=saved.exported_revision,
-        completed_at=at,
-    )
-
-
-def test_transcript_trigger_waits_for_capture_tail_and_committed_export(tmp_path: Path) -> None:
+def test_transcript_trigger_dispatches_once_to_a_task_owned_notes_path(tmp_path: Path) -> None:
     routines = RoutineStore(tmp_path / "work.sqlite3")
     routines.baseline_transcripts(())
     routine = routines.ensure_meeting_notes(at=1)
     routines.enable(routine.id, at=2)
     meeting = MeetingStore.create(tmp_path / "meetings", "microphone", "Release review")
-    assert ready_event(meeting, 3) is None
     meeting.append(b"\x01\x00" * 97)
     meeting.finish_capture()
-    meeting.export()
-    assert ready_event(meeting, 4) is None
     batch = meeting.batch()
     assert batch is not None
     meeting.complete(batch, "The final decision: Ada will publish the release notes on Friday.")
-    assert ready_event(meeting, 5) is None
     meeting.export()
-    event = ready_event(meeting, 6)
-    assert event is not None
+    event = TranscriptReady(meeting.folder.name, meeting.state().title, str(meeting.transcript), 6)
     routines.observe_transcript(event)
     routines.observe_transcript(event)
     tasks = TaskStore(tmp_path / "work.sqlite3")

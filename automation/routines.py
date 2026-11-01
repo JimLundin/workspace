@@ -36,12 +36,6 @@ def _stamp(value: object) -> float:
     return result
 
 
-def _boolean(value: object) -> bool:
-    if not isinstance(value, bool):
-        raise ValueError("Capture completion must be a boolean observation.")
-    return value
-
-
 def _path(value: object) -> str:
     result = text(value, "absolute file path", maximum=4096)
     if not (Path(result).is_absolute() or PureWindowsPath(result).is_absolute()):
@@ -152,28 +146,6 @@ class TranscriptReady:
         text(self.title, "transcript title", maximum=240)
         _path(self.path)
         _stamp(self.completed_at)
-
-
-def transcript_ready(
-    identity: str,
-    title: str,
-    path: str,
-    *,
-    finished: bool,
-    pending: int,
-    revision: int,
-    exported_revision: int,
-    completed_at: float,
-) -> TranscriptReady | None:
-    """Interpret committed meeting metadata after the publisher verifies its file."""
-    event = TranscriptReady(identity, title, path, completed_at)
-    complete = _boolean(finished)
-    integer(pending, "pending transcription frames")
-    integer(revision, "transcript revision")
-    integer(exported_revision, "exported transcript revision", minimum=-1)
-    if not complete or pending or revision != exported_revision:
-        return None
-    return event
 
 
 @dataclass(frozen=True, slots=True)
