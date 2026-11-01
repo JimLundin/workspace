@@ -289,6 +289,26 @@ def verify_attached_dom(personal: Browser, attached: Browser, url: str) -> None:
     request(personal, "close", target_id=target)
 
 
+def test_background_actions_deliver_clicks_in_a_headed_personal_browser(tmp_path: Path) -> None:
+    # Defect: ordinary fixtures accept input without wake emulation, but real
+    # minimized Edge ignores trusted clicks in its inactive browser pages.
+    cancel = threading.Event()
+    with disposable(Browser(tmp_path / "headed-personal")) as personal, fixture() as url:
+        personal.connect(cancel, visible=True)
+        with borrowed(personal) as attached:
+            page = request(attached, "open", url=url, group_id=-1)
+            target = TypeAdapter(str).validate_python(page["target_id"])
+            connection = attached.connection
+            assert connection is not None
+            act(attached, target, page, "Name", "fill", value="Headed fixture")
+            window = connection.call("Browser.getWindowForTarget", {"targetId": target}, cancel)["windowId"]
+            connection.call("Browser.setWindowBounds", {"windowId": window, "bounds": {"windowState": "minimized"}}, cancel)
+            before_bounds = connection.call("Browser.getWindowBounds", {"windowId": window}, cancel)
+            act(attached, target, page, "Save", "click")
+            assert "Headed fixture:alpha:false" in str(request(attached, "snapshot", target_id=target)["text"])
+            assert connection.call("Browser.getWindowBounds", {"windowId": window}, cancel) == before_bounds
+
+
 def verify_attached_cancellation(personal: Browser, attached: Browser) -> None:
     cancel = threading.Event()
     try:

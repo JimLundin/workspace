@@ -659,9 +659,12 @@ def page_action(path: Path, reply: Json, **arguments: Json) -> list[dict[str, Js
     channel = Channel.results(
         {"targetInfos": [{"type": "page", "targetId": "fixture"}]},
         {"sessionId": "page-session"},
+        {},
+        {},
         {"frameTree": {"frame": {"id": "main"}}},
         {"executionContextId": 1},
         {"result": {"value": reply}},
+        {},
         {},
         {},
     )

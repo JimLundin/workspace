@@ -688,22 +688,25 @@ class Browser:
         return BrowserResult("Browser viewport screenshot. Use browser controls; these are not desktop mouse coordinates.", image)
 
     def _action(self, request: PageAction, cancel: threading.Event) -> BrowserResult:
-        session = self._session(request.target_id, cancel)
-        context, _tree = self._world(session, request.frame_id, cancel)
-        # A frame's control coordinates are relative to that frame, not the
-        # viewport, so the page dispatches the click itself there.
-        dom_click = bool(request.frame_id)
-        options = ActionOptions(request.id, request.action, request.value, checked=request.checked, dom_click=dom_click)
-        result = self._evaluate(f"{browser_dom.ACTION}({_ACTION_OPTIONS.dump_json(options).decode()})", session, context, cancel)
-        if request.action == "click" and not dom_click:
-            point = decoded(_POINT, result, _UNEXPECTED)
-            for kind in ("mousePressed", "mouseReleased"):
-                self._call(
-                    "Input.dispatchMouseEvent",
-                    {"type": kind, "x": point.x, "y": point.y, "button": "left", "clickCount": 1},
-                    cancel,
-                    session=session,
-                )
+        # Minimized personal browsers ignore trusted input without wake
+        # emulation. Keep validation and dispatch in the same restored lifetime.
+        with self.awake(request.target_id, cancel):
+            session = self.sessions[request.target_id]
+            context, _tree = self._world(session, request.frame_id, cancel)
+            # A frame's control coordinates are relative to that frame, not the
+            # viewport, so the page dispatches the click itself there.
+            dom_click = bool(request.frame_id)
+            options = ActionOptions(request.id, request.action, request.value, checked=request.checked, dom_click=dom_click)
+            result = self._evaluate(f"{browser_dom.ACTION}({_ACTION_OPTIONS.dump_json(options).decode()})", session, context, cancel)
+            if request.action == "click" and not dom_click:
+                point = decoded(_POINT, result, _UNEXPECTED)
+                for kind in ("mousePressed", "mouseReleased"):
+                    self._call(
+                        "Input.dispatchMouseEvent",
+                        {"type": kind, "x": point.x, "y": point.y, "button": "left", "clickCount": 1},
+                        cancel,
+                        session=session,
+                    )
         return BrowserResult("Browser action completed. Read a fresh browser_snapshot to verify the result.")
 
     def _evaluate_request(self, request: Evaluate, cancel: threading.Event) -> BrowserResult:
