@@ -66,7 +66,7 @@ lazy from assistant.work_agent import WorkAgent
 lazy from assistant.work_bridge import WorkOwners
 lazy from assistant.work_bridge_contracts import WORK_BRIDGE, WORK_BRIDGE_ENDPOINT, BridgeCommand, BridgeResponse
 lazy from assistant.work_canvas import WorkCanvas, run_prompt
-lazy from assistant.work_commands import ControlTask, WorkCommand
+lazy from assistant.work_commands import ControlTask, WorkViewCommand
 lazy from assistant.work_snapshot import WorkSnapshot
 lazy from automation.bridge import BridgeClient
 lazy from automation.context import ContextStore
@@ -600,7 +600,7 @@ class AssistantApp:
         title = next((work.definition.title for work in self.personal.snapshot().catalog.works if work.id == run.work_id), run.work_id)
         self.agent.submit_identified(run.task_id, run_prompt(run, title), RequestKind.GENERAL)
 
-    def work_command(self, command: WorkCommand) -> None:
+    def work_command(self, command: WorkViewCommand) -> None:
         match command:
             case AddDocument() | AddWebPage() | DismissWork() | RestoreWork() | SaveWork() | UnlinkWork():
                 self.personal.enqueue(command)

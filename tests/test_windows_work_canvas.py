@@ -51,7 +51,7 @@ from assistant.work_canvas_model import (
 from assistant.work_canvas_panel import CanvasPanel
 from assistant.work_canvas_view import CanvasGroup
 from assistant.work_canvas_window import CanvasWindow
-from assistant.work_commands import AnswerTask, WorkCommand
+from assistant.work_commands import AnswerTask, WorkViewCommand
 from assistant.work_snapshot import ReplyProblem, WorkSnapshot
 from assistant.work_window import WorkOpening, WorkView, WorkWindow
 from automation.actions import Resources
@@ -97,7 +97,7 @@ class NativeCanvas:
         self.root = application()
         self.jobs: deque[Callable[[], None]] = deque()
         self.store = WorkCanvas(store.path, queue_nothing, self.show_publication, autonomous=False)
-        self.commands: list[WorkCommand] = []
+        self.commands: list[WorkViewCommand] = []
         self.view: CanvasWindow
         self.work = WorkWindow(self.commands.append, post=self.jobs.append, create_view=self.build)
         self.work.show(focus=False)
@@ -123,7 +123,7 @@ class NativeCanvas:
     def show_publication(self, publication: CanvasPublication) -> None:
         self.jobs.append(lambda: self.view.panel.show_document(publication.document))
 
-    def last_command(self) -> WorkCommand:
+    def last_command(self) -> WorkViewCommand:
         return self.commands[-1]
 
     def close(self) -> None:
@@ -1010,7 +1010,7 @@ def test_canvas_spoken_reply_keeps_transcript_on_rejection_and_continue_stays_bo
     # Defect: task replies route to a different request, failed persistence loses
     # user text, or starting research loses the work-to-run connection on reopen.
     ui = InboxUi()
-    commands: list[WorkCommand] = []
+    commands: list[WorkViewCommand] = []
     runs: list[CanvasRun] = []
     store = WorkCanvas(tmp_path / "canvas.sqlite3", runs.append, ui.publish_canvas, autonomous=False)
     ui.configure_canvas(store, lambda _title, _target: None)

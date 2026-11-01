@@ -32,7 +32,7 @@ from assistant.work_commands import (
     Submit,
     UpdatePreference,
     UpdateRoutine,
-    WorkCommand,
+    WorkViewCommand,
 )
 from assistant.work_panel import WorkPanel
 from assistant.work_snapshot import WorkSnapshot
@@ -78,7 +78,7 @@ class NativeWork:
     def __init__(self) -> None:
         self.root = application()
         self.jobs: deque[Callable[[], None]] = deque()
-        self.commands: list[WorkCommand] = []
+        self.commands: list[WorkViewCommand] = []
         self.view: WorkPanel
         self.work = WorkWindow(self.commands.append, post=self.jobs.append, create_view=self.build)
         self.work.show(focus=False)
@@ -100,7 +100,7 @@ class NativeWork:
         self.work.publish(snapshot)
         self.pump()
 
-    def last_command(self) -> WorkCommand:
+    def last_command(self) -> WorkViewCommand:
         return self.commands[-1]
 
     def close(self) -> None:

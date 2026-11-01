@@ -1,4 +1,4 @@
-"""Typed work commands: views and the agent issue them, and the work service applies each one."""
+"""Typed task, routine and context commands, plus personal-work commands for views."""
 
 from dataclasses import dataclass
 
@@ -131,12 +131,8 @@ type WorkCommand = (
     | AddProjectNote
     | UpdateProjectNote
     | RemoveContext
-    | AddDocument
-    | AddWebPage
-    | DismissWork
-    | RestoreWork
-    | SaveWork
-    | UnlinkWork
-    | OpenWorkSource
-    | RefreshPersonalWork
+)
+
+type WorkViewCommand = (
+    WorkCommand | AddDocument | AddWebPage | DismissWork | RestoreWork | SaveWork | UnlinkWork | OpenWorkSource | RefreshPersonalWork
 )

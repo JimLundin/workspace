@@ -36,7 +36,6 @@ from automation.ipc import (
     Resync,
     ReviewEvent,
 )
-from automation.personal_work import AddDocument, AddWebPage, DismissWork, OpenWorkSource, RefreshPersonalWork, RestoreWork, SaveWork, UnlinkWork
 from automation.routines import RoutineStore
 from automation.store import TaskStore
 from automation.task import (
@@ -254,8 +253,6 @@ class WorkService:
                 self._routine_command(issued.identity, command, at=at)
             case AddPreference() | UpdatePreference() | AddProjectNote() | UpdateProjectNote() | RemoveContext():
                 self._context_command(issued.identity, command, at=at)
-            case AddDocument() | AddWebPage() | DismissWork() | RestoreWork() | SaveWork() | UnlinkWork() | OpenWorkSource() | RefreshPersonalWork():
-                raise ValueError("Personal work commands belong to the My work owner.")
             case _:
                 assert_never(command)
         self.problem = ""

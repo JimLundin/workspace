@@ -5,7 +5,7 @@ from collections import deque
 from collections.abc import Callable
 from dataclasses import replace
 
-from assistant.work_commands import AnswerTask, Submit, WorkCommand
+from assistant.work_commands import AnswerTask, Submit, WorkViewCommand
 from assistant.work_snapshot import WorkSnapshot
 from assistant.work_text import task_detail
 from assistant.work_window import WorkOpening, WorkView, WorkWindow
@@ -68,7 +68,7 @@ class WorkUi:
         self.jobs: deque[Callable[[], None]] = deque()
         self.view = view or RecordingWorkView()
         self.created = 0
-        self.commands: list[WorkCommand] = []
+        self.commands: list[WorkViewCommand] = []
         self.problems: list[str] = []
         self.work = WorkWindow(self.commands.append, post=self.jobs.append, create_view=self.create, on_problem=self.problems.append)
 
@@ -328,7 +328,7 @@ def test_work_details_preserve_complete_results_evidence_and_recovery_instructio
 def test_command_failure_reports_a_problem_without_discarding_current_tasks() -> None:
     errors: list[str] = []
 
-    def reject(_command: WorkCommand) -> None:
+    def reject(_command: WorkViewCommand) -> None:
         raise RuntimeError("Work process unavailable")
 
     work = WorkWindow(reject, post=lambda _: None, create_view=lambda _: RecordingWorkView(), on_problem=errors.append)

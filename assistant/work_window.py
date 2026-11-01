@@ -7,7 +7,7 @@ from dataclasses import replace
 from typing import Protocol
 
 from assistant.view_publication import Post, Unavailable, ViewPublication, log_view
-from assistant.work_commands import AnswerTask, WorkCommand
+from assistant.work_commands import AnswerTask, WorkViewCommand
 from assistant.work_snapshot import WorkSnapshot
 from automation.execution import ApprovalReview, current_review
 from automation.task import ApprovalDecision, answers, requested
@@ -46,7 +46,7 @@ class WorkWindow:
 
     def __init__(
         self,
-        on_command: Callable[[WorkCommand], None],
+        on_command: Callable[[WorkViewCommand], None],
         *,
         post: Post,
         create_view: Callable[[WorkWindow], WorkView],
@@ -167,7 +167,7 @@ class WorkWindow:
         if self.on_problem is not None:
             self.on_problem(message)
 
-    def send(self, command: WorkCommand) -> bool:
+    def send(self, command: WorkViewCommand) -> bool:
         with self._lock:
             if self.publication.closed:
                 return False

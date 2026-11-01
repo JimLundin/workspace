@@ -48,7 +48,7 @@ lazy from assistant.window_switcher import WindowSwitcher
 lazy from assistant.work_canvas import CanvasPublication, WorkCanvas
 lazy from assistant.work_canvas_panel import CanvasEdits
 lazy from assistant.work_canvas_window import CanvasWindow
-lazy from assistant.work_commands import WorkCommand
+lazy from assistant.work_commands import WorkViewCommand
 lazy from assistant.work_snapshot import WorkSnapshot
 lazy from assistant.work_window import WorkWindow
 lazy from miryoku.layout import Layer, Scancode
@@ -70,7 +70,7 @@ class MeetingConnection:
 
 @dataclass(frozen=True, slots=True)
 class WorkConnection:
-    on_command: Callable[[WorkCommand], None]
+    on_command: Callable[[WorkViewCommand], None]
     on_problem: Callable[[str], None] | None
 
 
@@ -489,7 +489,7 @@ class Ui:
 
     def configure_work(
         self,
-        on_command: Callable[[WorkCommand], None],
+        on_command: Callable[[WorkViewCommand], None],
         *,
         on_problem: Callable[[str], None] | None = None,
     ) -> None:
