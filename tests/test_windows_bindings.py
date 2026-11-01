@@ -507,11 +507,11 @@ def test_firmware_voice_key_shortcuts_pair_each_voice_press_with_its_release() -
         (inputs.KeyEvent(0xA2, 0x1D, 0, 10, 0), inputs.KeyEvent(0xA0, 0x2A, 0, 10, 0), inputs.KeyEvent(0x44, 0x20, 0, 10, 0), Tool.DICTATE),
         (
             inputs.KeyEvent(0xA3, 0x1D, inputs.LLKHF_EXTENDED, 10, 0),
-            inputs.KeyEvent(0xA5, 0x38, inputs.LLKHF_EXTENDED, 10, 0),
+            inputs.KeyEvent(0xA1, 0x36, inputs.LLKHF_EXTENDED, 10, 0),
             inputs.KeyEvent(0x47, 0x22, 0, 10, 0),
             Tool.AGENT_VOICE,
         ),
-        (inputs.KeyEvent(0xA2, 0x1D, 0, 10, 0), inputs.KeyEvent(0xA4, 0x38, 0, 10, 0), inputs.KeyEvent(0x47, 0x22, 0, 10, 0), Tool.AGENT_VOICE),
+        (inputs.KeyEvent(0xA2, 0x1D, 0, 10, 0), inputs.KeyEvent(0xA0, 0x2A, 0, 10, 0), inputs.KeyEvent(0x47, 0x22, 0, 10, 0), Tool.AGENT_VOICE),
     ):
         keyboard, driver = firmware_keyboard()
         assert not keyboard.swallow(ctrl, down=True)
@@ -542,13 +542,13 @@ def test_firmware_voice_does_not_capture_ordinary_or_already_held_voice_keys() -
         (dictate, (ctrl,)),
         (agent, (ctrl,)),
         (dictate, (shift,)),
-        (agent, (alt,)),
+        (agent, (shift,)),
         (dictate, (ctrl, alt)),
-        (agent, (ctrl, shift)),
+        (agent, (ctrl, alt)),
         (dictate, (ctrl, alt, shift)),
         (agent, (ctrl, alt, shift)),
         (dictate, (ctrl, shift, win)),
-        (agent, (ctrl, alt, win)),
+        (agent, (ctrl, shift, win)),
     ):
         keyboard, driver = firmware_keyboard()
         for key in modifiers:
@@ -570,9 +570,9 @@ def test_firmware_voice_finishes_on_unplug_and_swallows_the_late_voice_key_relea
     """Detect capture remaining open, native modifier loss, or a phantom remapped key."""
     keyboard, driver = firmware_keyboard()
     ctrl = inputs.KeyEvent(0xA2, 0x1D, 0, 10, 0)
-    alt = inputs.KeyEvent(0xA4, 0x38, 0, 10, 0)
+    shift = inputs.KeyEvent(0xA0, 0x2A, 0, 10, 0)
     voice_key = inputs.KeyEvent(0x47, 0x22, 0, 10, 0)
-    for key in (ctrl, alt, voice_key):
+    for key in (ctrl, shift, voice_key):
         keyboard.swallow(key, down=True)
     driver.devices = ()
     keyboard.update_devices()
@@ -585,7 +585,7 @@ def test_firmware_voice_finishes_on_unplug_and_swallows_the_late_voice_key_relea
     assert keyboard.swallow(voice_key, down=False)
     assert not keyboard.voice_shortcuts
     assert not keyboard.swallow(ctrl, down=False)
-    assert not keyboard.swallow(alt, down=False)
+    assert not keyboard.swallow(shift, down=False)
     assert not keyboard.native_releases and not driver.output
 
 

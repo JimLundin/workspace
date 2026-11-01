@@ -34,7 +34,7 @@ type CapturedKey = VoiceShortcut | ConsumedKey
 
 
 def voice_tool(vk: int, held: Collection[int]) -> Tool | None:
-    """Ctrl+Shift+D holds dictation; Ctrl+Alt+G holds agent speech.
+    """Ctrl+Shift+D holds dictation; Ctrl+Shift+G holds agent speech.
 
     Native identities include the extended bit, so either side's modifiers work.
     Other modifier combinations and plain letters retain their application meaning.
@@ -52,7 +52,7 @@ def voice_tool(vk: int, held: Collection[int]) -> Tool | None:
     match vk, alt, shift:
         case 0x44, False, True:
             return Tool.DICTATE
-        case 0x47, True, False:
+        case 0x47, False, True:
             return Tool.AGENT_VOICE
         case _:
             return None
