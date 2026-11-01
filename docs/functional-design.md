@@ -26,6 +26,7 @@ The main places to read are:
 | `assistant/personal_work_sources.py`, `personal_work_model.py`, `personal_work_tools.py` | Observed browser evidence from typed web-app results, bounded review input and agent work-catalog contracts | `BrowserSources` owns read-only Edge collection; `Correlator` owns a cancellable structured model request without action tools; `work_canvas_panel.py` composes the native local canvas; `work_canvas_detail.py` owns revision-bound in-place drafts |
 | `assistant/work_canvas_model.py`, `work_canvas_context.py`, `work_canvas_layout.py`, `work_canvas_gestures.py`, `work_canvas_edits.py`, `canvas_activity.py` | Work as context, canonical contributions, arbitrary nested groups, shared source identity, nested bubbles on one native scene, arrangements/pins, substantive results, exact clarification routes, reply reconciliation and quiet attention policy | `WorkCanvas` in `work_canvas.py` is the single owner of the validated local SQLite document and its observation, attention, answer, continuation and user-edit policy, applying each `work_canvas_edits.py` intent to the latest document and publishing each change with immutable attention; `Ui` marshals to Qt and hands that publication to the view, agent window, toolbar count and notices; the view sends intents through `CanvasEdits`, redraws from their result and never saves its copy; `work_canvas_panel.py` owns native pointer capture and previews, shared `ui_components/canvas_bubble.py` controls handle both containers and contributions; existing input/work handlers deliver answers |
 | `assistant/keymap_views.py`, `layer_indicator.py`, `dialogs.py` | Key map presentation and native dialog placement | `KeymapWindow`, `KeymapOverlay` and `Indicator` own their Qt widgets; `RegionPicker` and `AnswerWindow` own their dialogs; `AnswerWindow` posts updates through `DialogHost`; dialog presentation owns positioning and activation; `Ui` marshals calls to those owners |
+| `assistant/desktop_attention.py` | Speech targets, first-question inbox precedence, active-canvas interruption suppression and session-bound answer delivery from immutable `CanvasFocus` and waiting questions | `CanvasWindow` publishes focus and owns instruction, reply feedback, document, voice and meeting updates; `AgentWindow.snapshot()` reads the immutable session under its own lock; `Ui` executes decision variants on Qt and its one `_publish_canvas` handler fans out each owner publication, retaining late-view replay without repeating notices; conversation navigation is connected once through `configure_controls` |
 | `assistant/ui_components/` | Shared bubble outline, palette/ink, text presentation, headings and controls | Native component owners paint Qt surfaces and adapt Windows window behavior; feature controllers consume components directly |
 | `assistant/work_canvas_commands.py`, `work_canvas_tools.py`, `work_canvas.py` | Atomic structural edits, paged reads, editable fingerprints, bounded evidence-driven scheduling and durable run retention | `Ui` marshals bridge commands to Qt; `WorkCanvas` persists and publishes each change through the same handler as user edits and observations; `App` constructs the one `WorkCanvas`, submits identified research or exact saved user instructions and recovers uncommitted bindings |
 | `assistant/work_bridge_contracts.py`, `work_bridge.py`, `browser_documents.py` | Validated desktop bridge variants, their routing to each owner and document stream contracts | The contracts join feed, catalog and canvas wire variants without a feed-to-canvas import cycle; `WorkOwners` routes each variant to its owner's typed handler; `local_bridge.py` owns every loopback listener, bearer check, request bound and endpoint file; `Browser` owns authenticated CDP streams and exclusive bounded file collection |
@@ -302,10 +303,17 @@ instruction, through the same containment projection.
 
 Clarification details use measured, selectable labels and a Hold N voice hint.
 Qt owns their compact height and the previous visible spoken reply when a task
-receipt rejects submission. Ui routes speech to the selected waiting question on
-the visible canvas before the conversation handler; failed replies cannot become
+receipt rejects submission. `desktop_attention.py` directs speech to the selected
+waiting question on the visible canvas before the conversation handler; `Ui`
+executes that decision through the view and answer owners, and failed replies cannot become
 new work. Dictation retains its independent capture and transcription path while
 the durable agent runs or queues instructions.
+
+Canvas session replies retain their session identity through the attention
+decision. `AgentWindow.respond` checks that identity while admitting the request
+under its lock, so a reset between observation and delivery cannot redirect an
+old reply into a later session that reuses the request id. The captured request's
+reply callback runs outside the lock, preserving retry and effect ownership.
 
 First canvas reveal presents an 80-logical-pixel nonactivating indicator before
 creating or rendering the view. `ui_components/canvas_loading.py` owns its
