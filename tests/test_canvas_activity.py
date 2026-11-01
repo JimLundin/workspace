@@ -47,9 +47,8 @@ def saved(path: Path) -> CanvasDocument:
 
 
 def observed_session(canvas: WorkCanvas, session: Session) -> CanvasDocument:
-    document = canvas.observe_session(session)
-    assert document is not None, "A changed session must be observed."
-    return document
+    assert canvas.observe_session(session), "A changed session must be observed."
+    return canvas.read()
 
 
 def test_saved_questions_keep_their_route_state_and_thread_after_session_mirroring(tmp_path: Path) -> None:
@@ -58,7 +57,8 @@ def test_saved_questions_keep_their_route_state_and_thread_after_session_mirrori
     task = work_task(Waiting(automation.task.Question("request-1", "Which supplier?", "Choose a deployment supplier.")))
     store = local_canvas(tmp_path)
     seeded(store, CanvasDocument(runs=(CanvasRun(task.id, "work:atlas"),)))
-    document = store.observe_work(WorkSnapshot(tasks=(task,))).document
+    store.observe_work(WorkSnapshot(tasks=(task,)))
+    document = store.read()
     question = document.activity[0]
     assert isinstance(question, CanvasQuestion)
     assert question.request == TaskRequest(task.id, "request-1") and question.work_ids == ("work:atlas",)
@@ -75,10 +75,12 @@ def test_saved_questions_keep_their_route_state_and_thread_after_session_mirrori
     # A failure receipt reopens only the exact live request, retaining the draft
     # in the native editor rather than displaying an unconfirmed answer forever.
     problem = ReplyProblem(task_id=task.id, request_id="request-1", receipt_id="reply-1", reason="Disk unavailable")
-    restored = store.observe_work(WorkSnapshot(tasks=(task,), reply_problems=(problem,))).document
+    store.observe_work(WorkSnapshot(tasks=(task,), reply_problems=(problem,)))
+    restored = store.read()
     retry = restored.activity[0]
     assert isinstance(retry, CanvasQuestion) and retry.reply is Attention.WAITING
-    closed = store.observe_work(WorkSnapshot(tasks=(replace(task, state=Completed("Supplier confirmed", ())),))).document
+    store.observe_work(WorkSnapshot(tasks=(replace(task, state=Completed("Supplier confirmed", ())),)))
+    closed = store.read()
     resolved = closed.activity[0]
     assert isinstance(resolved, CanvasQuestion) and resolved.reply is Attention.CLOSED
     assert isinstance(closed.activity[1], CanvasUpdate) and closed.activity[1].work_ids == ("work:atlas",)
@@ -167,11 +169,13 @@ def test_action_history_stays_out_of_the_canvas_while_prepared_content_remains(t
         assert draft is not None
         assert not rig.refresh().actions
         rig.agent.watch((task.id,), owner="canvas")
-        pending = canvas.observe_work(rig.refresh()).document.activity
+        canvas.observe_work(rig.refresh())
+        pending = canvas.read().activity
         assert not pending
         returned = rig.tasks.finish_action(draft.id, ActionReturned("Reply draft is available in Outlook"), at=4)
         assert returned is not None
-        document = canvas.observe_work(rig.refresh()).document
+        canvas.observe_work(rig.refresh())
+        document = canvas.read()
         assert not document.activity
         artifact = CanvasNote("note:handoff", "Handoff reply", "Proposed handoff", "work:atlas")
         seeded(canvas, replace(document, notes=(artifact,)))
@@ -182,10 +186,12 @@ def test_action_history_stays_out_of_the_canvas_while_prepared_content_remains(t
         metadata_spec = attempted("work_items_save", {"title": "Atlas"})
         metadata = rig.tasks.begin_action(claim.run, "classification", metadata_spec, at=7)
         assert metadata is not None
-        document = canvas.observe_work(rig.refresh()).document
+        canvas.observe_work(rig.refresh())
+        document = canvas.read()
         assert not document.activity and document.notes == (artifact,)
         rig.tasks.finish_action(ticket.id, ActionVerified("AT-42 now has the agreed owner"), at=8)
-        final = canvas.observe_work(rig.refresh()).document
+        canvas.observe_work(rig.refresh())
+        final = canvas.read()
         assert not final.activity and final.notes == (artifact,)
         assert len(rig.refresh().actions) == 4 and local_canvas(tmp_path).read() == final
     finally:
@@ -229,5 +235,6 @@ def test_another_research_run_does_not_turn_an_arrangement_report_into_context(t
     )
     arrangement = work_task(Completed("Moved the bubbles", ()), identity="arrange")
     research = work_task(Completed("The current plan is version 3", ()), identity="research")
-    document = store.observe_work(WorkSnapshot(tasks=(arrangement, research))).document
+    store.observe_work(WorkSnapshot(tasks=(arrangement, research)))
+    document = store.read()
     assert document.activity == (CanvasUpdate("result:research", research.title, "The current plan is version 3", 200, ("work:atlas",)),)

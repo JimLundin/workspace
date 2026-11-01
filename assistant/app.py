@@ -297,7 +297,10 @@ class AssistantApp:
             self.ui.communications_changed,
         )
         self.canvas: WorkCanvas = WorkCanvas(
-            work_folder / "canvas.sqlite3", self.continue_thread, autonomous=bool(self.settings.api_key and self.settings.base_url)
+            work_folder / "canvas.sqlite3",
+            self.continue_thread,
+            self.ui.publish_canvas,
+            autonomous=bool(self.settings.api_key and self.settings.base_url),
         )
         self.personal = self.create_personal(tasks)
         self.triage, self.work_bridge = self.create_feed(FeedWork(tasks, saved_context, context))

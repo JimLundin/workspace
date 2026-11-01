@@ -1265,6 +1265,16 @@
       },
       "reason": "The composition root receives independent effect owners (desktop, browser, meeting capture, capture observation, file opening) that the worker selects separately.",
       "kind": "interface"
+    },
+    {
+      "key": {
+        "rule": "PLR0913",
+        "path": "assistant/work_canvas.py",
+        "scope": "WorkCanvas.__init__",
+        "signature": "8c968ca01c42e2684dd56bb5557d4fa82444248f1943404234da2cf92338d4dc"
+      },
+      "reason": "One deep canvas owner requires its storage path, two distinct outbound effects (queue and publish), and autonomy policy.",
+      "kind": "interface"
     }
   ]
 }

@@ -9,13 +9,12 @@ from collections.abc import Callable
 lazy from PySide6 import QtCore, QtGui, QtWidgets
 lazy from PySide6.QtCore import Qt
 
-from assistant.personal_work_panel import PersonalPanel, rounded
+from assistant.personal_work_panel import CanvasEdits, PersonalPanel, rounded
 from assistant.ui_components.appearance import scheme, tokens
 from assistant.ui_components.canvas_chrome import CanvasFrame
 from assistant.ui_components.canvas_look import Role, face
 from assistant.ui_components.paint_ready import PaintReady
 from assistant.ui_components.widgets import column, show_window
-from assistant.work_canvas import WorkCanvas
 from assistant.work_snapshot import WorkSnapshot
 from assistant.work_window import WorkWindow
 lazy from assistant.meeting_panel import MeetingPanel
@@ -23,7 +22,7 @@ lazy from assistant.work_panel import WorkPanel
 
 
 class CanvasWindow:
-    def __init__(self, root: QtWidgets.QApplication, work: WorkWindow, canvas: WorkCanvas) -> None:
+    def __init__(self, root: QtWidgets.QApplication, work: WorkWindow, canvas: CanvasEdits) -> None:
         self.root: QtWidgets.QApplication = root
         self.work: WorkWindow = work
         self.snapshot: WorkSnapshot = WorkSnapshot()

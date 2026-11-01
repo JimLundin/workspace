@@ -18,11 +18,11 @@ from assistant.desktop_bar import BarActions, DesktopBar
 from assistant.island_model import Agent, Job, Key
 from assistant.island_surface import TOP, Capsule
 from assistant.notification_sources import NOTIFICATION_STATE
+from assistant.personal_work_panel import CanvasEdits
 from assistant.qt_runtime import prepare
 from assistant.qt_ui import application
 from assistant.state_store import SavedState
 from assistant.ui import Ui, Views
-from assistant.work_canvas import WorkCanvas
 from assistant.work_canvas_window import CanvasWindow
 from assistant.work_window import WorkWindow
 from automation.task import Reply, TextAnswer
@@ -54,7 +54,7 @@ class InboxUi(Ui):
         self.current_feed = AgentToasts(root, agent, open_canvas)
         return self.current_feed
 
-    def create_canvas(self, root: QtWidgets.QApplication, work: WorkWindow, canvas: WorkCanvas) -> CanvasWindow:
+    def create_canvas(self, root: QtWidgets.QApplication, work: WorkWindow, canvas: CanvasEdits) -> CanvasWindow:
         self.current_canvas = CanvasWindow(root, work, canvas)
         return self.current_canvas
 
@@ -154,7 +154,7 @@ def test_app_context_stays_quiet_and_only_agent_questions_change_toolbar_attenti
     app, original_style = application(), application().styleSheet()
     ui = InboxUi()
     try:
-        ui.configure_canvas(local_canvas(tmp_path), lambda _title, _target: None)
+        ui.configure_canvas(local_canvas(tmp_path, ui.publish_canvas), lambda _title, _target: None)
         ui.desktop(
             show_agent=lambda: None, show_work=lambda: None, stop=lambda: None, overlay=lambda: None, menu=lambda: None, on_problem=lambda _: None
         )

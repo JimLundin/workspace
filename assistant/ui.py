@@ -21,8 +21,7 @@ import winapi.shapes
 from assistant.canvas_activity import CanvasRequest, SessionRequest, TaskRequest
 from assistant.overlay import KeyHighlights, fit_position, nearest_work_area
 from assistant.qt_runtime import prepare
-from assistant.work_canvas_commands import CanvasCommand, CanvasRefused, CanvasResponse, CanvasUpdated
-from assistant.work_canvas_model import CanvasDocument
+from assistant.work_canvas_commands import CanvasCommand, CanvasRefused, CanvasResponse
 from assistant.work_commands import AnswerTask
 from automation.personal_work import Catalog
 from automation.task import TextAnswer
@@ -43,6 +42,7 @@ lazy from assistant.meeting_panel import MeetingPanel
 lazy from assistant.meeting_workflow import MeetingSnapshot, MeetingWorkflow
 lazy from assistant.notification_sources import HandleNotice, NotificationSources, NotificationState
 lazy from assistant.overlay_desktop import NativeOverlayDesktop, OverlayDesktop
+lazy from assistant.personal_work_panel import CanvasEdits
 lazy from assistant.qt_ui import application, cancel, later
 lazy from assistant.recording_state import RecordingAction, RecordingState
 lazy from assistant.state_store import SavedState
@@ -53,7 +53,7 @@ lazy from assistant.ui_components.controls import button, label
 lazy from assistant.ui_components.widgets import Editor, Window, column, glyph, row, segmented, show_window, surface, window_style
 lazy from assistant.vector_icons import icon
 lazy from assistant.window_switcher import WindowSwitcher
-lazy from assistant.work_canvas import AnswerQuestion, CanvasChange, SpeechRoute, WorkCanvas
+lazy from assistant.work_canvas import AnswerQuestion, CanvasPublication, SpeechRoute, WorkCanvas
 lazy from assistant.work_canvas_window import CanvasWindow
 lazy from assistant.work_commands import WorkCommand
 lazy from assistant.work_snapshot import WorkSnapshot
@@ -124,7 +124,7 @@ def _native_feed_view(root: QtWidgets.QApplication, agent: AgentWindow, open_can
     return AgentToasts(root, agent, open_canvas)
 
 
-def _native_canvas_view(root: QtWidgets.QApplication, work: WorkWindow, canvas: WorkCanvas) -> CanvasWindow:
+def _native_canvas_view(root: QtWidgets.QApplication, work: WorkWindow, canvas: CanvasEdits) -> CanvasWindow:
     return CanvasWindow(root, work, canvas)
 
 
@@ -134,7 +134,7 @@ class Views:
 
     desktop: DesktopFactory = _native_desktop
     feed: Callable[[QtWidgets.QApplication, AgentWindow, Callable[[str], None]], AgentToasts] = _native_feed_view
-    canvas: Callable[[QtWidgets.QApplication, WorkWindow, WorkCanvas], CanvasWindow] = _native_canvas_view
+    canvas: Callable[[QtWidgets.QApplication, WorkWindow, CanvasEdits], CanvasWindow] = _native_canvas_view
 
 
 type Assess = Callable[[assistant.communications.Feed], None]
@@ -149,6 +149,7 @@ class Ui:
         "_assess",
         "_canvas",
         "_canvas_notice",
+        "_canvas_published",
         "_closed",
         "_desktop",
         "_dialogs",
@@ -204,6 +205,7 @@ class Ui:
         self._work_view: CanvasWindow | None = None
         self._canvas: WorkCanvas | None = None
         self._canvas_notice: Callable[[str, str], None] | None = None
+        self._canvas_published: CanvasPublication | None = None
         self._meetings: MeetingConnection | None = None
         self._work_lock = threading.Lock()
         # The controller that owns these effects is created after Ui, on its own
@@ -470,6 +472,7 @@ class Ui:
                     on_work=on_work,
                     on_snapshot=self.refresh_inbox,
                 )
+                self.post(self._replay_canvas)
             panel = self._agent
         if reveal:
             panel.show(focus=focus)
@@ -506,10 +509,8 @@ class Ui:
                     session = self._agent.state
         if self._desktop is not None:
             self._desktop.agent_changed(island_agent.activity(session))
-        document = self._canvas.observe_session(session) if self._canvas is not None else None
-        if document is not None:
-            self.render_canvas_document(document)
-        self.refresh_canvas_attention()
+        if self._canvas is not None:
+            self._canvas.observe_session(session)
 
     def dismiss_system_notice(self, key: NoticeKey) -> None:
         if self._notice_dismissal is not None:
@@ -592,8 +593,7 @@ class Ui:
         def configure(_: QtWidgets.QApplication) -> None:
             self._canvas, self._canvas_notice = canvas, notice
             session = self._agent.state if self._agent is not None else Session()
-            self.render_canvas_document(canvas.observe_session(session) or canvas.read())
-            self.refresh_canvas_attention()
+            canvas.observe_session(session)
 
         self.post(configure)
 
@@ -626,43 +626,47 @@ class Ui:
         canvas = self._canvas
         if canvas is None:
             return CanvasRefused("The local canvas is unavailable.")
-        response = canvas.command(command)
-        match response:
-            case CanvasUpdated():
-                # Return the committed receipt before a later Qt refresh reflows.
-                self.post(lambda _: self.render_canvas_document(canvas.read()))
-            case _:
-                pass
-        return response
+        return canvas.command(command)
 
-    def render_canvas_document(self, document: CanvasDocument) -> None:
-        if self._agent is not None and self._canvas is not None:
-            self._agent.settle_canvas(self._canvas.settled(document))
-        if self._work_view is not None:
-            self._work_view.personal.show_document(document)
+    def publish_canvas(self, publication: CanvasPublication) -> None:
+        """Defer owner publications until callers have finished their gesture or command."""
+        self.post(lambda _: self._show_canvas(publication))
 
-    def refresh_canvas_attention(self) -> None:
+    def _replay_canvas(self, _: QtWidgets.QApplication) -> None:
+        # Read on Qt when the callback executes: an earlier queued change may
+        # have superseded the publication retained when the view was requested.
+        if self._canvas_published is not None:
+            self._show_canvas(self._canvas_published, replay=True)
+
+    def _show_canvas(self, publication: CanvasPublication, *, replay: bool = False) -> None:
+        """Replay attention to late-created views without repeating the original notice."""
+        self._canvas_published = publication
+        if self._agent is not None:
+            self._agent.settle_canvas(publication.settled)
         if self._desktop is not None:
-            self._desktop.inbox_changed(len(self._canvas.waiting()) if self._canvas is not None else 0)
-
-    def announce_canvas(self, change: CanvasChange) -> None:
-        self.render_canvas_document(change.document)
-        self.refresh_canvas_attention()
-        notice = change.notice
-        if notice is not None and self._canvas_notice is not None and (self._work_view is None or not self._work_view.window.isActiveWindow()):
+            self._desktop.inbox_changed(len(publication.waiting))
+        if self._work_view is not None:
+            self._work_view.personal.show_document(publication.document)
+        notice = publication.notice
+        if (
+            not replay
+            and notice is not None
+            and self._canvas_notice is not None
+            and (self._work_view is None or not self._work_view.window.isActiveWindow())
+        ):
             self._canvas_notice(notice.title, notice.target)
 
     def observe_canvas_work(self, snapshot: WorkSnapshot) -> None:
         def observe(_: QtWidgets.QApplication) -> None:
             if self._canvas is not None:
-                self.announce_canvas(self._canvas.observe_work(snapshot))
+                self._canvas.observe_work(snapshot)
 
         self.post(observe)
 
     def observe_canvas(self, catalog: Catalog) -> None:
         def observe(_: QtWidgets.QApplication) -> None:
             if self._canvas is not None:
-                self.announce_canvas(self._canvas.observe_catalog(catalog))
+                self._canvas.observe_catalog(catalog)
 
         self.post(observe)
 
@@ -718,12 +722,7 @@ class Ui:
             answer = TextAnswer(value)
         except ValueError:
             return False
-        document = self._canvas.answer(request, answer, self._deliver_answer)
-        if document is None:
-            return False
-        self.render_canvas_document(document)
-        self.refresh_canvas_attention()
-        return True
+        return self._canvas.answer(request, answer, self._deliver_answer)
 
     def _deliver_answer(self, request: CanvasRequest, answer: TextAnswer) -> bool:
         match request:
@@ -813,6 +812,8 @@ class Ui:
                     inbox=lambda: self.open_inbox(show_agent),
                 )
                 self._desktop = self._views.desktop(actions, audio_level=audio_level)
+                if self._canvas_published is not None:
+                    self._show_canvas(self._canvas_published, replay=True)
                 self.refresh_inbox()
             except Exception:
                 traceback.print_exc()

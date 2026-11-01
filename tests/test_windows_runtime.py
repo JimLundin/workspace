@@ -180,7 +180,8 @@ def test_work_window_closes_with_its_ui_owner_in_a_fresh_process(tmp_path: Path)
             return Ui(views=Views(canvas=offscreen_canvas))
 
         ui = offscreen_ui()
-        ui.configure_canvas(WorkCanvas(DIRECTORY / "work" / "canvas.sqlite3", lambda run: None, autonomous=False), lambda title, target: None)
+        canvas = WorkCanvas(DIRECTORY / "work" / "canvas.sqlite3", lambda run: None, ui.publish_canvas, autonomous=False)
+        ui.configure_canvas(canvas, lambda title, target: None)
         failures = []
         owners = []
 
@@ -265,7 +266,7 @@ def _native_controller_lifetime(tmp_path: Path, *, qt_first: bool) -> None:
 
             def run(self):
                 self.ui.agent(lambda: None, reveal=False)
-                canvas = WorkCanvas(DIRECTORY / "work" / "canvas.sqlite3", lambda run: None, autonomous=False)
+                canvas = WorkCanvas(DIRECTORY / "work" / "canvas.sqlite3", lambda run: None, self.ui.publish_canvas, autonomous=False)
                 self.ui.configure_canvas(canvas, lambda title, target: None)
                 self.ui.work(lambda command: None, focus=False)
                 self.ui.post(self.ready)

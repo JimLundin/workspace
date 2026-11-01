@@ -1,6 +1,7 @@
 """Workspace containment, shared identity, layout and scoped arrangement policy."""
 
 import sqlite3
+from collections.abc import Callable
 from contextlib import closing
 from dataclasses import replace
 from itertools import islice
@@ -8,7 +9,7 @@ from pathlib import Path
 from unittest import TestCase
 
 from assistant.canvas_activity import Attention, CanvasQuestion, CanvasRun, CanvasUpdate, TaskRequest
-from assistant.work_canvas import WorkCanvas
+from assistant.work_canvas import CanvasPublication, WorkCanvas
 from assistant.work_canvas_connections import CanvasConnection, RelationConnection, connections
 from assistant.work_canvas_context import CanvasMode, CanvasScene, CanvasScope, context_path, project, scene_contents
 from assistant.work_canvas_layout import Box, Measurements, Size, layout
@@ -37,8 +38,12 @@ def queue_nothing(_run: CanvasRun) -> None:
     pass
 
 
-def local_canvas(folder: Path) -> WorkCanvas:
-    return WorkCanvas(folder / "canvas.sqlite3", queue_nothing, autonomous=False)
+def publish_nothing(_publication: CanvasPublication) -> None:
+    pass
+
+
+def local_canvas(folder: Path, publish: Callable[[CanvasPublication], None] = publish_nothing) -> WorkCanvas:
+    return WorkCanvas(folder / "canvas.sqlite3", queue_nothing, publish, autonomous=False)
 
 
 def seeded(canvas: WorkCanvas, document: CanvasDocument) -> None:

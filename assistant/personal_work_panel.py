@@ -8,6 +8,7 @@ import sqlite3
 from collections.abc import Callable, Iterator
 from dataclasses import replace
 from pathlib import Path
+from typing import Protocol
 from uuid import uuid4
 
 lazy from PySide6 import QtCore, QtGui, QtWidgets
@@ -25,7 +26,7 @@ from assistant.ui_components.canvas_look import CARD_RADIUS, SHADOW, glass_ink
 from assistant.ui_components.controls import button, label
 from assistant.ui_components.voice_legend import VoiceLegend
 from assistant.ui_components.widgets import column
-from assistant.work_canvas import Investigating, NotQueued, Queued, ResumeTask, WorkCanvas
+from assistant.work_canvas import Continuation, Investigating, NotQueued, Queued, ResumeTask
 from assistant.work_canvas_commands import PutRelation, RemoveRelation
 from assistant.work_canvas_connections import connections
 from assistant.work_canvas_context import (
@@ -112,13 +113,22 @@ from miryoku.layout import AGENT
 lazy from assistant.work_canvas_detail import CardDetail, NoteDetail, QuestionDetail, SourceDetail, UpdateDetail, WorkDetail
 
 
+class CanvasEdits(Protocol):
+    """The view can read and edit the canvas without owning observations or attention."""
+
+    def read(self) -> CanvasDocument: ...
+    def commit(self, edit: UserEdit) -> CanvasDocument: ...
+    def start(self, run: CanvasRun) -> Queued | NotQueued: ...
+    def continue_work(self, work_id: str) -> Continuation: ...
+
+
 class PersonalPanel:
-    def __init__(self, parent: CanvasFrame, work: WorkWindow, canvas: WorkCanvas) -> None:
+    def __init__(self, parent: CanvasFrame, work: WorkWindow, canvas: CanvasEdits) -> None:
         # One scheme for the canvas's lifetime, so every bubble, detail and menu agree.
         self.theme: Tokens = parent.theme
         self.style: str = content_style(parent.theme)
         self.work: WorkWindow = work
-        self.work_canvas: WorkCanvas = canvas
+        self.work_canvas: CanvasEdits = canvas
         self.document: CanvasDocument = canvas.read()
         self.view: PersonalView = PersonalView()
         self.scope: CanvasScope = CanvasScope()
@@ -351,6 +361,8 @@ class PersonalPanel:
 
     def show_document(self, document: CanvasDocument) -> None:
         """Render a document the canvas owner committed or observed."""
+        if document == self.document:
+            return
         self.document = document
         self.render(self.view)
 

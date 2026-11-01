@@ -10,6 +10,7 @@ from assistant.canvas_activity import CanvasInstruction, CanvasQuestion, CanvasR
 from assistant.work_canvas import (
     Announcement,
     AnswerQuestion,
+    CanvasPublication,
     Investigating,
     NotQueued,
     Queued,
@@ -17,7 +18,17 @@ from assistant.work_canvas import (
     SpeechRoute,
     WorkCanvas,
 )
-from assistant.work_canvas_commands import ArrangeCanvas, CanvasUpdated, MoveBubble, PutNote, PutRelation, UpdateCanvas, revision
+from assistant.work_canvas_commands import (
+    ArrangeCanvas,
+    CanvasRefused,
+    CanvasUpdated,
+    MoveBubble,
+    PutNote,
+    PutRelation,
+    ReadCanvas,
+    UpdateCanvas,
+    revision,
+)
 from assistant.work_canvas_context import CanvasScope, context_path
 from assistant.work_canvas_edits import ArrangeView, RenameGroup, UserEdit
 from assistant.work_canvas_gestures import NestBubble, PlaceBubbles
@@ -26,7 +37,7 @@ from assistant.work_snapshot import WorkSnapshot
 from automation.personal_work import DismissedWork, WorkState
 from automation.task import Blocked, Completed, TextAnswer, Waiting
 from tests.agent_requests import asked
-from tests.test_work_canvas import catalog, local_canvas, nested_bubbles, seeded
+from tests.test_work_canvas import catalog, local_canvas, nested_bubbles, publish_nothing, seeded
 from tests.test_work_window import work_task
 
 
@@ -34,19 +45,25 @@ def test_changed_evidence_queues_one_bounded_investigation_and_refusal_releases_
     # Defect: catalog publication never investigates, repeats queued work,
     # announces the silent baseline, or a refused queue marks evidence handled.
     queued: list[CanvasRun] = []
-    canvas = WorkCanvas(tmp_path / "canvas.sqlite3", queued.append, autonomous=True)
-    first = canvas.observe_catalog(catalog())
+    publications: list[CanvasPublication] = []
+    canvas = WorkCanvas(tmp_path / "canvas.sqlite3", queued.append, publications.append, autonomous=True)
+    canvas.observe_catalog(catalog())
+    first = publications[-1]
     assert queued and first.document.runs == tuple(queued) == canvas.read().runs and first.notice is None
-    repeated = canvas.observe_catalog(catalog())
+    canvas.observe_catalog(catalog())
+    repeated = publications[-1]
     assert len(queued) == 2 and repeated.document.runs == tuple(queued) and repeated.notice is None
+    assert len(publications) == 2
 
     def refuse(_run: CanvasRun) -> None:
         raise ValueError("The queue is full.")
 
-    refused = WorkCanvas(tmp_path / "refused.sqlite3", refuse, autonomous=True)
-    assert not refused.observe_catalog(catalog()).document.runs and not refused.read().runs
-    manual = WorkCanvas(tmp_path / "manual.sqlite3", queued.append, autonomous=False)
-    assert not manual.observe_catalog(catalog()).document.runs and len(queued) == 2
+    refused = WorkCanvas(tmp_path / "refused.sqlite3", refuse, publications.append, autonomous=True)
+    refused.observe_catalog(catalog())
+    assert not publications[-1].document.runs and not refused.read().runs and len(publications) == 3
+    manual = WorkCanvas(tmp_path / "manual.sqlite3", queued.append, publications.append, autonomous=False)
+    manual.observe_catalog(catalog())
+    assert not publications[-1].document.runs and len(queued) == 2 and len(publications) == 4
 
 
 def test_attention_is_announced_once_and_never_from_dismissed_work(tmp_path: Path) -> None:
@@ -55,16 +72,24 @@ def test_attention_is_announced_once_and_never_from_dismissed_work(tmp_path: Pat
     data = catalog()
     active, dismissed = data.works
     research, late = work_task(identity="research"), work_task(identity="late")
-    canvas = local_canvas(tmp_path)
+    publications: list[CanvasPublication] = []
+    canvas = local_canvas(tmp_path, publications.append)
     seeded(canvas, CanvasDocument(runs=(CanvasRun(research.id, active.id), CanvasRun(late.id, dismissed.id))))
     shown = replace(data, works=(active,), dismissed=(DismissedWork(dismissed, "Wrong owner"),))
-    assert canvas.observe_catalog(shown).notice is None
-    assert canvas.observe_work(WorkSnapshot(tasks=(research, late))).notice is None
+    canvas.observe_catalog(shown)
+    canvas.observe_work(WorkSnapshot(tasks=(research, late)))
     completed = WorkSnapshot(tasks=tuple(replace(task, state=Completed("Handoff confirmed", ())) for task in (research, late)))
-    assert canvas.observe_work(completed).notice == Announcement(research.title, "result:" + research.id)
-    assert canvas.observe_work(completed).notice is None
+    canvas.observe_work(completed)
+    canvas.observe_work(completed)
     done = replace(shown, works=(replace(active, definition=replace(active.definition, state=WorkState.DONE)),))
-    assert canvas.observe_catalog(done).notice == Announcement("Canvas updated · " + active.definition.title, active.id)
+    canvas.observe_catalog(done)
+    assert tuple(publication.notice for publication in publications) == (
+        None,
+        None,
+        Announcement(research.title, "result:" + research.id),
+        None,
+        Announcement("Canvas updated · " + active.definition.title, active.id),
+    )
 
 
 def test_answers_reach_only_visible_waiting_questions_and_record_one_reply(tmp_path: Path) -> None:
@@ -79,9 +104,8 @@ def test_answers_reach_only_visible_waiting_questions_and_record_one_reply(tmp_p
     finding = CanvasUpdate("result:finding", "Finding", "Version two is approved.", 5, (active.id,))
     seeded(canvas, CanvasDocument(runs=(CanvasRun(current.id, active.id), CanvasRun(hidden.id, dismissed.id)), activity=(finding,)))
     canvas.observe_session(Session(identity="session", messages=(asked("chat", "Which supplier?", "", 10),)))
-    document = canvas.observe_work(WorkSnapshot(tasks=(current, hidden))).document
-    assert [question.id for question in canvas.waiting()] == ["question:chat", "question:current"]
-    assert canvas.settled(document) == frozenset(("question:hidden",))
+    canvas.observe_work(WorkSnapshot(tasks=(current, hidden)))
+    document = canvas.read()
     delivered: list[tuple[CanvasRequest, TextAnswer]] = []
 
     def accept(request: CanvasRequest, value: TextAnswer) -> bool:
@@ -92,17 +116,73 @@ def test_answers_reach_only_visible_waiting_questions_and_record_one_reply(tmp_p
         return False
 
     hidden_request = next(item.request for item in document.activity if isinstance(item, CanvasQuestion) and item.id == "question:hidden")
-    assert canvas.answer(SessionRequest("expired", "chat"), TextAnswer("Contoso"), accept) is None
-    assert canvas.answer(hidden_request, TextAnswer("Contoso"), accept) is None and not delivered
-    assert canvas.answer(SessionRequest("session", "chat"), TextAnswer("Contoso"), reject) is None
-    assert [question.id for question in canvas.waiting()] == ["question:chat", "question:current"]
-    answered = canvas.answer(SessionRequest("session", "chat"), TextAnswer("Contoso"), accept)
-    assert answered is not None and answered == canvas.read()
+    assert not canvas.answer(SessionRequest("expired", "chat"), TextAnswer("Contoso"), accept)
+    assert not canvas.answer(hidden_request, TextAnswer("Contoso"), accept) and not delivered
+    assert not canvas.answer(SessionRequest("session", "chat"), TextAnswer("Contoso"), reject)
+    assert canvas.answer(SessionRequest("session", "chat"), TextAnswer("Contoso"), accept)
+    answered = canvas.read()
     chat = next(item for item in answered.activity if item.id == "question:chat")
     assert isinstance(chat, CanvasQuestion) and chat.reply == TextAnswer("Contoso")
     assert finding in answered.activity
-    assert canvas.answer(SessionRequest("session", "chat"), TextAnswer("Fabrikam"), accept) is None
+    assert not canvas.answer(SessionRequest("session", "chat"), TextAnswer("Fabrikam"), accept)
     assert delivered == [(SessionRequest("session", "chat"), TextAnswer("Contoso"))]
+
+
+def test_each_change_publishes_current_attention_and_bridge_moves_settle_hidden_questions(tmp_path: Path) -> None:
+    # Defect: a write path saves without publishing, publishes more than once,
+    # publishes stale attention after a bridge move, or publishes a refused/no-op edit.
+    data = catalog()
+    active, dismissed = data.works
+    publications: list[CanvasPublication] = []
+    canvas = local_canvas(tmp_path, publications.append)
+    canvas.observe_catalog(replace(data, works=(active,), dismissed=(DismissedWork(dismissed, "Wrong owner"),)))
+    current = work_task(Waiting(automation.task.Question("current", "Current question", "")), identity="current-task")
+    hidden = work_task(Waiting(automation.task.Question("hidden", "Hidden question", "")), identity="hidden-task")
+    seeded(
+        canvas,
+        CanvasDocument(
+            collections=(CanvasCollection("group:archive", "Archive", parent_id=dismissed.id),),
+            notes=(CanvasNote("note:stable", "Stable", "Keep this finding."),),
+            runs=(CanvasRun(current.id, active.id), CanvasRun(hidden.id, dismissed.id)),
+        ),
+    )
+
+    def expect(count: int, waiting: tuple[str, ...], settled: frozenset[str]) -> None:
+        assert len(publications) == count
+        publication = publications[-1]
+        assert publication.document == canvas.read()
+        assert tuple(question.id for question in publication.waiting) == waiting
+        assert publication.settled == settled
+
+    session = Session(identity="session", messages=(asked("chat", "Which supplier?", "", 10),))
+    assert canvas.observe_session(session)
+    expect(2, ("question:chat",), frozenset())
+    assert not canvas.observe_session(session) and len(publications) == 2
+    canvas.observe_work(WorkSnapshot(tasks=(current, hidden)))
+    expect(3, ("question:chat", "question:current"), frozenset(("question:hidden",)))
+    rename = UserEdit(CanvasScope(), RenameGroup("group:archive", "Archived work"))
+    assert canvas.commit(rename) == canvas.read()
+    expect(4, ("question:chat", "question:current"), frozenset(("question:hidden",)))
+    assert isinstance(canvas.start(CanvasRun("manual", active.id)), Queued)
+    expect(5, ("question:chat", "question:current"), frozenset(("question:hidden",)))
+    command = UpdateCanvas(revision(canvas.read()), (MoveBubble("question:current", "group:archive"),))
+    assert isinstance(canvas.command(command), CanvasUpdated)
+    expect(6, ("question:chat",), frozenset(("question:hidden", "question:current")))
+    delivered: list[tuple[CanvasRequest, TextAnswer]] = []
+
+    def deliver(request: CanvasRequest, answer: TextAnswer) -> bool:
+        delivered.append((request, answer))
+        return True
+
+    assert canvas.answer(SessionRequest("session", "chat"), TextAnswer("Contoso"), deliver)
+    expect(7, (), frozenset(("question:hidden", "question:current", "question:chat")))
+    assert delivered == [(SessionRequest("session", "chat"), TextAnswer("Contoso"))]
+    canvas.command(ReadCanvas())
+    canvas.commit(rename)
+    assert isinstance(canvas.command(UpdateCanvas(revision(canvas.read()), (PutNote(canvas.read().notes[0]),))), CanvasUpdated)
+    assert isinstance(canvas.command(command), CanvasRefused)
+    assert not canvas.answer(SessionRequest("session", "chat"), TextAnswer("Again"), deliver)
+    expect(7, (), frozenset(("question:hidden", "question:current", "question:chat")))
 
 
 def test_speech_answers_the_selected_question_or_instructs_only_an_open_canvas(tmp_path: Path) -> None:
@@ -120,36 +200,42 @@ def test_directions_are_saved_before_queueing_and_retries_reuse_their_binding(tm
     # Defect: a failed handoff loses the user's direction, the task is queued
     # before its context is durable, or a retry records a duplicate binding.
     attempts: list[CanvasRun] = []
+    publications: list[CanvasPublication] = []
     path = tmp_path / "canvas.sqlite3"
 
     def queue(run: CanvasRun) -> None:
-        assert run in WorkCanvas(path, queue, autonomous=False).read().runs
+        assert run in WorkCanvas(path, queue, publish_nothing, autonomous=False).read().runs
         attempts.append(run)
         if len(attempts) == 1:
             raise OSError("Queue unavailable")
 
-    canvas = WorkCanvas(path, queue, autonomous=False)
+    canvas = WorkCanvas(path, queue, publications.append, autonomous=False)
     run = CanvasRun("canvas:instruction:one", "canvas:root", CanvasInstruction("Compare the two versions."))
     assert canvas.start(run) == NotQueued(CanvasDocument(runs=(run,)), "Queue unavailable")
     assert canvas.start(run) == Queued(CanvasDocument(runs=(run,)))
     assert attempts == [run, run] and canvas.read().runs == (run,)
+    assert len(publications) == 2 and all(publication.document == canvas.read() for publication in publications)
 
 
 def test_continue_resumes_or_reports_existing_work_before_queueing_another(tmp_path: Path) -> None:
     # Defect: Continue queues a fresh task while research is blocked or still
     # running, losing its durable recovery context.
     queued: list[CanvasRun] = []
-    canvas = WorkCanvas(tmp_path / "canvas.sqlite3", queued.append, autonomous=False)
+    publications: list[CanvasPublication] = []
+    canvas = WorkCanvas(tmp_path / "canvas.sqlite3", queued.append, publications.append, autonomous=False)
     blocked = work_task(Waiting(Blocked("Needs recovery")))
     seeded(canvas, CanvasDocument(runs=(CanvasRun(blocked.id, "work:one"),)))
     canvas.observe_work(WorkSnapshot(tasks=(blocked,)))
     assert canvas.continue_work("work:one") == ResumeTask(blocked.id)
+    assert len(publications) == 1
     canvas.observe_work(WorkSnapshot(tasks=(work_task(),)))
     assert canvas.continue_work("work:one") is Investigating.ALREADY
+    assert len(publications) == 2
     canvas.observe_work(WorkSnapshot(tasks=(replace(blocked, state=Completed("Done", ())),)))
     started = canvas.continue_work("work:one")
     assert isinstance(started, Queued) and queued == [started.document.runs[-1]] and queued[0].work_id == "work:one"
     assert canvas.read().runs == (CanvasRun(blocked.id, "work:one"), queued[0])
+    assert len(publications) == 4 and publications[-1].document == canvas.read()
 
 
 def test_released_gestures_commit_placement_and_nesting_or_save_nothing(tmp_path: Path) -> None:

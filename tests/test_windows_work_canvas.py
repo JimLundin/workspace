@@ -34,8 +34,8 @@ from assistant.ui_components.canvas_look import surface_fill
 from assistant.ui_components.voice_legend import VoiceLegend
 from assistant.work_bridge import WorkOwners
 from assistant.work_bridge_contracts import WORK_BRIDGE
-from assistant.work_canvas import WorkCanvas, instruction_prompt
-from assistant.work_canvas_commands import CANVAS_RESPONSE, CanvasSnapshot, CanvasUpdated
+from assistant.work_canvas import CanvasPublication, WorkCanvas, instruction_prompt
+from assistant.work_canvas_commands import CANVAS_RESPONSE, CanvasSnapshot, CanvasUpdated, MoveBubble, UpdateCanvas, revision
 from assistant.work_canvas_context import CanvasMode
 from assistant.work_canvas_detail import NoteDetail, QuestionDetail, SourceDetail, WorkDetail
 from assistant.work_canvas_edits import SaveNote
@@ -82,9 +82,9 @@ from tests.agent_requests import asked
 from tests.feed_fixture import feed_unavailable, no_personal_work
 from tests.personal_work_fixture import source
 from tests.test_agent import ToolRig
-from tests.test_windows_inbox_attention import InboxUi
+from tests.test_windows_inbox_attention import InboxUi, waiting
 from tests.test_work_actions import claimed
-from tests.test_work_canvas import local_canvas, nested_bubbles, seeded
+from tests.test_work_canvas import local_canvas, nested_bubbles, queue_nothing, seeded
 from tests.test_work_window import work_task
 from winapi import windows
 
@@ -92,12 +92,12 @@ prepare()
 
 
 class NativeCanvas:
-    """Publishes like App: the canvas owner observes, then the window renders its document."""
+    """Publishes like App: the canvas owner posts each observation to its view."""
 
     def __init__(self, store: WorkCanvas) -> None:
         self.root = application()
-        self.store = store
         self.jobs: deque[Callable[[], None]] = deque()
+        self.store = WorkCanvas(store.path, queue_nothing, self.show_publication, autonomous=False)
         self.commands: list[WorkCommand] = []
         self.view: CanvasWindow
         self.work = WorkWindow(self.commands.append, post=self.jobs.append, create_view=self.build)
@@ -117,10 +117,12 @@ class NativeCanvas:
 
     def publish(self, snapshot: WorkSnapshot) -> None:
         self.store.observe_catalog(snapshot.personal.catalog)
-        document = self.store.observe_work(snapshot).document
+        self.store.observe_work(snapshot)
         self.work.publish(snapshot)
-        self.view.personal.show_document(document)
         self.pump()
+
+    def show_publication(self, publication: CanvasPublication) -> None:
+        self.jobs.append(lambda: self.view.personal.show_document(publication.document))
 
     def last_command(self) -> WorkCommand:
         return self.commands[-1]
@@ -318,9 +320,9 @@ def test_startup_prepared_canvas_remains_hidden_and_keeps_its_native_scene(tmp_p
     # Defect: preparing the initial viewport shows a native window, changes
     # focus, or throws away prepared bubbles when the toolbar opens the canvas.
     data, document = nested_bubbles()
-    store = local_canvas(tmp_path)
-    seeded(store, document)
     ui = InboxUi()
+    store = local_canvas(tmp_path, ui.publish_canvas)
+    seeded(store, document)
     try:
         ui.configure_canvas(store, lambda _title, _target: None)
         work = ui.work(lambda _command: None, reveal=False)
@@ -634,7 +636,7 @@ def test_canvas_speech_instructs_the_open_canvas_and_keeps_failed_directions_for
             raise OSError("Queue unavailable")
         tasks.submit(run.task_id, "Canvas instruction", instruction_prompt(run), automation.task.RequestSource("canvas"), at=20)
 
-    store = WorkCanvas(tmp_path / "canvas.sqlite3", queue, autonomous=False)
+    store = WorkCanvas(tmp_path / "canvas.sqlite3", queue, ui.publish_canvas, autonomous=False)
     ui.configure_canvas(store, lambda _title, _target: None)
     work = ui.work(lambda _command: None, reveal=False)
     work.show(focus=False)
@@ -838,7 +840,7 @@ def test_agent_canvas_bridge_commits_on_qt_and_refreshes_without_revealing(tmp_p
     # Defect: worker edits race with Qt, return success before persistence,
     # overwrite a user draft, bypass durable verification or reveal a window.
     ui = InboxUi()
-    store = local_canvas(tmp_path)
+    store = local_canvas(tmp_path, ui.publish_canvas)
     ui.configure_canvas(store, lambda _title, _target: None)
     ui.observe_canvas(nested_bubbles()[0])
     ui.pump()
@@ -908,7 +910,7 @@ def test_canvas_voice_key_feedback_follows_agent_capture_and_release(tmp_path: P
     # clears it, release leaves it pressed during transcription, or dictation
     # incorrectly lights the agent key. Feedback must not resize the toolbar.
     ui = InboxUi()
-    ui.configure_canvas(local_canvas(tmp_path), lambda _title, _target: None)
+    ui.configure_canvas(local_canvas(tmp_path, ui.publish_canvas), lambda _title, _target: None)
     ui.desktop_state(State.LISTENING, agent_speaking=True)
     ui.pump()
     work = ui.work(lambda _: None, reveal=True, focus=False)
@@ -949,7 +951,7 @@ def test_canvas_clarification_redirect_submits_context_to_the_waiting_agent(tmp_
     # Defect: the redirect opens the wrong bubble, reserves empty editor space,
     # or spoken context fails to resume the exact existing waiting worker.
     ui = InboxUi()
-    store = local_canvas(tmp_path)
+    store = local_canvas(tmp_path, ui.publish_canvas)
     ui.configure_canvas(store, lambda _title, _target: None)
     work = ui.work(lambda _command: None, reveal=False)
     agent = ui.agent(lambda: None, on_work=lambda: work.show(focus=False), reveal=False)
@@ -998,7 +1000,7 @@ def test_canvas_spoken_reply_keeps_transcript_on_rejection_and_continue_stays_bo
     ui = InboxUi()
     commands: list[WorkCommand] = []
     runs: list[CanvasRun] = []
-    store = WorkCanvas(tmp_path / "canvas.sqlite3", runs.append, autonomous=False)
+    store = WorkCanvas(tmp_path / "canvas.sqlite3", runs.append, ui.publish_canvas, autonomous=False)
     ui.configure_canvas(store, lambda _title, _target: None)
     work = ui.work(commands.append, reveal=True, focus=False)
     task = work_task(automation.task.Waiting(automation.task.Question("request", "Which owner?", "Confirm the handoff.")))
@@ -1045,18 +1047,40 @@ def test_canvas_spoken_reply_keeps_transcript_on_rejection_and_continue_stays_bo
         ui.dispose()
 
 
+def check_late_agent_canvas_replay(ui: InboxUi, store: WorkCanvas) -> None:
+    """Exercise late-agent replay before canvas layout can republish and mask stale attention."""
+    bridge = UpdateCanvas(revision(store.read()), (MoveBubble("question:current", "group:archive"),))
+    assert isinstance(ui.canvas_command(bridge), CanvasUpdated)
+    agent = ui.agent(lambda: None, reveal=False)
+    agent.notify_canvas("Current question", "question:current")
+    ui.pump()
+    assert waiting(ui.bar) is None
+    assert not agent.state.messages
+    restored = UpdateCanvas(revision(store.read()), (MoveBubble("question:current", None),))
+    assert isinstance(ui.canvas_command(restored), CanvasUpdated)
+    ui.pump()
+
+
 def test_canvas_attention_reaches_the_desktop_and_redirects_to_its_bubble(tmp_path: Path) -> None:
     # Defect: the bell counts or opens a dismissed question, a hidden canvas
-    # misses its result notice, or the notice redirects to another bubble.
+    # misses its result notice, a late view repeats a notice or replays stale
+    # attention over a queued bridge change, or a notice redirects elsewhere.
     ui = InboxUi()
-    store = local_canvas(tmp_path)
+    store = local_canvas(tmp_path, ui.publish_canvas)
     dismissed = WorkThread("work:dismissed", 0, WorkDefinition("Not mine", "Other responsibility"), (), 10, 10)
     active = replace(dismissed, id="work:active", definition=WorkDefinition("Mine", "My responsibility"))
     data = Catalog(works=(active,), dismissed=(DismissedWork(dismissed, "Wrong owner"),))
     old = work_task(automation.task.Waiting(automation.task.Question("old", "Old question", "")), identity="old-task")
     current = work_task(automation.task.Waiting(automation.task.Question("current", "Current question", "")), identity="current-task")
     research = work_task(identity="research-task")
-    seeded(store, replace(store.read(), runs=(CanvasRun(old.id, dismissed.id), CanvasRun(current.id, active.id), CanvasRun(research.id, active.id))))
+    seeded(
+        store,
+        replace(
+            store.read(),
+            collections=(CanvasCollection("group:archive", "Archive", parent_id=dismissed.id),),
+            runs=(CanvasRun(old.id, dismissed.id), CanvasRun(current.id, active.id), CanvasRun(research.id, active.id)),
+        ),
+    )
     notices: list[tuple[str, str]] = []
 
     def notify(title: str, target: str) -> None:
@@ -1064,29 +1088,35 @@ def test_canvas_attention_reaches_the_desktop_and_redirects_to_its_bubble(tmp_pa
 
     try:
         ui.configure_canvas(store, notify)
-        work = ui.work(lambda _command: None, reveal=True, focus=False)
-        ui.desktop(
-            show_agent=lambda: None, show_work=lambda: None, stop=lambda: None, overlay=lambda: None, menu=lambda: None, on_problem=lambda _: None
-        )
         snapshot = WorkSnapshot(personal=PersonalView(data), tasks=(old, current, research))
-        work.publish(snapshot)
         ui.observe_canvas(data)
         ui.observe_canvas_work(snapshot)
         ui.pump()
+        assert notices == [("Current question", "question:current")]
+        ui.desktop(
+            show_agent=lambda: None, show_work=lambda: None, stop=lambda: None, overlay=lambda: None, menu=lambda: None, on_problem=lambda _: None
+        )
+        ui.pump()
+        assert notices == [("Current question", "question:current")]
+        check_late_agent_canvas_replay(ui, store)
         assert "1 clarification needs" in ui.bar.window.capsules[Key.INBOX].accessibleName()
+        work = ui.work(lambda _command: None, reveal=False)
+        work.publish(snapshot)
+        work.prepare()
         ui.open_inbox(lambda: None)
         ui.pump()
         assert ui.canvas_view.personal.selected == "question:current"
-        notices.clear()
         ui.canvas_view.hide()
         completed = replace(snapshot, tasks=(old, current, replace(research, state=automation.task.Completed("Handoff confirmed", ()))))
         work.publish(completed)
         ui.observe_canvas_work(completed)
         ui.pump()
-        assert notices == [(research.title, "result:" + research.id)]
-        ui.open_canvas_at(notices[0][1])
+        assert notices == [("Current question", "question:current"), (research.title, "result:" + research.id)]
+        ui.open_canvas_at(notices[-1][1])
         ui.pump()
         assert ui.canvas_view.personal.selected == "result:" + research.id
+        assert ui.canvas_view.personal.document == store.read()
+        assert notices == [("Current question", "question:current"), (research.title, "result:" + research.id)]
     finally:
         ui.dispose()
 

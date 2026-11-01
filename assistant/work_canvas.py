@@ -2,11 +2,11 @@
 
 `WorkCanvas` is the only writer of `canvas.sqlite3`. Qt serializes every
 observation, command, answer and user edit through it; other threads only
-read. Callers render the returned document and deliver the returned notices.
+read. Each change publishes its document and attention through one subscriber.
 """
 
 import hashlib
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Iterable, Iterator, Sequence
 from dataclasses import dataclass, replace
 from enum import Enum
 from pathlib import Path
@@ -67,8 +67,10 @@ class Announcement:
 
 
 @dataclass(frozen=True, slots=True)
-class CanvasChange:
+class CanvasPublication:
     document: CanvasDocument
+    waiting: tuple[CanvasQuestion, ...]
+    settled: frozenset[str]
     notice: Announcement | None = None
 
 
@@ -111,13 +113,20 @@ type Speech = AnswerQuestion | SpeechRoute
 
 
 class WorkCanvas:
+    """Own persistence, queueing and publication under one autonomy policy.
+
+    Construction takes four inputs because this deep owner has two distinct
+    outbound effects, queue and publish, alongside its storage and autonomy policy.
+    """
+
     # Mutable owner state: the latest observations that later policy compares
     # against. Callers serialize use on Qt, so these need no lock.
-    __slots__ = ("_autonomous", "_catalog", "_queue", "_session", "_task_activity", "_tasks", "path")
+    __slots__ = ("_autonomous", "_catalog", "_publish", "_queue", "_session", "_task_activity", "_tasks", "path")
 
-    def __init__(self, path: Path, queue: Callable[[CanvasRun], None], *, autonomous: bool) -> None:
+    def __init__(self, path: Path, queue: Callable[[CanvasRun], None], publish: Callable[[CanvasPublication], None], *, autonomous: bool) -> None:
         self.path: Path = path
         self._queue: Callable[[CanvasRun], None] = queue
+        self._publish: Callable[[CanvasPublication], None] = publish
         self._autonomous: bool = autonomous
         self._catalog: Catalog | None = None
         self._tasks: tuple[Task, ...] = ()
@@ -152,17 +161,19 @@ class WorkCanvas:
             self._save(current)
         return current
 
-    def observe_session(self, session: Snapshot) -> CanvasDocument | None:
-        """Mirror conversation questions; None when the session activity is unchanged."""
+    def observe_session(self, session: Snapshot) -> bool:
+        """Mirror conversation questions; publish only a changed session observation."""
         activity = session_activity(session)
         if activity == self._session:
-            return None
+            return False
         self._session = activity
         previous = self.read()
         document = observe_activity(previous, activity)
-        return self._persist(previous, replace(document, activity=settle_session(document.activity, session)))
+        document = self._persist(previous, replace(document, activity=settle_session(document.activity, session)))
+        self._publish(published(self._observed_catalog(), document, None))
+        return True
 
-    def observe_work(self, observed: WorkSnapshot) -> CanvasChange:
+    def observe_work(self, observed: WorkSnapshot) -> None:
         self._tasks = observed.tasks
         previous = self.read()
         updates = task_activity(observed.tasks, previous.runs)
@@ -175,17 +186,18 @@ class WorkCanvas:
         # Announce each new result or question once, and never inside dismissed work.
         additions = tuple(item for item in updates if item.id not in known and item.id not in hidden)
         notice = Announcement(additions[-1].title, additions[-1].id) if additions else None
-        return CanvasChange(self._investigate(document), notice)
+        self._publish(published(self._observed_catalog(), self._investigate(document), notice))
 
-    def observe_catalog(self, catalog: Catalog) -> CanvasChange:
+    def observe_catalog(self, catalog: Catalog) -> None:
         previous, self._catalog = self._catalog, catalog
         document = self._investigate(self.read())
         # The first catalog is a silent baseline; later state changes are announced.
         changes = important_changes(previous, catalog) if previous is not None else ()
-        if not changes:
-            return CanvasChange(document)
-        latest = next(work for work in catalog.works if work.id == changes[-1])
-        return CanvasChange(document, Announcement("Canvas updated · " + latest.definition.title, latest.id))
+        notice = None
+        if changes:
+            latest = next(work for work in catalog.works if work.id == changes[-1])
+            notice = Announcement("Canvas updated · " + latest.definition.title, latest.id)
+        self._publish(published(catalog, document, notice))
 
     def _investigate(self, previous: CanvasDocument) -> CanvasDocument:
         """Queue bounded research for changed evidence, saving each binding before its task."""
@@ -208,11 +220,15 @@ class WorkCanvas:
         """Save the binding before queueing, so a crash or refusal keeps the user's direction."""
         previous = self.read()
         document = previous if run in previous.runs else self._persist(previous, replace(previous, runs=(*previous.runs, run)))
+        result: Queued | NotQueued
         try:
             self._queue(run)
         except (OSError, ValueError) as error:
-            return NotQueued(document, str(error))
-        return Queued(document)
+            result = NotQueued(document, str(error))
+        else:
+            result = Queued(document)
+        self._publish(published(self._observed_catalog(), document, None))
+        return result
 
     def continue_work(self, work_id: str) -> Continuation:
         """Continue one work without duplicating its unfinished investigation."""
@@ -237,28 +253,22 @@ class WorkCanvas:
                     current = edited(document, request, self._observed_catalog())
                 except ValueError as error:
                     return CanvasRefused(str(error))
-                self._save(current)
+                if current != document:
+                    self._save(current)
+                    self._publish(published(self._observed_catalog(), current, None))
                 return CanvasUpdated(request.expected_revision, revision(current), changed=current != document)
 
     def commit(self, edit: UserEdit) -> CanvasDocument:
         """Persist one user edit to the latest document; an invalid edit raises ValueError and saves nothing."""
         document = self.read()
-        return self._persist(document, user_edited(document, self._observed_catalog(), edit))
+        current = self._persist(document, user_edited(document, self._observed_catalog(), edit))
+        if current != document:
+            self._publish(published(self._observed_catalog(), current, None))
+        return current
 
     def waiting(self) -> tuple[CanvasQuestion, ...]:
         """Visible questions still waiting for the user, in canvas order."""
-        document = self.read()
-        hidden = hidden_ids(self._observed_catalog(), document)
-        return tuple(
-            item for item in document.activity if isinstance(item, CanvasQuestion) and item.reply is Attention.WAITING and item.id not in hidden
-        )
-
-    def settled(self, document: CanvasDocument) -> frozenset[str]:
-        """Questions the conversation should stop presenting: answered, closed or dismissed."""
-        hidden = hidden_ids(self._observed_catalog(), document)
-        return frozenset(
-            item.id for item in document.activity if isinstance(item, CanvasQuestion) and (item.reply is not Attention.WAITING or item.id in hidden)
-        )
+        return published(self._observed_catalog(), self.read(), None).waiting
 
     def speech(self, selected: str | None, *, visible: bool) -> Speech:
         """Speech answers the selected waiting question, instructs the open canvas, or falls back."""
@@ -267,15 +277,35 @@ class WorkCanvas:
         question = next((item for item in self.waiting() if item.id == selected), None)
         return AnswerQuestion(question.request) if question is not None else SpeechRoute.INSTRUCT
 
-    def answer(self, request: CanvasRequest, value: TextAnswer, deliver: Callable[[CanvasRequest, TextAnswer], bool]) -> CanvasDocument | None:
+    def answer(self, request: CanvasRequest, value: TextAnswer, deliver: Callable[[CanvasRequest, TextAnswer], bool]) -> bool:
         """Deliver only to a visible waiting question; record the reply once delivery accepts it."""
         if not any(item.request == request for item in self.waiting()) or not deliver(request, value):
-            return None
+            return False
         document = self.read()
         activity = tuple(
             replace(item, reply=value) if isinstance(item, CanvasQuestion) and item.request == request else item for item in document.activity
         )
-        return self._persist(document, replace(document, activity=activity))
+        current = self._persist(document, replace(document, activity=activity))
+        self._publish(published(self._observed_catalog(), current, None))
+        return True
+
+
+def published(catalog: Catalog, document: CanvasDocument, notice: Announcement | None) -> CanvasPublication:
+    """Derive visible waiting questions and settled ids from one hidden-id snapshot."""
+    hidden = hidden_ids(catalog, document)
+    questions = tuple(_questions(document.activity))
+    waiting = tuple(question for question in questions if question.reply is Attention.WAITING and question.id not in hidden)
+    settled = frozenset(question.id for question in questions if question.reply is not Attention.WAITING or question.id in hidden)
+    return CanvasPublication(document, waiting, settled, notice)
+
+
+def _questions(activity: Iterable[CanvasActivity]) -> Iterator[CanvasQuestion]:
+    for item in activity:
+        match item:
+            case CanvasQuestion():
+                yield item
+            case _:
+                pass
 
 
 def _loaded(connection: journal.Connection) -> CanvasDocument:
