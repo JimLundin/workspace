@@ -48,10 +48,11 @@ lazy from assistant.notifications import (
     spinning,
 )
 lazy from assistant.qt_ui import EventLoop, cancel, later
-lazy from assistant.toast_card import Card, Finish, Measure
+lazy from assistant.toast_card import Card, CardOwner, Finish, Measure
 lazy from assistant.ui_components.appearance import scheme
 lazy from assistant.ui_components.text import BODY, face, line_height
 lazy from automation.task import Approval
+lazy from winapi.composition import DesktopComposition
 lazy from winapi.notification_input import Region, WheelRouter
 
 prepare()
@@ -81,12 +82,12 @@ def saved_monitor(path: Path = MONITOR) -> Rect | None:
 class AgentToasts:
     __slots__ = (
         "__weakref__",
+        "_clock",
         "agent",
         "animation_timer",
         "canvas_open",
         "capacity",
         "cards",
-        "clock",
         "closed",
         "create_card",
         "desktop",
@@ -120,7 +121,7 @@ class AgentToasts:
         monitor: Rect | None = None,
         clock: Callable[[], float] = time.monotonic,
         desktop: Desktop | None = None,
-        create_card: Callable[[AgentToasts, Toast, int], Card] | None = None,
+        create_card: Callable[[CardOwner, Toast, int], Card] | None = None,
         environment: appearance.Environment | None = None,
     ) -> None:
         # One view owns cards, desktop observation and motion timer lifetimes.
@@ -128,10 +129,11 @@ class AgentToasts:
         # at construction so every card shares that ownership; tests consume the
         # same contracts.
         # Bubbles direct the person to the canvas; its opener enters here.
-        self.root, self.agent, self.canvas_open, self.clock = root, agent, open_canvas, clock
+        self.root, self.agent, self.canvas_open = root, agent, open_canvas
+        self._clock: Callable[[], float] = clock
         self.environment: appearance.Environment = appearance.Environment() if environment is None else environment
         self.desktop: Desktop = NativeDesktop() if desktop is None else desktop
-        self.create_card = Card if create_card is None else create_card
+        self.create_card: Callable[[CardOwner, Toast, int], Card] = Card if create_card is None else create_card
         self.monitor = monitor if monitor is not None else saved_monitor()
         self.session = Session()
         self.stack = Stack()
@@ -155,6 +157,25 @@ class AgentToasts:
         self.expiry_timer: QtCore.QTimer | None = None
         self.animation_timer: QtCore.QTimer | None = None
         self.pointer_timer: QtCore.QTimer | None = None
+
+    def clock(self) -> float:
+        return self._clock()
+
+    @property
+    def composition(self) -> DesktopComposition | None:
+        return self.loop.composition
+
+    def animations(self) -> bool:
+        return self.environment.animations()
+
+    def cursor_position(self) -> tuple[int, int]:
+        return self.desktop.cursor_position()
+
+    def stop_agent(self) -> None:
+        self.agent.stop()
+
+    def stop_recording(self) -> None:
+        self.agent.stop_recording()
 
     def render(self, state: Snapshot) -> None:
         if self.closed:

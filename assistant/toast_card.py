@@ -5,7 +5,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from enum import Enum, auto
 from html import escape
-from typing import TYPE_CHECKING
+from typing import Protocol
 
 lazy import shiboken6
 lazy from PySide6 import QtCore, QtWidgets
@@ -30,6 +30,7 @@ from assistant.notifications import (
     Busy,
     Content,
     Entry,
+    Key,
     Recording,
     Response,
     Settled,
@@ -86,9 +87,6 @@ from winapi.composition import DesktopComposition, Glass
 from winapi.shapes import Rect
 
 prepare()
-
-if TYPE_CHECKING:
-    from assistant.agent_toasts import AgentToasts
 
 SECTION = 4  # logical padding above and below each text region
 CANVAS_ROW = ACTION + 8  # one persistent canvas action below the text
@@ -242,6 +240,32 @@ class Measure:
     def close(self) -> None:
         self.body.close()
         self.details.close()
+
+
+class CardOwner(Protocol):
+    """What one card reads from, and asks of, the stack that owns it."""
+
+    @property
+    def scale(self) -> float: ...
+
+    @property
+    def measure(self) -> Measure: ...
+
+    @property
+    def composition(self) -> DesktopComposition | None: ...
+
+    def clock(self) -> float: ...
+    def animations(self) -> bool: ...
+    def cursor_position(self) -> tuple[int, int]: ...
+    def dismiss_card(self, key: Key) -> None: ...
+    def toggle_card(self, selected: Card, *, animate: bool) -> None: ...
+    def set_hover(self, key: Key, *, inside: bool) -> None: ...
+    def action(self, url: QtCore.QUrl) -> None: ...
+    def action_link(self, link: str) -> None: ...
+    def show_history(self) -> None: ...
+    def stop_agent(self) -> None: ...
+    def stop_recording(self) -> None: ...
+    def tick(self) -> None: ...
 
 
 class Icon(Enum):
@@ -417,6 +441,7 @@ class Card:
         "layout",
         "line_height",
         "maximum",
+        "measurement",
         "motion",
         "move",
         "order",
@@ -440,7 +465,7 @@ class Card:
 
     def __init__(
         self,
-        owner: AgentToasts,
+        owner: CardOwner,
         toast: Toast,
         width: int,
         *,
@@ -450,7 +475,11 @@ class Card:
         # Geometry and glass creation are the two native effects owned by a card;
         # injected adapters retain real widgets and the same scene lifetime.
         self.move, self.create_glass = move, _glass if glass is None else glass
-        self.owner, self.key, self.order = owner, toast.key, (0, *order_of(toast))
+        self.owner: CardOwner = owner
+        # The stack retains the shared Qt measurement lifetime; the card binds
+        # that dependency directly without reaching through its owner.
+        self.measurement: Measure = owner.measure
+        self.key, self.order = toast.key, (0, *order_of(toast))
         self.content: Content | None = None
         self.prepared: tuple[Content, int, Prepared] | None = None
         self.layout: Layout | None = None
@@ -570,9 +599,9 @@ class Card:
     def cancel(self) -> None:
         match self.content:
             case Turn(state=Working()):
-                self.owner.agent.stop()
+                self.owner.stop_agent()
             case Recording():
-                self.owner.agent.stop_recording()
+                self.owner.stop_recording()
             case _:
                 pass
 
@@ -635,7 +664,7 @@ class Card:
 
     def check_pointer(self) -> None:
         if not self.closed and self.bounds is not None:
-            x, y = self.owner.desktop.cursor_position()
+            x, y = self.owner.cursor_position()
             self.owner.set_hover(self.key, inside=self.bounds.contains(x, y))
 
     def scroll_delta(self, delta: int) -> None:
@@ -677,9 +706,10 @@ class Card:
             return
         self.finish = finish
         preference = finish.preference
-        if preference is appearance.Material.GLASS and self.layer is None and self.owner.loop.composition is not None:
+        composition = self.owner.composition
+        if preference is appearance.Material.GLASS and self.layer is None and composition is not None:
             try:
-                self.layer = self.create_glass(self.owner.loop.composition)
+                self.layer = self.create_glass(composition)
             except OSError as error:
                 log_view(f"Rounded glass unavailable; using the solid material: {error}")
         self.glass = preference is appearance.Material.GLASS and self.layer is not None
@@ -711,7 +741,7 @@ class Card:
 
     def measure(self, content: Content, width: int) -> Prepared:
         if self.prepared is None or self.prepared[0] != content or self.prepared[1] != width:
-            self.prepared = (content, width, self.owner.measure.prepare(content, width, expanded=self.expanded))
+            self.prepared = (content, width, self.measurement.prepare(content, width, expanded=self.expanded))
         return self.prepared[2]
 
     def render_heading(self, content: Content, prepared: Prepared) -> None:
@@ -729,7 +759,7 @@ class Card:
         if content == self.content and (width, maximum) == (self.width, self.maximum) and self.layout is not None:
             return
         previous = self.content
-        self.layout = self.owner.measure.layout(prepared, width, maximum)
+        self.layout = self.measurement.layout(prepared, width, maximum)
         self.content, self.width, self.maximum, self.height = content, width, maximum, self.layout.height
         user = tone(content) is Tone.USER
         self.render_heading(content, prepared)
@@ -759,7 +789,7 @@ class Card:
                 and after is not None
                 and before.identity == after.identity
                 and after.state is not StreamState.INTERRUPTED
-                and self.owner.environment.animations()
+                and self.owner.animations()
                 and not (self.finish is not None and _contrast(self.finish.preference))
             ):
                 end = units("".join(span.text for span in self.spans))

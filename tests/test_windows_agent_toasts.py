@@ -32,7 +32,7 @@ from assistant.qt_runtime import prepare
 from assistant.qt_ui import application
 from assistant.recording_state import RecordingAction, RecordingState
 from assistant.rich_text import formatted
-from assistant.toast_card import Card, Finish
+from assistant.toast_card import Card, CardOwner, Finish
 from assistant.ui_components.appearance import Scheme, Shade, SolidLook
 from assistant.ui_components.text import TextView
 from automation.presentation import Answer, Failed, ReasoningSummary, Said, StreamState, Succeeded, ToolActivity
@@ -78,7 +78,7 @@ class Notifications:
     )
 
     def __init__(
-        self, *, animated: bool, create_card: Callable[[AgentToasts, Toast, int], Card] = Card, timing: appearance.TimerResolution | None = None
+        self, *, animated: bool, create_card: Callable[[CardOwner, Toast, int], Card] = Card, timing: appearance.TimerResolution | None = None
     ) -> None:
         screen.use_physical_pixels()
         self.root = application()
@@ -159,7 +159,7 @@ class Notifications:
 
 @contextmanager
 def notifications(
-    *, animated: bool = False, create_card: Callable[[AgentToasts, Toast, int], Card] = Card, timing: appearance.TimerResolution | None = None
+    *, animated: bool = False, create_card: Callable[[CardOwner, Toast, int], Card] = Card, timing: appearance.TimerResolution | None = None
 ) -> Generator[Notifications]:
     # The user's actual pointer must not affect a deterministic expiry check.
     # Desktop observations enter through the view's explicit boundary.
@@ -729,7 +729,7 @@ def test_streaming_never_resizes_a_visible_card_for_measurement() -> None:
             moves.append((handle, bounds))
         windows.move(handle, bounds)
 
-    def create(owner: AgentToasts, toast: Toast, width: int) -> Card:
+    def create(owner: CardOwner, toast: Toast, width: int) -> Card:
         return Card(owner, toast, width, move=move)
 
     with notifications(animated=True, create_card=create) as panel:
@@ -990,7 +990,7 @@ def test_repeating_a_frame_keeps_native_geometry_stable_after_dpi_rounding() -> 
         moves.append((handle, bounds))
         windows.move(handle, bounds)
 
-    def create(owner: AgentToasts, toast: Toast, width: int) -> Card:
+    def create(owner: CardOwner, toast: Toast, width: int) -> Card:
         return Card(owner, toast, width, move=move)
 
     with notifications(animated=True, create_card=create) as panel:
@@ -1048,7 +1048,7 @@ def test_solid_and_high_contrast_materials_keep_all_content_readable() -> None:
     def unavailable(composition: DesktopComposition) -> Glass:
         raise OSError("Unavailable")
 
-    def create(owner: AgentToasts, toast: Toast, width: int) -> Card:
+    def create(owner: CardOwner, toast: Toast, width: int) -> Card:
         return Card(owner, toast, width, glass=unavailable)
 
     with notifications(create_card=create) as panel:
