@@ -515,6 +515,48 @@ def test_native_drag_and_drop_puts_an_existing_bubble_inside_another(tmp_path: P
         assert canvas.card(note.id) in canvas.visible_cards
 
 
+def test_partial_drop_and_content_expansion_keep_unrelated_native_bubbles_separate(tmp_path: Path) -> None:
+    # Defect: dropping with the pointer outside a sibling leaves overlapping
+    # pinned cards, or later expanding a pinned card covers unrelated content.
+    parent = CanvasNote("note:container", "Container")
+    peer = CanvasNote("note:neighbor", "Neighbor")
+    children = tuple(CanvasNote(f"note:child:{index}", "Child", "Evidence", parent.id) for index in range(5))
+    store = local_canvas(tmp_path)
+    seeded(
+        store,
+        CanvasDocument(
+            notes=(parent, peer, *children),
+            placements=(Placement(parent.id, 0, 64), Placement(peer.id, 520, 64)),
+            pinned=frozenset((parent.id, peer.id)),
+        ),
+    )
+    with native_canvas(store) as native:
+        canvas = native.view.panel
+        card, neighbor = canvas.card(parent.id), canvas.card(peer.id)
+        assert card is not None and neighbor is not None
+        start = canvas.canvas.mapFromScene(card.mapToScene(QtCore.QPointF(160, 25)))
+        end = canvas.canvas.mapFromScene(neighbor.mapToScene(QtCore.QPointF(-30, 25)))
+        QtTest.QTest.mousePress(canvas.canvas.viewport(), Qt.MouseButton.LeftButton, pos=start)
+        QtTest.QTest.mouseMove(canvas.canvas.viewport(), end)
+        QtTest.QTest.mouseRelease(canvas.canvas.viewport(), Qt.MouseButton.LeftButton, pos=end)
+        native.pump()
+        assert not card.sceneBoundingRect().intersects(neighbor.sceneBoundingRect())
+        assert not store.read().nesting
+        assert card.contents is not None
+        card.contents.disclosure.click()
+        native.pump()
+        assert card.contents_expanded
+        assert not card.sceneBoundingRect().intersects(neighbor.sceneBoundingRect())
+        for child in children:
+            nested = canvas.card(child.id)
+            assert nested is not None and nested in canvas.visible_cards
+            assert card.sceneBoundingRect().contains(nested.sceneBoundingRect())
+        placements = store.read().placements
+        canvas.render(native.work.state.personal)
+        native.pump()
+        assert store.read().placements == placements
+
+
 def test_selecting_a_bubble_preserves_automatic_layout_until_it_is_dragged(tmp_path: Path) -> None:
     # Defect: an ordinary selection is saved as a manual pin, preventing
     # subsequent expansion and arrangement from moving that bubble safely.

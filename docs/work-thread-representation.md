@@ -368,6 +368,13 @@ expansion and navigation preserve absolute coordinates. Child positions stay
 inside their owner; dragging out explicitly changes containment. Reparenting
 releases the moved subtree's old scope pins so they cannot pull it back.
 
+Sibling bubbles always occupy separate space. Pins prefer their saved positions,
+but conflicting pins and growing containers move below the occupied sibling with
+a gap. Collision checks use the full measured container and move its descendants
+as a block. Only an actual ancestor may surround another bubble; geometry never
+creates containment by itself. The same measured policy repairs saved positions,
+agent arrangements and released drags, and its corrected positions are saved.
+
 Gesture states, inputs and effects are frozen payload variants handled by `match`.
 Qt owns mutable graphics, pointer capture and previews in
 `work_canvas_panel.py`; the panel sends a `UserEdit` intent through `CanvasEdits` on release,

@@ -7,6 +7,7 @@ belongs to work_canvas_context; this module only places its immutable scene.
 
 from collections.abc import Iterable, Iterator
 from dataclasses import dataclass, replace
+from itertools import chain
 
 from assistant.work_canvas_context import CanvasScene, ContextGroup, descendants
 from assistant.work_canvas_model import CanvasViewState, Placement
@@ -114,12 +115,21 @@ def arranged_group(group: ContextGroup, space: LayoutSpace) -> Block:
         for block in blocks
         if block.identity in space.pinned and block.identity in space.saved
     )
-    occupied = tuple(Box(block.placements[0].x, block.placements[0].y, block.size.width, block.size.height) for block in pinned)
-    nested = pinned
-    for block in shelf((block for block in blocks if block.identity not in space.pinned or block.identity not in space.saved), max(widest, width)):
-        candidate = Placement(block.identity, block.placements[0].x + 24, block.placements[0].y + header)
+    automatic = shelf((block for block in blocks if block.identity not in space.pinned or block.identity not in space.saved), max(widest, width))
+    occupied: tuple[Box, ...] = ()
+    nested: tuple[Block, ...] = ()
+    # Pins get first choice of space, but never permission to overlap a sibling.
+    # Use each child's complete frame so its descendants move with it.
+    for block in chain(pinned, automatic):
+        candidate = block.placements[0]
+        if block.identity not in space.pinned or block.identity not in space.saved:
+            candidate = Placement(block.identity, candidate.x + 24, candidate.y + header)
         position = clear_obstacles(candidate, block.size, occupied)
-        placed = shifted(block, Placement(block.identity, position.x - block.placements[0].x, position.y - block.placements[0].y))
+        placed = (
+            block
+            if position == block.placements[0]
+            else shifted(block, Placement(block.identity, position.x - block.placements[0].x, position.y - block.placements[0].y))
+        )
         nested = (*nested, placed)
         occupied = (*occupied, Box(placed.placements[0].x, placed.placements[0].y, placed.size.width, placed.size.height))
     body_width = max((block.placements[0].x + block.size.width for block in nested), default=356)
@@ -157,22 +167,19 @@ def layout(scene: CanvasScene, state: CanvasViewState, measurements: Measurement
     anchored = pinned | frozenset(
         group.id for group in groups if any(child.id in pinned or any(item.id in pinned for item in child.pieces) for child in descendants(group))
     )
-    root_boxes = tuple(
-        Box(saved[block.identity].x, saved[block.identity].y, block.size.width, block.size.height)
-        for block in blocks
-        if block.identity in anchored and block.identity in saved
-    )
+    root_boxes: tuple[Box, ...] = ()
     x, y, bottom = 0.0, 64.0, 64.0
 
-    def block_width(block: Block) -> float:
-        return block.size.width
+    def priority(block: Block) -> tuple[bool, float]:
+        return block.identity in anchored and block.identity in saved, block.size.width
 
-    for block in sorted(blocks, key=block_width, reverse=True):
+    # Resolve anchored roots first, including conflicts between their pins.
+    # Only ancestors and their actual contents may share canvas space.
+    for block in sorted(blocks, key=priority, reverse=True):
         if x and x + block.size.width > measurements.width:
             x, y = 0.0, bottom + 64
         anchor = saved.get(block.identity, Placement(block.identity, x, y))
-        if block.identity not in anchored:
-            anchor = clear_obstacles(anchor, block.size, root_boxes)
+        anchor = clear_obstacles(anchor, block.size, root_boxes)
         placed = shifted(block, anchor)
         positions = (*positions, *placed.placements)
         frames = (*frames, *placed.frames)

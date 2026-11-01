@@ -11,8 +11,8 @@ from unittest import TestCase
 from assistant.canvas_activity import Attention, CanvasInstruction, CanvasQuestion, CanvasResearch, CanvasRun, CanvasUpdate, TaskRequest
 from assistant.work_canvas import CanvasPublication, WorkCanvas, run_prompt
 from assistant.work_canvas_connections import CanvasConnection, RelationConnection, connections
-from assistant.work_canvas_context import CanvasMode, CanvasScene, CanvasScope, context_path, project, scene_contents
-from assistant.work_canvas_layout import Box, Measurements, Size, layout
+from assistant.work_canvas_context import CanvasMode, CanvasScene, CanvasScope, context_path, project, scene_contents, visible_groups
+from assistant.work_canvas_layout import Arrangement, Box, Measurements, Size, layout
 from assistant.work_canvas_model import (
     DOCUMENT,
     CanvasCollection,
@@ -79,6 +79,35 @@ def assert_separated(state: CanvasViewState, measurements: Measurements) -> None
         Box(p.x, p.y, measurements.sizes[p.id].width, measurements.sizes[p.id].height) for p in state.placements if p.id in measurements.sizes
     )
     assert all(not one.overlaps(two) for index, one in enumerate(boxes) for two in boxes[index + 1 :])
+
+
+def assert_contained_layout(scene: CanvasScene, arranged: Arrangement, measurements: Measurements) -> None:
+    boxes = frozendict(
+        (
+            *(
+                (p.id, Box(p.x, p.y, measurements.sizes[p.id].width, measurements.sizes[p.id].height))
+                for p in arranged.state.placements
+                if p.id in measurements.sizes
+            ),
+            *((frame.identity, frame.box) for frame in arranged.frames),
+        )
+    )
+    groups = tuple(group for root in scene.groups for group in visible_groups(root))
+    siblings = (
+        tuple(boxes[item.id] for item in (*scene.groups, *scene.items)),
+        *(tuple(boxes[item.id] for item in (*group.children, *group.items)) for group in groups if group.expanded),
+    )
+    assert all(not one.overlaps(two) for row in siblings for index, one in enumerate(row) for two in row[index + 1 :])
+    for group in groups:
+        if not group.expanded:
+            continue
+        parent = boxes[group.id]
+        header = measurements.sizes[group.id].height + 32 if group.content is not None else 172
+        for item in (*group.children, *group.items):
+            child = boxes[item.id]
+            assert child.x >= parent.x + 24 and child.y >= parent.y + header
+            assert child.x + child.width <= parent.x + parent.width - 24
+            assert child.y + child.height <= parent.y + parent.height - 24
 
 
 def test_work_is_a_container_and_shared_sources_keep_one_identity_per_canvas() -> None:
@@ -248,6 +277,69 @@ def test_measured_nested_containers_separate_content_and_preserve_pins() -> None
     assert pinned in updated.state.placements
     assert_separated(updated.state, measurements)
     assert layout(scene, updated.state, measurements) == updated
+
+
+def test_conflicting_pins_separate_siblings_and_keep_nested_subtrees_inside_their_owner() -> None:
+    # Defect: two pins bypass collision checks, including a root anchored by a
+    # descendant, or repairing the collision moves a frame without its contents.
+    outer = CanvasCollection("group:outer", "Outer")
+    inner = CanvasCollection("group:inner", "Inner", parent_id=outer.id)
+    peer = CanvasCollection("group:peer", "Peer")
+    first = CanvasNote("note:first", "First", context_id=inner.id)
+    second = CanvasNote("note:second", "Second", context_id=inner.id)
+    loose = CanvasNote("note:loose", "Loose")
+    document = CanvasDocument(notes=(first, second, loose), collections=(outer, inner, peer))
+    scene = project(Catalog(), document, CanvasScope())
+    measurements = measure(scene)
+    initial = layout(scene, view_state(document, None), measurements)
+    desired = frozendict(
+        (p.id, p)
+        for p in (
+            Placement(first.id, 48, 408),
+            Placement(second.id, 48, 408),
+            Placement(peer.id, 0, 64),
+            Placement(loose.id, 0, 64),
+        )
+    )
+    state = replace(
+        initial.state,
+        placements=tuple(desired.get(p.id, p) for p in initial.state.placements),
+        pinned=frozenset(desired),
+    )
+    repaired = layout(scene, state, measurements)
+    assert repaired.state.pinned == state.pinned
+    assert next(p for p in repaired.state.placements if p.id == outer.id) == next(p for p in state.placements if p.id == outer.id)
+    assert_contained_layout(scene, repaired, measurements)
+    assert layout(scene, repaired.state, measurements) == repaired
+    restored = save_view(document, repaired.state)
+    assert context_path(first.id, Catalog(), restored) == (outer.id, inner.id, first.id)
+    assert context_path(loose.id, Catalog(), restored) == (loose.id,)
+
+
+def test_expanding_a_pinned_content_container_separates_its_full_frame_from_other_pins() -> None:
+    # Defect: collision checks use the compact heading instead of the expanded
+    # container, or content growth makes a previously safe pin cover a sibling.
+    parent = CanvasNote("note:parent", "Container")
+    peer = CanvasNote("note:peer", "Neighbor")
+    children = tuple(CanvasNote(f"note:child:{index}", "Child", context_id=parent.id) for index in range(5))
+    for pins in (frozenset((parent.id, peer.id)), frozenset((peer.id,))):
+        state = CanvasViewState(None, (Placement(parent.id, 0, 64), Placement(peer.id, 430, 64)), pins)
+        document = save_view(CanvasDocument(notes=(parent, peer, *children)), state)
+        compact = project(Catalog(), document, CanvasScope())
+        initial = layout(compact, state, measure(compact))
+        assert frozenset(initial.state.placements) == frozenset(state.placements)
+        document = toggle_expansion(save_view(document, initial.state), None, parent.id, expanded=True)
+        expanded = project(Catalog(), document, CanvasScope())
+        measurements = measure(expanded)
+        arranged = layout(expanded, view_state(document, None), measurements)
+        assert arranged.frames[0].box.width > state.placements[1].x
+        assert arranged.state.pinned == state.pinned
+        assert_contained_layout(expanded, arranged, measurements)
+        assert layout(expanded, arranged.state, measurements) == arranged
+        grown = replace(measurements, sizes=measurements.sizes | {children[0].id: Size(360, 900)})
+        resized = layout(expanded, arranged.state, grown)
+        assert_contained_layout(expanded, resized, grown)
+        assert layout(expanded, resized.state, grown) == resized
 
 
 def test_explicit_grouping_moves_visible_content_and_retains_factual_connections() -> None:
