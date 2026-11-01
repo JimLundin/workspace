@@ -29,6 +29,33 @@ def exception(root: Path, *, reason: str = "Read the optional native error code.
         )
 
 
+def process_tree(root: Path) -> None:
+    write_tree(
+        root,
+        {
+            "automation/__init__.py": "",
+            "automation/entry.py": "lazy import assistant.shared\nlazy import automation.app\n",
+            "automation/app.py": "lazy import assistant.work\n",
+            "assistant/__init__.py": "",
+            "assistant/entry.py": "lazy import assistant.shared\nlazy import assistant.desktop\n",
+            "assistant/shared.py": "",
+            "assistant/work.py": "lazy import assistant.shared\n",
+            "assistant/desktop.py": "",
+            "assistant/other.py": "",
+            "assistant/unreachable.py": "lazy import assistant.other\n",
+        },
+    )
+    with (root / "pyproject.toml").open("a", encoding="utf-8") as output:
+        output.write(
+            'desktop_only = ["assistant.desktop"]\n'
+            'work_only = ["assistant.work"]\n'
+            'shared = ["assistant", "assistant.shared"]\n'
+            '\n[tool.workspace.architecture.processes]\nwork = "automation.entry"\ndesktop = "assistant.entry"\n'
+            '\n[[tool.workspace.architecture.seams]]\nmodule = "automation.entry"\nreason = "Worker shared settings."\n'
+            '\n[[tool.workspace.architecture.seams]]\nmodule = "automation.app"\nreason = "Worker composition."\n'
+        )
+
+
 def test_recursive_inventory_excludes_dependencies_and_honors_checked_names(tmp_path: Path) -> None:
     write_tree(
         tmp_path,
@@ -125,6 +152,94 @@ def test_worker_cannot_reach_desktop_only_modules(tmp_path: Path) -> None:
     assert failure.detail == "automation.__main__ → automation.app → assistant.tools → assistant.session"
     (tmp_path / "assistant/tools.py").write_text("", encoding="utf-8")
     assert not review(tmp_path).failures
+
+
+def test_work_imports_require_exact_process_declarations_through_seams(tmp_path: Path) -> None:
+    # Defect: configured roots or composition seams hide an undeclared work
+    # import, a package declaration grants its children access, or an unrelated
+    # desktop import is mistaken for work reachability.
+    process_tree(tmp_path)
+    assert not review(tmp_path).failures
+    (tmp_path / "assistant/work.py").write_text("lazy import assistant.shared\nlazy import assistant.other\n", encoding="utf-8")
+    (failure,) = review(tmp_path).failures
+    assert failure.rule == "process-declaration" and failure.module == "automation.entry"
+    assert failure.detail.endswith("automation.entry → automation.app → assistant.work → assistant.other")
+    config = tmp_path / "pyproject.toml"
+    config.write_text(
+        config.read_text(encoding="utf-8").replace('work_only = ["assistant.work"]', 'work_only = ["assistant.work", "assistant.other"]')
+    )
+    assert not review(tmp_path).failures
+    (tmp_path / "assistant/work.py").write_text("lazy import assistant.shared\nlazy import assistant.desktop\n", encoding="utf-8")
+    config.write_text(config.read_text(encoding="utf-8").replace(', "assistant.other"', ""))
+    (failure,) = review(tmp_path).failures
+    assert failure.rule == "worker-isolation" and failure.module == "automation.entry"
+
+
+def test_desktop_imports_of_work_owners_require_shared_ownership(tmp_path: Path) -> None:
+    # Defect: a new desktop consumer loads a declared work-only owner without
+    # review, or the checker refuses the accurate shared declaration afterward.
+    process_tree(tmp_path)
+    (tmp_path / "assistant/entry.py").write_text("lazy import assistant.shared\nlazy import assistant.desktop\nlazy import assistant.work\n")
+    (failure,) = review(tmp_path).failures
+    assert failure.rule == "process-ownership" and failure.detail.endswith("assistant.entry → assistant.work")
+    config = tmp_path / "pyproject.toml"
+    config.write_text(
+        config.read_text(encoding="utf-8")
+        .replace('work_only = ["assistant.work"]', "work_only = []")
+        .replace('shared = ["assistant", "assistant.shared"]', 'shared = ["assistant", "assistant.shared", "assistant.work"]')
+    )
+    assert not review(tmp_path).failures
+
+
+def test_process_declarations_cannot_outlive_their_consumers_or_entry(tmp_path: Path) -> None:
+    # Defect: removing a consumer leaves a misleading work/shared declaration,
+    # or a missing configured entry silently disables the ownership check.
+    process_tree(tmp_path)
+    (tmp_path / "automation/app.py").write_text("lazy import assistant.shared\n")
+    (failure,) = review(tmp_path).failures
+    assert failure.rule == "stale-process" and failure.module == "assistant.work"
+    config = tmp_path / "pyproject.toml"
+    config.write_text(config.read_text(encoding="utf-8").replace('work_only = ["assistant.work"]', "work_only = []"))
+    (tmp_path / "assistant/entry.py").write_text("lazy import assistant.desktop\n")
+    (failure,) = review(tmp_path).failures
+    assert failure.rule == "stale-process" and failure.module == "assistant.shared"
+    (tmp_path / "assistant/entry.py").unlink()
+    (failure,) = review(tmp_path).failures
+    assert failure.rule == "process-entry" and failure.module == "assistant.entry"
+
+
+def test_process_declarations_reject_conflicting_or_inexact_ownership(tmp_path: Path) -> None:
+    # Defect: duplicate/conflicting declarations or package wildcards turn one
+    # reviewed owner into broader permission; omitting roots disables the rule.
+    declarations = (
+        'work_only = ["assistant.work", "assistant.work"]',
+        'work_only = ["assistant.work", "assistant.shared"]',
+        'work_only = ["assistant.work", "assistant.desktop"]',
+        'work_only = ["assistant.*"]',
+    )
+    for declaration in declarations:
+        process_tree(tmp_path)
+        config = tmp_path / "pyproject.toml"
+        config.write_text(config.read_text(encoding="utf-8").replace('work_only = ["assistant.work"]', declaration))
+        try:
+            review(tmp_path)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError("An ambiguous process declaration was accepted.")
+    process_tree(tmp_path)
+    config = tmp_path / "pyproject.toml"
+    config.write_text(
+        config.read_text(encoding="utf-8").replace(
+            '[tool.workspace.architecture.processes]\nwork = "automation.entry"\ndesktop = "assistant.entry"\n', ""
+        )
+    )
+    try:
+        review(tmp_path)
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("Process declarations without roots were accepted.")
 
 
 def test_relative_lazy_and_aliased_dynamic_imports_select_their_consumers() -> None:

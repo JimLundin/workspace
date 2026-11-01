@@ -87,11 +87,18 @@ class Report:
 
 
 @dataclass(frozen=True, slots=True)
+class Processes:
+    work: Text
+    desktop: Text
+
+
+@dataclass(frozen=True, slots=True)
 class Configuration:
     """The architecture TOML contract keeps its independent policy declarations together.
 
-    Model ownership, exact exceptions, composition seams and desktop ownership
-    enter the source review as one validated record, requiring these four fields.
+    Model ownership, exact exceptions, composition seams and process ownership
+    enter the source review as one validated record. Its seven fields describe
+    independent policies rather than one function's operational inputs.
     """
 
     models: tuple[Text, ...]
@@ -100,6 +107,10 @@ class Configuration:
     """Lower-layer modules that may import assistant modules."""
     desktop_only: tuple[Text, ...] = ()
     """Owners that the work process must never import, including through seams."""
+    work_only: tuple[Text, ...] = ()
+    shared: tuple[Text, ...] = ()
+    processes: Processes | None = None
+    """Isolated policy fixtures may omit process roots; production declares both."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -212,6 +223,13 @@ def _configuration(root: Path) -> Configuration:
             raise ValueError("Architecture exceptions require a supported rule and an exact declaration.")
     if len(frozenset(seam.module for seam in configuration.seams)) != len(configuration.seams):
         raise ValueError("Duplicate layering seam.")
+    owners = (*configuration.desktop_only, *configuration.work_only, *configuration.shared)
+    if len(frozenset(owners)) != len(owners):
+        raise ValueError("Duplicate or conflicting process ownership declaration.")
+    if any("*" in owner for owner in owners):
+        raise ValueError("Process ownership declarations require exact module names.")
+    if configuration.processes is None and (configuration.work_only or configuration.shared):
+        raise ValueError("Work and shared ownership declarations require process roots.")
     return replace(configuration, exceptions=exceptions)
 
 
@@ -224,10 +242,10 @@ LOWER_LAYERS: Final = ("automation", "winapi")
 WORKER_ENTRY: Final = "automation.__main__"
 
 
-def worker_isolation(graph: Mapping[str, frozenset[str]], desktop_only: Iterable[str]) -> Iterator[Finding]:
+def worker_isolation(graph: Mapping[str, frozenset[str]], desktop_only: Iterable[str], *, entry: str = WORKER_ENTRY) -> Iterator[Finding]:
     """Report desktop-only owners reachable from the worker, traversing composition seams."""
     restricted = frozenset(desktop_only)
-    pending: deque[tuple[str, ...]] = deque([(WORKER_ENTRY,)])
+    pending: deque[tuple[str, ...]] = deque([(entry,)])
     visited: set[str] = set()
     while pending:
         route = pending.popleft()
@@ -236,9 +254,52 @@ def worker_isolation(graph: Mapping[str, frozenset[str]], desktop_only: Iterable
             continue
         visited.add(module)
         if any(_within(module, owner) for owner in restricted):
-            yield Finding("worker-isolation", WORKER_ENTRY, "", "", 0, " → ".join(route))
+            yield Finding("worker-isolation", entry, "", "", 0, " → ".join(route))
             continue
         pending.extend((*route, target) for target in sorted(graph.get(module, frozenset())) if target not in visited)
+
+
+def _routes(graph: Mapping[str, frozenset[str]], entry: str) -> Iterator[tuple[str, ...]]:
+    """One shortest static import route per module, including package initializers."""
+    pending: deque[tuple[str, ...]] = deque([(entry,)])
+    visited: set[str] = set()
+    while pending:
+        route = pending.popleft()
+        module = route[-1]
+        if module in visited:
+            continue
+        visited.add(module)
+        yield route
+        pending.extend((*route, target) for target in sorted(graph.get(module, frozenset())) if target not in visited)
+
+
+def process_ownership(graph: Mapping[str, frozenset[str]], configuration: Configuration) -> Iterator[Finding]:
+    """Exact work/shared declarations describe both closures, regardless of seams."""
+    processes = configuration.processes
+    if processes is None:
+        return
+    missing = tuple(entry for entry in (processes.work, processes.desktop) if entry not in graph)
+    for entry in missing:
+        yield Finding("process-entry", entry, "", "", 0, "Declared process entry is absent; update its ownership declaration.")
+    if missing:
+        return
+    # Repeated membership checks and route reporting need these bounded snapshots.
+    work = tuple(_routes(graph, processes.work))
+    desktop = tuple(_routes(graph, processes.desktop))
+    work_modules = frozenset(route[-1] for route in work)
+    desktop_modules = frozenset(route[-1] for route in desktop)
+    work_only, shared = frozenset(configuration.work_only), frozenset(configuration.shared)
+    allowed = work_only | shared
+    for route in work:
+        module = route[-1]
+        if _within(module, "assistant") and module not in allowed and not any(_within(module, owner) for owner in configuration.desktop_only):
+            yield Finding("process-declaration", processes.work, "", "", 0, "Declare this work import as work_only or shared: " + " → ".join(route))
+    for route in desktop:
+        if route[-1] in work_only:
+            yield Finding("process-ownership", processes.desktop, "", "", 0, "Desktop imports a work-only module: " + " → ".join(route))
+    for module in sorted(allowed):
+        if module not in work_modules or (module in shared and module not in desktop_modules):
+            yield Finding("stale-process", module, "", "", 0, "Ownership no longer matches the process closures; update its exact declaration.")
 
 
 def layering(graph: Mapping[str, frozenset[str]], seams: Iterable[Seam]) -> Iterator[Finding]:
@@ -474,7 +535,9 @@ def review(root: Path, names: Iterable[str] | None = None, *, cache: Cache | Non
         findings.extend(observations[module].dynamic_imports)
         pending.extend((*route, target) for target in sorted(graph[module]) if target not in visited)
     findings.extend(layering(graph, configuration.seams))
-    findings.extend(worker_isolation(graph, configuration.desktop_only))
+    entry = configuration.processes.work if configuration.processes is not None else WORKER_ENTRY
+    findings.extend(worker_isolation(graph, configuration.desktop_only, entry=entry))
+    findings.extend(process_ownership(graph, configuration))
     accepted = tuple(exception for exception in exceptions if any(exception.matches(finding) for finding in findings))
     failures = [finding for finding in findings if not any(exception.matches(finding) for exception in accepted)]
     failures.extend(
