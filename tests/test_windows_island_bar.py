@@ -111,8 +111,11 @@ def test_the_island_rests_alone_and_each_capsule_acts_on_what_it_shows() -> None
         QTest.keyClick(bar.window, QtCore.Qt.Key.Key_Escape)
         bar.agent_changed(WORKING)
         assert "Comparing both sheets" in island.accessibleName()
+        stop = stop_button(bar, Key.ISLAND)
+        before = island.geometry()
         bar.hover(Key.ISLAND)
-        stop_button(bar, Key.ISLAND).click()
+        assert island.geometry() == before, "Hover changed the running agent's toolbar width."
+        stop.click()
         bar.recording_changed(RecordingState(phase="recording", seconds=125))
         bar.dictation(active=True)
         assert shown(bar) == [Key.AGENT, Key.ISLAND, Key.RECORDING]

@@ -27,8 +27,8 @@ is doing for you. Its policy decides what may change it.
 4. **Only temporary or active things sit beside the island:** the keyboard layer
    before it, the inbox after it while items wait. Nothing persistent, nothing
    decorative.
-5. **Each activity that can stop reveals Stop under the pointer.** A quick job
-   can't be stopped, so it has no Stop.
+5. **Agent work keeps Stop visible**, so hovering does not change its width.
+   Other stoppable activities reveal Stop under the pointer. A quick job has no Stop.
 6. **Each fact has one owner, and only that owner changes it.** Dictation and
    quick jobs come from the voice controller (`Desktop.busy`), the agent's phase
    from its live session (the step it is running, or the heading of its latest
@@ -38,7 +38,7 @@ is doing for you. Its policy decides what may change it.
 | Situation | Island | Beside it |
 | --- | --- | --- |
 | Rest | Time and battery, with speaker and Wi-Fi alerts before them | — |
-| Agent working | Spinner and phase lead; hovering reveals Stop | — |
+| Agent working | Spinner, phase and Stop lead | — |
 | Quick job | Pulsing dots before the time | — |
 | Meeting recording | Red dot and timer last; hovering reveals Stop | — |
 | Dictating | The live microphone and its trace; no text | Agent, job and recording, detached |

@@ -55,15 +55,19 @@ def test_alerts_charger_and_low_battery_read_in_the_resting_facts() -> None:
     assert island(full)[0].slots == ((Text("09:41"), Glyph("charger")),)
 
 
-def test_agent_work_reads_its_phase_in_the_island_and_offers_stop_under_the_pointer() -> None:
-    # Defects: the bar hides what the agent is doing, a long phase overflows, or Stop is missing.
+def test_agent_work_keeps_stop_visible_and_its_slots_stable_under_the_pointer() -> None:
+    # Defects: hover inserts Stop and shifts the bar, or a long phase overflows.
     view = island(replace(RESTING, agent=WORKING))[0]
-    assert view.slots[0] == (Spinner("Agent: Comparing both sheets"), Text("Comparing both sheets"))
+    assert view.slots[0] == (
+        Spinner("Agent: Comparing both sheets"),
+        Text("Comparing both sheets"),
+        Control("stop", "Stop agent work", Action.STOP_AGENT),
+    )
     assert "Agent: Comparing both sheets" in view.label
     long = island(replace(RESTING, agent=Agent("Reading every attachment in the budget thread", waiting=False)))[0]
     assert long.slots[0][1] == Text("Reading every attachment in…")
     hovered = island(replace(RESTING, agent=WORKING), hovered=Key.ISLAND)[0]
-    assert hovered.slots[0][-1] == Control("stop", "Stop agent work", Action.STOP_AGENT)
+    assert hovered == view
 
 
 def test_concurrent_activities_share_the_island_at_rest_each_with_its_own_indicator() -> None:
@@ -88,7 +92,8 @@ def test_dictation_takes_the_island_and_detaches_every_activity_beside_it() -> N
         (Key.INBOX, Zone.TRAIL),
     ]
     agent, job, voice = views[:3]
-    assert agent.slots == ((Spinner("Agent: Comparing both sheets"),),) and "Comparing both sheets" in agent.label
+    assert agent.slots == ((Spinner("Agent: Comparing both sheets"), Control("stop", "Stop agent work", Action.STOP_AGENT)),)
+    assert "Comparing both sheets" in agent.label
     assert job.slots == ((Marker.DOTS,),) and job.label == "Answering"
     assert voice.slots == ((Glyph("mic.fill", Tone.MICROPHONE), Marker.WAVE),) and voice.action is Action.STOP_DICTATION
 

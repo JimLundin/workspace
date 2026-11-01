@@ -11,7 +11,7 @@ The bar's policy (docs/toolbar-design.md, "What the bar shows"):
   During a moment they detach beside it as compact capsules, phase and all.
 - Only temporary or active things sit beside the island: the keyboard layer
   before it, the inbox after it while items wait. Nothing persistent.
-- Each activity that can stop reveals Stop when the pointer is over it.
+- Agent work keeps Stop visible; other stoppable activities reveal it under the pointer.
 """
 
 from dataclasses import dataclass, field
@@ -188,9 +188,9 @@ def job_label(job: Job) -> str:
             assert_never(job)
 
 
-def agent_slot(agent: Agent, *, hovered: bool, compact: bool) -> Slot:
+def agent_slot(agent: Agent, *, compact: bool) -> Slot:
     """The agent's spinner and phase; compact capsules keep the phase for their label."""
-    stop = (Control("stop", "Stop agent work", Action.STOP_AGENT),) if hovered and not agent.waiting else ()
+    stop = (Control("stop", "Stop agent work", Action.STOP_AGENT),) if not agent.waiting else ()
     phase = () if compact else (Text(elided(agent.phase, PHASE)),)
     return (Spinner("Agent: " + agent.phase), *phase, *stop)
 
@@ -254,7 +254,7 @@ def island(observed: Observed, *, hovered: Key | None = None, expanded: bool = F
     # Dictation detaches the agent; a waiting question already is the island, unless you're dictating.
     if detached and agent is not None and observed.dictating:
         tint = meaning.Tint.ATTENTION if agent.waiting else meaning.Tint.NONE
-        slot = agent_slot(agent, hovered=hovered is Key.AGENT, compact=True)
+        slot = agent_slot(agent, compact=True)
         action = Action.OPEN_QUESTION if agent.waiting else Action.OPEN_MENU
         lead += (CapsuleView(Key.AGENT, Zone.LEAD, (slot,), f"Agent · {agent.phase}", action, tint),)
     if detached and job is not None:
@@ -286,7 +286,7 @@ def centre(observed: Observed, *, hovered: Key | None) -> CapsuleView:
             Key.ISLAND, Zone.ISLAND, slots, f"An agent question needs you: {agent.phase} · open it", Action.OPEN_QUESTION, meaning.Tint.ATTENTION
         )
     leading: tuple[Slot, ...] = (
-        *((agent_slot(agent, hovered=revealed, compact=False),) if agent is not None else ()),
+        *((agent_slot(agent, compact=False),) if agent is not None else ()),
         *(((Marker.DOTS,),) if job is not None else ()),
     )
     trailing: tuple[Slot, ...] = (recording_slot(recorded, hovered=revealed),) if recorded is not None else ()
