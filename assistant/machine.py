@@ -28,7 +28,7 @@ lazy from assistant.png import encode_png
 lazy from assistant.textio import paste_text
 lazy from assistant.uia import UiRequest
 lazy from assistant.web_apps import Located, WebAppOperation
-lazy from automation.capture import AudioSource
+lazy from automation.ipc import MeetingOperation
 lazy from winapi import clipboard, inputs, screen, system, windows
 
 _EXTENDED_VKS: Final = frozenset({0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27, 0x28, 0x2C, 0x2D, 0x2E, 0x5B, 0x5D, 0x90})
@@ -47,11 +47,7 @@ class DesktopAccess(Protocol):
 class MeetingControl(Protocol):
     """Meeting capture stays with its current owner and can be reached remotely."""
 
-    def start(self, source: AudioSource = "both", title: str = "Meeting") -> None: ...
-    def stop(self) -> None: ...
-    def retry(self) -> None: ...
-    def recent(self) -> str: ...
-    def describe(self) -> str: ...
+    def request(self, operation: MeetingOperation) -> str: ...
 
 
 class BrowserControl(Protocol):
@@ -197,22 +193,10 @@ class WinMachine:
         self.background_browser: BrowserControl = Browser(BROWSER_PROFILE, source=Product.EDGE) if browser is None else browser
         self.meetings = meetings
 
-    def meeting(self, operation: str, source: str = "both", title: str = "Meeting") -> str:
+    def meeting(self, operation: MeetingOperation) -> str:
         if self.meetings is None:
             raise OSError("Meeting recording is unavailable.")
-        if operation == "start":
-            if source not in ("both", "microphone"):
-                raise OSError("Meeting source must be both or microphone.")
-            self.meetings.start("both" if source == "both" else "microphone", title)
-        elif operation == "stop":
-            self.meetings.stop()
-        elif operation == "retry":
-            self.meetings.retry()
-        elif operation == "list":
-            return self.meetings.recent()
-        elif operation != "status":
-            raise OSError("Unknown meeting action.")
-        return self.meetings.describe()
+        return self.meetings.request(operation)
 
     def browse(self, request: BrowserRequest, cancel: threading.Event) -> tuple[str, bytes | None]:
         result = self.background_browser.request(request, cancel)

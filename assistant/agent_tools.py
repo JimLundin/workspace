@@ -24,6 +24,7 @@ from winapi.shapes import Rect, Window
 lazy from assistant.browser_requests import BrowserRequest
 lazy from assistant.uia import UiRequest
 lazy from assistant.web_apps import Located, WebAppOperation
+lazy from automation.ipc import MeetingOperation
 
 _ARGUMENTS = TypeAdapter(dict[str, Json], config=ConfigDict(allow_inf_nan=False))
 
@@ -53,7 +54,7 @@ class Machine(Protocol):
         """A typed Teams, Outlook or Kanban operation in the signed-in browser."""
         ...
 
-    def meeting(self, operation: str, source: str = "both", title: str = "Meeting") -> str: ...
+    def meeting(self, operation: MeetingOperation) -> str: ...
     def move_mouse(self, x: int, y: int) -> None: ...
     def mouse_button(self, button: str, *, down: bool) -> None: ...
     def click(self, x: int, y: int, button: str, count: int) -> None:

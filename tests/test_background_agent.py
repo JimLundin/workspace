@@ -11,6 +11,7 @@ from assistant.agent_session import activity_text, message_body
 from assistant.geometry import Shot
 from assistant.llm import Settings, ToolCall
 from assistant.task_profiles import General
+from automation.ipc import MeetingCommand, StartMeeting
 from automation.json_value import Json
 from automation.presentation import ToolActivity
 from tests.fake_endpoint import fake_endpoint
@@ -19,6 +20,8 @@ from winapi.shapes import Rect
 
 
 def test_meeting_voice_commands_use_the_recording_service_without_default_approvals(tmp_path: Path) -> None:
+    # Defect: the capture seam drops the selected source/title, dispatches the
+    # wrong command, or exposes private capture arguments in live activity.
     with fake_endpoint() as endpoint:
         rig = Rig(
             endpoint,
@@ -29,8 +32,7 @@ def test_meeting_voice_commands_use_the_recording_service_without_default_approv
             work=durable(tmp_path),
         )
         rig.run("Record this meeting, check its progress, and then stop it.")
-        assert "meeting start both Private planning" in rig.machine.log
-        assert any(line.startswith("meeting stop") for line in rig.machine.log)
+        assert rig.machine.meetings == [StartMeeting("both", "Private planning"), MeetingCommand.STATUS, MeetingCommand.STOP]
         assert all("Private planning" not in activity_text(item) for item in rig.window.live if isinstance(item, ToolActivity))
         request = cast(dict[str, Json], json.loads(endpoint.received[0].body))
         specs = cast(list[dict[str, Json]], request["tools"])
@@ -38,6 +40,8 @@ def test_meeting_voice_commands_use_the_recording_service_without_default_approv
 
 
 def test_stopped_agent_cannot_start_recording_and_explicit_approval_mode_is_preserved(tmp_path: Path) -> None:
+    # Defect: typed start dispatch bypasses approval or cancellation and reaches
+    # the recording owner after the user declined or stopped the work.
     machine, cancel = FakeMachine(), threading.Event()
     agent = Agent(
         Settings("", "", "", "", "", "", "", agent_approvals=True),
@@ -48,10 +52,10 @@ def test_stopped_agent_cannot_start_recording_and_explicit_approval_mode_is_pres
         toolset=lambda agent: General(agent, feed_request=no_feed),
     )
     assert not agent.call(ToolCall("record", "meeting_start", "{}")).ok
-    assert not any(line.startswith("meeting") for line in machine.log)
+    assert machine.meetings == []
     cancel.set()
     assert not agent.call(ToolCall("stopped", "meeting_start", "{}")).ok
-    assert not any(line.startswith("meeting") for line in machine.log)
+    assert machine.meetings == []
 
 
 def test_background_tools_are_exposed_to_the_model_and_run_without_default_prompts(tmp_path: Path) -> None:

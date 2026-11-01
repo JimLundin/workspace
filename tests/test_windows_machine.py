@@ -18,7 +18,7 @@ from assistant.browser_values import PageList
 from assistant.geometry import Shot
 from assistant.machine import WinMachine
 from assistant.web_apps import TEAMS_READ, Located, TeamsPage, TeamsQuery, WebAppOperation
-from automation.capture import AudioSource
+from automation.ipc import MeetingCommand, MeetingOperation, StartMeeting
 from automation.json_value import Json
 from winapi.shapes import Rect
 
@@ -41,22 +41,10 @@ class Recording:
     __slots__ = ("calls",)
 
     def __init__(self) -> None:
-        self.calls: list[tuple[str, ...]] = []
+        self.calls: list[MeetingOperation] = []
 
-    def start(self, source: AudioSource = "both", title: str = "Meeting") -> None:
-        self.calls.append(("start", source, title))
-
-    def stop(self) -> None:
-        self.calls.append(("stop",))
-
-    def retry(self) -> None:
-        self.calls.append(("retry",))
-
-    def recent(self) -> str:
-        self.calls.append(("list",))
-        return "Saved meetings"
-
-    def describe(self) -> str:
+    def request(self, operation: MeetingOperation) -> str:
+        self.calls.append(operation)
         return "Recording owner status"
 
 
@@ -86,22 +74,25 @@ class Browser:
 
 
 def test_machine_uses_explicit_desktop_and_meeting_owners() -> None:
+    # Defect: the machine rewrites the capture operation, drops the owner's
+    # response, or fails to report an absent recording owner.
     desktop, recording = Desktop(), Recording()
     machine: Machine = WinMachine(desktop, browser=Browser(), meetings=recording)
     machine.paste_text("A prepared note")
     assert desktop.pasted == ["A prepared note"]
-    assert machine.meeting("start", "microphone", "Planning") == "Recording owner status"
-    assert machine.meeting("stop") == "Recording owner status"
-    assert machine.meeting("retry") == "Recording owner status"
-    assert machine.meeting("list") == "Saved meetings"
-    assert recording.calls == [("start", "microphone", "Planning"), ("stop",), ("retry",), ("list",)]
+    start = StartMeeting("microphone", "Planning")
+    assert machine.meeting(start) == "Recording owner status"
+    assert recording.calls[0] is start
+    assert machine.meeting(MeetingCommand.STOP) == "Recording owner status"
+    assert machine.meeting(MeetingCommand.RETRY) == "Recording owner status"
+    assert machine.meeting(MeetingCommand.LIST) == "Recording owner status"
+    assert recording.calls == [start, MeetingCommand.STOP, MeetingCommand.RETRY, MeetingCommand.LIST]
     try:
-        machine.meeting("start", "invalid", "Planning")
+        WinMachine(desktop, browser=Browser()).meeting(MeetingCommand.STATUS)
     except OSError as error:
-        assert "both or microphone" in str(error)
+        assert str(error) == "Meeting recording is unavailable."
     else:
-        raise AssertionError("Invalid capture sources must not reach the recording owner.")
-    assert len(recording.calls) == 4
+        raise AssertionError("A missing recording owner must be reported.")
 
 
 def test_machine_keeps_browser_cleanup_with_its_owner() -> None:
@@ -117,12 +108,6 @@ def test_machine_keeps_browser_cleanup_with_its_owner() -> None:
     else:
         raise AssertionError("A failed disconnect must remain visible.")
     assert browser.calls == ["request PageList(offset=0, limit=20)", "web_app page", "close"]
-    try:
-        machine.meeting("status")
-    except OSError as error:
-        assert str(error) == "Meeting recording is unavailable."
-    else:
-        raise AssertionError("A missing recording owner must be reported.")
 
 
 def test_desktop_state_reports_the_real_monitors_windows_and_foreground() -> None:

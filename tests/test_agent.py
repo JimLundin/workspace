@@ -25,6 +25,7 @@ from assistant.work_bridge_contracts import BridgeCommand
 from assistant.workspace import Workspace
 from automation.actions import Resources
 from automation.execution import ApprovalReview, WorkExecution
+from automation.ipc import MeetingOperation
 from automation.json_value import Json
 from automation.presentation import LiveMessage, Succeeded, ToolActivity, ToolStatus
 from automation.store import TaskStore
@@ -112,10 +113,11 @@ def observed(output: object) -> str:
 
 
 class FakeMachine:
-    __slots__ = ("commands", "executed", "log")
+    __slots__ = ("commands", "executed", "log", "meetings")
 
     def __init__(self) -> None:
         self.log: list[str] = []
+        self.meetings: list[MeetingOperation] = []
         self.commands: dict[str, tuple[int, str]] = {}
         self.executed: list[tuple[str, float, str | None, threading.Event | None]] = []
 
@@ -164,8 +166,8 @@ class FakeMachine:
     def close_background(self) -> None:
         pass
 
-    def meeting(self, operation: str, source: str = "both", title: str = "Meeting") -> str:
-        self.log.append(f"meeting {operation} {source} {title}")
+    def meeting(self, operation: MeetingOperation) -> str:
+        self.meetings.append(operation)
         return "Meeting state supplied."
 
     def move_mouse(self, x: int, y: int) -> None:

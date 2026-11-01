@@ -36,7 +36,6 @@ lazy from assistant.workspace import Workspace
 lazy from automation import ipc
 lazy from automation.activity import ContextSnapshot, Observation, Sample, observed
 lazy from automation.bridge import BridgeServer
-lazy from automation.capture import AudioSource
 lazy from automation.context import ContextStore, select_context
 lazy from automation.controller import ControllerSnapshot, Fault, Idle, Runner, Stopping, WorkController, Working
 lazy from automation.execution import ApprovalReview, Log
@@ -76,21 +75,6 @@ class RemoteMeetings:
         if self.current is None:
             raise OSError("No work run owns this meeting request.")
         return self.bridge.meeting(self.current.run, operation, self.current.stop)
-
-    def start(self, source: AudioSource = "both", title: str = "Meeting") -> None:
-        self.request(ipc.StartMeeting(source, title))
-
-    def stop(self) -> None:
-        self.request(ipc.MeetingCommand.STOP)
-
-    def retry(self) -> None:
-        self.request(ipc.MeetingCommand.RETRY)
-
-    def recent(self) -> str:
-        return self.request(ipc.MeetingCommand.LIST)
-
-    def describe(self) -> str:
-        return self.request(ipc.MeetingCommand.STATUS)
 
 
 class DesktopContext:

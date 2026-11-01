@@ -2,7 +2,7 @@
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Annotated, Final, Literal
+from typing import Annotated, Final, assert_never
 
 from pydantic import ConfigDict, Field, TypeAdapter
 
@@ -27,7 +27,9 @@ from assistant.llm import ToolSpec
 from assistant.meeting_execution import MeetingRun, encoded, verified_mail
 from assistant.meeting_followup import FOLLOWUP_CLAIMS, MAX_MODEL_BYTES, FollowupClaims
 from automation.actions import Change, Evidence, Observation, target
+from automation.capture import AudioSource
 from automation.execution import ProofRule
+from automation.ipc import MeetingCommand, MeetingOperation, StartMeeting
 from automation.json_value import Json
 
 _VALUE = TypeAdapter(Json, config=ConfigDict(allow_inf_nan=False))
@@ -38,7 +40,7 @@ _STRICT: Final = ConfigDict(extra="forbid", strict=True)
 class CaptureArguments:
     """meeting_start's source and title; the other capture tools take neither."""
 
-    source: Literal["both", "microphone"] = "both"
+    source: AudioSource = "both"
     title: str = "Meeting"
     __pydantic_config__ = ConfigDict(strict=True)
 
@@ -168,6 +170,22 @@ def _capture_tool(spec: ToolSpec, run: Callable[[Args, CaptureArguments], Output
             raise ValueError(f"The meeting tool {spec.name} has no classification.")
 
 
+def _operation(name: str, request: CaptureArguments) -> MeetingOperation:
+    match name:
+        case "meeting_start":
+            return StartMeeting(request.source, request.title)
+        case "meeting_stop":
+            return MeetingCommand.STOP
+        case "meeting_retry":
+            return MeetingCommand.RETRY
+        case "meeting_list":
+            return MeetingCommand.LIST
+        case "meeting_status":
+            return MeetingCommand.STATUS
+        case _:
+            raise ValueError(f"The meeting tool {name} has no operation.")
+
+
 class MeetingCapture:
     __slots__ = ("session",)
 
@@ -178,12 +196,16 @@ class MeetingCapture:
         return tuple(_capture_tool(spec, self.capture) for spec in CAPTURE_SPECS)
 
     def capture(self, args: Args, request: CaptureArguments) -> Output:
-        operation = args.tool.removeprefix("meeting_")
-        if operation == "start" and not self.session.approve(
-            args.operation, "Record this meeting?", "Microphone and selected computer audio until Stop."
-        ):
-            return Output(DECLINED, ok=False)
-        return self.session.effect(args.operation, lambda: Output(self.session.machine.meeting(operation, request.source, request.title)))
+        operation = _operation(args.tool, request)
+        match operation:
+            case StartMeeting():
+                if not self.session.approve(args.operation, "Record this meeting?", "Microphone and selected computer audio until Stop."):
+                    return Output(DECLINED, ok=False)
+            case MeetingCommand():
+                pass
+            case _:
+                assert_never(operation)
+        return self.session.effect(args.operation, lambda: Output(self.session.machine.meeting(operation)))
 
 
 # The operations a follow-up run records describe what its handlers resolved:
