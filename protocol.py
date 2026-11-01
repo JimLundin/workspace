@@ -15,6 +15,9 @@ LAYOUT_MAGIC: Final = 0x4D49_5250
 MAGIC: Final = 0x4D49_524F
 """Tags input the workspace sends, so the layout's hook lets it through untouched."""
 
+SWITCHER_TITLE: Final = "Workspace window switcher"
+"""The assistant's window switcher; the layout passes Esc, Enter and Tab to it while it has focus."""
+
 
 _WM_APP: Final = 0x8000
 WM_REQUEST: Final = _WM_APP + 1

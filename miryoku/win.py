@@ -20,6 +20,7 @@ from miryoku.layout import ESCAPE, SLOTS, TAPPING_TERM_MS, VOICE_KEYS, Key, Mod,
 from protocol import (
     LAYOUT_MAGIC,
     MAGIC,
+    SWITCHER_TITLE,
     WM_INDICATOR,
     WM_KEY_STATE,
     WM_LAYOUT_STATE,
@@ -451,7 +452,7 @@ class Keyboard:
             return False
         foreground = self.platform.foreground()
         if foreground != self.foreground:
-            self.picker_active = self.platform.title(foreground) == "Workspace window switcher"
+            self.picker_active = self.platform.title(foreground) == SWITCHER_TITLE
         pointer = self.platform.cursor_position()
         if foreground != self.foreground or pointer != self.pointer or key.flags & inputs.LLKHF_EXTENDED or key.extra == MAGIC:
             self.engine.typed = ""

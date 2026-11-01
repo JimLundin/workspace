@@ -42,6 +42,7 @@ from miryoku.win import Keyboard, WinHost, release_keyboard
 from protocol import (
     LAYOUT_MAGIC,
     MAGIC,
+    SWITCHER_TITLE,
     WM_INDICATOR,
     WM_KEY_STATE,
     WM_LAYOUT_STATE,
@@ -312,7 +313,7 @@ def test_physical_arrows_navigate_apps_and_release_cleanly_after_the_thumb() -> 
 
 def test_picker_enter_release_passes_after_the_selected_window_takes_focus() -> None:
     driver = KeyboardFixture()
-    driver.current_title = "Workspace window switcher"
+    driver.current_title = SWITCHER_TITLE
     with observed_keyboard(platform=driver) as (keyboard, messages):
         keyboard.foreground = 0
         enter = inputs.KeyEvent(0x0D, 0x1C, 0, 0, 0)

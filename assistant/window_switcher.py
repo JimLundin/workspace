@@ -11,6 +11,7 @@ from assistant.qt_runtime import prepare
 from assistant.ui_components import typeface
 from assistant.ui_components.appearance import GLASS_ACCENT, Shade, Tokens, scheme, tokens
 from assistant.ui_components.widgets import column, glyph, row, surface_style, window_style
+from protocol import SWITCHER_TITLE
 
 prepare()
 
@@ -106,7 +107,7 @@ class WindowSwitcher(QtWidgets.QDialog):
         self.windows = tuple(windows)
         self.focus_window = focus
         theme = tokens(scheme())
-        self.setWindowTitle("Workspace window switcher")
+        self.setWindowTitle(SWITCHER_TITLE)
         self.setWindowFlags(Qt.WindowType.Tool | Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint)
         self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
