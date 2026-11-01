@@ -19,7 +19,7 @@ lazy from PySide6.QtWidgets import QLabel, QWidget
 from assistant.feed_origin import App, Origin
 from assistant.qt_runtime import prepare
 from assistant.ui_components import typeface
-from assistant.ui_components.appearance import GLASS_ACCENT, Scheme, Shade, brand, tokens
+from assistant.ui_components.appearance import GLASS_ACCENT, Rim, Scheme, Shade, brand, rim_stops, tokens
 from assistant.ui_components.text import BODY, META, TextInk, color, contrast_ink, face, text_ink
 from assistant.vector_icons import icon
 from winapi import appearance
@@ -47,7 +47,7 @@ class Glass:
     """Composition draws the veil; Qt paints the rim light and an invisible hit fill."""
 
     veil: Shade
-    rim: tuple[Shade, Shade, Shade]  # upper-leading, the long middle, the trailing foot
+    rim: Rim
 
 
 @dataclass(frozen=True, slots=True)
@@ -101,24 +101,23 @@ def look(preference: appearance.Preference, scheme: Scheme) -> Look:
         return Look(Solid(Shade(theme.solid), theme.solid_edge), text_ink(theme), controls, theme.thumb)
     match scheme:
         case Scheme.DARK:
-            glass = Glass(Shade("#222226", 0.64), (Shade("#ffffff", 0.55), Shade("#ffffff", 0.06), Shade("#ffffff", 0.22)))
+            glass = Glass(Shade("#222226", 0.64), Rim(0.55, 0.06, 0.22))
         case Scheme.LIGHT:
-            glass = Glass(Shade("#fafafc", 0.66), (Shade("#ffffff", 0.95), Shade("#ffffff", 0.16), Shade("#ffffff", 0.42)))
+            glass = Glass(Shade("#fafafc", 0.66), Rim(0.95, 0.16, 0.42))
         case _:
             assert_never(scheme)
     return Look(glass, text_ink(theme), controls, theme.thumb)
 
 
-def _rim(bounds: QRectF, rim: tuple[Shade, Shade, Shade]) -> QLinearGradient:
+def _rim(bounds: QRectF, rim: Rim) -> QLinearGradient:
     """CSS's 160deg gradient: brightest where light catches the upper-leading curve."""
     angle = math.radians(160)
     dx, dy = math.sin(angle), -math.cos(angle)
     half = (abs(bounds.width() * dx) + abs(bounds.height() * dy)) / 2
     center = bounds.center()
     gradient = QLinearGradient(center - QPointF(dx * half, dy * half), center + QPointF(dx * half, dy * half))
-    high, low, end = rim
-    for stop, shade in ((0.0, high), (0.34, low), (0.72, low), (1.0, end)):
-        gradient.setColorAt(stop, color(shade))
+    for stop in rim_stops(rim):
+        gradient.setColorAt(stop.offset, color(Shade(stop.color, stop.opacity)))
     return gradient
 
 

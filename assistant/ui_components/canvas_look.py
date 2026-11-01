@@ -17,7 +17,7 @@ lazy from PySide6.QtCore import Qt
 from assistant.feed_origin import App, Origin
 from assistant.qt_runtime import prepare
 from assistant.ui_components import text
-from assistant.ui_components.appearance import ATTENTION, GLASS_ACCENT, Scheme, Shade, Tokens, brand
+from assistant.ui_components.appearance import ATTENTION, GLASS_ACCENT, Lettering, Rim, Scheme, Shade, Tokens, brand, lettering, rim_stops
 from assistant.ui_components.meaning import Tint
 from assistant.vector_icons import icon
 
@@ -232,23 +232,13 @@ def paint_badges(painter: QtGui.QPainter, origins: tuple[Origin, ...], at: QtCor
     painter.restore()
 
 
-@dataclass(frozen=True, slots=True)
-class GlassInk:
-    """Monochrome ink on glass, and its control fills under the pointer."""
-
-    ink: Shade
-    quiet: Shade
-    hover: Shade
-    press: Shade
-
-
-def glass_ink(theme: Tokens, tint: Tint) -> GlassInk:
+def glass_ink(theme: Tokens, tint: Tint) -> Lettering:
     match tint:
         case Tint.ATTENTION:
             white = "#ffffff"
-            return GlassInk(Shade(white, 0.96), Shade(white, 0.8), Shade(white, 0.16), Shade(white, 0.26))
+            return Lettering(Shade(white, 0.96), Shade(white, 0.8), Shade(white, 0.16), Shade(white, 0.26))
         case Tint.NONE:
-            return GlassInk(theme.ink, theme.ink2, theme.hover, theme.press)
+            return lettering(theme)
         case _:
             assert_never(tint)
 
@@ -269,18 +259,20 @@ def paint_glass(painter: QtGui.QPainter, bounds: QtCore.QRectF, theme: Tokens, t
         )
     match tint:
         case Tint.ATTENTION:
-            veil, rim = Shade(ATTENTION, 0.94), (0.55, 0.06, 0.10)
+            veil, rim = Shade(ATTENTION, 0.94), Rim(0.55, 0.06, 0.10)
         case Tint.NONE:
-            veil, rim = (Shade("#1e1e22", 0.84), (0.55, 0.06, 0.22)) if dark else (Shade("#fbfbfd", 0.86), (0.95, 0.16, 0.42))
+            veil, rim = (Shade("#1e1e22", 0.84), Rim(0.55, 0.06, 0.22)) if dark else (Shade("#fbfbfd", 0.86), Rim(0.95, 0.16, 0.42))
         case _:
             assert_never(tint)
     painter.fillPath(rounded(bounds, corner), text.color(veil))
     painter.setPen(QtGui.QPen(QtGui.QColor(0, 0, 0, 115 if dark else 26), 0.5))
     painter.drawPath(rounded(bounds.adjusted(-0.25, -0.25, 0.25, 0.25), corner + 0.25))
-    high, low, end = rim
     gradient = QtGui.QLinearGradient(bounds.topLeft(), bounds.bottomRight())
-    for stop, alpha in ((0, high), (0.34, low), (0.72, low), (1, end)):
-        gradient.setColorAt(stop, QtGui.QColor(255, 255, 255, round(alpha * 255)))
+    for stop in rim_stops(rim):
+        # The canvas owns this uncached native colour and retains its eight-bit rim alpha.
+        shade = text.color(Shade(stop.color))
+        shade.setAlpha(round(stop.opacity * 255))
+        gradient.setColorAt(stop.offset, shade)
     painter.setPen(QtGui.QPen(QtGui.QBrush(gradient), 1))
     painter.drawPath(rounded(bounds.adjusted(0.5, 0.5, -0.5, -0.5), corner - 0.5))
     painter.restore()

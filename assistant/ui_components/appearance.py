@@ -232,15 +232,23 @@ class SolidLook:
 type Look = GlassLook | SolidLook
 
 
-def _lettering(ink: str, *, dark: bool) -> Lettering:
-    return Lettering(
-        Shade(ink, 0.94 if dark else 0.86), Shade(ink, 0.58 if dark else 0.54), Shade(ink, 0.08 if dark else 0.06), Shade(ink, 0.14 if dark else 0.10)
-    )
+def lettering(theme: Tokens) -> Lettering:
+    """The surface's text and pointer fills come from its scheme's tokens."""
+    return Lettering(theme.ink, theme.ink2, theme.hover, theme.press)
 
 
-def _rim(high: float, low: float, end: float) -> tuple[Stop, ...]:
+@dataclass(frozen=True, slots=True)
+class Rim:
+    """Rim light at the upper-leading curve, middle and trailing foot."""
+
+    high: float
+    low: float
+    end: float
+
+
+def rim_stops(rim: Rim) -> tuple[Stop, ...]:
     """Brightest where light catches the upper-leading curve, a softer return at the trailing foot."""
-    return (Stop(0, "#ffffff", high), Stop(0.34, "#ffffff", low), Stop(0.72, "#ffffff", low), Stop(1, "#ffffff", end))
+    return (Stop(0, "#ffffff", rim.high), Stop(0.34, "#ffffff", rim.low), Stop(0.72, "#ffffff", rim.low), Stop(1, "#ffffff", rim.end))
 
 
 @lru_cache(maxsize=32)  # Every frame asks again for each capsule; the answers are a handful of values.
@@ -254,9 +262,9 @@ def look(preference: appearance.Preference, frost: appearance.Frost, tint: Tint)
         case appearance.Material.SOLID:
             match tint:
                 case Tint.ATTENTION:
-                    return SolidLook(Shade(ATTENTION), Shade("#ffffff", 0.18), _lettering("#ffffff", dark=True))
+                    return SolidLook(Shade(ATTENTION), Shade("#ffffff", 0.18), lettering(tokens(Scheme.DARK)))
                 case Tint.NONE:
-                    return SolidLook(Shade("#26262a"), Shade("#ffffff", 0.07), _lettering("#ffffff", dark=True))
+                    return SolidLook(Shade("#26262a"), Shade("#ffffff", 0.07), lettering(tokens(Scheme.DARK)))
                 case _:
                     assert_never(tint)
         case appearance.Material.GLASS:
@@ -267,19 +275,19 @@ def look(preference: appearance.Preference, frost: appearance.Frost, tint: Tint)
     shadow = 0.14 if bright else 0.36
     match tint:
         case Tint.ATTENTION:
-            return GlassLook(Veil(ATTENTION, 0.9, _rim(0.55, 0.06, 0.10), shadow), _lettering("#ffffff", dark=True))
+            return GlassLook(Veil(ATTENTION, 0.9, rim_stops(Rim(0.55, 0.06, 0.10)), shadow), lettering(tokens(Scheme.DARK)))
         case Tint.NONE:
             pass
         case _:
             assert_never(tint)
     match frost:
         case appearance.Frost.BRIGHT:
-            return GlassLook(Veil("#ffffff", 0.2, _rim(0.95, 0.16, 0.42), shadow), _lettering("#000000", dark=False))
+            return GlassLook(Veil("#ffffff", 0.2, rim_stops(Rim(0.95, 0.16, 0.42)), shadow), lettering(tokens(Scheme.LIGHT)))
         case appearance.Frost.LIGHT:
-            return GlassLook(Veil("#1c1c20", 0.26, _rim(0.55, 0.06, 0.22), shadow), _lettering("#ffffff", dark=True))
+            return GlassLook(Veil("#1c1c20", 0.26, rim_stops(Rim(0.55, 0.06, 0.22)), shadow), lettering(tokens(Scheme.DARK)))
         case appearance.Frost.SMOKED:
             # A mixed desktop needs a heavier veil to keep small text legible.
-            return GlassLook(Veil("#1c1c20", 0.62, _rim(0.55, 0.06, 0.22), shadow), _lettering("#ffffff", dark=True))
+            return GlassLook(Veil("#1c1c20", 0.62, rim_stops(Rim(0.55, 0.06, 0.22)), shadow), lettering(tokens(Scheme.DARK)))
         case _:
             assert_never(frost)
 
