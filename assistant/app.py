@@ -55,6 +55,7 @@ lazy from assistant.overlay import OverlayState, load_enabled, save_enabled
 lazy from assistant.personal_work_model import Correlator
 lazy from assistant.personal_work_service import PersonalWork
 lazy from assistant.personal_work_sources import BrowserSources
+lazy from assistant.personal_work_tools import source_request
 lazy from assistant.recording_state import RecordingAction, RecordingState
 lazy from assistant.report import write_report
 lazy from assistant.state_store import windows_store
@@ -611,14 +612,7 @@ class AssistantApp:
                 if source.kind in (SourceKind.DOCUMENT, SourceKind.WEB_PAGE):
                     self.ui.open_reference(source.url)
                     return
-                self.agent.start(
-                    f"Open in {source.kind.value.capitalize()}: {source.title}\n"
-                    f"Show this exact original source in the user's browser. Application: {source.kind.value}; "
-                    f"source identity: {source.identity}; observed URL: {source.url}. "
-                    "Use browser_tabs to find the signed-in page and the dedicated app tools to select its exact identity, "
-                    "then show the page. If it isn't rendered, search or navigate using its observed title/URL and verify "
-                    "the identity before opening. Preserve existing drafts. This request only opens the source."
-                )
+                self.agent.start(source_request(source))
             case _:
                 self.agent.command(command)
 

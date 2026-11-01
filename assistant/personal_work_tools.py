@@ -26,6 +26,7 @@ from automation.personal_work import (
     UnlinkWork,
     WorkRefused,
     WorkSaved,
+    WorkSource,
 )
 from automation.task import ActionNotApplied, ActionUncertain, ActionVerified
 
@@ -98,6 +99,18 @@ SPECS: Final = (
         UnlinkWork,
     ),
 )
+
+
+def source_request(source: WorkSource) -> str:
+    """Open the observed original source without authorizing an external edit."""
+    return (
+        f"Open in {source.kind.value.capitalize()}: {source.title}\n"
+        f"Show this exact original source in the user's browser. Application: {source.kind.value}; "
+        f"source identity: {source.identity}; observed URL: {source.url}. "
+        "Use browser_tabs to find the signed-in page and the dedicated app tools to select its exact identity, "
+        "then show the page. If it isn't rendered, search or navigate using its observed title/URL and verify "
+        "the identity before opening. Preserve existing drafts. This request only opens the source."
+    )
 
 
 def validated(tool: str, arguments: dict[str, Json]) -> PersonalRequest:
