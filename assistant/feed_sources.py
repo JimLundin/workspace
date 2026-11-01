@@ -1,7 +1,7 @@
 """Feed sources: each variant owns its key, origin, pending rule and triage evidence.
 
-Observer reports join Teams work and Windows notices before the pending listing.
-Routine arrivals stay quiet: triage assesses the joined feed, never a floating card.
+The pending feed retains each observer's latest report and derives one listing.
+Routine arrivals stay quiet: triage assesses pending work, never a floating card.
 """
 
 import hashlib
@@ -28,6 +28,7 @@ from assistant.communications import (
     UpdateKind,
     WindowsNotice,
     chat_tickets,
+    update_fingerprint,
     update_order,
 )
 from assistant.feed_origin import App, Origin, application
@@ -38,12 +39,11 @@ _TEAMS = Origin(App.TEAMS, App.TEAMS.value)
 
 
 @dataclass(frozen=True, slots=True)
-class FeedObservation:
-    """The latest report from each observer; `communications` joins Teams work and notices under one filter."""
+class PendingFeed:
+    """Each observer's latest report; consumers list sources from it, never from one observer."""
 
     teams: Feed = field(default_factory=Feed)
     notices: Notices = field(default_factory=Notices)
-    communications: Feed = field(default_factory=Feed)
 
 
 @dataclass(frozen=True, slots=True)
@@ -59,25 +59,22 @@ class NoticesObserved:
 type FeedUpdate = TeamsObserved | NoticesObserved
 
 
-def joined(feed: Feed, notices: Notices) -> Feed:
-    """The pending feed every consumer reads: Teams work plus Windows notices under one filter."""
-    return replace(
-        feed,
-        updates=tuple(sorted((*feed.updates, *notices.updates), key=update_order)),
-        handled=(*feed.handled, *notices.handled),
-        notification_filter=notices.filter,
-    )
-
-
-def observe(observation: FeedObservation, update: FeedUpdate) -> FeedObservation:
+def observe(feed: PendingFeed, update: FeedUpdate) -> PendingFeed:
     match update:
         case TeamsObserved(feed=teams):
-            observation = replace(observation, teams=teams)
+            return replace(feed, teams=teams)
         case NoticesObserved(notices=notices):
-            observation = replace(observation, notices=notices)
+            return replace(feed, notices=notices)
         case _:
             assert_never(update)
-    return replace(observation, communications=joined(observation.teams, observation.notices))
+
+
+def needs_attention(feed: PendingFeed, update: Update) -> bool:
+    """Unhandled at this revision and not hidden by the notices' filter."""
+    key, revision = update.key, update_fingerprint(update)
+    return not any(
+        mark.key == key and mark.fingerprint == revision for mark in chain(feed.teams.handled, feed.notices.handled)
+    ) and not feed.notices.filter.hides(update)
 
 
 class SourceKind(Enum):
@@ -270,21 +267,21 @@ def _captured(source: SourceKey, at: Origin, excerpt: Excerpt) -> Candidate:
     )
 
 
-def listed(feed: Feed) -> Iterator[FeedSource]:
+def listed(feed: PendingFeed) -> Iterator[FeedSource]:
     """The feed's pending sources in display order.
 
     Filtered notices stay out of pending work without being handled. Replies remain
     listed after delivery, so the person sees each outcome before it retires.
     """
-    for ticket in chat_tickets(feed):
-        yield ChatTicketSource(ticket, feed.conversation(ticket.conversation))
-    for update in feed.updates:
-        if feed.needs_attention(update):
+    for ticket in chat_tickets(feed.teams):
+        yield ChatTicketSource(ticket, feed.teams.conversation(ticket.conversation))
+    for update in sorted(chain(feed.teams.updates, feed.notices.updates), key=update_order):
+        if needs_attention(feed, update):
             yield UpdateSource(update)
-    yield from map(ReplySource, feed.replies)
+    yield from map(ReplySource, feed.teams.replies)
 
 
-def triage_evidence(feed: Feed) -> tuple[Candidate, ...]:
+def triage_evidence(feed: PendingFeed) -> tuple[Candidate, ...]:
     return tuple(chain.from_iterable(map(evidence, listed(feed))))
 
 

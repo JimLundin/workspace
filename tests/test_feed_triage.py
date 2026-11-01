@@ -17,7 +17,7 @@ from assistant.feed_contracts import (
     ReviseProposal,
     SaveRule,
 )
-from assistant.feed_sources import Excerpt, triage_evidence
+from assistant.feed_sources import Excerpt, PendingFeed, triage_evidence
 from assistant.feed_triage import (
     Assessment,
     Board,
@@ -65,7 +65,7 @@ def test_reactions_are_counted_quietly_and_never_assessed_as_work() -> None:
         messages=(Message("budget", "one", "Anna", "Can you review the budget?", 1, 1),),
         updates=(Update(TeamsActivity("reaction"), "Anna liked a message", "👍", "Teams", 2, UpdateKind.REACTION),),
     )
-    candidates = triage_evidence(feed)
+    candidates = triage_evidence(PendingFeed(feed))
     board = reconcile(Board(enabled=True), candidates)
     batch = unassessed(board, candidates)
     assert len(batch) == 1 and board.reactions == 1

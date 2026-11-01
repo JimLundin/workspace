@@ -23,6 +23,7 @@ from assistant.communications import (
     updates_observed,
 )
 from assistant.communications_browser import TeamsWeb, activity_observation
+from assistant.feed_sources import PendingFeed, needs_attention
 from assistant.web_apps import ActivityItem, ActivityPage
 from automation.json_value import Json
 from tests.teams_fixture import Browser
@@ -97,10 +98,10 @@ def test_activity_repeats_replace_one_ticket_and_handled_items_can_be_reopened()
     done = handle(feed, (Acknowledgement(update.key, update_fingerprint(update)),))
     repeated = updates_observed(done, (replace(update, created_at=20),))
     assert len(repeated.updates) == 1 and repeated.updates[0].created_at == 10
-    assert not repeated.pending_update(repeated.updates[0])
-    assert reopen(repeated, update.key).pending_update(update)
+    assert not needs_attention(PendingFeed(repeated), repeated.updates[0])
+    assert needs_attention(PendingFeed(reopen(repeated, update.key)), update)
     edited = updates_observed(done, (replace(update, text="Changed context"),))
-    assert edited.pending_update(edited.updates[0])
+    assert needs_attention(PendingFeed(edited), edited.updates[0])
 
 
 def test_an_undated_activity_keeps_its_visible_date_hint_or_stays_unknown() -> None:

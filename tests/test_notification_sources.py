@@ -3,9 +3,9 @@
 from dataclasses import replace
 from pathlib import Path
 
-from assistant.communications import Feed, update_fingerprint
+from assistant.communications import update_fingerprint
 from assistant.communications_state import StoredAcknowledgement
-from assistant.feed_sources import joined
+from assistant.feed_sources import PendingFeed, needs_attention
 from assistant.notification_sources import NOTIFICATION_STATE, NotificationSources, NotificationState, notice_update
 from assistant.state_store import SavedState
 from tests.test_communications_service import LocalCipher
@@ -26,15 +26,16 @@ def test_loaded_attention_choices_survive_observations_and_only_handle_the_saved
     assert notices.observe(Observed((notice, hidden)))
     assert not notices.observe(Observed((notice, hidden)))
     assert not notices.observe(Observed(()))
-    feed = joined(Feed(), notices.state)
-    assert feed.updates == (captured, notice_update(hidden))
-    assert not feed.needs_attention(captured)
-    assert feed.pending_update(notice_update(hidden)) and not feed.needs_attention(notice_update(hidden))
+    feed = PendingFeed(notices=notices.state)
+    assert feed.notices.updates == (captured, notice_update(hidden))
+    assert not needs_attention(feed, captured)
+    assert all(mark.key != notice_update(hidden).key for mark in feed.notices.handled)
+    assert not needs_attention(feed, notice_update(hidden))
 
     revised = replace(notice, body="Review the revised meeting")
     assert notices.observe(Observed((revised,)))
-    feed = joined(Feed(), notices.state)
-    assert feed.updates == (notice_update(revised), notice_update(hidden))
-    assert feed.needs_attention(notice_update(revised))
-    assert feed.notification_filter.hidden == frozenset({"Security"})
+    feed = PendingFeed(notices=notices.state)
+    assert feed.notices.updates == (notice_update(revised), notice_update(hidden))
+    assert needs_attention(feed, notice_update(revised))
+    assert notices.state.filter.hidden == frozenset({"Security"})
     assert store.read() == saved

@@ -8,7 +8,7 @@ from datetime import UTC, datetime
 from itertools import chain, islice
 from typing import Protocol, assert_never
 
-from assistant.communications import Feed, SourceDate, SourceDateHint, SourceDateStatus
+from assistant.communications import SourceDate, SourceDateHint, SourceDateStatus
 from assistant.feed_contracts import (
     SOLUTION_CONTEXT,
     BoardEdit,
@@ -28,7 +28,7 @@ from assistant.feed_contracts import (
     StoredBoard,
 )
 from assistant.feed_history import Decision, Handoff
-from assistant.feed_sources import Candidate, triage_evidence
+from assistant.feed_sources import Candidate, PendingFeed, triage_evidence
 from assistant.feed_triage import (
     INSTRUCTIONS,
     Board,
@@ -154,7 +154,7 @@ class Triage:
         self.submitted: set[str] = set()
         self.lock = threading.RLock()
         self.closed, self.wake = threading.Event(), threading.Event()
-        self.feed = Feed()
+        self.feed: PendingFeed = PendingFeed()
         self.candidates: tuple[Candidate, ...] = ()
         self.epoch = 0
         try:
@@ -164,9 +164,9 @@ class Triage:
         self.thread = threading.Thread(target=self.run, name="Work feed triage", daemon=True)
         self.thread.start()
 
-    def observe(self, feed: Feed) -> None:
+    def observe(self, feed: PendingFeed) -> None:
         with self.lock:
-            history_changed = self.feed.messages != feed.messages
+            history_changed = self.feed.teams.messages != feed.teams.messages
             self.feed = feed
             candidates = triage_evidence(feed)
             if candidates == self.candidates and not history_changed:
@@ -243,7 +243,7 @@ class Triage:
     def research_conversation(self, source_id: str) -> str:
         with self.lock:
             feed = self.feed
-        return conversation_context(feed, source_id)
+        return conversation_context(feed.teams, source_id)
 
     def command(self, command: FeedCommand) -> FeedResponse:
         """Answer one bridge command; a validation refusal leaves state unchanged."""

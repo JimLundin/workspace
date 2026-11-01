@@ -14,8 +14,9 @@ lazy from PySide6.QtTest import QTest
 from assistant.agent_toasts import AgentToasts
 from assistant.agent_window import AgentWindow
 from assistant.canvas_activity import SessionRequest
-from assistant.communications import Feed, WindowsNotice
+from assistant.communications import WindowsNotice
 from assistant.desktop_bar import BarActions, DesktopBar
+from assistant.feed_sources import PendingFeed
 from assistant.island_model import Agent, Job, Key
 from assistant.island_surface import TOP, Capsule
 from assistant.notification_sources import NOTIFICATION_STATE
@@ -191,7 +192,7 @@ def test_app_arrivals_reach_triage_joined_without_floating_alerts(tmp_path: Path
     # Defect: the production Ui turns app observations into floating cards, or
     # triage sees Teams work without the Windows notices it must assess.
     original_style = application().styleSheet()
-    assessed: list[Feed] = []
+    assessed: list[PendingFeed] = []
     ui = InboxUi()
     ui.configure_feed(
         SavedState(tmp_path / "notifications.bin", NOTIFICATION_STATE, cipher=LocalCipher()),
@@ -206,8 +207,8 @@ def test_app_arrivals_reach_triage_joined_without_floating_alerts(tmp_path: Path
         ui.communications_changed(communication_feed())
         ui.pump()
         assert not ui.feed.stack.toasts and not ui.feed.cards
-        assert assessed[-1].messages
-        assert any(item.source == WindowsNotice(notice.key, notice.app_id) for item in assessed[-1].updates)
+        assert assessed[-1].teams.messages
+        assert any(item.source == WindowsNotice(notice.key, notice.app_id) for item in assessed[-1].notices.updates)
     finally:
         ui.dispose()
         ui.root.setStyleSheet(original_style)

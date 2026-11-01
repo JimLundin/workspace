@@ -8,7 +8,6 @@ from assistant.communications import (
     Delivery,
     Feed,
     Message,
-    NotificationFilter,
     Reply,
     TeamsActivity,
     Update,
@@ -18,9 +17,9 @@ from assistant.feed_origin import App
 from assistant.feed_sources import (
     Attention,
     ChatTicketSource,
-    FeedObservation,
     FeedSource,
     NoticesObserved,
+    PendingFeed,
     ReplySource,
     SourceKind,
     TeamsObserved,
@@ -28,14 +27,13 @@ from assistant.feed_sources import (
     attention,
     chat_message,
     evidence,
-    joined,
     key,
     listed,
     observe,
     origin,
     triage_evidence,
 )
-from assistant.notification_sources import Notices
+from assistant.notification_sources import Notices, NotificationFilter
 from tests.communications_fixture import communication_feed
 from winapi.system_notices import NoticeKey
 
@@ -48,7 +46,7 @@ OTHER = Update(WindowsNotice(NoticeKey(3, 4), "contoso"), "Deploy", "Finished", 
 REPLY = Reply("reply", "chat", "Anna", "On it", 6)
 
 
-def test_each_report_keeps_the_others_in_the_joined_feed() -> None:
+def test_each_report_keeps_the_others_in_the_pending_feed() -> None:
     # Defect: one observer's report drops another's, or triage sees notices
     # without Teams work or a stale notification filter.
     teams = communication_feed()
@@ -56,12 +54,12 @@ def test_each_report_keeps_the_others_in_the_joined_feed() -> None:
         updates=(Update(WindowsNotice(NoticeKey(1, 2), "mail"), "Review", "Budget", "Outlook", 3),),
         filter=NotificationFilter(frozenset({"chat-app"})),
     )
-    first = observe(FeedObservation(), NoticesObserved(notices))
-    assert first.communications == joined(Feed(), notices)
+    first = observe(PendingFeed(), NoticesObserved(notices))
+    assert first == PendingFeed(notices=notices)
     second = observe(first, TeamsObserved(teams))
-    assert second == FeedObservation(teams, notices, joined(teams, notices))
+    assert second == PendingFeed(teams, notices)
     revised = Notices(handled=notices.handled, filter=NotificationFilter(frozenset()))
-    assert observe(second, NoticesObserved(revised)) == FeedObservation(teams, revised, joined(teams, revised))
+    assert observe(second, NoticesObserved(revised)) == PendingFeed(teams, revised)
 
 
 def test_each_source_variant_owns_its_attention_key_origin_and_evidence() -> None:
@@ -86,13 +84,14 @@ def test_each_source_variant_owns_its_attention_key_origin_and_evidence() -> Non
 
 def test_pending_listing_keeps_filtered_notices_unhandled_and_replies_until_they_retire() -> None:
     # Defect: filtering a notice handles it, or pending work drops a delivered reply before the person sees it.
-    feed = Feed(
-        conversations=(CHAT,),
-        followed=("chat",),
-        messages=(FIRST,),
-        updates=(MAIL, OTHER),
-        replies=(replace(REPLY, delivery=Delivery.OBSERVED),),
-        notification_filter=NotificationFilter(frozenset({"contoso"})),
+    feed = PendingFeed(
+        teams=Feed(
+            conversations=(CHAT,),
+            followed=("chat",),
+            messages=(FIRST,),
+            replies=(replace(REPLY, delivery=Delivery.OBSERVED),),
+        ),
+        notices=Notices(updates=(MAIL, OTHER), filter=NotificationFilter(frozenset({"contoso"}))),
     )
     pending = tuple(key(source) for source in listed(feed))
     # The filtered notice is visible elsewhere, never quoted to triage.
@@ -104,6 +103,6 @@ def test_chat_evidence_names_its_exact_message_for_research() -> None:
     # Defect: research resolves evidence to another message and quotes the wrong conversation's history.
     other = Message("other", "three", "Sam", "Lunch?", 3, 3)
     feed = Feed(conversations=(CHAT,), followed=("chat", "other"), messages=(FIRST, other))
-    quoted = {item.body: item.identity for item in triage_evidence(feed)}
+    quoted = {item.body: item.identity for item in triage_evidence(PendingFeed(feed))}
     assert chat_message(feed, quoted["Lunch?"]) == other and chat_message(feed, quoted["Review the figures"]) == FIRST
     assert chat_message(feed, "chat:missing") is None

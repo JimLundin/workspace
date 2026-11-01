@@ -31,7 +31,7 @@ lazy from assistant.agent_toasts import AgentToasts
 lazy from assistant.agent_window import AgentWindow
 lazy from assistant.desktop_bar import BarActions, DesktopBar
 lazy from assistant.dialogs import AnswerWindow, Job, NativePresentation, Presentation, RegionPicker, bring_forward, near_pointer
-lazy from assistant.feed_sources import FeedObservation, FeedUpdate, NoticesObserved, TeamsObserved, observe
+lazy from assistant.feed_sources import FeedUpdate, NoticesObserved, PendingFeed, TeamsObserved, observe
 lazy from assistant.icons import State
 lazy from assistant.keymap_views import KeymapOverlay, KeymapWindow
 lazy from assistant.layer_indicator import Indicator
@@ -100,7 +100,7 @@ class Views:
     canvas: Callable[[QtWidgets.QApplication, WorkWindow, CanvasEdits], CanvasWindow] = _native_canvas_view
 
 
-type Assess = Callable[[assistant.communications.Feed], None]
+type Assess = Callable[[PendingFeed], None]
 
 
 class Ui:
@@ -157,7 +157,7 @@ class Ui:
         # exists, so opening it during a held speech key starts in that state.
         self._agent_speaking: bool = False
         # Qt's thread owns the feed observation; every observer's report arrives there.
-        self._feed = FeedObservation()
+        self._feed: PendingFeed = PendingFeed()
         self._assess: Assess | None = None
         self._notifications: NotificationSources | None = None
         self._desktop: DesktopBar | None = None
@@ -453,7 +453,7 @@ class Ui:
     def _observe_feed(self, update: FeedUpdate) -> None:
         self._feed = observe(self._feed, update)
         if self._assess is not None:
-            self._assess(self._feed.communications)
+            self._assess(self._feed)
 
     def communications_changed(self, feed: assistant.communications.Feed) -> None:
         self.post(lambda _: self._observe_feed(TeamsObserved(feed)))

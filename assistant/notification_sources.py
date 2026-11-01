@@ -10,7 +10,7 @@ from assistant.communications import (
     MAX_HANDLED,
     MAX_MESSAGES,
     Acknowledgement,
-    NotificationFilter,
+    TeamsActivity,
     Update,
     WindowsNotice,
     update_order,
@@ -22,6 +22,20 @@ from winapi.system_notices import Notice, Observed
 MAX_HIDDEN_APPS = 256
 
 type AppId = Annotated[str, StringConstraints(min_length=1, max_length=512)]
+
+
+@dataclass(frozen=True, slots=True)
+class NotificationFilter:
+    """Windows apps the person keeps out of pending work; hiding never handles their notices."""
+
+    hidden: frozenset[str] = frozenset()
+
+    def hides(self, update: Update) -> bool:
+        match update.source:
+            case WindowsNotice(_, app_id):
+                return app_id in self.hidden
+            case TeamsActivity():
+                return False
 
 
 @dataclass(frozen=True, slots=True)

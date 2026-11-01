@@ -141,7 +141,7 @@ def test_failed_teams_read_confirmation_does_not_claim_native_acknowledgement(tm
     update = Update(TeamsActivity("123"), "Reaction", "Someone reacted", "Teams", 1)
     controller.feed = replace(controller.feed, updates=(update,))
     controller.command(Handle((Acknowledgement(update.key, update_fingerprint(update)),)))
-    assert not controller.feed.pending_update(update)
+    assert Acknowledgement(update.key, update_fingerprint(update)) in controller.feed.handled
     assert "could not be confirmed" in controller.feed.activity_detail
 
 

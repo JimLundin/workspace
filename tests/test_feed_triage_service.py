@@ -8,7 +8,7 @@ from pathlib import Path
 
 from assistant.communications import Feed, TeamsActivity, Update
 from assistant.feed_contracts import ChooseSolution, DismissItem, Disposition, ReadFeed, RejectProposal, SaveRule, StoredBoard
-from assistant.feed_sources import Candidate, Excerpt
+from assistant.feed_sources import Candidate, Excerpt, PendingFeed
 from assistant.feed_triage import Assessment, Board, decode, proposal_revision, saved
 from assistant.feed_triage_service import RejectedError, Triage, classify
 from assistant.llm import Settings
@@ -104,9 +104,9 @@ def test_automatic_triage_coalesces_polls_and_voice_feedback_updates_the_live_pl
     request = feed_bridge(triage)
     try:
         feed = Feed(updates=(Update(TeamsActivity("fictional"), "Budget review", "Please check the figures.", "Teams", 1),))
-        triage.observe(feed)
+        triage.observe(PendingFeed(feed))
         for _ in range(20):
-            triage.observe(feed)
+            triage.observe(PendingFeed(feed))
         assert not calls, "The model ran before coalescing completed."
         triage.advance()
         wait_until(lambda: bool(triage.board.actions))
@@ -133,7 +133,7 @@ def test_shutdown_cancels_supplied_debounce_before_calling_model(tmp_path: Path)
 
     triage = TriageFixture(MemoryStore(), model)
     try:
-        triage.observe(Feed(updates=(Update(TeamsActivity("cancelled"), "Review", "Please review.", "Teams", 1),)))
+        triage.observe(PendingFeed(Feed(updates=(Update(TeamsActivity("cancelled"), "Review", "Please review.", "Teams", 1),))))
         timeout, _release = triage.delays.get(timeout=5)
         assert timeout == 1.5
     finally:
@@ -152,7 +152,7 @@ def test_inflight_model_cannot_overwrite_new_voice_feedback(tmp_path: Path) -> N
 
     triage = TriageFixture(MemoryStore(), model)
     try:
-        triage.observe(Feed(updates=(Update(TeamsActivity("fictional"), "Review", "Please review.", "Teams", 1),)))
+        triage.observe(PendingFeed(Feed(updates=(Update(TeamsActivity("fictional"), "Review", "Please review.", "Teams", 1),))))
         triage.advance()
         assert entered.wait(5)
         triage.command(SaveRule("Ignore fictional review notices."))
@@ -188,7 +188,9 @@ def test_voice_agent_tools_read_the_curated_plan_and_save_feedback_without_loggi
     request = feed_bridge(triage)
     try:
         triage.observe(
-            Feed(updates=(Update(TeamsActivity("fictional"), "Private fictional subject", "Private fictional source body.", "Teams", 1),)),
+            PendingFeed(
+                Feed(updates=(Update(TeamsActivity("fictional"), "Private fictional subject", "Private fictional source body.", "Teams", 1),)),
+            )
         )
         triage.advance()
         wait_until(lambda: triage.board.pending == 0)
@@ -218,10 +220,10 @@ def test_stable_arrival_is_retried_alone_when_a_grouped_chat_changes_during_eval
     first = Update(TeamsActivity("changing"), "Changing chat", "First revision.", "Teams", 1)
     stable = Update(TeamsActivity("stable"), "Stable review request", "Please review.", "Teams", 2)
     try:
-        triage.observe(Feed(updates=(first, stable)))
+        triage.observe(PendingFeed(Feed(updates=(first, stable))))
         triage.advance()
         assert entered.wait(4)
-        triage.observe(Feed(updates=(replace(first, text="A new revision."), stable)))
+        triage.observe(PendingFeed(Feed(updates=(replace(first, text="A new revision."), stable))))
         release.set()
         triage.advance()
         wait_until(lambda: len(calls) >= 2)
