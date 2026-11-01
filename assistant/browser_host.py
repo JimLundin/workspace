@@ -15,7 +15,7 @@ import uuid
 from collections.abc import Generator
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Annotated, Literal
+from typing import Annotated, Literal, assert_never
 lazy import fcntl
 lazy import msvcrt
 
@@ -51,7 +51,7 @@ class Endpoint:
         try:
             with socket.create_connection(("127.0.0.1", self.port), timeout=0.5) as stream:
                 stream.settimeout(0.1)
-                stream.sendall(frame(_REQUEST.dump_json(request)))
+                stream.sendall(frame(request_bytes(request)))
                 raw = receive(stream, cancel, time.monotonic() + timeout)
         except BrowserError:
             raise
@@ -150,10 +150,42 @@ _ENDPOINT = TypeAdapter(Endpoint)
 _CREDENTIAL = TypeAdapter(Credential)
 _REQUEST = TypeAdapter[StatusRequest | ConnectRequest | ReleaseRequest | CallRequest](HostRequest)
 _REPLY = TypeAdapter[Reply](Reply)
+_STATUS_REQUEST = TypeAdapter(StatusRequest)
+_CONNECT_REQUEST = TypeAdapter(ConnectRequest)
+_RELEASE_REQUEST = TypeAdapter(ReleaseRequest)
+_CALL_REQUEST = TypeAdapter(CallRequest)
+_ANSWER = TypeAdapter(Answer)
+_REFUSAL = TypeAdapter(Refusal)
 _STATUS = TypeAdapter(HostStatus)
 _RESULT = TypeAdapter(frozendict[str, Json])
 _SESSION = TypeAdapter(TargetSession)
 _NO_RESULT: frozendict[str, Json] = frozendict()  # Connect and release reply with an empty result.
+
+
+def request_bytes(request: HostRequest) -> bytes:
+    """Serialize the exact variant: union serialization changes nested JSON booleans to integers."""
+    match request:
+        case StatusRequest():
+            return _STATUS_REQUEST.dump_json(request)
+        case ConnectRequest():
+            return _CONNECT_REQUEST.dump_json(request)
+        case ReleaseRequest():
+            return _RELEASE_REQUEST.dump_json(request)
+        case CallRequest():
+            return _CALL_REQUEST.dump_json(request)
+        case _:
+            assert_never(request)
+
+
+def reply_bytes(reply: Reply) -> bytes:
+    """Keep the browser's JSON observations intact using their concrete reply variant."""
+    match reply:
+        case Answer():
+            return _ANSWER.dump_json(reply)
+        case Refusal():
+            return _REFUSAL.dump_json(reply)
+        case _:
+            assert_never(reply)
 
 
 def sealed(data: bytes, *, opening: bool = False) -> bytes:
@@ -395,7 +427,7 @@ class Server:
             except (OSError, ValueError) as error:
                 reply = Refusal(Failure(type(error).__name__, str(error)[:1000]))
             if not cancel.is_set():
-                stream.sendall(frame(_REPLY.dump_json(reply)))
+                stream.sendall(frame(reply_bytes(reply)))
         except OSError, ValueError:
             pass
         finally:

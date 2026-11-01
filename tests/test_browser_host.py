@@ -5,6 +5,8 @@ import time
 from pathlib import Path
 from unittest import TestCase
 
+from pydantic import TypeAdapter
+
 from assistant.browser_host import ConnectRequest, Host, HostedConnection, Server, StatusRequest
 from assistant.browser_session import Attached, BrowserSession, Product, Source
 from assistant.browser_values import BrowserError, DisconnectedError, InterruptedError, NavigationContextError
@@ -16,6 +18,7 @@ class Connection:
         self.closed = 0
         self.sessions = 0
         self.calls: list[str] = []
+        self.parameters: tuple[frozendict[str, Json], ...] = ()
         self.started = threading.Event()
         self.cancelled = threading.Event()
 
@@ -29,6 +32,7 @@ class Connection:
         timeout: float = 15,
     ) -> dict[str, Json]:
         self.calls.append(method)
+        self.parameters = (*self.parameters, frozendict(params))
         if method == "Target.attachToTarget":
             self.sessions += 1
             return {"sessionId": str(self.sessions)}
@@ -43,6 +47,8 @@ class Connection:
             raise InterruptedError("Stopped")
         if method == "disconnect":
             raise DisconnectedError("Browser closed")
+        if method == "Runtime.evaluate":
+            return params
         return {"value": "observed"}
 
     def close(self) -> None:
@@ -88,6 +94,30 @@ def test_reloaded_clients_share_one_connection_and_release_only_their_sessions(t
     finally:
         server.close()
     assert opener.connection.closed == 1
+
+
+def test_host_preserves_boolean_browser_parameters_and_observations(tmp_path: Path) -> None:
+    # Defect: union serialization turns CDP's flatten/awaitPromise/returnByValue
+    # booleans into integers, which the live browser rejects as invalid parameters.
+    opener = Opener()
+    server = Server(tmp_path, Host(Product.EDGE, opener))
+    server.start()
+    try:
+        connection = client(server)
+        connection.call("Target.attachToTarget", {"targetId": "app", "flatten": True}, threading.Event())
+        assert opener.connection.parameters[-1]["flatten"] is True
+        result = connection.call(
+            "Runtime.evaluate", {"awaitPromise": True, "returnByValue": False, "nested": {"values": [True, False, 1]}}, threading.Event()
+        )
+        assert opener.connection.parameters[-1]["awaitPromise"] is True
+        assert opener.connection.parameters[-1]["returnByValue"] is False
+        assert result["awaitPromise"] is True and result["returnByValue"] is False
+        nested = TypeAdapter(dict[str, object]).validate_python(result["nested"])
+        values = TypeAdapter(tuple[object, ...]).validate_python(nested["values"])
+        assert values[0] is True and values[1] is False and values[2] == 1
+        connection.close()
+    finally:
+        server.close()
 
 
 def test_timeout_and_cancel_do_not_disconnect_the_shared_browser(tmp_path: Path) -> None:
