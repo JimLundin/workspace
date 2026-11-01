@@ -1,4 +1,4 @@
-"""Toast stack layout: measured card sizes in; heights, capacity, releases and frames out."""
+"""Toast stack layout and motion: measured sizes and timestamps in; placements and frames out."""
 
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -14,6 +14,57 @@ GAP: Final = 10
 RISE: Final = 16  # logical travel of an arriving, leaving or pushed card
 PENDING_HEIGHT: Final = 480  # logical preference for pending input
 HEIGHT: Final = 360
+MOTION_SECONDS: Final = 0.28  # Vault of Glass: motion.base
+
+
+@dataclass(frozen=True, slots=True)
+class Frame:
+    y: float
+    width: float
+    height: float
+    alpha: float
+    details: float = 0
+
+
+@dataclass(frozen=True, slots=True)
+class Motion:
+    start: Frame
+    end: Frame
+    started: float
+
+    def sample(self, now: float) -> Frame:
+        progress = max(0.0, min(1.0, (now - self.started) / MOTION_SECONDS))
+        if progress == 0:
+            return self.start
+        if progress == 1:
+            return self.end
+        amount = ease_out(progress)
+        return Frame(
+            self.start.y + (self.end.y - self.start.y) * amount,
+            self.start.width + (self.end.width - self.start.width) * amount,
+            self.start.height + (self.end.height - self.start.height) * amount,
+            self.start.alpha + (self.end.alpha - self.start.alpha) * amount,
+            self.start.details + (self.end.details - self.start.details) * amount,
+        )
+
+    def finished(self, now: float) -> bool:
+        return now >= self.started + MOTION_SECONDS
+
+
+def ease_out(progress: float) -> float:
+    """Vault of Glass's cubic-bezier(0.32, 0.72, 0, 1), without overshoot."""
+    if progress <= 0 or progress >= 1:
+        return max(0.0, min(1.0, progress))
+    low, high = 0.0, 1.0
+    for _ in range(18):
+        t = (low + high) / 2
+        x = 3 * (1 - t) ** 2 * t * 0.32 + t**3
+        if x < progress:
+            low = t
+        else:
+            high = t
+    t = (low + high) / 2
+    return 3 * (1 - t) ** 2 * t * 0.72 + 3 * (1 - t) * t**2 + t**3
 
 
 @dataclass(frozen=True, slots=True)

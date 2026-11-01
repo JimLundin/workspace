@@ -30,8 +30,6 @@ from assistant.notifications import (
     Busy,
     Content,
     Entry,
-    Frame,
-    Motion,
     Recording,
     Response,
     Settled,
@@ -49,6 +47,7 @@ from assistant.notifications import (
 )
 from assistant.qt_runtime import prepare
 from assistant.rich_text import Span
+from assistant.toast_stack import Frame, Motion
 from assistant.ui_components import bubble
 from assistant.ui_components.appearance import GlassLook, Scheme, Shade
 from assistant.ui_components.bubble import (

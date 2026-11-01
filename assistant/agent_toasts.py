@@ -16,7 +16,7 @@ lazy from PySide6.QtWidgets import QApplication
 from assistant.agent_progress import Progress, advance_progress, compact, retain_lifetimes, visible
 from assistant.canvas_session import redirect_session
 from assistant.qt_runtime import prepare
-from assistant.toast_stack import Active, Column, Measured, Retiring, Stacking, Viewport, fit, frames, reservable
+from assistant.toast_stack import Active, Column, Frame, Measured, Retiring, Stacking, Viewport, fit, frames, reservable
 from usage import DIRECTORY
 from winapi import appearance, windows
 from winapi.shapes import Rect
@@ -29,7 +29,6 @@ lazy from assistant.notifications import (
     MAX_VISIBLE,
     Content,
     Entry,
-    Frame,
     Key,
     PhaseKey,
     Recording,

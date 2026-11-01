@@ -9,10 +9,8 @@ from assistant.notifications import (
     Busy,
     Entry,
     Expires,
-    Frame,
     Held,
     Kind,
-    Motion,
     Paused,
     Recording,
     Response,
@@ -36,6 +34,7 @@ from assistant.notifications import (
     tone,
 )
 from assistant.recording_state import RecordingState
+from assistant.toast_stack import Frame, Motion
 from automation.presentation import Answer, Failed, Finished, Progress, ReasoningSummary, Said, StreamState, Succeeded, ToolActivity
 from automation.task import ApprovalDecision, TextAnswer
 from tests.agent_requests import asked, reviewed

@@ -9,9 +9,10 @@ if sys.platform != "win32":
 lazy import shiboken6
 
 from assistant.agent_toasts import AgentToasts
-from assistant.notifications import Frame, Toast
+from assistant.notifications import Toast
 from assistant.qt_runtime import prepare
 from assistant.toast_card import Card, Finish
+from assistant.toast_stack import Frame
 from tests.test_windows_agent_toasts import notifications
 from winapi import windows
 
