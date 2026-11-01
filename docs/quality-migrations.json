@@ -508,15 +508,6 @@
     {
       "key": {
         "rule": "PLR0913",
-        "path": "assistant/ui.py",
-        "scope": "Ui.work",
-        "signature": "ee3d2c64e7ec19a722e25517af2105aa56b3703f1f8996c0c094a7b2e00d18c7"
-      },
-      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
-    },
-    {
-      "key": {
-        "rule": "PLR0913",
         "path": "assistant/ui_components/widgets.py",
         "scope": "Window.__init__",
         "signature": "8de0fae46999b094bf9a4745867e8cbe7b77f2011517ef4eb86a575947badd63"

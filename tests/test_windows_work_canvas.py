@@ -325,7 +325,16 @@ def test_startup_prepared_canvas_remains_hidden_and_keeps_its_native_scene(tmp_p
     seeded(store, document)
     try:
         ui.configure_canvas(store, lambda _title, _target: None)
-        work = ui.work(lambda _command: None, reveal=False)
+        # Defect: retrieval chooses an unwired command owner, configuration can
+        # silently replace it, or retrieving the controller opens native views.
+        with unittest.TestCase().assertRaisesRegex(RuntimeError, "command owner is configured"):
+            ui.work_window()
+        ui.configure_work(lambda _command: None)
+        with unittest.TestCase().assertRaisesRegex(RuntimeError, "already configured"):
+            ui.configure_work(lambda _command: None)
+        work = ui.work_window()
+        ui.pump()
+        assert ui.current_canvas is None and ui.work_window() is work
         work.publish(WorkSnapshot(personal=PersonalView(data)))
         work.prepare()
         ui.pump()
@@ -638,7 +647,8 @@ def test_canvas_speech_instructs_the_open_canvas_and_keeps_failed_directions_for
 
     store = WorkCanvas(tmp_path / "canvas.sqlite3", queue, ui.publish_canvas, autonomous=False)
     ui.configure_canvas(store, lambda _title, _target: None)
-    work = ui.work(lambda _command: None, reveal=False)
+    ui.configure_work(lambda _command: None)
+    work = ui.work_window()
     work.show(focus=False)
     ui.pump()
     try:
@@ -913,7 +923,9 @@ def test_canvas_voice_key_feedback_follows_agent_capture_and_release(tmp_path: P
     ui.configure_canvas(local_canvas(tmp_path, ui.publish_canvas), lambda _title, _target: None)
     ui.desktop_state(State.LISTENING, agent_speaking=True)
     ui.pump()
-    work = ui.work(lambda _: None, reveal=True, focus=False)
+    ui.configure_work(lambda _: None)
+    work = ui.work_window()
+    work.show(focus=False)
     ui.pump()
     try:
         legend = ui.canvas_view.panel.voice_hint
@@ -953,7 +965,8 @@ def test_canvas_clarification_redirect_submits_context_to_the_waiting_agent(tmp_
     ui = InboxUi()
     store = local_canvas(tmp_path, ui.publish_canvas)
     ui.configure_canvas(store, lambda _title, _target: None)
-    work = ui.work(lambda _command: None, reveal=False)
+    ui.configure_work(lambda _command: None)
+    work = ui.work_window()
     agent = ui.agent(lambda: None, on_work=lambda: work.show(focus=False), reveal=False)
     ui.pump()
     agent.show(focus=False)
@@ -1002,7 +1015,9 @@ def test_canvas_spoken_reply_keeps_transcript_on_rejection_and_continue_stays_bo
     runs: list[CanvasRun] = []
     store = WorkCanvas(tmp_path / "canvas.sqlite3", runs.append, ui.publish_canvas, autonomous=False)
     ui.configure_canvas(store, lambda _title, _target: None)
-    work = ui.work(commands.append, reveal=True, focus=False)
+    ui.configure_work(commands.append)
+    work = ui.work_window()
+    work.show(focus=False)
     task = work_task(automation.task.Waiting(automation.task.Question("request", "Which owner?", "Confirm the handoff.")))
     personal = PersonalStore(tmp_path / "work.sqlite3")
     saved = personal.handle(SaveWork(WorkDefinition("Atlas", "Deploy Atlas")), 20)
@@ -1100,7 +1115,8 @@ def test_canvas_attention_reaches_the_desktop_and_redirects_to_its_bubble(tmp_pa
         assert notices == [("Current question", "question:current")]
         check_late_agent_canvas_replay(ui, store)
         assert "1 clarification needs" in ui.bar.window.capsules[Key.INBOX].accessibleName()
-        work = ui.work(lambda _command: None, reveal=False)
+        ui.configure_work(lambda _command: None)
+        work = ui.work_window()
         work.publish(snapshot)
         work.prepare()
         capsule = waiting(ui.bar)

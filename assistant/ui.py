@@ -68,6 +68,12 @@ class MeetingConnection:
     open_file: Callable[[Path], None]
 
 
+@dataclass(frozen=True, slots=True)
+class WorkConnection:
+    on_command: Callable[[WorkCommand], None]
+    on_problem: Callable[[str], None] | None
+
+
 class DesktopFactory(Protocol):
     def __call__(self, actions: BarActions, *, audio_level: Callable[[], float | None] | None = None) -> DesktopBar: ...
 
@@ -128,6 +134,7 @@ class Ui:
         "_thread",
         "_views",
         "_work",
+        "_work_connection",
         "_work_lock",
         "_work_view",
         "presentation",
@@ -157,6 +164,7 @@ class Ui:
         self._switcher: WindowSwitcher | None = None
         self._agent_lock = threading.Lock()
         self._work: WorkWindow | None = None
+        self._work_connection: WorkConnection | None = None
         self._work_view: CanvasWindow | None = None
         self._canvas: WorkCanvas | None = None
         self._canvas_notice: Callable[[str, str], None] | None = None
@@ -479,27 +487,35 @@ class Ui:
             elif threading.current_thread() is not self._thread:
                 window.publication.closed_ready.wait(timeout=3)
 
-    def work(
+    def configure_work(
         self,
         on_command: Callable[[WorkCommand], None],
         *,
         on_problem: Callable[[str], None] | None = None,
-        focus: bool = True,
-        reveal: bool = True,
-    ) -> WorkWindow:
+    ) -> None:
+        """Connect work effects once, before publishers or recovery can request its window."""
+        # The control thread configures these effects; callers on either thread
+        # may request the controller. This lock owns that one-time lifecycle.
         with self._work_lock:
+            if self._work_connection is not None:
+                raise RuntimeError("Work is already configured.")
+            self._work_connection = WorkConnection(on_command, on_problem)
+
+    def work_window(self) -> WorkWindow:
+        """Return the configured controller; native preparation and showing are explicit."""
+        with self._work_lock:
+            connection = self._work_connection
+            if connection is None:
+                raise RuntimeError("Work opens after its command owner is configured.")
             if self._work is None:
                 self._work = WorkWindow(
-                    on_command,
+                    connection.on_command,
                     post=lambda job: self.post(lambda root: job()),
                     create_view=self._create_work,
-                    on_problem=on_problem,
+                    on_problem=connection.on_problem,
                     create_loading=self._create_canvas_loading,
                 )
-            work = self._work
-        if reveal:
-            work.show(focus=focus)
-        return work
+            return self._work
 
     def _create_canvas_loading(self) -> CanvasLoading:
         return CanvasLoading(self._root, paint_frame=self._paint_canvas_loading)

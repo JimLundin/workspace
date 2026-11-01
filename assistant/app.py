@@ -361,6 +361,7 @@ class AssistantApp:
     # ---- running -----------------------------------------------------------------------
 
     def create_personal(self, tasks: TaskStore) -> PersonalWork:
+        self.ui.configure_work(self.work_command, on_problem=self.problem)
         self.ui.configure_canvas(self.canvas, self.agent.notify_canvas)
         self.agent.watch(tuple(run.task_id for run in self.canvas.read().runs), owner="canvas")
         return PersonalWork(
@@ -412,7 +413,7 @@ class AssistantApp:
         if os.environ.get("WORKSPACE_DESKTOP", "on").lower() != "off":
             # Prepare Qt controls while starting the desktop, so the first
             # canvas click reuses the current native scene and font resources.
-            work = self.ui.work(self.work_command, on_problem=self.problem, reveal=False)
+            work = self.ui.work_window()
             work.publish(replace(self.agent.snapshot(), personal=self.personal.snapshot()))
             work.prepare()
             self.ui.desktop(
@@ -586,12 +587,12 @@ class AssistantApp:
         return classify(self.settings, batch, rules, working_context=self.triage.working_context(batch), research=research)
 
     def work_changed(self, snapshot: WorkSnapshot) -> None:
-        self.ui.work(self.work_command, on_problem=self.problem, reveal=False).publish(replace(snapshot, personal=self.personal.snapshot()))
+        self.ui.work_window().publish(replace(snapshot, personal=self.personal.snapshot()))
         self.ui.observe_canvas_work(snapshot)
         self.triage.context_changed(snapshot.tasks, snapshot.context)
 
     def personal_changed(self, view: PersonalView) -> None:
-        self.ui.work(self.work_command, on_problem=self.problem, reveal=False).publish(replace(self.agent.snapshot(), personal=view))
+        self.ui.work_window().publish(replace(self.agent.snapshot(), personal=view))
         self.ui.observe_canvas(view.catalog)
 
     def continue_thread(self, run: CanvasRun) -> None:
@@ -617,7 +618,7 @@ class AssistantApp:
                 self.agent.command(command)
 
     def show_work(self) -> None:
-        self.ui.work(self.work_command, on_problem=self.problem)
+        self.ui.work_window().show()
         self.agent.refresh()
 
     def show_meetings(self) -> None:
