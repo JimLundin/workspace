@@ -343,8 +343,10 @@ releases the moved subtree's old scope pins so they cannot pull it back.
 
 Gesture states, inputs and effects are frozen payload variants handled by `match`.
 Qt owns mutable graphics, pointer capture and previews in
-`personal_work_panel.py`; `WorkCanvas` persists one edit on release and the panel
-performs one reflow. Pointer moves do not write SQLite or rebuild topology. Membership and
+`personal_work_panel.py`; the panel sends a `UserEdit` intent through `CanvasEdits` on release,
+`WorkCanvas` persists and publishes the change, and the panel redraws from its
+returned document. `Ui` delivers the publication to the view, agent window, toolbar
+count and notices; the panel performs one reflow. Pointer moves do not write SQLite or rebuild topology. Membership and
 ancestry use immutable indexes with a bounded eight-entry `functools.lru_cache`,
 keyed by catalog and editable structure, excluding geometry and cameras.
 Stdlib grouping provides the index construction; native graph/layout dependencies
