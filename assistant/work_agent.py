@@ -597,12 +597,8 @@ class WorkAgent:
                     self.window.step(text)
                 case automation.presentation.Said(text, _):
                     self.window.say(text)
-                case automation.presentation.Done():
-                    pass  # A durable outcome, not a late live frame, completes work.
                 case automation.presentation.Problem(text, _):
                     self.window.problem(text)
-                case automation.presentation.Finished():
-                    pass
                 case automation.presentation.Answer() | automation.presentation.ReasoningSummary() | automation.presentation.ToolActivity():
                     if self._live is not None:
                         self._live(event.event)

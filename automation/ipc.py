@@ -17,8 +17,6 @@ from automation.capture import AudioSource
 from automation.execution import ApprovalReview
 from automation.presentation import (
     Answer,
-    Done,
-    Finished,
     LiveMessage,
     Problem,
     Progress,
@@ -28,7 +26,7 @@ from automation.presentation import (
 )
 from automation.task import RunRef, identifier, integer, text, timestamp
 
-VERSION: Final = 2
+VERSION: Final = 3
 MAX_FRAME: Final = 1_048_576
 MAX_EVENTS: Final = 128
 MAX_CONTEXT: Final = 128
@@ -36,15 +34,15 @@ MAX_CONTEXT: Final = 128
 # Frames are strict: a peer's JSON never coerces into another type or adds fields.
 _WIRE = ConfigDict(strict=True, extra="forbid", allow_inf_nan=False)
 
-type PresentationEvent = Progress | Said | Done | Problem | Finished | LiveMessage
+type PresentationEvent = Progress | Said | Problem | LiveMessage
 type ProcessId = Annotated[int, Field(ge=1, le=2**32 - 1)]
 
 
 def _moment(event: PresentationEvent) -> None:
     match event:
-        case Said(at=at) | Done(at=at) | Problem(at=at) | Answer(created_at=at) | ReasoningSummary(created_at=at) | ToolActivity(created_at=at):
+        case Said(at=at) | Problem(at=at) | Answer(created_at=at) | ReasoningSummary(created_at=at) | ToolActivity(created_at=at):
             timestamp(at, "event time")
-        case Progress() | Finished():
+        case Progress():
             pass
         case _:
             assert_never(event)

@@ -18,7 +18,7 @@ from automation import ipc
 from automation.activity import Activity, ContextSnapshot
 from automation.bridge import BridgeClient, BridgeServer, Channel, LocalChannel, ProfileLease, read_discovery
 from automation.execution import ApprovalReview
-from automation.presentation import Answer, Done, Progress, StreamState
+from automation.presentation import Answer, Progress, Said, StreamState
 from automation.task import Approval, RunRef
 from winapi.shapes import Window
 
@@ -120,18 +120,18 @@ def test_unavailable_worker_retains_invocation_and_replays_after_restart(tmp_pat
         client.close()
 
 
-def test_streaming_updates_coalesce_and_terminal_results_survive(tmp_path: Path) -> None:
+def test_streaming_updates_coalesce_and_complete_updates_and_speech_survive(tmp_path: Path) -> None:
     with bridge(tmp_path) as (server, client):
         for index in range(200):
             server.publish(ipc.LogEvent(RUN, Progress(f"Read {index + 1} pages")))
             server.publish(ipc.LogEvent(RUN, Answer("progress", f"Draft {index + 1}", 20)))
         server.publish(ipc.LogEvent(RUN, Answer("progress", "Complete notes", 20, StreamState.COMPLETE)))
-        server.publish(ipc.LogEvent(RUN, Done("Saved and checked the notes.", 21)))
+        server.publish(ipc.LogEvent(RUN, Said("Saved and checked the notes.", 21)))
         events = drain(client)
         assert [item.payload for item in events] == [
             ipc.LogEvent(RUN, Progress("Read 200 pages")),
             ipc.LogEvent(RUN, Answer("progress", "Complete notes", 20, StreamState.COMPLETE)),
-            ipc.LogEvent(RUN, Done("Saved and checked the notes.", 21)),
+            ipc.LogEvent(RUN, Said("Saved and checked the notes.", 21)),
         ]
         assert all(left.sequence < right.sequence for left, right in itertools.pairwise(events))
         server.publish(ipc.LogEvent(RUN, Progress("A later observation")))
@@ -139,21 +139,21 @@ def test_streaming_updates_coalesce_and_terminal_results_survive(tmp_path: Path)
         assert len(later) == 1 and later[0].sequence > events[-1].sequence
 
 
-def test_overflow_reports_loss_before_new_results_and_stays_within_frame_budget(tmp_path: Path) -> None:
+def test_overflow_reports_loss_before_new_speech_and_stays_within_frame_budget(tmp_path: Path) -> None:
     with bridge(tmp_path) as (server, client):
         for index in range(200):
-            server.publish(ipc.LogEvent(RUN, Done(f"Result {index}", index)))
+            server.publish(ipc.LogEvent(RUN, Said(f"Result {index}", index)))
         events = drain(client)
         assert isinstance(events[0].payload, ipc.Resync)
-        assert events[-1].payload == ipc.LogEvent(RUN, Done("Result 199", 199))
+        assert events[-1].payload == ipc.LogEvent(RUN, Said("Result 199", 199))
         assert len(events) <= ipc.MAX_EVENTS
         # Hit the byte bound independently of the event-count bound.
         for index in range(50):
-            server.publish(ipc.LogEvent(RUN, Done(f"{index}:" + "x" * 127_990, index)))
+            server.publish(ipc.LogEvent(RUN, Said(f"{index}:" + "x" * 127_990, index)))
         events = drain(client)
         assert isinstance(events[0].payload, ipc.Resync)
         assert isinstance(events[-1].payload, ipc.LogEvent)
-        assert events[-1].payload.event == Done("49:" + "x" * 127_990, 49)
+        assert events[-1].payload.event == Said("49:" + "x" * 127_990, 49)
 
 
 def test_review_requires_a_connected_assistant_and_remains_volatile(tmp_path: Path) -> None:
@@ -283,7 +283,7 @@ def test_codec_rejects_unknown_versions_invalid_scalars_and_stale_batches() -> N
     bounded = request.ljust(ipc.MAX_FRAME, b" ")
     assert ipc.decode_request(bounded).operation == ipc.Poll(0, 64)
     for broken in (
-        request.replace(b'"version":2', b'"version":3'),
+        request.replace(b'"version":3', b'"version":2'),
         request.replace(b'"after":0', b'"after":0,"private":"sdk object"'),
         request.replace(b'"after":0', b'"after":true'),
         request.replace(b'"limit":64', b'"limit":129'),
@@ -292,7 +292,7 @@ def test_codec_rejects_unknown_versions_invalid_scalars_and_stale_batches() -> N
     ):
         with TestCase().assertRaises(ValueError):
             ipc.decode_request(broken)
-    batch = ipc.encode_reply(ipc.Batch("worker", (ipc.Envelope("worker", 1, ipc.LogEvent(RUN, Done("Observed", 20))),)))
+    batch = ipc.encode_reply(ipc.Batch("worker", (ipc.Envelope("worker", 1, ipc.LogEvent(RUN, Said("Observed", 20))),)))
     for broken in (
         batch.replace(b'"at":20', b'"at":NaN'),
         batch.replace(b'"at":20', b'"at":-1'),
@@ -306,7 +306,7 @@ def test_codec_rejects_unknown_versions_invalid_scalars_and_stale_batches() -> N
         "worker",
         (
             ipc.Envelope("worker", 2, ipc.LogEvent(RUN, Progress("Reading the transcript."))),
-            ipc.Envelope("worker", 3, ipc.LogEvent(RUN, Done("Notes saved and checked.", 21))),
+            ipc.Envelope("worker", 3, ipc.LogEvent(RUN, Said("Notes saved and checked.", 21))),
         ),
     )
     paired = ipc.encode_reply(ordered)

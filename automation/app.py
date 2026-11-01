@@ -38,7 +38,7 @@ lazy from automation.capture import AudioSource
 lazy from automation.context import ContextStore, select_context
 lazy from automation.controller import ControllerSnapshot, Fault, Idle, Stopping, WorkController, WorkExecution, Working
 lazy from automation.execution import ApprovalReview, Log
-lazy from automation.presentation import Done, Finished, LiveMessage, Problem, Progress, Said
+lazy from automation.presentation import LiveMessage, Problem, Progress, Said
 lazy from automation.routines import RoutineStore
 lazy from automation.store import TaskStore
 lazy from automation.task import Claim, Outcome, RunRef, Task, owns
@@ -146,7 +146,8 @@ class VolatileLog:
         self.publish(Problem(message, time.time()))
 
     def done(self, message: str, /) -> None:
-        self.publish(Done(message, time.time()))
+        # The journal outcome completes work; the frontend observes it durably.
+        pass
 
 
 class NativeExecution:
@@ -275,18 +276,13 @@ def run(
 
 
 class WorkEvents:
-    """The work process owns failure signalling and sequential run observations.
+    """The work process owns failure signalling and live presentation logs."""
 
-    Previous-run identity changes in this observer so it can publish exactly one
-    Finished event when the controller leaves a run. Callers see native/log effects.
-    """
-
-    __slots__ = ("bridge", "failed", "folder", "hwnd", "previous")
+    __slots__ = ("bridge", "failed", "folder", "hwnd")
 
     def __init__(self, bridge: BridgeServer, folder: Path, hwnd: int) -> None:
         self.bridge, self.folder, self.hwnd = bridge, folder, hwnd
         self.failed = threading.Event()
-        self.previous: RunRef | None = None
 
     def problem(self, reason: str) -> None:
         # Caller details may include exception payloads; retain only an
@@ -296,20 +292,13 @@ class WorkEvents:
         system.post_message(self.hwnd, system.WM_CLOSE, 0, 0)
 
     def changed(self, snapshot: ControllerSnapshot) -> None:
-        active: RunRef | None
         match snapshot.status:
-            case Working(reference) | Stopping(reference):
-                active = reference
             case Fault():
-                active = None
                 self.problem("Work controller failed.")
-            case Idle():
-                active = None
+            case Idle() | Working() | Stopping():
+                pass
             case _:
                 assert_never(snapshot.status)
-        if self.previous is not None and active != self.previous:
-            self.bridge.publish(ipc.LogEvent(self.previous, Finished()))
-        self.previous = active
 
     def log(self, claim: Claim) -> Log:
         return VolatileLog(self.bridge, claim.run)

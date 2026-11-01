@@ -1,9 +1,8 @@
-"""What a work run publishes for its presentation: progress, results and live rows.
+"""Shared presentation values: progress, results and live rows.
 
-The automation process produces these values and the assistant's timeline
-consumes them; how they are rendered belongs to the assistant. Each variant
-carries its wire `kind` and each payload-free variant a string value, so the
-process bridge sends these records directly.
+The automation process publishes live updates over the process bridge. The
+assistant synthesizes Done and Finished from durable task outcomes and renders
+the timeline. Each variant carries its presentation `kind`.
 """
 
 from dataclasses import dataclass
