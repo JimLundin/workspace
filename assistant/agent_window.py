@@ -40,7 +40,6 @@ class View(Protocol):
 
     def render(self, state: Snapshot) -> None: ...
     def show(self, *, focus: bool = False) -> None: ...
-    def open_inbox(self) -> None: ...
     def close(self) -> None: ...
 
 
@@ -127,6 +126,11 @@ class AgentWindow:
         with self.lock:
             return self.state.waiting
 
+    def snapshot(self) -> Snapshot:
+        """Observe the current immutable session under its owner lock."""
+        with self.lock:
+            return self.state
+
     def _prepare(self) -> None:
         self._open()
 
@@ -171,15 +175,6 @@ class AgentWindow:
         def reveal() -> None:
             if (view := self._open()) is not None:
                 view.show(focus=focus)
-
-        self.publication.post(reveal)
-
-    def open_inbox(self) -> None:
-        """Schedule current inbox access with native view creation on the UI thread."""
-
-        def reveal() -> None:
-            if (view := self._open()) is not None:
-                view.open_inbox()
 
         self.publication.post(reveal)
 
@@ -264,9 +259,16 @@ class AgentWindow:
                 case _:
                     pass
 
-    def respond(self, identity: str, reply: Reply) -> bool:
-        """Route a parsed reply to the exact durable request this view projects."""
+    def respond(self, identity: str, reply: Reply, *, expected_session: str | None = None) -> bool:
+        """Admit a reply to this request, optionally fenced to a captured session.
+
+        Current-view actions identify the current request alone; delayed canvas
+        replies also supply their saved session. Check that identity when admitting
+        the request, then call its captured reply owner outside the session lock.
+        """
         with self.lock:
+            if expected_session is not None and self.state.identity != expected_session:
+                return False
             request = self._input
             if self.publication.closed or request is None or request.message.id != identity or request.state is InputState.SUBMITTED:
                 return False

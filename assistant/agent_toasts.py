@@ -581,16 +581,6 @@ class AgentToasts:
             if cards:
                 cards[-1].text.setFocus(Qt.FocusReason.OtherFocusReason)
 
-    def open_inbox(self) -> None:
-        """Replace immutable feed selection; this owner updates the live Qt cards."""
-        if self.closed:
-            return
-        self.stack = replace(self.stack, hidden=frozenset())
-        self.history = False
-        self.page = 0
-        self.reveal = True
-        self.show(focus=True)
-
     def show_history(self) -> None:
         if self.closed:
             return

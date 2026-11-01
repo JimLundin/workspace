@@ -8,7 +8,7 @@ from assistant.agent_session import Snapshot, message_body, pending
 from assistant.agent_window import AgentWindow, View
 from assistant.recording_state import RecordingAction
 from automation.presentation import Answer, StreamState
-from automation.task import TextAnswer
+from automation.task import Reply, TextAnswer
 from tests.agent_requests import asked
 
 
@@ -28,9 +28,6 @@ class RecordingView:
     def show(self, *, focus: bool = False) -> None:
         self.shown.append(focus)
         self.threads.append(threading.get_ident())
-
-    def open_inbox(self) -> None:
-        self.show(focus=True)
 
     def close(self) -> None:
         self.closed = True
@@ -126,16 +123,16 @@ def test_live_publishers_cannot_update_a_later_turn_or_a_reset_conversation() ->
     panel.begin("Next task")
     second = panel.updates()
     panel.paint()
-    before = panel.state
+    before = panel.snapshot()
     first(Answer("late", "This belongs to the first request", 2))
-    assert panel.state is before and not panel.jobs
+    assert panel.snapshot() is before and not panel.jobs
     second(Answer("second-answer", "Second answer", 3))
-    assert message_body(panel.state.messages[-1]) == "Second answer"
+    assert message_body(panel.snapshot().messages[-1]) == "Second answer"
     panel.reset()
     panel.begin("Fresh conversation")
-    before = panel.state
+    before = panel.snapshot()
     second(Answer("late", "This belongs to the old conversation", 4))
-    assert panel.state is before and len(panel.state.messages) == 1
+    assert panel.snapshot() is before and len(panel.snapshot().messages) == 1
     panel.close()
     panel.paint()
 
@@ -148,6 +145,35 @@ def test_quitting_during_ui_warmup_withdraws_requests_and_never_creates_a_late_w
     assert not panel.respond("open", TextAnswer("Yes"))
     panel.paint()
     assert not panel.view.states and not panel.view.shown and not panel.publication.ready.is_set()
+
+
+def test_captured_session_replies_cannot_enter_a_reprojected_request_with_the_same_id() -> None:
+    # Defect: a canvas reply admitted after a session reset reaches a later
+    # conversation that reused the same durable request id.
+    delivered: list[TextAnswer] = []
+
+    def accept(reply: Reply) -> bool:
+        match reply:
+            case TextAnswer():
+                delivered.append(reply)
+                return True
+            case _:
+                return False
+
+    panel = RecordingWindow(lambda: None)
+    try:
+        panel.request_input(asked("same", "Which owner?", "", 1), accept)
+        captured = panel.snapshot()
+        panel.reset()
+        panel.request_input(asked("same", "Which sheet?", "", 2), accept)
+        answer = TextAnswer("Revenue")
+        assert not panel.respond("same", answer, expected_session=captured.identity)
+        assert not delivered and panel.snapshot().waiting
+        assert panel.respond("same", answer, expected_session=panel.snapshot().identity)
+        assert delivered == [answer] and not panel.snapshot().waiting
+    finally:
+        panel.close()
+        panel.paint()
 
 
 def test_failed_widget_startup_reports_the_problem_and_can_be_retried() -> None:
