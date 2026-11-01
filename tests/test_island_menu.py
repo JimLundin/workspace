@@ -7,6 +7,7 @@ from assistant.island_menu import (
     Chosen,
     Command,
     Dismissed,
+    Item,
     Key,
     Letter,
     Live,
@@ -45,6 +46,15 @@ def test_running_activities_lead_with_their_stop_and_recording_replaces_its_star
     assert all(label(entry) != "Record a meeting" for entry in menu)
     resting = entries(recording=None, agent=None)
     assert [label(entry) for entry in resting[:3]] == ["Your work canvas", "Your work feed", "Record a meeting"]
+
+
+def test_tool_rows_derive_hints_without_advertising_inbox_for_the_work_feed() -> None:
+    # Defects: the switcher advertises layer/tap labels instead of physical keys,
+    # disclosed hints collide with labels, or the feed promises the inbox action.
+    resting = entries(recording=None, agent=None)
+    assert Item("Your work feed", "chat", Command.FEED) in resting
+    assert Item("Switch windows", "search", ToolChoice(Tool.WINDOW_SWITCHER), ". X") in resting
+    assert Item("Pause or resume automatic tiling", "", ToolChoice(Tool.TILE_PAUSE)) in TILING.items
 
 
 def test_arrows_wrap_and_skip_separators() -> None:

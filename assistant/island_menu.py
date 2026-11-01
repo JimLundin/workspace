@@ -12,6 +12,7 @@ from dataclasses import dataclass, field, replace
 from enum import Enum, auto
 from typing import Final, assert_never
 
+from assistant.keymap import shortcut, shortcut_hint
 from protocol import Tool
 
 
@@ -46,6 +47,11 @@ class Item:
     key: str = ""  # A shortcut hint, shown quietly at the trailing edge.
 
 
+def tool_item(label: str, icon: str, tool: Tool) -> Item:
+    """Top-level Tool rows advertise the physical keys from the layout that triggers them."""
+    return Item(label, icon, ToolChoice(tool), shortcut_hint(shortcut(tool), compact=True))
+
+
 @dataclass(frozen=True, slots=True)
 class Live:
     """An ongoing activity: its reading (empty while it has none) and its Stop."""
@@ -72,6 +78,8 @@ TILING: Final = Disclosure(
     "Window tiling",
     "grid",
     (
+        # Disclosed labels fill the fixed menu width; the longest tiling label
+        # overlaps its derived hint in the native preview, so hints stay above.
         Item("Spread windows across screens", "", ToolChoice(Tool.TILE_BALANCE)),
         Item("Focus left", "", ToolChoice(Tool.TILE_FOCUS_LEFT)),
         Item("Focus right", "", ToolChoice(Tool.TILE_FOCUS_RIGHT)),
@@ -94,15 +102,15 @@ def entries(*, recording: str | None, agent: str | None) -> tuple[Entry, ...]:
         *live,
         *((Rule.SEPARATOR,) if live else ()),
         Item("Your work canvas", "canvas", Command.CANVAS),
-        Item("Your work feed", "chat", Command.FEED, "V T"),
+        Item("Your work feed", "chat", Command.FEED),
         *(() if recording is not None else (Item("Record a meeting", "mic", Command.RECORD),)),
         Rule.SEPARATOR,
         Item("Keyboard map", "keyboard", Command.KEYMAP),
         Item("Keyboard overlay", "layers", Command.OVERLAY),
         Item("Windows taskbar", "table", Command.TASKBAR),
         Rule.SEPARATOR,
-        Item("Switch windows", "search", ToolChoice(Tool.WINDOW_SWITCHER), "Apps Esc"),
-        Item("Copy latest transcript", "doc", ToolChoice(Tool.COPY_TRANSCRIPT)),
+        tool_item("Switch windows", "search", Tool.WINDOW_SWITCHER),
+        tool_item("Copy latest transcript", "doc", Tool.COPY_TRANSCRIPT),
         TILING,
         Item("Windows notification settings", "bell", Command.NOTIFICATIONS),
         Rule.SEPARATOR,
