@@ -135,7 +135,10 @@ waiting question still stands out; every reading keeps the system foreground.
 One screen-wide, translucent Qt window (titled "Workspace floating bar") holds a
 child widget per capsule and a child button per control, so each keeps its
 accessible name, tooltip and keyboard focus. Its transparent pixels pass clicks
-through to the desktop; capsules paint an invisible hit fill. Behind it, one
+through to the desktop; capsules paint an invisible hit fill. The glass host
+behind it is layered and `WS_EX_TRANSPARENT`, with opacity initialized to 255,
+so Windows skips it for input even when the target belongs to another process.
+`WS_EX_NOREDIRECTIONBITMAP` keeps its pixels supplied by composition. One
 composition window (`GlassScene`) holds a pooled group of native visuals per
 capsule: a rounded clip, the blurred host backdrop, a tint, the rim and a shadow.
 Expression animations derive the geometry, corner radius, rim and shadow from

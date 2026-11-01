@@ -364,8 +364,8 @@ reply callback runs outside the lock, preserving retry and effect ownership.
 
 First canvas reveal presents an 80-logical-pixel nonactivating indicator before
 creating or rendering the view. `ui_components/canvas_loading.py` owns its
-transient lifetime. `winapi/composition_spinner.py` uses the same top-level
-NOREDIRECTIONBITMAP host as desktop glass; Windows supplies the rounded surface
+transient lifetime. `winapi/composition_spinner.py` uses a top-level
+NOREDIRECTIONBITMAP host; Windows supplies the rounded surface
 and rotates the wheel independently of Qt. Reduced motion retains a static mark;
 unavailable composition uses the native wait cursor. Ui pauses its job timer
 during initial native frame delivery, keeping redirects outside construction.
@@ -377,8 +377,13 @@ another indicator. Hidden preparation stays hidden. Wheel animation requires no
 timer-driven Qt painting or background thread.
 
 Qt supplies a per-pixel transparent foreground. `winapi.composition` uses
-win32more bindings to create a separate, nonactivating, input-transparent HWND
-directly below it. A Windows host backdrop brush is clipped to a rounded
+win32more bindings and one `glass_host` constructor for card and island glass.
+The nonactivating host combines `WS_EX_LAYERED` with `WS_EX_TRANSPARENT`, so
+Windows skips its entire surface for input across processes; `HTTRANSPARENT`
+alone only passes input within one thread. Layered opacity is initialized to
+255, while `WS_EX_NOREDIRECTIONBITMAP` leaves the backdrop, tint, rim and shadow
+pixels with composition. The host sits directly below the Qt foreground.
+A Windows host backdrop brush is clipped to a rounded
 rectangle with a 26-logical-pixel radius. A matching visual-surface mask supplies
 the native soft shadow. The layer follows the foreground's final physical
 rectangle after Qt paints, including at fractional DPI; it updates geometry only
