@@ -290,6 +290,17 @@ reply/action buttons. See [Windows shell integration](docs/windows-shell-integra
 
 ## Meeting transcripts
 
+The toolbar menu's **Auto-record Teams** toggle saves an opt-in for browser
+meetings in the approved Edge debugging connection. **On** means the monitor
+is armed; a red dot and advancing timer mean audio capture has actually started.
+The monitor reads Teams' in-call microphone, Leave and duration controls every five seconds,
+without navigating or activating your tab. Chat, prejoin and lobby do not start
+capture. Leaving stops an automatic recording after a ten-second debounce.
+Choosing Stop suppresses automatic restart for that call. Manual recordings
+remain independent. If observation fails for thirty seconds, automatic capture
+stops and the menu reports a connection problem; choose **Record a meeting**
+manually if needed. Native Teams and other browsers are outside this trigger.
+
 Choose **Record a meeting** from the tray or the agent timeline's **⋯** menu,
 or tell the agent to start a meeting transcript. Recording continues until you
 choose **Stop**, tell the agent to stop recording, or quit Workspace. A red tray
@@ -320,8 +331,9 @@ speech). Reaching it stops capture visibly and retains the saved part instead of
 using unlimited memory or disk space. Device errors also stop capture visibly.
 
 Stop saves the final partial chunk and lets transcription finish. On quit, saved
-pending audio is retained for transcription after the next launch. A restart
-never starts the microphone or playback recording automatically. A crash can
+pending audio is retained for transcription after the next launch. Recovery
+does not resume capture from an old journal. With Auto-record Teams enabled,
+a currently joined browser call can start a new recording after restart. A crash can
 lose the most recent audio still in memory; committed text and
 audio recover from the journal, including if a transcript-file write was interrupted.
 

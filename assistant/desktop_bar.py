@@ -31,6 +31,7 @@ lazy from assistant.island_menu import Chosen, Command, Dismissed, Menu, ToolCho
 lazy from assistant.island_model import Action, Agent, CapsuleView, Job, Key, Marker, Observed, Spinner, capture, island, keyboard
 lazy from assistant.island_motion import IslandMotion, Shown, advance, finish, placed, retarget, settled
 lazy from assistant.island_surface import TOP, BarWindow, Drawn, Presented
+lazy from assistant.meeting_detection import AutomaticStatus
 lazy from assistant.qt_ui import EventLoop, application
 lazy from assistant.recording_state import RecordingAction, RecordingState
 lazy from assistant.shell_controls import TASKBAR_TOGGLE, TaskbarControl, WindowsKeyObserver
@@ -85,6 +86,7 @@ class DesktopBar:
         "ambient",
         "audio_meter",
         "audio_timer",
+        "automatic_recording",
         "closed",
         "controls",
         "current_layer",
@@ -139,7 +141,7 @@ class DesktopBar:
         self.visible = native_shell
         # Each activity comes from its own owner: dictation and quick jobs from the
         # voice controller, the agent from its session.
-        self.dictating = False
+        self.dictating, self.automatic_recording = False, AutomaticStatus.OFF
         self.job: Job | None = None
         self.agent: Agent | None = None
         self.recording = RecordingState()
@@ -253,7 +255,11 @@ class DesktopBar:
         recorded = capture(self.recording) if self.recording.capturing else None
         working = self.agent if self.agent is not None and not self.agent.waiting else None
         menu = Menu(
-            entries(recording=recorded.title if recorded is not None else None, agent=working.phase if working is not None else None),
+            entries(
+                recording=recorded.title if recorded is not None else None,
+                agent=working.phase if working is not None else None,
+                automatic=self.automatic_recording,
+            ),
             "Layout on" if self.layout_enabled else "Layout off",
         )
         if self.expanded is None:
@@ -323,6 +329,8 @@ class DesktopBar:
                 self.actions.record("start")
             case Command.STOP_RECORDING:
                 self.actions.record("stop")
+            case Command.AUTOMATIC_RECORDING:
+                self.actions.record("automatic")
             case Command.STOP_AGENT:
                 self.actions.stop()
             case Command.KEYMAP:
@@ -361,6 +369,11 @@ class DesktopBar:
     def recording_changed(self, recording: RecordingState) -> None:
         if self.recording != recording:
             self.recording = recording
+            self.render()
+
+    def automatic_changed(self, status: AutomaticStatus) -> None:
+        if self.automatic_recording is not status:
+            self.automatic_recording = status
             self.render()
 
     def layer(self, text: str | None) -> None:

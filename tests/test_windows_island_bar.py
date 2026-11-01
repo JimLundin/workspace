@@ -17,6 +17,7 @@ from assistant.desktop_bar import BarActions, BarObservations, DesktopBar
 from assistant.island_menu import Menu
 from assistant.island_model import Agent, Job, Key
 from assistant.island_surface import SHADOW, TOP, ControlButton, MenuRow
+from assistant.meeting_detection import AutomaticStatus
 from assistant.qt_runtime import prepare
 from assistant.qt_ui import EventLoop, application
 from assistant.recording_state import RecordingState
@@ -135,6 +136,10 @@ def test_the_island_rests_alone_and_each_capsule_acts_on_what_it_shows() -> None
         bar.inbox_changed(0)
         rest(bar)
         assert shown(bar) == [Key.ISLAND]
+        bar.automatic_changed(AutomaticStatus.READY)
+        press(bar, Key.ISLAND)
+        menu_row(bar, "Auto-record Teams: On").click()
+        assert invoked[-1] == "record-automatic"
     finally:
         closed(app, bar)
 

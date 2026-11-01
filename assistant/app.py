@@ -25,6 +25,7 @@ from automation.activity import ContextSnapshot, Observation, Policy
 from config import APPS
 from usage import DIRECTORY, Detail
 lazy from assistant import control_policy
+lazy from assistant.automatic_meetings import AutomaticMeetings
 lazy from assistant.browser import Browser
 lazy from assistant.browser_session import Product
 lazy from assistant.canvas_activity import CanvasInstruction, CanvasRun
@@ -42,6 +43,8 @@ lazy from assistant.icons import State, dot
 lazy from assistant.keymap import indicator_text
 lazy from assistant.lifecycle import Timings
 lazy from assistant.llm import MAX_SECONDS, Missing, Settings
+lazy from assistant.meeting_browser import TeamsCalls
+lazy from assistant.meeting_detection import PREFERENCE, AutomaticStatus
 lazy from assistant.meeting_events import TranscriptEvents
 lazy from assistant.meeting_followup_store import FollowupStore
 lazy from assistant.meeting_preparation import Preparations
@@ -208,6 +211,7 @@ class AssistantApp:
         "activity",
         "agent",
         "assistant",
+        "automatic_meetings",
         "canvas",
         "capture_timer",
         "communications",
@@ -330,6 +334,12 @@ class AssistantApp:
             on_recovery=events.recover,
             on_complete=events.completed,
         )
+        self.automatic_meetings = AutomaticMeetings(
+            self.meetings,
+            TeamsCalls(Browser(BROWSER_PROFILE, source=Product.EDGE)),
+            windows_store(DIRECTORY / "automatic-meetings.bin", PREFERENCE),
+            publish=self.automatic_recording_changed,
+        )
         self.timings.mark("meeting services")
         self.assistant = Assistant(
             self.desktop,
@@ -352,6 +362,7 @@ class AssistantApp:
                 self.communications.start,
                 self.followups.start,
                 self.meetings.start_worker,
+                self.automatic_meetings.start,
                 self.monitor_layout.start,
             )
         )
@@ -451,6 +462,7 @@ class AssistantApp:
         timings.mark("feed triage")
         self.communications.close()
         timings.mark("Teams worker")
+        self.automatic_meetings.close()
         self.monitor_layout.close()
         timings.mark("monitor layout")
         try:
@@ -561,12 +573,14 @@ class AssistantApp:
         try:
             match action:
                 case "start" | "start_microphone":
-                    self.meetings.start("both" if action == "start" else "microphone")
+                    self.automatic_meetings.start_recording("both" if action == "start" else "microphone")
                     self.agent.prepare()
                     if self.agent.window is not None:
                         self.agent.window.show()
                 case "stop":
-                    self.meetings.stop()
+                    self.automatic_meetings.stop_recording()
+                case "automatic":
+                    self.automatic_meetings.toggle()
                 case "retry":
                     self.meetings.retry()
                 case "open" | "folder":
@@ -576,6 +590,15 @@ class AssistantApp:
                     os.startfile(path if path.exists() else self.meetings.root)
         except (OSError, ValueError) as error:
             self.problem(str(error))
+
+    def automatic_recording_changed(self, status: AutomaticStatus) -> None:
+        self.ui.desktop_automatic(status)
+        if status is AutomaticStatus.UNAVAILABLE:
+            self.tray.notify(
+                "Automatic Teams recording",
+                "Meeting detection is unavailable. Check the browser connection or choose Record a meeting manually.",
+                warning=True,
+            )
 
     def refresh_work(self) -> None:
         self.agent.refresh()
@@ -637,9 +660,9 @@ class AssistantApp:
         try:
             match command:
                 case StartMeeting(source, title):
-                    self.meetings.start(source, title)
+                    self.automatic_meetings.start_recording(source, title)
                 case MeetingCommand.STOP:
-                    self.meetings.stop()
+                    self.automatic_meetings.stop_recording()
                 case MeetingCommand.RETRY:
                     self.meetings.retry()
                 case MeetingCommand.LIST:

@@ -13,6 +13,7 @@ from enum import Enum, auto
 from typing import Final, assert_never
 
 from assistant.keymap import shortcut, shortcut_hint
+from assistant.meeting_detection import AutomaticStatus
 from protocol import Tool
 
 
@@ -21,6 +22,7 @@ class Command(Enum):
     FEED = auto()
     RECORD = auto()
     STOP_RECORDING = auto()
+    AUTOMATIC_RECORDING = auto()
     STOP_AGENT = auto()
     KEYMAP = auto()
     OVERLAY = auto()
@@ -92,7 +94,21 @@ TILING: Final = Disclosure(
 )
 
 
-def entries(*, recording: str | None, agent: str | None) -> tuple[Entry, ...]:
+def automatic_label(status: AutomaticStatus) -> str:
+    match status:
+        case AutomaticStatus.OFF:
+            return "Auto-record Teams: Off"
+        case AutomaticStatus.CHECKING:
+            return "Auto-record Teams: Connecting…"
+        case AutomaticStatus.READY:
+            return "Auto-record Teams: On"
+        case AutomaticStatus.UNAVAILABLE:
+            return "Auto-record Teams: Check connection"
+        case _:
+            assert_never(status)
+
+
+def entries(*, recording: str | None, agent: str | None, automatic: AutomaticStatus = AutomaticStatus.OFF) -> tuple[Entry, ...]:
     """The menu for what's happening now: `recording` and `agent` are their readings while they run."""
     live: tuple[Live, ...] = (
         *((Live("Agent working", agent, Command.STOP_AGENT),) if agent is not None else ()),
@@ -104,6 +120,7 @@ def entries(*, recording: str | None, agent: str | None) -> tuple[Entry, ...]:
         Item("Your work canvas", "canvas", Command.CANVAS),
         Item("Your work feed", "chat", Command.FEED),
         *(() if recording is not None else (Item("Record a meeting", "mic", Command.RECORD),)),
+        Item(automatic_label(automatic), "mic", Command.AUTOMATIC_RECORDING),
         Rule.SEPARATOR,
         Item("Keyboard map", "keyboard", Command.KEYMAP),
         Item("Keyboard overlay", "layers", Command.OVERLAY),
@@ -288,7 +305,7 @@ def restores_focus(choice: Choice) -> bool:
     match choice:
         case ToolChoice():
             return True
-        case Command.OVERLAY | Command.TASKBAR | Command.RECORD | Command.STOP_RECORDING | Command.STOP_AGENT:
+        case Command.OVERLAY | Command.TASKBAR | Command.RECORD | Command.STOP_RECORDING | Command.STOP_AGENT | Command.AUTOMATIC_RECORDING:
             return True
         case Command.CANVAS | Command.FEED | Command.KEYMAP | Command.NOTIFICATIONS | Command.ALL_CONTROLS:
             return False

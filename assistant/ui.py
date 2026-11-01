@@ -35,6 +35,7 @@ lazy from assistant.feed_sources import FeedUpdate, NoticesObserved, PendingFeed
 lazy from assistant.icons import State
 lazy from assistant.keymap_views import KeymapOverlay, KeymapWindow
 lazy from assistant.layer_indicator import Indicator
+lazy from assistant.meeting_detection import AutomaticStatus
 lazy from assistant.meeting_workflow import MeetingSnapshot, MeetingWorkflow
 lazy from assistant.notification_sources import NotificationSources, NotificationState
 lazy from assistant.qt_ui import application, later
@@ -110,6 +111,7 @@ class Ui:
         "_agent_speaking",
         "_agent_waiting",
         "_assess",
+        "_automatic_recording",
         "_canvas",
         "_canvas_notice",
         "_canvas_published",
@@ -161,6 +163,7 @@ class Ui:
         self._assess: Assess | None = None
         self._notifications: NotificationSources | None = None
         self._desktop: DesktopBar | None = None
+        self._automatic_recording = AutomaticStatus.OFF
         self._switcher: WindowSwitcher | None = None
         self._agent_lock = threading.Lock()
         self._work: WorkWindow | None = None
@@ -777,6 +780,7 @@ class Ui:
                     inbox=self.open_inbox,
                 )
                 self._desktop = self._views.desktop(actions, audio_level=audio_level)
+                self._desktop.automatic_changed(self._automatic_recording)
                 if self._canvas_published is not None:
                     self._publish_canvas(self._canvas_published, replay=True)
                 self.refresh_inbox()
@@ -803,6 +807,14 @@ class Ui:
 
     def desktop_recording(self, recording: RecordingState) -> None:
         self.post(lambda _: self._desktop.recording_changed(recording) if self._desktop is not None else None)
+
+    def desktop_automatic(self, status: AutomaticStatus) -> None:
+        def display(_: QtWidgets.QApplication) -> None:
+            self._automatic_recording = status
+            if self._desktop is not None:
+                self._desktop.automatic_changed(status)
+
+        self.post(display)
 
     def desktop_layout(self, *, enabled: bool) -> None:
         self.post(lambda _: self._desktop.layout(enabled=enabled) if self._desktop is not None else None)

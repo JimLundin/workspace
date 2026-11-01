@@ -20,6 +20,7 @@ from assistant.island_menu import (
     restores_focus,
     rows,
 )
+from assistant.meeting_detection import AutomaticStatus
 from protocol import Tool
 
 
@@ -72,7 +73,7 @@ def test_arrows_wrap_and_skip_separators() -> None:
     assert selected(outcome) == "Record a meeting"
     match outcome:
         case Menu() as current:
-            assert selected(press(current, Key.DOWN)) == "Keyboard map"
+            assert selected(press(current, Key.DOWN)) == "Auto-record Teams: Off"
         case other:
             raise AssertionError(f"Navigation left the menu: {other}")
 
@@ -119,3 +120,17 @@ def test_window_tools_hand_the_keyboard_back_and_workspace_views_keep_it() -> No
     # view that just opened loses the keyboard to the previous window.
     assert restores_focus(ToolChoice(Tool.TILE_FLOAT)) and restores_focus(Command.TASKBAR)
     assert not restores_focus(Command.CANVAS) and not restores_focus(Command.KEYMAP)
+
+
+def test_automatic_recording_menu_exposes_saved_state_and_connection_failure() -> None:
+    # Defect: the menu hides the opt-in, advertises monitoring after a connection
+    # failure, or dispatches its toggle as a manual recording start.
+    for status, text in (
+        (AutomaticStatus.OFF, "Auto-record Teams: Off"),
+        (AutomaticStatus.READY, "Auto-record Teams: On"),
+        (AutomaticStatus.UNAVAILABLE, "Auto-record Teams: Check connection"),
+    ):
+        menu = Menu(entries(recording=None, agent=None, automatic=status), "Layout on")
+        index = next(i for i, entry in enumerate(rows(menu)) if label(entry) == text)
+        assert press(replace(menu, selected=index), Key.ENTER) == Chosen(Command.AUTOMATIC_RECORDING)
+    assert restores_focus(Command.AUTOMATIC_RECORDING)
