@@ -18,11 +18,11 @@ from assistant.desktop_bar import BarActions, DesktopBar
 from assistant.island_model import Agent, Job, Key
 from assistant.island_surface import TOP, Capsule
 from assistant.notification_sources import NOTIFICATION_STATE
-from assistant.personal_work_panel import CanvasEdits
 from assistant.qt_runtime import prepare
 from assistant.qt_ui import application
 from assistant.state_store import SavedState
 from assistant.ui import Ui, Views
+from assistant.work_canvas_panel import CanvasEdits
 from assistant.work_canvas_window import CanvasWindow
 from assistant.work_window import WorkWindow
 from automation.task import Reply, TextAnswer

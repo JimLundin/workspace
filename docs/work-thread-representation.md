@@ -192,7 +192,7 @@ A measured layout is dropped when its view changed since that render; the next
 render measures again. `work_canvas_view.py` owns native
 spatial interaction, and `work_canvas_detail.py` owns in-place drafts and controls.
 `work_canvas_window.py` owns the dedicated frame and optional administration
-window. `personal_work_panel.py` composes these with the existing immutable
+window. `work_canvas_panel.py` composes these with the existing immutable
 catalog and saved-work command interface.
 
 The first implementation collects the information observed by the existing
@@ -343,7 +343,7 @@ releases the moved subtree's old scope pins so they cannot pull it back.
 
 Gesture states, inputs and effects are frozen payload variants handled by `match`.
 Qt owns mutable graphics, pointer capture and previews in
-`personal_work_panel.py`; the panel sends a `UserEdit` intent through `CanvasEdits` on release,
+`work_canvas_panel.py`; the panel sends a `UserEdit` intent through `CanvasEdits` on release,
 `WorkCanvas` persists and publishes the change, and the panel redraws from its
 returned document. `Ui` delivers the publication to the view, agent window, toolbar
 count and notices; the panel performs one reflow. Pointer moves do not write SQLite or rebuild topology. Membership and

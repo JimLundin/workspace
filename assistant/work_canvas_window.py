@@ -9,12 +9,12 @@ from collections.abc import Callable
 lazy from PySide6 import QtCore, QtGui, QtWidgets
 lazy from PySide6.QtCore import Qt
 
-from assistant.personal_work_panel import CanvasEdits, PersonalPanel, rounded
 from assistant.ui_components.appearance import scheme, tokens
 from assistant.ui_components.canvas_chrome import CanvasFrame
 from assistant.ui_components.canvas_look import Role, face
 from assistant.ui_components.paint_ready import PaintReady
 from assistant.ui_components.widgets import column, show_window
+from assistant.work_canvas_panel import CanvasEdits, CanvasPanel, rounded
 from assistant.work_snapshot import WorkSnapshot
 from assistant.work_window import WorkWindow
 lazy from assistant.meeting_panel import MeetingPanel
@@ -35,27 +35,27 @@ class CanvasWindow:
         # visible source preview must not pay that setup cost on a user click.
         QtGui.QFontMetricsF(face(Role.BODY)).horizontalAdvance("Workspace")
         self.window.setWindowState(Qt.WindowState.WindowMaximized)
-        self.personal: PersonalPanel = PersonalPanel(self.window, work, canvas)
-        self.personal.position_chrome()
+        self.panel: CanvasPanel = CanvasPanel(self.window, work, canvas)
+        self.panel.position_chrome()
         layout = column(self.window)
         self.layout: QtWidgets.QVBoxLayout = layout
         layout.setSpacing(0)
-        layout.addWidget(self.personal.frame)
-        self.grip: QtWidgets.QSizeGrip = QtWidgets.QSizeGrip(self.personal.frame)
-        self.personal.menu.addSeparator()
-        self.personal.menu.addAction("Agent tasks and settings").triggered.connect(self.show_administration)
-        self.personal.menu.addAction("Meetings").triggered.connect(self.show_meetings)
-        self.personal.menu.addSeparator()
+        layout.addWidget(self.panel.frame)
+        self.grip: QtWidgets.QSizeGrip = QtWidgets.QSizeGrip(self.panel.frame)
+        self.panel.menu.addSeparator()
+        self.panel.menu.addAction("Agent tasks and settings").triggered.connect(self.show_administration)
+        self.panel.menu.addAction("Meetings").triggered.connect(self.show_meetings)
+        self.panel.menu.addSeparator()
         # Window controls live in the options menu; the island carries no duplicate Close.
-        window_menu = rounded(self.personal.menu.addMenu("Window"))
+        window_menu = rounded(self.panel.menu.addMenu("Window"))
         window_menu.addAction("Maximize or restore canvas").triggered.connect(self.maximize)
         self.close_action: QtGui.QAction = window_menu.addAction("Close canvas")
         self.close_action.triggered.connect(self.hide)
-        self.personal.frame.resized.connect(self.position_controls)
+        self.panel.frame.resized.connect(self.position_controls)
         self.position_controls()
 
     def position_controls(self) -> None:
-        self.grip.setGeometry(self.personal.frame.width() - 20, self.personal.frame.height() - 20, 16, 16)
+        self.grip.setGeometry(self.panel.frame.width() - 20, self.panel.frame.height() - 20, 16, 16)
         self.grip.raise_()
 
     def maximize(self) -> None:
@@ -66,22 +66,22 @@ class CanvasWindow:
 
     def render(self, snapshot: WorkSnapshot) -> None:
         self.snapshot = snapshot
-        self.personal.render(snapshot.personal)
-        if not self.preview_prepared and self.personal.visible_cards:
+        self.panel.render(snapshot.personal)
+        if not self.preview_prepared and self.panel.visible_cards:
             # Warm the initial visible viewport while the startup view is hidden.
             # Font fallback/shaping stays on Qt; later offscreen previews remain
             # lazy, and normal publications never repeat this one-time painting.
             self.layout.activate()
-            self.personal.layout.activate()
-            viewport = self.personal.canvas.viewport()
+            self.panel.layout.activate()
+            viewport = self.panel.canvas.viewport()
             image = QtGui.QImage(viewport.size(), QtGui.QImage.Format.Format_ARGB32_Premultiplied)
             image.fill(Qt.GlobalColor.transparent)
             painter = QtGui.QPainter(image)
             try:
-                self.personal.scene.render(
+                self.panel.scene.render(
                     painter,
                     QtCore.QRectF(image.rect()),
-                    self.personal.canvas.mapToScene(viewport.rect()).boundingRect(),
+                    self.panel.canvas.mapToScene(viewport.rect()).boundingRect(),
                 )
             finally:
                 painter.end()
@@ -92,12 +92,12 @@ class CanvasWindow:
     def show(self, *, focus: bool = True, on_presented: Callable[[], None] | None = None) -> None:
         if self.presentation is not None:
             self.presentation.cancel()
-        self.presentation = PaintReady(self.personal.canvas.viewport(), on_presented) if on_presented is not None else None
+        self.presentation = PaintReady(self.panel.canvas.viewport(), on_presented) if on_presented is not None else None
         # Native maximization resizes several child surfaces synchronously.
         # Paint their final geometry once, after the window state is settled.
         self.window.setUpdatesEnabled(False)
         try:
-            show_window(self.window, focus=focus, target=self.personal.canvas)
+            show_window(self.window, focus=focus, target=self.panel.canvas)
         finally:
             self.window.setUpdatesEnabled(True)
 
@@ -132,7 +132,7 @@ class CanvasWindow:
         self.work.cancel_show(self)
 
     def escape(self) -> None:
-        if not self.personal.escape():
+        if not self.panel.escape():
             self.hide()
 
     def close(self) -> None:

@@ -26,7 +26,6 @@ from assistant.icons import State
 from assistant.island_model import Key
 from assistant.local_bridge import LocalBridge
 from assistant.notifications import body
-from assistant.personal_work_panel import PersonalPanel
 from assistant.qt_runtime import prepare
 from assistant.qt_ui import application
 from assistant.ui_components.canvas_loading import CanvasLoading
@@ -49,6 +48,7 @@ from assistant.work_canvas_model import (
     save_note,
     view_state,
 )
+from assistant.work_canvas_panel import CanvasPanel
 from assistant.work_canvas_view import CanvasGroup
 from assistant.work_canvas_window import CanvasWindow
 from assistant.work_commands import AnswerTask, WorkCommand
@@ -122,7 +122,7 @@ class NativeCanvas:
         self.pump()
 
     def show_publication(self, publication: CanvasPublication) -> None:
-        self.jobs.append(lambda: self.view.personal.show_document(publication.document))
+        self.jobs.append(lambda: self.view.panel.show_document(publication.document))
 
     def last_command(self) -> WorkCommand:
         return self.commands[-1]
@@ -177,7 +177,7 @@ def test_my_work_sources_corrections_and_editing_survive_background_publication(
     assert isinstance(saved, WorkSaved)
     canvas_store = local_canvas(tmp_path)
     with native_canvas(canvas_store) as panel:
-        view = panel.view.personal
+        view = panel.view.panel
         assert not panel.view.window.findChildren(QtWidgets.QTabWidget)
         assert panel.view.administration is None
         panel.publish(WorkSnapshot(personal=PersonalView(store.read(), "Automatically connected")))
@@ -228,7 +228,7 @@ def test_unchanged_canvas_reopening_and_resize_reuse_native_groups(tmp_path: Pat
     seeded(store, document)
     with native_canvas(store) as native:
         native.publish(WorkSnapshot(personal=PersonalView(data)))
-        panel = native.view.personal
+        panel = native.view.panel
         previous = frozendict((frame.context.id, frame) for frame in panel.group_frames)
         native.work.show(focus=False)
         native.pump()
@@ -251,7 +251,7 @@ def test_unopened_nested_bubbles_are_created_when_found_or_redirected(tmp_path: 
     seeded(store, document)
     with native_canvas(store) as native:
         native.publish(WorkSnapshot(personal=PersonalView(data)))
-        canvas = native.view.personal
+        canvas = native.view.panel
         first = next(item for item in data.sources if item.parent_id == data.sources[0].id)
         assert canvas.card(first.id) is None
         canvas.search.setText(first.id)
@@ -280,7 +280,7 @@ def test_attention_redirect_reveals_its_question_in_a_collapsed_work_context(tmp
     task = work_task(automation.task.Waiting(automation.task.Question("attention", "Which owner?", "Choose the right owner.")), identity="task")
     with native_canvas(store) as native:
         native.publish(WorkSnapshot(tasks=(task,), personal=PersonalView(Catalog(works=(work,)))))
-        canvas = native.view.personal
+        canvas = native.view.panel
         canvas.questions_button.click()
         native.pump()
         card = canvas.card(question.id)
@@ -299,7 +299,7 @@ def test_work_dismissal_and_restore_controls_change_the_local_canvas(tmp_path: P
     assert isinstance(saved, WorkSaved)
     with native_canvas(local_canvas(tmp_path)) as native:
         native.publish(WorkSnapshot(personal=PersonalView(personal.read())))
-        canvas = native.view.personal
+        canvas = native.view.panel
         canvas.context_menu(saved.work.id)
         next(action for action in canvas.context_popup.actions() if action.text() == "This isn't my work").trigger()
         command = native.last_command()
@@ -332,12 +332,12 @@ def test_startup_prepared_canvas_remains_hidden_and_keeps_its_native_scene(tmp_p
         view = ui.canvas_view
         assert not view.window.isVisible() and not view.window.isActiveWindow()
         assert view.preview_prepared
-        cards = view.personal.cards
-        frames = view.personal.group_frames
+        cards = view.panel.cards
+        frames = view.panel.group_frames
         work.show(focus=False)
         ui.pump()
         assert view.window.isVisible()
-        assert view.personal.cards == cards and view.personal.group_frames == frames
+        assert view.panel.cards == cards and view.panel.group_frames == frames
     finally:
         ui.dispose()
 
@@ -368,7 +368,7 @@ def test_first_canvas_open_shows_native_loading_before_building_and_releases_it(
             bounds = windows.outer_rect(handle)
             assert bounds.width == bounds.height == round(80 * windows.scale(handle))
         view = CanvasWindow(root, work, store)
-        view.personal.canvas.viewport().installEventFilter(observer)
+        view.panel.canvas.viewport().installEventFilter(observer)
         views.append(view)
         return view
 
@@ -401,7 +401,7 @@ def test_first_canvas_open_shows_native_loading_before_building_and_releases_it(
 
 def drag_bubble(panel: NativeCanvas, identity: str) -> QtCore.QPointF:
     # Drive the public native surface; release must reach our persistence owner.
-    view = panel.view.personal
+    view = panel.view.panel
     card = view.card(identity)
     assert card is not None
     panel.pump()
@@ -424,7 +424,7 @@ def test_dragging_a_work_container_moves_its_contents_and_preserves_the_arrangem
     store = local_canvas(tmp_path)
     with native_canvas(store) as native:
         native.publish(WorkSnapshot(personal=PersonalView(Catalog(works=(work,), sources=(evidence,)))))
-        canvas = native.view.personal
+        canvas = native.view.panel
         group = next(frame for frame in canvas.group_frames if frame.context.id == work.id)
         child = canvas.card(evidence.id)
         assert child is not None
@@ -459,7 +459,7 @@ def test_native_drag_and_drop_puts_an_existing_bubble_inside_another(tmp_path: P
         ),
     )
     with native_canvas(store) as native:
-        canvas = native.view.personal
+        canvas = native.view.panel
         card = canvas.card(note.id)
         group = next(frame for frame in canvas.group_frames if frame.context.id == target.id)
         assert card is not None
@@ -484,7 +484,7 @@ def test_selecting_a_bubble_preserves_automatic_layout_until_it_is_dragged(tmp_p
     canvas_store = local_canvas(tmp_path)
     with native_canvas(canvas_store) as panel:
         panel.publish(WorkSnapshot(personal=PersonalView(store.read())))
-        view = panel.view.personal
+        view = panel.view.panel
         card = view.card(evidence.id)
         assert card is not None
         point = view.canvas.mapFromScene(card.mapToScene(QtCore.QPointF(200, 25)))
@@ -506,7 +506,7 @@ def test_long_bubbles_resize_without_overlapping_text_or_controls(tmp_path: Path
         panel.view.window.showNormal()
         panel.view.window.resize(800, 560)
         panel.publish(WorkSnapshot(personal=PersonalView(store.read())))
-        card = panel.view.personal.card(evidence.id)
+        card = panel.view.panel.card(evidence.id)
         assert card is not None
         compact_title = card.title_label.mapRectToParent(card.title_label.boundingRect())
         preview = card.preview.mapRectToParent(card.preview.rect())
@@ -516,15 +516,15 @@ def test_long_bubbles_resize_without_overlapping_text_or_controls(tmp_path: Path
         assert card.toolTip().startswith(evidence.title)
         assert_source_mark_visible(panel, evidence.id)
         assert_heading_surface(panel, evidence.id)
-        panel.view.personal.select(evidence.id)
+        panel.view.panel.select(evidence.id)
         assert_source_mark_visible(panel, evidence.id)
-        panel.view.personal.inspect(evidence.id)
+        panel.view.panel.inspect(evidence.id)
         panel.pump()
         assert card.detail_proxy is not None
         assert card.title_label.mapRectToParent(card.title_label.boundingRect()).bottom() < card.detail_proxy.pos().y()
         assert card.rect().contains(card.detail_proxy.mapRectToParent(card.detail_proxy.boundingRect()))
         assert panel.view.window.size() == QtCore.QSize(800, 560)
-        assert panel.view.personal.frame.rect().contains(panel.view.personal.toolbar.geometry())
+        assert panel.view.panel.frame.rect().contains(panel.view.panel.toolbar.geometry())
         panel.view.show_administration()
         assert panel.view.administration is not None
         assert panel.view.administration.window is not panel.view.window
@@ -539,7 +539,7 @@ def test_canvas_opens_maximized_and_retains_a_deliberate_restore(tmp_path: Path)
     # or subsequent redirects override a user's deliberate restored window.
     with native_canvas(local_canvas(tmp_path)) as panel:
         window = panel.view.window
-        window_menu = next(action.menu() for action in panel.view.personal.menu.actions() if action.text() == "Window")
+        window_menu = next(action.menu() for action in panel.view.panel.menu.actions() if action.text() == "Window")
         assert isinstance(window_menu, QtWidgets.QMenu)
         maximize = next(action for action in window_menu.actions() if action.text() == "Maximize or restore canvas")
         assert window.isMaximized()
@@ -573,7 +573,7 @@ def test_escape_unwinds_bubbles_and_search_keeps_drafts_then_exits(tmp_path: Pat
     seeded(store, save_note(document, CanvasNote("note:standalone", "Context", "Original context")))
     with native_canvas(store) as native:
         native.publish(WorkSnapshot(personal=PersonalView(data)))
-        canvas = native.view.personal
+        canvas = native.view.panel
         conversation = data.sources[0]
         canvas.canvas.setTransform(QtGui.QTransform().scale(0.8, 0.8))
         canvas.canvas.centerOn(80, 120)
@@ -611,7 +611,7 @@ def test_shared_connections_move_highlight_and_disappear_with_their_reference(tm
     seeded(store, document)
     with native_canvas(store) as native:
         native.publish(WorkSnapshot(personal=PersonalView(data)))
-        canvas = native.view.personal
+        canvas = native.view.panel
         path = canvas.connection_paths[0]
         assert path.toolTip() == "Shared approval"
         before = path.path()
@@ -642,7 +642,7 @@ def test_canvas_speech_instructs_the_open_canvas_and_keeps_failed_directions_for
     work.show(focus=False)
     ui.pump()
     try:
-        canvas = ui.canvas_view.personal
+        canvas = ui.canvas_view.panel
         instruction = "Find the deployment plan\nand compare the two document versions."
         fallback: list[str] = []
         ui.voice_agent(instruction, fallback.append)
@@ -650,7 +650,7 @@ def test_canvas_speech_instructs_the_open_canvas_and_keeps_failed_directions_for
         assert canvas.instruction_run is not None and "Queue unavailable" in canvas.status.text()
         ui.voice_agent(instruction, fallback.append)
         ui.pump()
-        canvas = ui.canvas_view.personal  # A fresh observation after the retry, not the narrowed earlier one.
+        canvas = ui.canvas_view.panel  # A fresh observation after the retry, not the narrowed earlier one.
         assert canvas.instruction_run is None and attempts[0] == attempts[1] and not fallback
         run = attempts[-1]
         assert run.intent == CanvasInstruction(instruction) and run.work_id == ROOT_CONTEXT
@@ -683,7 +683,7 @@ def test_canvas_toolbar_keeps_search_and_center_accessible_in_a_small_window(tmp
         native.publish(WorkSnapshot(personal=personal))
         native.view.window.showNormal()
         native.view.window.resize(800, 560)
-        canvas = native.view.personal
+        canvas = native.view.panel
         assert not canvas.clear_context.isVisible()
         assert not canvas.toolbar.findChildren(QtWidgets.QPlainTextEdit)
         work = next(item for item in personal.catalog.works if item.definition.title.startswith("Atlas"))
@@ -738,7 +738,7 @@ def test_canvas_gestures_pan_and_zoom_without_moving_saved_bubbles(tmp_path: Pat
     seeded(store, document)
     with native_canvas(store) as native:
         native.publish(WorkSnapshot(personal=PersonalView(data)))
-        canvas = native.view.personal
+        canvas = native.view.panel
         viewport = canvas.canvas
         before = store.read()
         point = QtCore.QPointF(200, 200)
@@ -776,7 +776,7 @@ def test_grid_remains_visible_and_spaced_when_zoomed_out_and_panned(tmp_path: Pa
     # Defect: the tiled raster shrinks into invisible dots or dense stripes;
     # Workspace must keep its spatial reference visible at every allowed zoom.
     with native_canvas(local_canvas(tmp_path)) as panel:
-        viewport = panel.view.personal.canvas
+        viewport = panel.view.panel.canvas
         for zoom in (1.6, 1.0, 0.6, 0.3, 0.15):
             viewport.setTransform(QtGui.QTransform().scale(zoom, zoom))
             for center in (QtCore.QPointF(0, 0), QtCore.QPointF(173, -91)):
@@ -787,7 +787,7 @@ def test_grid_remains_visible_and_spaced_when_zoomed_out_and_panned(tmp_path: Pa
                 # native pixels (the real desktop may have a DPI scale).
                 x0, y0 = image.width() // 2 - 160, image.height() // 2 - 100
                 # Dots stand apart from the window in either scheme: lighter in dark, darker in light.
-                ground = QtGui.QColor(panel.view.personal.theme.window).lightness()
+                ground = QtGui.QColor(panel.view.panel.theme.window).lightness()
                 rows = tuple(
                     tuple(x for x in range(x0, x0 + 320) if abs(image.pixelColor(x, y).lightness() - ground) > 20) for y in range(y0, y0 + 200)
                 )
@@ -801,7 +801,7 @@ def test_grid_remains_visible_and_spaced_when_zoomed_out_and_panned(tmp_path: Pa
 
 def assert_source_mark_visible(panel: NativeCanvas, identity: str) -> None:
     # Defect: the selection outline fills over the app mark painted beneath it.
-    view = panel.view.personal
+    view = panel.view.panel
     card = view.card(identity)
     assert card is not None
     image = QtGui.QImage(22, 22, QtGui.QImage.Format.Format_ARGB32_Premultiplied)
@@ -816,13 +816,13 @@ def assert_source_mark_visible(panel: NativeCanvas, identity: str) -> None:
 def assert_heading_surface(panel: NativeCanvas, identity: str) -> None:
     # Defect: the heading paints a dark rectangle behind the title
     # instead of using the same continuous surface as the notification bubble.
-    card = panel.view.personal.card(identity)
+    card = panel.view.panel.card(identity)
     assert card is not None
     image = QtGui.QImage(20, 2, QtGui.QImage.Format.Format_ARGB32_Premultiplied)
     image.fill(Qt.GlobalColor.transparent)
     origin = card.mapToScene(card.title_label.pos())
     painter = QtGui.QPainter(image)
-    panel.view.personal.scene.render(painter, QtCore.QRectF(0, 0, 20, 2), QtCore.QRectF(origin.x() + 4, origin.y() + 1, 20, 2))
+    panel.view.panel.scene.render(painter, QtCore.QRectF(0, 0, 20, 2), QtCore.QRectF(origin.x() + 4, origin.y() + 1, 20, 2))
     painter.end()
     surface = surface_fill(card.theme, card.surface)
     assert all(image.pixelColor(x, y) == surface for x in range(20) for y in range(2))
@@ -916,7 +916,7 @@ def test_canvas_voice_key_feedback_follows_agent_capture_and_release(tmp_path: P
     work = ui.work(lambda _: None, reveal=True, focus=False)
     ui.pump()
     try:
-        legend = ui.canvas_view.personal.voice_hint
+        legend = ui.canvas_view.panel.voice_hint
         assert pressed(legend) and "Listening" in legend.accessibleDescription()
         held = legend.grab().toImage()
         bounds = legend.geometry()
@@ -973,7 +973,7 @@ def test_canvas_clarification_redirect_submits_context_to_the_waiting_agent(tmp_
         question = store.read().activity[0]
         assert isinstance(question, CanvasQuestion) and isinstance(question.request, SessionRequest)
         click_canvas_notification(ui)
-        canvas = ui.canvas_view.personal
+        canvas = ui.canvas_view.panel
         assert canvas.selected == question.id
         detail = canvas.detail(question.id)
         assert isinstance(detail, QuestionDetail)
@@ -1013,7 +1013,7 @@ def test_canvas_spoken_reply_keeps_transcript_on_rejection_and_continue_stays_bo
     ui.observe_canvas_work(snapshot)
     ui.pump()
     try:
-        canvas = ui.canvas_view.personal
+        canvas = ui.canvas_view.panel
         canvas.open_at("question:request")
         question = canvas.detail("question:request")
         assert isinstance(question, QuestionDetail)
@@ -1105,7 +1105,7 @@ def test_canvas_attention_reaches_the_desktop_and_redirects_to_its_bubble(tmp_pa
         work.prepare()
         ui.open_inbox(lambda: None)
         ui.pump()
-        assert ui.canvas_view.personal.selected == "question:current"
+        assert ui.canvas_view.panel.selected == "question:current"
         ui.canvas_view.hide()
         completed = replace(snapshot, tasks=(old, current, replace(research, state=automation.task.Completed("Handoff confirmed", ()))))
         work.publish(completed)
@@ -1114,8 +1114,8 @@ def test_canvas_attention_reaches_the_desktop_and_redirects_to_its_bubble(tmp_pa
         assert notices == [("Current question", "question:current"), (research.title, "result:" + research.id)]
         ui.open_canvas_at(notices[-1][1])
         ui.pump()
-        assert ui.canvas_view.personal.selected == "result:" + research.id
-        assert ui.canvas_view.personal.document == store.read()
+        assert ui.canvas_view.panel.selected == "result:" + research.id
+        assert ui.canvas_view.panel.document == store.read()
         assert notices == [("Current question", "question:current"), (research.title, "result:" + research.id)]
     finally:
         ui.dispose()
@@ -1159,7 +1159,7 @@ def test_nested_bubbles_reveal_on_one_canvas_and_retain_reading_and_pins(tmp_pat
     seeded(store, document)
     with native_canvas(store) as panel:
         panel.publish(WorkSnapshot(personal=personal))
-        canvas = panel.view.personal
+        canvas = panel.view.panel
         scene = canvas.scene
         assert len(canvas.cards) == 2 and canvas.card(work.id) is None
         context_frame = next(frame for frame in canvas.group_frames if frame.context.id == work.id)
@@ -1195,7 +1195,7 @@ def test_nested_bubbles_reveal_on_one_canvas_and_retain_reading_and_pins(tmp_pat
         assert canvas.selected == question.id and editor.question.text() == clarification
 
 
-def assert_searching_island(canvas: PersonalPanel) -> None:
+def assert_searching_island(canvas: CanvasPanel) -> None:
     # Defect: the island leaves its fixed place at the window's foot, or search
     # crowds the speak and options symbols instead of taking the island over.
     toolbar = canvas.toolbar
@@ -1218,7 +1218,7 @@ def assert_context_header(frame: CanvasGroup) -> None:
     assert frame.rect().contains(frame.contents.mapRectToParent(frame.contents.rect()))
 
 
-def assert_source_context(canvas: PersonalPanel, identity: str) -> None:
+def assert_source_context(canvas: CanvasPanel, identity: str) -> None:
     assert canvas.selected is not None
     source_editor = canvas.detail(canvas.selected)
     assert isinstance(source_editor, SourceDetail)
@@ -1226,7 +1226,7 @@ def assert_source_context(canvas: PersonalPanel, identity: str) -> None:
     assert connected is not None and connected.id == identity
 
 
-def assert_inline_containment(canvas: PersonalPanel, parent: str) -> None:
+def assert_inline_containment(canvas: CanvasPanel, parent: str) -> None:
     bubble = canvas.card(parent)
     assert bubble is not None
     bounds = tuple(item.sceneBoundingRect() for item in canvas.visible_cards if item is not bubble)
@@ -1243,7 +1243,7 @@ def test_nested_document_and_conversation_controls_keep_routes_and_drafts(tmp_pa
     seeded(store, document)
     with native_canvas(store) as native:
         native.publish(WorkSnapshot(personal=PersonalView(data)))
-        canvas = native.view.personal
+        canvas = native.view.panel
         conversation = data.sources[0]
         card = canvas.card(conversation.id)
         assert card is not None and card.contents is not None and card.contents.disclosure.action.title == "Show 8 pieces"
@@ -1286,7 +1286,7 @@ def test_nested_document_and_conversation_controls_keep_routes_and_drafts(tmp_pa
 
 
 def open_document_context(native: NativeCanvas, identity: str, work: str) -> None:
-    canvas = native.view.personal
+    canvas = native.view.panel
     card = canvas.card(identity)
     assert card is not None and card.contents is not None
     card.contents.open_canvas.click()
@@ -1312,7 +1312,7 @@ def test_native_connector_relationships_and_menus_work_for_cards_and_containers(
         ),
     )
     with native_canvas(store) as native:
-        canvas = native.view.personal
+        canvas = native.view.panel
         card = canvas.card(note.id)
         target = next(frame for frame in canvas.group_frames if frame.context.id == group.id)
         assert card is not None

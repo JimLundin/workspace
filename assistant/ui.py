@@ -42,7 +42,6 @@ lazy from assistant.meeting_panel import MeetingPanel
 lazy from assistant.meeting_workflow import MeetingSnapshot, MeetingWorkflow
 lazy from assistant.notification_sources import HandleNotice, NotificationSources, NotificationState
 lazy from assistant.overlay_desktop import NativeOverlayDesktop, OverlayDesktop
-lazy from assistant.personal_work_panel import CanvasEdits
 lazy from assistant.qt_ui import application, cancel, later
 lazy from assistant.recording_state import RecordingAction, RecordingState
 lazy from assistant.state_store import SavedState
@@ -54,6 +53,7 @@ lazy from assistant.ui_components.widgets import Editor, Window, column, glyph, 
 lazy from assistant.vector_icons import icon
 lazy from assistant.window_switcher import WindowSwitcher
 lazy from assistant.work_canvas import AnswerQuestion, CanvasPublication, SpeechRoute, WorkCanvas
+lazy from assistant.work_canvas_panel import CanvasEdits
 lazy from assistant.work_canvas_window import CanvasWindow
 lazy from assistant.work_commands import WorkCommand
 lazy from assistant.work_snapshot import WorkSnapshot
@@ -581,7 +581,7 @@ class Ui:
         if self._canvas is None:
             raise RuntimeError("The canvas opens after its owner is configured.")
         self._work_view = self._views.canvas(self._root, work, self._canvas)
-        self._work_view.personal.voice_hint.set_pressed(pressed=self._agent_speaking)
+        self._work_view.panel.voice_hint.set_pressed(pressed=self._agent_speaking)
         self._attach_meetings()
         return self._work_view
 
@@ -646,7 +646,7 @@ class Ui:
         if self._desktop is not None:
             self._desktop.inbox_changed(len(publication.waiting))
         if self._work_view is not None:
-            self._work_view.personal.show_document(publication.document)
+            self._work_view.panel.show_document(publication.document)
         notice = publication.notice
         if (
             not replay
@@ -679,7 +679,7 @@ class Ui:
 
         def reveal(_: QtWidgets.QApplication) -> None:
             if self._work_view is not None:
-                self._work_view.personal.open_at(identity)
+                self._work_view.panel.open_at(identity)
 
         self.post(reveal)
 
@@ -700,7 +700,7 @@ class Ui:
         """
 
         def route(_: QtWidgets.QApplication) -> None:
-            panel = self._work_view.personal if self._work_view is not None else None
+            panel = self._work_view.panel if self._work_view is not None else None
             if self._canvas is None or panel is None:
                 fallback(text)
                 return
@@ -829,7 +829,7 @@ class Ui:
             if self._desktop is not None:
                 self._desktop.dictation(active=state is State.LISTENING)
             if self._work_view is not None:
-                self._work_view.personal.voice_hint.set_pressed(pressed=agent_speaking)
+                self._work_view.panel.voice_hint.set_pressed(pressed=agent_speaking)
 
         self.post(display)
 

@@ -122,13 +122,13 @@ class CanvasEdits(Protocol):
     def continue_work(self, work_id: str) -> Continuation: ...
 
 
-class PersonalPanel:
+class CanvasPanel:
     def __init__(self, parent: CanvasFrame, work: WorkWindow, canvas: CanvasEdits) -> None:
         # One scheme for the canvas's lifetime, so every bubble, detail and menu agree.
         self.theme: Tokens = parent.theme
         self.style: str = content_style(parent.theme)
         self.work: WorkWindow = work
-        self.work_canvas: CanvasEdits = canvas
+        self.edits: CanvasEdits = canvas
         self.document: CanvasDocument = canvas.read()
         self.view: PersonalView = PersonalView()
         self.scope: CanvasScope = CanvasScope()
@@ -267,7 +267,7 @@ class PersonalPanel:
         if pending is None or pending.intent != intent:
             pending = CanvasRun("canvas:instruction:" + uuid4().hex, self.selected or ROOT_CONTEXT, intent)
         try:
-            started = self.work_canvas.start(pending)
+            started = self.edits.start(pending)
         except (OSError, ValueError, sqlite3.Error) as error:
             self.work.problem("The local canvas could not be saved: " + str(error))
             return False
@@ -368,7 +368,7 @@ class PersonalPanel:
 
     def commit(self, change: Change) -> bool:
         try:
-            self.document = self.work_canvas.commit(UserEdit(self.scope, change))
+            self.document = self.edits.commit(UserEdit(self.scope, change))
         except ValueError as error:
             self.work.problem(str(error))
             return False
@@ -897,7 +897,7 @@ class PersonalPanel:
 
     def study_work(self, identity: str) -> None:
         try:
-            continued = self.work_canvas.continue_work(identity)
+            continued = self.edits.continue_work(identity)
         except (OSError, ValueError, sqlite3.Error) as error:
             self.work.problem("The local canvas could not be saved: " + str(error))
             return
@@ -1066,8 +1066,8 @@ def rounded(menu: QtWidgets.QMenu) -> QtWidgets.QMenu:
 # No document/layout work occurs during pointer movement. The panel applies
 # the single immutable commit effect on release.
 class CanvasInteraction:
-    def __init__(self, owner: PersonalPanel) -> None:
-        self.owner: PersonalPanel = owner
+    def __init__(self, owner: CanvasPanel) -> None:
+        self.owner: CanvasPanel = owner
         self.gesture: Gesture = Idle.READY
         self.gesture_scene: GestureScene = GestureScene((), None)
         self.relation_preview: QtWidgets.QGraphicsPathItem | None = None
