@@ -53,9 +53,6 @@ class Source:
         self.known.append(dict(known))
         return self.observe()
 
-    def dismiss(self, key: NoticeKey) -> None:
-        pass
-
     def close(self) -> None:
         self.closes += 1
 

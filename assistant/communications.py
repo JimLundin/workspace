@@ -150,9 +150,6 @@ class NotificationFilter:
             case TeamsActivity():
                 return False
 
-    def toggled(self, app_id: str) -> NotificationFilter:
-        return NotificationFilter(self.hidden ^ {app_id})
-
 
 @dataclass(frozen=True, slots=True)
 class UnavailableChat:

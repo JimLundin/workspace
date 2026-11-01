@@ -1,4 +1,4 @@
-"""Bounded, local Notification Center reads and explicit individual dismissal."""
+"""Bounded, local Notification Center observations."""
 
 import os
 import queue
@@ -32,7 +32,6 @@ class NotificationSource(Protocol):
     def open(self) -> bool: ...
     def stamp(self) -> Stamp: ...
     def read(self, stopped: threading.Event, known: Mapping[NoticeKey, Notice]) -> Observation: ...
-    def dismiss(self, key: NoticeKey) -> None: ...
     def close(self) -> None: ...
 
 
@@ -88,12 +87,6 @@ class NativeNotifications:
                 found.append(notice)
         return Observed(tuple(sorted(found, key=notice_created, reverse=True)))
 
-    def dismiss(self, key: NoticeKey) -> None:
-        listener = UserNotificationListener.get_Current()
-        source = listener.GetNotification(key.identity)
-        if source and creation_time(source.CreationTime) == key.created:
-            listener.RemoveNotification(key.identity)
-
     def close(self) -> None:
         RoUninitialize()
 
@@ -101,13 +94,12 @@ class NativeNotifications:
 class NotificationObserver:
     """WinRT lives on one MTA worker; no notification content is logged or saved."""
 
-    __slots__ = ("banner_policy", "dismissals", "results", "source", "stopped", "thread")
+    __slots__ = ("banner_policy", "results", "source", "stopped", "thread")
 
     def __init__(self, *, source: NotificationSource | None = None, banner_policy: BannerLease | None = None) -> None:
         self.results: queue.Queue[Observation] = queue.Queue(maxsize=1)
         self.source: NotificationSource = NativeNotifications() if source is None else source
         self.banner_policy: BannerLease = BannerPolicy() if banner_policy is None else banner_policy
-        self.dismissals: queue.Queue[NoticeKey] = queue.Queue(maxsize=64)
         self.stopped = threading.Event()
         self.thread = threading.Thread(target=self.run, name="Windows notifications", daemon=True)
         self.thread.start()
@@ -116,10 +108,6 @@ class NotificationObserver:
         with suppress(queue.Empty):
             self.results.get_nowait()
         self.results.put_nowait(value)
-
-    def dismiss(self, key: NoticeKey) -> None:
-        with suppress(queue.Full):
-            self.dismissals.put_nowait(key)
 
     def run(self) -> None:
         if not self.source.open():
@@ -131,9 +119,6 @@ class NotificationObserver:
             read_stamp: Stamp = None
             due = 0.0
             while not self.stopped.is_set():
-                while not self.dismissals.empty():
-                    with suppress(OSError):
-                        self.source.dismiss(self.dismissals.get_nowait())
                 stamp = self.source.stamp()
                 if stamp != read_stamp or time.monotonic() >= due:
                     observation = self.observe(known, failures)

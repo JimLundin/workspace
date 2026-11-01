@@ -56,7 +56,6 @@ class BarActions:
     inbox: Callable[[], None] = field(kw_only=True)
     tool: Callable[[Tool, int], None] = lambda tool, hwnd: None
     notices: Callable[[system_notices.Observed], None] = lambda _: None
-    handled_notice: Callable[[system_notices.NoticeKey], bool] = lambda _: False
 
 
 @dataclass(frozen=True, slots=True)
@@ -495,14 +494,6 @@ class DesktopBar:
                 self.materials.submit((self.sample_bounds,))
         # Each tick re-measures, so a growing timer pushes its neighbours out.
         self.render()
-
-    def dismiss_notification(self, key: system_notices.NoticeKey) -> None:
-        if not self.actions.handled_notice(key):
-            self.remove_notification(key)
-
-    def remove_notification(self, key: system_notices.NoticeKey) -> None:
-        if self.notification_service is not None:
-            self.notification_service.dismiss(key)
 
     def notification_settings(self) -> None:
         os.startfile("ms-settings:notifications")

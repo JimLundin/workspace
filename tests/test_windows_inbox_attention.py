@@ -40,11 +40,11 @@ class InboxUi(Ui):
 
     __slots__ = ("current_bar", "current_canvas", "current_feed")
 
-    def __init__(self, *, dismiss_notice: Callable[[NoticeKey], None] | None = None) -> None:
+    def __init__(self) -> None:
         self.current_bar: DesktopBar | None = None
         self.current_canvas: CanvasWindow | None = None
         self.current_feed: AgentToasts | None = None
-        super().__init__(views=Views(self.create_bar, self.create_feed, self.create_canvas), dismiss_notice=dismiss_notice or (lambda _: None))
+        super().__init__(views=Views(self.create_bar, self.create_feed, self.create_canvas))
 
     def create_bar(self, actions: BarActions, *, audio_level: Callable[[], float | None] | None = None) -> DesktopBar:
         self.current_bar = DesktopBar(actions, native_shell=False, audio_level=audio_level)

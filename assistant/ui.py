@@ -37,7 +37,7 @@ lazy from assistant.keymap_views import KeymapOverlay, KeymapWindow
 lazy from assistant.layer_indicator import Indicator
 lazy from assistant.meeting_panel import MeetingPanel
 lazy from assistant.meeting_workflow import MeetingSnapshot, MeetingWorkflow
-lazy from assistant.notification_sources import HandleNotice, NotificationSources, NotificationState
+lazy from assistant.notification_sources import NotificationSources, NotificationState
 lazy from assistant.qt_ui import application, later
 lazy from assistant.recording_state import RecordingAction, RecordingState
 lazy from assistant.state_store import SavedState
@@ -54,7 +54,6 @@ lazy from assistant.work_snapshot import WorkSnapshot
 lazy from assistant.work_window import WorkWindow
 lazy from miryoku.layout import Layer, Scancode
 lazy from protocol import Tool
-lazy from winapi.system_notices import NoticeKey
 
 prepare()
 
@@ -120,7 +119,6 @@ class Ui:
         "_keyboard_overlay",
         "_keymap",
         "_meetings",
-        "_notice_dismissal",
         "_notifications",
         "_pending_inputs",
         "_poll_timer",
@@ -140,13 +138,11 @@ class Ui:
         *,
         presentation: Presentation | None = None,
         views: Views | None = None,
-        dismiss_notice: Callable[[NoticeKey], None] | None = None,
     ) -> None:
         # Ui owns independent dialog, toolbar and feed lifetimes; their concrete
         # factories and native effects enter here before any view is created.
         self.presentation: Presentation = NativePresentation() if presentation is None else presentation
         self._views: Views = Views() if views is None else views
-        self._notice_dismissal: Callable[[NoticeKey], None] | None = dismiss_notice
         if threading.current_thread() is not threading.main_thread():
             raise RuntimeError("Qt must be created on the process's main thread.")
         self._agent: AgentWindow | None = None
@@ -439,7 +435,7 @@ class Ui:
 
     def configure_feed(self, notifications: SavedState[NotificationState], assess: Assess) -> None:
         """Connect the notice store and triage before their observers start."""
-        owner = NotificationSources(notifications, self.dismiss_system_notice)
+        owner = NotificationSources(notifications)
         owner.load()
         self._notifications, self._assess = owner, assess
 
@@ -470,22 +466,6 @@ class Ui:
             self._desktop.agent_changed(island_agent.activity(session))
         if self._canvas is not None:
             self._canvas.observe_session(session)
-
-    def dismiss_system_notice(self, key: NoticeKey) -> None:
-        if self._notice_dismissal is not None:
-            self._notice_dismissal(key)
-        else:
-            self.post(lambda _: self._desktop.remove_notification(key) if self._desktop is not None else None)
-
-    def handle_system_notice(self, key: NoticeKey) -> bool:
-        if self._desktop is None or self._desktop.notification_observation is None:
-            return False
-        notice = next((item for item in self._desktop.notification_observation.notices if item.key == key), None)
-        notifications = self._notifications
-        if notice is None or notifications is None or not notifications.command(HandleNotice(notice)):
-            return False
-        self._observe_feed(NoticesObserved(notifications.state))
-        return True
 
     def _windows(self) -> tuple[AgentWindow | WorkWindow, ...]:
         return tuple(window for window in (self._agent, self._work) if window is not None)
@@ -767,7 +747,6 @@ class Ui:
                     on_problem,
                     tool or (lambda _tool, _hwnd: None),
                     self.system_notices,
-                    self.handle_system_notice,
                     inbox=lambda: self.open_inbox(show_agent),
                 )
                 self._desktop = self._views.desktop(actions, audio_level=audio_level)
