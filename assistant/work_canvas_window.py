@@ -5,19 +5,23 @@ observations and command owner, keeping approvals and saved drafts on one path.
 """
 
 from collections.abc import Callable
+from pathlib import Path
 
 lazy from PySide6 import QtCore, QtGui, QtWidgets
 lazy from PySide6.QtCore import Qt
 
+from assistant.desktop_attention import CanvasFocus
 from assistant.ui_components.appearance import scheme, tokens
 from assistant.ui_components.canvas_chrome import CanvasFrame
 from assistant.ui_components.canvas_look import Role, face
 from assistant.ui_components.paint_ready import PaintReady
 from assistant.ui_components.widgets import column, show_window
+from assistant.work_canvas_model import CanvasDocument
 from assistant.work_canvas_panel import CanvasEdits, CanvasPanel, rounded
 from assistant.work_snapshot import WorkSnapshot
 from assistant.work_window import WorkWindow
 lazy from assistant.meeting_panel import MeetingPanel
+lazy from assistant.meeting_workflow import MeetingSnapshot, MeetingWorkflow
 lazy from assistant.work_panel import WorkPanel
 
 
@@ -57,6 +61,34 @@ class CanvasWindow:
     def position_controls(self) -> None:
         self.grip.setGeometry(self.panel.frame.width() - 20, self.panel.frame.height() - 20, 16, 16)
         self.grip.raise_()
+
+    def focus(self) -> CanvasFocus:
+        """Publish only the canvas observation needed by desktop attention policy."""
+        return CanvasFocus(selected=self.panel.selected, visible=self.panel.frame.isVisible(), active=self.window.isActiveWindow())
+
+    def instruct(self, text: str) -> bool:
+        return self.panel.send_instruction(text)
+
+    def reply_failed(self) -> None:
+        self.panel.status.setText("This reply could not be sent. Your transcript is available with Copy latest transcript.")
+
+    def show_document(self, document: CanvasDocument) -> None:
+        self.panel.show_document(document)
+
+    def open_at(self, identity: str) -> None:
+        self.panel.open_at(identity)
+
+    def voice_pressed(self, *, pressed: bool) -> None:
+        self.panel.voice_hint.set_pressed(pressed=pressed)
+
+    def configure_meetings(self, workflow: MeetingWorkflow, open_file: Callable[[Path], None]) -> None:
+        """Create and retain the view's meeting widgets once, on Qt's thread."""
+        if self.meetings is None:
+            self.attach_meetings(MeetingPanel(workflow, open_file=open_file))
+
+    def render_meetings(self, snapshot: MeetingSnapshot) -> None:
+        if self.meetings is not None:
+            self.meetings.render_snapshot(snapshot)
 
     def maximize(self) -> None:
         if self.window.isMaximized():

@@ -13,6 +13,7 @@ lazy from PySide6.QtTest import QTest
 
 from assistant.agent_toasts import AgentToasts
 from assistant.agent_window import AgentWindow
+from assistant.canvas_activity import SessionRequest
 from assistant.communications import Feed, WindowsNotice
 from assistant.desktop_bar import BarActions, DesktopBar
 from assistant.island_model import Agent, Job, Key
@@ -25,7 +26,7 @@ from assistant.ui import Ui, Views
 from assistant.work_canvas_panel import CanvasEdits
 from assistant.work_canvas_window import CanvasWindow
 from assistant.work_window import WorkWindow
-from automation.task import Reply, TextAnswer
+from automation.task import Reply
 from tests.agent_requests import asked
 from tests.communications_fixture import communication_feed
 from tests.test_communications_service import LocalCipher
@@ -153,7 +154,19 @@ def test_app_context_stays_quiet_and_only_agent_questions_change_toolbar_attenti
     # question count depends on a floating view already being created.
     app, original_style = application(), application().styleSheet()
     ui = InboxUi()
+    conversations: tuple[str, ...] = ()
+
+    def show_conversation() -> None:
+        nonlocal conversations
+        conversations = (*conversations, "shown")
+
     try:
+        # Defect: inbox navigation loses the configured conversation callback
+        # before either canvas or agent view is created.
+        ui.configure_controls(on_agent_waiting=lambda _: None, on_recording=lambda _: None, on_show_agent=show_conversation)
+        ui.open_inbox()
+        ui.pump()
+        assert conversations == ("shown",)
         ui.configure_canvas(local_canvas(tmp_path, ui.publish_canvas), lambda _title, _target: None)
         ui.desktop(
             show_agent=lambda: None, show_work=lambda: None, stop=lambda: None, overlay=lambda: None, menu=lambda: None, on_problem=lambda _: None
@@ -166,7 +179,7 @@ def test_app_context_stays_quiet_and_only_agent_questions_change_toolbar_attenti
         ui.pump()
         capsule = waiting(ui.bar)
         assert capsule is not None and "1 clarification needs" in capsule.accessibleName()
-        assert agent.respond("owned", TextAnswer("Revenue"))
+        assert ui.answer_canvas(SessionRequest(agent.snapshot().identity, "owned"), "Revenue")
         ui.pump()
         assert waiting(ui.bar) is None
     finally:

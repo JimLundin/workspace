@@ -241,6 +241,7 @@ class AssistantApp:
         self.ui.configure_controls(
             on_agent_waiting=lambda waiting: self.show(State.NEEDS_INPUT if waiting else State.AGENT),
             on_recording=self.recording_action,
+            on_show_agent=self.show_agent,
         )
         self.overlay = OverlayState(enabled=load_enabled())
         self.jobs: queue.Queue[Callable[[], None] | None] = queue.Queue()
@@ -483,7 +484,7 @@ class AssistantApp:
         threading.Thread(target=self.monitor_layout.balance, name="window redistribution", daemon=True).start()
 
     def open_inbox(self) -> None:
-        self.ui.open_inbox(self.agent.show)
+        self.ui.open_inbox()
 
     def show_agent(self) -> None:
         self.agent.show()

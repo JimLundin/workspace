@@ -9,13 +9,11 @@ from assistant.agent_session import Session
 from assistant.canvas_activity import CanvasInstruction, CanvasQuestion, CanvasRequest, CanvasRun, CanvasUpdate, SessionRequest
 from assistant.work_canvas import (
     Announcement,
-    AnswerQuestion,
     CanvasPublication,
     Investigating,
     NotQueued,
     Queued,
     ResumeTask,
-    SpeechRoute,
     WorkCanvas,
 )
 from assistant.work_canvas_commands import (
@@ -183,17 +181,6 @@ def test_each_change_publishes_current_attention_and_bridge_moves_settle_hidden_
     assert isinstance(canvas.command(command), CanvasRefused)
     assert not canvas.answer(SessionRequest("session", "chat"), TextAnswer("Again"), deliver)
     expect(7, (), frozenset(("question:hidden", "question:current", "question:chat")))
-
-
-def test_speech_answers_the_selected_question_or_instructs_only_an_open_canvas(tmp_path: Path) -> None:
-    # Defect: speech answers an unselected question, becomes a task while a
-    # question is selected, or instructs a canvas the user cannot see.
-    canvas = local_canvas(tmp_path)
-    canvas.observe_session(Session(identity="session", messages=(asked("chat", "Which supplier?", "", 10),)))
-    assert canvas.speech("question:chat", visible=True) == AnswerQuestion(SessionRequest("session", "chat"))
-    assert canvas.speech("work:one", visible=True) is SpeechRoute.INSTRUCT
-    assert canvas.speech(None, visible=True) is SpeechRoute.INSTRUCT
-    assert canvas.speech("question:chat", visible=False) is SpeechRoute.FALLBACK
 
 
 def test_directions_are_saved_before_queueing_and_retries_reuse_their_binding(tmp_path: Path) -> None:

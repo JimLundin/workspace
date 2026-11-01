@@ -1103,7 +1103,9 @@ def test_canvas_attention_reaches_the_desktop_and_redirects_to_its_bubble(tmp_pa
         work = ui.work(lambda _command: None, reveal=False)
         work.publish(snapshot)
         work.prepare()
-        ui.open_inbox(lambda: None)
+        capsule = waiting(ui.bar)
+        assert capsule is not None
+        QtTest.QTest.mouseClick(capsule, Qt.MouseButton.LeftButton, pos=QtCore.QPoint(17, 25))
         ui.pump()
         assert ui.canvas_view.panel.selected == "question:current"
         ui.canvas_view.hide()

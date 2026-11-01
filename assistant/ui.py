@@ -10,20 +10,20 @@ from collections.abc import Callable
 from concurrent.futures import Future, TimeoutError
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Protocol
+from typing import Protocol, assert_never
 
 lazy import shiboken6
 lazy from PySide6 import QtCore, QtGui, QtWidgets
 
 import winapi.shapes
-from assistant.canvas_activity import CanvasRequest, SessionRequest, TaskRequest
+from assistant.canvas_activity import CanvasRequest
 from assistant.qt_runtime import prepare
 from assistant.work_canvas_commands import CanvasCommand, CanvasRefused, CanvasResponse
-from assistant.work_commands import AnswerTask
 from automation.personal_work import Catalog
 from automation.task import TextAnswer
 from winapi.shapes import Rect
 lazy import assistant.communications
+lazy import assistant.desktop_attention
 lazy import winapi.system_notices
 lazy from assistant import island_agent, island_model
 lazy from assistant.agent_session import Session, Snapshot
@@ -35,7 +35,6 @@ lazy from assistant.feed_observation import FeedObservation, FeedUpdate, Notices
 lazy from assistant.icons import State
 lazy from assistant.keymap_views import KeymapOverlay, KeymapWindow
 lazy from assistant.layer_indicator import Indicator
-lazy from assistant.meeting_panel import MeetingPanel
 lazy from assistant.meeting_workflow import MeetingSnapshot, MeetingWorkflow
 lazy from assistant.notification_sources import NotificationSources, NotificationState
 lazy from assistant.qt_ui import application, later
@@ -46,7 +45,7 @@ lazy from assistant.ui_components.canvas_loading import CanvasLoading
 lazy from assistant.ui_components.widgets import show_window, window_style
 lazy from assistant.vector_icons import icon
 lazy from assistant.window_switcher import WindowSwitcher
-lazy from assistant.work_canvas import AnswerQuestion, CanvasPublication, SpeechRoute, WorkCanvas
+lazy from assistant.work_canvas import CanvasPublication, WorkCanvas
 lazy from assistant.work_canvas_panel import CanvasEdits
 lazy from assistant.work_canvas_window import CanvasWindow
 lazy from assistant.work_commands import WorkCommand
@@ -124,6 +123,7 @@ class Ui:
         "_poll_timer",
         "_recording",
         "_root",
+        "_show_agent",
         "_switcher",
         "_thread",
         "_views",
@@ -167,6 +167,7 @@ class Ui:
         # thread, so it connects them through configure_controls.
         self._agent_waiting: Callable[[bool], None] | None = None
         self._recording: Callable[[RecordingAction], None] | None = None
+        self._show_agent: Callable[[], None] | None = None
         self._indicator: Indicator | None = None
         """Made on first use, on the Qt thread."""
         self._keymap: KeymapWindow | None = None
@@ -189,9 +190,11 @@ class Ui:
         *,
         on_agent_waiting: Callable[[bool], None],
         on_recording: Callable[[RecordingAction], None],
+        on_show_agent: Callable[[], None],
     ) -> None:
         """Connect the application before it creates any views."""
         self._agent_waiting, self._recording = on_agent_waiting, on_recording
+        self._show_agent = on_show_agent
 
     def run(self) -> None:
         """Run and dispose Qt on the main thread, including binding-owned deletions."""
@@ -457,11 +460,7 @@ class Ui:
     def refresh_inbox(self, session: Snapshot | None = None) -> None:
         """Publish attention on the Qt thread, including before the agent view exists."""
         if session is None:
-            if self._agent is None:
-                session = Session()
-            else:
-                with self._agent.lock:
-                    session = self._agent.state
+            session = Session() if self._agent is None else self._agent.snapshot()
         if self._desktop is not None:
             self._desktop.agent_changed(island_agent.activity(session))
         if self._canvas is not None:
@@ -520,7 +519,7 @@ class Ui:
         if self._canvas is None:
             raise RuntimeError("The canvas opens after its owner is configured.")
         self._work_view = self._views.canvas(self._root, work, self._canvas)
-        self._work_view.panel.voice_hint.set_pressed(pressed=self._agent_speaking)
+        self._work_view.voice_pressed(pressed=self._agent_speaking)
         self._attach_meetings()
         return self._work_view
 
@@ -531,7 +530,7 @@ class Ui:
         # The canvas owner holds storage and policy; Qt serializes its use.
         def configure(_: QtWidgets.QApplication) -> None:
             self._canvas, self._canvas_notice = canvas, notice
-            session = self._agent.state if self._agent is not None else Session()
+            session = self._agent.snapshot() if self._agent is not None else Session()
             canvas.observe_session(session)
 
         self.post(configure)
@@ -569,15 +568,15 @@ class Ui:
 
     def publish_canvas(self, publication: CanvasPublication) -> None:
         """Defer owner publications until callers have finished their gesture or command."""
-        self.post(lambda _: self._show_canvas(publication))
+        self.post(lambda _: self._publish_canvas(publication))
 
     def _replay_canvas(self, _: QtWidgets.QApplication) -> None:
         # Read on Qt when the callback executes: an earlier queued change may
         # have superseded the publication retained when the view was requested.
         if self._canvas_published is not None:
-            self._show_canvas(self._canvas_published, replay=True)
+            self._publish_canvas(self._canvas_published, replay=True)
 
-    def _show_canvas(self, publication: CanvasPublication, *, replay: bool = False) -> None:
+    def _publish_canvas(self, publication: CanvasPublication, *, replay: bool = False) -> None:
         """Replay attention to late-created views without repeating the original notice."""
         self._canvas_published = publication
         if self._agent is not None:
@@ -585,15 +584,12 @@ class Ui:
         if self._desktop is not None:
             self._desktop.inbox_changed(len(publication.waiting))
         if self._work_view is not None:
-            self._work_view.panel.show_document(publication.document)
-        notice = publication.notice
-        if (
-            not replay
-            and notice is not None
-            and self._canvas_notice is not None
-            and (self._work_view is None or not self._work_view.window.isActiveWindow())
-        ):
-            self._canvas_notice(notice.title, notice.target)
+            self._work_view.show_document(publication.document)
+        if not replay:
+            focus = self._work_view.focus() if self._work_view is not None else None
+            notice = assistant.desktop_attention.interrupts(publication.notice, focus)
+            if notice is not None and self._canvas_notice is not None:
+                self._canvas_notice(notice.title, notice.target)
 
     def observe_canvas_work(self, snapshot: WorkSnapshot) -> None:
         def observe(_: QtWidgets.QApplication) -> None:
@@ -618,7 +614,7 @@ class Ui:
 
         def reveal(_: QtWidgets.QApplication) -> None:
             if self._work_view is not None:
-                self._work_view.panel.open_at(identity)
+                self._work_view.open_at(identity)
 
         self.post(reveal)
 
@@ -639,18 +635,21 @@ class Ui:
         """
 
         def route(_: QtWidgets.QApplication) -> None:
-            panel = self._work_view.panel if self._work_view is not None else None
-            if self._canvas is None or panel is None:
-                fallback(text)
-                return
-            match self._canvas.speech(panel.selected, visible=panel.frame.isVisible()):
-                case AnswerQuestion(request=request):
-                    if not self.answer_canvas(request, text):
-                        panel.status.setText("This reply could not be sent. Your transcript is available with Copy latest transcript.")
-                case SpeechRoute.INSTRUCT:
-                    panel.send_instruction(text)
-                case SpeechRoute.FALLBACK:
+            view = self._work_view
+            focus = view.focus() if view is not None else None
+            waiting = self._canvas.waiting() if self._canvas is not None else ()
+            target = assistant.desktop_attention.speech_target(waiting, focus)
+            match target:
+                case assistant.desktop_attention.AnswerQuestion(request=request):
+                    if not self.answer_canvas(request, text) and view is not None:
+                        view.reply_failed()
+                case assistant.desktop_attention.Speech.INSTRUCT:
+                    if view is not None:
+                        view.instruct(text)
+                case assistant.desktop_attention.Speech.CONVERSATION:
                     fallback(text)
+                case _:
+                    assert_never(target)
 
         self.post(route)
 
@@ -664,16 +663,22 @@ class Ui:
         return self._canvas.answer(request, answer, self._deliver_answer)
 
     def _deliver_answer(self, request: CanvasRequest, answer: TextAnswer) -> bool:
-        match request:
-            case SessionRequest(session_id=identity, request_id=key):
-                return self._agent is not None and self._agent.state.identity == identity and self._agent.respond(key, answer)
-            case TaskRequest(task_id=task, request_id=key):
-                return self._work is not None and self._work.send(AnswerTask(task, key, answer))
+        session = self._agent.snapshot().identity if self._agent is not None else None
+        target = assistant.desktop_attention.delivery(request, answer, session)
+        match target:
+            case assistant.desktop_attention.ToSession(session_id=identity, request_id=key):
+                return self._agent is not None and self._agent.respond(key, answer, expected_session=identity)
+            case assistant.desktop_attention.ToTask(command=command):
+                return self._work is not None and self._work.send(command)
+            case assistant.desktop_attention.Undeliverable.STALE:
+                return False
+            case _:
+                assert_never(target)
 
     def _attach_meetings(self) -> None:
         connection, view = self._meetings, self._work_view
-        if connection is not None and view is not None and view.meetings is None:
-            view.attach_meetings(MeetingPanel(connection.workflow, open_file=connection.open_file))
+        if connection is not None and view is not None:
+            view.configure_meetings(connection.workflow, connection.open_file)
 
     def configure_meetings(self, workflow: MeetingWorkflow, open_file: Callable[[Path], None]) -> None:
         def configure(_: QtWidgets.QApplication) -> None:
@@ -684,8 +689,8 @@ class Ui:
 
     def meetings_changed(self, snapshot: MeetingSnapshot) -> None:
         def render(_: QtWidgets.QApplication) -> None:
-            if self._work_view is not None and self._work_view.meetings is not None:
-                self._work_view.meetings.render_snapshot(snapshot)
+            if self._work_view is not None:
+                self._work_view.render_meetings(snapshot)
 
         self.post(render)
 
@@ -696,7 +701,7 @@ class Ui:
 
         self.post(reveal)
 
-    def open_inbox(self, show_agent: Callable[[], None]) -> None:
+    def open_inbox(self) -> None:
         """Bell and keyboard requests share Qt-owned initialization and inbox focus."""
 
         def reveal(_: QtWidgets.QApplication) -> None:
@@ -704,12 +709,18 @@ class Ui:
                 if self._inputs_closed:
                     return
             waiting = self._canvas.waiting() if self._canvas is not None else ()
-            if waiting:
-                self.open_canvas_at(waiting[0].id)
-            elif self._work is not None:
-                self._work.show()
-            else:
-                show_agent()
+            target = assistant.desktop_attention.inbox_target(waiting, work_open=self._work is not None)
+            match target:
+                case assistant.desktop_attention.OpenQuestion(identity=identity):
+                    self.open_canvas_at(identity)
+                case assistant.desktop_attention.Inbox.WORK:
+                    if self._work is not None:
+                        self._work.show()
+                case assistant.desktop_attention.Inbox.CONVERSATION:
+                    if self._show_agent is not None:
+                        self._show_agent()
+                case _:
+                    assert_never(target)
 
         self.post(reveal)
 
@@ -747,11 +758,11 @@ class Ui:
                     on_problem,
                     tool or (lambda _tool, _hwnd: None),
                     self.system_notices,
-                    inbox=lambda: self.open_inbox(show_agent),
+                    inbox=self.open_inbox,
                 )
                 self._desktop = self._views.desktop(actions, audio_level=audio_level)
                 if self._canvas_published is not None:
-                    self._show_canvas(self._canvas_published, replay=True)
+                    self._publish_canvas(self._canvas_published, replay=True)
                 self.refresh_inbox()
             except Exception:
                 traceback.print_exc()
@@ -767,7 +778,7 @@ class Ui:
             if self._desktop is not None:
                 self._desktop.dictation(active=state is State.LISTENING)
             if self._work_view is not None:
-                self._work_view.panel.voice_hint.set_pressed(pressed=agent_speaking)
+                self._work_view.voice_pressed(pressed=agent_speaking)
 
         self.post(display)
 

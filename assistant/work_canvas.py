@@ -99,19 +99,6 @@ class Investigating(Enum):
 type Continuation = Queued | NotQueued | ResumeTask | Investigating
 
 
-@dataclass(frozen=True, slots=True)
-class AnswerQuestion:
-    request: CanvasRequest
-
-
-class SpeechRoute(Enum):
-    INSTRUCT = "instruct"
-    FALLBACK = "fallback"
-
-
-type Speech = AnswerQuestion | SpeechRoute
-
-
 class WorkCanvas:
     """Own persistence, queueing and publication under one autonomy policy.
 
@@ -269,13 +256,6 @@ class WorkCanvas:
     def waiting(self) -> tuple[CanvasQuestion, ...]:
         """Visible questions still waiting for the user, in canvas order."""
         return published(self._observed_catalog(), self.read(), None).waiting
-
-    def speech(self, selected: str | None, *, visible: bool) -> Speech:
-        """Speech answers the selected waiting question, instructs the open canvas, or falls back."""
-        if not visible:
-            return SpeechRoute.FALLBACK
-        question = next((item for item in self.waiting() if item.id == selected), None)
-        return AnswerQuestion(question.request) if question is not None else SpeechRoute.INSTRUCT
 
     def answer(self, request: CanvasRequest, value: TextAnswer, deliver: Callable[[CanvasRequest, TextAnswer], bool]) -> bool:
         """Deliver only to a visible waiting question; record the reply once delivery accepts it."""
