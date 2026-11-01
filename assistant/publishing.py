@@ -9,8 +9,8 @@ from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
 
+from assistant.git_environment import isolated
 from keeper import copy_source, source_diff, source_digest, source_files
-from scripts.git_environment import isolated
 
 DEFAULT_REMOTE = "https://github.com/JimLundin/workspace.git"
 

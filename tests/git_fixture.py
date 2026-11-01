@@ -4,7 +4,7 @@ import os
 import subprocess
 from pathlib import Path
 
-from scripts.git_environment import isolated
+from assistant.git_environment import isolated
 
 
 def initialized(folder: Path) -> None:
