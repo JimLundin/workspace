@@ -696,8 +696,11 @@ def test_canvas_toolbar_keeps_search_and_center_accessible_in_a_small_window(tmp
         island = (canvas.voice_hint, canvas.clear_context, canvas.search_button, canvas.menu_button)
         assert all(control.isVisible() and toolbar.glass().contains(QtCore.QRectF(control.geometry())) for control in island)
         assert all(not first.geometry().intersects(second.geometry()) for first, second in pairwise(island))
-        # Only temporary things sit beside the island: no question waits, and the view shows the work.
-        assert not canvas.questions.isVisible() and not canvas.recenter.isVisible()
+        # Only temporary things sit beside the island: the Questions pill while questions wait, with their
+        # count, and Recenter only once the view leaves the work.
+        waiting = len(tuple(canvas.pending_questions()))
+        assert canvas.questions.isVisible() == bool(waiting) and canvas.questions_button.text() == str(waiting)
+        assert not canvas.recenter.isVisible(), "Recenter showed while the work is in view."
         before = store.read()
         canvas.canvas.centerOn(10000, 10000)
         native.pump()

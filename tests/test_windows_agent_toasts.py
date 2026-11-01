@@ -366,7 +366,9 @@ def test_bubble_icon_controls_share_hover_press_and_disabled_feedback() -> None:
                 painter = QPainter(image)
                 button.render(painter, QPoint(), QRegion(), QWidget.RenderFlag.DrawChildren)
                 painter.end()
-                fills.append(image.pixelColor(3, button.height() // 2).alpha())
+                # The control is a circle centred in its hit rectangle: sample just inside its leading edge.
+                side = min(button.width(), button.height())
+                fills.append(image.pixelColor((button.width() - side) // 2 + 4, button.height() // 2).alpha())
                 assert button.geometry() == geometry
             resting, hover, pressed, disabled = fills
             # Controls inside glass are filled at rest; a disabled one never reacts.
@@ -1026,8 +1028,10 @@ def test_solid_and_high_contrast_materials_keep_all_content_readable() -> None:
         panel.pump()
         assert not work.glass and work.style.surface == Solid(Shade("#ffffff"), Shade("#000000"))
         assert work.style.text.ink == work.style.text.quiet == Shade("#000000")
-        color = work.details.calls[0].status.grab().toImage().pixelColor(8, 8)
-        assert color.name() == "#000000" and color.alpha() > 0
+        status = work.details.calls[0].status.grab().toImage()
+        painted = tuple(status.pixelColor(x, y) for x in range(status.width()) for y in range(status.height()) if status.pixelColor(x, y).alpha() > 0)
+        # The symbol is scaled from a 2x rendering, so its pixels round near the system colour, never to red or grey.
+        assert painted and all(max(pixel.red(), pixel.green(), pixel.blue()) <= 32 for pixel in painted), "The step's status left the system colours."
 
 
 def test_hovering_glass_pauses_expiry_and_close_cancels_all_observation() -> None:
