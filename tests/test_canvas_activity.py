@@ -18,8 +18,8 @@ from assistant.canvas_activity import (
     CanvasUpdate,
     TaskRequest,
     important_changes,
-    redirect_session,
 )
+from assistant.canvas_session import redirect_session
 from assistant.notifications import Tone, active, observe, tone
 from assistant.work_canvas import WorkCanvas
 from assistant.work_canvas_model import DOCUMENT, CanvasCollection, CanvasDocument, CanvasNote, Placement, observe_activity

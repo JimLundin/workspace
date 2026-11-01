@@ -6,7 +6,7 @@ from hashlib import sha256
 from textwrap import shorten
 
 from assistant.agent_session import ChatMessage, Message, Snapshot
-from assistant.canvas_activity import redirect_session
+from assistant.canvas_session import redirect_session
 from assistant.notifications import (
     Busy,
     Entry,

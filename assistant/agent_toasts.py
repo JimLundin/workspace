@@ -14,7 +14,7 @@ lazy from PySide6.QtCore import Qt
 lazy from PySide6.QtWidgets import QApplication
 
 from assistant.agent_progress import Progress, advance_progress, compact, retain_lifetimes, visible
-from assistant.canvas_activity import redirect_session
+from assistant.canvas_session import redirect_session
 from assistant.qt_runtime import prepare
 from assistant.toast_stack import Active, Column, Measured, Retiring, Stacking, Viewport, fit, frames, reservable
 from usage import DIRECTORY

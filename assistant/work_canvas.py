@@ -27,11 +27,10 @@ from assistant.canvas_activity import (
     CanvasRun,
     TaskRequest,
     important_changes,
-    session_activity,
-    settle_session,
     settle_tasks,
     task_activity,
 )
+from assistant.canvas_session import session_activity, settle_session
 from assistant.work_canvas_commands import (
     CanvasCommand,
     CanvasRefused,
