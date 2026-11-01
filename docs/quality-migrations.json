@@ -292,15 +292,6 @@
     {
       "key": {
         "rule": "PLR0913",
-        "path": "assistant/meeting_events.py",
-        "scope": "TranscriptEvents.__init__",
-        "signature": "b3bb5389af2c8d1dc05ff8b7745492926ba894ddd37906673ee0278bcfeeb3ce"
-      },
-      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
-    },
-    {
-      "key": {
-        "rule": "PLR0913",
         "path": "assistant/meeting_followup.py",
         "scope": "_header",
         "signature": "284b35612693d54395864370cb78c67ae88a88491fa49aa7e810fdb376f13426"
@@ -376,15 +367,6 @@
         "path": "assistant/meeting_store.py",
         "scope": "MeetingStore.create",
         "signature": "e3047cdd06b79f73095407c1c2a22ee891b7b71fc04a36e9a302e6080ae1cc29"
-      },
-      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
-    },
-    {
-      "key": {
-        "rule": "PLR0913",
-        "path": "assistant/meetings.py",
-        "scope": "Meetings.__init__",
-        "signature": "09174a952bcb3553d5d3bb4086707a4fc4b689de648d26bc4a414730863d4a34"
       },
       "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
     },

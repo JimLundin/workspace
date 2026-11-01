@@ -208,7 +208,7 @@ class BrowserSources:
                             if result_mail.next_offset is None:
                                 break
                             offset = result_mail.next_offset
-                    case SourceKind.DOCUMENT | SourceKind.WEB_PAGE:
+                    case SourceKind.DOCUMENT | SourceKind.WEB_PAGE | SourceKind.MEETING:
                         continue
                     case _ as unreachable:
                         assert_never(unreachable)

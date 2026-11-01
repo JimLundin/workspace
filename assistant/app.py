@@ -77,6 +77,7 @@ lazy from automation.personal_work import (
     AddDocument,
     AddWebPage,
     DismissWork,
+    MeetingSource,
     OpenWorkSource,
     PersonalView,
     RefreshPersonalWork,
@@ -325,7 +326,7 @@ class AssistantApp:
             report_error=log,
         )
         self.ui.configure_meetings(self.followups, self.open_meeting_file)
-        events = TranscriptEvents(archive, routines, on_error=log, on_change=self.refresh_work)
+        events = TranscriptEvents(archive, routines, on_error=log, on_change=self.refresh_work, on_meeting=self.personal.observe_meeting)
         self.meetings = Meetings(
             self.settings,
             lambda source: recording.MeetingAudio(computer_audio=source == "both"),
@@ -333,6 +334,7 @@ class AssistantApp:
             on_update=self.recording_changed,
             on_recovery=events.recover,
             on_complete=events.completed,
+            on_meeting=events.observe,
         )
         self.automatic_meetings = AutomaticMeetings(
             self.meetings,
@@ -632,6 +634,9 @@ class AssistantApp:
                 source = next((source for source in self.personal.snapshot().catalog.sources if source.id == source_id), None)
                 if source is None:
                     raise ValueError("This source is no longer available. Refresh My work.")
+                if isinstance(source, MeetingSource):
+                    self.open_meeting_file(Path(source.meeting.transcript_path))
+                    return
                 if source.kind in (SourceKind.DOCUMENT, SourceKind.WEB_PAGE):
                     self.ui.open_reference(source.url)
                     return

@@ -143,6 +143,7 @@ def snapshot(document: CanvasDocument, catalog: Catalog, request: ReadCanvas) ->
                 notes=tuple(note for note in document.notes if note.id in offered),
                 activity=tuple(item for item in document.activity if item.id in offered),
                 runs=(),
+                reviewed=(),
             ),
             tuple(work.id for work in catalog.works),
             tuple(source.id for source in catalog.sources),
@@ -164,6 +165,7 @@ def revision(document: CanvasDocument) -> str:
         document,
         activity=(),
         runs=(),
+        reviewed=(),
         placements=pinned(document.placements, document.pinned),
         views=tuple(
             replace(view, placements=pinned(view.placements, view.pinned))

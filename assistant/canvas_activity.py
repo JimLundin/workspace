@@ -65,7 +65,13 @@ class CanvasInstruction:
         automation.task.text(self.text, "canvas instruction", maximum=32000)
 
 
-type CanvasIntent = Annotated[CanvasResearch | CanvasInstruction, Field(discriminator="kind")]
+@dataclass(frozen=True, slots=True)
+class CanvasIntake:
+    evidence: str
+    kind: Literal["intake"] = "intake"
+
+
+type CanvasIntent = Annotated[CanvasResearch | CanvasInstruction | CanvasIntake, Field(discriminator="kind")]
 
 
 @dataclass(frozen=True, slots=True)
@@ -77,7 +83,7 @@ class CanvasRun:
     @property
     def evidence(self) -> str | None:
         match self.intent:
-            case CanvasResearch(evidence=evidence):
+            case CanvasResearch(evidence=evidence) | CanvasIntake(evidence=evidence):
                 return evidence
             case CanvasInstruction():
                 return None

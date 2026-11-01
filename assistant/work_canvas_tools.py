@@ -14,6 +14,10 @@ from automation.json_value import Json
 from automation.task import ActionNotApplied, ActionUncertain, ActionVerified
 
 INSTRUCTIONS = """You build and maintain the local desktop canvas; the user is not expected to populate or arrange it.
+New observed evidence and user contributions prompt one bounded intake investigation. Your own additions belong to this
+same task: examine their context, connect relevant pieces and follow useful leads while working, rather than spawning tasks.
+Preserve native meeting event identities and time ranges. Read work_items_meeting for the conversation, following every
+next_offset before drawing whole-meeting conclusions. Transcript batches have captured-audio offsets and unknown speakers.
 Read work_canvas_read and the personal work catalog before editing. Use work_canvas_update for atomic batches of notes,
 groups, containment, relationships, collapse and arrangement. Use stable note:/group: identities for retryable additions. Any known bubble
 can contain other bubbles. Keep factual source links in work_items_save; visual nesting does not replace those connections.

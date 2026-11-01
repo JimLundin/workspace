@@ -23,6 +23,7 @@ from assistant.card_actions import OpenCanvas, parse
 from assistant.feed_origin import App
 from assistant.icons import State
 from assistant.island_model import Key
+from assistant.meeting_store import MeetingStore
 from assistant.notifications import body
 from assistant.personal_work_store import PersonalStore
 from assistant.qt_runtime import prepare
@@ -60,6 +61,7 @@ from automation.personal_work import (
     Catalog,
     DismissedWork,
     DismissWork,
+    MeetingSource,
     OpenWorkSource,
     PersonalView,
     RefreshPersonalWork,
@@ -71,6 +73,7 @@ from automation.personal_work import (
     WorkSaved,
     WorkState,
     WorkThread,
+    source_id,
 )
 from automation.store import TaskStore
 from automation.task import ActionNotApplied, ActionVerified, Reply, TextAnswer
@@ -79,6 +82,7 @@ from tests.agent_requests import asked
 from tests.feed_fixture import feed_unavailable, no_personal_work, owner_request
 from tests.personal_work_fixture import source
 from tests.test_agent import ToolRig
+from tests.test_meetings import SPEECH
 from tests.test_windows_inbox_attention import InboxUi, waiting
 from tests.test_work_actions import claimed
 from tests.test_work_canvas import local_canvas, nested_bubbles, queue_nothing, seeded
@@ -156,6 +160,37 @@ class LoadingPaintObserver(QtCore.QObject):
 def pressed(legend: VoiceLegend) -> bool:
     """The legend's current state, read afresh after each desktop transition."""
     return legend.pressed
+
+
+def test_native_meeting_detail_reads_its_conversation_and_opens_the_same_event(tmp_path: Path) -> None:
+    # Defect: meeting bubbles render as generic files, show only the preview,
+    # or open an unrelated browser identity instead of their recorded conversation.
+    meeting = MeetingStore.create(tmp_path / "meetings", "both", "Planning event")
+    meeting.append(SPEECH)
+    meeting.finish_capture()
+    batch = meeting.batch()
+    assert batch is not None
+    meeting.complete(batch, "Supplier approval SA-42 is ready for Friday.")
+    meeting.export()
+    event, preview = meeting.observation()
+    evidence = MeetingSource(source_id(SourceKind.MEETING, event.identity), event, preview, 20)
+    store = PersonalStore(tmp_path / "work.sqlite3")
+    store.observe((evidence,))
+    saved = store.handle(SaveWork(WorkDefinition("Rollout", "Deploy Friday"), (Association(evidence.id, "Approval is discussed here."),)), 20)
+    assert isinstance(saved, WorkSaved)
+    with native_canvas(local_canvas(tmp_path)) as panel:
+        panel.publish(WorkSnapshot(personal=PersonalView(store.read())))
+        view = panel.view.panel
+        assert view.card(evidence.id) is not None
+        view.inspect(evidence.id)
+        detail = view.detail(evidence.id)
+        assert isinstance(detail, SourceDetail)
+        text = detail.text.toPlainText()
+        assert "00:00:00 - 00:00:01" in text and "SA-42" in text and "Speakers have not been identified" in text
+        assert detail.open.text() == "Open transcript"
+        detail.open.click()
+        assert panel.last_command() == OpenWorkSource(evidence.id)
+        assert "Approval is discussed here" in detail.reason.toPlainText()
 
 
 def test_my_work_sources_corrections_and_editing_survive_background_publication(tmp_path: Path) -> None:

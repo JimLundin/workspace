@@ -4,6 +4,7 @@ from dataclasses import replace
 from pathlib import Path
 from typing import assert_never
 
+from assistant.meeting_store import MeetingStore
 from automation import journal
 from automation.personal_work import (
     CATALOG,
@@ -17,11 +18,15 @@ from automation.personal_work import (
     DocumentAdded,
     ListSources,
     ListWork,
+    MeetingSource,
     PersonalRequest,
     PersonalResponse,
+    ReadMeeting,
     RestoreWork,
     SaveWork,
+    Source,
     SourceKind,
+    SourceOrigin,
     UnlinkWork,
     WorkPlan,
     WorkSaved,
@@ -70,7 +75,7 @@ class PersonalStore:
         with journal.reading(self.path) as connection:
             return self.loaded(connection)
 
-    def observe(self, sources: tuple[WorkSource, ...]) -> Catalog:
+    def observe(self, sources: tuple[Source, ...]) -> Catalog:
         with journal.writing(self.path) as connection:
             state = observe_sources(self.loaded(connection), sources)
             self.persist(connection, state)
@@ -90,7 +95,18 @@ class PersonalStore:
             self.persist(connection, state)
             return state
 
-    def handle(self, request: PersonalRequest, at: float) -> PersonalResponse:
+    def handle(self, request: PersonalRequest, at: float, *, origin: SourceOrigin = SourceOrigin.AGENT) -> PersonalResponse:
+        # Meeting conversation IO owns a separate journal, outside a catalog write transaction.
+        if isinstance(request, ReadMeeting):
+            source = next((item for item in self.read().sources if item.id == request.source_id), None)
+            match source:
+                case MeetingSource(meeting=meeting):
+                    conversation = MeetingStore(Path(meeting.transcript_path).parent).conversation(request.offset, request.limit)
+                    if conversation.meeting.identity != meeting.identity:
+                        raise ValueError("This journal no longer matches the recorded meeting identity.")
+                    return conversation
+                case _:
+                    raise ValueError("Read a native meeting source identity from work_items_sources first.")
         with journal.writing(self.path) as connection:
             state = self.loaded(connection)
             match request:
@@ -108,6 +124,7 @@ class PersonalStore:
                         location,
                         source_revision(request.title, request.excerpt, location),
                         at,
+                        origin=origin,
                     )
                     state = observe_sources(state, (source,))
                     if request.work_id is not None:

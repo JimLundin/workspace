@@ -88,6 +88,17 @@ The Personal work feed has one triage pass in the desktop process:
 
 Meetings have three paths:
 
+Native meeting intake is shared with the work canvas: `automation/meetings.py`
+owns immutable event periods and conversation batches; `meeting_store.py` owns
+the authoritative journal and bounded snapshots. `meeting_events.py` publishes
+canvas observations independently of routine delivery. `PersonalWork` records
+native `MeetingSource` metadata and wakes its worker, while `WorkCanvas` owns
+serialized intake/research dispatch and durable contribution fingerprints.
+The agent reads full conversation pages through `work_items_meeting`; the Qt
+detail owner reads the same journal interface. Neither catalog nor view copies
+audio or the complete transcript. Python, SQLite and Pydantic algorithms are
+trusted; checks cover Workspace's timing, identity, page selection and wiring.
+
 1. Capture: `meeting_tools.py` → `MeetingOperation` in `automation/ipc.py` → `automation/app.py` `OwnerCalls.request` → `AssistantApp.meeting_command` in `assistant/app.py` → `meetings.py`, `meeting_store.py` and `recording_state.py`. `automation/capture.py` names the audio source.
 2. Meeting-notes routine: `meeting_events.py` records published transcript trigger occurrences; `automation/routines.py` `RoutineStore.dispatch` submits enabled routine work.
 3. Meeting follow-up: `meeting_panel.py` / `meeting_workflow.py` selection → `meeting_preparation.py` frozen bundle → `meeting_execution.py`, `meeting_tools.py` and `meeting_followup.py` claims → `meeting_followup_store.py` package → `outlook.py` unsent drafts.

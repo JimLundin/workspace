@@ -29,6 +29,7 @@ from automation.personal_work import (
     ListWork,
     PersonalRequest,
     PersonalResponse,
+    ReadMeeting,
     RestoreWork,
     SaveWork,
     UnlinkWork,
@@ -47,7 +48,9 @@ class WorkOwners:
         match command:
             case ReadCanvas() | UpdateCanvas():
                 return self.canvas(command)
-            case AddDocument() | AddWebPage() | DismissWork() | RestoreWork() | ListWork() | ListSources() | SaveWork() | UnlinkWork():
+            case (
+                AddDocument() | AddWebPage() | DismissWork() | RestoreWork() | ListWork() | ListSources() | ReadMeeting() | SaveWork() | UnlinkWork()
+            ):
                 return self.personal(command)
             case (
                 ReadFeed()

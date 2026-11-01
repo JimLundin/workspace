@@ -13,14 +13,18 @@ from datetime import datetime
 from pathlib import Path
 from typing import Final
 
+from pydantic import TypeAdapter
+
 from assistant.recording_state import Batch, StoredState, duration, source_name
 from automation import journal
 from automation.capture import AudioSource
+from automation.meetings import CONVERSATION, MEETING, Ended, InProgress, Meeting, MeetingConversation, TranscriptEntry, TranscriptState, UnknownEnd
 from winapi.pcm import RATE, quiet_tail
 
 MAX_PENDING_BYTES: Final = 256 * 1024 * 1024
 MIN_CHUNK_SECONDS: Final = 20
 MAX_CHUNK_SECONDS: Final = 30
+_END = TypeAdapter(float | None)
 
 
 def _replace_transcript(temporary: Path, transcript: Path) -> None:
@@ -77,6 +81,8 @@ class MeetingStore:
 
     def reading(self) -> AbstractContextManager[journal.Connection]:
         """One snapshot of this recording's journal; callers validate each column before use."""
+        if not (self.folder / "session.sqlite3").is_file():
+            raise FileNotFoundError("The native meeting journal is unavailable.")
         return journal.reading(self.folder / "session.sqlite3", self.connect)
 
     def writing(self) -> AbstractContextManager[journal.Connection]:
@@ -113,9 +119,17 @@ class MeetingStore:
 
     def state(self) -> StoredState:
         with self.reading() as connection:
-            row = connection.execute(
-                "SELECT title, source, started, frames, pending, finished, problem, revision, exported_revision FROM meeting WHERE id=1",
-            ).fetchone()
+            return self._state(connection)
+
+    def _state(self, connection: journal.Connection) -> StoredState:
+        row = connection.execute(
+            "SELECT title, source, started, frames, pending, finished, problem, revision, exported_revision FROM meeting WHERE id=1",
+        ).fetchone()
+        ending = (
+            connection.execute("SELECT at FROM capture_end WHERE id=1").fetchone()
+            if connection.execute("SELECT name FROM sqlite_master WHERE name='capture_end'").fetchone() is not None
+            else None
+        )
         if row is None or row[1] not in ("both", "microphone") or not isinstance(row[2], (int, float)):
             raise ValueError("The local meeting journal is incomplete.")
         return StoredState(
@@ -128,6 +142,7 @@ class MeetingStore:
             problem=_text(row[6]),
             revision=_integer(row[7]),
             exported_revision=_integer(row[8]),
+            ended_at=_END.validate_python(ending[0] if ending is not None else None, strict=True),
         )
 
     def append(self, pcm: bytes) -> None:
@@ -148,9 +163,63 @@ class MeetingStore:
         if pending is not None and _integer(pending[0]) * 2 >= self.max_pending_bytes:
             raise BacklogFullError("Recording stopped because untranscribed audio reached its storage limit. Saved audio can be retried.")
 
-    def finish_capture(self, problem: str = "") -> None:
+    def finish_capture(self, problem: str = "", *, at: float | None = None) -> None:
+        """Persist the observed capture end, independently of audio duration and export time."""
+        self._finish(problem, time.time() if at is None else at)
+
+    def interrupt_capture(self, problem: str) -> None:
+        """Recovery cannot reconstruct the time a dead capture actually stopped."""
+        self._finish(problem, None)
+
+    def _finish(self, problem: str, at: float | None) -> None:
         with self.writing() as connection:
-            connection.execute("UPDATE meeting SET finished=1, problem=?, revision=revision+1 WHERE id=1", (problem,))
+            # Repeated stop/recovery must never move the original end timestamp.
+            changed = connection.execute("UPDATE meeting SET finished=1, problem=?, revision=revision+1 WHERE id=1 AND finished=0", (problem,))
+            if changed.rowcount:
+                connection.execute("CREATE TABLE IF NOT EXISTS capture_end (id INTEGER PRIMARY KEY CHECK(id=1), at REAL)")
+                connection.execute("INSERT INTO capture_end (id, at) VALUES (1, ?)", (at,))
+
+    def meeting(self) -> Meeting:
+        return self._meeting(self.state())
+
+    def _meeting(self, saved: StoredState) -> Meeting:
+        period = (
+            InProgress(saved.started)
+            if not saved.finished
+            else UnknownEnd(saved.started)
+            if saved.ended_at is None
+            else Ended(saved.started, saved.ended_at)
+        )
+        observed = Meeting(
+            self.folder.name,
+            saved.title,
+            period,
+            saved.source,
+            saved.frames / RATE,
+            saved.pending / RATE,
+            str(self.transcript.absolute()),
+            TranscriptState.COMPLETE if saved.finished and not saved.pending else TranscriptState.PENDING,
+            saved.revision,
+            saved.problem,
+        )
+        # Existing dataclass instances are trusted by Pydantic. The IO round trip
+        # revalidates constrained journal numbers before publishing typed values.
+        return MEETING.validate_json(MEETING.dump_json(observed))
+
+    def conversation(self, offset: int = 0, limit: int = 50) -> MeetingConversation:
+        """Read a bounded page of ordered conversation batches from the authoritative journal."""
+        if offset < 0 or not 1 <= limit <= 100:
+            raise ValueError("Meeting conversation pages require a nonnegative offset and 1-100 entries.")
+        with self.reading() as connection:
+            meeting = self._meeting(self._state(connection))
+            count = connection.execute("SELECT COUNT(*) FROM segments WHERE text!=''").fetchone()
+            rows = connection.execute(
+                "SELECT start, end, text FROM segments WHERE text!='' ORDER BY start LIMIT ? OFFSET ?", (limit, offset)
+            ).fetchall()
+        total = _integer(count[0]) if count is not None else 0
+        entries = tuple(TranscriptEntry(_integer(row[0]) / RATE, _integer(row[1]) / RATE, _text(row[2])) for row in rows)
+        observed = MeetingConversation(meeting, entries, total, offset + len(entries) if offset + len(entries) < total else None)
+        return CONVERSATION.validate_json(CONVERSATION.dump_json(observed))
 
     def batch(self) -> Batch | None:
         with self.reading() as connection:
@@ -191,6 +260,14 @@ class MeetingStore:
             rows = connection.execute("SELECT start, end, text FROM segments WHERE text!='' ORDER BY start DESC LIMIT 8").fetchall()
         return "\n\n".join(f"**{duration(_integer(row[0]) / RATE)}**  {_text(row[2])[:2000]}" for row in reversed(rows))
 
+    def observation(self) -> tuple[Meeting, str]:
+        """One bounded native-event/preview snapshot for catalog intake."""
+        with self.reading() as connection:
+            meeting = self._meeting(self._state(connection))
+            rows = connection.execute("SELECT start, text FROM segments WHERE text!='' ORDER BY start DESC LIMIT 8").fetchall()
+        preview = "\n\n".join(f"{duration(_integer(row[0]) / RATE)}  {_text(row[1])[:2000]}" for row in reversed(rows))
+        return meeting, preview[:6000]
+
     def export(self) -> None:
         temporary = self.transcript.with_suffix(".tmp")
         state = self.state()
@@ -202,6 +279,8 @@ class MeetingStore:
         try:
             with temporary.open("w", encoding="utf-8", newline="\n") as output, self.reading() as connection:
                 output.write(f"# {state.title}\n\n{datetime.fromtimestamp(state.started).isoformat(timespec='seconds')}\n\n")
+                if state.ended_at is not None:
+                    output.write(f"Ended {datetime.fromtimestamp(state.ended_at).isoformat(timespec='seconds')}\n\n")
                 output.write(f"{source_name(state.source)} · {duration(state.frames / RATE)} captured · {status}\n\n")
                 if state.problem:
                     output.write(f"> {state.problem}\n\n")

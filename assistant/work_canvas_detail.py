@@ -1,24 +1,31 @@
 """In-place native card details and revision-bound drafts, owned by Qt."""
 
+import sqlite3
 from collections.abc import Callable
 from dataclasses import replace
+from pathlib import Path
 
 lazy from PySide6 import QtCore, QtGui, QtWidgets
 lazy from PySide6.QtCore import Qt
 
 from assistant.canvas_activity import Attention, CanvasAction, CanvasQuestion, CanvasUpdate
 from assistant.keymap import PHYSICAL_NAMES
+from assistant.meeting_presentation import meeting_text
+from assistant.meeting_store import MeetingStore
 from assistant.ui_components.controls import button, label
 from assistant.ui_components.widgets import Editor, column, replace_text, row
 from assistant.work_canvas_context import context_path
 from assistant.work_canvas_model import CanvasDocument, CanvasNote
 from assistant.work_text import when
 from assistant.work_window import WorkWindow
+from automation.meetings import MeetingConversation
 from automation.personal_work import (
     Catalog,
     DismissWork,
+    MeetingSource,
     OpenWorkSource,
     SaveWork,
+    Source,
     SourceKind,
     UnlinkWork,
     WorkDefinition,
@@ -170,9 +177,11 @@ class WorkDetail:
 
 class SourceDetail:
     # Four inputs, as WorkDetail: the canvas style must precede the source text's layout.
-    def __init__(self, work: WorkWindow, content: WorkSource, style: str, *, on_context: Callable[[str], None] | None = None) -> None:
+    def __init__(self, work: WorkWindow, content: Source, style: str, *, on_context: Callable[[str], None] | None = None) -> None:
         self.work: WorkWindow = work
-        self.current: WorkSource = content
+        self.current: Source = content
+        # Qt owns this bounded reading cursor. No audio or full transcript is copied into the catalog.
+        self.conversation: MeetingConversation | None = None
         self.catalog: Catalog = Catalog()
         self.ancestry: frozenset[str] = frozenset()
         self.frame: QtWidgets.QWidget = detail_frame(475, style)
@@ -180,6 +189,9 @@ class SourceDetail:
         self.text: Editor = Editor(readonly=True)
         self.text.setAccessibleName("Observed source content")
         layout.addWidget(self.text, 3)
+        self.more: QtWidgets.QToolButton = button("Read more conversation", self.read_more)
+        self.more.setVisible(False)
+        layout.addWidget(self.more)
         layout.addWidget(label("Connected work", "muted"))
         self.connections: QtWidgets.QComboBox = QtWidgets.QComboBox()
         self.connections.setAccessibleName("Work connected to this source")
@@ -201,16 +213,22 @@ class SourceDetail:
         self.frame.ensurePolished()
         layout.activate()
 
-    def refresh(self, content: WorkSource, catalog: Catalog, document: CanvasDocument) -> None:
+    def refresh(self, content: Source, catalog: Catalog, document: CanvasDocument) -> None:
         self.current, self.catalog = content, catalog
         self.ancestry = frozenset(context_path(content.id, catalog, document)) | {content.id}
-        self.open.setText("Open original" if content.kind in (SourceKind.DOCUMENT, SourceKind.WEB_PAGE) else "Open in Edge")
-        replace_text(
-            self.text,
-            f"Observed {when(content.observed_at)}\n\n{content.url}\n\n{content.excerpt}"
-            if content.kind in (SourceKind.DOCUMENT, SourceKind.WEB_PAGE)
-            else f"Observed {when(content.observed_at)}\n\n{content.excerpt}",
-        )
+        match content:
+            case MeetingSource(meeting=meeting):
+                self.open.setText("Open transcript")
+                if self.conversation is None or self.conversation.meeting.revision != meeting.revision:
+                    self.read_conversation(0)
+            case WorkSource():
+                self.open.setText("Open original" if content.kind in (SourceKind.DOCUMENT, SourceKind.WEB_PAGE) else "Open in Edge")
+                replace_text(
+                    self.text,
+                    f"Observed {when(content.observed_at)}\n\n{content.url}\n\n{content.excerpt}"
+                    if content.kind in (SourceKind.DOCUMENT, SourceKind.WEB_PAGE)
+                    else f"Observed {when(content.observed_at)}\n\n{content.excerpt}",
+                )
         previous: object = self.connections.currentData()
         self.connections.clear()
         for item in catalog.works:
@@ -256,11 +274,32 @@ class SourceDetail:
             self.work.send(UnlinkWork(work.id, self.current.id, work.revision))
 
     def open_source(self) -> None:
-        if self.current.kind is SourceKind.DOCUMENT:
+        if isinstance(self.current, MeetingSource):
+            self.work.send(OpenWorkSource(self.current.id))
+        elif self.current.kind is SourceKind.DOCUMENT:
             if not QtGui.QDesktopServices.openUrl(QtCore.QUrl(self.current.url)):
                 self.work.problem("Windows could not open this document.")
         else:
             self.work.send(OpenWorkSource(self.current.parent_id or self.current.id))
+
+    def read_conversation(self, offset: int) -> None:
+        match self.current:
+            case MeetingSource(meeting=meeting):
+                try:
+                    page = MeetingStore(Path(meeting.transcript_path).parent).conversation(offset)
+                except OSError, ValueError, sqlite3.Error:
+                    replace_text(self.text, "This meeting's conversation could not be read. Check access to its saved folder and try again.")
+                    self.more.setVisible(False)
+                    return
+                self.conversation = page
+                replace_text(self.text, meeting_text(page))
+                self.more.setVisible(page.next_offset is not None)
+            case WorkSource():
+                pass
+
+    def read_more(self) -> None:
+        if self.conversation is not None and self.conversation.next_offset is not None:
+            self.read_conversation(self.conversation.next_offset)
 
 
 class NoteDetail:

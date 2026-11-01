@@ -28,11 +28,11 @@ from assistant.work_canvas_commands import (
     revision,
 )
 from assistant.work_canvas_context import CanvasScope, context_path
-from assistant.work_canvas_edits import ArrangeView, RenameGroup, UserEdit
+from assistant.work_canvas_edits import ArrangeView, RenameGroup, SaveNote, UserEdit
 from assistant.work_canvas_gestures import NestBubble, PlaceBubbles
 from assistant.work_canvas_model import CanvasCollection, CanvasDocument, CanvasNote, CanvasRelation, Placement, view_state
 from assistant.work_snapshot import WorkSnapshot
-from automation.personal_work import DismissedWork, WorkState
+from automation.personal_work import Catalog, DismissedWork, WorkState
 from automation.task import Blocked, Completed, TextAnswer, Waiting
 from tests.agent_requests import asked
 from tests.test_work_canvas import catalog, local_canvas, nested_bubbles, publish_nothing, seeded
@@ -50,7 +50,7 @@ def test_changed_evidence_queues_one_bounded_investigation_and_refusal_releases_
     assert queued and first.document.runs == tuple(queued) == canvas.read().runs and first.notice is None
     canvas.observe_catalog(catalog())
     repeated = publications[-1]
-    assert len(queued) == 2 and repeated.document.runs == tuple(queued) and repeated.notice is None
+    assert len(queued) == 1 and repeated.document.runs == tuple(queued) and repeated.notice is None
     assert len(publications) == 2
 
     def refuse(_run: CanvasRun) -> None:
@@ -61,7 +61,25 @@ def test_changed_evidence_queues_one_bounded_investigation_and_refusal_releases_
     assert not publications[-1].document.runs and not refused.read().runs and len(publications) == 3
     manual = WorkCanvas(tmp_path / "manual.sqlite3", queued.append, publications.append, autonomous=False)
     manual.observe_catalog(catalog())
-    assert not publications[-1].document.runs and len(queued) == 2 and len(publications) == 4
+    assert not publications[-1].document.runs and len(queued) == 1 and len(publications) == 4
+
+
+def test_user_notes_wake_intake_and_agent_notes_do_not_launch_recursive_tasks(tmp_path: Path) -> None:
+    # Defect: user-added evidence waits for unrelated polling, while an agent's
+    # own conclusions launch endless new runs or invalidate its canvas edit token.
+    queued: list[CanvasRun] = []
+    canvas = WorkCanvas(tmp_path / "canvas.sqlite3", queued.append, publish_nothing, autonomous=True)
+    canvas.observe_catalog(Catalog())
+    authored = CanvasNote("note:agent", "Finding", "Approval is recorded in the supplier document.")
+    response = canvas.command(UpdateCanvas(revision(canvas.read()), (PutNote(authored),)))
+    assert isinstance(response, CanvasUpdated) and not queued
+    canvas.observe_catalog(Catalog())
+    assert not queued
+    handwritten = CanvasNote("note:user", "New evidence", "The supplier moved the deadline to Friday.")
+    canvas.commit(UserEdit(CanvasScope(), SaveNote(handwritten)))
+    assert len(queued) == 1 and queued[0].work_id == handwritten.id
+    canvas.observe_catalog(Catalog())
+    assert len(queued) == 1
 
 
 def test_attention_is_announced_once_and_never_from_dismissed_work(tmp_path: Path) -> None:

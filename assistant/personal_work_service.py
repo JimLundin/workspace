@@ -8,6 +8,7 @@ from collections.abc import Callable
 from dataclasses import replace
 from typing import Protocol
 
+from assistant.meeting_store import MeetingStore
 from assistant.personal_work_sources import Observations
 from assistant.personal_work_store import PersonalStore
 from automation.personal_work import (
@@ -21,17 +22,21 @@ from automation.personal_work import (
     DismissWork,
     DocumentAdded,
     ListWork,
+    MeetingSource,
     PersonalRequest,
     PersonalResponse,
     PersonalView,
     RestoreWork,
     SaveWork,
+    Source,
+    SourceKind,
+    SourceOrigin,
     UnlinkWork,
     WorkPlan,
     WorkRefused,
     WorkSaved,
-    WorkSource,
     WorkThread,
+    source_id,
 )
 
 
@@ -47,7 +52,7 @@ type Model = Callable[[CorrelationInput, threading.Event], WorkPlan]
 def correlation_input(catalog: Catalog) -> CorrelationInput:
     # The latest sixty observations bound model input. Retained connections in
     # saved work remain visible even when their original page is no longer rendered.
-    def order(source: WorkSource) -> tuple[float, str]:
+    def order(source: Source) -> tuple[float, str]:
         return -source.observed_at, source.id
 
     ordered = tuple(sorted(catalog.sources, key=order))
@@ -63,7 +68,7 @@ def signature(catalog: Catalog) -> str:
     request = correlation_input(catalog)
 
     # Observation timestamps do not invalidate a review of unchanged content.
-    def identity(source: WorkSource) -> str:
+    def identity(source: Source) -> str:
         return source.id
 
     canonical = replace(
@@ -141,6 +146,13 @@ class PersonalWork:
             self.force = True
             self.wake.set()
 
+    def observe_meeting(self, store: MeetingStore) -> None:
+        meeting, preview = store.observation()
+        source = MeetingSource(source_id(SourceKind.MEETING, meeting.identity), meeting, preview, self.clock())
+        catalog = self.store.observe((source,))
+        self.show(catalog, "Meeting added to the canvas. Connections update from its conversation.")
+        self.wake.set()
+
     def enqueue(self, command: SaveWork | UnlinkWork | AddDocument | AddWebPage | DismissWork | RestoreWork) -> None:
         # Pydantic trusts existing dataclass instances by default. The wire
         # round-trip revalidates their constrained fields before queue admission;
@@ -162,9 +174,9 @@ class PersonalWork:
             raise ValueError("My work is busy. Try this edit again.") from error
         self.wake.set()
 
-    def handle(self, request: PersonalRequest) -> PersonalResponse:
+    def handle(self, request: PersonalRequest, *, origin: SourceOrigin = SourceOrigin.AGENT) -> PersonalResponse:
         try:
-            response = self.store.handle(request, self.clock())
+            response = self.store.handle(request, self.clock(), origin=origin)
         except ValueError as error:
             return WorkRefused(str(error))
         if isinstance(request, (SaveWork, UnlinkWork, AddDocument, AddWebPage, DismissWork, RestoreWork)):
@@ -189,7 +201,7 @@ class PersonalWork:
                 command = self.commands.get_nowait()
             except queue.Empty:
                 break
-            response = self.handle(command)
+            response = self.handle(command, origin=SourceOrigin.USER)
             if isinstance(response, WorkRefused):
                 self.show(self.store.read(), response.error)
         with self.lock:
@@ -238,7 +250,9 @@ class PersonalWork:
                     self.tick()
                 except OSError, ValueError:
                     self.show(self.snapshot().catalog, "My work could not refresh. Saved work remains available.")
-                self.wake.wait(120)
+                # Canvas intake wakes at publication; regular sampling bounds
+                # arrival latency for evidence visible in the signed-in browser.
+                self.wake.wait(15)
         finally:
             self.sources.close()
 

@@ -30,7 +30,7 @@ from assistant.work_canvas_model import (
     toggle_expansion,
     view_state,
 )
-from automation.personal_work import Association, Catalog, DismissedWork, SourceKind, WorkDefinition, WorkThread, source_id
+from automation.personal_work import Association, Catalog, DismissedWork, SourceKind, WorkDefinition, WorkSource, WorkThread, source_id
 from tests.personal_work_fixture import source
 
 
@@ -132,6 +132,7 @@ def test_dismissal_preserves_shared_conversation_context_and_routes_to_active_wo
     # after the original work is dismissed, or redirects follow the dismissed work.
     data = catalog()
     conversation = data.sources[0]
+    assert isinstance(conversation, WorkSource)
     message = replace(
         conversation, id=source_id(SourceKind.OUTLOOK, "message", parent_id=conversation.id), identity="message", parent_id=conversation.id
     )

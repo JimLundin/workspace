@@ -14,6 +14,7 @@ from urllib.parse import urlsplit
 
 from pydantic import Field, StringConstraints, TypeAdapter
 
+from automation.meetings import Meeting, MeetingConversation
 from automation.work_documents import DocumentReference, WebDocument, checked_url
 
 type Identity = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=500)]
@@ -29,12 +30,19 @@ class SourceKind(StrEnum):
     KANBAN = "kanban"
     DOCUMENT = "document"
     WEB_PAGE = "web_page"
+    MEETING = "meeting"
 
 
 class WorkState(StrEnum):
     ACTIVE = "active"
     WAITING = "waiting"
     DONE = "done"
+
+
+class SourceOrigin(StrEnum):
+    OBSERVED = "observed"
+    USER = "user"
+    AGENT = "agent"
 
 
 @dataclass(frozen=True, slots=True)
@@ -48,6 +56,7 @@ class WorkSource:
     revision: Identity
     observed_at: Timestamp
     parent_id: Identity | None = None
+    origin: SourceOrigin = SourceOrigin.OBSERVED
 
     def __post_init__(self) -> None:
         if self.id != source_id(self.kind, self.identity, parent_id=self.parent_id) or self.id == self.parent_id:
@@ -65,6 +74,8 @@ class WorkSource:
                 hosts = ("outlook.office.com", "outlook.office365.com", "outlook.cloud.microsoft")
             case SourceKind.KANBAN:
                 hosts = ("dev-team-kanban.fcg.palantirfoundry.com",)
+            case SourceKind.MEETING:
+                raise ValueError("Recorded meetings require a native MeetingSource.")
             case _ as unreachable:
                 assert_never(unreachable)
         parsed = urlsplit(self.url)
@@ -72,6 +83,48 @@ class WorkSource:
             raise ValueError("The source must point to its observed business application.")
         if self.id != source_id(self.kind, self.identity, parent_id=self.parent_id):
             raise ValueError("The source identity does not match its application identity.")
+
+
+@dataclass(frozen=True, slots=True)
+class MeetingSource:
+    """A catalog reference to one native event; its conversation stays in its journal."""
+
+    id: Identity
+    meeting: Meeting
+    excerpt: Detail
+    observed_at: Timestamp
+    kind: Literal[SourceKind.MEETING] = SourceKind.MEETING
+
+    def __post_init__(self) -> None:
+        if self.id != source_id(SourceKind.MEETING, self.meeting.identity):
+            raise ValueError("The meeting source identity does not match its event.")
+
+    @property
+    def identity(self) -> str:
+        return self.meeting.identity
+
+    @property
+    def title(self) -> str:
+        return self.meeting.title
+
+    @property
+    def revision(self) -> str:
+        return str(self.meeting.revision)
+
+    @property
+    def url(self) -> str:
+        return self.meeting.transcript_path
+
+    @property
+    def parent_id(self) -> None:
+        return None
+
+    @property
+    def origin(self) -> SourceOrigin:
+        return SourceOrigin.OBSERVED
+
+
+type Source = WorkSource | MeetingSource
 
 
 @dataclass(frozen=True, slots=True)
@@ -117,7 +170,7 @@ class DismissedWork:
 class Catalog:
     revision: Revision = 0
     works: Annotated[tuple[WorkThread, ...], Field(max_length=200)] = ()
-    sources: Annotated[tuple[WorkSource, ...], Field(max_length=1000)] = ()
+    sources: Annotated[tuple[Source, ...], Field(max_length=1000)] = ()
     rejected: Annotated[tuple[RejectedAssociation, ...], Field(max_length=4000)] = ()
     dismissed: Annotated[tuple[DismissedWork, ...], Field(max_length=200)] = ()
 
@@ -153,6 +206,14 @@ class ListSources:
     offset: Annotated[int, Field(strict=True, ge=0)] = 0
     limit: Annotated[int, Field(strict=True, ge=1, le=20)] = 10
     operation: Literal["work_items_sources"] = "work_items_sources"
+
+
+@dataclass(frozen=True, slots=True)
+class ReadMeeting:
+    source_id: Identity
+    offset: Annotated[int, Field(strict=True, ge=0)] = 0
+    limit: Annotated[int, Field(strict=True, ge=1, le=100)] = 50
+    operation: Literal["work_items_meeting"] = "work_items_meeting"
 
 
 @dataclass(frozen=True, slots=True)
@@ -206,14 +267,15 @@ class RestoreWork:
 
 
 type PersonalRequest = Annotated[
-    ListWork | ListSources | SaveWork | UnlinkWork | AddDocument | AddWebPage | DismissWork | RestoreWork, Field(discriminator="operation")
+    ListWork | ListSources | ReadMeeting | SaveWork | UnlinkWork | AddDocument | AddWebPage | DismissWork | RestoreWork,
+    Field(discriminator="operation"),
 ]
 
 
 @dataclass(frozen=True, slots=True)
 class WorkPage:
     works: tuple[WorkThread, ...]
-    sources: tuple[WorkSource, ...]
+    sources: tuple[Source, ...]
     total: int
     next_offset: int | None
     kind: Literal["personal_work"] = "personal_work"
@@ -222,7 +284,7 @@ class WorkPage:
 
 @dataclass(frozen=True, slots=True)
 class SourcePage:
-    sources: tuple[WorkSource, ...]
+    sources: tuple[Source, ...]
     total: int
     next_offset: int | None
     kind: Literal["work_sources"] = "work_sources"
@@ -246,7 +308,7 @@ class DocumentAdded:
     kind: Literal["document_added"] = "document_added"
 
 
-type PersonalResponse = WorkPage | SourcePage | WorkSaved | WorkRefused | DocumentAdded
+type PersonalResponse = WorkPage | SourcePage | WorkSaved | WorkRefused | DocumentAdded | MeetingConversation
 
 
 @dataclass(frozen=True, slots=True)
@@ -265,7 +327,7 @@ class WorkPlan:
 class CorrelationInput:
     catalog_revision: Revision
     works: tuple[WorkThread, ...]
-    sources: tuple[WorkSource, ...]
+    sources: tuple[Source, ...]
     rejected: tuple[RejectedAssociation, ...]
     dismissed: tuple[DismissedWork, ...] = ()
 
@@ -359,7 +421,7 @@ def unlink_work(catalog: Catalog, command: UnlinkWork, at: float) -> tuple[Catal
     ), work
 
 
-def source_context(sources: Sequence[WorkSource], referenced: frozenset[str]) -> frozenset[str]:
+def source_context(sources: Sequence[Source], referenced: frozenset[str]) -> frozenset[str]:
     """A conversation retains its pieces; a message retains its conversation."""
     while True:
         extended = (
@@ -372,22 +434,32 @@ def source_context(sources: Sequence[WorkSource], referenced: frozenset[str]) ->
         referenced = extended
 
 
-def observe_sources(catalog: Catalog, sources: tuple[WorkSource, ...]) -> Catalog:
+def observe_sources(catalog: Catalog, sources: tuple[Source, ...]) -> Catalog:
+    # This bounded merge index is local to the transition. Mutating it avoids
+    # copying the entire index per source; only an immutable catalog is published.
     current = {source.id: source for source in catalog.sources}
     for source in sources:
         previous = current.get(source.id)
+        match source, previous:
+            case MeetingSource(meeting=incoming), MeetingSource(meeting=stored):
+                if incoming.revision < stored.revision or (incoming == stored and source.excerpt == previous.excerpt):
+                    continue
+                current[source.id] = source
+                continue
+            case _:
+                pass
         if previous is None or source.observed_at >= previous.observed_at:
             current[source.id] = source
     referenced = frozenset(
         link.source_id for work in (*catalog.works, *(item.work for item in catalog.dismissed)) for link in work.links
-    ) | frozenset(source.id for source in current.values() if source.kind in (SourceKind.DOCUMENT, SourceKind.WEB_PAGE))
+    ) | frozenset(source.id for source in current.values() if source.kind in (SourceKind.DOCUMENT, SourceKind.WEB_PAGE, SourceKind.MEETING))
     # A conversation reference retains its observed pieces; a specific message
     # retains its containing conversation. Missing browser rows prove no deletion.
     referenced = source_context(tuple(current.values()), referenced)
 
     # Missing rendered rows do not delete evidence or its associations. Bound
     # unconnected observations while retaining the sources of saved work.
-    def order(source: WorkSource) -> tuple[bool, float, str]:
+    def order(source: Source) -> tuple[bool, float, str]:
         return source.id not in referenced, -source.observed_at, source.id
 
     retained = tuple(sorted(current.values(), key=order)[:1000])

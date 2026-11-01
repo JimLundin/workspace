@@ -15,7 +15,7 @@ from automation.routines import MAX_TRANSCRIPTS, RoutineStore, TranscriptReady
 
 
 class TranscriptEvents:
-    __slots__ = ("archive", "clock", "on_change", "on_error", "routines")
+    __slots__ = ("archive", "clock", "on_change", "on_error", "on_meeting", "routines")
 
     def __init__(
         self,
@@ -25,9 +25,21 @@ class TranscriptEvents:
         on_error: Callable[[str], None],
         on_change: Callable[[], None] | None = None,
         clock: Callable[[], float] = time.time,
+        on_meeting: Callable[[MeetingStore], None] | None = None,
     ) -> None:
+        # Recording archive, routine delivery and canvas intake are distinct
+        # effects; callbacks and clock preserve their independent ownership.
         self.archive, self.routines = archive, routines
         self.on_error, self.on_change, self.clock = on_error, on_change, clock
+        self.on_meeting = on_meeting
+
+    def observe(self, store: MeetingStore) -> None:
+        """Canvas intake is independent of routine enablement or publication success."""
+        if self.on_meeting is not None:
+            try:
+                self.on_meeting(store)
+            except Exception as error:
+                self.on_error(f"Meeting canvas intake failed: {error}. The journal is saved; startup will retry intake.")
 
     def _read(self, store: MeetingStore, *, completed_at: float | None = None) -> TranscriptReady | None:
         state = store.state()
@@ -72,6 +84,7 @@ class TranscriptEvents:
             historical: list[TranscriptReady] = []
             complete_scan = True
             for path in journals:
+                self.observe(self.archive.open(path.parent))
                 try:
                     event = self._read(self.archive.open(path.parent))
                     if event is None:
@@ -95,6 +108,7 @@ class TranscriptEvents:
         Delivery errors belong to automation. They must not change a successful
         recording into a failed transcription or cause its audio to be retried.
         """
+        self.observe(store)
         try:
             event = self._read(store, completed_at=self.clock())
             if event is not None:

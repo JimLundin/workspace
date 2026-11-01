@@ -87,6 +87,7 @@ class StoredState:
     problem: str
     revision: int
     exported_revision: int
+    ended_at: float | None = field(default=None, kw_only=True)
 
     @property
     def export_current(self) -> bool:

@@ -72,6 +72,7 @@ class Meetings:
         "archive",
         "factory",
         "on_complete",
+        "on_meeting",
         "on_recovery",
         "on_update",
         "retry_policy",
@@ -90,7 +91,10 @@ class Meetings:
         retry_policy: RetryPolicy | None = None,
         on_complete: Callable[[MeetingStore], None] | None = None,
         on_recovery: Callable[[tuple[Path, ...]], None] | None = None,
+        on_meeting: Callable[[MeetingStore], None] | None = None,
     ) -> None:
+        # Capture, transcription, storage and their independent publications
+        # are effect dependencies; no callback owns another owner's progress.
         self.settings, self.factory = settings, factory
         self.archive = archive if archive is not None else MeetingArchive(DIRECTORY / "meetings")
 
@@ -101,6 +105,7 @@ class Meetings:
         self.retry_policy = retry_policy if retry_policy is not None else RetryPolicy()
         self.on_update = on_update
         self.on_complete, self.on_recovery = on_complete, on_recovery
+        self.on_meeting = on_meeting
         self._lock = threading.RLock()
         self._state = RecordingState()
         self._stop, self._quit, self._wake = threading.Event(), threading.Event(), threading.Event()
@@ -190,6 +195,10 @@ class Meetings:
                 return
             self.on_update(self._state)
 
+    def _observe_meeting(self, store: MeetingStore) -> None:
+        if self.on_meeting is not None:
+            self.on_meeting(store)
+
     def _schedule(self, store: MeetingStore) -> None:
         with self._lock:
             if store.folder not in self._scheduled and not self._closing:
@@ -214,6 +223,7 @@ class Meetings:
         problem = ""
         try:
             store = self.archive.create(source, title)
+            self._observe_meeting(store)
             with self._lock:
                 self._state = replace(self._state, identity=store.folder.name, path=str(store.transcript))
             self._publish(store)
@@ -243,6 +253,7 @@ class Meetings:
                         except (OSError, ValueError, sqlite3.Error) as error:
                             problem = problem or str(error)
                     store.finish_capture(problem)
+                    self._observe_meeting(store)
                     self._publish(store)
                 except OSError, ValueError, sqlite3.Error:
                     # In particular, never claim that a disk-full write succeeded.
@@ -263,9 +274,10 @@ class Meetings:
                 store = self.archive.open(path.parent)
                 state = store.state()
                 if not state.finished:
-                    store.finish_capture(
+                    store.interrupt_capture(
                         "Recording was interrupted when Workspace closed. Saved audio has been recovered; capture was not restarted."
                     )
+                    self._observe_meeting(store)
                 if not state.complete or not store.transcript.is_file():
                     self._schedule(store)
             except OSError, ValueError, sqlite3.Error:
@@ -351,6 +363,7 @@ class Meetings:
                 continue
             failures = 0
             store.complete(batch, result)
+            self._observe_meeting(store)
             try:
                 store.export()
             except PermissionError:

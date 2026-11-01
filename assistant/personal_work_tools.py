@@ -21,6 +21,7 @@ from automation.personal_work import (
     ListSources,
     ListWork,
     PersonalRequest,
+    ReadMeeting,
     RestoreWork,
     SaveWork,
     UnlinkWork,
@@ -31,7 +32,11 @@ from automation.personal_work import (
 from automation.task import ActionNotApplied, ActionUncertain, ActionVerified
 
 INSTRUCTIONS = """My work is the user's persistent representation of ongoing work, connecting Outlook conversations, Teams
-conversations, Kanban tickets and documents. Sources can contain observed message pieces; keep the conversation
+conversations, Kanban tickets, native meetings and documents. Native meeting sources contain an event identity, capture
+start/end period and transcript state. Read work_items_meeting for its timestamped conversation; follow next_offset.
+Batch timestamps are offsets in captured audio, not word timings or wall-clock speaker turns. Speakers are unknown;
+never invent attribution. Link the same meeting source to every work thread its actual discussion supports.
+Sources can contain observed message pieces; keep the conversation
 connection when its whole discussion supplies context, and use a child source only when that specific piece is relevant.
 It is distinct from agent execution tasks and from transient feed proposals.
 Each work definition is a context/container on the local desktop canvas, your primary work surface. Classifying an
@@ -53,6 +58,12 @@ when the user asks or the observed result establishes completion. Never send a m
 """
 
 SPECS: Final = (
+    spec(
+        "work_items_meeting",
+        "Read one native meeting and a page of its ordered transcript batches using its exact source_id. "
+        "Returns start/end period, transcript progress, captured-audio offsets and text. Speakers are unknown. Follow next_offset.",
+        ReadMeeting,
+    ),
     spec(
         "work_items_add_web_page",
         "Save a researched HTTPS web page with its original URL and useful captured excerpt. Optional work_id connects it to that work. "
@@ -81,7 +92,7 @@ SPECS: Final = (
     ),
     spec(
         "work_items_sources",
-        "Read observed Teams, Outlook and Kanban sources with exact source ids, application identities and bounded excerpts. "
+        "Read observed Teams, Outlook, Kanban and native meeting sources with exact source ids, identities and bounded excerpts. "
         "Coverage follows rendered browser pages; query can include an exact source or parent id to find conversation pieces. Follow next_offset.",
         ListSources,
     ),
@@ -147,7 +158,7 @@ def _resources(tool: str, arguments: Mapping[str, Json]) -> tuple[str, ...]:
 
 def _classify(spec: ToolSpec) -> Callable[[Mapping[str, Json]], Classification]:
     match spec.name:
-        case "work_items_list" | "work_items_sources":
+        case "work_items_list" | "work_items_sources" | "work_items_meeting":
             return lambda arguments: Observation(_resources(spec.name, arguments))
         case (
             "work_items_add_web_page"

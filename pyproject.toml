@@ -314,6 +314,7 @@ shared = [
     "assistant.meeting_followup",
     "assistant.meeting_followup_store",
     "assistant.meeting_preparation",
+    "assistant.meeting_presentation",
     "assistant.meeting_store",
     "assistant.personal_work_tools",
     "assistant.png",

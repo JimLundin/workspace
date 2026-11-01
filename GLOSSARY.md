@@ -147,6 +147,16 @@ published and each draft's save is verified by reading back the exact draft
 revision it wrote. The person reviews and edits the resulting actions and drafts.
 _Avoid_: Meeting-notes routine, meeting summary
 
+**Meeting**:
+A conversation recorded as one event, with its own identity, start and observed
+end, and associated transcript. The same meeting may contribute to several work threads.
+_Avoid_: Transcript file, work thread, meeting notes
+
+**Meeting transcript**:
+The ordered text of a meeting's captured conversation, with time spans within
+its captured audio. Transcription batches do not imply individual speaker turns.
+_Avoid_: Meeting summary, attributed conversation
+
 **Follow-up claims**:
 What a meeting follow-up's agent proposes: statements, actions and drafts, each
 with literal quotes from the selected recordings. Claims carry no offsets; they

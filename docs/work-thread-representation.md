@@ -8,6 +8,32 @@ Workspace remains paused. The earlier browser study is historical exploration on
 
 ## Representation
 
+Recorded meetings are native events, with a stable identity, recorded start/end
+period, captured duration and transcription progress. Their ordered conversation
+lives in the recording journal and is read in bounded pages by the native detail
+view and `work_items_meeting`. The catalog stores event metadata and a bounded
+preview, rather than copying full transcripts. One meeting may support several
+work threads through explained source connections. Interrupted capture has an
+unknown end; sample duration and transcript publication time never substitute
+for an observed wall-clock end. Batch offsets describe captured audio, not
+word-level times, speaker turns or time spent before recording began. Speakers
+are currently unknown.
+
+New observed evidence enters the canvas before the automatic connection model
+finishes. Unconnected sources receive an intake investigation, while connected
+source changes continue their work thread. User-added documents and notes also
+receive intake. Agent-authored references and notes are examined within the
+creating run, avoiding recursive tasks for its own output. Intake fingerprints
+are durable, and completed intake bindings compact into observation cursors.
+Admission allows one automatic execution slot and at most three unresolved
+investigations. Paused questions retain their context while unrelated evidence
+can be reviewed; bursts wait and repeat observations do not create duplicate
+tasks. Browser collection samples currently
+rendered, signed-in Teams, Outlook and Kanban pages at fifteen-second intervals
+between reviews; this is not a mailbox subscription or a guarantee of complete
+application coverage. Completed meeting transcripts wake intake immediately,
+independently of the optional meeting-notes routine.
+
 A work thread is a container for an ongoing outcome or responsibility. It supplies
 its name, goal, current state and connections; classification does not create a
 second bubble announcing that work exists. Emails, Teams conversations, Kanban

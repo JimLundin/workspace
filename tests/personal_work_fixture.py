@@ -30,6 +30,8 @@ def source(kind: SourceKind, identity: str = "one", at: float = 10) -> WorkSourc
             url = "https://contoso.example.test/research"
         case SourceKind.KANBAN:
             url = "https://dev-team-kanban.fcg.palantirfoundry.com/"
+        case SourceKind.MEETING:
+            raise ValueError("Use a native meeting fixture.")
     return observed_source(kind, identity, ("Atlas migration", "Deploy Atlas after the supplier review.", url), at)
 
 

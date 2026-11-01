@@ -97,6 +97,7 @@ from automation.personal_work import (
     AddWebPage,
     Association,
     DismissWork,
+    MeetingSource,
     PersonalView,
     RefreshPersonalWork,
     RestoreWork,
@@ -468,7 +469,7 @@ class CanvasPanel:
     def refresh_detail(self, item: CanvasContent) -> None:
         detail = self.detail(item.id)
         match detail, item:
-            case SourceDetail() as source, WorkSource() as current:
+            case SourceDetail() as source, (WorkSource() | MeetingSource()) as current:
                 source.refresh(current, self.view.catalog, self.document)
             case UpdateDetail() as editor, (CanvasUpdate() | CanvasAction()) as current:
                 editor.refresh(current)
@@ -494,7 +495,7 @@ class CanvasPanel:
 
         if self.linking is not None and card is not None:
             match card.content:
-                case WorkSource() as source:
+                case WorkSource() | MeetingSource() as source:
                     work, self.linking = self.linking, None
                     reason, accepted = QtWidgets.QInputDialog.getText(self.frame, "Connect source", "Why does this source belong to this work?")
                     if accepted and reason.strip():
@@ -533,7 +534,7 @@ class CanvasPanel:
         detail = self.detail(identity)
         if detail is None:
             match card.content:
-                case WorkSource() as content:
+                case WorkSource() | MeetingSource() as content:
                     detail = SourceDetail(self.work, content, self.style, on_context=self.open_context)
                     detail.refresh(content, self.view.catalog, self.document)
                 case CanvasNote() as content:

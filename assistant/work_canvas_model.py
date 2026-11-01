@@ -15,7 +15,8 @@ from assistant.canvas_activity import (
     CanvasUpdate,
     merge_activity,
 )
-from automation.personal_work import Catalog, Detail, Identity, SourceKind, Title, WorkSource, source_context
+from assistant.meeting_presentation import time_range
+from automation.personal_work import Catalog, Detail, Identity, MeetingSource, Source, SourceKind, Title, WorkSource, source_context
 
 type Coordinate = Annotated[float, Field(ge=-100000, le=100000, allow_inf_nan=False)]
 
@@ -82,6 +83,12 @@ class CanvasViewState:
 
 
 @dataclass(frozen=True, slots=True)
+class ReviewedContribution:
+    id: Identity
+    revision: str
+
+
+@dataclass(frozen=True, slots=True)
 class CanvasDocument:
     placements: tuple[Placement, ...] = ()
     notes: tuple[CanvasNote, ...] = ()
@@ -94,6 +101,7 @@ class CanvasDocument:
     expanded: frozenset[Identity] = frozenset()
     collapsed: frozenset[Identity] = frozenset()
     relations: Annotated[tuple[CanvasRelation, ...], Field(max_length=1000)] = ()
+    reviewed: tuple[ReviewedContribution, ...] = ()
 
     def __post_init__(self) -> None:
         if len(frozenset(item.id for item in self.placements)) != len(self.placements):
@@ -133,7 +141,7 @@ class CanvasDocument:
                 current = parents.get(current)
 
 
-type CanvasContent = WorkSource | CanvasNote | CanvasActivity
+type CanvasContent = Source | CanvasNote | CanvasActivity
 
 DOCUMENT = TypeAdapter(CanvasDocument)
 NOTE = TypeAdapter(CanvasNote)
@@ -210,6 +218,8 @@ def save_note(document: CanvasDocument, note: CanvasNote) -> CanvasDocument:
 
 def caption(content: CanvasContent) -> str:
     match content:
+        case MeetingSource(meeting=meeting):
+            return "Meeting · " + time_range(meeting)
         case WorkSource(kind=kind, parent_id=parent):
             return source_caption(kind, parent)
         case CanvasNote():
@@ -236,19 +246,35 @@ def source_caption(kind: SourceKind, parent: str | None) -> str:
             return "Document"
         case SourceKind.WEB_PAGE:
             return "Web reference"
+        case SourceKind.MEETING:
+            return "Meeting"
         case _ as unreachable:
             assert_never(unreachable)
 
 
 def title(content: CanvasContent) -> str:
     match content:
-        case WorkSource(title=value) | CanvasNote(title=value) | CanvasUpdate(title=value) | CanvasQuestion(title=value) | CanvasAction(title=value):
+        case (
+            WorkSource(title=value)
+            | MeetingSource(title=value)
+            | CanvasNote(title=value)
+            | CanvasUpdate(title=value)
+            | CanvasQuestion(title=value)
+            | CanvasAction(title=value)
+        ):
             return value
 
 
 def summary(content: CanvasContent) -> str:
     match content:
-        case WorkSource(excerpt=value) | CanvasNote(text=value) | CanvasUpdate(text=value) | CanvasQuestion(text=value) | CanvasAction(text=value):
+        case (
+            WorkSource(excerpt=value)
+            | MeetingSource(excerpt=value)
+            | CanvasNote(text=value)
+            | CanvasUpdate(text=value)
+            | CanvasQuestion(text=value)
+            | CanvasAction(text=value)
+        ):
             return value
 
 

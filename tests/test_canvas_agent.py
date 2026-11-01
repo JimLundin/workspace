@@ -3,7 +3,7 @@
 from dataclasses import replace
 from unittest import TestCase
 
-from assistant.canvas_activity import CanvasRun, CanvasUpdate
+from assistant.canvas_activity import CanvasIntake, CanvasRun, CanvasUpdate
 from assistant.work_canvas import pending, retained
 from assistant.work_canvas_commands import (
     CANVAS_RESPONSE,
@@ -22,7 +22,7 @@ from assistant.work_canvas_commands import (
 )
 from assistant.work_canvas_context import context_path
 from assistant.work_canvas_model import CanvasDocument, CanvasNote, CanvasRelation, CanvasViewState, Placement, view_state
-from automation.personal_work import Association, SourceKind, WorkState, source_id
+from automation.personal_work import Association, Catalog, SourceKind, SourceOrigin, WorkSource, WorkState, source_id
 from automation.task import Completed, Question, Waiting
 from tests.personal_work_fixture import source
 from tests.test_work_canvas import catalog
@@ -99,12 +99,13 @@ def test_investigations_deduplicate_research_and_wait_for_the_same_question() ->
     # Defect: polling starts duplicate work, agent-written summaries/documents
     # loop into new research, or changed mail starts another task while asking.
     data = catalog()
+    data = replace(data, works=(replace(data.works[0], links=data.works[1].links),))
     planned = pending(data, CanvasDocument(), ())
-    assert len(planned) == 2 and all(run.evidence for run in planned)
+    assert len(planned) == 1 and all(run.evidence for run in planned)
     document = CanvasDocument(runs=planned)
     completed = tuple(replace(work_task(identity=run.task_id), state=Completed("Collected context", ())) for run in planned)
     assert not pending(data, document, completed)
-    own_references = tuple(source(kind, "decision") for kind in (SourceKind.DOCUMENT, SourceKind.WEB_PAGE))
+    own_references = tuple(replace(source(kind, "decision"), origin=SourceOrigin.AGENT) for kind in (SourceKind.DOCUMENT, SourceKind.WEB_PAGE))
     own_update = replace(
         data,
         sources=(*data.sources, *own_references),
@@ -118,12 +119,14 @@ def test_investigations_deduplicate_research_and_wait_for_the_same_question() ->
         ),
     )
     assert not pending(own_update, document, completed)
-    changed_mail = replace(data.sources[0], revision="changed-mail")
+    mail = data.sources[0]
+    assert isinstance(mail, WorkSource)
+    changed_mail = replace(mail, revision="changed-mail")
     changed = replace(data, sources=(changed_mail, data.sources[1]))
     waiting = tuple(replace(task, state=Waiting(Question("choose-version", "Which version?", "Two observed candidates"))) for task in completed)
     assert not pending(changed, document, waiting)
     next_runs = pending(changed, document, completed)
-    assert len(next_runs) == 2 and next_runs[0].task_id != planned[0].task_id
+    assert len(next_runs) == 1 and next_runs[0].task_id != planned[0].task_id
     recorded = replace(document, runs=(*planned, *next_runs, CanvasRun("manual", "work:one")))
     assert retained(recorded, completed).runs == (*next_runs, CanvasRun("manual", "work:one"))
     closed = replace(changed, works=tuple(replace(work, definition=replace(work.definition, state=WorkState.DONE)) for work in changed.works))
@@ -137,15 +140,54 @@ def test_child_message_changes_trigger_research_and_capacity_stays_bounded() -> 
     original = pending(data, CanvasDocument(), ())
     completed = tuple(replace(work_task(identity=run.task_id), state=Completed("Done", ())) for run in original)
     root = data.sources[0]
+    assert isinstance(root, WorkSource)
     child = replace(root, id=source_id(root.kind, "child", parent_id=root.id), identity="child", parent_id=root.id, revision="child-v1")
     updated = replace(data, sources=(*data.sources, child))
-    assert len(pending(updated, CanvasDocument(runs=original), completed)) == 2
+    assert len(pending(updated, CanvasDocument(runs=original), completed)) == 1
     crowded = replace(data, works=tuple(replace(data.works[0], id="work:" + str(i)) for i in range(10)))
     first = pending(crowded, CanvasDocument(), ())
-    assert len(first) == 3
+    assert len(first) == 1
     assert not pending(crowded, CanvasDocument(runs=first), ())
     one_finished = (replace(work_task(identity=first[0].task_id), state=Completed("Done", ())),)
     assert len(pending(crowded, CanvasDocument(runs=first), one_finished)) == 1
+
+
+def test_unconnected_evidence_is_reviewed_once_and_bursts_wait_in_order() -> None:
+    # Defect: evidence outside work links never reaches the agent, duplicate
+    # observations launch more work, or a burst loses sources while intake is busy.
+    mail, chat = source(SourceKind.OUTLOOK), source(SourceKind.TEAMS)
+    data = Catalog(sources=(mail, chat))
+    first = pending(data, CanvasDocument(), ())
+    assert len(first) == 1 and first[0].work_id == mail.id and isinstance(first[0].intent, CanvasIntake)
+    document = CanvasDocument(runs=first)
+    assert not pending(data, document, ())
+    # Defect: an unanswered clarification stalls intake for unrelated arrivals,
+    # even though the paused task consumes no execution slot.
+    waiting = replace(work_task(identity=first[0].task_id), state=Waiting(Question("owner", "Who owns this?", "")))
+    resumed_intake = pending(data, document, (waiting,))
+    assert len(resumed_intake) == 1 and resumed_intake[0].work_id == chat.id
+    completed = replace(work_task(identity=first[0].task_id), state=Completed("Reviewed", ()))
+    second = pending(data, document, (completed,))
+    assert len(second) == 1 and second[0].work_id == chat.id
+    document = replace(document, runs=(*first, *second))
+    completed_both = (completed, replace(work_task(identity=second[0].task_id), state=Completed("Reviewed", ())))
+    assert not pending(data, document, completed_both)
+    compacted = retained(document, completed_both)
+    assert not compacted.runs and len(compacted.reviewed) == 2
+    assert not pending(data, compacted, completed_both)
+    changed = replace(data, sources=(replace(mail, revision="new-mail"), chat))
+    assert pending(changed, document, completed_both)[0].task_id != first[0].task_id
+    authored = replace(source(SourceKind.DOCUMENT), origin=SourceOrigin.AGENT)
+    manual = replace(authored, origin=SourceOrigin.USER)
+    assert not pending(Catalog(sources=(authored,)), CanvasDocument(), ())
+    assert pending(Catalog(sources=(manual,)), CanvasDocument(), ())[0].work_id == manual.id
+    sources = tuple(source(SourceKind.OUTLOOK, str(index)) for index in range(4))
+    waiting_runs = tuple(CanvasRun("intake:" + str(index), item.id, CanvasIntake(item.revision)) for index, item in enumerate(sources[:3]))
+    waiting_tasks = tuple(
+        replace(work_task(identity=run.task_id), state=Waiting(Question("owner:" + str(index), "Who owns this?", "")))
+        for index, run in enumerate(waiting_runs)
+    )
+    assert not pending(Catalog(sources=sources), CanvasDocument(runs=waiting_runs), waiting_tasks)
 
 
 def test_canvas_read_pages_keep_full_topology_and_bound_large_activity_bodies() -> None:
