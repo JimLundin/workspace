@@ -106,7 +106,7 @@ Runner startup before its timer, report-writing cost, early preflight failures
 and interrupted processes are outside this accounting. See the [full-suite investigation](test-speed-investigation.md)
 for measured portable costs and the limits of current full-run attribution.
 
-Broad native editing checks run twenty-nine explicitly reviewed isolated test modules
+Broad native editing checks run twenty-eight explicitly reviewed isolated test modules
 through four standard-library process workers before the single sequential
 desktop-test lane. Their private files, localhost transports and fake desktop
 adapters allow that overlap; [execution ownership](test-execution-ownership.md)
@@ -189,16 +189,19 @@ commit ordering, lost acknowledgment, edited/deleted items and recipient checks
 still run, including Windows sharing behavior. The blanket runtime slots audit
 was removed; Python instance-storage behavior is trusted.
 
-Feed-triage fixtures keep real worker threads, locks and authenticated HTTP
-requests. Tests explicitly release debounce steps instead of waiting 1.5 seconds
-per step; the local fixture server uses a short idle shutdown poll. The daily
-refresh case still exercises the real periodic wake without a new observation.
-The fixture supplies the real server adapter and cancellable wait dependency
-through `Triage` construction; it does not patch native events or module globals.
-Feed context/reply checks use the existing task and context stores, real local
-HTTP and the registered agent tools. They verify saved-before-queue ownership,
-exact reply retries after restart, stale-item rejection, contextual model wiring
-and outcome/answer retrieval. Pydantic's own parsing algorithms are trusted.
+Feed-triage fixtures keep real worker threads, locks and typed desktop owner
+commands. Tests explicitly release debounce steps instead of waiting 1.5 seconds
+per step. The daily refresh case still exercises the real periodic wake without
+a new observation. Triage takes explicit store, model and cancellable-wait
+dependencies; registered tools receive a serialized in-process `WorkOwners`
+adapter. Feed context/reply checks use the existing task and context stores and
+registered agent tools. They verify saved-before-queue ownership, exact reply
+retries after restart, stale-item rejection, contextual model wiring and
+outcome/answer retrieval. Pydantic's own parsing algorithms are trusted.
+The native work-process fixture submits through `WorkAgent`, runs the real
+controller and makes a desktop call through `OwnerCalls` over the authenticated
+pipe. Separate real-pipe checks cover observer responsiveness and redelivery;
+dispatcher checks cover stale queued runs and shutdown rejection.
 Feed-tool cases use the registered tool boundary; the general SDK conversation
 scenarios remain in `tests/test_agent.py`.
 

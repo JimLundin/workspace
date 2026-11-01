@@ -29,7 +29,7 @@ The main places to read are:
 | `assistant/desktop_attention.py` | Speech targets, first-question inbox precedence, active-canvas interruption suppression and session-bound answer delivery from immutable `CanvasFocus` and waiting questions | `CanvasWindow` publishes focus and owns instruction, reply feedback, document, voice and meeting updates; `AgentWindow.snapshot()` reads the immutable session under its own lock; `Ui` executes decision variants on Qt and its one `_publish_canvas` handler fans out each owner publication, retaining late-view replay without repeating notices; conversation navigation is connected once through `configure_controls` |
 | `assistant/ui_components/` | Shared bubble outline, palette/ink, text presentation, headings and controls | Native component owners paint Qt surfaces and adapt Windows window behavior; feature controllers consume components directly |
 | `assistant/work_canvas_commands.py`, `work_canvas_tools.py`, `work_canvas.py` | Atomic structural edits, paged reads, editable fingerprints, bounded evidence-driven scheduling, durable run retention and one exhaustive `run_prompt` for research or exact saved user direction | `Ui` marshals bridge commands to Qt; `WorkCanvas` persists and publishes each change through the same handler as user edits and observations; `App` constructs the one `WorkCanvas`, submits its identified run prompt and recovers uncommitted bindings |
-| `assistant/work_bridge_contracts.py`, `work_bridge.py`, `browser_documents.py` | Validated desktop bridge variants, their routing to each owner and document stream contracts | The contracts join feed, catalog and canvas wire variants without a feed-to-canvas import cycle and name the shared work endpoint; `WorkOwners` routes each variant to its owner's typed handler; `local_bridge.py` owns every loopback listener and its client, bearer check, request bound and endpoint file; `Browser` owns authenticated CDP streams and exclusive bounded file collection |
+| `assistant/work_bridge_contracts.py`, `work_bridge.py`, `browser_documents.py` | Validated desktop owner variants, their routing to each owner and document stream contracts | The contracts join feed, catalog and canvas wire variants without a feed-to-canvas import cycle; `WorkOwners` routes each variant to its owner's typed handler, and `answer` validates desktop text and encodes its response; `Browser` owns authenticated CDP streams and exclusive bounded file collection |
 | `assistant/work_snapshot.py`, `work_canvas_window.py`, `ui_components/bubble.py`, `ui_components/text.py` | Current observations and bounded preview presentation | `Ui.configure_work` binds immutable work callbacks once before publication, recovery or startup; `work_window` retrieves the lazy controller, while preparation and showing remain explicit; desktop startup prepares the hidden native canvas; Qt retains group/header identities, materializes visible nested bubbles and shapes previews during viewport painting |
 | `assistant/llm.py` | System, user, assistant, and tool-result message variants; request serialization | HTTP client functions |
 | `automation/presentation.py` | Shared progress, result and live-row values | `automation/app.py` publishes live updates through `ipc.py`; the assistant synthesizes completion from durable outcomes and renders the timeline |
@@ -40,9 +40,9 @@ The main places to read are:
 | `automation/journal.py` | Schema versions: creation, ordered migration steps and refusal of unknown or unversioned journals | Every SQLite owner (task, routine, context, personal-work, canvas, meeting and edit journals) opens its file through one connection interface: write transactions, single read snapshots, rollback on any exception, one busy wait and durability policy, and reads that report an absent journal without creating it |
 | `automation/controller.py`, `execution.py`, `actions.py` | Work outcomes, recovery context, exact operations, observation evidence, reconciliation proof and verification decisions | `WorkController` owns execution lifetime; `Actions` owns cancellable effect coordination |
 | `automation/routines.py`, `context.py` | Trigger occurrences, accepted handoffs, context relevance and freshness | The routine/context stores own persistence; `meeting_events.py` owns transcript delivery and startup scanning |
-| `assistant/work_commands.py`, `work_snapshot.py`, `work_text.py`, `work_agent.py`, `work_service.py` | Work commands, the published work snapshot, readable task labels, conversation/task selection and meeting RPC acceptance | `WorkAgent` owns frontend observation and asynchronous UI delivery; `WorkService` composes journal/transport calls and RPC replies; `WorkWindow` schedules its native view |
+| `assistant/work_commands.py`, `work_snapshot.py`, `work_text.py`, `work_agent.py`, `work_service.py`, `owner_calls.py` | Work commands, the published work snapshot, readable task labels, conversation/task selection and volatile owner-call admission/result identities | `WorkAgent` owns frontend observation and asynchronous UI delivery; `WorkService` composes journal/transport calls; `OwnerDispatcher` owns one handler thread, bounded mailboxes and immutable pending/cache snapshots, rechecking the journal before each effect; the frontend observer alone sends replies; `WorkWindow` schedules its native view |
 | `assistant/view_publication.py` | One view per owner: coalesced renders, lazy creation with retry, a single confirmed close | `AgentWindow` and `WorkWindow` keep their immutable state and post through it; `Ui.close_windows` closes both and waits for each confirmation |
-| `automation/ipc.py`, `outbox.py`, `bridge.py`, `profile_lease.py` | Validated process messages and immutable bounded event retention/coalescing with explicit history loss | Bridge client/server own authenticated byte transport and replace outbox snapshots under the server lock; `ProfileLease` owns the OS-released exclusive work-folder lock; `automation/app.py` composes the native worker |
+| `automation/ipc.py`, `outbox.py`, `bridge.py`, `profile_lease.py` | Validated process messages, typed meeting operations and bounded desktop-call text, plus immutable event retention/coalescing with explicit history loss | Bridge client/server own the one authenticated pipe and replace outbox snapshots under the server lock; `ProfileLease` owns the OS-released exclusive work-folder lock; `automation/app.py` composes the worker and its `OwnerCalls` adapter, binding calls to the current execution run and cancellation handle |
 | `assistant/action_text.py` | Readable action targets and results, formatted before preview limits | `agent.py` publishes previews; session presentation handles raw payloads too |
 | `assistant/notifications.py`, `notification_text.py`, `notification_reading.py`, `toast_style.py` | Grouped turns, attached results, optional steps, reading states, lifetimes, tints, and motion sampling | `agent_toasts.py`, `toast_card.py`, `qt_text.py`, `qt_ui.py`, `winapi/composition.py`, `winapi/appearance.py`, `winapi/notification_input.py` |
 | `assistant/browser_requests.py`, `browser_values.py`, `browser_session.py`, `browser.py` | Browser requests (one typed variant per operation, validated once at the browser tool seam), immutable page/tab/group observations, validated DevTools and tab-API replies, group selection, typed paginated projections | `Browser`, `NativeSessions`, `Cdp`, `browser_tabs.TabStrip`, the `browser_host` exchange of typed flat requests, and a cancellable connection wait |
@@ -58,7 +58,7 @@ The main places to read are:
 | `assistant/communications.py` | Source identities, grouped pending chat tickets, captured handling revisions and reply evidence | `communications_service.py` owns encrypted settings/drafts/handling, collection and effects; `communications_browser.py` owns exact-chat and Activity DOM boundaries and reads chats with the Teams web-app operation's result type; `Ui` supplies source observations as agent context; canvas activity owns user attention |
 | `assistant/feed_sources.py` | Feed source variants, each owning its key, origin, attention (the one pending rule) and triage evidence; the pending listing | Every consumer reads the same list: `feed_triage_service.py` collects evidence and `feed_agent_tools.py` shows the voice agent the feed |
 | `assistant/notifications.py` | The bounded bubble projection of canvas redirects, approvals and agent turns | `agent_toasts.py` and `toast_card.py` own the floating bubbles, explicit history and approval buttons |
-| `assistant/feed_triage.py` | Revision-bound grouped assessments with their captured origins, quiet/action/completed/dismissed dispositions, explicit feedback and stale-result rejection | `feed_triage_service.py` owns coalesced background model calls, DPAPI plan/preferences and the feed commands the work bridge routes to it, with an explicit cancellable-wait dependency; `feed_agent_tools.py` lets the main voice agent inspect and maintain the same plan; ordinary arrivals do not become floating cards |
+| `assistant/feed_triage.py` | Revision-bound grouped assessments with their captured origins, quiet/action/completed/dismissed dispositions, explicit feedback and stale-result rejection | `feed_triage_service.py` owns coalesced background model calls, DPAPI plan/preferences and the feed commands the desktop owner routes to it, with an explicit cancellable-wait dependency; `feed_agent_tools.py` lets the main voice agent inspect and maintain the same plan; ordinary arrivals do not become floating cards |
 | `assistant/feed_origin.py` | Source application identity and assessment provenance | `feed_icons.py` owns native vector marks; canvas bubbles and the Workspace badge on floating bubbles paint them; the triage board keeps reaction counts quiet |
 | `assistant/notification_sources.py` | Windows notice updates, loaded handling marks, the notification filter and the joined pending feed | `NotificationSources` loads stored attention choices and retains notice observations on Qt's thread, apart from the Teams worker; routine observations preserve those choices and expose revised notices as pending |
 | `assistant/feed_observation.py` | Teams work and Windows notices joined from each observer's latest report | `Ui` marshals each report onto Qt's thread and hands the joined feed to triage; routine arrivals never reach the floating bubbles |
@@ -125,7 +125,7 @@ standing preferences. Queue acknowledgment is distinct from task completion.
 `feed_contracts.py` defines immutable IO shapes, validated and serialized with
 Pydantic `TypeAdapter`; application decisions operate on typed values. Every feed
 operation is one `FeedCommand` variant, validated by the agent tool adapter and
-again at the bridge. `feed_triage.edited` is the single pure transition for explicit
+again at the desktop owner boundary. `feed_triage.edited` is the single pure transition for explicit
 board edits: it owns dispositions, rule preservation, reconciliation and the
 recorded decision, so `Triage` only persists the result.
 History stays in the same floating feed; the separate legacy panel is removed.
@@ -187,7 +187,22 @@ remain volatile, tied to their run, goal revision, exact operation, and request
 identity. A view must display the matching preview before approval is accepted.
 After a lost preview, refreshing creates a new request identity. Local IPC uses
 authenticated, bounded JSON byte frames with worker epochs and event cursors;
-it never deserializes Python objects. UI, microphone, meeting capture and live
+it never deserializes Python objects. Meeting and desktop owner calls use this same
+pipe. Desktop text is bounded to 64,000 UTF-8 bytes and validated through the
+existing desktop adapters. Owner calls and their results remain volatile; each
+owner's durable store and the task journal retain the truth (ADR-0001).
+
+The owner dispatcher admits at most two calls, one executing and one queued,
+while the frontend continues polling and processing commands. It rechecks the
+journal's run immediately before the handler and retains the latest 128 results
+by worker epoch, run and request identity. In-flight and completed redelivery
+reuse that invocation instead of repeating an effect. Closing rejects queued
+calls and drains the active result before disconnecting. Assistant shutdown waits
+up to twelve seconds for the dispatcher, retaining personal work, feed, meetings
+and Qt throughout; canvas commands have an eight-second Qt wait. A failed drain
+stops teardown with an explicit error.
+
+UI, microphone, meeting capture and live
 web-app pages remain with the assistant. The worker owns Teams, native actions
 and its external-browser session; web-app operations cross typed RPC.
 
@@ -434,7 +449,7 @@ and observations are immutable, with mutation retained at their effect owners.
 
 Synchronization handles remain with their effect owners. Frozen records can hold
 those handles without mutable record fields. The task execution-flight and
-pending-meeting records, conversation holder, benchmark options and usage values
+pending-owner records, conversation holder, benchmark options and usage values
 now follow that pattern. Deeply immutable payloads still need review: an alias
 or opaque object can hide mutation beyond what the syntax check recognizes.
 

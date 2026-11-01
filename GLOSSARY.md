@@ -249,12 +249,10 @@ automation. Each entry names its entry module, control window, quit message,
 shutdown budget and readiness marker.
 _Avoid_: Program, role, miryoku (as a component name)
 
-**Local bridge**:
-The authenticated loopback listener through which a local client reaches
-Workspace owners. The work bridge carries the agents' feed, work and canvas
-tool requests. A bridge publishes an endpoint file with its address and token.
-An owner's refusal is a typed reply, not a transport error.
-_Avoid_: Feed bridge, console server
+**Owner call**:
+A work run's request to another Workspace owner, answered for that exact
+invocation. The call is temporary; the owner's saved state remains the truth.
+_Avoid_: Local bridge, feed bridge, console request
 
 **Keeper request**:
 A typed ask in the keeper's inbox folder: install a checked change, undo the
