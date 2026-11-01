@@ -104,10 +104,18 @@ The frame loop runs only while a spring moves or the spinner turns, and holds a
 fine timer resolution only while springs move. Windows' reduced-motion setting
 moves every capsule straight to its target, including mid-flight.
 
-`scripts/benchmark_island.py` drives the real bar and glass through rest, agent
-work, dictation with a recording and inbox, a question and rest. On this laptop
-untraced frame work measured a median of 0.55–0.7 ms and a 95th percentile of
-3.5–4.9 ms, with about 11 KB allocated per frame and no frames at rest.
+`scripts/benchmark_island.py` drives the real bar and glass through agent work with a
+transcription, dictation beside both with a recording and inbox, a question and
+rest. On this laptop a frame takes about 1.3 ms at the median and 3.2–3.8 ms at
+the 95th percentile, and peaks at about 4 KB of transient allocation; no frames run
+at rest. Bar code is about a quarter of that (0.3 ms median, 0.7 ms p95); the rest
+is Qt's native painting and its layered-window flush.
+
+Three measured choices keep it there. Glass writes go straight through IVisual's
+COM slots: win32more's generic dispatch costs 44 µs per write, a slot call 2.2 µs.
+Each capsule renders its still content once and blits it while its shape morphs;
+spinners, dots and the trace repaint only their own rectangles. Looks and colours
+are cached values, so a frame builds only its motion records.
 
 ## Material
 
