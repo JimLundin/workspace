@@ -12,7 +12,9 @@ from miryoku.layout import (
     CUT,
     ESCAPE,
     PASTE,
+    PHYSICAL,
     REDO,
+    TABLE,
     UNDO,
     VOICE_KEYS,
     Action,
@@ -45,6 +47,41 @@ ROWS: Final = (
 """The keyboard's letter block and Spacebar: scancode and Nordic keycap name."""
 
 PHYSICAL_NAMES: Final = {scancode: name for row in ROWS for scancode, name in row}
+
+
+@dataclass(frozen=True, slots=True)
+class Shortcut:
+    """Physical keycaps: a tap and, for a layer binding, its held thumb."""
+
+    tap: str
+    hold: str | None
+
+
+def shortcut(tool: Tool) -> Shortcut | None:
+    """Prefer a dedicated voice key, otherwise the first binding in Layer order."""
+    for scancode, voice in VOICE_KEYS.items():
+        if voice is tool:
+            return Shortcut(PHYSICAL_NAMES[scancode], None)
+    physical = PHYSICAL.cells()
+    for layer in Layer:
+        held = _holding(layer)
+        if held is None:
+            continue
+        for cell, binding in enumerate(TABLE[layer]):
+            if binding is tool:
+                return Shortcut(PHYSICAL_NAMES[physical[cell]], PHYSICAL_NAMES[physical[held]])
+    return None
+
+
+def shortcut_hint(binding: Shortcut | None, *, compact: bool = False) -> str:
+    """Use README keycap notation, shortened for the floating menu's trailing edge."""
+    match binding:
+        case Shortcut(tap, None):
+            return tap
+        case Shortcut(tap, hold):
+            return f"{hold} {tap}" if compact else f"Hold {hold} + {tap}"
+        case None:
+            return ""
 
 
 class Kind(Enum):

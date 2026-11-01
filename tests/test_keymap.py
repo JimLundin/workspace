@@ -1,6 +1,6 @@
 """The key map: what each physical key does, per layer; and the indicator's words."""
 
-from assistant.keymap import ROWS, Kind, indicator_text, keymap
+from assistant.keymap import ROWS, Kind, Shortcut, indicator_text, keymap, shortcut, shortcut_hint
 from miryoku.layout import Layer
 from protocol import Tool
 lazy from assistant.keymap import TOOL_NAMES
@@ -14,6 +14,25 @@ def test_rows_are_the_nordic_iso_keyboard() -> None:
     assert [len(row) for row in ROWS] == [13, 12, 13, 11, 1]
     assert ROWS[0][0][1] == "§"
     assert ROWS[3][0][1] == "<"
+
+
+def test_shortcuts_use_physical_keys_the_right_thumb_and_dedicated_voice_first() -> None:
+    # Defects: using BASE outputs as keycaps, selecting another layer's thumb, or
+    # advertising the Tools-layer dictation copy instead of its dedicated key.
+    assert shortcut(Tool.ASK) == Shortcut("P", "V")
+    assert shortcut(Tool.OPEN_INBOX) == Shortcut("T", "V")
+    assert shortcut(Tool.WINDOW_SWITCHER) == Shortcut("X", ".")
+    assert shortcut(Tool.DICTATE) == Shortcut("Space", None)
+    assert shortcut(Tool.TILE_FLOAT) == Shortcut("I", ".")
+
+
+def test_shortcut_hints_share_keycap_notation_and_omit_absent_bindings() -> None:
+    # Defects: the compact hint uses a layer's name, a dedicated key acquires a
+    # nonexistent thumb, or a missing binding renders "None".
+    assert shortcut_hint(Shortcut("P", "V")) == "Hold V + P"
+    assert shortcut_hint(Shortcut("X", "."), compact=True) == ". X"
+    assert shortcut_hint(Shortcut("Space", None)) == "Space"
+    assert shortcut_hint(None) == ""
 
 
 def test_base_layer() -> None:
