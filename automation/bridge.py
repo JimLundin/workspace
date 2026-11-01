@@ -21,8 +21,7 @@ from concurrent.futures import Future, TimeoutError
 from dataclasses import dataclass, replace
 from multiprocessing.connection import Listener
 from pathlib import Path
-from types import TracebackType
-from typing import BinaryIO, Final, Protocol, assert_never
+from typing import Final, Protocol, assert_never
 
 from pydantic import ConfigDict, TypeAdapter
 
@@ -33,10 +32,8 @@ from automation.task import RunRef, identifier, integer
 
 if sys.platform == "win32":
     import _winapi
-    import msvcrt
     from multiprocessing.connection import PipeConnection
 else:
-    import fcntl
     from multiprocessing.connection import Connection
 
 MAX_BUFFER_BYTES: Final = 4 * ipc.MAX_FRAME
@@ -83,52 +80,6 @@ class LocalChannel:
                         stream.shutdown(socket.SHUT_RDWR)
             with contextlib.suppress(OSError, ValueError):
                 self.connection.close()
-
-
-class ProfileLease:
-    """One OS-released owner, acquired before opening/recovering the task store."""
-
-    __slots__ = ("_file", "folder")
-
-    def __init__(self, folder: Path) -> None:
-        self.folder = folder
-        self._file: BinaryIO | None = None
-
-    def __enter__(self) -> ProfileLease:
-        if self._file is not None:
-            raise RuntimeError("The worker ownership lease is already held.")
-        self.folder.mkdir(parents=True, exist_ok=True)
-        descriptor = os.open(self.folder / "worker.lock", os.O_RDWR | os.O_CREAT, 0o600)
-        file = os.fdopen(descriptor, "r+b")
-        try:
-            if not file.read(1):
-                file.write(b"0")
-                file.flush()
-            file.seek(0)
-            if sys.platform == "win32":
-                msvcrt.locking(file.fileno(), msvcrt.LK_NBLCK, 1)
-            else:
-                fcntl.flock(file, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except BaseException:
-            file.close()
-            raise
-        self._file = file
-        return self
-
-    def close(self) -> None:
-        file, self._file = self._file, None
-        if file is not None:
-            try:
-                file.seek(0)
-                if sys.platform == "win32":
-                    msvcrt.locking(file.fileno(), msvcrt.LK_UNLCK, 1)
-                else:
-                    fcntl.flock(file, fcntl.LOCK_UN)
-            finally:
-                file.close()
-
-    def __exit__(self, kind: type[BaseException] | None, error: BaseException | None, trace: TracebackType | None) -> None:
-        self.close()
 
 
 @dataclass(frozen=True, slots=True)

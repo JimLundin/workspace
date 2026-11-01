@@ -33,12 +33,13 @@ lazy from assistant.outlook import OutlookDrafts
 lazy from assistant.task_profiles import RequestContext
 lazy from automation import ipc
 lazy from automation.activity import ContextSnapshot, Observation, Sample, observed
-lazy from automation.bridge import BridgeServer, ProfileLease
+lazy from automation.bridge import BridgeServer
 lazy from automation.capture import AudioSource
 lazy from automation.context import ContextStore, select_context
 lazy from automation.controller import ControllerSnapshot, Fault, Idle, Stopping, WorkController, WorkExecution, Working
 lazy from automation.execution import ApprovalReview, Log
 lazy from automation.presentation import LiveMessage, Problem, Progress, Said
+lazy from automation.profile_lease import ProfileLease
 lazy from automation.routines import RoutineStore
 lazy from automation.store import TaskStore
 lazy from automation.task import Claim, Outcome, RunRef, Task, owns

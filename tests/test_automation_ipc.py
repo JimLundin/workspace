@@ -16,9 +16,10 @@ from unittest import TestCase
 
 from automation import ipc
 from automation.activity import Activity, ContextSnapshot
-from automation.bridge import BridgeClient, BridgeServer, Channel, LocalChannel, ProfileLease, read_discovery
+from automation.bridge import BridgeClient, BridgeServer, Channel, LocalChannel, read_discovery
 from automation.execution import ApprovalReview
 from automation.presentation import Answer, Progress, Said, StreamState
+from automation.profile_lease import ProfileLease
 from automation.task import Approval, RunRef
 from winapi.shapes import Window
 

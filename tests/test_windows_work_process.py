@@ -18,8 +18,9 @@ if sys.platform != "win32":
 
 from assistant.work_agent import WorkAgent
 from assistant.work_snapshot import WorkSnapshot
-from automation.bridge import BridgeClient, ProfileLease, read_discovery
+from automation.bridge import BridgeClient, read_discovery
 from automation.context import ContextStore
+from automation.profile_lease import ProfileLease
 from automation.routines import Disabled, RoutineStore
 from automation.store import TaskStore
 from automation.task import Completed, Interrupted, RequestSource, Running, RunRef
