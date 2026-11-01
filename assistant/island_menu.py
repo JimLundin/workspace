@@ -29,13 +29,13 @@ class Command(Enum):
 
 
 @dataclass(frozen=True, slots=True)
-class Tiling:
-    """A window tool, acting on the window that had the keyboard before the menu opened."""
+class ToolChoice:
+    """A Tool selected from the menu; window tools retain the window that had the keyboard."""
 
     tool: Tool
 
 
-type Choice = Command | Tiling
+type Choice = Command | ToolChoice
 
 
 @dataclass(frozen=True, slots=True)
@@ -72,14 +72,14 @@ TILING: Final = Disclosure(
     "Window tiling",
     "grid",
     (
-        Item("Spread windows across screens", "", Tiling(Tool.TILE_BALANCE)),
-        Item("Focus left", "", Tiling(Tool.TILE_FOCUS_LEFT)),
-        Item("Focus right", "", Tiling(Tool.TILE_FOCUS_RIGHT)),
-        Item("Previous workspace", "", Tiling(Tool.TILE_PREVIOUS_WORKSPACE)),
-        Item("Next workspace", "", Tiling(Tool.TILE_NEXT_WORKSPACE)),
-        Item("Float or tile the active window", "", Tiling(Tool.TILE_FLOAT)),
-        Item("Change split direction", "", Tiling(Tool.TILE_DIRECTION)),
-        Item("Pause or resume automatic tiling", "", Tiling(Tool.TILE_PAUSE)),
+        Item("Spread windows across screens", "", ToolChoice(Tool.TILE_BALANCE)),
+        Item("Focus left", "", ToolChoice(Tool.TILE_FOCUS_LEFT)),
+        Item("Focus right", "", ToolChoice(Tool.TILE_FOCUS_RIGHT)),
+        Item("Previous workspace", "", ToolChoice(Tool.TILE_PREVIOUS_WORKSPACE)),
+        Item("Next workspace", "", ToolChoice(Tool.TILE_NEXT_WORKSPACE)),
+        Item("Float or tile the active window", "", ToolChoice(Tool.TILE_FLOAT)),
+        Item("Change split direction", "", ToolChoice(Tool.TILE_DIRECTION)),
+        Item("Pause or resume automatic tiling", "", ToolChoice(Tool.TILE_PAUSE)),
     ),
 )
 
@@ -101,8 +101,8 @@ def entries(*, recording: str | None, agent: str | None) -> tuple[Entry, ...]:
         Item("Keyboard overlay", "layers", Command.OVERLAY),
         Item("Windows taskbar", "table", Command.TASKBAR),
         Rule.SEPARATOR,
-        Item("Switch windows", "search", Tiling(Tool.WINDOW_SWITCHER), "Apps Esc"),
-        Item("Copy latest transcript", "doc", Tiling(Tool.COPY_TRANSCRIPT)),
+        Item("Switch windows", "search", ToolChoice(Tool.WINDOW_SWITCHER), "Apps Esc"),
+        Item("Copy latest transcript", "doc", ToolChoice(Tool.COPY_TRANSCRIPT)),
         TILING,
         Item("Windows notification settings", "bell", Command.NOTIFICATIONS),
         Rule.SEPARATOR,
@@ -278,7 +278,7 @@ def jump(menu: Menu, character: str) -> Menu:
 def restores_focus(choice: Choice) -> bool:
     """Window tools and quiet toggles hand the keyboard back; Workspace's own views keep it."""
     match choice:
-        case Tiling():
+        case ToolChoice():
             return True
         case Command.OVERLAY | Command.TASKBAR | Command.RECORD | Command.STOP_RECORDING | Command.STOP_AGENT:
             return True

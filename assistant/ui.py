@@ -775,6 +775,8 @@ class Ui:
 
         self.post(reveal)
 
+    # View navigation, stop, overlay, menu dispatch and error reporting remain
+    # distinct effect ports; audio observation and tool dispatch complete bar composition.
     def desktop(
         self,
         *,
@@ -785,7 +787,7 @@ class Ui:
         menu: Callable[[], None],
         on_problem: Callable[[str], None],
         audio_level: Callable[[], float | None] | None = None,
-        tiling: Callable[[Tool, int], None] | None = None,
+        tool: Callable[[Tool, int], None] | None = None,
     ) -> None:
         """Create only Workspace's floating native controls."""
 
@@ -805,7 +807,7 @@ class Ui:
                     overlay,
                     menu,
                     on_problem,
-                    tiling or (lambda _tool, _hwnd: None),
+                    tool or (lambda _tool, _hwnd: None),
                     self.system_notices,
                     self.handle_system_notice,
                     inbox=lambda: self.open_inbox(show_agent),

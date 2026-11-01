@@ -9,12 +9,12 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import Protocol
+from typing import Final, Protocol
 
 import protocol
 from components import LAYOUT
 from miryoku.layout import Scancode
-from protocol import App, LayoutState, Request
+from protocol import App, LayoutState, Request, Tool
 lazy from winapi.shell import MenuItem
 
 
@@ -137,6 +137,10 @@ def change_overlay(change: OverlayChange, effects: OverlayPreference) -> str | N
     return None
 
 
+WM_TOOL_CHOSEN: Final = 0x8057
+"""Menu -> assistant control thread: Tool value in wparam, target HWND in lparam (0 for foreground)."""
+
+
 @dataclass(frozen=True, slots=True)
 class WindowInput:
     """One native message observation; the HWND remains with its native owner."""
@@ -162,11 +166,19 @@ class FeatureRequest:
     down: bool = field(kw_only=True)
 
 
-type ControlAction = PhysicalKey | FeatureRequest
+@dataclass(frozen=True, slots=True)
+class ChosenTool:
+    """A Tool picked from a Workspace menu: press only, on the window that had the keyboard."""
+
+    tool: Tool
+    target: int | None
+
+
+type ControlAction = PhysicalKey | FeatureRequest | ChosenTool
 
 
 def control_event(event: WindowInput, apps: Sequence[App]) -> ControlAction | None:
-    """Decode physical keys and preserve both edges for the feature dispatcher."""
+    """Preserve key edges and the captured target of press-only menu choices."""
     match event:
         case WindowInput(message=protocol.WM_KEY_STATE, wparam=scancode, lparam=down):
             return PhysicalKey(Scancode(scancode), down=bool(down))
@@ -177,5 +189,11 @@ def control_event(event: WindowInput, apps: Sequence[App]) -> ControlAction | No
                     return None
                 case _:
                     return FeatureRequest(request, down=bool(down))
+        case WindowInput(message=message, wparam=code, lparam=target) if message == WM_TOOL_CHOSEN:
+            try:
+                tool = Tool(code)
+            except ValueError:
+                return None
+            return ChosenTool(tool, target or None)
         case _:
             return None

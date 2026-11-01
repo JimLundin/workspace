@@ -12,7 +12,7 @@ from assistant.island_menu import (
     Live,
     Menu,
     Rule,
-    Tiling,
+    ToolChoice,
     entries,
     label,
     press,
@@ -107,5 +107,5 @@ def test_enter_chooses_escape_dismisses_and_a_letter_jumps_to_the_next_match() -
 def test_window_tools_hand_the_keyboard_back_and_workspace_views_keep_it() -> None:
     # Defects: tiling acts on the menu instead of the user's window, or a Workspace
     # view that just opened loses the keyboard to the previous window.
-    assert restores_focus(Tiling(Tool.TILE_FLOAT)) and restores_focus(Command.TASKBAR)
+    assert restores_focus(ToolChoice(Tool.TILE_FLOAT)) and restores_focus(Command.TASKBAR)
     assert not restores_focus(Command.CANVAS) and not restores_focus(Command.KEYMAP)

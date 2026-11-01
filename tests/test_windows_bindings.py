@@ -16,6 +16,8 @@ if sys.platform != "win32":
     raise unittest.SkipTest("Windows bindings")
 
 from assistant.control_policy import (
+    WM_TOOL_CHOSEN,
+    ChosenTool,
     FeatureRequest,
     Menu,
     MenuState,
@@ -927,6 +929,16 @@ def test_control_event_preserves_voice_release_and_rejects_unknown_requests() ->
     """Detect dropping a capture's key-up or forwarding an invalid wire request."""
     assert control_event(WindowInput(WM_REQUEST, Tool.DICTATE.value, 0), APPS) == FeatureRequest(Tool.DICTATE, down=False)
     assert control_event(WindowInput(WM_REQUEST, 999, 1), APPS) is None
+
+
+def test_menu_tool_message_preserves_the_captured_window_and_rejects_other_requests() -> None:
+    # Defects: decoding drops the captured HWND, treats 0 as a real window,
+    # accepts a non-Tool wire request, or handles another private message as a choice.
+    assert control_event(WindowInput(WM_TOOL_CHOSEN, Tool.TILE_FLOAT.value, 42), APPS) == ChosenTool(Tool.TILE_FLOAT, 42)
+    assert control_event(WindowInput(WM_TOOL_CHOSEN, Tool.TILE_FLOAT.value, 0), APPS) == ChosenTool(Tool.TILE_FLOAT, None)
+    assert control_event(WindowInput(WM_TOOL_CHOSEN, 999, 42), APPS) is None
+    assert control_event(WindowInput(WM_TOOL_CHOSEN, 1000, 42), APPS) is None
+    assert control_event(WindowInput(0x8056, Tool.TILE_FLOAT.value, 42), APPS) is None
 
 
 def test_keeper_native_messages_preserve_pointer_sized_payloads() -> None:

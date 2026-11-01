@@ -509,15 +509,6 @@
       "key": {
         "rule": "PLR0913",
         "path": "assistant/ui.py",
-        "scope": "Ui.desktop",
-        "signature": "1a92684a03c2add67191b73f83ca3e14a876ba42d50191ae947918fcbd3e40c7"
-      },
-      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
-    },
-    {
-      "key": {
-        "rule": "PLR0913",
-        "path": "assistant/ui.py",
         "scope": "Ui.show_keyboard_overlay",
         "signature": "da56c5db9965405acb4c6e8084feb5570fc54e7a9202ae533397f5df9ab7c14f"
       },

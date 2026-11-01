@@ -410,12 +410,12 @@ class AssistantApp:
             self.ui.desktop(
                 show_agent=self.agent.show,
                 show_work=self.show_work,
-                stop=self.stop_requested,
+                stop=lambda: self.choose_tool(Tool.STOP, 0),
                 overlay=self.toggle_overlay,
                 menu=self.request_menu,
                 on_problem=self.problem,
                 audio_level=self.desktop.mic.level,
-                tiling=self.tile_from_menu,
+                tool=self.choose_tool,
             )
 
     def run(self) -> None:
@@ -472,24 +472,9 @@ class AssistantApp:
         timings.mark("microphone and tiling cleanup")
         system.post_quit()
 
-    def tile_from_menu(self, tool: Tool, hwnd: int) -> None:
-        if tool is Tool.WINDOW_SWITCHER:
-            self.switch_windows()
-            return
-        if tool is Tool.COPY_TRANSCRIPT:
-            self.assistant.handle(tool, down=True)
-            return
-        if tool is Tool.TILE_BALANCE:
-            self.balance_windows()
-            return
-
-        def arrange() -> None:
-            try:
-                self.desktop.arrange(tool, target=hwnd)
-            except OSError as error:
-                self.problem(str(error))
-
-        self.jobs.put(arrange)
+    def choose_tool(self, tool: Tool, target: int) -> None:
+        """Marshal menu choices from Qt to the assistant's control-thread owner."""
+        system.post_message(self.window.handle, control_policy.WM_TOOL_CHOSEN, tool.value, target)
 
     def balance_windows(self) -> None:
         threading.Thread(target=self.monitor_layout.balance, name="window redistribution", daemon=True).start()
@@ -529,9 +514,6 @@ class AssistantApp:
             self.ui.switch_windows(switcher_windows(all_windows, visible, managed), focus)
 
         threading.Thread(target=collect, name="window list", daemon=True).start()
-
-    def stop_requested(self) -> None:
-        system.post_message(self.window.handle, WM_REQUEST, Tool.STOP.value, 1)
 
     def work(self) -> None:
         """The worker thread: slow jobs, one at a time."""
@@ -741,7 +723,7 @@ class AssistantApp:
             if message == WM_SHOW_MENU:
                 self.menu()
                 return 0
-            if message in (WM_KEY_STATE, WM_REQUEST):
+            if message in (WM_KEY_STATE, WM_REQUEST, control_policy.WM_TOOL_CHOSEN):
                 action = control_policy.control_event(control_policy.WindowInput(message, wparam, lparam), APPS)
                 match action:
                     case control_policy.PhysicalKey(scancode=scancode, down=down):
@@ -749,6 +731,8 @@ class AssistantApp:
                         self.ui.show_pressed_keys(self.overlay.pressed, reset=action.reset)
                     case control_policy.FeatureRequest(request=request, down=down):
                         self.assistant.handle(request, down=down)
+                    case control_policy.ChosenTool(tool=tool, target=target):
+                        self.assistant.handle(tool, down=True, target=target)
                     case None:
                         pass
                     case _:
@@ -808,7 +792,7 @@ class AssistantApp:
             case control_policy.Menu.STOP_AGENT.value:
                 self.agent.stop()
             case control_policy.Menu.MEETING.value:
-                self.toggle_meeting()
+                self.assistant.handle(Tool.MEETING_TOGGLE, down=True)
             case control_policy.Menu.TRANSCRIPTS.value:
                 self.recording_action("folder")
             case control_policy.Menu.FOLLOWUPS.value:

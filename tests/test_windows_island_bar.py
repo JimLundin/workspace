@@ -41,7 +41,7 @@ def rest(bar: DesktopBar) -> None:
     bar.agent_changed(None)
 
 
-def recorded(invoked: list[str], *, tiling: list[tuple[Tool, int]] | None = None) -> BarActions:
+def recorded(invoked: list[str], *, tools: list[tuple[Tool, int]] | None = None) -> BarActions:
     return BarActions(
         lambda: invoked.append("feed"),
         lambda: invoked.append("canvas"),
@@ -51,7 +51,7 @@ def recorded(invoked: list[str], *, tiling: list[tuple[Tool, int]] | None = None
         lambda: invoked.append("overlay"),
         lambda: invoked.append("controls"),
         lambda message: invoked.append("problem: " + message),
-        (lambda tool, hwnd: tiling.append((tool, hwnd))) if tiling is not None else (lambda tool, hwnd: None),
+        (lambda tool, hwnd: tools.append((tool, hwnd))) if tools is not None else (lambda tool, hwnd: None),
         inbox=lambda: invoked.append("inbox"),
     )
 
@@ -336,14 +336,14 @@ def test_activity_indicators_move_only_while_work_runs_and_motion_allows() -> No
         closed(app, bar)
 
 
-def test_tiling_acts_on_the_window_captured_before_the_menu_opened() -> None:
+def test_tool_choice_acts_on_the_window_captured_before_the_menu_opened() -> None:
     # Defect: a window tool acts on whatever window is in front after the menu
     # took the keyboard, or the keyboard isn't handed back to that window.
     app = application()
     invoked: list[tuple[Tool, int]] = []
     foreground, focused = [42], list[int]()
     observations = BarObservations(foreground=lambda: foreground[0], focus=lambda hwnd: remember(focused, hwnd))
-    bar = DesktopBar(recorded([], tiling=invoked), native_shell=False, observations=observations)
+    bar = DesktopBar(recorded([], tools=invoked), native_shell=False, observations=observations)
     try:
         bar.open_menu()
         foreground[0] = 999

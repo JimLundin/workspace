@@ -26,7 +26,7 @@ lazy from assistant.ambient import Ambient, SystemStatus
 lazy from assistant.audio_meter import AudioMeter
 lazy from assistant.bar_status import StatusObserver
 lazy from assistant.island_layout import HEIGHT, Metrics, expansion, frame, snap
-lazy from assistant.island_menu import Chosen, Command, Dismissed, Menu, Tiling, entries, restores_focus, rows
+lazy from assistant.island_menu import Chosen, Command, Dismissed, Menu, ToolChoice, entries, restores_focus, rows
 lazy from assistant.island_model import Action, Agent, CapsuleView, Job, Key, Marker, Observed, Spinner, Tint, capture, island, keyboard
 lazy from assistant.island_motion import IslandMotion, Shown, advance, finish, placed, retarget, settled
 lazy from assistant.island_surface import TOP, BarWindow, Drawn, Presented
@@ -54,7 +54,7 @@ class BarActions:
     menu: Callable[[], None]
     problem: Callable[[str], None]
     inbox: Callable[[], None] = field(kw_only=True)
-    tiling: Callable[[Tool, int], None] = lambda tool, hwnd: None
+    tool: Callable[[Tool, int], None] = lambda tool, hwnd: None
     notices: Callable[[system_notices.Observed], None] = lambda _: None
     handled_notice: Callable[[system_notices.NoticeKey], bool] = lambda _: False
 
@@ -312,8 +312,8 @@ class DesktopBar:
 
     def run(self, choice: island_menu.Choice) -> None:
         match choice:
-            case Tiling(tool=tool):
-                self.actions.tiling(tool, self.menu_target)
+            case ToolChoice(tool=tool):
+                self.actions.tool(tool, self.menu_target)
             case Command.CANVAS:
                 self.actions.work()
             case Command.FEED:

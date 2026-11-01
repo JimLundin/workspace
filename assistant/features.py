@@ -100,8 +100,8 @@ class Desktop(Protocol):
     def foreground(self) -> int: ...
     def focus(self, handle: int) -> bool: ...
     def launch(self, command: str) -> None: ...
-    def arrange(self, tool: Tool) -> None:
-        """Snap, maximize, minimize or move the front window (a window tool)."""
+    def arrange(self, tool: Tool, *, target: int | None) -> None:
+        """Arrange the captured window, or the foreground window when target is None."""
 
 
 Recorder = Callable[[str, Mapping[str, Detail]], None]
@@ -247,8 +247,8 @@ class Assistant:
     def listening(self) -> Tool | None:
         return self.capture.tool if self.capture is not None else None
 
-    def handle(self, request: Request, *, down: bool) -> None:
-        """A tool or app key went down or up. Returns quickly; slow work is submitted."""
+    def handle(self, request: Request, *, down: bool, target: int | None = None) -> None:
+        """Dispatch a key edge or menu press; only window arrangement uses target."""
         match request:
             case App():
                 if down:
@@ -280,7 +280,7 @@ class Assistant:
             case Route.TRANSCRIPT:
                 self.submit(self.copy_transcript)
             case Route.ARRANGE:
-                self.submit(lambda: self.timed(request.name.lower(), lambda: self.arrange(request)))
+                self.submit(lambda: self.timed(request.name.lower(), lambda: self.arrange(request, target=target)))
             case Route.REWRITE:
                 self.submit(lambda: self.timed(request.name.lower(), lambda: self.rewrite(REWRITES[request])))
             case Route.ASK:
@@ -484,9 +484,9 @@ class Assistant:
         except OSError as error:
             self.desktop.problem(str(error))
 
-    def arrange(self, tool: Tool) -> Failure | Outcome:
+    def arrange(self, tool: Tool, *, target: int | None) -> Failure | Outcome:
         try:
-            self.desktop.arrange(tool)
+            self.desktop.arrange(tool, target=target)
         except OSError as error:
             return Failure(str(error))
         return Outcome.DONE
