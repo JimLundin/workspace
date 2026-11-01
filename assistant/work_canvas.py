@@ -353,8 +353,8 @@ def pending(catalog: Catalog, document: CanvasDocument, tasks: Sequence[Task]) -
     return candidates if capacity else ()
 
 
-def instruction_prompt(run: CanvasRun) -> str:
-    """Keep the user's exact direction durable alongside its canvas context."""
+def run_prompt(run: CanvasRun, title: str) -> str:
+    """Bind each investigation to its canvas context and preserve exact user direction."""
     match run.intent:
         case CanvasInstruction(text=instruction):
             context = (
@@ -377,6 +377,16 @@ def instruction_prompt(run: CanvasRun) -> str:
                 "The user's instruction above determines what actions are authorized."
             )
         case CanvasResearch():
-            raise ValueError("A research run has no user instruction.")
+            return (
+                f"Research and build the canvas for {title}.\n"
+                f"Continue work thread {run.work_id} on the local desktop canvas. Read work_canvas_read and its current "
+                "work_items_list representation and linked sources. Inspect relevant browser conversations and their document references; "
+                "use outlook_web_documents and outlook_web_open_document for rendered attachments. Find referenced documents in "
+                "browser resources or local files, register their verified references with work_items_add_document, compare version evidence, "
+                "and use work_canvas_update to collect/nest the sources and useful findings under this work. Arrange with the shared layout. "
+                "Research the next useful step and update the work thread with what you learn. Routine collection stays quiet. "
+                "Ask the user for clarification when missing input prevents progress; continue this same work after the answer. "
+                "Keep your progress and findings on the work representation."
+            )
         case _:
             assert_never(run.intent)

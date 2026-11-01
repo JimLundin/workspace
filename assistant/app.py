@@ -63,7 +63,7 @@ lazy from assistant.ui import Ui
 lazy from assistant.work_agent import WorkAgent
 lazy from assistant.work_bridge import WorkOwners
 lazy from assistant.work_bridge_contracts import WORK_BRIDGE, BridgeCommand, BridgeResponse
-lazy from assistant.work_canvas import WorkCanvas, instruction_prompt
+lazy from assistant.work_canvas import WorkCanvas, run_prompt
 lazy from assistant.work_commands import ControlTask, WorkCommand
 lazy from assistant.work_snapshot import WorkSnapshot
 lazy from automation.bridge import BridgeClient
@@ -304,6 +304,7 @@ class AssistantApp:
             autonomous=bool(self.settings.api_key and self.settings.base_url),
         )
         self.personal = self.create_personal(tasks)
+        self.recover_canvas(tasks)
         self.triage, self.work_bridge = self.create_feed(FeedWork(tasks, saved_context, context))
         self.ui.configure_feed(windows_store(DIRECTORY / "notifications.bin", NOTIFICATION_STATE), self.triage.observe)
         self.timings.mark("communications and feed bridge")
@@ -362,6 +363,16 @@ class AssistantApp:
     def create_personal(self, tasks: TaskStore) -> PersonalWork:
         self.ui.configure_canvas(self.canvas, self.agent.notify_canvas)
         self.agent.watch(tuple(run.task_id for run in self.canvas.read().runs), owner="canvas")
+        return PersonalWork(
+            PersonalStore(tasks.path),
+            BrowserSources(Browser(DIRECTORY / "browser-profile", source=Product.EDGE)),
+            self.personal_changed,
+            model=Correlator(self.settings) if self.settings.api_key and self.settings.base_url else None,
+            dismissed=self.stop_dismissed_work,
+        )
+
+    def recover_canvas(self, tasks: TaskStore) -> None:
+        """Queue restored runs only after their personal-work title owner exists."""
         if self.settings.api_key and self.settings.base_url:
             # Recover only the crash window between binding and task commit.
             # Existing task prompts may have been redirected by the user.
@@ -371,13 +382,6 @@ class AssistantApp:
                         self.ui.post(self.canvas_recovery(run))
                     case _:
                         pass
-        return PersonalWork(
-            PersonalStore(tasks.path),
-            BrowserSources(Browser(DIRECTORY / "browser-profile", source=Product.EDGE)),
-            self.personal_changed,
-            model=Correlator(self.settings) if self.settings.api_key and self.settings.base_url else None,
-            dismissed=self.stop_dismissed_work,
-        )
 
     def create_feed(self, work: FeedWork) -> tuple[Triage, LocalBridge[BridgeCommand, BridgeResponse]]:
         """The feed owner, then the work bridge that routes agent tools to it, personal work and the canvas."""
@@ -592,26 +596,8 @@ class AssistantApp:
 
     def continue_thread(self, run: CanvasRun) -> None:
         self.agent.watch(tuple(binding.task_id for binding in self.canvas.read().runs), owner="canvas")
-        match run.intent:
-            case CanvasInstruction():
-                self.agent.submit_identified(run.task_id, instruction_prompt(run), RequestKind.GENERAL)
-                return
-            case _:
-                pass
         title = next((work.definition.title for work in self.personal.snapshot().catalog.works if work.id == run.work_id), run.work_id)
-        self.agent.submit_identified(
-            run.task_id,
-            f"Research and build the canvas for {title}.\n"
-            f"Continue work thread {run.work_id} on the local desktop canvas. Read work_canvas_read and its current "
-            "work_items_list representation and linked sources. Inspect relevant browser conversations and their document references; "
-            "use outlook_web_documents and outlook_web_open_document for rendered attachments. Find referenced documents in "
-            "browser resources or local files, register their verified references with work_items_add_document, compare version evidence, "
-            "and use work_canvas_update to collect/nest the sources and useful findings under this work. Arrange with the shared layout. "
-            "Research the next useful step and update the work thread with what you learn. Routine collection stays quiet. "
-            "Ask the user for clarification when missing input prevents progress; continue this same work after the answer. "
-            "Keep your progress and findings on the work representation.",
-            RequestKind.GENERAL,
-        )
+        self.agent.submit_identified(run.task_id, run_prompt(run, title), RequestKind.GENERAL)
 
     def work_command(self, command: WorkCommand) -> None:
         match command:

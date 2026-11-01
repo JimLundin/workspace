@@ -33,7 +33,7 @@ from assistant.ui_components.canvas_look import surface_fill
 from assistant.ui_components.voice_legend import VoiceLegend
 from assistant.work_bridge import WorkOwners
 from assistant.work_bridge_contracts import WORK_BRIDGE
-from assistant.work_canvas import CanvasPublication, WorkCanvas, instruction_prompt
+from assistant.work_canvas import CanvasPublication, WorkCanvas, run_prompt
 from assistant.work_canvas_commands import CANVAS_RESPONSE, CanvasSnapshot, CanvasUpdated, MoveBubble, UpdateCanvas, revision
 from assistant.work_canvas_context import CanvasMode
 from assistant.work_canvas_detail import NoteDetail, QuestionDetail, SourceDetail, WorkDetail
@@ -634,7 +634,7 @@ def test_canvas_speech_instructs_the_open_canvas_and_keeps_failed_directions_for
         attempts.append(run)
         if len(attempts) == 1:
             raise OSError("Queue unavailable")
-        tasks.submit(run.task_id, "Canvas instruction", instruction_prompt(run), automation.task.RequestSource("canvas"), at=20)
+        tasks.submit(run.task_id, "Canvas instruction", run_prompt(run, run.work_id), automation.task.RequestSource("canvas"), at=20)
 
     store = WorkCanvas(tmp_path / "canvas.sqlite3", queue, ui.publish_canvas, autonomous=False)
     ui.configure_canvas(store, lambda _title, _target: None)

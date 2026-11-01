@@ -8,8 +8,8 @@ from itertools import islice
 from pathlib import Path
 from unittest import TestCase
 
-from assistant.canvas_activity import Attention, CanvasQuestion, CanvasRun, CanvasUpdate, TaskRequest
-from assistant.work_canvas import CanvasPublication, WorkCanvas
+from assistant.canvas_activity import Attention, CanvasInstruction, CanvasQuestion, CanvasResearch, CanvasRun, CanvasUpdate, TaskRequest
+from assistant.work_canvas import CanvasPublication, WorkCanvas, run_prompt
 from assistant.work_canvas_connections import CanvasConnection, RelationConnection, connections
 from assistant.work_canvas_context import CanvasMode, CanvasScene, CanvasScope, context_path, project, scene_contents
 from assistant.work_canvas_layout import Box, Measurements, Size, layout
@@ -40,6 +40,17 @@ def queue_nothing(_run: CanvasRun) -> None:
 
 def publish_nothing(_publication: CanvasPublication) -> None:
     pass
+
+
+def test_run_prompts_keep_research_identity_and_exact_scoped_instructions() -> None:
+    # Defect: research targets the wrong work, or an instruction is replaced by
+    # research, loses exact user text, or acts outside its submitted context.
+    work_id, title = "work:atlas", "Atlas deployment"
+    research = run_prompt(CanvasRun("research", work_id, CanvasResearch("evidence")), title)
+    assert work_id in research and title in research
+    instruction = "Compare these versions.\nKeep the current draft."
+    scoped = run_prompt(CanvasRun("instruction", work_id, CanvasInstruction(instruction)), title)
+    assert scoped.startswith(instruction + "\n\n") and work_id in scoped
 
 
 def local_canvas(folder: Path, publish: Callable[[CanvasPublication], None] = publish_nothing) -> WorkCanvas:
