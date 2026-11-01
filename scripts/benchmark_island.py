@@ -116,12 +116,15 @@ def run(rounds: int) -> Result:
                             before = tracemalloc.get_traced_memory()[0]
                             bar.paint_frames()
                             app.processEvents()
-                            allocations = (*allocations, max(0, tracemalloc.get_traced_memory()[1] - before) / 1024)
+                            # Read the peak before recording it: building the record allocates too.
+                            peak = tracemalloc.get_traced_memory()[1] - before
+                            allocations = (*allocations, max(0, peak) / 1024)
                         else:
                             started = perf_counter_ns()
                             bar.paint_frames()
                             app.processEvents()
-                            durations = (*durations, (perf_counter_ns() - started) / 1e6)
+                            elapsed = perf_counter_ns() - started
+                            durations = (*durations, elapsed / 1e6)
         stopped = not bar.loop.timer.isActive()
     finally:
         tracemalloc.stop()
