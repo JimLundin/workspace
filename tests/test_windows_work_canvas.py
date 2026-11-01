@@ -23,7 +23,6 @@ from assistant.card_actions import OpenCanvas, parse
 from assistant.feed_origin import App
 from assistant.icons import State
 from assistant.island_model import Key
-from assistant.local_bridge import LocalBridge, call
 from assistant.notifications import body
 from assistant.personal_work_store import PersonalStore
 from assistant.qt_runtime import prepare
@@ -32,7 +31,6 @@ from assistant.ui_components.canvas_loading import CanvasLoading
 from assistant.ui_components.canvas_look import surface_fill
 from assistant.ui_components.voice_legend import VoiceLegend
 from assistant.work_bridge import WorkOwners
-from assistant.work_bridge_contracts import WORK_BRIDGE
 from assistant.work_canvas import CanvasPublication, WorkCanvas, run_prompt
 from assistant.work_canvas_commands import CANVAS_RESPONSE, CanvasSnapshot, CanvasUpdated, MoveBubble, UpdateCanvas, revision
 from assistant.work_canvas_context import CanvasMode
@@ -78,7 +76,7 @@ from automation.store import TaskStore
 from automation.task import ActionNotApplied, ActionVerified, Reply, TextAnswer
 from automation.work_documents import WebDocument
 from tests.agent_requests import asked
-from tests.feed_fixture import feed_unavailable, no_personal_work
+from tests.feed_fixture import feed_unavailable, no_personal_work, owner_request
 from tests.personal_work_fixture import source
 from tests.test_agent import ToolRig
 from tests.test_windows_inbox_attention import InboxUi, waiting
@@ -845,7 +843,7 @@ def pump_until(ui: InboxUi, ready: Callable[[], bool]) -> None:
     assert ready(), "The native canvas did not receive the request publication."
 
 
-def test_agent_canvas_bridge_commits_on_qt_and_refreshes_without_revealing(tmp_path: Path) -> None:
+def test_agent_canvas_owner_commits_on_qt_and_refreshes_without_revealing(tmp_path: Path) -> None:
     # Defect: worker edits race with Qt, return success before persistence,
     # overwrite a user draft, bypass durable verification or reveal a window.
     ui = InboxUi()
@@ -853,10 +851,9 @@ def test_agent_canvas_bridge_commits_on_qt_and_refreshes_without_revealing(tmp_p
     ui.configure_canvas(store, lambda _title, _target: None)
     ui.observe_canvas(nested_bubbles()[0])
     ui.pump()
-    endpoint = tmp_path / "bridge.json"
-    bridge = LocalBridge(endpoint, WORK_BRIDGE, WorkOwners(feed_unavailable, no_personal_work, ui.canvas_command).handle)
+    request = owner_request(WorkOwners(feed_unavailable, no_personal_work, ui.canvas_command))
     tasks, claim, clock = claimed(tmp_path)
-    rig = ToolRig(work=WorkExecution(claim, tasks, Resources(), clock=clock), feed_request=lambda data: call(endpoint, WORK_BRIDGE, data))
+    rig = ToolRig(work=WorkExecution(claim, tasks, Resources(), clock=clock), feed_request=request)
     try:
         with ThreadPoolExecutor(max_workers=1) as worker:
             reading = worker.submit(rig.call, "work_canvas_read")
@@ -895,7 +892,6 @@ def test_agent_canvas_bridge_commits_on_qt_and_refreshes_without_revealing(tmp_p
         assert not any(widget.isVisible() for widget in ui.root.topLevelWidgets())
         assert not rig.machine.log
     finally:
-        bridge.close()
         ui.dispose()
 
 

@@ -8,7 +8,7 @@ from contextlib import contextmanager
 from pathlib import Path
 
 from assistant.agent_session import ChatMessage
-from assistant.work_agent import MeetingControl, WorkAgent
+from assistant.work_agent import WorkAgent
 from assistant.work_commands import (
     AddPreference,
     AddProjectNote,
@@ -26,6 +26,7 @@ from assistant.work_commands import (
     UpdateRoutine,
 )
 from assistant.work_snapshot import WorkSnapshot
+from automation import ipc
 from automation.activity import Activity, ContextSnapshot
 from automation.bridge import BridgeClient, BridgeServer
 from automation.context import ContextStore, Preference, ProjectNote
@@ -35,9 +36,6 @@ from automation.ipc import (
     Envelope,
     LogEvent,
     MeetingCommand,
-    MeetingFailed,
-    MeetingRequest,
-    MeetingSucceeded,
     Resync,
     ReviewEvent,
     StartMeeting,
@@ -87,7 +85,6 @@ class RecordingBridge:
         on_register: Callable[[str], None] | None = None,
         on_poll: Callable[[], None] | None = None,
         on_wake: Callable[[], None] | None = None,
-        accept_meeting: bool = True,
     ) -> None:
         self.epoch = "worker-one"
         self.sequence = 0
@@ -95,11 +92,9 @@ class RecordingBridge:
         self.messages: queue.Queue[Envelope] = queue.Queue()
         self.registrations: list[tuple[str, ContextSnapshot | None, int]] = []
         self.contexts: list[ContextSnapshot] = []
-        self.responses: list[tuple[Envelope, MeetingSucceeded | MeetingFailed]] = []
         self.on_register = on_register
         self.on_poll = on_poll
         self.on_wake = on_wake
-        self.accept_meeting = accept_meeting
         self.closed = threading.Event()
 
     def connect(self) -> str:
@@ -134,10 +129,9 @@ class RecordingBridge:
         self.contexts.append(context)
         self.connect()
 
-    def respond(self, message: Envelope, result: MeetingSucceeded | MeetingFailed) -> bool:
+    def respond(self, message: Envelope, result: ipc.Succeeded | ipc.Failed) -> bool:
         self.connect()
-        self.responses.append((message, result))
-        return self.accept_meeting
+        raise AssertionError("Owner effects use the real pipe fixture.")
 
     def publish(self, payload: BridgeEvent, *, epoch: str | None = None) -> None:
         self.sequence += 1
@@ -164,9 +158,10 @@ class WorkRig:
         bridge: RecordingBridge | None = None,
         context: Callable[[], ContextSnapshot] | None = None,
         start: bool = True,
-        meeting: MeetingControl | None = None,
         on_snapshot: Callable[[WorkSnapshot], None] | None = None,
     ) -> None:
+        # Folder, transport, context, startup and publication bind independent
+        # fixture effects while preserving the frontend dependency interface.
         self.tasks = TaskStore(folder / "tasks.sqlite3")
         self.routines = RoutineStore(folder / "routines.sqlite3")
         self.saved_context = ContextStore(folder / "context.sqlite3")
@@ -191,7 +186,6 @@ class WorkRig:
             context=context,
             clock=self.clock,
             assistant_pid=1234,
-            meeting=meeting,
         )
         if start:
             self.agent.start_worker()
@@ -550,32 +544,6 @@ def test_follow_up_retains_related_context_and_user_controls_survive_reopening(t
         assert resumed is not None and resumed.state is TaskStatus.READY
 
 
-def test_meeting_requests_are_run_fenced_and_duplicate_delivery_does_not_repeat_effects(tmp_path: Path) -> None:
-    operations: list[MeetingCommand] = []
-
-    def meeting(operation: StartMeeting | MeetingCommand) -> MeetingSucceeded:
-        assert isinstance(operation, MeetingCommand)
-        operations.append(operation)
-        return MeetingSucceeded("Meeting is recording.")
-
-    rig = WorkRig(tmp_path, meeting=meeting)
-    try:
-        rig.agent.start("Check my recording")
-        rig.refresh()
-        claim = rig.tasks.claim("worker-one", "meeting-run", at=rig.clock())
-        assert claim is not None
-        request = MeetingRequest(claim.run, "meeting-request", MeetingCommand.STATUS)
-        rig.bridge.publish(request)
-        rig.refresh()
-        rig.bridge.publish(request)
-        rig.bridge.publish(MeetingRequest(RunRef(claim.task.id, "stale-run"), "stale-request", MeetingCommand.STOP))
-        rig.refresh()
-        assert operations == [MeetingCommand.STATUS]
-        assert [reply for _, reply in rig.bridge.responses] == [MeetingSucceeded("Meeting is recording.")] * 2
-    finally:
-        rig.close()
-
-
 def test_reconnecting_reprojects_a_durable_question_without_showing_a_hidden_view(tmp_path: Path) -> None:
     store = TaskStore(tmp_path / "tasks.sqlite3")
     store.submit("recovered-task", "Recover my request", "Recover my request", RequestSource("recovered-conversation"), at=10)
@@ -592,30 +560,6 @@ def test_reconnecting_reprojects_a_durable_question_without_showing_a_hidden_vie
         assert rig.panel.submit("Use the project folder")
         rig.refresh()
         assert [response.reply for response in store.responses("recovered-task")] == [TextAnswer("Use the project folder")]
-
-
-def test_expired_meeting_response_reports_uncertainty_without_repeating_the_operation(tmp_path: Path) -> None:
-    performed: list[StartMeeting | MeetingCommand] = []
-
-    def meeting(operation: StartMeeting | MeetingCommand) -> MeetingSucceeded:
-        performed.append(operation)
-        return MeetingSucceeded("Recording stopped.")
-
-    rig = WorkRig(tmp_path, bridge=RecordingBridge(accept_meeting=False), meeting=meeting)
-    try:
-        rig.agent.start("Stop recording")
-        rig.refresh()
-        claim = rig.tasks.claim("worker-one", "expired-meeting-run", at=rig.clock())
-        assert claim is not None
-        request = MeetingRequest(claim.run, "expired-request", MeetingCommand.STOP)
-        rig.bridge.publish(request)
-        rig.refresh()
-        rig.bridge.publish(request)
-        snapshot = rig.refresh()
-        assert performed == [MeetingCommand.STOP]
-        assert "expired" in snapshot.status and "Recordings" in snapshot.status
-    finally:
-        rig.close()
 
 
 def test_real_bridge_delivers_context_live_output_and_meeting_results_to_the_frontend(tmp_path: Path) -> None:
@@ -636,9 +580,10 @@ def test_real_bridge_delivers_context_live_output_and_meeting_results_to_the_fro
         windows.append(result)
         return result
 
-    def meeting(operation: StartMeeting | MeetingCommand) -> MeetingSucceeded:
+    def meeting(operation: ipc.OwnerCall) -> ipc.Succeeded:
+        assert isinstance(operation, (StartMeeting, MeetingCommand))
         operations.append(operation)
-        return MeetingSucceeded("The current recording is active.")
+        return ipc.Succeeded("The current recording is active.")
 
     server = BridgeServer(folder, epoch="1" * 32, wake=lambda: None, owns=current_run)
     agent = WorkAgent(
@@ -651,7 +596,7 @@ def test_real_bridge_delivers_context_live_output_and_meeting_results_to_the_fro
         on_done=lambda: None,
         report_error=errors.append,
         context=lambda: invocation("Shared workbook"),
-        meeting=meeting,
+        owners=meeting,
         clock=clock,
         assistant_pid=1234,
     )
@@ -669,7 +614,7 @@ def test_real_bridge_delivers_context_live_output_and_meeting_results_to_the_fro
         assert agent.refresh().wait(5)
         assert "Authenticated progress reached the conversation." in windows[0].all_text()
         with ThreadPoolExecutor(max_workers=1) as pool:
-            response = pool.submit(server.meeting, claim.run, MeetingCommand.STATUS, threading.Event(), timeout_s=3)
+            response = pool.submit(server.call, claim.run, MeetingCommand.STATUS, threading.Event(), timeout_s=3)
             assert response.result(timeout=5) == "The current recording is active."
         assert operations == [MeetingCommand.STATUS] and not errors
     finally:

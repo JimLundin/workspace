@@ -1,7 +1,7 @@
 """Conversation controls backed by durable work in the supervised process.
 
-UI callbacks enqueue immutable requests. This controller's observer owns all
-journal and transport calls; the existing AgentWindow owns UI scheduling.
+UI callbacks enqueue immutable requests. This controller's observer owns journal mutations and
+transport calls; the owner-call dispatcher rechecks the journal before effects; the existing AgentWindow owns UI scheduling.
 """
 
 import os
@@ -18,20 +18,18 @@ lazy import automation.presentation
 lazy from assistant import agent_session
 lazy from assistant.agent_window import AgentWindow
 lazy from assistant.feed_origin import FeedRequest
+lazy from assistant.owner_calls import OwnerDispatcher, OwnerReply
 lazy from assistant.work_commands import AnswerTask, FollowUp, Redirect, Submit, WorkCommand
 lazy from assistant.work_service import IdentifiedSubmission, Issued, WorkBridge, WorkService
 lazy from assistant.work_snapshot import WorkSnapshot
+lazy from automation import ipc
 lazy from automation.activity import ContextSnapshot
 lazy from automation.context import ContextStore
 lazy from automation.execution import ApprovalReview, current_review, review_matches
 lazy from automation.ipc import (
     Envelope,
     LogEvent,
-    MeetingCommand,
-    MeetingFailed,
-    MeetingRequest,
-    MeetingSucceeded,
-    StartMeeting,
+    OwnerRequest,
 )
 lazy from automation.routines import RoutineStore
 lazy from automation.store import TaskStore
@@ -51,7 +49,6 @@ lazy from automation.task import (
     RequestSource,
     RoutineSource,
     Running,
-    RunRef,
     Task,
     TaskStatus,
     Until,
@@ -64,8 +61,6 @@ lazy from automation.task import (
     terminal,
     text,
 )
-
-type MeetingControl = Callable[[StartMeeting | MeetingCommand], MeetingSucceeded | MeetingFailed]
 
 
 @dataclass(frozen=True, slots=True)
@@ -157,8 +152,8 @@ class WorkAgent:
         "_last_submission_source",
         "_live",
         "_lock",
-        "_meeting_results",
         "_ordinary_pending",
+        "_owners",
         "_pending",
         "_queued",
         "_rejected_input",
@@ -174,7 +169,6 @@ class WorkAgent:
         "clock",
         "context",
         "identity",
-        "meeting",
         "on_done",
         "on_snapshot",
         "on_start",
@@ -195,15 +189,17 @@ class WorkAgent:
         report_error: Callable[[str], None],
         on_start: Callable[[], None] | None = None,
         context: Callable[[], ContextSnapshot] | None = None,
-        meeting: MeetingControl | None = None,
+        owners: Callable[[ipc.OwnerCall], ipc.OwnerResult] | None = None,
         clock: Callable[[], float] = time.time,
         identity: Callable[[], str] = lambda: uuid.uuid4().hex,
         assistant_pid: int | None = None,
     ) -> None:
+        # Journal/transport, view construction and independent frontend callbacks
+        # compose one observer lifetime; owner effects run on its dispatcher.
         self._service = WorkService(tasks, routines, saved_context, bridge, assistant_pid=os.getpid() if assistant_pid is None else assistant_pid)
         self._create_window = create_window
         self.on_snapshot, self.on_done, self.report_error, self.on_start = on_snapshot, on_done, report_error, on_start
-        self.context, self.meeting, self.clock, self.identity = context, meeting, clock, identity
+        self.context, self.clock, self.identity = context, clock, identity
         self._lock = threading.RLock()
         # A Stop marker follows its accepted work in FIFO order. Between two
         # distinct Stop markers there is at least one ordinary command, so
@@ -226,13 +222,14 @@ class WorkAgent:
         self._watch_groups: dict[str, frozenset[str]] = {}
         self._watched: frozenset[str] = frozenset()
         self._live: Callable[[automation.presentation.LiveMessage], None] | None = None
-        self._meeting_results: dict[tuple[str, RunRef, str], MeetingSucceeded | MeetingFailed] = {}
+        self._owners = OwnerDispatcher(owners, tasks, self._wake)
         self.window: AgentWindow | None = None
 
     def start_worker(self) -> None:
         """Begin observation after the application has composed its callbacks."""
         with self._lock:
             if self._thread is None and not self._closing.is_set():
+                self._owners.start()
                 self._thread = threading.Thread(target=self._observe, name="work frontend", daemon=True)
                 self._thread.start()
 
@@ -406,6 +403,7 @@ class WorkAgent:
             if self._closing.is_set():
                 return
             self._closing.set()
+            self._owners.close()
             self._wake.set()
             if self.window is not None:
                 self.window.close()
@@ -605,26 +603,24 @@ class WorkAgent:
                 case _:
                     assert_never(event.event)
 
-    def _meeting(self, message: Envelope, request: MeetingRequest) -> None:
+    def _owner(self, message: Envelope, request: OwnerRequest) -> None:
         task = self._service.tasks.get(request.run.task_id)
         if task is None or not owns(task, request.run) or self._closing.is_set():
             return
-        key = message.epoch, request.run, request.request_id
-        result = self._meeting_results.get(key)
-        if result is None:
-            try:
-                result = self.meeting(request.operation) if self.meeting is not None else MeetingFailed("Meeting controls are unavailable.")
-            except Exception:
-                self.report_error(traceback.format_exc())
-                result = MeetingFailed("The meeting operation failed; see the assistant log.")
-            if len(self._meeting_results) >= 128:
-                self._meeting_results.pop(next(iter(self._meeting_results)))
-            self._meeting_results[key] = result
+        reply = self._owners.submit(message)
+        if reply is not None:
+            self._owner_reply(reply)
+
+    def _owner_reply(self, reply: OwnerReply) -> None:
+        if reply.error is not None:
+            self.report_error(reply.error)
         try:
-            if not self._service.bridge.respond(message, result):
-                self._service.problem = "The meeting request expired before its result was delivered. Check Recordings for its current state."
+            if not self._service.bridge.respond(reply.message, reply.result):
+                self._service.problem = "The owner request expired before its result was delivered. Inspect its current state before trying again."
         except OSError, ValueError:
-            self._service.problem = "The work process disconnected before confirming the meeting result. Check Recordings for its current state."
+            self._service.problem = "The work process disconnected before confirming the owner result. Inspect its current state before trying again."
+        if self._closing.is_set() and self._service.problem:
+            self.report_error(self._service.problem)
 
     def _jobs_ready(self) -> tuple[Observe, ...]:
         observed: list[Observe] = []
@@ -686,6 +682,8 @@ class WorkAgent:
             while True:
                 observed = self._jobs_ready()
                 try:
+                    for reply in self._owners.ready():
+                        self._owner_reply(reply)
                     if not self._closing.is_set():
                         current_context = self.context() if self.context is not None else None
                         if current_context is not None and current_context != previous_context:
@@ -698,8 +696,8 @@ class WorkAgent:
                             match event.payload:
                                 case LogEvent() as log:
                                     self._log(log)
-                                case MeetingRequest() as request:
-                                    self._meeting(event, request)
+                                case OwnerRequest() as request:
+                                    self._owner(event, request)
                                 case _:
                                     raise ValueError("Unexpected frontend event.")
                 except Exception as error:
@@ -709,13 +707,15 @@ class WorkAgent:
                 finally:
                     for observation in observed:
                         observation.completed.set()
-                if self._closing.is_set() and self._jobs.empty():
+                if self._closing.is_set() and self._jobs.empty() and not self._owners.pending:
                     break
                 if self._jobs.empty():
                     self._wake.wait(0.25)
                     self._wake.clear()
         finally:
             try:
+                self._owners.close()
+                self._owners.wait()
                 self._service.bridge.close()
             finally:
                 self._closed.set()

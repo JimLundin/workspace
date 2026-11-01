@@ -12,8 +12,7 @@ from assistant.feed_sources import Candidate, Excerpt
 from assistant.feed_triage import Assessment, Board, decode, proposal_revision, saved
 from assistant.feed_triage_service import RejectedError, Triage, classify
 from assistant.llm import Settings
-from assistant.local_bridge import call
-from assistant.work_bridge_contracts import WORK_BRIDGE, BridgeCommand
+from assistant.work_bridge_contracts import BridgeCommand
 from automation.actions import Resources
 from automation.execution import WorkExecution
 from automation.task import ActionNotApplied, ActionVerified, FeedHandoff, Profile, RequestSource
@@ -101,9 +100,8 @@ def test_automatic_triage_coalesces_polls_and_voice_feedback_updates_the_live_pl
         return output(([item.identity for item in batch], "quiet" if rules else "action"))
 
     store = MemoryStore()
-    endpoint = tmp_path / "bridge.json"
     triage = TriageFixture(store, model)
-    bridge = feed_bridge(endpoint, triage)
+    request = feed_bridge(triage)
     try:
         feed = Feed(updates=(Update(TeamsActivity("fictional"), "Budget review", "Please check the figures.", "Teams", 1),))
         triage.observe(feed)
@@ -113,17 +111,15 @@ def test_automatic_triage_coalesces_polls_and_voice_feedback_updates_the_live_pl
         triage.advance()
         wait_until(lambda: bool(triage.board.actions))
         assert len(calls) == 1
-        snapshot = json_object(call(endpoint, WORK_BRIDGE, ReadFeed()))
+        snapshot = json_object(request(ReadFeed()))
         assert snapshot["focus"] == triage.board.actions[0].identity
-        updated = json_object(call(endpoint, WORK_BRIDGE, SaveRule("Keep fictional budget notices quiet.")))
+        updated = json_object(request(SaveRule("Keep fictional budget notices quiet.")))
         assert updated["rules"] == ["Keep fictional budget notices quiet."]
         triage.advance()
         wait_until(lambda: len(calls) == 2 and triage.board.pending == 0)
         assert not triage.board.actions and list(store.read().rules) == updated["rules"]
     finally:
-        bridge.close()
         triage.close()
-    assert not endpoint.exists()
 
 
 def test_shutdown_cancels_supplied_debounce_before_calling_model(tmp_path: Path) -> None:
@@ -188,16 +184,15 @@ def test_voice_agent_tools_read_the_curated_plan_and_save_feedback_without_loggi
     # Missing catalog entries, wrong bridge routing and source text in the
     # visible tool log are owned defects. SDK conversation transport is covered in test_agent.
     assert {"work_feed", "work_feed_update"} <= {spec.name for spec in SPECS}
-    endpoint = tmp_path / "bridge.json"
     triage = TriageFixture(MemoryStore(), lambda batch, rules: output(([item.identity for item in batch], "quiet")))
-    bridge = feed_bridge(endpoint, triage)
+    request = feed_bridge(triage)
     try:
         triage.observe(
             Feed(updates=(Update(TeamsActivity("fictional"), "Private fictional subject", "Private fictional source body.", "Teams", 1),)),
         )
         triage.advance()
         wait_until(lambda: triage.board.pending == 0)
-        rig = ToolRig(feed_request=lambda data: call(endpoint, WORK_BRIDGE, data), work=durable(tmp_path))
+        rig = ToolRig(feed_request=request, work=durable(tmp_path))
         current = rig.call("work_feed")
         assert current.ok and "Private fictional source body" in current.text
         updated = rig.call("work_feed_update", operation="rule", text="Keep routine fictional notices quiet.")
@@ -205,7 +200,6 @@ def test_voice_agent_tools_read_the_curated_plan_and_save_feedback_without_loggi
         assert triage.board.rules == ("Keep routine fictional notices quiet.",)
         assert "Private fictional source body" not in str((*rig.window.log, *rig.window.live))
     finally:
-        bridge.close()
         triage.close()
 
 
@@ -239,12 +233,11 @@ def test_stable_arrival_is_retried_alone_when_a_grouped_chat_changes_during_eval
 
 
 def test_rejected_stale_edit_does_not_block_the_voice_agent_from_saving_feedback(tmp_path: Path) -> None:
-    endpoint = tmp_path / "bridge.json"
     triage = TriageFixture(MemoryStore(), lambda batch, rules: output(([item.identity for item in batch], "action")))
-    bridge = feed_bridge(endpoint, triage)
+    request = feed_bridge(triage)
     store, claim, clock = claimed(tmp_path)
     work = WorkExecution(claim, store, Resources(), clock=clock)
-    rig = ToolRig(work=work, feed_request=lambda data: call(endpoint, WORK_BRIDGE, data))
+    rig = ToolRig(work=work, feed_request=request)
     try:
         rejected = rig.call("work_feed_update", operation="quiet", item="replaced-while-evaluating")
         assert not rejected.ok and work.disposition is None
@@ -253,19 +246,17 @@ def test_rejected_stale_edit_does_not_block_the_voice_agent_from_saving_feedback
         accepted = rig.call("work_feed_update", operation="rule", text="Keep routine fictional updates quiet.")
         assert accepted.ok and triage.board.rules == ("Keep routine fictional updates quiet.",)
     finally:
-        bridge.close()
         triage.close()
 
 
 def test_lost_acknowledgement_stays_uncertain_after_the_owner_commits_feedback(tmp_path: Path) -> None:
-    endpoint = tmp_path / "bridge.json"
     triage = TriageFixture(MemoryStore(), lambda batch, rules: output(([item.identity for item in batch], "quiet")))
-    bridge = feed_bridge(endpoint, triage)
+    request = feed_bridge(triage)
     store, claim, clock = claimed(tmp_path)
     work = WorkExecution(claim, store, Resources(), clock=clock)
 
     def lost(data: BridgeCommand) -> str:
-        call(endpoint, WORK_BRIDGE, data)
+        request(data)
         raise OSError("The local acknowledgement was lost after the commit.")
 
     rig = ToolRig(work=work, feed_request=lost)
@@ -274,7 +265,6 @@ def test_lost_acknowledgement_stays_uncertain_after_the_owner_commits_feedback(t
         assert not result.ok and work.disposition is not None and work.actions.unresolved()
         assert triage.board.rules == ("Keep routine fictional updates quiet.",)
     finally:
-        bridge.close()
         triage.close()
 
 
@@ -288,13 +278,12 @@ def test_repeated_choices_reuse_one_task_and_stale_or_unavailable_choices_do_not
     def submit(task: str, prompt: str, profile: Profile) -> None:
         submitted.append((task, prompt, profile))
 
-    endpoint = tmp_path / "choices.json"
     triage = TriageFixture(store, lambda _batch, _rules: "{}", submit=submit)
-    bridge = feed_bridge(endpoint, triage)
+    request = feed_bridge(triage)
     try:
         revision = proposal_revision(item)
         assert accepted(triage, ChooseSolution(item.identity, revision, "1"))
-        response = json_object(call(endpoint, WORK_BRIDGE, ChooseSolution(item.identity, revision, "1")))
+        response = json_object(request(ChooseSolution(item.identity, revision, "1")))
         assert response["queued"] == submitted[0][0] and len(submitted) == 1
         assert submitted[0][2] == FeedHandoff(item.identity, item.title), "The handoff keeps its feed label."
         assert triage.board.actions == (item,)  # queued work is not completion
@@ -312,7 +301,6 @@ def test_repeated_choices_reuse_one_task_and_stale_or_unavailable_choices_do_not
         triage.submit = submit
         assert accepted(triage, ChooseSolution(item.identity, revision, "2")) and len(submitted) == 2
     finally:
-        bridge.close()
         triage.close()
 
 
@@ -326,10 +314,9 @@ def test_voice_choice_tool_requires_exact_revision_before_effect(tmp_path: Path)
     def queue(task: str, prompt: str, profile: Profile) -> None:
         store.submit(task, item.title, prompt, RequestSource("feed", profile), at=clock())
 
-    endpoint = tmp_path / "choice.json"
     triage = TriageFixture(feed_store, lambda _batch, _rules: "{}", submit=queue)
-    bridge = feed_bridge(endpoint, triage)
-    rig = ToolRig(work=WorkExecution(claim, store, Resources(), clock=clock), feed_request=lambda data: call(endpoint, WORK_BRIDGE, data))
+    request = feed_bridge(triage)
+    rig = ToolRig(work=WorkExecution(claim, store, Resources(), clock=clock), feed_request=request)
     try:
         wrong = rig.call("work_feed_choose", item=item.identity, choice="1")
         assert not wrong.ok and not store.actions(claim.task.id)
@@ -340,7 +327,6 @@ def test_voice_choice_tool_requires_exact_revision_before_effect(tmp_path: Path)
         actions = store.actions(claim.task.id)
         assert len(actions) == 1 and isinstance(actions[0].outcome, ActionVerified)
     finally:
-        bridge.close()
         triage.close()
 
 
@@ -350,17 +336,15 @@ def test_reasoned_rejection_remains_recorded_once_after_feedback_and_reload(tmp_
     store = MemoryStore()
     store.data = saved(Board(enabled=True, items=(item,)))
     reason = "I cannot approve incomplete figures."
-    endpoint = tmp_path / "rejection.json"
     triage = TriageFixture(store, lambda _batch, _rules: "{}")
-    bridge = feed_bridge(endpoint, triage)
+    request = feed_bridge(triage)
     try:
-        answer = json_object(call(endpoint, WORK_BRIDGE, RejectProposal(item.identity, proposal_revision(item), reason)))
+        answer = json_object(request(RejectProposal(item.identity, proposal_revision(item), reason)))
         assert not answer["items"] and json_rows(answer["decisions"])[0]["reason"] == reason
         triage.command(SaveRule("Keep routine reminders quiet."))
         assert len(triage.board.items) == 1 and triage.board.items[0].disposition is Disposition.REJECTED
         assert triage.board.items[0].decision == reason
     finally:
-        bridge.close()
         triage.close()
     restarted = TriageFixture(store, lambda _batch, _rules: "{}")
     try:

@@ -14,8 +14,6 @@ from assistant.feed_triage import Board, decode, proposal_revision, restored, sa
 from assistant.feed_triage_service import classify
 from assistant.feed_work import FeedWork
 from assistant.llm import Settings
-from assistant.local_bridge import call
-from assistant.work_bridge_contracts import WORK_BRIDGE
 from automation.actions import Resources
 from automation.activity import Activity, ContextSnapshot
 from automation.context import ContextStore, Preference, ProjectNote
@@ -137,10 +135,9 @@ def test_registered_reply_tool_saves_instruction_before_handoff_and_reuses_it_af
         submitted.append((task, prompt, profile))
         tasks.submit(task, item.title, prompt, RequestSource("feed", profile), at=clock())
 
-    endpoint = tmp_path / "bridge.json"
     triage = TriageFixture(feed_store, lambda _batch, _rules: "{}", submit=queue)
-    bridge = feed_bridge(endpoint, triage)
-    rig = ToolRig(work=WorkExecution(claim, tasks, Resources(), clock=clock), feed_request=lambda data: call(endpoint, WORK_BRIDGE, data))
+    request = feed_bridge(triage)
+    rig = ToolRig(work=WorkExecution(claim, tasks, Resources(), clock=clock), feed_request=request)
     reply = FeedReply(item.identity, proposal_revision(item), "user-turn-one", words)
     arguments = {"item": reply.item, "revision": reply.revision, "reply_id": reply.reply_id, "text": reply.text}
     try:
@@ -154,7 +151,6 @@ def test_registered_reply_tool_saves_instruction_before_handoff_and_reuses_it_af
         assert triage.board.actions == (item,), "Queueing is not completion."
         assert _OBJECT.validate_json(result.text)["queued"] == task_id
     finally:
-        bridge.close()
         triage.close()
     restarted = TriageFixture(feed_store, lambda _batch, _rules: "{}", submit=queue)
     try:

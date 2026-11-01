@@ -155,8 +155,8 @@ def test_poll_splits_retained_events_to_fit_the_reply_frame(tmp_path: Path) -> N
 def test_overflow_resets_live_history_and_releases_pending_owner_request(tmp_path: Path) -> None:
     # Defect: transport overflow retains an unresolved owner effect or hides lost history.
     with ThreadPoolExecutor(max_workers=1) as pool, bridge(tmp_path) as (server, client):
-        result = pool.submit(server.meeting, RUN, ipc.MeetingCommand.STATUS, threading.Event())
-        read_until(client, lambda item: isinstance(item.payload, ipc.MeetingRequest))
+        result = pool.submit(server.call, RUN, ipc.MeetingCommand.STATUS, threading.Event())
+        read_until(client, lambda item: isinstance(item.payload, ipc.OwnerRequest))
         for index in range(ipc.MAX_EVENTS + 1):
             server.publish(ipc.LogEvent(RUN, Said(f"Result {index}", index)))
         with TestCase().assertRaisesRegex(OSError, "lost"):
@@ -186,39 +186,35 @@ def test_review_requires_a_connected_assistant_and_remains_volatile(tmp_path: Pa
     assert all(b"Full private preview" not in path.read_bytes() for path in tmp_path.iterdir() if path.is_file())
 
 
-def test_meeting_response_must_match_worker_run_and_request(tmp_path: Path) -> None:
+def test_owner_response_must_match_worker_run_and_request(tmp_path: Path) -> None:
     with bridge(tmp_path) as (server, client), ThreadPoolExecutor(max_workers=1) as pool:
         stop = threading.Event()
-        result = pool.submit(server.meeting, RUN, ipc.StartMeeting("microphone", "Planning"), stop)
-        request = read_until(client, lambda item: isinstance(item.payload, ipc.MeetingRequest))
-        assert isinstance(request.payload, ipc.MeetingRequest)
-        assert not client.respond(replace(request, epoch="b" * 32), ipc.MeetingSucceeded("stale worker"))
-        assert not client.respond(
-            replace(request, payload=replace(request.payload, run=RunRef("notes", "old-run"))), ipc.MeetingSucceeded("stale run")
-        )
-        assert not client.respond(
-            replace(request, payload=replace(request.payload, request_id="different-request")), ipc.MeetingSucceeded("stale request")
-        )
-        assert client.respond(request, ipc.MeetingSucceeded("Recording Planning from the microphone."))
+        result = pool.submit(server.call, RUN, ipc.StartMeeting("microphone", "Planning"), stop)
+        request = read_until(client, lambda item: isinstance(item.payload, ipc.OwnerRequest))
+        assert isinstance(request.payload, ipc.OwnerRequest)
+        assert not client.respond(replace(request, epoch="b" * 32), ipc.Succeeded("stale worker"))
+        assert not client.respond(replace(request, payload=replace(request.payload, run=RunRef("notes", "old-run"))), ipc.Succeeded("stale run"))
+        assert not client.respond(replace(request, payload=replace(request.payload, request_id="different-request")), ipc.Succeeded("stale request"))
+        assert client.respond(request, ipc.Succeeded("Recording Planning from the microphone."))
         assert result.result(timeout=3) == "Recording Planning from the microphone."
-        assert not client.respond(request, ipc.MeetingSucceeded("duplicate"))
+        assert not client.respond(request, ipc.Succeeded("duplicate"))
 
 
-def test_cancel_and_assistant_replacement_release_meeting_waits(tmp_path: Path) -> None:
+def test_cancel_and_assistant_replacement_release_owner_waits(tmp_path: Path) -> None:
     ownership = threading.Event()
     ownership.set()
     with bridge(tmp_path, owns=lambda run: run == RUN and ownership.is_set()) as (server, client), ThreadPoolExecutor(max_workers=1) as pool:
         stop = threading.Event()
-        result = pool.submit(server.meeting, RUN, ipc.MeetingCommand.STATUS, stop)
-        request = read_until(client, lambda item: isinstance(item.payload, ipc.MeetingRequest))
+        result = pool.submit(server.call, RUN, ipc.MeetingCommand.STATUS, stop)
+        request = read_until(client, lambda item: isinstance(item.payload, ipc.OwnerRequest))
         ownership.clear()
-        assert not client.respond(request, ipc.MeetingSucceeded("outdated"))
+        assert not client.respond(request, ipc.Succeeded("outdated"))
         stop.set()
         with TestCase().assertRaisesRegex(OSError, "stopped"):
             result.result(timeout=3)
         ownership.set()
-        result = pool.submit(server.meeting, RUN, ipc.MeetingCommand.STATUS, threading.Event())
-        read_until(client, lambda item: isinstance(item.payload, ipc.MeetingRequest))
+        result = pool.submit(server.call, RUN, ipc.MeetingCommand.STATUS, threading.Event())
+        read_until(client, lambda item: isinstance(item.payload, ipc.OwnerRequest))
         replacement = BridgeClient(tmp_path)
         try:
             replacement.connect()
@@ -228,10 +224,10 @@ def test_cancel_and_assistant_replacement_release_meeting_waits(tmp_path: Path) 
             replacement.close()
 
 
-def test_shutdown_releases_stalled_authentication_and_pending_meeting(tmp_path: Path) -> None:
+def test_shutdown_releases_stalled_authentication_and_pending_owner(tmp_path: Path) -> None:
     with bridge(tmp_path) as (server, client), ThreadPoolExecutor(max_workers=1) as pool:
-        result = pool.submit(server.meeting, RUN, ipc.MeetingCommand.STATUS, threading.Event())
-        read_until(client, lambda item: isinstance(item.payload, ipc.MeetingRequest))
+        result = pool.submit(server.call, RUN, ipc.MeetingCommand.STATUS, threading.Event())
+        read_until(client, lambda item: isinstance(item.payload, ipc.OwnerRequest))
         peer = raw_peer(server)
         try:
             assert peer.recv_bytes(128).startswith(b"Workspace1:")  # accept is now blocked on authentication
@@ -294,7 +290,7 @@ def test_codec_rejects_unknown_versions_invalid_scalars_and_stale_batches() -> N
     bounded = request.ljust(ipc.MAX_FRAME, b" ")
     assert ipc.decode_request(bounded).operation == ipc.Poll(0, 64)
     for broken in (
-        request.replace(b'"version":3', b'"version":2'),
+        request.replace(f'"version":{ipc.VERSION}'.encode(), b'"version":0'),
         request.replace(b'"after":0', b'"after":0,"private":"sdk object"'),
         request.replace(b'"after":0', b'"after":true'),
         request.replace(b'"limit":64', b'"limit":129'),

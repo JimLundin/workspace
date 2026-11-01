@@ -26,7 +26,7 @@ from automation.presentation import (
 )
 from automation.task import RunRef, identifier, integer, text, timestamp
 
-VERSION: Final = 3
+VERSION: Final = 4
 MAX_FRAME: Final = 1_048_576
 MAX_EVENTS: Final = 128
 MAX_CONTEXT: Final = 128
@@ -87,35 +87,51 @@ class MeetingCommand(Enum):
 
 
 type MeetingOperation = StartMeeting | MeetingCommand
+MAX_OWNER_BODY: Final = 64_000
 
 
 @dataclass(frozen=True, slots=True)
-class MeetingRequest:
-    run: RunRef
-    request_id: str
-    operation: MeetingOperation
-    kind: Literal["meeting"] = "meeting"
+class DesktopCall:
+    """Desktop JSON stays opaque here; the desktop owner validates its contract."""
+
+    body: str
+    kind: Literal["desktop"] = "desktop"
 
     def __post_init__(self) -> None:
-        identifier(self.request_id, "meeting request identity")
+        if not 0 < len(self.body.encode("utf-8")) <= MAX_OWNER_BODY:
+            raise ValueError("Invalid desktop owner request size.")
+
+
+type OwnerCall = MeetingOperation | DesktopCall
 
 
 @dataclass(frozen=True, slots=True)
-class MeetingSucceeded:
+class OwnerRequest:
+    run: RunRef
+    request_id: str
+    call: OwnerCall
+    kind: Literal["owner"] = "owner"
+
+    def __post_init__(self) -> None:
+        identifier(self.request_id, "owner request identity")
+
+
+@dataclass(frozen=True, slots=True)
+class Succeeded:
     text: str
     kind: Literal["succeeded"] = "succeeded"
 
 
 @dataclass(frozen=True, slots=True)
-class MeetingFailed:
+class Failed:
     reason: str
     kind: Literal["failed"] = "failed"
 
     def __post_init__(self) -> None:
-        text(self.reason, "meeting failure", maximum=8000)
+        text(self.reason, "owner failure", maximum=8000)
 
 
-type MeetingResult = MeetingSucceeded | MeetingFailed
+type OwnerResult = Succeeded | Failed
 
 
 @dataclass(frozen=True, slots=True)
@@ -127,7 +143,7 @@ class Resync:
         text(self.reason, "resynchronization reason", maximum=1000)
 
 
-type BridgeEvent = LogEvent | ReviewEvent | MeetingRequest | Resync
+type BridgeEvent = LogEvent | ReviewEvent | OwnerRequest | Resync
 
 
 @dataclass(frozen=True, slots=True)
@@ -174,21 +190,21 @@ class PublishContext:
 
 
 @dataclass(frozen=True, slots=True)
-class MeetingResponse:
+class OwnerResponse:
     run: RunRef
     request_id: str
-    result: MeetingResult
+    result: OwnerResult
     kind: Literal["response"] = "response"
 
     def __post_init__(self) -> None:
-        identifier(self.request_id, "meeting request identity")
+        identifier(self.request_id, "owner request identity")
 
 
 class Command(Enum):
     WAKE = "wake"
 
 
-type Operation = Hello | Poll | Register | PublishContext | MeetingResponse | Command
+type Operation = Hello | Poll | Register | PublishContext | OwnerResponse | Command
 
 
 @dataclass(frozen=True, slots=True)
@@ -287,7 +303,7 @@ def _sent(operation: Operation) -> Operation:
             return replace(operation, context=_bounded(context))
         case PublishContext(context=context):
             return replace(operation, context=_bounded(context))
-        case Hello() | Poll() | Register() | MeetingResponse() | Command():
+        case Hello() | Poll() | Register() | OwnerResponse() | Command():
             return operation
         case _:
             assert_never(operation)
@@ -297,7 +313,7 @@ def _received(operation: Operation) -> None:
     match operation:
         case Register(context=ContextSnapshot() as context) | PublishContext(context=context):
             _observed(context)
-        case Hello() | Poll() | Register() | MeetingResponse() | Command():
+        case Hello() | Poll() | Register() | OwnerResponse() | Command():
             pass
         case _:
             assert_never(operation)

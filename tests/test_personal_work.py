@@ -8,7 +8,6 @@ from unittest import TestCase
 
 from assistant.browser_values import BrowserError
 from assistant.llm import Settings
-from assistant.local_bridge import LocalBridge, call
 from assistant.personal_work_model import Correlator
 from assistant.personal_work_service import PersonalWork, correlation_input
 from assistant.personal_work_sources import BrowserSources, Tab, outlook_sources
@@ -29,7 +28,6 @@ from assistant.web_apps import (
     TeamsQuery,
 )
 from assistant.work_bridge import WorkOwners
-from assistant.work_bridge_contracts import WORK_BRIDGE
 from assistant.work_canvas_model import caption
 from automation.actions import Resources
 from automation.execution import WorkExecution
@@ -62,7 +60,7 @@ from automation.personal_work import (
 from automation.task import ActionNotApplied, ActionVerified
 from automation.work_documents import LocalDocument, WebDocument
 from tests.fake_endpoint import Reply, fake_endpoint
-from tests.feed_fixture import feed_unavailable, no_canvas
+from tests.feed_fixture import feed_unavailable, no_canvas, owner_request
 from tests.personal_work_fixture import WIRE, CapturedBrowser, CapturedSources, source
 from tests.test_work_actions import claimed
 lazy from tests.test_agent import ToolRig, durable, message
@@ -403,17 +401,16 @@ def test_unavailable_browser_waits_for_refresh_and_empty_chats_are_not_evidence(
     reader.close()
 
 
-def test_agent_tools_use_the_live_bridge_and_record_confirmed_edits(tmp_path: Path) -> None:
+def test_agent_tools_use_the_desktop_owner_and_record_confirmed_edits(tmp_path: Path) -> None:
     # Defect: registered tools only return text without editing the saved
-    # catalog, lose typed requests at HTTP, or journal a refusal as success.
+    # catalog, lose typed requests at the owner boundary, or journal a refusal as success.
     tasks, claim, clock = claimed(tmp_path)
     store = PersonalStore(tasks.path)
     evidence = source(SourceKind.TEAMS)
     store.observe((evidence,))
     service = PersonalWork(store, CapturedSources(), lambda _: None)
-    endpoint = tmp_path / "feed-bridge.json"
-    bridge = LocalBridge(endpoint, WORK_BRIDGE, WorkOwners(feed_unavailable, service.handle, no_canvas).handle)
-    rig = ToolRig(work=WorkExecution(claim, tasks, Resources(), clock=clock), feed_request=lambda data: call(endpoint, WORK_BRIDGE, data))
+    request = owner_request(WorkOwners(feed_unavailable, service.handle, no_canvas))
+    rig = ToolRig(work=WorkExecution(claim, tasks, Resources(), clock=clock), feed_request=request)
     try:
         sources = rig.call("work_items_sources")
         assert sources.ok and evidence.id in sources.text
@@ -467,7 +464,6 @@ def test_agent_tools_use_the_live_bridge_and_record_confirmed_edits(tmp_path: Pa
         assert any(link.source_id == captured.source.id for link in store.read().works[0].links)
         assert isinstance(tasks.actions(claim.task.id)[-1].outcome, ActionVerified)
     finally:
-        bridge.close()
         service.close()
 
 

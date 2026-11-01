@@ -16,16 +16,23 @@ from typing import cast
 if sys.platform != "win32":
     raise unittest.SkipTest("Windows work process ownership")
 
+from assistant.feed_contracts import FeedCommand
+from assistant.feed_triage_service import Triage
 from assistant.work_agent import WorkAgent
+from assistant.work_bridge import WorkOwners, answer
+from assistant.work_bridge_contracts import FeedResponse
 from assistant.work_snapshot import WorkSnapshot
+from automation import ipc
 from automation.bridge import BridgeClient, read_discovery
 from automation.context import ContextStore
 from automation.profile_lease import ProfileLease
 from automation.routines import Disabled, RoutineStore
 from automation.store import TaskStore
-from automation.task import Completed, Interrupted, RequestSource, Running, RunRef
+from automation.task import Completed, Interrupted, RequestSource, Running, RunRef, Task
 from automation.work_folder import WorkFolder
+from tests.feed_fixture import no_canvas, no_personal_work
 from tests.test_agent_window import RecordingWindow
+from tests.test_feed_triage_service import MemoryStore
 from winapi import system, windows
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -34,10 +41,11 @@ import os, socket, sys, threading
 from pathlib import Path
 from runtime import activate
 activate()
-from automation.app import run
+from automation.app import CallOwner, OwnerCalls, run
 from automation.store import TaskStore
 from automation.task import Completed, Interrupted, Running
 from assistant.llm import Missing
+from assistant.feed_contracts import SaveRule
 from winapi import windows
 
 folder, title, port, mode = Path(sys.argv[1]), sys.argv[2], int(sys.argv[3]), sys.argv[4]
@@ -50,12 +58,21 @@ def notify(message):
 notify("pid:" + str(os.getpid()))
 
 class Execution:
+    def __init__(self, bridge):
+        self.calls = OwnerCalls(bridge)
+
     def run_work(self, claim, store, log, stop):
         if mode == "link":
             assert claim.task.prompt == "Link check"
             notify("claimed:" + claim.run.run_id)
             assert channel.recv(1) == b"s", "The test did not release live progress."
             log.say("Linked progress.")
+            self.calls.current = CallOwner(claim.run, stop)
+            try:
+                response = self.calls.desktop(SaveRule("Keep linked fixture updates quiet."))
+                assert "Keep linked fixture updates quiet." in response
+            finally:
+                self.calls.current = None
             notify("said:" + claim.run.run_id)
             assert channel.recv(1) == b"f", "The test did not release completion."
             # No live Done: the controller must save the returned outcome.
@@ -85,7 +102,7 @@ def ready():
 
 try:
     run(Missing(("OPENAI_API_KEY",)), folder=folder, title=title, ready=ready,
-        execution=Execution() if mode in ("fixture", "link") else None)
+        execution_factory=Execution if mode in ("fixture", "link") else None)
     assert windows.find(title) is None, "The worker's native HWND survived cleanup."
     notify("closed")
 finally:
@@ -200,6 +217,42 @@ def test_native_worker_constructs_default_machine_and_disabled_routine(tmp_path:
         assert native.process.wait(timeout=10) == 0
 
 
+class LinkedOwners:
+    """Own the fixture's feed store and publish immutable call observations."""
+
+    __slots__ = ("desktop", "operations", "triage")
+
+    def __init__(self) -> None:
+        self.triage = Triage(MemoryStore(), lambda _batch, _rules: "")
+        self.operations: tuple[FeedCommand, ...] = ()
+        self.desktop = WorkOwners(self.feed, no_personal_work, no_canvas)
+
+    def feed(self, command: FeedCommand) -> FeedResponse:
+        self.operations = (*self.operations, command)
+        return self.triage.command(command)
+
+    def meeting(self, _operation: ipc.MeetingOperation) -> ipc.OwnerResult:
+        raise AssertionError("This fixture requests only the desktop owner.")
+
+    def answer(self, call: ipc.OwnerCall) -> ipc.OwnerResult:
+        return answer(call, self.desktop, self.meeting)
+
+    def close(self) -> None:
+        self.triage.close()
+
+
+def linked_claim(snapshot: WorkSnapshot, epoch: str, claimed: str) -> tuple[Task, RunRef]:
+    """The native claim and frontend observation must agree before releasing work."""
+    (active,) = snapshot.tasks
+    assert active.prompt == "Link check"
+    match active.state:
+        case Running(run=run, owner=owner):
+            assert owner == epoch and run == RunRef(active.id, claimed.removeprefix("claimed:"))
+            return active, run
+        case state:
+            raise AssertionError(f"The native worker did not own a running task: {state}")
+
+
 def test_assistant_submission_runs_in_the_native_worker_and_completes(tmp_path: Path) -> None:
     # Defects: mismatched journals or worker epochs, wrongly fenced live output,
     # or frontend completion that requires a live Done instead of the journal.
@@ -207,6 +260,7 @@ def test_assistant_submission_runs_in_the_native_worker_and_completes(tmp_path: 
     panels: list[RecordingWindow] = []
     errors: list[str] = []
     completed = threading.Event()
+    owners = LinkedOwners()
 
     def window(agent: WorkAgent) -> RecordingWindow:
         panel = RecordingWindow(agent.stop, on_submit=agent.start, on_reset=agent.new_conversation)
@@ -233,6 +287,7 @@ def test_assistant_submission_runs_in_the_native_worker_and_completes(tmp_path: 
             on_snapshot=published,
             on_done=lambda: None,
             report_error=errors.append,
+            owners=owners.answer,
         )
         agent.start_worker()
         try:
@@ -240,18 +295,14 @@ def test_assistant_submission_runs_in_the_native_worker_and_completes(tmp_path: 
             claimed = native.receive()
             assert claimed.startswith("claimed:")
             assert agent.refresh().wait(5), "The frontend did not observe the worker's claim."
-            (active,) = agent.snapshot().tasks
-            assert active.prompt == "Link check"
-            match active.state:
-                case Running(run=run, owner=owner):
-                    assert owner == epoch and run == RunRef(active.id, claimed.removeprefix("claimed:"))
-                case state:
-                    raise AssertionError(f"The native worker did not own a running task: {state}")
+            active, run = linked_claim(agent.snapshot(), epoch, claimed)
 
             native.peer.sendall(b"s")
             assert native.receive() == "said:" + run.run_id
             assert agent.refresh().wait(5), "The frontend did not consume the worker's live progress."
             assert "Linked progress." in panels[0].all_text()
+            assert len(owners.operations) == 1
+            assert owners.triage.board.rules == ("Keep linked fixture updates quiet.",)
             assert agent.snapshot().tasks[0].state == active.state
 
             native.peer.sendall(b"f")
@@ -264,6 +315,7 @@ def test_assistant_submission_runs_in_the_native_worker_and_completes(tmp_path: 
         finally:
             agent.close()
             assert agent.wait_closed(5)
+            owners.close()
             for panel in panels:
                 panel.paint()
         native.close_window()

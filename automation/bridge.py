@@ -212,10 +212,10 @@ def _client_auth(channel: Channel, key: bytes) -> None:
 
 
 @dataclass(frozen=True, slots=True)
-class PendingMeeting:
+class PendingOwner:
     run: RunRef
     client: str
-    result: Future[ipc.MeetingResult]
+    result: Future[ipc.OwnerResult]
 
 
 class BridgeServer:
@@ -266,7 +266,7 @@ class BridgeServer:
         self._client, self._assistant_pid, self._last_poll = "", 0, 0.0
         self._context = ContextSnapshot(0, "unavailable")
         self._registrations: dict[str, ContextSnapshot | None] = {}
-        self._pending: dict[str, PendingMeeting] = {}
+        self._pending: dict[str, PendingOwner] = {}
         self._outbox = Outbox()
 
     def start(self) -> None:
@@ -330,7 +330,7 @@ class BridgeServer:
     def _discard_pending(self, reason: str) -> None:
         for pending in self._pending.values():
             if not pending.result.done():
-                pending.result.set_result(ipc.MeetingFailed(reason))
+                pending.result.set_result(ipc.Failed(reason))
         self._pending.clear()
 
     def _publish(self, payload: ipc.BridgeEvent) -> None:
@@ -343,7 +343,7 @@ class BridgeServer:
         if request.epoch != self.discovery.epoch:
             return ipc.Rejected("This message belongs to an earlier work process.")
         operation = request.operation
-        if isinstance(operation, ipc.MeetingResponse) and not self.owns(operation.run):
+        if isinstance(operation, ipc.OwnerResponse) and not self.owns(operation.run):
             return ipc.Accepted(self.discovery.epoch, accepted=False)
         with self._lock:
             if self._closed.is_set():
@@ -373,7 +373,7 @@ class BridgeServer:
                     if assistant_pid != self._assistant_pid:
                         return ipc.Rejected("Context came from a different assistant.")
                     self._context = context
-                case ipc.MeetingResponse(run, request_id, result):
+                case ipc.OwnerResponse(run, request_id, result):
                     pending = self._pending.get(request_id)
                     if pending is None or pending.run != run or pending.client != request.client or pending.result.done():
                         return ipc.Accepted(self.discovery.epoch, accepted=False)
@@ -429,39 +429,43 @@ class BridgeServer:
         with self._lock:
             return self._assistant_pid
 
-    def meeting(self, run: RunRef, operation: ipc.MeetingOperation, stop: threading.Event, *, timeout_s: float = 30) -> str:
-        """Wait for this run's exact volatile response; never replay a lost effect."""
+    def call(self, run: RunRef, call: ipc.OwnerCall, stop: threading.Event, *, timeout_s: float = 30) -> str:
+        """Wait for this run's exact volatile response; never replay a lost effect.
+
+        Run identity, call and cancellation bind one invocation. The keyword
+        deadline bounds waiting independently of the pipe's exchange deadline.
+        """
         if not 0 < timeout_s <= 120:
-            raise ValueError("Invalid meeting response deadline.")
+            raise ValueError("Invalid owner response deadline.")
         if stop.is_set() or not self.owns(run):
-            raise OSError("This work run no longer owns the meeting request.")
+            raise OSError("This work run no longer owns the owner request.")
         identity = uuid.uuid4().hex
-        result: Future[ipc.MeetingResult] = Future()
+        result: Future[ipc.OwnerResult] = Future()
         with self._lock:
             if self._closed.is_set() or not self._client or time.monotonic() - self._last_poll > CLIENT_FRESH_SECONDS:
-                raise OSError("The assistant is unavailable for meeting capture.")
+                raise OSError("The assistant is unavailable for owner calls.")
             if self._pending:
-                raise OSError("Another meeting request is already awaiting its owner.")
-            self._publish(ipc.MeetingRequest(run, identity, operation))
-            self._pending[identity] = PendingMeeting(run, self._client, result)
+                raise OSError("Another owner request is already awaiting its owner.")
+            self._publish(ipc.OwnerRequest(run, identity, call))
+            self._pending[identity] = PendingOwner(run, self._client, result)
         deadline = time.monotonic() + timeout_s
         try:
             while not stop.is_set():
                 remaining = deadline - time.monotonic()
                 if remaining <= 0:
-                    raise OSError("The meeting owner did not respond. Inspect meeting status before trying again.")
+                    raise OSError("The owner did not respond. Inspect its current state before trying again.")
                 try:
                     answer = result.result(timeout=min(remaining, 0.1))
                 except TimeoutError:
                     continue
                 match answer:
-                    case ipc.MeetingSucceeded(message):
+                    case ipc.Succeeded(message):
                         return message
-                    case ipc.MeetingFailed(reason):
+                    case ipc.Failed(reason):
                         raise OSError(reason)
                     case _:
                         assert_never(answer)
-            raise OSError("The work run stopped before its meeting request completed.")
+            raise OSError("The work run stopped before its owner request completed.")
         finally:
             with self._lock:
                 self._pending.pop(identity, None)
@@ -612,15 +616,15 @@ class BridgeClient:
         with self._gate:
             self._send(self._connect(), ipc.Command.WAKE)
 
-    def respond(self, message: ipc.Envelope, result: ipc.MeetingResult) -> bool:
-        if not isinstance(message.payload, ipc.MeetingRequest):
-            raise ValueError("Only a meeting request can receive a meeting response.")
+    def respond(self, message: ipc.Envelope, result: ipc.OwnerResult) -> bool:
+        if not isinstance(message.payload, ipc.OwnerRequest):
+            raise ValueError("Only an owner request can receive an owner response.")
         with self._gate:
             discovery = self._connect()
             if discovery.epoch != message.epoch:
                 return False
             request = message.payload
-            return self._send(discovery, ipc.MeetingResponse(request.run, request.request_id, result))
+            return self._send(discovery, ipc.OwnerResponse(request.run, request.request_id, result))
 
     def close(self) -> None:
         self._closed.set()

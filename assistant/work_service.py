@@ -24,15 +24,14 @@ from assistant.work_commands import (
     WorkCommand,
 )
 from assistant.work_snapshot import ReplyProblem, SubmissionProblem, WorkSnapshot
+from automation import ipc
 from automation.activity import ContextSnapshot
 from automation.context import ContextStore, Preference, ProjectNote
 from automation.execution import ApprovalReview, review_matches
 from automation.ipc import (
     Envelope,
     LogEvent,
-    MeetingFailed,
-    MeetingRequest,
-    MeetingSucceeded,
+    OwnerRequest,
     Resync,
     ReviewEvent,
 )
@@ -63,7 +62,7 @@ class WorkBridge(Protocol):
     def wake(self) -> None: ...
     def register(self, task_id: str, context: ContextSnapshot | None, *, assistant_pid: int) -> None: ...
     def publish_context(self, context: ContextSnapshot, *, assistant_pid: int) -> None: ...
-    def respond(self, message: Envelope, result: MeetingSucceeded | MeetingFailed) -> bool: ...
+    def respond(self, message: Envelope, result: ipc.Succeeded | ipc.Failed) -> bool: ...
     def close(self) -> None: ...
 
 
@@ -371,7 +370,7 @@ class WorkService:
                         if len(self._reviews) >= 1_000:
                             self._reviews.pop(next(iter(self._reviews)))
                         self._reviews[task.id] = message.payload
-                case LogEvent() | MeetingRequest():
+                case LogEvent() | OwnerRequest():
                     accepted.append(message)
                 case _:
                     assert_never(message.payload)

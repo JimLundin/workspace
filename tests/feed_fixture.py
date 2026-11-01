@@ -1,6 +1,6 @@
 """Real triage and work-bridge wiring with explicitly released debounce steps.
 
-The fixture owns only waiting: locks, worker threads, model calls, HTTP requests
+The fixture owns only waiting: locks, worker threads, model calls, typed owner calls
 and response files use the production implementation. Each advance releases one
 delay after the test has supplied the observations for that step.
 """
@@ -8,16 +8,14 @@ delay after the test has supplied the observations for that step.
 import threading
 import time
 from collections.abc import Callable
-from pathlib import Path
 from queue import Queue
 
 from assistant.feed_contracts import FeedCommand, FeedRejected
 from assistant.feed_sources import Candidate
 from assistant.feed_triage_service import Store, Triage
 from assistant.feed_work import FeedWork
-from assistant.local_bridge import LocalBridge
 from assistant.work_bridge import WorkOwners
-from assistant.work_bridge_contracts import WORK_BRIDGE, BridgeCommand, BridgeResponse, FeedResponse
+from assistant.work_bridge_contracts import BRIDGE_COMMAND, BRIDGE_RESPONSE, BridgeCommand, FeedResponse
 from assistant.work_canvas_commands import CanvasCommand, CanvasRefused, CanvasResponse
 from automation.personal_work import PersonalRequest, PersonalResponse, WorkRefused
 from automation.task import Profile
@@ -35,9 +33,18 @@ def no_canvas(_: CanvasCommand) -> CanvasResponse:
     return CanvasRefused("The local canvas is unavailable.")
 
 
-def feed_bridge(endpoint: Path, triage: Triage) -> LocalBridge[BridgeCommand, BridgeResponse]:
-    """The application's work bridge with only the feed owner available."""
-    return LocalBridge(endpoint, WORK_BRIDGE, WorkOwners(triage.command, no_personal_work, no_canvas).handle)
+def owner_request(owners: WorkOwners) -> Callable[[BridgeCommand], str]:
+    """Use the desktop's real serialization/routing boundary without a listener."""
+
+    def request(command: BridgeCommand) -> str:
+        return BRIDGE_RESPONSE.dump_json(owners.handle(BRIDGE_COMMAND.validate_json(BRIDGE_COMMAND.dump_json(command)))).decode("utf-8")
+
+    return request
+
+
+def feed_bridge(triage: Triage) -> Callable[[BridgeCommand], str]:
+    """The application's desktop command adapter with only feed available."""
+    return owner_request(WorkOwners(triage.command, no_personal_work, no_canvas))
 
 
 class TriageFixture(Triage):

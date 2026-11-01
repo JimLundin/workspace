@@ -42,7 +42,6 @@ lazy from assistant.icons import State, dot
 lazy from assistant.keymap import indicator_text
 lazy from assistant.lifecycle import Timings
 lazy from assistant.llm import MAX_SECONDS, Missing, Settings
-lazy from assistant.local_bridge import LocalBridge
 lazy from assistant.meeting_events import TranscriptEvents
 lazy from assistant.meeting_followup_store import FollowupStore
 lazy from assistant.meeting_preparation import Preparations
@@ -63,14 +62,14 @@ lazy from assistant.state_store import windows_store
 lazy from assistant.tiling import GlazeWM
 lazy from assistant.ui import Ui
 lazy from assistant.work_agent import WorkAgent
-lazy from assistant.work_bridge import WorkOwners
-lazy from assistant.work_bridge_contracts import WORK_BRIDGE, WORK_BRIDGE_ENDPOINT, BridgeCommand, BridgeResponse
+lazy from assistant.work_bridge import WorkOwners, answer
 lazy from assistant.work_canvas import WorkCanvas, run_prompt
 lazy from assistant.work_commands import ControlTask, WorkViewCommand
 lazy from assistant.work_snapshot import WorkSnapshot
+lazy from automation import ipc
 lazy from automation.bridge import BridgeClient
 lazy from automation.context import ContextStore
-lazy from automation.ipc import MeetingCommand, MeetingFailed, MeetingSucceeded, StartMeeting
+lazy from automation.ipc import MeetingCommand, StartMeeting
 lazy from automation.personal_work import (
     AddDocument,
     AddWebPage,
@@ -230,7 +229,7 @@ class AssistantApp:
         "triage",
         "ui",
         "window",
-        "work_bridge",
+        "work_owners",
         "worker",
     )
 
@@ -284,7 +283,7 @@ class AssistantApp:
             report_error=log,
             on_start=lambda: self.show(State.AGENT),
             context=context,
-            meeting=self.meeting_command,
+            owners=self.owner_command,
         )
         self.timings.mark("work frontend")
         self.activity = ActivityTracker(
@@ -305,9 +304,10 @@ class AssistantApp:
         )
         self.personal = self.create_personal(tasks)
         self.recover_canvas(tasks)
-        self.triage, self.work_bridge = self.create_feed(FeedWork(tasks, saved_context, context))
+        self.triage = self.create_feed(FeedWork(tasks, saved_context, context))
+        self.work_owners = WorkOwners(self.triage.command, self.personal.handle, self.ui.canvas_command)
         self.ui.configure_feed(windows_store(DIRECTORY / "notifications.bin", NOTIFICATION_STATE), self.triage.observe)
-        self.timings.mark("communications and feed bridge")
+        self.timings.mark("communications and desktop owners")
         archive = MeetingArchive(DIRECTORY / "meetings")
         followup_folder = WORK.followups
         self.followups = MeetingWorkflow(
@@ -384,17 +384,15 @@ class AssistantApp:
                     case _:
                         pass
 
-    def create_feed(self, work: FeedWork) -> tuple[Triage, LocalBridge[BridgeCommand, BridgeResponse]]:
-        """The feed owner, then the work bridge that routes agent tools to it, personal work and the canvas."""
-        triage = Triage(
+    def create_feed(self, work: FeedWork) -> Triage:
+        """Construct the feed owner over the durable task/context observations."""
+        return Triage(
             windows_store(DIRECTORY / "work-feed.bin", STORED_BOARD),
             self.review_feed,
             submit=self.agent.submit_identified,
             work=work,
             personal=self.personal,
         )
-        owners = WorkOwners(triage.command, self.personal.handle, self.ui.canvas_command)
-        return triage, LocalBridge(WORK_BRIDGE_ENDPOINT, WORK_BRIDGE, owners.handle)
 
     def stop_dismissed_work(self, work: WorkThread) -> None:
         """The committed user dismissal owns cancellation of only its research."""
@@ -441,8 +439,12 @@ class AssistantApp:
             self.capture_timer = None
         self.assistant.stop_capture(discard=True, reason="shutdown")
         timings.mark("stop capture")
-        self.work_bridge.close()
-        timings.mark("work bridge")
+        self.agent.close()
+        # A canvas call waits up to eight seconds on Qt. Retain every desktop
+        # owner until the dispatcher and observer have drained their replies.
+        if not self.agent.wait_closed(timeout=12):
+            raise RuntimeError("The work frontend did not release its desktop owner calls before shutdown.")
+        timings.mark("work frontend and desktop calls")
         self.personal.close()
         timings.mark("personal work")
         self.triage.close()
@@ -461,9 +463,6 @@ class AssistantApp:
             log(str(error))
         self.followups.close()
         self.followups.wait_closed()
-        self.agent.close()
-        if not self.agent.wait_closed(timeout=5):
-            log("The work frontend did not finish closing before assistant shutdown.")
         timings.mark("meetings and work frontend")
         self.activity.close()
         self.ui.close_windows()
@@ -629,7 +628,11 @@ class AssistantApp:
     def open_meeting_file(self, path: Path) -> None:
         self.jobs.put(control_policy.meeting_file_job(path, os.startfile, self.problem))
 
-    def meeting_command(self, command: StartMeeting | MeetingCommand) -> MeetingSucceeded | MeetingFailed:
+    def owner_command(self, call: ipc.OwnerCall) -> ipc.OwnerResult:
+        """Route the work process's one owner-call seam to its desktop owners."""
+        return answer(call, self.work_owners, self.meeting_command)
+
+    def meeting_command(self, command: StartMeeting | MeetingCommand) -> ipc.Succeeded | ipc.Failed:
         """Execute the worker's validated request with the existing capture owner."""
         try:
             match command:
@@ -640,14 +643,14 @@ class AssistantApp:
                 case MeetingCommand.RETRY:
                     self.meetings.retry()
                 case MeetingCommand.LIST:
-                    return MeetingSucceeded(self.meetings.recent())
+                    return ipc.Succeeded(self.meetings.recent())
                 case MeetingCommand.STATUS:
                     pass
                 case _:
                     assert_never(command)
-            return MeetingSucceeded(self.meetings.describe())
+            return ipc.Succeeded(self.meetings.describe())
         except (OSError, ValueError) as error:
-            return MeetingFailed(str(error))
+            return ipc.Failed(str(error))
 
     def agent_done(self) -> None:
         if self.assistant.listening is None:

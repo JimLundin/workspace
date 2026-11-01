@@ -18,8 +18,9 @@ from assistant.feed_contracts import (
     ReviseProposal,
     SaveRule,
 )
-from assistant.work_bridge_contracts import BridgeCommand, BridgeResponse, FeedResponse
+from assistant.work_bridge_contracts import BRIDGE_COMMAND, BRIDGE_RESPONSE, BridgeCommand, BridgeResponse, FeedResponse
 from assistant.work_canvas_commands import CanvasCommand, CanvasResponse, ReadCanvas, UpdateCanvas
+from automation import ipc
 from automation.personal_work import (
     AddDocument,
     AddWebPage,
@@ -64,3 +65,20 @@ class WorkOwners:
                 return self.feed(command)
             case _ as unreachable:
                 assert_never(unreachable)
+
+
+def answer(call: ipc.OwnerCall, desktop: WorkOwners, meeting: Callable[[ipc.MeetingOperation], ipc.OwnerResult]) -> ipc.OwnerResult:
+    """Decode desktop text at its owner and encode the committed typed response."""
+    match call:
+        case ipc.DesktopCall(body):
+            try:
+                command = BRIDGE_COMMAND.validate_json(body)
+                return ipc.Succeeded(BRIDGE_RESPONSE.dump_json(desktop.handle(command)).decode("utf-8"))
+            except ValueError, TypeError:
+                return ipc.Failed("The desktop owner rejected an invalid request.")
+            except OSError:
+                return ipc.Failed("The desktop owner is unavailable; inspect its current state before trying again.")
+        case ipc.StartMeeting() | ipc.MeetingCommand():
+            return meeting(call)
+        case _:
+            assert_never(call)

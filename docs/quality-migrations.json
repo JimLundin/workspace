@@ -526,15 +526,6 @@
     {
       "key": {
         "rule": "PLR0913",
-        "path": "assistant/work_agent.py",
-        "scope": "WorkAgent.__init__",
-        "signature": "8d094cd08adcfc90d1f601b419cab5bb2d5a2d54e20ce0da9bc0179e55f62078"
-      },
-      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
-    },
-    {
-      "key": {
-        "rule": "PLR0913",
         "path": "assistant/work_service.py",
         "scope": "WorkService.__init__",
         "signature": "4f4ba149beef792f10e00f7fed75b617decd3bd8b9b6f4b27c1bc0e4baac2f2a"
@@ -610,15 +601,6 @@
         "path": "automation/bridge.py",
         "scope": "BridgeServer.__init__",
         "signature": "2909d4f3397e3d95d85722b2a7f7d3501badf6d0666884aeeb8e1d74fcff9a50"
-      },
-      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
-    },
-    {
-      "key": {
-        "rule": "PLR0913",
-        "path": "automation/bridge.py",
-        "scope": "BridgeServer.meeting",
-        "signature": "09dfa6025eaff6216b5aba720d655ed8d65a57f288242539a9d09e43c379b5c1"
       },
       "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
     },
@@ -1054,24 +1036,6 @@
         "path": "tests/test_work_actions.py",
         "scope": "StoppingStore.begin_action",
         "signature": "38a69067bbfb48fbc6d4f32bed18c3cce7ffdf117d0d60082e092731223ff3da"
-      },
-      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
-    },
-    {
-      "key": {
-        "rule": "PLR0913",
-        "path": "tests/test_work_agent.py",
-        "scope": "RecordingBridge.__init__",
-        "signature": "72584923d52acdff6f80598c80a2f12d2f53f81e6083b5e20e1b56d81ee39ad9"
-      },
-      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
-    },
-    {
-      "key": {
-        "rule": "PLR0913",
-        "path": "tests/test_work_agent.py",
-        "scope": "WorkRig.__init__",
-        "signature": "6e702b703aa1d44317ae65f4586f2d8e14f33bbdd333bdbe59d2b0961ecdf04c"
       },
       "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
     },

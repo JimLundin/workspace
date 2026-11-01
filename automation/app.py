@@ -31,7 +31,7 @@ lazy from assistant.meeting_followup_store import FollowupStore
 lazy from assistant.meeting_preparation import Preparations
 lazy from assistant.outlook import OutlookDrafts
 lazy from assistant.task_profiles import GeneralEffects, Profiles, RequestContext
-lazy from assistant.work_bridge_contracts import work_bridge_request
+lazy from assistant.work_bridge_contracts import BRIDGE_COMMAND, BRIDGE_RESPONSE, BridgeCommand
 lazy from assistant.workspace import Workspace
 lazy from automation import ipc
 lazy from automation.activity import ContextSnapshot, Observation, Sample, observed
@@ -55,26 +55,36 @@ def report(message: str, *, folder: Path = WORK.root) -> None:
 
 
 @dataclass(frozen=True, slots=True)
-class MeetingOwner:
-    """The work run whose meeting requests the assistant answers, and its Stop."""
+class CallOwner:
+    """The execution thread owns this run binding and cancellation handle."""
 
     run: RunRef
     stop: threading.Event
 
 
-class RemoteMeetings:
-    """The execution thread delegates capture to its assistant-owned meeting service."""
+class OwnerCalls:
+    """Execution owns the current binding; calls delegate to assistant-owned services.
+
+    The single controller execution thread sets and clears its mutable binding
+    around a run. Immutable run identities cross the pipe; no binding is shared.
+    """
 
     __slots__ = ("bridge", "current")
 
     def __init__(self, bridge: BridgeServer) -> None:
         self.bridge = bridge
-        self.current: MeetingOwner | None = None
+        self.current: CallOwner | None = None
 
-    def request(self, operation: ipc.MeetingOperation) -> str:
+    def request(self, operation: ipc.OwnerCall) -> str:
         if self.current is None:
-            raise OSError("No work run owns this meeting request.")
-        return self.bridge.meeting(self.current.run, operation, self.current.stop)
+            raise OSError("No work run owns this owner request.")
+        return self.bridge.call(self.current.run, operation, self.current.stop)
+
+    def desktop(self, command: BridgeCommand) -> str:
+        """Validate the desktop response before returning wire text to tool families."""
+        result = self.request(ipc.DesktopCall(BRIDGE_COMMAND.dump_json(command).decode("utf-8")))
+        BRIDGE_RESPONSE.validate_json(result)
+        return result
 
 
 class DesktopContext:
@@ -138,13 +148,13 @@ class VolatileLog:
 
 
 class NativeExecution:
-    __slots__ = ("bridge", "execution", "meetings")
+    __slots__ = ("bridge", "calls", "execution")
 
-    def __init__(self, execution: AgentExecution, bridge: BridgeServer, meetings: RemoteMeetings) -> None:
-        self.execution, self.bridge, self.meetings = execution, bridge, meetings
+    def __init__(self, execution: AgentExecution, bridge: BridgeServer, calls: OwnerCalls) -> None:
+        self.execution, self.bridge, self.calls = execution, bridge, calls
 
     def run_work(self, claim: Claim, store: TaskStore, log: Log, stop: threading.Event) -> Outcome:
-        self.meetings.current = MeetingOwner(claim.run, stop)
+        self.calls.current = CallOwner(claim.run, stop)
 
         def review(preview: ApprovalReview) -> bool:
             try:
@@ -155,13 +165,13 @@ class NativeExecution:
         try:
             return self.execution.run_work(claim, store, log, stop, review=review)
         finally:
-            self.meetings.current = None
+            self.calls.current = None
 
 
 def _native_execution(settings: Settings | Missing, bridge: BridgeServer, hwnd: int, contexts: ContextStore) -> tuple[NativeExecution, WinMachine]:
-    meetings = RemoteMeetings(bridge)
+    calls = OwnerCalls(bridge)
     browser = Browser(BROWSER_PROFILE, source=Product.EDGE)
-    machine = WinMachine(NativeDesktop(hwnd), meetings=meetings, browser=browser)
+    machine = WinMachine(NativeDesktop(hwnd), meetings=calls, browser=browser)
     context = DesktopContext(bridge, contexts, enabled=os.environ.get("WORKSPACE_AGENT_CONTEXT", "recent").lower() != "off")
     usable = settings if isinstance(settings, Settings) else Settings("", "", "", "", "", "", "")
     followups = WorkFolder(bridge.folder).followups
@@ -171,7 +181,7 @@ def _native_execution(settings: Settings | Missing, bridge: BridgeServer, hwnd: 
             machine,
             Profiles(
                 Workspace(),
-                GeneralEffects(context.request, work_bridge_request),
+                GeneralEffects(context.request, calls.desktop),
                 MeetingWork(Preparations(followups / "preparations"), FollowupStore(followups / "packages"), OutlookDrafts(followups / "mail")),
             ),
             record=lambda details: usage.record("automation", "agent", details),
@@ -181,21 +191,22 @@ def _native_execution(settings: Settings | Missing, bridge: BridgeServer, hwnd: 
     except BaseException:
         machine.close_background()
         raise
-    return NativeExecution(execution, bridge, meetings), machine
+    return NativeExecution(execution, bridge, calls), machine
 
 
 def run(
     settings: Settings | Missing,
     *,
     folder: Path = WORK.root,
-    execution: Runner | None = None,
+    execution_factory: Callable[[BridgeServer], Runner] | None = None,
     ready: Callable[[], None] = components.ready,
     title: str = components.AUTOMATION.window.title,
 ) -> None:
     """Own one profile until all work is parked and native resources are released.
 
-    The optional execution and readiness adapters are also used by native
-    process tests with a real journal, real pipe, and isolated clipboard HWND.
+    The execution factory composes a runner over this process's real bridge;
+    native tests use the same journal, pipe and isolated clipboard HWND. Folder,
+    runner construction, readiness and native title are distinct lifecycle inputs.
     """
     work_folder = WorkFolder(folder)
     with ProfileLease(folder), contextlib.ExitStack() as cleanup:
@@ -217,9 +228,12 @@ def run(
 
         bridge = BridgeServer(folder, epoch=uuid.uuid4().hex, wake=wake, owns=run_owns)
         cleanup.callback(bridge.close)
-        if execution is None:
+        execution: Runner
+        if execution_factory is None:
             execution, machine = _native_execution(settings, bridge, hwnd, contexts)
             cleanup.callback(machine.close_background)
+        else:
+            execution = execution_factory(bridge)
         events = WorkEvents(bridge, folder, hwnd)
         controller = WorkController(
             tasks,
