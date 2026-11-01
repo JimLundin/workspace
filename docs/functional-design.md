@@ -70,6 +70,34 @@ process, such as the browser host. Effect ownership stays in the last column.
 | `assistant/shell_state.py` | desktop | Windows-key tap decisions | `shell_controls.py` owns taskbar recovery and a dedicated Windows-key message thread; keyboard callbacks post toggles and pass other input through |
 | `assistant/geometry.py`, `panel.py`, `rich_text.py` | shared: geometry; desktop: panel/rich text | Geometry, preferences, and Markdown values | Qt views and preference files |
 
+## Feed and meeting passes
+
+The Personal work feed has one triage pass in the desktop process:
+
+1. `communications_browser.py` → `communications_service.py`: Teams observations become a `communications.Feed`.
+2. `desktop_bar.py` → `notification_sources.py`: Windows notices, handling marks and the Notification filter become `Notices`.
+3. `ui.py` → `feed_sources.observe`: the latest reports update `PendingFeed`; `listed` and `triage_evidence` derive its pending Feed sources.
+4. `feed_triage_service.Triage.observe` → `feed_triage.py`: reconcile the revision-bound board using the assessment and command shapes in `feed_contracts.py`.
+5. `feed_work.py` and `feed_research.py`: supply bounded context and read-only investigation to the assessment model.
+6. `feed_agent_tools.py` → `automation/app.py` `OwnerCalls.desktop` → `work_bridge.py`: voice commands reach `Triage.command`; `feed_history.py` owns their decisions and handoffs.
+
+`feed_origin.py` supplies shared source-application vocabulary for the canvas and bubbles.
+`automation/bridge.py` carries owner calls on the authenticated work pipe;
+`work_agent.py` admits them and `owner_calls.py` dispatches them to desktop handlers.
+
+Meetings have three paths:
+
+1. Capture: `meeting_tools.py` → `MeetingOperation` in `automation/ipc.py` → `automation/app.py` `OwnerCalls.request` → `AssistantApp.meeting_command` in `assistant/app.py` → `meetings.py`, `meeting_store.py` and `recording_state.py`. `automation/capture.py` names the audio source.
+2. Meeting-notes routine: `meeting_events.py` records published transcript trigger occurrences; `automation/routines.py` `RoutineStore.dispatch` submits enabled routine work.
+3. Meeting follow-up: `meeting_panel.py` / `meeting_workflow.py` selection → `meeting_preparation.py` frozen bundle → `meeting_execution.py`, `meeting_tools.py` and `meeting_followup.py` claims → `meeting_followup_store.py` package → `outlook.py` unsent drafts.
+
+The Meeting-notes routine and Meeting follow-up share the publication rule on `recording_state.StoredState.complete`.
+
+Moving these modules into packages remains follow-up work to the process-ownership
+decision in [#54](https://github.com/JimLundin/workspace/issues/54).
+
+## Runtime behavior
+
 Feed context refresh and source-date corrections reconsider automatic action and
 quiet assessments. Explicit user quieting is a separate disposition and remains
 handled across context, date and filtering changes. `feed_contracts.py` separates
