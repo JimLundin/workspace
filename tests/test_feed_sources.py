@@ -46,9 +46,9 @@ def test_each_source_variant_owns_its_attention_key_origin_and_evidence() -> Non
     # send is quoted to triage, or a source is badged wrongly.
     table: tuple[tuple[FeedSource, Attention, SourceKind, App, int], ...] = (
         (ChatTicketSource(ChatTicket("chat", (FIRST, SECOND)), CHAT), Attention.TRIAGE, SourceKind.CHAT, App.TEAMS, 2),
-        (UpdateSource(ACTIVITY, handled=False), Attention.TRIAGE, SourceKind.ACTIVITY, App.TEAMS, 1),
-        (UpdateSource(MAIL, handled=False), Attention.TRIAGE, SourceKind.WINDOWS, App.OUTLOOK, 1),
-        (UpdateSource(OTHER, handled=True), Attention.RESOLVED, SourceKind.WINDOWS, App.WINDOWS, 0),
+        (UpdateSource(ACTIVITY), Attention.TRIAGE, SourceKind.ACTIVITY, App.TEAMS, 1),
+        (UpdateSource(MAIL), Attention.TRIAGE, SourceKind.WINDOWS, App.OUTLOOK, 1),
+        (UpdateSource(OTHER), Attention.TRIAGE, SourceKind.WINDOWS, App.WINDOWS, 1),
         (ReplySource(REPLY), Attention.SETTLING, SourceKind.REPLY, App.TEAMS, 0),
         (ReplySource(replace(REPLY, delivery=Delivery.SENDING)), Attention.SETTLING, SourceKind.REPLY, App.TEAMS, 0),
         (ReplySource(replace(REPLY, delivery=Delivery.UNKNOWN)), Attention.TRIAGE, SourceKind.REPLY, App.TEAMS, 1),

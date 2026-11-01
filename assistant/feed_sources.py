@@ -56,10 +56,9 @@ class ChatTicketSource:
 
 @dataclass(frozen=True, slots=True)
 class UpdateSource:
-    """A Teams activity or Windows notice; `Update.source` already names which."""
+    """A pending Teams activity or Windows notice; `Update.source` already names which."""
 
     update: Update
-    handled: bool = field(kw_only=True)
 
 
 @dataclass(frozen=True, slots=True)
@@ -104,10 +103,8 @@ class Excerpt:
 
 def attention(source: FeedSource) -> Attention:
     match source:
-        case ChatTicketSource():
+        case ChatTicketSource() | UpdateSource():
             return Attention.TRIAGE
-        case UpdateSource(handled=handled):
-            return Attention.RESOLVED if handled else Attention.TRIAGE
         case ReplySource(reply=reply):
             return _delivery(reply.delivery)
         case _:
@@ -234,7 +231,7 @@ def listed(feed: Feed) -> Iterator[FeedSource]:
         yield ChatTicketSource(ticket, feed.conversation(ticket.conversation))
     for update in feed.updates:
         if feed.needs_attention(update):
-            yield UpdateSource(update, handled=not feed.pending_update(update))
+            yield UpdateSource(update)
     yield from map(ReplySource, feed.replies)
 
 
