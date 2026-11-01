@@ -34,23 +34,27 @@ type CapturedKey = VoiceShortcut | ConsumedKey
 
 
 def voice_tool(vk: int, held: Collection[int]) -> Tool | None:
-    """Ctrl+Alt+D/G uses plain Miryoku letters and opposite-hand home-row mods.
+    """Ctrl+Shift+D holds dictation; Ctrl+Alt+G holds agent speech.
 
-    Native identities include the extended bit, so either side's Ctrl/Alt works.
-    Shift/Win chords retain their application meaning. Plain voice keys stay native.
+    Native identities include the extended bit, so either side's modifiers work.
+    Other modifier combinations and plain letters retain their application meaning.
     """
     match vk:
-        case 0x44:
-            tool = Tool.DICTATE
-        case 0x47:
-            tool = Tool.AGENT_VOICE
+        case 0x44 | 0x47:
+            pass
         case _:
             return None
-    if not (0x1D in held or 0x11D in held) or not (0x38 in held or 0x138 in held):
+    if not (0x1D in held or 0x11D in held) or any(identity in held for identity in (0x15B, 0x15C)):
         return None
-    if any(identity in held for identity in (0x2A, 0x36, 0x15B, 0x15C)):
-        return None
-    return tool
+    alt = 0x38 in held or 0x138 in held
+    shift = 0x2A in held or 0x36 in held
+    match vk, alt, shift:
+        case 0x44, False, True:
+            return Tool.DICTATE
+        case 0x47, True, False:
+            return Tool.AGENT_VOICE
+        case _:
+            return None
 
 
 def connected(names: Iterable[str]) -> bool:

@@ -491,23 +491,30 @@ def firmware_keyboard() -> tuple[Keyboard, KeyboardFixture]:
 
 def test_firmware_voice_key_shortcuts_pair_each_voice_press_with_its_release() -> None:
     """Detect swapped commands, repeat starts, leaked voice_key keys, or early stops."""
-    for ctrl, alt, voice_key, tool in (
+    for ctrl, modifier, voice_key, tool in (
+        (
+            inputs.KeyEvent(0xA3, 0x1D, inputs.LLKHF_EXTENDED, 10, 0),
+            inputs.KeyEvent(0xA1, 0x36, 0, 10, 0),
+            inputs.KeyEvent(0x44, 0x20, 0, 10, 0),
+            Tool.DICTATE,
+        ),
+        (inputs.KeyEvent(0xA2, 0x1D, 0, 10, 0), inputs.KeyEvent(0xA0, 0x2A, 0, 10, 0), inputs.KeyEvent(0x44, 0x20, 0, 10, 0), Tool.DICTATE),
         (
             inputs.KeyEvent(0xA3, 0x1D, inputs.LLKHF_EXTENDED, 10, 0),
             inputs.KeyEvent(0xA5, 0x38, inputs.LLKHF_EXTENDED, 10, 0),
-            inputs.KeyEvent(0x44, 0x20, 0, 10, 0),
-            Tool.DICTATE,
+            inputs.KeyEvent(0x47, 0x22, 0, 10, 0),
+            Tool.AGENT_VOICE,
         ),
         (inputs.KeyEvent(0xA2, 0x1D, 0, 10, 0), inputs.KeyEvent(0xA4, 0x38, 0, 10, 0), inputs.KeyEvent(0x47, 0x22, 0, 10, 0), Tool.AGENT_VOICE),
     ):
         keyboard, driver = firmware_keyboard()
         assert not keyboard.swallow(ctrl, down=True)
-        assert not keyboard.swallow(alt, down=True)
+        assert not keyboard.swallow(modifier, down=True)
         assert keyboard.swallow(voice_key, down=True)
         assert keyboard.swallow(voice_key, down=True)
         assert driver.messages == [(WM_REQUEST, tool.value, 1)]
         assert not keyboard.swallow(ctrl, down=False)
-        assert not keyboard.swallow(alt, down=False)
+        assert not keyboard.swallow(modifier, down=False)
         assert driver.messages == [(WM_REQUEST, tool.value, 1)]
         assert keyboard.swallow(voice_key, down=False)
         assert driver.messages == [(WM_REQUEST, tool.value, 1), (WM_REQUEST, tool.value, 0)]
@@ -521,18 +528,32 @@ def test_firmware_voice_does_not_capture_ordinary_or_already_held_voice_keys() -
     alt = inputs.KeyEvent(0xA4, 0x38, 0, 10, 0)
     shift = inputs.KeyEvent(0xA1, 0x36, 0, 10, 0)
     win = inputs.KeyEvent(0x5B, 0x5B, inputs.LLKHF_EXTENDED, 10, 0)
-    for modifiers in ((), (ctrl,), (alt,), (ctrl, alt, shift), (ctrl, alt, win)):
+    dictate = inputs.KeyEvent(0x44, 0x20, 0, 10, 0)
+    agent = inputs.KeyEvent(0x47, 0x22, 0, 10, 0)
+    for voice_key, modifiers in (
+        (dictate, ()),
+        (agent, ()),
+        (dictate, (ctrl,)),
+        (agent, (ctrl,)),
+        (dictate, (shift,)),
+        (agent, (alt,)),
+        (dictate, (ctrl, alt)),
+        (agent, (ctrl, shift)),
+        (dictate, (ctrl, alt, shift)),
+        (agent, (ctrl, alt, shift)),
+        (dictate, (ctrl, shift, win)),
+        (agent, (ctrl, alt, win)),
+    ):
         keyboard, driver = firmware_keyboard()
         for key in modifiers:
             assert not keyboard.swallow(key, down=True)
-        for voice_key in (inputs.KeyEvent(0x44, 0x20, 0, 10, 0), inputs.KeyEvent(0x47, 0x22, 0, 10, 0)):
-            assert not keyboard.swallow(voice_key, down=True)
-            assert not keyboard.swallow(voice_key, down=False)
+        assert not keyboard.swallow(voice_key, down=True)
+        assert not keyboard.swallow(voice_key, down=False)
         assert not driver.messages
     keyboard, driver = firmware_keyboard()
     voice_key = inputs.KeyEvent(0x44, 0x20, 0, 10, 0)
     assert not keyboard.swallow(voice_key, down=True)
-    for key in (ctrl, alt):
+    for key in (ctrl, shift):
         keyboard.swallow(key, down=True)
     assert not keyboard.swallow(voice_key, down=True)
     assert not keyboard.swallow(voice_key, down=False)
@@ -567,7 +588,7 @@ def test_firmware_voice_finishes_on_hook_failure_and_keyboard_shutdown() -> None
     stops: tuple[Callable[[Keyboard], None], ...] = (release_keyboard, lambda keyboard: keyboard.input_failed(OSError("hook failed")))
     for stop in stops:
         keyboard, driver = firmware_keyboard()
-        for key in (inputs.KeyEvent(0xA2, 0x1D, 0, 10, 0), inputs.KeyEvent(0xA4, 0x38, 0, 10, 0), inputs.KeyEvent(0x44, 0x20, 0, 10, 0)):
+        for key in (inputs.KeyEvent(0xA2, 0x1D, 0, 10, 0), inputs.KeyEvent(0xA1, 0x36, 0, 10, 0), inputs.KeyEvent(0x44, 0x20, 0, 10, 0)):
             keyboard.swallow(key, down=True)
         stop(keyboard)
         keyboard.swallow(inputs.KeyEvent(0x44, 0x20, 0, 10, 0), down=False)
@@ -581,12 +602,12 @@ def test_generated_input_neither_arms_nor_finishes_firmware_voice_shortcuts() ->
     """Detect dictation/automation output impersonating a physical voice shortcut."""
     for flags, extra in ((inputs.LLKHF_INJECTED, 0), (0, MAGIC), (0, LAYOUT_MAGIC)):
         keyboard, driver = firmware_keyboard()
-        for vk, scan in ((0xA2, 0x1D), (0xA4, 0x38), (0x44, 0x20)):
+        for vk, scan in ((0xA2, 0x1D), (0xA1, 0x36), (0x44, 0x20)):
             assert not keyboard.swallow(inputs.KeyEvent(vk, scan, flags, 10, extra), down=True)
         assert not keyboard.swallow(inputs.KeyEvent(0x44, 0x20, 0, 10, 0), down=True)
         assert not driver.messages
         keyboard.swallow(inputs.KeyEvent(0x44, 0x20, 0, 10, 0), down=False)
-        for vk, scan in ((0xA2, 0x1D), (0xA4, 0x38), (0x44, 0x20)):
+        for vk, scan in ((0xA2, 0x1D), (0xA1, 0x36), (0x44, 0x20)):
             keyboard.swallow(inputs.KeyEvent(vk, scan, 0, 10, 0), down=True)
         assert not keyboard.swallow(inputs.KeyEvent(0x44, 0x20, flags, 10, extra), down=False)
         assert driver.messages == [(WM_REQUEST, Tool.DICTATE.value, 1)]

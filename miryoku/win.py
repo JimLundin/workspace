@@ -415,7 +415,7 @@ class Keyboard:
                             assert_never(held)
                 return True
         # A native voice key already held stays native even if modifiers arrive
-        # during its repeat. Only a fresh Ctrl+Alt letter press starts capture.
+        # during its repeat. Only a fresh configured voice chord starts capture.
         if (
             self.firmware is not None
             and down
@@ -441,7 +441,7 @@ class Keyboard:
             return True
         if self.firmware is not None:
             # Firmware owns ordinary keys and the layout toggle. Only explicit
-            # Ctrl+Alt letter shortcuts above reach Workspace's voice commands.
+            # Ctrl+Shift+D and Ctrl+Alt+G above reach Workspace's voice commands.
             # Remember native downs so their releases still pass after unplugging.
             if not key.flags & inputs.LLKHF_INJECTED and key.extra != MAGIC:
                 identity = key.scancode | (0x100 if key.flags & inputs.LLKHF_EXTENDED else 0)

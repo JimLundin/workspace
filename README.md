@@ -111,9 +111,10 @@ embedded browser are paused; Workspace retains its Windows desktop runtime.
   **§** to switch; a checkmark means the layout is on. If the layout has quit,
   choose **Start layout** first.
   While the firmware keyboard is connected, the layout stays off and the toggle
-  is ignored. Ordinary firmware output passes through; **Ctrl+Alt+D** holds
+  is ignored. Ordinary firmware output passes through; **Ctrl+Shift+D** holds
   dictation and **Ctrl+Alt+G** holds agent speech. Hold the right hand's
-  home-row Ctrl+Alt modifiers, then hold D (dictation) or G (agent) while speaking.
+  home-row Ctrl+Shift modifiers, then hold D for dictation while speaking.
+  For agent speech, hold the right hand's home-row Ctrl+Alt modifiers and G.
   These are ordinary Miryoku keys; Space/Enter thumbs change layers when held.
   Releasing D or G finishes dictation or sends to the agent, even if the
   modifiers were released first. No firmware update is needed.
