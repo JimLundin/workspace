@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from enum import Enum, auto
 from typing import Final
 
+from assistant.hotkeys import Route, route
 from miryoku.layout import (
     BASE,
     COPY,
@@ -131,15 +132,16 @@ def describe(a: Action) -> tuple[str, Kind]:
             return a.name[:1].upper() + a.name[1:], Kind.APP
 
 
-_HOLD_TO_TALK: Final = frozenset({Tool.DICTATE, Tool.DICTATE_CLEAN, Tool.DICTATE_COMMAND, Tool.REWRITE_VOICE, Tool.AGENT_VOICE})
-
-
 def _hold(a: Action) -> str:
-    if a in _HOLD_TO_TALK:
-        return "hold"
-    if not isinstance(a, TapHold):
-        return ""
-    return _MOD_NAMES[a.hold] if isinstance(a.hold, Mod) else a.hold.name.title()
+    match a:
+        case Tool() if route(a) is Route.HOLD:
+            return "hold"
+        case TapHold(hold=Mod() as modifier):
+            return _MOD_NAMES[modifier]
+        case TapHold(hold=Layer() as layer):
+            return layer.name.title()
+        case _:
+            return ""
 
 
 def _holding(layer: Layer | None) -> int | None:
@@ -157,7 +159,7 @@ def keymap(layer: Layer | None) -> list[list[Cap]]:
             if scancode == ESCAPE:
                 caps.append(Cap(name, "On/off", "hold: quit", Kind.SPECIAL))
             elif (tool := VOICE_KEYS.get(scancode)) is not None:
-                caps.append(Cap(name, TOOL_NAMES[tool], "hold" if tool in _HOLD_TO_TALK else "toggle", Kind.TOOL))
+                caps.append(Cap(name, TOOL_NAMES[tool], "hold" if route(tool) is Route.HOLD else "toggle", Kind.TOOL))
             else:
                 match slot(scancode):
                     case Unmapped():

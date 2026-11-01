@@ -252,6 +252,7 @@ assistant = ["*.ps1", "*.yaml"]
 # Model ownership follows module moves; mutable effect owners are not models.
 models = [
     "assistant.control_policy",
+    "assistant.hotkeys",
     "assistant.agent_session",
     "assistant.communications",
     "assistant.feed_sources",
