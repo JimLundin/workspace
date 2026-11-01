@@ -14,7 +14,7 @@ from automation.activity import Activity, ContextSnapshot
 from automation.execution import WorkExecution
 from automation.json_value import Json
 from tests.fake_endpoint import fake_endpoint
-from tests.test_agent import FakeMachine, FakeWindow, Rig, ToolRig, calls, durable, says
+from tests.test_agent import FakeMachine, FakeWindow, Rig, ToolRig, calls, durable, no_feed, says
 from tests.test_work_actions import claimed
 from winapi.shapes import Rect, Window
 
@@ -63,7 +63,14 @@ class StoppingMouse(FakeMachine):
 def test_stopping_a_drag_releases_its_button_and_modifiers(tmp_path: Path) -> None:
     stop = threading.Event()
     machine = StoppingMouse(stop)
-    agent = Agent(Settings("", "", "", "", "", "", ""), machine, FakeWindow(), stop, work=durable(tmp_path), toolset=General)
+    agent = Agent(
+        Settings("", "", "", "", "", "", ""),
+        machine,
+        FakeWindow(),
+        stop,
+        work=durable(tmp_path),
+        toolset=lambda agent: General(agent, feed_request=no_feed),
+    )
     agent.screen.shot = Shot(Rect(-1920, 0, 0, 1080), 960, 540)
     arguments: dict[str, object] = {
         "x": 10,
@@ -82,7 +89,14 @@ def test_stopping_a_drag_releases_its_button_and_modifiers(tmp_path: Path) -> No
 
 def test_bad_coordinates_and_action_arguments_do_not_produce_input(tmp_path: Path) -> None:
     machine = FakeMachine()
-    agent = Agent(Settings("", "", "", "", "", "", ""), machine, FakeWindow(), threading.Event(), work=durable(tmp_path), toolset=General)
+    agent = Agent(
+        Settings("", "", "", "", "", "", ""),
+        machine,
+        FakeWindow(),
+        threading.Event(),
+        work=durable(tmp_path),
+        toolset=lambda agent: General(agent, feed_request=no_feed),
+    )
     agent.screen.shot = Shot(Rect(0, 0, 100, 100), 100, 100)
     for name, arguments in (
         ("click", {"x": -1, "y": 10}),
@@ -106,7 +120,16 @@ def test_request_context_includes_the_work_window_and_one_current_screenshot(tmp
     with fake_endpoint() as endpoint:
         rig = Rig(endpoint, says("I see the workbook."), work=durable(tmp_path))
         settings = Settings(endpoint.url, "fixture", "transcribe", "chat", "agent", "", "")
-        agent = Agent(settings, rig.machine, rig.window, rig.stop, work=durable(tmp_path), toolset=General, history=rig.history, context=context())
+        agent = Agent(
+            settings,
+            rig.machine,
+            rig.window,
+            rig.stop,
+            work=durable(tmp_path),
+            toolset=lambda agent: General(agent, feed_request=no_feed),
+            history=rig.history,
+            context=context(),
+        )
         assert agent.run("Summarize this")
         request = rig.sent(0)[0]
         assert request["role"] == "user"
@@ -123,7 +146,14 @@ def test_automatic_and_explicit_screenshots_share_the_same_history_limit(tmp_pat
         for _ in range(3):
             endpoint.replies = [calls(("screenshot", {})), says("I see it.")]
             agent = Agent(
-                settings, rig.machine, rig.window, rig.stop, work=durable(tmp_path), toolset=General, history=rig.history, context=context()
+                settings,
+                rig.machine,
+                rig.window,
+                rig.stop,
+                work=durable(tmp_path),
+                toolset=lambda agent: General(agent, feed_request=no_feed),
+                history=rig.history,
+                context=context(),
             )
             assert agent.run("Check this")
         assert rig.history.encoded().decode().count("data:image/png;base64,") == 2
@@ -140,7 +170,7 @@ def test_disabled_context_does_not_capture_or_add_observations_to_the_request(tm
             rig.window,
             rig.stop,
             work=durable(tmp_path),
-            toolset=General,
+            toolset=lambda agent: General(agent, feed_request=no_feed),
             context=ContextSnapshot(time.time(), "disabled"),
         )
         assert agent.run("Do the task")
@@ -161,7 +191,7 @@ def test_unavailable_screen_context_keeps_the_request_and_activity_usable(tmp_pa
             rig.window,
             rig.stop,
             work=durable(tmp_path),
-            toolset=General,
+            toolset=lambda agent: General(agent, feed_request=no_feed),
             context=context(),
         )
         assert agent.run("Find this workbook")
@@ -179,7 +209,7 @@ def test_context_tool_refreshes_the_current_app_without_taking_a_screenshot(tmp_
         FakeWindow(),
         threading.Event(),
         work=durable(tmp_path),
-        toolset=General,
+        toolset=lambda agent: General(agent, feed_request=no_feed),
         context=context(),
         context_reader=lambda: context("Report.docx - Word"),
     )
@@ -239,7 +269,7 @@ def test_inspection_defaults_to_the_work_window_and_only_ui_changes_need_approva
         FakeWindow(),
         threading.Event(),
         work=durable(tmp_path),
-        toolset=General,
+        toolset=lambda agent: General(agent, feed_request=no_feed),
         context=context(),
         context_reader=context,
     )

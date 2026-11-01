@@ -15,7 +15,7 @@ from automation.execution import WorkExecution
 from automation.json_value import Json
 from automation.presentation import Answer, LiveMessage, ReasoningSummary, StreamState, Succeeded, ToolActivity, ToolStatus
 from tests.fake_endpoint import FakeEndpoint, Received, fake_endpoint
-from tests.test_agent import FakeMachine, FakeWindow, calls, durable, message, response, says
+from tests.test_agent import FakeMachine, FakeWindow, calls, durable, message, no_feed, response, says
 from tests.test_agent_window import RecordingWindow
 
 
@@ -52,7 +52,14 @@ def make_agent(
 ) -> Agent:
     window.begin("Read the workbook")
     settings = Settings(endpoint.url, "k", "transcribe", "chat", "gpt-6-astra", "", "")
-    return Agent(settings, machine if machine is not None else FakeMachine(), window, stop, work=work, toolset=General)
+    return Agent(
+        settings,
+        machine if machine is not None else FakeMachine(),
+        window,
+        stop,
+        work=work,
+        toolset=lambda agent: General(agent, feed_request=no_feed),
+    )
 
 
 @contextmanager
@@ -240,7 +247,15 @@ def test_stop_closes_a_stalled_stream_and_preserves_earlier_tool_results(tmp_pat
                 release.set()
         endpoint.stream = None
         endpoint.replies = [says("It said clipped.")]
-        follow_up = Agent(agent.settings, agent.machine, FakeWindow(), threading.Event(), work=agent.work, toolset=General, history=agent.history)
+        follow_up = Agent(
+            agent.settings,
+            agent.machine,
+            FakeWindow(),
+            threading.Event(),
+            work=agent.work,
+            toolset=lambda agent: General(agent, feed_request=no_feed),
+            history=agent.history,
+        )
         assert follow_up.run("What did it say?")
         assert b'"output":"clipped\\n[observation_id: ' in endpoint.last.body
         assert b"Too late." not in endpoint.last.body and b"The workbook" not in endpoint.last.body

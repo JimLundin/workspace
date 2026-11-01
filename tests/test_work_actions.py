@@ -38,7 +38,7 @@ from automation.task import (
     RunRef,
     Waiting,
 )
-from tests.test_agent import FakeMachine, FakeWindow
+from tests.test_agent import FakeMachine, FakeWindow, no_feed
 from tests.work_fixture import seed_verified_actions
 
 
@@ -66,7 +66,14 @@ def written(arguments: Mapping[str, Json], verification: FileDigest | None = Non
 
 def families(work: WorkExecution) -> Agent:
     """The registered tool families classify operations and decide what observations prove."""
-    return Agent(Settings("", "", "", "", "", "", ""), FakeMachine(), FakeWindow(), threading.Event(), work=work, toolset=General)
+    return Agent(
+        Settings("", "", "", "", "", "", ""),
+        FakeMachine(),
+        FakeWindow(),
+        threading.Event(),
+        work=work,
+        toolset=lambda agent: General(agent, feed_request=no_feed),
+    )
 
 
 def attempt(agent: Agent, tool: str, arguments: Mapping[str, Json]) -> None:

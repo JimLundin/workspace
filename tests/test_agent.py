@@ -21,7 +21,7 @@ from assistant.llm import Settings, ToolCall, settings_from
 from assistant.task_profiles import General
 from assistant.uia import UiRequest
 from assistant.web_apps import Located, WebAppOperation
-from assistant.work_bridge_contracts import BridgeCommand, work_bridge_request
+from assistant.work_bridge_contracts import BridgeCommand
 from assistant.workspace import Workspace
 from automation.actions import Resources
 from automation.execution import ApprovalReview, WorkExecution
@@ -32,6 +32,10 @@ from automation.task import RequestSource
 from tests.fake_endpoint import FakeEndpoint, Received, Reply, fake_endpoint, sse
 from tests.test_workspace import live_tree
 from winapi.shapes import Rect, Window
+
+
+def no_feed(_command: BridgeCommand) -> str:
+    raise OSError("No feed bridge in this test.")
 
 
 def dumps(value: Json) -> str:
@@ -276,7 +280,7 @@ class Rig:
             self.window,
             self.stop,
             work=self.work,
-            toolset=lambda agent: General(agent, workspace=self.workspace),
+            toolset=lambda agent: General(agent, workspace=self.workspace, feed_request=no_feed),
             max_steps=max_steps,
             after_step=after_step,
             history=self.history,
@@ -308,7 +312,7 @@ class ToolRig:
         workspace: Workspace | None = None,
         machine: FakeMachine | None = None,
         clock: Callable[[], datetime] = datetime.now,
-        feed_request: Callable[[BridgeCommand], str] = work_bridge_request,
+        feed_request: Callable[[BridgeCommand], str] = no_feed,
     ) -> None:
         self.machine = machine if machine is not None else FakeMachine()
         self.window = FakeWindow()
@@ -385,7 +389,7 @@ def test_default_agent_uses_sol_with_low_reasoning_across_tool_turns(tmp_path: P
         rig = Rig(endpoint, calls(("get_clipboard", {})), says("Read it."), work=durable(tmp_path))
         settings = settings_from({"OPENAI_BASE_URL": endpoint.url, "OPENAI_API_KEY": "k"})
         assert isinstance(settings, Settings)
-        agent = Agent(settings, rig.machine, rig.window, rig.stop, work=durable(tmp_path), toolset=General)
+        agent = Agent(settings, rig.machine, rig.window, rig.stop, work=durable(tmp_path), toolset=lambda agent: General(agent, feed_request=no_feed))
         agent.run("Read the clipboard.")
         assert len(endpoint.received) == 2
         for request in endpoint.received:
@@ -678,7 +682,14 @@ def test_stop_prevents_actions_even_with_approvals_disabled(tmp_path: Path) -> N
     stopped = threading.Event()
     stopped.set()
     machine = FakeMachine()
-    agent = Agent(Settings("", "", "", "", "", "", ""), machine, FakeWindow(), stopped, work=durable(tmp_path), toolset=General)
+    agent = Agent(
+        Settings("", "", "", "", "", "", ""),
+        machine,
+        FakeWindow(),
+        stopped,
+        work=durable(tmp_path),
+        toolset=lambda agent: General(agent, feed_request=no_feed),
+    )
     target = tmp_path / "not-written.txt"
     for name, args in (
         ("write_file", {"path": str(target), "content": "no"}),

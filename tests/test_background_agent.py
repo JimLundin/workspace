@@ -14,7 +14,7 @@ from assistant.task_profiles import General
 from automation.json_value import Json
 from automation.presentation import ToolActivity
 from tests.fake_endpoint import fake_endpoint
-from tests.test_agent import FakeMachine, FakeWindow, Rig, calls, durable, says
+from tests.test_agent import FakeMachine, FakeWindow, Rig, calls, durable, no_feed, says
 from winapi.shapes import Rect
 
 
@@ -39,7 +39,14 @@ def test_meeting_voice_commands_use_the_recording_service_without_default_approv
 
 def test_stopped_agent_cannot_start_recording_and_explicit_approval_mode_is_preserved(tmp_path: Path) -> None:
     machine, cancel = FakeMachine(), threading.Event()
-    agent = Agent(Settings("", "", "", "", "", "", "", agent_approvals=True), machine, FakeWindow(), cancel, work=durable(tmp_path), toolset=General)
+    agent = Agent(
+        Settings("", "", "", "", "", "", "", agent_approvals=True),
+        machine,
+        FakeWindow(),
+        cancel,
+        work=durable(tmp_path),
+        toolset=lambda agent: General(agent, feed_request=no_feed),
+    )
     assert not agent.call(ToolCall("record", "meeting_start", "{}")).ok
     assert not any(line.startswith("meeting") for line in machine.log)
     cancel.set()
@@ -85,7 +92,12 @@ def test_explicit_approval_mode_can_decline_browser_changes(tmp_path: Path) -> N
     ):
         work = durable(tmp_path)
         agent = Agent(
-            Settings("", "", "", "", "", "", "", agent_approvals=True), machine, FakeWindow(), threading.Event(), work=work, toolset=General
+            Settings("", "", "", "", "", "", "", agent_approvals=True),
+            machine,
+            FakeWindow(),
+            threading.Event(),
+            work=work,
+            toolset=lambda agent: General(agent, feed_request=no_feed),
         )
         assert not agent.call(ToolCall("fixture", name, json.dumps(arguments))).ok
         assert work.disposition is not None, name
@@ -94,7 +106,14 @@ def test_explicit_approval_mode_can_decline_browser_changes(tmp_path: Path) -> N
 
 def test_browser_images_invalidate_desktop_coordinates(tmp_path: Path) -> None:
     machine = FakeMachine()
-    agent = Agent(Settings("", "", "", "", "", "", ""), machine, FakeWindow(), threading.Event(), work=durable(tmp_path), toolset=General)
+    agent = Agent(
+        Settings("", "", "", "", "", "", ""),
+        machine,
+        FakeWindow(),
+        threading.Event(),
+        work=durable(tmp_path),
+        toolset=lambda agent: General(agent, feed_request=no_feed),
+    )
     agent.screen.shot = Shot(Rect(0, 0, 1920, 1080), 960, 540)
     result = agent.call(ToolCall("browser", "browser_screenshot", '{"target_id":"page"}'))
     assert result.image is not None
@@ -105,7 +124,14 @@ def test_browser_images_invalidate_desktop_coordinates(tmp_path: Path) -> None:
 
 def test_agent_can_manage_tabs_and_groups_without_default_approval_prompts(tmp_path: Path) -> None:
     machine = FakeMachine()
-    agent = Agent(Settings("", "", "", "", "", "", ""), machine, FakeWindow(), threading.Event(), work=durable(tmp_path), toolset=General)
+    agent = Agent(
+        Settings("", "", "", "", "", "", ""),
+        machine,
+        FakeWindow(),
+        threading.Event(),
+        work=durable(tmp_path),
+        toolset=lambda agent: General(agent, feed_request=no_feed),
+    )
     for name, arguments in (
         ("browser_tabs", {"view": "strip"}),
         ("browser_open", {"url": "about:blank", "group_id": 23}),
@@ -123,7 +149,14 @@ def test_agent_can_manage_tabs_and_groups_without_default_approval_prompts(tmp_p
 
 def test_stopped_agent_does_not_start_background_tools_or_show_their_arguments(tmp_path: Path) -> None:
     machine, window, cancel = FakeMachine(), FakeWindow(), threading.Event()
-    agent = Agent(Settings("", "", "", "", "", "", ""), machine, window, cancel, work=durable(tmp_path), toolset=General)
+    agent = Agent(
+        Settings("", "", "", "", "", "", ""),
+        machine,
+        window,
+        cancel,
+        work=durable(tmp_path),
+        toolset=lambda agent: General(agent, feed_request=no_feed),
+    )
     cancel.set()
     for name in ("browser_action", "kanban_comment"):
         result = agent.call(ToolCall("stopped", name, '{"text":"private-secret"}'))

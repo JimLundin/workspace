@@ -13,7 +13,7 @@ from typing import cast
 from assistant.agent import Agent
 from assistant.agent_execution import AgentExecution
 from assistant.llm import Settings, ToolCall
-from assistant.task_profiles import General
+from assistant.task_profiles import General, GeneralEffects, Profiles, unseen
 from assistant.workspace import CheckInterrupted, Workspace
 from automation.actions import Change, Operation, Resources
 from automation.execution import WorkExecution
@@ -35,7 +35,7 @@ from automation.task import (
 )
 from keeper import copy_source, source_digest
 from tests.fake_endpoint import Reply, fake_endpoint
-from tests.test_agent import FakeMachine, FakeWindow, calls, says
+from tests.test_agent import FakeMachine, FakeWindow, calls, no_feed, says
 from tests.test_work_actions import claimed
 from tests.test_workspace import live_tree
 
@@ -52,10 +52,10 @@ def execution(settings: Settings, workspace: Workspace, errors: list[str]) -> Ag
     return AgentExecution(
         settings,
         machine,
+        Profiles(workspace, GeneralEffects(unseen, no_feed), None),
         record=lambda record: None,
         report_error=errors.append,
         close_background=machine.close_background,
-        workspace=workspace,
     )
 
 
@@ -111,7 +111,7 @@ def test_sdk_history_and_source_drafts_are_scoped_to_the_conversation(tmp_path: 
         settings = Settings(endpoint.url, "fixture", "transcribe", "chat", "gpt-6-astra", "", "")
         adapter = execution(settings, source, errors)
         first = request(store, "one", "Inspect the first project.")
-        draft = adapter.conversation(first).workspace
+        draft = adapter.profiles.run(first).conversation.workspace
         draft.ensure()
         draft.write("draft.py", "DRAFT = 'saved for this conversation'\n")
         endpoint.replies = [says("Remember project reference ORCHID-471.")]
@@ -122,7 +122,7 @@ def test_sdk_history_and_source_drafts_are_scoped_to_the_conversation(tmp_path: 
         done = adapter.run_work(second, store, FakeWindow(), threading.Event())
         assert isinstance(done, Completed)
         assert "ORCHID-471" in endpoint.received[-1].body.decode("utf-8")
-        assert adapter.conversation(second).workspace.read("draft.py") == "DRAFT = 'saved for this conversation'\n"
+        assert adapter.profiles.run(second).conversation.workspace.read("draft.py") == "DRAFT = 'saved for this conversation'\n"
         assert store.finish(second.run, done, at=time.time()) is not None
         for identity, origin in (
             ("routine", RoutineSource("meeting-notes", 1, "meeting-one")),
@@ -133,12 +133,12 @@ def test_sdk_history_and_source_drafts_are_scoped_to_the_conversation(tmp_path: 
             done = adapter.run_work(other, store, FakeWindow(), threading.Event())
             assert isinstance(done, Completed)
             assert "ORCHID-471" not in endpoint.received[-1].body.decode("utf-8")
-            separate = adapter.conversation(other).workspace
+            separate = adapter.profiles.run(other).conversation.workspace
             separate.ensure()
             assert "draft.py" not in separate.files()
             assert store.finish(other.run, done, at=time.time()) is not None
         later = request(store, "after-restart", "Reopen the draft.")
-        restarted = execution(settings, source, errors).conversation(later).workspace
+        restarted = execution(settings, source, errors).profiles.run(later).conversation.workspace
         restarted.ensure()
         assert restarted.read("draft.py") == "DRAFT = 'saved for this conversation'\n"
         assert not errors
@@ -160,7 +160,7 @@ def test_endpoint_failure_and_step_limit_never_report_completion(tmp_path: Path)
         work = WorkExecution(second, store, Resources())
         endpoint.replies = [calls(("get_clipboard", {}))]
         stop = threading.Event()
-        agent = Agent(settings, FakeMachine(), FakeWindow(), stop, work=work, toolset=General, max_steps=1)
+        agent = Agent(settings, FakeMachine(), FakeWindow(), stop, work=work, toolset=lambda agent: General(agent, feed_request=no_feed), max_steps=1)
         assert not agent.run(second.task.prompt)
         result = work.outcome(agent.report, stop)
         assert isinstance(result, Waiting) and isinstance(result.reason, Blocked)
@@ -188,7 +188,7 @@ def test_runtime_checks_are_recorded_before_candidate_import_and_failures_remain
         FakeWindow(),
         threading.Event(),
         work=work,
-        toolset=lambda agent: General(agent, workspace=workspace),
+        toolset=lambda agent: General(agent, workspace=workspace, feed_request=no_feed),
     )
     with closing(sqlite3.connect(tmp_path / "work.sqlite3")) as database, database:
         database.execute("CREATE TRIGGER refuse_execution BEFORE INSERT ON actions BEGIN SELECT RAISE(ABORT,'cannot record'); END")
@@ -244,7 +244,14 @@ def test_nonfinite_tool_arguments_never_enter_effect_storage(tmp_path: Path) -> 
     destination = tmp_path / "forbidden.txt"
     payload: dict[str, object] = {"path": str(destination), "content": "not written", "unexpected": float("nan")}
     args = json.dumps(payload)
-    agent = Agent(Settings("", "", "", "", "", "", ""), FakeMachine(), FakeWindow(), threading.Event(), work=work, toolset=General)
+    agent = Agent(
+        Settings("", "", "", "", "", "", ""),
+        FakeMachine(),
+        FakeWindow(),
+        threading.Event(),
+        work=work,
+        toolset=lambda agent: General(agent, feed_request=no_feed),
+    )
     result = agent.call(ToolCall("invalid", "write_file", args))
     assert not result.ok and not destination.exists() and not store.actions("task")
 
@@ -269,7 +276,7 @@ def test_installation_resumes_only_after_running_source_matches_the_requested_di
         FakeWindow(),
         threading.Event(),
         work=WorkExecution(claim, store, Resources()),
-        toolset=lambda agent: General(agent, workspace=workspace),
+        toolset=lambda agent: General(agent, workspace=workspace, feed_request=no_feed),
     )
     classified = agent.tools["apply_changes"].classify(installation.arguments)
     assert isinstance(classified, Change)

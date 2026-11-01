@@ -11,13 +11,14 @@ from assistant.llm import Settings
 from assistant.meeting_events import TranscriptEvents
 from assistant.meeting_store import MeetingArchive, MeetingStore
 from assistant.meetings import Meetings
+from assistant.task_profiles import GeneralEffects, Profiles, unseen
 from assistant.workspace import Workspace
 from automation.controller import ControllerSnapshot, WorkController
 from automation.routines import RoutineStore
 from automation.store import TaskStore
 from automation.task import ActionVerified, Completed, FileDigest, RoutineSource, Task, Waiting
 from tests.fake_endpoint import fake_endpoint
-from tests.test_agent import FakeMachine, FakeWindow, calls, says
+from tests.test_agent import FakeMachine, FakeWindow, calls, no_feed, says
 from tests.test_meetings import GeneratedCapture
 from tests.test_workspace import live_tree
 
@@ -100,10 +101,10 @@ def test_finished_meeting_produces_one_verified_notes_file_and_survives_restart(
         execution = AgentExecution(
             settings,
             machine,
+            Profiles(Workspace(live_tree(tmp_path / "source"), tmp_path / "workspace"), GeneralEffects(unseen, no_feed), None),
             record=lambda record: None,
             report_error=errors.append,
             close_background=machine.close_background,
-            workspace=Workspace(live_tree(tmp_path / "source"), tmp_path / "workspace"),
         )
         settled = threading.Event()
 

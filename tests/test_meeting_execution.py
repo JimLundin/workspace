@@ -17,14 +17,14 @@ from typing import cast
 import tests.test_outlook
 from assistant import outlook
 from assistant.agent import Agent
-from assistant.agent_execution import AgentExecution, unseen
+from assistant.agent_execution import AgentExecution
 from assistant.agent_tools import Output
 from assistant.llm import Settings, ToolCall
 from assistant.meeting_execution import MeetingWork
 from assistant.meeting_followup_store import FollowupStore
 from assistant.meeting_preparation import Preparations
 from assistant.outlook import OutlookDrafts, PowerShellOutlook, read_eml
-from assistant.task_profiles import MeetingFollowupTools, RequestContext
+from assistant.task_profiles import GeneralEffects, MeetingFollowupTools, Profiles, RequestContext, unseen
 from assistant.workspace import Workspace
 from automation.actions import Resources
 from automation.activity import Activity, ContextSnapshot
@@ -47,7 +47,7 @@ from automation.task import (
     Waiting,
 )
 from tests.fake_endpoint import FakeEndpoint, fake_endpoint
-from tests.test_agent import FakeMachine, FakeWindow, calls, says
+from tests.test_agent import FakeMachine, FakeWindow, calls, no_feed, says
 from tests.test_meeting_followup import BODY, NOTICE, followup_response, followup_sources, resolved, response_item
 from tests.test_workspace import live_tree
 from winapi.shapes import Window
@@ -106,12 +106,10 @@ class MeetingRig:
         return AgentExecution(
             Settings(endpoint.url, "fixture", "transcribe", "chat", "gpt-6-astra", "", ""),
             self.machine,
+            Profiles(self.workspace, GeneralEffects(context, no_feed), meeting),
             record=lambda record: None,
             report_error=self.errors.append,
             close_background=self.machine.close_background,
-            workspace=self.workspace,
-            meeting=meeting,
-            context=context,
         )
 
     def agent(self, claim: Claim, *, context: Callable[[], ContextSnapshot] | None = None) -> Agent:

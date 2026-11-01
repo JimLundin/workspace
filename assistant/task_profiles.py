@@ -1,17 +1,18 @@
 """Each task profile's execution: its conversation, context, toolset, instructions, recovery and completion check.
 
-Execution selects one profile run from the task's profile and runs whatever it
-supplies without branching on the profile.
+Profiles selects one run and owns its dependencies and conversations. Execution
+runs whatever that profile supplies without branching on the profile.
 """
 
 import hashlib
 import os
 import threading
+from collections import OrderedDict
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Final, Protocol
+from typing import Final, Protocol, assert_never
 
 from assistant import feed_agent_tools, meeting_tools, personal_work_tools, self_change_tools, work_canvas_tools
 from assistant.agent import Agent, Toolset
@@ -21,17 +22,17 @@ from assistant.browser_tools import Browser
 from assistant.business_tools import Business
 from assistant.desktop_tools import Desktop
 from assistant.feed_agent_tools import Feed
-from assistant.meeting_execution import MeetingRun
+from assistant.meeting_execution import MeetingRun, MeetingWork
 from assistant.meeting_tools import MeetingCapture
 from assistant.personal_work_tools import PersonalWork
 from assistant.self_change_tools import Delivery, SelfChange, verified_installation
 from assistant.task_tools import TaskTools
-from assistant.work_bridge_contracts import BridgeCommand, work_bridge_request
+from assistant.work_bridge_contracts import BridgeCommand
 from assistant.work_canvas_tools import Canvas
 from assistant.workspace import Workspace
 from automation.activity import ContextSnapshot
 from automation.execution import WorkExecution
-from automation.task import Outcome, Waiting
+from automation.task import Claim, FeedHandoff, MeetingFollowup, Outcome, RequestKind, RequestSource, RoutineSource, Task, Waiting, task_profile
 
 
 @dataclass(frozen=True, slots=True)
@@ -53,6 +54,30 @@ class RequestContext:
 
 UNSEEN: Final = RequestContext(None, "", None)
 """No desktop context: the agent sees only its task's own sources."""
+
+
+def unseen(_task: Task) -> RequestContext:
+    return UNSEEN
+
+
+class ProfileError(Exception):
+    """The task's profile cannot run: the reason is shown and the task waits."""
+
+
+@dataclass(frozen=True, slots=True)
+class GeneralEffects:
+    """What a general request reads beyond its conversation: desktop context and the feed bridge."""
+
+    context: Callable[[Task], RequestContext]
+    feed_request: Callable[[BridgeCommand], str]
+
+
+@dataclass(frozen=True, slots=True)
+class GeneralTools:
+    """A general run's tool dependencies: its installation destination and feed bridge."""
+
+    install_root: Path
+    feed_request: Callable[[BridgeCommand], str]
 
 
 class ProfileRun(Protocol):
@@ -138,7 +163,7 @@ class General:
         workspace: Workspace | None = None,
         install_root: Path | None = None,
         clock: Callable[[], datetime] = datetime.now,
-        feed_request: Callable[[BridgeCommand], str] = work_bridge_request,
+        feed_request: Callable[[BridgeCommand], str],
     ) -> None:
         # The families act through the agent; the workspace, install root, clock
         # and feed transport are independently varying effects of this toolset.
@@ -165,13 +190,13 @@ class General:
 class GeneralRun:
     """A general request continues its conversation with the request's desktop context, the whole desktop and self-change."""
 
-    __slots__ = ("context", "conversation", "install_root")
+    __slots__ = ("context", "conversation", "tools")
 
-    def __init__(self, conversation: Conversation, context: RequestContext, install_root: Path) -> None:
-        self.conversation, self.context, self.install_root = conversation, context, install_root
+    def __init__(self, conversation: Conversation, context: RequestContext, tools: GeneralTools) -> None:
+        self.conversation, self.context, self.tools = conversation, context, tools
 
     def toolset(self, agent: Agent) -> Toolset:
-        return General(agent, workspace=self.conversation.workspace, install_root=self.install_root)
+        return General(agent, workspace=self.conversation.workspace, install_root=self.tools.install_root, feed_request=self.tools.feed_request)
 
     def recover(self, work: WorkExecution, stop: threading.Event) -> Waiting | None:
         """A requested installation finishes when the running source matches its checked digest."""
@@ -220,3 +245,63 @@ class MeetingFollowupRun:
     def completed(self, outcome: Outcome) -> Outcome:
         """Complete only after the package is published and each draft's save is verified."""
         return self.run.completed(outcome)
+
+
+class Conversations:
+    """SDK history and source drafts per conversation, retaining the eight most recent.
+
+    Mutable owner: each SDK session writes the retained History handle across
+    serialized runs. The private bounded LRU preserves those live handles and
+    releases evicted histories; callers receive a frozen conversation holder.
+    """
+
+    __slots__ = ("_recent", "workspace")
+
+    def __init__(self, workspace: Workspace) -> None:
+        self.workspace = workspace
+        self._recent: OrderedDict[str, Conversation] = OrderedDict()
+
+    def named(self, name: str) -> Conversation:
+        key = hashlib.sha256(name.encode("utf-8")).hexdigest()
+        if key not in self._recent:
+            draft = self.workspace.root.parent / "workspaces" / key
+            self._recent[key] = Conversation(History(), Workspace(self.workspace.live, draft, resume=True))
+        self._recent.move_to_end(key)
+        while len(self._recent) > 8:
+            self._recent.popitem(last=False)
+        return self._recent[key]
+
+
+class Profiles:
+    """Select one claim's profile run and own its profile-specific dependencies."""
+
+    __slots__ = ("conversations", "general", "meeting", "tools")
+
+    def __init__(self, workspace: Workspace, general: GeneralEffects, meeting: MeetingWork | None) -> None:
+        self.conversations = Conversations(workspace)
+        self.general, self.meeting = general, meeting
+        self.tools = GeneralTools(workspace.root, general.feed_request)
+
+    def run(self, claim: Claim) -> ProfileRun:
+        """Select the run, refusing missing or changed meeting preparations."""
+        match profile := task_profile(claim.task.source):
+            case MeetingFollowup():
+                # A missing or changed preparation must not silently gain the general profile.
+                if self.meeting is None:
+                    raise ProfileError("Meeting follow-up is not configured for this work process.")
+                try:
+                    run = self.meeting.session(claim.task.id, profile)
+                except (OSError, ValueError) as error:
+                    raise ProfileError(f"Meeting preparation could not be opened: {error}"[:4000]) from error
+                return MeetingFollowupRun(self.conversations.named("task:" + claim.task.id), run)
+            case RequestKind.GENERAL | FeedHandoff():
+                match source := claim.task.source:
+                    case RequestSource(conversation_id=name):
+                        name = "conversation:" + name
+                    case RoutineSource():
+                        name = "task:" + claim.task.id
+                    case _:
+                        assert_never(source)
+                return GeneralRun(self.conversations.named(name), self.general.context(claim.task), self.tools)
+            case _:
+                assert_never(profile)

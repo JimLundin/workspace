@@ -30,7 +30,9 @@ lazy from assistant.meeting_execution import MeetingWork
 lazy from assistant.meeting_followup_store import FollowupStore
 lazy from assistant.meeting_preparation import Preparations
 lazy from assistant.outlook import OutlookDrafts
-lazy from assistant.task_profiles import RequestContext
+lazy from assistant.task_profiles import GeneralEffects, Profiles, RequestContext
+lazy from assistant.work_bridge_contracts import work_bridge_request
+lazy from assistant.workspace import Workspace
 lazy from automation import ipc
 lazy from automation.activity import ContextSnapshot, Observation, Sample, observed
 lazy from automation.bridge import BridgeServer
@@ -183,11 +185,14 @@ def _native_execution(settings: Settings | Missing, bridge: BridgeServer, hwnd: 
         execution = AgentExecution(
             usable,
             machine,
+            Profiles(
+                Workspace(),
+                GeneralEffects(context.request, work_bridge_request),
+                MeetingWork(Preparations(followups / "preparations"), FollowupStore(followups / "packages"), OutlookDrafts(followups / "mail")),
+            ),
             record=lambda details: usage.record("automation", "agent", details),
             report_error=lambda detail: report(detail, folder=bridge.folder),
             close_background=machine.close_background,
-            context=context.request,
-            meeting=MeetingWork(Preparations(followups / "preparations"), FollowupStore(followups / "packages"), OutlookDrafts(followups / "mail")),
         )
     except BaseException:
         machine.close_background()
