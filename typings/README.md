@@ -33,6 +33,10 @@ Both checkers select it through their supported typeshed-directory settings;
 runtime uses the builtin directly. Python's frozen mapping implementation is
 trusted, without library tests.
 
+The pytest stub covers the mutation session's plugin: the bare `fixture`
+decorator on a method taking only its instance, and `main`, whose `ExitCode`
+result is an int. Upstream's overloads carry `Any` in their parameters.
+
 The jsonschema stub exposes only `validate`, which raises for an instance the
 schema rejects. A meeting test uses it to check the tool schema offered to the
 model against payloads the follow-up validator accepts; schema evaluation

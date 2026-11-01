@@ -25,7 +25,7 @@ from pydantic import TypeAdapter, ValidationError
 
 from scripts.architecture import Report, dependencies, module_name, review
 from scripts.check_results import Failure, Results, Selection, raised, reported
-from scripts.deploy_files import CheckedArchitecture, CheckReceipt, file_at, read, sha, source_map, write, write_receipt
+from scripts.deploy_files import CheckedArchitecture, CheckReceipt, file_at, json_record, read, sha, source_map, write, write_receipt
 from scripts.development_paths import LIVE, PROFILE
 from scripts.source_analysis import Cache
 lazy import selfcheck
@@ -543,7 +543,7 @@ def publish_check(options: Options, run: CheckRun) -> bool:
         worker_seconds=sum(seconds for seconds, label in observations if label.startswith("worker:")),
         unattributed_seconds=max(0.0, run.elapsed - sum(seconds for seconds, label in observations if not label.startswith("worker:"))),
     )
-    write(evidence, COST_RECORD.dump_python(record, mode="json"))
+    write(evidence, json_record(COST_RECORD, record))
     print(f"{results.passed} passed, {len(failures)} failed, {results.skipped} skipped in {run.elapsed:.2f}s; source-bound editing profile")
     print(f"Complete cost evidence: {evidence}", flush=True)
     for seconds, name in sorted((item for item in observations if not item[1].startswith(("phase:", "module:", "worker:module:"))), reverse=True)[:5]:

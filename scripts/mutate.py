@@ -7,6 +7,7 @@ The checkout is never modified. Timeouts and collection errors are not kills.
 import argparse
 import ast
 import hashlib
+import inspect
 import os
 import random
 import shutil
@@ -406,8 +407,9 @@ OPTIONS = TypeAdapter(Options)
 
 
 def arguments(parser: argparse.ArgumentParser) -> Options:
+    observed: dict[str, object] = dict(inspect.getmembers(parser.parse_args()))
     try:
-        return OPTIONS.validate_python(vars(parser.parse_args()))
+        return OPTIONS.validate_python(observed)
     except ValidationError as error:
         return parser.error(str(error))
 

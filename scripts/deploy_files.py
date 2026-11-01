@@ -197,8 +197,13 @@ def zip_files(path: Path, root: str = "workspace", *, source_only: bool = False)
     return dict(sorted(result.items()))
 
 
+def json_record[T](adapter: TypeAdapter[T], value: T) -> dict[str, object]:
+    """A typed value as the JSON object `write` stores, read back through its wire form."""
+    return RECORD.validate_json(adapter.dump_json(value))
+
+
 def write_receipt(path: Path, receipt: CheckReceipt) -> None:
-    write(path, CHECK_RECEIPT.dump_python(receipt, mode="json"))
+    write(path, json_record(CHECK_RECEIPT, receipt))
 
 
 def read_receipt(path: Path) -> CheckReceipt:
