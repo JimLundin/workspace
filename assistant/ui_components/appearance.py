@@ -12,10 +12,9 @@ from enum import Enum, auto
 from functools import lru_cache
 from typing import Final, assert_never
 
-from assistant import island_model
 from assistant.feed_origin import App
-from assistant.island_model import Tint
 from assistant.ui_components import typeface
+from assistant.ui_components.meaning import Tint, Tone
 from winapi import appearance
 from winapi.shapes import Stop, Veil
 
@@ -297,18 +296,18 @@ def large(look: Look) -> Look:
             assert_never(look)
 
 
-def reading(lettering: Lettering, tone: island_model.Tone, *, contrast: bool) -> Shade:
+def reading(lettering: Lettering, tone: Tone, *, contrast: bool) -> Shade:
     """A part's ink. High contrast keeps every reading in the system foreground."""
     if contrast:
         return lettering.ink
     match tone:
-        case island_model.Tone.INK:
+        case Tone.INK:
             return lettering.ink
-        case island_model.Tone.QUIET:
+        case Tone.QUIET:
             return lettering.quiet
-        case island_model.Tone.MICROPHONE:
+        case Tone.MICROPHONE:
             return Shade(MICROPHONE)
-        case island_model.Tone.LOW:
+        case Tone.LOW:
             return Shade(RED)
         case _:
             assert_never(tone)

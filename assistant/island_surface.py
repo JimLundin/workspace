@@ -21,11 +21,12 @@ lazy from PySide6.QtCore import Qt
 from assistant import island_menu
 from assistant.island_layout import HEIGHT, MENU_HEAD, MENU_PAD, MENU_RADIUS, MENU_WIDTH, WAVE_BARS, Content, Framed, Line, Spot, arrange, lines, live
 from assistant.island_menu import Disclosure, Item, Live, Menu, Rule, within
-from assistant.island_model import Action, Badge, CapsuleView, Control, Glyph, Key, Marker, Part, Spinner, Text, Tint, Tone
+from assistant.island_model import Action, Badge, CapsuleView, Control, Glyph, Key, Marker, Part, Spinner, Text
 from assistant.qt_runtime import prepare
 from assistant.qt_ui import EventLoop
 from assistant.ui_components import typeface
 from assistant.ui_components.appearance import GLASS_ACCENT, RED, GlassLook, Look, Shade, SolidLook, look, reading
+from assistant.ui_components.meaning import Tint, Tone
 from assistant.vector_icons import icon
 from assistant.view_publication import log_view
 from components import BAR_WINDOW

@@ -20,6 +20,7 @@ from typing import Final, assert_never
 
 from assistant.ambient import Ambient, SystemStatus
 from assistant.recording_state import RecordingState
+from assistant.ui_components import meaning
 from winapi.machine_status import Battery
 
 
@@ -54,18 +55,6 @@ class Action(Enum):
     STOP_RECORDING = auto()
 
 
-class Tone(Enum):
-    INK = auto()
-    QUIET = auto()
-    MICROPHONE = auto()
-    LOW = auto()
-
-
-class Tint(Enum):
-    NONE = auto()
-    ATTENTION = auto()
-
-
 class Marker(Enum):
     """Live indicators without a payload."""
 
@@ -77,14 +66,14 @@ class Marker(Enum):
 @dataclass(frozen=True, slots=True)
 class Text:
     text: str
-    tone: Tone = Tone.INK
+    tone: meaning.Tone = meaning.Tone.INK
     strong: bool = field(default=False, kw_only=True)
 
 
 @dataclass(frozen=True, slots=True)
 class Glyph:
     name: str
-    tone: Tone = Tone.INK
+    tone: meaning.Tone = meaning.Tone.INK
 
 
 @dataclass(frozen=True, slots=True)
@@ -115,7 +104,7 @@ class CapsuleView:
     slots: tuple[Slot, ...]
     label: str
     action: Action
-    tint: Tint = Tint.NONE
+    tint: meaning.Tint = meaning.Tint.NONE
 
 
 class Job(Enum):
@@ -217,7 +206,7 @@ def facts(ambient: Ambient, system: SystemStatus) -> Slot:
         case _ if not ambient.battery_text:
             battery: Slot = ()
         case Battery(percent=percent, powered=False) if percent <= 20:
-            battery = (Text(ambient.battery_text, Tone.LOW),)
+            battery = (Text(ambient.battery_text, meaning.Tone.LOW),)
         case _:
             battery = (Text(ambient.battery_text),)
     return (*(Glyph(alert) for alert in system.alerts), Text(ambient.clock), *charger, *battery)
@@ -241,7 +230,7 @@ def inbox_label(count: int) -> str:
 
 
 def recording_slot(recorded: Capture, *, hovered: bool) -> Slot:
-    tone = Tone.LOW if recorded.attention else Tone.INK
+    tone = meaning.Tone.LOW if recorded.attention else meaning.Tone.INK
     stop = (Control("stop", "Stop recording", Action.STOP_RECORDING),) if hovered and recorded.can_stop else ()
     return (Marker.DOT, Text(recorded.title, tone), *stop)
 
@@ -264,7 +253,7 @@ def island(observed: Observed, *, hovered: Key | None = None, expanded: bool = F
         )
     # Dictation detaches the agent; a waiting question already is the island, unless you're dictating.
     if detached and agent is not None and observed.dictating:
-        tint = Tint.ATTENTION if agent.waiting else Tint.NONE
+        tint = meaning.Tint.ATTENTION if agent.waiting else meaning.Tint.NONE
         slot = agent_slot(agent, hovered=hovered is Key.AGENT, compact=True)
         action = Action.OPEN_QUESTION if agent.waiting else Action.OPEN_MENU
         lead += (CapsuleView(Key.AGENT, Zone.LEAD, (slot,), f"Agent · {agent.phase}", action, tint),)
@@ -272,7 +261,7 @@ def island(observed: Observed, *, hovered: Key | None = None, expanded: bool = F
         lead += (CapsuleView(Key.JOB, Zone.LEAD, ((Marker.DOTS,),), job_label(job), Action.OPEN_MENU),)
     trail: tuple[CapsuleView, ...] = ()
     if detached and recorded is not None:
-        tint = Tint.ATTENTION if recorded.attention else Tint.NONE
+        tint = meaning.Tint.ATTENTION if recorded.attention else meaning.Tint.NONE
         slot = recording_slot(recorded, hovered=hovered is Key.RECORDING)
         trail += (CapsuleView(Key.RECORDING, Zone.TRAIL, (slot,), f"{recorded.title} · Open canvas", Action.OPEN_CANVAS, tint),)
     if observed.inbox > 0:
@@ -289,12 +278,12 @@ def centre(observed: Observed, *, hovered: Key | None) -> CapsuleView:
     agent, job, recorded = observed.agent, observed.job, capture(observed.recording)
     if observed.dictating:
         stop: Slot = (Control("stop", "Stop dictation", Action.STOP_DICTATION),) if revealed else ()
-        slots: tuple[Slot, ...] = ((Glyph("mic.fill", Tone.MICROPHONE), Marker.WAVE, *stop),)
+        slots: tuple[Slot, ...] = ((Glyph("mic.fill", meaning.Tone.MICROPHONE), Marker.WAVE, *stop),)
         return CapsuleView(Key.ISLAND, Zone.ISLAND, slots, "Listening · press to stop", Action.STOP_DICTATION)
     if agent is not None and agent.waiting:
         slots = ((Text("Needs you", strong=True), Glyph("down")),)
         return CapsuleView(
-            Key.ISLAND, Zone.ISLAND, slots, f"An agent question needs you: {agent.phase} · open it", Action.OPEN_QUESTION, Tint.ATTENTION
+            Key.ISLAND, Zone.ISLAND, slots, f"An agent question needs you: {agent.phase} · open it", Action.OPEN_QUESTION, meaning.Tint.ATTENTION
         )
     leading: tuple[Slot, ...] = (
         *((agent_slot(agent, hovered=revealed, compact=False),) if agent is not None else ()),

@@ -6,10 +6,10 @@ from typing import override
 lazy from PySide6 import QtCore, QtGui, QtWidgets
 lazy from PySide6.QtCore import Qt
 
-from assistant.island_model import Tint
 from assistant.ui_components.appearance import GLASS_ACCENT, Tokens, canvas_style
 from assistant.ui_components.canvas_look import CAPSULE, CONTROL, SHADOW, WINDOW_RADIUS, color, glass_ink, paint_glass, paint_scroll_edge
 from assistant.ui_components.controls import button
+from assistant.ui_components.meaning import Tint
 from assistant.ui_components.widgets import Window, row
 from assistant.vector_icons import icon
 

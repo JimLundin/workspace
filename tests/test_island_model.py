@@ -17,14 +17,13 @@ from assistant.island_model import (
     Observed,
     Spinner,
     Text,
-    Tint,
-    Tone,
     Zone,
     capture,
     island,
     keyboard,
 )
 from assistant.recording_state import RecordingState
+from assistant.ui_components.meaning import Tint, Tone
 from winapi.machine_status import Battery, Speakers, Wifi
 
 RESTING = Observed(

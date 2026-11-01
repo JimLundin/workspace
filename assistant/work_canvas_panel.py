@@ -15,7 +15,6 @@ lazy from PySide6 import QtCore, QtGui, QtWidgets
 lazy from PySide6.QtCore import Qt
 
 from assistant.canvas_activity import ROOT_CONTEXT, Attention, CanvasAction, CanvasInstruction, CanvasQuestion, CanvasRun, CanvasUpdate
-from assistant.island_model import Tint
 from assistant.keymap import PHYSICAL_NAMES
 from assistant.qt_ui import cancel, later
 from assistant.ui_components.appearance import GLASS_ACCENT, Tokens
@@ -24,6 +23,7 @@ from assistant.ui_components.canvas_chrome import CanvasFrame, CanvasSurface, Ca
 from assistant.ui_components.canvas_connection import ConnectionPath
 from assistant.ui_components.canvas_look import CARD_RADIUS, SHADOW, glass_ink
 from assistant.ui_components.controls import button, label
+from assistant.ui_components.meaning import Tint
 from assistant.ui_components.voice_legend import VoiceLegend
 from assistant.ui_components.widgets import column
 from assistant.work_canvas import Continuation, Investigating, NotQueued, Queued, ResumeTask

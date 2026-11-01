@@ -1,7 +1,7 @@
 """How capsules read under each Windows material and the desktop beneath them."""
 
-from assistant.island_model import Tint, Tone
 from assistant.ui_components.appearance import ATTENTION, GlassLook, Shade, SolidLook, look, reading
+from assistant.ui_components.meaning import Tint, Tone
 from winapi import appearance
 
 

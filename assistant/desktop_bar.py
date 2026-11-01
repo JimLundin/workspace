@@ -27,13 +27,14 @@ lazy from assistant.audio_meter import AudioMeter
 lazy from assistant.bar_status import StatusObserver
 lazy from assistant.island_layout import HEIGHT, Metrics, expansion, frame, snap
 lazy from assistant.island_menu import Chosen, Command, Dismissed, Menu, ToolChoice, entries, restores_focus, rows
-lazy from assistant.island_model import Action, Agent, CapsuleView, Job, Key, Marker, Observed, Spinner, Tint, capture, island, keyboard
+lazy from assistant.island_model import Action, Agent, CapsuleView, Job, Key, Marker, Observed, Spinner, capture, island, keyboard
 lazy from assistant.island_motion import IslandMotion, Shown, advance, finish, placed, retarget, settled
 lazy from assistant.island_surface import TOP, BarWindow, Drawn, Presented
 lazy from assistant.qt_ui import EventLoop, application
 lazy from assistant.recording_state import RecordingAction, RecordingState
 lazy from assistant.shell_controls import TASKBAR_TOGGLE, TaskbarControl, WindowsKeyObserver
 lazy from assistant.ui_components.appearance import Look, large, look
+lazy from assistant.ui_components.meaning import Tint
 lazy from protocol import Tool
 lazy from winapi import appearance, shell, system_notices, windows
 lazy from winapi.machine_status import Power, PowerUnavailable

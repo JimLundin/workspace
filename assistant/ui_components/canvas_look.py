@@ -15,10 +15,10 @@ lazy from PySide6 import QtCore, QtGui
 lazy from PySide6.QtCore import Qt
 
 from assistant.feed_origin import App, Origin
-from assistant.island_model import Tint
 from assistant.qt_runtime import prepare
 from assistant.ui_components import typeface
 from assistant.ui_components.appearance import ATTENTION, GLASS_ACCENT, Scheme, Shade, Tokens, brand
+from assistant.ui_components.meaning import Tint
 from assistant.vector_icons import icon
 
 prepare()
