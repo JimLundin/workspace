@@ -11,6 +11,7 @@ import ctypes
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
+from typing import Final
 
 from win32more import FAILED, WinError
 from win32more.Windows.Foundation import IAsyncInfo
@@ -39,7 +40,19 @@ from win32more.Windows.Win32.System.WinRT import (
     RoUninitialize,
 )
 from win32more.Windows.Win32.System.WinRT.Composition import ICompositorDesktopInterop
-from win32more.Windows.Win32.UI.WindowsAndMessaging import CreateWindowExW, GetWindow, SetWindowPos
+from win32more.Windows.Win32.UI.WindowsAndMessaging import (
+    LWA_ALPHA,
+    WS_EX_LAYERED,
+    WS_EX_NOACTIVATE,
+    WS_EX_NOREDIRECTIONBITMAP,
+    WS_EX_TOOLWINDOW,
+    WS_EX_TRANSPARENT,
+    WS_POPUP,
+    CreateWindowExW,
+    GetWindow,
+    SetLayeredWindowAttributes,
+    SetWindowPos,
+)
 
 from winapi import windows
 from winapi._core import NativeFunction
@@ -68,6 +81,21 @@ def borderless(handle: int) -> None:
 def stack_behind(handle: int, foreground: int) -> None:
     """Place native glass below its foreground without activation or movement."""
     SetWindowPos(handle, foreground, 0, 0, 0, 0, 0x0013)
+
+
+_GLASS_HOST: Final = WS_EX_NOACTIVATE | WS_EX_NOREDIRECTIONBITMAP | WS_EX_TOOLWINDOW | WS_EX_TRANSPARENT | WS_EX_LAYERED
+
+
+def glass_host(title: str) -> int:
+    """Composition owns the pixels; Windows skips this layered host for input."""
+    handle = CreateWindowExW(_GLASS_HOST, "STATIC", title, WS_POPUP, 0, 0, 1, 1, None, None, GetModuleHandleW(None), None) or 0
+    if not handle:
+        raise ctypes.WinError(GetLastError())
+    if not SetLayeredWindowAttributes(handle, 0, 255, LWA_ALPHA):
+        error = GetLastError()
+        windows.destroy(handle)
+        raise ctypes.WinError(error)
+    return handle
 
 
 @dataclass(frozen=True, slots=True)
@@ -159,13 +187,7 @@ class Glass:
         stack: Callable[[int, int], None] = stack_behind,
     ) -> None:
         self.stack = stack
-        # NOREDIRECTIONBITMAP lets composition supply the entire surface. It is
-        # intentionally not a layered/color-keyed window.
-        self.handle = (
-            CreateWindowExW(0x0820_00A0, "STATIC", "Workspace · Glass", 0x8000_0000, 0, 0, 1, 1, None, None, GetModuleHandleW(None), None) or 0
-        )
-        if not self.handle:
-            raise ctypes.WinError(GetLastError())
+        self.handle = glass_host("Workspace · Glass")
         self.closed = self.visible = False
         self.bounds: Rect | None = None
         self.size: tuple[int, int, float] | None = None
@@ -431,9 +453,7 @@ class GlassScene:
 
     def __init__(self, owner: DesktopComposition, title: str, *, stack: Callable[[int, int], None] = stack_behind) -> None:
         self.stack = stack
-        self.handle = CreateWindowExW(0x0820_00A0, "STATIC", title, 0x8000_0000, 0, 0, 1, 1, None, None, GetModuleHandleW(None), None) or 0
-        if not self.handle:
-            raise ctypes.WinError(GetLastError())
+        self.handle = glass_host(title)
         self.closed = self.visible = False
         self.bounds: Rect | None = None
         self.scale = 0.0
