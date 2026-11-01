@@ -8,6 +8,7 @@ text. Glass cards are functional UI such as the agent feed.
 import math
 from collections.abc import Sequence
 from dataclasses import dataclass
+from enum import Enum, auto
 from typing import Final, assert_never
 
 lazy from PySide6.QtCore import QPointF, QRect, QRectF, Qt
@@ -127,6 +128,32 @@ class Spinning:
 type Mark = App | Spinning
 
 
+class BadgeSize(Enum):
+    """The kit's card and canvas tile geometry and glyph sizes."""
+
+    CARD = auto()  # 30 px tile, 9 px corners, 16 px symbol, 13 px bold letter
+    CANVAS = auto()  # 22 px tile, 7 px corners, 14 px symbol, 11 px bold letter
+
+
+@dataclass(frozen=True, slots=True)
+class Badge:
+    mark: Mark
+    size: BadgeSize
+
+
+@dataclass(frozen=True, slots=True)
+class Letter:
+    text: str
+
+
+@dataclass(frozen=True, slots=True)
+class Symbol:
+    name: str
+
+
+type Glyph = Letter | Symbol
+
+
 def _app(mark: Mark) -> App:
     match mark:
         case Spinning(app=app):
@@ -137,24 +164,44 @@ def _app(mark: Mark) -> App:
             assert_never(mark)
 
 
-def initial(app: App) -> str:
-    """The letter an app's badge shows; taking the whole enum keeps its value typed."""
-    return app.value[:1].upper()
+def glyph(app: App) -> Glyph:
+    """Brands have distinct letters; Workspace and generic content use symbols."""
+    match app:
+        case App.TEAMS:
+            return Letter("T")
+        case App.OUTLOOK:
+            return Letter("O")
+        case App.KANBAN:
+            return Letter("K")
+        case App.CODEX:
+            return Letter("X")
+        case App.CLAUDE:
+            return Letter("C")
+        case App.EDGE:
+            return Letter("E")
+        case App.WINDOWS:
+            return Symbol("grid")
+        case App.DOCUMENT:
+            return Symbol("doc")
+        case App.WEB_PAGE:
+            return Symbol("globe")
+        case App.WORKSPACE:
+            return Symbol("agent")
+        case _:
+            assert_never(app)
 
 
-def paint_badge(painter: QPainter, bounds: QRectF, mark: Mark) -> None:
-    """The kit's app badge: a rounded tile in the app's own colour with a white glyph."""
-    painter.save()
-    painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-    tint = QColor(brand(_app(mark)))
-    tile = QLinearGradient(bounds.topLeft(), bounds.bottomRight())
-    tile.setColorAt(0, tint.lighter(118))
-    tile.setColorAt(1, tint)
-    painter.setPen(QPen(QColor(255, 255, 255, 77), 0.5))
-    painter.setBrush(tile)
-    painter.drawRoundedRect(bounds.adjusted(0.25, 0.25, -0.25, -0.25), BADGE_RADIUS, BADGE_RADIUS)
+def _paint_mark(painter: QPainter, bounds: QRectF, badge: Badge) -> None:
+    """The badge owner's glyph or spinner over its already-painted tile."""
+    match badge.size:
+        case BadgeSize.CARD:
+            symbol_size, letter_size = 16, BODY
+        case BadgeSize.CANVAS:
+            symbol_size, letter_size = 14, 11.0
+        case _:
+            assert_never(badge.size)
     center = bounds.center()
-    match mark:
+    match badge.mark:
         case Spinning(angle=angle):
             ring = QRectF(center.x() - 7, center.y() - 7, 14, 14)
             painter.setBrush(Qt.BrushStyle.NoBrush)
@@ -162,14 +209,62 @@ def paint_badge(painter: QPainter, bounds: QRectF, mark: Mark) -> None:
             painter.drawEllipse(ring)
             painter.setPen(QPen(QColor("#ffffff"), 1.8, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
             painter.drawArc(ring, round(angle * 16), 90 * 16)
-        case App.WORKSPACE:
-            icon("agent", "#ffffff").paint(painter, QRect(round(center.x()) - 8, round(center.y()) - 8, 16, 16))
-        case App():
-            painter.setPen(QColor("#ffffff"))
-            painter.setFont(face(BODY, 700))
-            painter.drawText(bounds, Qt.AlignmentFlag.AlignCenter, initial(mark))
+        case App() as app:
+            value = glyph(app)
+            match value:
+                case Letter(text=letter):
+                    painter.setPen(QColor("#ffffff"))
+                    painter.setFont(face(letter_size, 700))
+                    painter.drawText(bounds, Qt.AlignmentFlag.AlignCenter, letter)
+                case Symbol(name=name):
+                    match badge.size:
+                        case BadgeSize.CARD:
+                            symbol_bounds = QRect(round(center.x()) - 8, round(center.y()) - 8, symbol_size, symbol_size)
+                        case BadgeSize.CANVAS:
+                            symbol_bounds = bounds.adjusted(4, 4, -4, -4).toRect()
+                        case _:
+                            assert_never(badge.size)
+                    icon(name, "#ffffff", symbol_size).paint(painter, symbol_bounds)
+                case _:
+                    assert_never(value)
         case _:
-            assert_never(mark)
+            assert_never(badge.mark)
+
+
+def paint_badge(painter: QPainter, at: QPointF, badge: Badge) -> None:
+    """The kit's app badge: a rounded tile in the app's own colour with a white glyph."""
+    match badge.size:
+        case BadgeSize.CARD:
+            side = BADGE
+        case BadgeSize.CANVAS:
+            side = 22
+        case _:
+            assert_never(badge.size)
+    bounds = QRectF(at.x(), at.y(), side, side)
+    painter.save()
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+    tint = QColor(brand(_app(badge.mark)))
+    tile = QLinearGradient(bounds.topLeft(), bounds.bottomRight())
+    tile.setColorAt(0, tint.lighter(118))
+    tile.setColorAt(1, tint)
+    # Each size retains its existing subpixel fill and border geometry.
+    match badge.size:
+        case BadgeSize.CARD:
+            painter.setPen(QPen(QColor(255, 255, 255, 77), 0.5))
+            painter.setBrush(tile)
+            painter.drawRoundedRect(bounds.adjusted(0.25, 0.25, -0.25, -0.25), BADGE_RADIUS, BADGE_RADIUS)
+        case BadgeSize.CANVAS:
+            fill = QPainterPath()
+            fill.addRoundedRect(bounds, 7, 7)
+            painter.fillPath(fill, tile)
+            edge = QPainterPath()
+            edge.addRoundedRect(bounds.adjusted(0.25, 0.25, -0.25, -0.25), 6.75, 6.75)
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            painter.setPen(QPen(QColor(255, 255, 255, 76), 0.5))
+            painter.drawPath(edge)
+        case _:
+            assert_never(badge.size)
+    _paint_mark(painter, bounds, badge)
     painter.restore()
 
 

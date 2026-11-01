@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING
 
 lazy import shiboken6
 lazy from PySide6 import QtCore, QtWidgets
-lazy from PySide6.QtCore import QPoint, QRect, QRectF, Qt
+lazy from PySide6.QtCore import QPoint, QPointF, QRect, QRectF, Qt
 lazy from PySide6.QtGui import (
     QContextMenuEvent,
     QEnterEvent,
@@ -62,6 +62,8 @@ from assistant.ui_components.bubble import (
     RIGHT,
     TEXT_LEFT,
     TOP,
+    Badge,
+    BadgeSize,
     FeedTitle,
     Look,
     Spinning,
@@ -330,7 +332,8 @@ class SourceBadge(QWidget):
         content = self.card.content
         working = content is not None and spinning(content)
         painter = QPainter(self)
-        paint_badge(painter, QRectF(self.rect()), Spinning(App.WORKSPACE, self.card.spin_angle) if working else App.WORKSPACE)
+        mark = Spinning(App.WORKSPACE, self.card.spin_angle) if working else App.WORKSPACE
+        paint_badge(painter, QPointF(), Badge(mark, BadgeSize.CARD))
 
 
 class Bubble(QWidget):

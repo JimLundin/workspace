@@ -14,12 +14,11 @@ from typing import Final, assert_never
 lazy from PySide6 import QtCore, QtGui
 lazy from PySide6.QtCore import Qt
 
-from assistant.feed_origin import App, Origin
+from assistant.feed_origin import Origin
 from assistant.qt_runtime import prepare
 from assistant.ui_components import text
-from assistant.ui_components.appearance import ATTENTION, GLASS_ACCENT, GlassLook, Rim, Scheme, Shade, Tokens, brand
-from assistant.ui_components.bubble import rim_gradient
-from assistant.vector_icons import icon
+from assistant.ui_components.appearance import ATTENTION, GLASS_ACCENT, GlassLook, Rim, Scheme, Shade, Tokens
+from assistant.ui_components.bubble import Badge, BadgeSize, paint_badge, rim_gradient
 
 prepare()
 
@@ -43,7 +42,6 @@ class Role(Enum):
     META = auto()  # the meta line under a title: 11.5 px
     BODY = auto()  # previews and details: 13 px
     CONTROL = auto()  # control captions and counts: 12 px medium
-    BADGE = auto()  # a letter on an app badge: 11 px bold
 
 
 @lru_cache(maxsize=8)
@@ -59,8 +57,6 @@ def face(role: Role) -> QtGui.QFont:
             size, weight, tracking = 13.0, 400, -0.04
         case Role.CONTROL:
             size, weight, tracking = 12.0, 500, 0.0
-        case Role.BADGE:
-            size, weight, tracking = 11.0, 700, 0.0
         case _:
             assert_never(role)
     value = text.face(size, weight)
@@ -163,46 +159,6 @@ def paint_selection(painter: QtGui.QPainter, bounds: QtCore.QRectF, surface: Sur
     painter.restore()
 
 
-@dataclass(frozen=True, slots=True)
-class Letter:
-    text: str
-
-
-@dataclass(frozen=True, slots=True)
-class Symbol:
-    name: str
-
-
-type Glyph = Letter | Symbol
-
-
-def glyph(app: App) -> Glyph:
-    """Brands read as their initial; Workspace and generic content as a symbol."""
-    match app:
-        case App.TEAMS:
-            return Letter("T")
-        case App.OUTLOOK:
-            return Letter("O")
-        case App.KANBAN:
-            return Letter("K")
-        case App.CODEX:
-            return Letter("X")
-        case App.CLAUDE:
-            return Letter("C")
-        case App.EDGE:
-            return Letter("E")
-        case App.WINDOWS:
-            return Symbol("grid")
-        case App.DOCUMENT:
-            return Symbol("doc")
-        case App.WEB_PAGE:
-            return Symbol("globe")
-        case App.WORKSPACE:
-            return Symbol("agent")
-        case _:
-            assert_never(app)
-
-
 def badge_width(origins: tuple[Origin, ...]) -> int:
     return BADGE + BADGE_STEP * (max(1, min(3, len(origins))) - 1)
 
@@ -215,20 +171,7 @@ def paint_badges(painter: QtGui.QPainter, origins: tuple[Origin, ...], at: QtCor
         bounds = QtCore.QRectF(at.x() + index * BADGE_STEP, at.y(), BADGE, BADGE)
         if index:
             painter.fillPath(rounded(bounds.adjusted(-2, -2, 2, 2), 9), ring)
-        base = QtGui.QColor(brand(origin.app))
-        gradient = QtGui.QLinearGradient(bounds.topLeft(), bounds.bottomRight())
-        gradient.setColorAt(0, base.lighter(122))
-        gradient.setColorAt(1, base)
-        painter.fillPath(rounded(bounds, 7), gradient)
-        painter.setPen(QtGui.QPen(QtGui.QColor(255, 255, 255, 76), 0.5))
-        painter.drawPath(rounded(bounds.adjusted(0.25, 0.25, -0.25, -0.25), 6.75))
-        match glyph(origin.app):
-            case Letter(text=text):
-                painter.setPen(QtGui.QColor("#ffffff"))
-                painter.setFont(face(Role.BADGE))
-                painter.drawText(bounds, Qt.AlignmentFlag.AlignCenter, text)
-            case Symbol(name=name):
-                icon(name, "#ffffff", 14).paint(painter, bounds.adjusted(4, 4, -4, -4).toRect())
+        paint_badge(painter, bounds.topLeft(), Badge(origin.app, BadgeSize.CANVAS))
     painter.restore()
 
 
