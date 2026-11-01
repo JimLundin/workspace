@@ -24,6 +24,8 @@ WM_REQUEST: Final = _WM_APP + 1
 """Layout -> assistant: a key went down (lparam 1) or up (lparam 0); wparam is `encode(request)`."""
 WM_LAYOUT_STATE: Final = _WM_APP + 2
 """Layout -> assistant: wparam is a `LayoutState` value."""
+WM_QUIT_LAYOUT: Final = _WM_APP + 3
+"""Keeper -> layout: release held keys, then exit cleanly."""
 WM_INDICATOR: Final = _WM_APP + 4
 """Layout -> assistant: what the layer indicator shows; wparam is `encode_indicator(...)`."""
 WM_TOGGLE_LAYOUT: Final = _WM_APP + 5

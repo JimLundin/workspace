@@ -18,6 +18,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Final, Literal, Protocol
 
+from protocol import WM_QUIT_LAYOUT
+
 type Component = Literal["layout", "assistant", "automation"]
 
 WM_CLOSE: Final = 0x0010
@@ -50,7 +52,7 @@ class Entry:
 # Assistant cleanup includes a 20-second personal-work join, and automation must
 # park ongoing work and close its browser: a bounded minute each. The keyboard
 # has nothing to drain, so a stuck one is replaced quickly.
-LAYOUT: Final = Entry(name="layout", module="miryoku", window=Window("workspace layout", None), quit_message=0x8003, shutdown_s=5.0)
+LAYOUT: Final = Entry(name="layout", module="miryoku", window=Window("workspace layout", None), quit_message=WM_QUIT_LAYOUT, shutdown_s=5.0)
 ASSISTANT: Final = Entry(
     name="assistant",
     module="assistant",
