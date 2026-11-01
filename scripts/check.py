@@ -27,6 +27,7 @@ from scripts.architecture import Report, dependencies, module_name, review
 from scripts.check_results import Failure, Results, Selection, raised, reported
 from scripts.deploy_files import CheckedArchitecture, CheckReceipt, file_at, json_record, read, sha, source_map, write, write_receipt
 from scripts.development_paths import LIVE, PROFILE
+from scripts.git_environment import isolated
 from scripts.source_analysis import Cache
 lazy import selfcheck
 lazy from runtime import activate
@@ -103,7 +104,9 @@ class Test(Protocol):
 
 
 def source_files(root: Path = ROOT) -> dict[str, str]:
-    result = subprocess.run(["git", "ls-files", "--cached", "--others", "--exclude-standard", "-z"], cwd=root, capture_output=True, check=True)
+    result = subprocess.run(
+        ["git", "ls-files", "--cached", "--others", "--exclude-standard", "-z"], cwd=root, capture_output=True, check=True, env=isolated(os.environ)
+    )
     paths = sorted(set(os.fsdecode(result.stdout).split("\0")) - {""})
     return {name: sha(path) for name in paths if (path := file_at(root, name)).is_file()}
 

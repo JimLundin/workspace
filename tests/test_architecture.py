@@ -7,6 +7,7 @@ from pathlib import Path
 
 from scripts.architecture import dependencies, python_sources, review
 from tests.check_fixture import copy_check_scripts
+from tests.git_fixture import initialized
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -196,7 +197,7 @@ def test_explicit_test_scope_cannot_bypass_architecture_or_write_a_receipt(tmp_p
         },
     )
     copy_check_scripts(tmp_path, ("check.py",))
-    subprocess.run(["git", "init", "--quiet", str(tmp_path)], check=True, capture_output=True)
+    initialized(tmp_path)
     receipt = tmp_path / "checked.json"
     result = subprocess.run(
         [sys.executable, "-m", "scripts.check", "--tests", "tests/test_requested.py", "--receipt", str(receipt)],

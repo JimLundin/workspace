@@ -24,6 +24,7 @@ from assistant.island_model import Key
 from assistant.qt_runtime import prepare
 from scripts.preview import Files, Preview
 from tests.check_fixture import copy_check_scripts
+from tests.git_fixture import initialized
 from tests.test_quality import migrations
 
 prepare()
@@ -70,7 +71,7 @@ def write_watch_source(root: Path, output: Path) -> None:
         '    output.write_text(json.dumps({"value": value}))\n'
         '    assert value != 2, "an intentional failed edit"\n'
     )
-    subprocess.run(("git", "init", "--quiet", str(root)), check=True, capture_output=True)
+    initialized(root)
 
 
 def test_watch_rechecks_fresh_source_and_retains_baseline_after_failed_edits(tmp_path: Path) -> None:

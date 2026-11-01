@@ -1,7 +1,10 @@
 """Publish through real local Git repositories; never contact GitHub in tests."""
 
+import os
 import shutil
 import sqlite3
+import subprocess
+import sys
 import threading
 from collections.abc import Callable
 from contextlib import closing
@@ -13,8 +16,11 @@ from automation.actions import Change, Operation, Resources
 from automation.execution import ApprovalReview, WorkExecution
 from automation.task import ActionVerified, ApprovalDecision, NoVerification, Waiting
 from keeper import copy_source
+from tests.git_fixture import initialized
 from tests.test_work_actions import claimed
 from tests.test_workspace import live_tree
+
+ROOT = Path(__file__).resolve().parent.parent
 
 
 def repository(tmp_path: Path) -> tuple[Path, Path, Path]:
@@ -148,6 +154,35 @@ def test_durable_publication_approval_is_bound_to_the_frozen_candidate_and_desti
     assert len(reviews) == 2 and reviews[0].request.fingerprint != reviews[1].request.fingerprint
     assert "changed after review" in reviews[1].detail and str(remote) in reviews[1].detail
     assert not git(remote, "for-each-ref", "refs/heads/workspace/")
+
+
+def test_git_commits_land_in_the_named_folder_whatever_repository_the_parent_locates(tmp_path: Path) -> None:
+    # Defect: an inherited GIT_DIR, GIT_WORK_TREE or GIT_INDEX_FILE overrides
+    # `git -C folder`, so a temporary repository's init and commit rewrite the
+    # repository the parent environment points at, including its configuration.
+    decoy, folder = tmp_path / "decoy", tmp_path / "folder"
+    initialized(decoy)
+    folder.mkdir()
+    (folder / "value.txt").write_text("temporary\n", encoding="utf-8")
+    script = (
+        "import sys; from pathlib import Path; from assistant.publishing import git; folder = Path(sys.argv[1]); "
+        "git(folder, 'init'); git(folder, 'add', '.'); "
+        "git(folder, '-c', 'user.name=Workspace Test', '-c', 'user.email=workspace@example.invalid', 'commit', '-m', 'temporary')"
+    )
+    located = {"GIT_DIR": str(decoy / ".git"), "GIT_WORK_TREE": str(decoy), "GIT_INDEX_FILE": str(decoy / ".git" / "index")}
+    result = subprocess.run(
+        (sys.executable, "-c", script, str(folder)),
+        cwd=ROOT,
+        env={**os.environ, **located},
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=60,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert git(folder, "log", "--format=%s") == "temporary"
+    assert git(decoy, "for-each-ref") == "" and not (decoy / ".git" / "index").exists()
+    assert "worktree" not in (decoy / ".git" / "config").read_text(encoding="utf-8")
 
 
 if shutil.which("git") is None:

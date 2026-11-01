@@ -13,6 +13,7 @@ from pathlib import Path
 from scripts.check_standards import TYPES, Standard, background
 from scripts.quality import Entry, Finding, Key, compare, imports, load, scan
 from tests.check_fixture import copy_check_scripts
+from tests.git_fixture import initialized
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -162,7 +163,7 @@ def test_explicit_test_scope_cannot_bypass_quality_or_write_a_receipt(tmp_path: 
     copy_check_scripts(tmp_path, ("check.py",))
     (tmp_path / "tests").mkdir()
     (tmp_path / "tests" / "test_requested.py").write_text('def test_requested():\n    raise AssertionError("must not execute")\n')
-    subprocess.run(("git", "init", "--quiet", str(tmp_path)), check=True, capture_output=True)
+    initialized(tmp_path)
     receipt = tmp_path / "checked.json"
     result = subprocess.run(
         (sys.executable, "-m", "scripts.check", "--tests", "tests/test_requested.py", "--receipt", str(receipt)),
@@ -185,7 +186,7 @@ def test_standards_fail_on_a_lint_error_outside_the_selected_tests_before_tests_
     copy_check_scripts(tmp_path, ("check.py",))
     (tmp_path / "tests").mkdir()
     (tmp_path / "tests" / "test_requested.py").write_text('def test_requested():\n    raise AssertionError("must not execute")\n')
-    subprocess.run(("git", "init", "--quiet", str(tmp_path)), check=True, capture_output=True)
+    initialized(tmp_path)
     receipt = tmp_path / "checked.json"
     result = subprocess.run(
         (sys.executable, "-m", "scripts.check", "--standards", "--tests", "tests/test_requested.py", "--receipt", str(receipt)),

@@ -10,6 +10,7 @@ from datetime import datetime
 from pathlib import Path
 
 from keeper import copy_source, source_diff, source_digest, source_files
+from scripts.git_environment import isolated
 
 DEFAULT_REMOTE = "https://github.com/JimLundin/workspace.git"
 
@@ -19,7 +20,8 @@ class PublishError(Exception):
 
 
 def git(folder: Path, *arguments: str) -> str:
-    env = {**os.environ, "GIT_TERMINAL_PROMPT": "0", "GCM_INTERACTIVE": "Never"}
+    # The repository comes only from `folder`, never from an inherited location.
+    env = isolated({**os.environ, "GIT_TERMINAL_PROMPT": "0", "GCM_INTERACTIVE": "Never"})
     try:
         result = subprocess.run(["git", "-C", str(folder), *arguments], capture_output=True, text=True, timeout=120, env=env, check=False)
     except FileNotFoundError as error:

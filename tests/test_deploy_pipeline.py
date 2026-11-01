@@ -36,6 +36,7 @@ from scripts.deploy_processes import Observation, Process, installed_processes, 
 from scripts.deploy_values import Prepared, Stopped
 from scripts.deploy_windows import Release, drive, group, launch_interpreter
 from scripts.development_paths import PYTHON
+from tests.git_fixture import initialized
 
 
 def test_rollback_relaunches_the_observed_interpreter_while_checked_source_uses_installed_python() -> None:
@@ -144,7 +145,7 @@ def test_staging_includes_nested_native_helpers_and_the_checked_source(tmp_path:
         raise unittest.SkipTest("Source deployment tooling requires Git")
     source = tmp_path / "checkout"
     source.mkdir()
-    subprocess.run(["git", "init", "--quiet", str(source)], check=True)
+    initialized(source)
     root = Path(__file__).resolve().parent.parent
 
     def ignored_cache(_folder: str, names: list[str]) -> tuple[str, ...]:
