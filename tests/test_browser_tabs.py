@@ -7,8 +7,9 @@ from unittest import TestCase
 from pydantic import TypeAdapter
 
 from assistant.browser import MAX_OUTPUT
+from assistant.browser_requests import Open, OpenHidden
 from assistant.browser_tabs import Call, Control, TabStrip
-from assistant.browser_tools import GroupArguments, group_request
+from assistant.browser_tools import GroupArguments, OpenArguments, group_request, open_request
 from assistant.browser_values import (
     STRIP_PAGE,
     BrowserError,
@@ -36,6 +37,16 @@ from automation.actions import target
 from automation.json_value import Json
 from tests.test_agent import ToolRig, durable
 from tests.test_browser import WIRE, Channel, command, connected_browser, decoded, group_of, tab_of
+
+
+def test_invisible_pages_require_explicit_selection_and_preserve_exact_target_visibility() -> None:
+    # Defect: changing the default to hidden breaks workflows requiring a
+    # rendering surface, or navigation silently changes an existing tab's mode.
+    url = "https://example.com"
+    assert open_request(OpenArguments(url)) == Open(url)
+    assert open_request(OpenArguments(url, visibility="tab")) == Open(url)
+    assert open_request(OpenArguments(url, visibility="hidden")) == OpenHidden(url)
+    assert open_request(OpenArguments(url, target_id="existing")) == Open(url, target_id="existing")
 
 
 def test_default_open_reuses_the_users_expanded_workspace_group_without_changing_it() -> None:
@@ -89,6 +100,9 @@ def test_invalid_tab_edits_do_not_create_a_controller_or_change_any_tabs(tmp_pat
         ("close", {"target_id": "page", "tab_ids": [1]}),
         ("open", {"url": "about:blank", "group_id": "1"}),
         ("open", {"url": "about:blank", "target_id": "page", "group_id": 1}),
+        ("open", {"url": "about:blank", "visibility": "hidden", "group_id": 1}),
+        ("open", {"url": "about:blank", "visibility": "tab", "target_id": "page"}),
+        ("open", {"url": "about:blank", "visibility": "invisible"}),
     )
     try:
         for operation, arguments in cases:

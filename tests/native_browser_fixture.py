@@ -9,7 +9,8 @@ from contextlib import contextmanager
 from pathlib import Path
 
 from assistant.browser import Browser
-from assistant.browser_session import NativeSessions, Product, edge_path
+from assistant.browser_host import ConnectRequest, Host, HostedConnection, Server
+from assistant.browser_session import Attached, BrowserSession, NativeSessions, Product, Source, edge_path
 from automation.json_value import Json
 from tests.test_browser import command, decoded
 
@@ -77,3 +78,35 @@ def borrowed(personal: Browser) -> Generator[Browser]:
         yield browser
     finally:
         browser.close()
+
+
+class HostedSessions:
+    """Use the real host exchange over the fixture's existing native browser."""
+
+    __slots__ = ("server",)
+
+    def __init__(self, server: Server) -> None:
+        self.server = server
+
+    def open(self, source: Source, cancel: threading.Event, *, visible: bool = False) -> BrowserSession:
+        assert source is Product.EDGE
+        connection = HostedConnection(self.server.location)
+        self.server.location.exchange(ConnectRequest(self.server.location.token, connection.identity), cancel, timeout=5)
+        return BrowserSession(connection, Attached(Product.EDGE))
+
+
+@contextmanager
+def hosted(personal: Browser) -> Generator[Browser]:
+    """Own a disposable host while borrowing one already running browser."""
+    unused = personal.profile.parent / "unused-hosted-profile"
+    opener = NativeSessions(unused, profiles=lambda _: personal.profile)
+    server = Server(personal.profile.parent / "browser-host", Host(Product.EDGE, opener))
+    server.start()
+    browser = Browser(unused, source=Product.EDGE, opener=HostedSessions(server))
+    try:
+        yield browser
+    finally:
+        try:
+            browser.close()
+        finally:
+            server.close()

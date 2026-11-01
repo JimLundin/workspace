@@ -235,6 +235,18 @@ Their implementation keeps WebContents hidden and enables rendering for explicit
 captures. [Sources: hidden contents implementation][hidden-manager],
 [approval dialog][connection-dialog].
 
+Windows Edge 155.0.4283.62 was subsequently tested through Workspace's real
+shared host and directly with disposable headed and headless profiles. Hidden
+pages reused local storage, navigated, and accepted DOM actions with an explicit
+1280 × 900 viewport. `Page.captureScreenshot` timed out with and without focus
+emulation, explicit clipping, screen metrics, `Emulation.setVisibleSize`, and
+`fromSurface=false`. Even activation of a disposable hidden page did not provide
+a capture surface. The upstream hidden-target tests verify visibility and
+lifecycle, but do not establish screenshot support on this platform. Workspace
+therefore supports explicit `visibility=hidden` for DOM work, rejects hidden
+screenshots before sending CDP, and retains ordinary background tabs as default.
+Live Teams chat discovery worked invisibly; Devices settings remained loading.
+
 ## Alternatives
 
 | Option | Session reuse | Fit for Workspace |

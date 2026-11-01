@@ -1,6 +1,6 @@
 """Validated browser observations and pure choices for the agent's tab group."""
 
-from collections.abc import Mapping
+from collections.abc import Collection, Mapping
 from dataclasses import dataclass, field
 from enum import Enum, auto
 from typing import Annotated, Literal, assert_never
@@ -82,6 +82,7 @@ class PageRow:
     url: str
     tab_id: int | None = None
     created_in_session: bool | None = field(default=None, kw_only=True)
+    hidden: bool | None = field(default=None, kw_only=True)
 
 
 @dataclass(frozen=True, slots=True)
@@ -210,7 +211,7 @@ class Snapshot:
     """A bounded page observation with its frame list and continuation offsets."""
 
     target_id: str
-    tab_id: int | None
+    tab_id: int | None = field(default=None, kw_only=True)
     title: str
     url: str
     text: str
@@ -262,13 +263,17 @@ class TargetList:
 _TARGETS = TypeAdapter(TargetList)
 
 
-def pages_of(reply: object) -> tuple[Page, ...]:
-    """The browser's pages from a Target.getTargets reply; other target types are ignored."""
+def pages_of(reply: object, *, hidden: Collection[str] = ()) -> tuple[Page, ...]:
+    """Ordinary pages and owned hidden targets; other clients' non-page targets stay private."""
     try:
         targets = _TARGETS.validate_python(reply).targets
     except ValidationError as error:
         raise BrowserError("The browser did not provide a valid page list.") from error
-    return tuple(Page(item.target_id, item.title[:300], item.url[:1000]) for item in targets if item.type == "page")
+    return tuple(
+        Page(item.target_id, item.title[:300], item.url[:1000])
+        for item in targets
+        if item.type == "page" or (item.type == "other" and item.target_id in hidden)
+    )
 
 
 @dataclass(frozen=True, slots=True)

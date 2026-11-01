@@ -16,15 +16,16 @@ if sys.platform != "win32":
 
 import msvcrt
 
+from pydantic import TypeAdapter
 lazy from PySide6.QtGui import QImage
 
 from assistant.browser import MAX_OUTPUT, Browser
 from assistant.browser_session import read_endpoint
-from assistant.browser_values import BrowserError, Group, InterruptedError, Tab
+from assistant.browser_values import BrowserError, Group, InterruptedError, Snapshot, Tab, TargetList
 from assistant.qt_runtime import prepare
 from automation.json_value import Json
 from tests.browser_fixture import fixture
-from tests.native_browser_fixture import borrowed, disposable, dispose, request
+from tests.native_browser_fixture import borrowed, disposable, dispose, hosted, request
 from tests.native_browser_tabs import verify_native_tabs
 from tests.native_business_apps import verify_business_apps
 from tests.native_communications_browser import NativeTrace, verify_communications
@@ -308,10 +309,50 @@ def verify_attached_cancellation(personal: Browser, attached: Browser) -> None:
         cancel.set()
 
 
+def verify_hidden_dom(personal: Browser, attached: Browser, url: str) -> None:
+    # Defects: hidden agent opens add visible tabs, hidden targets are rejected
+    # as non-pages, sign-in context is lost, or release leaves hidden work alive.
+    cancel = threading.Event()
+    request(attached, "attach")
+    connection = attached.connection
+    assert connection is not None
+    before = attached.strip.snapshot(connection.call, cancel)
+    page = request(attached, "open", url=url, visibility="hidden")
+    target = page["target_id"]
+    assert isinstance(target, str)
+    assert "tab_id" not in page
+    observation = TypeAdapter(Snapshot).validate_python(page)
+    assert observation.target_id == target and observation.tab_id is None
+    rows = request(attached, "tabs")["tabs"]
+    assert isinstance(rows, list)
+    assert any(isinstance(row, dict) and row["id"] == target and row["hidden"] is True for row in rows)
+    value = TypeAdapter(str).validate_json(
+        attached.request(command("evaluate", target_id=target, expression="localStorage.getItem('fixture-session')"), cancel).text
+    )
+    assert value == "already-signed-in"
+    act(attached, target, page, "Name", "fill", value="Hidden fixture")
+    act(attached, target, page, "Save", "click")
+    assert "Hidden fixture" in str(request(attached, "snapshot", target_id=target)["text"])
+    # Defect: an unavailable hidden rendering surface starts a CDP copy that
+    # stalls the shared browser host, rather than failing before capture.
+    with TestCase().assertRaisesRegex(BrowserError, "no capturable viewport"):
+        attached.request(command("screenshot", target_id=target), cancel)
+    assert attached.strip.snapshot(connection.call, cancel) == before
+    assert request(attached, "close", target_id=target)["state"] == "closed"
+    leftover = request(attached, "open", url=url, visibility="hidden")["target_id"]
+    attached.close()
+    native = personal.connection
+    assert native is not None
+    inventory = TypeAdapter(TargetList).validate_python(native.call("Target.getTargets", {}, cancel))
+    assert leftover not in {item.target_id for item in inventory.targets}
+    assert personal.process is not None and personal.process.poll() is None
+
+
 def test_attached_browser_dom_tabs_and_cancellation_share_a_personal_browser(tmp_path: Path) -> None:
     with disposable(Browser(tmp_path / "fixture-personal")) as personal, fixture() as url:
-        with borrowed(personal) as attached:
+        with hosted(personal) as attached:
             verify_attached_dom(personal, attached, url)
+            verify_hidden_dom(personal, attached, url)
         process = personal.process
         assert process is not None and process.poll() is None
         with borrowed(personal) as attached:

@@ -17,6 +17,7 @@ from assistant.browser_requests import (
     BrowserRequest,
     Evaluate,
     Open,
+    OpenHidden,
     PageAction,
     PageSnapshot,
     Screenshot,
@@ -73,6 +74,7 @@ class OpenArguments:
     browser: Literal["edge", "chrome", "separate"] | None = None
     group_id: GroupSelector | None = None
     window_id: Identifier | None = None
+    visibility: Literal["hidden", "tab"] | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -122,9 +124,19 @@ def _unique(identities: tuple[int, ...]) -> tuple[int, ...]:
     return tuple(dict.fromkeys(identities, True))
 
 
-def open_request(arguments: OpenArguments) -> Open:
+def open_request(arguments: OpenArguments) -> Open | OpenHidden:
     source = None if arguments.browser is None else source_of(arguments.browser)
-    return Open(web_url(arguments.url), arguments.target_id, source, destination(arguments.group_id), arguments.window_id)
+    url = web_url(arguments.url)
+    if arguments.target_id:
+        if arguments.visibility is not None:
+            raise BrowserError("visibility applies to new pages; an exact target_id retains its existing visibility.")
+        return Open(url, arguments.target_id, source, destination(arguments.group_id), arguments.window_id)
+    placed = arguments.group_id is not None or arguments.window_id is not None
+    if arguments.visibility == "hidden":
+        if placed:
+            raise BrowserError("Hidden pages have no tab group or browser window.")
+        return OpenHidden(url, source)
+    return Open(url, source=source, placement=destination(arguments.group_id), window_id=arguments.window_id)
 
 
 def tabs_request(arguments: TabsArguments) -> PageList | StripQuery:
@@ -235,9 +247,12 @@ TOOLS: Final = (
     ),
     browser_tool(
         "browser_open",
-        "Open a background tab or navigate an explicit target_id, returning text and controls. "
+        "Open a background page or navigate an explicit target_id, returning text and controls. "
         "By default uses the user's opted-in signed-in Edge; browser=chrome selects Chrome, browser=separate selects Workspace's isolated "
-        "headless profile. New Edge tabs join the Workspace group, created collapsed; an existing group's expanded state is preserved. "
+        "headless profile with its own sign-ins. visibility=hidden creates an invisible page using the personal browser's sign-in, "
+        "owned by this connection and closed on disconnect. Hidden pages support DOM tools but no screenshots; "
+        "some app workflows that require rendering can remain loading. Default visibility=tab supports those workflows. "
+        "New Edge tabs join the Workspace group, created collapsed; an existing group's expanded state is preserved. "
         "For new tabs, group_id chooses another group or -1 for ungrouped; window_id chooses a normal browser window. "
         "Omit browser to keep the connection. Existing tab state requires its explicit target_id. Does not select the tab.",
         Parser(TypeAdapter(OpenArguments), open_request),
@@ -245,7 +260,8 @@ TOOLS: Final = (
     browser_tool(
         "browser_tabs",
         "Check connection/setup status without connecting or requesting consent. List connected page ids, titles and URLs. "
-        "Default view=pages supplies target IDs for DOM tools; created_in_session marks pages opened by this connection. "
+        "Default view=pages supplies target IDs for DOM tools; hidden marks this connection's invisible pages and "
+        "created_in_session marks pages opened by this connection. Hidden pages have no native tab_id. "
         "In Edge, view=strip supplies native tab_id, window_id, group_id, active/pinned/muted state and the listed tabs' groups. "
         "Use native IDs for tab/group management; never guess them from duplicate URLs. Strip view can filter window_id or group_id "
         "(-1 means ungrouped). Follow next_offset for more; limit is 1-40.",
@@ -293,7 +309,8 @@ TOOLS: Final = (
     ),
     browser_tool(
         "browser_screenshot",
-        "Capture the browser viewport, including when headless. Its coordinates are not desktop mouse coordinates.",
+        "Capture an ordinary tab or Workspace's separate headless viewport. Invisible visibility=hidden pages have no capturable surface; "
+        "open their URL with visibility=tab first. Its coordinates are not desktop mouse coordinates.",
         direct(Screenshot),
     ),
     browser_tool(
@@ -306,7 +323,8 @@ TOOLS: Final = (
         "browser_close",
         "Close a page by target_id, native Edge tab_ids, or all tabs in an Edge group_id. Choose one selector. "
         "A page result reports state=closed once it disappears, or requested if it is still open; inspect it without repeating the close. "
-        "Any explicitly selected tab can be closed. With no selector, detach from a personal browser, preserving all its tabs and groups, "
+        "Any explicitly selected page can be closed. With no selector, close this client's hidden pages and detach from a personal browser, "
+        "preserving all ordinary tabs and groups, "
         "or close Workspace's separate browser, retaining its sign-ins. Closing a tab does not require page scripting access.",
         Parser(TypeAdapter(CloseArguments), close_request),
     ),
@@ -335,7 +353,7 @@ def _resources(request: BrowserRequest | None) -> tuple[str, ...]:
             return (*locks, target("browser-group", group))
         case CreateGroup() | UngroupTabs() | CloseTabs() | CloseGroup() | Disconnect.BROWSER:
             return (*locks, target("browser-strip", "tabs"))
-        case Attach() | Open() | SignIn() | PageList() | StripQuery() | Activate() | None:
+        case Attach() | Open() | OpenHidden() | SignIn() | PageList() | StripQuery() | Activate() | None:
             return (*locks, target("browser-session", "connection"))
 
 
@@ -358,7 +376,7 @@ def _tabs_readback(arguments: Mapping[str, Json], result: str) -> Readback:
 def _review_subject(request: BrowserRequest) -> str:
     """The address or exact page an approval review names."""
     match request:
-        case Open(url=url) | SignIn(url=url) if url:
+        case Open(url=url) | OpenHidden(url=url) | SignIn(url=url) if url:
             return url
         case Open(target_id=page) | PageSnapshot(target_id=page) | PageAction(target_id=page) | Evaluate(target_id=page) if page:
             return page

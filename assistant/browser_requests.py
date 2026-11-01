@@ -59,6 +59,14 @@ class Open:
 
 
 @dataclass(frozen=True, slots=True)
+class OpenHidden:
+    """Create an agent-owned page outside the personal browser's tab strip."""
+
+    url: str
+    source: Source | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class SignIn:
     """Open Workspace's separate profile visibly so the user can sign in."""
 
@@ -108,4 +116,4 @@ class Activate:
 
 
 type Status = PageList | StripQuery
-type BrowserRequest = Attach | Open | SignIn | Status | TabEdit | Closure | PageSnapshot | PageAction | Evaluate | Screenshot | Activate
+type BrowserRequest = Attach | Open | OpenHidden | SignIn | Status | TabEdit | Closure | PageSnapshot | PageAction | Evaluate | Screenshot | Activate

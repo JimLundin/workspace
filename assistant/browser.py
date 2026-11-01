@@ -7,7 +7,7 @@ import threading
 import time
 import uuid
 from collections.abc import Generator
-from contextlib import contextmanager
+from contextlib import contextmanager, suppress
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Literal, assert_never
@@ -22,6 +22,7 @@ from assistant.browser_requests import (
     BrowserRequest,
     Evaluate,
     Open,
+    OpenHidden,
     PageAction,
     PageSnapshot,
     Screenshot,
@@ -165,7 +166,7 @@ class BrowserResult:
 class Browser:
     """Own launched processes; borrow a personal browser through its opt-in CDP."""
 
-    __slots__ = ("_live", "_opener", "created", "lock", "native_targets", "profile", "sessions", "source", "strip")
+    __slots__ = ("_live", "_opener", "created", "hidden", "lock", "native_targets", "profile", "sessions", "source", "strip")
 
     def __init__(
         self,
@@ -182,6 +183,7 @@ class Browser:
         self._live: BrowserSession | None = None
         self.sessions: dict[str, str] = {}
         self.created: set[str] = set()
+        self.hidden: frozenset[str] = frozenset()
         self.native_targets: dict[str, int] = {}
         self.strip = strip if strip is not None else TabStrip()
         self.lock = threading.RLock()
@@ -265,17 +267,23 @@ class Browser:
             live, self._live = self._live, None
             try:
                 if live is not None:
+                    control = self.strip.control
+                    owned = self.hidden if control is None else self.hidden.union((control.target,))
+                    for target in owned:
+                        with suppress(OSError):
+                            live.connection.call("Target.closeTarget", {"targetId": target}, threading.Event(), timeout=1)
                     live.close()
             finally:
                 self.sessions.clear()
                 self.created.clear()
+                self.hidden = frozenset()
                 self.native_targets.clear()
                 self.strip.control = None
 
     def _tabs(self, cancel: threading.Event) -> tuple[Page, ...]:
         if self.connection is None:
             return ()
-        return pages_of(self._call("Target.getTargets", {}, cancel))
+        return pages_of(self._call("Target.getTargets", {}, cancel), hidden=self.hidden)
 
     def _session(self, target: str, cancel: threading.Event) -> str:
         if not target or not any(tab.id == target for tab in self._tabs(cancel)):
@@ -368,7 +376,6 @@ class Browser:
         frame_offset = request.frame_offset
         snapshot = Snapshot(
             target,
-            self.native_targets.get(target),
             rendered.title,
             rendered.url,
             rendered.text,
@@ -381,6 +388,7 @@ class Browser:
             frame_offset,
             len(frames),
             frame_offset + 8 if frame_offset + 8 < len(frames) else None,
+            tab_id=self.native_targets.get(target),
             more_controls=rendered.more_controls,
             scan_limited=rendered.scan_limited,
         )
@@ -455,6 +463,30 @@ class Browser:
             return BrowserResult(_dumped(_SIGN_IN, SignInPage(target, url, message)))
         return self._settle(target, navigation, cancel)
 
+    def _open_hidden(self, request: OpenHidden, cancel: threading.Event) -> BrowserResult:
+        url = web_url(request.url)
+        if request.source is not None:
+            self.select(request.source)
+        self.connect(cancel)
+        if not self.attached:
+            # Workspace's separate profile is already an owned headless process.
+            return self._open(Open(url, placement=Ungrouped.TABS), cancel, visible=False)
+        created = self._call("Target.createTarget", {"url": "about:blank", "background": True, "hidden": True}, cancel)
+        target = decoded(CREATED_TARGET, created, "The browser did not create a hidden page.").target_id
+        self.hidden = self.hidden.union((target,))
+        self.created.add(target)
+        # Hidden WebContents have no native window to supply layout bounds.
+        # Give them the same viewport as Workspace's separate headless browser.
+        session = self._session(target, cancel)
+        self._call(
+            "Emulation.setDeviceMetricsOverride",
+            {"width": 1280, "height": 900, "deviceScaleFactor": 1, "mobile": False},
+            cancel,
+            session=session,
+        )
+        with self.awake(target, cancel):
+            return self._open(Open(url, target_id=target), cancel, visible=False)
+
     def _settle(self, target: str, navigation: Navigated, cancel: threading.Event) -> BrowserResult:
         """Snapshot the navigated page once its main document is ready, within one budget."""
         session = self.sessions[target]
@@ -526,7 +558,14 @@ class Browser:
         tabs = self._tabs(cancel)
         attached = self.attached
         rows = tuple(
-            PageRow(tab.id, tab.title, tab.url, self.native_targets.get(tab.id), created_in_session=tab.id in self.created if attached else None)
+            PageRow(
+                tab.id,
+                tab.title,
+                tab.url,
+                self.native_targets.get(tab.id),
+                created_in_session=tab.id in self.created if attached else None,
+                hidden=True if tab.id in self.hidden else None,
+            )
             for tab in tabs[offset : offset + limit]
         )
         mode: Literal["stopped", "attached", "sign_in", "background"] = (
@@ -612,6 +651,7 @@ class Browser:
                 raise InterruptedError("Stopped while waiting for the tab to close. Inspect browser_tabs before retrying.")
         self.sessions.pop(target, None)
         self.created.discard(target)
+        self.hidden = self.hidden.difference((target,))
         self.native_targets.pop(target, None)
         return BrowserResult(_dumped(_CLOSED_PAGE, PageClosure(target, CloseState.CLOSED)))
 
@@ -628,6 +668,13 @@ class Browser:
         return self._status(PageList(), cancel)
 
     def _screenshot(self, request: Screenshot, cancel: threading.Event) -> BrowserResult:
+        if request.target_id in self.hidden:
+            # Windows Edge's hidden WebContents never present a capture surface,
+            # even with explicit viewport/focus emulation. Refuse before CDP
+            # starts a copy that cannot finish; DOM operations remain available.
+            raise BrowserError(
+                "Hidden pages support DOM inspection but have no capturable viewport. Open the URL with visibility=tab for a screenshot."
+            )
         capture = self._capture(self._session(request.target_id, cancel), cancel)
         try:
             image = base64.b64decode(capture.data, validate=True)
@@ -674,6 +721,8 @@ class Browser:
                 raise BrowserError("The page did not return its evaluated value as text.")
 
     def _activate(self, request: Activate, cancel: threading.Event) -> BrowserResult:
+        if request.target_id in self.hidden:
+            raise BrowserError("This is a hidden agent page. Open its URL with visibility=tab for review.")
         if not any(page.id == request.target_id for page in self._tabs(cancel)):
             raise BrowserError("That browser page is closed. Refresh before opening its source.")
         self._call("Target.activateTarget", {"targetId": request.target_id}, cancel)
@@ -685,6 +734,8 @@ class Browser:
         match request:
             case Open():
                 return self._open(request, cancel, visible=False)
+            case OpenHidden():
+                return self._open_hidden(request, cancel)
             case SignIn(url):
                 return self._open(Open(url), cancel, visible=True)
             case Attach():

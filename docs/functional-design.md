@@ -432,8 +432,13 @@ Raw JSON is decoded and validated at the transport boundary. Tool and future UI
 projections can share the concrete state and response types. Group selection
 and pagination are pure functions of observations and arguments. The Edge tab
 controller owns one hidden Favorites page, whose API calls remain separate from
-ordinary page DOM evaluation. Only explicit activation brings a tab forward;
-default opens reuse Workspace's group without changing its expanded state.
+ordinary page DOM evaluation. `OpenHidden` creates an explicitly requested
+invisible page in the personal browser's existing context; `Browser` publishes
+its immutable owned-ID set and closes those exact pages on release. Hidden pages
+receive an explicit layout viewport but have no capture surface in Windows Edge;
+screenshot requests fail before starting a stalled CDP copy. Only explicit
+activation brings an ordinary tab forward; default opens reuse Workspace's group
+without changing its expanded state.
 
 Recording state is a projection for the UI. The journal can still be absent
 while a capture starts. Publication decisions use immutable observations read

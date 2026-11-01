@@ -29,10 +29,25 @@ Use an explicit existing `target_id` for a page whose tab-local state is needed.
 Initial browser consent may bring its window forward; subsequent DOM actions
 and viewport captures do not select a tab or move the desktop pointer.
 
+Set `visibility=hidden` to create an invisible agent page outside the tab strip,
+using the same browser context and existing sign-in. Page lists mark these with
+`hidden=true`; they have no native tab ID, group or window. DOM inspection,
+actions and web-app operations remain available. Closing the page or disconnecting
+its Workspace client destroys it, preserving personal tabs and other clients.
+This is a hidden page in the existing browser, not a separate headless process.
+
+Hidden pages have no capturable viewport in the tested Windows Edge version.
+Screenshots fail immediately with guidance to open an ordinary background tab.
+Some workflows that require rendering can remain loading: live Teams chat
+discovery worked, but its Devices settings stayed on the setup screen. Hidden
+pages therefore require explicit selection; ordinary background tabs remain the
+default. Use `visibility=tab` for screenshots and these app workflows. An existing
+`target_id` keeps its visibility; visibility applies only when creating a page.
+
 | Tool | Use |
 |---|---|
 | `browser_attach` | Connect to the running signed-in `edge` or `chrome`; return current tabs. |
-| `browser_open` | Open a background HTTP(S) page or `about:blank`, normally in Workspace's group, or navigate an explicit `target_id`. Optional `browser`: `edge`, `chrome`, or `separate`. |
+| `browser_open` | Open a background HTTP(S) page or `about:blank`, normally in Workspace's group, or navigate an explicit `target_id`. `visibility=hidden` creates an invisible DOM-only page. Optional `browser`: `edge`, `chrome`, or `separate`. |
 | `browser_tabs` | Report connection/setup status. Default `view=pages` lists CDP page IDs. Edge's `view=strip` lists native tab IDs, windows, group membership, active/pinned/muted state and the listed tabs' groups. Follow `next_offset` for more tabs. |
 | `browser_group` | Create a group from `tab_ids`, add tabs to `group_id`, edit its title/color/collapsed state, or move it using `index` and optional `window_id`. Unspecified existing properties stay unchanged. |
 | `browser_ungroup` | Remove native `tab_ids` from their groups, keeping the tabs open. |
@@ -96,7 +111,7 @@ the pending socket promptly, although the browser controls its own dialog.
 No `/json/version` probe is used, because the consent mode does not expose it.
 
 Attached browsers and all their ordinary tabs survive Stop, disconnect and
-Workspace exit. Only an explicitly selected target is navigated or closed; an
+Workspace exit. Workspace closes its owned hidden pages on release. Only an explicitly selected target is navigated or closed; an
 arbitrary personal blank tab is never reused. There is no artificial limit of
 20 agent tabs. Attached page lists mark the current connection's new pages with
 `created_in_session`. Closing by page ID uses the target lifecycle API directly,
@@ -201,6 +216,9 @@ cover DPAPI and job cleanup. Local Teams, Outlook and Kanban fixtures verify eac
 web-app script's output against its result type; they use no real Microsoft
 credentials or Teams messages.
 
-Authenticated company-site automation remains untested against live tenants. Native desktop apps
+Live Teams chat discovery was checked in an owned hidden page using the existing
+sign-in: 24 rendered chats, no sign-in prompt, no added native tab and unchanged
+tab selection. This does not verify every Teams operation or live Outlook/Kanban
+writes. Native desktop apps
 continue to use their APIs, accessibility or foreground input; they do not gain
 a generic headless mode.
