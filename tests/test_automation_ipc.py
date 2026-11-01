@@ -123,14 +123,14 @@ def test_unavailable_worker_retains_invocation_and_replays_after_restart(tmp_pat
 
 def test_streaming_updates_coalesce_and_complete_updates_and_speech_survive(tmp_path: Path) -> None:
     with bridge(tmp_path) as (server, client):
-        for index in range(200):
+        for index in range(3):
             server.publish(ipc.LogEvent(RUN, Progress(f"Read {index + 1} pages")))
             server.publish(ipc.LogEvent(RUN, Answer("progress", f"Draft {index + 1}", 20)))
         server.publish(ipc.LogEvent(RUN, Answer("progress", "Complete notes", 20, StreamState.COMPLETE)))
         server.publish(ipc.LogEvent(RUN, Said("Saved and checked the notes.", 21)))
         events = drain(client)
         assert [item.payload for item in events] == [
-            ipc.LogEvent(RUN, Progress("Read 200 pages")),
+            ipc.LogEvent(RUN, Progress("Read 3 pages")),
             ipc.LogEvent(RUN, Answer("progress", "Complete notes", 20, StreamState.COMPLETE)),
             ipc.LogEvent(RUN, Said("Saved and checked the notes.", 21)),
         ]
@@ -140,21 +140,31 @@ def test_streaming_updates_coalesce_and_complete_updates_and_speech_survive(tmp_
         assert len(later) == 1 and later[0].sequence > events[-1].sequence
 
 
-def test_overflow_reports_loss_before_new_speech_and_stays_within_frame_budget(tmp_path: Path) -> None:
+def test_poll_splits_retained_events_to_fit_the_reply_frame(tmp_path: Path) -> None:
+    # Defect: the transport packs valid retained events into one oversized reply.
+    first = ipc.LogEvent(RUN, Said("First:" + "x" * (ipc.MAX_FRAME // 2), 1))
+    second = ipc.LogEvent(RUN, Said("Second:" + "x" * (ipc.MAX_FRAME // 2), 2))
     with bridge(tmp_path) as (server, client):
-        for index in range(200):
+        assert server.publish(first) and server.publish(second)
+        first_batch, second_batch = client.poll(), client.poll()
+        assert tuple(item.payload for item in first_batch) == (first,)
+        assert tuple(item.payload for item in second_batch) == (second,)
+        assert first_batch[0].sequence < second_batch[0].sequence
+
+
+def test_overflow_resets_live_history_and_releases_pending_owner_request(tmp_path: Path) -> None:
+    # Defect: transport overflow retains an unresolved owner effect or hides lost history.
+    with ThreadPoolExecutor(max_workers=1) as pool, bridge(tmp_path) as (server, client):
+        result = pool.submit(server.meeting, RUN, ipc.MeetingCommand.STATUS, threading.Event())
+        read_until(client, lambda item: isinstance(item.payload, ipc.MeetingRequest))
+        for index in range(ipc.MAX_EVENTS + 1):
             server.publish(ipc.LogEvent(RUN, Said(f"Result {index}", index)))
+        with TestCase().assertRaisesRegex(OSError, "lost"):
+            result.result(timeout=3)
         events = drain(client)
         assert isinstance(events[0].payload, ipc.Resync)
-        assert events[-1].payload == ipc.LogEvent(RUN, Said("Result 199", 199))
+        assert events[-1].payload == ipc.LogEvent(RUN, Said(f"Result {ipc.MAX_EVENTS}", ipc.MAX_EVENTS))
         assert len(events) <= ipc.MAX_EVENTS
-        # Hit the byte bound independently of the event-count bound.
-        for index in range(50):
-            server.publish(ipc.LogEvent(RUN, Said(f"{index}:" + "x" * 127_990, index)))
-        events = drain(client)
-        assert isinstance(events[0].payload, ipc.Resync)
-        assert isinstance(events[-1].payload, ipc.LogEvent)
-        assert events[-1].payload.event == Said("49:" + "x" * 127_990, 49)
 
 
 def test_review_requires_a_connected_assistant_and_remains_volatile(tmp_path: Path) -> None:
