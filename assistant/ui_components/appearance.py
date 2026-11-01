@@ -349,13 +349,13 @@ def _veil(pane: Pane) -> Shade:
 
 def _attention(pane: Pane) -> GlassLook:
     rim = Rim(0.55, 0.06, 0.10)
+    white = "#ffffff"
+    ink = Lettering(Shade(white, 0.96), Shade(white, 0.8), Shade(white, 0.16), Shade(white, 0.26))
     match pane:
         case CanvasBar():
-            white = "#ffffff"
-            ink = Lettering(Shade(white, 0.96), Shade(white, 0.8), Shade(white, 0.16), Shade(white, 0.26))
             return GlassLook(Shade(ATTENTION, 0.94), rim, ink)
         case Capsule() | Menu() | Card():
-            return GlassLook(Shade(ATTENTION, 0.9), rim, lettering(tokens(Scheme.DARK)))
+            return GlassLook(Shade(ATTENTION, 0.9), rim, ink)
         case _:
             assert_never(pane)
 

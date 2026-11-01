@@ -17,7 +17,8 @@ lazy from PySide6.QtCore import Qt
 from assistant.feed_origin import App, Origin
 from assistant.qt_runtime import prepare
 from assistant.ui_components import text
-from assistant.ui_components.appearance import ATTENTION, GLASS_ACCENT, GlassLook, Scheme, Shade, Tokens, brand, rim_stops
+from assistant.ui_components.appearance import ATTENTION, GLASS_ACCENT, GlassLook, Rim, Scheme, Shade, Tokens, brand
+from assistant.ui_components.bubble import rim_gradient
 from assistant.vector_icons import icon
 
 prepare()
@@ -256,12 +257,11 @@ def paint_glass(painter: QtGui.QPainter, bounds: QtCore.QRectF, surface: CanvasG
     painter.fillPath(rounded(bounds, corner), text.color(surface.look.veil))
     painter.setPen(QtGui.QPen(QtGui.QColor(0, 0, 0, 115 if dark else 26), 0.5))
     painter.drawPath(rounded(bounds.adjusted(-0.25, -0.25, 0.25, 0.25), corner + 0.25))
-    gradient = QtGui.QLinearGradient(bounds.topLeft(), bounds.bottomRight())
-    for stop in rim_stops(surface.look.rim):
-        # The canvas owns this uncached native colour and retains its eight-bit rim alpha.
-        shade = text.color(Shade(stop.color))
-        shade.setAlpha(round(stop.opacity * 255))
-        gradient.setColorAt(stop.offset, shade)
+    # The canvas keeps its existing eight-bit rim alpha at this native boundary;
+    # the shared painter owns the light's angle and stop placement.
+    rim = surface.look.rim
+    native_rim = Rim(round(rim.high * 255) / 255, round(rim.low * 255) / 255, round(rim.end * 255) / 255)
+    gradient = rim_gradient(bounds, native_rim)
     painter.setPen(QtGui.QPen(QtGui.QBrush(gradient), 1))
     painter.drawPath(rounded(bounds.adjusted(0.5, 0.5, -0.5, -0.5), corner - 0.5))
     painter.restore()
