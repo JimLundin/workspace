@@ -135,9 +135,9 @@ class ComponentRelease(Release):
         cache.write_bytes(b"unmanaged cache bytes")
         unrelated = {cache.relative_to(self.live).as_posix(): sha(cache)}
         with zipfile.ZipFile(self.archive, "w") as archive:
-            for name in files(self.live):
-                if name not in unrelated:
-                    archive.write(self.live / name, "workspace/" + name)
+            for listed in files(self.live):
+                if listed not in unrelated:
+                    archive.write(self.live / listed, "workspace/" + listed)
         backup = self.stage / "backup"
         shutil.copytree(self.live, backup / "source", ignore=runtime_folders)
         shutil.copyfile(self.archive, backup / "previous-bundle.zip")

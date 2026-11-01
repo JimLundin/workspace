@@ -165,6 +165,15 @@ def indicator_area() -> Rect:
 WM_SHOW_MENU: Final = 0x8056
 
 
+def configured(settings: Settings | Missing) -> tuple[Settings, Missing | None]:
+    """The settings the app runs with and, when credentials are absent, what is missing."""
+    match settings:
+        case Missing():
+            return Settings("", "", "", "", "", "", ""), settings
+        case Settings():
+            return settings, None
+
+
 class NativeStartup:
     """Native timer, layout replay and readiness for the control-thread lifetime."""
 
@@ -245,11 +254,7 @@ class AssistantApp:
             self.window.handle, mic, self.ui, on_state=self.show, on_notify=self.tray.notify, on_problem=self.problem, tiling=self.tiling
         )
         self.timings.mark("control window and microphone")
-        match settings:
-            case Missing():
-                missing, self.settings = settings, Settings("", "", "", "", "", "", "")
-            case Settings():
-                missing, self.settings = None, settings
+        self.settings, missing = configured(settings)
         self.activity: ActivityTracker
 
         def context() -> ContextSnapshot:

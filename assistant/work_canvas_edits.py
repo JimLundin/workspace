@@ -133,8 +133,8 @@ def user_edited(document: CanvasDocument, catalog: Catalog, edit: UserEdit) -> C
         case AddGroup(group=group):
             return save_collection(document, group)
         case RenameGroup(id=identity, title=title):
-            group = next((group for group in document.collections if group.id == identity), None)
-            return save_collection(document, replace(group, title=title)) if group is not None else document
+            named = next((group for group in document.collections if group.id == identity), None)
+            return save_collection(document, replace(named, title=title)) if named is not None else document
         case PutInside(id=identity, parent_id=parent, members=members):
             nested = release_subtree(nest(document, parent, identity), members | {identity})
             project(catalog, nested, scope)

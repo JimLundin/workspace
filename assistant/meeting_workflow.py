@@ -589,8 +589,8 @@ class MeetingWorkflow:
         previous_progress, self._progress = self._progress, progress
         match self._opened:
             case OpenedFollowup(request, packages):
-                observed, earlier = progress.get(request.task_id), previous_progress.get(request.task_id)
-                work = WorkPending.OBSERVATION if observed is None else observed.work
+                current_progress, earlier = progress.get(request.task_id), previous_progress.get(request.task_id)
+                work = WorkPending.OBSERVATION if current_progress is None else current_progress.work
                 changed_work = earlier is None or work != earlier.work
                 if refresh_packages or changed_work or isinstance(packages, PackagesUnavailable) or not package_values(packages):
                     self._opened = OpenedFollowup(request, self._packages(request, work, packages))

@@ -216,6 +216,7 @@ class CanvasCard(CanvasBubble):
         self.preview.setPos(title_x, body_y)
         self.preview.setVisible(not self.expanded)
         self.compact_height = body_y + preview_height + FOOT
+        height: float
         if self.expanded and self.detail_proxy is not None and self.detail is not None:
             # Details span the card below its head, as the kit's extra content does.
             detail_width = width - 2 * PADDING

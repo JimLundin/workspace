@@ -193,6 +193,8 @@ def covers(proof: Proof, pending: ActionSpec, observed: Observed) -> bool:
 
 
 def _ledger_entry(action: Action) -> _LedgerEntry:
+    file: str | None
+    digest: str | None
     match action.specification.verification:
         case FileDigest(path=path, sha256=sha256):
             file, digest = path, sha256

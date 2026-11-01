@@ -349,8 +349,8 @@ class QuestionDetail:
                 self.response.setText("You replied\n" + self.last_reply if self.last_reply is not None else "")
                 self.status.setText("The agent is no longer waiting for this clarification.")
         self.response.setVisible(bool(self.response.text()))
-        for text in (self.question, self.response, self.status):
-            text.setFixedHeight(max(1, text.heightForWidth(self.frame.width())))
+        for text_label in (self.question, self.response, self.status):
+            text_label.setFixedHeight(max(1, text_label.heightForWidth(self.frame.width())))
         layout = self.frame.layout()
         if layout is not None:
             layout.activate()

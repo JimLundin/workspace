@@ -419,10 +419,10 @@ class Keyboard:
             self.firmware is not None
             and down
             and identity not in self.native_releases
-            and (tool := voice_tool(key.vk, self.native_releases)) is not None
+            and (voice := voice_tool(key.vk, self.native_releases)) is not None
         ):
-            self.voice_shortcuts = (*self.voice_shortcuts, VoiceShortcut(identity, tool))
-            self.host.request(tool, down=True)
+            self.voice_shortcuts = (*self.voice_shortcuts, VoiceShortcut(identity, voice))
+            self.host.request(voice, down=True)
             return True
         return False
 
