@@ -499,7 +499,7 @@
     {
       "key": {
         "rule": "PLR0913",
-        "path": "assistant/ui.py",
+        "path": "assistant/keymap_views.py",
         "scope": "KeymapOverlay.show",
         "signature": "da56c5db9965405acb4c6e8084feb5570fc54e7a9202ae533397f5df9ab7c14f"
       },
