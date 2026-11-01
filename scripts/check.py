@@ -561,6 +561,7 @@ def publish_check(options: Options, run: CheckRun) -> bool:
                 architecture=CheckedArchitecture(sources=len(run.architecture.sources), exceptions=len(run.architecture.exceptions)),
                 elapsed_seconds=run.elapsed,
                 checked_at_ns=time.time_ns(),
+                standards=options.standards,
             ),
         )
     return bool(failures)

@@ -18,7 +18,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
-from scripts.deploy_files import HELPERS, PINS, checked_sources, read, read_receipt, sha, source_map, write, zip_files
+from scripts.deploy_files import HELPERS, PINS, CheckReceipt, checked_sources, read, read_receipt, sha, source_map, write, zip_files
 from scripts.deploy_values import CONFIG, Config
 from scripts.development_paths import LIVE, PROFILE, PYTHON, TEMP
 lazy from scripts.check import source_files
@@ -50,8 +50,16 @@ def workspace_files() -> dict[str, str]:
     return source_map({"files": source_files(WORKSPACE)})
 
 
+def deployable(receipt: Path) -> CheckReceipt:
+    """A check receipt that may release source: the run also applied the whole-tree standards."""
+    checked = read_receipt(receipt)
+    if not checked.standards:
+        raise ValueError("The check receipt was written without --standards; rerun Dev.cmd check.")
+    return checked
+
+
 def stage_source(receipt: Path, stage: Path | None = None) -> Path:
-    wanted = checked_sources(read_receipt(receipt).files)
+    wanted = checked_sources(deployable(receipt).files)
     if workspace_files() != wanted:
         raise RuntimeError("The working tree differs from the checked source; rerun checks.")
     stage = stage or TEMP / f"workspace-source-{time.time_ns()}"
@@ -109,7 +117,7 @@ def checked_config(stage: Path) -> tuple[Config, dict[str, str]]:
     if sha(stage / "source.json") != config["source_manifest_sha256"] or sha(stage / "checked.json") != config["check_sha256"]:
         raise RuntimeError("The checked source manifest or receipt changed.")
     wanted = source_map(read(stage / "source.json"))
-    if dict(read_receipt(stage / "checked.json").files) != wanted or {name: wanted[name] for name in PINS} != config["pins"]:
+    if dict(deployable(stage / "checked.json").files) != wanted or {name: wanted[name] for name in PINS} != config["pins"]:
         raise RuntimeError("The staged source differs from the check receipt or runtime pins.")
     return config, wanted
 

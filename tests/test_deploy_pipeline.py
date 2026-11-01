@@ -12,6 +12,9 @@ from collections.abc import Generator
 from pathlib import Path, PureWindowsPath
 
 from scripts import deploy
+from scripts.architecture import Report
+from scripts.check import CheckRun, Options, publish_check
+from scripts.check_results import Results, Selection
 from scripts.deploy_archive import repack
 from scripts.deploy_files import (
     HELPERS,
@@ -167,6 +170,7 @@ def test_staging_includes_nested_native_helpers_and_the_checked_source(tmp_path:
             architecture=CheckedArchitecture(sources=1, exceptions=0),
             elapsed_seconds=1.0,
             checked_at_ns=1,
+            standards=True,
         ),
     )
     stage = tmp_path / "workspace-source-test"
@@ -183,6 +187,23 @@ def test_staging_includes_nested_native_helpers_and_the_checked_source(tmp_path:
     assert payload == wanted
     assert config["helpers"] == {name: sha(stage / name) for name in HELPERS}
     assert sha(stage / "winapi" / "_core.py") == wanted["winapi/_core.py"]
+
+
+def test_deployment_refuses_a_passing_receipt_from_a_check_without_the_standards(tmp_path: Path) -> None:
+    # Defect: a plain `scripts.check --receipt` run, which skipped the whole-tree
+    # lint and type standards, still releases its source.
+    receipt, stage = tmp_path / "checked.json", tmp_path / "workspace-source-test"
+    options = Options(full=False, native=False, standards=False, tests=(), receipt=receipt, baseline=tmp_path, timings=tmp_path / "timings.json")
+    run = CheckRun(frozendict({"source.py": "0" * 64}), Selection((), (), "explicit iteration scope"), Results(1, 0, (), ()), Report((), (), ()), 1.0)
+    with contextlib.redirect_stdout(io.StringIO()):
+        assert not publish_check(options, run)
+    try:
+        deploy.stage_source(receipt, stage)
+    except ValueError as error:
+        assert "--standards" in str(error), error
+    else:
+        raise AssertionError("A receipt from a check without the standards was deployable.")
+    assert not stage.exists()
 
 
 def test_native_coordinator_owns_stage_folder_and_detects_source_changes(tmp_path: Path) -> None:

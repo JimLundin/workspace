@@ -59,6 +59,8 @@ class CheckReceipt:
     architecture: CheckedArchitecture
     elapsed_seconds: float
     checked_at_ns: int
+    # Whether the whole-tree lint, format and type standards passed in this run.
+    standards: bool
     kind: Literal["workspace-edit-check-v1"] = "workspace-edit-check-v1"
 
 
