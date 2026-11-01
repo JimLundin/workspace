@@ -88,10 +88,18 @@ class Report:
 
 @dataclass(frozen=True, slots=True)
 class Configuration:
+    """The architecture TOML contract keeps its independent policy declarations together.
+
+    Model ownership, exact exceptions, composition seams and desktop ownership
+    enter the source review as one validated record, requiring these four fields.
+    """
+
     models: tuple[Text, ...]
     exceptions: tuple[ExceptionSpec, ...] = ()
     seams: tuple[Seam, ...] = ()
     """Lower-layer modules that may import assistant modules."""
+    desktop_only: tuple[Text, ...] = ()
+    """Owners that the work process must never import, including through seams."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -213,6 +221,24 @@ def _within(module: str, package: str) -> bool:
 
 LOWER_LAYERS: Final = ("automation", "winapi")
 """Packages the assistant builds on; they reach no assistant module except through declared seams."""
+WORKER_ENTRY: Final = "automation.__main__"
+
+
+def worker_isolation(graph: Mapping[str, frozenset[str]], desktop_only: Iterable[str]) -> Iterator[Finding]:
+    """Report desktop-only owners reachable from the worker, traversing composition seams."""
+    restricted = frozenset(desktop_only)
+    pending: deque[tuple[str, ...]] = deque([(WORKER_ENTRY,)])
+    visited: set[str] = set()
+    while pending:
+        route = pending.popleft()
+        module = route[-1]
+        if module in visited:
+            continue
+        visited.add(module)
+        if any(_within(module, owner) for owner in restricted):
+            yield Finding("worker-isolation", WORKER_ENTRY, "", "", 0, " → ".join(route))
+            continue
+        pending.extend((*route, target) for target in sorted(graph.get(module, frozenset())) if target not in visited)
 
 
 def layering(graph: Mapping[str, frozenset[str]], seams: Iterable[Seam]) -> Iterator[Finding]:
@@ -448,6 +474,7 @@ def review(root: Path, names: Iterable[str] | None = None, *, cache: Cache | Non
         findings.extend(observations[module].dynamic_imports)
         pending.extend((*route, target) for target in sorted(graph[module]) if target not in visited)
     findings.extend(layering(graph, configuration.seams))
+    findings.extend(worker_isolation(graph, configuration.desktop_only))
     accepted = tuple(exception for exception in exceptions if any(exception.matches(finding) for finding in findings))
     failures = [finding for finding in findings if not any(exception.matches(finding) for exception in accepted)]
     failures.extend(

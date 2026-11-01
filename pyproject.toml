@@ -264,6 +264,12 @@ models = [
     "automation.task",
     "winapi.system_notices",
 ]
+desktop_only = [
+    "assistant.agent_session",
+    "assistant.card_actions",
+    "assistant.canvas_session",
+    "assistant.personal_work_store",
+]
 
 [[tool.workspace.architecture.seams]]
 module = "automation.app"

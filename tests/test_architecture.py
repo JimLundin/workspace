@@ -98,6 +98,35 @@ def test_lower_layers_reach_assistant_only_through_declared_seams(tmp_path: Path
     assert [finding.rule for finding in review(tmp_path).failures] == ["stale-seam"]
 
 
+def test_worker_cannot_reach_desktop_only_modules(tmp_path: Path) -> None:
+    # Defect: work isolation stops at an allowed composition seam, misses a
+    # transitive lazy import, or rejects an owner the work process cannot reach.
+    write_tree(
+        tmp_path,
+        {
+            "automation/__init__.py": "",
+            "automation/__main__.py": "lazy from assistant.settings import config\nlazy from automation.app import run\n",
+            "automation/app.py": "lazy from assistant.tools import run\n",
+            "assistant/__init__.py": "",
+            "assistant/settings.py": "config = 1\n",
+            "assistant/tools.py": "lazy import assistant.session\n",
+            "assistant/session.py": "",
+            "assistant/unreachable.py": "lazy import assistant.session\n",
+        },
+    )
+    with (tmp_path / "pyproject.toml").open("a", encoding="utf-8") as output:
+        output.write(
+            'desktop_only = ["assistant.session"]\n'
+            '\n[[tool.workspace.architecture.seams]]\nmodule = "automation.__main__"\nreason = "Worker settings."\n'
+            '\n[[tool.workspace.architecture.seams]]\nmodule = "automation.app"\nreason = "Worker composition."\n'
+        )
+    (failure,) = review(tmp_path).failures
+    assert failure.rule == "worker-isolation" and failure.module == "automation.__main__"
+    assert failure.detail == "automation.__main__ → automation.app → assistant.tools → assistant.session"
+    (tmp_path / "assistant/tools.py").write_text("", encoding="utf-8")
+    assert not review(tmp_path).failures
+
+
 def test_relative_lazy_and_aliased_dynamic_imports_select_their_consumers() -> None:
     imported = dependencies(
         "app/nested/owner.py", 'lazy from .. import model\nfrom importlib import import_module as load\nload("app.effects.native")\n'
