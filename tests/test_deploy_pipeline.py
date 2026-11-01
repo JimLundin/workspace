@@ -153,7 +153,7 @@ def test_staging_includes_nested_native_helpers_and_the_checked_source(tmp_path:
 
     for package in ("scripts", "winapi"):
         shutil.copytree(root / package, source / package, ignore=ignored_cache)
-    for name in ("runtime.py", "keeper.py", "keeper_control.py", "components.py", *PINS):
+    for name in ("runtime.py", "keeper.py", "keeper_control.py", "components.py", "protocol.py", *PINS):
         target = source / name
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(root / name, target)
@@ -188,6 +188,21 @@ def test_staging_includes_nested_native_helpers_and_the_checked_source(tmp_path:
     assert payload == wanted
     assert config["helpers"] == {name: sha(stage / name) for name in HELPERS}
     assert sha(stage / "winapi" / "_core.py") == wanted["winapi/_core.py"]
+    # A new process must load the native coordinator from the staged helpers,
+    # without checkout imports masking a missing transitive dependency.
+    driver = subprocess.run(
+        [
+            sys.executable,
+            "-B",
+            "-c",
+            "from pathlib import Path; from scripts.deploy import checked_config; from scripts.deploy_windows import run; checked_config(Path.cwd())",
+        ],
+        cwd=stage,
+        capture_output=True,
+        check=False,
+        timeout=15,
+    )
+    assert driver.returncode == 0, (driver.stdout + driver.stderr).decode("utf-8", errors="replace")
 
 
 def test_deployment_refuses_a_passing_receipt_from_a_check_without_the_standards(tmp_path: Path) -> None:
