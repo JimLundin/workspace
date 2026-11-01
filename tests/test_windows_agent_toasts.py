@@ -26,13 +26,13 @@ from assistant import toast_stack
 from assistant.agent_session import Begin, Session, transition
 from assistant.agent_toasts import AgentToasts
 from assistant.agent_window import AgentWindow
-from assistant.feed_desktop import NativeDesktop
 from assistant.notifications import MAX_VISIBLE, WIDTH, Kind, MessageKey, PhaseKey, Toast, TurnKey
 from assistant.qt_runtime import prepare
 from assistant.qt_ui import application
 from assistant.recording_state import RecordingAction, RecordingState
 from assistant.rich_text import formatted
 from assistant.toast_card import Card, CardOwner, Finish
+from assistant.toast_desktop import NativeDesktop
 from assistant.ui_components.appearance import Scheme, Shade, SolidLook
 from assistant.ui_components.text import TextView
 from automation.presentation import Answer, Failed, ReasoningSummary, Said, StreamState, Succeeded, ToolActivity

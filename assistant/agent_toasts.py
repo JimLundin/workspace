@@ -25,7 +25,6 @@ lazy from assistant import notification_reading
 lazy from assistant.agent_session import AgentRequest, Message, Session, Snapshot, pending
 lazy from assistant.agent_window import AgentWindow
 lazy from assistant.card_actions import AnswerApproval, OpenCanvas, parse
-lazy from assistant.feed_desktop import Desktop, NativeDesktop
 lazy from assistant.notifications import (
     MAX_VISIBLE,
     Content,
@@ -49,6 +48,7 @@ lazy from assistant.notifications import (
 )
 lazy from assistant.qt_ui import EventLoop, cancel, later
 lazy from assistant.toast_card import Card, CardOwner, Finish, Measure
+lazy from assistant.toast_desktop import Desktop, NativeDesktop
 lazy from assistant.ui_components.appearance import scheme
 lazy from assistant.ui_components.text import BODY, face, line_height
 lazy from automation.task import Approval

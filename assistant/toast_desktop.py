@@ -1,4 +1,4 @@
-"""Desktop observations consumed by the floating feed, separate from its UI."""
+"""Desktop observations consumed by the agent bubbles, separate from their Qt view."""
 
 from typing import Protocol
 
