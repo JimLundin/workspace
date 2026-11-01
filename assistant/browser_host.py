@@ -153,6 +153,7 @@ _REPLY = TypeAdapter[Reply](Reply)
 _STATUS = TypeAdapter(HostStatus)
 _RESULT = TypeAdapter(frozendict[str, Json])
 _SESSION = TypeAdapter(TargetSession)
+_NO_RESULT: frozendict[str, Json] = frozendict()  # Connect and release reply with an empty result.
 
 
 def sealed(data: bytes, *, opening: bool = False) -> bytes:
@@ -274,14 +275,14 @@ class Host:
                     self.session = self.opener.open(self.product, cancel)
                     self.generation += 1
                 self.clients.setdefault(client, set())
-                return frozendict()
+                return _NO_RESULT
             case ReleaseRequest(client=client):
                 sessions = self.clients.pop(client, set())
                 if self.session is not None:
                     for session in sessions:
                         with contextlib.suppress(OSError):
                             self.session.connection.call("Target.detachFromTarget", {"sessionId": session}, cancel, timeout=1)
-                return frozendict()
+                return _NO_RESULT
             case CallRequest(client=client) if client not in self.clients or self.session is None:
                 raise DisconnectedError("The approved browser connection is unavailable. Use Connect Teams to reconnect explicitly.")
             case CallRequest(method="Browser.close"):

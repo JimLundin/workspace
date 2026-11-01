@@ -119,7 +119,7 @@ TABS_ARGUMENTS = TypeAdapter(TabsArguments)
 
 
 def _unique(identities: tuple[int, ...]) -> tuple[int, ...]:
-    return tuple(dict.fromkeys(identities))
+    return tuple(dict.fromkeys(identities, True))
 
 
 def open_request(arguments: OpenArguments) -> Open:

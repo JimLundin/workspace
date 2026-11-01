@@ -238,7 +238,7 @@ def decode(raw: str, candidates: tuple[Candidate, ...]) -> tuple[Assessment, ...
                 max(by_id[ref].created_at for ref in refs),
                 disposition,
                 solutions,
-                origins=tuple(dict.fromkeys(by_id[ref].origin for ref in refs)),
+                origins=tuple(dict.fromkeys((by_id[ref].origin for ref in refs), True)),
             )
         )
     if seen != set(by_id):

@@ -30,9 +30,10 @@ def matching(windows: Sequence[winapi.shapes.Window], query: str) -> tuple[winap
 class _Rows(QtWidgets.QStyledItemDelegate):
     """Paints each window as its title over its program, with the selection in the accent."""
 
-    def __init__(self, theme: Tokens, parent: QtCore.QObject) -> None:
+    def __init__(self, theme: Tokens, parent: QtWidgets.QListWidget) -> None:
         super().__init__(parent)
         self.theme: Tokens = theme
+        self.rows: QtWidgets.QListWidget = parent
 
     def sizeHint(self, option: QtWidgets.QStyleOptionViewItem, index: QtCore.QModelIndex | QtCore.QPersistentModelIndex) -> QtCore.QSize:
         return QtCore.QSize(option.rect.width(), _ROW)
@@ -40,7 +41,7 @@ class _Rows(QtWidgets.QStyledItemDelegate):
     def paint(
         self, painter: QtGui.QPainter, option: QtWidgets.QStyleOptionViewItem, index: QtCore.QModelIndex | QtCore.QPersistentModelIndex
     ) -> None:
-        title, _, detail = str(index.data(Qt.ItemDataRole.DisplayRole)).partition("\n")
+        title, _, detail = self.rows.item(index.row()).text().partition("\n")
         selected = bool(option.state & QtWidgets.QStyle.StateFlag.State_Selected)
         bounds = QtCore.QRectF(option.rect).adjusted(0, 1, 0, -1)
         painter.save()

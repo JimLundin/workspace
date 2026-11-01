@@ -89,10 +89,23 @@ class ArgumentError(Exception):
     pass
 
 
+@dataclass(frozen=True, slots=True)
+class _Problem:
+    """One of pydantic's reported validation errors: where it occurred and its message."""
+
+    loc: tuple[str | int, ...]
+    msg: str
+
+
+_PROBLEMS = TypeAdapter(tuple[_Problem, ...])
+
+
 def rejected(tool: str, error: ValidationError) -> ArgumentError:
     """A tool seam's validation failure, phrased for the model by argument name."""
+    # Only locations and messages are read back; the rejected input stays out of the report.
+    reported = _PROBLEMS.validate_json(error.json(include_url=False, include_context=False, include_input=False))
     # A request union's tag is the tool itself, so it is dropped from each location.
-    problems = "; ".join(f"{'.'.join(str(part) for part in item['loc'] if part != tool) or 'arguments'}: {item['msg']}" for item in error.errors())
+    problems = "; ".join(f"{'.'.join(str(part) for part in item.loc if part != tool) or 'arguments'}: {item.msg}" for item in reported)
     return ArgumentError(f"{tool} arguments are invalid: {problems}.")
 
 

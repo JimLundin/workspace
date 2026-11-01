@@ -164,6 +164,11 @@ def _app(mark: Mark) -> App:
             assert_never(mark)
 
 
+def initial(app: App) -> str:
+    """The letter an app's badge shows; taking the whole enum keeps its value typed."""
+    return app.value[:1].upper()
+
+
 def paint_badge(painter: QPainter, bounds: QRectF, mark: Mark) -> None:
     """The kit's app badge: a rounded tile in the app's own colour with a white glyph."""
     painter.save()
@@ -189,7 +194,7 @@ def paint_badge(painter: QPainter, bounds: QRectF, mark: Mark) -> None:
         case App():
             painter.setPen(QColor("#ffffff"))
             painter.setFont(face(BODY, 700))
-            painter.drawText(bounds, Qt.AlignmentFlag.AlignCenter.value, mark.value[:1].upper())
+            painter.drawText(bounds, Qt.AlignmentFlag.AlignCenter, initial(mark))
         case _:
             assert_never(mark)
     painter.restore()
