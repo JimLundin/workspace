@@ -490,8 +490,14 @@ def firmware_keyboard() -> tuple[Keyboard, KeyboardFixture]:
 
 
 def test_firmware_voice_key_shortcuts_pair_each_voice_press_with_its_release() -> None:
-    """Detect swapped commands, repeat starts, leaked voice_key keys, or early stops."""
+    """Detect missed extended right Shift, repeat starts, leaked keys, or early stops."""
     for ctrl, modifier, voice_key, tool in (
+        (
+            inputs.KeyEvent(0xA3, 0x1D, inputs.LLKHF_EXTENDED, 10, 0),
+            inputs.KeyEvent(0xA1, 0x36, inputs.LLKHF_EXTENDED, 10, 0),
+            inputs.KeyEvent(0x44, 0x20, 0, 10, 0),
+            Tool.DICTATE,
+        ),
         (
             inputs.KeyEvent(0xA3, 0x1D, inputs.LLKHF_EXTENDED, 10, 0),
             inputs.KeyEvent(0xA1, 0x36, 0, 10, 0),
@@ -526,7 +532,7 @@ def test_firmware_voice_does_not_capture_ordinary_or_already_held_voice_keys() -
     """Detect broad shortcut matching or starting voice halfway through native repeat."""
     ctrl = inputs.KeyEvent(0xA2, 0x1D, 0, 10, 0)
     alt = inputs.KeyEvent(0xA4, 0x38, 0, 10, 0)
-    shift = inputs.KeyEvent(0xA1, 0x36, 0, 10, 0)
+    shift = inputs.KeyEvent(0xA1, 0x36, inputs.LLKHF_EXTENDED, 10, 0)
     win = inputs.KeyEvent(0x5B, 0x5B, inputs.LLKHF_EXTENDED, 10, 0)
     dictate = inputs.KeyEvent(0x44, 0x20, 0, 10, 0)
     agent = inputs.KeyEvent(0x47, 0x22, 0, 10, 0)

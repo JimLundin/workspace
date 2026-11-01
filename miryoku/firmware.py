@@ -47,7 +47,8 @@ def voice_tool(vk: int, held: Collection[int]) -> Tool | None:
     if not (0x1D in held or 0x11D in held) or any(identity in held for identity in (0x15B, 0x15C)):
         return None
     alt = 0x38 in held or 0x138 in held
-    shift = 0x2A in held or 0x36 in held
+    # The observed Charybdis right Shift includes Windows' extended-key flag.
+    shift = 0x2A in held or 0x36 in held or 0x136 in held
     match vk, alt, shift:
         case 0x44, False, True:
             return Tool.DICTATE
