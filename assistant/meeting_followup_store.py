@@ -98,7 +98,7 @@ def _read_file(path: Path, maximum: int) -> bytes:
 def observe_transcript(store: MeetingStore) -> Transcript:
     """Read published bytes, including manual corrections, without refreshing export."""
     before = store.state()
-    if not before.finished or before.pending or before.revision != before.exported_revision:
+    if not before.complete:
         raise TranscriptNotReadyError("This recording's transcription and current Markdown export must finish first.")
     try:
         if not stat.S_ISREG(filesystem_path(store.transcript).lstat().st_mode):

@@ -88,6 +88,16 @@ class StoredState:
     revision: int
     exported_revision: int
 
+    @property
+    def export_current(self) -> bool:
+        """Every captured frame is transcribed and Markdown has the latest revision."""
+        return not self.pending and self.revision == self.exported_revision
+
+    @property
+    def complete(self) -> bool:
+        """Capture finished and its current transcript is published."""
+        return self.finished and self.export_current
+
 
 @dataclass(frozen=True, slots=True)
 class Batch:
@@ -111,7 +121,7 @@ class Publication:
 def completion_phase(saved: StoredState) -> CompletionPhase:
     """Decide progress after capture finishes, unless an explicit pause overrides it."""
     match saved:
-        case StoredState(pending=pending, revision=revision, exported_revision=exported) if pending or revision != exported:
+        case StoredState() if not saved.export_current:
             return "finishing"
         case StoredState(problem=problem) if problem:
             return "interrupted"

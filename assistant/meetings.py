@@ -266,7 +266,7 @@ class Meetings:
                     store.finish_capture(
                         "Recording was interrupted when Workspace closed. Saved audio has been recovered; capture was not restarted."
                     )
-                if state.pending or not state.finished or state.revision != state.exported_revision or not store.transcript.is_file():
+                if not state.complete or not store.transcript.is_file():
                     self._schedule(store)
             except OSError, ValueError, sqlite3.Error:
                 # Keep damaged journals for recovery rather than deleting them.
