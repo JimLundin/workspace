@@ -556,9 +556,9 @@ class Capsule(KeyboardFocus):
             case Control():
                 pass  # A child button paints it.
             case Marker.WAVE:
-                ink = color(reading(lettering, Tone.INK, contrast=self.contrast))
+                trace = color(reading(lettering, Tone.INK, contrast=self.contrast))
                 painter.setPen(Qt.PenStyle.NoPen)
-                painter.setBrush(ink)
+                painter.setBrush(trace)
                 for index, sample in enumerate(self.window_.samples):
                     height = 3 + sample * 13
                     painter.drawRoundedRect(QtCore.QRectF(spot.x + index * 4, middle - height / 2, 2, height), 1, 1)

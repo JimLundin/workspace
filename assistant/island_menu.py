@@ -86,7 +86,7 @@ TILING: Final = Disclosure(
 
 def entries(*, recording: str | None, agent: str | None) -> tuple[Entry, ...]:
     """The menu for what's happening now: `recording` and `agent` are their readings while they run."""
-    live = (
+    live: tuple[Live, ...] = (
         *((Live("Agent working", agent, Command.STOP_AGENT),) if agent is not None else ()),
         *((Live("Recording", recording, Command.STOP_RECORDING),) if recording is not None else ()),
     )

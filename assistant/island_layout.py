@@ -86,7 +86,7 @@ def live(row: Entry) -> bool:
 
 def lines(menu: Menu) -> tuple[Line, ...]:
     placed: list[Line] = []
-    y = MENU_PAD + MENU_HEAD
+    y: float = MENU_PAD + MENU_HEAD
     for index, row in enumerate(rows(menu)):
         if placed and live(placed[-1].row) and live(row):
             y += 4  # Live rows read as separate activities.
@@ -203,7 +203,7 @@ def present(value: float) -> float:
 
 def frame(placed: Sequence[Placed], metrics: Metrics) -> tuple[Framed, ...]:
     """Capsules in left-to-right order; absent ones (presence 0) take no space."""
-    order = tuple(Key)
+    order: tuple[Key, ...] = tuple(Key)
 
     def shown(capsule: Placed) -> float:
         return capsule.width * present(capsule.presence)
@@ -212,8 +212,11 @@ def frame(placed: Sequence[Placed], metrics: Metrics) -> tuple[Framed, ...]:
         box = Box(x, metrics.top, shown(capsule), capsule.height)
         return Framed(capsule.key, box, Box(x, 0, box.width, metrics.top), present(capsule.presence))
 
+    def position(capsule: Placed) -> int:
+        return order.index(capsule.key)
+
     def zone(name: Zone) -> tuple[Placed, ...]:
-        return tuple(sorted((c for c in placed if c.zone is name and c.presence > 0), key=lambda c: order.index(c.key)))
+        return tuple(sorted((c for c in placed if c.zone is name and c.presence > 0), key=position))
 
     islands = zone(Zone.ISLAND)
     if not islands:

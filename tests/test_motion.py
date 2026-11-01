@@ -4,7 +4,7 @@ from assistant.motion import APPEAR, LEAVE, MORPH, Motion, Spring, resting, sett
 
 
 def frames(motion: Motion, seconds: float, step: float = 1 / 60) -> tuple[Motion, ...]:
-    trail = (motion,)
+    trail: tuple[Motion, ...] = (motion,)
     for _ in range(round(seconds / step)):
         trail = (*trail, settle(trail[-1], step))
     return trail

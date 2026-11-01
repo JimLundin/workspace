@@ -1,6 +1,5 @@
 """The island bar through real Qt windows: what shows, where it sits, and what a press does."""
 
-import ctypes
 import sys
 import threading
 import time
@@ -16,6 +15,7 @@ lazy from PySide6 import QtCore, QtGui, QtWidgets
 lazy from PySide6.QtTest import QTest
 
 from assistant.desktop_bar import BarActions, BarObservations, DesktopBar
+from assistant.island_menu import Menu
 from assistant.island_model import Agent, Job, Key
 from assistant.island_surface import TOP, ControlButton, MenuRow
 from assistant.qt_runtime import prepare
@@ -23,15 +23,13 @@ from assistant.qt_ui import EventLoop, application
 from assistant.recording_state import RecordingState
 from protocol import Tool
 from winapi import appearance, windows
+from winapi._core import fn, user32
 from winapi.machine_status import Battery
 
 prepare()
 
-user32 = ctypes.WinDLL("user32", use_last_error=True)
-user32.WindowFromPoint.restype = wintypes.HWND
-user32.WindowFromPoint.argtypes = (wintypes.POINT,)
-user32.GetAncestor.restype = wintypes.HWND
-user32.GetAncestor.argtypes = (wintypes.HWND, wintypes.UINT)
+window_from_point = fn(user32, "WindowFromPoint", wintypes.HWND, wintypes.POINT)
+get_ancestor = fn(user32, "GetAncestor", wintypes.HWND, wintypes.HWND, wintypes.UINT)
 
 
 WORKING = Agent("Comparing both sheets", waiting=False)
@@ -78,6 +76,16 @@ def sampled(app: QtWidgets.QApplication, bar: DesktopBar, reached: Callable[[], 
         app.processEvents()
         time.sleep(0.005)
     assert reached(), "The microphone level did not reach the trace."
+
+
+def remember(focused: list[int], hwnd: int) -> bool:
+    focused.append(hwnd)
+    return True
+
+
+def menu(bar: DesktopBar) -> Menu | None:
+    """The open menu, read fresh: the bar changes it between steps."""
+    return bar.expanded
 
 
 def menu_row(bar: DesktopBar, label: str) -> MenuRow:
@@ -177,7 +185,7 @@ def test_pointer_reaches_capsules_and_their_edge_strip_but_passes_through_elsewh
 
         def owner(x: float, y: float) -> int:
             point = wintypes.POINT(outer.left + round(x * scale), outer.top + round(y * scale))
-            return int(user32.GetAncestor(user32.WindowFromPoint(point), 2) or 0)  # GA_ROOT
+            return get_ancestor(window_from_point(point), 2) or 0  # GA_ROOT
 
         assert owner(island.center().x(), TOP + 17) == handle
         assert owner(island.center().x(), 1) == handle
@@ -334,7 +342,7 @@ def test_tiling_acts_on_the_window_captured_before_the_menu_opened() -> None:
     app = application()
     invoked: list[tuple[Tool, int]] = []
     foreground, focused = [42], list[int]()
-    observations = BarObservations(foreground=lambda: foreground[0], focus=lambda hwnd: focused.append(hwnd) is None)
+    observations = BarObservations(foreground=lambda: foreground[0], focus=lambda hwnd: remember(focused, hwnd))
     bar = DesktopBar(recorded([], tiling=invoked), native_shell=False, observations=observations)
     try:
         bar.open_menu()
@@ -354,16 +362,17 @@ def test_the_menu_takes_the_keyboard_and_hands_it_back_only_when_a_choice_calls_
     app = application()
     invoked: list[str] = []
     focused: list[int] = []
-    observations = BarObservations(foreground=lambda: 42, focus=lambda hwnd: focused.append(hwnd) is None)
+    observations = BarObservations(foreground=lambda: 42, focus=lambda hwnd: remember(focused, hwnd))
     bar = DesktopBar(recorded(invoked), native_shell=False, observations=observations)
     try:
         bar.open_menu()
         island = bar.window.capsules[Key.ISLAND]
         assert island.height() > TOP + 34 and bar.window.height() >= island.height()
         QTest.keyClick(bar.window, QtCore.Qt.Key.Key_Down)
-        assert bar.expanded is not None and bar.expanded.selected == 0
+        opened = menu(bar)
+        assert opened is not None and opened.selected == 0
         QTest.keyClick(bar.window, QtCore.Qt.Key.Key_Escape)
-        assert bar.expanded is None and focused == [42] and bar.window.capsules[Key.ISLAND].height() == TOP + 34
+        assert menu(bar) is None and focused == [42] and bar.window.capsules[Key.ISLAND].height() == TOP + 34
         bar.open_menu()
         QTest.keyClicks(bar.window, "k")
         QTest.keyClick(bar.window, QtCore.Qt.Key.Key_Return)

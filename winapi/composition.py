@@ -293,9 +293,13 @@ _PUT_OFFSET, _PUT_OPACITY, _PUT_SIZE = 21, 23, 36
 
 
 def _slot(this: ctypes.c_void_p, index: int, value: type[ctypes.Structure | ctypes.c_float]) -> NativeFunction[int]:
-    vtable = ctypes.cast(this, ctypes.POINTER(ctypes.POINTER(ctypes.c_void_p)))[0]
+    """The method at `index` in a COM object's vtable: the object's first pointer is its table."""
+    table = ctypes.c_void_p.from_address(this.value or 0).value
+    address = ctypes.c_void_p.from_address((table or 0) + index * ctypes.sizeof(ctypes.c_void_p)).value
+    if not this.value or not table or not address:
+        raise OSError("The composition visual has no method table.")
     prototype = ctypes.WINFUNCTYPE(ctypes.c_long, ctypes.c_void_p, value)
-    return prototype(vtable[index])
+    return prototype(address)
 
 
 @dataclass(frozen=True, slots=True)

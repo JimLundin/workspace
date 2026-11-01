@@ -5,8 +5,6 @@ its latest reasoning summary. The bar owns no agent state of its own; every
 session snapshot replaces the reading.
 """
 
-import re
-
 from assistant import action_text
 from assistant.agent_progress import phases
 from assistant.agent_session import ChatMessage, Snapshot
@@ -17,10 +15,18 @@ from automation.presentation import Answer, ToolActivity, ToolStatus
 LENGTH = 40  # The reading's bound before the island elides it to its own width.
 
 
+def sentence(text: str) -> str:
+    """The first line, up to its first sentence end."""
+    line = text.split("\n", 1)[0]
+    ends = tuple(index + 1 for mark in ".!?" if (index := line.find(mark + " ")) >= 0)
+    return line[: min(ends)] if ends else line
+
+
 def heading(text: str) -> str:
     """A summary's bold heading, else its first sentence, as one bounded line."""
-    bold = re.match(r"\s*\*\*(.+?)\*\*", text)
-    line = bold.group(1) if bold is not None else re.split(r"(?<=[.!?])\s|\n", text.strip(), maxsplit=1)[0]
+    stripped = text.strip()
+    close = stripped.find("**", 2) if stripped.startswith("**") else -1
+    line = stripped[2:close] if close > 2 else sentence(stripped)
     return action_text.shortened(" ".join(line.replace("*", "").split()), LENGTH)
 
 
