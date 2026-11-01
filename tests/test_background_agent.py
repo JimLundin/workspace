@@ -8,9 +8,9 @@ from typing import cast
 from assistant import browser_tools, business_tools, meeting_tools
 from assistant.agent import Agent
 from assistant.agent_session import activity_text, message_body
-from assistant.agent_toolsets import General
 from assistant.geometry import Shot
 from assistant.llm import Settings, ToolCall
+from assistant.task_profiles import General
 from automation.json_value import Json
 from automation.presentation import ToolActivity
 from tests.fake_endpoint import fake_endpoint

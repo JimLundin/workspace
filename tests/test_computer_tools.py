@@ -6,9 +6,9 @@ import time
 from pathlib import Path
 
 from assistant.agent import Agent
-from assistant.agent_toolsets import General
 from assistant.geometry import Shot
 from assistant.llm import Settings, ToolCall
+from assistant.task_profiles import General
 from automation.actions import Change, Observation, Resources, target
 from automation.activity import Activity, ContextSnapshot
 from automation.execution import WorkExecution

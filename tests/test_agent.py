@@ -13,12 +13,12 @@ from assistant.agent import Agent
 from assistant.agent_history import History
 from assistant.agent_session import activity_text
 from assistant.agent_tools import Output
-from assistant.agent_toolsets import General
 from assistant.browser_requests import BrowserRequest, Screenshot
 from assistant.browser_values import BrowserError
 from assistant.desktop_tools import allowed, key_strokes
 from assistant.geometry import Shot
 from assistant.llm import Settings, ToolCall, settings_from
+from assistant.task_profiles import General
 from assistant.uia import UiRequest
 from assistant.web_apps import Located, WebAppOperation
 from assistant.work_bridge_contracts import BridgeCommand, work_bridge_request

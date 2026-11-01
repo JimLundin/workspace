@@ -9,8 +9,8 @@ from pathlib import Path
 
 from assistant.agent import Agent
 from assistant.agent_session import message_body
-from assistant.agent_toolsets import General
 from assistant.llm import Settings
+from assistant.task_profiles import General
 from automation.execution import WorkExecution
 from automation.json_value import Json
 from automation.presentation import Answer, LiveMessage, ReasoningSummary, StreamState, Succeeded, ToolActivity, ToolStatus

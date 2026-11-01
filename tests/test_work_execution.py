@@ -12,8 +12,8 @@ from typing import cast
 
 from assistant.agent import Agent
 from assistant.agent_execution import AgentExecution
-from assistant.agent_toolsets import General
 from assistant.llm import Settings, ToolCall
+from assistant.task_profiles import General
 from assistant.workspace import CheckInterrupted, Workspace
 from automation.actions import Change, Operation, Resources
 from automation.execution import WorkExecution
