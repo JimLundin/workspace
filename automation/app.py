@@ -18,7 +18,7 @@ from typing import assert_never
 
 import components
 import usage
-from usage import DIRECTORY
+from automation.work_folder import BROWSER_PROFILE, WORK, WorkFolder
 from winapi import screen, system, windows
 from winapi.shapes import Window
 lazy from assistant.agent_execution import AgentExecution
@@ -44,7 +44,7 @@ lazy from automation.store import TaskStore
 lazy from automation.task import Claim, Outcome, RunRef, Task, owns
 
 
-def report(message: str, *, folder: Path = DIRECTORY / "work") -> None:
+def report(message: str, *, folder: Path = WORK.root) -> None:
     """Operational diagnostics only; SDK and IPC payloads never enter this log."""
     with contextlib.suppress(OSError):
         folder.mkdir(parents=True, exist_ok=True)
@@ -172,11 +172,11 @@ class NativeExecution:
 
 def _native_execution(settings: Settings | Missing, bridge: BridgeServer, hwnd: int, contexts: ContextStore) -> tuple[NativeExecution, WinMachine]:
     meetings = RemoteMeetings(bridge)
-    browser = Browser(DIRECTORY / "browser-profile", source=Product.EDGE)
+    browser = Browser(BROWSER_PROFILE, source=Product.EDGE)
     machine = WinMachine(NativeDesktop(hwnd), meetings=meetings, browser=browser)
     context = DesktopContext(bridge, contexts, enabled=os.environ.get("WORKSPACE_AGENT_CONTEXT", "recent").lower() != "off")
     usable = settings if isinstance(settings, Settings) else Settings("", "", "", "", "", "", "")
-    followups = bridge.folder / "meeting-followups"
+    followups = WorkFolder(bridge.folder).followups
     try:
         execution = AgentExecution(
             usable,
@@ -196,7 +196,7 @@ def _native_execution(settings: Settings | Missing, bridge: BridgeServer, hwnd: 
 def run(
     settings: Settings | Missing,
     *,
-    folder: Path = DIRECTORY / "work",
+    folder: Path = WORK.root,
     execution: WorkExecution | None = None,
     ready: Callable[[], None] = components.ready,
     title: str = components.AUTOMATION.window.title,
@@ -206,11 +206,12 @@ def run(
     The optional execution and readiness adapters are also used by native
     process tests with a real journal, real pipe, and isolated clipboard HWND.
     """
+    work_folder = WorkFolder(folder)
     with ProfileLease(folder), contextlib.ExitStack() as cleanup:
         screen.use_physical_pixels()
         hwnd = windows.create_hidden(title)
         cleanup.callback(windows.destroy, hwnd)
-        tasks = TaskStore(folder / "work.sqlite3")
+        tasks = TaskStore(work_folder.journal)
         routines, contexts = RoutineStore(tasks.path), ContextStore(tasks.path)
         routines.ensure_meeting_notes(at=time.time())
         shutdown = threading.Event()

@@ -16,8 +16,8 @@ from pydantic import TypeAdapter
 
 import keeper
 import keeper_control
+from automation.work_folder import BROWSER_PROFILE
 from protocol import MAGIC
-from usage import DIRECTORY
 from winapi.shapes import Rect, Window
 lazy from assistant import commands, uia
 lazy from assistant.browser import Browser, BrowserResult
@@ -194,7 +194,7 @@ class WinMachine:
         self.desktop = desktop
         self.capture_sources: CaptureObservation = NativeCaptureObservation() if capture_sources is None else capture_sources
         self.open_target = open_target
-        self.background_browser: BrowserControl = Browser(DIRECTORY / "browser-profile", source=Product.EDGE) if browser is None else browser
+        self.background_browser: BrowserControl = Browser(BROWSER_PROFILE, source=Product.EDGE) if browser is None else browser
         self.meetings = meetings
 
     def meeting(self, operation: str, source: str = "both", title: str = "Meeting") -> str:

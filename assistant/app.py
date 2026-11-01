@@ -87,6 +87,7 @@ lazy from automation.personal_work import (
 lazy from automation.routines import RoutineStore
 lazy from automation.store import TaskStore
 lazy from automation.task import Control, RequestKind
+lazy from automation.work_folder import BROWSER_PROFILE, WORK
 lazy from miryoku.layout import Layer
 lazy from protocol import WM_INDICATOR, WM_KEY_STATE, WM_LAYOUT_STATE, WM_REQUEST, LayoutState, Tool, decode_indicator
 lazy from winapi import audio, recording, screen, shell, system, windows
@@ -262,15 +263,14 @@ class AssistantApp:
             # The tracker and runner refer to each other; observe after composition.
             return self.activity.snapshot()
 
-        work_folder = DIRECTORY / "work"
-        tasks = TaskStore(work_folder / "work.sqlite3")
+        tasks = TaskStore(WORK.journal)
         routines = RoutineStore(tasks.path)
         saved_context = ContextStore(tasks.path)
         self.agent = WorkAgent(
             tasks,
             routines,
             saved_context,
-            BridgeClient(work_folder),
+            BridgeClient(WORK.root),
             lambda runner: self.ui.agent(
                 runner.stop,
                 on_problem=self.problem,
@@ -293,12 +293,12 @@ class AssistantApp:
             policy=Policy(enabled=os.environ.get("WORKSPACE_AGENT_CONTEXT", "recent").lower() != "off"),
         )
         self.communications = Communications(
-            TeamsWeb(DIRECTORY / "browser-profile"),
+            TeamsWeb(BROWSER_PROFILE),
             windows_store(DIRECTORY / "communications.bin", COMMUNICATIONS_STATE),
             self.ui.communications_changed,
         )
         self.canvas: WorkCanvas = WorkCanvas(
-            work_folder / "canvas.sqlite3",
+            WORK.root / "canvas.sqlite3",
             self.continue_thread,
             self.ui.publish_canvas,
             autonomous=bool(self.settings.api_key and self.settings.base_url),
@@ -309,7 +309,7 @@ class AssistantApp:
         self.ui.configure_feed(windows_store(DIRECTORY / "notifications.bin", NOTIFICATION_STATE), self.triage.observe)
         self.timings.mark("communications and feed bridge")
         archive = MeetingArchive(DIRECTORY / "meetings")
-        followup_folder = work_folder / "meeting-followups"
+        followup_folder = WORK.followups
         self.followups = MeetingWorkflow(
             archive,
             Preparations(followup_folder / "preparations"),
@@ -366,7 +366,7 @@ class AssistantApp:
         self.agent.watch(tuple(run.task_id for run in self.canvas.read().runs), owner="canvas")
         return PersonalWork(
             PersonalStore(tasks.path),
-            BrowserSources(Browser(DIRECTORY / "browser-profile", source=Product.EDGE)),
+            BrowserSources(Browser(BROWSER_PROFILE, source=Product.EDGE)),
             self.personal_changed,
             model=Correlator(self.settings) if self.settings.api_key and self.settings.base_url else None,
             dismissed=self.stop_dismissed_work,
