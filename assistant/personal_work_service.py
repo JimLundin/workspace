@@ -9,6 +9,7 @@ from dataclasses import replace
 from typing import Protocol
 
 from assistant.personal_work_sources import Observations
+from assistant.personal_work_store import PersonalStore
 from automation.personal_work import (
     CORRELATION_INPUT,
     PERSONAL_REQUEST,
@@ -22,7 +23,6 @@ from automation.personal_work import (
     ListWork,
     PersonalRequest,
     PersonalResponse,
-    PersonalStore,
     PersonalView,
     RestoreWork,
     SaveWork,

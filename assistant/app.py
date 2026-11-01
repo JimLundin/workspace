@@ -55,6 +55,7 @@ lazy from assistant.overlay import OverlayState, load_enabled, save_enabled
 lazy from assistant.personal_work_model import Correlator
 lazy from assistant.personal_work_service import PersonalWork
 lazy from assistant.personal_work_sources import BrowserSources
+lazy from assistant.personal_work_store import PersonalStore
 lazy from assistant.personal_work_tools import source_request
 lazy from assistant.recording_state import RecordingAction, RecordingState
 lazy from assistant.report import write_report
@@ -75,7 +76,6 @@ lazy from automation.personal_work import (
     AddWebPage,
     DismissWork,
     OpenWorkSource,
-    PersonalStore,
     PersonalView,
     RefreshPersonalWork,
     RestoreWork,

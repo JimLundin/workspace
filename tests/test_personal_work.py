@@ -13,6 +13,7 @@ from assistant.local_bridge import LocalBridge
 from assistant.personal_work_model import Correlator
 from assistant.personal_work_service import PersonalWork, correlation_input
 from assistant.personal_work_sources import BrowserSources, Tab, outlook_sources
+from assistant.personal_work_store import PersonalStore
 from assistant.web_apps import (
     Board,
     BoardQuery,
@@ -45,7 +46,6 @@ from automation.personal_work import (
     DocumentAdded,
     ListSources,
     ListWork,
-    PersonalStore,
     PlannedWork,
     RestoreWork,
     SaveWork,

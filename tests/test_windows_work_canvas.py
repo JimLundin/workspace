@@ -26,6 +26,7 @@ from assistant.icons import State
 from assistant.island_model import Key
 from assistant.local_bridge import LocalBridge
 from assistant.notifications import body
+from assistant.personal_work_store import PersonalStore
 from assistant.qt_runtime import prepare
 from assistant.qt_ui import application
 from assistant.ui_components.canvas_loading import CanvasLoading
@@ -63,7 +64,6 @@ from automation.personal_work import (
     DismissedWork,
     DismissWork,
     OpenWorkSource,
-    PersonalStore,
     PersonalView,
     RefreshPersonalWork,
     RestoreWork,
