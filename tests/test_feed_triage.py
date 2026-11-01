@@ -331,8 +331,8 @@ def test_a_board_saved_before_origins_were_captured_keeps_its_rules_and_items() 
         EditObservation((), 2),
     )
     assert board.items and board.history
-    stored = STORED_BOARD.dump_python(saved(board), mode="json")
-    for item in stored["items"]:
+    stored = json_object(STORED_BOARD.dump_json(saved(board)))
+    for item in json_rows(stored["items"]):
         del item["origins"]
     restarted = restored(STORED_BOARD.validate_python(stored))
     assert restarted.rules == board.rules and restarted.history == board.history

@@ -49,11 +49,12 @@ from tests.test_agent import FakeMachine, ToolRig, durable
 from tests.test_work_actions import claimed
 
 _WIRE = TypeAdapter(dict[str, Json])
+_NO_FIELDS: frozendict[str, str] = frozendict()
 
 # Each change's receipt confirms arguments(name) exactly.
 RECEIPTS: Mapping[object, object] = {
     KANBAN_BOARD: Board((), 0, (), (), "", "Currently rendered board", None),
-    KANBAN_READ_TASK: TaskDetail("task-1", frozendict(), ""),
+    KANBAN_READ_TASK: TaskDetail("task-1", _NO_FIELDS, ""),
     KANBAN_UPDATE_TASK: TaskEdited("task-1", "title", "private content", verified=True),
     KANBAN_MOVE_TASK: TaskMoved("task-1", "Done", verified=True, changed=True),
     KANBAN_COMMENT: CommentPosted("task-1", "private content", posted=True),

@@ -123,11 +123,12 @@ def test_bell_opens_inbox_keeps_exact_accessible_count_and_survives_activity(tmp
         assert capsule is not None and "1 clarification needs" in capsule.accessibleName() and "Hold V + T" in capsule.toolTip()
         QTest.mouseClick(capsule, QtCore.Qt.MouseButton.LeftButton, pos=QtCore.QPoint(17, TOP + 17))
         assert invoked == ("inbox",) and bar.expanded is None
-        for start in (
+        starts: tuple[Callable[[], None], ...] = (
             lambda: bar.agent_changed(Agent("Comparing both sheets", waiting=False)),
             lambda: bar.dictation(active=True),
             lambda: bar.job_changed(Job.TRANSCRIBING),
-        ):
+        )
+        for start in starts:
             start()
             assert waiting(bar) is capsule
         bar.dictation(active=False)

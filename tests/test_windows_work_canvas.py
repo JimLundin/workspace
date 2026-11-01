@@ -31,6 +31,7 @@ from assistant.qt_runtime import prepare
 from assistant.qt_ui import application
 from assistant.ui_components.canvas_loading import CanvasLoading
 from assistant.ui_components.canvas_look import surface_fill
+from assistant.ui_components.voice_legend import VoiceLegend
 from assistant.work_bridge import WorkOwners
 from assistant.work_bridge_contracts import WORK_BRIDGE
 from assistant.work_canvas import WorkCanvas, instruction_prompt
@@ -151,6 +152,11 @@ class LoadingPaintObserver(QtCore.QObject):
             indicator = self.loading.spinner
             self.first_paint = indicator is not None and windows.is_visible(indicator.handle)
         return False
+
+
+def pressed(legend: VoiceLegend) -> bool:
+    """The legend's current state, read afresh after each desktop transition."""
+    return legend.pressed
 
 
 def test_my_work_sources_corrections_and_editing_survive_background_publication(tmp_path: Path) -> None:
@@ -377,7 +383,7 @@ def test_first_canvas_open_shows_native_loading_before_building_and_releases_it(
         QtTest.QTest.qWait(20)
         assert not work.state.status, work.state.status
         view = views[0]
-        assert view.window.isVisible() and loading.closed
+        assert (view.window.isVisible(), loading.closed) == (True, True)
         assert loading.loop is not None and loading.loop.closed
         if loading.spinner is not None:
             assert observer.first_paint is True
@@ -642,6 +648,7 @@ def test_canvas_speech_instructs_the_open_canvas_and_keeps_failed_directions_for
         assert canvas.instruction_run is not None and "Queue unavailable" in canvas.status.text()
         ui.voice_agent(instruction, fallback.append)
         ui.pump()
+        canvas = ui.canvas_view.personal  # A fresh observation after the retry, not the narrowed earlier one.
         assert canvas.instruction_run is None and attempts[0] == attempts[1] and not fallback
         run = attempts[-1]
         assert run.intent == CanvasInstruction(instruction) and run.work_id == ROOT_CONTEXT
@@ -908,32 +915,32 @@ def test_canvas_voice_key_feedback_follows_agent_capture_and_release(tmp_path: P
     ui.pump()
     try:
         legend = ui.canvas_view.personal.voice_hint
-        assert legend.pressed and "Listening" in legend.accessibleDescription()
+        assert pressed(legend) and "Listening" in legend.accessibleDescription()
         held = legend.grab().toImage()
         bounds = legend.geometry()
         ui.desktop_state(State.LISTENING, agent_speaking=True)
         ui.pump()
-        assert legend.pressed and legend.grab().toImage() == held
+        assert pressed(legend) and legend.grab().toImage() == held
         ui.desktop_state(State.WORKING)
         ui.pump()
-        assert not legend.pressed and legend.geometry() == bounds
+        assert not pressed(legend) and legend.geometry() == bounds
         released = legend.grab().toImage()
         assert released != held
         ui.desktop_state(State.AGENT)
         ui.pump()
-        assert not legend.pressed and legend.grab().toImage() == released
+        assert not pressed(legend) and legend.grab().toImage() == released
         ui.desktop_state(State.LISTENING)
         ui.pump()
-        assert not legend.pressed and legend.grab().toImage() == released
+        assert not pressed(legend) and legend.grab().toImage() == released
         ui.desktop_state(State.LISTENING, agent_speaking=True)
         ui.pump()
-        assert legend.pressed and legend.grab().toImage() == held
+        assert pressed(legend) and legend.grab().toImage() == held
         ui.canvas_view.hide()
         ui.desktop_state(State.AGENT)
         ui.pump()
         work.show(focus=False)
         ui.pump()
-        assert not legend.pressed and legend.grab().toImage() == released
+        assert not pressed(legend) and legend.grab().toImage() == released
     finally:
         ui.dispose()
 

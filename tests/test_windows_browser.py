@@ -149,8 +149,8 @@ def verify_dom_and_saved_profile(browser: Browser, url: str) -> None:
         }
         return true;
     })()"""
-    browser.request(command("evaluate", **{"target_id": target, "expression": expression}), threading.Event())
-    output = browser.request(command("snapshot", **{"target_id": target, "limit": 100}), threading.Event()).text
+    browser.request(command("evaluate", target_id=target, expression=expression), threading.Event())
+    output = browser.request(command("snapshot", target_id=target, limit=100), threading.Event()).text
     assert len(output) <= MAX_OUTPUT
     first = decoded(output)
     second = request(browser, "snapshot", target_id=target, offset=first["next_control_offset"], text_offset=first["next_text_offset"])
@@ -232,7 +232,7 @@ def verify_inactive_screenshots(browser: Browser, target: str, identity: int) ->
             document.body.style.cssText = 'margin:0;min-height:100vh;background:' + COLOR;
             return document.visibilityState;
         })()""".replace("COLOR", json.dumps(css))
-        painted = browser.request(command("evaluate", **{"target_id": target, "expression": expression}), threading.Event())
+        painted = browser.request(command("evaluate", target_id=target, expression=expression), threading.Event())
         visibility = cast(Json, json.loads(painted.text))
         assert visibility in ("hidden", "visible")
         shot = browser.request(command("screenshot", **{"target_id": target}), threading.Event()).image

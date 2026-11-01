@@ -139,7 +139,7 @@ def test_native_tab_pagination_keeps_ids_and_group_details_with_escaped_long_tit
     seen: list[int] = []
     try:
         while True:
-            output = browser.request(command("tabs", **{"view": "strip", "offset": offset, "limit": 40}), threading.Event()).text
+            output = browser.request(command("tabs", view="strip", offset=offset, limit=40), threading.Event()).text
             assert len(output) <= MAX_OUTPUT
             data = decoded(output)
             rows, group_rows = data["tabs"], data["groups"]
@@ -240,7 +240,8 @@ def test_only_a_complete_unfiltered_listing_proves_unlisted_tabs_closed(tmp_path
 
     complete = target("browser-strip", "tabs")
     assert complete in readback({"view": "strip"}, strip(None)).resources
-    for arguments in ({"view": "strip", "offset": 1}, {"view": "strip", "window_id": 1}, {"view": "strip", "group_id": -1}):
+    filtered: tuple[dict[str, Json], ...] = ({"view": "strip", "offset": 1}, {"view": "strip", "window_id": 1}, {"view": "strip", "group_id": -1})
+    for arguments in filtered:
         assert complete not in readback(arguments, strip(None)).resources, arguments
     assert complete not in readback({"view": "strip"}, strip(1)).resources
     assert readback({}, pages(None)).resources == ("all:browser-page",)

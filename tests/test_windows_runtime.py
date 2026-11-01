@@ -51,7 +51,7 @@ def test_keeper_allows_owned_cleanup_longer_than_five_seconds(tmp_path: Path) ->
                 time.sleep(0.01)
             child = Process(process, replace(ASSISTANT, window=Window(title, None)), boundary)
             child.stop()
-            assert process.returncode == 0, "The keeper terminated a responsive child before cleanup finished"
+            assert process.poll() == 0, "The keeper terminated a responsive child before cleanup finished"
         finally:
             if process.poll() is None:
                 if handle := boundary.FindWindowW(None, title):

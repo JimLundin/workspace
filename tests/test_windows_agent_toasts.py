@@ -860,7 +860,7 @@ def test_live_phases_grow_push_up_and_fade_with_one_opaque_bubble() -> None:
         second = view.cards[PhaseKey("summary:compare")]
         assert second.alpha == 1 and first.alpha == 0.42
         assert first.y < old_top and first.y + first.height <= second.y
-        assert not first.expanded and second.expanded
+        assert (first.expanded, second.expanded) == (False, True)
         publish(Answer("result", "The newer plan has the approved dates.", 5, StreamState.COMPLETE))
         panel.pump()
         panel.advance(0.3)

@@ -248,7 +248,8 @@ def test_inspection_defaults_to_the_work_window_and_only_ui_changes_need_approva
     call(agent, "ui_action", {"handle": 7, "id": "1.2", "action": "read"})
     assert machine.log[-1].startswith("ui Act(handle=7, id='1.2', action='read'")
     before = tuple(machine.log)
-    assert not agent.call(ToolCall("fixture", "ui_action", json.dumps({"handle": 7, "id": "1.2", "action": "invoke"}))).ok
+    invoke: dict[str, object] = {"handle": 7, "id": "1.2", "action": "invoke"}
+    assert not agent.call(ToolCall("fixture", "ui_action", json.dumps(invoke))).ok
     assert tuple(machine.log) == before and agent.work.disposition is not None
 
 

@@ -129,7 +129,7 @@ def test_loading_remains_until_the_view_presents_its_first_frame() -> None:
         work.cancel_show(DeferredWorkView())
         assert loading.visible and not loading.closed
         view.paint_frame()
-        assert loading.closed and not loading.visible
+        assert (loading.closed, loading.visible) == (True, False)
     finally:
         work.close()
         while jobs:

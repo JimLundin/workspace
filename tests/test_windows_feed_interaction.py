@@ -9,6 +9,7 @@ lazy from PySide6 import QtWidgets
 lazy from PySide6.QtCore import Qt
 lazy from PySide6.QtTest import QTest
 
+from assistant.agent_toasts import card_order
 from assistant.qt_runtime import prepare
 from automation.presentation import Succeeded, ToolActivity
 from automation.task import Reply, TextAnswer
@@ -81,7 +82,7 @@ def test_expanding_a_bubble_collapses_the_previous_one() -> None:
             panel.agent.done("The fictional figures are ready.")
             panel.agent.finish()
         panel.pump()
-        first_card, second_card = sorted((card for card in panel.view.cards.values() if not card.retiring), key=lambda card: card.order)
+        first_card, second_card = sorted((card for card in panel.view.cards.values() if not card.retiring), key=card_order)
         first_card.toggle(animate=False)
         assert bool(first_card.expanded)
         second_card.toggle(animate=False)

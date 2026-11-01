@@ -340,7 +340,7 @@ def test_browser_snapshot_limits_keep_valid_json_and_progress_offsets(tmp_path: 
         {"result": {"value": source}},
     )
     browser = connected_browser(tmp_path, channel)
-    output = browser.request(command("snapshot", **{"target_id": "fixture", "offset": 4}), threading.Event()).text
+    output = browser.request(command("snapshot", target_id="fixture", offset=4), threading.Event()).text
     assert len(output) <= MAX_OUTPUT
     page = decoded(output)
     assert page["more_controls"] and page["next_text_offset"] == len(cast(str, page["text"]))

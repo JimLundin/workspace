@@ -42,7 +42,12 @@ def test_changes_from_any_thread_coalesce_into_one_render_on_the_view_thread() -
     view = RecordingView()
     publication = ViewPublication(thread.jobs.append, lambda: view, render)
     assert publication.opened() is view and renders == [(view, threading.get_ident())]
-    producer = threading.Thread(target=lambda: [publication.changed() for _ in range(100)])
+
+    def produce() -> None:
+        for _ in range(100):
+            publication.changed()
+
+    producer = threading.Thread(target=produce)
     producer.start()
     producer.join(timeout=2)
     assert not producer.is_alive() and len(thread.jobs) == 1
