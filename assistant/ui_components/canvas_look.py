@@ -16,7 +16,7 @@ lazy from PySide6.QtCore import Qt
 
 from assistant.feed_origin import App, Origin
 from assistant.qt_runtime import prepare
-from assistant.ui_components import text, typeface
+from assistant.ui_components import text
 from assistant.ui_components.appearance import ATTENTION, GLASS_ACCENT, Scheme, Shade, Tokens, brand
 from assistant.ui_components.meaning import Tint
 from assistant.vector_icons import icon
@@ -50,23 +50,20 @@ class Role(Enum):
 def face(role: Role) -> QtGui.QFont:
     match role:
         case Role.TITLE:
-            size, weight, tracking = 14.0, QtGui.QFont.Weight.DemiBold, -0.084
+            size, weight, tracking = 14.0, 600, -0.084
         case Role.GROUP:
-            size, weight, tracking = 15.0, QtGui.QFont.Weight.DemiBold, -0.15
+            size, weight, tracking = 15.0, 600, -0.15
         case Role.META:
-            size, weight, tracking = 11.5, QtGui.QFont.Weight.Normal, 0.0
+            size, weight, tracking = 11.5, 400, 0.0
         case Role.BODY:
-            size, weight, tracking = 13.0, QtGui.QFont.Weight.Normal, -0.04
+            size, weight, tracking = 13.0, 400, -0.04
         case Role.CONTROL:
-            size, weight, tracking = 12.0, QtGui.QFont.Weight.Medium, 0.0
+            size, weight, tracking = 12.0, 500, 0.0
         case Role.BADGE:
-            size, weight, tracking = 11.0, QtGui.QFont.Weight.Bold, 0.0
+            size, weight, tracking = 11.0, 700, 0.0
         case _:
             assert_never(role)
-    value = QtGui.QFont(typeface.FAMILY)
-    # Qt's logical DPI is 96 under high-DPI scaling, so points at 3/4 keep the kit's fractional pixel sizes.
-    value.setPointSizeF(size * 0.75)
-    value.setWeight(weight)
+    value = text.face(size, weight)
     value.setLetterSpacing(QtGui.QFont.SpacingType.AbsoluteSpacing, tracking)
     return value
 
