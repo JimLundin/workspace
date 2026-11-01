@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Final, Protocol
 
 import protocol
+from assistant.keymap import shortcut, shortcut_hint
 from components import LAYOUT
 from miryoku.layout import Scancode
 from protocol import App, LayoutState, Request, Tool
@@ -60,11 +61,11 @@ def menu_items(state: MenuState) -> tuple[MenuItem, ...]:
         MenuItem(Menu.OVERLAY.value, "Keyboard overlay", checked=state.overlay_enabled),
         MenuItem(Menu.KEYMAP.value, "Key map"),
         MenuItem(0),
-        MenuItem(Menu.ASK.value, "Ask…\tHold V + P"),
-        MenuItem(Menu.AGENT.value, "Agent session\tHold V + L"),
+        MenuItem(Menu.ASK.value, "Ask…\t" + shortcut_hint(shortcut(Tool.ASK))),
+        MenuItem(Menu.AGENT.value, "Agent session\t" + shortcut_hint(shortcut(Tool.AGENT_TYPED))),
         MenuItem(Menu.WORK.value, "Work…"),
         MenuItem(Menu.TASKBAR.value, "Toggle Windows taskbar\tWindows key"),
-        MenuItem(Menu.STOP_AGENT.value, "Stop agent\tHold V + Ö", enabled=state.agent_running),
+        MenuItem(Menu.STOP_AGENT.value, "Stop agent\t" + shortcut_hint(shortcut(Tool.STOP)), enabled=state.agent_running),
         MenuItem(Menu.MEETING.value, "Stop recording" if state.capturing else "Record a meeting"),
         MenuItem(Menu.TRANSCRIPTS.value, "Transcripts"),
         MenuItem(Menu.FOLLOWUPS.value, "Meeting follow-up…"),

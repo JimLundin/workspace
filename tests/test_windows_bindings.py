@@ -874,6 +874,13 @@ def test_stopped_layout_has_a_start_action_and_no_active_toggle_hotkey() -> None
     assert not toggle_layout(unavailable) and not unavailable.messages
 
 
+def test_tray_ask_advertises_the_layout_shortcut_in_readme_notation() -> None:
+    # Defect: the tray diverges from the shared physical-key formatter.
+    state = MenuState(layout=LayoutState.ON, overlay_enabled=True, agent_running=False, capturing=False)
+    ask = next(item for item in menu_items(state) if item.id == Menu.ASK.value)
+    assert ask.text == "Ask…\tHold V + P"
+
+
 def test_tray_overlay_toggle_updates_and_remembers_the_preference(tmp_path: Path) -> None:
     effects = OverlayFixture(OverlayState(layout_on=True), tmp_path / "overlay.json")
     for enabled in (False, True):
