@@ -366,10 +366,11 @@ def pending(catalog: Catalog, document: CanvasDocument, tasks: Sequence[Task]) -
     known = frozendict((task.id, phase(task.state)) for task in tasks)
     busy = frozenset(run.work_id for run in document.runs if known.get(run.task_id) not in _FINISHED)
     unresolved = sum(run.evidence is not None and known.get(run.task_id) not in _FINISHED for run in document.runs)
+    unresolved_intake = sum(isinstance(run.intent, CanvasIntake) and known.get(run.task_id) not in _FINISHED for run in document.runs)
     executing = sum(run.evidence is not None and known.get(run.task_id) in (None, "ready", "running") for run in document.runs)
-    # Admission owns one execution slot and at most three unresolved investigations.
-    # Waiting, paused and interrupted work retains its context without starving unrelated intake.
-    capacity = max(0, min(1 - executing, 3 - unresolved))
+    # Admission owns one execution slot. Intake has its own three-question budget:
+    # older paused research must not prevent all newly arrived evidence being read.
+    capacity = max(0, 1 - executing)
     # Bindings are retained by the execution journal's bounded watcher. Avoid
     # silently losing question routing when its retention budget is exhausted.
     capacity = min(capacity, max(0, 500 - len(document.runs)))
@@ -386,7 +387,8 @@ def pending(catalog: Catalog, document: CanvasDocument, tasks: Sequence[Task]) -
         covered = revised
     # Intake runs also use the source itself as their context bubble. Saved
     # fingerprints survive restart; a burst waits instead of losing arrivals.
-    for source in catalog.sources:
+    intake_available = unresolved_intake < 3
+    for source in catalog.sources if intake_available else ():
         if source.id in covered or source.id in busy or not reviewable(source):
             continue
         current = source.revision
@@ -395,7 +397,7 @@ def pending(catalog: Catalog, document: CanvasDocument, tasks: Sequence[Task]) -
         identity = hashlib.sha256((source.id + "\0" + current).encode()).hexdigest()
         return (CanvasRun("canvas:intake:" + identity, source.id, CanvasIntake(current)),)
     hidden = hidden_ids(catalog, document)
-    for note in document.notes:
+    for note in document.notes if intake_available else ():
         current = note_revision(note)
         if (
             not note.text.strip()
@@ -407,6 +409,11 @@ def pending(catalog: Catalog, document: CanvasDocument, tasks: Sequence[Task]) -
             continue
         identity = hashlib.sha256((note.id + "\0" + current).encode()).hexdigest()
         return (CanvasRun("canvas:intake:" + identity, note.id, CanvasIntake(current)),)
+    # Further research retains the overall three-investigation budget. Existing
+    # questions remain bound to their work; fresh intake can proceed independently.
+    capacity = min(capacity, max(0, 3 - unresolved))
+    if not capacity:
+        return ()
     for work in catalog.works:
         if work.definition.state is not WorkState.ACTIVE or work.id in busy:
             continue

@@ -3,7 +3,7 @@
 from dataclasses import replace
 from unittest import TestCase
 
-from assistant.canvas_activity import CanvasIntake, CanvasRun, CanvasUpdate
+from assistant.canvas_activity import CanvasIntake, CanvasResearch, CanvasRun, CanvasUpdate
 from assistant.work_canvas import pending, retained
 from assistant.work_canvas_commands import (
     CANVAS_RESPONSE,
@@ -188,6 +188,25 @@ def test_unconnected_evidence_is_reviewed_once_and_bursts_wait_in_order() -> Non
         for index, run in enumerate(waiting_runs)
     )
     assert not pending(Catalog(sources=sources), CanvasDocument(runs=waiting_runs), waiting_tasks)
+
+
+def test_waiting_research_backlog_does_not_prevent_new_evidence_intake() -> None:
+    # Defect: four existing unanswered research tasks exhaust the global budget
+    # and prevent any new meeting, email or user note from reaching the agent.
+    prior = tuple(CanvasRun("research:" + str(index), "work:" + str(index), CanvasResearch("revision")) for index in range(4))
+    tasks = tuple(
+        replace(work_task(identity=run.task_id), state=Waiting(Question("owner:" + str(index), "Who owns this?", "")))
+        for index, run in enumerate(prior)
+    )
+    mail = source(SourceKind.OUTLOOK)
+    document = CanvasDocument(runs=prior)
+    intake = pending(Catalog(sources=(mail,)), document, tasks)
+    assert len(intake) == 1 and intake[0].work_id == mail.id and isinstance(intake[0].intent, CanvasIntake)
+    assert not pending(Catalog(sources=(mail,)), replace(document, runs=(*prior, *intake)), tasks)
+    note = CanvasNote("note:arrival", "New evidence", "Supplier approval arrived.")
+    assert pending(Catalog(), replace(document, notes=(note,)), tasks)[0].work_id == note.id
+    # Starting further work research still waits for its unanswered predecessors.
+    assert not pending(catalog(), document, tasks)
 
 
 def test_canvas_read_pages_keep_full_topology_and_bound_large_activity_bodies() -> None:

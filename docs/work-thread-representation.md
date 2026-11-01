@@ -25,10 +25,11 @@ source changes continue their work thread. User-added documents and notes also
 receive intake. Agent-authored references and notes are examined within the
 creating run, avoiding recursive tasks for its own output. Intake fingerprints
 are durable, and completed intake bindings compact into observation cursors.
-Admission allows one automatic execution slot and at most three unresolved
-investigations. Paused questions retain their context while unrelated evidence
-can be reviewed; bursts wait and repeat observations do not create duplicate
-tasks. Browser collection samples currently
+Admission allows one automatic execution slot and at most three unresolved intake
+investigations. Intake has a separate budget so older unanswered research does
+not block all new evidence. Further work research waits when three investigations
+are unresolved. Paused questions retain their context; bursts wait and repeat
+observations do not create duplicate tasks. Browser collection samples currently
 rendered, signed-in Teams, Outlook and Kanban pages at fifteen-second intervals
 between reviews; this is not a mailbox subscription or a guarantee of complete
 application coverage. Completed meeting transcripts wake intake immediately,
