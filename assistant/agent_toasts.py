@@ -334,8 +334,6 @@ class AgentToasts:
             card = self.spares[-1]
             self.spares = self.spares[:-1]
             card.bind(toast, width)
-        if self.live_progress and _phase(toast.key) is not None:
-            card.expanded = toast.key == self.progress_head
         return card
 
     def retiring(self) -> tuple[Card, ...]:

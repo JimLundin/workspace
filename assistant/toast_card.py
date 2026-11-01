@@ -108,7 +108,6 @@ class Prepared:
     canvas_actions: tuple[Span, ...]
     body_height: int
     header_height: int
-    label_width: int
     hint: str
     hint_height: int
     caption: str
@@ -146,12 +145,6 @@ def _text_height(text: str, width: float) -> float:
 
 def _meta_height(text: str) -> int:
     return math.ceil(QFontMetricsF(meta_face()).height()) if text else 0
-
-
-def _controls(content: Content) -> int:
-    """Dismiss, Stop and the disclosure sit at the head's trailing edge."""
-    user = tone(content) is Tone.USER
-    return (0 if user else 1) + (1 if can_stop(content) else 0) + (1 if notification_text.expandable(content) else 0)
 
 
 def _title(content: Content) -> str:
@@ -192,9 +185,7 @@ class Measure:
         text_width = max(1, logical - body_padding)
         body_height = self.body.load(spans, text_width) + SECTION * 2 if spans else 0
         details_height = self.details.total(details, text_width) + SECTION * 2 if details else 0
-        label_width = title_width(logical, _controls(content))
-        # Collapsed turns elide their title to one line; other headings wrap.
-        title = title_height(_title(content), label_width, expanded=expanded or not _turn(content))
+        title = title_height()
         header = TOP + max(BADGE, title + _meta_height(meta))
         footer_height = _text_height(footer, text_width) + SECTION * 2 if footer else 0
         if labels:
@@ -208,7 +199,6 @@ class Measure:
             presentation.canvas_actions,
             math.ceil(body_height * scale),
             math.ceil(header * scale),
-            math.floor(label_width * scale),
             footer,
             math.ceil(footer_height * scale),
             meta,
@@ -745,9 +735,8 @@ class Card:
         return self.prepared[2]
 
     def render_heading(self, content: Content, prepared: Prepared) -> None:
-        # Collapsed turns elide their title to one line; other headings wrap.
-        self.label.expanded = self.expanded or not _turn(content)
         self.label.setText(_title(content))
+        self.label.setToolTip(escape(self.label.text()))
         self.caption.setText(prepared.caption)
         self.label.show()
         self.caption.setVisible(bool(prepared.caption))
@@ -826,7 +815,7 @@ class Card:
     def place_heading(self, wide: int, header: float, controls: int) -> None:
         """Titles and meta stack beside the badge, centred on it when they are shorter."""
         width = title_width(wide, controls)
-        title = title_height(self.label.text(), width, expanded=self.label.expanded)
+        title = title_height()
         meta = _meta_height(self.caption.text()) if not self.caption.isHidden() else 0
         top = TOP + max(0, round((header - TOP - title - meta) / 2))
         self.label.setGeometry(TEXT_LEFT, top, width, max(1, title))

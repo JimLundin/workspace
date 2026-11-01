@@ -278,15 +278,13 @@ def meta_face() -> QFont:
     return face(META)
 
 
-def title_height(text: str, width: int, *, expanded: bool) -> int:
-    metrics = QFontMetricsF(title_face())
-    if expanded:
-        return math.ceil(metrics.boundingRect(QRectF(0, 0, max(1, width), 10000), Qt.TextFlag.TextWordWrap.value, text).height())
-    return math.ceil(metrics.height())
+def title_height() -> int:
+    """Card headings keep one line independently of step disclosure."""
+    return math.ceil(QFontMetricsF(title_face()).height())
 
 
-def title_text(text: str, width: int, *, expanded: bool) -> str:
-    return text if expanded else QFontMetricsF(title_face()).elidedText(text, Qt.TextElideMode.ElideRight, width)
+def title_text(text: str, width: int) -> str:
+    return QFontMetricsF(title_face()).elidedText(" ".join(text.split()), Qt.TextElideMode.ElideRight, width)
 
 
 def controls_width(count: int) -> int:
@@ -337,26 +335,22 @@ def action_style(controls: Controls, *, primary: bool) -> str:
 
 
 class FeedTitle(QLabel):
-    """A card's title: one elided line, or the whole title while the card is expanded."""
+    """A card's title stays on one elided line; its original text remains accessible."""
 
     def __init__(self, parent: QWidget) -> None:
         super().__init__(parent)
-        # Qt owns mutable presentation; this flag selects its current paint/layout.
-        self.expanded: bool = False
         self.setFont(title_face())
 
     def display_text(self) -> str:
-        return title_text(self.text(), self.width(), expanded=self.expanded)
+        return title_text(self.text(), self.width())
 
     def heightForWidth(self, width: int) -> int:
-        return title_height(self.text(), width, expanded=self.expanded)
+        return title_height()
 
     def paintEvent(self, event: QPaintEvent) -> None:
         painter = QPainter(self)
         painter.setFont(title_face())
         painter.setPen(self.palette().color(QPalette.ColorRole.WindowText))
         flags = Qt.AlignmentFlag.AlignLeft.value | Qt.AlignmentFlag.AlignVCenter.value
-        if self.expanded:
-            flags |= Qt.TextFlag.TextWordWrap.value
         painter.drawText(QRectF(self.rect()), flags, self.display_text())
         painter.end()

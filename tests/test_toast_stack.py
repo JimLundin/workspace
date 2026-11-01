@@ -77,13 +77,13 @@ def test_feed_stacks_upward_and_retiring_cards_hold_their_place() -> None:
     assert frames(slots, TALL, Stacking.FEED) == (Placement(684, 1.0), Placement(534, 1.0))
 
 
-def test_trail_closes_retiring_space_fades_by_rank_and_pushes_older_phases_up() -> None:
-    # Defect: a short arrival leaves a tall older phase stationary, or older phases stay opaque.
-    assert frames((Active(100, 0), Retiring(50), Active(80, 650)), TALL, Stacking.TRAIL) == (Placement(684, 1.0), Placement(594, 0.42))
-    assert frames((Active(100, 0), Active(80, 560)), TALL, Stacking.TRAIL) == (Placement(684, 1.0), Placement(560, 0.42))
-    assert frames((Active(100, 0), Active(80, 600)), TALL, Stacking.PUSH) == (Placement(684, 1.0), Placement(584, 0.42))
+def test_trail_closes_retiring_space_and_pushes_without_dimming_readable_phases() -> None:
+    # Defect: a short arrival leaves a tall older phase stationary, or stack rank dims it.
+    assert frames((Active(100, 0), Retiring(50), Active(80, 650)), TALL, Stacking.TRAIL) == (Placement(684, 1.0), Placement(594, 1.0))
+    assert frames((Active(100, 0), Active(80, 560)), TALL, Stacking.TRAIL) == (Placement(684, 1.0), Placement(560, 1.0))
+    assert frames((Active(100, 0), Active(80, 600)), TALL, Stacking.PUSH) == (Placement(684, 1.0), Placement(584, 1.0))
     trail = frames((Active(10, 1000),) * 6, TALL, Stacking.TRAIL)
-    assert trail == tuple(Placement(y, alpha) for y, alpha in zip((774, 754, 734, 714, 694, 674), (1.0, 0.42, 0.14, 0.04, 0.02, 0.02), strict=True))
+    assert trail == tuple(Placement(y, 1.0) for y in (774, 754, 734, 714, 694, 674))
 
 
 def test_frame_retarget_preserves_every_visible_value_and_velocity() -> None:

@@ -1,9 +1,10 @@
 # Functional design
 
 Live agent activity appears in a bounded lower-right trail. Each public update starts
-a phase bubble, which grows with its tool calls. The newest phase expands and stays
-opaque; earlier phases collapse, move upward and fade. Full history retains the
-complete interaction. Clarification redirects take precedence over transient steps.
+a phase bubble with compact steps. Headings stay on one elided line even when
+steps are opened. Cards remain opaque until their reading lifetime ends, then
+fade away; stack position does not dim them. Hover pauses the reading timeout.
+Full history retains the complete interaction. Clarification redirects take precedence over transient steps.
 Bubbles remain read-only; a tooltip directs replies to the agent voice button.
 The canvas retains useful findings, sources, documents, drafts and clarifications.
 Requests and execution history do not create work bubbles. Arrangement instructions

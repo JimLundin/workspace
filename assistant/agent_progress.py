@@ -25,7 +25,6 @@ from assistant.notifications import (
 from automation.presentation import Answer, ReasoningSummary, ToolActivity
 
 TRAIL_LENGTH = 3
-TRAIL_ALPHA = (1.0, 0.42, 0.14, 0.04, 0.02)
 
 
 @dataclass(frozen=True, slots=True)

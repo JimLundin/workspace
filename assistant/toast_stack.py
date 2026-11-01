@@ -6,7 +6,6 @@ from enum import Enum, auto
 from typing import Final
 
 from assistant import motion
-from assistant.agent_progress import TRAIL_ALPHA
 from assistant.notifications import MAX_VISIBLE, WIDTH
 from winapi.shapes import Rect
 
@@ -144,7 +143,7 @@ class Fit:
 
 class Stacking(Enum):
     FEED = auto()  # opaque cards; retiring cards hold their space while they leave
-    TRAIL = auto()  # live progress fades older phases and closes retiring space
+    TRAIL = auto()  # live progress closes retiring space; lifetime owns its fade
     PUSH = auto()  # a trail arrival also lifts older phases above their prior top
 
 
@@ -229,13 +228,9 @@ def frames(slots: Sequence[Slot], viewport: Viewport, stacking: Stacking) -> tup
                     bottom -= height + viewport.gap
             case Active(height, top):
                 bottom -= height
-                if stacking is Stacking.FEED:
-                    alpha = 1.0
-                else:
-                    if placed:
-                        bottom = min(bottom, top - (viewport.rise if stacking is Stacking.PUSH else 0))
-                    alpha = TRAIL_ALPHA[min(len(placed), len(TRAIL_ALPHA) - 1)]
-                placed = (*placed, Placement(bottom, alpha))
+                if stacking is not Stacking.FEED and placed:
+                    bottom = min(bottom, top - (viewport.rise if stacking is Stacking.PUSH else 0))
+                placed = (*placed, Placement(bottom, 1.0))
                 bottom -= viewport.gap
     return placed
 
