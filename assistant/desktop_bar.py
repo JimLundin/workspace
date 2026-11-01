@@ -20,6 +20,7 @@ lazy import os
 lazy from PySide6 import QtCore, QtGui
 
 from assistant.qt_runtime import prepare
+lazy import assistant.ui_components.appearance
 lazy import winapi.ambient
 lazy from assistant import island_menu
 lazy from assistant.ambient import Ambient, SystemStatus
@@ -33,7 +34,7 @@ lazy from assistant.island_surface import TOP, BarWindow, Drawn, Presented
 lazy from assistant.qt_ui import EventLoop, application
 lazy from assistant.recording_state import RecordingAction, RecordingState
 lazy from assistant.shell_controls import TASKBAR_TOGGLE, TaskbarControl, WindowsKeyObserver
-lazy from assistant.ui_components.appearance import Look, large, look
+lazy from assistant.ui_components.appearance import Look, look
 lazy from assistant.ui_components.meaning import Tint
 lazy from protocol import Tool
 lazy from winapi import appearance, shell, system_notices, windows
@@ -429,11 +430,13 @@ class DesktopBar:
         )
         # The window keeps the room a capsule is heading for, so it resizes only as an expansion starts and settles.
         reach = max((max(moving.height.value, moving.height.target) for moving in self.motion.capsules), default=float(HEIGHT))
-        self.window.present(Presented(drawn, reach, self.expanded, contrast=contrast, glass=self.preference is appearance.Material.GLASS))
+        self.window.present(
+            Presented(drawn, reach, self.expanded, frost=self.frost, contrast=contrast, glass=self.preference is appearance.Material.GLASS)
+        )
 
     def style(self, tint: Tint, height: float) -> Look:
-        small = look(self.preference, self.frost, tint)
-        return large(small) if height > HEIGHT else small
+        pane = assistant.ui_components.appearance.Menu(self.frost) if height > HEIGHT else assistant.ui_components.appearance.Capsule(self.frost)
+        return look(self.preference, pane, tint)
 
     def spinning(self) -> bool:
         def spinner(part: object) -> bool:

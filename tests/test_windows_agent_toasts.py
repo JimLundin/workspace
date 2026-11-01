@@ -32,8 +32,7 @@ from assistant.qt_ui import application
 from assistant.recording_state import RecordingAction, RecordingState
 from assistant.rich_text import formatted
 from assistant.toast_card import Card, Finish
-from assistant.ui_components.appearance import Scheme, Shade
-from assistant.ui_components.bubble import Solid
+from assistant.ui_components.appearance import Scheme, Shade, SolidLook
 from assistant.ui_components.text import TextView
 from automation.presentation import Answer, Failed, ReasoningSummary, Said, StreamState, Succeeded, ToolActivity
 from automation.task import Reply, TextAnswer
@@ -1026,7 +1025,12 @@ def test_solid_and_high_contrast_materials_keep_all_content_readable() -> None:
         panel.preference = appearance.Contrast("#ffffff", "#000000")
         panel.view.refresh()
         panel.pump()
-        assert not work.glass and work.style.surface == Solid(Shade("#ffffff"), Shade("#000000"))
+        assert not work.glass
+        match work.style.surface:
+            case SolidLook(fill=Shade("#ffffff"), edge=Shade("#000000")):
+                pass
+            case other:
+                raise AssertionError(f"The card did not use its high-contrast solid surface: {other}")
         assert work.style.text.ink == work.style.text.quiet == Shade("#000000")
         status = work.details.calls[0].status.grab().toImage()
         painted = tuple(status.pixelColor(x, y) for x in range(status.width()) for y in range(status.height()) if status.pixelColor(x, y).alpha() > 0)

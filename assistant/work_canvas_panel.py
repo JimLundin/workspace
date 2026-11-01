@@ -21,7 +21,7 @@ from assistant.ui_components.appearance import GLASS_ACCENT, Tokens
 from assistant.ui_components.canvas_bubble import CanvasBubble
 from assistant.ui_components.canvas_chrome import CanvasFrame, CanvasSurface, CanvasToolbar, GlassCapsule, ScrollEdge, content_style
 from assistant.ui_components.canvas_connection import ConnectionPath
-from assistant.ui_components.canvas_look import CARD_RADIUS, SHADOW, glass_ink
+from assistant.ui_components.canvas_look import CARD_RADIUS, SHADOW
 from assistant.ui_components.controls import button, label
 from assistant.ui_components.meaning import Tint
 from assistant.ui_components.voice_legend import VoiceLegend
@@ -228,7 +228,7 @@ class CanvasPanel:
         self.questions.hide()
 
     def create_voice_controls(self) -> None:
-        self.voice_hint: VoiceLegend = VoiceLegend(PHYSICAL_NAMES[AGENT], glass_ink(self.theme, Tint.NONE).ink)
+        self.voice_hint: VoiceLegend = VoiceLegend(PHYSICAL_NAMES[AGENT], self.toolbar.surface.look.lettering.ink)
         self.toolbar_layout.addWidget(self.voice_hint)
         self.clear_context: QtWidgets.QToolButton = self.toolbar.button("close", "Ask about the whole canvas", self.clear_selection)
         self.clear_context.setIconSize(QtCore.QSize(12, 12))

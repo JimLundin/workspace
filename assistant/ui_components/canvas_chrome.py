@@ -1,18 +1,19 @@
 """Quiet native canvas chrome: the content window, its floating glass capsules and the scroll edge."""
 
 from collections.abc import Callable
-from typing import override
+from typing import assert_never, override
 
 lazy from PySide6 import QtCore, QtGui, QtWidgets
 lazy from PySide6.QtCore import Qt
 
-from assistant.ui_components.appearance import GLASS_ACCENT, Tokens, canvas_style
-from assistant.ui_components.canvas_look import CAPSULE, CONTROL, SHADOW, WINDOW_RADIUS, glass_ink, paint_glass, paint_scroll_edge
+from assistant.ui_components.appearance import GLASS_ACCENT, CanvasBar, GlassLook, SolidLook, Tokens, canvas_style, look
+from assistant.ui_components.canvas_look import CAPSULE, CONTROL, SHADOW, WINDOW_RADIUS, CanvasGlass, paint_glass, paint_scroll_edge
 from assistant.ui_components.controls import button
 from assistant.ui_components.meaning import Tint
 from assistant.ui_components.text import color
 from assistant.ui_components.widgets import Window, row
 from assistant.vector_icons import icon
+from winapi.appearance import Material
 
 
 def content_style(theme: Tokens) -> str:
@@ -59,13 +60,21 @@ class GlassCapsule(QtWidgets.QFrame):
 
     def __init__(self, parent: QtWidgets.QWidget, theme: Tokens, tint: Tint) -> None:
         super().__init__(parent)
-        self.theme: Tokens = theme
-        self.tint: Tint = tint
+        # The canvas does not observe the material preference yet; its toolbar
+        # explicitly retains Qt-painted glass in the current content scheme.
+        surface = look(Material.GLASS, CanvasBar(theme.scheme), tint)
+        match surface:
+            case GlassLook():
+                self.surface: CanvasGlass = CanvasGlass(theme.scheme, surface)
+            case SolidLook():
+                raise ValueError("The canvas glass recipe produced a solid surface.")
+            case _:
+                assert_never(surface)
         inset = (CAPSULE - CONTROL) // 2
         self.setContentsMargins(SHADOW.left() + inset, SHADOW.top() + inset, SHADOW.right() + inset, SHADOW.bottom() + inset)
         self.content: QtWidgets.QHBoxLayout = row(self)
         self.content.setSpacing(2)
-        ink = glass_ink(theme, tint)
+        ink = self.surface.look.lettering
         # Qt sizes a styled button's contents box: 24 px inside a 2 px border keeps the 28 px circle.
         self.setStyleSheet(
             f"QToolButton#glass {{ border: 2px solid transparent; border-radius: {CONTROL // 2}px; padding: 0; background: transparent;"
@@ -82,13 +91,13 @@ class GlassCapsule(QtWidgets.QFrame):
 
     def button(self, symbol: str, tip: str, action: Callable[[], None]) -> QtWidgets.QToolButton:
         control = button("", action, tip=tip, name="glass")
-        control.setIcon(icon(symbol, glass_ink(self.theme, self.tint).ink.color))
+        control.setIcon(icon(symbol, self.surface.look.lettering.ink.color))
         control.setIconSize(QtCore.QSize(16, 16))
         return control
 
     def paintEvent(self, event: QtGui.QPaintEvent) -> None:
         painter = QtGui.QPainter(self)
-        paint_glass(painter, self.glass(), self.theme, self.tint)
+        paint_glass(painter, self.glass(), self.surface)
         painter.end()
 
 

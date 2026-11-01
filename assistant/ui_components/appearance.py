@@ -16,7 +16,7 @@ from assistant.feed_origin import App
 from assistant.ui_components import typeface
 from assistant.ui_components.meaning import Tint, Tone
 from winapi import appearance
-from winapi.shapes import Stop, Veil
+from winapi.shapes import Stop
 
 GLASS_ACCENT: Final = "#4b8fe8"  # a soft blue, lighter and less saturated than system blue
 ATTENTION: Final = "#f08a00"  # a question waits
@@ -201,7 +201,7 @@ def brand(app: App) -> str:
             assert_never(app)
 
 
-# Small glass: thin neutral veils with monochrome ink.
+# Every glass surface shares its ink and rim vocabulary.
 @dataclass(frozen=True, slots=True)
 class Lettering:
     """Ink for a surface: primary and quiet text, and the control fills under the pointer."""
@@ -213,10 +213,20 @@ class Lettering:
 
 
 @dataclass(frozen=True, slots=True)
-class GlassLook:
-    """Composition draws the veil; Qt paints only content and an invisible hit fill."""
+class Rim:
+    """Rim light at the upper-leading curve, middle and trailing foot."""
 
-    veil: Veil
+    high: float
+    low: float
+    end: float
+
+
+@dataclass(frozen=True, slots=True)
+class GlassLook:
+    """A veil and rim for composition or Qt, with the same surface lettering."""
+
+    veil: Shade
+    rim: Rim
     lettering: Lettering
 
 
@@ -232,18 +242,40 @@ class SolidLook:
 type Look = GlassLook | SolidLook
 
 
-def lettering(theme: Tokens) -> Lettering:
-    """The surface's text and pointer fills come from its scheme's tokens."""
-    return Lettering(theme.ink, theme.ink2, theme.hover, theme.press)
+@dataclass(frozen=True, slots=True)
+class Capsule:
+    """Small desktop glass follows the observed background."""
+
+    frost: appearance.Frost
 
 
 @dataclass(frozen=True, slots=True)
-class Rim:
-    """Rim light at the upper-leading curve, middle and trailing foot."""
+class Menu:
+    """Expanded desktop glass is thicker over the same observed background."""
 
-    high: float
-    low: float
-    end: float
+    frost: appearance.Frost
+
+
+@dataclass(frozen=True, slots=True)
+class Card:
+    """Large desktop glass follows the app scheme."""
+
+    scheme: Scheme
+
+
+@dataclass(frozen=True, slots=True)
+class CanvasBar:
+    """Qt-painted glass is thicker over the canvas's content scheme."""
+
+    scheme: Scheme
+
+
+type Pane = Capsule | Menu | Card | CanvasBar
+
+
+def lettering(theme: Tokens) -> Lettering:
+    """The surface's text and pointer fills come from its scheme's tokens."""
+    return Lettering(theme.ink, theme.ink2, theme.hover, theme.press)
 
 
 def rim_stops(rim: Rim) -> tuple[Stop, ...]:
@@ -251,57 +283,120 @@ def rim_stops(rim: Rim) -> tuple[Stop, ...]:
     return (Stop(0, "#ffffff", rim.high), Stop(0.34, "#ffffff", rim.low), Stop(0.72, "#ffffff", rim.low), Stop(1, "#ffffff", rim.end))
 
 
+def _scheme(pane: Pane, material: appearance.Material) -> Scheme:
+    match pane:
+        case Capsule(frost=frost) | Menu(frost=frost):
+            match material:
+                case appearance.Material.SOLID:
+                    # The bar's solid fallback stays dark regardless of desktop frost.
+                    return Scheme.DARK
+                case appearance.Material.GLASS:
+                    pass
+                case _:
+                    assert_never(material)
+            match frost:
+                case appearance.Frost.BRIGHT:
+                    return Scheme.LIGHT
+                case appearance.Frost.LIGHT | appearance.Frost.SMOKED:
+                    return Scheme.DARK
+                case _:
+                    assert_never(frost)
+        case Card(scheme=scheme) | CanvasBar(scheme=scheme):
+            return scheme
+        case _:
+            assert_never(pane)
+
+
+def _small_veil(frost: appearance.Frost) -> Shade:
+    match frost:
+        case appearance.Frost.BRIGHT:
+            return Shade("#ffffff", 0.2)
+        case appearance.Frost.LIGHT:
+            return Shade("#1c1c20", 0.26)
+        case appearance.Frost.SMOKED:
+            # A mixed desktop needs a heavier veil to keep small text legible.
+            return Shade("#1c1c20", 0.62)
+        case _:
+            assert_never(frost)
+
+
+def _veil(pane: Pane) -> Shade:
+    match pane:
+        case Capsule(frost=frost):
+            return _small_veil(frost)
+        case Menu(frost=frost):
+            small = _small_veil(frost)
+            return Shade(small.color, max(small.opacity, 0.64))
+        case Card(scheme=scheme):
+            match scheme:
+                case Scheme.DARK:
+                    return Shade("#222226", 0.64)
+                case Scheme.LIGHT:
+                    return Shade("#fafafc", 0.66)
+                case _:
+                    assert_never(scheme)
+        case CanvasBar(scheme=scheme):
+            match scheme:
+                case Scheme.DARK:
+                    return Shade("#1e1e22", 0.84)
+                case Scheme.LIGHT:
+                    return Shade("#fbfbfd", 0.86)
+                case _:
+                    assert_never(scheme)
+        case _:
+            assert_never(pane)
+
+
+def _attention(pane: Pane) -> GlassLook:
+    rim = Rim(0.55, 0.06, 0.10)
+    match pane:
+        case CanvasBar():
+            white = "#ffffff"
+            ink = Lettering(Shade(white, 0.96), Shade(white, 0.8), Shade(white, 0.16), Shade(white, 0.26))
+            return GlassLook(Shade(ATTENTION, 0.94), rim, ink)
+        case Capsule() | Menu() | Card():
+            return GlassLook(Shade(ATTENTION, 0.9), rim, lettering(tokens(Scheme.DARK)))
+        case _:
+            assert_never(pane)
+
+
 @lru_cache(maxsize=32)  # Every frame asks again for each capsule; the answers are a handful of values.
-def look(preference: appearance.Preference, frost: appearance.Frost, tint: Tint) -> Look:
-    """Small glass takes its scheme from the desktop beneath it; a tint replaces the veil only for meaning."""
+def look(preference: appearance.Preference, pane: Pane, tint: Tint) -> Look:
+    """One material recipe; pane ownership selects the scheme and veil thickness."""
     match preference:
         case appearance.Contrast(background=background, foreground=foreground):
-            # System colours, swapped when the capsule carries meaning.
+            # System colours, swapped when the surface carries meaning.
             fill, ink = (foreground, background) if tint is Tint.ATTENTION else (background, foreground)
             return SolidLook(Shade(fill), Shade(ink), Lettering(Shade(ink), Shade(ink), Shade(ink, 0.2), Shade(ink, 0.35)))
         case appearance.Material.SOLID:
             match tint:
                 case Tint.ATTENTION:
-                    return SolidLook(Shade(ATTENTION), Shade("#ffffff", 0.18), lettering(tokens(Scheme.DARK)))
+                    return SolidLook(Shade(ATTENTION), Shade("#ffffff", 0.18), _attention(pane).lettering)
                 case Tint.NONE:
-                    return SolidLook(Shade("#26262a"), Shade("#ffffff", 0.07), lettering(tokens(Scheme.DARK)))
+                    theme = tokens(_scheme(pane, appearance.Material.SOLID))
+                    return SolidLook(Shade(theme.solid), theme.solid_edge, lettering(theme))
                 case _:
                     assert_never(tint)
         case appearance.Material.GLASS:
             pass
         case _:
             assert_never(preference)
-    bright = frost is appearance.Frost.BRIGHT
-    shadow = 0.14 if bright else 0.36
     match tint:
         case Tint.ATTENTION:
-            return GlassLook(Veil(ATTENTION, 0.9, rim_stops(Rim(0.55, 0.06, 0.10)), shadow), lettering(tokens(Scheme.DARK)))
+            return _attention(pane)
         case Tint.NONE:
             pass
         case _:
             assert_never(tint)
-    match frost:
-        case appearance.Frost.BRIGHT:
-            return GlassLook(Veil("#ffffff", 0.2, rim_stops(Rim(0.95, 0.16, 0.42)), shadow), lettering(tokens(Scheme.LIGHT)))
-        case appearance.Frost.LIGHT:
-            return GlassLook(Veil("#1c1c20", 0.26, rim_stops(Rim(0.55, 0.06, 0.22)), shadow), lettering(tokens(Scheme.DARK)))
-        case appearance.Frost.SMOKED:
-            # A mixed desktop needs a heavier veil to keep small text legible.
-            return GlassLook(Veil("#1c1c20", 0.62, rim_stops(Rim(0.55, 0.06, 0.22)), shadow), lettering(tokens(Scheme.DARK)))
+    scheme = _scheme(pane, appearance.Material.GLASS)
+    match scheme:
+        case Scheme.DARK:
+            rim = Rim(0.55, 0.06, 0.22)
+        case Scheme.LIGHT:
+            rim = Rim(0.95, 0.16, 0.42)
         case _:
-            assert_never(frost)
-
-
-@lru_cache(maxsize=16)
-def large(look: Look) -> Look:
-    """Large glass is thicker, so a menu's text stays legible over any desktop."""
-    match look:
-        case GlassLook(veil=veil, lettering=lettering):
-            return GlassLook(Veil(veil.tint, max(veil.opacity, 0.64), veil.rim, veil.shadow), lettering)
-        case SolidLook():
-            return look
-        case _:
-            assert_never(look)
+            assert_never(scheme)
+    return GlassLook(_veil(pane), rim, lettering(tokens(scheme)))
 
 
 def reading(lettering: Lettering, tone: Tone, *, contrast: bool) -> Shade:

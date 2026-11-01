@@ -18,11 +18,12 @@ lazy from PySide6.QtWidgets import QLabel, QWidget
 
 from assistant.feed_origin import App, Origin
 from assistant.qt_runtime import prepare
-from assistant.ui_components import typeface
-from assistant.ui_components.appearance import GLASS_ACCENT, Rim, Scheme, Shade, brand, rim_stops, tokens
+from assistant.ui_components import appearance, typeface
+from assistant.ui_components.appearance import GLASS_ACCENT, GlassLook, Rim, Scheme, Shade, SolidLook, brand, rim_stops, tokens
+from assistant.ui_components.meaning import Tint
 from assistant.ui_components.text import BODY, META, TextInk, color, contrast_ink, face, text_ink
 from assistant.vector_icons import icon
-from winapi import appearance
+from winapi.appearance import Contrast, Material, Preference
 
 prepare()
 
@@ -43,23 +44,6 @@ ACTIONS_TOP: Final = 12
 
 
 @dataclass(frozen=True, slots=True)
-class Glass:
-    """Composition draws the veil; Qt paints the rim light and an invisible hit fill."""
-
-    veil: Shade
-    rim: Rim
-
-
-@dataclass(frozen=True, slots=True)
-class Solid:
-    fill: Shade
-    edge: Shade
-
-
-type Surface = Glass | Solid
-
-
-@dataclass(frozen=True, slots=True)
 class Controls:
     """Controls inside a card are filled, never glass: glass doesn't sit on glass."""
 
@@ -75,20 +59,21 @@ class Controls:
 
 @dataclass(frozen=True, slots=True)
 class Look:
-    surface: Surface
+    surface: appearance.Look
     text: TextInk
     controls: Controls
     thumb: Shade  # overlay scroll bars
 
 
-def look(preference: appearance.Preference, scheme: Scheme) -> Look:
+def look(preference: Preference, scheme: Scheme) -> Look:
     """Large glass follows Windows' app scheme; high contrast uses the system colours."""
+    surface = appearance.look(preference, appearance.Card(scheme), Tint.NONE)
     match preference:
-        case appearance.Contrast(background=background, foreground=foreground):
+        case Contrast(background=background, foreground=foreground):
             ink, ground = Shade(foreground), Shade(background)
             controls = Controls(ink, ground, Shade(foreground, 0.2), Shade(foreground, 0.35), ink, ink, ground, ink)
-            return Look(Solid(ground, ink), contrast_ink(foreground, background), controls, ink)
-        case appearance.Material.SOLID | appearance.Material.GLASS:
+            return Look(surface, contrast_ink(foreground, background), controls, ink)
+        case Material.SOLID | Material.GLASS:
             pass
         case _:
             assert_never(preference)
@@ -97,19 +82,10 @@ def look(preference: appearance.Preference, scheme: Scheme) -> Look:
     controls = Controls(
         theme.ink, theme.hover, theme.press, Shade(theme.ink.color, 0.18), clear, Shade(GLASS_ACCENT), Shade("#ffffff"), Shade(GLASS_ACCENT)
     )
-    if preference is appearance.Material.SOLID:
-        return Look(Solid(Shade(theme.solid), theme.solid_edge), text_ink(theme), controls, theme.thumb)
-    match scheme:
-        case Scheme.DARK:
-            glass = Glass(Shade("#222226", 0.64), Rim(0.55, 0.06, 0.22))
-        case Scheme.LIGHT:
-            glass = Glass(Shade("#fafafc", 0.66), Rim(0.95, 0.16, 0.42))
-        case _:
-            assert_never(scheme)
-    return Look(glass, text_ink(theme), controls, theme.thumb)
+    return Look(surface, text_ink(theme), controls, theme.thumb)
 
 
-def _rim(bounds: QRectF, rim: Rim) -> QLinearGradient:
+def rim_gradient(bounds: QRectF, rim: Rim) -> QLinearGradient:
     """CSS's 160deg gradient: brightest where light catches the upper-leading curve."""
     angle = math.radians(160)
     dx, dy = math.sin(angle), -math.cos(angle)
@@ -121,7 +97,7 @@ def _rim(bounds: QRectF, rim: Rim) -> QLinearGradient:
     return gradient
 
 
-def paint_card(painter: QPainter, bounds: QRectF, surface: Surface) -> None:
+def paint_card(painter: QPainter, bounds: QRectF, surface: appearance.Look) -> None:
     """Qt owns the paint target; glass leaves its veil to composition."""
     painter.save()
     painter.setRenderHint(QPainter.RenderHint.Antialiasing)
@@ -129,11 +105,11 @@ def paint_card(painter: QPainter, bounds: QRectF, surface: Surface) -> None:
     outline = QPainterPath()
     outline.addRoundedRect(edge, RADIUS - 0.5, RADIUS - 0.5)
     match surface:
-        case Glass(rim=rim):
+        case GlassLook(rim=rim):
             # A nearly transparent fill keeps the rounded shape hit-testable.
             painter.fillPath(outline, QColor(1, 1, 1, 1))
-            painter.setPen(QPen(_rim(edge, rim), 1))
-        case Solid(fill=fill, edge=line):
+            painter.setPen(QPen(rim_gradient(edge, rim), 1))
+        case SolidLook(fill=fill, edge=line):
             painter.fillPath(outline, color(fill))
             painter.setPen(QPen(color(line), 1))
         case _:

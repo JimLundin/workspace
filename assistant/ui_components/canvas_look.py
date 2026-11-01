@@ -17,8 +17,7 @@ lazy from PySide6.QtCore import Qt
 from assistant.feed_origin import App, Origin
 from assistant.qt_runtime import prepare
 from assistant.ui_components import text
-from assistant.ui_components.appearance import ATTENTION, GLASS_ACCENT, Lettering, Rim, Scheme, Shade, Tokens, brand, lettering, rim_stops
-from assistant.ui_components.meaning import Tint
+from assistant.ui_components.appearance import ATTENTION, GLASS_ACCENT, GlassLook, Scheme, Shade, Tokens, brand, rim_stops
 from assistant.vector_icons import icon
 
 prepare()
@@ -232,18 +231,15 @@ def paint_badges(painter: QtGui.QPainter, origins: tuple[Origin, ...], at: QtCor
     painter.restore()
 
 
-def glass_ink(theme: Tokens, tint: Tint) -> Lettering:
-    match tint:
-        case Tint.ATTENTION:
-            white = "#ffffff"
-            return Lettering(Shade(white, 0.96), Shade(white, 0.8), Shade(white, 0.16), Shade(white, 0.26))
-        case Tint.NONE:
-            return lettering(theme)
-        case _:
-            assert_never(tint)
+@dataclass(frozen=True, slots=True)
+class CanvasGlass:
+    """A canvas paint treatment: shared glass with scheme-owned shadow and hairline."""
+
+    scheme: Scheme
+    look: GlassLook
 
 
-def paint_glass(painter: QtGui.QPainter, bounds: QtCore.QRectF, theme: Tokens, tint: Tint) -> None:
+def paint_glass(painter: QtGui.QPainter, bounds: QtCore.QRectF, surface: CanvasGlass) -> None:
     """The canvas toolbar's glass over the canvas: a veil, a rim lit along its upper-leading curve, and a shadow.
 
     Qt can't blur the scene beneath a child widget cheaply, so the veil is
@@ -252,23 +248,16 @@ def paint_glass(painter: QtGui.QPainter, bounds: QtCore.QRectF, theme: Tokens, t
     painter.save()
     painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
     corner = bounds.height() / 2
-    dark = theme.scheme is Scheme.DARK
+    dark = surface.scheme is Scheme.DARK
     for spread, drop, alpha in ((6, 6, 0.10 if dark else 0.05), (2, 2, 0.22 if dark else 0.07)):
         painter.fillPath(
             rounded(bounds.adjusted(-spread, -spread + drop, spread, spread + drop), corner + spread), QtGui.QColor(0, 0, 0, round(alpha * 255))
         )
-    match tint:
-        case Tint.ATTENTION:
-            veil, rim = Shade(ATTENTION, 0.94), Rim(0.55, 0.06, 0.10)
-        case Tint.NONE:
-            veil, rim = (Shade("#1e1e22", 0.84), Rim(0.55, 0.06, 0.22)) if dark else (Shade("#fbfbfd", 0.86), Rim(0.95, 0.16, 0.42))
-        case _:
-            assert_never(tint)
-    painter.fillPath(rounded(bounds, corner), text.color(veil))
+    painter.fillPath(rounded(bounds, corner), text.color(surface.look.veil))
     painter.setPen(QtGui.QPen(QtGui.QColor(0, 0, 0, 115 if dark else 26), 0.5))
     painter.drawPath(rounded(bounds.adjusted(-0.25, -0.25, 0.25, 0.25), corner + 0.25))
     gradient = QtGui.QLinearGradient(bounds.topLeft(), bounds.bottomRight())
-    for stop in rim_stops(rim):
+    for stop in rim_stops(surface.look.rim):
         # The canvas owns this uncached native colour and retains its eight-bit rim alpha.
         shade = text.color(Shade(stop.color))
         shade.setAlpha(round(stop.opacity * 255))

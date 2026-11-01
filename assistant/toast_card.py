@@ -50,7 +50,7 @@ from assistant.notifications import (
 from assistant.qt_runtime import prepare
 from assistant.rich_text import Span
 from assistant.ui_components import bubble
-from assistant.ui_components.appearance import Scheme, Shade
+from assistant.ui_components.appearance import GlassLook, Scheme, Shade
 from assistant.ui_components.bubble import (
     ACTION,
     ACTIONS_TOP,
@@ -684,7 +684,7 @@ class Card:
         # Without a composition layer, requested glass falls back to the solid material.
         self.style = bubble.look(preference if self.glass or _contrast(preference) else appearance.Material.SOLID, finish.scheme)
         match self.style.surface:
-            case bubble.Glass(veil=veil) if self.layer is not None:
+            case GlassLook(veil=veil) if self.layer is not None:
                 self.layer.color(veil.color, veil.opacity)
             case _:
                 if self.layer is not None:
