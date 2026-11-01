@@ -5,6 +5,7 @@ import os
 import socket
 import subprocess
 import sys
+import threading
 import unittest
 import uuid
 from collections.abc import Generator
@@ -15,10 +16,15 @@ from typing import cast
 if sys.platform != "win32":
     raise unittest.SkipTest("Windows work process ownership")
 
+from assistant.work_agent import WorkAgent
+from assistant.work_snapshot import WorkSnapshot
 from automation.bridge import BridgeClient, ProfileLease, read_discovery
+from automation.context import ContextStore
 from automation.routines import Disabled, RoutineStore
 from automation.store import TaskStore
-from automation.task import Interrupted, RequestSource, Running, RunRef
+from automation.task import Completed, Interrupted, RequestSource, Running, RunRef
+from automation.work_folder import WorkFolder
+from tests.test_agent_window import RecordingWindow
 from winapi import system, windows
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -44,6 +50,15 @@ notify("pid:" + str(os.getpid()))
 
 class Execution:
     def run_work(self, claim, store, log, stop):
+        if mode == "link":
+            assert claim.task.prompt == "Link check"
+            notify("claimed:" + claim.run.run_id)
+            assert channel.recv(1) == b"s", "The test did not release live progress."
+            log.say("Linked progress.")
+            notify("said:" + claim.run.run_id)
+            assert channel.recv(1) == b"f", "The test did not release completion."
+            # No live Done: the controller must save the returned outcome.
+            return Completed("Linked result.", ())
         assert isinstance(claim.previous, Interrupted), claim.previous
         assert claim.task.checkpoint.summary == "Read and checked the transcript."
         # A real execution-owned file is closed before controller.wait returns.
@@ -69,7 +84,7 @@ def ready():
 
 try:
     run(Missing(("OPENAI_API_KEY",)), folder=folder, title=title, ready=ready,
-        execution=Execution() if mode == "fixture" else None)
+        execution=Execution() if mode in ("fixture", "link") else None)
     assert windows.find(title) is None, "The worker's native HWND survived cleanup."
     notify("closed")
 finally:
@@ -179,6 +194,77 @@ def test_native_worker_constructs_default_machine_and_disabled_routine(tmp_path:
             client.close()
         routines = RoutineStore(tmp_path / "work.sqlite3").list()
         assert len(routines) == 1 and isinstance(routines[0].state, Disabled)
+        native.close_window()
+        assert native.receive() == "closed"
+        assert native.process.wait(timeout=10) == 0
+
+
+def test_assistant_submission_runs_in_the_native_worker_and_completes(tmp_path: Path) -> None:
+    # Defects: mismatched journals or worker epochs, wrongly fenced live output,
+    # or frontend completion that requires a live Done instead of the journal.
+    tasks = TaskStore(WorkFolder(tmp_path).journal)
+    panels: list[RecordingWindow] = []
+    errors: list[str] = []
+    completed = threading.Event()
+
+    def window(agent: WorkAgent) -> RecordingWindow:
+        panel = RecordingWindow(agent.stop, on_submit=agent.start, on_reset=agent.new_conversation)
+        panels.append(panel)
+        return panel
+
+    def published(snapshot: WorkSnapshot) -> None:
+        for task in snapshot.tasks:
+            match task.state:
+                case Completed():
+                    completed.set()
+                case _:
+                    pass
+
+    with worker(tmp_path, mode="link") as native:
+        assert native.receive() == "ready"
+        epoch = read_discovery(tmp_path).epoch
+        agent = WorkAgent(
+            tasks,
+            RoutineStore(tasks.path),
+            ContextStore(tasks.path),
+            BridgeClient(tmp_path),
+            window,
+            on_snapshot=published,
+            on_done=lambda: None,
+            report_error=errors.append,
+        )
+        agent.start_worker()
+        try:
+            agent.start("Link check")
+            claimed = native.receive()
+            assert claimed.startswith("claimed:")
+            assert agent.refresh().wait(5), "The frontend did not observe the worker's claim."
+            (active,) = agent.snapshot().tasks
+            assert active.prompt == "Link check"
+            match active.state:
+                case Running(run=run, owner=owner):
+                    assert owner == epoch and run == RunRef(active.id, claimed.removeprefix("claimed:"))
+                case state:
+                    raise AssertionError(f"The native worker did not own a running task: {state}")
+
+            native.peer.sendall(b"s")
+            assert native.receive() == "said:" + run.run_id
+            assert agent.refresh().wait(5), "The frontend did not consume the worker's live progress."
+            assert "Linked progress." in panels[0].all_text()
+            assert agent.snapshot().tasks[0].state == active.state
+
+            native.peer.sendall(b"f")
+            assert completed.wait(5), "The frontend did not publish the worker's durable completion."
+            (finished,) = agent.snapshot().tasks
+            assert finished.id == active.id and finished.state == Completed("Linked result.", ())
+            assert tasks.get(finished.id) == finished
+            assert "Linked result." in panels[0].all_text()
+            assert not errors
+        finally:
+            agent.close()
+            assert agent.wait_closed(5)
+            for panel in panels:
+                panel.paint()
         native.close_window()
         assert native.receive() == "closed"
         assert native.process.wait(timeout=10) == 0
