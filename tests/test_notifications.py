@@ -34,7 +34,6 @@ from assistant.notifications import (
     tone,
 )
 from assistant.recording_state import RecordingState
-from assistant.toast_stack import Frame, Motion
 from automation.presentation import Answer, Failed, Finished, Progress, ReasoningSummary, Said, StreamState, Succeeded, ToolActivity
 from automation.task import ApprovalDecision, TextAnswer
 from tests.agent_requests import asked, reviewed
@@ -340,18 +339,3 @@ def test_unread_content_stays_through_updates_then_gets_a_full_expiry_delay() ->
     stack = hover(stack, key, inside=False, now=20000)
     assert next_expiry(stack) == 20012
     assert not advance(stack, session, 20012).toasts
-
-
-def test_interrupted_motion_retargets_from_the_visible_position_without_overshoot() -> None:
-    move = Motion(Frame(500, 120, 100, 0), Frame(300, 240, 300, 1), 10)
-    current = move.sample(10.1)
-    assert 300 < current.y < 500 and 0 < current.alpha < 1
-    assert 120 < current.width < 240
-    assert current.y + current.height == 600
-    retargeted = Motion(current, Frame(200, 280, 400, 1), 10.1)
-    assert retargeted.sample(10.1) == current
-    positions = [retargeted.sample(10.1 + step / 100).y for step in range(30)]
-    assert positions == sorted(positions, reverse=True)
-    widths = [retargeted.sample(10.1 + step / 100).width for step in range(30)]
-    assert widths == sorted(widths) and widths[-1] == 280
-    assert retargeted.sample(20) == Frame(200, 280, 400, 1) and retargeted.finished(20)

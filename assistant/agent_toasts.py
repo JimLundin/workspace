@@ -13,6 +13,7 @@ lazy from PySide6 import QtCore
 lazy from PySide6.QtCore import Qt
 lazy from PySide6.QtWidgets import QApplication
 
+from assistant import toast_stack
 from assistant.agent_progress import Progress, advance_progress, compact, retain_lifetimes, visible
 from assistant.canvas_session import redirect_session
 from assistant.qt_runtime import prepare
@@ -379,7 +380,6 @@ class AgentToasts:
                 if not animate or key in created:
                     self.release(card)
                 else:
-                    card.motion = None
                     exits = (*exits, card)
         retiring = sorted((card for card in self.cards.values() if card.retiring), key=card_order, reverse=True)
         for card in retiring[reservable(len(desired)) :]:
@@ -441,16 +441,16 @@ class AgentToasts:
                 card.position(right, card.frame)
         stacking = Stacking.FEED if not self.live_progress else Stacking.PUSH if pushing else Stacking.TRAIL
         slots = tuple(
-            Retiring(card.height) if card.retiring else Active(card.height, card.motion.end.y if card.motion is not None else card.y)
+            Retiring(card.height) if card.retiring else Active(card.height, toast_stack.target(card.motion).y if card.motion is not None else card.y)
             for card in cards
         )
         targets = tuple(
             (card, Frame(placement.y, card.width, card.height, placement.alpha, card.layout.details_height if card.layout is not None else 0))
             for card, placement in zip((card for card in cards if not card.retiring), frames(slots, viewport, stacking), strict=True)
         )
-        changed = any(target != (card.motion.end if card.motion is not None else card.frame) for card, target in targets)
-        # All active rectangles retarget on the same clock. Interpolating top
-        # and bottom together preserves the gap between neighboring cards;
+        changed = any(target != (toast_stack.target(card.motion) if card.motion is not None else card.frame) for card, target in targets)
+        # All active rectangles spring on one clock with the same response.
+        # Their paired top/bottom values and velocities preserve neighboring gaps;
         # applying target heights before moving their tops would overlap them.
         for card, target in targets:
             card.target(target.y, target.alpha, now, animate=animate, retarget=changed)
@@ -535,8 +535,9 @@ class AgentToasts:
         before = self.stack
         for key, card in tuple(self.cards.items()):
             if card.motion is not None:
-                card.position(card.right, card.motion.sample(now) if animate else card.motion.end)
-                if card.motion.finished(now) or not animate:
+                card.motion = toast_stack.advance(card.motion, now)
+                card.position(card.right, toast_stack.shown(card.motion) if animate else toast_stack.target(card.motion))
+                if toast_stack.resting(card.motion) or not animate:
                     card.motion = None
                     if card.retiring:
                         self.release(card)

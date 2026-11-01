@@ -59,7 +59,7 @@ def test_animation_clock_starts_after_native_preparation() -> None:
         panel.pump()
         card = next(iter(panel.view.cards.values()))
         assert card.motion is not None, "Preparation used up the animation's entire duration."
-        assert card.motion.started == panel.now and card.alpha == 0
+        assert card.motion.at == panel.now and card.alpha == 0
         panel.now += 0.14
         panel.view.tick()
         assert 0 < card.alpha < 1

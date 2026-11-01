@@ -23,7 +23,7 @@ lazy from PySide6.QtGui import (
 )
 lazy from PySide6.QtWidgets import QAbstractButton, QLabel, QTextEdit, QWidget
 
-from assistant import notification_reading, notification_text, step_view
+from assistant import notification_reading, notification_text, step_view, toast_stack
 from assistant.feed_origin import App
 from assistant.notifications import (
     REVEAL_SECONDS,
@@ -47,7 +47,7 @@ from assistant.notifications import (
 )
 from assistant.qt_runtime import prepare
 from assistant.rich_text import Span
-from assistant.toast_stack import Frame, Motion
+from assistant.toast_stack import Frame, Moving
 from assistant.ui_components import bubble
 from assistant.ui_components.appearance import GlassLook, Scheme, Shade
 from assistant.ui_components.bubble import (
@@ -457,7 +457,7 @@ class Card:
         self.bounds: Rect | None = None
         self.finish: Finish | None = None
         self.glass = self.closed = self.hovered = self.retiring = self.expanded = self.tail_pending = False
-        self.motion: Motion | None = None
+        self.motion: Moving | None = None
         self.reader: notification_reading.State = notification_reading.Waiting(0, owner.clock() + notification_reading.START_SECONDS)
         self.page_origin = self.speed = self.spin_angle = 0.0
         self.line_height = round(line_height(face(BODY)) * owner.scale)
@@ -888,10 +888,15 @@ class Card:
             self.motion = None
             self.position(self.right, end)
             return
-        if not retarget and self.motion is not None and self.motion.end == end:
+        if not retarget and self.motion is not None and toast_stack.target(self.motion) == end:
             return
-        current = self.motion.sample(now) if self.motion is not None else self.frame
-        self.motion = Motion(current, end, now) if current != end else None
+        current = toast_stack.advance(self.motion, now) if self.motion is not None else toast_stack.start(self.frame, now)
+        moving = toast_stack.retarget(current, end)
+        if toast_stack.resting(moving):
+            self.motion = None
+            self.position(self.right, end)
+        else:
+            self.motion = moving
 
     def reveal(self) -> None:
         self.window.show()

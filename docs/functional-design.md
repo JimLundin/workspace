@@ -48,7 +48,7 @@ process, such as the browser host. Effect ownership stays in the last column.
 | `automation/ipc.py`, `outbox.py`, `bridge.py`, `profile_lease.py` | shared: IPC/outbox/bridge; work: profile lease | Validated process messages, typed meeting operations and bounded desktop-call text, plus immutable event retention/coalescing with explicit history loss | Bridge client/server own the one authenticated pipe and replace outbox snapshots under the server lock; `ProfileLease` owns the OS-released exclusive work-folder lock; `automation/app.py` composes the worker and its `OwnerCalls` adapter, binding calls to the current execution run and cancellation handle |
 | `assistant/action_text.py` | shared | Readable action targets and results, formatted before preview limits | `agent.py` publishes previews; session presentation handles raw payloads too |
 | `assistant/notifications.py`, `notification_text.py`, `notification_reading.py`, `toast_style.py` | desktop | Grouped turns, attached results, optional steps, reading states, lifetimes and tints | `agent_toasts.py`, `toast_card.py`, `qt_text.py`, `qt_ui.py`, `winapi/composition.py`, `winapi/appearance.py`, `winapi/notification_input.py` |
-| `assistant/toast_stack.py` | desktop | Measured card sizing, capacity, stack placement and frame motion sampling | `agent_toasts.py` and `toast_card.py` own windows and the shared frame clock |
+| `assistant/toast_stack.py`, `motion.py` | desktop | Measured card sizing, capacity, stack placement and immutable synchronized frame springs | `agent_toasts.py` and `toast_card.py` own windows and the shared frame clock; `island_motion.py` consumes the same spring model |
 | `assistant/browser_requests.py`, `browser_values.py`, `browser_session.py`, `browser.py` | shared | Browser requests (one typed variant per operation, validated once at the browser tool seam), immutable page/tab/group observations, validated DevTools and tab-API replies, group selection, typed paginated projections | `Browser`, `NativeSessions`, `Cdp`, `browser_tabs.TabStrip`, the `browser_host` exchange of typed flat requests, and a cancellable connection wait |
 | `assistant/recording_state.py` | shared | Audio batches, stored observations, completion rules, retry policy, stale-update rejection, and recording controls | `meetings.py` and `meeting_store.py` |
 | `assistant/meeting_followup.py`, `meeting_preparation.py` | shared | Frozen transcript bundles, exact citations, sourced actions and drafts, preparation identity | `meeting_followup_store.py` owns verified publications and revision-checked edits; `Preparations` owns content-addressed bundle files |
@@ -272,15 +272,15 @@ revision. Multiple saved packages require an explicit choice when no selection
 is retained. Opening an email uses the saved draft file, after local edits have
 been saved or explicitly reloaded.
 
-The owner animates at most five cards, retargeting from current geometry. Each
-notification fits its rendered content up to 360 logical pixels (280 for user
-requests), independent of the history window. Headers, the stop icon and voice
-hints contribute to that width. The pure `allocate` function reserves readable
+The owner animates at most five cards. Retargeting keeps current geometry and
+velocity. Each notification fits its rendered content up to 360 logical pixels
+(280 for user requests), independent of the history window. Headers, the stop
+icon and voice hints contribute to that width. The pure `allocate` function reserves readable
 previews and gives pending questions and recent messages the remaining height.
 On very small work areas it removes older entries from the projection.
-`qt_text.Document` measures Markdown using separate `QTextDocument` instances,
-with the same fonts, paragraph margins and wrapping as the visible text. A line
-that wraps at the maximum width already needs that width; shorter lines get an
+`ui_components.text.Document` measures Markdown using separate `QTextDocument`
+instances, with the same fonts, paragraph margins and wrapping as the visible
+text. A line that wraps at the maximum width already needs that width; shorter lines get an
 exact pixel measurement. No visible window is resized for measurement.
 
 Steps, result, header and footer get separate rectangles; viewports end on
@@ -289,9 +289,10 @@ with no character cutoff. The result and steps have independent scroll positions
 and small overflow markers. Steps use smaller type and a 200-logical-pixel
 height budget, reserving room for the attached result. Collapsing only changes
 the steps' viewport; the result retains its widget, selection and reading
-position. `toast_stack.Frame` carries top, width, height, opacity and steps height together.
-Every active card retargets on the same clock, so growing and shrinking neighbors
-retain their gaps. Native positioning anchors the right edge; the text wraps at
+position. `toast_stack.Frame` carries top, width, height, opacity and steps height
+together. Its five springs share one critically damped response and clock, so
+growing and shrinking neighbors retain their gaps through interruptions and
+retirement. Native positioning anchors the right edge; the text wraps at
 its destination width, and the stop icon follows the visible right edge.
 Unchanged frames do not repeat native movement after fractional DPI rounding.
 
@@ -301,8 +302,9 @@ and closing Markdown preserve earlier text and selection. The display cursor
 stays at its existing position when text arrives; new replies start at the top.
 Recording previews explicitly follow their newest line after Qt resolves layout.
 New reply text gets a bounded set of short-lived extra selections to reveal its
-ink; later packets do not dim earlier text. Motion uses a 280 ms base and 160 ms
-fast duration with `cubic-bezier(0.32, 0.72, 0, 1)`. Keyboard disclosure is immediate.
+ink; later packets do not dim earlier text. Floating frames use the shared spring
+model with damping 1.0 and response 0.32 s; the text reveal keeps its 160 ms fade.
+Keyboard disclosure and Windows reduced motion place frames immediately.
 The frame timer accounts for drawing time and requests Windows' finer timer
 resolution only while movement, text reveals or smooth reading run. Reduced
 motion, opening history and closing release that request. A shared callback

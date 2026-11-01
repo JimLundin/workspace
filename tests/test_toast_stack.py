@@ -4,16 +4,23 @@ from assistant.toast_stack import (
     Active,
     Column,
     Fit,
+    Frame,
     Measured,
     Placement,
     Retiring,
     Space,
     Stacking,
     Viewport,
+    advance,
     allocate,
     fit,
     frames,
+    resting,
+    retarget,
+    shown,
     space,
+    start,
+    target,
 )
 from winapi.shapes import Rect
 
@@ -77,3 +84,68 @@ def test_trail_closes_retiring_space_fades_by_rank_and_pushes_older_phases_up() 
     assert frames((Active(100, 0), Active(80, 600)), TALL, Stacking.PUSH) == (Placement(684, 1.0), Placement(584, 0.42))
     trail = frames((Active(10, 1000),) * 6, TALL, Stacking.TRAIL)
     assert trail == tuple(Placement(y, alpha) for y, alpha in zip((774, 754, 734, 714, 694, 674), (1.0, 0.42, 0.14, 0.04, 0.02, 0.02), strict=True))
+
+
+def test_frame_retarget_preserves_every_visible_value_and_velocity() -> None:
+    # Defect: changing the card's slot reconstructs a field at rest, so the
+    # interruption jumps or stops one part of the synchronized frame.
+    moving = advance(retarget(start(Frame(500, 120, 100, 0), 10), Frame(300, 240, 300, 1, 80)), 10.1)
+    before = shown(moving)
+    end = Frame(200, 280, 400, 0.42, 40)
+    changed = retarget(moving, end)
+    assert shown(changed) == before and target(changed) == end
+    for previous, current in zip(
+        (moving.y, moving.width, moving.height, moving.alpha, moving.details),
+        (changed.y, changed.width, changed.height, changed.alpha, changed.details),
+        strict=True,
+    ):
+        assert current.velocity == previous.velocity != 0
+    assert changed.y.velocity < 0
+
+
+def test_synchronized_frames_preserve_bottom_edges_and_neighboring_gaps() -> None:
+    # Defect: frame fields or neighboring cards use different responses or
+    # elapsed times, making a bottom edge drift or the stack overlap.
+    lower = retarget(start(Frame(500, 240, 100, 1), 10), Frame(300, 240, 300, 1))
+    upper = retarget(start(Frame(350, 240, 140, 1), 10), Frame(150, 240, 140, 1))
+    for step in range(1, 101):
+        now = 10 + step / 100
+        lower, upper = advance(lower, now), advance(upper, now)
+        if step == 10:
+            lower = retarget(lower, Frame(200, 240, 400, 1))
+            upper = retarget(upper, Frame(50, 240, 140, 1))
+        bottom, top = shown(lower), shown(upper)
+        assert abs(bottom.y + bottom.height - 600) < 0.01
+        assert abs(bottom.y - (top.y + top.height) - 10) < 0.01
+    assert resting(lower) and resting(upper)
+
+
+def test_a_card_from_rest_never_overshoots_its_slot() -> None:
+    # Defect: floating frames select a bouncy token or wire a target into the
+    # wrong field, sending the card beyond its slot before it settles.
+    end = Frame(300, 240, 300, 1, 80)
+    moving = retarget(start(Frame(500, 120, 100, 0), 10), end)
+    previous = shown(moving)
+    for step in range(1, 101):
+        moving = advance(moving, 10 + step / 100)
+        current = shown(moving)
+        assert 300 <= current.y <= previous.y
+        assert previous.width <= current.width <= 240
+        assert previous.height <= current.height <= 300
+        assert previous.alpha <= current.alpha <= 1
+        assert previous.details <= current.details <= 80
+        previous = current
+    assert shown(moving) == end and resting(moving)
+
+
+def test_opacity_or_disclosure_keeps_an_otherwise_still_frame_in_flight() -> None:
+    # Defect: completion omits opacity or the details pane, so the owner stops
+    # ticking before a rank fade or fixed-height disclosure has completed.
+    initial = Frame(300, 240, 300, 1)
+    for end in (Frame(300, 240, 300, 0.42), Frame(300, 240, 300, 1, 80)):
+        moving = retarget(start(initial, 10), end)
+        assert not resting(moving)
+        moving = advance(moving, 10.1)
+        assert not resting(moving) and shown(moving) != end
+        moving = advance(moving, 12)
+        assert resting(moving) and shown(moving) == end
