@@ -815,7 +815,7 @@ def test_streaming_reveals_only_new_text_and_releases_animation_timing() -> None
         panel.pump()
         panel.settle()
         assert reply.text.toPlainText() == final and not reply.text.extraSelections()
-        assert panel.view.animation_timer is None and not panel.view.environment.timer.active
+        assert not panel.view.animation_timer.isActive() and not panel.view.environment.timer.active
 
 
 class Period:
@@ -855,7 +855,9 @@ def test_motion_timing_is_balanced_on_reduced_motion_history_and_close() -> None
 
 def test_measured_previews_end_on_complete_lines_with_mixed_markdown_fonts() -> None:
     with notifications() as panel:
-        document = panel.view.measure.body
+        panel.agent.say("Fictional preview.")
+        panel.pump()
+        document = next(iter(panel.view.cards.values())).measurement.body
         for source in (
             "A wrapped paragraph with Åäö and 👩🏽‍💻. " * 12,
             "# Heading\n\nA **bold** paragraph.\n\n- An item that wraps across several lines in a narrow preview.\n"
@@ -1096,20 +1098,20 @@ def test_spinner_reuses_widgets_and_stops_timers_for_reduced_motion_and_input() 
         assert work.spin_angle != angle and work.window.findChildren(QWidget) == widgets
         panel.animated = False
         panel.view.tick()
-        assert panel.view.animation_timer is None
+        assert not panel.view.animation_timer.isActive()
         panel.animated = True
         replies: list[Reply] = []
         panel.agent.request_input(asked("open", "Open this?", "budget.xlsx", panel.now), recording(replies))
         assert panel.requested.wait(timeout=2)
         panel.pump()
         panel.settle()
-        assert panel.view.animation_timer is None
+        assert not panel.view.animation_timer.isActive()
         assert panel.agent.reply_by_voice("The workbook on my desktop")
         assert replies == [TextAnswer("The workbook on my desktop")]
         panel.agent.finish()
         panel.pump()
         panel.settle()
-        assert panel.view.animation_timer is None and panel.view.cards
+        assert not panel.view.animation_timer.isActive() and panel.view.cards
 
 
 def test_solid_and_high_contrast_materials_keep_all_content_readable() -> None:
@@ -1239,7 +1241,7 @@ def test_recording_stop_is_independent_and_shutdown_closes_every_native_layer() 
         panel.agent.close()
         panel.pump()
         assert panel.agent.publication.closed_ready.is_set() and not panel.view.cards
-        assert panel.view.animation_timer is None and panel.view.expiry_timer is None and not shiboken6.isValid(panel.view.loop.timer)
+        assert not shiboken6.isValid(panel.view.animation_timer) and panel.view.expiry_timer is None and not shiboken6.isValid(panel.view.loop.timer)
         assert all(not windows.exists(handle) for handle in handles)
 
 

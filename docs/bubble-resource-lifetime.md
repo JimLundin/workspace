@@ -30,6 +30,18 @@ already in progress retains its clock across unrelated refreshes. Translation
 updates native position without reshaping unchanged text and child controls;
 size or details-height changes still lay out those contents.
 
+Each pooled card also owns its measurement documents, cleared on parking and
+closed on shutdown. Measuring another card preserves its prepared paragraphs.
+The shared text adapter rounds measurement budgets to Qt's whole logical pixels,
+so fractional Windows scaling does not repeatedly reflow unchanged text.
+
+One reusable precise timer advances card movement, text reveals, spinners and
+automatic reading. Incoming observations preserve its deadline; native glass
+publishes once per tick. An idle stack stops frame work. The work observer
+prepares accepted answer/reasoning prose before posting to Qt, sharing immutable
+spans through a cache bounded to eight recent bodies. Qt retains native document
+ownership. [Current measurements](qt-animation-performance.md) cover these changes.
+
 ## Native measurements on 2026-10-28
 
 The investigation used CPython 3.15.1, Qt 6.12 and GC enabled. Separate harness

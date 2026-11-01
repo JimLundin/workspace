@@ -7,15 +7,85 @@ if sys.platform != "win32":
     raise unittest.SkipTest("Windows bubble resource ownership")
 
 lazy import shiboken6
+lazy from PySide6 import QtCore
 
-from assistant.notifications import Toast
+from assistant.agent_session import ChatMessage
+from assistant.notifications import Entry, Toast
 from assistant.qt_runtime import prepare
-from assistant.toast_card import Card, CardOwner, Finish
+from assistant.toast_card import Card, CardOwner, Finish, Measure
 from assistant.toast_stack import Frame
 from tests.test_windows_agent_toasts import notifications
 from winapi import windows
 
 prepare()
+
+
+def test_settled_bubbles_stop_their_native_frame_publication_loop() -> None:
+    # Defect: a separate glass frame loop keeps querying native geometry at
+    # 60 Hz after all bubble motion, reveals and scrolling have stopped.
+    with notifications(animated=True) as panel:
+        panel.agent.say("A short fictional reply.")
+        panel.pump()
+        panel.settle()
+        assert not panel.view.animation_timer.isActive()
+        assert not panel.view.loop.timer.isActive(), "Idle bubbles kept native frame work running."
+
+
+def test_repeated_observations_preserve_the_cards_animation_deadline() -> None:
+    # Defect: incoming observations restart the card timer before it can fire,
+    # starving movement, text reveals, scrolling and the working spinner.
+    with notifications(animated=True) as panel:
+        panel.agent.begin("Review the fictional figures")
+        panel.pump()
+        frames = 0
+
+        def painted() -> None:
+            nonlocal frames
+            frames += 1
+
+        updates = QtCore.QTimer(panel.root)
+        updates.setInterval(5)
+        updates.timeout.connect(panel.view.refresh)
+        waiting = QtCore.QEventLoop()
+        try:
+            panel.view.animation_timer.timeout.connect(painted)
+            updates.start()
+            QtCore.QTimer.singleShot(150, waiting.quit)
+            waiting.exec()
+            assert frames >= 3, "Incoming observations starved card animation."
+        finally:
+            updates.stop()
+            updates.deleteLater()
+
+
+def test_measuring_another_bubble_preserves_each_bubbles_prepared_document() -> None:
+    # Defect: a shared scratch document discards another card's text layout,
+    # forcing full reconstruction instead of updating its changed tail.
+    with notifications() as panel:
+        panel.agent.say("First fictional reply with its own measured text.")
+        panel.agent.say("Second fictional reply with different measured text.")
+        panel.pump()
+        assert len(panel.view.cards) == 2
+        for card in panel.view.cards.values():
+            assert card.prepared is not None
+            assert card.measurement.body.spans == card.prepared[2].spans, "Another bubble overwrote its prepared document."
+
+
+def test_fractional_scaling_keeps_measurement_and_viewport_on_one_text_width() -> None:
+    # Defect: the physical-pixel budget becomes a fractional logical width,
+    # repeatedly reflowing the full reply between measurement and viewport fit.
+    with notifications():
+        measurement = Measure()
+        measurement.scale = 1.25
+        try:
+            content = Entry(0, ChatMessage("Workspace", "A long fictional paragraph.\n\n" * 80, 100))
+            prepared = measurement.prepare(content, 400)
+            measured_width = measurement.body.qt.textWidth()
+            fitted = measurement.layout(prepared, prepared.width, 300)
+            assert fitted.body_height < prepared.body_height
+            assert measurement.body.qt.textWidth() == measured_width, "Fitting changed the measured text width."
+        finally:
+            measurement.close()
 
 
 def test_expired_bubble_reuses_its_windows_without_retaining_content() -> None:

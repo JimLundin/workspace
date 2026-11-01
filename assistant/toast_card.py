@@ -239,9 +239,6 @@ class CardOwner(Protocol):
     def scale(self) -> float: ...
 
     @property
-    def measure(self) -> Measure: ...
-
-    @property
     def composition(self) -> DesktopComposition | None: ...
 
     def clock(self) -> float: ...
@@ -466,9 +463,9 @@ class Card:
         # injected adapters retain real widgets and the same scene lifetime.
         self.move, self.create_glass = move, _glass if glass is None else glass
         self.owner: CardOwner = owner
-        # The stack retains the shared Qt measurement lifetime; the card binds
-        # that dependency directly without reaching through its owner.
-        self.measurement: Measure = owner.measure
+        # A pooled card owns its measured documents. Sharing a scratch document
+        # across cards discarded unchanged paragraphs and rebuilt long replies.
+        self.measurement = Measure()
         self.key, self.order = toast.key, (0, *order_of(toast))
         self.content: Content | None = None
         self.prepared: tuple[Content, int, Prepared] | None = None
@@ -540,6 +537,8 @@ class Card:
         self.motion = None
         self.content = None
         self.prepared = None
+        self.measurement.body.load((), 1)
+        self.measurement.details.history.load((), 1)
         self.layout = None
         self.expanded = self.hovered = self.tail_pending = False
         self.reveals = ()
@@ -730,6 +729,7 @@ class Card:
                 self.layer.show(self.handle)
 
     def measure(self, content: Content, width: int) -> Prepared:
+        self.measurement.scale = self.owner.scale
         if self.prepared is None or self.prepared[0] != content or self.prepared[1] != width:
             self.prepared = (content, width, self.measurement.prepare(content, width, expanded=self.expanded))
         return self.prepared[2]
@@ -928,6 +928,7 @@ class Card:
         if self.closed:
             return
         self.closed = True
+        self.measurement.close()
         self.window.close()
         if self.layer is not None:
             self.layer.close()

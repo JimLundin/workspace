@@ -8,6 +8,7 @@ from contextlib import contextmanager
 from pathlib import Path
 
 from assistant.agent_session import ChatMessage
+from assistant.notification_text import prepared_answer
 from assistant.work_agent import WorkAgent
 from assistant.work_commands import (
     AddPreference,
@@ -466,6 +467,9 @@ def test_wrong_run_and_old_epoch_previews_cannot_authorize_a_waiting_operation(t
 
 
 def test_streaming_rejects_superseded_runs_and_completion_comes_from_the_journal(tmp_path: Path) -> None:
+    # Defect: publishing an accepted reply leaves Markdown preparation to Qt,
+    # freezing unrelated animations on both streaming and durable completion.
+    prepared_answer.cache_clear()
     with work(tmp_path) as rig:
         rig.agent.start("Check the outcome")
         rig.refresh()
@@ -474,6 +478,9 @@ def test_streaming_rejects_superseded_runs_and_completion_comes_from_the_journal
         rig.bridge.publish(LogEvent(claim.run, Answer("reply", "Current streamed text", rig.clock(), StreamState.RUNNING)))
         rig.refresh()
         assert "Current streamed text" in rig.panel.all_text()
+        misses = prepared_answer.cache_info().misses
+        assert "".join(span.text for span in prepared_answer("Current streamed text")) == "Current streamed text"
+        assert prepared_answer.cache_info().misses == misses
         rig.tasks.control(claim.task.id, Control.PAUSE, at=rig.clock())
         rig.tasks.control(claim.task.id, Control.RESUME, at=rig.clock())
         resumed = rig.tasks.claim("worker-one", "resumed-run", at=rig.clock())
@@ -485,6 +492,9 @@ def test_streaming_rejects_superseded_runs_and_completion_comes_from_the_journal
         rig.tasks.finish(resumed.run, Completed("Verified durable result", ("Output exists",)), at=rig.clock())
         rig.refresh()
         assert "Verified durable result" in rig.panel.all_text()
+        misses = prepared_answer.cache_info().misses
+        assert "".join(span.text for span in prepared_answer("Verified durable result")) == "Verified durable result"
+        assert prepared_answer.cache_info().misses == misses
         rig.refresh()
         count = sum(isinstance(message, ChatMessage) and message.text == "Verified durable result" for message in rig.panel.state.messages)
         assert count == 1 and not rig.agent.running() and rig.finished == [False]

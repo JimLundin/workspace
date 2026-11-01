@@ -11,6 +11,7 @@ lazy from PySide6.QtTest import QTest
 
 from assistant.agent_toasts import card_order
 from assistant.qt_runtime import prepare
+from assistant.ui_components.bubble import title_height
 from automation.presentation import Succeeded, ToolActivity
 from automation.task import Reply, TextAnswer
 from tests.agent_requests import asked
@@ -35,7 +36,9 @@ def test_thinking_and_reply_share_one_dismissible_bubble() -> None:
         assert panel.agent.state.busy, "Hiding a bubble must not cancel its work."
 
 
-def test_expanded_turn_reserves_the_title_width_left_by_its_disclosure() -> None:
+def test_expanded_turn_keeps_its_heading_compact_beside_its_disclosure() -> None:
+    # Defect: expanding steps lets a long heading consume multiple lines or
+    # overlap disclosure, or loses the original text used by accessibility.
     with notifications() as panel:
         title = ("Review the fictional forecast " + "compare the figures " * 10).strip()
         panel.agent.begin(title)
@@ -47,8 +50,8 @@ def test_expanded_turn_reserves_the_title_width_left_by_its_disclosure() -> None
         card.toggle(animate=False)
         panel.pump()
         assert bool(card.expanded) and card.disclosure.isVisible()
-        assert card.label.display_text() == title
-        assert card.label.height() >= card.label.heightForWidth(card.label.width()), "The complete wrapped title fits beside its controls."
+        assert card.label.text() == title and card.label.display_text() != title
+        assert card.label.height() == title_height(), "Expanded steps grew the heading beyond one line."
         assert card.label.geometry().right() < card.disclosure.x()
 
 

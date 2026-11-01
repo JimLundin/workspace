@@ -327,6 +327,42 @@ def test_slow_native_audio_level_does_not_block_the_waveform_ui() -> None:
         closed(app, bar)
 
 
+def test_dictation_animates_between_samples_without_republishing_glass() -> None:
+    # Defects: dictation only jumps on its 20 Hz sample timer, or indicator
+    # frames repeat unchanged native glass/layout publication.
+    app = application()
+    now = [100.0]
+    bar = DesktopBar(
+        recorded([]), native_shell=False, audio_level=lambda: 0.25, observations=BarObservations(clock=lambda: now[0], motion=lambda: True)
+    )
+    bar.visible = True
+    try:
+        bar.timer.stop()
+        bar.dictation(active=True)
+        now[0] += 2
+        bar.paint_frames()
+        app.processEvents()
+        bar.audio_timer.stop()
+        sampled(app, bar, lambda: bar.window.samples[-1] > 0)
+        assert bar.loop.timer.isActive(), "Settled dictation must keep its waveform frames running."
+        app.processEvents()
+        first = bar.window.capsules[Key.ISLAND].grab().toImage()
+        now[0] += 0.025
+        bar.paint_frames()
+        halfway = bar.window.capsules[Key.ISLAND].grab().toImage()
+        assert halfway != first, "The waveform jumped only when another microphone sample arrived."
+        assert not bar.window.glass_timer.isActive(), "A waveform frame queued unchanged glass publication."
+        now[0] += 0.025
+        bar.paint_frames()
+        assert bar.window.capsules[Key.ISLAND].grab().toImage() != halfway
+        bar.dictation(active=False)
+        now[0] += 2
+        bar.paint_frames()
+        assert not bar.loop.timer.isActive() and not bar.resolution.active
+    finally:
+        closed(app, bar)
+
+
 def test_activity_indicators_move_only_while_work_runs_and_motion_allows() -> None:
     # Defects: the agent's spinner or a job's dots are painted frozen, keep the
     # frame timer running after work ends, or ignore Windows' reduced-motion setting.
@@ -360,6 +396,114 @@ def test_activity_indicators_move_only_while_work_runs_and_motion_allows() -> No
         bar.paint_frames()
         assert not bar.loop.timer.isActive()
     finally:
+        closed(app, bar)
+
+
+def test_expanded_menu_keeps_its_activity_spinner_running_after_settling() -> None:
+    # Defect: expanding moves activity out of the compact slots, so its menu
+    # spinner loses the frame loop and stays frozen once geometry settles.
+    class Paints(QtCore.QObject):
+        """This native observer retains paint deliveries from Workspace's updates."""
+
+        def __init__(self, parent: QtCore.QObject) -> None:
+            super().__init__(parent)
+            self.count = 0
+
+        def eventFilter(self, watched: QtCore.QObject, event: QtCore.QEvent) -> bool:
+            if event.type() == QtCore.QEvent.Type.Paint:
+                self.count += 1
+            return False
+
+    app = application()
+    now, motion = [100.0], [True]
+    bar = DesktopBar(
+        recorded([]),
+        native_shell=False,
+        observations=BarObservations(clock=lambda: now[0], motion=lambda: motion[0], material=lambda: appearance.Material.SOLID),
+    )
+    bar.visible = True
+    try:
+        bar.timer.stop()
+        bar.agent_changed(WORKING)
+        bar.open_menu()
+        now[0] += 2
+        bar.paint_frames()
+        app.processEvents()
+        row = menu_row(bar, "Agent working")
+        assert bar.loop.timer.isActive(), "The expanded activity lost its frame loop."
+        first = row.grab().toImage()
+        app.processEvents()
+        paints = Paints(row)
+        row.installEventFilter(paints)
+        now[0] += 0.1
+        bar.paint_frames()
+        app.processEvents()
+        assert paints.count, "The menu's activity did not receive a native paint."
+        assert row.grab().toImage() != first, "The settled menu's activity spinner stayed frozen."
+        motion[0] = False
+        bar.paint_frames()
+        assert not bar.loop.timer.isActive() and bar.window.spin_angle == 90
+        motion[0] = True
+        bar.agent_changed(None)
+        now[0] += 2
+        bar.paint_frames()
+        assert not bar.loop.timer.isActive(), "An idle expanded menu kept animation running."
+    finally:
+        closed(app, bar)
+
+
+def test_repeated_observations_cannot_postpone_the_next_animation_frame() -> None:
+    # Defect: each observation restarts the frame timer, starving animation
+    # delivery when observations arrive faster than the frame interval.
+    app = application()
+    bar = DesktopBar(recorded([]), native_shell=False, observations=BarObservations(motion=lambda: True))
+    bar.visible = True
+    frames = 0
+
+    def painted() -> None:
+        nonlocal frames
+        frames += 1
+
+    updates = QtCore.QTimer(bar.window)
+    updates.setInterval(5)
+    updates.timeout.connect(bar.render)
+    waiting = QtCore.QEventLoop()
+    try:
+        bar.timer.stop()
+        bar.agent_changed(WORKING)
+        app.processEvents()
+        bar.loop.timer.timeout.connect(painted)
+        updates.start()
+        QtCore.QTimer.singleShot(150, waiting.quit)
+        waiting.exec()
+        assert frames >= 3, "Repeated observations starved the animation timer."
+    finally:
+        updates.stop()
+        closed(app, bar)
+
+
+def test_first_menu_open_survives_native_activation_settling() -> None:
+    # Defect: Qt briefly reports inactive between native activation events,
+    # immediately closing the first expanded menu before its next interaction.
+    app = application()
+    bar = DesktopBar(recorded([]), native_shell=False, audio_level=lambda: 0.25, observations=BarObservations(motion=lambda: True))
+    bar.visible = True
+    bar.dictation(active=True)
+    waiting = QtCore.QEventLoop()
+    target = QtWidgets.QWidget()
+    try:
+        QtCore.QTimer.singleShot(75, bar.open_menu)
+        QtCore.QTimer.singleShot(300, waiting.quit)
+        waiting.exec()
+        assert bar.expanded is not None, "Native activation closed the menu immediately after opening it."
+        target.show()
+        target.activateWindow()
+        QtCore.QTimer.singleShot(100, waiting.quit)
+        waiting.exec()
+        assert bar.expanded is None, "A real focus transfer left the menu open."
+    finally:
+        target.close()
+        target.deleteLater()
         closed(app, bar)
 
 

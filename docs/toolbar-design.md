@@ -167,9 +167,15 @@ stream or scanning for networks.
 The microphone trace is 18 bars of real RMS levels, read every 50 ms only while
 dictating, off Qt's thread. `waveInGetPosition` marks recorded data in the same
 PCM buffer used for transcription; each read copies at most 40 ms. Silence stays
-flat, and an unavailable meter doesn't simulate activity. The spinner turns on the
-existing frame loop only while work runs; reduced motion holds it still. No frame
-timer runs at rest.
+flat, and an unavailable meter doesn't simulate activity. Qt interpolates between
+observed traces on its precise 16 ms frame loop, without repeating unchanged
+layout or glass publication. Spinners use that loop too; incoming observations
+preserve its next deadline. Reduced motion shows samples directly and holds
+spinners still. No frame timer runs at rest. Native menu activation settles for
+one frame before an inactive window dismisses its menu.
+
+See [the native animation investigation](qt-animation-performance.md) for the
+shared scheduling, text-layout and activation fixes and their measured limits.
 
 ## References
 

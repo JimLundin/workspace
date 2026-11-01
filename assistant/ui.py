@@ -5,6 +5,7 @@ No GUI objects cross the keyboard process. Domain work remains off the UI thread
 
 import queue
 import threading
+import time
 import traceback
 from collections.abc import Callable
 from concurrent.futures import Future, TimeoutError
@@ -118,6 +119,7 @@ class Ui:
         "_closed",
         "_desktop",
         "_dialogs",
+        "_draining",
         "_feed",
         "_indicator",
         "_input_lock",
@@ -184,6 +186,9 @@ class Ui:
         self._keymap: KeymapWindow | None = None
         self._keyboard_overlay: KeymapOverlay | None = None
         self._jobs: queue.Queue[Job] = queue.Queue()
+        # Qt can deliver nested events inside a native job. This owner keeps
+        # queue execution serial, including across those nested deliveries.
+        self._draining = False
         self._closed, self._inputs_closed = threading.Event(), False
         self._input_lock = threading.Lock()
         self._pending_inputs: set[Callable[[], None]] = set()
@@ -248,16 +253,29 @@ class Ui:
             cancel_input()
 
     def drain(self) -> None:
-        """Run up to 64 queued jobs now; call only on the Qt thread."""
-        for _ in range(64):
-            try:
-                job = self._jobs.get_nowait()
-            except queue.Empty:
-                break
-            try:
-                job(self._root)
-            except Exception:
-                traceback.print_exc()
+        """Yield after 4 ms of queued work; call only on the Qt thread.
+
+        A quarter of a 60 Hz frame leaves room for painting and input. One job
+        still runs to completion; expensive preparation belongs off this queue.
+        """
+        if self._draining:
+            return
+        self._draining = True
+        deadline = time.monotonic() + 0.004
+        try:
+            for _ in range(64):
+                try:
+                    job = self._jobs.get_nowait()
+                except queue.Empty:
+                    break
+                try:
+                    job(self._root)
+                except Exception:
+                    traceback.print_exc()
+                if time.monotonic() >= deadline:
+                    break
+        finally:
+            self._draining = False
 
     def close(self) -> None:
         if self._closed.is_set():

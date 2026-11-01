@@ -47,7 +47,7 @@ lazy from assistant.notifications import (
     spinning,
 )
 lazy from assistant.qt_ui import EventLoop, cancel, later
-lazy from assistant.toast_card import Card, CardOwner, Finish, Measure
+lazy from assistant.toast_card import Card, CardOwner, Finish
 lazy from assistant.toast_desktop import Desktop, NativeDesktop
 lazy from assistant.ui_components.appearance import scheme
 lazy from assistant.ui_components.text import BODY, face, line_height
@@ -95,7 +95,6 @@ class AgentToasts:
         "expiry_timer",
         "history",
         "loop",
-        "measure",
         "monitor",
         "page",
         "pointer_timer",
@@ -140,7 +139,6 @@ class AgentToasts:
         self.progress = Progress()
         self.progress_head: PhaseKey | None = None
         self.loop = EventLoop(root, self.sync_layers)
-        self.measure = Measure()
         self.wheel = WheelRouter()
         self.cards: dict[Key, Card] = {}
         # Qt owns these native resources. Keep at most MAX_VISIBLE surfaces for
@@ -155,7 +153,12 @@ class AgentToasts:
         self.work: Rect | None = None
         self.scale = 0.0
         self.expiry_timer: QtCore.QTimer | None = None
-        self.animation_timer: QtCore.QTimer | None = None
+        # This view owns one reusable frame timer. Per-frame QObject/closure
+        # creation and a second glass timer only add UI work and collection pressure.
+        self.animation_timer = QtCore.QTimer(root)
+        self.animation_timer.setTimerType(QtCore.Qt.TimerType.PreciseTimer)
+        self.animation_timer.setInterval(16)
+        self.animation_timer.timeout.connect(self.tick)
         self.pointer_timer: QtCore.QTimer | None = None
 
     def clock(self) -> float:
@@ -260,7 +263,7 @@ class AgentToasts:
 
     def observe_pointer(self) -> None:
         x, y = self.desktop.cursor_position()
-        for card in self.cards.values():
+        for card in tuple(self.cards.values()):
             if not card.retiring:
                 bounds = windows.outer_rect(card.handle)
                 self.set_hover(card.key, inside=bounds.left <= x < bounds.right and bounds.top <= y < bounds.bottom)
@@ -378,7 +381,6 @@ class AgentToasts:
         scale = self.loop.scale(work)
         immediate = self.work is not None and (self.work != work or self.scale != scale)
         self.work, self.scale = work, scale
-        self.measure.scale = scale
         viewport = Viewport(work, scale, round(line_height(face(BODY)) * scale))
         if self.viewport != viewport:
             self.viewport = viewport
@@ -434,7 +436,6 @@ class AgentToasts:
                 card.target(card.y - viewport.rise, 0, presented, animate=animate)
         self.layout(presented, animate=animate and not immediate, pushing=bool(created) and self.live_progress)
         self.tick()
-        self.loop.watch(visible=bool(self.cards))
         self.loop.pump()
 
     def content_for(self, toast: Toast) -> Content:
@@ -537,9 +538,6 @@ class AgentToasts:
         self.wheel.update(tuple(regions))
 
     def tick(self) -> None:
-        if self.animation_timer is not None:
-            cancel(self.animation_timer)
-            self.animation_timer = None
         if self.closed:
             return
         now = self.clock()
@@ -578,16 +576,21 @@ class AgentToasts:
         moving = any(card.motion is not None for card in self.cards.values())
         scrolling = reader is not None and not reader.hovered
         sliding = scrolling and animate and _sliding(reader)
-        self.environment.timer.update(active=moving or revealing or sliding)
+        self.environment.timer.update(active=moving or revealing or sliding or spin)
         if self.stack is not before:
             self.schedule_expiry()
             self.schedule_pointer()
         if moving or revealing or spin or scrolling:
-            interval = 1 / 60 if moving or revealing or sliding else 0.05
-            delay = max(1, round((now + interval - self.clock()) * 1000))
-            self.animation_timer = later(self.root, delay, self.tick)
-        self.loop.watch(visible=bool(self.cards))
-        self.loop.pump()
+            interval = 16 if moving or revealing or sliding or spin else 50
+            if self.animation_timer.interval() != interval:
+                self.animation_timer.setInterval(interval)
+            if not self.animation_timer.isActive():
+                self.animation_timer.start()
+        else:
+            self.animation_timer.stop()
+        # Native geometry is already applied by Card.position. Publish it once
+        # on this frame, without recursively delivering other UI callbacks.
+        self.sync_layers()
         if not self.cards:
             self.work = None
 
@@ -620,9 +623,7 @@ class AgentToasts:
         if self.pointer_timer is not None:
             cancel(self.pointer_timer)
             self.pointer_timer = None
-        if self.animation_timer is not None:
-            cancel(self.animation_timer)
-            self.animation_timer = None
+        self.animation_timer.stop()
         for card in tuple(self.cards.values()):
             self.release(card)
         self.loop.watch(visible=False)
@@ -630,16 +631,18 @@ class AgentToasts:
         self.work = None
 
     def close(self) -> None:
+        if self.closed:
+            return
         self.closed = True
         if self.expiry_timer is not None:
             cancel(self.expiry_timer)
             self.expiry_timer = None
         self.clear_cards()
+        self.animation_timer.deleteLater()
         for card in self.spares:
             card.close()
         self.spares = ()
         self.wheel.close()
-        self.measure.close()
         self.loop.close()
 
 

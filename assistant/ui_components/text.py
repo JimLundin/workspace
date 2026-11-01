@@ -159,7 +159,10 @@ class Document:
                         cursor.setBlockFormat(paragraph_style(span))
                     cursor.insertText(part, style)
             cursor.endEditBlock()
-        width = max(1.0, width)
+        # QWidget viewports use whole logical pixels, including at fractional
+        # Windows scaling. Match them during measurement too: alternating a
+        # fractional budget and its painted width reflows the entire document.
+        width = max(1.0, float(round(width)))
         if self.qt.textWidth() != width:
             self.qt.setTextWidth(width)
         return self.height

@@ -183,6 +183,11 @@ def formatted(text: str) -> Iterator[Span]:
     unfinished fences. Web destinations and Workspace canvas redirects are clickable.
     """
     tree = SyntaxTreeNode(_MARKDOWN.parse(text))
+    # This adapter owns the temporary parser tree and only traverses children.
+    # Release parent links so streaming replies do not accumulate cyclic trees
+    # and trigger a process-wide collection that suspends Qt's frame delivery.
+    for node in tree.walk(include_self=False):
+        node.parent = None
     trailing = 0
     started = False
     for block in _blocks(tree.children):

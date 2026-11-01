@@ -1,6 +1,7 @@
 """Native bell interaction and inbox publication, without changing the shared shell."""
 
 import sys
+import time
 import unittest
 from collections.abc import Callable
 from pathlib import Path
@@ -65,8 +66,15 @@ class InboxUi(Ui):
         return application()
 
     def pump(self) -> None:
+        # Ui yields queued work between frames. This fixture waits across those
+        # turns before assertions that require every queued publication to land.
+        deadline = time.monotonic() + 4
         self.drain()
         application().processEvents()
+        while not self._jobs.empty() and time.monotonic() < deadline:
+            self.drain()
+            application().processEvents()
+        assert self._jobs.empty(), "Queued UI publications did not settle."
 
     @property
     def bar(self) -> DesktopBar:

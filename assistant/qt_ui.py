@@ -29,6 +29,7 @@ def application() -> QApplication:
 def later(parent: QtCore.QObject, milliseconds: int, callback: Callable[[], None]) -> QtCore.QTimer:
     """Schedule one UI-owned callback. Closing its owner cancels delivery."""
     timer = QtCore.QTimer(parent)
+    timer.setTimerType(QtCore.Qt.TimerType.PreciseTimer)
     timer.setSingleShot(True)
 
     def deliver() -> None:
@@ -55,6 +56,7 @@ class EventLoop:
         self.app, self.painted = app, painted
         self.closed = False
         self.timer = QtCore.QTimer(app)
+        self.timer.setTimerType(QtCore.Qt.TimerType.PreciseTimer)
         self.timer.setInterval(16)
 
         def paint_tick() -> None:
@@ -89,7 +91,12 @@ class EventLoop:
 
     def watch(self, *, visible: bool) -> None:
         if not self.closed:
-            self.timer.start() if visible else self.timer.stop()
+            # Observations and paint callbacks must preserve the next frame's
+            # deadline. Restarting an active timer lets frequent updates starve it.
+            if visible and not self.timer.isActive():
+                self.timer.start()
+            elif not visible:
+                self.timer.stop()
 
     def close(self) -> None:
         if self.closed:

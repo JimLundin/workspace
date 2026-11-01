@@ -18,6 +18,7 @@ lazy import automation.presentation
 lazy from assistant import agent_session
 lazy from assistant.agent_window import AgentWindow
 lazy from assistant.feed_origin import FeedRequest
+lazy from assistant.notification_text import prepared_answer
 lazy from assistant.owner_calls import OwnerDispatcher, OwnerReply
 lazy from assistant.work_commands import AnswerTask, FollowUp, Redirect, Submit, WorkCommand
 lazy from assistant.work_service import IdentifiedSubmission, Issued, WorkBridge, WorkService
@@ -472,6 +473,7 @@ class WorkAgent:
             case Waiting(reason):
                 self._display_waiting(task, reason, review)
             case Completed(result, _):
+                prepared_answer(result)
                 window.done(result)
             case Failed(reason):
                 window.problem(reason)
@@ -593,15 +595,27 @@ class WorkAgent:
             match event.event:
                 case automation.presentation.Progress(text):
                     self.window.step(text)
+                    return
                 case automation.presentation.Said(text, _):
                     self.window.say(text)
+                    return
                 case automation.presentation.Problem(text, _):
                     self.window.problem(text)
-                case automation.presentation.Answer() | automation.presentation.ReasoningSummary() | automation.presentation.ToolActivity():
+                    return
+                case automation.presentation.Answer(text=text) | automation.presentation.ReasoningSummary(text=text):
+                    live = self._live
+                    if live is None:
+                        return
+                case automation.presentation.ToolActivity():
                     if self._live is not None:
                         self._live(event.event)
+                    return
                 case _:
                     assert_never(event.event)
+        # Parsing stays outside the frontend lock too, so UI commands need not
+        # wait for it. The captured producer is fenced to its session generation.
+        prepared_answer(text)
+        live(event.event)
 
     def _owner(self, message: Envelope, request: OwnerRequest) -> None:
         task = self._service.tasks.get(request.run.task_id)

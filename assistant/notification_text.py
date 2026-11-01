@@ -1,6 +1,7 @@
 """The answer and optional steps of a conversation bubble, without UI effects."""
 
 from dataclasses import dataclass, replace
+from functools import lru_cache
 
 from assistant import tool_text
 from assistant.action_text import readable
@@ -55,9 +56,22 @@ def spans(content: Content) -> tuple[Span, ...]:
         case _:
             pass
     text = body(content)
+    if not plain(content):
+        return prepared_answer(text)
     if not _yours(content):
         text = readable(text)
-    return ((Span(text),) if plain(content) else tuple(formatted(text))) if text else ()
+    return (Span(text),) if text else ()
+
+
+@lru_cache(maxsize=8)
+def prepared_answer(text: str) -> tuple[Span, ...]:
+    """Share immutable prose prepared by the work observer with Qt's views.
+
+    Eight recent bodies bound retained stream versions. The parser's configured
+    rules stay fixed; each parse owns its state and temporary tree. Native text
+    documents remain exclusively owned by Qt.
+    """
+    return tuple(formatted(readable(text))) if text else ()
 
 
 @dataclass(frozen=True, slots=True)

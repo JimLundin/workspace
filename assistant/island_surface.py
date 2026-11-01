@@ -10,7 +10,7 @@ invisible (alpha 1) hit fill; without glass, Qt paints the capsule itself.
 
 import math
 from collections import deque
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
 from dataclasses import dataclass, field
 from functools import lru_cache
 from typing import Final, Protocol, assert_never, override
@@ -444,6 +444,12 @@ class Capsule(KeyboardFocus):
         for spot in self.content.spots:
             if animated(spot.part):
                 self.update(QtCore.QRect(math.floor(shift + spot.x) - 2, TOP, math.ceil(spot.width) + 4, HEIGHT))
+        for row in self.rows:
+            match row.line.row:
+                case Live(stop=island_menu.Command.STOP_AGENT):
+                    row.update(QtCore.QRect(5, row.height() // 2 - 9, 18, 18))
+                case _:
+                    pass
 
     def enterEvent(self, event: QtGui.QEnterEvent) -> None:
         super().enterEvent(event)
@@ -570,7 +576,7 @@ class Capsule(KeyboardFocus):
                 trace = color(reading(lettering, Tone.INK, contrast=self.contrast))
                 painter.setPen(Qt.PenStyle.NoPen)
                 painter.setBrush(trace)
-                for index, sample in enumerate(self.window_.samples):
+                for index, sample in enumerate(self.window_.trace()):
                     height = 3 + sample * 13
                     painter.drawRoundedRect(QtCore.QRectF(spot.x + index * 4, middle - height / 2, 2, height), 1, 1)
             case Marker.DOTS:
@@ -620,6 +626,11 @@ class BarWindow(QtWidgets.QWidget):
         self.spin_angle = 90.0
         # Qt owns the painted trace; samples arrive from the bar's audio meter.
         self.samples: deque[float] = deque([0.0] * WAVE_BARS, maxlen=WAVE_BARS)
+        self.wave_from: tuple[float, ...] = tuple(self.samples)
+        self.wave_progress = 1.0
+        # This UI owner retains the immutable last application frame to avoid
+        # native layout and glass work for unchanged indicator-only redraws.
+        self.presentation: tuple[Presented, tuple[int, int, int, int], float] | None = None
         self.scene: GlassScene | None = None
         self.panes: tuple[Pane, ...] = ()
         self.glass = False
@@ -633,6 +644,13 @@ class BarWindow(QtWidgets.QWidget):
         self.glass_timer = QtCore.QTimer(self)
         self.glass_timer.setSingleShot(True)
         self.glass_timer.timeout.connect(self.publish_glass)
+        # Native activation can briefly report inactive then active while Qt
+        # settles the first opening. Dismiss only after one frame of stable
+        # inactivity; a real focus transfer still closes the menu promptly.
+        self.deactivation_timer = QtCore.QTimer(self)
+        self.deactivation_timer.setTimerType(QtCore.Qt.TimerType.PreciseTimer)
+        self.deactivation_timer.setSingleShot(True)
+        self.deactivation_timer.timeout.connect(self.dismiss_inactive)
 
     def measure(self, view: CapsuleView) -> Content:
         def width(text: Text) -> float:
@@ -651,6 +669,10 @@ class BarWindow(QtWidgets.QWidget):
     def present(self, presented: Presented) -> None:
         """Show exactly these capsules where their frames put them; other pooled capsules hide."""
         area = QtGui.QGuiApplication.primaryScreen().geometry()
+        scale = self.devicePixelRatioF()
+        publication = (presented, (area.x(), area.y(), area.width(), area.height()), scale)
+        if publication == self.presentation:
+            return
         height = TOP + math.ceil(presented.height)
         if self.geometry() != QtCore.QRect(area.x(), area.y(), area.width(), height):
             self.setGeometry(area.x(), area.y(), area.width(), height)
@@ -666,11 +688,16 @@ class BarWindow(QtWidgets.QWidget):
         for key, capsule in self.capsules.items():
             if key not in keys:
                 capsule.hide()
-        scale = self.devicePixelRatioF()
         self.glass = presented.glass
         self.panes = tuple(found for each in presented.drawn if (found := pane(each, presented.frost, scale)) is not None)
         if not self.glass_timer.isActive():
             self.glass_timer.start(0)
+        self.presentation = publication
+
+    def trace(self) -> Iterator[float]:
+        """Interpolate the displayed history between the meter's 50 ms samples."""
+        progress = self.wave_progress
+        return (before + (after - before) * progress for before, after in zip(self.wave_from, self.samples, strict=True))
 
     def keyPressEvent(self, event: QtGui.QKeyEvent) -> None:
         keys = {
@@ -697,7 +724,14 @@ class BarWindow(QtWidgets.QWidget):
     @override
     def changeEvent(self, event: QtCore.QEvent) -> None:
         super().changeEvent(event)
-        if event.type() is QtCore.QEvent.Type.ActivationChange and self.menu is not None and not self.isActiveWindow():
+        if event.type() is QtCore.QEvent.Type.ActivationChange:
+            if self.isActiveWindow():
+                self.deactivation_timer.stop()
+            elif self.menu is not None and not self.deactivation_timer.isActive():
+                self.deactivation_timer.start(16)
+
+    def dismiss_inactive(self) -> None:
+        if self.menu is not None and not self.isActiveWindow():
             self.owner.deactivated()
 
     def bounds(self, key: Key) -> Rect | None:
@@ -730,6 +764,8 @@ class BarWindow(QtWidgets.QWidget):
 
     def dispose(self) -> None:
         self.glass_timer.stop()
+        self.deactivation_timer.stop()
+        self.menu = None
         self.hide()
         if self.scene is not None:
             self.scene.close()

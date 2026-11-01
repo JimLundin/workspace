@@ -115,6 +115,7 @@ class DesktopBar:
         "recording",
         "resolution",
         "sample_bounds",
+        "sampled_at",
         "status_service",
         "system",
         "taskbar",
@@ -137,8 +138,7 @@ class DesktopBar:
     ) -> None:
         self.actions = actions
         self.observations = BarObservations() if observations is None else observations
-        self.closed = False
-        self.visible = native_shell
+        self.closed, self.visible = False, native_shell
         # Each activity comes from its own owner: dictation and quick jobs from the
         # voice controller, the agent from its session.
         self.dictating, self.automatic_recording = False, AutomaticStatus.OFF
@@ -171,6 +171,7 @@ class DesktopBar:
         self.ambient = Ambient(self.observations.local_time().strftime("%H:%M"), self.power)
         self.audio_meter: AudioMeter | None = None
         self.sample_bounds: Rect | None = None
+        self.sampled_at: float | None = None
         self.preference: appearance.Preference = self.observations.material()
         self.frost = appearance.Frost.SMOKED
         self.window = BarWindow(self.loop, self)
@@ -196,6 +197,7 @@ class DesktopBar:
         tick.setInterval(100)
         tick.timeout.connect(self.tick)
         audio.setInterval(50)
+        audio.setTimerType(QtCore.Qt.TimerType.PreciseTimer)
         audio.timeout.connect(self.sample_audio)
         return tick, audio
 
@@ -411,6 +413,9 @@ class DesktopBar:
         listening = self.dictating
         if listening and not self.audio_timer.isActive():
             self.window.samples.extend(0.0 for _ in range(len(self.window.samples)))
+            self.window.wave_from = tuple(self.window.samples)
+            self.window.wave_progress = 1.0
+            self.sampled_at = None
             self.audio_timer.start()
         elif not listening:
             self.audio_timer.stop()
@@ -459,7 +464,8 @@ class DesktopBar:
                 case _:
                     return False
 
-        return any(spinner(part) for view in self.views for slot in view.slots for part in slot)
+        menu_spinner = self.expanded is not None and self.agent is not None and not self.agent.waiting
+        return menu_spinner or any(spinner(part) for view in self.views for slot in view.slots for part in slot)
 
     def paint_frames(self) -> None:
         if self.closed:
@@ -470,15 +476,17 @@ class DesktopBar:
         self.motion = advance(self.motion, elapsed) if animate else finish(self.motion)
         moving = not settled(self.motion)
         spinning = animate and self.spinning()
+        waving = animate and self.dictating and self.expanded is None
+        self.window.wave_progress = min(1.0, max(0.0, (now - self.sampled_at) / 0.05)) if waving and self.sampled_at is not None else 1.0
         self.window.spin_angle = (90 - now * 300) % 360 if spinning else 90.0
         self.draw()
-        if self.spinning():
+        if self.spinning() or waving:
             for key, capsule in self.window.capsules.items():
                 if key in (Key.ISLAND, Key.AGENT, Key.JOB):
                     capsule.update_indicators()
-        running = moving or spinning
+        running = moving or spinning or waving
         self.last_frame = now if running else None
-        self.resolution.update(active=moving)
+        self.resolution.update(active=running)
         self.loop.watch(visible=running)
 
     def tick(self) -> None:
@@ -529,7 +537,12 @@ class DesktopBar:
 
     def sample_audio(self) -> None:
         if not self.closed and self.dictating:
+            # Begin at the last painted interpolation, including if a sample
+            # arrives early. The bounded history stays with its Qt paint owner.
+            self.window.wave_from = tuple(self.window.trace())
             self.window.samples.append(level(self.audio_meter.level() if self.audio_meter is not None else None))
+            self.sampled_at = self.observations.clock()
+            self.window.wave_progress = 0.0 if self.visible and self.observations.motion() else 1.0
             capsule = self.window.capsules.get(Key.ISLAND)
             if capsule is not None and any(Marker.WAVE in slot for view in self.views for slot in view.slots):
                 capsule.update_indicators()

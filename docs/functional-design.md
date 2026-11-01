@@ -556,10 +556,15 @@ replacement tests and before/after keyboard measurements.
 
 ## Keyboard and audio performance
 
-The keyboard hook and engine run in the layout process. The agent and UI run in
-the assistant process, with a separate Python heap and garbage collector. Agent
-collections cannot stop the keyboard interpreter, although both processes still
-share CPU and other operating-system resources.
+The keyboard hook and engine run in the layout process. Durable agent/model work
+runs in the automation process. Qt, microphone services and the background work
+frontend run in the assistant process. The frontend prepares accepted answer and
+reasoning spans before posting immutable observations to Qt; native documents
+remain with their views. These frontend threads still share Python's heap, GIL
+and collector with Qt. Each process has its own heap and collector, so assistant
+collections cannot stop the keyboard interpreter, although the processes still
+share CPU and other operating-system resources. See
+[native animation measurements](qt-animation-performance.md).
 
 The keeper owns independent child restarts. Its protected event loop consumes
 typed keeper requests (install, undo, keep, restart) and pause/resume commands
