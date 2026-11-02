@@ -91,7 +91,7 @@ def workspace(endpoint: FakeEndpoint, home: Path, live: Path = ROOT) -> Generato
         **os.environ,
         "OPENAI_BASE_URL": endpoint.url,
         "OPENAI_API_KEY": "k",
-        "WORKSPACE_CHAT_MODEL": "chat",
+        "WORKSPACE_MODEL_SMALL": "chat",
         "WORKSPACE_AGENT_APPROVALS": "never",
         "LOCALAPPDATA": str(home),
     }

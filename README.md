@@ -52,12 +52,15 @@ and our typed Win32 bindings (`winapi/`), independently of the assistant.
    |---|---|
    | `OPENAI_BASE_URL` | your endpoint, ending in `/v1` |
    | `OPENAI_API_KEY` | its key |
-   | `WORKSPACE_CHAT_MODEL` | optional; default `gpt-5.4-mini` (quick jobs) |
-   | `WORKSPACE_AGENT_MODEL` | optional; default `gpt-6.1-sol` (agent tasks and self-modification) |
-   | `WORKSPACE_SUBAGENT_SMALL_MODEL` | optional; default `gpt-6-luna` (focused extraction, summaries and routine checks) |
-   | `WORKSPACE_SUBAGENT_MEDIUM_MODEL` | optional; default `gpt-6.1-terra` (bounded visual, writing and desktop tasks) |
-   | `WORKSPACE_SUBAGENT_LARGE_MODEL` | optional; default `gpt-6.1-sol` (complex implementation and investigation) |
-   | `WORKSPACE_SUBAGENT_EXTRA_LARGE_MODEL` | optional; default `gpt-6-astra` (the hardest reasoning and design) |
+   | `WORKSPACE_CHAT_CLASS` | optional; default `small` (dictation cleanup, rewrites, questions and screenshots) |
+   | `WORKSPACE_AGENT_CLASS` | optional; default `extra_large` (main agent, canvas investigation and self-modification) |
+   | `WORKSPACE_NOTIFICATION_SCREEN_CLASS` | optional; default `small` (quick notification relevance screening) |
+   | `WORKSPACE_NOTIFICATION_RESEARCH_CLASS` | optional; default `medium` (focused inbox research, including public lookups) |
+   | `WORKSPACE_PERSONAL_WORK_CLASS` | optional; default `medium` (matching sources to ongoing work) |
+   | `WORKSPACE_MODEL_SMALL` | optional; default `gpt-6-luna` |
+   | `WORKSPACE_MODEL_MEDIUM` | optional; default `gpt-6.1-terra` |
+   | `WORKSPACE_MODEL_LARGE` | optional; default `gpt-6.1-sol` |
+   | `WORKSPACE_MODEL_EXTRA_LARGE` | optional; default `gpt-6-astra` |
    | `WORKSPACE_AGENT_REASONING_EFFORT` | optional; default `low` for quicker replies; use an effort supported by your selected model |
    | `WORKSPACE_AGENT_APPROVALS` | optional; default `never`; set `ask` to opt in to action and update approvals |
    | `WORKSPACE_AGENT_CONTEXT` | optional; default `recent`; set `off` to disable idle activity tracking and automatic request context |
@@ -67,6 +70,11 @@ and our typed Win32 bindings (`winapi/`), independently of the assistant.
 
    Without the first two the layout, snippets, apps and window keys still work;
    the AI keys tell you what's missing.
+
+   Every `*_CLASS` accepts `small`, `medium`, `large` or `extra_large`. Roles and
+   delegated subtasks share the same four model mappings. Choose a size for a
+   role; change its `WORKSPACE_MODEL_*` value to select a different provider model
+   for every use of that size. Restart Workspace after changing environment settings.
 3. Turn on Settings → Privacy & security → Microphone → **Let desktop apps access
    your microphone**.
 4. Double-click **`StartWorkspace.cmd`**. A dot appears in the tray. To start it at login,
@@ -428,9 +436,10 @@ existing UI thread after Workspace starts. History widgets are created when you
 open it. The source workspace is prepared only when a source tool is used.
 Failed requests show the reason in a bubble and the timeline;
 they also notify you and are recorded in
-`assistant.log`. Agent tasks use **GPT-6.1 Sol with low reasoning effort** for
-quicker replies, independently of the fast model used for dictation and quick questions. The
-endpoint must support the selected model through the Responses API.
+`assistant.log`. Agent tasks use the **extra-large size with low reasoning effort**
+by default, mapped to GPT-6 Astra. `WORKSPACE_AGENT_CLASS` selects another size,
+independently of quick jobs and background screening/research. The endpoint must
+support the selected model through the Responses API.
 
 By default, file writes, commands, opening files, desktop control and self-updates
 run without approval prompts. Requests to change Workspace authorize the agent to
@@ -543,8 +552,8 @@ bubbles**. Notes and positions are saved locally.
 Collection reads the signed-in Edge pages without changing searches, board
 filters, chat selection or drafts. Coverage follows rendered content; sources
 that disappear from view keep their saved connections. Content changes trigger
-bounded reviews using the configured agent model. **Refresh sources** requests
-a fresh review. Canvas edits update the personal representation; source controls
+bounded reviews using the configured personal-work size (medium by default).
+**Refresh sources** requests a fresh review. Canvas edits update the personal representation; source controls
 open the corresponding resource in Edge.
 
 Choose **Agent tasks and settings** in the canvas’s **+** menu to open a separate

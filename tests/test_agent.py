@@ -269,8 +269,6 @@ class Rig:
             self.endpoint.url,
             "k",
             "transcribe",
-            "chat",
-            "gpt-6-astra",
             "",
             "",
             agent_reasoning_effort=effort,
@@ -319,7 +317,7 @@ class ToolRig:
         self.machine = machine if machine is not None else FakeMachine()
         self.window = FakeWindow()
         self.agent = Agent(
-            Settings("", "", "", "", "", "", "", agent_approvals=approvals),
+            Settings("", "", "", "", "", agent_approvals=approvals),
             self.machine,
             self.window,
             threading.Event(),
@@ -409,8 +407,8 @@ def test_tool_replay_omits_absent_namespace_and_retains_reasoning_across_follow_
             assert [observed(output) for output in outputs] == ["clipped"]
 
 
-def test_default_agent_uses_sol_with_low_reasoning_across_tool_turns(tmp_path: Path) -> None:
-    """The speed-focused defaults must reach the SDK on every tool turn."""
+def test_default_agent_uses_extra_large_with_low_reasoning_across_tool_turns(tmp_path: Path) -> None:
+    # Defect: the default main-agent size fails to reach the SDK on every turn.
     with fake_endpoint() as endpoint:
         rig = Rig(endpoint, calls(("get_clipboard", {})), says("Read it."), work=durable(tmp_path))
         settings = settings_from({"OPENAI_BASE_URL": endpoint.url, "OPENAI_API_KEY": "k"})
@@ -421,7 +419,7 @@ def test_default_agent_uses_sol_with_low_reasoning_across_tool_turns(tmp_path: P
         for request in endpoint.received:
             body = cast("dict[str, Json]", json.loads(request.body))
             assert request.path == "/v1/responses"
-            assert body["model"] == "gpt-6.1-sol"
+            assert body["model"] == "gpt-6-astra"
             assert body["reasoning"] == {"effort": "low", "summary": "auto"}
             assert body["stream"] is True
         assert [observed(result) for result in rig.results()] == ["clipped"]
@@ -733,7 +731,7 @@ def test_stop_prevents_actions_even_with_approvals_disabled(tmp_path: Path) -> N
     stopped.set()
     machine = FakeMachine()
     agent = Agent(
-        Settings("", "", "", "", "", "", ""),
+        Settings("", "", "", "", ""),
         machine,
         FakeWindow(),
         stopped,

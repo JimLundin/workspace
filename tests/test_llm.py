@@ -6,12 +6,13 @@ from typing import cast
 
 import tests.fake_endpoint
 from assistant.llm import (
+    AgentClass,
     Failure,
     Image,
     Missing,
+    Models,
     Reply,
     Settings,
-    SubagentModels,
     Text,
     ToolCall,
     assistant_message,
@@ -32,7 +33,7 @@ ENV = {"OPENAI_BASE_URL": "https://ai.example/v1/", "OPENAI_API_KEY": "k"}
 
 
 def settings(url: str, vocabulary: str = "", language: str = "") -> Settings:
-    return Settings(url, "secret", "gpt-4o-transcribe", "chat-model", "agent-model", vocabulary, language)
+    return Settings(url, "secret", "gpt-4o-transcribe", vocabulary, language, models=Models(small="chat-model"))
 
 
 def body_json(raw: bytes) -> dict[str, object]:
@@ -50,44 +51,70 @@ def test_settings_need_the_endpoint_and_key() -> None:
 
 
 def test_settings_defaults() -> None:
+    # Defect: a role defaults to the wrong workload size or model mapping.
     result = settings_from(ENV)
     assert isinstance(result, Settings)
-    assert result == Settings("https://ai.example/v1", "k", "gpt-4o-transcribe", "gpt-5.4-mini", "gpt-6.1-sol", "", "")
+    assert result == Settings("https://ai.example/v1", "k", "gpt-4o-transcribe", "", "")
     assert result.agent_reasoning_effort == "low"
     assert result.agent_approvals is False
-    assert result.subagent_models == SubagentModels("gpt-6-luna", "gpt-6.1-terra", "gpt-6.1-sol", "gpt-6-astra")
+    assert result.models == Models("gpt-6-luna", "gpt-6.1-terra", "gpt-6.1-sol", "gpt-6-astra")
 
 
 def test_settings_overrides() -> None:
+    # Defect: independently configured roles or shared model IDs are ignored.
     env = {
         **ENV,
         "WORKSPACE_TRANSCRIBE_MODEL": "whisper-1",
-        "WORKSPACE_CHAT_MODEL": "fast",
-        "WORKSPACE_AGENT_MODEL": "smart",
+        "WORKSPACE_CHAT_CLASS": "medium",
+        "WORKSPACE_AGENT_CLASS": "large",
+        "WORKSPACE_NOTIFICATION_SCREEN_CLASS": "large",
+        "WORKSPACE_NOTIFICATION_RESEARCH_CLASS": "extra_large",
+        "WORKSPACE_PERSONAL_WORK_CLASS": "small",
+        "WORKSPACE_MODEL_SMALL": "extractor",
+        "WORKSPACE_MODEL_MEDIUM": "fast",
+        "WORKSPACE_MODEL_LARGE": "smart",
+        "WORKSPACE_MODEL_EXTRA_LARGE": "deep",
         "WORKSPACE_AGENT_REASONING_EFFORT": "high",
         "WORKSPACE_AGENT_APPROVALS": "ask",
         "WORKSPACE_VOCABULARY": "Miryoku, Colemak",
         "WORKSPACE_LANGUAGE": "sv",
     }
     assert settings_from(env) == Settings(
-        "https://ai.example/v1", "k", "whisper-1", "fast", "smart", "Miryoku, Colemak", "sv", "high", agent_approvals=True
+        "https://ai.example/v1",
+        "k",
+        "whisper-1",
+        "Miryoku, Colemak",
+        "sv",
+        chat_class=AgentClass.MEDIUM,
+        agent_class=AgentClass.LARGE,
+        notification_screen_class=AgentClass.LARGE,
+        notification_research_class=AgentClass.EXTRA_LARGE,
+        personal_work_class=AgentClass.SMALL,
+        agent_reasoning_effort="high",
+        agent_approvals=True,
+        models=Models("extractor", "fast", "smart", "deep"),
     )
 
 
-def test_agent_model_is_independent_of_the_quick_chat_model() -> None:
-    result = settings_from({**ENV, "WORKSPACE_CHAT_MODEL": "fast"})
-    assert isinstance(result, Settings)
-    assert result.agent_model == "gpt-6.1-sol"
+def test_unknown_role_sizes_are_rejected_at_configuration_entry() -> None:
+    # Defect: a misspelled role silently selects another, potentially costly size.
+    for role in ("CHAT", "AGENT", "NOTIFICATION_SCREEN", "NOTIFICATION_RESEARCH", "PERSONAL_WORK"):
+        try:
+            settings_from({**ENV, f"WORKSPACE_{role}_CLASS": "huge"})
+        except ValueError:
+            pass
+        else:
+            raise AssertionError(f"The unknown {role} size was accepted.")
 
 
-def test_empty_subagent_model_overrides_are_rejected_at_configuration_entry() -> None:
+def test_empty_model_overrides_are_rejected_at_configuration_entry() -> None:
     # Defect: an empty model ID reaches a delegated provider request instead of
     # being rejected where Workspace reads its external configuration.
     for agent_class in ("SMALL", "MEDIUM", "LARGE", "EXTRA_LARGE"):
         try:
-            settings_from({**ENV, f"WORKSPACE_SUBAGENT_{agent_class}_MODEL": "  "})
+            settings_from({**ENV, f"WORKSPACE_MODEL_{agent_class}": "  "})
         except ValueError as error:
-            assert str(error) == "Subagent model IDs must not be empty."
+            assert str(error) == "Model IDs must not be empty."
         else:
             raise AssertionError(f"The empty {agent_class} model override was accepted.")
 
@@ -150,14 +177,20 @@ ANSWER = b'{"choices": [{"message": {"role": "assistant", "content": "Hej!"}}]}'
 
 
 def test_chat_sends_messages_and_returns_the_answer() -> None:
+    # Defect: chat ignores its independently selected size or sends an invalid
+    # message contract to the configured endpoint.
     with fake_endpoint() as endpoint:
-        endpoint.replies = [tests.fake_endpoint.Reply(ANSWER)]
-        reply = chat(settings(endpoint.url), [system_message("Be brief."), user_message("Say hi")])
-        assert reply == Reply("Hej!", ())
-        assert endpoint.last.path == "/v1/chat/completions"
-        body = body_json(endpoint.last.body)
-        assert body["model"] == "chat-model"
-        assert body["messages"] == [{"role": "system", "content": "Be brief."}, {"role": "user", "content": "Say hi"}]
+        endpoint.replies = [tests.fake_endpoint.Reply(ANSWER), tests.fake_endpoint.Reply(ANSWER)]
+        for chat_class, model_id in ((AgentClass.SMALL, "chat-model"), (AgentClass.MEDIUM, "selected-model")):
+            configured = Settings(
+                endpoint.url, "secret", "transcribe", "", "", chat_class=chat_class, models=Models(small="chat-model", medium="selected-model")
+            )
+            reply = chat(configured, [system_message("Be brief."), user_message("Say hi")])
+            assert reply == Reply("Hej!", ())
+            assert endpoint.last.path == "/v1/chat/completions"
+            body = body_json(endpoint.last.body)
+            assert body["model"] == model_id
+            assert body["messages"] == [{"role": "system", "content": "Be brief."}, {"role": "user", "content": "Say hi"}]
         assert "tools" not in body
         assert "stream" not in body
 

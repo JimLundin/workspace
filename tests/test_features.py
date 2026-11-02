@@ -194,7 +194,7 @@ class Rig:
         self.desktop = desktop if desktop is not None else FakeDesktop()
         self.used: list[tuple[str, Mapping[str, Detail]]] = []
         self.agent: list[str] = []
-        settings = Settings(endpoint.url, "k", "transcribe", "chat", "agent", "", "")
+        settings = Settings(endpoint.url, "k", "transcribe", "", "")
         self.assistant = Assistant(
             self.desktop,
             settings,

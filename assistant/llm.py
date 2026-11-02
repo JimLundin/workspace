@@ -40,8 +40,8 @@ class AgentClass(Enum):
 
 
 @dataclass(frozen=True, slots=True)
-class SubagentModels:
-    """Workload classes select models independently of the main agent."""
+class Models:
+    """One model per workload size, shared by background roles and delegated work."""
 
     small: str = "gpt-6-luna"
     medium: str = "gpt-6.1-terra"
@@ -50,7 +50,7 @@ class SubagentModels:
 
     def __post_init__(self) -> None:
         if any(not model.strip() for model in (self.small, self.medium, self.large, self.extra_large)):
-            raise ValueError("Subagent model IDs must not be empty.")
+            raise ValueError("Model IDs must not be empty.")
 
     def model(self, agent_class: AgentClass) -> str:
         match agent_class:
@@ -72,18 +72,24 @@ class Settings:
     """The endpoint's base, as OpenAI's own libraries take it: `https://.../v1`."""
     api_key: str
     transcribe_model: str
-    chat_model: str
-    """For quick jobs: tidying dictation, rewrites, questions, screenshots."""
-    agent_model: str
     vocabulary: str
     """Names and terms to expect when transcribing; helps with jargon. Empty: none."""
     language: str
     """An ISO code such as `sv` or `en` for transcription. Empty: detected."""
+    chat_class: AgentClass = AgentClass.SMALL
+    """Quick jobs: tidying dictation, rewrites, questions and screenshots."""
+    agent_class: AgentClass = AgentClass.EXTRA_LARGE
+    notification_screen_class: AgentClass = AgentClass.SMALL
+    notification_research_class: AgentClass = AgentClass.MEDIUM
+    personal_work_class: AgentClass = AgentClass.MEDIUM
     agent_reasoning_effort: str = "low"
     """Reasoning effort for agent tasks; independent of quick chat."""
     agent_approvals: bool = field(default=False, kw_only=True)
     """Opt in to tool and self-update approval prompts."""
-    subagent_models: SubagentModels = SubagentModels()
+    models: Models = Models()
+
+
+_CLASS = TypeAdapter(AgentClass)
 
 
 @dataclass(frozen=True, slots=True)
@@ -98,23 +104,25 @@ def settings_from(env: Mapping[str, str]) -> Settings | Missing:
     required = ("OPENAI_BASE_URL", "OPENAI_API_KEY")
     if missing := tuple(name for name in required if not env.get(name)):
         return Missing(missing)
-    chat_model = env.get("WORKSPACE_CHAT_MODEL", "gpt-5.4-mini")
-    subagents = SubagentModels()
+    models = Models()
     return Settings(
         base_url=env["OPENAI_BASE_URL"].rstrip("/"),
         api_key=env["OPENAI_API_KEY"],
         transcribe_model=env.get("WORKSPACE_TRANSCRIBE_MODEL", "gpt-4o-transcribe"),
-        chat_model=chat_model,
-        agent_model=env.get("WORKSPACE_AGENT_MODEL", "gpt-6.1-sol"),
         vocabulary=env.get("WORKSPACE_VOCABULARY", ""),
         language=env.get("WORKSPACE_LANGUAGE", ""),
+        chat_class=_CLASS.validate_python(env.get("WORKSPACE_CHAT_CLASS", "small")),
+        agent_class=_CLASS.validate_python(env.get("WORKSPACE_AGENT_CLASS", "extra_large")),
+        notification_screen_class=_CLASS.validate_python(env.get("WORKSPACE_NOTIFICATION_SCREEN_CLASS", "small")),
+        notification_research_class=_CLASS.validate_python(env.get("WORKSPACE_NOTIFICATION_RESEARCH_CLASS", "medium")),
+        personal_work_class=_CLASS.validate_python(env.get("WORKSPACE_PERSONAL_WORK_CLASS", "medium")),
         agent_reasoning_effort=env.get("WORKSPACE_AGENT_REASONING_EFFORT", "low"),
         agent_approvals=env.get("WORKSPACE_AGENT_APPROVALS", "never").lower() == "ask",
-        subagent_models=SubagentModels(
-            small=env.get("WORKSPACE_SUBAGENT_SMALL_MODEL", subagents.small),
-            medium=env.get("WORKSPACE_SUBAGENT_MEDIUM_MODEL", subagents.medium),
-            large=env.get("WORKSPACE_SUBAGENT_LARGE_MODEL", subagents.large),
-            extra_large=env.get("WORKSPACE_SUBAGENT_EXTRA_LARGE_MODEL", subagents.extra_large),
+        models=Models(
+            small=env.get("WORKSPACE_MODEL_SMALL", models.small),
+            medium=env.get("WORKSPACE_MODEL_MEDIUM", models.medium),
+            large=env.get("WORKSPACE_MODEL_LARGE", models.large),
+            extra_large=env.get("WORKSPACE_MODEL_EXTRA_LARGE", models.extra_large),
         ),
     )
 
@@ -461,7 +469,10 @@ def transcribe(settings: Settings, audio: bytes, *, timeout_s: float = 60, conte
 
 
 def _chat_body(settings: Settings, request: CompletionRequest) -> bytes:
-    body: WireCompletion = {"model": request.model or settings.chat_model, "messages": tuple(_message(message) for message in request.messages)}
+    body: WireCompletion = {
+        "model": request.model or settings.models.model(settings.chat_class),
+        "messages": tuple(_message(message) for message in request.messages),
+    }
     if request.tools:
         body["tools"] = tuple(_tool(tool) for tool in request.tools)
     if request.streaming:

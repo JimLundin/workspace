@@ -51,7 +51,7 @@ def make_agent(
     machine: FakeMachine | None = None,
 ) -> Agent:
     window.begin("Read the workbook")
-    settings = Settings(endpoint.url, "k", "transcribe", "chat", "gpt-6-astra", "", "")
+    settings = Settings(endpoint.url, "k", "transcribe", "", "")
     return Agent(
         settings,
         machine if machine is not None else FakeMachine(),

@@ -64,7 +64,7 @@ def test_stopping_a_drag_releases_its_button_and_modifiers(tmp_path: Path) -> No
     stop = threading.Event()
     machine = StoppingMouse(stop)
     agent = Agent(
-        Settings("", "", "", "", "", "", ""),
+        Settings("", "", "", "", ""),
         machine,
         FakeWindow(),
         stop,
@@ -90,7 +90,7 @@ def test_stopping_a_drag_releases_its_button_and_modifiers(tmp_path: Path) -> No
 def test_bad_coordinates_and_action_arguments_do_not_produce_input(tmp_path: Path) -> None:
     machine = FakeMachine()
     agent = Agent(
-        Settings("", "", "", "", "", "", ""),
+        Settings("", "", "", "", ""),
         machine,
         FakeWindow(),
         threading.Event(),
@@ -119,7 +119,7 @@ def context(title: str = "Budget.xlsx - Excel") -> ContextSnapshot:
 def test_request_context_includes_the_work_window_and_one_current_screenshot(tmp_path: Path) -> None:
     with fake_endpoint() as endpoint:
         rig = Rig(endpoint, says("I see the workbook."), work=durable(tmp_path))
-        settings = Settings(endpoint.url, "fixture", "transcribe", "chat", "agent", "", "")
+        settings = Settings(endpoint.url, "fixture", "transcribe", "", "")
         agent = Agent(
             settings,
             rig.machine,
@@ -142,7 +142,7 @@ def test_request_context_includes_the_work_window_and_one_current_screenshot(tmp
 def test_automatic_and_explicit_screenshots_share_the_same_history_limit(tmp_path: Path) -> None:
     with fake_endpoint() as endpoint:
         rig = Rig(endpoint, calls(("screenshot", {})), says("I see it."), work=durable(tmp_path))
-        settings = Settings(endpoint.url, "fixture", "transcribe", "chat", "agent", "", "")
+        settings = Settings(endpoint.url, "fixture", "transcribe", "", "")
         for _ in range(3):
             endpoint.replies = [calls(("screenshot", {})), says("I see it.")]
             agent = Agent(
@@ -165,7 +165,7 @@ def test_disabled_context_does_not_capture_or_add_observations_to_the_request(tm
     with fake_endpoint() as endpoint:
         rig = Rig(endpoint, says("Done."), work=durable(tmp_path))
         agent = Agent(
-            Settings(endpoint.url, "fixture", "transcribe", "chat", "agent", "", ""),
+            Settings(endpoint.url, "fixture", "transcribe", "", ""),
             rig.machine,
             rig.window,
             rig.stop,
@@ -186,7 +186,7 @@ def test_unavailable_screen_context_keeps_the_request_and_activity_usable(tmp_pa
     with fake_endpoint() as endpoint:
         rig = Rig(endpoint, says("I can still work with files."), work=durable(tmp_path))
         agent = Agent(
-            Settings(endpoint.url, "fixture", "transcribe", "chat", "agent", "", ""),
+            Settings(endpoint.url, "fixture", "transcribe", "", ""),
             LockedDesktop(),
             rig.window,
             rig.stop,
@@ -204,7 +204,7 @@ def test_context_tool_refreshes_the_current_app_without_taking_a_screenshot(tmp_
     machine = FakeMachine()
     journal: list[dict[str, Json]] = []
     agent = Agent(
-        Settings("", "", "", "", "", "", ""),
+        Settings("", "", "", "", ""),
         machine,
         FakeWindow(),
         threading.Event(),
@@ -264,7 +264,7 @@ def test_inspection_defaults_to_the_work_window_and_only_ui_changes_need_approva
     # mode interrupts a control read while letting a control change through.
     machine = FakeMachine()
     agent = Agent(
-        Settings("", "", "", "", "", "", "", agent_approvals=True),
+        Settings("", "", "", "", "", agent_approvals=True),
         machine,
         FakeWindow(),
         threading.Event(),

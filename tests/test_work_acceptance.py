@@ -73,7 +73,7 @@ def test_finished_meeting_produces_one_verified_notes_file_and_survives_restart(
     errors: list[str] = []
 
     with fake_endpoint() as endpoint:
-        settings = Settings(endpoint.url, "fixture-key", "transcribe", "chat", "gpt-6-astra", "", "")
+        settings = Settings(endpoint.url, "fixture-key", "transcribe", "", "")
         task, meeting = finished_meeting_task(tmp_path, settings, errors)
         transcript = meeting.transcript
         assert TRANSCRIPT in transcript.read_text(encoding="utf-8")

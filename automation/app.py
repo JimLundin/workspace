@@ -173,7 +173,7 @@ def _native_execution(settings: Settings | Missing, bridge: BridgeServer, hwnd: 
     browser = Browser(BROWSER_PROFILE, source=Product.EDGE)
     machine = WinMachine(NativeDesktop(hwnd), meetings=calls, browser=browser)
     context = DesktopContext(bridge, contexts, enabled=os.environ.get("WORKSPACE_AGENT_CONTEXT", "recent").lower() != "off")
-    usable = settings if isinstance(settings, Settings) else Settings("", "", "", "", "", "", "")
+    usable = settings if isinstance(settings, Settings) else Settings("", "", "", "", "")
     followups = WorkFolder(bridge.folder).followups
     try:
         execution = AgentExecution(

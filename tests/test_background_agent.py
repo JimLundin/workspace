@@ -44,7 +44,7 @@ def test_stopped_agent_cannot_start_recording_and_explicit_approval_mode_is_pres
     # the recording owner after the user declined or stopped the work.
     machine, cancel = FakeMachine(), threading.Event()
     agent = Agent(
-        Settings("", "", "", "", "", "", "", agent_approvals=True),
+        Settings("", "", "", "", "", agent_approvals=True),
         machine,
         FakeWindow(),
         cancel,
@@ -96,7 +96,7 @@ def test_explicit_approval_mode_can_decline_browser_changes(tmp_path: Path) -> N
     ):
         work = durable(tmp_path)
         agent = Agent(
-            Settings("", "", "", "", "", "", "", agent_approvals=True),
+            Settings("", "", "", "", "", agent_approvals=True),
             machine,
             FakeWindow(),
             threading.Event(),
@@ -111,7 +111,7 @@ def test_explicit_approval_mode_can_decline_browser_changes(tmp_path: Path) -> N
 def test_browser_images_invalidate_desktop_coordinates(tmp_path: Path) -> None:
     machine = FakeMachine()
     agent = Agent(
-        Settings("", "", "", "", "", "", ""),
+        Settings("", "", "", "", ""),
         machine,
         FakeWindow(),
         threading.Event(),
@@ -129,7 +129,7 @@ def test_browser_images_invalidate_desktop_coordinates(tmp_path: Path) -> None:
 def test_agent_can_manage_tabs_and_groups_without_default_approval_prompts(tmp_path: Path) -> None:
     machine = FakeMachine()
     agent = Agent(
-        Settings("", "", "", "", "", "", ""),
+        Settings("", "", "", "", ""),
         machine,
         FakeWindow(),
         threading.Event(),
@@ -154,7 +154,7 @@ def test_agent_can_manage_tabs_and_groups_without_default_approval_prompts(tmp_p
 def test_stopped_agent_does_not_start_background_tools_or_show_their_arguments(tmp_path: Path) -> None:
     machine, window, cancel = FakeMachine(), FakeWindow(), threading.Event()
     agent = Agent(
-        Settings("", "", "", "", "", "", ""),
+        Settings("", "", "", "", ""),
         machine,
         window,
         cancel,

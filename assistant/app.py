@@ -146,7 +146,7 @@ def configured(settings: Settings | Missing) -> tuple[Settings, Missing | None]:
     """The settings the app runs with and, when credentials are absent, what is missing."""
     match settings:
         case Missing():
-            return Settings("", "", "", "", "", "", ""), settings
+            return Settings("", "", "", "", ""), settings
         case Settings():
             return settings, None
 

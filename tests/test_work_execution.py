@@ -72,7 +72,7 @@ def test_durable_execution_failure_preserves_safe_fault_locations(tmp_path: Path
     workspace = Workspace(live_tree(tmp_path / "live"), tmp_path / "workspace")
     with fake_endpoint() as endpoint:
         endpoint.replies = [says("Result")]
-        settings = Settings(endpoint.url, "fixture", "transcribe", "chat", "gpt-6-astra", "", "")
+        settings = Settings(endpoint.url, "fixture", "transcribe", "", "")
         claim = request(store, "task", "Research this work")
         result = execution(settings, workspace, errors).run_work(claim, store, BrokenResultLog(), threading.Event())
     assert isinstance(result, Waiting) and isinstance(result.reason, Blocked)
@@ -85,7 +85,7 @@ def test_question_suspends_and_recorded_answer_survives_a_fresh_sdk_process_owne
     errors: list[str] = []
     source = Workspace(live_tree(tmp_path / "live"), tmp_path / "workspace")
     with fake_endpoint() as endpoint:
-        settings = Settings(endpoint.url, "fixture", "transcribe", "chat", "gpt-6-astra", "", "")
+        settings = Settings(endpoint.url, "fixture", "transcribe", "", "")
         endpoint.replies = [calls(("ask_user", {"question": "Which report folder?"}))]
         first = request(store, "task", "Prepare the report.")
         outcome = execution(settings, source, errors).run_work(first, store, FakeWindow(), threading.Event())
@@ -108,7 +108,7 @@ def test_sdk_history_and_source_drafts_are_scoped_to_the_conversation(tmp_path: 
     errors: list[str] = []
     source = Workspace(live_tree(tmp_path / "live"), tmp_path / "workspace")
     with fake_endpoint() as endpoint:
-        settings = Settings(endpoint.url, "fixture", "transcribe", "chat", "gpt-6-astra", "", "")
+        settings = Settings(endpoint.url, "fixture", "transcribe", "", "")
         adapter = execution(settings, source, errors)
         first = request(store, "one", "Inspect the first project.")
         draft = adapter.profiles.run(first).conversation.workspace
@@ -149,7 +149,7 @@ def test_endpoint_failure_and_step_limit_never_report_completion(tmp_path: Path)
     errors: list[str] = []
     source = Workspace(live_tree(tmp_path / "live"), tmp_path / "workspace")
     with fake_endpoint() as endpoint:
-        settings = Settings(endpoint.url, "fixture", "transcribe", "chat", "gpt-6-astra", "", "")
+        settings = Settings(endpoint.url, "fixture", "transcribe", "", "")
         first = request(store, "unavailable", "Inspect the computer.")
         endpoint.replies = [Reply(b'{"error":{"message":"model unavailable"}}', status=503)]
         outcome = execution(settings, source, errors).run_work(first, store, FakeWindow(), threading.Event())
@@ -183,7 +183,7 @@ def test_runtime_checks_are_recorded_before_candidate_import_and_failures_remain
     )
     work = WorkExecution(claim, store, Resources())
     agent = Agent(
-        Settings("", "", "", "", "", "", ""),
+        Settings("", "", "", "", ""),
         FakeMachine(),
         FakeWindow(),
         threading.Event(),
@@ -245,7 +245,7 @@ def test_nonfinite_tool_arguments_never_enter_effect_storage(tmp_path: Path) -> 
     payload: dict[str, object] = {"path": str(destination), "content": "not written", "unexpected": float("nan")}
     args = json.dumps(payload)
     agent = Agent(
-        Settings("", "", "", "", "", "", ""),
+        Settings("", "", "", "", ""),
         FakeMachine(),
         FakeWindow(),
         threading.Event(),
@@ -271,7 +271,7 @@ def test_installation_resumes_only_after_running_source_matches_the_requested_di
         },
     )
     agent = Agent(
-        Settings("", "", "", "", "", "", ""),
+        Settings("", "", "", "", ""),
         FakeMachine(),
         FakeWindow(),
         threading.Event(),
@@ -289,7 +289,7 @@ def test_installation_resumes_only_after_running_source_matches_the_requested_di
     assert pending is not None
     errors: list[str] = []
     with fake_endpoint() as endpoint:
-        settings = Settings(endpoint.url, "fixture", "transcribe", "chat", "gpt-6-astra", "", "")
+        settings = Settings(endpoint.url, "fixture", "transcribe", "", "")
         adapter = execution(settings, workspace, errors)
         outcome = adapter.run_work(pending, store, FakeWindow(), threading.Event())
         assert isinstance(outcome, Waiting) and not endpoint.received

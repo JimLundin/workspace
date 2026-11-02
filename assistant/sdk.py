@@ -516,7 +516,7 @@ async def run(local: Agent, task: str, prompt: str, specs: tuple[ToolSpec, ...])
         timeout=600,
         http_client=http,
     ) as client:
-        model = OpenAIResponsesModel(model=local.settings.agent_model, openai_client=client)
+        model = OpenAIResponsesModel(model=local.settings.models.model(local.settings.agent_class), openai_client=client)
         lock = asyncio.Lock()
         config = RunConfig(
             tracing_disabled=True,
@@ -540,7 +540,7 @@ async def run(local: Agent, task: str, prompt: str, specs: tuple[ToolSpec, ...])
         specialists = frozendict(
             (
                 agent_class,
-                replace(specialist, model=OpenAIResponsesModel(model=local.settings.subagent_models.model(agent_class), openai_client=client)),
+                replace(specialist, model=OpenAIResponsesModel(model=local.settings.models.model(agent_class), openai_client=client)),
             )
             for agent_class in AgentClass
         )

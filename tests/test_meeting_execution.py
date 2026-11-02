@@ -104,7 +104,7 @@ class MeetingRig:
         context: Callable[[Task], RequestContext] = unseen,
     ) -> AgentExecution:
         return AgentExecution(
-            Settings(endpoint.url, "fixture", "transcribe", "chat", "gpt-6-astra", "", ""),
+            Settings(endpoint.url, "fixture", "transcribe", "", ""),
             self.machine,
             Profiles(self.workspace, GeneralEffects(context, no_feed), meeting),
             record=lambda record: None,
@@ -115,7 +115,7 @@ class MeetingRig:
     def agent(self, claim: Claim, *, context: Callable[[], ContextSnapshot] | None = None) -> Agent:
         selected = self.meeting.session(claim.task.id, self.prepared.profile)
         return Agent(
-            Settings("", "", "", "", "", "", ""),
+            Settings("", "", "", "", ""),
             self.machine,
             FakeWindow(),
             threading.Event(),

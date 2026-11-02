@@ -43,7 +43,7 @@ def task(name: str, agent_class: str = "small") -> dict[str, Json]:
 def make_agent(endpoint: FakeEndpoint, folder: Path, machine: FakeMachine, window: FakeWindow) -> Agent:
     # Transport, local resources and observers vary independently in this fixture.
     return Agent(
-        Settings(endpoint.url, "k", "transcribe", "chat", "manager", "", ""),
+        Settings(endpoint.url, "k", "transcribe", "", ""),
         machine,
         window,
         threading.Event(),
@@ -63,9 +63,9 @@ def test_main_selects_four_configured_classes_and_receives_parallel_results(tmp_
             {
                 "OPENAI_BASE_URL": endpoint.url,
                 "OPENAI_API_KEY": "k",
-                "WORKSPACE_AGENT_MODEL": "manager",
+                "WORKSPACE_AGENT_CLASS": "medium",
                 "WORKSPACE_AGENT_REASONING_EFFORT": "medium",
-                **{f"WORKSPACE_SUBAGENT_{name.upper()}_MODEL": "model-" + name for name in classes},
+                **{f"WORKSPACE_MODEL_{name.upper()}": "model-" + name for name in classes},
             }
         )
         assert isinstance(settings, Settings)
@@ -92,6 +92,7 @@ def test_main_selects_four_configured_classes_and_receives_parallel_results(tmp_
         )
         assert agent.run("main")
         assert agent.report == Reported("Combined and verified.")
+        assert all(body(request)["model"] == "model-medium" for request in endpoint.received if prompt(request) == "main")
         children = [request for request in endpoint.received if prompt(request) != "main"]
         assert len(children) == 4
         for request in children:
@@ -162,7 +163,7 @@ def test_children_share_serialized_tools_and_the_durable_evidence_owner(tmp_path
 
         endpoint.respond = respond
         agent = Agent(
-            Settings(endpoint.url, "k", "", "", "manager", "", ""),
+            Settings(endpoint.url, "k", "", "", ""),
             machine,
             window,
             threading.Event(),
@@ -376,8 +377,6 @@ def test_children_keep_the_profiles_tool_boundary_and_cannot_delegate(tmp_path: 
 
         endpoint.respond = respond
         machine, window = FakeMachine(), FakeWindow()
-        agent = Agent(
-            Settings(endpoint.url, "k", "", "", "manager", "", ""), machine, window, threading.Event(), work=durable(tmp_path), toolset=Restricted
-        )
+        agent = Agent(Settings(endpoint.url, "k", "", "", ""), machine, window, threading.Event(), work=durable(tmp_path), toolset=Restricted)
         assert agent.run("main") and machine.log == []
         assert len(endpoint.received) == 4
