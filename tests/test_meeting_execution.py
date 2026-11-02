@@ -381,6 +381,7 @@ def test_reserved_workflow_omits_unrelated_history_context_and_general_tools(tmp
         payload = cast("dict[str, object]", json.loads(request_body))
         tools = cast("list[dict[str, object]]", payload["tools"])
         assert {tool["name"] for tool in tools} == {
+            "delegate_subtasks",
             "meeting_read_sources",
             "meeting_publish_followup",
             "meeting_followup_result",

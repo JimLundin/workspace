@@ -11,6 +11,7 @@ import uuid
 import wave
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field
+from enum import Enum
 from http.client import HTTPException, HTTPResponse
 from typing import Final, Literal, NotRequired, TypedDict, assert_never
 
@@ -31,6 +32,40 @@ _SCHEMA = TypeAdapter(dict[str, Json], config=ConfigDict(allow_inf_nan=False))
 # ---- Settings --------------------------------------------------------------------------
 
 
+class AgentClass(Enum):
+    SMALL = "small"
+    MEDIUM = "medium"
+    LARGE = "large"
+    EXTRA_LARGE = "extra_large"
+
+
+@dataclass(frozen=True, slots=True)
+class SubagentModels:
+    """Workload classes select models independently of the main agent."""
+
+    small: str = "gpt-6-luna"
+    medium: str = "gpt-6.1-terra"
+    large: str = "gpt-6.1-sol"
+    extra_large: str = "gpt-6-astra"
+
+    def __post_init__(self) -> None:
+        if any(not model.strip() for model in (self.small, self.medium, self.large, self.extra_large)):
+            raise ValueError("Subagent model IDs must not be empty.")
+
+    def model(self, agent_class: AgentClass) -> str:
+        match agent_class:
+            case AgentClass.SMALL:
+                return self.small
+            case AgentClass.MEDIUM:
+                return self.medium
+            case AgentClass.LARGE:
+                return self.large
+            case AgentClass.EXTRA_LARGE:
+                return self.extra_large
+            case _:
+                assert_never(agent_class)
+
+
 @dataclass(frozen=True, slots=True)
 class Settings:
     base_url: str
@@ -48,6 +83,7 @@ class Settings:
     """Reasoning effort for agent tasks; independent of quick chat."""
     agent_approvals: bool = field(default=False, kw_only=True)
     """Opt in to tool and self-update approval prompts."""
+    subagent_models: SubagentModels = SubagentModels()
 
 
 @dataclass(frozen=True, slots=True)
@@ -63,6 +99,7 @@ def settings_from(env: Mapping[str, str]) -> Settings | Missing:
     if missing := tuple(name for name in required if not env.get(name)):
         return Missing(missing)
     chat_model = env.get("WORKSPACE_CHAT_MODEL", "gpt-5.4-mini")
+    subagents = SubagentModels()
     return Settings(
         base_url=env["OPENAI_BASE_URL"].rstrip("/"),
         api_key=env["OPENAI_API_KEY"],
@@ -73,6 +110,12 @@ def settings_from(env: Mapping[str, str]) -> Settings | Missing:
         language=env.get("WORKSPACE_LANGUAGE", ""),
         agent_reasoning_effort=env.get("WORKSPACE_AGENT_REASONING_EFFORT", "low"),
         agent_approvals=env.get("WORKSPACE_AGENT_APPROVALS", "never").lower() == "ask",
+        subagent_models=SubagentModels(
+            small=env.get("WORKSPACE_SUBAGENT_SMALL_MODEL", subagents.small),
+            medium=env.get("WORKSPACE_SUBAGENT_MEDIUM_MODEL", subagents.medium),
+            large=env.get("WORKSPACE_SUBAGENT_LARGE_MODEL", subagents.large),
+            extra_large=env.get("WORKSPACE_SUBAGENT_EXTRA_LARGE_MODEL", subagents.extra_large),
+        ),
     )
 
 

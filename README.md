@@ -54,6 +54,10 @@ and our typed Win32 bindings (`winapi/`), independently of the assistant.
    | `OPENAI_API_KEY` | its key |
    | `WORKSPACE_CHAT_MODEL` | optional; default `gpt-5.4-mini` (quick jobs) |
    | `WORKSPACE_AGENT_MODEL` | optional; default `gpt-6.1-sol` (agent tasks and self-modification) |
+   | `WORKSPACE_SUBAGENT_SMALL_MODEL` | optional; default `gpt-6-luna` (focused extraction, summaries and routine checks) |
+   | `WORKSPACE_SUBAGENT_MEDIUM_MODEL` | optional; default `gpt-6.1-terra` (bounded visual, writing and desktop tasks) |
+   | `WORKSPACE_SUBAGENT_LARGE_MODEL` | optional; default `gpt-6.1-sol` (complex implementation and investigation) |
+   | `WORKSPACE_SUBAGENT_EXTRA_LARGE_MODEL` | optional; default `gpt-6-astra` (the hardest reasoning and design) |
    | `WORKSPACE_AGENT_REASONING_EFFORT` | optional; default `low` for quicker replies; use an effort supported by your selected model |
    | `WORKSPACE_AGENT_APPROVALS` | optional; default `never`; set `ask` to opt in to action and update approvals |
    | `WORKSPACE_AGENT_CONTEXT` | optional; default `recent`; set `off` to disable idle activity tracking and automatic request context |
@@ -501,6 +505,19 @@ consequential action and its outcome. Browser and Teams arguments and results st
 out of persistent journals and activity details, including form values and
 sign-in codes.
 
+The main agent can delegate independent work to **small**, **medium**, **large**
+or **extra large** subagents, choosing the smallest suitable model for each task.
+Their model IDs are configurable above; these are workload classes, not published
+parameter counts. Up to four subagents run in parallel per delegation, each with
+at most twelve model turns and the current task's tools and approval policy.
+They inherit the configured reasoning effort, so choose an effort supported by
+all selected models. Child conversations are separate; the main agent supplies
+their context, collects named results and owns the final answer and verification.
+The timeline shows each child's class and status. Stop covers every child.
+Computer actions remain serialized; work on the same desktop, tab, source draft
+or document belongs to one agent because multi-call sequences are not exclusive.
+Subagents cannot spawn further agents.
+
 ## Durable work
 
 Open **Work…** from the tray or conversation menu. Voice requests, typed
@@ -647,7 +664,15 @@ assembles content parts; immutable timeline entries replace each live row.
 Publishers belong to one request, so late events cannot enter another turn.
 Tools run
 one at a time, enforced locally so endpoints that reject `parallel_tool_calls`
-still work. Automatic request images and screenshot tool results share a limit
+still work. `delegate_subtasks` is an SDK orchestration tool: it validates named
+tasks and class choices, then starts independent `Runner` loops using the selected
+configured models. All loops share the same effect gate and durable claim; child
+loops receive only the profile's existing tools. Only the main conversation is
+checkpointed, with the collected child results retained for follow-ups. Child
+response text stays with the manager rather than appearing as its final answer.
+The installed SDK owns loop execution, HTTP recovery and stream parsing;
+Workspace owns class routing, bounds, cancellation and effect ownership.
+Automatic request images and screenshot tool results share a limit
 of two retained images.
 Response storage and tracing are disabled. Quick chat and transcription still
 use `assistant/llm.py` and their existing endpoints.

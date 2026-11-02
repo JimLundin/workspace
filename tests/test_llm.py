@@ -11,6 +11,7 @@ from assistant.llm import (
     Missing,
     Reply,
     Settings,
+    SubagentModels,
     Text,
     ToolCall,
     assistant_message,
@@ -54,6 +55,7 @@ def test_settings_defaults() -> None:
     assert result == Settings("https://ai.example/v1", "k", "gpt-4o-transcribe", "gpt-5.4-mini", "gpt-6.1-sol", "", "")
     assert result.agent_reasoning_effort == "low"
     assert result.agent_approvals is False
+    assert result.subagent_models == SubagentModels("gpt-6-luna", "gpt-6.1-terra", "gpt-6.1-sol", "gpt-6-astra")
 
 
 def test_settings_overrides() -> None:
@@ -76,6 +78,18 @@ def test_agent_model_is_independent_of_the_quick_chat_model() -> None:
     result = settings_from({**ENV, "WORKSPACE_CHAT_MODEL": "fast"})
     assert isinstance(result, Settings)
     assert result.agent_model == "gpt-6.1-sol"
+
+
+def test_empty_subagent_model_overrides_are_rejected_at_configuration_entry() -> None:
+    # Defect: an empty model ID reaches a delegated provider request instead of
+    # being rejected where Workspace reads its external configuration.
+    for agent_class in ("SMALL", "MEDIUM", "LARGE", "EXTRA_LARGE"):
+        try:
+            settings_from({**ENV, f"WORKSPACE_SUBAGENT_{agent_class}_MODEL": "  "})
+        except ValueError as error:
+            assert str(error) == "Subagent model IDs must not be empty."
+        else:
+            raise AssertionError(f"The empty {agent_class} model override was accepted.")
 
 
 # ---- transcription ---------------------------------------------------------------------
