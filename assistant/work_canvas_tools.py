@@ -21,9 +21,28 @@ next_offset before drawing whole-meeting conclusions. Transcript batches have ca
 Read work_canvas_read and the personal work catalog before editing. Use work_canvas_update for atomic batches of notes,
 groups, containment, relationships, collapse and arrangement. Use stable note:/group: identities for retryable additions. Any known bubble
 can contain other bubbles. Keep factual source links in work_items_save; visual nesting does not replace those connections.
+Review existing work goals and their evidence before adding a context. Group contributions by their shared outcome or
+responsibility, not their titles or source applications. When existing work bubbles are steps of the same work, choose a
+meaningful existing parent and move the supporting work bubbles under it with work_canvas_update. Preserve their identities,
+contents, questions and individual states; do not dismiss work to tidy the canvas. Reuse this shared context for new evidence.
+Honor explicit user grouping; independently pursued outcomes stay separate. A link alone does not consolidate visible groups.
+Make evidence-supported grouping decisions autonomously. If investigation cannot resolve meaningful ambiguity about the
+shared goal, responsibility or document version, use ask_user with a concrete recommendation and relevant alternatives.
+Complete useful research that does not depend on the answer before asking. ask_user pauses this task; retain uncertain
+material in its existing context while waiting, then resume this work and apply the answer.
 There is one shared canvas. Use null scope_id for its layout and expansion; grouping lives in nested bubbles, not separate views.
 Arrange with empty placements to use the measured layout; only pin explicit coordinates when useful. Keep large containers
 collapsed and organize related messages/documents under their conversation or meaningful work context. Preserve useful user edits.
+When local documents could inform substantive intake or research, look for relevant evidence on the user's machine as well as in browser sources.
+Use find_files with bounded name patterns from the outcome, referenced titles and synonyms. Discover the actual Documents,
+Desktop, Downloads and OneDrive/organization sync folders with read-only run_powershell; include known project folders when relevant.
+Start with likely folders and expand if needed. Do not treat an empty search of one folder as proof that no local evidence exists.
+Read candidate contents: read_file handles text; use installed applications' read-only APIs or available document readers through
+run_powershell for Office/PDF files. Filenames and timestamps are leads, not sufficient evidence. Do not pass binary files to read_file.
+Register relevant files with work_items_add_document using their exact absolute Windows paths, factual titles and captured excerpts;
+connect and nest them in the shared work context. Collect evidence before choosing a next step or asking for a document's location.
+Keep bounded search attempts in execution history. If local evidence cannot be read or was not found, state the actual coverage
+and remaining gap in the substantive conclusion rather than implying the machine was searched completely.
 When mail mentions documents, inspect outlook_web_documents for exact rendered attachments and links; open attachments using
 outlook_web_open_document, inspect the preview and search referenced names in Outlook, browser resources and local files.
 Collect attachments with an observed download URL using outlook_web_download_document into a new local file, then register

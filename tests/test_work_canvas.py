@@ -8,7 +8,7 @@ from itertools import islice
 from pathlib import Path
 from unittest import TestCase
 
-from assistant.canvas_activity import Attention, CanvasInstruction, CanvasQuestion, CanvasResearch, CanvasRun, CanvasUpdate, TaskRequest
+from assistant.canvas_activity import Attention, CanvasInstruction, CanvasIntake, CanvasQuestion, CanvasResearch, CanvasRun, CanvasUpdate, TaskRequest
 from assistant.work_canvas_context import CanvasMode, CanvasScene, CanvasScope, context_path, project, scene_contents, visible_groups
 from assistant.work_canvas_model import (
     DOCUMENT,
@@ -44,13 +44,21 @@ def publish_nothing(_publication: CanvasPublication) -> None:
 
 def test_run_prompts_keep_research_identity_and_exact_scoped_instructions() -> None:
     # Defect: research targets the wrong work, or an instruction is replaced by
-    # research, loses exact user text, or acts outside its submitted context.
+    # research, loses exact user text, acts outside its submitted context, or
+    # skips local evidence and comparison with existing work during intake.
     work_id, title = "work:atlas", "Atlas deployment"
     research = run_prompt(CanvasRun("research", work_id, CanvasResearch("evidence")), title)
     assert work_id in research and title in research
     instruction = "Compare these versions.\nKeep the current draft."
     scoped = run_prompt(CanvasRun("instruction", work_id, CanvasInstruction(instruction)), title)
     assert scoped.startswith(instruction + "\n\n") and work_id in scoped
+    intake = run_prompt(CanvasRun("intake", "kanban:atlas", CanvasIntake("evidence")), "Atlas migration")
+    assert "kanban:atlas" in intake and "all pages of work_items_list" in intake
+    for prompt in (research, intake):
+        assert "same outcome" in prompt or "shared outcome" in prompt
+        assert all(tool in prompt for tool in ("find_files", "read_file", "run_powershell", "work_items_add_document"))
+        assert "ask_user with a recommended choice and alternatives" in prompt and "independent research before asking" in prompt
+        assert "pauses the task" in prompt
 
 
 def local_canvas(folder: Path, publish: Callable[[CanvasPublication], None] = publish_nothing) -> WorkCanvas:

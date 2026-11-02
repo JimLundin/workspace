@@ -507,7 +507,8 @@ def test_agent_tools_use_the_desktop_owner_and_record_confirmed_edits(tmp_path: 
 
 def test_correlation_model_receives_bounded_evidence_and_has_no_action_tools(tmp_path: Path) -> None:
     # Defect: the connector uses the quick chat model, omits saved work or
-    # corrections, or grants the background correlation model action tools.
+    # corrections or the shared-outcome policy, or grants the background
+    # correlation model action tools.
     store = PersonalStore(tmp_path / "work.sqlite3")
     state = store.observe((source(SourceKind.TEAMS),))
     existing = store.handle(
@@ -536,6 +537,7 @@ def test_correlation_model_receives_bounded_evidence_and_has_no_action_tools(tmp
         assert existing.work.id in str(wire["input"]) and "Deploy only after supplier approval" in str(wire["input"])
         assert "rejected" in str(wire["input"])
         assert "untrusted evidence" in str(wire)
+        assert "overall outcome" in str(wire) and "boundary is ambiguous" in str(wire)
         assert "WorkPlan" in str(wire["text"])
 
 

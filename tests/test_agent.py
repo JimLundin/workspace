@@ -334,6 +334,30 @@ class ToolRig:
 # ---- the loop --------------------------------------------------------------------------
 
 
+def test_general_agent_receives_shared_work_grouping_and_local_evidence_tools(tmp_path: Path) -> None:
+    # Defect: profile composition drops the canvas grouping/research policy or
+    # omits the tools needed to collect local evidence from the model request.
+    with fake_endpoint() as endpoint:
+        rig = Rig(endpoint, says("Research complete."), work=durable(tmp_path))
+        rig.run("Research this work on my canvas.")
+        request = cast("dict[str, Json]", json.loads(endpoint.last.body))
+        assert "Group contributions by their shared outcome" in str(request)
+        assert "relevant evidence on the user's machine" in str(request)
+        assert "resolve meaningful ambiguity" in str(request)
+        assert "ask_user pauses this task" in str(request)
+        tools = cast("list[dict[str, Json]]", request["tools"])
+        offered = frozenset(tool["name"] for tool in tools)
+        assert {
+            "find_files",
+            "read_file",
+            "run_powershell",
+            "work_items_add_document",
+            "work_items_list",
+            "work_canvas_update",
+            "ask_user",
+        } <= offered
+
+
 def test_the_agent_uses_tools_then_answers(tmp_path: Path) -> None:
     (tmp_path / "notes.txt").write_text("hello", encoding="utf-8")
     with fake_endpoint() as endpoint:

@@ -41,6 +41,32 @@ second bubble announcing that work exists. Emails, Teams conversations, Kanban
 tickets, documents, notes, clarifications, research findings and drafts are the
 contributions inside that context. Kanban uses a dedicated amber board badge.
 
+Agent grouping follows the shared outcome across conversations, decisions,
+documents and supporting tickets. Different titles, deliverables and source
+states do not establish separate work. Intake compares all saved work goals
+before creating a context. Existing supporting work bubbles can nest under one
+meaningful work bubble, preserving their references, questions and individual
+states. Explicit user grouping takes
+precedence. Independently pursued outcomes remain separate.
+
+The agent makes supported decisions autonomously. When investigation cannot
+resolve meaningful ambiguity about the shared goal, responsibility or evidence,
+it asks a focused question with a recommended choice and relevant alternatives.
+Useful independent research precedes the question. Asking pauses the task; the
+answer resumes the same work. The tool-free correlation pass leaves uncertain connections for that
+investigation instead of inventing a work boundary.
+
+When local documents could inform the outcome, intake and work research search
+likely local and synced document folders with bounded patterns, read candidate
+contents and register relevant files with their exact Windows paths and captured
+evidence. File names and dates are leads;
+version selection depends on observed contents and metadata. Search attempts stay
+in execution history, while useful references and conclusions join their work
+context. An unsuccessful bounded search reports its coverage. The automatic
+correlation model still has no file or action tools; the general canvas agent owns
+this evidence collection. Transport checks verify that these policies and tools
+reach the model, not that a scripted model response proves its semantic judgment.
+
 The same canonical source can support several work contexts through explained
 connections. It appears once on the shared canvas; connections lead between
 related bubbles without opening a separate workspace. Arbitrary canvas groups can contain pieces,
