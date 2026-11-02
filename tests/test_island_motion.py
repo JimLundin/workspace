@@ -1,8 +1,8 @@
 """How capsules move between views: arriving, morphing, cross-fading and leaving."""
 
-from assistant.island_layout import Content, Spot
-from assistant.island_model import Action, CapsuleView, Glyph, Key, Text, Zone
-from assistant.island_motion import IslandMotion, Shown, advance, finish, placed, retarget, settled
+from desktop_ui.island_layout import Content, Spot
+from desktop_ui.island_model import Action, CapsuleView, Glyph, Key, Text, Zone
+from desktop_ui.island_motion import IslandMotion, Shown, advance, finish, placed, retarget, settled
 
 
 def shown(key: Key, zone: Zone, width: float, *parts: Text | Glyph) -> Shown:

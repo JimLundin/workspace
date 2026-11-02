@@ -11,7 +11,6 @@ from typing import Final, cast
 
 from assistant.agent import Agent
 from assistant.agent_history import History
-from assistant.agent_session import activity_text
 from assistant.agent_tools import Output
 from assistant.browser_requests import BrowserRequest, Screenshot
 from assistant.browser_values import BrowserError
@@ -30,6 +29,7 @@ from automation.json_value import Json
 from automation.presentation import LiveMessage, Succeeded, ToolActivity, ToolStatus
 from automation.store import TaskStore
 from automation.task import RequestSource
+from desktop_ui.agent_session import activity_text
 from tests.fake_endpoint import FakeEndpoint, Received, Reply, fake_endpoint, sse
 from tests.test_workspace import live_tree
 from winapi.shapes import Rect, Window

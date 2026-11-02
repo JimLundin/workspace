@@ -8,7 +8,7 @@ test uses control identities from one process, operates them from another and
 reads the resulting state from a third. Removing it would lose coverage of our
 PowerShell/UIA integration, escaping, bounds and action validation.
 
-The flashing bubble cards are real `assistant/toast_card.py` surfaces constructed
+The flashing bubble cards are real `desktop_ui/toast_card.py` surfaces constructed
 by `tests/test_windows_agent_toasts.py` and its consumers. The fixture supplies
 synthetic requests, replies, approvals, recordings and feed items, sometimes at
 narrow widths or fractional DPI. These are current product variants; standalone

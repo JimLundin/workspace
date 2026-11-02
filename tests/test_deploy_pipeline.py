@@ -67,7 +67,7 @@ def test_shared_interpreter_inventory_owns_only_installed_commands_and_their_des
 
 def test_restart_plan_tracks_shared_removed_and_package_dependencies(tmp_path: Path) -> None:
     # Detect selecting by directory alone, dropping consumers of removed imports,
-    # or failing to include package initialization in a child's lifetime.
+    # or failing to include extracted UI/package initialization in a child's lifetime.
     source = {
         "keeper.py": "import keeper_control\nimport supervisor_support\n",
         "keeper_control.py": "",
@@ -77,7 +77,9 @@ def test_restart_plan_tracks_shared_removed_and_package_dependencies(tmp_path: P
         "miryoku/engine.py": "import protocol\n",
         "assistant/__init__.py": "",
         "assistant/__main__.py": "from assistant import app\n",
-        "assistant/app.py": "import protocol\nimport retired\n",
+        "assistant/app.py": "import protocol\nimport retired\nimport desktop_ui.ui\n",
+        "desktop_ui/__init__.py": "",
+        "desktop_ui/ui.py": "value = 1\n",
         "automation/__init__.py": "",
         "automation/__main__.py": "from automation import app\n",
         "automation/app.py": "import protocol\n",
@@ -88,6 +90,8 @@ def test_restart_plan_tracks_shared_removed_and_package_dependencies(tmp_path: P
     }
     cases = (
         ({"assistant/app.py": "import protocol\nimport retired\nvalue = 2\n"}, (), ComponentRestart(("assistant",))),
+        ({"desktop_ui/ui.py": "value = 2\n"}, (), ComponentRestart(("assistant",))),
+        ({"desktop_ui/__init__.py": "value = 2\n"}, (), ComponentRestart(("assistant",))),
         ({"protocol.py": "value = 2\n"}, (), ComponentRestart(("layout", "assistant", "automation"))),
         ({"assistant/app.py": "import protocol\n"}, ("retired.py",), ComponentRestart(("assistant",))),
         ({"miryoku/__init__.py": "value = 2\n"}, (), ComponentRestart(("layout",))),

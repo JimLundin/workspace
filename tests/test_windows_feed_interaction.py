@@ -9,11 +9,11 @@ lazy from PySide6 import QtWidgets
 lazy from PySide6.QtCore import Qt
 lazy from PySide6.QtTest import QTest
 
-from assistant.agent_toasts import card_order
-from assistant.qt_runtime import prepare
-from assistant.ui_components.bubble import title_height
 from automation.presentation import Succeeded, ToolActivity
 from automation.task import Reply, TextAnswer
+from desktop_ui.agent_toasts import card_order
+from desktop_ui.components.bubble import title_height
+from desktop_ui.qt_runtime import prepare
 from tests.agent_requests import asked
 from tests.test_windows_agent_toasts import notifications
 

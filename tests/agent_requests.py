@@ -1,7 +1,7 @@
 """Timeline projections of durable agent requests, for conversation and UI fixtures."""
 
-from assistant.agent_session import AgentRequest
 from automation.task import Approval, Question
+from desktop_ui.agent_session import AgentRequest
 
 
 def asked(identity: str, text: str, detail: str, at: float) -> AgentRequest:

@@ -4,9 +4,9 @@ import io
 import wave
 import zlib
 
-from assistant.icons import dot
 from assistant.llm import long_enough, wav
 from assistant.png import encode_png
+from desktop_ui.icons import dot
 from winapi.pcm import RATE
 
 

@@ -92,7 +92,7 @@ class Execution:
 def ready():
     hwnd = windows.find(title)
     assert hwnd and windows.process_id(hwnd) == os.getpid()
-    for module in ("assistant.app", "assistant.desktop", "assistant.ui", "winapi.audio", "winapi.recording", "tkinter", "PySide6"):
+    for module in ("assistant.app", "assistant.desktop", "desktop_ui.ui", "winapi.audio", "winapi.recording", "tkinter", "PySide6"):
         assert not any(name == module or name.startswith(module + ".") for name in sys.modules), module
     if mode == "fixture":
         task = TaskStore(folder / "work.sqlite3").get("notes")

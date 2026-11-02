@@ -129,7 +129,7 @@ was added, despite the extensive Git diff. Selection returned zero changed files
 and zero affected tests. The comparison is against **deployed bytes**, not Git
 HEAD. With one hash changed only in an in-memory baseline, the actual selector
 returned 8 modules for `assistant/bar_model.py`, 11 for
-`assistant/tool_call_view.py`, and all 118 eligible modules for `runtime.py`.
+`desktop_ui/tool_call_view.py`, and all 118 eligible modules for `runtime.py`.
 The first two scopes include 7 and 11 native modules respectively; native cases
 remain sequential on the shared desktop. This verifies that affected selection
 works, while showing why an explicit test/function scope helps during editing.
@@ -255,13 +255,13 @@ remains a separate future lifecycle feature.
 2. [Project dependencies](../pyproject.toml),
    [Windows runtime lock](../requirements/windows-py315.lock).
 3. [CPython 3.15: importlib.reload](https://docs.python.org/3.15/library/importlib.html#importlib.reload).
-4. [Toolbar construction](../assistant/desktop_bar.py),
+4. [Toolbar construction](../desktop_ui/desktop_bar.py),
    [toolbar native fixtures](../tests/test_windows_shell.py),
    [feed native fixtures](../tests/test_windows_feed.py).
 5. [Native deployment close/install/readiness owner](../scripts/deploy_windows.py).
 6. [Keeper child lifecycle and requests](../keeper.py).
 7. [Assistant startup/shutdown](../assistant/app.py),
-   [Qt UI thread/queue/disposal owner](../assistant/ui.py).
+   [Qt UI thread/queue/disposal owner](../desktop_ui/ui.py).
 8. [Jurigged limitations](https://github.com/breuleux/jurigged/blob/master/README.md),
    [dependencies](https://github.com/breuleux/jurigged/blob/master/pyproject.toml),
    [tested interpreter/platform matrix](https://github.com/breuleux/jurigged/blob/master/.github/workflows/python-package.yml).

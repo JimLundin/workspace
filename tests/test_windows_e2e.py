@@ -19,12 +19,12 @@ from pathlib import Path
 
 lazy from PySide6 import QtCore, QtWidgets
 
-from assistant.qt_runtime import prepare
 from components import LAYOUT
+from desktop_ui.qt_runtime import prepare
 from protocol import MAGIC
 from tests.json_fixture import json_value
-lazy from assistant.qt_ui import application
-lazy from assistant.shell_controls import WindowsKeyObserver
+lazy from desktop_ui.qt_ui import application
+lazy from desktop_ui.shell_controls import WindowsKeyObserver
 lazy from winapi import inputs, shell, system, windows
 lazy from winapi._core import fn, kernel32, user32
 

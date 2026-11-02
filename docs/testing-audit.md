@@ -102,7 +102,7 @@ mutations became surviving after the test changes.
 | Source | Generated | Tested | Detected before | Detected after |
 | --- | ---: | ---: | ---: | ---: |
 | `assistant/recording_state.py` | 44 | 44 | 30 | 41 |
-| `assistant/notification_reading.py` | 31 | 31 | 25 | 29 |
+| `desktop_ui/notification_reading.py` | 31 | 31 | 25 | 29 |
 | `assistant/pcm.py` | 104 | 60 | 48 | 60 |
 | `miryoku/engine.py` | 153 | 80 | 71 | 77 |
 | Six selected `Agent` methods | 27 | 20 | 11 | 19 |
@@ -148,7 +148,7 @@ selections. No mutation command is added to the normal edit or install loop.
 
 ```sh
 python scripts/mutate.py assistant/recording_state.py --tests tests/test_recording_state.py --limit 0 --workers 2 --output dist/recording-mutations.json
-python scripts/mutate.py assistant/notification_reading.py --tests tests/test_notification_reading.py --limit 0 --workers 2 --output dist/reading-mutations.json
+python scripts/mutate.py desktop_ui/notification_reading.py --tests tests/test_notification_reading.py --limit 0 --workers 2 --output dist/reading-mutations.json
 python scripts/mutate.py assistant/pcm.py --tests tests/test_pcm.py --limit 60 --workers 2 --output dist/pcm-mutations.json
 python scripts/mutate.py miryoku/engine.py --tests tests/test_engine.py --limit 80 --workers 2 --output dist/engine-mutations.json
 python scripts/mutate.py assistant/agent.py --function Agent.read_file --function Agent.find_files --function Agent.write_file --function Agent.run_powershell --function Agent.approve --function Agent.may_control --tests tests/test_agent.py --limit 20 --workers 2 --timeout 90 --output dist/agent-mutations.json
@@ -270,8 +270,8 @@ Reproduce the current decision campaigns with pytest installed:
 
 ```sh
 python scripts/mutate.py assistant/action_text.py --tests tests/test_action_text.py --limit 0 --workers 2 --output dist/action-mutations.json
-python scripts/mutate.py assistant/notifications.py --function observe --function observe.finish_turn --function results --function steps --function settled --function caption --function order_of --function advance --tests tests/test_notifications.py --limit 0 --workers 4 --output dist/turn-mutations.json
-python scripts/mutate.py assistant/notifications.py --tests tests/test_notifications.py --replace 'for entry in reversed(entries):' 'for entry in entries:' --output dist/turn-precedence-mutation.json
+python scripts/mutate.py desktop_ui/notifications.py --function observe --function observe.finish_turn --function results --function steps --function settled --function caption --function order_of --function advance --tests tests/test_notifications.py --limit 0 --workers 4 --output dist/turn-mutations.json
+python scripts/mutate.py desktop_ui/notifications.py --tests tests/test_notifications.py --replace 'for entry in reversed(entries):' 'for entry in entries:' --output dist/turn-precedence-mutation.json
 ```
 
 These commands exit nonzero for the documented survivors. Mutation runs remain

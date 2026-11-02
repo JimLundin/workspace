@@ -17,8 +17,6 @@ from typing import Final, Literal, Protocol, assert_never
 from assistant import prompts
 from assistant.geometry import Shot
 from assistant.hotkeys import Route, needs_settings, route
-from assistant.icons import State
-from assistant.island_model import Job
 from assistant.llm import (
     MAX_SECONDS,
     Failure,
@@ -39,6 +37,8 @@ from assistant.llm import (
 )
 from assistant.text import one_line_command, typed_text, unwrap
 from config import REWRITES
+from desktop_ui.icons import State
+from desktop_ui.island_model import Job
 from diagnostics import failure_info
 from protocol import App, Request, Tool
 from usage import Detail

@@ -9,14 +9,14 @@ if sys.platform != "win32":
 
 lazy from PySide6 import QtCore, QtGui
 
-from assistant.qt_runtime import prepare
-from assistant.qt_ui import application
-from assistant.shell_controls import TaskbarControl, WindowsKeyDispatch, WindowsKeyEffects
+from desktop_ui.qt_runtime import prepare
+from desktop_ui.qt_ui import application
+from desktop_ui.shell_controls import TaskbarControl, WindowsKeyDispatch, WindowsKeyEffects
 from miryoku.win import Keyboard, maintain_keyboard
 from protocol import LAYOUT_MAGIC, WM_TOGGLE_LAYOUT
 from tests.test_windows_bindings import KeyboardFixture
 from winapi import inputs, keyboard_language, system
-lazy from assistant.window_switcher import WindowSwitcher
+lazy from desktop_ui.window_switcher import WindowSwitcher
 lazy from winapi.shapes import Window
 
 prepare()

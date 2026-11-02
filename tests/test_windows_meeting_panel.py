@@ -33,7 +33,6 @@ from assistant.meeting_followup import (
     resolve_citation,
 )
 from assistant.meeting_followup_store import ActionRevision, DraftFiles, DraftRevision, Edited, Original, PublishedFollowup
-from assistant.meeting_panel import ArtifactKey, DraftEdit, MeetingPanel, choice
 from assistant.meeting_preparation import PreparedFollowup
 from assistant.meeting_workflow import (
     ActionChange,
@@ -50,10 +49,11 @@ from assistant.meeting_workflow import (
     OpenedFollowup,
     WorkPending,
 )
-from assistant.qt_runtime import prepare
-from assistant.qt_ui import application
-from assistant.ui_components.appearance import DARK, control_style
 from automation.task import MeetingFollowup
+from desktop_ui.components.appearance import DARK, control_style
+from desktop_ui.meeting_panel import ArtifactKey, DraftEdit, MeetingPanel, choice
+from desktop_ui.qt_runtime import prepare
+from desktop_ui.qt_ui import application
 
 prepare()
 

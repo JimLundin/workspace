@@ -51,7 +51,7 @@ Repository references confirmed these declarations have no callers:
 
 Removed the obsolete quality-migration entry for `GestureHandle.__init__`.
 Package initializers, native callbacks and executable modules require review
-beyond reference counts. `assistant.taskbar_guard` has no ordinary importer but
+beyond reference counts. `desktop_ui.taskbar_guard` has no ordinary importer but
 is launched with `python -m` by `launch_recovery_guard`; it remains necessary for
 the currently owned taskbar-hiding behavior.
 

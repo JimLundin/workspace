@@ -2,7 +2,7 @@
 
 import unittest
 
-from assistant.ambient import Ambient, SystemStatus
+from desktop_ui.ambient import Ambient, SystemStatus
 from winapi.machine_status import Battery, PowerUnavailable, Speakers, Wifi
 
 

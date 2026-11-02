@@ -136,7 +136,7 @@ try:
     machine = WinMachine(NativeDesktop(owner))
     assert windows.process_id(owner) == os.getpid()
     machine.close_background()
-    for name in ("assistant.app", "assistant.desktop", "assistant.ui", "winapi.audio",
+    for name in ("assistant.app", "assistant.desktop", "desktop_ui.ui", "winapi.audio",
                  "winapi.recording", "tkinter", "PySide6"):
         assert name not in sys.modules, name
 finally:

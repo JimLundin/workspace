@@ -1,6 +1,6 @@
 """Springs: interruptible, exact over any frame length, and still once they arrive."""
 
-from assistant.motion import APPEAR, LEAVE, MORPH, Motion, Spring, resting, settle, still, toward
+from desktop_ui.motion import APPEAR, LEAVE, MORPH, Motion, Spring, resting, settle, still, toward
 
 
 def frames(motion: Motion, seconds: float, step: float = 1 / 60) -> tuple[Motion, ...]:

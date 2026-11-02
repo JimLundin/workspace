@@ -15,8 +15,6 @@ if sys.platform != "win32":
 lazy from PySide6 import QtCore, QtGui, QtWidgets
 lazy from PySide6.QtCore import Qt
 
-from assistant.qt_runtime import prepare
-from assistant.qt_ui import application
 from assistant.work_commands import (
     AddPreference,
     AddProjectNote,
@@ -34,12 +32,14 @@ from assistant.work_commands import (
     UpdateRoutine,
     WorkViewCommand,
 )
-from assistant.work_panel import WorkPanel
 from assistant.work_snapshot import WorkSnapshot
-from assistant.work_window import WorkWindow
 from automation.context import Preference, ProjectNote
 from automation.routines import Disabled, Enabled, Every, Routine, RoutineSummary
 from automation.task import ApprovalDecision, Completed, Control, Question, TaskStatus, TextAnswer, Waiting
+from desktop_ui.qt_runtime import prepare
+from desktop_ui.qt_ui import application
+from desktop_ui.work_panel import WorkPanel
+from desktop_ui.work_window import WorkWindow
 from tests.test_work_window import approval_task, work_task
 from winapi import windows
 

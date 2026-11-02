@@ -103,7 +103,7 @@ periodic waveform stalls. A real-microphone baseline reproduced a 160.46 ms
 driver's `waveInGetPosition` call nonblocking. Calling it from the toolbar's
 50 ms Qt timer therefore blocks waveform frames and other UI work.
 
-`assistant.audio_meter.AudioMeter` now owns that native read on one worker.
+`desktop_ui.audio_meter.AudioMeter` now owns that native read on one worker.
 Qt reads only the latest immutable observation through a short handoff lock;
 native reads never hold that lock. Capture revisions reject a result from a
 stopped or restarted recording, and observations expire after 250 ms instead

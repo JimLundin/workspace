@@ -2,7 +2,8 @@
 
 from dataclasses import replace
 
-from assistant.work_canvas_gestures import (
+from assistant.work_canvas_model import Placement
+from desktop_ui.work_canvas_gestures import (
     BubbleDrag,
     BubbleTarget,
     CancelGesture,
@@ -21,8 +22,7 @@ from assistant.work_canvas_gestures import (
     ScenePoint,
     transition,
 )
-from assistant.work_canvas_layout import Box
-from assistant.work_canvas_model import Placement
+from desktop_ui.work_canvas_layout import Box
 
 
 def scene() -> GestureScene:

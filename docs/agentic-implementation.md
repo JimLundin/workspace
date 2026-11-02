@@ -49,7 +49,7 @@ fresh inspection instead of replaying a previous model request.
 | --- | --- |
 | work_core | automation/task.py, automation/store.py, core public-interface tests |
 | execution_actions | automation/actions.py, automation/execution.py, assistant/agent.py, assistant/agent_execution.py, assistant/sdk.py, execution tests |
-| work_interface | assistant/work_window.py, assistant/work_panel.py, coordinated view entry points and UI tests |
+| work_interface | desktop_ui/work_window.py, desktop_ui/work_panel.py, coordinated view entry points and UI tests |
 | automations_context | automation/routines.py, automation/context.py, routine/context tests |
 | process_integration | assistant/machine.py, then explicitly assigned worker/IPC implementation and process tests |
 | work_controller | automation/controller.py and public lifecycle/concurrency tests |

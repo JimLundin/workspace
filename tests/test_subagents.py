@@ -8,7 +8,6 @@ from pathlib import Path
 from typing import cast
 
 from assistant.agent import Agent
-from assistant.agent_session import Begin, Session, transition
 from assistant.agent_tools import Tool
 from assistant.llm import Settings, settings_from
 from assistant.task_profiles import General
@@ -16,6 +15,7 @@ from automation.execution import Reported, ReportStatus
 from automation.json_value import Json
 from automation.presentation import Answer, Failed, Succeeded, ToolActivity, ToolStatus
 from automation.task import Question, Waiting
+from desktop_ui.agent_session import Begin, Session, transition
 from tests.fake_endpoint import FakeEndpoint, Received, Reply, fake_endpoint
 from tests.test_agent import FakeMachine, FakeWindow, calls, durable, no_feed, says
 

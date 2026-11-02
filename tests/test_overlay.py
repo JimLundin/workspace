@@ -3,7 +3,7 @@
 from dataclasses import replace
 from pathlib import Path
 
-from assistant.overlay import KeyHighlights, OverlayState, fit_position, load_enabled, load_position, nearest_work_area, save_enabled, save_position
+from desktop_ui.overlay import KeyHighlights, OverlayState, fit_position, load_enabled, load_position, nearest_work_area, save_enabled, save_position
 from miryoku.layout import Layer, Scancode
 from winapi.shapes import Rect
 

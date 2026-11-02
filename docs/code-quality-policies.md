@@ -58,7 +58,7 @@ symbols. Re-exports are forbidden as review policy, including indirect forwardin
 and dynamic exports that static checks cannot reliably detect. Dependency stubs
 describe upstream contracts and retain upstream exports.
 
-Qt consumers import directly from PySide6. `assistant/qt_runtime.py` owns the
+Qt consumers import directly from PySide6. `desktop_ui/qt_runtime.py` owns the
 required Python executor initialization before lazy Qt imports first resolve;
 it exports no Qt symbols. Native startup coverage checks the SDK/Qt ordering.
 

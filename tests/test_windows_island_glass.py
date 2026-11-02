@@ -10,10 +10,10 @@ from win32more.Windows.Win32.UI.WindowsAndMessaging import GetWindow
 lazy from PySide6 import QtCore, QtWidgets
 lazy from PySide6.QtCore import Qt
 
-from assistant.desktop_bar import BarActions, BarObservations, DesktopBar
-from assistant.island_model import Agent
-from assistant.qt_runtime import prepare
-from assistant.qt_ui import EventLoop, application
+from desktop_ui.desktop_bar import BarActions, BarObservations, DesktopBar
+from desktop_ui.island_model import Agent
+from desktop_ui.qt_runtime import prepare
+from desktop_ui.qt_ui import EventLoop, application
 from winapi import appearance
 from winapi.composition import Glass, GlassScene, stack_behind
 from winapi.shapes import Pane, Rect, Stop, Veil

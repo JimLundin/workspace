@@ -12,8 +12,8 @@ from pathlib import Path
 from typing import Final, Protocol
 
 import protocol
-from assistant.keymap import shortcut, shortcut_hint
 from components import LAYOUT
+from desktop_ui.keymap import shortcut, shortcut_hint
 from miryoku.layout import Scancode
 from protocol import App, LayoutState, Request, Tool
 lazy from winapi.shell import MenuItem

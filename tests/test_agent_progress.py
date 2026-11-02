@@ -2,12 +2,11 @@
 
 from dataclasses import replace
 
-from assistant.agent_progress import Progress, advance_progress, visible
-from assistant.agent_session import Begin, CanvasNotice, CanvasSettled, ChatMessage, Session, transition
-from assistant.notifications import PhaseKey, Turn, body, steps
-
 from assistant.feed_origin import FeedRequest, Initiation
 from automation.presentation import Answer, Finished, ReasoningSummary, StreamState, Succeeded, ToolActivity
+from desktop_ui.agent_progress import Progress, advance_progress, visible
+from desktop_ui.agent_session import Begin, CanvasNotice, CanvasSettled, ChatMessage, Session, transition
+from desktop_ui.notifications import PhaseKey, Turn, body, steps
 
 
 def test_progress_and_completion_share_one_card_for_the_requested_outcome() -> None:

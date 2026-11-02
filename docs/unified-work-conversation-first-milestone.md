@@ -296,7 +296,7 @@ does not require a model turn.
 | --- | --- |
 | `assistant/browser.py`, `browser_session.py` | Reuse the existing consent, page ownership, cancellation and observation mechanisms. Retain one connection and scoped page identity. |
 | `assistant/system_notices.py`, `system_toasts.py`, `winapi/notifications.py` | Separate Windows notice identity and dismissal from communication source identity; never infer a reply destination from a notification title. |
-| `assistant/agent_session.py`, `agent_window.py`, `agent_panel.py` | The current session only models agent/meeting entries. Add a presentation composition boundary for communication observations rather than pretending an incoming colleague message was said by Workspace. Preserve existing question/input routing. |
+| `desktop_ui/agent_session.py`, `agent_window.py`, `agent_panel.py` | The current session only models agent/meeting entries. Add a presentation composition boundary for communication observations rather than pretending an incoming colleague message was said by Workspace. Preserve existing question/input routing. |
 | `assistant/work_agent.py`, `work_window.py`, `automation/task.py` | Bind explicit agent assistance to source identity and task identity; preserve existing execution and recovery ownership. |
 | `assistant/app.py`, `ui.py`, `desktop_bar.py` | Compose the communication observer and view. Keep network, page reading and storage off UI, keyboard and audio loops. |
 

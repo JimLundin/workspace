@@ -3,7 +3,9 @@
 from dataclasses import replace
 
 from assistant.canvas_activity import Attention, CanvasQuestion, SessionRequest, TaskRequest
-from assistant.desktop_attention import (
+from assistant.work_commands import AnswerTask
+from automation.task import TextAnswer
+from desktop_ui.desktop_attention import (
     AnswerQuestion,
     CanvasFocus,
     Inbox,
@@ -17,9 +19,7 @@ from assistant.desktop_attention import (
     interrupts,
     speech_target,
 )
-from assistant.work_canvas import Announcement
-from assistant.work_commands import AnswerTask
-from automation.task import TextAnswer
+from desktop_ui.work_canvas import Announcement
 
 
 def questions() -> tuple[CanvasQuestion, CanvasQuestion]:

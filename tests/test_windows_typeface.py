@@ -8,9 +8,9 @@ if sys.platform != "win32":
 
 lazy from PySide6 import QtGui
 
-from assistant.qt_runtime import prepare
-from assistant.qt_ui import application
-from assistant.ui_components import typeface
+from desktop_ui.components import typeface
+from desktop_ui.qt_runtime import prepare
+from desktop_ui.qt_ui import application
 
 prepare()
 

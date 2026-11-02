@@ -2,7 +2,10 @@
 
 from dataclasses import replace
 
-from assistant.agent_session import (
+from assistant.recording_state import RecordingState
+from automation.presentation import Answer, Done, Failed, Finished, Progress, ReasoningSummary, Said, StreamState, Succeeded, ToolActivity
+from automation.task import ApprovalDecision, TextAnswer
+from desktop_ui.agent_session import (
     AgentRequest,
     ApprovalControls,
     Begin,
@@ -18,9 +21,6 @@ from assistant.agent_session import (
     presentation,
     transition,
 )
-from assistant.recording_state import RecordingState
-from automation.presentation import Answer, Done, Failed, Finished, Progress, ReasoningSummary, Said, StreamState, Succeeded, ToolActivity
-from automation.task import ApprovalDecision, TextAnswer
 from tests.agent_requests import asked, reviewed
 
 

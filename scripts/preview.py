@@ -16,15 +16,15 @@ from pydantic import TypeAdapter, ValidationError
 lazy from PySide6 import QtCore, QtWidgets
 lazy from PySide6.QtCore import Qt
 
-from assistant.qt_runtime import prepare
+from desktop_ui.qt_runtime import prepare
 from runtime import activate
-lazy from assistant.agent_toasts import AgentToasts
-lazy from assistant.agent_window import AgentWindow
-lazy from assistant.desktop_bar import BarActions, DesktopBar
-lazy from assistant.island_model import Agent, Job
-lazy from assistant.qt_ui import application
 lazy from assistant.recording_state import RecordingState
 lazy from automation.presentation import Answer, StreamState, Succeeded, ToolActivity
+lazy from desktop_ui.agent_toasts import AgentToasts
+lazy from desktop_ui.agent_window import AgentWindow
+lazy from desktop_ui.desktop_bar import BarActions, DesktopBar
+lazy from desktop_ui.island_model import Agent, Job
+lazy from desktop_ui.qt_ui import application
 lazy from winapi import screen
 lazy from winapi.shapes import Rect
 

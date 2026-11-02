@@ -7,7 +7,7 @@ from pathlib import Path
 if sys.platform != "win32":
     raise unittest.SkipTest("The toast owner binds Windows APIs")
 
-from assistant.agent_toasts import saved_monitor
+from desktop_ui.agent_toasts import saved_monitor
 from winapi.shapes import Rect
 
 

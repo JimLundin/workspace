@@ -9,7 +9,7 @@ if sys.platform != "win32":
 
 lazy from PySide6 import QtWidgets
 
-from assistant.ui import Ui
+from desktop_ui.ui import Ui
 
 
 def test_ui_queue_yields_before_a_batch_consumes_the_frame_budget() -> None:

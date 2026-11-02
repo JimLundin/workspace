@@ -9,11 +9,11 @@ if sys.platform != "win32":
 lazy import shiboken6
 lazy from PySide6 import QtCore
 
-from assistant.agent_session import ChatMessage
-from assistant.notifications import Entry, Toast
-from assistant.qt_runtime import prepare
-from assistant.toast_card import Card, CardOwner, Finish, Measure
-from assistant.toast_stack import Frame
+from desktop_ui.agent_session import ChatMessage
+from desktop_ui.notifications import Entry, Toast
+from desktop_ui.qt_runtime import prepare
+from desktop_ui.toast_card import Card, CardOwner, Finish, Measure
+from desktop_ui.toast_stack import Frame
 from tests.test_windows_agent_toasts import notifications
 from winapi import windows
 

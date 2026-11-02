@@ -19,24 +19,12 @@ lazy from PySide6.QtCore import Qt
 
 import automation.task
 from assistant.canvas_activity import ROOT_CONTEXT, Attention, CanvasInstruction, CanvasQuestion, CanvasRun, SessionRequest, TaskRequest
-from assistant.card_actions import OpenCanvas, parse
 from assistant.feed_origin import App
-from assistant.icons import State
-from assistant.island_model import Key
 from assistant.meeting_store import MeetingStore
-from assistant.notifications import body
 from assistant.personal_work_store import PersonalStore
-from assistant.qt_runtime import prepare
-from assistant.qt_ui import application
-from assistant.ui_components.canvas_loading import CanvasLoading
-from assistant.ui_components.canvas_look import surface_fill
-from assistant.ui_components.voice_legend import VoiceLegend
 from assistant.work_bridge import WorkOwners
-from assistant.work_canvas import CanvasPublication, WorkCanvas, run_prompt
 from assistant.work_canvas_commands import CANVAS_RESPONSE, CanvasSnapshot, CanvasUpdated, MoveBubble, UpdateCanvas, revision
 from assistant.work_canvas_context import CanvasMode
-from assistant.work_canvas_detail import NoteDetail, QuestionDetail, SourceDetail, WorkDetail
-from assistant.work_canvas_edits import SaveNote
 from assistant.work_canvas_model import (
     CanvasCollection,
     CanvasDocument,
@@ -47,12 +35,8 @@ from assistant.work_canvas_model import (
     save_note,
     view_state,
 )
-from assistant.work_canvas_panel import CanvasPanel
-from assistant.work_canvas_view import CanvasGroup
-from assistant.work_canvas_window import CanvasWindow
 from assistant.work_commands import AnswerTask, WorkViewCommand
 from assistant.work_snapshot import ReplyProblem, WorkSnapshot
-from assistant.work_window import WorkOpening, WorkView, WorkWindow
 from automation.actions import Resources
 from automation.execution import WorkExecution
 from automation.personal_work import (
@@ -78,6 +62,22 @@ from automation.personal_work import (
 from automation.store import TaskStore
 from automation.task import ActionNotApplied, ActionVerified, Reply, TextAnswer
 from automation.work_documents import WebDocument
+from desktop_ui.card_actions import OpenCanvas, parse
+from desktop_ui.components.canvas_loading import CanvasLoading
+from desktop_ui.components.canvas_look import surface_fill
+from desktop_ui.components.voice_legend import VoiceLegend
+from desktop_ui.icons import State
+from desktop_ui.island_model import Key
+from desktop_ui.notifications import body
+from desktop_ui.qt_runtime import prepare
+from desktop_ui.qt_ui import application
+from desktop_ui.work_canvas import CanvasPublication, WorkCanvas, run_prompt
+from desktop_ui.work_canvas_detail import NoteDetail, QuestionDetail, SourceDetail, WorkDetail
+from desktop_ui.work_canvas_edits import SaveNote
+from desktop_ui.work_canvas_panel import CanvasPanel
+from desktop_ui.work_canvas_view import CanvasGroup
+from desktop_ui.work_canvas_window import CanvasWindow
+from desktop_ui.work_window import WorkOpening, WorkView, WorkWindow
 from tests.agent_requests import asked
 from tests.feed_fixture import feed_unavailable, no_personal_work, owner_request
 from tests.personal_work_fixture import source

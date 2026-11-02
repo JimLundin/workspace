@@ -31,9 +31,9 @@ from assistant.control_policy import (
     menu_items,
     toggle_layout,
 )
-from assistant.overlay import OverlayState, load_enabled, save_enabled
 from components import LAYOUT
 from config import APPS
+from desktop_ui.overlay import OverlayState, load_enabled, save_enabled
 from keeper import Stage, WindowsUser32
 from keeper_control import STATUS, Control, Pause, Paused, Resume, Resumed, submit
 from miryoku.engine import Indicator

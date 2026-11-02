@@ -12,9 +12,9 @@ if sys.platform != "win32":
 lazy from PySide6 import QtCore, QtGui, QtWidgets
 lazy from PySide6.QtCore import Qt
 
-from assistant.keymap_views import KeymapCanvas, KeymapOverlay
-from assistant.qt_runtime import prepare
-from assistant.qt_ui import application
+from desktop_ui.keymap_views import KeymapCanvas, KeymapOverlay
+from desktop_ui.qt_runtime import prepare
+from desktop_ui.qt_ui import application
 from miryoku.layout import AGENT, TALK, Layer, Scancode
 from winapi.shapes import Rect
 

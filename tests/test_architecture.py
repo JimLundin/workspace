@@ -86,15 +86,17 @@ def test_keyboard_rejection_follows_lazy_imports_and_package_initializers(tmp_pa
         {
             "miryoku/__init__.py": "",
             "miryoku/engine.py": "lazy from helper.values import value\n",
-            "helper/__init__.py": "from assistant import model\n",
+            "helper/__init__.py": "from desktop_ui import model\n",
             "helper/values.py": "value = 1\n",
             "assistant/__init__.py": "",
             "assistant/model.py": "",
+            "desktop_ui/__init__.py": "",
+            "desktop_ui/model.py": "",
         },
     )
     report = review(tmp_path)
     assert report.failures and all(finding.rule == "keyboard-isolation" for finding in report.failures)
-    assert any("miryoku.engine → helper → assistant" in finding.detail for finding in report.failures)
+    assert any("miryoku.engine → helper → desktop_ui" in finding.detail for finding in report.failures)
     (tmp_path / "helper/__init__.py").write_text("")
     assert not review(tmp_path).failures
 
@@ -108,16 +110,18 @@ def test_lower_layers_reach_assistant_only_through_declared_seams(tmp_path: Path
             "automation/__init__.py": "",
             "automation/ipc.py": "from helper import value\n",
             "winapi/__init__.py": "",
-            "winapi/status.py": "from assistant.model import Model\n",
+            "winapi/status.py": "from desktop_ui.model import Model\n",
             "automation/app.py": "lazy from assistant.model import Model\n",
             "helper.py": "from assistant import model\nvalue = 1\n",
             "assistant/__init__.py": "",
             "assistant/model.py": "",
+            "desktop_ui/__init__.py": "",
+            "desktop_ui/model.py": "",
         },
     )
     with (tmp_path / "pyproject.toml").open("a", encoding="utf-8") as output:
         output.write('\n[[tool.workspace.architecture.seams]]\nmodule = "automation.app"\nreason = "The composition root."\n')
-    assert [finding.detail for finding in review(tmp_path).failures] == ["automation.ipc → helper → assistant", "winapi.status → assistant"]
+    assert [finding.detail for finding in review(tmp_path).failures] == ["automation.ipc → helper → assistant", "winapi.status → desktop_ui"]
     (tmp_path / "helper.py").write_text("value = 1\n")
     (tmp_path / "winapi/status.py").write_text("")
     assert not review(tmp_path).failures
@@ -136,20 +140,24 @@ def test_worker_cannot_reach_desktop_only_modules(tmp_path: Path) -> None:
             "automation/app.py": "lazy from assistant.tools import run\n",
             "assistant/__init__.py": "",
             "assistant/settings.py": "config = 1\n",
-            "assistant/tools.py": "lazy import assistant.session\n",
-            "assistant/session.py": "",
-            "assistant/unreachable.py": "lazy import assistant.session\n",
+            "assistant/tools.py": "lazy import desktop_ui.session\n",
+            "desktop_ui/__init__.py": "",
+            "desktop_ui/session.py": "",
+            "assistant/unreachable.py": "lazy import desktop_ui.session\n",
         },
     )
     with (tmp_path / "pyproject.toml").open("a", encoding="utf-8") as output:
         output.write(
-            'desktop_only = ["assistant.session"]\n'
+            'desktop_only = ["desktop_ui"]\n'
             '\n[[tool.workspace.architecture.seams]]\nmodule = "automation.__main__"\nreason = "Worker settings."\n'
             '\n[[tool.workspace.architecture.seams]]\nmodule = "automation.app"\nreason = "Worker composition."\n'
         )
-    (failure,) = review(tmp_path).failures
-    assert failure.rule == "worker-isolation" and failure.module == "automation.__main__"
-    assert failure.detail == "automation.__main__ → automation.app → assistant.tools → assistant.session"
+    failures = review(tmp_path).failures
+    assert all(failure.rule == "worker-isolation" and failure.module == "automation.__main__" for failure in failures)
+    assert {failure.detail for failure in failures} == {
+        "automation.__main__ → automation.app → assistant.tools → desktop_ui",
+        "automation.__main__ → automation.app → assistant.tools → desktop_ui.session",
+    }
     (tmp_path / "assistant/tools.py").write_text("", encoding="utf-8")
     assert not review(tmp_path).failures
 

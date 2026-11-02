@@ -117,7 +117,7 @@ artwork drawn for toolbar size; only battery, cloud and Wi-Fi off fall back to
 the 20 px grid. It looked thin at first because the 20 px artwork was being
 scaled to 16 px. Fluent has true filled variants, used for active states such
 as the dictation microphone. Stop is a small rounded square, as `stop.fill`
-is. Vendor only the paths Workspace uses into `assistant/vector_icons.py`.
+is. Vendor only the paths Workspace uses into `desktop_ui/vector_icons.py`.
 
 ## Toolbar pattern
 
@@ -207,8 +207,8 @@ macOS 26 puts these in its menu bar:
 - **Not there:** weather and other ambient information live in widgets. The
   menu bar holds controls, status and alerts.
 
-Workspace's bar today (`assistant/bar_model.py`, `assistant/ambient.py`,
-`assistant/desktop_bar.py`) and the proposed home for each item:
+Workspace's bar today (`assistant/bar_model.py`, `desktop_ui/ambient.py`,
+`desktop_ui/desktop_bar.py`) and the proposed home for each item:
 
 | Item | Today | Proposed |
 | --- | --- | --- |

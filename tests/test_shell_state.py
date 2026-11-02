@@ -1,6 +1,6 @@
 """Windows-key taskbar intent, independent of Windows and Qt."""
 
-from assistant.shell_state import WindowsKeyTap
+from desktop_ui.shell_state import WindowsKeyTap
 
 
 def test_bare_windows_keys_toggle_once_on_release() -> None:

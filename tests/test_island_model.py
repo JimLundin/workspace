@@ -2,8 +2,10 @@
 
 from dataclasses import replace
 
-from assistant.ambient import Ambient, SystemStatus
-from assistant.island_model import (
+from assistant.recording_state import RecordingState
+from desktop_ui.ambient import Ambient, SystemStatus
+from desktop_ui.components.meaning import Tint, Tone
+from desktop_ui.island_model import (
     Action,
     Agent,
     Badge,
@@ -22,8 +24,6 @@ from assistant.island_model import (
     island,
     keyboard,
 )
-from assistant.recording_state import RecordingState
-from assistant.ui_components.meaning import Tint, Tone
 from winapi.machine_status import Battery, Speakers, Wifi
 
 RESTING = Observed(

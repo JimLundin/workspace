@@ -1,9 +1,9 @@
 """The key map: what each physical key does, per layer; and the indicator's words."""
 
-from assistant.keymap import ROWS, Kind, Shortcut, indicator_text, keymap, shortcut, shortcut_hint
+from desktop_ui.keymap import ROWS, Kind, Shortcut, indicator_text, keymap, shortcut, shortcut_hint
 from miryoku.layout import Layer
 from protocol import Tool
-lazy from assistant.keymap import TOOL_NAMES
+lazy from desktop_ui.keymap import TOOL_NAMES
 
 
 def caps(layer: Layer | None) -> dict[str, tuple[str, str, Kind]]:

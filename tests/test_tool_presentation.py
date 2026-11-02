@@ -3,9 +3,9 @@
 from datetime import UTC, datetime
 from pathlib import Path
 
-from assistant import notification_text
-from assistant.notifications import Entry, Settled, Turn
 from automation.presentation import Answer, StreamState, Succeeded, ToolActivity
+from desktop_ui import notification_text
+from desktop_ui.notifications import Entry, Settled, Turn
 from tests.fake_endpoint import fake_endpoint
 from tests.json_fixture import json_object, json_rows
 from tests.test_agent import Rig, ToolRig, calls, durable, says

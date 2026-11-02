@@ -5,17 +5,7 @@ from pathlib import Path
 from unittest import TestCase
 
 import automation.task
-from assistant.agent_session import Session
 from assistant.canvas_activity import CanvasInstruction, CanvasQuestion, CanvasRequest, CanvasRun, CanvasUpdate, SessionRequest
-from assistant.work_canvas import (
-    Announcement,
-    CanvasPublication,
-    Investigating,
-    NotQueued,
-    Queued,
-    ResumeTask,
-    WorkCanvas,
-)
 from assistant.work_canvas_commands import (
     ArrangeCanvas,
     CanvasRefused,
@@ -28,12 +18,22 @@ from assistant.work_canvas_commands import (
     revision,
 )
 from assistant.work_canvas_context import CanvasScope, context_path
-from assistant.work_canvas_edits import ArrangeView, RenameGroup, SaveNote, UserEdit
-from assistant.work_canvas_gestures import NestBubble, PlaceBubbles
 from assistant.work_canvas_model import CanvasCollection, CanvasDocument, CanvasNote, CanvasRelation, Placement, view_state
 from assistant.work_snapshot import WorkSnapshot
 from automation.personal_work import Catalog, DismissedWork, WorkState
 from automation.task import Blocked, Completed, TextAnswer, Waiting
+from desktop_ui.agent_session import Session
+from desktop_ui.work_canvas import (
+    Announcement,
+    CanvasPublication,
+    Investigating,
+    NotQueued,
+    Queued,
+    ResumeTask,
+    WorkCanvas,
+)
+from desktop_ui.work_canvas_edits import ArrangeView, RenameGroup, SaveNote, UserEdit
+from desktop_ui.work_canvas_gestures import NestBubble, PlaceBubbles
 from tests.agent_requests import asked
 from tests.test_work_canvas import catalog, local_canvas, nested_bubbles, publish_nothing, seeded
 from tests.test_work_window import work_task

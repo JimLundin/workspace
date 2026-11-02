@@ -196,7 +196,7 @@ retains the full work timeline without presenting app observations as alerts.
 
 ## UI ownership
 
-`assistant/ui_components/` owns reusable native bubble surfaces, palette/ink,
+`desktop_ui/components/` owns reusable native bubble surfaces, palette/ink,
 text rendering, headings, controls, press feedback and common widgets. Feature
 controllers consume those components directly; no forwarding compatibility
 modules remain. `canvas_look` owns the canvas's Liquid Glass look: Inter at the

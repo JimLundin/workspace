@@ -13,14 +13,14 @@ if sys.platform != "win32":
 lazy from PySide6 import QtCore, QtGui, QtWidgets
 lazy from PySide6.QtTest import QTest
 
-from assistant.desktop_bar import BarActions, BarObservations, DesktopBar
-from assistant.island_menu import Menu
-from assistant.island_model import Agent, Job, Key
-from assistant.island_surface import SHADOW, TOP, ControlButton, MenuRow
 from assistant.meeting_detection import AutomaticStatus
-from assistant.qt_runtime import prepare
-from assistant.qt_ui import EventLoop, application
 from assistant.recording_state import RecordingState
+from desktop_ui.desktop_bar import BarActions, BarObservations, DesktopBar
+from desktop_ui.island_menu import Menu
+from desktop_ui.island_model import Agent, Job, Key
+from desktop_ui.island_surface import SHADOW, TOP, ControlButton, MenuRow
+from desktop_ui.qt_runtime import prepare
+from desktop_ui.qt_ui import EventLoop, application
 from protocol import Tool
 from tests.native_pointer import foreign_pointer
 from winapi import appearance, windows

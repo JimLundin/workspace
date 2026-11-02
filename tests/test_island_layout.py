@@ -1,7 +1,7 @@
 """Where the island bar's capsules sit, and where parts sit inside them."""
 
-from assistant.island_layout import Box, Framed, Metrics, Placed, Spot, arrange, frame, snap
-from assistant.island_model import Action, Badge, Control, Glyph, Key, Marker, Spinner, Text, Zone
+from desktop_ui.island_layout import Box, Framed, Metrics, Placed, Spot, arrange, frame, snap
+from desktop_ui.island_model import Action, Badge, Control, Glyph, Key, Marker, Spinner, Text, Zone
 
 
 def test_the_island_alone_is_centred_with_an_edge_strip_to_the_top() -> None:

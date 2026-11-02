@@ -3,7 +3,7 @@
 import threading
 import time
 
-from assistant.audio_meter import AudioMeter
+from desktop_ui.audio_meter import AudioMeter
 
 
 def test_stopped_capture_cannot_publish_into_the_next_waveform() -> None:

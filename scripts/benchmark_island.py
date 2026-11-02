@@ -23,10 +23,10 @@ from pydantic import TypeAdapter
 lazy from PySide6 import QtCore
 
 from runtime import activate
-lazy from assistant.desktop_bar import BarActions, BarObservations, DesktopBar
-lazy from assistant.island_model import Agent, Job
-lazy from assistant.qt_ui import application
 lazy from assistant.recording_state import RecordingState
+lazy from desktop_ui.desktop_bar import BarActions, BarObservations, DesktopBar
+lazy from desktop_ui.island_model import Agent, Job
+lazy from desktop_ui.qt_ui import application
 lazy from winapi import appearance
 
 FRAME = 1 / 60

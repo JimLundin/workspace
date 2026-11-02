@@ -5,9 +5,9 @@ import threading
 from collections import deque
 from collections.abc import Callable
 
-from assistant.agent_session import AgentRequest, pending
-from assistant.agent_window import AgentWindow, View
 from automation.task import ApprovalDecision, Reply, TextAnswer
+from desktop_ui.agent_session import AgentRequest, pending
+from desktop_ui.agent_window import AgentWindow, View
 from tests.agent_requests import asked, reviewed
 from tests.test_agent_window import RecordingWindow
 

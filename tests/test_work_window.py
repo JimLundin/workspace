@@ -7,8 +7,6 @@ from dataclasses import replace
 
 from assistant.work_commands import AnswerTask, Submit, WorkViewCommand
 from assistant.work_snapshot import WorkSnapshot
-from assistant.work_text import task_detail
-from assistant.work_window import WorkOpening, WorkView, WorkWindow
 from automation.execution import ApprovalReview
 from automation.task import (
     Approval,
@@ -25,6 +23,8 @@ from automation.task import (
     TextAnswer,
     Waiting,
 )
+from desktop_ui.work_text import task_detail
+from desktop_ui.work_window import WorkOpening, WorkView, WorkWindow
 
 
 def work_task(state: State = TaskStatus.READY, *, identity: str = "task-one") -> Task:

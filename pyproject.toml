@@ -243,17 +243,18 @@ ban-relative-imports = "all"
 py-modules = ["components", "config", "diagnostics", "keeper", "keeper_control", "keeper_ui", "protocol", "runtime", "selfcheck", "usage"]
 
 [tool.setuptools.packages.find]
-include = ["assistant*", "automation*", "miryoku*", "winapi*"]
+include = ["assistant*", "desktop_ui*", "automation*", "miryoku*", "winapi*"]
 
 [tool.setuptools.package-data]
 assistant = ["*.ps1", "*.yaml"]
+desktop_ui = ["fonts/*.ttf", "fonts/OFL.txt"]
 
 [tool.workspace.architecture]
 # Model ownership follows module moves; mutable effect owners are not models.
 models = [
     "assistant.control_policy",
     "assistant.hotkeys",
-    "assistant.agent_session",
+    "desktop_ui.agent_session",
     "assistant.communications",
     "assistant.feed_sources",
     "assistant.feed_triage",
@@ -265,9 +266,7 @@ models = [
     "winapi.system_notices",
 ]
 desktop_only = [
-    "assistant.agent_session",
-    "assistant.card_actions",
-    "assistant.canvas_session",
+    "desktop_ui",
     "assistant.personal_work_store",
 ]
 # Exact static loading declarations; the package initializer does not grant its children access.

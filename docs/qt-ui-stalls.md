@@ -30,7 +30,7 @@ keyboard hooks, taskbar recovery and communications collection were not started
 by the UI fixture. The existing preview composes real views through their regular
 constructor inputs.
 
-The focused pure reproduction invokes `assistant.notifications.observe` three
+The focused pure reproduction invokes `desktop_ui.notifications.observe` three
 times with that snapshot. It asserts a median below 50 ms and failed on the
 starting source:
 

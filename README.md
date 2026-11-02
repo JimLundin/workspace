@@ -1,7 +1,7 @@
 # Workspace
 
-A personal work environment for a Windows laptop: extract and run, with its own Python
-and no admin installation. It changes itself: ask its agent for a new feature or a fix,
+A personal work environment for a Windows laptop: extract and run with installed
+Python 3.15 and no admin installation. It changes itself: ask its agent for a new feature or a fix,
 and it edits, tests, installs and reloads the change without another approval.
 It undoes the update by itself if it fails. Four main processes:
 
@@ -677,26 +677,26 @@ of two retained images.
 Response storage and tracing are disabled. Quick chat and transcription still
 use `assistant/llm.py` and their existing endpoints.
 
-The notifications in `assistant/agent_toasts.py` and conversation history
-in `assistant/agent_panel.py` share the main UI thread in `assistant/ui.py` with
+The notifications in `desktop_ui/agent_toasts.py` and conversation history
+in the same floating feed share the main UI thread in `desktop_ui/ui.py` with
 prompts, answers, reviews, the key map and overlays. Qt owns the event loop;
-`assistant/qt_ui.py` manages shared composition and UI timers. Closing a view
+`desktop_ui/qt_ui.py` manages shared composition and UI timers. Closing a view
 leaves that loop available to the remaining views. The hidden Windows message
 window and its message loop have their own application control thread.
-`assistant/agent_window.py` owns the session controller and queues
-immutable snapshots for painting through `assistant/view_publication.py`, the
+`desktop_ui/agent_window.py` owns the session controller and queues
+immutable snapshots for painting through `desktop_ui/view_publication.py`, the
 lifecycle it shares with the work window. The model and inline questions stay on worker
-threads. `assistant/notifications.py` projects bounded notifications with pure
+threads. `desktop_ui/notifications.py` projects bounded notifications with pure
 lifetime transitions; expiry never removes session messages. Background updates
 preserve keyboard focus; history preserves selection and scroll position.
-`assistant/toast_card.py` draws the text and controls on a per-pixel transparent
+`desktop_ui/toast_card.py` draws the text and controls on a per-pixel transparent
 Qt surface. `winapi/composition.py` places native background blur and a soft
 shadow beneath it, clipped to a 26-pixel rounded shape. The glass tracks Qt's
 actual bounds after display scaling. `winapi/appearance.py` samples neighboring
 background pixels on one bounded worker to select readable text and tint.
 A shared timer rotates existing spinner shapes only while needed; it does not
 rebuild the text. Reading timers also observe hover over transparent pixels.
-`assistant/qt_text.py` measures Markdown in separate text documents before each
+`desktop_ui/components/text.py` measures Markdown in separate text documents before each
 final card layout, so updates never resize visible windows just to measure text.
 Agent messages render
 Markdown headings, nested emphasis, lists and checklists, quotes, code blocks,
@@ -758,23 +758,24 @@ automation/     task.py and store.py (durable work), controller.py (execution),
                 actions.py and execution.py (attempts and verification),
                 routines.py and context.py (standing work and saved knowledge),
                 ipc.py, bridge.py, app.py (the supervised worker)
-assistant/      llm.py (the endpoint), features.py (what each key does), agent.py,
-                agent_tools.py and *_tools.py (the agent's tool families),
-                task_profiles.py (each task profile's families, instructions
-                and execution),
-                workspace.py (the agent's copy of the source), keymap.py;
-                agent_session.py, agent_window.py (conversation and UI scheduling),
-                agent_toasts.py, toast_stack.py, toast_card.py, qt_text.py, qt_ui.py
-                (Qt bubbles), ui.py, ui_components/appearance.py, rich_text.py
-                (the shared Qt UI);
-                desktop.py and app.py on Windows
+assistant/      llm.py (the endpoint), features.py (key actions), agent.py,
+                agent_tools.py and *_tools.py (agent tool families),
+                task_profiles.py (task execution), work_service.py (frontend IO),
+                work_canvas_model.py, work_canvas_commands.py (shared contracts),
+                desktop.py and app.py (native application composition)
+desktop_ui/     ui.py and qt_ui.py (Qt dispatch and event-loop ownership),
+                agent_session.py and agent_window.py (conversation presentation),
+                agent_toasts.py and toast_card.py (floating feed and history),
+                work_canvas.py and work_canvas_*.py (desktop canvas owner/views),
+                work_panel.py and meeting_panel.py (work and meeting views),
+                components/ and fonts/ (shared controls, appearance and typography)
 ```
 
 The logic never calls Windows directly: the layout's engine goes through a
 `Host`, the assistant's features through a `Desktop`, the agent through a
-`Machine`, so all of it is tested with fakes. The code is strictly typed, with no
+`Machine`, so behavior tests use explicit concrete adapters. The code is strictly typed, with no
 `Any` outside the boundaries to untyped code (`winapi` for ctypes,
-the assistant's Qt view modules for GUI bindings,
+`desktop_ui` for GUI bindings,
 `assistant/sdk.py` for SDK integration, and
 `selfcheck.py` for looking inside modules). Data records use frozen dataclasses
 with slots, checked from source. SDK lifecycle subclasses and Qt objects inherit

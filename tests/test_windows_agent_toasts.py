@@ -16,28 +16,28 @@ from typing import Protocol, cast
 if sys.platform != "win32":
     raise unittest.SkipTest("Windows native agent notifications")
 
-from assistant.agent_session import Begin, Session, transition
-from assistant.agent_toasts import AgentToasts
-from assistant.agent_window import AgentWindow
-from assistant.notifications import MAX_VISIBLE, WIDTH, Kind, MessageKey, PhaseKey, Toast, TurnKey
-from assistant.qt_runtime import prepare
-from assistant.qt_ui import application
-from assistant.rich_text import formatted
-from assistant.toast_card import Card, CardOwner, Finish
-from assistant.toast_desktop import NativeDesktop
-from assistant.ui_components.appearance import Scheme, Shade, SolidLook
-from assistant.ui_components.bubble import BADGE, TOP
-from assistant.ui_components.text import TextView
 lazy import shiboken6
 lazy from PySide6.QtCore import QEvent, QPoint, QPointF, Qt
 lazy from PySide6.QtGui import QEnterEvent, QFont, QFontMetricsF, QImage, QPainter, QRegion, QTextCursor
 lazy from PySide6.QtTest import QTest
 lazy from PySide6.QtWidgets import QWidget
 
-from assistant import toast_stack
 from assistant.recording_state import RecordingAction, RecordingState
 from automation.presentation import Answer, Failed, ReasoningSummary, Said, StreamState, Succeeded, ToolActivity
 from automation.task import Reply, TextAnswer
+from desktop_ui import toast_stack
+from desktop_ui.agent_session import Begin, Session, transition
+from desktop_ui.agent_toasts import AgentToasts
+from desktop_ui.agent_window import AgentWindow
+from desktop_ui.components.appearance import Scheme, Shade, SolidLook
+from desktop_ui.components.bubble import BADGE, TOP
+from desktop_ui.components.text import TextView
+from desktop_ui.notifications import MAX_VISIBLE, WIDTH, Kind, MessageKey, PhaseKey, Toast, TurnKey
+from desktop_ui.qt_runtime import prepare
+from desktop_ui.qt_ui import application
+from desktop_ui.rich_text import formatted
+from desktop_ui.toast_card import Card, CardOwner, Finish
+from desktop_ui.toast_desktop import NativeDesktop
 from tests.agent_requests import asked, reviewed
 from winapi import appearance, screen, system, windows
 from winapi.composition import DesktopComposition, Glass

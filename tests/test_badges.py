@@ -3,7 +3,7 @@
 from typing import assert_never
 
 from assistant.feed_origin import App
-from assistant.ui_components.bubble import Letter, Symbol, glyph
+from desktop_ui.components.bubble import Letter, Symbol, glyph
 
 
 def test_brand_badges_have_distinct_letters() -> None:

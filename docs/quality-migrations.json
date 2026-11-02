@@ -175,7 +175,7 @@
     {
       "key": {
         "rule": "PLR0913",
-        "path": "assistant/desktop_bar.py",
+        "path": "desktop_ui/desktop_bar.py",
         "scope": "DesktopBar.message",
         "signature": "6b1c2637d86e2001144e8c96c9e112fc4668ab84bac3391b3c9b685cf66bf5bd"
       },
@@ -373,7 +373,7 @@
     {
       "key": {
         "rule": "PLR0913",
-        "path": "assistant/notification_reading.py",
+        "path": "desktop_ui/notification_reading.py",
         "scope": "advance",
         "signature": "a3c41395c6632e26059055d07c3c2252fcb8e5f068f02c009bb8ec0de16cb8b2"
       },
@@ -382,7 +382,7 @@
     {
       "key": {
         "rule": "PLR0913",
-        "path": "assistant/notification_reading.py",
+        "path": "desktop_ui/notification_reading.py",
         "scope": "displayed",
         "signature": "378fb959a2489930a4598e2c00542178cfc8c74c39d916fce0e13e52237efe59"
       },
@@ -400,7 +400,7 @@
     {
       "key": {
         "rule": "PLR0913",
-        "path": "assistant/ui_components/controls.py",
+        "path": "desktop_ui/components/controls.py",
         "scope": "button",
         "signature": "99b44bc87de3b64925d42e62bdada33300962fab8ddd938985dd924e4e2ddc4a"
       },
@@ -454,7 +454,7 @@
     {
       "key": {
         "rule": "PLR0913",
-        "path": "assistant/toast_card.py",
+        "path": "desktop_ui/toast_card.py",
         "scope": "Card.target",
         "signature": "f72e5bc61be5698324de31f1f38f23cdc89f98c2af169aa07fd48f633d041d9f"
       },
@@ -463,7 +463,7 @@
     {
       "key": {
         "rule": "PLR0913",
-        "path": "assistant/toast_card.py",
+        "path": "desktop_ui/toast_card.py",
         "scope": "Measure.fit_body",
         "signature": "64274d51f14ec2fc4a576ce5bcb359f84fcd5b0806f18d7ce8afadb792087d88"
       },
@@ -472,7 +472,7 @@
     {
       "key": {
         "rule": "PLR0913",
-        "path": "assistant/keymap_views.py",
+        "path": "desktop_ui/keymap_views.py",
         "scope": "KeymapOverlay.show",
         "signature": "da56c5db9965405acb4c6e8084feb5570fc54e7a9202ae533397f5df9ab7c14f"
       },
@@ -481,7 +481,7 @@
     {
       "key": {
         "rule": "PLR0913",
-        "path": "assistant/ui.py",
+        "path": "desktop_ui/ui.py",
         "scope": "Ui.show_keyboard_overlay",
         "signature": "da56c5db9965405acb4c6e8084feb5570fc54e7a9202ae533397f5df9ab7c14f"
       },
@@ -490,7 +490,7 @@
     {
       "key": {
         "rule": "PLR0913",
-        "path": "assistant/ui_components/widgets.py",
+        "path": "desktop_ui/components/widgets.py",
         "scope": "Window.__init__",
         "signature": "8de0fae46999b094bf9a4745867e8cbe7b77f2011517ef4eb86a575947badd63"
       },
@@ -499,7 +499,7 @@
     {
       "key": {
         "rule": "PLR0913",
-        "path": "assistant/ui_components/widgets.py",
+        "path": "desktop_ui/components/widgets.py",
         "scope": "show_window",
         "signature": "1511fe276d563219222e381e26ffe2d07a29e6ade880be9b8aeafc0b32c8af1b"
       },
@@ -1188,7 +1188,7 @@
     {
       "key": {
         "rule": "PLR0913",
-        "path": "assistant/work_canvas.py",
+        "path": "desktop_ui/work_canvas.py",
         "scope": "WorkCanvas.__init__",
         "signature": "8c968ca01c42e2684dd56bb5557d4fa82444248f1943404234da2cf92338d4dc"
       },

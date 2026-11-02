@@ -26,9 +26,9 @@ if sys.platform != "win32" or os.environ.get("WORKSPACE_E2E") != "1":
 
 lazy from PySide6 import QtCore, QtWidgets
 
-from assistant.qt_runtime import prepare
-from assistant.qt_ui import application
 from components import ASSISTANT, CATALOGUE, read_marker
+from desktop_ui.qt_runtime import prepare
+from desktop_ui.qt_ui import application
 from protocol import MAGIC
 from winapi import clipboard, inputs, screen, system, windows
 from winapi.shapes import Rect

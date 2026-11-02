@@ -8,12 +8,12 @@ from contextlib import contextmanager
 from pathlib import Path
 
 from assistant.agent import Agent
-from assistant.agent_session import message_body
 from assistant.llm import Settings
 from assistant.task_profiles import General
 from automation.execution import WorkExecution
 from automation.json_value import Json
 from automation.presentation import Answer, LiveMessage, ReasoningSummary, StreamState, Succeeded, ToolActivity, ToolStatus
+from desktop_ui.agent_session import message_body
 from tests.fake_endpoint import FakeEndpoint, Received, Reply, fake_endpoint
 from tests.test_agent import FakeMachine, FakeWindow, calls, durable, message, no_feed, response, says
 from tests.test_agent_window import RecordingWindow

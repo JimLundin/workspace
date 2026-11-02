@@ -1,6 +1,6 @@
 """Reading time depends on content and observations, never the real clock."""
 
-from assistant.notification_reading import START_SECONDS, Finished, Paused, Scrolling, Waiting, advance, displayed, pace
+from desktop_ui.notification_reading import START_SECONDS, Finished, Paused, Scrolling, Waiting, advance, displayed, pace
 
 
 def test_reading_waits_then_moves_at_a_bounded_pace_to_the_last_line() -> None:

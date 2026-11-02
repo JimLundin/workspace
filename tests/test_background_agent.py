@@ -7,13 +7,13 @@ from typing import cast
 
 from assistant import browser_tools, business_tools, meeting_tools
 from assistant.agent import Agent
-from assistant.agent_session import activity_text, message_body
 from assistant.geometry import Shot
 from assistant.llm import Settings, ToolCall
 from assistant.task_profiles import General
 from automation.ipc import MeetingCommand, StartMeeting
 from automation.json_value import Json
 from automation.presentation import ToolActivity
+from desktop_ui.agent_session import activity_text, message_body
 from tests.fake_endpoint import fake_endpoint
 from tests.test_agent import FakeMachine, FakeWindow, Rig, calls, durable, no_feed, says
 from winapi.shapes import Rect

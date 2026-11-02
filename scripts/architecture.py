@@ -238,7 +238,8 @@ def _within(module: str, package: str) -> bool:
 
 
 LOWER_LAYERS: Final = ("automation", "winapi")
-"""Packages the assistant builds on; they reach no assistant module except through declared seams."""
+"""Packages the application builds on; they reach no application owner except through declared seams."""
+APPLICATION_LAYERS: Final = ("assistant", "desktop_ui")
 WORKER_ENTRY: Final = "automation.__main__"
 
 
@@ -303,7 +304,7 @@ def process_ownership(graph: Mapping[str, frozenset[str]], configuration: Config
 
 
 def layering(graph: Mapping[str, frozenset[str]], seams: Iterable[Seam]) -> Iterator[Finding]:
-    """No lower-layer module reaches the assistant, except through a declared seam."""
+    """No lower-layer module reaches application owners, except through a declared seam."""
     allowed = frozenset(seam.module for seam in seams)
     starts = (module for module in graph if any(_within(module, layer) for layer in LOWER_LAYERS) and module not in allowed)
     for start in sorted(starts):
@@ -315,13 +316,13 @@ def layering(graph: Mapping[str, frozenset[str]], seams: Iterable[Seam]) -> Iter
             if module in visited:
                 continue
             visited.add(module)
-            if _within(module, "assistant"):
+            if any(_within(module, layer) for layer in APPLICATION_LAYERS):
                 yield Finding("layering", start, "", "", 0, " → ".join(route))
                 break
             pending.extend((*route, target) for target in sorted(graph[module]) if target not in visited)
     for seam in sorted(allowed):
-        if not any(_within(target, "assistant") for target in graph.get(seam, frozenset())):
-            yield Finding("stale-seam", seam, "", "", 0, "Remove the seam: this module no longer imports an assistant module.")
+        if not any(_within(target, layer) for target in graph.get(seam, frozenset()) for layer in APPLICATION_LAYERS):
+            yield Finding("stale-seam", seam, "", "", 0, "Remove the seam: this module no longer imports an application owner.")
 
 
 def _scope_aliases(tree: ast.AST, inherited: Mapping[str, str]) -> dict[str, str]:
@@ -529,7 +530,7 @@ def review(root: Path, names: Iterable[str] | None = None, *, cache: Cache | Non
         if module in visited:
             continue
         visited.add(module)
-        if module == "assistant" or module.startswith("assistant.") or module == "automation" or module.startswith("automation."):
+        if any(_within(module, layer) for layer in (*APPLICATION_LAYERS, "automation")):
             findings.append(Finding("keyboard-isolation", route[0], "", "", 0, " → ".join(route)))
             continue
         findings.extend(observations[module].dynamic_imports)

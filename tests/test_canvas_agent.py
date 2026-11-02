@@ -4,7 +4,6 @@ from dataclasses import replace
 from unittest import TestCase
 
 from assistant.canvas_activity import CanvasIntake, CanvasResearch, CanvasRun, CanvasUpdate
-from assistant.work_canvas import pending, retained
 from assistant.work_canvas_commands import (
     CANVAS_RESPONSE,
     ArrangeCanvas,
@@ -24,6 +23,7 @@ from assistant.work_canvas_context import context_path
 from assistant.work_canvas_model import CanvasDocument, CanvasNote, CanvasRelation, CanvasViewState, Placement, view_state
 from automation.personal_work import Association, Catalog, SourceKind, SourceOrigin, WorkSource, WorkState, source_id
 from automation.task import Completed, Question, Waiting
+from desktop_ui.work_canvas import pending, retained
 from tests.personal_work_fixture import source
 from tests.test_work_canvas import catalog
 from tests.test_work_window import work_task

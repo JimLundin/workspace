@@ -1,10 +1,14 @@
 # Functional design
 
-Live agent activity appears in a bounded lower-right trail. Each public update starts
-a phase bubble with compact steps. Headings stay on one elided line even when
-steps are opened. Cards remain opaque until their reading lifetime ends, then
-fade away; stack position does not dim them. Hover pauses the reading timeout.
-Full history retains the complete interaction. Clarification redirects take precedence over transient steps.
+Live requested agent activity appears in a bounded lower-right trail. One
+requested outcome owns one card: public updates, actions and the final reply
+stay together. Questions and approvals resume that same turn. Headings stay on
+one elided line even when steps are opened. Cards remain opaque until their
+reading lifetime ends, then fade away; stack position does not dim them.
+Hover pauses the reading timeout. Full history retains the complete interaction.
+Notification-owned background tasks stay quiet; their useful findings and
+questions use the separate canvas navigation projection for attention.
+Clarification redirects take precedence over transient steps.
 Bubbles remain read-only; a tooltip directs replies to the agent voice button.
 The canvas retains useful findings, sources, documents, drafts and clarifications.
 Requests and execution history do not create work bubbles. Arrangement instructions
@@ -28,18 +32,18 @@ process, such as the browser host. Effect ownership stays in the last column.
 | `miryoku/firmware.py` | input | Firmware keyboard identity, immutable prior-layout intent and Ctrl+Shift+D/Ctrl+Shift+G voice-shortcut decisions | `winapi/keyboard_devices.py` observes attached device names; the keyboard message loop pauses remapping and restores prior intent outside key callbacks; `keyboard_language.py` keeps firmware output on English (US); `Keyboard` owns paired voice requests and immutable captured-key observations |
 | `automation/personal_work.py`, `assistant/personal_work_store.py`, `personal_work_service.py` | shared: `personal_work.py`; desktop: store/service | Work threads, source identity, bounded associations, remembered corrections, stale-edit rejection and model-plan reconciliation | Desktop-owned `PersonalStore` in `personal_work_store.py` validates transactional SQLite snapshots; `PersonalWork` owns polling, review scheduling, constrained edit validation before queue admission and immutable publication; the work process shares the pure catalog contracts without loading its store |
 | `assistant/personal_work_sources.py`, `personal_work_model.py`, `personal_work_tools.py` | desktop: sources/model; shared: `personal_work_tools.py` | Observed browser evidence from typed web-app results, bounded review input and agent work-catalog contracts, including the exact observed source-opening request | `BrowserSources` owns read-only Edge collection every 15 seconds, retries failed access after one minute and reconnects after a stopped native observation; manual refresh retries immediately. `Correlator` owns a cancellable structured model request without action tools; `App` chooses native reference opening or agent execution using the catalog-owned `source_request`; `work_canvas_panel.py` composes the native local canvas; `work_canvas_detail.py` owns revision-bound in-place drafts |
-| `assistant/work_canvas_model.py`, `work_canvas_context.py`, `work_canvas_layout.py`, `work_canvas_gestures.py`, `work_canvas_edits.py`, `canvas_activity.py`, `canvas_session.py` | shared: model/context/activity; desktop: layout/gestures/edits/session | Work as context, canonical contributions, arbitrary nested groups, shared source identity, nested bubbles on one native scene, arrangements/pins, substantive results, exact clarification routes, reply reconciliation and quiet attention policy; desktop-only `canvas_session.py` projects conversation requests, closes expired session questions and redirects floating attention, while shared `canvas_activity.py` owns the canvas variants and task projection | `WorkCanvas` in `work_canvas.py` is the single owner of the validated local SQLite document and its observation, attention, answer, continuation and user-edit policy, applying each `work_canvas_edits.py` intent to the latest document and publishing each change with immutable attention; `Ui` marshals to Qt and hands that publication to the view, agent window, toolbar count and notices; the view sends intents through `CanvasEdits`, redraws from their result and never saves its copy; `work_canvas_panel.py` owns native pointer capture and previews, shared `ui_components/canvas_bubble.py` controls handle both containers and contributions; existing input/work handlers deliver answers |
-| `assistant/keymap_views.py`, `layer_indicator.py`, `dialogs.py` | desktop | Key map presentation and native dialog placement | `KeymapWindow`, `KeymapOverlay` and `Indicator` own their Qt widgets; `RegionPicker` and `AnswerWindow` own their dialogs; `AnswerWindow` posts updates through `DialogHost`; dialog presentation owns positioning and activation; `Ui` marshals calls to those owners |
-| `assistant/desktop_attention.py` | desktop | Speech targets, first-question inbox precedence, active-canvas interruption suppression and session-bound answer delivery from immutable `CanvasFocus` and waiting questions | `CanvasWindow` publishes focus and owns instruction, reply feedback, document, voice and meeting updates; `AgentWindow.snapshot()` reads the immutable session under its own lock; `Ui` executes decision variants on Qt and its one `_publish_canvas` handler fans out each owner publication, retaining late-view replay without repeating notices; conversation navigation is connected once through `configure_controls` |
-| `assistant/ui_components/meaning.py`, `appearance.py`, `text.py`, `bubble.py` | desktop | Semantic tints and ink roles; scheme tokens and one glass recipe for capsules, menus, cards and the canvas bar; card anatomy and app glyphs | `text.color` and `text.face` adapt shades and type to Qt; `bubble` paints app badges and rim light; surface painters and composition render the shared recipe |
-| `assistant/island_model.py`, `island_layout.py`, `island_menu.py`, `island_motion.py`, `motion.py` | desktop | Bar views, capsule and menu layout, navigation and shared spring transitions (see `docs/toolbar-design.md`) | `DesktopBar` owns observations and timers; `island_surface.py` owns the Qt window and glass |
-| `assistant/work_canvas_commands.py`, `work_canvas_tools.py`, `work_canvas.py` | shared: commands; work: tools; desktop: `work_canvas.py` | Atomic structural edits, paged reads, editable fingerprints, bounded evidence-driven scheduling, durable run retention and one exhaustive `run_prompt` for research or exact saved user direction | `Ui` marshals bridge commands to Qt; `WorkCanvas` persists and publishes each change through the same handler as user edits and observations; `App` constructs the one `WorkCanvas`, submits its identified run prompt and recovers uncommitted bindings |
+| `assistant/work_canvas_model.py`, `assistant/work_canvas_context.py`, `assistant/canvas_activity.py`; `desktop_ui/work_canvas_layout.py`, `work_canvas_gestures.py`, `work_canvas_edits.py`, `canvas_session.py` | shared: model/context/activity; desktop: layout/gestures/edits/session | Work as context, canonical contributions, arbitrary nested groups, shared source identity, nested bubbles on one native scene, arrangements/pins, substantive results, exact clarification routes, reply reconciliation and quiet attention policy; desktop-only `canvas_session.py` projects conversation requests, closes expired session questions and redirects floating attention, while shared `canvas_activity.py` owns the canvas variants and task projection | `WorkCanvas` in `desktop_ui/work_canvas.py` is the single owner of the validated local SQLite document and its observation, attention, answer, continuation and user-edit policy, applying each `work_canvas_edits.py` intent to the latest document and publishing each change with immutable attention; `Ui` marshals to Qt and hands that publication to the view, agent window, toolbar count and notices; the view sends intents through `CanvasEdits`, redraws from their result and never saves its copy; `work_canvas_panel.py` owns native pointer capture and previews, shared `desktop_ui/components/canvas_bubble.py` controls handle both containers and contributions; existing input/work handlers deliver answers |
+| `desktop_ui/keymap_views.py`, `layer_indicator.py`, `dialogs.py` | desktop | Key map presentation and native dialog placement | `KeymapWindow`, `KeymapOverlay` and `Indicator` own their Qt widgets; `RegionPicker` and `AnswerWindow` own their dialogs; `AnswerWindow` posts updates through `DialogHost`; dialog presentation owns positioning and activation; `Ui` marshals calls to those owners |
+| `desktop_ui/desktop_attention.py` | desktop | Speech targets, first-question inbox precedence, active-canvas interruption suppression and session-bound answer delivery from immutable `CanvasFocus` and waiting questions | `CanvasWindow` publishes focus and owns instruction, reply feedback, document, voice and meeting updates; `AgentWindow.snapshot()` reads the immutable session under its own lock; `Ui` executes decision variants on Qt and its one `_publish_canvas` handler fans out each owner publication, retaining late-view replay without repeating notices; conversation navigation is connected once through `configure_controls` |
+| `desktop_ui/components/meaning.py`, `appearance.py`, `text.py`, `bubble.py` | desktop | Semantic tints and ink roles; scheme tokens and one glass recipe for capsules, menus, cards and the canvas bar; card anatomy and app glyphs | `text.color` and `text.face` adapt shades and type to Qt; `bubble` paints app badges and rim light; surface painters and composition render the shared recipe |
+| `desktop_ui/island_model.py`, `island_layout.py`, `island_menu.py`, `island_motion.py`, `motion.py` | desktop | Bar views, capsule and menu layout, navigation and shared spring transitions (see `docs/toolbar-design.md`) | `DesktopBar` owns observations and timers; `island_surface.py` owns the Qt window and glass |
+| `assistant/work_canvas_commands.py`, `assistant/work_canvas_tools.py`; `desktop_ui/work_canvas.py` | shared: commands; work: tools; desktop: `work_canvas.py` | Atomic structural edits, paged reads, editable fingerprints, bounded evidence-driven scheduling, durable run retention and one exhaustive `run_prompt` for research or exact saved user direction | `Ui` marshals bridge commands to Qt; `WorkCanvas` persists and publishes each change through the same handler as user edits and observations; `App` constructs the one `WorkCanvas`, submits its identified run prompt and recovers uncommitted bindings |
 | `assistant/work_bridge_contracts.py`, `work_bridge.py`, `browser_documents.py` | shared: contracts/documents; desktop: `work_bridge.py` | Validated desktop owner variants, their routing to each owner and document stream contracts | The contracts join feed, catalog and canvas wire variants without a feed-to-canvas import cycle; `WorkOwners` routes each variant to its owner's typed handler, and `answer` validates desktop text and encodes its response; `Browser` owns authenticated CDP streams and exclusive bounded file collection |
-| `assistant/work_snapshot.py`, `work_canvas_window.py`, `work_canvas_view.py`, `ui_components/canvas_look.py`, `ui_components/canvas_bubble.py` | desktop | Current work observations, canvas surface roles and bounded previews | `Ui.configure_work` binds callbacks before publication and startup; canvas preparation and showing remain explicit. `canvas_look` paints content and toolbar surfaces, `CanvasBubble` supplies shared scene controls, and `work_canvas_view` shapes visible previews |
+| `assistant/work_snapshot.py`; `desktop_ui/work_canvas_window.py`, `work_canvas_view.py`, `components/canvas_look.py`, `components/canvas_bubble.py` | desktop | Current work observations, canvas surface roles and bounded previews | `Ui.configure_work` binds callbacks before publication and startup; canvas preparation and showing remain explicit. `canvas_look` paints content and toolbar surfaces, `CanvasBubble` supplies shared scene controls, and `work_canvas_view` shapes visible previews |
 | `assistant/llm.py` | shared | System, user, assistant, and tool-result message variants; request serialization; four immutable subagent workload classes and their configured model selection | HTTP client functions and environment configuration entry |
 | `assistant/sdk.py` | work | Validated named delegation batches, class choices, immutable child results and bounded child turns | The SDK owns each model/tool loop; the adapter owns one shared native-effect gate, independent stream cancellation, content-free child lifecycle updates and collection into the manager's conversation. Child loops reuse the task profile's tools and durable claim, without checkpointing or recursive delegation |
 | `automation/presentation.py` | shared | Shared progress, result and live-row values | `automation/app.py` publishes live updates through `ipc.py`; the assistant synthesizes completion from durable outcomes and renders the timeline |
-| `assistant/agent_session.py` | desktop | Typed events, messages, agent request rows over the durable questions and approvals, session transitions, and presentation | `agent_window.py`, `agent_toasts.py`, `toast_card.py` |
+| `desktop_ui/agent_session.py` | desktop | Typed events, messages, agent request rows over the durable questions and approvals, session transitions, and presentation | `agent_window.py`, `agent_toasts.py`, `toast_card.py` |
 | `assistant/agent.py`, `task_profiles.py`, `agent_execution.py` | work | Tool dispatch, approval and observation recording for one durable work claim; each task profile's toolset and execution (conversation, admitted desktop context, recovery and completion check) | `Profiles` selects the profile run and owns its dependencies, per-conversation SDK history and source drafts; `AgentExecution` owns metrics, error reporting and run cleanup; `WorkExecution` owns the claim's effects |
 | `assistant/agent_tools.py`, `desktop_tools.py`, `browser_tools.py`, `business_tools.py`, `self_change_tools.py`, `meeting_tools.py`, `feed_agent_tools.py`, `work_canvas_tools.py`, `personal_work_tools.py`, `task_tools.py` | shared: `agent_tools.py`, `business_tools.py`, `personal_work_tools.py`; work: other listed tools | Tool families: each `Tool` declares its schema, handler, read/change classification with resources, reconciliation proof, readback evidence and visible display; handlers describe each exact `Operation` to approval and effect | The agent composes the families over its `Session`; `Screen` and `SelfChange` own the latest screenshot and the source draft's check/install state |
 | `automation/task.py`, `store.py` | shared | Durable task, request profile, agent request, reply, action, and run variants, each tagged by its `kind` or enum value; controls and stale-run decisions | `TaskStore` owns the task journal's queries and stores those records through strict Pydantic adapters; schema version 5 converts version 4 journals in place |
@@ -47,13 +51,13 @@ process, such as the browser host. Effect ownership stays in the last column.
 | `automation/controller.py`, `execution.py`, `actions.py` | work: controller; shared: execution/actions | Work outcomes, recovery context, exact operations, observation evidence, reconciliation proof and verification decisions | `WorkController` owns execution lifetime; `Actions` owns cancellable effect coordination |
 | `automation/routines.py`, `context.py` | shared | Trigger occurrences, accepted handoffs, context relevance and freshness | The routine/context stores own persistence; `meeting_events.py` owns transcript delivery and startup scanning |
 | `assistant/work_commands.py`, `work_snapshot.py`, `work_text.py`, `work_agent.py`, `work_service.py`, `owner_calls.py` | desktop | Work commands, the published work snapshot, readable task labels, conversation/task selection and volatile owner-call admission/result identities | `WorkAgent` owns frontend observation and asynchronous UI delivery; `WorkService` composes journal/transport calls; `OwnerDispatcher` owns one handler thread, bounded mailboxes and immutable pending/cache snapshots, rechecking the journal before each effect; the frontend observer alone sends replies; `WorkWindow` schedules its native view |
-| `assistant/view_publication.py` | desktop | One view per owner: coalesced renders, lazy creation with retry, a single confirmed close | `AgentWindow` and `WorkWindow` keep their immutable state and post through it; `Ui.close_windows` closes both and waits for each confirmation |
+| `desktop_ui/view_publication.py` | desktop | One view per owner: coalesced renders, lazy creation with retry, a single confirmed close | `AgentWindow` and `WorkWindow` keep their immutable state and post through it; `Ui.close_windows` closes both and waits for each confirmation |
 | `automation/ipc.py`, `outbox.py`, `bridge.py`, `profile_lease.py` | shared: IPC/outbox/bridge; work: profile lease | Validated process messages, typed meeting operations and bounded desktop-call text, plus immutable event retention/coalescing with explicit history loss | Bridge client/server own the one authenticated pipe and replace outbox snapshots under the server lock; `ProfileLease` owns the OS-released exclusive work-folder lock; `automation/app.py` composes the worker and its `OwnerCalls` adapter, binding calls to the current execution run and cancellation handle |
 | `assistant/action_text.py` | shared | Readable action targets and results, formatted before preview limits | `agent.py` publishes previews; session presentation handles raw payloads too |
-| `assistant/notifications.py`, `notification_text.py`, `notification_reading.py`, `toast_stack.py` | desktop | Bounded projection of canvas redirects, approvals and agent turns; reading states and lifetimes; measured stack placement and synchronized frame springs | `AgentToasts` owns the card pool, shared measurement, frame clock, timers and history; `toast_card.Card` owns each native window and glass through `CardOwner` |
+| `desktop_ui/notifications.py`, `notification_text.py`, `notification_reading.py`, `toast_stack.py` | desktop | Bounded projection of canvas redirects, approvals and agent turns; reading states and lifetimes; measured stack placement and synchronized frame springs | `AgentToasts` owns the card pool, shared measurement, frame clock, timers and history; `toast_card.Card` owns each native window and glass through `CardOwner` |
 | `assistant/browser_requests.py`, `browser_values.py`, `browser_session.py`, `browser.py` | shared | Browser requests (one typed variant per operation, validated once at the browser tool seam), immutable page/tab/group observations, validated DevTools and tab-API replies, group selection, typed paginated projections | `Browser`, `NativeSessions`, `Cdp`, `browser_tabs.TabStrip`, the `browser_host` exchange of typed flat requests, and a cancellable connection wait |
 | `assistant/recording_state.py` | shared | Audio batches, stored observations, completion rules, retry policy, stale-update rejection, and recording controls | `meetings.py` and `meeting_store.py` |
-| `assistant/meeting_detection.py` | desktop | Immutable joined-call observations, saved opt-in, departure debounce, bounded observation failure and manual-stop suppression | `meeting_browser.py` reads the existing approved Edge tabs without focus/navigation; `automatic_meetings.py` owns five-second polling, the encrypted preference and command serialization over the existing recorder; `App` routes manual starts/stops through it and `Ui` retains its toolbar-menu status. This uses the existing browser and recording dependencies: lifecycle decisions are Workspace policy, not a general-purpose polling library. |
+| `assistant/meeting_detection.py` | desktop | Immutable joined-call observations, saved opt-in, departure debounce, continuous thirty-second failure/recovery warning policy and manual-stop suppression | `meeting_browser.py` reads the existing approved Edge tabs without focus/navigation; `automatic_meetings.py` owns five-second polling, the encrypted preference and command serialization over the existing recorder; `App` routes manual starts/stops through it and `Ui` retains its toolbar-menu status. This uses the existing browser and recording dependencies: lifecycle decisions are Workspace policy, not a general-purpose polling library. |
 | `assistant/meeting_followup.py`, `meeting_preparation.py` | shared | Frozen transcript bundles, exact citations, sourced actions and drafts, preparation identity | `meeting_followup_store.py` owns verified publications and revision-checked edits; `Preparations` owns content-addressed bundle files |
 | `assistant/meeting_workflow.py` | desktop | Catalog, work and package observations; identified edit commands and receipts | `MeetingWorkflow` owns background I/O; `meeting_panel.py` owns Qt selection, local edits and explicit handoff |
 | `assistant/meeting_execution.py`, `meeting_tools.py`, `outlook.py` | work | Constrained meeting execution, bounded source reads and verified draft outcomes | The work process owns generation; `outlook.ps1` owns Outlook COM observation and draft operations |
@@ -65,14 +69,33 @@ process, such as the browser host. Effect ownership stays in the last column.
 | `assistant/communications.py` | desktop | Teams' `Feed` observations, source identities, grouped pending chat tickets, captured handling revisions and reply evidence | `communications_service.py` owns encrypted settings/drafts/handling, collection and effects; `communications_browser.py` owns exact-chat and Activity DOM boundaries and reads chats with the Teams web-app operation's result type; `Ui` supplies source observations as agent context; canvas activity owns user attention |
 | `assistant/feed_sources.py` | desktop | `PendingFeed` retains only the latest Teams and notice reports; one pending listing derives their ordered updates, handling revisions and notice filter. Source variants own their key, origin, attention and triage evidence | `Ui` marshals each report onto Qt's thread and hands `PendingFeed` to triage; routine arrivals never reach the floating bubbles. Every consumer reads the same list: `feed_triage_service.py` collects evidence and `feed_agent_tools.py` shows the voice agent the feed |
 | `assistant/feed_triage.py` | desktop | Revision-bound grouped assessments with their captured origins, quiet/action/completed/dismissed dispositions, explicit feedback and stale-result rejection | `feed_triage_service.py` owns coalesced background model calls, DPAPI plan/preferences and the feed commands the desktop owner routes to it, with an explicit cancellable-wait dependency; `feed_agent_tools.py` lets the main voice agent inspect and maintain the same plan; ordinary arrivals do not become floating cards |
-| `assistant/feed_origin.py` | shared | Source application identity and assessment provenance | `feed_icons.py` owns native vector marks; canvas bubbles and the Workspace badge on floating bubbles paint them; the triage board keeps reaction counts quiet |
+| `assistant/feed_origin.py` | shared | Source application identity and assessment provenance | `desktop_ui/vector_icons.py` owns native vector marks; canvas bubbles and the Workspace badge on floating bubbles paint them; the triage board keeps reaction counts quiet |
 | `assistant/notification_sources.py` | desktop | Windows notice updates, loaded handling marks and the `NotificationFilter` definition | `NotificationSources` loads stored attention choices and retains notice observations on Qt's thread, apart from the Teams worker; routine observations preserve those choices and expose revised notices as pending |
-| `assistant/notification_agent.py` | desktop | Notification evidence independent of pending-feed filters, exact source-revision task IDs and stable prompts | `NotificationAgent` owns a separate admission thread for Windows notices, Teams activities and unseen messages, including hidden sources and reactions, so slow triage research cannot delay activation. `WorkAgent.submit_identified` owns durable admission, replay and execution with the existing general tools; refused admissions retry on worker ticks. The agent investigates and executes actions covered by existing user authorization, recording useful findings in their canvas context. |
-| `assistant/card_actions.py` | desktop | Card action variants (open the canvas, decide an approval) and their one `workspace://` encoding; a link that is not exactly one variant parses to nothing | `notification_text.py` and `agent_session.notice_text` build variants; `rich_text.py` keeps only canvas redirects clickable in Markdown; `agent_toasts.py` matches the parsed variant |
+| `assistant/notification_agent.py` | desktop | Reviewed actionable notification evidence, current source-revision/date selection, exact task IDs and stable prompts | `NotificationAgent` owns a separate admission thread for reviewed ACTION sources from Windows notices, Teams activities and unseen messages. Only current eligible revisions and dates enter quick tool-free screening; refused admissions retry on worker ticks. `WorkAgent.submit_identified` owns durable admission, replay and execution with the existing general tools. The agent investigates and executes actions covered by existing user authorization, recording useful findings in their canvas context. |
+| `desktop_ui/card_actions.py` | desktop | Card action variants (open the canvas, decide an approval) and their one `workspace://` encoding; a link that is not exactly one variant parses to nothing | `notification_text.py` and `agent_session.notice_text` build variants; `rich_text.py` keeps only canvas redirects clickable in Markdown; `agent_toasts.py` matches the parsed variant |
 | `winapi/system_notices.py` | desktop | Native notification identities, quiet history baselines, banner coverage and validated timestamps | `winapi/notifications.py` owns native observations; `notification_banners.py` owns the recoverable banner-setting lease; `desktop_bar.py` forwards observations through `Ui.system_notices` to `NotificationSources` and the joined feed; the island has no individual-notice dismissal control |
 | `assistant/monitor_layout.py`, `tiling.py`, `tiling_commands.py` | desktop | Monitor observations, window distribution and native window command mapping | `MonitorLayout` owns automatic redistribution; `GlazeWM` owns manager startup and ordinary window tiling |
-| `assistant/shell_state.py` | desktop | Windows-key tap decisions | `shell_controls.py` owns taskbar recovery and a dedicated Windows-key message thread; keyboard callbacks post toggles and pass other input through |
-| `assistant/geometry.py`, `panel.py`, `rich_text.py` | shared: geometry; desktop: panel/rich text | Geometry, preferences, and Markdown values | Qt views and preference files |
+| `desktop_ui/shell_state.py` | desktop | Windows-key tap decisions | `shell_controls.py` owns taskbar recovery and a dedicated Windows-key message thread; keyboard callbacks post toggles and pass other input through |
+| `assistant/geometry.py`; `desktop_ui/rich_text.py` | shared: geometry; desktop: rich text | Geometry and Markdown values | Native geometry adapters and Qt text views |
+
+## Presentation ownership
+
+`desktop_ui` owns native views (including the notification-area `Tray`), presentation records and projections, layout,
+motion, view publication, the Qt event loop, shared controls and bundled fonts.
+Its `work_canvas.py` owns the local canvas document and applies user edit intents
+on the UI thread; shared canvas data, agent commands and wire contracts remain in
+`assistant/work_canvas_model.py`, `work_canvas_context.py` and
+`work_canvas_commands.py`.
+
+`assistant` owns agent execution and tool families, dictation and meeting behavior,
+application effects and shared work contracts. `assistant/app.py` composes these
+owners with `desktop_ui.ui.Ui`; `assistant/work_agent.py` adapts durable worker
+observations to the conversation presentation. Agent execution stays in the
+supervised automation process. Neither the worker nor the keyboard may import
+any `desktop_ui` module, including through package initialization or an allowed
+composition seam. The source architecture review enforces those import routes.
+Python language features and dependency algorithms remain upstream trust;
+Workspace tests cover its SDK/Qt startup ordering, effect ownership and visible behavior.
 
 ## Feed and meeting passes
 
@@ -85,19 +108,28 @@ The Personal work feed has one triage pass in the desktop process:
 5. `feed_work.py` and `feed_research.py`: supply bounded context and read-only investigation to the assessment model.
 6. `feed_agent_tools.py` → `automation/app.py` `OwnerCalls.desktop` → `work_bridge.py`: voice commands reach `Triage.command`; `feed_history.py` owns their decisions and handoffs.
 
-Each feed observation offers notification work to an independent admission worker,
-before coalesced assessment and regardless of pending-feed filters or reactions.
-Source content remains untrusted evidence. Existing tasks and standing instructions supply action
-scope; arrivals themselves supply no new permission. Exact content revisions reuse
-their durable task on polling and restart. Observation times are excluded from the
-captured prompt so reacquiring the source cannot conflict with its saved task.
+The quick chat model screens current source revisions before read-only research.
+Screening has no tools, one turn and a twenty-second deadline; its result must
+cover the exact candidate batch. Quiet, hidden and reaction-only sources do not
+enter automatic work. Research investigates actionable candidates, and admission
+uses only current reviewed actions from today's feed. Source content remains
+untrusted evidence: existing tasks and standing instructions supply action scope;
+arrivals themselves supply no new permission. Exact content revisions reuse
+their durable task on polling and restart. Observation times are excluded from
+the captured prompt so reacquiring the source cannot conflict with its saved task.
 Queue admission and duplicate ownership use the existing work frontend and journal;
-Python, Pydantic and SQLite algorithms remain trusted. No new scheduling or storage
-dependency is needed for this domain-specific wiring.
+Python, Pydantic and SQLite algorithms remain trusted. Screening reuses the existing
+SDK and quick-model setting without a new scheduling or storage dependency.
 
 `feed_origin.py` supplies shared source-application vocabulary for the canvas and bubbles.
 `automation/bridge.py` carries owner calls on the authenticated work pipe;
 `work_agent.py` admits them and `owner_calls.py` dispatches them to desktop handlers.
+
+Automatic meeting observation updates its status on every poll, but warns only
+after thirty seconds of continuous unavailability. It warns once per outage;
+thirty seconds of uninterrupted ready observations rearm the next warning.
+`meeting_detection.py` owns those pure transitions, while
+`automatic_meetings.AutomaticAttention` owns callback delivery from poll heartbeats.
 
 Meetings have three paths:
 
@@ -304,7 +336,7 @@ unchanged. Both conversation views use the same readable presentation.
 
 Qt owns the assistant's main thread, its expiry and animation callbacks, and all
 assistant windows. A separate control thread creates the hidden Windows message
-window and runs its message loop. `assistant/qt_ui.py` shares Windows composition
+window and runs its message loop. `desktop_ui/qt_ui.py` shares Windows composition
 across assistant views without tying the application lifetime to a view.
 `keeper_ui.py` owns the keeper's separate protected Qt event loop. The bundled
 UI uses Qt; no GUI objects cross the keyboard process boundary.
@@ -494,8 +526,8 @@ policy reports. Editing checks supply their Git-listed snapshot; the deployed
 full check can review the filesystem without Git. `scripts/check.py` uses the
 same import resolution for affected-test selection. Data-record declarations are
 checked from source; the retired runtime instance-storage audit is not required.
-Application modules stay
-in their current locations while this enforcement is established.
+Presentation modules live in `desktop_ui`; agent behavior and shared contracts
+live in `assistant`. Source review follows both packages after module moves.
 
 The architecture `processes` table names `automation.__main__` as work and
 `assistant.__main__` as desktop. The review computes both static import closures,
@@ -506,8 +538,8 @@ Work-only modules cannot enter the desktop closure. Removed consumers make
 work/shared declarations stale, and duplicate or conflicting declarations fail.
 These loading declarations do not move modules or describe which methods run.
 
-The `desktop_only` declaration additionally keeps conversation presentation,
-`canvas_session.py` and `personal_work_store.py` outside the work closure. The
+The `desktop_only` declaration keeps the entire `desktop_ui` package and
+`assistant/personal_work_store.py` outside the work closure. The
 review reports the import route to an undeclared module or a desktop owner,
 even through composition seams. Shared canvas and catalog contracts remain
 available to worker tools without loading those owners. Isolated policy fixture

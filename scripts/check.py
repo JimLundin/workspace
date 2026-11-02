@@ -23,7 +23,7 @@ lazy from concurrent.futures import ProcessPoolExecutor
 
 from pydantic import TypeAdapter, ValidationError
 
-from scripts.architecture import Report, dependencies, module_name, review
+from scripts.architecture import Report, dependencies, module_name, python_sources, review
 from scripts.check_results import Failure, Results, Selection, raised, reported
 from scripts.deploy_files import CheckedArchitecture, CheckReceipt, file_at, json_record, read, sha, source_map, write, write_receipt
 from scripts.development_paths import LIVE, PROFILE
@@ -457,11 +457,9 @@ def choose(args: Options, current: Mapping[str, str], parser: argparse.ArgumentP
         previous = {name: sha(path) for name in current if (path := args.baseline / name).is_file()}
     # Include removed deployed Python modules so deletion propagates through imports.
     if baseline is None and args.baseline.exists():
-        for folder in ("assistant", "automation", "miryoku", "winapi", "scripts", "tests"):
-            for path in (args.baseline / folder).glob("*.py"):
-                name = path.relative_to(args.baseline).as_posix()
-                if name not in current:
-                    previous[name] = sha(path)
+        for name in python_sources(args.baseline):
+            if name not in current:
+                previous[name] = sha(args.baseline / name)
     selection = select(ROOT, current, previous, full=args.full, native=args.native)
     if args.tests and args.full:
         parser.error("--full and --tests select different profiles")

@@ -1,6 +1,6 @@
 """Toast stack sizing, capacity and placement from measured card sizes."""
 
-from assistant.toast_stack import (
+from desktop_ui.toast_stack import (
     Active,
     Column,
     Fit,

@@ -4,7 +4,7 @@ import threading
 from collections import deque
 from collections.abc import Callable
 
-from assistant.view_publication import Unavailable, ViewPublication
+from desktop_ui.view_publication import Unavailable, ViewPublication
 
 
 class RecordingView:

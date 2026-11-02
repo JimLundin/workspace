@@ -16,12 +16,6 @@ from enum import Enum, auto
 from pathlib import Path
 from typing import Final, Protocol, assert_never
 
-lazy from assistant.icons import State, dot
-lazy from assistant.keymap import indicator_text
-lazy from assistant.overlay import OverlayState, load_enabled, save_enabled
-lazy from assistant.ui import Ui
-lazy from assistant.work_canvas import WorkCanvas, run_prompt
-
 import components
 import keeper
 import keeper_control
@@ -92,6 +86,12 @@ lazy from automation.routines import RoutineStore
 lazy from automation.store import TaskStore
 lazy from automation.task import Control, RequestKind
 lazy from automation.work_folder import BROWSER_PROFILE, WORK
+lazy from desktop_ui.icons import State
+lazy from desktop_ui.keymap import indicator_text
+lazy from desktop_ui.overlay import OverlayState, load_enabled, save_enabled
+lazy from desktop_ui.tray import Tray
+lazy from desktop_ui.ui import Ui
+lazy from desktop_ui.work_canvas import WorkCanvas, run_prompt
 lazy from miryoku.layout import Layer
 lazy from protocol import WM_INDICATOR, WM_KEY_STATE, WM_LAYOUT_STATE, WM_REQUEST, LayoutState, Tool, decode_indicator
 lazy from winapi import audio, recording, screen, shell, system, windows
@@ -110,34 +110,6 @@ def log(text: str) -> None:
         LOG.parent.mkdir(parents=True, exist_ok=True)
         with LOG.open("a", encoding="utf-8") as file:
             file.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')} {text}\n")
-
-
-# ---- the tray icon ---------------------------------------------------------------------
-
-
-class Tray:
-    """The notification-area icon. Safe to use from any thread."""
-
-    __slots__ = ("_icon", "_icons", "_lock")
-
-    def __init__(self, window: int) -> None:
-        self._icons = {state: shell.Icon(32, dot(32, state.value)) for state in State}
-        self._lock = threading.Lock()
-        self._icon = shell.TrayIcon(window, WM_TRAY, self._icons[State.READY], "Workspace")
-
-    def show(self, state: State) -> None:
-        with self._lock:
-            self._icon.update(self._icons[state], f"Workspace: {state.name.lower().replace('_', ' ')}")
-
-    def notify(self, title: str, text: str, *, warning: bool = False) -> None:
-        with self._lock:
-            self._icon.notify(title, text, shell.NIIF_WARNING if warning else shell.NIIF_INFO)
-
-    def remove(self) -> None:
-        with self._lock:
-            self._icon.remove()
-            for icon in self._icons.values():
-                icon.destroy()
 
 
 # ---- the request context ---------------------------------------------------------------
@@ -253,7 +225,7 @@ class AssistantApp:
         self.overlay = OverlayState(enabled=load_enabled())
         self.jobs: queue.Queue[Callable[[], None] | None] = queue.Queue()
         self.window = shell.AppWindow(components.ASSISTANT.window.title, self.on_message)
-        self.tray = Tray(self.window.handle)
+        self.tray = Tray(self.window.handle, WM_TRAY)
         self.automatic_attention = AutomaticAttention(self.ui.desktop_automatic, self.warn_automatic_recording)
         self.mic_event = system.create_event()
         self.tiling = GlazeWM()

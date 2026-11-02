@@ -20,8 +20,8 @@ lazy import shiboken6
 lazy from PySide6.QtCore import Qt
 lazy from PySide6.QtTest import QTest
 
-from assistant.island_model import Key
-from assistant.qt_runtime import prepare
+from desktop_ui.island_model import Key
+from desktop_ui.qt_runtime import prepare
 from scripts.preview import Files, Preview
 from tests.check_fixture import copy_check_scripts
 from tests.git_fixture import initialized

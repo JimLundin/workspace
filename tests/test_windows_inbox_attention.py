@@ -12,23 +12,23 @@ if sys.platform != "win32":
 lazy from PySide6 import QtCore, QtWidgets
 lazy from PySide6.QtTest import QTest
 
-from assistant.agent_toasts import AgentToasts
-from assistant.agent_window import AgentWindow
 from assistant.canvas_activity import SessionRequest
 from assistant.communications import WindowsNotice
-from assistant.desktop_bar import BarActions, DesktopBar
 from assistant.feed_sources import PendingFeed
-from assistant.island_model import Agent, Job, Key
-from assistant.island_surface import TOP, Capsule
 from assistant.notification_sources import NOTIFICATION_STATE
-from assistant.qt_runtime import prepare
-from assistant.qt_ui import application
 from assistant.state_store import SavedState
-from assistant.ui import Ui, Views
-from assistant.work_canvas_panel import CanvasEdits
-from assistant.work_canvas_window import CanvasWindow
-from assistant.work_window import WorkWindow
 from automation.task import Reply
+from desktop_ui.agent_toasts import AgentToasts
+from desktop_ui.agent_window import AgentWindow
+from desktop_ui.desktop_bar import BarActions, DesktopBar
+from desktop_ui.island_model import Agent, Job, Key
+from desktop_ui.island_surface import TOP, Capsule
+from desktop_ui.qt_runtime import prepare
+from desktop_ui.qt_ui import application
+from desktop_ui.ui import Ui, Views
+from desktop_ui.work_canvas_panel import CanvasEdits
+from desktop_ui.work_canvas_window import CanvasWindow
+from desktop_ui.work_window import WorkWindow
 from tests.agent_requests import asked
 from tests.communications_fixture import communication_feed
 from tests.test_communications_service import LocalCipher

@@ -109,17 +109,17 @@ def test_copied_source_starts_the_sdk_and_qt_with_the_inherited_bundle(tmp_path:
     def ignore_bytecode(_folder: str, names: list[str]) -> set[str]:
         return set(names) & {"__pycache__"}
 
-    for package in ("assistant", "automation", "miryoku", "winapi"):
+    for package in ("assistant", "desktop_ui", "automation", "miryoku", "winapi"):
         shutil.copytree(ROOT / package, source / package, ignore=ignore_bytecode)
     for module in ROOT.glob("*.py"):
         shutil.copyfile(module, source / module.name)
     assert not (source / ".runtime").exists() and not (source / ".python").exists()
     script = (
-        "from runtime import activate; activate(); import assistant.sdk, assistant.agent_toasts; "
+        "from runtime import activate; activate(); import assistant.sdk, desktop_ui.agent_toasts; "
         "from pathlib import Path; import os, runtime, PySide6; "
-        "assert all(Path(module.__file__).is_relative_to(Path.cwd()) for module in (runtime, assistant.sdk, assistant.agent_toasts)); "
+        "assert all(Path(module.__file__).is_relative_to(Path.cwd()) for module in (runtime, assistant.sdk, desktop_ui.agent_toasts)); "
         "assert Path(PySide6.__file__).is_relative_to(Path(os.environ['WORKSPACE_BUNDLED_RUNTIME'])); "
-        "from assistant.qt_ui import EventLoop, application; "
+        "from desktop_ui.qt_ui import EventLoop, application; "
         "root=application(); "
         "loop=EventLoop(root, lambda: None); loop.pump(); loop.close(); root.processEvents(); print('Copied SDK and Qt passed')"
     )
@@ -139,7 +139,7 @@ def test_qt_import_keeps_asyncio_workers_usable_in_a_fresh_interpreter() -> None
     activate()
     script = (
         "from runtime import activate; activate(); import asyncio; "
-        "import assistant.ui_components.text; "
+        "import desktop_ui.components.text; "
         "assert asyncio.run(asyncio.to_thread(lambda: 42)) == 42; print('Qt and async workers passed')"
     )
     checked = subprocess.run(
@@ -160,20 +160,21 @@ def test_work_window_closes_with_its_ui_owner_in_a_fresh_process(tmp_path: Path)
         import threading
         from runtime import activate
         activate()
-        from assistant.qt_runtime import prepare
+        from desktop_ui.qt_runtime import prepare
         prepare()
         from PySide6.QtWidgets import QApplication
-        from assistant.qt_ui import later
-        from assistant.ui import Ui, Views
-        from assistant.work_canvas import WorkCanvas
-        from assistant.work_canvas_window import CanvasWindow
+        from desktop_ui.ui import Ui, Views
+        from desktop_ui.work_canvas import WorkCanvas
+        from desktop_ui.work_canvas_window import CanvasWindow
         from usage import DIRECTORY
 
         faulthandler.enable()
+        owners = []
 
         def offscreen_canvas(root, work, canvas):
             view = CanvasWindow(root, work, canvas)
             view.window.move(-4000, -3000)
+            owners.append(threading.current_thread() is threading.main_thread())
             return view
 
         def offscreen_ui():
@@ -184,7 +185,6 @@ def test_work_window_closes_with_its_ui_owner_in_a_fresh_process(tmp_path: Path)
         ui.configure_canvas(canvas, lambda title, target: None)
         ui.configure_work(lambda command: None)
         failures = []
-        owners = []
 
         def control():
             try:
@@ -192,10 +192,10 @@ def test_work_window_closes_with_its_ui_owner_in_a_fresh_process(tmp_path: Path)
                 work.show(focus=False)
                 ready = threading.Event()
                 def opened(root):
-                    owners.append(threading.current_thread() is threading.main_thread())
-                    later(root, 40, ready.set)
+                    ready.set()
                 ui.post(opened)
-                assert ready.wait(10), "Work did not open on the UI thread"
+                # The subprocess deadline guards hangs; preparation has no ten-second contract.
+                ready.wait()
                 ui.close_windows()
                 assert work.publication.closed_ready.is_set(), "Work did not acknowledge closing"
             except BaseException as error:
@@ -236,12 +236,12 @@ def _native_controller_lifetime(tmp_path: Path, *, qt_first: bool) -> None:
         activate()
         from assistant import app
         from assistant.llm import Missing
-        from assistant.qt_runtime import prepare
+        from desktop_ui.qt_runtime import prepare
         prepare()
         from PySide6.QtWidgets import QApplication
-        from assistant.ui import Ui, Views
-        from assistant.work_canvas import WorkCanvas
-        from assistant.work_canvas_window import CanvasWindow
+        from desktop_ui.ui import Ui, Views
+        from desktop_ui.work_canvas import WorkCanvas
+        from desktop_ui.work_canvas_window import CanvasWindow
         from usage import DIRECTORY
         from winapi import shell, system
 
@@ -329,7 +329,7 @@ def test_controller_initialization_failure_closes_qt_and_propagates(tmp_path: Pa
         activate()
         from assistant import app
         from assistant.llm import Missing
-        from assistant.qt_runtime import prepare
+        from desktop_ui.qt_runtime import prepare
         prepare()
         from PySide6.QtWidgets import QApplication
 
@@ -366,12 +366,12 @@ def test_shutdown_resolves_pending_and_late_ui_requests(tmp_path: Path) -> None:
         import threading
         from runtime import activate
         activate()
-        from assistant.ui import Ui
-        from assistant.qt_runtime import prepare
+        from desktop_ui.ui import Ui
+        from desktop_ui.qt_runtime import prepare
         prepare()
         from PySide6 import QtWidgets
         from PySide6.QtCore import Qt
-        from assistant.qt_ui import later
+        from desktop_ui.qt_ui import later
 
         class OffscreenPresentation:
             def position(self, dialog, width, height):

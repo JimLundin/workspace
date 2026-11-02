@@ -22,8 +22,8 @@ lazy from PySide6.QtGui import QImage
 from assistant.browser import MAX_OUTPUT, Browser
 from assistant.browser_session import read_endpoint
 from assistant.browser_values import BrowserError, Group, InterruptedError, Snapshot, Tab, TargetList
-from assistant.qt_runtime import prepare
 from automation.json_value import Json
+from desktop_ui.qt_runtime import prepare
 from tests.browser_fixture import fixture
 from tests.native_browser_fixture import borrowed, disposable, dispose, hosted, request
 from tests.native_browser_tabs import verify_native_tabs

@@ -1,7 +1,7 @@
 """How shared glass surfaces read under each material and their owner's observations."""
 
-from assistant.ui_components.appearance import ATTENTION, CanvasBar, Capsule, Card, GlassLook, Menu, Scheme, Shade, SolidLook, look, reading, tokens
-from assistant.ui_components.meaning import Tint, Tone
+from desktop_ui.components.appearance import ATTENTION, CanvasBar, Capsule, Card, GlassLook, Menu, Scheme, Shade, SolidLook, look, reading, tokens
+from desktop_ui.components.meaning import Tint, Tone
 from winapi import appearance
 
 

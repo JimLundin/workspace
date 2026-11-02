@@ -2,7 +2,8 @@
 
 from dataclasses import replace
 
-from assistant.island_menu import (
+from assistant.meeting_detection import AutomaticStatus
+from desktop_ui.island_menu import (
     TILING,
     Chosen,
     Command,
@@ -20,7 +21,6 @@ from assistant.island_menu import (
     restores_focus,
     rows,
 )
-from assistant.meeting_detection import AutomaticStatus
 from protocol import Tool
 
 
