@@ -234,9 +234,9 @@ contracts.
 
 ## Reviewable interaction prototype
 
-The isolated worktree at
-`/home/jim/workspace-prototypes/unified-work-conversation-20261026` captures a
+The retired `prototype/unified-work-conversation-20261026` branch captures a
 single-file demo under `experiments/unified-work-conversation/prototype.html`.
+Its history is saved in the [consolidation archive](repository-consolidation.md).
 It uses fictional data, in-memory state, no network calls, and no persistence.
 Open the HTML file directly in a browser. A standalone copy is also supplied in
 Windows Downloads as `workspace-work-conversation-prototype.html`.
@@ -253,7 +253,7 @@ Captured on branch `prototype/unified-work-conversation-20261026`, commit
 All four guided walkthroughs ran in an isolated headless Chromium process
 without page errors. This is an interaction demonstration, not validation of
 live Teams delivery. No production state-machine decision has been validated
-by user review yet; the HTML shell stays on the throwaway branch.
+by user review yet; the HTML shell remains archived with the throwaway branch.
 
 ## First production slice
 

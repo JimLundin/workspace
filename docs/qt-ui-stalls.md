@@ -14,10 +14,12 @@ rebuilds the complete evidence and application-origin indexes. Notification
 projection then builds those proposals again for the side feed. Handling scans
 also reconstruct a Windows update's identity for every handling record.
 
-This investigation and fix are isolated in `workspace-qt-stalls`, on branch
-`investigate/qt-stalls`. The starting source snapshot is `d8d4956`; it includes the
-current uncommitted UI work, including retained bubble surfaces and the background
-audio meter. The shared checkout and Downloads deployment were not modified.
+This investigation and fix used the former `workspace-qt-stalls` worktree and
+`investigate/qt-stalls` branch. The starting source snapshot was `d8d4956`; it
+included the then-uncommitted UI work, retained bubble surfaces and background
+audio meter. The fixes were subsequently integrated into the product history.
+The retired worktree and branch are saved in the
+[consolidation archive](repository-consolidation.md).
 
 ## Reproduction and measured cause
 

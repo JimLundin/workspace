@@ -177,5 +177,6 @@ the earlier runtime/stub hashes and measurements remain applicable.
 The user authorized integration into local `main`. Preserve the other agent's
 pending source/index state when merging the UI diff, and issue a new receipt for
 the receiving checkout. Downloads deployment remains with the coordinating
-agent. The pre-rebase commits remain on
-`investigate/qt-stalls-before-latest-rebase` for reproducibility.
+agent. The pre-rebase commits are saved under
+`investigate/qt-stalls-before-latest-rebase` in the
+[consolidation archive](repository-consolidation.md) for reproducibility.

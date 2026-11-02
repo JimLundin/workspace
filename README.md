@@ -759,8 +759,9 @@ their libraries' storage. Tests exercise Workspace behavior and integration wiri
 
 On this laptop, develop in `C:\Users\Jim.Lundin\Projects\workspace` and use
 `Dev.cmd` as described in [the iteration pipeline](docs/iteration-pipeline.md).
-The Linux path `/home/jim/workspace` redirects to that checkout. The original
-Linux tree is preserved at `/home/jim/workspace-linux-reference`.
+Use `main` in that single development checkout. The Linux path
+`/home/jim/workspace` redirects to it. Retired checkouts and branch history are
+saved in the [consolidation archive](docs/repository-consolidation.md).
 
 Use `Dev.cmd watch` for affected tests on save, or narrow with
 `Dev.cmd watch --tests tests/test_bar_model.py`. `Dev.cmd preview` restarts a real

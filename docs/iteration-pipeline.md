@@ -9,9 +9,9 @@ the installed `.runtime` through a local `.pth` file. The dependency folder is n
 copied or rebuilt for development. Keep the Downloads client separate so edits
 and test execution do not replace files in a running application.
 
-`/home/jim/workspace` links to the active Windows checkout. The previous Linux
-tree is preserved at `/home/jim/workspace-linux-reference`; use Windows tools for
-ongoing work. The same eighteen native checks took 34.8 seconds from WSL source
+Use `main` in this single development checkout. `/home/jim/workspace` links to it.
+The previous Linux tree is saved in the [consolidation archive](repository-consolidation.md);
+use Windows tools for ongoing work. The same eighteen native checks took 34.8 seconds from WSL source
 and 13.3 seconds from identical Windows-local source in a paired measurement.
 
 ```powershell

@@ -2,8 +2,9 @@
 
 The active development checkout is `C:\Users\Jim.Lundin\Projects\workspace`
 (`/mnt/c/Users/Jim.Lundin/Projects/workspace` from WSL). Edit this checkout and
-run its native Windows tools. `/home/jim/workspace` links to this Windows checkout;
-the original Linux tree is preserved at `/home/jim/workspace-linux-reference`.
+run its native Windows tools. Use `main` in this single development checkout.
+`/home/jim/workspace` links to it. Retired checkouts and branch history are saved
+in the [consolidation archive](docs/repository-consolidation.md).
 
 Workspace owns the Windows keyboard, dictation, assistant, floating desktop bar,
 automation and the native Qt work canvas
