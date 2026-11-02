@@ -342,7 +342,9 @@ async def run(local: Agent, task: str, prompt: str, specs: tuple[ToolSpec, ...])
     async with AsyncOpenAI(
         base_url=local.settings.base_url,
         api_key=local.settings.api_key,
-        max_retries=0,
+        # Let the SDK retry transient request failures with backoff and Retry-After.
+        # Retry only the model request; restarting the agent could repeat completed effects.
+        max_retries=2,
         timeout=600,
         http_client=http,
     ) as client:

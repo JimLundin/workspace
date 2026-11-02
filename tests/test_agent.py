@@ -518,11 +518,35 @@ def test_the_agent_stops_after_its_step_limit(tmp_path: Path) -> None:
         assert rig.window.log[-1] == "done Stopped after 3 steps, not finished."
 
 
-def test_model_failures_end_the_task(tmp_path: Path) -> None:
-    with fake_endpoint() as endpoint:
-        rig = Rig(endpoint, Reply(b'{"error": {"message": "model overloaded"}}', status=503), work=durable(tmp_path))
-        rig.run()
-        assert "503" in rig.window.log[-1] and "model overloaded" in rig.window.log[-1]
+def test_transient_endpoint_failures_resume_without_repeating_completed_effects(tmp_path: Path) -> None:
+    # Defect: disabling request retries blocks recoverable work; restarting the run repeats effects.
+    for status in (429, 503):
+        with fake_endpoint() as endpoint:
+            rig = Rig(
+                endpoint,
+                calls(("set_clipboard", {"text": "saved"})),
+                Reply(b'{"error": {"message": "temporarily unavailable"}}', status=status),
+                says("Saved."),
+                work=durable(tmp_path),
+            )
+            rig.run("Save this text to the clipboard.")
+            assert rig.window.log[-1] == "done Saved."
+            assert rig.machine.log == ["clipboard saved"]
+            assert len(endpoint.received) == 3
+            assert endpoint.received[1].body == endpoint.received[2].body
+            assert rig.results() == ["Copied."]
+
+
+def test_permanent_and_exhausted_endpoint_failures_end_the_turn(tmp_path: Path) -> None:
+    # Defect: retrying invalid/auth requests or unlimited retries leaves the task running.
+    for status, attempts in ((400, 1), (401, 1), (403, 1), (429, 3), (503, 3)):
+        with fake_endpoint() as endpoint:
+            rig = Rig(endpoint, Reply(b'{"error": {"message": "request refused"}}', status=status), work=durable(tmp_path))
+            rig.run()
+            assert len(endpoint.received) == attempts
+            assert rig.window.log[-1].startswith("problem Endpoint request failed:")
+            assert str(status) in rig.window.log[-1] and "request refused" in rig.window.log[-1]
+            assert not rig.machine.log
 
 
 def test_effects_are_recorded_as_durable_actions(tmp_path: Path) -> None:

@@ -14,7 +14,7 @@ from assistant.task_profiles import General
 from automation.execution import WorkExecution
 from automation.json_value import Json
 from automation.presentation import Answer, LiveMessage, ReasoningSummary, StreamState, Succeeded, ToolActivity, ToolStatus
-from tests.fake_endpoint import FakeEndpoint, Received, fake_endpoint
+from tests.fake_endpoint import FakeEndpoint, Received, Reply, fake_endpoint
 from tests.test_agent import FakeMachine, FakeWindow, calls, durable, message, no_feed, response, says
 from tests.test_agent_window import RecordingWindow
 
@@ -259,6 +259,25 @@ def test_stop_closes_a_stalled_stream_and_preserves_earlier_tool_results(tmp_pat
         assert follow_up.run("What did it say?")
         assert b'"output":"clipped\\n[observation_id: ' in endpoint.last.body
         assert b"Too late." not in endpoint.last.body and b"The workbook" not in endpoint.last.body
+
+
+def test_stop_interrupts_provider_backoff_without_another_request(tmp_path: Path) -> None:
+    # Defect: request recovery can keep retrying after the caller stops its run.
+    stop = threading.Event()
+    panel = ObservedWindow(stop.set)
+    with fake_endpoint() as endpoint:
+
+        def respond(_: Received) -> Reply:
+            stop.set()
+            return Reply(b'{"error": {"message": "rate limited"}}', status=429)
+
+        endpoint.respond = respond
+        agent = make_agent(endpoint, panel, stop, work=durable(tmp_path))
+        with running(agent, panel) as worker:
+            worker.join(timeout=2)
+            assert not worker.is_alive(), "Stopping did not interrupt provider backoff."
+        assert len(endpoint.received) == 1
+        assert panel.state.status == "Stopped"
 
 
 def test_ending_a_stream_early_keeps_visible_partial_text_and_reports_the_failure(tmp_path: Path) -> None:

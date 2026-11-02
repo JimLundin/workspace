@@ -154,7 +154,7 @@ def test_endpoint_failure_and_step_limit_never_report_completion(tmp_path: Path)
         endpoint.replies = [Reply(b'{"error":{"message":"model unavailable"}}', status=503)]
         outcome = execution(settings, source, errors).run_work(first, store, FakeWindow(), threading.Event())
         assert isinstance(outcome, Waiting) and isinstance(outcome.reason, Blocked)
-        assert "Endpoint request failed" in outcome.reason.reason and len(endpoint.received) == 1
+        assert "Endpoint request failed" in outcome.reason.reason and len(endpoint.received) == 3
         assert store.finish(first.run, outcome, at=time.time()) is not None
         second = request(store, "limited", "Inspect the computer.")
         work = WorkExecution(second, store, Resources())
@@ -164,7 +164,7 @@ def test_endpoint_failure_and_step_limit_never_report_completion(tmp_path: Path)
         assert not agent.run(second.task.prompt)
         result = work.outcome(agent.report, stop)
         assert isinstance(result, Waiting) and isinstance(result.reason, Blocked)
-        assert "not finished" in result.reason.reason and len(endpoint.received) == 2
+        assert "not finished" in result.reason.reason and len(endpoint.received) == 4
 
 
 def test_runtime_checks_are_recorded_before_candidate_import_and_failures_remain_fixable(tmp_path: Path) -> None:
