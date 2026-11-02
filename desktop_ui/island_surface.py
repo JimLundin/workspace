@@ -41,7 +41,7 @@ from desktop_ui.island_layout import (
     lines,
     live,
 )
-from desktop_ui.island_menu import Disclosure, Item, Live, Menu, Rule, within
+from desktop_ui.island_menu import Disclosure, Item, Live, Menu, Rule, selectable, within
 from desktop_ui.island_model import Action, Badge, CapsuleView, Control, Glyph, Key, Marker, Part, Spinner, Text
 from desktop_ui.qt_runtime import prepare
 from desktop_ui.qt_ui import EventLoop
@@ -241,7 +241,7 @@ class MenuRow(QtWidgets.QAbstractButton):
         super().__init__(capsule)
         self.capsule = capsule
         self.line = line
-        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setCursor(Qt.CursorShape.PointingHandCursor if selectable(line.row) else Qt.CursorShape.ArrowCursor)
         self.setFocusPolicy(Qt.FocusPolicy.NoFocus)  # The window navigates; rows show its selection.
         self.clicked.connect(self.picked)
         self.describe()
@@ -296,7 +296,8 @@ class MenuRow(QtWidgets.QAbstractButton):
 
     def enterEvent(self, event: QtGui.QEnterEvent) -> None:
         super().enterEvent(event)
-        self.capsule.window_.owner.select(self.line.index)
+        if selectable(self.line.row):
+            self.capsule.window_.owner.select(self.line.index)
 
     def paintEvent(self, event: QtGui.QPaintEvent) -> None:
         painter = QtGui.QPainter(self)

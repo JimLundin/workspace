@@ -16,7 +16,7 @@ lazy from PySide6.QtTest import QTest
 from assistant.meeting_detection import AutomaticStatus
 from assistant.recording_state import RecordingState
 from desktop_ui.desktop_bar import BarActions, BarObservations, DesktopBar
-from desktop_ui.island_menu import Menu
+from desktop_ui.island_menu import Menu, Rule
 from desktop_ui.island_model import Agent, Job, Key
 from desktop_ui.island_surface import SHADOW, TOP, ControlButton, MenuRow
 from desktop_ui.qt_runtime import prepare
@@ -524,6 +524,32 @@ def test_tool_choice_acts_on_the_window_captured_before_the_menu_opened() -> Non
         QTest.mouseClick(menu_row(bar, "Window tiling"), QtCore.Qt.MouseButton.LeftButton)
         QTest.mouseClick(menu_row(bar, "Float or tile the active window"), QtCore.Qt.MouseButton.LeftButton)
         assert invoked == [(Tool.TILE_FLOAT, 42)] and focused == [42] and bar.expanded is None
+    finally:
+        closed(app, bar)
+
+
+def test_menu_dividers_never_take_the_pointer_selection_or_highlight() -> None:
+    # Defect: entering a divider selects its row and paints the action highlight
+    # behind the line, even though keyboard navigation and clicks skip it.
+    app = application()
+    invoked: list[str] = []
+    bar = DesktopBar(recorded(invoked), native_shell=False, observations=BarObservations(motion=lambda: False))
+    try:
+        bar.open_menu()
+        island = bar.window.capsules[Key.ISLAND]
+        for divider in (row for row in island.rows if row.line.row is Rule.SEPARATOR):
+            action = island.rows[divider.line.index - 1]
+            point = QtCore.QPointF(action.rect().center())
+            app.sendEvent(action, QtGui.QEnterEvent(point, point, QtCore.QPointF(action.mapToGlobal(point.toPoint()))))
+            before = divider.grab().toImage()
+            point = QtCore.QPointF(divider.rect().center())
+            app.sendEvent(divider, QtGui.QEnterEvent(point, point, QtCore.QPointF(divider.mapToGlobal(point.toPoint()))))
+            opened = menu(bar)
+            assert opened is not None and opened.selected == action.line.index, "Hover selected a menu divider."
+            assert divider.grab().toImage() == before, "Hover painted a highlight behind a menu divider."
+            assert divider.cursor().shape() == QtCore.Qt.CursorShape.ArrowCursor
+            QTest.mouseClick(divider, QtCore.Qt.MouseButton.LeftButton)
+            assert menu(bar) is not None and not invoked, "Clicking a divider acted on the menu."
     finally:
         closed(app, bar)
 
