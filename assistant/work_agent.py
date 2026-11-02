@@ -17,7 +17,7 @@ from typing import assert_never
 lazy import automation.presentation
 lazy from assistant import agent_session
 lazy from assistant.agent_window import AgentWindow
-lazy from assistant.feed_origin import FeedRequest
+lazy from assistant.feed_origin import FeedRequest, Initiation
 lazy from assistant.notification_text import prepared_answer
 lazy from assistant.owner_calls import OwnerDispatcher, OwnerReply
 lazy from assistant.work_commands import AnswerTask, FollowUp, Redirect, Submit, WorkCommand
@@ -90,6 +90,15 @@ def in_conversation(task: Task, conversation_id: str | None) -> bool:
     return conversation_id is not None and conversation_of(task) == conversation_id
 
 
+def source_is_automatic(task: Task) -> bool:
+    """Notification admission owns this durable identity namespace."""
+    match task.source:
+        case RequestSource(profile=FeedHandoff()):
+            return task.id.startswith("workspace-notification:")
+        case RequestSource() | RoutineSource():
+            return False
+
+
 def active(task: Task) -> bool:
     match task.state:
         case TaskStatus.PAUSED | Waiting(Blocked() | Until()):
@@ -99,11 +108,13 @@ def active(task: Task) -> bool:
 
 
 def new_turn(previous: Task, task: Task) -> bool:
-    """A changed goal, leaving a wait or a different run starts a fresh turn for the same task."""
+    """A changed goal or execution break starts a turn; user input continues it."""
     if task.goal_revision != previous.goal_revision:
         return True
     match previous.state, task.state:
         case Waiting(), Waiting():
+            return False
+        case Waiting(Question() | Approval()), _:
             return False
         case Waiting(), _:
             return True
@@ -115,7 +126,15 @@ def new_turn(previous: Task, task: Task) -> bool:
 
 def turn_ended(task: Task) -> bool:
     match task.state:
-        case Waiting() | Completed() | Failed() | TaskStatus.PAUSED | TaskStatus.CANCELLED:
+        case Waiting(reason):
+            match reason:
+                case Blocked() | Until():
+                    return True
+                case Question() | Approval():
+                    return False
+                case _:
+                    assert_never(reason)
+        case Completed() | Failed() | TaskStatus.PAUSED | TaskStatus.CANCELLED:
             return True
         case TaskStatus.READY | Running() | Interrupted():
             return False
@@ -436,7 +455,8 @@ class WorkAgent:
     def _display(self, task: Task, review: ApprovalReview | None) -> None:
         match task.source:
             case RequestSource(profile=FeedHandoff(item, title)):
-                source: FeedRequest | None = FeedRequest(item, title)
+                initiation = Initiation.AUTOMATIC if source_is_automatic(task) else Initiation.REQUESTED
+                source: FeedRequest | None = FeedRequest(item, title, initiation=initiation)
             case RequestSource() | RoutineSource():
                 source = None
         previous = self._displayed
@@ -476,7 +496,10 @@ class WorkAgent:
                 prepared_answer(result)
                 window.done(result)
             case Failed(reason):
-                window.problem(reason)
+                if source_is_automatic(task):
+                    window.say(reason)
+                else:
+                    window.problem(reason)
             case TaskStatus.CANCELLED:
                 window.done("Stopped.")
             case TaskStatus.PAUSED:
@@ -497,7 +520,10 @@ class WorkAgent:
                     self._clear_input()
                     self._panel().say("An approval needs a fresh preview. Open Work to request it.")
             case Blocked(explanation):
-                self._panel().problem(explanation)
+                if source_is_automatic(task):
+                    self._panel().say(explanation)
+                else:
+                    self._panel().problem(explanation)
             case Until(_, explanation):
                 self._panel().say(f"Waiting: {explanation}")
             case _:
@@ -600,7 +626,10 @@ class WorkAgent:
                     self.window.say(text)
                     return
                 case automation.presentation.Problem(text, _):
-                    self.window.problem(text)
+                    if source_is_automatic(task):
+                        self.window.say(text)
+                    else:
+                        self.window.problem(text)
                     return
                 case automation.presentation.Answer(text=text) | automation.presentation.ReasoningSummary(text=text):
                     live = self._live

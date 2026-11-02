@@ -95,9 +95,9 @@ def wait_until(check: Callable[[], bool]) -> None:
         time.sleep(0.03)
 
 
-def test_every_notification_activates_work_with_retry_and_durable_identity(tmp_path: Path) -> None:
-    # Defect: hidden apps or reactions never activate the agent, a queue refusal
-    # loses a notification, or polling/restart repeats an already accepted task.
+def test_only_reviewed_actionable_notifications_activate_work_with_retry(tmp_path: Path) -> None:
+    # Defect: arrivals bypass triage and queue full tasks for reactions, hidden
+    # apps or FYI; or a queue refusal loses a reviewed actionable notification.
     tasks = TaskStore(tmp_path / "notifications.sqlite3")
     refused = threading.Event()
 
@@ -109,29 +109,41 @@ def test_every_notification_activates_work_with_retry_and_durable_identity(tmp_p
 
     reaction = Update(TeamsActivity("reaction"), "Anna liked a message", "👍", "Teams", 1, UpdateKind.REACTION)
     hidden = Update(WindowsNotice(NoticeKey(7, 8), "hidden-app"), "Approval", "Review the supplier approval.", "Outlook", 2)
-    feed = PendingFeed(Feed(updates=(reaction,)), Notices((hidden,), filter=NotificationFilter(frozenset({"hidden-app"}))))
+    actionable = Update(TeamsActivity("review"), "Supplier review", "Please review the figures.", "Teams", 3)
+    quiet = Update(TeamsActivity("fyi"), "Status", "Routine FYI.", "Teams", 4)
+    feed = PendingFeed(Feed(updates=(reaction, actionable, quiet)), Notices((hidden,), filter=NotificationFilter(frozenset({"hidden-app"}))))
     store = MemoryStore()
-    triage = TriageFixture(store, lambda _batch, _rules: "{}", submit=submit)
+
+    def model(batch: tuple[Candidate, ...], _rules: tuple[str, ...]) -> str:
+        return output(
+            ([item.identity for item in batch if item.body.startswith("Please review")], "action"),
+            ([item.identity for item in batch if not item.body.startswith("Please review")], "quiet"),
+        )
+
+    triage = TriageFixture(store, model, submit=submit)
     try:
         triage.observe(feed)
-        wait_until(lambda: len(tasks.list_tasks()) == 2)
+        triage.advance()
+        wait_until(lambda: bool(triage.notifications.accepted))
         initial = tasks.list_tasks()
-        assert all(item.reaction for item in triage.candidates), "Activation must also reach notifications excluded from triage."
+        assert len(initial) == 1
         for _ in range(20):
             triage.observe(feed)
         assert tasks.list_tasks() == initial
-        revised = replace(hidden, text="Review the revised supplier approval.")
-        triage.observe(replace(feed, notices=replace(feed.notices, updates=(revised,))))
-        wait_until(lambda: len(tasks.list_tasks()) == 3)
+        revised = replace(actionable, text="Please review the revised figures.")
+        feed = replace(feed, teams=replace(feed.teams, updates=(reaction, revised, quiet)))
+        triage.observe(feed)
+        triage.advance()
+        wait_until(lambda: len(tasks.list_tasks()) == 2)
         assert all(isinstance(task.source, RequestSource) and isinstance(task.source.profile, FeedHandoff) for task in tasks.list_tasks())
         assert all("already-authorized" in task.prompt and "untrusted" in task.prompt for task in tasks.list_tasks())
     finally:
         triage.close()
-    restarted = TriageFixture(store, lambda _batch, _rules: "{}", submit=submit)
+    restarted = TriageFixture(store, model, submit=submit)
     try:
         restarted.observe(feed)
         wait_until(lambda: bool(restarted.notifications.accepted))
-        assert len(tasks.list_tasks()) == 3
+        assert len(tasks.list_tasks()) == 2
     finally:
         restarted.close()
 
@@ -210,12 +222,12 @@ def test_inflight_model_cannot_overwrite_new_voice_feedback(tmp_path: Path) -> N
                 )
             )
         )
-        wait_until(lambda: len(submitted) == 2)
+        assert not submitted, "Unreviewed arrivals must not bypass the pending review."
         triage.command(SaveRule("Ignore fictional review notices."))
         release.set()
         triage.advance()
         wait_until(lambda: triage.board.pending == 0)
-        assert not triage.board.actions
+        assert not triage.board.actions and not submitted
     finally:
         release.set()
         triage.close()

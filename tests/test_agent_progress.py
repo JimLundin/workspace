@@ -3,9 +3,26 @@
 from dataclasses import replace
 
 from assistant.agent_progress import Progress, advance_progress, visible
-from assistant.agent_session import CanvasNotice, CanvasSettled, ChatMessage, Session, transition
+from assistant.agent_session import Begin, CanvasNotice, CanvasSettled, ChatMessage, Session, transition
 from assistant.notifications import PhaseKey, Turn, body, steps
 from automation.presentation import Answer, Finished, ReasoningSummary, StreamState, Succeeded, ToolActivity
+
+
+def test_progress_and_completion_share_one_card_for_the_requested_outcome() -> None:
+    # Defect: reasoning/action phases each settle into their own card, leaving
+    # a stopped action card alongside the finished answer for the same request.
+    session = transition(Session(identity="run"), Begin("Compare plans", 1))
+    session = transition(session, ReasoningSummary("read", "Checking the plans", 2))
+    session = transition(session, ToolActivity("read", "read_file", "plan.md", 3))
+    progress = advance_progress(Progress(), session, 10)
+    key = progress.toasts[0].key
+    session = transition(session, ReasoningSummary("compare", "Comparing dates", 4))
+    session = transition(session, Answer("result", "The newer plan is approved.", 5, StreamState.COMPLETE))
+    session = transition(session, Finished())
+    progress = advance_progress(progress, session, 11)
+    cards = visible(progress, 5).toasts
+    assert [toast.key for toast in cards] == [key]
+    assert body(cards[0].content) == "The newer plan is approved."
 
 
 def test_tools_grow_within_a_phase_and_new_public_updates_start_the_next() -> None:

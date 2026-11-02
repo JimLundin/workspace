@@ -20,7 +20,7 @@ from assistant.browser import MAX_OUTPUT, Browser
 from assistant.browser_requests import BrowserRequest, web_url
 from assistant.browser_session import MAX_RESPONSE, Attached, BrowserSession, Cdp, Managed, Product, Separate, Source
 from assistant.browser_tabs import TabStrip
-from assistant.browser_values import GROUP, TAB, BrowserError, Group, InterruptedError, NavigationContextError, Tab, evaluated
+from assistant.browser_values import GROUP, TAB, BrowserError, DisconnectedError, Group, InterruptedError, NavigationContextError, Tab, evaluated
 from automation.json_value import Json
 
 VIEWPORT_PNG = base64.b64decode(
@@ -295,6 +295,26 @@ def test_cdp_refuses_non_loopback_debugging_and_proxy_use() -> None:
         finally:
             server.shutdown()
             thread.join(timeout=2)
+
+
+def test_browser_releases_a_dead_connection_before_an_explicit_reconnect(tmp_path: Path) -> None:
+    # Defect: connect sees an attached session after its CDP transport died and
+    # reuses that dead client forever, including the background reader's retries.
+    lost = Channel(OSError("Edge closed its connection"))
+    fresh = Channel.results({"targetInfos": []})
+    opener = ScriptedSessions(BrowserSession(Cdp(lost), Attached(Product.EDGE)), BrowserSession(Cdp(fresh), Attached(Product.EDGE)))
+    browser = Browser(tmp_path, source=Product.EDGE, opener=opener)
+    try:
+        browser.connect(threading.Event())
+        with TestCase().assertRaises(DisconnectedError):
+            browser.request(command("tabs"), threading.Event())
+        assert browser.connection is None and lost.closed
+        assert len(opener.opened) == 1, "A failed request must never reconnect or repeat itself."
+        browser.connect(threading.Event())
+        assert decoded(browser.request(command("tabs"), threading.Event()).text)["tabs"] == []
+        assert len(opener.opened) == 2 and len(fresh.sent) == 1
+    finally:
+        browser.close()
 
 
 def test_browser_initialization_and_status_do_not_launch_or_create_a_profile(tmp_path: Path) -> None:

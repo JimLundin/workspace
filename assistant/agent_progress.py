@@ -2,13 +2,12 @@
 
 from collections.abc import Iterable, Iterator
 from dataclasses import dataclass, field, replace
-from hashlib import sha256
 from textwrap import shorten
 
 from assistant.agent_session import ChatMessage, Message, Snapshot
 from assistant.canvas_session import redirect_session
+from assistant.feed_origin import Initiation
 from assistant.notifications import (
-    Busy,
     Entry,
     Expires,
     Held,
@@ -17,12 +16,11 @@ from assistant.notifications import (
     Stack,
     Toast,
     Turn,
-    Working,
     advance,
+    observe,
     reading_seconds,
-    settled,
 )
-from automation.presentation import Answer, ReasoningSummary, ToolActivity
+from automation.presentation import Answer, ReasoningSummary
 
 TRAIL_LENGTH = 3
 
@@ -41,73 +39,42 @@ class Progress:
 
 
 def phase_messages(messages: Iterable[Message]) -> Iterator[Message]:
-    # Redirect removal must not shift phase indices and replay expired activity.
+    # Notification investigations stay in history; their decisions and canvas
+    # findings use the independent navigation projection when attention is needed.
+    automatic = False
     for message in messages:
         match message:
-            case ChatMessage(speaker="You"):
-                yield message
+            case ChatMessage(speaker="You", source=source):
+                automatic = source is not None and source.initiation is Initiation.AUTOMATIC
+                if not automatic:
+                    yield message
             case ChatMessage(source=source) if source is not None and source.identity.startswith("canvas:"):
                 continue
+            case _ if automatic:
+                continue
+            case ReasoningSummary(text=text, created_at=created):
+                if text.strip():
+                    yield ChatMessage("Workspace", text, created)
             case _:
                 yield message
 
 
 def phases(session: Snapshot) -> Iterator[Phase]:
-    """A public update starts a phase; its tool calls remain inside that phase.
-
-    SDK reasoning *summaries* are public status text. Raw reasoning is never
-    supplied here. Streaming updates retain their message identity and bubble.
-    """
-    entries: tuple[Entry, ...] = ()
-    identity = ""
-    at = 0.0
-    index = -1
-
-    def phase() -> Phase:
-        return Phase(PhaseKey(identity), Turn(index, entries, settled(entries), at))
-
-    for position, message in enumerate(phase_messages(session.messages)):
-        match message:
-            case ChatMessage(speaker="You", created_at=created):
-                if entries:
-                    yield phase()
-                identity, at, index = f"request:{created}", created, position
-                entries = (Entry(position, message),)
-            case ReasoningSummary(identity=key, text=text, created_at=created):
-                if not text.strip():
-                    continue
-                match entries:
-                    case () | (Entry(message=ChatMessage(speaker="You")),):
-                        pass
-                    case _:
-                        yield phase()
-                        entries = ()
-                identity, at, index = "summary:" + key, created, position
-                entries = (*entries, Entry(position, ChatMessage("Workspace", text, created)))
-            case Answer(text=text, created_at=created) | ChatMessage(speaker="Workspace" | "Error", text=text, created_at=created):
-                if not text.strip():
-                    continue
-                match entries:
-                    case () | (Entry(message=ChatMessage(speaker="You")),):
-                        pass
-                    case _:
-                        yield phase()
-                        entries = ()
-                identity = update_identity(message)
-                at, index = created, position
-                entries = (*entries, Entry(position, message))
-            case ToolActivity(created_at=created):
-                if not entries:
-                    identity, at, index = "tool:" + message.identity, created, position
-                entries = (*entries, Entry(position, message))
+    """One requested outcome owns its public updates, actions and final reply."""
+    messages = tuple(phase_messages(session.messages))
+    latest = next((message for message in reversed(session.messages) if isinstance(message, ChatMessage) and message.speaker == "You"), None)
+    automatic = latest is not None and latest.source is not None and latest.source.initiation is Initiation.AUTOMATIC
+    if messages and not any(isinstance(message, ChatMessage) and message.speaker == "You" for message in messages):
+        messages = (ChatMessage("You", "", 0), *messages)
+    # A quiet automatic task must not synthesize an empty unprompted progress card.
+    projected = replace(session, messages=messages, phase=session.phase if messages and not automatic else "idle")
+    for content in observe(projected):
+        match content:
+            case Turn(request=request, created_at=at):
+                identity = f"request:{at}" if request >= 0 else "unprompted:" + session.identity
+                yield Phase(PhaseKey(identity), content)
             case _:
-                continue
-    if entries:
-        current = phase()
-        if session.busy:
-            busy = Busy.STOPPING if session.stopping else Busy.WAITING if session.waiting else Busy.THINKING
-            current = replace(current, turn=replace(current.turn, state=Working(session.generation, busy, len(session.queued))))
-        yield current
+                pass
 
 
 def advance_progress(previous: Progress, session: Snapshot, now: float) -> Progress:
@@ -134,14 +101,6 @@ def advance_progress(previous: Progress, session: Snapshot, now: float) -> Progr
             continue
         toasts = (*toasts, Toast(phase.key, phase.turn, lifetime, toast.order if toast is not None else navigation.serial + len(toasts) + 1))
     return Progress(navigation, observed, toasts)
-
-
-def update_identity(message: Answer | ChatMessage) -> str:
-    match message:
-        case Answer(identity=key):
-            return "answer:" + key
-        case ChatMessage(text=text, created_at=at):
-            return f"update:{at}:" + sha256(text.encode()).hexdigest()
 
 
 def visible(progress: Progress, capacity: int) -> Stack:

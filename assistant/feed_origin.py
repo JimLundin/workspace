@@ -1,6 +1,6 @@
 """Source identity for compact feed badges, independent of notification text."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 
 
@@ -38,7 +38,13 @@ def application(name: str, app_id: str = "") -> Origin:
     return Origin(App.WINDOWS, name or App.WINDOWS.value)
 
 
+class Initiation(Enum):
+    REQUESTED = "requested"
+    AUTOMATIC = "automatic"
+
+
 @dataclass(frozen=True, slots=True)
 class FeedRequest:
     identity: str
     title: str
+    initiation: Initiation = field(default=Initiation.REQUESTED, kw_only=True)

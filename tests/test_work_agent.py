@@ -9,6 +9,7 @@ from pathlib import Path
 
 from assistant.agent_session import ChatMessage
 from assistant.notification_text import prepared_answer
+from assistant.notifications import Busy, Settled, Stack, Turn, TurnKey, Working, advance, body
 from assistant.work_agent import WorkAgent
 from assistant.work_commands import (
     AddPreference,
@@ -41,7 +42,7 @@ from automation.ipc import (
     ReviewEvent,
     StartMeeting,
 )
-from automation.presentation import Answer, Said, StreamState
+from automation.presentation import Answer, Said, StreamState, Succeeded, ToolActivity
 from automation.routines import Every, Once, RoutineStore
 from automation.store import TaskStore
 from automation.task import (
@@ -498,6 +499,47 @@ def test_streaming_rejects_superseded_runs_and_completion_comes_from_the_journal
         rig.refresh()
         count = sum(isinstance(message, ChatMessage) and message.text == "Verified durable result" for message in rig.panel.state.messages)
         assert count == 1 and not rig.agent.running() and rig.finished == [False]
+
+
+def test_approval_and_resumed_action_keep_one_notification_card(tmp_path: Path) -> None:
+    # Defect: ending the UI turn at each approval cancels its running action row,
+    # then resuming creates a second card alongside the falsely stopped card.
+    with work(tmp_path) as rig:
+        rig.agent.start("Open the workbook")
+        rig.refresh()
+        claim = rig.tasks.claim("worker-one", "first-run", at=rig.clock())
+        assert claim is not None
+        rig.bridge.publish(LogEvent(claim.run, ToolActivity("open", "open_file", "budget.xlsx", rig.clock())))
+        rig.refresh()
+        stack = advance(Stack(), rig.panel.snapshot(), 100)
+        request = Approval("open-approval", "Open this workbook?", "budget.xlsx", "a" * 64)
+        review = ApprovalReview(claim.task.id, 0, request, "Open the workbook", "budget.xlsx")
+        rig.tasks.finish(claim.run, Waiting(request), at=rig.clock())
+        rig.bridge.publish(ReviewEvent(claim.run, review))
+        rig.refresh()
+        stack = advance(stack, rig.panel.snapshot(), 101)
+        assert len(stack.toasts) == 1
+        waiting = stack.toasts[0].content
+        assert isinstance(waiting, Turn) and isinstance(waiting.state, Working) and waiting.state.phase is Busy.WAITING
+        rig.panel.input_presented(request.id)
+        assert rig.panel.respond(request.id, ApprovalDecision.APPROVED)
+        rig.refresh()
+        stack = advance(stack, rig.panel.snapshot(), 102)
+        resumed = rig.tasks.claim("worker-one", "resumed-run", at=rig.clock())
+        assert resumed is not None
+        rig.bridge.publish(LogEvent(resumed.run, ToolActivity("open", "open_file", "budget.xlsx", rig.clock(), Succeeded("Opened"))))
+        rig.bridge.publish(LogEvent(resumed.run, Answer("reply", "The workbook is open.", rig.clock(), StreamState.COMPLETE)))
+        rig.refresh()
+        rig.tasks.finish(resumed.run, Completed("The workbook is open.", ("Window is visible",)), at=rig.clock())
+        rig.refresh()
+        stack = advance(stack, rig.panel.snapshot(), 103)
+        assert [toast.key for toast in stack.toasts] == [TurnKey(0)]
+        finished = stack.toasts[0].content
+        assert isinstance(finished, Turn) and finished.state is Settled.FINISHED
+        assert body(finished) == "The workbook is open."
+        actions = tuple(message for message in rig.panel.snapshot().messages if isinstance(message, ToolActivity))
+        assert len(actions) == 1 and actions[0].outcome == Succeeded("Opened")
+        assert "stopped" not in rig.panel.all_text().lower()
 
 
 def test_routine_and_context_commands_persist_without_implicit_enablement(tmp_path: Path) -> None:
