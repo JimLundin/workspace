@@ -33,6 +33,7 @@ from assistant.feed_sources import (
     origin,
     triage_evidence,
 )
+from assistant.notification_agent import received
 from assistant.notification_sources import Notices, NotificationFilter
 from tests.communications_fixture import communication_feed
 from winapi.system_notices import NoticeKey
@@ -83,7 +84,8 @@ def test_each_source_variant_owns_its_attention_key_origin_and_evidence() -> Non
 
 
 def test_pending_listing_keeps_filtered_notices_unhandled_and_replies_until_they_retire() -> None:
-    # Defect: filtering a notice handles it, or pending work drops a delivered reply before the person sees it.
+    # Defect: filtering handles a notice or prevents activation, incoming chat
+    # work is lost, or a delivered reply activates fresh notification work.
     feed = PendingFeed(
         teams=Feed(
             conversations=(CHAT,),
@@ -97,6 +99,7 @@ def test_pending_listing_keeps_filtered_notices_unhandled_and_replies_until_they
     # The filtered notice is visible elsewhere, never quoted to triage.
     assert [item.kind for item in triage_evidence(feed)] == [SourceKind.CHAT, SourceKind.WINDOWS]
     assert [item.kind for item in pending] == [SourceKind.CHAT, SourceKind.WINDOWS, SourceKind.REPLY]
+    assert [item.kind for item in received(feed)] == [SourceKind.CHAT, SourceKind.WINDOWS, SourceKind.WINDOWS]
 
 
 def test_chat_evidence_names_its_exact_message_for_research() -> None:

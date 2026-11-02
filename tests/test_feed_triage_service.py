@@ -6,15 +6,17 @@ from collections.abc import Callable
 from dataclasses import replace
 from pathlib import Path
 
-from assistant.communications import Feed, TeamsActivity, Update
+from assistant.communications import Feed, TeamsActivity, Update, UpdateKind, WindowsNotice
 from assistant.feed_contracts import ChooseSolution, DismissItem, Disposition, ReadFeed, RejectProposal, SaveRule, StoredBoard
 from assistant.feed_sources import Candidate, Excerpt, PendingFeed
 from assistant.feed_triage import Assessment, Board, decode, proposal_revision, saved
 from assistant.feed_triage_service import RejectedError, Triage, classify
 from assistant.llm import Settings
+from assistant.notification_sources import Notices, NotificationFilter
 from assistant.work_bridge_contracts import BridgeCommand
 from automation.actions import Resources
 from automation.execution import WorkExecution
+from automation.store import TaskStore
 from automation.task import ActionNotApplied, ActionVerified, FeedHandoff, Profile, RequestSource
 from tests.fake_endpoint import fake_endpoint
 from tests.feed_fixture import TriageFixture, feed_bridge
@@ -22,6 +24,7 @@ from tests.feed_source_fixture import captured
 from tests.json_fixture import json_object, json_rows, json_text
 from tests.test_feed_triage import output
 from tests.test_work_actions import claimed
+from winapi.system_notices import NoticeKey
 lazy from assistant.feed_agent_tools import SPECS
 lazy from tests.test_agent import ToolRig, durable, says
 
@@ -92,6 +95,47 @@ def wait_until(check: Callable[[], bool]) -> None:
         time.sleep(0.03)
 
 
+def test_every_notification_activates_work_with_retry_and_durable_identity(tmp_path: Path) -> None:
+    # Defect: hidden apps or reactions never activate the agent, a queue refusal
+    # loses a notification, or polling/restart repeats an already accepted task.
+    tasks = TaskStore(tmp_path / "notifications.sqlite3")
+    refused = threading.Event()
+
+    def submit(task: str, prompt: str, profile: Profile) -> None:
+        if not refused.is_set():
+            refused.set()
+            raise ValueError("The work queue is temporarily full.")
+        tasks.submit(task, "Notification", prompt, RequestSource("notifications", profile), at=10)
+
+    reaction = Update(TeamsActivity("reaction"), "Anna liked a message", "👍", "Teams", 1, UpdateKind.REACTION)
+    hidden = Update(WindowsNotice(NoticeKey(7, 8), "hidden-app"), "Approval", "Review the supplier approval.", "Outlook", 2)
+    feed = PendingFeed(Feed(updates=(reaction,)), Notices((hidden,), filter=NotificationFilter(frozenset({"hidden-app"}))))
+    store = MemoryStore()
+    triage = TriageFixture(store, lambda _batch, _rules: "{}", submit=submit)
+    try:
+        triage.observe(feed)
+        wait_until(lambda: len(tasks.list_tasks()) == 2)
+        initial = tasks.list_tasks()
+        assert all(item.reaction for item in triage.candidates), "Activation must also reach notifications excluded from triage."
+        for _ in range(20):
+            triage.observe(feed)
+        assert tasks.list_tasks() == initial
+        revised = replace(hidden, text="Review the revised supplier approval.")
+        triage.observe(replace(feed, notices=replace(feed.notices, updates=(revised,))))
+        wait_until(lambda: len(tasks.list_tasks()) == 3)
+        assert all(isinstance(task.source, RequestSource) and isinstance(task.source.profile, FeedHandoff) for task in tasks.list_tasks())
+        assert all("already-authorized" in task.prompt and "untrusted" in task.prompt for task in tasks.list_tasks())
+    finally:
+        triage.close()
+    restarted = TriageFixture(store, lambda _batch, _rules: "{}", submit=submit)
+    try:
+        restarted.observe(feed)
+        wait_until(lambda: bool(restarted.notifications.accepted))
+        assert len(tasks.list_tasks()) == 3
+    finally:
+        restarted.close()
+
+
 def test_automatic_triage_coalesces_polls_and_voice_feedback_updates_the_live_plan(tmp_path: Path) -> None:
     calls: list[tuple[tuple[Candidate, ...], tuple[str, ...]]] = []
 
@@ -143,6 +187,7 @@ def test_shutdown_cancels_supplied_debounce_before_calling_model(tmp_path: Path)
 
 def test_inflight_model_cannot_overwrite_new_voice_feedback(tmp_path: Path) -> None:
     entered, release = threading.Event(), threading.Event()
+    submitted: list[str] = []
 
     def model(batch: tuple[Candidate, ...], rules: tuple[str, ...]) -> str:
         if not rules:
@@ -150,11 +195,22 @@ def test_inflight_model_cannot_overwrite_new_voice_feedback(tmp_path: Path) -> N
             assert release.wait(5)
         return output(([item.identity for item in batch], "quiet" if rules else "action"))
 
-    triage = TriageFixture(MemoryStore(), model)
+    triage = TriageFixture(MemoryStore(), model, submit=lambda task, _prompt, _profile: submitted.append(task))
     try:
         triage.observe(PendingFeed(Feed(updates=(Update(TeamsActivity("fictional"), "Review", "Please review.", "Teams", 1),))))
         triage.advance()
         assert entered.wait(5)
+        triage.observe(
+            PendingFeed(
+                Feed(
+                    updates=(
+                        Update(TeamsActivity("fictional"), "Review", "Please review.", "Teams", 1),
+                        Update(TeamsActivity("late"), "Approval", "An approval arrived during research.", "Teams", 2),
+                    )
+                )
+            )
+        )
+        wait_until(lambda: len(submitted) == 2)
         triage.command(SaveRule("Ignore fictional review notices."))
         release.set()
         triage.advance()

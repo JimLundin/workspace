@@ -53,6 +53,7 @@ from assistant.feed_triage import (
 )
 from assistant.feed_work import FeedWork, WorkingContext
 from assistant.llm import Settings
+from assistant.notification_agent import NotificationAgent, received
 from assistant.personal_work_service import PersonalWork
 from assistant.work_bridge_contracts import FeedResponse
 from automation.context import ContextRecord
@@ -120,6 +121,7 @@ class Triage:
         "feed",
         "lock",
         "model",
+        "notifications",
         "personal",
         "store",
         "submit",
@@ -154,6 +156,7 @@ class Triage:
         self.submitted: set[str] = set()
         self.lock = threading.RLock()
         self.closed, self.wake = threading.Event(), threading.Event()
+        self.notifications = NotificationAgent(submit, self.closed)
         self.feed: PendingFeed = PendingFeed()
         self.candidates: tuple[Candidate, ...] = ()
         self.epoch = 0
@@ -162,12 +165,14 @@ class Triage:
         except ValueError, OSError:
             self.board = Board(enabled=True, status="Saved feed preferences could not be loaded.")
         self.thread = threading.Thread(target=self.run, name="Work feed triage", daemon=True)
+        self.notifications.start()
         self.thread.start()
 
     def observe(self, feed: PendingFeed) -> None:
         with self.lock:
             history_changed = self.feed.teams.messages != feed.teams.messages
             self.feed = feed
+            self.notifications.offer(received(feed))
             candidates = triage_evidence(feed)
             if candidates == self.candidates and not history_changed:
                 return
@@ -221,7 +226,7 @@ class Triage:
                 total_actions=len(actions),
                 quiet_updates=sum(item.disposition in (Disposition.QUIET, Disposition.USER_QUIET) for item in self.board.items),
                 focus=actions[0].identity if actions else None,
-                status=self.board.status,
+                status=self.notifications.status or self.board.status,
                 pending=self.board.pending,
                 unavailable_items=tuple(proposal.identity for proposal in actions if not all(ref in current for ref in proposal.references)),
                 quiet_reactions=self.board.reactions,
@@ -360,7 +365,8 @@ class Triage:
             self.wake.wait(1)
             with self.lock:
                 today = datetime.fromtimestamp(self.clock(), UTC).astimezone().date()
-                if not self.wake.is_set() and not unassessed(self.board, self.candidates, today=today):
+                if not unassessed(self.board, self.candidates, today=today):
+                    self.wake.clear()
                     continue
             self.wake.clear()
             if self.wait(self.closed, 1.5):
@@ -400,4 +406,5 @@ class Triage:
     def close(self) -> None:
         self.closed.set()
         self.wake.set()
+        self.notifications.close()
         self.thread.join(timeout=2)

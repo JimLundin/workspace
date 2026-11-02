@@ -75,7 +75,7 @@ class RequestKind(Enum):
 
 @dataclass(frozen=True, slots=True)
 class FeedHandoff:
-    """Work the person chose from the feed, labelled by its feed item."""
+    """Work from a feed choice or received notification, labelled by its source."""
 
     item: str
     title: str

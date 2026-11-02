@@ -3,15 +3,44 @@
 import threading
 from collections.abc import Generator
 from contextlib import contextmanager
+from dataclasses import replace
 from pathlib import Path
 from unittest import TestCase
 
 from assistant import agent_session
+from assistant.communications import SourceDate
 from assistant.feed_origin import FeedRequest
+from assistant.feed_sources import Excerpt
+from assistant.notification_agent import NotificationAgent
 from automation.task import Completed, FeedHandoff, Question, RequestKind, RequestSource, RoutineSource, TaskStatus, TextAnswer, Waiting
+from tests.feed_source_fixture import captured
 from tests.test_external_input import has_pending_input
 from tests.test_work_agent import RecordingBridge, WorkRig, invocation
 from tests.work_fixture import seed_tasks
+
+
+def test_notification_replay_uses_the_original_frontend_task_after_restart(tmp_path: Path) -> None:
+    # Defect: observation timestamps change the notification prompt and reject
+    # durable replay, or the notification adapter does not reach the frontend.
+    source = captured("approval", Excerpt("Supplier approval", "Prepare the already requested deployment.", 10))
+    rig = WorkRig(tmp_path)
+    try:
+        notifications = NotificationAgent(rig.agent.submit_identified, threading.Event())
+        assert notifications.activate((source,))
+        (original,) = rig.refresh().tasks
+        assert isinstance(original.source, RequestSource) and original.source.profile == FeedHandoff(source.identity, source.title)
+        assert not rig.errors
+    finally:
+        rig.close()
+    restarted = WorkRig(tmp_path)
+    try:
+        notifications = NotificationAgent(restarted.agent.submit_identified, threading.Event())
+        assert notifications.activate((replace(source, created_at=20, source_time=SourceDate(20)),))
+        snapshot = restarted.refresh()
+        assert snapshot.tasks == (original,) and not snapshot.submission_problems
+        assert not restarted.errors
+    finally:
+        restarted.close()
 
 
 class PollHold:
