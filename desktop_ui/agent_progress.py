@@ -23,6 +23,7 @@ from desktop_ui.notifications import (
     Turn,
     Working,
     advance,
+    expire_in_order,
     observe,
     reading_seconds,
 )
@@ -270,10 +271,8 @@ def advance_progress(previous: Progress, session: Snapshot, now: float) -> Progr
             lifetime = Held.ACTIVE
         elif changed or lifetime is Held.ACTIVE:
             lifetime = Expires(now + reading_seconds(phase.turn))
-        if isinstance(lifetime, Expires) and lifetime.at <= now:
-            continue
         toasts = (*toasts, Toast(phase.key, phase.turn, lifetime, toast.order if toast is not None else navigation.serial + len(toasts) + 1))
-    return Progress(navigation, observed, toasts)
+    return Progress(navigation, observed, expire_in_order(toasts, now))
 
 
 def visible(progress: Progress, capacity: int) -> Stack:

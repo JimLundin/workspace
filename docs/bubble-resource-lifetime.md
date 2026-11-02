@@ -30,6 +30,19 @@ already in progress retains its clock across unrelated refreshes. Translation
 updates native position without reshaping unchanged text and child controls;
 size or details-height changes still lay out those contents.
 
+Completed cards leave oldest first, with deadlines and simultaneous native exits
+spaced by 250 ms. Older live cards pushed into the upper eight-line band retire
+through the same resource owner; their hidden identities prevent later updates
+from reviving them. Hover, expansion, pending input and recording protect cards.
+History does not use the edge exit. Reduced motion parks exiting surfaces immediately.
+
+The focused expiry, stack and native-owner campaigns detected all seven seeded
+defects: reversed deadlines, independent deadlines, missing edge fading, missing
+protection, reversed native exits, omitted retirement and revival after parking.
+Each baseline passed; there were no survivors, timeouts or collection errors.
+Reports are in Windows Temp as `workspace-expiry-mutations.json`,
+`workspace-stack-mutations.json` and `workspace-exit-mutations.json`.
+
 Each pooled card also owns its measurement documents, cleared on parking and
 closed on shutdown. Measuring another card preserves its prepared paragraphs.
 The shared text adapter rounds measurement budgets to Qt's whole logical pixels,

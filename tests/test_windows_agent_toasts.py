@@ -1232,7 +1232,8 @@ def test_new_recording_interrupts_dismissal_and_follows_work_area_changes() -> N
         card = panel.view.cards[Kind.RECORDING]
         panel.advance(31)
         assert all(item.retiring for item in panel.view.cards.values())
-        panel.now += 0.08
+        # The saved-recording notice follows its older conversation card.
+        panel.now += 0.33
         assert card.motion is not None and 0 < toast_stack.shown(toast_stack.advance(card.motion, panel.now)).alpha < 1
         panel.agent.recording(RecordingState(phase="recording", identity="second", preview="New transcript."))
         panel.pump()

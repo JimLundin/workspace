@@ -11,7 +11,7 @@ from automation.task import TextAnswer
 from desktop_ui.agent_progress import Progress, advance_progress, phases, visible
 from desktop_ui.agent_session import AgentRequest, Begin, CanvasAttention, CanvasNotice, ChatMessage, Resolution, Session, transition
 from desktop_ui.attention import observed_attention
-from desktop_ui.notifications import Entry, PhaseKey, Response, Turn, body, steps
+from desktop_ui.notifications import Entry, Expires, PhaseKey, Response, Turn, body, steps
 from tests.agent_requests import asked
 
 
@@ -30,6 +30,25 @@ def test_progress_and_completion_share_one_card_for_the_requested_outcome() -> N
     cards = visible(progress, 5).toasts
     assert [toast.key for toast in cards] == [key]
     assert body(cards[0].content) == "The newer plan is approved."
+
+
+def test_completed_cards_expire_in_their_stack_order_despite_different_reading_times() -> None:
+    # Defect: an older long result remains above a newer short result that expires first.
+    session = Session(
+        identity="ordered",
+        messages=(
+            ChatMessage("You", "First task", 1),
+            ChatMessage("Workspace", "Detailed result " * 60, 2),
+            ChatMessage("You", "Second task", 3),
+            ChatMessage("Workspace", "Brief result", 4),
+        ),
+    )
+    progress = advance_progress(Progress(), session, 10)
+    older, newer = progress.toasts
+    assert isinstance(older.lifetime, Expires) and isinstance(newer.lifetime, Expires)
+    assert older.lifetime.at < newer.lifetime.at
+    after_oldest = advance_progress(progress, session, older.lifetime.at)
+    assert tuple(toast.key for toast in after_oldest.toasts) == (newer.key,)
 
 
 def test_tools_and_public_updates_keep_one_stable_request_card() -> None:

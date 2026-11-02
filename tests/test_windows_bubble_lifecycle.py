@@ -10,6 +10,7 @@ lazy import shiboken6
 lazy from PySide6 import QtCore
 
 from desktop_ui.agent_session import ChatMessage
+from desktop_ui.agent_toasts import card_order
 from desktop_ui.notifications import Entry, Toast
 from desktop_ui.qt_runtime import prepare
 from desktop_ui.toast_card import Card, CardOwner, Finish, Measure
@@ -29,6 +30,68 @@ def test_settled_bubbles_stop_their_native_frame_publication_loop() -> None:
         panel.settle()
         assert not panel.view.animation_timer.isActive()
         assert not panel.view.loop.timer.isActive(), "Idle bubbles kept native frame work running."
+
+
+def test_simultaneous_expiry_fades_native_cards_oldest_first_without_restarting_exits() -> None:
+    # Defect: a long clock jump starts all exits together or a refresh resets the exit clocks.
+    with notifications(animated=True) as panel:
+        panel.view.resume()
+        panel.agent.begin("First fictional task")
+        panel.agent.done("Older fictional result.")
+        panel.agent.finish()
+        panel.agent.begin("Second fictional task")
+        panel.agent.done("Newer fictional result.")
+        panel.agent.finish()
+        panel.pump()
+        panel.settle()
+        older, newer = sorted(panel.view.cards.values(), key=card_order)
+        panel.advance(100)
+        assert older.motion is not None and newer.motion is not None
+        assert newer.motion.at - older.motion.at == 0.25
+        panel.now += 0.08
+        panel.view.tick()
+        assert 0 < older.alpha < 1 and newer.alpha == 1
+        started = newer.motion.at
+        panel.view.refresh()
+        assert newer.motion is not None and newer.motion.at == started
+        panel.settle()
+        assert not panel.view.cards and not windows.is_visible(older.handle) and not windows.is_visible(newer.handle)
+
+
+def test_pushed_card_waits_for_hover_then_parks_without_reviving() -> None:
+    # Defect: the native owner ignores edge placement, retires a hovered card,
+    # leaves a surface visible, or lets a later refresh recreate its hidden identity.
+    for animated in (True, False):
+        with notifications(animated=animated) as panel:
+            panel.view.resume()
+            panel.agent.begin("First fictional task")
+            panel.agent.done("Older fictional result.")
+            panel.agent.finish()
+            panel.agent.begin("Second fictional task")
+            panel.agent.done("Newer fictional result.")
+            panel.agent.finish()
+            panel.pump()
+            panel.settle()
+            older = min(panel.view.cards.values(), key=card_order)
+            key, handle = older.key, older.handle
+            viewport = panel.view.viewport
+            assert viewport is not None
+            panel.view.set_hover(key, inside=True)
+            frame = older.frame
+            older.position(older.right, Frame(viewport.area.top + viewport.margin + viewport.line * 2, frame.width, frame.height, 1))
+            panel.view.layout(panel.now, animate=animated)
+            assert (older.retiring, older.alpha) == (False, 1)
+            panel.view.set_hover(key, inside=False)
+            if animated:
+                assert older.retiring and older.motion is not None
+                panel.now += 0.08
+                panel.view.tick()
+                assert 0 < older.alpha < 1
+                panel.settle()
+            assert key not in panel.view.cards and not windows.is_visible(handle)
+            panel.view.refresh()
+            panel.pump()
+            assert key not in panel.view.cards
 
 
 def test_repeated_observations_preserve_the_cards_animation_deadline() -> None:

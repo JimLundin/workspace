@@ -86,6 +86,17 @@ def test_trail_closes_retiring_space_and_pushes_without_dimming_readable_phases(
     assert trail == tuple(Placement(y, 1.0) for y in (774, 754, 734, 714, 694, 674))
 
 
+def test_pushed_cards_fade_before_leaving_the_top_of_the_work_area() -> None:
+    # Defect: a card pushed beyond the usable stack area remains fully opaque and never leaves.
+    pushed = frames((Active(100, 0), Active(80, 40), Active(80, 0)), TALL, Stacking.PUSH)
+    assert pushed[0].alpha == 1
+    assert 0 < pushed[1].alpha < 1
+    assert pushed[2].alpha == 0
+    # History keeps its full readable stack and does not use the pushed-card fade.
+    assert all(placement.alpha == 1 for placement in frames((Active(100, 0), Active(80, 0)), TALL, Stacking.FEED))
+    assert frames((Active(100, 0), Active(80, 0, protected=True)), TALL, Stacking.PUSH)[1].alpha == 1
+
+
 def test_frame_retarget_preserves_every_visible_value_and_velocity() -> None:
     # Defect: changing the card's slot reconstructs a field at rest, so the
     # interruption jumps or stops one part of the synchronized frame.

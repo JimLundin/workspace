@@ -310,6 +310,33 @@ def reading_seconds(content: Content) -> float:
     return min(MAX_SECONDS, max(minimum, 4 + len(text.split()) / 3))
 
 
+def expire_in_order(toasts: tuple[Toast, ...], now: float) -> tuple[Toast, ...]:
+    """Older readable cards leave first; hover and unfinished reading hold newer exits.
+
+    Active work/input has its own lifetime and does not block completed cards.
+    Deadlines are 250 ms apart; a long clock jump does not revive old content.
+    """
+    result: tuple[Toast, ...] = ()
+    after = float("-inf")
+    for original in sorted(toasts, key=order_of):
+        toast = original
+        match toast.lifetime:
+            case Expires(at=at):
+                deadline = max(at, after)
+                after = deadline + 0.25
+                if deadline <= now:
+                    continue
+                toast = replace(toast, lifetime=Expires(deadline))
+            case Paused(remaining=remaining):
+                after = max(after, now + remaining + 0.25)
+            case Held.READING:
+                after = max(after, now + MAX_SECONDS + 0.25)
+            case Held.ACTIVE:
+                pass
+        result = (*result, toast)
+    return result
+
+
 def advance(
     stack: Stack, session: Snapshot, now: float, *, history: bool = False, page: int = 0, reveal: bool = False, limit: int = MAX_VISIBLE
 ) -> Stack:

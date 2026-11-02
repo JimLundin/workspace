@@ -1,7 +1,7 @@
 """Toast stack layout and motion: measured sizes and timestamps in; placements and frames out."""
 
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum, auto
 from typing import Final
 
@@ -151,6 +151,7 @@ class Stacking(Enum):
 class Active:
     height: int
     top: float  # the current top, or the top an unfinished motion is heading to
+    protected: bool = field(default=False, kw_only=True)
 
 
 @dataclass(frozen=True, slots=True)
@@ -226,11 +227,18 @@ def frames(slots: Sequence[Slot], viewport: Viewport, stacking: Stacking) -> tup
             case Retiring(height):
                 if stacking is Stacking.FEED:
                     bottom -= height + viewport.gap
-            case Active(height, top):
+            case Active(height, top, protected=protected):
                 bottom -= height
                 if stacking is not Stacking.FEED and placed:
                     bottom = min(bottom, top - (viewport.rise if stacking is Stacking.PUSH else 0))
-                placed = (*placed, Placement(bottom, 1.0))
+                # The upper eight text lines form the exit band. History and
+                # a hovered/expanded card or pending input remain fully readable.
+                alpha = (
+                    1.0
+                    if stacking is Stacking.FEED or protected or not placed
+                    else min(1.0, max(0.0, (bottom - viewport.area.top - viewport.margin) / (viewport.line * 8)))
+                )
+                placed = (*placed, Placement(bottom, alpha))
                 bottom -= viewport.gap
     return placed
 

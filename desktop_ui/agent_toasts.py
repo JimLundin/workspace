@@ -256,6 +256,7 @@ class AgentToasts:
                 self.stack = updated
                 self.schedule_expiry()
             if changed:
+                self.layout(self.clock(), animate=self.environment.animations())
                 self.tick()
 
     def schedule_pointer(self) -> None:
@@ -438,9 +439,11 @@ class AgentToasts:
         # Native preparation consumes wall time. Start the shared transition
         # clock only once all arrivals are ready, so the first frame is not late.
         presented = self.clock()
-        for card in exits:
+        for index, card in enumerate(sorted(exits, key=card_order)):
             if card in self.cards.values():
                 card.target(card.y - viewport.rise, 0, presented, animate=animate)
+                if card.motion is not None:
+                    card.motion = replace(card.motion, at=presented + index * 0.25)
         self.layout(presented, animate=animate and not immediate, pushing=bool(created) and self.live_progress)
         self.tick()
         self.loop.pump()
@@ -468,7 +471,13 @@ class AgentToasts:
                 card.position(right, card.frame)
         stacking = Stacking.FEED if not self.live_progress else Stacking.PUSH if pushing else Stacking.TRAIL
         slots = tuple(
-            Retiring(card.height) if card.retiring else Active(card.height, toast_stack.target(card.motion).y if card.motion is not None else card.y)
+            Retiring(card.height)
+            if card.retiring
+            else Active(
+                card.height,
+                toast_stack.target(card.motion).y if card.motion is not None else card.y,
+                protected=card.hovered or card.expanded or (card.content is not None and priority(card.content) == 2) or _recording(card.content),
+            )
             for card in cards
         )
         targets = tuple(
@@ -480,7 +489,17 @@ class AgentToasts:
         # Their paired top/bottom values and velocities preserve neighboring gaps;
         # applying target heights before moving their tops would overlap them.
         for card, target in targets:
-            card.target(target.y, target.alpha, now, animate=animate, retarget=changed)
+            if target.alpha < 1:
+                # Leaving the stack hides only this projection. Retain history
+                # and the hidden identity so status updates cannot revive it.
+                self.stack = hide(self.stack, card.key)
+                card.retiring = True
+                if not animate:
+                    self.release(card)
+                    continue
+                card.target(target.y - viewport.rise, 0, now, animate=True, retarget=changed)
+            else:
+                card.target(target.y, target.alpha, now, animate=animate, retarget=changed)
 
     def older(self) -> None:
         self.page += 1
