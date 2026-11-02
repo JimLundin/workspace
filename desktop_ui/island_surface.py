@@ -691,6 +691,7 @@ class BarWindow(QtWidgets.QWidget):
         self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)  # The open menu takes the keyboard here.
         borderless(int(self.winId()))
+        windows.allow_activation(int(self.winId()), allowed=False)
         # Several changes in one Qt turn publish one final glass frame.
         self.glass_timer = QtCore.QTimer(self)
         self.glass_timer.setSingleShot(True)

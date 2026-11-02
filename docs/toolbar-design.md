@@ -63,6 +63,9 @@ it back to the window that had it, a Workspace view keeps it, and clicking
 elsewhere closes the menu without taking it back. Window tools act on the window
 captured as the menu opened. Large glass is thicker than the capsules, so the
 menu's text stays legible over any desktop.
+The idle bar starts with native activation disabled, preserving the active
+application before an icon click. Menu opening enables activation; closing
+restores the idle policy.
 
 Pressing the island while dictating stops dictation; pressing "Needs you"
 expands the island to present the complete request. The bell and Hold V + T use

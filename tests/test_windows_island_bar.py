@@ -5,6 +5,7 @@ import threading
 import time
 import unittest
 from collections.abc import Callable
+from ctypes import wintypes
 from datetime import datetime
 
 if sys.platform != "win32":
@@ -24,11 +25,29 @@ from desktop_ui.qt_ui import EventLoop, application
 from protocol import Tool
 from tests.native_pointer import foreign_pointer
 from winapi import appearance, windows
+from winapi._core import fn, user32
 from winapi.machine_status import Battery
 
 prepare()
 
 WORKING = Agent("Comparing both sheets", waiting=False)
+_GetWindowLong = fn(user32, "GetWindowLongW", wintypes.LONG, wintypes.HWND, wintypes.INT)
+
+
+def test_idle_toolbar_preserves_application_focus_and_menu_can_take_the_keyboard() -> None:
+    # Defect: the toolbar activates before an app click observes the current
+    # window, so repeated icon clicks stop cycling that application's windows.
+    app = application()
+    bar = DesktopBar(recorded([]), native_shell=False)
+    try:
+        handle = int(bar.window.winId())
+        assert _GetWindowLong(handle, -20) & 0x08000000
+        bar.open_menu()
+        assert not _GetWindowLong(handle, -20) & 0x08000000
+        bar.close_menu(restore=False)
+        assert _GetWindowLong(handle, -20) & 0x08000000
+    finally:
+        closed(app, bar)
 
 
 def rest(bar: DesktopBar) -> None:
