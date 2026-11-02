@@ -22,7 +22,7 @@ from winapi.shapes import Rect, Window
 lazy from assistant import commands, uia
 lazy from assistant.browser import Browser, BrowserResult
 lazy from assistant.browser_requests import BrowserRequest
-lazy from assistant.browser_session import Product
+lazy from assistant.browser_session import Separate
 lazy from assistant.geometry import Shot, fit, half
 lazy from assistant.png import encode_png
 lazy from assistant.textio import paste_text
@@ -53,7 +53,7 @@ class MeetingControl(Protocol):
 class BrowserControl(Protocol):
     def request(self, request: BrowserRequest, cancel: threading.Event) -> BrowserResult: ...
     def web_app[Q: Located, R](self, operation: WebAppOperation[Q, R], query: Q, cancel: threading.Event) -> R: ...
-    def close(self) -> None: ...
+    def close(self, *, keep_browser: bool = False) -> None: ...
 
 
 class NativeDesktop:
@@ -190,7 +190,7 @@ class WinMachine:
         self.desktop = desktop
         self.capture_sources: CaptureObservation = NativeCaptureObservation() if capture_sources is None else capture_sources
         self.open_target = open_target
-        self.background_browser: BrowserControl = Browser(BROWSER_PROFILE, source=Product.EDGE) if browser is None else browser
+        self.background_browser: BrowserControl = Browser(BROWSER_PROFILE, source=Separate.PROFILE) if browser is None else browser
         self.meetings = meetings
 
     def meeting(self, operation: MeetingOperation) -> str:
@@ -205,8 +205,8 @@ class WinMachine:
     def web_app[Q: Located, R](self, operation: WebAppOperation[Q, R], query: Q, cancel: threading.Event) -> R:
         return self.background_browser.web_app(operation, query, cancel)
 
-    def close_background(self) -> None:
-        self.background_browser.close()
+    def close_background(self, *, keep_browser: bool = False) -> None:
+        self.background_browser.close(keep_browser=keep_browser)
 
     def run_powershell(
         self,

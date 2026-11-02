@@ -11,9 +11,11 @@ if sys.platform != "win32":
 
 from pydantic import TypeAdapter
 
+from assistant import browser
 from assistant.agent_tools import Machine
 from assistant.browser import BrowserResult
 from assistant.browser_requests import BrowserRequest
+from assistant.browser_session import Separate
 from assistant.browser_values import PageList
 from assistant.geometry import Shot
 from assistant.machine import WinMachine
@@ -67,7 +69,7 @@ class Browser:
         self.calls.append("web_app " + query.target_id)
         return operation.result.validate_python(TEAMS_PAGE)
 
-    def close(self) -> None:
+    def close(self, *, keep_browser: bool = False) -> None:
         self.calls.append("close")
         if self.failure is not None:
             raise self.failure
@@ -93,6 +95,18 @@ def test_machine_uses_explicit_desktop_and_meeting_owners() -> None:
         assert str(error) == "Meeting recording is unavailable."
     else:
         raise AssertionError("A missing recording owner must be reported.")
+
+
+def test_default_agent_browser_owns_an_exclusive_profile_without_launching() -> None:
+    # Defect: composition silently attaches the agent to the user's Edge.
+    machine = WinMachine(Desktop())
+    match machine.background_browser:
+        case browser.Browser(source=Separate.PROFILE, connection=None):
+            pass
+        case _:
+            raise AssertionError("The agent must own its separate Edge profile.")
+    assert machine.browse(PageList(), threading.Event())[0].startswith('{"mode":"stopped"')
+    machine.close_background()
 
 
 def test_machine_keeps_browser_cleanup_with_its_owner() -> None:

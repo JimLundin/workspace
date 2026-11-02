@@ -8,7 +8,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Annotated, Final, Literal
 
-from pydantic import Field, TypeAdapter, ValidationError
+from pydantic import ConfigDict, Field, TypeAdapter, ValidationError
 
 from assistant.agent_tools import DECLINED, Args, Display, Output, Session, Tool, rejected
 from assistant.browser_requests import (
@@ -24,7 +24,7 @@ from assistant.browser_requests import (
     SignIn,
     web_url,
 )
-from assistant.browser_session import source_of
+from assistant.browser_session import Separate, source_of
 from assistant.browser_values import (
     BrowserError,
     BrowserStatus,
@@ -331,7 +331,65 @@ TOOLS: Final = (
 )
 
 
-SPECS: Final = tuple(tool.spec for tool in TOOLS)
+@dataclass(frozen=True, slots=True)
+class AgentOpen:
+    """The agent always navigates its exclusive Edge profile."""
+
+    url: Annotated[str, Field(strict=True, max_length=4000)]
+    target_id: Annotated[str, Field(strict=True, max_length=128)] = ""
+    __pydantic_config__ = ConfigDict(extra="forbid")
+
+
+@dataclass(frozen=True, slots=True)
+class AgentPages:
+    offset: Offset = 0
+    limit: Annotated[int, Field(strict=True, ge=1, le=40)] = 20
+    __pydantic_config__ = ConfigDict(extra="forbid")
+
+
+@dataclass(frozen=True, slots=True)
+class AgentClose:
+    target_id: Annotated[str, Field(strict=True, max_length=128)] = ""
+    __pydantic_config__ = ConfigDict(extra="forbid")
+
+
+def agent_open(arguments: AgentOpen) -> Open:
+    return Open(web_url(arguments.url), arguments.target_id, Separate.PROFILE)
+
+
+AGENT_TOOLS: Final = (
+    browser_tool(
+        "browser_open",
+        "Open a page in the agent's exclusive headless Edge instance, returning text and controls. "
+        "Its dedicated profile retains sign-ins and stays running between tasks. It is separate from the user's browser. "
+        "Reuse an explicit target_id while gathering context; close pages as soon as their evidence is saved. "
+        "Task completion releases research pages, leaving an idle blank page. Refresh browser_tabs at the next run. "
+        "Use browser_sign_in if this profile needs authentication.",
+        Parser(TypeAdapter(AgentOpen), agent_open),
+    ),
+    browser_tool(
+        "browser_tabs",
+        "Inspect the agent's current Edge pages, IDs, titles and URLs without launching it. "
+        "Follow next_offset for more. Use these exact IDs to reuse pages or clean up saved context.",
+        Parser(TypeAdapter(AgentPages), lambda args: PageList(args.offset, args.limit)),
+    ),
+    *(
+        tool
+        for tool in TOOLS
+        if tool.spec.name in ("browser_snapshot", "browser_action", "browser_evaluate", "browser_screenshot", "browser_sign_in")
+    ),
+    browser_tool(
+        "browser_close",
+        "Close an agent page by target_id after saving its useful context. "
+        "With no target_id, close the exclusive agent browser, retaining its profile and sign-ins. "
+        "A page reports state=closed or requested; inspect a requested close before repeating it.",
+        Parser(
+            TypeAdapter(AgentClose),
+            lambda args: ClosePage(args.target_id) if args.target_id else Disconnect.BROWSER,
+        ),
+    ),
+)
+SPECS: Final = tuple(tool.spec for tool in AGENT_TOOLS)
 _LISTING = TypeAdapter[BrowserStatus | StripPage](Annotated[BrowserStatus | StripPage, Field(discriminator="view")])
 
 
@@ -411,7 +469,7 @@ class Browser:
         self.session, self.screen = session, screen
 
     def tools(self) -> tuple[Tool, ...]:
-        return tuple(self._tool(declared) for declared in TOOLS)
+        return tuple(self._tool(declared) for declared in AGENT_TOOLS)
 
     def _tool(self, declared: BrowserTool) -> Tool:
         classify = _classify(declared)

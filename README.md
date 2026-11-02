@@ -457,28 +457,23 @@ directories and timeouts; Stop terminates its running command and child
 processes. The agent can use installed applications' APIs and COM interfaces
 through PowerShell when those suit the task.
 
-For web tasks, it defaults to **your running, signed-in Edge**, and can attach to
-Chrome on request. Enable **Allow remote debugging for this browser instance** at
-`edge://inspect/#remote-debugging` (or `chrome://inspect/#remote-debugging`), then
-approve the browser's connection dialog. Workspace keeps that connection for
-subsequent work; the browser may ask again after a disconnect or restart.
-New Edge tabs open in a **Workspace** group, created collapsed so the agent can
-work while you browse. If you expand the group to collaborate, it stays expanded.
-The agent can open and close tabs, group and ungroup them, rename and collapse
-groups, move tabs or groups between windows, pin tabs and reload them. Ask it to
-show a page when you want that tab brought forward. It can also work on your
-existing tabs when requested, read page text and controls, fill forms, handle
-frames and open shadow roots, and capture browser screenshots. Stop and Workspace
-exit disconnect, leaving your browser, tabs and groups open.
+For web tasks, the agent owns an **exclusive headless Edge instance**, separate
+from the browser you view. Its profile lives at
+`%LOCALAPPDATA%\workspace\browser-profile`. The instance stays running between
+tasks and retains its own sign-ins. The agent lists its pages, reuses their IDs
+and closes pages after saving useful context. Each completed, suspended or failed
+run releases temporary pages and leaves one idle blank page. Stop and Workspace
+exit close the owned process tree; the sign-in profile persists.
 
-This reuses the running browser's session; it is not a second headless process
-sharing an open profile. The group's tabs remain accessible in the tab strip.
-Chrome retains the page tools; native tab/group management currently uses Edge.
-The separate headless Edge profile is still available when explicitly selected.
-See [browser session reuse](docs/browser-session-reuse.md) for supported setup
-and the browser's consent requirements.
+If authentication is needed, the agent opens its dedicated profile visibly for
+you to complete sign-in or MFA. That handoff survives a suspended task; continuing
+work returns to headless mode with the same profile. Cookies are never copied
+from your personal browser. Sites still control session expiry and MFA. The
+agent can read page text and controls, fill forms, handle frames and open shadow
+roots, and capture browser screenshots. Sources requested for review open through
+the desktop in your normal browser. See [background automation](docs/background-automation.md).
 
-Teams and Outlook web have dedicated tools that reuse the signed-in Edge tabs.
+Teams and Outlook web tools use signed-in pages in the agent's dedicated profile.
 Workspace has no Teams API integration; all Teams work runs in the browser. The agent can read/select Teams conversations, search/read
 Outlook conversations and prepare unsent replies while preserving existing drafts
 and Outlook signatures. The internal AIP Kanban tools read tasks, edit fields,

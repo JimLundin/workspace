@@ -6,7 +6,7 @@ import sys
 import threading
 import time
 import uuid
-from collections.abc import Generator
+from collections.abc import Generator, Iterable, Iterator
 from contextlib import contextmanager, suppress
 from dataclasses import dataclass, replace
 from pathlib import Path
@@ -163,6 +163,16 @@ class BrowserResult:
     image: bytes | None = None
 
 
+def task_pages(pages: Iterable[Page]) -> Iterator[Page]:
+    """Edge owns its mandatory profile sign-in page and recreates it if closed."""
+    for page in pages:
+        match page:
+            case Page(url="edge://force-signin/"):
+                continue
+            case _:
+                yield page
+
+
 class Browser:
     """Own launched processes; borrow a personal browser through its opt-in CDP."""
 
@@ -261,9 +271,15 @@ class Browser:
             self.close()
             self._live = self._opener.open(self.source, cancel, visible=visible)
 
-    def close(self) -> None:
+    def close(self, *, keep_browser: bool = False) -> None:
         """Detach personal browsers. Only terminate a process Workspace launched."""
         with self.lock:
+            if keep_browser and self.process is not None:
+                # A pending sign-in handoff must remain usable. Otherwise retain
+                # the exclusive browser and its cookies, releasing task pages.
+                if not self.visible:
+                    self._clear_pages()
+                return
             live, self._live = self._live, None
             try:
                 if live is not None:
@@ -279,6 +295,29 @@ class Browser:
                 self.hidden = frozenset()
                 self.native_targets.clear()
                 self.strip.control = None
+
+    def _clear_pages(self) -> None:
+        """Release exclusive research pages, including script-opened tabs."""
+        cancel = threading.Event()
+        pages = tuple(task_pages(self._tabs(cancel)))
+        reply = self._call("Target.createTarget", {"url": "about:blank", "background": True}, cancel)
+        blank = decoded(CREATED_TARGET, reply, "The browser did not create its idle page.").target_id
+        control = self.strip.control
+        targets = frozenset(page.id for page in pages).union(self.hidden, () if control is None else (control.target,)).difference((blank,))
+        for target in targets:
+            result = decoded(_CLOSED_TARGET, self._call("Target.closeTarget", {"targetId": target}, cancel), "The browser did not answer cleanup.")
+            if not result.success:
+                raise BrowserError("The agent browser did not accept page cleanup; inspect browser_tabs before continuing.")
+        deadline = time.monotonic() + 3
+        while any(page.id != blank for page in task_pages(self._tabs(cancel))):
+            if time.monotonic() >= deadline:
+                raise BrowserError("Agent pages remain open after cleanup; inspect browser_tabs for a pending browser dialog.")
+            cancel.wait(0.05)
+        self.sessions.clear()
+        self.created.clear()
+        self.hidden = frozenset()
+        self.native_targets.clear()
+        self.strip.control = None
 
     def _tabs(self, cancel: threading.Event) -> tuple[Page, ...]:
         if self.connection is None:

@@ -23,15 +23,23 @@ def test_retired_embedded_browser_tools_cannot_reach_the_machine_or_start_action
 
 def test_model_receives_only_current_browser_capabilities(tmp_path: Path) -> None:
     with fake_endpoint() as endpoint:
-        rig = Rig(endpoint, calls(("browser_tabs", {})), says("Tabs inspected."), work=durable(tmp_path))
+        rig = Rig(
+            endpoint,
+            calls(("browser_tabs", {})),
+            calls(("browser_open", {"url": "https://example.com/"})),
+            says("Tabs inspected."),
+            work=durable(tmp_path),
+        )
         rig.run()
         data: object = json.loads(endpoint.received[0].body)
         assert isinstance(data, dict)
         tools = cast("list[dict[str, object]]", cast("dict[str, object]", data)["tools"])
         names = {str(tool["name"]) for tool in tools}
-        assert {"browser_attach", "browser_open", "browser_tabs", "browser_snapshot", "browser_action"} <= names
+        assert {"browser_open", "browser_tabs", "browser_snapshot", "browser_action"} <= names
+        assert "browser_attach" not in names
+        assert "source=<Separate.PROFILE:" in rig.machine.log[-1]
         assert not any(name.startswith("browser_app_") for name in names)
-        assert rig.machine.log == ["browser PageList(offset=0, limit=20)"]
+        assert rig.machine.log[0] == "browser PageList(offset=0, limit=20)"
 
 
 def test_browser_approval_reviews_name_the_address_or_exact_page(tmp_path: Path) -> None:
@@ -46,10 +54,10 @@ def test_browser_approval_reviews_name_the_address_or_exact_page(tmp_path: Path)
     cases: tuple[tuple[str, dict[str, Json]], ...] = (
         ("browser_open", {"url": "https://example.com/"}),
         ("browser_evaluate", {"target_id": "page-1", "expression": "1"}),
-        ("browser_close", {"tab_ids": [7]}),
+        ("browser_close", {"target_id": "page-1"}),
     )
     for name, arguments in cases:
         rig = ToolRig(approvals=True, work=durable(tmp_path, review=review))
         assert not rig.call(name, **arguments).ok
     summaries = [item.detail.split("\n\nExact operation:")[0] for item in reviews]
-    assert summaries == ["open: https://example.com/", "evaluate: page-1", "close: Workspace browser"]
+    assert summaries == ["open: https://example.com/", "evaluate: page-1", "close: page-1"]

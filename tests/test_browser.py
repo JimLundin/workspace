@@ -16,11 +16,11 @@ from pydantic import TypeAdapter
 from websockets.sync.server import ServerConnection, serve
 
 from assistant import browser_tools, browser_values
-from assistant.browser import MAX_OUTPUT, Browser
+from assistant.browser import MAX_OUTPUT, Browser, task_pages
 from assistant.browser_requests import BrowserRequest, web_url
 from assistant.browser_session import MAX_RESPONSE, Attached, BrowserSession, Cdp, Managed, Product, Separate, Source
 from assistant.browser_tabs import TabStrip
-from assistant.browser_values import GROUP, TAB, BrowserError, Group, InterruptedError, NavigationContextError, Tab, evaluated
+from assistant.browser_values import GROUP, TAB, BrowserError, Group, InterruptedError, NavigationContextError, Page, Tab, evaluated
 from automation.json_value import Json
 
 VIEWPORT_PNG = base64.b64decode(
@@ -29,6 +29,18 @@ VIEWPORT_PNG = base64.b64decode(
 
 
 WIRE = TypeAdapter(dict[str, Json])
+
+
+def test_cleanup_preserves_only_edges_required_profile_sign_in_page() -> None:
+    # Defect: cleanup fights the browser's mandatory sign-in screen, or
+    # exempts research pages based on a matching title or a blank/loading URL.
+    pages = (
+        Page("required", "Sign in", "edge://force-signin/"),
+        Page("web", "edge://force-signin/", "https://example.com/force-signin/"),
+        Page("blank", "Research", "about:blank"),
+        Page("loading", "", ""),
+    )
+    assert tuple(page.id for page in task_pages(pages)) == ("web", "blank", "loading")
 
 
 def command(operation: str, **arguments: Json) -> BrowserRequest:

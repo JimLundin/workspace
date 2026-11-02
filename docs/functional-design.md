@@ -483,7 +483,13 @@ socket is closed on cancellation. Status inspection never starts that connection
 through `SessionOpener`; `NativeSessions` owns endpoint discovery, consent and
 process creation. The same `connect`/`close` interface is used by callers and
 tests. Attached sessions only disconnect; managed sessions close and reap the
-owned process. Tab mutation waits use the clock supplied to `TabStrip`.
+owned process by default. The agent owns an exclusive managed Edge profile;
+run-end cleanup releases every research page, including script-created and
+blank pages, while retaining its process, connection and cookies. It creates a
+fresh idle page and preserves Edge's mandatory profile sign-in screen. A visible
+sign-in handoff survives suspended work; Stop and shutdown reap the process.
+The independent collection adapters still borrow the personal browser.
+Tab mutation waits use the clock supplied to `TabStrip`.
 
 Browser page, tab and group state uses frozen, slotted dataclasses. Tab edits,
 group creation/changes, placement and closure use payload variants; required

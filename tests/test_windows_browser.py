@@ -204,10 +204,46 @@ def test_managed_browser_dom_teams_persistence_and_cancellation(tmp_path: Path) 
 def test_visible_sign_in_handoff_reuses_only_the_dedicated_profile(tmp_path: Path) -> None:
     with disposable(Browser(tmp_path / "sign-in-profile")) as browser, fixture() as url:
         visible = request(browser, "sign_in", url=url)
+        signing_in, connection = browser.process, browser.connection
+        browser.close(keep_browser=True)
+        assert browser.process is signing_in and browser.connection is connection
         assert visible["mode"] == "sign_in"
         result = request(browser, "open", url=url, target_id=visible["target_id"])
         assert result["title"] == "Workspace browser fixture"
         assert request(browser, "tabs")["mode"] == "background"
+
+
+def test_exclusive_browser_releases_all_research_pages_but_keeps_process_and_sign_in(tmp_path: Path) -> None:
+    # Defects: task cleanup leaks navigated or script-created tabs, clears
+    # cookies, closes the exclusive process, or alters a personal browser.
+    with disposable(Browser(tmp_path / "personal")) as personal, disposable(Browser(tmp_path / "agent")) as agent, fixture() as url:
+        original = request(personal, "open", url=url)
+        before = request(personal, "tabs")
+        page = request(agent, "open", url=url)
+        native, connection = agent.process, agent.connection
+        assert native is not None and native is not personal.process and connection is not None
+        agent.request(
+            command("evaluate", target_id=page["target_id"], expression="document.cookie = 'workspace-fixture=signed-in; path=/'"),
+            threading.Event(),
+        )
+        request(agent, "open", url=url)
+        research_blank = request(agent, "open", url="about:blank")["target_id"]
+        # Observe popups created through CDP too: ownership is the exclusive
+        # instance, rather than only IDs recorded by browser_open.
+        popup = connection.call("Target.createTarget", {"url": url, "background": True}, threading.Event())["targetId"]
+        for _ in range(2):
+            agent.close(keep_browser=True)
+            assert agent.process is native and native.poll() is None and agent.connection is connection
+            pages = TypeAdapter(TargetList).validate_python(connection.call("Target.getTargets", {}, threading.Event()))
+            live = tuple(target for target in pages.targets if target.type == "page" and target.url != "edge://force-signin/")
+            assert len(live) == 1 and live[0].url == "about:blank" and live[0].target_id not in (popup, research_blank)
+            assert request(personal, "tabs") == before
+            reopened = request(agent, "open", url=url)
+            cookie = agent.request(command("evaluate", target_id=reopened["target_id"], expression="document.cookie"), threading.Event()).text
+            # Evaluate returns its scalar JSON text; use the public response
+            # without treating the CDP transport as a cookie implementation test.
+            assert "workspace-fixture=signed-in" in cookie
+        assert request(personal, "snapshot", target_id=original["target_id"])["url"] == url
 
 
 def verify_inactive_screenshots(browser: Browser, target: str, identity: int) -> None:

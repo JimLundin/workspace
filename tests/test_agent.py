@@ -163,7 +163,7 @@ class FakeMachine:
         self.log.append("web_app " + query.target_id)
         raise BrowserError("This machine has no captured web-app results.")
 
-    def close_background(self) -> None:
+    def close_background(self, *, keep_browser: bool = False) -> None:
         pass
 
     def meeting(self, operation: MeetingOperation) -> str:

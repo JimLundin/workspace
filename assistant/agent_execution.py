@@ -4,6 +4,7 @@ import contextlib
 import threading
 import time
 from collections.abc import Callable, Mapping
+from typing import Protocol
 
 from assistant.agent import Agent
 from assistant.agent_tools import Machine
@@ -15,6 +16,12 @@ from automation.store import TaskStore
 from automation.task import Blocked, Claim, Outcome, Waiting
 from diagnostics import failure_info
 from usage import Detail
+
+
+class BackgroundCleanup(Protocol):
+    """Run-end cleanup releases pages; cancellation also releases the browser."""
+
+    def __call__(self, *, keep_browser: bool) -> None: ...
 
 
 class AgentExecution:
@@ -36,7 +43,7 @@ class AgentExecution:
         *,
         record: Callable[[Mapping[str, Detail]], None],
         report_error: Callable[[str], None],
-        close_background: Callable[[], None],
+        close_background: BackgroundCleanup,
         resources: Resources | None = None,
     ) -> None:
         # Settings, machine and profiles supply the run; recording, error reporting,
@@ -98,7 +105,11 @@ class AgentExecution:
             log.problem("Something went wrong; it's in the assistant's log.")
             return Waiting(Blocked("Execution failed before a verified result. Resume to inspect its state."))
         finally:
-            if stop.is_set():
-                self.close_background()
+            try:
+                self.close_background(keep_browser=not stop.is_set())
+            except OSError as error:
+                fault = failure_info(error)
+                self.report_error(f"Agent browser cleanup failed: {fault.kind}; {' > '.join(fault.locations)}")
+                log.problem("The agent browser could not close; its background pages may still be using memory.")
             with contextlib.suppress(OSError):
                 self.record({"durable": True, "seconds": round(time.monotonic() - started, 1), **agent.timings})

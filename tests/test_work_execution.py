@@ -64,6 +64,39 @@ class BrokenResultLog(FakeWindow):
         raise ValueError("Private mail content must stay out of operational diagnostics")
 
 
+def test_every_execution_releases_research_pages_and_stop_releases_the_browser(tmp_path: Path) -> None:
+    # Defect: only Stop invokes cleanup, leaving completed, suspended or failed
+    # tasks' research pages alive in the shared worker's browser.
+    store = TaskStore(tmp_path / "work.sqlite3")
+    source = Workspace(live_tree(tmp_path / "live"), tmp_path / "workspace")
+    cleaned: tuple[bool, ...] = ()
+    errors: list[str] = []
+
+    def cleanup(*, keep_browser: bool) -> None:
+        nonlocal cleaned
+        cleaned += (keep_browser,)
+
+    with fake_endpoint() as endpoint:
+        adapter = AgentExecution(
+            Settings(endpoint.url, "fixture", "transcribe", "", ""),
+            FakeMachine(),
+            Profiles(source, GeneralEffects(unseen, no_feed), None),
+            record=lambda record: None,
+            report_error=errors.append,
+            close_background=cleanup,
+        )
+        for identity, log in (("completed", FakeWindow()), ("suspended", FakeWindow()), ("failed", BrokenResultLog()), ("stopped", FakeWindow())):
+            endpoint.replies = [calls(("ask_user", {"question": "Which source?"}))] if identity == "suspended" else [says("Result")]
+            stop = threading.Event()
+            if identity == "stopped":
+                stop.set()
+            claim = request(store, identity, "Research this work", RequestSource(identity))
+            outcome = adapter.run_work(claim, store, log, stop)
+            assert store.finish(claim.run, outcome, at=time.time()) is not None
+        assert cleaned == (True, True, True, False)
+        assert len(errors) == 1 and "ValueError" in errors[0]
+
+
 def test_durable_execution_failure_preserves_safe_fault_locations(tmp_path: Path) -> None:
     # Defect: the execution owner discards the actionable fault location or
     # writes private source/exception content into the automation worker log.

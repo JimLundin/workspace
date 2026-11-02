@@ -62,7 +62,6 @@ def test_background_tools_are_exposed_to_the_model_and_run_without_default_promp
     with fake_endpoint() as endpoint:
         rig = Rig(
             endpoint,
-            calls(("browser_attach", {"browser": "edge"})),
             calls(("browser_open", {"url": "https://example.com"})),
             calls(("browser_action", {"target_id": "page", "id": "field", "action": "fill", "value": "fixture-private"})),
             says("Done."),
@@ -87,12 +86,9 @@ def test_explicit_approval_mode_can_decline_browser_changes(tmp_path: Path) -> N
     # gets its own task: the first unreviewed approval suspends a task.
     machine = FakeMachine()
     for name, arguments in (
-        ("browser_attach", {"browser": "edge"}),
+        ("browser_open", {"url": "https://example.com"}),
         ("browser_action", {"target_id": "page", "id": "button", "action": "click"}),
-        ("browser_group", {"tab_ids": [7], "title": "Workspace"}),
-        ("browser_ungroup", {"tab_ids": [7]}),
-        ("browser_tab", {"tab_id": 7, "action": "pin"}),
-        ("browser_close", {"group_id": 23}),
+        ("browser_close", {"target_id": "page"}),
     ):
         work = durable(tmp_path)
         agent = Agent(
@@ -126,7 +122,9 @@ def test_browser_images_invalidate_desktop_coordinates(tmp_path: Path) -> None:
     assert not any(line.startswith("click ") for line in machine.log)
 
 
-def test_agent_can_manage_tabs_and_groups_without_default_approval_prompts(tmp_path: Path) -> None:
+def test_agent_cannot_attach_to_or_manage_the_personal_browser(tmp_path: Path) -> None:
+    # Defect: a model can select the user's browser instead of its exclusive
+    # instance, or reach native personal-tab operations through old arguments.
     machine = FakeMachine()
     agent = Agent(
         Settings("", "", "", "", ""),
@@ -137,6 +135,9 @@ def test_agent_can_manage_tabs_and_groups_without_default_approval_prompts(tmp_p
         toolset=lambda agent: General(agent, feed_request=no_feed),
     )
     for name, arguments in (
+        ("browser_attach", {"browser": "edge"}),
+        ("browser_open", {"url": "about:blank", "browser": "edge"}),
+        ("browser_open", {"url": "about:blank", "browser": "chrome"}),
         ("browser_tabs", {"view": "strip"}),
         ("browser_open", {"url": "about:blank", "group_id": 23}),
         ("browser_group", {"tab_ids": [7, 8], "title": "Workspace", "collapsed": True}),
@@ -146,9 +147,9 @@ def test_agent_can_manage_tabs_and_groups_without_default_approval_prompts(tmp_p
         ("browser_close", {"group_id": 23}),
     ):
         result = agent.call(ToolCall("tabs", name, json.dumps(arguments)))
-        assert result.ok, (name, result.text)
-    assert len(machine.log) == 7 and all(line.startswith("browser ") for line in machine.log)
-    assert {"browser_group", "browser_ungroup", "browser_tab"} <= {spec.name for spec in browser_tools.SPECS}
+        assert not result.ok, (name, result.text)
+    assert not machine.log
+    assert not {"browser_attach", "browser_group", "browser_ungroup", "browser_tab"} & {spec.name for spec in browser_tools.SPECS}
 
 
 def test_stopped_agent_does_not_start_background_tools_or_show_their_arguments(tmp_path: Path) -> None:

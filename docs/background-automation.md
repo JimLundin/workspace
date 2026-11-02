@@ -7,82 +7,45 @@ applies; its default is `never`.
 
 ## Browser sessions
 
-The Windows app defaults to the user's running, signed-in Edge, with Chrome
-available through `browser_attach` or `browser_open`'s `browser` argument.
-The tools use the existing `websockets` dependency and CDP implementation;
-no browser bundle, Node.js, Playwright, Selenium or extension is added.
+The agent owns a separate headless Edge instance and dedicated profile at
+`%LOCALAPPDATA%\workspace\browser-profile`. It uses the existing `websockets`
+dependency and CDP implementation; no browser bundle, Node.js, Playwright,
+Selenium or extension is added. The agent tools cannot attach to the user's
+personal Edge or Chrome, or manage their native tabs and groups.
 
-Open `edge://inspect/#remote-debugging` (Chrome: `chrome://inspect/#remote-debugging`)
-in the intended browser and enable **Allow remote debugging for this browser
-instance**. Keep it running and approve its connection dialog when Workspace
-connects. The browser owns that consent and can request it again for a new
-connection. Workspace reuses an established connection across operations and tasks.
-Status checks never connect or trigger consent. A denied or blocked connection
-does not launch a separate profile or change browser policy.
-
-New Edge pages open in background tabs in a **Workspace** group in the existing
-browser context. The first group is blue and collapsed. Later opens reuse it,
-preserving its color and expanded state, including after Workspace reconnects.
-The group's tabs remain accessible in the tab strip. Set `group_id=-1` for an
-ordinary ungrouped tab, or provide another group ID or normal window ID.
-Use an explicit existing `target_id` for a page whose tab-local state is needed.
-Initial browser consent may bring its window forward; subsequent DOM actions
-and viewport captures do not select a tab or move the desktop pointer.
-
-Set `visibility=hidden` to create an invisible agent page outside the tab strip,
-using the same browser context and existing sign-in. Page lists mark these with
-`hidden=true`; they have no native tab ID, group or window. DOM inspection,
-actions and web-app operations remain available. Closing the page or disconnecting
-its Workspace client destroys it, preserving personal tabs and other clients.
-This is a hidden page in the existing browser, not a separate headless process.
-
-Hidden pages have no capturable viewport in the tested Windows Edge version.
-Screenshots fail immediately with guidance to open an ordinary background tab.
-Some workflows that require rendering can remain loading: live Teams chat
-discovery worked, but its Devices settings stayed on the setup screen. Hidden
-pages therefore require explicit selection; ordinary background tabs remain the
-default. Use `visibility=tab` for screenshots and these app workflows. An existing
-`target_id` keeps its visibility; visibility applies only when creating a page.
+The exclusive instance stays running between tasks. The agent inspects its page
+list, reuses exact page IDs and closes pages once useful context is saved. Every
+completed, suspended or failed execution releases the instance's research pages,
+including script-created tabs, and leaves one idle blank page. The same process,
+connection and cookies survive cleanup. Saved URLs and documents remain useful;
+page IDs must be refreshed on a later run. Stop and shutdown close the owned
+process tree, retaining its profile. Cleanup failures are reported explicitly.
+Edge's policy-required `edge://force-signin/` page belongs to the browser and is
+preserved; closing it would make Edge create it again.
 
 | Tool | Use |
 |---|---|
-| `browser_attach` | Connect to the running signed-in `edge` or `chrome`; return current tabs. |
-| `browser_open` | Open a background HTTP(S) page or `about:blank`, normally in Workspace's group, or navigate an explicit `target_id`. `visibility=hidden` creates an invisible DOM-only page. Optional `browser`: `edge`, `chrome`, or `separate`. |
-| `browser_tabs` | Report connection/setup status. Default `view=pages` lists CDP page IDs. Edge's `view=strip` lists native tab IDs, windows, group membership, active/pinned/muted state and the listed tabs' groups. Follow `next_offset` for more tabs. |
-| `browser_group` | Create a group from `tab_ids`, add tabs to `group_id`, edit its title/color/collapsed state, or move it using `index` and optional `window_id`. Unspecified existing properties stay unchanged. |
-| `browser_ungroup` | Remove native `tab_ids` from their groups, keeping the tabs open. |
-| `browser_tab` | Pin, unpin, reload or move a native `tab_id`. `activate` explicitly selects the tab and brings its window forward. |
-| `browser_snapshot` | Read visible text and controls. Follow the returned next offsets for more text, controls or frames. |
-| `browser_action` | Click, fill, select an option by value, or check a native checkbox/radio. |
-| `browser_evaluate` | Evaluate a JavaScript expression in an isolated world; await promises and return bounded output. |
-| `browser_screenshot` | Capture the browser viewport. Its coordinates are independent of desktop screenshots. |
-| `browser_sign_in` | Open the dedicated profile visibly so the user can complete sign-in or MFA. |
-| `browser_close` | Close a page's `target_id`, native `tab_ids`, or every tab in a `group_id`. With no selector, detach from a personal browser or close Workspace's separate browser. |
+| `browser_open` | Open an HTTP(S) page or `about:blank` in the exclusive agent instance, or navigate an exact `target_id`. |
+| `browser_tabs` | Inspect its current page IDs, titles and URLs without launching it. Follow `next_offset`; pages contain up to 40 tabs. |
+| `browser_snapshot` | Read text and controls. Follow next offsets for more text, controls or frames. |
+| `browser_action` | Click, fill, select an option, or check a native checkbox/radio. |
+| `browser_evaluate` | Evaluate JavaScript in an isolated world; await promises and return bounded output. |
+| `browser_screenshot` | Capture the agent viewport, independently of desktop coordinates. |
+| `browser_sign_in` | Open the dedicated profile visibly for credentials/MFA, then resume headless work with `browser_open`. |
+| `browser_close` | Close an exact page after saving evidence; with no `target_id`, close the exclusive browser and retain its profile. |
 
-Native tab IDs and CDP page IDs are different identifiers. Use the pages view
-for DOM tools and the strip view for tab/group management. Newly created group
-tabs return both IDs. The integration identifies them by a unique temporary
-blank-page URL before navigating; it never guesses an existing tab's identity
-from its title or URL. Explicit native operations work on existing personal
-tabs as well as agent tabs. Strip results can filter `window_id` or `group_id`
-(`-1` means ungrouped); group metadata accompanies each page of matching tabs.
-Tab batches contain up to 200 IDs and list pages up to 40 tabs.
+A visible sign-in handoff survives ordinary run cleanup so the user can finish
+MFA before continuing. Sites control session expiry; Workspace never copies
+cookies or tokens between profiles. Managed Edge can force sign-in and sync into
+new profiles, so this instance disables sync and extensions to keep its pages
+exclusive to the agent. Showing a source to the user uses the desktop open tool.
 
-Edge tab/group management uses the browser's built-in `tabs`, `tabGroups` and
-`windows` APIs from a hidden `edge://favorites/` control page on the existing
-approved CDP connection. That page is outside the tab strip and belongs to the
-connection; disconnecting destroys it without closing ordinary tabs. No
-extension is installed and no browser flags or policy settings are changed.
-This WebUI API exposure was tested against Edge **155.0.4283.62**. A runtime probe
-checks availability; unsupported versions return an error, with `group_id=-1`
-available for ordinary background opening. Chrome retains its existing page
-tools but does not expose this Edge control surface.
-
-Muting remains read-only in the tab metadata. Calling `tabs.update({muted:...})`
-from a WebUI page crashes this Edge version: the Chromium implementation
-dereferences `extension()->id()` although WebUI has no extension. The adapter
-rejects mute/unmute before touching the browser. See
-[the tabs implementation](https://github.com/chromium/chromium/blob/main/chrome/browser/extensions/api/tabs/tabs_api.cc).
+The independent Teams/activity collectors still borrow the user's approved
+signed-in Edge connection. Their browser attachment and native tab infrastructure
+remain separate from the agent toolset. Enable remote debugging at
+`edge://inspect/#remote-debugging` and approve the browser-owned connection for
+those collectors. They preserve personal tabs when disconnecting. See
+[browser session reuse](browser-session-reuse.md) for that connection's contract.
 
 Use control IDs from the latest snapshot of the selected page and frame. A new
 snapshot replaces that frame's IDs. Actions do not imply that the intended
@@ -95,38 +58,9 @@ verifies the saved effect and unchanged window state. Open shadow roots are incl
 with closed shadow roots, inaccessible frames or canvas interfaces may require
 custom JavaScript, screenshots or foreground automation.
 
-Selecting `browser=separate` retains the optional isolated Edge workflow and its
-profile at `%LOCALAPPDATA%\workspace\browser-profile`. `browser_sign_in` explicitly
-selects that profile and opens it visibly. After sign-in, `browser_open` restarts
-it headlessly and returns new page IDs. It has its own sign-ins; it does not
-inherit the normal browser's session. Workspace never copies cookies or tokens
-between profiles. MFA and company access policy may require further interaction.
-Managed Edge can force account sign-in and sync into every new profile (the
-`BrowserSignin` and `ForceSync` policies). Sync would then install the account's
-extensions, which open their own tabs and script pages. Workspace therefore
-launches this profile with sync and extensions disabled. The attached personal
-browser keeps its own settings.
-
-CDP connects only to `127.0.0.1`, bypassing proxies. Attachment reads only the
-bounded `DevToolsActivePort` discovery file; it never creates, rewrites or deletes
-that file. The connection waits up to 60 seconds for browser consent. Stop closes
-the pending socket promptly, although the browser controls its own dialog.
-No `/json/version` probe is used, because the consent mode does not expose it.
-
-Attached browsers and all their ordinary tabs survive Stop, disconnect and
-Workspace exit. Workspace closes its owned hidden pages on release. Only an explicitly selected target is navigated or closed; an
-arbitrary personal blank tab is never reused. There is no artificial limit of
-20 agent tabs. Attached page lists mark the current connection's new pages with
-`created_in_session`. Closing by page ID uses the target lifecycle API directly,
-so closing a tab does not depend on permission to attach to its page scripts.
-It waits briefly for removal and returns `state=closed`, or `state=requested`
-if the page remains open. Inspection can then handle any outstanding browser
-dialog without sending the close again.
-
-In separate mode, Workspace starts Edge suspended, assigns it to an owned job and
-then resumes it. Stop and exit close that owned process tree. Normal closure
-waits for child processes; the job also terminates them if Workspace crashes.
-The separate profile's sign-in state persists.
+The exclusive browser is started suspended, assigned to an owned Windows job
+and then resumed. Normal closure waits for children; the job also terminates
+them if the worker crashes. The persistent profile retains sign-in data.
 
 Snapshots and evaluated output are limited to 20,000 characters; oversized
 snapshots and tab lists retain valid JSON and expose offsets. CDP replies
@@ -171,7 +105,7 @@ offered no call control.
 
 Outlook tools reuse the signed-in browser at `outlook.office.com`,
 `outlook.office365.com` or `outlook.cloud.microsoft`. Obtain the exact page ID from
-`browser_tabs`, connecting with `browser_attach` when needed. No Microsoft app IDs
+`browser_tabs`, opening the application with `browser_open` when needed. No Microsoft app IDs
 or consent are required. These adapters use the English web
 interface observed in the live apps; unexpected controls fail explicitly.
 
@@ -201,7 +135,7 @@ message history are bounded; they are not a tenant-wide search or archive.
 
 The Kanban adapter targets the observed AIP Kanban app at
 `https://dev-team-kanban.fcg.palantirfoundry.com`. Obtain its exact page ID from
-`browser_tabs`, connecting with `browser_attach` when needed. Multiple open board
+`browser_tabs`, opening the application with `browser_open` when needed. Multiple open board
 tabs require an explicit selection. Workspace reuses the signed-in page without
 copying credentials or calling undocumented Foundry APIs.
 
