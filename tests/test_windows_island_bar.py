@@ -554,6 +554,22 @@ def test_menu_dividers_never_take_the_pointer_selection_or_highlight() -> None:
         closed(app, bar)
 
 
+def test_menu_rows_do_not_inherit_the_escape_closes_tooltip() -> None:
+    # Defect: the expanded capsule's tooltip propagates to every menu row.
+    app = application()
+    bar = DesktopBar(recorded([]), native_shell=False, observations=BarObservations(motion=lambda: False))
+    try:
+        island = bar.window.capsules[Key.ISLAND]
+        assert island.toolTip()
+        bar.open_menu()
+        assert island.toolTip() == "" and all(row.toolTip() == "" for row in island.rows)
+        assert "Workspace controls" in island.accessibleName()
+        QTest.keyClick(bar.window, QtCore.Qt.Key.Key_Escape)
+        assert bar.expanded is None and island.toolTip()
+    finally:
+        closed(app, bar)
+
+
 def test_the_menu_takes_the_keyboard_and_hands_it_back_only_when_a_choice_calls_for_it() -> None:
     # Defects: arrows or letters don't reach the menu, Escape strands the keyboard
     # on the bar, opening a Workspace view gives the keyboard back to the old window,

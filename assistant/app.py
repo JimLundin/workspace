@@ -703,6 +703,9 @@ class AssistantApp:
 
     def on_message(self, hwnd: int, message: int, wparam: int, lparam: int) -> int | None:
         try:
+            if message == shell.TASKBAR_CREATED:
+                self.tray.restore()
+                return 0
             if message == system.WM_TIMER and wparam == self.capture_timer:
                 self.assistant.expire_capture(time.monotonic())
                 return 0

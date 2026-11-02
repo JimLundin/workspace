@@ -4,8 +4,9 @@ Workspace's desktop control surface is a floating island at the top of the
 primary screen, in the Liquid Glass design
 ([design note](design/liquid-glass.md), kit at
 [JimLundin/liquid-glass](https://github.com/JimLundin/liquid-glass)). The island
-stays centred 8 px below the screen edge. Only temporary or active things sit
-beside it, and every capsule acts on what it shows.
+stays centred 8 px below the screen edge. Activity capsules sit beside it, and
+every capsule acts on what it shows. Separate compact running-app and tray
+sections occupy the left and right ends of the toolbar.
 
 ## What the bar shows
 
@@ -24,9 +25,9 @@ is doing for you. Its policy decides what may change it.
    then a job's dots, the time and battery, and the recording last. During a
    moment they detach beside the island as compact capsules in the same order;
    a detached agent keeps its phase in its label.
-4. **Only temporary or active things sit beside the island:** the keyboard layer
-   before it, the inbox after it while items wait. Nothing persistent, nothing
-   decorative.
+4. **Temporary or active capsules sit beside the island:** the keyboard layer
+   before it, the inbox after it while items wait. Persistent shell icons stay
+   in their own sections at the ends of the bar.
 5. **Agent work keeps Stop visible**, so hovering does not change its width.
    Other stoppable activities reveal Stop under the pointer. A quick job has no Stop.
 6. **Each fact has one owner, and only that owner changes it.** Dictation and
@@ -56,6 +57,7 @@ capsules leave the bar while the menu is open. The canvas comes first, then the 
 keyboard, and the desktop tools. Window tiling discloses its items in place.
 Arrows wrap and skip separators, Right and Left open and close tiling, Enter
 chooses, a letter jumps to the next row starting with it, and Escape closes.
+Menu rows do not inherit an Escape tooltip from the island.
 Opening the menu takes the keyboard; a window tool, a quiet toggle or Escape hands
 it back to the window that had it, a Workspace view keeps it, and clicking
 elsewhere closes the menu without taking it back. Window tools act on the window
@@ -72,6 +74,29 @@ The bell's badge reads `99+` above 99; its tooltip
 and accessible name keep the exact count and the **Hold V + T** shortcut. Hold
 V + T opens the same inbox while the layout is on, including when no bell shows.
 Space holds dictation; B toggles dictation; N toggles agent speech.
+
+Running applications have one icon per executable. Clicking switches to that
+app; further clicks cycle its windows in a stable order. Right-click lists its
+current windows. A background observer refreshes windows once per second and
+copies newly seen icons away from Qt's animation and audio thread. The current
+app has a quiet selection fill. Both sections scroll horizontally when crowded.
+
+Tray icons come from live Windows registration messages, including tooltip,
+image, visibility and callback/version changes. Left, right and double clicks
+route to the registered application. The hidden native tray proxy forwards
+shell messages to Explorer, broadcasts TaskbarCreated at startup/shutdown, and
+is excluded from taskbar hiding and recovery. Closing Workspace removes it.
+Registry history is not used to invent live icons.
+
+Native fixtures cover real registration/update/removal, callback delivery,
+popup position, restoration, legacy icon masks and scroll overflow. Pure checks
+cover stable app/window order and tray field/version policy. The app/tray mutation
+campaigns detected all five seeded defects, with passing baselines and no
+survivors, timeouts or collection errors. Reports are in Windows Temp as
+`workspace-app-mutations.json` and `workspace-tray-mutations.json`. A separate
+live Windows probe observed three running-app groups and eight registered tray
+icons; all eight tray images copied successfully. Python and Qt primitives,
+Windows enumeration and icon painting remain trusted dependencies.
 
 ## Shape
 

@@ -46,6 +46,7 @@ from desktop_ui.island_model import Action, Badge, CapsuleView, Control, Glyph, 
 from desktop_ui.qt_runtime import prepare
 from desktop_ui.qt_ui import EventLoop
 from desktop_ui.request_panel import RequestActions, RequestPanel
+from desktop_ui.shell_surface import ShellSections
 from desktop_ui.vector_icons import icon
 from desktop_ui.view_publication import log_view
 from winapi import windows
@@ -118,6 +119,7 @@ class Presented:
     contrast: bool = field(kw_only=True)
     glass: bool = field(kw_only=True)
     request: Phase | None = None
+    shell_look: Look = field(kw_only=True)
 
 
 def radius(height: float) -> float:
@@ -408,7 +410,7 @@ class Capsule(KeyboardFocus):
             return
         if self.view is None or self.view.label != drawn.view.label:
             # Each change raises an accessibility event; frames of a fade keep the label.
-            self.setToolTip(drawn.view.label)
+            self.setToolTip("" if drawn.view.action is Action.CLOSE_MENU else drawn.view.label)
             self.setAccessibleName(drawn.view.label)
         self.view, self.content, self.previous, self.fade, self.look, self.presence, self.contrast = state
         wanted = controls(drawn.content)
@@ -681,6 +683,7 @@ class BarWindow(QtWidgets.QWidget):
         self.presentation: tuple[Presented, tuple[int, int, int, int], float] | None = None
         self.scene: GlassScene | None = None
         self.panes: tuple[Pane, ...] = ()
+        self.shell_sections = ShellSections(self)
         self.glass = False
         self.setWindowTitle(BAR_WINDOW)
         self.setWindowFlags(Qt.WindowType.Tool | Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint)
@@ -747,8 +750,40 @@ class BarWindow(QtWidgets.QWidget):
         for key, capsule in self.capsules.items():
             if key not in keys:
                 capsule.hide()
+        self.shell_sections.place(
+            (
+                math.floor(min((each.framed.box.x for each in presented.drawn), default=area.width() / 2)),
+                math.ceil(max((each.framed.box.x + each.framed.box.width for each in presented.drawn), default=area.width() / 2)),
+            ),
+            area.width(),
+        )
+        self.shell_sections.apps.apply_look(presented.shell_look)
+        self.shell_sections.tray.apply_look(presented.shell_look)
         self.glass = presented.glass
         self.panes = tuple(found for each in presented.drawn if (found := pane(each, presented.frost, scale)) is not None)
+        match presented.shell_look:
+            case GlassLook() as shell_look:
+                self.panes = (
+                    *self.panes,
+                    *(
+                        Pane(
+                            name,
+                            Rect(
+                                round(section.x() * scale),
+                                round(section.y() * scale),
+                                round((section.x() + section.width()) * scale),
+                                round((section.y() + section.height()) * scale),
+                            ),
+                            RADIUS * scale,
+                            1,
+                            _veil(shell_look, presented.frost),
+                        )
+                        for name, section in (("applications", self.shell_sections.apps), ("tray", self.shell_sections.tray))
+                        if section.isVisible()
+                    ),
+                )
+            case SolidLook():
+                pass
         if not self.glass_timer.isActive():
             self.glass_timer.start(0)
         self.presentation = publication

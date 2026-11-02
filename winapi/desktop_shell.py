@@ -12,6 +12,7 @@ _ShowWindow = fn(user32, "ShowWindow", wintypes.BOOL, wintypes.HWND, ctypes.c_in
 _OpenProcess = fn(kernel32, "OpenProcess", wintypes.HANDLE, wintypes.DWORD, wintypes.BOOL, wintypes.DWORD)
 _WaitForSingleObject = fn(kernel32, "WaitForSingleObject", wintypes.DWORD, wintypes.HANDLE, wintypes.DWORD)
 _CloseHandle = fn(kernel32, "CloseHandle", wintypes.BOOL, wintypes.HANDLE)
+_GetProp = fn(user32, "GetPropW", wintypes.HANDLE, wintypes.HWND, wintypes.LPCWSTR)
 
 
 def taskbars() -> tuple[int, ...]:
@@ -20,7 +21,8 @@ def taskbars() -> tuple[int, ...]:
         previous = 0
         while found := _FindWindowEx(0, previous, name, None):
             previous = int(found)
-            handles.append(previous)
+            if not _GetProp(previous, "workspace tray proxy"):
+                handles.append(previous)
     return tuple(handles)
 
 

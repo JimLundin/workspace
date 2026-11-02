@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 from typing import Final
 
 from winapi._core import LRESULT, NativeFunction, fn, gdi32, kernel32, last_error, shell32, user32
+from winapi.shapes import Rect
 
 WNDPROC = ctypes.WINFUNCTYPE(LRESULT, wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM)
 
@@ -95,6 +96,14 @@ class ICONINFO(ctypes.Structure):
     )
 
 
+class NOTIFYICONIDENTIFIER(ctypes.Structure):
+    cbSize: int
+    hWnd: int | None
+    uID: int
+    guidItem: GUID
+    _fields_ = (("cbSize", wintypes.DWORD), ("hWnd", wintypes.HWND), ("uID", wintypes.UINT), ("guidItem", GUID))
+
+
 class BITMAPINFOHEADER(ctypes.Structure):
     biSize: int
     biWidth: int
@@ -126,6 +135,9 @@ if ctypes.sizeof(NOTIFYICONDATAW) != (976 if ctypes.sizeof(ctypes.c_void_p) == 8
     raise ImportError(f"NOTIFYICONDATAW is {ctypes.sizeof(NOTIFYICONDATAW)} bytes; Windows expects a different size")
 
 _RegisterClassW = fn(user32, "RegisterClassW", wintypes.ATOM, ctypes.POINTER(WNDCLASSW))
+_RegisterWindowMessage = fn(user32, "RegisterWindowMessageW", wintypes.UINT, wintypes.LPCWSTR)
+TASKBAR_CREATED: Final = _RegisterWindowMessage("TaskbarCreated")
+_UnregisterClassW = fn(user32, "UnregisterClassW", wintypes.BOOL, wintypes.LPCWSTR, wintypes.HINSTANCE)
 _CreateWindowExW = fn(
     user32,
     "CreateWindowExW",
@@ -147,6 +159,7 @@ _DefWindowProcW = fn(user32, "DefWindowProcW", LRESULT, wintypes.HWND, wintypes.
 _DestroyWindow = fn(user32, "DestroyWindow", wintypes.BOOL, wintypes.HWND)
 _GetModuleHandleW = fn(kernel32, "GetModuleHandleW", wintypes.HMODULE, wintypes.LPCWSTR)
 _Shell_NotifyIconW = fn(shell32, "Shell_NotifyIconW", wintypes.BOOL, wintypes.DWORD, ctypes.POINTER(NOTIFYICONDATAW))
+_Shell_NotifyIconGetRect = fn(shell32, "Shell_NotifyIconGetRect", wintypes.LONG, ctypes.POINTER(NOTIFYICONIDENTIFIER), ctypes.POINTER(wintypes.RECT))
 _CreatePopupMenu = fn(user32, "CreatePopupMenu", wintypes.HMENU)
 _AppendMenuW = fn(user32, "AppendMenuW", wintypes.BOOL, wintypes.HMENU, wintypes.UINT, ctypes.c_size_t, wintypes.LPCWSTR)
 _TrackPopupMenu = fn(
@@ -190,14 +203,14 @@ class AppWindow:
 
     __slots__ = ("_callback", "_class", "handle")
 
-    def __init__(self, title: str, proc: WindowProc) -> None:
+    def __init__(self, title: str, proc: WindowProc, *, class_name: str | None = None) -> None:
         def call(hwnd: int, message: int, wparam: int, lparam: int) -> int:
             result = proc(int(hwnd or 0), int(message), int(wparam or 0), int(lparam or 0))
             return int(_DefWindowProcW(hwnd, message, wparam, lparam)) if result is None else result
 
         self._callback = WNDPROC(call)  # kept alive as long as the window
         instance = _GetModuleHandleW(None)
-        self._class = WNDCLASSW(0, self._callback, 0, 0, instance, None, None, None, None, f"{title} class")
+        self._class = WNDCLASSW(0, self._callback, 0, 0, instance, None, None, None, None, class_name or f"{title} class")
         if not _RegisterClassW(ctypes.byref(self._class)):
             raise last_error()
         hwnd: int | None = _CreateWindowExW(0, self._class.lpszClassName, title, 0, 0, 0, 0, 0, None, None, instance, None)
@@ -207,6 +220,7 @@ class AppWindow:
 
     def destroy(self) -> None:
         _DestroyWindow(self.handle)
+        _UnregisterClassW(self._class.lpszClassName, self._class.hInstance)
 
 
 class Icon:
@@ -265,6 +279,19 @@ class TrayIcon:
 
     def remove(self) -> None:
         _Shell_NotifyIconW(_NIM_DELETE, ctypes.byref(self._data))
+
+    def restore(self) -> None:
+        """Re-register the retained icon after Explorer or the tray host restarts."""
+        self._data.uFlags = _NIF_MESSAGE | _NIF_ICON | _NIF_TIP
+        _Shell_NotifyIconW(_NIM_ADD, ctypes.byref(self._data))
+
+    def bounds(self) -> Rect | None:
+        """Observe the host's icon position for native popup anchoring."""
+        identifier = NOTIFYICONIDENTIFIER(ctypes.sizeof(NOTIFYICONIDENTIFIER), self._data.hWnd, self._data.uID, self._data.guidItem)
+        rect = wintypes.RECT()
+        if _Shell_NotifyIconGetRect(ctypes.byref(identifier), ctypes.byref(rect)) < 0:
+            return None
+        return Rect(rect.left, rect.top, rect.right, rect.bottom)
 
 
 @dataclass(frozen=True, slots=True)

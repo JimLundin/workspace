@@ -34,3 +34,7 @@ class Tray:
             self._icon.remove()
             for icon in self._icons.values():
                 icon.destroy()
+
+    def restore(self) -> None:
+        with self._lock:
+            self._icon.restore()

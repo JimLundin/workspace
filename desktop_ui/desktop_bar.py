@@ -27,6 +27,7 @@ lazy from assistant.recording_state import RecordingAction, RecordingState
 lazy from desktop_ui import island_menu
 lazy from desktop_ui.agent_progress import Phase, coalesced, stable_phases
 lazy from desktop_ui.ambient import Ambient, SystemStatus
+lazy from desktop_ui.application_observer import ApplicationObserver
 lazy from desktop_ui.audio_meter import AudioMeter
 lazy from desktop_ui.bar_status import StatusObserver
 lazy from desktop_ui.components.appearance import Look, look
@@ -39,11 +40,13 @@ lazy from desktop_ui.island_surface import TOP, BarWindow, Drawn, Presented
 lazy from desktop_ui.qt_ui import EventLoop, application
 lazy from desktop_ui.request_panel import RequestActions
 lazy from desktop_ui.shell_controls import TASKBAR_TOGGLE, TaskbarControl, WindowsKeyObserver
+lazy from desktop_ui.shell_items import Application, next_window
 lazy from protocol import Tool
-lazy from winapi import appearance, shell, system_notices, windows
+lazy from winapi import appearance, inputs, shell, system_notices, windows
 lazy from winapi.machine_status import Power, PowerUnavailable
 lazy from winapi.notifications import NotificationObserver
 lazy from winapi.shapes import Rect
+lazy from winapi.tray_host import Click, Entry, TrayHost
 
 prepare()
 
@@ -87,6 +90,8 @@ class DesktopBar:
         "actions",
         "agent",
         "ambient",
+        "application_service",
+        "applications",
         "audio_meter",
         "audio_timer",
         "automatic_recording",
@@ -124,6 +129,7 @@ class DesktopBar:
         "system",
         "taskbar",
         "timer",
+        "tray_host",
         "views",
         "visible",
         "window",
@@ -141,6 +147,9 @@ class DesktopBar:
         observations: BarObservations | None = None,
     ) -> None:
         self.actions = actions
+        self.applications: tuple[Application, ...] = ()
+        self.application_service: ApplicationObserver | None = None
+        self.tray_host: TrayHost | None = None
         self.observations = BarObservations() if observations is None else observations
         self.closed, self.visible = False, native_shell
         # Each activity comes from its own owner: dictation and quick jobs from the
@@ -215,6 +224,8 @@ class DesktopBar:
         self.notification_service = NotificationObserver()
         self.status_service = StatusObserver()
         self.controls = shell.AppWindow("workspace shell controls", self.message)
+        self.tray_host = TrayHost()
+        self.application_service = ApplicationObserver()
         self.keys = WindowsKeyObserver(self.controls.handle)
         self.worker = threading.Thread(target=self.start_taskbar, name="taskbar recovery", daemon=True)
         self.worker.start()
@@ -236,6 +247,33 @@ class DesktopBar:
             self.taskbar.toggle()
         except OSError as error:
             self.actions.problem(str(error))
+
+    def poll_shell(self) -> None:
+        if self.tray_host is None:
+            return
+        previous = (self.window.shell_sections.app_snapshot, self.window.shell_sections.tray_snapshot)
+        self.window.shell_sections.notifications(self.tray_host.poll(), self.tray_click)
+        if self.application_service is not None:
+            with suppress(queue.Empty):
+                self.applications = self.application_service.results.get_nowait()
+        self.window.shell_sections.applications((self.applications, self.observations.foreground()), self.application_click)
+        # A changed snapshot must also publish section geometry when the island is still.
+        if previous != (self.window.shell_sections.app_snapshot, self.window.shell_sections.tray_snapshot):
+            self.window.presentation = None
+
+    def application_click(self, app: Application, click: Click) -> None:
+        self.close_menu(restore=False)
+        if click is Click.RIGHT:
+            chosen = shell.show_menu(int(self.window.winId()), tuple(shell.MenuItem(window.handle, window.title) for window in app.windows))
+            if chosen:
+                self.observations.focus(chosen)
+        else:
+            self.observations.focus(next_window(app, self.observations.foreground()))
+
+    def tray_click(self, entry: Entry, click: Click) -> None:
+        if self.tray_host is not None:
+            self.close_menu(restore=False)
+            self.tray_host.click(entry, click, inputs.cursor_position())
 
     def press(self, action: Action) -> None:
         match action:
@@ -510,8 +548,11 @@ class DesktopBar:
                 contrast=contrast,
                 glass=self.preference is appearance.Material.GLASS,
                 request=self.request,
+                shell_look=self.style(Tint.NONE, HEIGHT),
             )
         )
+        if self.tray_host is not None:
+            self.tray_host.locate(self.window.shell_sections.locations(windows.outer_rect(int(self.window.winId())), self.window.devicePixelRatioF()))
 
     def style(self, tint: Tint, height: float) -> Look:
         pane = desktop_ui.components.appearance.Menu(self.frost) if height > HEIGHT else desktop_ui.components.appearance.Capsule(self.frost)
@@ -561,6 +602,7 @@ class DesktopBar:
             self.actions.problem(self.errors.get_nowait())
         self.poll_notifications()
         now = self.observations.clock()
+        self.poll_shell()
         if now >= self.next_power:
             self.next_power = now + 15
             self.power = self.observations.power()
@@ -621,6 +663,10 @@ class DesktopBar:
         if self.notification_service is not None:
             self.notification_service.close()
         self.materials.close()
+        if self.tray_host is not None:
+            self.tray_host.close()
+        if self.application_service is not None:
+            self.application_service.close()
         try:
             if self.keys is not None:
                 self.keys.close()

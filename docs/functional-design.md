@@ -3,9 +3,10 @@
 Live requested agent activity appears in a bounded lower-right trail. One
 requested outcome owns one card: public updates, actions and the final reply
 stay together. Questions and approvals resume that same turn. Headings stay on
-one elided line even when steps are opened. Cards remain opaque until their
-reading lifetime ends, then fade away; stack position does not dim them.
-Hover pauses the reading timeout. Full history retains the complete interaction.
+one elided line even when steps are opened. Completed cards expire oldest first.
+Older cards pushed into the upper eight-line edge band begin their ordinary exit;
+hover, expansion, pending input and recording protect them from that exit.
+Hover also pauses the reading timeout. Full history retains the complete interaction.
 Notification-owned background tasks stay quiet; their useful findings and
 questions join the desktop card for their factual work context. Related canvas
 contributions retain one desktop card even across different visual groups.
@@ -79,6 +80,7 @@ process, such as the browser host. Effect ownership stays in the last column.
 | `winapi/system_notices.py` | desktop | Native notification identities, quiet history baselines, banner coverage and validated timestamps | `winapi/notifications.py` owns native observations; `notification_banners.py` owns the recoverable banner-setting lease; `desktop_bar.py` forwards observations through `Ui.system_notices` to `NotificationSources` and the joined feed; the island has no individual-notice dismissal control |
 | `assistant/monitor_layout.py`, `tiling.py`, `tiling_commands.py` | desktop | Monitor observations, window distribution and native window command mapping | `MonitorLayout` owns automatic redistribution; `GlazeWM` owns manager startup and ordinary window tiling |
 | `desktop_ui/shell_state.py` | desktop | Windows-key tap decisions | `shell_controls.py` owns taskbar recovery and a dedicated Windows-key message thread; keyboard callbacks post toggles and pass other input through |
+| `desktop_ui/shell_items.py`; `winapi/tray_host.py` | desktop | Stable running-app/window grouping, live tray registration updates, callback/version routing and popup geometry | `application_observer.py` copies window icons off Qt; `shell_surface.py` owns scrollable icon sections; `TrayHost` forwards shell traffic to Explorer and owns its hidden proxy; the desktop bar composes their lifetimes and excludes the proxy from taskbar recovery |
 | `assistant/geometry.py`; `desktop_ui/rich_text.py` | shared: geometry; desktop: rich text | Geometry and Markdown values | Native geometry adapters and Qt text views |
 
 ## Presentation ownership
