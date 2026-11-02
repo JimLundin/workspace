@@ -18,6 +18,7 @@ lazy from PySide6 import QtCore, QtGui, QtWidgets
 
 import winapi.shapes
 from assistant.canvas_activity import CanvasRequest
+from assistant.feed_origin import FeedRequest
 from assistant.work_canvas_commands import CanvasCommand, CanvasRefused, CanvasResponse
 from automation.personal_work import Catalog
 from automation.task import TextAnswer
@@ -35,9 +36,12 @@ lazy from assistant.state_store import SavedState
 lazy from assistant.work_commands import WorkViewCommand
 lazy from assistant.work_snapshot import WorkSnapshot
 lazy from desktop_ui import island_agent, island_model
-lazy from desktop_ui.agent_session import Session, Snapshot
+lazy from desktop_ui.agent_progress import canvas_phases, phases
+lazy from desktop_ui.agent_session import AgentRequest, ChatMessage, Session, Snapshot, notice_text, pending
 lazy from desktop_ui.agent_toasts import AgentToasts
 lazy from desktop_ui.agent_window import AgentWindow
+lazy from desktop_ui.attention import selected_question
+lazy from desktop_ui.card_actions import AnswerApproval, CardAction, OpenCanvas
 lazy from desktop_ui.components.appearance import scheme, tokens
 lazy from desktop_ui.components.canvas_loading import CanvasLoading
 lazy from desktop_ui.components.widgets import show_window, window_style
@@ -46,7 +50,9 @@ lazy from desktop_ui.dialogs import AnswerWindow, Job, NativePresentation, Prese
 lazy from desktop_ui.icons import State
 lazy from desktop_ui.keymap_views import KeymapOverlay, KeymapWindow
 lazy from desktop_ui.layer_indicator import Indicator
+lazy from desktop_ui.notifications import Entry
 lazy from desktop_ui.qt_ui import application, later
+lazy from desktop_ui.request_panel import RequestActions
 lazy from desktop_ui.vector_icons import icon
 lazy from desktop_ui.window_switcher import WindowSwitcher
 lazy from desktop_ui.work_canvas import CanvasPublication, WorkCanvas
@@ -492,6 +498,7 @@ class Ui:
             session = Session() if self._agent is None else self._agent.snapshot()
         if self._desktop is not None:
             self._desktop.agent_changed(island_agent.activity(session))
+            self._desktop.requests_changed(tuple(phases(session)))
         if self._canvas is not None:
             self._canvas.observe_session(session)
 
@@ -617,7 +624,7 @@ class Ui:
         """Replay attention to late-created views without repeating the original notice."""
         self._canvas_published = publication
         if self._agent is not None:
-            self._agent.settle_canvas(publication.settled)
+            self._agent.canvas_attention(publication.attention)
         if self._desktop is not None:
             self._desktop.inbox_changed(len(publication.waiting))
         if self._work_view is not None:
@@ -672,6 +679,12 @@ class Ui:
         """
 
         def route(_: QtWidgets.QApplication) -> None:
+            if self._agent is not None:
+                session = self._agent.snapshot()
+                question = selected_question(session.attention, session.selected_request)
+                if question is not None:
+                    self.answer_canvas(question.request, text)
+                    return
             view = self._work_view
             focus = view.focus() if view is not None else None
             waiting = self._canvas.waiting() if self._canvas is not None else ()
@@ -746,10 +759,43 @@ class Ui:
                 if self._inputs_closed:
                     return
             waiting = self._canvas.waiting() if self._canvas is not None else ()
+            session = self._agent.snapshot() if self._agent is not None else Session()
+            choices = tuple(phases(session))
+            request = next(
+                (
+                    phase
+                    for phase in choices
+                    if any(
+                        isinstance(entry, Entry) and isinstance(entry.message, AgentRequest) and pending(entry.message)
+                        for entry in phase.turn.entries
+                    )
+                ),
+                None,
+            )
+            if request is None and waiting and self._canvas_published is not None:
+                question = waiting[0]
+                preview = Session(
+                    attention=self._canvas_published.attention,
+                    messages=(
+                        ChatMessage(
+                            "Workspace",
+                            notice_text(question.title, question.id),
+                            question.created_at,
+                            FeedRequest("canvas:" + question.id, question.title),
+                        ),
+                    ),
+                )
+                request = next(canvas_phases(preview), None)
+            if request is not None:
+                if self._desktop is not None:
+                    self._desktop.open_request(request)
+                elif self._agent is not None:
+                    self._agent.show()
+                return
             target = desktop_ui.desktop_attention.inbox_target(waiting, work_open=self._work is not None)
             match target:
-                case desktop_ui.desktop_attention.OpenQuestion(identity=identity):
-                    self.open_canvas_at(identity)
+                case desktop_ui.desktop_attention.OpenQuestion():
+                    pass
                 case desktop_ui.desktop_attention.Inbox.WORK:
                     if self._work is not None:
                         self._work.show()
@@ -760,6 +806,26 @@ class Ui:
                     assert_never(target)
 
         self.post(reveal)
+
+    def request_action(self, action: CardAction) -> None:
+        match action:
+            case OpenCanvas(target=target):
+                if self._desktop is not None:
+                    self._desktop.close_menu(restore=False)
+                self.open_canvas_at(target)
+            case AnswerApproval(request=request, decision=decision):
+                if self._agent is not None:
+                    self._agent.respond(request, decision)
+            case _:
+                assert_never(action)
+
+    def select_request(self, request: CanvasRequest | None) -> None:
+        if self._agent is not None:
+            self._agent.select_attention(request)
+
+    def request_presented(self, identity: str) -> None:
+        if self._agent is not None:
+            self._agent.input_presented(identity)
 
     # View navigation, stop, overlay, menu dispatch and error reporting remain
     # distinct effect ports; audio observation and tool dispatch complete bar composition.
@@ -796,6 +862,7 @@ class Ui:
                     tool or (lambda _tool, _hwnd: None),
                     self.system_notices,
                     inbox=self.open_inbox,
+                    requests=RequestActions(self.request_action, self.select_request, self.request_presented),
                 )
                 self._desktop = self._views.desktop(actions, audio_level=audio_level)
                 self._desktop.automatic_changed(self._automatic_recording)

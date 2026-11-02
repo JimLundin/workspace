@@ -163,7 +163,7 @@ class Measure:
         user = tone(content) is Tone.USER
         compact = _settled_turn(content)
         maximum_width = min(maximum / scale, 280 if user else maximum / scale)
-        presentation = notification_text.bubble_text(notification_text.spans(content))
+        presentation = notification_text.bubble_text(notification_text.spans(content, expanded=expanded))
         spans = presentation.body
         details = notification_text.step_blocks(content, expanded=expanded)
         meta, footer = "" if compact else caption(content), hint(content)
@@ -762,7 +762,7 @@ class Card:
         self.stop.setEnabled(not _stopping(content))
         self.disclosure.setVisible(notification_text.expandable(content))
         self.disclosure.expanded = self.expanded
-        self.disclosure.setAccessibleName(("Hide " if self.expanded else "Show ") + "steps")
+        self.disclosure.setAccessibleName(("Hide " if self.expanded else "Show ") + ("request" if hint(content) else "steps"))
         self.disclosure.setToolTip(self.disclosure.accessibleName() + (" · " + caption(content) if caption(content) else ""))
         self.disclosure.update()
         text_width = max(1, prepared.text_width / self.owner.scale)

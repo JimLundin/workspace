@@ -266,7 +266,8 @@ def test_contrast_paints_system_colours_and_releases_only_its_composition_owner(
     try:
         island = bar.window.capsules[Key.ISLAND]
         image = island.grab().toImage()
-        assert image.pixelColor(island.width() - 4, TOP + 17) == QtGui.QColor("#000000")
+        scale = image.devicePixelRatio()
+        assert image.pixelColor(round((island.width() - 4) * scale), round((TOP + 17) * scale)) == QtGui.QColor("#000000")
         assert not bar.window.glass
         assert other_view.composition is bar.loop.composition
         bar.close()
@@ -498,8 +499,10 @@ def test_first_menu_open_survives_native_activation_settling() -> None:
         assert bar.expanded is not None, "Native activation closed the menu immediately after opening it."
         target.show()
         target.activateWindow()
-        QtCore.QTimer.singleShot(100, waiting.quit)
-        waiting.exec()
+        deadline = time.monotonic() + 2
+        while (not target.isActiveWindow() or menu(bar) is not None) and time.monotonic() < deadline:
+            QTest.qWait(20)
+        assert target.isActiveWindow(), "The fixture did not transfer native focus."
         assert bar.expanded is None, "A real focus transfer left the menu open."
     finally:
         target.close()

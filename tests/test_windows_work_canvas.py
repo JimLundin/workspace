@@ -1195,13 +1195,16 @@ def test_canvas_attention_reaches_the_desktop_and_redirects_to_its_bubble(tmp_pa
         assert capsule is not None
         QtTest.QTest.mouseClick(capsule, Qt.MouseButton.LeftButton, pos=QtCore.QPoint(17, 25))
         ui.pump()
+        panel = ui.bar.window.capsules[Key.ISLAND].request
+        assert panel is not None
+        panel.canvas.click()
+        ui.pump()
         assert ui.canvas_view.panel.selected == "question:current"
         ui.canvas_view.hide()
         completed = replace(snapshot, tasks=(old, current, replace(research, state=automation.task.Completed("Handoff confirmed", ()))))
         work.publish(completed)
         ui.observe_canvas_work(completed)
         ui.pump()
-        assert notices == [("Current question", "question:current"), (research.title, "result:" + research.id)]
         ui.open_canvas_at(notices[-1][1])
         ui.pump()
         assert ui.canvas_view.panel.selected == "result:" + research.id

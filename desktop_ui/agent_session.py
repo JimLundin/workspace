@@ -8,6 +8,7 @@ from dataclasses import dataclass, field, replace
 from typing import Literal, assert_never
 
 from assistant import action_text
+from assistant.canvas_activity import CanvasRequest
 from assistant.feed_origin import FeedRequest
 from assistant.recording_state import RecordingState
 from automation.presentation import (
@@ -26,6 +27,7 @@ from automation.presentation import (
     ToolStatus,
 )
 from automation.task import Approval, ApprovalDecision, Question, Reply, TextAnswer, answers
+from desktop_ui.attention import AttentionSnapshot, context_of
 from desktop_ui.card_actions import OpenCanvas, encode
 
 type Result = Literal["Ready", "Stopped", "Needs attention"]
@@ -111,8 +113,13 @@ class CanvasNotice:
 
 
 @dataclass(frozen=True, slots=True)
-class CanvasSettled:
-    targets: frozenset[str]
+class CanvasAttention:
+    observation: AttentionSnapshot
+
+
+@dataclass(frozen=True, slots=True)
+class SelectAttention:
+    request: CanvasRequest | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -138,7 +145,8 @@ type Event = (
     | Progress
     | Said
     | CanvasNotice
-    | CanvasSettled
+    | CanvasAttention
+    | SelectAttention
     | Done
     | Problem
     | Finished
@@ -172,6 +180,8 @@ class Session:
     last_said: str = ""
     result: Result = "Ready"
     recording: RecordingState = field(default_factory=RecordingState)
+    attention: AttentionSnapshot = field(default_factory=AttentionSnapshot)
+    selected_request: CanvasRequest | None = None
 
     @property
     def busy(self) -> bool:
@@ -210,15 +220,43 @@ def notice_text(title: str, target: str) -> str:
 
 def transition(state: Session, event: Event) -> Session:
     match event:
-        case CanvasSettled(targets):
-            identities = frozenset("canvas:" + target for target in targets)
-            return replace(
-                state,
-                messages=tuple(message for message in state.messages if not _redirects_to(message, identities)),
+        case CanvasAttention(observation):
+            messages = tuple(
+                message
+                for message in state.messages
+                if not (
+                    isinstance(message, ChatMessage)
+                    and message.source is not None
+                    and message.source.identity.startswith("canvas:")
+                    and message.source.identity.removeprefix("canvas:") in observation.hidden
+                )
             )
+            return replace(state, attention=observation, messages=messages)
+        case SelectAttention(request):
+            return replace(state, selected_request=request)
         case CanvasNotice(title, target, at):
+            if target.removeprefix("canvas:") in state.attention.hidden:
+                return state
             text = notice_text(title, target)
-            return replace(state, messages=(*state.messages, ChatMessage("Workspace", text, at, FeedRequest("canvas:" + target, title))))
+            notice = ChatMessage("Workspace", text, at, FeedRequest("canvas:" + target, title))
+            context = context_of(state.attention, target)
+            previous = next(
+                (
+                    index
+                    for index, message in enumerate(state.messages)
+                    if isinstance(message, ChatMessage)
+                    and message.source is not None
+                    and message.source.identity.startswith("canvas:")
+                    and context_of(state.attention, message.source.identity) == context
+                ),
+                None,
+            )
+            messages = (
+                (*state.messages, notice)
+                if previous is None
+                else tuple(notice if index == previous else message for index, message in enumerate(state.messages))
+            )
+            return replace(state, messages=messages)
         case Begin(text, at, queued=queued, source=source):
             return replace(
                 state,
@@ -266,14 +304,6 @@ def transition(state: Session, event: Event) -> Session:
             return update_live(state, event)
         case _:
             assert_never(event)
-
-
-def _redirects_to(message: Message, identities: frozenset[str]) -> bool:
-    match message:
-        case ChatMessage(source=FeedRequest(identity=identity)):
-            return identity in identities
-        case _:
-            return False
 
 
 def interrupt(message: Message) -> Message:

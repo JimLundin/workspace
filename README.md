@@ -193,8 +193,9 @@ it. A failed or incomplete buffer is reported instead of sending partial audio.
 
 **Tools** (hold the Tab thumb, then the right hand):
 
-**Hold V + T** opens the pending agent clarification on the canvas, just like
-the toolbar bell. Without a pending question it opens the canvas. The shortcut uses the physical keycaps with
+**Hold V + T** expands the toolbar to present the pending agent request, just like
+the toolbar bell. Its canvas icon opens the exact question. Without a pending
+question the shortcut opens the canvas. It uses the physical keycaps with
 Workspace's layout enabled.
 
 | | | | | | |
@@ -302,8 +303,10 @@ without navigating or activating your tab. Chat, prejoin and lobby do not start
 capture. Leaving stops an automatic recording after a ten-second debounce.
 Choosing Stop suppresses automatic restart for that call. Manual recordings
 remain independent. If observation fails for thirty seconds, automatic capture
-stops and the menu reports a connection problem; choose **Record a meeting**
-manually if needed. Native Teams and other browsers are outside this trigger.
+stops and the menu reports a connection problem. The “Automatic Teams recording
+unavailable” warning appears once per continuous outage; thirty seconds of
+healthy observations rearm it. Choose **Record a meeting** manually if needed.
+Native Teams and other browsers are outside this trigger.
 
 Choose **Record a meeting** from the tray or the agent timeline's **⋯** menu,
 or tell the agent to start a meeting transcript. Recording continues until you
@@ -360,22 +363,22 @@ agent and clears queued follow-ups. The toolbar's Canvas button opens your local
 work surface; the agent collects evidence, maintains connections and builds on
 work threads there.
 
-Clarification bubbles live on the canvas. A short desktop prompt links to the
-exact question. Open it, supply your context and choose **Send context**; the same
-agent work resumes with your answer. The toolbar bell counts pending
-clarifications. **Hold V + T** opens one directly. Answered questions retain your
-context, and a rejected submission keeps your text available for retry.
+Clarification bubbles live alongside their work on the canvas. Their desktop
+card expands the complete request in place; the toolbar bell, **Needs you** and
+**Hold V + T** expand the toolbar to present it too. **Hold N** to reply and release
+to send; the same agent work resumes with your answer. A separate canvas icon
+opens the exact question when you want its surrounding context. The bell counts
+pending clarifications. Answered questions retain your context, and a rejected
+submission keeps your reply available for retry.
 
 Floating bubbles use the existing Windows glass, contrast and motion treatment.
-They present clarification redirects, important canvas additions or state changes,
-and guarded action approvals. Routine app arrivals stay quiet. While the agent
-works, its progress forms a trail of at most three phases: your request, each
-public update and each reasoning summary opens a phase that collects the tool
-calls after it. The newest phase is opaque and expanded and remains while the
-agent is busy; earlier phases fade behind it in compact form. Each phase expires
-after a reading delay once it is no longer current work. Important-change
-prompts expire normally; clarification redirects remain until answered or
-closed. If approval mode is enabled, the existing exact-preview and explicit
+They present questions, useful canvas findings or state changes, and guarded
+action approvals. Routine app arrivals stay quiet after quick relevance screening.
+One requested outcome keeps its updates, tools and final reply in one card.
+Related notification work shares that card through its work context even when
+the canvas arranges contributions separately. The trail holds at most three
+cards, and completed cards expire after a reading delay. Questions remain until
+answered or closed. If approval mode is enabled, the existing exact-preview and explicit
 approve/decline rules still apply. Meeting recording retains its own control.
 **Hold V + L** or **Agent session** opens explicit conversation history.
 

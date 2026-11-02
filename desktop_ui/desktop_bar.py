@@ -25,6 +25,7 @@ lazy import winapi.ambient
 lazy from assistant.meeting_detection import AutomaticStatus
 lazy from assistant.recording_state import RecordingAction, RecordingState
 lazy from desktop_ui import island_menu
+lazy from desktop_ui.agent_progress import Phase, coalesced, stable_phases
 lazy from desktop_ui.ambient import Ambient, SystemStatus
 lazy from desktop_ui.audio_meter import AudioMeter
 lazy from desktop_ui.bar_status import StatusObserver
@@ -36,6 +37,7 @@ lazy from desktop_ui.island_model import Action, Agent, CapsuleView, Job, Key, M
 lazy from desktop_ui.island_motion import IslandMotion, Shown, advance, finish, placed, retarget, settled
 lazy from desktop_ui.island_surface import TOP, BarWindow, Drawn, Presented
 lazy from desktop_ui.qt_ui import EventLoop, application
+lazy from desktop_ui.request_panel import RequestActions
 lazy from desktop_ui.shell_controls import TASKBAR_TOGGLE, TaskbarControl, WindowsKeyObserver
 lazy from protocol import Tool
 lazy from winapi import appearance, shell, system_notices, windows
@@ -59,6 +61,7 @@ class BarActions:
     inbox: Callable[[], None] = field(kw_only=True)
     tool: Callable[[Tool, int], None] = lambda tool, hwnd: None
     notices: Callable[[system_notices.Observed], None] = lambda _: None
+    requests: RequestActions | None = field(default=None, kw_only=True)
 
 
 @dataclass(frozen=True, slots=True)
@@ -113,6 +116,7 @@ class DesktopBar:
         "power",
         "preference",
         "recording",
+        "request",
         "resolution",
         "sample_bounds",
         "sampled_at",
@@ -151,6 +155,7 @@ class DesktopBar:
         self.hovered: Key | None = None
         # The open menu, and the window that had the keyboard before it opened.
         self.expanded: Menu | None = None
+        self.request: Phase | None = None
         self.menu_target = 0
         self.views: tuple[CapsuleView, ...] = ()
         # Reassigned each frame; the bar mutates no motion or view record.
@@ -179,6 +184,10 @@ class DesktopBar:
         self.notification_access = system_notices.Access.UNAVAILABLE
         self.notification_observation: system_notices.Observed | None = None
         self.timer, self.audio_timer = self.timers()
+        self.start(native_shell=native_shell, audio_level=audio_level)
+
+    def start(self, *, native_shell: bool, audio_level: Callable[[], float | None] | None) -> None:
+        """Start native observations only after all resource fields are initialized."""
         try:
             if audio_level is not None:
                 self.audio_meter = AudioMeter(audio_level)
@@ -268,11 +277,43 @@ class DesktopBar:
             return menu
         return replace(menu, selected=self.expanded.selected, disclosed=self.expanded.disclosed)
 
+    def request_actions(self) -> RequestActions | None:
+        return self.actions.requests
+
+    def requests_changed(self, choices: tuple[Phase, ...]) -> None:
+        choices = tuple(coalesced(stable_phases(choices, (self.request,) if self.request is not None else ())))
+        if self.request is not None:
+            current = next((phase for phase in choices if phase.key == self.request.key), None)
+            if current is None:
+                self.close_menu(restore=False)
+            elif current != self.request:
+                self.request = current
+                if self.actions.requests is not None:
+                    self.actions.requests.select(current.request)
+                self.render()
+
+    def open_request(self, phase: Phase) -> None:
+        if self.closed:
+            return
+        self.menu_target = self.observations.foreground()
+        self.expanded = None
+        self.request = phase
+        actions = self.actions.requests
+        if actions is not None:
+            actions.select(phase.request)
+        windows.allow_activation(int(self.window.winId()), allowed=True)
+        self.window.activateWindow()
+        self.window.setFocus()
+        self.render()
+
     def open_menu(self) -> None:
         """The island expands into the menu and takes the keyboard from the window that had it."""
         if self.closed:
             return
         self.menu_target = self.observations.foreground()
+        self.request = None
+        if self.actions.requests is not None:
+            self.actions.requests.select(None)
         self.expanded = self.menu()
         handle = int(self.window.winId())
         windows.allow_activation(handle, allowed=True)
@@ -281,9 +322,12 @@ class DesktopBar:
         self.render()
 
     def close_menu(self, *, restore: bool) -> None:
-        if self.expanded is None:
+        if self.expanded is None and self.request is None:
             return
         self.expanded = None
+        self.request = None
+        if self.actions.requests is not None:
+            self.actions.requests.select(None)
         windows.allow_activation(int(self.window.winId()), allowed=False)
         self.render()
         if restore and self.menu_target:
@@ -405,9 +449,18 @@ class DesktopBar:
         if self.expanded is not None:
             self.expanded = self.menu()
         menu = self.expanded
-        self.views = island(self.observed(), hovered=self.hovered, expanded=menu is not None)
+        request = self.request
+        self.views = island(self.observed(), hovered=self.hovered, expanded=menu is not None or request is not None)
         shown = tuple(
-            Shown(view, expansion(menu) if menu is not None and view.key is Key.ISLAND else self.window.measure(view)) for view in self.views
+            Shown(
+                view,
+                self.window.measure_request(request)
+                if request is not None and view.key is Key.ISLAND
+                else expansion(menu)
+                if menu is not None and view.key is Key.ISLAND
+                else self.window.measure(view),
+            )
+            for view in self.views
         )
         self.motion = retarget(self.motion, shown, animate=self.visible and self.observations.motion())
         listening = self.dictating
@@ -449,7 +502,15 @@ class DesktopBar:
         # The window keeps the room a capsule is heading for, so it resizes only as an expansion starts and settles.
         reach = max((max(moving.height.value, moving.height.target) for moving in self.motion.capsules), default=float(HEIGHT))
         self.window.present(
-            Presented(drawn, reach, self.expanded, frost=self.frost, contrast=contrast, glass=self.preference is appearance.Material.GLASS)
+            Presented(
+                drawn,
+                reach,
+                self.expanded,
+                frost=self.frost,
+                contrast=contrast,
+                glass=self.preference is appearance.Material.GLASS,
+                request=self.request,
+            )
         )
 
     def style(self, tint: Tint, height: float) -> Look:

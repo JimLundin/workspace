@@ -6,7 +6,6 @@ from typing import assert_never
 import automation.task
 import desktop_ui.agent_session
 from assistant.canvas_activity import Attention, CanvasActivity, CanvasQuestion, CanvasReply, SessionRequest, question_body
-from assistant.feed_origin import FeedRequest
 
 
 def canvas_reply(reply: desktop_ui.agent_session.RequestReply) -> CanvasReply:
@@ -59,30 +58,3 @@ def settle_session(activity: tuple[CanvasActivity, ...], session: desktop_ui.age
         else item
         for item in activity
     )
-
-
-def redirect_session(session: desktop_ui.agent_session.Snapshot) -> desktop_ui.agent_session.Snapshot:
-    """The floating surface is navigation and guarded approvals, not app arrivals."""
-    messages: tuple[desktop_ui.agent_session.Message, ...] = ()
-    for message in session.messages:
-        match message:
-            case desktop_ui.agent_session.AgentRequest(
-                request=automation.task.Question(id=identity, text=title), reply=desktop_ui.agent_session.Pending(), created_at=at
-            ):
-                target = "question:" + identity
-                messages = (
-                    *messages,
-                    desktop_ui.agent_session.ChatMessage(
-                        "Workspace",
-                        desktop_ui.agent_session.notice_text("Your input is needed · " + title[:180], target),
-                        at,
-                        FeedRequest("canvas:" + target, title[:240]),
-                    ),
-                )
-            case desktop_ui.agent_session.AgentRequest(request=automation.task.Approval()):
-                messages = (*messages, message)
-            case desktop_ui.agent_session.ChatMessage(source=source) if source is not None and source.identity.startswith("canvas:"):
-                messages = (*messages, message)
-            case _:
-                pass
-    return replace(session, phase="idle", messages=messages)

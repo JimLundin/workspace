@@ -121,11 +121,13 @@ Questions stay in the selected context when one exists. Startup can recover the
 exact saved instruction when its task was not committed. Old generated request
 cards and action reports are removed while their useful children are preserved.
 
-Public agent updates appear as temporary phase bubbles at the lower-right desktop
-corner. Tool calls grow inside their current phase; the next update pushes earlier
-phases upward, collapses them and reduces their opacity. The bounded trail keeps
-one opaque bubble, and clarification redirects take precedence. Hover pauses
-expiry; full interaction history remains available. These steps stay off the canvas.
+Public agent updates appear in temporary cards at the lower-right desktop corner.
+One requested outcome keeps its updates, tool calls and final reply in one card.
+Related sources, questions and useful findings share that desktop card through
+their work context, even when the canvas arranges them in separate groups.
+New work connections retain the existing card's identity. The trail is bounded
+to three cards; hover pauses expiry and full interaction history remains available.
+Execution steps stay off the canvas.
 
 The desktop Working label has the existing 300-degree/second linear arc spinner.
 It stops when work ends; disabled Windows animations show a static arc. Busy frames
@@ -133,8 +135,10 @@ repaint the small status control without repositioning unchanged toolbar capsule
 
 The agent builds and connects information on the canvas autonomously. App arrivals
 are context, not floating notifications. Clarification bubbles live alongside
-the work and evidence. Their desktop prompts open the exact canvas location.
-The toolbar bell counts pending questions and Hold V + T opens one directly.
+the work and evidence. Desktop cards expand the complete request in place.
+The toolbar bell counts pending questions; clicking it, clicking Needs you or
+holding V + T expands the toolbar to present the request. A separate canvas icon
+opens the exact contribution when more context is useful.
 
 The agent uses `work_canvas_read` and revision-bound `work_canvas_update` batches
 to create notes/groups, move any known bubble into another, collapse containers
@@ -167,13 +171,15 @@ to rendered controls; fixture verification does not establish complete mailbox
 or file-service coverage.
 
 Clarifications show content-sized text and a Hold N to reply hint, without reply
-editors or send buttons. Speech first targets the selected waiting question on
-the visible canvas, through its exact session/request or task/request handler.
+editors or send buttons. Speech first targets the request expanded on the desktop,
+then the selected waiting question on the visible canvas, through its exact
+session/request or task/request handler.
 The same worker resumes; the canvas retains the answer. A failed task reply
 receipt reopens its current question and keeps the previous spoken reply visible.
 Rejected replies never become a new task or answer another question. Stale requests reject answers.
 Other speech on the visible canvas creates an instruction in the selected context
-or on the whole canvas. With the canvas hidden, speech uses the main conversation.
+or on the whole canvas. With no expanded desktop request and the canvas hidden,
+speech uses the main conversation.
 Restarted sessions close orphaned questions; durable task requests retain their
 route and work connection across reopening. Approvals retain their existing
 preview, identity and explicit-decision guards.
@@ -189,8 +195,8 @@ submitting research. Questions and useful research results use that binding.
 Drafts are actual prepared content; a returned draft never claims an email was
 sent. Execution attempts and effect acknowledgments remain in the task journal,
 which retains their distinct states and complete ledger. Existing work state transitions and
-attached research results provide a short canvas redirect
-when the canvas is not active. Routine source and summary refreshes remain quiet.
+attached research results update their work's desktop card with an optional
+canvas icon when the canvas is not active. Routine source and summary refreshes remain quiet.
 Initial catalog loading establishes a silent baseline. Explicit agent history
 retains the full work timeline without presenting app observations as alerts.
 

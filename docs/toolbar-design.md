@@ -32,8 +32,8 @@ is doing for you. Its policy decides what may change it.
 6. **Each fact has one owner, and only that owner changes it.** Dictation and
    quick jobs come from the voice controller (`Desktop.busy`), the agent's phase
    from its live session (the step it is running, or the heading of its latest
-   reasoning summary), the recording from meetings, the inbox from triage and
-   the layer from the keyboard. Notifications are cards, never bar content.
+   reasoning summary), the recording from meetings, the inbox from pending
+   questions and the layer from the keyboard. Routine notifications stay quiet.
 
 | Situation | Island | Beside it |
 | --- | --- | --- |
@@ -63,8 +63,12 @@ captured as the menu opened. Large glass is thicker than the capsules, so the
 menu's text stays legible over any desktop.
 
 Pressing the island while dictating stops dictation; pressing "Needs you"
-opens the question. The recording opens the canvas, the layer opens the key map
-and the bell opens the inbox. The bell's badge reads `99+` above 99; its tooltip
+expands the island to present the complete request. The bell and Hold V + T use
+the same expansion. The request has voice guidance or explicit approval controls,
+plus an optional canvas icon that opens the exact contribution. Reviewing a
+request does not open the canvas. Escape or clicking elsewhere closes it.
+The recording opens the canvas and the layer opens the key map.
+The bell's badge reads `99+` above 99; its tooltip
 and accessible name keep the exact count and the **Hold V + T** shortcut. Hold
 V + T opens the same inbox while the layout is on, including when no bell shows.
 Space holds dictation; B toggles dictation; N toggles agent speech.

@@ -13,6 +13,7 @@ from dataclasses import dataclass, replace
 from enum import Enum, auto
 from typing import Protocol
 
+from assistant.canvas_activity import CanvasRequest
 from assistant.feed_origin import FeedRequest
 from assistant.recording_state import RecordingAction, RecordingState
 from automation.presentation import Done, Finished, LiveMessage, Problem, Progress, Said
@@ -21,17 +22,19 @@ from desktop_ui.agent_session import (
     AgentRequest,
     Begin,
     Cancelled,
+    CanvasAttention,
     CanvasNotice,
-    CanvasSettled,
     Enqueued,
     Event,
     RecordingUpdated,
     Resolution,
+    SelectAttention,
     Session,
     Snapshot,
     StopRequested,
     transition,
 )
+from desktop_ui.attention import AttentionSnapshot
 from desktop_ui.view_publication import Post, Unavailable, ViewPublication, log_view
 
 
@@ -303,8 +306,13 @@ class AgentWindow:
     def notify_canvas(self, title: str, target: str) -> None:
         self._event(CanvasNotice(title, target, time.time()))
 
-    def settle_canvas(self, targets: frozenset[str]) -> None:
-        self._event(CanvasSettled(targets))
+    def canvas_attention(self, observation: AttentionSnapshot) -> None:
+        if self.snapshot().attention != observation:
+            self._event(CanvasAttention(observation))
+
+    def select_attention(self, request: CanvasRequest | None) -> None:
+        if self.snapshot().selected_request != request:
+            self._event(SelectAttention(request))
 
     def new(self) -> bool:
         with self.lock:

@@ -14,14 +14,16 @@ lazy from PySide6.QtTest import QTest
 
 from assistant.canvas_activity import SessionRequest
 from assistant.communications import WindowsNotice
+from assistant.feed_origin import FeedRequest
 from assistant.feed_sources import PendingFeed
 from assistant.notification_sources import NOTIFICATION_STATE
 from assistant.state_store import SavedState
-from automation.task import Reply
+from automation.task import ApprovalDecision, Reply, TextAnswer
 from desktop_ui.agent_toasts import AgentToasts
 from desktop_ui.agent_window import AgentWindow
 from desktop_ui.desktop_bar import BarActions, DesktopBar
 from desktop_ui.island_model import Agent, Job, Key
+from desktop_ui.island_motion import settled
 from desktop_ui.island_surface import TOP, Capsule
 from desktop_ui.qt_runtime import prepare
 from desktop_ui.qt_ui import application
@@ -29,7 +31,7 @@ from desktop_ui.ui import Ui, Views
 from desktop_ui.work_canvas_panel import CanvasEdits
 from desktop_ui.work_canvas_window import CanvasWindow
 from desktop_ui.work_window import WorkWindow
-from tests.agent_requests import asked
+from tests.agent_requests import asked, reviewed
 from tests.communications_fixture import communication_feed
 from tests.test_communications_service import LocalCipher
 from tests.test_work_canvas import local_canvas
@@ -104,6 +106,14 @@ def waiting(bar: DesktopBar) -> Capsule | None:
 
 def accept_answer(answer: Reply) -> bool:
     return True
+
+
+def settle_toolbar(ui: InboxUi) -> None:
+    deadline = time.monotonic() + 5
+    while not settled(ui.bar.motion) and time.monotonic() < deadline:
+        QTest.qWait(20)
+        ui.pump()
+    assert settled(ui.bar.motion), "The toolbar transition did not settle."
 
 
 def test_bell_opens_inbox_keeps_exact_accessible_count_and_survives_activity(tmp_path: Path) -> None:
@@ -220,3 +230,126 @@ def test_app_arrivals_reach_triage_joined_without_floating_alerts(tmp_path: Path
     finally:
         ui.dispose()
         ui.root.setStyleSheet(original_style)
+
+
+def test_toolbar_request_expands_in_place_routes_voice_and_opens_canvas_only_from_icon(tmp_path: Path) -> None:
+    # Defect: the attention click navigates away, clips the request, or sends a
+    # spoken reply to the conversation rather than its exact waiting owner.
+    ui = InboxUi()
+    original_style = application().styleSheet()
+    answers: list[Reply] = []
+    fallback: list[str] = []
+
+    def accept(reply: Reply) -> bool:
+        answers.append(reply)
+        return True
+
+    try:
+        ui.configure_canvas(local_canvas(tmp_path, ui.publish_canvas), lambda _title, _target: None)
+        ui.configure_work(lambda _command: None)
+        ui.desktop(
+            show_agent=lambda: None, show_work=lambda: None, stop=lambda: None, overlay=lambda: None, menu=lambda: None, on_problem=lambda _: None
+        )
+        agent = ui.agent(lambda: None, reveal=False, on_work=lambda: ui.work_window().show())
+        agent.request_input(asked("inline", "Which sheet should I use?", "Revenue contains the approved supplier figures.", 3), accept)
+        ui.pump()
+        card = next(iter(ui.feed.cards.values()))
+        assert (card.expanded, "Revenue contains" in card.text.toPlainText()) == (False, False)
+        ui.feed.toggle_card(card, animate=False)
+        ui.pump()
+        assert card.expanded and "Revenue contains the approved supplier figures" in card.text.toPlainText()
+        assert ui.current_canvas is None
+        ui.bar.visible = True
+        ui.bar.render()
+        ui.open_inbox()
+        ui.pump()
+        settle_toolbar(ui)
+        capsule = ui.bar.window.capsules[Key.ISLAND]
+        panel = capsule.request
+        assert panel is not None and panel.isVisible() and panel.isEnabled()
+        assert "Revenue contains the approved supplier figures" in panel.body.toPlainText()
+        assert ui.current_canvas is None, "Reviewing a request must not create or open the canvas."
+        capsule.grab().save(str(tmp_path / "workspace-inline-request.png"))
+        QTest.mouseClick(panel.canvas, QtCore.Qt.MouseButton.LeftButton)
+        ui.pump()
+        assert ui.canvas_view.panel.selected == "question:inline"
+        ui.canvas_view.hide()
+        ui.open_inbox()
+        ui.pump()
+        ui.voice_agent("Revenue", fallback.append)
+        ui.pump()
+        assert answers == [TextAnswer("Revenue")] and not fallback
+        settle_toolbar(ui)
+        assert waiting(ui.bar) is None
+    finally:
+        ui.dispose()
+        application().setStyleSheet(original_style)
+
+
+def test_toolbar_approval_presents_exact_review_and_decides_without_canvas() -> None:
+    # Defect: the expanded toolbar omits the exact operation, never acknowledges
+    # its presentation, or routes its approval button to another request owner.
+    ui = InboxUi()
+    original_style = application().styleSheet()
+    decisions: list[Reply] = []
+
+    def decide(reply: Reply) -> bool:
+        decisions.append(reply)
+        return True
+
+    try:
+        ui.desktop(
+            show_agent=lambda: None, show_work=lambda: None, stop=lambda: None, overlay=lambda: None, menu=lambda: None, on_problem=lambda _: None
+        )
+        agent = ui.agent(lambda: None, reveal=False)
+        agent.request_input(reviewed("write", "Save approved figures?", "Write the approved totals to C:/Budget/approved.xlsx", 3), decide)
+        ui.pump()
+        ui.bar.visible = True
+        ui.bar.render()
+        ui.open_inbox()
+        ui.pump()
+        settle_toolbar(ui)
+        panel = ui.bar.window.capsules[Key.ISLAND].request
+        assert panel is not None and panel.isVisible() and panel.isEnabled()
+        assert "C:/Budget/approved.xlsx" in panel.body.toPlainText()
+        assert [button.text() for _, button in panel.options] == ["Approve", "Decline"]
+        assert ui.current_canvas is None
+        QTest.mouseClick(panel.options[0][1], QtCore.Qt.MouseButton.LeftButton)
+        ui.pump()
+        assert decisions == [ApprovalDecision.APPROVED] and not agent.snapshot().waiting
+    finally:
+        ui.dispose()
+        application().setStyleSheet(original_style)
+
+
+def test_expanded_notification_keeps_its_card_and_reply_owner_when_work_asks_again(tmp_path: Path) -> None:
+    # Defect: a continuation asks in the existing expanded card but voice still
+    # targets the resolved request, or the continuation creates another card.
+    ui = InboxUi()
+    original_style = application().styleSheet()
+    answers: list[Reply] = []
+
+    def accept(reply: Reply) -> bool:
+        answers.append(reply)
+        return True
+
+    try:
+        agent = ui.agent(lambda: None, reveal=False)
+        ui.configure_canvas(local_canvas(tmp_path, ui.publish_canvas), agent.notify_canvas)
+        agent.begin("Review budget", source=FeedRequest("source:budget", "Budget notice"))
+        agent.request_input(asked("figures", "Which figures?", "Approved or forecast?", 3), accept)
+        ui.pump()
+        card = next(iter(ui.feed.cards.values()))
+        ui.feed.toggle_card(card, animate=False)
+        ui.voice_agent("Approved", lambda _text: None)
+        ui.pump()
+        agent.request_input(asked("deadline", "Which deadline?", "Monday or Friday?", 4), accept)
+        ui.pump()
+        assert tuple(ui.feed.cards.values()) == (card,) and card.expanded
+        assert "Monday or Friday" in card.text.toPlainText() and ui.current_canvas is None
+        ui.voice_agent("Monday", lambda _text: None)
+        ui.pump()
+        assert answers == [TextAnswer("Approved"), TextAnswer("Monday")]
+    finally:
+        ui.dispose()
+        application().setStyleSheet(original_style)

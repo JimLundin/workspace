@@ -7,7 +7,7 @@ read. Each change publishes its document and attention through one subscriber.
 
 import hashlib
 from collections.abc import Callable, Iterable, Iterator, Sequence
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from enum import Enum
 from pathlib import Path
 from typing import assert_never
@@ -56,6 +56,7 @@ from automation.meetings import TranscriptState
 from automation.personal_work import Catalog, MeetingSource, Source, SourceOrigin, WorkState, WorkThread, source_revision
 from automation.task import Blocked, Task, TextAnswer, Waiting, phase
 from desktop_ui.agent_session import Snapshot
+from desktop_ui.attention import AttentionSnapshot, observed_attention
 from desktop_ui.canvas_session import session_activity, settle_session
 from desktop_ui.work_canvas_edits import UserEdit, user_edited
 
@@ -75,6 +76,7 @@ class CanvasPublication:
     waiting: tuple[CanvasQuestion, ...]
     settled: frozenset[str]
     notice: Announcement | None = None
+    attention: AttentionSnapshot = field(default_factory=AttentionSnapshot)
 
 
 @dataclass(frozen=True, slots=True)
@@ -291,7 +293,7 @@ def published(catalog: Catalog, document: CanvasDocument, notice: Announcement |
     questions = tuple(_questions(document.activity))
     waiting = tuple(question for question in questions if question.reply is Attention.WAITING and question.id not in hidden)
     settled = frozenset(question.id for question in questions if question.reply is not Attention.WAITING or question.id in hidden)
-    return CanvasPublication(document, waiting, settled, notice)
+    return CanvasPublication(document, waiting, settled, notice, observed_attention(catalog, document))
 
 
 def _questions(activity: Iterable[CanvasActivity]) -> Iterator[CanvasQuestion]:

@@ -15,7 +15,6 @@ lazy from PySide6.QtWidgets import QApplication
 
 from desktop_ui import toast_stack
 from desktop_ui.agent_progress import Progress, advance_progress, compact, retain_lifetimes, visible
-from desktop_ui.canvas_session import redirect_session
 from desktop_ui.qt_runtime import prepare
 from desktop_ui.toast_stack import Active, Column, Frame, Measured, Retiring, Stacking, Viewport, fit, frames, reservable
 from usage import DIRECTORY
@@ -188,10 +187,6 @@ class AgentToasts:
         self.session = state
         self.refresh()
 
-    def observation(self) -> Snapshot:
-        # History shows the agent's work as it was; live bubbles only redirect.
-        return self.session if self.history else redirect_session(self.session)
-
     def refresh(self) -> None:
         if self.closed:
             return
@@ -209,9 +204,21 @@ class AgentToasts:
 
     def project(self, now: float, *, reveal: bool = False) -> None:
         if not self.live_progress:
-            self.stack = advance(self.stack, self.observation(), now, history=True, page=self.page, reveal=reveal, limit=self.capacity)
+            self.stack = advance(self.stack, self.session, now, history=True, page=self.page, reveal=reveal, limit=self.capacity)
             return
+        previous = self.progress.observed
         self.progress = advance_progress(retain_lifetimes(self.progress, self.stack), self.session, now)
+        for observation in self.progress.observed:
+            before = next((item for item in previous if item.key == observation.key), None)
+            card = self.cards.get(observation.key)
+            if (
+                card is not None
+                and card.expanded
+                and before is not None
+                and before.request == self.session.selected_request
+                and observation.request != before.request
+            ):
+                self.agent.select_attention(observation.request)
         self.stack = visible(self.progress, self.capacity)
         latest = next((phase for toast in reversed(self.stack.toasts) if (phase := _phase(toast.key)) is not None), None)
         if latest != self.progress_head:
@@ -503,6 +510,8 @@ class AgentToasts:
     def toggle_card(self, selected: Card, *, animate: bool) -> None:
         """Qt owns disclosure state; collapse and expand on one layout clock."""
         expanded = not selected.expanded
+        route = next((phase.request for phase in self.progress.observed if phase.key == selected.key), None)
+        self.agent.select_attention(route if expanded else None)
         for card in self.cards.values():
             desired = expanded and card is selected
             if card.expanded == desired:
@@ -518,6 +527,7 @@ class AgentToasts:
         card = self.cards.get(key)
         if card is None:
             return
+        self.agent.select_attention(None)
         self.stack = hide(self.stack, key)
         self.refresh()
 

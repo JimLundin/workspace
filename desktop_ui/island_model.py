@@ -226,7 +226,7 @@ def inbox_text(count: int) -> str:
 
 
 def inbox_label(count: int) -> str:
-    return f"{count} {'clarification needs' if count == 1 else 'clarifications need'} your input · open canvas · Hold V + T"
+    return f"{count} {'clarification needs' if count == 1 else 'clarifications need'} your input · Review request · Hold V + T"
 
 
 def recording_slot(recorded: Capture, *, hovered: bool) -> Slot:

@@ -13,7 +13,7 @@ from desktop_ui.vector_icons import icon
 
 class CanvasJumpButton(QtWidgets.QPushButton):
     def __init__(self, parent: QtWidgets.QWidget, controls: Controls) -> None:
-        super().__init__("Open on canvas", parent)
+        super().__init__("", parent)
         self.setObjectName("canvasJump")
         self.setAccessibleName("Open on canvas")
         self.setToolTip("Open the related bubble on your work canvas")
@@ -21,8 +21,9 @@ class CanvasJumpButton(QtWidgets.QPushButton):
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self.setFont(action_face(primary=False))
         self.setIconSize(QtCore.QSize(16, 16))
+        self.setFixedSize(28, 28)
         self.recolor(controls)
 
     def recolor(self, controls: Controls) -> None:
         self.setIcon(icon("canvas", controls.ink.color))
-        self.setStyleSheet(action_style(controls, primary=False))
+        self.setStyleSheet(action_style(controls, primary=False) + "\nQPushButton#canvasJump { padding: 0; }")

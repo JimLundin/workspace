@@ -5,7 +5,7 @@ from functools import lru_cache
 
 from assistant.action_text import readable
 from automation.presentation import Answer, ToolActivity
-from automation.task import Approval, ApprovalDecision
+from automation.task import Approval, ApprovalDecision, Question
 from desktop_ui import tool_text
 from desktop_ui.agent_session import AgentRequest, ChatMessage, pending
 from desktop_ui.card_actions import AnswerApproval, OpenCanvas, encode, parse
@@ -43,16 +43,26 @@ def _yours(content: Content) -> bool:
 def expandable(content: Content) -> bool:
     match content:
         case Turn():
-            return bool(steps(content))
+            return bool(steps(content)) or any(
+                isinstance(entry, Entry)
+                and isinstance(entry.message, AgentRequest)
+                and isinstance(entry.message.request, Question)
+                and pending(entry.message)
+                for entry in results(content)
+            )
+        case Entry(message=AgentRequest(request=Question()) as message):
+            return pending(message)
         case _:
             return False
 
 
-def spans(content: Content) -> tuple[Span, ...]:
+def spans(content: Content, *, expanded: bool = True) -> tuple[Span, ...]:
     match content:
         case Turn():
-            parts = [spans(entry) for entry in results(content)]
+            parts = [spans(entry, expanded=expanded) for entry in results(content)]
             return tuple(span for index, part in enumerate(parts) for span in ((Span("\n\n"),) if index else ()) + part)
+        case Entry(message=AgentRequest(request=Question()) as message) if not expanded and pending(message):
+            return (Span(message.text), *(span for span in prepared_answer(message.detail) if canvas_link(span)))
         case _:
             pass
     text = body(content)

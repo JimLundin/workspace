@@ -18,8 +18,10 @@ from typing import Final, Protocol, assert_never, override
 lazy from PySide6 import QtCore, QtGui, QtWidgets
 lazy from PySide6.QtCore import Qt
 
+import desktop_ui.request_panel
 from components import BAR_WINDOW
 from desktop_ui import island_menu
+from desktop_ui.agent_progress import Phase
 from desktop_ui.components import appearance, typeface
 from desktop_ui.components.appearance import GLASS_ACCENT, RED, GlassLook, Look, Shade, SolidLook, look, reading, rim_stops
 from desktop_ui.components.meaning import Tint, Tone
@@ -43,6 +45,7 @@ from desktop_ui.island_menu import Disclosure, Item, Live, Menu, Rule, within
 from desktop_ui.island_model import Action, Badge, CapsuleView, Control, Glyph, Key, Marker, Part, Spinner, Text
 from desktop_ui.qt_runtime import prepare
 from desktop_ui.qt_ui import EventLoop
+from desktop_ui.request_panel import RequestActions, RequestPanel
 from desktop_ui.vector_icons import icon
 from desktop_ui.view_publication import log_view
 from winapi import windows
@@ -86,6 +89,7 @@ class Owner(Protocol):
     def pick(self, index: int) -> None: ...
     def key(self, press: island_menu.Press) -> None: ...
     def deactivated(self) -> None: ...
+    def request_actions(self) -> RequestActions | None: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -113,6 +117,7 @@ class Presented:
     frost: Frost = field(kw_only=True)
     contrast: bool = field(kw_only=True)
     glass: bool = field(kw_only=True)
+    request: Phase | None = None
 
 
 def radius(height: float) -> float:
@@ -382,6 +387,7 @@ class Capsule(KeyboardFocus):
         self.contrast = False
         self.controls: tuple[ControlButton, ...] = ()
         self.rows: tuple[MenuRow, ...] = ()
+        self.request: RequestPanel | None = None
         self.placed: tuple[QtCore.QRect, float, float, Content, tuple[Line, ...]] | None = None
         self.stills: frozendict[tuple[Content, Look, bool, float], QtGui.QPixmap] = frozendict()
         self.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -425,6 +431,19 @@ class Capsule(KeyboardFocus):
             row.update_line(line)
             row.update()
 
+    def show_request(self, phase: Phase | None) -> None:
+        if phase is None:
+            if self.request is not None:
+                self.request.hide()
+            return
+        actions = self.window_.owner.request_actions()
+        if actions is None:
+            return
+        if self.request is None:
+            self.request = RequestPanel(self, actions)
+        self.request.present(phase, self.look)
+        self.request.show()
+
     def place_rows(self) -> None:
         left = (self.width() - MENU_WIDTH) / 2 + MENU_PAD
         for row in self.rows:
@@ -451,6 +470,18 @@ class Capsule(KeyboardFocus):
         self.setGeometry(geometry)
         self.place_controls()
         self.place_rows()
+        if self.request is not None and self.request.isVisible():
+            self.request.setGeometry(
+                round((self.width() - desktop_ui.request_panel.WIDTH) / 2),
+                TOP + MENU_HEAD,
+                desktop_ui.request_panel.WIDTH,
+                max(0, self.height() - TOP - MENU_HEAD),
+            )
+            self.request.setEnabled(
+                self.width() >= desktop_ui.request_panel.WIDTH - 1 and self.request.height() >= self.request.measure(self.request.phase)
+                if self.request.phase is not None
+                else False
+            )
 
     def update_indicators(self) -> None:
         """Repaint only the live indicators (spinner, dots, trace); the rest of the capsule is unchanged."""
@@ -635,6 +666,8 @@ class BarWindow(QtWidgets.QWidget):
         self.loop = loop
         self.owner = owner
         self.menu: Menu | None = None
+        self.request: Phase | None = None
+        self.request_measurement: RequestPanel | None = None
         self.look: Look = look(Material.SOLID, appearance.Capsule(Frost.SMOKED), Tint.NONE)
         self.capsules: Mapping[Key, Capsule] = frozendict()
         self.spin_angle = 90.0
@@ -672,6 +705,15 @@ class BarWindow(QtWidgets.QWidget):
 
         return arrange(view.slots, width)
 
+    def measure_request(self, phase: Phase) -> Content:
+        actions = self.owner.request_actions()
+        if actions is None:
+            return Content(desktop_ui.request_panel.WIDTH, (), 120)
+        if self.request_measurement is None:
+            self.request_measurement = RequestPanel(self, actions)
+            self.request_measurement.hide()
+        return Content(desktop_ui.request_panel.WIDTH, (), MENU_HEAD + self.request_measurement.measure(phase))
+
     def capsule(self, key: Key) -> Capsule:
         existing = self.capsules.get(key)
         if existing is not None:
@@ -691,12 +733,14 @@ class BarWindow(QtWidgets.QWidget):
         if self.geometry() != QtCore.QRect(area.x(), area.y(), area.width(), height):
             self.setGeometry(area.x(), area.y(), area.width(), height)
         self.menu = presented.menu
+        self.request = presented.request
         keys = frozenset(each.view.key for each in presented.drawn)
         for each in presented.drawn:
             capsule = self.capsule(each.view.key)
             capsule.show_view(each, contrast=presented.contrast)
             if each.view.key is Key.ISLAND:
                 capsule.show_menu(presented.menu if each.content.height > HEIGHT else None)
+                capsule.show_request(presented.request if each.content.height > HEIGHT else None)
             capsule.frame(each.framed)
             capsule.show()
         for key, capsule in self.capsules.items():
@@ -724,6 +768,9 @@ class BarWindow(QtWidgets.QWidget):
             Qt.Key.Key_Space: island_menu.Key.ENTER,
             Qt.Key.Key_Escape: island_menu.Key.ESCAPE,
         }
+        if self.request is not None and event.key() == Qt.Key.Key_Escape:
+            self.owner.press(Action.CLOSE_MENU)
+            return
         if self.menu is None:
             super().keyPressEvent(event)
             return
@@ -741,11 +788,11 @@ class BarWindow(QtWidgets.QWidget):
         if event.type() is QtCore.QEvent.Type.ActivationChange:
             if self.isActiveWindow():
                 self.deactivation_timer.stop()
-            elif self.menu is not None and not self.deactivation_timer.isActive():
+            elif (self.menu is not None or self.request is not None) and not self.deactivation_timer.isActive():
                 self.deactivation_timer.start(16)
 
     def dismiss_inactive(self) -> None:
-        if self.menu is not None and not self.isActiveWindow():
+        if (self.menu is not None or self.request is not None) and not self.isActiveWindow():
             self.owner.deactivated()
 
     def bounds(self, key: Key) -> Rect | None:
