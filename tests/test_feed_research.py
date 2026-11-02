@@ -6,15 +6,16 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 from datetime import date
 from pathlib import Path
+from typing import Literal
 from unittest import TestCase
 
 from pydantic import TypeAdapter
 
 from assistant.communications import Conversation, Feed, Message, acknowledge
-from assistant.feed_contracts import DismissItem, Disposition, StoredBoard
+from assistant.feed_contracts import DismissItem, Disposition, ReviewInput, StoredBoard
 from assistant.feed_research import Research
-from assistant.feed_sources import PendingFeed, triage_evidence
-from assistant.feed_triage import Board, decode, proposal_revision, restored, saved, unassessed
+from assistant.feed_sources import Excerpt, PendingFeed, triage_evidence
+from assistant.feed_triage import INSTRUCTIONS, Board, decode, proposal_revision, restored, saved, unassessed
 from assistant.feed_triage_service import classify
 from assistant.feed_work import FeedWork
 from assistant.llm import Settings
@@ -24,11 +25,49 @@ from automation.json_value import Json
 from automation.store import TaskStore
 from tests.fake_endpoint import Received, Reply, fake_endpoint
 from tests.feed_fixture import TriageFixture
+from tests.feed_source_fixture import captured, screening_reply
 from tests.test_feed_triage import output
 from tests.test_feed_triage_service import MemoryStore
 lazy from tests.test_agent import calls, says
 
 _OBJECT = TypeAdapter(dict[str, Json])
+
+
+def test_quick_screening_keeps_routine_notices_out_of_deep_research() -> None:
+    # Defect: FYI uses full agent research, or quiet screening removes a real
+    # request instead of passing its dated source/context to the researcher.
+    quiet = captured("fyi", Excerpt("Status", "Routine FYI, no action.", 1))
+    action = captured("review", Excerpt("Approval", "Please review the budget.", 2))
+    batch = (quiet, action)
+    with fake_endpoint() as endpoint:
+        endpoint.replies = [screening_reply(((quiet.identity, "quiet"), (action.identity, "action"))), says(output(([action.identity], "action")))]
+        reviewed = decode(classify(Settings(endpoint.url, "fixture", "transcribe", "quick", "agent", "", ""), batch, ()), batch)
+        quick, research = (_OBJECT.validate_json(request.body) for request in endpoint.received)
+    assert quick["model"] == "quick" and not quick.get("tools")
+    assert research["model"] == "agent" and research.get("tools")
+    assert quiet.body not in _OBJECT.dump_json(research).decode()
+    assert {ref[0]: item.disposition for item in reviewed for ref in item.references} == {
+        quiet.identity: Disposition.QUIET,
+        action.identity: Disposition.ACTION,
+    }
+
+
+def test_screening_rejects_missing_duplicate_and_unknown_sources_before_research() -> None:
+    # Defect: accepting incomplete/duplicate coverage silently loses arrivals
+    # or treats an unrelated model-supplied source as user work.
+    first = captured("first", Excerpt("First", "Review this.", 1))
+    second = captured("second", Excerpt("Second", "Review that.", 2))
+    cases: tuple[tuple[tuple[str, Literal["action", "quiet"]], ...], ...] = (
+        ((first.identity, "action"),),
+        ((first.identity, "action"), (first.identity, "quiet")),
+        ((first.identity, "action"), ("unknown", "action")),
+    )
+    for items in cases:
+        with fake_endpoint() as endpoint:
+            endpoint.replies = [screening_reply(items)]
+            with TestCase().assertRaises(ValueError):
+                classify(Settings(endpoint.url, "fixture", "transcribe", "quick", "agent", "", ""), (first, second), ())
+            assert len(endpoint.received) == 1
 
 
 def test_background_research_reads_topic_memory_full_thread_and_file_before_publishing(tmp_path: Path) -> None:
@@ -62,6 +101,7 @@ def test_background_research_reads_topic_memory_full_thread_and_file_before_publ
         triage.observe(PendingFeed(feed))
         with fake_endpoint() as endpoint:
             endpoint.replies = [
+                screening_reply((item.identity, "action") for item in batch),
                 calls(
                     ("lookup_work", {"query": "Atlas"}), ("read_conversation", {"source_id": batch[0].identity}), ("read_file", {"path": str(path)})
                 ),
@@ -71,7 +111,7 @@ def test_background_research_reads_topic_memory_full_thread_and_file_before_publ
             settings = Settings(endpoint.url, "fixture", "transcribe", "quick", "agent", "", "", agent_reasoning_effort="high")
             research = Research(settings, triage.research_context, triage.research_conversation, stop=triage.closed)
             review = classify(settings, batch, (), research=research, clock=lambda: 50)
-            requests = tuple(_OBJECT.validate_json(item.body) for item in endpoint.received)
+            requests = tuple(_OBJECT.validate_json(item.body) for item in endpoint.received[1:])
         assert len(decode(review, batch)) == 1 and len(requests) == 3
         for request in requests:
             assert request["model"] == "agent" and request["reasoning"] == {"effort": "high", "summary": "auto"}
@@ -130,6 +170,8 @@ def test_public_research_supplies_findings_or_an_explicit_access_gap_without_los
             endpoint.replies = [calls(("web_search", {"query": "documented export options"})), says(output(([batch[0].identity], "action")))]
 
             def respond(request: Received, status: int = status) -> Reply:
+                if _OBJECT.validate_json(request.body).get("model") == "quick":
+                    return screening_reply((item.identity, "action") for item in batch)
                 payload = _OBJECT.validate_json(request.body)
                 if payload.get("tools") == [{"type": "web_search"}]:
                     assert payload["input"] == "documented export options"
@@ -161,7 +203,7 @@ def test_public_research_supplies_findings_or_an_explicit_access_gap_without_los
             endpoint.respond = respond
             settings = Settings(endpoint.url, "fixture", "transcribe", "quick", "agent", "", "")
             review = classify(settings, batch, ())
-            assert len(decode(review, batch)) == 1 and len(endpoint.received) == 3
+            assert len(decode(review, batch)) == 1 and len(endpoint.received) == 4
             evidence = endpoint.last.body.decode()
             assert (findings if status == 200 else "could not complete hosted web research") in evidence
 
@@ -173,7 +215,8 @@ def test_shutdown_cancels_a_pending_model_request_without_waiting_for_network_ti
     with fake_endpoint() as endpoint:
         settings = Settings(endpoint.url, "fixture", "transcribe", "quick", "agent", "", "")
         endpoint.replies = [says('{"items": []}')]
-        classify(settings, (), ())
+        request = ReviewInput("2026-11-02T10:00:00+00:00", (), "")
+        Research(settings).review(request, INSTRUCTIONS)
 
         def stream(_request: object) -> Iterator[bytes]:
             entered.set()
@@ -182,7 +225,7 @@ def test_shutdown_cancels_a_pending_model_request_without_waiting_for_network_ti
 
         endpoint.stream = stream
         with ThreadPoolExecutor(max_workers=1) as pool:
-            future = pool.submit(classify, settings, (), (), research=Research(settings, stop=stop))
+            future = pool.submit(Research(settings, stop=stop).review, request, INSTRUCTIONS)
             try:
                 assert entered.wait(5)
                 stop.set()

@@ -16,10 +16,9 @@ from assistant.llm import Settings
 from assistant.web_apps import ActivityItem, ActivityPage, TeamsPage, TeamsPost
 from tests import fake_endpoint
 from tests.feed_fixture import TriageFixture
-from tests.feed_source_fixture import captured
+from tests.feed_source_fixture import captured, screening_reply
 from tests.test_feed_triage import output
 from tests.test_feed_triage_service import MemoryStore, wait_until
-lazy from tests.test_agent import says
 
 LAST_WEEK = datetime(2026, 10, 20, 9, tzinfo=UTC).timestamp()
 THIS_WEEK = datetime(2026, 10, 27, 9, tzinfo=UTC).timestamp()
@@ -79,7 +78,7 @@ def test_an_undated_chat_is_not_presented_as_created_today() -> None:
 def test_triage_model_receives_readable_current_and_source_dates() -> None:
     source = captured("old-invite", Excerpt("Meeting reminder", "The meeting is tomorrow.", LAST_WEEK))
     with fake_endpoint.fake_endpoint() as endpoint:
-        endpoint.replies = [says('{"items": []}')]
+        endpoint.replies = [screening_reply(((source.identity, "quiet"),))]
         settings = Settings(endpoint.url, "fixture", "transcribe", "chat", "agent", "", "")
         classify(settings, (source,), (), clock=lambda: THIS_WEEK)
         request: object = json.loads(endpoint.last.body)
@@ -113,7 +112,7 @@ def test_teams_activity_uses_the_provider_date_instead_of_its_collection_time() 
     observed = activity_observation(ActivityPage((item,), ready=True), THIS_WEEK)
     sources = triage_evidence(PendingFeed(Feed(updates=observed.items)))
     with fake_endpoint.fake_endpoint() as endpoint:
-        endpoint.replies = [says('{"items": []}')]
+        endpoint.replies = [screening_reply((item.identity, "quiet") for item in sources)]
         classify(Settings(endpoint.url, "fixture", "transcribe", "chat", "agent", "", ""), sources, (), clock=lambda: THIS_WEEK)
         request: object = json.loads(endpoint.last.body)
     match request:

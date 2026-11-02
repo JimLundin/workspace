@@ -5,7 +5,7 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 from pathlib import Path
 
-from assistant.automatic_meetings import AutomaticMeetings
+from assistant.automatic_meetings import AutomaticAttention, AutomaticMeetings
 from assistant.meeting_detection import (
     PREFERENCE,
     AutomaticPreference,
@@ -20,6 +20,44 @@ from assistant.state_store import SavedState
 from automation.capture import AudioSource
 
 CALL = Calls((Call("private-call", "Workspace private meeting"),))
+
+
+def test_monitor_warns_once_for_a_sustained_outage_and_ignores_flapping() -> None:
+    # Defect: each brief Edge/page failure produces another desktop warning,
+    # even though monitoring recovers on the next poll or the outage is unchanged.
+    now = 0.0
+    statuses: list[AutomaticStatus] = []
+    warnings: list[float] = []
+    attention = AutomaticAttention(statuses.append, lambda: warnings.append(now), lambda: now)
+    attention.changed(AutomaticStatus.UNAVAILABLE)
+    now = 5
+    attention.changed(AutomaticStatus.READY)
+    now = 10
+    attention.changed(AutomaticStatus.UNAVAILABLE)
+    now = 39
+    attention.changed(AutomaticStatus.UNAVAILABLE)
+    assert not warnings
+    now = 40
+    attention.changed(AutomaticStatus.UNAVAILABLE)
+    assert warnings == [40]
+    for at, status in ((45, AutomaticStatus.READY), (50, AutomaticStatus.UNAVAILABLE), (55, AutomaticStatus.READY), (84, AutomaticStatus.READY)):
+        now = at
+        attention.changed(status)
+    assert warnings == [40] and statuses[-1] is AutomaticStatus.READY
+    now = 84.5
+    attention.changed(AutomaticStatus.UNAVAILABLE)
+    now = 114.5
+    attention.changed(AutomaticStatus.UNAVAILABLE)
+    assert warnings == [40], "A 29-second recovery must not rearm outage warnings."
+    now = 120
+    attention.changed(AutomaticStatus.READY)
+    now = 150
+    attention.changed(AutomaticStatus.READY)
+    now = 155
+    attention.changed(AutomaticStatus.UNAVAILABLE)
+    now = 185
+    attention.changed(AutomaticStatus.UNAVAILABLE)
+    assert warnings == [40, 185]
 
 
 class LocalRecording:

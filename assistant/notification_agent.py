@@ -1,30 +1,18 @@
-"""Notification-triggered work, independent of the person's pending-feed filter."""
+"""Durable work admission for notifications that passed selective triage."""
 
 import hashlib
 import threading
 from collections.abc import Callable
 from dataclasses import replace
-from itertools import chain
 
 from pydantic import TypeAdapter
 
-from assistant.communications import SourceDateStatus, chat_tickets
-from assistant.feed_sources import Candidate, ChatTicketSource, PendingFeed, UpdateSource, evidence
+from assistant.communications import SourceDateStatus
+from assistant.feed_sources import Candidate
 from automation.task import FeedHandoff, Profile
 
 _NOTIFICATION = TypeAdapter(Candidate)
 _QUEUE_WAIT = "Notification work awaits queue access; retrying automatically."
-
-
-def received(feed: PendingFeed) -> tuple[Candidate, ...]:
-    """Every received notice, activity and unseen chat message can activate work.
-
-    Filtering/handling govern the pending view; the agent still evaluates arrivals.
-    Reply delivery changes are outcomes of work, not incoming notifications.
-    """
-    chats = (ChatTicketSource(ticket, feed.teams.conversation(ticket.conversation)) for ticket in chat_tickets(feed.teams))
-    updates = map(UpdateSource, chain(feed.teams.updates, feed.notices.updates))
-    return tuple(chain.from_iterable(chain(map(evidence, chats), map(evidence, updates))))
 
 
 def notification_id(item: Candidate) -> str:

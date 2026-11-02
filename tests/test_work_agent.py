@@ -10,6 +10,7 @@ from pathlib import Path
 from assistant.agent_session import ChatMessage
 from assistant.notification_text import prepared_answer
 from assistant.notifications import Busy, Settled, Stack, Turn, TurnKey, Working, advance, body
+
 from assistant.work_agent import WorkAgent
 from assistant.work_commands import (
     AddPreference,

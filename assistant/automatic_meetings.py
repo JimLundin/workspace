@@ -9,17 +9,22 @@ from typing import Protocol
 from assistant.meeting_detection import (
     AutomaticPreference,
     AutomaticStatus,
+    Available,
     Calls,
     Effect,
     Idle,
+    MonitorSample,
+    NoticeState,
     Observation,
     ObservationFailure,
     Ownership,
     Sample,
     Start,
+    Warning,
     Watch,
     Watching,
     decide,
+    monitor_attention,
     suppressed,
 )
 from assistant.recording_state import RecordingState
@@ -36,6 +41,30 @@ class Recorder(Protocol):
     def snapshot(self) -> RecordingState: ...
     def start(self, source: AudioSource = "both", title: str = "Meeting") -> None: ...
     def stop(self) -> None: ...
+
+
+class AutomaticAttention:
+    """Own status publication, the monotonic clock and desktop warning effects.
+
+    Only this callback owner replaces its immutable attention/status observations;
+    repeated poll samples assess recovery without repainting the unchanged status.
+    """
+
+    __slots__ = ("_state", "_status", "clock", "publish", "warn")
+
+    def __init__(self, publish: Callable[[AutomaticStatus], None], warn: Callable[[], None], clock: Callable[[], float] = time.monotonic) -> None:
+        self.publish, self.warn, self.clock = publish, warn, clock
+        self._state: NoticeState = Available.MONITOR
+        self._status: AutomaticStatus | None = None
+
+    def changed(self, status: AutomaticStatus) -> None:
+        decision = monitor_attention(self._state, MonitorSample(status, self.clock()))
+        self._state = decision.state
+        if status is not self._status:
+            self._status = status
+            self.publish(status)
+        if decision.warning is Warning.SHOW:
+            self.warn()
 
 
 class AutomaticMeetings:
@@ -141,9 +170,8 @@ class AutomaticMeetings:
                     status = AutomaticStatus.UNAVAILABLE
                 case _:
                     pass
-            if status is not self._status:
-                self._status = status
-                self.publish(status)
+            self._status = status
+            self.publish(status)
 
     def _run(self) -> None:
         try:

@@ -16,6 +16,63 @@ class AutomaticStatus(Enum):
     UNAVAILABLE = auto()
 
 
+class Warning(Enum):
+    NONE = auto()
+    SHOW = auto()
+
+
+class Available(Enum):
+    MONITOR = auto()
+
+
+@dataclass(frozen=True, slots=True)
+class UnreportedFailure:
+    since: float
+
+
+@dataclass(frozen=True, slots=True)
+class ReportedFailure:
+    recovered_since: float | None = None
+
+
+type NoticeState = Available | UnreportedFailure | ReportedFailure
+
+
+@dataclass(frozen=True, slots=True)
+class MonitorSample:
+    status: AutomaticStatus
+    at: float
+
+
+@dataclass(frozen=True, slots=True)
+class MonitorAttention:
+    state: NoticeState
+    warning: Warning = Warning.NONE
+
+
+def monitor_attention(state: NoticeState, sample: MonitorSample) -> MonitorAttention:
+    """Require 30s of failure to warn and 30s of recovery before warning again."""
+    match sample.status, state:
+        case AutomaticStatus.OFF | AutomaticStatus.CHECKING, _:
+            return MonitorAttention(Available.MONITOR)
+        case AutomaticStatus.UNAVAILABLE, Available.MONITOR:
+            return MonitorAttention(UnreportedFailure(sample.at))
+        case AutomaticStatus.UNAVAILABLE, UnreportedFailure(since) if sample.at - since >= 30:
+            return MonitorAttention(ReportedFailure(), Warning.SHOW)
+        case AutomaticStatus.UNAVAILABLE, UnreportedFailure():
+            return MonitorAttention(state)
+        case AutomaticStatus.UNAVAILABLE, ReportedFailure():
+            return MonitorAttention(ReportedFailure())
+        case AutomaticStatus.READY, ReportedFailure(recovered_since=None):
+            return MonitorAttention(ReportedFailure(sample.at))
+        case AutomaticStatus.READY, ReportedFailure(recovered_since=since) if since is not None and sample.at - since < 30:
+            return MonitorAttention(state)
+        case AutomaticStatus.READY, _:
+            return MonitorAttention(Available.MONITOR)
+        case _:
+            raise ValueError("Unknown automatic recording status or attention state.")
+
+
 @dataclass(frozen=True, slots=True)
 class AutomaticPreference:
     enabled: Annotated[bool, Field(strict=True)] = field(default=False, kw_only=True)

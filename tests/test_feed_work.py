@@ -23,7 +23,7 @@ from automation.store import TaskStore
 from automation.task import Completed, FeedHandoff, Profile, Question, RequestSource, TextAnswer, Waiting
 from tests.fake_endpoint import fake_endpoint
 from tests.feed_fixture import TriageFixture, feed_bridge
-from tests.feed_source_fixture import captured
+from tests.feed_source_fixture import captured, screening_reply
 from tests.test_feed_triage import output
 from tests.test_feed_triage_service import MemoryStore
 from tests.test_work_actions import claimed
@@ -95,7 +95,7 @@ def test_model_gets_project_facts_prior_decisions_task_results_and_recorded_answ
     board = Board(enabled=True, items=(item,), history=(decision, *unrelated))
     working = work.read(board, source.title + " " + source.body, 50).describe(board)
     with fake_endpoint() as endpoint:
-        endpoint.replies = [says(output(([source.identity], "action")))]
+        endpoint.replies = [screening_reply(((source.identity, "action"),)), says(output(([source.identity], "action")))]
         classify(Settings(endpoint.url, "fixture", "transcribe", "quick", "agent", "", ""), (source,), (), working_context=working, clock=lambda: 50)
         payload = _OBJECT.validate_json(endpoint.last.body)
     assert payload["model"] == "agent"

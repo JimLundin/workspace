@@ -14,11 +14,12 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import assert_never
 
+lazy from assistant.agent_window import AgentWindow
+lazy from assistant.notification_text import prepared_answer
+
 lazy import automation.presentation
 lazy from assistant import agent_session
-lazy from assistant.agent_window import AgentWindow
 lazy from assistant.feed_origin import FeedRequest, Initiation
-lazy from assistant.notification_text import prepared_answer
 lazy from assistant.owner_calls import OwnerDispatcher, OwnerReply
 lazy from assistant.work_commands import AnswerTask, FollowUp, Redirect, Submit, WorkCommand
 lazy from assistant.work_service import IdentifiedSubmission, Issued, WorkBridge, WorkService

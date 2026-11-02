@@ -8,20 +8,11 @@ from pathlib import Path
 from typing import Annotated, Final, TypedDict, assert_never
 from urllib.parse import urlsplit
 
-from pydantic import Field, StrictInt, TypeAdapter
-lazy from PySide6 import QtCore
-lazy from PySide6.QtCore import Qt
-lazy from PySide6.QtWidgets import QApplication
-
-from assistant import toast_stack
 from assistant.agent_progress import Progress, advance_progress, compact, retain_lifetimes, visible
 from assistant.canvas_session import redirect_session
 from assistant.qt_runtime import prepare
 from assistant.toast_stack import Active, Column, Frame, Measured, Retiring, Stacking, Viewport, fit, frames, reservable
-from usage import DIRECTORY
-from winapi import appearance, windows
-from winapi.shapes import Rect
-lazy from assistant import notification_reading
+from pydantic import Field, StrictInt, TypeAdapter
 lazy from assistant.agent_session import AgentRequest, Message, Session, Snapshot, pending
 lazy from assistant.agent_window import AgentWindow
 lazy from assistant.card_actions import AnswerApproval, OpenCanvas, parse
@@ -51,6 +42,15 @@ lazy from assistant.toast_card import Card, CardOwner, Finish
 lazy from assistant.toast_desktop import Desktop, NativeDesktop
 lazy from assistant.ui_components.appearance import scheme
 lazy from assistant.ui_components.text import BODY, face, line_height
+lazy from PySide6 import QtCore
+lazy from PySide6.QtCore import Qt
+lazy from PySide6.QtWidgets import QApplication
+
+from assistant import toast_stack
+from usage import DIRECTORY
+from winapi import appearance, windows
+from winapi.shapes import Rect
+lazy from assistant import notification_reading
 lazy from automation.task import Approval
 lazy from winapi.composition import DesktopComposition
 lazy from winapi.notification_input import Region, WheelRouter

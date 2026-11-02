@@ -16,6 +16,12 @@ from enum import Enum, auto
 from pathlib import Path
 from typing import Final, Protocol, assert_never
 
+lazy from assistant.icons import State, dot
+lazy from assistant.keymap import indicator_text
+lazy from assistant.overlay import OverlayState, load_enabled, save_enabled
+lazy from assistant.ui import Ui
+lazy from assistant.work_canvas import WorkCanvas, run_prompt
+
 import components
 import keeper
 import keeper_control
@@ -25,7 +31,7 @@ from automation.activity import ContextSnapshot, Observation, Policy
 from config import APPS
 from usage import DIRECTORY, Detail
 lazy from assistant import control_policy
-lazy from assistant.automatic_meetings import AutomaticMeetings
+lazy from assistant.automatic_meetings import AutomaticAttention, AutomaticMeetings
 lazy from assistant.browser import Browser
 lazy from assistant.browser_session import Product
 lazy from assistant.canvas_activity import CanvasInstruction, CanvasRun
@@ -39,8 +45,6 @@ lazy from assistant.feed_research import Research
 lazy from assistant.feed_sources import Candidate
 lazy from assistant.feed_triage_service import Triage, classify
 lazy from assistant.feed_work import FeedWork
-lazy from assistant.icons import State, dot
-lazy from assistant.keymap import indicator_text
 lazy from assistant.lifecycle import Timings
 lazy from assistant.llm import MAX_SECONDS, Missing, Settings
 lazy from assistant.meeting_browser import TeamsCalls
@@ -53,7 +57,6 @@ lazy from assistant.meeting_workflow import MeetingWorkflow
 lazy from assistant.meetings import Meetings
 lazy from assistant.monitor_layout import MonitorLayout
 lazy from assistant.notification_sources import NOTIFICATION_STATE
-lazy from assistant.overlay import OverlayState, load_enabled, save_enabled
 lazy from assistant.personal_work_model import Correlator
 lazy from assistant.personal_work_service import PersonalWork
 lazy from assistant.personal_work_sources import BrowserSources
@@ -63,10 +66,8 @@ lazy from assistant.recording_state import RecordingAction, RecordingState
 lazy from assistant.report import write_report
 lazy from assistant.state_store import windows_store
 lazy from assistant.tiling import GlazeWM
-lazy from assistant.ui import Ui
 lazy from assistant.work_agent import WorkAgent
 lazy from assistant.work_bridge import WorkOwners, answer
-lazy from assistant.work_canvas import WorkCanvas, run_prompt
 lazy from assistant.work_commands import ControlTask, WorkViewCommand
 lazy from assistant.work_snapshot import WorkSnapshot
 lazy from automation import ipc
@@ -212,6 +213,7 @@ class AssistantApp:
         "activity",
         "agent",
         "assistant",
+        "automatic_attention",
         "automatic_meetings",
         "canvas",
         "capture_timer",
@@ -252,6 +254,7 @@ class AssistantApp:
         self.jobs: queue.Queue[Callable[[], None] | None] = queue.Queue()
         self.window = shell.AppWindow(components.ASSISTANT.window.title, self.on_message)
         self.tray = Tray(self.window.handle)
+        self.automatic_attention = AutomaticAttention(self.ui.desktop_automatic, self.warn_automatic_recording)
         self.mic_event = system.create_event()
         self.tiling = GlazeWM()
         self.monitor_layout = MonitorLayout(self.tiling, self.problem)
@@ -594,13 +597,14 @@ class AssistantApp:
             self.problem(str(error))
 
     def automatic_recording_changed(self, status: AutomaticStatus) -> None:
-        self.ui.desktop_automatic(status)
-        if status is AutomaticStatus.UNAVAILABLE:
-            self.tray.notify(
-                "Automatic Teams recording",
-                "Meeting detection is unavailable. Check the browser connection or choose Record a meeting manually.",
-                warning=True,
-            )
+        self.automatic_attention.changed(status)
+
+    def warn_automatic_recording(self) -> None:
+        self.tray.notify(
+            "Automatic Teams recording",
+            "Meeting detection is unavailable. Check the browser connection or choose Record a meeting manually.",
+            warning=True,
+        )
 
     def refresh_work(self) -> None:
         self.agent.refresh()

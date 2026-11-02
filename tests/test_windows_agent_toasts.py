@@ -16,6 +16,18 @@ from typing import Protocol, cast
 if sys.platform != "win32":
     raise unittest.SkipTest("Windows native agent notifications")
 
+from assistant.agent_session import Begin, Session, transition
+from assistant.agent_toasts import AgentToasts
+from assistant.agent_window import AgentWindow
+from assistant.notifications import MAX_VISIBLE, WIDTH, Kind, MessageKey, PhaseKey, Toast, TurnKey
+from assistant.qt_runtime import prepare
+from assistant.qt_ui import application
+from assistant.rich_text import formatted
+from assistant.toast_card import Card, CardOwner, Finish
+from assistant.toast_desktop import NativeDesktop
+from assistant.ui_components.appearance import Scheme, Shade, SolidLook
+from assistant.ui_components.bubble import BADGE, TOP
+from assistant.ui_components.text import TextView
 lazy import shiboken6
 lazy from PySide6.QtCore import QEvent, QPoint, QPointF, Qt
 lazy from PySide6.QtGui import QEnterEvent, QFont, QFontMetricsF, QImage, QPainter, QRegion, QTextCursor
@@ -23,19 +35,7 @@ lazy from PySide6.QtTest import QTest
 lazy from PySide6.QtWidgets import QWidget
 
 from assistant import toast_stack
-from assistant.agent_session import Begin, Session, transition
-from assistant.agent_toasts import AgentToasts
-from assistant.agent_window import AgentWindow
-from assistant.notifications import MAX_VISIBLE, WIDTH, Expires, Kind, MessageKey, PhaseKey, Toast, TurnKey
-from assistant.qt_runtime import prepare
-from assistant.qt_ui import application
 from assistant.recording_state import RecordingAction, RecordingState
-from assistant.rich_text import formatted
-from assistant.toast_card import Card, CardOwner, Finish
-from assistant.toast_desktop import NativeDesktop
-from assistant.ui_components.appearance import Scheme, Shade, SolidLook
-from assistant.ui_components.bubble import BADGE, TOP
-from assistant.ui_components.text import TextView
 from automation.presentation import Answer, Failed, ReasoningSummary, Said, StreamState, Succeeded, ToolActivity
 from automation.task import Reply, TextAnswer
 from tests.agent_requests import asked, reviewed
@@ -891,7 +891,7 @@ def test_new_live_phase_keeps_steps_compact_before_its_first_presentation() -> N
         publish(ReasoningSummary("read", "Reading plans", 1))
         publish(ToolActivity("a", "read_file", "plan.md", 2))
         panel.pump()
-        card = panel.view.cards[PhaseKey("summary:read")]
+        card = panel.view.cards[PhaseKey(f"request:{panel.agent.state.messages[0].created_at}")]
         assert not card.expanded and not card.disclosure.expanded
 
 
@@ -905,7 +905,7 @@ def test_long_card_heading_is_bounded_on_arrival_and_when_steps_open() -> None:
         publish(ReasoningSummary("read", "Reading plans", 1))
         publish(ToolActivity("a", "read_file", "plan.md", 2))
         panel.pump()
-        card = panel.view.cards[PhaseKey("summary:read")]
+        card = panel.view.cards[PhaseKey(f"request:{panel.agent.state.messages[0].created_at}")]
         line = math.ceil(QFontMetricsF(card.label.font()).height())
         assert card.label.height() <= line, "The heading expanded into the conversation area on arrival."
         assert card.prepared is not None
@@ -916,36 +916,7 @@ def test_long_card_heading_is_bounded_on_arrival_and_when_steps_open() -> None:
         assert len(card.label.text()) > 1000, "Elision discarded the original heading."
 
 
-def test_live_phase_arrival_keeps_cards_readable_until_their_timed_fade() -> None:
-    # Defect: stack rank shades cards immediately rather than allowing their
-    # independent reading lifetime to trigger a fade.
-    with notifications(animated=True) as panel:
-        panel.view.resume()
-        panel.agent.begin("Compare plans")
-        publish = panel.agent.updates()
-        publish(ReasoningSummary("read", "Reading plans", 1))
-        panel.pump()
-        panel.settle()
-        first = panel.view.cards[PhaseKey("summary:read")]
-        publish(ReasoningSummary("compare", "Comparing dates", 2))
-        panel.pump()
-        panel.settle()
-        assert first.alpha == 1
-        lifetime = next(toast.lifetime for toast in panel.view.stack.toasts if toast.key == first.key)
-        assert isinstance(lifetime, Expires)
-        panel.advance(lifetime.at - panel.now - 0.01)
-        assert (first.alpha, first.retiring) == (1, False)
-        panel.advance(0.02)
-        assert first.retiring and first.motion is not None and toast_stack.target(first.motion).alpha == 0
-        panel.now += 0.16
-        panel.view.tick()
-        panel.pump()
-        assert 0 < first.alpha < 1, "The expired card disappeared without fading."
-        panel.settle()
-        assert first.key not in panel.view.cards
-
-
-def test_live_phases_keep_manual_disclosure_and_expire_after_reading() -> None:
+def test_live_request_keeps_one_card_with_manual_disclosure_and_reading_expiry() -> None:
     # Defect: phases stay invisible with the canvas configured, calls create
     # separate bubbles, stacking overlaps, or hovering fails to pause expiry.
     with notifications(animated=True) as panel:
@@ -957,28 +928,26 @@ def test_live_phases_keep_manual_disclosure_and_expire_after_reading() -> None:
         publish(ToolActivity("a", "read_file", "plan.md", 2))
         panel.pump()
         panel.settle()
-        first = view.cards[PhaseKey("summary:read")]
+        first = view.cards[PhaseKey(f"request:{panel.agent.state.messages[0].created_at}")]
         assert (first.expanded, first.disclosure.expanded) == (False, False)
         first.toggle(animate=False)
         height = first.height
         publish(ToolActivity("b", "read_file", "plan-v2.md", 3))
         panel.pump()
         panel.settle()
-        assert view.cards[PhaseKey("summary:read")] is first and first.expanded
+        assert view.cards[PhaseKey(f"request:{panel.agent.state.messages[0].created_at}")] is first and first.expanded
         assert len(first.details.calls) == 2 and first.height > height
-        old_top = first.y
         publish(ReasoningSummary("compare", "Comparing versions and dates", 4))
         panel.pump()
         panel.settle()
-        second = view.cards[PhaseKey("summary:compare")]
-        assert second.alpha == first.alpha == 1
-        assert first.y < old_top and first.y + first.height <= second.y
-        assert (first.expanded, second.expanded) == (False, False)
+        assert view.cards[first.key] is first and first.expanded and first.alpha == 1
+        assert len(tuple(card for card in view.cards.values() if not card.retiring)) == 1
         publish(Answer("result", "The newer plan has the approved dates.", 5, StreamState.COMPLETE))
         panel.pump()
         panel.settle()
         cards = tuple(card for card in view.cards.values() if not card.retiring)
-        assert len(cards) == 3 and all(card.alpha == 1 for card in cards)
+        assert cards == (first,) and first.alpha == 1
+        assert "The newer plan has the approved dates." in first.text.toPlainText()
         assert len(view.cards) + len(view.spares) <= MAX_VISIBLE
         panel.agent.finish()
         panel.pump()

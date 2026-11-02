@@ -4,8 +4,10 @@ import asyncio
 import threading
 from collections.abc import Callable
 from dataclasses import dataclass
+from enum import Enum, auto
 from itertools import islice
 from pathlib import Path
+from typing import assert_never
 
 from pydantic import TypeAdapter
 lazy import agents
@@ -15,11 +17,33 @@ lazy from agents.tool_context import ToolContext
 lazy from openai import APIError, AsyncOpenAI, DefaultAsyncHttpxClient
 lazy from openai.types.shared import Reasoning
 
-from assistant.feed_contracts import REVIEW_INPUT, REVIEW_OUTPUT, ReviewInput
+from assistant.feed_contracts import REVIEW_INPUT, REVIEW_OUTPUT, SCREENING, ReviewInput
 from assistant.llm import Settings
 from automation.files import filesystem_path
 
 _SCHEMA = TypeAdapter(dict[str, object])
+
+
+class Mode(Enum):
+    SCREEN = auto()
+    RESEARCH = auto()
+
+
+def review_output(output: object, mode: Mode) -> str:
+    """Validate the SDK's unknown final value through this run's owned contract."""
+    match output:
+        case str() as text:
+            match mode:
+                case Mode.SCREEN:
+                    screened = SCREENING.validate_json(text)
+                    return SCREENING.dump_json(screened).decode()
+                case Mode.RESEARCH:
+                    reviewed = REVIEW_OUTPUT.validate_json(text)
+                    return REVIEW_OUTPUT.dump_json(reviewed).decode()
+                case _:
+                    assert_never(mode)
+        case _:
+            raise ValueError("Inbox research returned no review.")
 
 
 @dataclass(frozen=True, slots=True)
@@ -84,6 +108,9 @@ class Research:
     def review(self, request: ReviewInput, instructions: str) -> str:
         return asyncio.run(self.run(request, instructions))
 
+    def screen(self, request: ReviewInput, instructions: str) -> str:
+        return asyncio.run(self.run(request, instructions, mode=Mode.SCREEN))
+
     async def web_search(self, client: AsyncOpenAI, query: Query) -> str:
         """Keep hosted-tool failure local: compatible providers may support only function tools."""
         try:
@@ -123,7 +150,7 @@ class Research:
             strict_json_schema=False,
         )
 
-    async def run(self, request: ReviewInput, instructions: str) -> str:
+    async def run(self, request: ReviewInput, instructions: str, *, mode: Mode = Mode.RESEARCH) -> str:
         def context(query: Query) -> str:
             """Find relevant saved project facts, user decisions, task results and recorded answers by topic."""
             return self.context(query.query[:20000]) if self.context is not None else request.working_context
@@ -158,10 +185,14 @@ class Research:
 
             search_schema: object = TypeAdapter(Query).json_schema()
             investigator: agents.Agent[Research] = agents.Agent(
-                name="Workspace inbox research",
+                name="Workspace notification triage" if mode is Mode.SCREEN else "Workspace inbox research",
                 instructions=instructions,
-                model=OpenAIResponsesModel(model=self.settings.agent_model, openai_client=client),
-                tools=[
+                model=OpenAIResponsesModel(
+                    model=self.settings.chat_model if mode is Mode.SCREEN else self.settings.agent_model, openai_client=client
+                ),
+                tools=[]
+                if mode is Mode.SCREEN
+                else [
                     self.tool("lookup_work", TypeAdapter(Query), context),
                     self.tool("read_conversation", TypeAdapter(ConversationRequest), conversation),
                     self.tool("read_file", TypeAdapter(FileRequest), file),
@@ -175,13 +206,15 @@ class Research:
                         strict_json_schema=False,
                     ),
                 ],
-                model_settings=ModelSettings(reasoning=reasoning, store=False, response_include=["reasoning.encrypted_content"]),
+                model_settings=ModelSettings(
+                    reasoning=None if mode is Mode.SCREEN else reasoning, store=False, response_include=["reasoning.encrypted_content"]
+                ),
             )
             result = Runner.run_streamed(
                 investigator,
                 REVIEW_INPUT.dump_json(request).decode(),
                 context=self,
-                max_turns=12,
+                max_turns=1 if mode is Mode.SCREEN else 12,
                 run_config=RunConfig(
                     tracing_disabled=True,
                     trace_include_sensitive_data=False,
@@ -198,7 +231,7 @@ class Research:
 
             pending = asyncio.create_task(consume())
             try:
-                async with asyncio.timeout(180):
+                async with asyncio.timeout(20 if mode is Mode.SCREEN else 180):
                     while not pending.done():
                         if self.stop.is_set():
                             raise OSError("Inbox research stopped.")
@@ -214,9 +247,4 @@ class Research:
             if self.stop.is_set():
                 raise OSError("Inbox research stopped.")
             output: object = result.final_output
-            match output:
-                case str() as text:
-                    reviewed = REVIEW_OUTPUT.validate_json(text)
-                    return REVIEW_OUTPUT.dump_json(reviewed).decode()
-                case _:
-                    raise ValueError("Inbox research returned no review.")
+            return review_output(output, mode)

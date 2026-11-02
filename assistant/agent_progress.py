@@ -4,9 +4,8 @@ from collections.abc import Iterable, Iterator
 from dataclasses import dataclass, field, replace
 from textwrap import shorten
 
-from assistant.agent_session import ChatMessage, Message, Snapshot
+from assistant.agent_session import AgentRequest, ChatMessage, Message, Snapshot
 from assistant.canvas_session import redirect_session
-from assistant.feed_origin import Initiation
 from assistant.notifications import (
     Entry,
     Expires,
@@ -16,10 +15,13 @@ from assistant.notifications import (
     Stack,
     Toast,
     Turn,
+    Working,
     advance,
     observe,
     reading_seconds,
 )
+
+from assistant.feed_origin import Initiation
 from automation.presentation import Answer, ReasoningSummary
 
 TRAIL_LENGTH = 3
@@ -51,6 +53,8 @@ def phase_messages(messages: Iterable[Message]) -> Iterator[Message]:
             case ChatMessage(source=source) if source is not None and source.identity.startswith("canvas:"):
                 continue
             case _ if automatic:
+                continue
+            case AgentRequest():
                 continue
             case ReasoningSummary(text=text, created_at=created):
                 if text.strip():
@@ -93,7 +97,7 @@ def advance_progress(previous: Progress, session: Snapshot, now: float) -> Progr
         if toast is None and not changed:
             continue
         lifetime = toast.lifetime if toast is not None else Held.ACTIVE
-        if phase.key == observed[-1].key and session.busy:
+        if isinstance(phase.turn.state, Working):
             lifetime = Held.ACTIVE
         elif changed or lifetime is Held.ACTIVE:
             lifetime = Expires(now + reading_seconds(phase.turn))

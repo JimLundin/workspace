@@ -52,6 +52,17 @@ class ReviewOutput:
 
 
 @dataclass(frozen=True, slots=True)
+class ScreenedSource:
+    id: Identity
+    disposition: Literal["action", "quiet"]
+
+
+@dataclass(frozen=True, slots=True)
+class Screening:
+    items: Annotated[tuple[ScreenedSource, ...], Field(max_length=20)]
+
+
+@dataclass(frozen=True, slots=True)
 class SourceEvidence:
     id: str
     revision: str
@@ -166,6 +177,7 @@ class SolutionContext:
 
 
 REVIEW_OUTPUT = TypeAdapter(ReviewOutput)
+SCREENING = TypeAdapter(Screening)
 REVIEW_INPUT = TypeAdapter(ReviewInput)
 SOURCE_EVIDENCE = TypeAdapter(SourceEvidence)
 FEED_REPLY = TypeAdapter(FeedReply)
