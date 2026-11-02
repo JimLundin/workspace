@@ -11,11 +11,13 @@ if sys.platform != "win32":
 lazy from PySide6 import QtCore, QtWidgets
 lazy from PySide6.QtTest import QTest
 
+from desktop_ui.components.appearance import Capsule, look
+from desktop_ui.components.meaning import Tint
 from desktop_ui.qt_runtime import prepare
 from desktop_ui.qt_ui import application
 from desktop_ui.shell_items import Application, applications, next_window
 from desktop_ui.shell_surface import ShellSections
-from winapi import desktop_shell, shell, windows
+from winapi import appearance, desktop_shell, shell, windows
 from winapi.icon_pixels import pixels
 from winapi.shapes import Rect, Window
 from winapi.tray_host import Click, Entry, Located, Registration, TrayHost, callbacks, registration, update
@@ -139,11 +141,40 @@ def test_toolbar_shell_icons_route_actions_and_keep_overflow_reachable() -> None
         QTest.mouseClick(sections.tray.buttons[0], QtCore.Qt.MouseButton.RightButton)
         assert invoked == [("0", Click.LEFT), ("Fixture tray", Click.RIGHT)]
         assert sections.tray.buttons[0].accessibleName() == "Fixture tray"
-        assert sections.apps.horizontalScrollBar().maximum() > 0
-        sections.apps.horizontalScrollBar().setValue(sections.apps.horizontalScrollBar().maximum())
+        assert sections.apps.overflow.horizontalScrollBar().maximum() > 0
+        sections.apps.overflow.horizontalScrollBar().setValue(sections.apps.overflow.horizontalScrollBar().maximum())
         app.processEvents()
-        assert sections.apps.buttons[-1].geometry().right() - sections.apps.horizontalScrollBar().value() < sections.apps.viewport().width()
+        assert (
+            sections.apps.buttons[-1].geometry().right() - sections.apps.overflow.horizontalScrollBar().value()
+            < sections.apps.overflow.viewport().width()
+        )
         assert sections.apps.geometry().right() < 250 and sections.tray.geometry().left() > 350
+    finally:
+        parent.close()
+        parent.deleteLater()
+        app.processEvents()
+
+
+def test_shell_sections_leave_glass_transparent_and_use_the_shared_solid_surface() -> None:
+    # Defect: a scroll viewport paints opaque black over the native glass,
+    # or the shell strip invents a colour instead of using the shared surface.
+    app = application()
+    parent = QtWidgets.QWidget()
+    parent.setAttribute(QtCore.Qt.WidgetAttribute.WA_TranslucentBackground)
+    parent.resize(600, 50)
+    sections = ShellSections(parent)
+    item = Application("editor.exe", (Window(1, "Editor", "editor.exe", minimized=False),))
+    sections.applications(((item,), 0), lambda item, click: None)
+    sections.place((250, 350), 600)
+    sections.apps.apply_look(look(appearance.Material.GLASS, Capsule(appearance.Frost.SMOKED), Tint.NONE))
+    parent.show()
+    app.processEvents()
+    try:
+        assert sections.apps.grab().toImage().pixelColor(3, 17).alpha() <= 1
+        sections.apps.apply_look(look(appearance.Contrast("#ffffff", "#000000"), Capsule(appearance.Frost.SMOKED), Tint.NONE))
+        app.processEvents()
+        pixel = sections.apps.grab().toImage().pixelColor(3, 17)
+        assert (pixel.red(), pixel.green(), pixel.blue(), pixel.alpha()) == (255, 255, 255, 255)
     finally:
         parent.close()
         parent.deleteLater()

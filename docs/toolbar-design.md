@@ -83,6 +83,8 @@ app; further clicks cycle its windows in a stable order. Right-click lists its
 current windows. A background observer refreshes windows once per second and
 copies newly seen icons away from Qt's animation and audio thread. The current
 app has a quiet selection fill. Both sections scroll horizontally when crowded.
+Their foreground stays transparent over the same native glass and rim as the
+island; solid and high-contrast modes use the island's shared surface colours.
 
 Tray icons come from live Windows registration messages, including tooltip,
 image, visibility and callback/version changes. Left, right and double clicks

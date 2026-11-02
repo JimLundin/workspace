@@ -6,7 +6,8 @@ from typing import assert_never, override
 lazy from PySide6 import QtCore, QtGui, QtWidgets
 lazy from PySide6.QtCore import Qt
 
-from desktop_ui.components.appearance import GlassLook, Lettering, Look, Shade, SolidLook
+from desktop_ui.components.appearance import GlassLook, Lettering, Look, SolidLook
+from desktop_ui.components.text import color
 from desktop_ui.shell_items import Application
 from desktop_ui.vector_icons import icon
 from winapi.icon_pixels import Pixels
@@ -69,28 +70,36 @@ class IconButton(QtWidgets.QToolButton):
             super().mouseDoubleClickEvent(event)
 
 
-class Section(QtWidgets.QScrollArea):
+class HorizontalScroll(QtWidgets.QScrollArea):
+    """Qt owns overflow; vertical wheel input moves the horizontal icon strip."""
+
+    @override
+    def wheelEvent(self, event: QtGui.QWheelEvent) -> None:
+        self.horizontalScrollBar().setValue(self.horizontalScrollBar().value() - (event.angleDelta().x() or event.angleDelta().y()))
+        event.accept()
+
+
+class Section(QtWidgets.QWidget):
     """Overflow stays reachable by scrolling horizontally; no icons are silently dropped."""
 
     def __init__(self, parent: QtWidgets.QWidget) -> None:
         super().__init__(parent)
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        self.overflow = HorizontalScroll(self)
         self.body = QtWidgets.QWidget()
         self.row = QtWidgets.QHBoxLayout(self.body)
-        self.row.setContentsMargins(4, 0, 4, 0)
+        self.row.setContentsMargins(6, 0, 6, 0)
         self.row.setSpacing(2)
-        self.setWidget(self.body)
-        self.setWidgetResizable(False)
-        self.setFrameShape(QtWidgets.QFrame.Shape.NoFrame)
-        self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        self.setStyleSheet(
-            "QScrollArea {background:rgba(24,24,28,225); border:1px solid rgba(255,255,255,30); border-radius:17px;}"
-            "QScrollArea > QWidget > QWidget {background:transparent;}"
-        )
+        self.overflow.setWidget(self.body)
+        self.overflow.setWidgetResizable(False)
+        self.overflow.setFrameShape(QtWidgets.QFrame.Shape.NoFrame)
+        self.overflow.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.overflow.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        for widget in (self.overflow, self.overflow.viewport(), self.body):
+            widget.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+            widget.setAutoFillBackground(False)
         self.buttons: tuple[IconButton, ...] = ()
         self.appearance: Look | None = None
-        self.viewport().setAutoFillBackground(False)
-        self.body.setAutoFillBackground(False)
         self.hide()
 
     def reset(self) -> None:
@@ -106,33 +115,39 @@ class Section(QtWidgets.QScrollArea):
             self.row.addWidget(button)
             if self.appearance is not None:
                 button.apply_look(self.appearance.lettering)
-        self.body.setFixedSize(max(8, len(buttons) * 34 + 6), 32)
+        self.body.setFixedSize(max(12, len(buttons) * 34 + 10), 32)
 
     def apply_look(self, appearance: Look) -> None:
         if appearance == self.appearance:
             return
         self.appearance = appearance
-        match appearance:
-            case SolidLook(fill=fill, edge=edge):
-                pass
-            case GlassLook():
-                fill, edge = Shade("#000000", 1 / 255), Shade("#000000", 0)
-            case _:
-                assert_never(appearance)
-        self.setStyleSheet(
-            f"QScrollArea {{background:{fill.css}; border:1px solid {edge.css}; border-radius:17px;}}"
-            "QScrollArea > QWidget > QWidget {background:transparent;}"
-        )
         for button in self.buttons:
             button.apply_look(appearance.lettering)
+        self.update()
 
     def place(self, left: int, right: int) -> None:
-        self.setGeometry(left, 8, max(0, min(right - left, self.body.width() + 2)), 34)
+        self.setGeometry(left, 8, max(0, min(right - left, self.body.width() + 4)), 34)
+        self.overflow.setGeometry(2, 1, max(0, self.width() - 4), 32)
         self.setVisible(bool(self.buttons) and right - left >= 34)
 
-    def wheelEvent(self, event: QtGui.QWheelEvent) -> None:
-        self.horizontalScrollBar().setValue(self.horizontalScrollBar().value() - (event.angleDelta().x() or event.angleDelta().y()))
-        event.accept()
+    @override
+    def paintEvent(self, event: QtGui.QPaintEvent) -> None:
+        painter = QtGui.QPainter(self)
+        painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
+        outline = QtGui.QPainterPath()
+        outline.addRoundedRect(QtCore.QRectF(self.rect()), 17, 17)
+        match self.appearance:
+            case GlassLook():
+                # GlassScene owns the material; this invisible fill keeps native hit testing.
+                painter.fillPath(outline, QtGui.QColor(0, 0, 0, 1))
+            case SolidLook(fill=fill, edge=edge):
+                painter.fillPath(outline, color(fill))
+                painter.setPen(QtGui.QPen(color(edge), 1))
+                painter.drawPath(outline)
+            case None:
+                pass
+            case _:
+                assert_never(self.appearance)
 
 
 class ShellSections:
@@ -178,7 +193,7 @@ class ShellSections:
     def place(self, bounds: tuple[int, int], width: int) -> None:
         left, right = bounds
         self.apps.place(12, max(12, left - 12))
-        tray_width = min(self.tray.body.width() + 2, max(0, width - right - 24))
+        tray_width = min(self.tray.body.width() + 4, max(0, width - right - 24))
         self.tray.place(width - 12 - tray_width, width - 12)
 
     def locations(self, outer: Rect, scale: float) -> tuple[Located, ...]:
