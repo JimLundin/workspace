@@ -6,7 +6,7 @@ from dataclasses import replace
 from pathlib import Path
 from unittest import TestCase
 
-from assistant.browser_values import BrowserError
+from assistant.browser_values import BrowserError, BrowserStatus, PageRow
 from assistant.llm import Settings
 from assistant.personal_work_model import Correlator
 from assistant.personal_work_service import PersonalWork, correlation_input
@@ -380,9 +380,35 @@ def test_selected_outlook_body_is_evidence_even_without_a_rendered_list_row() ->
     assert observations[0].excerpt == selected.text and observations[0].title == selected.subject
 
 
-def test_unavailable_browser_waits_for_refresh_and_empty_chats_are_not_evidence() -> None:
-    # Defect: failed attachment repeatedly interrupts the user, or sidebar
-    # titles alone create responsibilities despite no observed message body.
+def test_browser_access_checks_apps_beyond_the_first_tab_page_and_recovers_each_app() -> None:
+    # Defect: an open project app after the first forty tabs is never checked,
+    # or a failed app stays unavailable despite a later successful observation.
+    browser = CapturedBrowser(
+        (),
+        {TeamsQuery("chat"): BrowserError("Sign-in expired")},
+        pages=frozendict(
+            {
+                0: BrowserStatus("attached", tuple(PageRow(str(index), "Other", "https://example.test/") for index in range(40)), next_offset=40),
+                40: BrowserStatus("attached", (PageRow("chat", "Teams", source(SourceKind.TEAMS).url),)),
+            }
+        ),
+    )
+    reader = BrowserSources(browser)
+    try:
+        first = reader.read(10, threading.Event())
+        assert not first.coverage and first.problems and browser.tab_reads == 2
+        available: Mapping[Located, object] = {TeamsQuery("chat"): TeamsPage("19:chat@thread.v2", "Atlas", (), (), editor_ready=True)}
+        browser.answers = available
+        second = reader.read(25, threading.Event())
+        assert second.coverage == ("teams",) and not second.problems
+        assert browser.connections == 1 and browser.tab_reads == 4
+    finally:
+        reader.close()
+
+
+def test_unavailable_browser_retries_periodically_and_empty_chats_are_not_evidence() -> None:
+    # Defect: an access failure permanently stops automatic observation, retries
+    # every sample, or sidebar titles alone create responsibilities.
     browser = CapturedBrowser(BrowserError("Unavailable"), {})
     reader = BrowserSources(browser)
     first = reader.read(10, threading.Event())
@@ -395,9 +421,21 @@ def test_unavailable_browser_waits_for_refresh_and_empty_chats_are_not_evidence(
         TeamsQuery("chat"): TeamsPage(chat, "Deploy Atlas", (TeamsChat(chat, "Deploy Atlas", "chat"),), (), editor_ready=True)
     }
     browser.answers = available
-    reader.refresh()
-    fresh = reader.read(12, threading.Event())
+    fresh = reader.read(70, threading.Event())
     assert not fresh.sources and not fresh.problems and fresh.coverage == ("teams",)
+    assert browser.connections == 2 and browser.tab_reads == 2
+    browser.tabs = BrowserError("Connection lost")
+    assert reader.read(71, threading.Event()).problems
+    browser.tabs = (Tab("chat", source(SourceKind.TEAMS).url),)
+    reader.refresh()
+    assert reader.read(72, threading.Event()).coverage == ("teams",)
+    assert browser.connections == 3
+    browser.tabs = BrowserStatus("stopped", ())
+    assert reader.read(73, threading.Event()).problems
+    browser.tabs = (Tab("chat", source(SourceKind.TEAMS).url),)
+    assert reader.read(74, threading.Event()).problems
+    assert reader.read(133, threading.Event()).coverage == ("teams",)
+    assert browser.connections == 4
     reader.close()
 
 

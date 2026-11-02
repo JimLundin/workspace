@@ -60,9 +60,16 @@ class CapturedBrowser:
     fixture cannot drift from the shape the real page script is checked against.
     """
 
-    def __init__(self, tabs: tuple[Tab, ...] | BrowserError, answers: Mapping[Located, object]) -> None:
+    def __init__(
+        self,
+        tabs: tuple[Tab, ...] | BrowserStatus | BrowserError,
+        answers: Mapping[Located, object],
+        *,
+        pages: Mapping[int, BrowserStatus] = frozendict(),
+    ) -> None:
         self.tabs = tabs
         self.answers = answers
+        self.pages: Mapping[int, BrowserStatus] = pages
         self.queries: list[Located] = []
         self.tab_reads = 0
         self.connections = 0
@@ -74,9 +81,13 @@ class CapturedBrowser:
     def request(self, request: BrowserRequest, cancel: threading.Event) -> BrowserResult:
         assert isinstance(request, PageList)
         self.tab_reads += 1
+        if request.offset in self.pages:
+            return BrowserResult(STATUS.dump_json(self.pages[request.offset], exclude_none=True).decode())
         match self.tabs:
             case BrowserError() as error:
                 raise error
+            case BrowserStatus() as status:
+                return BrowserResult(STATUS.dump_json(status, exclude_none=True).decode())
             case tabs:
                 status = BrowserStatus("attached", tuple(PageRow(tab.id, "", tab.url) for tab in tabs))
                 return BrowserResult(STATUS.dump_json(status, exclude_none=True).decode())

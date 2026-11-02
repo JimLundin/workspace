@@ -6,9 +6,9 @@ saved evidence. CDP targets belong to this observation and are never persisted.
 """
 
 import threading
-from collections.abc import Iterable
+from collections.abc import Iterable, Iterator
 from dataclasses import dataclass, replace
-from typing import Protocol, assert_never
+from typing import Final, Protocol, assert_never
 from urllib.parse import urlsplit
 
 from pydantic import TypeAdapter
@@ -64,6 +64,7 @@ class Observations:
 
 
 _STATUS = TypeAdapter(BrowserStatus)
+ACCESS_RETRY_SECONDS: Final = 60.0
 
 
 def kind_for(url: str) -> SourceKind | None:
@@ -152,30 +153,51 @@ def message_sources(conversation: WorkSource, messages: Iterable[Piece]) -> tupl
 
 
 class BrowserSources:
-    __slots__ = ("browser", "connected", "failed")
+    __slots__ = ("browser", "connected", "failed", "retry_at")
 
     def __init__(self, browser: BrowserPort) -> None:
         self.browser = browser
-        # This reader owns the connection lifecycle. A denied/unavailable
-        # attachment is retried only when the user explicitly refreshes My work.
+        # This reader owns connection state and a bounded retry deadline. Regular
+        # samples keep checking app access; attachment failures wait one minute.
         self.connected = False
         self.failed: str | None = None
+        self.retry_at = 0.0
 
     def refresh(self) -> None:
         self.failed = None
+        self.retry_at = 0.0
+
+    def tabs(self, cancel: threading.Event) -> Iterator[Tab]:
+        """Check every page of open tabs, rejecting stopped or stalled reads."""
+        if not self.connected:
+            self.browser.connect(cancel)
+            self.connected = True
+        offset = 0
+        while not cancel.is_set():
+            status = _STATUS.validate_json(self.browser.request(PageList(offset, limit=40), cancel).text)
+            if status.mode == "stopped":
+                raise BrowserError("The browser connection ended.")
+            yield from (Tab(page.id, page.url) for page in status.tabs)
+            following = status.next_offset
+            if following is None:
+                return
+            if following <= offset:
+                raise BrowserError("The browser tab listing did not advance.")
+            offset = following
 
     def read(self, at: float, cancel: threading.Event) -> Observations:
-        if self.failed is not None:
+        if cancel.is_set():
+            return Observations((), ())
+        if self.failed is not None and at < self.retry_at:
             return Observations((), (), (self.failed,))
         try:
-            if not self.connected:
-                self.browser.connect(cancel)
-                self.connected = True
-            pages = _STATUS.validate_json(self.browser.request(PageList(limit=40), cancel).text).tabs
-            tabs = tuple(Tab(page.id, page.url) for page in pages)
+            tabs = tuple(self.tabs(cancel))
         except BrowserError, OSError, ValueError:
-            self.failed = "Browser evidence is unavailable. Open signed-in Teams, Outlook and Kanban tabs, then Refresh My work."
+            self.connected = False
+            self.retry_at = at + ACCESS_RETRY_SECONDS
+            self.failed = "Browser evidence is unavailable. Open signed-in Teams, Outlook and Kanban tabs; access retries automatically each minute."
             return Observations((), (), (self.failed,))
+        self.failed = None
         sources: tuple[WorkSource, ...] = ()
         coverage: tuple[str, ...] = ()
         problems: tuple[str, ...] = ()
