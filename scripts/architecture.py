@@ -97,7 +97,7 @@ class Configuration:
     """The architecture TOML contract keeps its independent policy declarations together.
 
     Model ownership, exact exceptions, composition seams and process ownership
-    enter the source review as one validated record. Its seven fields describe
+    enter the source review as one validated record. Its fields describe
     independent policies rather than one function's operational inputs.
     """
 
@@ -109,6 +109,10 @@ class Configuration:
     """Owners that the work process must never import, including through seams."""
     work_only: tuple[Text, ...] = ()
     shared: tuple[Text, ...] = ()
+    headless: tuple[Text, ...] = ()
+    """Application logic that cannot import presentation modules or Qt."""
+    ui_private: tuple[Text, ...] = ()
+    """Effect owners that presentation must access through client contracts."""
     processes: Processes | None = None
     """Isolated policy fixtures may omit process roots; production declares both."""
 
@@ -272,6 +276,28 @@ def _routes(graph: Mapping[str, frozenset[str]], entry: str) -> Iterator[tuple[s
         visited.add(module)
         yield route
         pending.extend((*route, target) for target in sorted(graph.get(module, frozenset())) if target not in visited)
+
+
+def ui_isolation(graph: Mapping[str, frozenset[str]], entries: Iterable[str]) -> Iterator[Finding]:
+    """Headless owners stay independent even through lazy, indirect imports."""
+    for entry in entries:
+        if entry not in graph:
+            yield Finding("ui-isolation", entry, "", "", 0, "Declared headless owner is absent; update its declaration.")
+            continue
+        for route in _routes(graph, entry):
+            if any(_within(route[-1], package) for package in ("desktop_ui", "PySide6", "PyQt6")):
+                yield Finding("ui-isolation", entry, "", "", 0, " → ".join(route))
+
+
+def presentation_isolation(graph: Mapping[str, frozenset[str]], owners: Iterable[str]) -> Iterator[Finding]:
+    """Views consume contracts without importing their concrete effect owners."""
+    restricted = frozenset(owners)
+    for owner in sorted(restricted - graph.keys()):
+        yield Finding("presentation-isolation", owner, "", "", 0, "Declared UI-private owner is absent; update its declaration.")
+    for entry in sorted(module for module in graph if _within(module, "desktop_ui")):
+        for route in _routes(graph, entry):
+            if route[-1] in restricted:
+                yield Finding("presentation-isolation", entry, "", "", 0, " → ".join(route))
 
 
 def process_ownership(graph: Mapping[str, frozenset[str]], configuration: Configuration) -> Iterator[Finding]:
@@ -514,7 +540,8 @@ def review(root: Path, names: Iterable[str] | None = None, *, cache: Cache | Non
     all_source = tuple(Source(name, (root / name).read_text(encoding="utf-8")) for name in sources)
     loaded = tuple(source for source in all_source if not source.name.startswith("tests/"))
     observations = {module_name(source.name): observation(source, cache) for source in loaded}
-    graph = {module_name(source.name): dependencies(source.name, source.text, cache=cache) & observations.keys() for source in loaded}
+    imports = {module_name(source.name): dependencies(source.name, source.text, cache=cache) for source in loaded}
+    graph = {module: imported & observations.keys() for module, imported in imports.items()}
     findings = [finding for observed in observations.values() for finding in observed.declarations]
     findings.extend(finding for source in all_source for finding in testing_dependencies(source))
     findings.extend(
@@ -539,6 +566,8 @@ def review(root: Path, names: Iterable[str] | None = None, *, cache: Cache | Non
     entry = configuration.processes.work if configuration.processes is not None else WORKER_ENTRY
     findings.extend(worker_isolation(graph, configuration.desktop_only, entry=entry))
     findings.extend(process_ownership(graph, configuration))
+    findings.extend(ui_isolation(imports, configuration.headless))
+    findings.extend(presentation_isolation(graph, configuration.ui_private))
     accepted = tuple(exception for exception in exceptions if any(exception.matches(finding) for finding in findings))
     failures = [finding for finding in findings if not any(exception.matches(finding) for exception in accepted)]
     failures.extend(

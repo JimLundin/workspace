@@ -68,3 +68,21 @@ dependencies and native initialization order without imports inside methods.
 Launchers run directly on Python 3.15 and lazily resolve product imports after
 runtime activation. The editing runner lazily loads its test/native dependencies after both policy gates pass;
 the staged native deployment driver can avoid loading test machinery entirely.
+
+## UI independence
+
+`tool.workspace.architecture.headless` names the work frontend, canvas owner and
+shared conversation/attention/edit values. The source review follows their full
+import routes, including lazy imports and package initializers, and rejects
+`desktop_ui`, `PySide6` and `PyQt6`. Native rendering and text preparation enter
+through the injected presentation adapter; the canvas client receives commands
+and immutable publications from `assistant/work_canvas_contracts.py`.
+`ui_private` also rejects presentation imports of concrete work/canvas owners,
+including indirect imports through contracts. These declarations supplement process isolation: a
+logic owner remains headless even when it shares the desktop process with Qt.
+
+The canvas owner holds its reentrant lock through each read/modify/write operation
+and ordered publication. Publish callbacks enqueue observations without waiting
+for native rendering. Queue callbacks may read the committed document, and use
+this owner's catalog title rather than locking another observation owner. Durable
+work publication runs before presentation and survives an unavailable view.

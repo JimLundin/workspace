@@ -4,12 +4,12 @@ from collections.abc import Iterable, Iterator
 from dataclasses import dataclass, field, replace
 from textwrap import shorten
 
+from assistant.agent_session import AgentRequest, Cancelled, ChatMessage, Message, Pending, Snapshot, notice_text, pending
+from assistant.attention import AttentionSnapshot, context_of
 from assistant.canvas_activity import Attention, CanvasRequest
 from assistant.feed_origin import FeedRequest, Initiation
 from automation.presentation import Answer, ReasoningSummary, ToolActivity
 from automation.task import Question, TextAnswer
-from desktop_ui.agent_session import AgentRequest, Cancelled, ChatMessage, Message, Pending, Snapshot, notice_text, pending
-from desktop_ui.attention import AttentionSnapshot, context_of
 from desktop_ui.notifications import (
     Busy,
     Entry,

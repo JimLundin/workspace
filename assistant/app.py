@@ -62,6 +62,7 @@ lazy from assistant.state_store import windows_store
 lazy from assistant.tiling import GlazeWM
 lazy from assistant.work_agent import WorkAgent
 lazy from assistant.work_bridge import WorkOwners, answer
+lazy from assistant.work_canvas import WorkCanvas, run_prompt
 lazy from assistant.work_commands import ControlTask, WorkViewCommand
 lazy from assistant.work_snapshot import WorkSnapshot
 lazy from automation import ipc
@@ -91,7 +92,6 @@ lazy from desktop_ui.keymap import indicator_text
 lazy from desktop_ui.overlay import OverlayState, load_enabled, save_enabled
 lazy from desktop_ui.tray import Tray
 lazy from desktop_ui.ui import Ui
-lazy from desktop_ui.work_canvas import WorkCanvas, run_prompt
 lazy from miryoku.layout import Layer
 lazy from protocol import WM_INDICATOR, WM_KEY_STATE, WM_LAYOUT_STATE, WM_REQUEST, LayoutState, Tool, decode_indicator
 lazy from winapi import audio, recording, screen, shell, system, windows
@@ -285,7 +285,7 @@ class AssistantApp:
         self.personal = self.create_personal(tasks)
         self.recover_canvas(tasks)
         self.triage = self.create_feed(FeedWork(tasks, saved_context, context))
-        self.work_owners = WorkOwners(self.triage.command, self.personal.handle, self.ui.canvas_command)
+        self.work_owners = WorkOwners(self.triage.command, self.personal.handle, self.canvas.command)
         self.ui.configure_feed(windows_store(DIRECTORY / "notifications.bin", NOTIFICATION_STATE), self.triage.observe)
         self.timings.mark("communications and desktop owners")
         archive = MeetingArchive(DIRECTORY / "meetings")
@@ -350,7 +350,7 @@ class AssistantApp:
 
     def create_personal(self, tasks: TaskStore) -> PersonalWork:
         self.ui.configure_work(self.work_command, on_problem=self.problem)
-        self.ui.configure_canvas(self.canvas, self.agent.notify_canvas)
+        self.ui.configure_canvas(self.canvas, self.agent.notify_canvas, observe_session=self.canvas.observe_session)
         self.agent.watch(tuple(run.task_id for run in self.canvas.read().runs), owner="canvas")
         return PersonalWork(
             PersonalStore(tasks.path),
@@ -368,7 +368,7 @@ class AssistantApp:
             for run in self.canvas.read().runs:
                 match run:
                     case CanvasRun(intent=CanvasInstruction()) | CanvasRun(evidence=str()) if tasks.get(run.task_id) is None:
-                        self.ui.post(self.canvas_recovery(run))
+                        self.continue_thread(run)
                     case _:
                         pass
 
@@ -387,12 +387,6 @@ class AssistantApp:
         for run in self.canvas.read().runs:
             if run.work_id == work.id:
                 self.agent.command(ControlTask(run.task_id, Control.CANCEL))
-
-    def canvas_recovery(self, run: CanvasRun) -> Callable[[object], None]:
-        def recover(_root: object) -> None:
-            self.continue_thread(run)
-
-        return recover
 
     def start_background(self) -> None:
         self.startup.start()
@@ -587,17 +581,17 @@ class AssistantApp:
         return classify(self.settings, batch, rules, working_context=self.triage.working_context(batch), research=research)
 
     def work_changed(self, snapshot: WorkSnapshot) -> None:
-        self.ui.work_window().publish(replace(snapshot, personal=self.personal.snapshot()))
-        self.ui.observe_canvas_work(snapshot)
+        self.canvas.observe_work(snapshot)
         self.triage.context_changed(snapshot.tasks, snapshot.context)
+        self.ui.work_window().publish(replace(snapshot, personal=self.personal.snapshot()))
 
     def personal_changed(self, view: PersonalView) -> None:
+        self.canvas.observe_catalog(view.catalog)
         self.ui.work_window().publish(replace(self.agent.snapshot(), personal=view))
-        self.ui.observe_canvas(view.catalog)
 
     def continue_thread(self, run: CanvasRun) -> None:
         self.agent.watch(tuple(binding.task_id for binding in self.canvas.read().runs), owner="canvas")
-        title = next((work.definition.title for work in self.personal.snapshot().catalog.works if work.id == run.work_id), run.work_id)
+        title = self.canvas.title(run.work_id)
         self.agent.submit_identified(run.task_id, run_prompt(run, title), RequestKind.GENERAL)
 
     def work_command(self, command: WorkViewCommand) -> None:

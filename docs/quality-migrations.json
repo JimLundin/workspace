@@ -1188,7 +1188,7 @@
     {
       "key": {
         "rule": "PLR0913",
-        "path": "desktop_ui/work_canvas.py",
+        "path": "assistant/work_canvas.py",
         "scope": "WorkCanvas.__init__",
         "signature": "8c968ca01c42e2684dd56bb5557d4fa82444248f1943404234da2cf92338d4dc"
       },

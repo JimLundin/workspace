@@ -2,6 +2,8 @@
 
 from dataclasses import replace
 
+from assistant.agent_session import AgentRequest, Begin, CanvasAttention, CanvasNotice, ChatMessage, Resolution, Session, transition
+from assistant.attention import observed_attention
 from assistant.canvas_activity import Attention, CanvasQuestion, CanvasUpdate, TaskRequest
 from assistant.feed_origin import FeedRequest, Initiation
 from assistant.work_canvas_model import CanvasCollection, CanvasDocument
@@ -9,8 +11,6 @@ from automation.personal_work import Association, Catalog, WorkDefinition, WorkT
 from automation.presentation import Answer, Finished, ReasoningSummary, StreamState, Succeeded, ToolActivity
 from automation.task import TextAnswer
 from desktop_ui.agent_progress import Progress, advance_progress, phases, visible
-from desktop_ui.agent_session import AgentRequest, Begin, CanvasAttention, CanvasNotice, ChatMessage, Resolution, Session, transition
-from desktop_ui.attention import observed_attention
 from desktop_ui.notifications import Entry, Expires, PhaseKey, Response, Turn, body, steps
 from tests.agent_requests import asked
 

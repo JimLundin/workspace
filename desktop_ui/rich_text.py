@@ -12,7 +12,7 @@ from urllib.parse import urlsplit
 from markdown_it import MarkdownIt
 from markdown_it.tree import SyntaxTreeNode
 
-from desktop_ui.card_actions import OpenCanvas, parse
+from assistant.card_actions import OpenCanvas, parse
 
 
 @dataclass(frozen=True, slots=True)

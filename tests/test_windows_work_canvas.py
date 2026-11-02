@@ -19,12 +19,16 @@ lazy from PySide6.QtCore import Qt
 
 import automation.task
 from assistant.canvas_activity import ROOT_CONTEXT, Attention, CanvasInstruction, CanvasQuestion, CanvasRun, SessionRequest, TaskRequest
+from assistant.card_actions import OpenCanvas, parse
 from assistant.feed_origin import App
 from assistant.meeting_store import MeetingStore
 from assistant.personal_work_store import PersonalStore
 from assistant.work_bridge import WorkOwners
+from assistant.work_canvas import WorkCanvas, run_prompt
 from assistant.work_canvas_commands import CANVAS_RESPONSE, CanvasSnapshot, CanvasUpdated, MoveBubble, UpdateCanvas, revision
 from assistant.work_canvas_context import CanvasMode
+from assistant.work_canvas_contracts import CanvasPublication
+from assistant.work_canvas_edits import SaveNote
 from assistant.work_canvas_model import (
     CanvasCollection,
     CanvasDocument,
@@ -62,7 +66,6 @@ from automation.personal_work import (
 from automation.store import TaskStore
 from automation.task import ActionNotApplied, ActionVerified, Reply, TextAnswer
 from automation.work_documents import WebDocument
-from desktop_ui.card_actions import OpenCanvas, parse
 from desktop_ui.components.canvas_loading import CanvasLoading
 from desktop_ui.components.canvas_look import surface_fill
 from desktop_ui.components.voice_legend import VoiceLegend
@@ -71,9 +74,7 @@ from desktop_ui.island_model import Key
 from desktop_ui.notifications import body
 from desktop_ui.qt_runtime import prepare
 from desktop_ui.qt_ui import application
-from desktop_ui.work_canvas import CanvasPublication, WorkCanvas, run_prompt
 from desktop_ui.work_canvas_detail import NoteDetail, QuestionDetail, SourceDetail, WorkDetail
-from desktop_ui.work_canvas_edits import SaveNote
 from desktop_ui.work_canvas_panel import CanvasPanel
 from desktop_ui.work_canvas_view import CanvasGroup
 from desktop_ui.work_canvas_window import CanvasWindow
@@ -356,7 +357,7 @@ def test_startup_prepared_canvas_remains_hidden_and_keeps_its_native_scene(tmp_p
     store = local_canvas(tmp_path, ui.publish_canvas)
     seeded(store, document)
     try:
-        ui.configure_canvas(store, lambda _title, _target: None)
+        ui.configure_canvas(store, lambda _title, _target: None, observe_session=store.observe_session)
         # Defect: retrieval chooses an unwired command owner, configuration can
         # silently replace it, or retrieving the controller opens native views.
         with unittest.TestCase().assertRaisesRegex(RuntimeError, "command owner is configured"):
@@ -720,7 +721,7 @@ def test_canvas_speech_instructs_the_open_canvas_and_keeps_failed_directions_for
         tasks.submit(run.task_id, "Canvas instruction", run_prompt(run, run.work_id), automation.task.RequestSource("canvas"), at=20)
 
     store = WorkCanvas(tmp_path / "canvas.sqlite3", queue, ui.publish_canvas, autonomous=False)
-    ui.configure_canvas(store, lambda _title, _target: None)
+    ui.configure_canvas(store, lambda _title, _target: None, observe_session=store.observe_session)
     ui.configure_work(lambda _command: None)
     work = ui.work_window()
     work.show(focus=False)
@@ -920,22 +921,21 @@ def pump_until(ui: InboxUi, ready: Callable[[], bool]) -> None:
     assert ready(), "The native canvas did not receive the request publication."
 
 
-def test_agent_canvas_owner_commits_on_qt_and_refreshes_without_revealing(tmp_path: Path) -> None:
+def test_agent_canvas_owner_commits_without_qt_dispatch_and_refreshes_without_revealing(tmp_path: Path) -> None:
     # Defect: worker edits race with Qt, return success before persistence,
     # overwrite a user draft, bypass durable verification or reveal a window.
     ui = InboxUi()
     store = local_canvas(tmp_path, ui.publish_canvas)
-    ui.configure_canvas(store, lambda _title, _target: None)
-    ui.observe_canvas(nested_bubbles()[0])
+    ui.configure_canvas(store, lambda _title, _target: None, observe_session=store.observe_session)
+    store.observe_catalog(nested_bubbles()[0])
     ui.pump()
-    request = owner_request(WorkOwners(feed_unavailable, no_personal_work, ui.canvas_command))
+    request = owner_request(WorkOwners(feed_unavailable, no_personal_work, store.command))
     tasks, claim, clock = claimed(tmp_path)
     rig = ToolRig(work=WorkExecution(claim, tasks, Resources(), clock=clock), feed_request=request)
     try:
         with ThreadPoolExecutor(max_workers=1) as worker:
             reading = worker.submit(rig.call, "work_canvas_read")
-            pump_until(ui, reading.done)
-            snapshot = CANVAS_RESPONSE.validate_json(reading.result().text.split("\n[observation_id:", 1)[0])
+            snapshot = CANVAS_RESPONSE.validate_json(reading.result(timeout=5).text.split("\n[observation_id:", 1)[0])
             assert isinstance(snapshot, CanvasSnapshot) and snapshot.work_ids
             assert not tasks.actions(claim.task.id)
             edit = worker.submit(
@@ -948,8 +948,7 @@ def test_agent_canvas_owner_commits_on_qt_and_refreshes_without_revealing(tmp_pa
                     {"kind": "move", "id": "note:agent", "parent_id": "group:agent"},
                 ],
             )
-            pump_until(ui, edit.done)
-            receipt = CANVAS_RESPONSE.validate_json(edit.result().text)
+            receipt = CANVAS_RESPONSE.validate_json(edit.result(timeout=5).text)
             assert isinstance(receipt, CanvasUpdated) and receipt.changed
             persisted = store.read()
             assert persisted.notes[0].text == "Candidate two matches the approval."
@@ -961,8 +960,7 @@ def test_agent_canvas_owner_commits_on_qt_and_refreshes_without_revealing(tmp_pa
                 expected_revision=snapshot.revision,
                 edits=[{"kind": "group", "id": "group:stale", "title": "Must not appear"}],
             )
-            pump_until(ui, stale.done)
-            stale.result()
+            stale.result(timeout=5)
             assert isinstance(tasks.actions(claim.task.id)[-1].outcome, ActionNotApplied)
             assert store.read() == persisted
         # No window had to be created for any read, edit or conflict.
@@ -992,7 +990,8 @@ def test_canvas_voice_key_feedback_follows_agent_capture_and_release(tmp_path: P
     # clears it, release leaves it pressed during transcription, or dictation
     # incorrectly lights the agent key. Feedback must not resize the toolbar.
     ui = InboxUi()
-    ui.configure_canvas(local_canvas(tmp_path, ui.publish_canvas), lambda _title, _target: None)
+    store = local_canvas(tmp_path, ui.publish_canvas)
+    ui.configure_canvas(store, lambda _title, _target: None, observe_session=store.observe_session)
     ui.desktop_state(State.LISTENING, agent_speaking=True)
     ui.pump()
     ui.configure_work(lambda _: None)
@@ -1036,7 +1035,7 @@ def test_canvas_clarification_redirect_submits_context_to_the_waiting_agent(tmp_
     # or spoken context fails to resume the exact existing waiting worker.
     ui = InboxUi()
     store = local_canvas(tmp_path, ui.publish_canvas)
-    ui.configure_canvas(store, lambda _title, _target: None)
+    ui.configure_canvas(store, lambda _title, _target: None, observe_session=store.observe_session)
     ui.configure_work(lambda _command: None)
     work = ui.work_window()
     agent = ui.agent(lambda: None, on_work=lambda: work.show(focus=False), reveal=False)
@@ -1086,7 +1085,7 @@ def test_canvas_spoken_reply_keeps_transcript_on_rejection_and_continue_stays_bo
     commands: list[WorkViewCommand] = []
     runs: list[CanvasRun] = []
     store = WorkCanvas(tmp_path / "canvas.sqlite3", runs.append, ui.publish_canvas, autonomous=False)
-    ui.configure_canvas(store, lambda _title, _target: None)
+    ui.configure_canvas(store, lambda _title, _target: None, observe_session=store.observe_session)
     ui.configure_work(commands.append)
     work = ui.work_window()
     work.show(focus=False)
@@ -1097,7 +1096,7 @@ def test_canvas_spoken_reply_keeps_transcript_on_rejection_and_continue_stays_bo
     seeded(store, replace(store.read(), runs=(CanvasRun(task.id, saved.work.id),)))
     snapshot = WorkSnapshot(tasks=(task,), personal=PersonalView(personal.read()))
     work.publish(snapshot)
-    ui.observe_canvas_work(snapshot)
+    store.observe_work(snapshot)
     ui.pump()
     try:
         canvas = ui.canvas_view.panel
@@ -1116,7 +1115,7 @@ def test_canvas_spoken_reply_keeps_transcript_on_rejection_and_continue_stays_bo
             snapshot, reply_problems=(ReplyProblem(task_id=task.id, request_id="request", receipt_id="receipt", reason="Disk unavailable"),)
         )
         work.publish(rejected)
-        ui.observe_canvas_work(rejected)
+        store.observe_work(rejected)
         ui.pump()
         assert "Use Contoso" in question.response.text() and question.status.text() == "Hold N to reply · release to send"
         ui.voice_agent("Use Fabrikam instead", fallback.append)
@@ -1137,14 +1136,14 @@ def test_canvas_spoken_reply_keeps_transcript_on_rejection_and_continue_stays_bo
 def check_late_agent_canvas_replay(ui: InboxUi, store: WorkCanvas) -> None:
     """Exercise late-agent replay before canvas layout can republish and mask stale attention."""
     bridge = UpdateCanvas(revision(store.read()), (MoveBubble("question:current", "group:archive"),))
-    assert isinstance(ui.canvas_command(bridge), CanvasUpdated)
+    assert isinstance(store.command(bridge), CanvasUpdated)
     agent = ui.agent(lambda: None, reveal=False)
     agent.notify_canvas("Current question", "question:current")
     ui.pump()
     assert waiting(ui.bar) is None
     assert not agent.state.messages
     restored = UpdateCanvas(revision(store.read()), (MoveBubble("question:current", None),))
-    assert isinstance(ui.canvas_command(restored), CanvasUpdated)
+    assert isinstance(store.command(restored), CanvasUpdated)
     ui.pump()
 
 
@@ -1174,10 +1173,10 @@ def test_canvas_attention_reaches_the_desktop_and_redirects_to_its_bubble(tmp_pa
         notices.append((title, target))
 
     try:
-        ui.configure_canvas(store, notify)
+        ui.configure_canvas(store, notify, observe_session=store.observe_session)
         snapshot = WorkSnapshot(personal=PersonalView(data), tasks=(old, current, research))
-        ui.observe_canvas(data)
-        ui.observe_canvas_work(snapshot)
+        store.observe_catalog(data)
+        store.observe_work(snapshot)
         ui.pump()
         assert notices == [("Current question", "question:current")]
         ui.desktop(
@@ -1203,7 +1202,7 @@ def test_canvas_attention_reaches_the_desktop_and_redirects_to_its_bubble(tmp_pa
         ui.canvas_view.hide()
         completed = replace(snapshot, tasks=(old, current, replace(research, state=automation.task.Completed("Handoff confirmed", ()))))
         work.publish(completed)
-        ui.observe_canvas_work(completed)
+        store.observe_work(completed)
         ui.pump()
         ui.open_canvas_at(notices[-1][1])
         ui.pump()

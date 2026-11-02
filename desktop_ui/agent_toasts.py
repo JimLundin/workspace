@@ -20,11 +20,11 @@ from desktop_ui.toast_stack import Active, Column, Frame, Measured, Retiring, St
 from usage import DIRECTORY
 from winapi import appearance, windows
 from winapi.shapes import Rect
+lazy from assistant.agent_session import AgentRequest, Message, Session, Snapshot, pending
+lazy from assistant.card_actions import AnswerApproval, OpenCanvas, parse
 lazy from automation.task import Approval
 lazy from desktop_ui import notification_reading
-lazy from desktop_ui.agent_session import AgentRequest, Message, Session, Snapshot, pending
 lazy from desktop_ui.agent_window import AgentWindow
-lazy from desktop_ui.card_actions import AnswerApproval, OpenCanvas, parse
 lazy from desktop_ui.components.appearance import scheme
 lazy from desktop_ui.components.text import BODY, face, line_height
 lazy from desktop_ui.notifications import (

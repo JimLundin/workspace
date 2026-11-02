@@ -4,11 +4,11 @@ from dataclasses import dataclass, replace
 from functools import lru_cache
 
 from assistant.action_text import readable
+from assistant.agent_session import AgentRequest, ChatMessage, pending
+from assistant.card_actions import AnswerApproval, OpenCanvas, encode, parse
 from automation.presentation import Answer, ToolActivity
 from automation.task import Approval, ApprovalDecision, Question
 from desktop_ui import tool_text
-from desktop_ui.agent_session import AgentRequest, ChatMessage, pending
-from desktop_ui.card_actions import AnswerApproval, OpenCanvas, encode, parse
 from desktop_ui.notifications import Content, Entry, Response, Turn, body, heading, plain, results, steps
 from desktop_ui.rich_text import Span, formatted
 

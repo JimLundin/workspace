@@ -5,8 +5,9 @@ from contextlib import closing
 from dataclasses import replace
 from pathlib import Path
 
+import assistant.agent_session
 import automation.task
-import desktop_ui.agent_session
+from assistant.agent_session import ChatMessage, Session
 from assistant.canvas_activity import (
     ActionState,
     Attention,
@@ -18,6 +19,7 @@ from assistant.canvas_activity import (
     TaskRequest,
     important_changes,
 )
+from assistant.work_canvas import WorkCanvas
 from assistant.work_canvas_model import DOCUMENT, CanvasCollection, CanvasDocument, CanvasNote, Placement, observe_activity
 from assistant.work_snapshot import ReplyProblem, WorkSnapshot
 from automation.actions import Change, Operation
@@ -25,10 +27,8 @@ from automation.json_value import Json
 from automation.personal_work import Catalog, SourceKind, WorkDefinition, WorkState, WorkThread
 from automation.task import ActionReturned, ActionSpec, ActionUncertain, ActionVerified, Completed, NoVerification, RequestSource, TextAnswer, Waiting
 from desktop_ui.agent_progress import Progress, advance_progress
-from desktop_ui.agent_session import ChatMessage, Session
 from desktop_ui.notification_text import options
 from desktop_ui.notifications import Tone, active, body, tone
-from desktop_ui.work_canvas import WorkCanvas
 from tests.agent_requests import asked, reviewed
 from tests.personal_work_fixture import source
 from tests.test_work_agent import WorkRig
@@ -70,7 +70,7 @@ def test_saved_questions_keep_their_route_state_and_thread_after_session_mirrori
     assert isinstance(mirrored, CanvasQuestion) and mirrored.request == question.request
     accepted = replace(question, reply=TextAnswer("Use Contoso"))
     seeded(store, observe_activity(document, (accepted,)))
-    cancelled = replace(session, messages=(replace(mirror, reply=desktop_ui.agent_session.Cancelled()),))
+    cancelled = replace(session, messages=(replace(mirror, reply=assistant.agent_session.Cancelled()),))
     document = observed_session(store, cancelled)
     assert document.activity == (accepted,)
     # A failure receipt reopens only the exact live request, retaining the draft

@@ -8,7 +8,6 @@ import sqlite3
 from collections.abc import Callable, Iterator
 from dataclasses import replace
 from pathlib import Path
-from typing import Protocol
 from uuid import uuid4
 
 lazy from PySide6 import QtCore, QtGui, QtWidgets
@@ -30,6 +29,21 @@ from assistant.work_canvas_context import (
     scene_contents,
     topology,
     visible_groups,
+)
+from assistant.work_canvas_contracts import CanvasEdits, Investigating, NotQueued, Queued, ResumeTask
+from assistant.work_canvas_edits import (
+    AddGroup,
+    ArrangeView,
+    Change,
+    NestBubble,
+    PlaceBubbles,
+    PutInside,
+    ReleasePositions,
+    RenameGroup,
+    Reveal,
+    SaveNote,
+    SetExpansion,
+    UserEdit,
 )
 from assistant.work_canvas_model import (
     CanvasCollection,
@@ -70,20 +84,7 @@ from desktop_ui.components.voice_legend import VoiceLegend
 from desktop_ui.components.widgets import column
 from desktop_ui.keymap import PHYSICAL_NAMES
 from desktop_ui.qt_ui import cancel, later
-from desktop_ui.work_canvas import Continuation, Investigating, NotQueued, Queued, ResumeTask
 from desktop_ui.work_canvas_connections import connections
-from desktop_ui.work_canvas_edits import (
-    AddGroup,
-    ArrangeView,
-    Change,
-    PutInside,
-    ReleasePositions,
-    RenameGroup,
-    Reveal,
-    SaveNote,
-    SetExpansion,
-    UserEdit,
-)
 from desktop_ui.work_canvas_gestures import (
     BubbleDrag,
     BubbleTarget,
@@ -96,9 +97,7 @@ from desktop_ui.work_canvas_gestures import (
     GestureScene,
     Idle,
     MovePreview,
-    NestBubble,
     NoChange,
-    PlaceBubbles,
     PointerMoved,
     PointerReleased,
     PressBubble,
@@ -112,15 +111,6 @@ from desktop_ui.work_canvas_view import CanvasCard, CanvasGroup, CanvasViewport
 from desktop_ui.work_window import WorkWindow
 from miryoku.layout import AGENT
 lazy from desktop_ui.work_canvas_detail import CardDetail, NoteDetail, QuestionDetail, SourceDetail, UpdateDetail, WorkDetail
-
-
-class CanvasEdits(Protocol):
-    """The view can read and edit the canvas without owning observations or attention."""
-
-    def read(self) -> CanvasDocument: ...
-    def commit(self, edit: UserEdit) -> CanvasDocument: ...
-    def start(self, run: CanvasRun) -> Queued | NotQueued: ...
-    def continue_work(self, work_id: str) -> Continuation: ...
 
 
 class CanvasPanel:

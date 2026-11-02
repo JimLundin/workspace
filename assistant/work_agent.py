@@ -1,7 +1,7 @@
 """Conversation controls backed by durable work in the supervised process.
 
 UI callbacks enqueue immutable requests. This controller's observer owns journal mutations and
-transport calls; the owner-call dispatcher rechecks the journal before effects; the existing AgentWindow owns UI scheduling.
+transport calls; the owner-call dispatcher rechecks the journal before effects; the injected conversation output owns presentation and UI scheduling.
 """
 
 import os
@@ -14,7 +14,9 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import assert_never
 
+from assistant.conversation_output import ConversationOutput
 lazy import automation.presentation
+lazy from assistant import agent_session
 lazy from assistant.feed_origin import FeedRequest, Initiation
 lazy from assistant.owner_calls import OwnerDispatcher, OwnerReply
 lazy from assistant.work_commands import AnswerTask, FollowUp, Redirect, Submit, WorkCommand
@@ -59,9 +61,6 @@ lazy from automation.task import (
     terminal,
     text,
 )
-lazy from desktop_ui import agent_session
-lazy from desktop_ui.agent_window import AgentWindow
-lazy from desktop_ui.notification_text import prepared_answer
 
 
 @dataclass(frozen=True, slots=True)
@@ -202,7 +201,7 @@ class WorkAgent:
         routines: RoutineStore,
         saved_context: ContextStore,
         bridge: WorkBridge,
-        create_window: Callable[[WorkAgent], AgentWindow],
+        create_window: Callable[[WorkAgent], ConversationOutput],
         *,
         on_snapshot: Callable[[WorkSnapshot], None],
         on_done: Callable[[], None],
@@ -243,7 +242,7 @@ class WorkAgent:
         self._watched: frozenset[str] = frozenset()
         self._live: Callable[[automation.presentation.LiveMessage], None] | None = None
         self._owners = OwnerDispatcher(owners, tasks, self._wake)
-        self.window: AgentWindow | None = None
+        self.window: ConversationOutput | None = None
 
     def start_worker(self) -> None:
         """Begin observation after the application has composed its callbacks."""
@@ -299,10 +298,16 @@ class WorkAgent:
         try:
             self.command(Submit(text))
         except ValueError as error:
-            self._panel().problem(str(error))
+            try:
+                self._panel().problem(str(error))
+            except Exception:
+                self.report_error(traceback.format_exc())
             return
         if reveal:
-            self._panel().show()
+            try:
+                self._panel().show()
+            except Exception:
+                self.report_error(traceback.format_exc())
 
     def notify_canvas(self, title: str, target: str) -> None:
         self._panel().notify_canvas(title, target)
@@ -364,7 +369,7 @@ class WorkAgent:
                 active(task) and in_conversation(task, self._conversation) for task in self._snapshot.tasks
             )
 
-    def _panel(self) -> AgentWindow:
+    def _panel(self) -> ConversationOutput:
         with self._lock:
             if self.window is None:
                 self.window = self._create_window(self)
@@ -398,7 +403,10 @@ class WorkAgent:
             self._last_stop = stop
             self._wake.set()
             if self.window is not None:
-                self.window.stopping()
+                try:
+                    self.window.stopping()
+                except Exception:
+                    self.report_error(traceback.format_exc())
 
     def new_conversation(self) -> bool:
         with self._lock:
@@ -411,7 +419,10 @@ class WorkAgent:
             self._settled.clear()
             self._queued.clear()
             if self.window is not None:
-                self.window.reset()
+                try:
+                    self.window.reset()
+                except Exception:
+                    self.report_error(traceback.format_exc())
             self._wake.set()
         if was_running:
             self.on_done()
@@ -426,7 +437,10 @@ class WorkAgent:
             self._owners.close()
             self._wake.set()
             if self.window is not None:
-                self.window.close()
+                try:
+                    self.window.close()
+                except Exception:
+                    self.report_error(traceback.format_exc())
             if self._thread is None:
                 # Commands may have arrived during composition, before startup.
                 self._thread = threading.Thread(target=self._observe, name="work frontend shutdown", daemon=True)
@@ -493,7 +507,6 @@ class WorkAgent:
             case Waiting(reason):
                 self._display_waiting(task, reason, review)
             case Completed(result, _):
-                prepared_answer(result)
                 window.done(result)
             case Failed(reason):
                 if source_is_automatic(task):
@@ -530,17 +543,37 @@ class WorkAgent:
                 assert_never(reason)
 
     def _publish(self, snapshot: WorkSnapshot) -> None:
+        """Publish durable state before attempting any presentation effect."""
         with self._lock:
             if self._closing.is_set():
                 return
             was_running = self._reported_running
             self._snapshot = snapshot
-            self._restore_reply(snapshot)
             if self._conversation is None:
                 self._conversation = next(
                     (conversation for task in snapshot.tasks if (conversation := conversation_of(task)) is not None and not terminal(task.state)),
                     None,
                 )
+            is_running = self._reported_running = self.running()
+        self.on_snapshot(snapshot)
+        if not was_running and is_running and self.on_start is not None:
+            self.on_start()
+        elif was_running and not is_running:
+            self.on_done()
+        try:
+            self._present(snapshot)
+        except Exception:
+            # A failed view must not change journal/transport availability or
+            # prevent canvas intake. Retry presentation on the next observation.
+            with self._lock:
+                self._displayed = self._displayed_review = self._live = None
+            self.report_error(traceback.format_exc())
+
+    def _present(self, snapshot: WorkSnapshot) -> None:
+        with self._lock:
+            if self._closing.is_set():
+                return
+            self._restore_reply(snapshot)
             tasks = sorted((task for task in snapshot.tasks if in_conversation(task, self._conversation)), key=chronological)
             task_ids = {task.id for task in tasks}
             self._settled = {identity: revision for identity, revision in self._settled.items() if identity in task_ids}
@@ -571,12 +604,6 @@ class WorkAgent:
                 ):
                     self._panel().queued(task.prompt)
                     self._queued.add(task.id)
-            is_running = self._reported_running = self.running()
-        self.on_snapshot(snapshot)
-        if not was_running and is_running and self.on_start is not None:
-            self.on_start()
-        elif was_running and not is_running:
-            self.on_done()
 
     def _restore_reply(self, snapshot: WorkSnapshot) -> None:
         if self._rejected_input is None:
@@ -612,6 +639,12 @@ class WorkAgent:
         self.on_snapshot(snapshot)
 
     def _log(self, event: LogEvent) -> None:
+        try:
+            self._present_log(event)
+        except Exception:
+            self.report_error(traceback.format_exc())
+
+    def _present_log(self, event: LogEvent) -> None:
         task = self._service.tasks.get(event.run.task_id)
         with self._lock:
             if task is None or not owns(task, event.run) or not in_conversation(task, self._conversation):
@@ -641,9 +674,8 @@ class WorkAgent:
                     return
                 case _:
                     assert_never(event.event)
-        # Parsing stays outside the frontend lock too, so UI commands need not
-        # wait for it. The captured producer is fenced to its session generation.
-        prepared_answer(text)
+        # The output adapter owns prose preparation outside the frontend lock.
+        # The captured producer is fenced to its session generation.
         live(event.event)
 
     def _owner(self, message: Envelope, request: OwnerRequest) -> None:

@@ -4,6 +4,7 @@ from dataclasses import dataclass, replace
 from enum import Enum
 from typing import assert_never
 
+from assistant.work_canvas_edits import NestBubble, PlaceBubbles
 from assistant.work_canvas_model import Placement
 from desktop_ui.work_canvas_layout import Box
 
@@ -110,20 +111,6 @@ class RelationPreview:
     source_id: str
     point: ScenePoint
     target_id: str | None
-
-
-@dataclass(frozen=True, slots=True)
-class PlaceBubbles:
-    id: str
-    positions: tuple[Placement, ...]
-
-
-@dataclass(frozen=True, slots=True)
-class NestBubble:
-    id: str
-    parent_id: str | None
-    positions: tuple[Placement, ...]
-    members: frozenset[str]
 
 
 @dataclass(frozen=True, slots=True)

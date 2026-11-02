@@ -4,10 +4,10 @@ import threading
 from collections import deque
 from collections.abc import Callable
 
+from assistant.agent_session import Snapshot, message_body, pending
 from assistant.recording_state import RecordingAction
 from automation.presentation import Answer, StreamState
 from automation.task import Reply, TextAnswer
-from desktop_ui.agent_session import Snapshot, message_body, pending
 from desktop_ui.agent_window import AgentWindow, View
 from tests.agent_requests import asked
 

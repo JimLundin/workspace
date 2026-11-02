@@ -9,10 +9,10 @@ from dataclasses import dataclass, replace
 from enum import Enum, auto
 from typing import Final, assert_never
 
+from assistant.agent_session import AgentRequest, Cancelled, ChatMessage, MeetingMessage, Snapshot, message_body, pending, presentation
 from assistant.recording_state import RecordingState, duration, phase_label
 from automation.presentation import Answer, Failed, ReasoningSummary, StreamState, Succeeded, ToolActivity, ToolStatus
 from automation.task import Approval, ApprovalDecision, Question, TextAnswer
-from desktop_ui.agent_session import AgentRequest, Cancelled, ChatMessage, MeetingMessage, Snapshot, message_body, pending, presentation
 
 MAX_VISIBLE: Final = 5
 WIDTH: Final = 360  # maximum logical width, independent of the full history window

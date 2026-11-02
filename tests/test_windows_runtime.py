@@ -164,7 +164,7 @@ def test_work_window_closes_with_its_ui_owner_in_a_fresh_process(tmp_path: Path)
         prepare()
         from PySide6.QtWidgets import QApplication
         from desktop_ui.ui import Ui, Views
-        from desktop_ui.work_canvas import WorkCanvas
+        from assistant.work_canvas import WorkCanvas
         from desktop_ui.work_canvas_window import CanvasWindow
         from usage import DIRECTORY
 
@@ -182,7 +182,7 @@ def test_work_window_closes_with_its_ui_owner_in_a_fresh_process(tmp_path: Path)
 
         ui = offscreen_ui()
         canvas = WorkCanvas(DIRECTORY / "work" / "canvas.sqlite3", lambda run: None, ui.publish_canvas, autonomous=False)
-        ui.configure_canvas(canvas, lambda title, target: None)
+        ui.configure_canvas(canvas, lambda title, target: None, observe_session=canvas.observe_session)
         ui.configure_work(lambda command: None)
         failures = []
 
@@ -240,7 +240,7 @@ def _native_controller_lifetime(tmp_path: Path, *, qt_first: bool) -> None:
         prepare()
         from PySide6.QtWidgets import QApplication
         from desktop_ui.ui import Ui, Views
-        from desktop_ui.work_canvas import WorkCanvas
+        from assistant.work_canvas import WorkCanvas
         from desktop_ui.work_canvas_window import CanvasWindow
         from usage import DIRECTORY
         from winapi import shell, system
@@ -269,7 +269,7 @@ def _native_controller_lifetime(tmp_path: Path, *, qt_first: bool) -> None:
             def run(self):
                 self.ui.agent(lambda: None, reveal=False)
                 canvas = WorkCanvas(DIRECTORY / "work" / "canvas.sqlite3", lambda run: None, self.ui.publish_canvas, autonomous=False)
-                self.ui.configure_canvas(canvas, lambda title, target: None)
+                self.ui.configure_canvas(canvas, lambda title, target: None, observe_session=canvas.observe_session)
                 self.ui.configure_work(lambda command: None)
                 self.ui.work_window().show(focus=False)
                 self.ui.post(self.ready)

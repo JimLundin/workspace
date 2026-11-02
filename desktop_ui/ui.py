@@ -8,7 +8,6 @@ import threading
 import time
 import traceback
 from collections.abc import Callable
-from concurrent.futures import Future, TimeoutError
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol, assert_never
@@ -19,29 +18,27 @@ lazy from PySide6 import QtCore, QtGui, QtWidgets
 import winapi.shapes
 from assistant.canvas_activity import CanvasRequest
 from assistant.feed_origin import FeedRequest
-from assistant.work_canvas_commands import CanvasCommand, CanvasRefused, CanvasResponse
-from automation.personal_work import Catalog
 from automation.task import TextAnswer
 from desktop_ui.qt_runtime import prepare
 from winapi.shapes import Rect
 lazy import assistant.communications
 lazy import desktop_ui.desktop_attention
 lazy import winapi.system_notices
+lazy from assistant.agent_session import AgentRequest, ChatMessage, Session, Snapshot, notice_text, pending
+lazy from assistant.attention import selected_question
+lazy from assistant.card_actions import AnswerApproval, CardAction, OpenCanvas
 lazy from assistant.feed_sources import FeedUpdate, NoticesObserved, PendingFeed, TeamsObserved, observe
 lazy from assistant.meeting_detection import AutomaticStatus
 lazy from assistant.meeting_workflow import MeetingSnapshot, MeetingWorkflow
 lazy from assistant.notification_sources import NotificationSources, NotificationState
 lazy from assistant.recording_state import RecordingAction, RecordingState
 lazy from assistant.state_store import SavedState
+lazy from assistant.work_canvas_contracts import CanvasEdits, CanvasPublication
 lazy from assistant.work_commands import WorkViewCommand
-lazy from assistant.work_snapshot import WorkSnapshot
 lazy from desktop_ui import island_agent, island_model
 lazy from desktop_ui.agent_progress import canvas_phases, phases
-lazy from desktop_ui.agent_session import AgentRequest, ChatMessage, Session, Snapshot, notice_text, pending
 lazy from desktop_ui.agent_toasts import AgentToasts
 lazy from desktop_ui.agent_window import AgentWindow
-lazy from desktop_ui.attention import selected_question
-lazy from desktop_ui.card_actions import AnswerApproval, CardAction, OpenCanvas
 lazy from desktop_ui.components.appearance import scheme, tokens
 lazy from desktop_ui.components.canvas_loading import CanvasLoading
 lazy from desktop_ui.components.widgets import show_window, window_style
@@ -55,8 +52,6 @@ lazy from desktop_ui.qt_ui import application, later
 lazy from desktop_ui.request_panel import RequestActions
 lazy from desktop_ui.vector_icons import icon
 lazy from desktop_ui.window_switcher import WindowSwitcher
-lazy from desktop_ui.work_canvas import CanvasPublication, WorkCanvas
-lazy from desktop_ui.work_canvas_panel import CanvasEdits
 lazy from desktop_ui.work_canvas_window import CanvasWindow
 lazy from desktop_ui.work_window import WorkWindow
 lazy from miryoku.layout import Layer, Scancode
@@ -122,6 +117,7 @@ class Ui:
         "_canvas",
         "_canvas_notice",
         "_canvas_published",
+        "_canvas_session",
         "_closed",
         "_desktop",
         "_dialogs",
@@ -177,7 +173,8 @@ class Ui:
         self._work: WorkWindow | None = None
         self._work_connection: WorkConnection | None = None
         self._work_view: CanvasWindow | None = None
-        self._canvas: WorkCanvas | None = None
+        self._canvas: CanvasEdits | None = None
+        self._canvas_session: Callable[[Snapshot], bool] | None = None
         self._canvas_notice: Callable[[str, str], None] | None = None
         self._canvas_published: CanvasPublication | None = None
         self._meetings: MeetingConnection | None = None
@@ -499,8 +496,8 @@ class Ui:
         if self._desktop is not None:
             self._desktop.agent_changed(island_agent.activity(session))
             self._desktop.requests_changed(tuple(phases(session)))
-        if self._canvas is not None:
-            self._canvas.observe_session(session)
+        if self._canvas_session is not None:
+            self._canvas_session(session)
 
     def _windows(self) -> tuple[AgentWindow | WorkWindow, ...]:
         return tuple(window for window in (self._agent, self._work) if window is not None)
@@ -570,45 +567,15 @@ class Ui:
     def _compose_feed(self, agent: AgentWindow) -> AgentToasts:
         return self._views.feed(self._root, agent, self.open_canvas_at)
 
-    def configure_canvas(self, canvas: WorkCanvas, notice: Callable[[str, str], None]) -> None:
-        # The canvas owner holds storage and policy; Qt serializes its use.
+    def configure_canvas(self, canvas: CanvasEdits, notice: Callable[[str, str], None], *, observe_session: Callable[[Snapshot], bool]) -> None:
+        """Connect edit commands and a session-observation sink before rendering starts."""
+
         def configure(_: QtWidgets.QApplication) -> None:
-            self._canvas, self._canvas_notice = canvas, notice
+            self._canvas, self._canvas_notice, self._canvas_session = canvas, notice, observe_session
             session = self._agent.snapshot() if self._agent is not None else Session()
-            canvas.observe_session(session)
+            observe_session(session)
 
         self.post(configure)
-
-    def canvas_command(self, command: CanvasCommand) -> CanvasResponse:
-        """Marshal bridge operations to Qt, never saving a worker's stale snapshot."""
-        if threading.current_thread() is self._thread:
-            return self.apply_canvas_command(command)
-        result: Future[CanvasResponse] = Future()
-
-        def execute(_: QtWidgets.QApplication) -> None:
-            if not result.set_running_or_notify_cancel():
-                return
-            try:
-                response = self.apply_canvas_command(command)
-            except Exception as error:
-                result.set_exception(error)
-            else:
-                result.set_result(response)
-
-        self.post(execute)
-        try:
-            return result.result(timeout=8)
-        except TimeoutError:
-            # A queued command is cancelled before applying. If already running,
-            # transport failure stays uncertain; never claim it was rejected.
-            result.cancel()
-            raise
-
-    def apply_canvas_command(self, command: CanvasCommand) -> CanvasResponse:
-        canvas = self._canvas
-        if canvas is None:
-            return CanvasRefused("The local canvas is unavailable.")
-        return canvas.command(command)
 
     def publish_canvas(self, publication: CanvasPublication) -> None:
         """Defer owner publications until callers have finished their gesture or command."""
@@ -634,20 +601,6 @@ class Ui:
             notice = desktop_ui.desktop_attention.interrupts(publication.notice, focus)
             if notice is not None and self._canvas_notice is not None:
                 self._canvas_notice(notice.title, notice.target)
-
-    def observe_canvas_work(self, snapshot: WorkSnapshot) -> None:
-        def observe(_: QtWidgets.QApplication) -> None:
-            if self._canvas is not None:
-                self._canvas.observe_work(snapshot)
-
-        self.post(observe)
-
-    def observe_canvas(self, catalog: Catalog) -> None:
-        def observe(_: QtWidgets.QApplication) -> None:
-            if self._canvas is not None:
-                self._canvas.observe_catalog(catalog)
-
-        self.post(observe)
 
     def open_canvas_at(self, identity: str) -> None:
         if self._work is None:
@@ -719,7 +672,16 @@ class Ui:
             case desktop_ui.desktop_attention.ToSession(session_id=identity, request_id=key):
                 return self._agent is not None and self._agent.respond(key, answer, expected_session=identity)
             case desktop_ui.desktop_attention.ToTask(command=command):
-                return self._work is not None and self._work.send(command)
+                connection = self._work_connection
+                if connection is None:
+                    return False
+                try:
+                    connection.on_command(command)
+                except (OSError, ValueError) as error:
+                    if connection.on_problem is not None:
+                        connection.on_problem(str(error))
+                    return False
+                return True
             case desktop_ui.desktop_attention.Undeliverable.STALE:
                 return False
             case _:

@@ -1,7 +1,7 @@
 """What the island reads of the agent's live session."""
 
+from assistant.agent_session import ChatMessage, Session
 from automation.presentation import ReasoningSummary, Succeeded, ToolActivity
-from desktop_ui.agent_session import ChatMessage, Session
 from desktop_ui.island_agent import activity
 from desktop_ui.island_model import Agent
 from tests.agent_requests import asked

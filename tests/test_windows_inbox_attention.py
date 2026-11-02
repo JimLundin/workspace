@@ -18,6 +18,7 @@ from assistant.feed_origin import FeedRequest
 from assistant.feed_sources import PendingFeed
 from assistant.notification_sources import NOTIFICATION_STATE
 from assistant.state_store import SavedState
+from assistant.work_canvas_contracts import CanvasEdits
 from automation.task import ApprovalDecision, Reply, TextAnswer
 from desktop_ui.agent_toasts import AgentToasts
 from desktop_ui.agent_window import AgentWindow
@@ -28,7 +29,6 @@ from desktop_ui.island_surface import TOP, Capsule
 from desktop_ui.qt_runtime import prepare
 from desktop_ui.qt_ui import application
 from desktop_ui.ui import Ui, Views
-from desktop_ui.work_canvas_panel import CanvasEdits
 from desktop_ui.work_canvas_window import CanvasWindow
 from desktop_ui.work_window import WorkWindow
 from tests.agent_requests import asked, reviewed
@@ -186,7 +186,8 @@ def test_app_context_stays_quiet_and_only_agent_questions_change_toolbar_attenti
         ui.open_inbox()
         ui.pump()
         assert conversations == ("shown",)
-        ui.configure_canvas(local_canvas(tmp_path, ui.publish_canvas), lambda _title, _target: None)
+        store = local_canvas(tmp_path, ui.publish_canvas)
+        ui.configure_canvas(store, lambda _title, _target: None, observe_session=store.observe_session)
         ui.desktop(
             show_agent=lambda: None, show_work=lambda: None, stop=lambda: None, overlay=lambda: None, menu=lambda: None, on_problem=lambda _: None
         )
@@ -245,7 +246,8 @@ def test_toolbar_request_expands_in_place_routes_voice_and_opens_canvas_only_fro
         return True
 
     try:
-        ui.configure_canvas(local_canvas(tmp_path, ui.publish_canvas), lambda _title, _target: None)
+        store = local_canvas(tmp_path, ui.publish_canvas)
+        ui.configure_canvas(store, lambda _title, _target: None, observe_session=store.observe_session)
         ui.configure_work(lambda _command: None)
         ui.desktop(
             show_agent=lambda: None, show_work=lambda: None, stop=lambda: None, overlay=lambda: None, menu=lambda: None, on_problem=lambda _: None
@@ -335,7 +337,8 @@ def test_expanded_notification_keeps_its_card_and_reply_owner_when_work_asks_aga
 
     try:
         agent = ui.agent(lambda: None, reveal=False)
-        ui.configure_canvas(local_canvas(tmp_path, ui.publish_canvas), agent.notify_canvas)
+        store = local_canvas(tmp_path, ui.publish_canvas)
+        ui.configure_canvas(store, agent.notify_canvas, observe_session=store.observe_session)
         agent.begin("Review budget", source=FeedRequest("source:budget", "Budget notice"))
         agent.request_input(asked("figures", "Which figures?", "Approved or forecast?", 3), accept)
         ui.pump()

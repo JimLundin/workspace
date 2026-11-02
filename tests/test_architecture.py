@@ -162,6 +162,53 @@ def test_worker_cannot_reach_desktop_only_modules(tmp_path: Path) -> None:
     assert not review(tmp_path).failures
 
 
+def test_headless_owners_reject_indirect_ui_and_native_qt_imports(tmp_path: Path) -> None:
+    # Defect: a controller gains a view dependency through a shared contract or
+    # a lazy native import, while process isolation still permits that route.
+    write_tree(
+        tmp_path,
+        {
+            "assistant/__init__.py": "",
+            "assistant/owner.py": "lazy import assistant.contract\n",
+            "assistant/contract.py": "lazy from desktop_ui.view import View\n",
+            "desktop_ui/__init__.py": "",
+            "desktop_ui/view.py": "class View: pass\n",
+        },
+    )
+    with (tmp_path / "pyproject.toml").open("a", encoding="utf-8") as output:
+        output.write('headless = ["assistant.owner"]\n')
+    failures = review(tmp_path).failures
+    assert failures and all(failure.rule == "ui-isolation" for failure in failures)
+    assert any("assistant.owner → assistant.contract → desktop_ui.view" in failure.detail for failure in failures)
+    contract = tmp_path / "assistant/contract.py"
+    contract.write_text("lazy from PySide6.QtWidgets import QWidget\n", encoding="utf-8")
+    assert any("PySide6.QtWidgets" in failure.detail for failure in review(tmp_path).failures)
+    contract.write_text("", encoding="utf-8")
+    assert not review(tmp_path).failures
+
+
+def test_presentation_cannot_import_concrete_logic_owners_through_contracts(tmp_path: Path) -> None:
+    # Defect: a view starts importing a concrete controller through a shared
+    # contract, recreating lifecycle coupling despite the headless-owner rule.
+    write_tree(
+        tmp_path,
+        {
+            "assistant/__init__.py": "",
+            "assistant/owner.py": "",
+            "assistant/contract.py": "lazy import assistant.owner\n",
+            "desktop_ui/__init__.py": "",
+            "desktop_ui/view.py": "lazy import assistant.contract\n",
+        },
+    )
+    with (tmp_path / "pyproject.toml").open("a", encoding="utf-8") as output:
+        output.write('ui_private = ["assistant.owner"]\n')
+    (failure,) = review(tmp_path).failures
+    assert failure.rule == "presentation-isolation"
+    assert failure.detail == "desktop_ui.view → assistant.contract → assistant.owner"
+    (tmp_path / "assistant/contract.py").write_text("", encoding="utf-8")
+    assert not review(tmp_path).failures
+
+
 def test_work_imports_require_exact_process_declarations_through_seams(tmp_path: Path) -> None:
     # Defect: configured roots or composition seams hide an undeclared work
     # import, a package declaration grants its children access, or an unrelated

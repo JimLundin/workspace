@@ -10,6 +10,7 @@ from pathlib import Path
 lazy from PySide6 import QtCore, QtGui, QtWidgets
 lazy from PySide6.QtCore import Qt
 
+from assistant.work_canvas_contracts import CanvasEdits
 from assistant.work_canvas_model import CanvasDocument
 from assistant.work_snapshot import WorkSnapshot
 from desktop_ui.components.appearance import scheme, tokens
@@ -18,7 +19,7 @@ from desktop_ui.components.canvas_look import Role, face
 from desktop_ui.components.paint_ready import PaintReady
 from desktop_ui.components.widgets import column, show_window
 from desktop_ui.desktop_attention import CanvasFocus
-from desktop_ui.work_canvas_panel import CanvasEdits, CanvasPanel, rounded
+from desktop_ui.work_canvas_panel import CanvasPanel, rounded
 from desktop_ui.work_window import WorkWindow
 lazy from assistant.meeting_workflow import MeetingSnapshot, MeetingWorkflow
 lazy from desktop_ui.meeting_panel import MeetingPanel

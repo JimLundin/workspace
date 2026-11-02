@@ -79,7 +79,10 @@ corrections. The agent collects observed browser information and updates
 connections. A separate canvas document owns groups, coordinates, pins,
 notes, agent contributions and work-to-run bindings in
 `%LOCALAPPDATA%\workspace\work\canvas.sqlite3`. Arrangement is absent from
-agent review input. One native scene retains the complete arrangement.
+agent review input. The headless `assistant/work_canvas.py` owner serializes document edits and
+observations independently of Qt. Agent tools call that owner directly; native
+views submit domain edit intents and receive immutable publications. One native
+scene retains the complete arrangement.
 Collapsing a group preserves its hidden pieces and pins.
 
 Measured shelves arrange nested containers and their real bubble heights, using

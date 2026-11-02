@@ -7,12 +7,12 @@ from typing import override
 
 lazy from PySide6 import QtCore, QtGui, QtWidgets
 
+from assistant.agent_session import AgentRequest, pending
 from assistant.canvas_activity import CanvasRequest
+from assistant.card_actions import CardAction, parse
 from automation.task import Approval
 from desktop_ui import notification_text
 from desktop_ui.agent_progress import Phase
-from desktop_ui.agent_session import AgentRequest, pending
-from desktop_ui.card_actions import CardAction, parse
 from desktop_ui.components.appearance import GREEN, RED, Look, Shade
 from desktop_ui.components.bubble import Controls, action_face, action_style
 from desktop_ui.components.canvas_jump import CanvasJumpButton

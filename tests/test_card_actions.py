@@ -1,7 +1,7 @@
 """A card link acts only when it is exactly one card action; anything else does nothing."""
 
+from assistant.card_actions import AnswerApproval, encode, parse
 from automation.task import ApprovalDecision
-from desktop_ui.card_actions import AnswerApproval, encode, parse
 
 
 def test_partial_or_altered_links_are_refused_instead_of_acting_on_defaults() -> None:

@@ -1,20 +1,22 @@
 """The canvas owner: one local document, its observations and its policy.
 
-`WorkCanvas` is the only writer of `canvas.sqlite3`. Qt serializes every
-observation, command, answer and user edit through it; other threads only
-read. Each change publishes its document and attention through one subscriber.
+`WorkCanvas` is the only writer of `canvas.sqlite3`. Its lock serializes
+observations, commands, answers and user edits independently of any UI loop.
+Each change publishes immutable document and attention observations.
 """
 
 import hashlib
+import threading
 from collections.abc import Callable, Iterable, Iterator, Sequence
-from dataclasses import dataclass, field, replace
-from enum import Enum
+from dataclasses import replace
 from pathlib import Path
 from typing import assert_never
 from uuid import uuid4
 
 from pydantic import TypeAdapter
 
+from assistant.agent_session import Snapshot
+from assistant.attention import observed_attention
 from assistant.canvas_activity import (
     ROOT_CONTEXT,
     Attention,
@@ -30,6 +32,7 @@ from assistant.canvas_activity import (
     settle_tasks,
     task_activity,
 )
+from assistant.canvas_session import session_activity, settle_session
 from assistant.work_canvas_commands import (
     CanvasCommand,
     CanvasRefused,
@@ -41,6 +44,8 @@ from assistant.work_canvas_commands import (
     revision,
     snapshot,
 )
+from assistant.work_canvas_contracts import Announcement, CanvasPublication, Continuation, Investigating, NotQueued, Queued, ResumeTask
+from assistant.work_canvas_edits import UserEdit, user_edited
 from assistant.work_canvas_model import (
     DOCUMENT,
     CanvasDocument,
@@ -55,53 +60,9 @@ from automation import journal
 from automation.meetings import TranscriptState
 from automation.personal_work import Catalog, MeetingSource, Source, SourceOrigin, WorkState, WorkThread, source_revision
 from automation.task import Blocked, Task, TextAnswer, Waiting, phase
-from desktop_ui.agent_session import Snapshot
-from desktop_ui.attention import AttentionSnapshot, observed_attention
-from desktop_ui.canvas_session import session_activity, settle_session
-from desktop_ui.work_canvas_edits import UserEdit, user_edited
 
 _EVIDENCE = TypeAdapter(tuple[tuple[str, str], ...])
 _FINISHED = ("completed", "failed", "cancelled")
-
-
-@dataclass(frozen=True, slots=True)
-class Announcement:
-    title: str
-    target: str
-
-
-@dataclass(frozen=True, slots=True)
-class CanvasPublication:
-    document: CanvasDocument
-    waiting: tuple[CanvasQuestion, ...]
-    settled: frozenset[str]
-    notice: Announcement | None = None
-    attention: AttentionSnapshot = field(default_factory=AttentionSnapshot)
-
-
-@dataclass(frozen=True, slots=True)
-class Queued:
-    document: CanvasDocument
-
-
-@dataclass(frozen=True, slots=True)
-class NotQueued:
-    """The binding stays saved, so retrying or startup recovery reuses it."""
-
-    document: CanvasDocument
-    reason: str
-
-
-@dataclass(frozen=True, slots=True)
-class ResumeTask:
-    task_id: str
-
-
-class Investigating(Enum):
-    ALREADY = "already"
-
-
-type Continuation = Queued | NotQueued | ResumeTask | Investigating
 
 
 class WorkCanvas:
@@ -111,11 +72,13 @@ class WorkCanvas:
     outbound effects, queue and publish, alongside its storage and autonomy policy.
     """
 
-    # Mutable owner state: the latest observations that later policy compares
-    # against. Callers serialize use on Qt, so these need no lock.
-    __slots__ = ("_autonomous", "_catalog", "_publish", "_queue", "_session", "_task_activity", "_tasks", "path")
+    # This effect owner serializes independent work/catalog publishers and UI
+    # commands. Reentrancy permits its saved-before-queue callback to read the
+    # committed document; published state and all domain inputs are immutable.
+    __slots__ = ("_autonomous", "_catalog", "_lock", "_publish", "_queue", "_session", "_task_activity", "_tasks", "path")
 
     def __init__(self, path: Path, queue: Callable[[CanvasRun], None], publish: Callable[[CanvasPublication], None], *, autonomous: bool) -> None:
+        self._lock = threading.RLock()
         self.path: Path = path
         self._queue: Callable[[CanvasRun], None] = queue
         self._publish: Callable[[CanvasPublication], None] = publish
@@ -139,9 +102,15 @@ class WorkCanvas:
         return self._catalog or Catalog()
 
     def read(self) -> CanvasDocument:
-        with journal.reading(self.path) as connection:
-            document = _loaded(connection)
-        return result_document(document)
+        with self._lock:
+            with journal.reading(self.path) as connection:
+                document = _loaded(connection)
+            return result_document(document)
+
+    def title(self, work_id: str) -> str:
+        """Use this owner's catalog observation without locking another owner."""
+        with self._lock:
+            return next((work.definition.title for work in self._observed_catalog().works if work.id == work_id), work_id)
 
     def _save(self, document: CanvasDocument) -> None:
         checked = result_document(DOCUMENT.validate_python(document))
@@ -155,41 +124,44 @@ class WorkCanvas:
 
     def observe_session(self, session: Snapshot) -> bool:
         """Mirror conversation questions; publish only a changed session observation."""
-        activity = session_activity(session)
-        if activity == self._session:
-            return False
-        self._session = activity
-        previous = self.read()
-        document = observe_activity(previous, activity)
-        document = self._persist(previous, replace(document, activity=settle_session(document.activity, session)))
-        self._publish(published(self._observed_catalog(), document, None))
-        return True
+        with self._lock:
+            activity = session_activity(session)
+            if activity == self._session:
+                return False
+            self._session = activity
+            previous = self.read()
+            document = observe_activity(previous, activity)
+            document = self._persist(previous, replace(document, activity=settle_session(document.activity, session)))
+            self._publish(published(self._observed_catalog(), document, None))
+            return True
 
     def observe_work(self, observed: WorkSnapshot) -> None:
-        self._tasks = observed.tasks
-        previous = self.read()
-        updates = task_activity(observed.tasks, previous.runs)
-        known = frozenset(item.id for item in (*self._task_activity, *(self._session or ())))
-        self._task_activity = updates
-        document = observe_activity(previous, updates)
-        rejected = frozenset(TaskRequest(problem.task_id, problem.request_id) for problem in observed.reply_problems)
-        document = self._persist(previous, replace(document, activity=settle_tasks(document.activity, observed.tasks, rejected)))
-        hidden = hidden_ids(self._observed_catalog(), document)
-        # Announce each new result or question once, and never inside dismissed work.
-        additions = tuple(item for item in updates if item.id not in known and item.id not in hidden)
-        notice = Announcement(additions[-1].title, additions[-1].id) if additions else None
-        self._publish(published(self._observed_catalog(), self._investigate(document), notice))
+        with self._lock:
+            self._tasks = observed.tasks
+            previous = self.read()
+            updates = task_activity(observed.tasks, previous.runs)
+            known = frozenset(item.id for item in (*self._task_activity, *(self._session or ())))
+            self._task_activity = updates
+            document = observe_activity(previous, updates)
+            rejected = frozenset(TaskRequest(problem.task_id, problem.request_id) for problem in observed.reply_problems)
+            document = self._persist(previous, replace(document, activity=settle_tasks(document.activity, observed.tasks, rejected)))
+            hidden = hidden_ids(self._observed_catalog(), document)
+            # Announce each new result or question once, and never inside dismissed work.
+            additions = tuple(item for item in updates if item.id not in known and item.id not in hidden)
+            notice = Announcement(additions[-1].title, additions[-1].id) if additions else None
+            self._publish(published(self._observed_catalog(), self._investigate(document), notice))
 
     def observe_catalog(self, catalog: Catalog) -> None:
-        previous, self._catalog = self._catalog, catalog
-        document = self._investigate(self.read())
-        # The first catalog is a silent baseline; later state changes are announced.
-        changes = important_changes(previous, catalog) if previous is not None else ()
-        notice = None
-        if changes:
-            latest = next(work for work in catalog.works if work.id == changes[-1])
-            notice = Announcement("Canvas updated · " + latest.definition.title, latest.id)
-        self._publish(published(catalog, document, notice))
+        with self._lock:
+            previous, self._catalog = self._catalog, catalog
+            document = self._investigate(self.read())
+            # The first catalog is a silent baseline; later state changes are announced.
+            changes = important_changes(previous, catalog) if previous is not None else ()
+            notice = None
+            if changes:
+                latest = next(work for work in catalog.works if work.id == changes[-1])
+                notice = Announcement("Canvas updated · " + latest.definition.title, latest.id)
+            self._publish(published(catalog, document, notice))
 
     def _investigate(self, previous: CanvasDocument) -> CanvasDocument:
         """Queue bounded research for changed evidence, saving each binding before its task."""
@@ -212,79 +184,87 @@ class WorkCanvas:
 
     def start(self, run: CanvasRun) -> Queued | NotQueued:
         """Save the binding before queueing, so a crash or refusal keeps the user's direction."""
-        previous = self.read()
-        document = previous if run in previous.runs else self._persist(previous, replace(previous, runs=(*previous.runs, run)))
-        result: Queued | NotQueued
-        try:
-            self._queue(run)
-        except (OSError, ValueError) as error:
-            result = NotQueued(document, str(error))
-        else:
-            result = Queued(document)
-        self._publish(published(self._observed_catalog(), document, None))
-        return result
+        with self._lock:
+            previous = self.read()
+            document = previous if run in previous.runs else self._persist(previous, replace(previous, runs=(*previous.runs, run)))
+            result: Queued | NotQueued
+            try:
+                self._queue(run)
+            except (OSError, ValueError) as error:
+                result = NotQueued(document, str(error))
+            else:
+                result = Queued(document)
+            self._publish(published(self._observed_catalog(), document, None))
+            return result
 
     def continue_work(self, work_id: str) -> Continuation:
         """Continue one work without duplicating its unfinished investigation."""
-        document = self.read()
-        active = frozendict((task.id, task) for task in self._tasks if phase(task.state) not in _FINISHED)
-        binding = next((run for run in reversed(document.runs) if run.work_id == work_id and run.task_id in active), None)
-        if binding is None:
-            return self.start(CanvasRun("canvas:" + uuid4().hex, work_id))
-        match active[binding.task_id].state:
-            case Waiting(reason=Blocked()):
-                return ResumeTask(binding.task_id)
-            case _:
-                return Investigating.ALREADY
+        with self._lock:
+            document = self.read()
+            active = frozendict((task.id, task) for task in self._tasks if phase(task.state) not in _FINISHED)
+            binding = next((run for run in reversed(document.runs) if run.work_id == work_id and run.task_id in active), None)
+            if binding is None:
+                return self.start(CanvasRun("canvas:" + uuid4().hex, work_id))
+            match active[binding.task_id].state:
+                case Waiting(reason=Blocked()):
+                    return ResumeTask(binding.task_id)
+                case _:
+                    return Investigating.ALREADY
 
     def command(self, request: CanvasCommand) -> CanvasResponse:
-        document = self.read()
-        match request:
-            case ReadCanvas():
-                return snapshot(document, self._observed_catalog(), request)
-            case UpdateCanvas():
-                try:
-                    current = edited(document, request, self._observed_catalog())
-                except ValueError as error:
-                    return CanvasRefused(str(error))
-                if current != document:
-                    # Agent edits already belong to its current reasoning. Remember
-                    # authored notes so a publication cannot recursively launch new work.
-                    reviewed = frozendict((item.id, item) for item in current.reviewed)
-                    prior = frozendict((note.id, note) for note in document.notes)
-                    revised = tuple(note for note in current.notes if prior.get(note.id) != note)
-                    current = replace(
-                        current,
-                        reviewed=tuple({**reviewed, **{note.id: ReviewedContribution(note.id, note_revision(note)) for note in revised}}.values()),
-                    )
-                    self._save(current)
-                    self._publish(published(self._observed_catalog(), current, None))
-                return CanvasUpdated(request.expected_revision, revision(current), changed=current != document)
+        with self._lock:
+            document = self.read()
+            match request:
+                case ReadCanvas():
+                    return snapshot(document, self._observed_catalog(), request)
+                case UpdateCanvas():
+                    try:
+                        current = edited(document, request, self._observed_catalog())
+                    except ValueError as error:
+                        return CanvasRefused(str(error))
+                    if current != document:
+                        # Agent edits already belong to its current reasoning. Remember
+                        # authored notes so a publication cannot recursively launch new work.
+                        reviewed = frozendict((item.id, item) for item in current.reviewed)
+                        prior = frozendict((note.id, note) for note in document.notes)
+                        revised = tuple(note for note in current.notes if prior.get(note.id) != note)
+                        current = replace(
+                            current,
+                            reviewed=tuple(
+                                {**reviewed, **{note.id: ReviewedContribution(note.id, note_revision(note)) for note in revised}}.values()
+                            ),
+                        )
+                        self._save(current)
+                        self._publish(published(self._observed_catalog(), current, None))
+                    return CanvasUpdated(request.expected_revision, revision(current), changed=current != document)
 
     def commit(self, edit: UserEdit) -> CanvasDocument:
         """Persist one user edit to the latest document; an invalid edit raises ValueError and saves nothing."""
-        document = self.read()
-        current = self._persist(document, user_edited(document, self._observed_catalog(), edit))
-        if current != document:
-            current = self._investigate(current)
-            self._publish(published(self._observed_catalog(), current, None))
-        return current
+        with self._lock:
+            document = self.read()
+            current = self._persist(document, user_edited(document, self._observed_catalog(), edit))
+            if current != document:
+                current = self._investigate(current)
+                self._publish(published(self._observed_catalog(), current, None))
+            return current
 
     def waiting(self) -> tuple[CanvasQuestion, ...]:
         """Visible questions still waiting for the user, in canvas order."""
-        return published(self._observed_catalog(), self.read(), None).waiting
+        with self._lock:
+            return published(self._observed_catalog(), self.read(), None).waiting
 
     def answer(self, request: CanvasRequest, value: TextAnswer, deliver: Callable[[CanvasRequest, TextAnswer], bool]) -> bool:
         """Deliver only to a visible waiting question; record the reply once delivery accepts it."""
-        if not any(item.request == request for item in self.waiting()) or not deliver(request, value):
-            return False
-        document = self.read()
-        activity = tuple(
-            replace(item, reply=value) if isinstance(item, CanvasQuestion) and item.request == request else item for item in document.activity
-        )
-        current = self._persist(document, replace(document, activity=activity))
-        self._publish(published(self._observed_catalog(), current, None))
-        return True
+        with self._lock:
+            if not any(item.request == request for item in self.waiting()) or not deliver(request, value):
+                return False
+            document = self.read()
+            activity = tuple(
+                replace(item, reply=value) if isinstance(item, CanvasQuestion) and item.request == request else item for item in document.activity
+            )
+            current = self._persist(document, replace(document, activity=activity))
+            self._publish(published(self._observed_catalog(), current, None))
+            return True
 
 
 def published(catalog: Catalog, document: CanvasDocument, notice: Announcement | None) -> CanvasPublication:

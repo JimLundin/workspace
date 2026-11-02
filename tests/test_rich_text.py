@@ -3,8 +3,8 @@
 from dataclasses import replace
 from itertools import chain
 
-from desktop_ui.agent_session import notice_text
-from desktop_ui.card_actions import OpenCanvas, parse
+from assistant.agent_session import notice_text
+from assistant.card_actions import OpenCanvas, parse
 from desktop_ui.notification_text import bubble_text
 from desktop_ui.rich_text import Span, changed_tail, formatted
 

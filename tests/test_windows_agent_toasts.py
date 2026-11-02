@@ -22,11 +22,11 @@ lazy from PySide6.QtGui import QEnterEvent, QFont, QFontMetricsF, QImage, QPaint
 lazy from PySide6.QtTest import QTest
 lazy from PySide6.QtWidgets import QWidget
 
+from assistant.agent_session import Begin, Session, transition
 from assistant.recording_state import RecordingAction, RecordingState
 from automation.presentation import Answer, Failed, ReasoningSummary, Said, StreamState, Succeeded, ToolActivity
 from automation.task import Reply, TextAnswer
 from desktop_ui import toast_stack
-from desktop_ui.agent_session import Begin, Session, transition
 from desktop_ui.agent_toasts import AgentToasts
 from desktop_ui.agent_window import AgentWindow
 from desktop_ui.components.appearance import Scheme, Shade, SolidLook

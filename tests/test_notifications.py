@@ -2,10 +2,10 @@
 
 from dataclasses import replace
 
+from assistant.agent_session import Begin, ChatMessage, Enqueued, RecordingUpdated, Resolution, Result, Session, StopRequested, transition
 from assistant.recording_state import RecordingState
 from automation.presentation import Answer, Failed, Finished, Progress, ReasoningSummary, Said, StreamState, Succeeded, ToolActivity
 from automation.task import ApprovalDecision, TextAnswer
-from desktop_ui.agent_session import Begin, ChatMessage, Enqueued, RecordingUpdated, Resolution, Result, Session, StopRequested, transition
 from desktop_ui.notification_text import details, spans
 from desktop_ui.notifications import (
     MAX_VISIBLE,

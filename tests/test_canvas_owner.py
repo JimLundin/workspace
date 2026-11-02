@@ -1,11 +1,15 @@
 """The canvas owner's observation, attention, answer and user-edit policy."""
 
+import threading
+from concurrent.futures import ThreadPoolExecutor, TimeoutError
 from dataclasses import replace
 from pathlib import Path
 from unittest import TestCase
 
 import automation.task
+from assistant.agent_session import Session
 from assistant.canvas_activity import CanvasInstruction, CanvasQuestion, CanvasRequest, CanvasRun, CanvasUpdate, SessionRequest
+from assistant.work_canvas import WorkCanvas
 from assistant.work_canvas_commands import (
     ArrangeCanvas,
     CanvasRefused,
@@ -18,25 +22,56 @@ from assistant.work_canvas_commands import (
     revision,
 )
 from assistant.work_canvas_context import CanvasScope, context_path
+from assistant.work_canvas_contracts import Announcement, CanvasPublication, Investigating, NotQueued, Queued, ResumeTask
+from assistant.work_canvas_edits import ArrangeView, NestBubble, PlaceBubbles, RenameGroup, SaveNote, UserEdit
 from assistant.work_canvas_model import CanvasCollection, CanvasDocument, CanvasNote, CanvasRelation, Placement, view_state
 from assistant.work_snapshot import WorkSnapshot
 from automation.personal_work import Catalog, DismissedWork, WorkState
 from automation.task import Blocked, Completed, TextAnswer, Waiting
-from desktop_ui.agent_session import Session
-from desktop_ui.work_canvas import (
-    Announcement,
-    CanvasPublication,
-    Investigating,
-    NotQueued,
-    Queued,
-    ResumeTask,
-    WorkCanvas,
-)
-from desktop_ui.work_canvas_edits import ArrangeView, RenameGroup, SaveNote, UserEdit
-from desktop_ui.work_canvas_gestures import NestBubble, PlaceBubbles
 from tests.agent_requests import asked
 from tests.test_work_canvas import catalog, local_canvas, nested_bubbles, publish_nothing, seeded
 from tests.test_work_window import work_task
+
+
+def test_canvas_serializes_commits_through_ordered_publication(tmp_path: Path) -> None:
+    # Defect: another writer commits while the first transaction's publication
+    # is still pending, exposing notifications out of order or losing an edit.
+    entered, release, second_started = threading.Event(), threading.Event(), threading.Event()
+    publications: list[CanvasPublication] = []
+
+    def publish(publication: CanvasPublication) -> None:
+        if len(publication.document.notes) == 1:
+            entered.set()
+            assert release.wait(5)
+        publications.append(publication)
+
+    canvas = local_canvas(tmp_path, publish)
+    first_note = CanvasNote("note:first", "First", "First finding")
+    second_note = CanvasNote("note:second", "Second", "Second finding")
+    first = UserEdit(CanvasScope(), SaveNote(first_note))
+    second = UserEdit(CanvasScope(), SaveNote(second_note))
+
+    def commit_second() -> CanvasDocument:
+        second_started.set()
+        return canvas.commit(second)
+
+    with ThreadPoolExecutor(max_workers=2) as workers:
+        committed_first = workers.submit(canvas.commit, first)
+        try:
+            assert entered.wait(5)
+            committed_second = workers.submit(commit_second)
+            assert second_started.wait(5)
+            try:
+                committed_second.result(timeout=0.1)
+            except TimeoutError:
+                pass
+            else:
+                raise AssertionError("A second writer bypassed the owner's publication order.")
+        finally:
+            release.set()
+        assert committed_first.result(timeout=5).notes == (first_note,)
+        assert committed_second.result(timeout=5).notes == (first_note, second_note)
+    assert tuple(len(publication.document.notes) for publication in publications) == (1, 2)
 
 
 def test_changed_evidence_queues_one_bounded_investigation_and_refusal_releases_it(tmp_path: Path) -> None:

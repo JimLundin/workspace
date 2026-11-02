@@ -11,9 +11,9 @@ from enum import Enum
 from typing import assert_never
 
 from assistant.canvas_activity import CanvasQuestion, CanvasRequest, SessionRequest, TaskRequest
+from assistant.work_canvas_contracts import Announcement
 from assistant.work_commands import AnswerTask
 from automation.task import TextAnswer
-from desktop_ui.work_canvas import Announcement
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)

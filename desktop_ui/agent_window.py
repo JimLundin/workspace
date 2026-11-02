@@ -13,12 +13,7 @@ from dataclasses import dataclass, replace
 from enum import Enum, auto
 from typing import Protocol
 
-from assistant.canvas_activity import CanvasRequest
-from assistant.feed_origin import FeedRequest
-from assistant.recording_state import RecordingAction, RecordingState
-from automation.presentation import Done, Finished, LiveMessage, Problem, Progress, Said
-from automation.task import Approval, ApprovalDecision, Question, Reply, TextAnswer
-from desktop_ui.agent_session import (
+from assistant.agent_session import (
     AgentRequest,
     Begin,
     Cancelled,
@@ -34,7 +29,13 @@ from desktop_ui.agent_session import (
     StopRequested,
     transition,
 )
-from desktop_ui.attention import AttentionSnapshot
+from assistant.attention import AttentionSnapshot
+from assistant.canvas_activity import CanvasRequest
+from assistant.feed_origin import FeedRequest
+from assistant.recording_state import RecordingAction, RecordingState
+from automation.presentation import Answer, Done, Finished, LiveMessage, Problem, Progress, ReasoningSummary, Said
+from automation.task import Approval, ApprovalDecision, Question, Reply, TextAnswer
+from desktop_ui.notification_text import prepared_answer
 from desktop_ui.view_publication import Post, Unavailable, ViewPublication, log_view
 
 
@@ -341,6 +342,11 @@ class AgentWindow:
             identity, generation = self.state.identity, self.state.generation
 
         def publish(message: LiveMessage) -> None:
+            match message:
+                case Answer(text=text) | ReasoningSummary(text=text):
+                    prepared_answer(text)
+                case _:
+                    pass
             with self.lock:
                 if self.state.identity == identity and self.state.generation == generation:
                     self._event(message)
@@ -353,6 +359,7 @@ class AgentWindow:
             self._callbacks.problem(text)
 
     def done(self, text: str) -> None:
+        prepared_answer(text)
         self._event(Done(text, time.time()))
 
     def finish(self) -> None:

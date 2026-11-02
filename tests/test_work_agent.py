@@ -7,7 +7,11 @@ from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from pathlib import Path
 
+from assistant.agent_session import ChatMessage
+from assistant.canvas_activity import CanvasRun, TaskRequest
+from assistant.conversation_output import ConversationOutput
 from assistant.work_agent import WorkAgent
+from assistant.work_canvas import WorkCanvas, run_prompt
 from assistant.work_commands import (
     AddPreference,
     AddProjectNote,
@@ -39,6 +43,7 @@ from automation.ipc import (
     ReviewEvent,
     StartMeeting,
 )
+from automation.personal_work import Catalog, SourceKind
 from automation.presentation import Answer, Said, StreamState, Succeeded, ToolActivity
 from automation.routines import Every, Once, RoutineStore
 from automation.store import TaskStore
@@ -60,9 +65,9 @@ from automation.task import (
     Waiting,
     owns,
 )
-from desktop_ui.agent_session import ChatMessage
 from desktop_ui.notification_text import prepared_answer
 from desktop_ui.notifications import Busy, Settled, Stack, Turn, TurnKey, Working, advance, body
+from tests.personal_work_fixture import source
 from tests.test_agent_window import RecordingWindow
 from winapi.shapes import Window
 
@@ -234,6 +239,56 @@ def work(folder: Path) -> Generator[WorkRig]:
 def invocation(title: str) -> ContextSnapshot:
     window = Window(42, title, "workbook.exe", minimized=False)
     return ContextSnapshot(90, "active", (Activity(window, 80, 90, agent_active=False),))
+
+
+def test_canvas_intake_and_questions_continue_when_presentation_is_unavailable(tmp_path: Path) -> None:
+    # Defect: creating a conversation view fails before work state reaches the
+    # canvas, preventing intake, durable clarification or accepted replies.
+    tasks = TaskStore(tmp_path / "tasks.sqlite3")
+    bridge = RecordingBridge()
+    errors: list[str] = []
+    clock = Clock()
+    agent: WorkAgent
+
+    def submit(run: CanvasRun) -> None:
+        agent.watch(tuple(binding.task_id for binding in canvas.read().runs), owner="canvas")
+        agent.submit_identified(run.task_id, run_prompt(run, canvas.title(run.work_id)), RequestKind.GENERAL)
+
+    def unavailable(_agent: WorkAgent) -> ConversationOutput:
+        raise RuntimeError("Fixture conversation presentation is unavailable")
+
+    canvas = WorkCanvas(tmp_path / "canvas.sqlite3", submit, lambda _publication: None, autonomous=True)
+    agent = WorkAgent(
+        tasks,
+        RoutineStore(tasks.path),
+        ContextStore(tasks.path),
+        bridge,
+        unavailable,
+        on_snapshot=canvas.observe_work,
+        on_done=lambda: None,
+        report_error=errors.append,
+        clock=clock,
+        assistant_pid=1234,
+    )
+    try:
+        canvas.observe_catalog(Catalog(sources=(source(SourceKind.OUTLOOK),)))
+        agent.start_worker()
+        assert agent.refresh().wait(5)
+        claim = tasks.claim("worker-one", "intake-run", at=clock())
+        assert claim is not None and claim.task.id == canvas.read().runs[0].task_id
+        tasks.finish(claim.run, Waiting(Question("owner", "Who owns this?", "Confirm the work owner.")), at=clock())
+        assert agent.refresh().wait(5)
+        assert canvas.waiting()[0].request == TaskRequest(claim.task.id, "owner")
+        agent.command(AnswerTask(claim.task.id, "owner", TextAnswer("Contoso")))
+        assert agent.refresh().wait(5)
+        resumed = tasks.get(claim.task.id)
+        assert resumed is not None and resumed.state is TaskStatus.READY
+        assert not canvas.waiting() and len(tasks.list_tasks()) == 1
+        assert errors and all("presentation is unavailable" in error for error in errors)
+        assert not agent.snapshot().status
+    finally:
+        agent.close()
+        assert agent.wait_closed(5)
 
 
 def pending_approval(rig: WorkRig, prompt: str = "Send the reviewed draft") -> tuple[Task, RunRef, ApprovalReview]:

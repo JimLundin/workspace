@@ -9,7 +9,7 @@ if sys.platform != "win32":
 lazy import shiboken6
 lazy from PySide6 import QtCore
 
-from desktop_ui.agent_session import ChatMessage
+from assistant.agent_session import ChatMessage
 from desktop_ui.agent_toasts import card_order
 from desktop_ui.notifications import Entry, Toast
 from desktop_ui.qt_runtime import prepare

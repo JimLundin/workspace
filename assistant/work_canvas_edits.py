@@ -16,6 +16,7 @@ from assistant.work_canvas_model import (
     CanvasDocument,
     CanvasNote,
     CanvasViewState,
+    Placement,
     nest,
     release_subtree,
     save_collection,
@@ -25,7 +26,20 @@ from assistant.work_canvas_model import (
     view_state,
 )
 from automation.personal_work import Catalog
-from desktop_ui.work_canvas_gestures import NestBubble, PlaceBubbles
+
+
+@dataclass(frozen=True, slots=True)
+class PlaceBubbles:
+    id: str
+    positions: tuple[Placement, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class NestBubble:
+    id: str
+    parent_id: str | None
+    positions: tuple[Placement, ...]
+    members: frozenset[str]
 
 
 @dataclass(frozen=True, slots=True)

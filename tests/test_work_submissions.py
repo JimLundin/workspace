@@ -7,12 +7,12 @@ from dataclasses import replace
 from pathlib import Path
 from unittest import TestCase
 
+from assistant import agent_session
 from assistant.communications import SourceDate
 from assistant.feed_origin import FeedRequest
 from assistant.feed_sources import Excerpt
 from assistant.notification_agent import NotificationAgent
 from automation.task import Blocked, Completed, FeedHandoff, Question, RequestKind, RequestSource, RoutineSource, TaskStatus, TextAnswer, Waiting
-from desktop_ui import agent_session
 from desktop_ui.agent_progress import Progress, advance_progress, visible
 from tests.feed_source_fixture import captured
 from tests.test_external_input import has_pending_input
