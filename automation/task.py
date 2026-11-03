@@ -97,7 +97,18 @@ class MeetingFollowup:
         digest(self.bundle, "meeting bundle digest")
 
 
-type Profile = RequestKind | FeedHandoff | MeetingFollowup
+@dataclass(frozen=True, slots=True)
+class SelfReview:
+    """The agent's review of its own work: one task's run (`subject` is that task) or a day (`subject` is its date)."""
+
+    subject: str
+    kind: Literal["self_review"] = "self_review"
+
+    def __post_init__(self) -> None:
+        identifier(self.subject, "review subject")
+
+
+type Profile = RequestKind | FeedHandoff | MeetingFollowup | SelfReview
 """What a requested task is for: it selects the agent's tools, instructions and completion check."""
 
 
@@ -109,7 +120,7 @@ class RequestSource:
 
     def __post_init__(self) -> None:
         identifier(self.conversation_id, "conversation identity")
-        variant(self.profile, (RequestKind, FeedHandoff, MeetingFollowup), "request profile")
+        variant(self.profile, (RequestKind, FeedHandoff, MeetingFollowup, SelfReview), "request profile")
 
 
 @dataclass(frozen=True, slots=True)

@@ -32,6 +32,7 @@ from automation.task import (
     MeetingFollowup,
     Profile,
     RequestKind,
+    SelfReview,
     Task,
     digest,
     identifier,
@@ -231,7 +232,7 @@ def meeting_profile(task: Task) -> MeetingFollowup | None:
     match profile := task_profile(task.source):
         case MeetingFollowup():
             return profile
-        case RequestKind() | FeedHandoff():
+        case RequestKind() | FeedHandoff() | SelfReview():
             return None
         case _:
             assert_never(profile)

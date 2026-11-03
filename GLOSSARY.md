@@ -275,3 +275,17 @@ _Avoid_: Action, agent request (the user's ask of the agent)
 The file a component writes once it is up. It names its writer by process id
 and creation time, so a reader accepts it only from the process it observed.
 _Avoid_: Ready flag
+
+**Self-review**:
+A task in which the agent reviews its own work. A review is queued after a run
+that failed, ended blocked, left an action uncertain or not applied, or needed
+a goal revision or an answer from the user. A daily review covers the previous
+day. A review reads the task journal and keeps lessons. It may also check,
+publish and install source changes. A review is never reviewed.
+_Avoid_: Reflection, evaluation run
+
+**Lesson**:
+A saved preference written by the agent: one rule that every later general run
+follows. Its source names the task it came from. The agent may update or remove
+only its own lessons, never the user's preferences.
+_Avoid_: Memory, agent note

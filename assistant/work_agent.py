@@ -49,6 +49,7 @@ lazy from automation.task import (
     RequestSource,
     RoutineSource,
     Running,
+    SelfReview,
     Task,
     TaskStatus,
     Until,
@@ -323,6 +324,8 @@ class WorkAgent:
         match profile:
             case MeetingFollowup():
                 # Its agent sees only the selected recordings.
+                captured = None
+            case SelfReview():
                 captured = None
             case RequestKind.GENERAL | FeedHandoff():
                 captured = self.context() if self.context is not None else None

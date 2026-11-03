@@ -14,7 +14,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Final, Protocol, assert_never
 
-from assistant import feed_agent_tools, meeting_tools, personal_work_tools, self_change_tools, work_canvas_tools
+from assistant import feed_agent_tools, meeting_tools, personal_work_tools, self_change_tools, self_review_tools, work_canvas_tools
 from assistant.agent import Agent, Toolset
 from assistant.agent_history import History
 from assistant.agent_tools import Display, Tool
@@ -26,13 +26,27 @@ from assistant.meeting_execution import MeetingRun, MeetingWork
 from assistant.meeting_tools import MeetingCapture
 from assistant.personal_work_tools import PersonalWork
 from assistant.self_change_tools import Delivery, SelfChange, verified_installation
+from assistant.self_review_tools import SelfReviewTools
 from assistant.task_tools import TaskTools
 from assistant.work_bridge_contracts import BridgeCommand
 from assistant.work_canvas_tools import Canvas
 from assistant.workspace import Workspace
 from automation.activity import ContextSnapshot
+from automation.context import ContextStore
 from automation.execution import WorkExecution
-from automation.task import Claim, FeedHandoff, MeetingFollowup, Outcome, RequestKind, RequestSource, RoutineSource, Task, Waiting, task_profile
+from automation.task import (
+    Claim,
+    FeedHandoff,
+    MeetingFollowup,
+    Outcome,
+    RequestKind,
+    RequestSource,
+    RoutineSource,
+    SelfReview,
+    Task,
+    Waiting,
+    task_profile,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -66,18 +80,20 @@ class ProfileError(Exception):
 
 @dataclass(frozen=True, slots=True)
 class GeneralEffects:
-    """What a general request reads beyond its conversation: desktop context and the feed bridge."""
+    """What a general request uses beyond its conversation: desktop context, the feed bridge and saved lessons."""
 
     context: Callable[[Task], RequestContext]
     feed_request: Callable[[BridgeCommand], str]
+    lessons: ContextStore | None = None
 
 
 @dataclass(frozen=True, slots=True)
 class GeneralTools:
-    """A general run's tool dependencies: its installation destination and feed bridge."""
+    """A general run's tool dependencies: its installation destination, feed bridge and saved lessons."""
 
     install_root: Path
     feed_request: Callable[[BridgeCommand], str]
+    lessons: ContextStore | None
 
 
 class ProfileRun(Protocol):
@@ -148,9 +164,10 @@ def instructions() -> str:
 
 
 class General:
-    """A general request's toolset: the whole desktop and its applications, the task's records and, with a workspace, self-change."""
+    """A general request's toolset: the whole desktop and its applications, the task's records and, with a
+    workspace, self-change; with saved lessons, self-review."""
 
-    __slots__ = ("self_change", "tools")
+    __slots__ = ("self_change", "self_review", "tools")
 
     def __init__(
         self,
@@ -158,14 +175,16 @@ class General:
         *,
         workspace: Workspace | None = None,
         install_root: Path | None = None,
+        lessons: ContextStore | None = None,
         clock: Callable[[], datetime] = datetime.now,
         feed_request: Callable[[BridgeCommand], str],
     ) -> None:
-        # The families act through the agent; the workspace, install root, clock
-        # and feed transport are independently varying effects of this toolset.
+        # The families act through the agent; the workspace, install root, lessons,
+        # clock and feed transport are independently varying effects of this toolset.
         task = agent.work.claim.task
         branch = "workspace/agent-" + hashlib.sha256((task.id + ":" + str(task.goal_revision)).encode()).hexdigest()[:24]
         self.self_change = SelfChange(agent, workspace, Delivery(install_root, branch)) if workspace is not None else None
+        self.self_review = SelfReviewTools(agent, agent.work, lessons) if lessons is not None else None
         self.tools: tuple[Tool, ...] = (
             *Desktop(agent, agent.screen, agent.current_context).tools(),
             *Browser(agent, agent.screen).tools(),
@@ -176,10 +195,13 @@ class General:
             *Feed(agent, feed_request).tools(),
             *TaskTools(agent, agent.work, clock).tools(agent.proof, Display.PUBLIC),
             *(self.self_change.tools() if self.self_change is not None else ()),
+            *(self.self_review.tools() if self.self_review is not None else ()),
         )
 
     def instructions(self) -> str:
         prompt = f"{instructions()}\n\n{self_change_tools.INSTRUCTIONS}" if self.self_change is not None else instructions()
+        if self.self_review is not None:
+            prompt += "\n\n" + self_review_tools.INSTRUCTIONS
         return prompt + "\n\n" + feed_agent_tools.INSTRUCTIONS + "\n" + personal_work_tools.INSTRUCTIONS + "\n" + work_canvas_tools.INSTRUCTIONS
 
 
@@ -192,7 +214,13 @@ class GeneralRun:
         self.conversation, self.context, self.tools = conversation, context, tools
 
     def toolset(self, agent: Agent) -> Toolset:
-        return General(agent, workspace=self.conversation.workspace, install_root=self.tools.install_root, feed_request=self.tools.feed_request)
+        return General(
+            agent,
+            workspace=self.conversation.workspace,
+            install_root=self.tools.install_root,
+            lessons=self.tools.lessons,
+            feed_request=self.tools.feed_request,
+        )
 
     def recover(self, work: WorkExecution, stop: threading.Event) -> Waiting | None:
         """A requested installation finishes when the running source matches its checked digest."""
@@ -276,7 +304,7 @@ class Profiles:
     def __init__(self, workspace: Workspace, general: GeneralEffects, meeting: MeetingWork | None) -> None:
         self.conversations = Conversations(workspace)
         self.general, self.meeting = general, meeting
-        self.tools = GeneralTools(workspace.root, general.feed_request)
+        self.tools = GeneralTools(workspace.root, general.feed_request, general.lessons)
 
     def run(self, claim: Claim) -> ProfileRun:
         """Select the run, refusing missing or changed meeting preparations."""
@@ -290,6 +318,9 @@ class Profiles:
                 except (OSError, ValueError) as error:
                     raise ProfileError(f"Meeting preparation could not be opened: {error}"[:4000]) from error
                 return MeetingFollowupRun(self.conversations.named("task:" + claim.task.id), run)
+            case SelfReview():
+                # Each review starts fresh rather than inheriting earlier reviews' history.
+                return GeneralRun(self.conversations.named("task:" + claim.task.id), UNSEEN, self.tools)
             case RequestKind.GENERAL | FeedHandoff():
                 match source := claim.task.source:
                     case RequestSource(conversation_id=name):

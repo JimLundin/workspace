@@ -13,6 +13,7 @@ import time
 import uuid
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import assert_never
 
@@ -42,6 +43,7 @@ lazy from automation.execution import ApprovalReview, Log
 lazy from automation.presentation import LiveMessage, Problem, Progress, Said
 lazy from automation.profile_lease import ProfileLease
 lazy from automation.routines import RoutineStore
+lazy from automation.self_review import ReviewingRunner
 lazy from automation.store import TaskStore
 lazy from automation.task import Claim, Outcome, RunRef, Task, owns
 
@@ -181,7 +183,7 @@ def _native_execution(settings: Settings | Missing, bridge: BridgeServer, hwnd: 
             machine,
             Profiles(
                 Workspace(),
-                GeneralEffects(context.request, calls.desktop),
+                GeneralEffects(context.request, calls.desktop, contexts),
                 MeetingWork(Preparations(followups / "preparations"), FollowupStore(followups / "packages"), OutlookDrafts(followups / "mail")),
             ),
             record=lambda details: usage.record("automation", "agent", details),
@@ -230,7 +232,8 @@ def run(
         cleanup.callback(bridge.close)
         execution: Runner
         if execution_factory is None:
-            execution, machine = _native_execution(settings, bridge, hwnd, contexts)
+            native, machine = _native_execution(settings, bridge, hwnd, contexts)
+            execution = ReviewingRunner(native, datetime.now)
             cleanup.callback(machine.close_background)
         else:
             execution = execution_factory(bridge)

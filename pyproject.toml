@@ -294,6 +294,7 @@ work_only = [
     "assistant.publishing",
     "assistant.sdk",
     "assistant.self_change_tools",
+    "assistant.self_review_tools",
     "assistant.task_profiles",
     "assistant.task_tools",
     "assistant.work_canvas_tools",
