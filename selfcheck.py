@@ -70,7 +70,8 @@ class Scope:
 FULL_SCOPE = Scope(Profile.FULL)
 """The keeper's default gate: every test module."""
 
-_DOCUMENTS = ("docs/", ".github/")
+_DOCUMENTS = ("docs/", ".github/", ".vscode/", "typings/", ".git")
+"""Changes no test reads: documentation, repository and editor configuration, type stubs."""
 _TEXT = frozenset({"AGENTS.md", "README.md", "GLOSSARY.md"})
 
 

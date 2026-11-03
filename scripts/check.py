@@ -101,7 +101,7 @@ def select(root: Path, current: Mapping[str, str], previous: Mapping[str, str], 
         name
         for name in changed
         if not name.endswith((".py", ".pyw"))
-        and not name.startswith(("docs/", ".github/"))
+        and not name.startswith(("docs/", ".github/", ".vscode/", "typings/", ".git"))
         and name not in ("AGENTS.md", "README.md", "GLOSSARY.md", *POLICY_FILES)
     ]
     # Non-Python application assets have implicit users: run the whole source suite.
