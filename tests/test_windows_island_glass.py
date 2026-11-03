@@ -62,7 +62,9 @@ def test_the_bar_publishes_one_final_glass_frame_per_qt_turn_behind_its_window()
         published, bounds = scene.published(), scene.bounds
         baseline_keys = {pane.key for pane in published}
         assert {"STATUS", "CANVAS", "tray"} <= baseline_keys and "ISLAND" not in baseline_keys and "INBOX" not in baseline_keys, (
-            "The first visible frame omitted persistent glass or retained activity.", baseline_keys, bar.window.panes
+            "The first visible frame omitted persistent glass or retained activity.",
+            baseline_keys,
+            bar.window.panes,
         )
         bar.agent_changed(Agent("Comparing both sheets", waiting=False))
         bar.inbox_changed(3)
@@ -71,7 +73,10 @@ def test_the_bar_publishes_one_final_glass_frame_per_qt_turn_behind_its_window()
         app.processEvents()
         final_keys = {pane.key for pane in scene.published()}
         assert final_keys == baseline_keys | {"INBOX"}, (
-            "The batched glass frame differs from the final bar state.", baseline_keys, final_keys, bar.window.panes
+            "The batched glass frame differs from the final bar state.",
+            baseline_keys,
+            final_keys,
+            bar.window.panes,
         )
         assert scene.bounds == bounds, "A capsule change moved the glass window."
         assert GetWindow(int(bar.window.winId()), 2) == scene.handle

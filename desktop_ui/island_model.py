@@ -249,9 +249,7 @@ def island(observed: Observed, *, hovered: Key | None = None, expanded: bool = F
     detached = (observed.dictating or asking) and not expanded
     lead: tuple[CapsuleView, ...] = ()
     if observed.keyboard is not None:
-        lead += (
-            CapsuleView(Key.LAYER, Zone.RIGHT, ((Glyph("keyboard"),),), f"{observed.keyboard} · Open key map", Action.OPEN_KEYMAP),
-        )
+        lead += (CapsuleView(Key.LAYER, Zone.RIGHT, ((Glyph("keyboard"),),), f"{observed.keyboard} · Open key map", Action.OPEN_KEYMAP),)
     # Dictation detaches the agent; a waiting question already is the island, unless you're dictating.
     if detached and agent is not None and observed.dictating:
         tint = meaning.Tint.ATTENTION if agent.waiting else meaning.Tint.NONE

@@ -76,9 +76,7 @@ def test_agent_stop_is_stable_and_concurrent_activity_keeps_distinct_indicators(
     busy = replace(RESTING, agent=WORKING, job=Job.TRANSCRIBING, recording=RECORDING)
     active = view(busy, Key.ISLAND, hovered=Key.ISLAND)
     agent, job, recording = active.slots
-    assert agent == (
-        Spinner("Agent: Comparing both sheets"), Text("Comparing both sheets"), Control("stop", "Stop agent work", Action.STOP_AGENT)
-    )
+    assert agent == (Spinner("Agent: Comparing both sheets"), Text("Comparing both sheets"), Control("stop", "Stop agent work", Action.STOP_AGENT))
     assert job == (Marker.DOTS,) and recording == (Marker.DOT, Text("02:05"), Control("stop", "Stop recording", Action.STOP_RECORDING))
     assert view(replace(RESTING, agent=WORKING), Key.ISLAND) == view(replace(RESTING, agent=WORKING), Key.ISLAND, hovered=Key.ISLAND)
     long = replace(RESTING, agent=Agent("Reading every attachment in the budget thread", waiting=False))
