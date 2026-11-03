@@ -19,7 +19,7 @@ from assistant.llm import ToolSpec, tool_spec
 from automation.actions import Classification, Operation
 from automation.execution import Proof, Readback, Targets
 from automation.json_value import Json
-from automation.task import ActionNotApplied, ActionUncertain, ActionVerified, FileDigest, MailTarget, NoVerification
+from automation.task import ActionNotApplied, ActionReturned, ActionUncertain, ActionVerified, FileDigest, MailTarget, NoVerification
 from winapi.shapes import Rect, Window
 lazy from assistant.browser_requests import BrowserRequest
 lazy from assistant.uia import UiRequest
@@ -175,7 +175,7 @@ def typed_classification[A](
     return classified
 
 
-type Verifier = Callable[[Output], ActionVerified | ActionUncertain | ActionNotApplied]
+type Verifier = Callable[[Output], ActionVerified | ActionReturned | ActionUncertain | ActionNotApplied]
 
 
 @dataclass(frozen=True, slots=True)

@@ -610,6 +610,21 @@ def test_commands_run_and_report_their_output(tmp_path: Path) -> None:
     assert rig.machine.executed == [("Stop-Process -Name notepad", 120, None, rig.agent.stop)]
 
 
+def test_a_failing_command_finishes_but_an_interrupted_one_waits_for_reconciliation(tmp_path: Path) -> None:
+    # Detect a nonzero exit blocking later changes again (a failing test run ended
+    # self-modification), or an interrupted command ending the task before the
+    # model can reconcile it.
+    rig = ToolRig(work=durable(tmp_path))
+    rig.machine.commands = {"pytest": (1, "1 failed"), "sleep": (-1, "Timed out")}
+    assert rig.call("run_powershell", command="pytest").text == "Exit code 1.\n1 failed"
+    assert rig.call("run_powershell", command="git status").ok
+    assert not rig.call("run_powershell", command="sleep").ok
+    refused = rig.call("run_powershell", command="git status")
+    assert not refused.ok and "reconcile_action" in refused.text
+    assert rig.agent.work.disposition is None
+    assert [entry[0] for entry in rig.machine.executed] == ["pytest", "git status", "sleep"]
+
+
 def test_allowed_commands_run_without_asking(tmp_path: Path) -> None:
     rig = ToolRig(approvals=True, work=durable(tmp_path))
     for timeout in (1, 600):

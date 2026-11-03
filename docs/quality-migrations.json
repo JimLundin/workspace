@@ -553,15 +553,6 @@
     {
       "key": {
         "rule": "PLR0913",
-        "path": "automation/actions.py",
-        "scope": "Actions.execute",
-        "signature": "f3f3eda8a1dc24eb1c17e9027e09058607f5938b719cf5e58331016c1fc7473d"
-      },
-      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
-    },
-    {
-      "key": {
-        "rule": "PLR0913",
         "path": "automation/app.py",
         "scope": "NativeExecution.run_work",
         "signature": "a9d7cdc1dcd348a59e1e5cdcdbe0aa64c8201d757ae8aa36e53068d5db9da404"

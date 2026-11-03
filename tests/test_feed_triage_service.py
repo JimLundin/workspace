@@ -330,7 +330,7 @@ def test_lost_acknowledgement_stays_uncertain_after_the_owner_commits_feedback(t
     rig = ToolRig(work=work, feed_request=lost)
     try:
         result = rig.call("work_feed_update", operation="rule", text="Keep routine fictional updates quiet.")
-        assert not result.ok and work.disposition is not None and work.actions.unresolved()
+        assert not result.ok and "reconcile_action" in result.text and work.actions.unresolved()
         assert triage.board.rules == ("Keep routine fictional updates quiet.",)
     finally:
         triage.close()

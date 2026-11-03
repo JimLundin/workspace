@@ -222,7 +222,7 @@ class Actions:
         succeeded: Callable[[T], bool],
         cancel: threading.Event,
         *,
-        verify: Callable[[T], ActionVerified | ActionUncertain | ActionNotApplied] | None = None,
+        verify: Callable[[T], ActionVerified | ActionReturned | ActionUncertain | ActionNotApplied] | None = None,
     ) -> T:
         with self.resources.hold(specification.resources, cancel):
             if isinstance(specification, Observation):

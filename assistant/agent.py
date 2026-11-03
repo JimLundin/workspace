@@ -26,7 +26,7 @@ from assistant.desktop_tools import Screen
 from assistant.llm import Settings, ToolCall
 from assistant.publishing import PublishError
 from assistant.workspace import SourceError
-from automation.actions import ActionError, Change, Observation, Operation
+from automation.actions import ActionError, Change, Observation, Operation, UncertainEffectError
 from automation.activity import ContextSnapshot
 from automation.execution import Log, Proof, Report, ReportStatus, Targets, WorkExecution
 from automation.json_value import Json
@@ -37,6 +37,10 @@ lazy from assistant import sdk
 
 KEPT_SCREENSHOTS: Final = 2
 """Screenshots kept in the conversation; older ones are replaced by a note, to save space."""
+
+RECONCILE: Final = (
+    "Use work_actions to find it, inspect its exact target from fresh state, then reconcile_action with that evidence. Do not repeat the effect."
+)
 
 _ARGUMENTS = TypeAdapter(dict[str, Json], config=ConfigDict(allow_inf_nan=False))
 
@@ -199,13 +203,17 @@ class Agent:
             return tool.run(args)
         except (ArgumentError, SourceError, PublishError, ValueError) as error:
             return Output(f"Error: {error}", ok=False)
+        except UncertainEffectError as error:
+            # The journal still refuses every change until the uncertain action is
+            # reconciled. Ending the task here left the model no turn to do that.
+            return Output(f"Error: {error} {RECONCILE}", ok=False)
         except ActionError as error:
             self.work.block(str(error))
             return Output(f"Error: {error}", ok=False)
         except (OSError, sqlite3.Error) as error:
             try:
                 if self.work.actions.unresolved():
-                    self.work.block("An operation was interrupted without a conclusive outcome. Resume to inspect its result.")
+                    return Output(f"Error: {error} The operation was interrupted without a conclusive outcome. {RECONCILE}", ok=False)
             except OSError, sqlite3.Error:
                 self.work.block("Durable storage is unavailable. Resume after it is available to inspect the result.")
             return Output(f"Error: {error}", ok=False)

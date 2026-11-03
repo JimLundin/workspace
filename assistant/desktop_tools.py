@@ -32,7 +32,7 @@ from automation.actions import Change, Classification, Evidence, Observation, Op
 from automation.activity import ContextSnapshot
 from automation.execution import ProofRule, Readback, Targets
 from automation.json_value import Json
-from automation.task import FileDigest
+from automation.task import ActionReturned, ActionUncertain, FileDigest
 from config import ALLOWED_COMMANDS
 from winapi.shapes import Rect
 
@@ -612,11 +612,24 @@ class Desktop:
         if (not allowed(command) and not self.session.approve(args.operation, "Run this command?", command)) or self.session.stop.is_set():
             return Output(DECLINED, ok=False)
 
+        exit_code: int | None = None
+
         def execute() -> Output:
+            nonlocal exit_code
             code, output = self.session.machine.run_powershell(command, timeout_s=timeout, cwd=cwd, cancel=self.session.stop)
+            exit_code = code
             return Output(f"Exit code {code}.\n{output[:MAX_CHARS]}", ok=code == 0)
 
-        return self.session.effect(args.operation, execute)
+        def finished(_: Output) -> ActionReturned | ActionUncertain:
+            # A command that ran to completion has a known outcome whatever its exit
+            # code: a failing test run or a diff with differences is not an
+            # interrupted effect. Recording nonzero exits as uncertain blocked every
+            # later change, ending self-modification at its first failing test.
+            if exit_code is None or exit_code < 0:
+                return ActionUncertain("The command was interrupted before it finished; it may have partially completed.")
+            return ActionReturned(f"The command finished with exit code {exit_code}; verify any intended changes from fresh state.")
+
+        return self.session.effect(args.operation, execute, finished)
 
     def open(self, args: Args, request: OpenArguments) -> Output:
         if not self.session.approve(args.operation, "Open this?", request.target):
