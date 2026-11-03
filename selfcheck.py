@@ -454,4 +454,7 @@ def main() -> None:
 
 
 if __name__ == "__main__":
+    # Worker processes re-run this script from the checked folder, so a relative
+    # invocation path (CI's) must be resolved before check() changes directory.
+    __file__ = os.path.abspath(__file__)
     main()
