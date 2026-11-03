@@ -312,15 +312,31 @@ and PowerShell strips embedded double quotes.
 ## Source deployment
 
 The coordinator creates a fresh `workspace-source-*` directory in Windows Temp.
-It stages all source and validates hashes, unchanged Python/dependency pins and ZIP paths.
-It builds verified source/ZIP backups and a new ZIP while Workspace keeps running.
-The new ZIP copies compressed runtime records byte-for-byte and writes a fresh
-central directory. It replaces source records rather than accumulating stale
-entries. Runtime decompression/recompression is absent from routine ZIP updates.
+It compares the Git-listed working tree with the check receipt once, stages
+all source in a checked payload ZIP and validates hashes, unchanged
+Python/dependency pins and ZIP paths. The working tree is compared with the
+receipt again after deployment.
+
+While Workspace keeps running, preparation hashes the installed source once,
+between two equal size and modification-time snapshots. Only files the release
+replaces are extracted, and only files it replaces or removes are backed up and
+verified. The new ZIP copies compressed runtime records from the old bundle and
+every source record from the payload byte-for-byte, then writes a fresh central
+directory. Its source records are verified once against the checked manifest.
+Stale source records never accumulate, and nothing is decompressed or
+recompressed to assemble it.
+
+Later checks hash only the files a release wrote: restart planning and
+installation require every other installed file to keep its prepared size and
+modification time, and the installed and restored trees must contain exactly the
+expected names. The final check hashes the published ZIP against the prepared
+one. The size/mtime identity is a local consistency check, not a defense
+against deliberately forged timestamps.
 
 The first run audits runtime bytes against the old bundle. Later runs reuse that
-audit only when the complete bundle SHA-256 and every runtime file's membership,
-size and stat timestamps match the saved audit. A
+audit, and the source manifest the verified release published, only when the
+complete bundle SHA-256 and every runtime file's membership, size and stat
+timestamps match the saved audit. An unreadable audit or a
 changed observation forces another byte audit; pins changing require bundle.py.
 This is a local performance cache, not a defense against deliberately forged
 filesystem timestamps. The dependency folder identity is checked and never replaced.
@@ -360,13 +376,17 @@ only changed managed files, removes retired managed files, clears their bytecode
 and verifies the replaced source. It resumes selected children or relaunches the
 full group immediately afterward. Only restarted children require fresh readiness
 markers; retained children must keep their exact process identities and marker
-timestamps. The prepared
-ZIP is rechecked and atomically published after fresh visible readiness, keeping
-archive I/O outside the interruption; final ZIP/runtime verification follows.
+timestamps. After fresh visible readiness the prepared ZIP's identity is
+rechecked and it is atomically published, keeping archive I/O outside the
+interruption. A second hard link keeps the previous ZIP as
+`backup/previous-bundle.zip` without copying it. Final ZIP/runtime verification
+follows.
 Installed-source receipts explicitly mark the ZIP as pending until publication.
 
 A stopped copy stays stopped. Partial replacement failures before launch restore
-verified before-images and conditionally relaunch the previous copy. Errors
+the verified before-images of every replaced or removed file, delete added
+files and conditionally relaunch the previous copy. The ZIP is still the
+previous one then, because publication follows launch. Errors
 following a launch preserve evidence and backups for inspection; they never
 overwrite an active installation. A process crash cannot resume a used stage;
 inspect its receipts/backups rather than blindly rerunning it.

@@ -6,7 +6,7 @@ import os
 import re
 import stat
 import zipfile
-from collections.abc import Collection, Iterable, Iterator, Mapping
+from collections.abc import Callable, Collection, Iterable, Iterator, Mapping
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from functools import lru_cache
@@ -139,38 +139,82 @@ def file_at(root: Path, name: str) -> Path:
     return path
 
 
-def files(root: Path, *, skip_roots: Collection[str] = (), ignore_extra_bytecode: bool = False, expected: Collection[str] = ()) -> dict[str, str]:
+def tree(root: Path, skip_roots: Collection[str], keep: Callable[[str], bool]) -> Iterator[tuple[str, Path, os.stat_result]]:
+    """Every regular file below `root` that `keep` accepts; links, junctions and other nodes fail."""
     root = Path(root)
     if not stat.S_ISDIR(no_link(root).st_mode):
         raise ValueError("A release tree must be a directory.")
+    pending = [root]
+    while pending:
+        directory = pending.pop()
+        with os.scandir(directory) as entries:
+            for entry in entries:
+                path = Path(entry.path)
+                observed = entry.stat(follow_symlinks=False)
+                if stat.S_ISLNK(observed.st_mode) or (os.name == "nt" and observed.st_file_attributes & 0x400):
+                    raise ValueError("A release tree contains a link or junction.")
+                name = member(path.relative_to(root).as_posix())
+                if stat.S_ISDIR(observed.st_mode):
+                    if directory != root or entry.name not in skip_roots:
+                        pending.append(path)
+                elif not stat.S_ISREG(observed.st_mode):
+                    raise ValueError("A release tree contains a nonregular file.")
+                elif keep(name):
+                    yield name, path, observed
 
-    def walk() -> Iterator[tuple[str, Path]]:
-        pending = [root]
-        while pending:
-            directory = pending.pop()
-            with os.scandir(directory) as entries:
-                for entry in entries:
-                    path = Path(entry.path)
-                    observed = entry.stat(follow_symlinks=False)
-                    if stat.S_ISLNK(observed.st_mode) or (os.name == "nt" and observed.st_file_attributes & 0x400):
-                        raise ValueError("A release tree contains a link or junction.")
-                    name = member(path.relative_to(root).as_posix())
-                    if stat.S_ISDIR(observed.st_mode):
-                        if directory != root or entry.name not in skip_roots:
-                            pending.append(path)
-                    elif not stat.S_ISREG(observed.st_mode):
-                        raise ValueError("A release tree contains a nonregular file.")
-                    elif not (ignore_extra_bytecode and bytecode(name) and name not in expected):
-                        yield name, path
 
-    def hashed(item: tuple[str, Path]) -> tuple[str, str]:
-        name, path = item
+def files(root: Path, *, skip_roots: Collection[str] = (), ignore_extra_bytecode: bool = False, expected: Collection[str] = ()) -> dict[str, str]:
+    def kept(name: str) -> bool:
+        return not (ignore_extra_bytecode and bytecode(name) and name not in expected)
+
+    def hashed(item: tuple[str, Path, os.stat_result]) -> tuple[str, str]:
+        name, path, _ = item
         return name, sha(path)
 
     with ThreadPoolExecutor(max_workers=8, thread_name_prefix="source-release-hash") as workers:
-        result = dict(workers.map(hashed, walk(), buffersize=16))
+        result = dict(workers.map(hashed, tree(root, skip_roots, kept), buffersize=16))
     names(result)
     return dict(sorted(result.items()))
+
+
+def identities(root: Path, skip_roots: Collection[str]) -> dict[str, list[int]]:
+    """Size and modification time of every non-bytecode file, from the directory enumeration alone.
+
+    A release hashes a tree once, between two equal identity snapshots; later
+    observations of files it did not write compare this cheap identity instead.
+    """
+
+    def kept(name: str) -> bool:
+        return not bytecode(name)
+
+    result = {name: [observed.st_size, observed.st_mtime_ns] for name, _, observed in tree(root, skip_roots, kept)}
+    return dict(sorted(result.items()))
+
+
+def identity(path: Path) -> list[int]:
+    """One file's volume, file ID, size and modification time; a rename keeps all four."""
+    observed = no_link(path)
+    return [observed.st_dev, observed.st_ino, observed.st_size, observed.st_mtime_ns]
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class Replacement:
+    """Managed source a release writes (`changed`) or deletes (`removed`) in the installed tree."""
+
+    changed: frozenset[str]
+    removed: frozenset[str]
+
+    @property
+    def touched(self) -> frozenset[str]:
+        return self.changed | self.removed
+
+
+def replacement(wanted: Mapping[str, str], installed: Mapping[str, str], managed: Collection[str]) -> Replacement:
+    """Compare the checked manifest with the installed hashes and the previously managed names."""
+    return Replacement(
+        changed=frozenset(name for name, value in wanted.items() if installed.get(name) != value),
+        removed=frozenset(name for name in managed if name not in wanted),
+    )
 
 
 def zip_files(path: Path, root: str = "workspace", *, source_only: bool = False) -> dict[str, str]:

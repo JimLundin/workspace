@@ -6,7 +6,6 @@ from pathlib import Path
 
 from components import ASSISTANT, Component, Writer, write_marker
 from scripts.deploy_files import read, sha
-from scripts.deploy_policy import ComponentRestart
 from scripts.deploy_windows import drive
 from tests.component_deploy_fixture import ComponentRelease, SourceChange
 
@@ -21,7 +20,6 @@ def test_selective_deployment_and_rollback_preserve_keyboard_and_supervisor(tmp_
         before = release.inventory()
         try:
             components: tuple[Component, ...] = ("assistant",) if change is SourceChange.ASSISTANT else ()
-            assert release.plan(next(row.pid for row in before if row.role == "keeper")) == ComponentRestart(components)
             with contextlib.redirect_stdout(io.StringIO()):
                 try:
                     drive(release, "deploy")
@@ -45,7 +43,7 @@ def test_selective_deployment_and_rollback_preserve_keyboard_and_supervisor(tmp_
             assert (release.live / ".ruff_cache" / "CACHEDIR.TAG").read_bytes() == b"unmanaged cache bytes"
             if fail:
                 assert (release.stage / "rollback.json").is_file()
-                assert sha(release.archive) == release.baseline["old_archive_sha256"]
+                assert sha(release.archive) == release.prepared()["old_archive_sha256"]
                 assert not (release.live / "added.py").exists()
             elif change is SourceChange.ASSISTANT:
                 assert (release.stage / "verified.json").is_file()

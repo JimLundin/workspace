@@ -27,12 +27,17 @@ class Prepared(TypedDict):
     stage_id: str
     manifest_sha256: str
     old_archive_sha256: str
+    old_archive_identity: list[int]
     new_archive_sha256: str
+    new_archive_identity: list[int]
     runtime: dict[str, str]
     runtime_fingerprint: dict[str, list[int]]
     runtime_audit_reused: bool
     old_source: dict[str, str]
     source_before: dict[str, str]
+    # The identity of every file hashed into source_before, observed before and
+    # after that single hash; later checks hash only the files a release wrote.
+    source_identity: dict[str, list[int]]
     unrelated_source: dict[str, str]
     runtime_directory_ids: dict[str, list[int]]
     prepared_at_ns: int
@@ -86,6 +91,8 @@ type Reloaded = RunningReload | StoppedReload
 
 class RuntimeAudit(TypedDict):
     runtime: dict[str, str]
+    # The audited archive's source records, which equal the release it published.
+    source: dict[str, str]
     fingerprint: dict[str, list[int]]
     archive_sha256: str
     verified_stage: str

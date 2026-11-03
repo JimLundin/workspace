@@ -6,29 +6,46 @@ interface; it creates no keyboard hook, microphone or visible desktop window.
 
 import contextlib
 import os
-import shutil
 import subprocess
 import sys
 import threading
 import time
 import zipfile
-from collections.abc import Generator
+from collections.abc import Generator, Mapping
 from enum import Enum, auto
 from pathlib import Path
 
 from components import CATALOGUE, Component, read_marker, started_ms
 from keeper import Keeper, Stage
 from keeper_control import Control
-from scripts.deploy_archive import repack
-from scripts.deploy_files import files, sha
+from scripts.deploy_files import PINS, files, sha, write, zip_files
 from scripts.deploy_processes import Process, process_id
-from scripts.deploy_values import Prepared
+from scripts.deploy_values import Config
 from scripts.deploy_windows import Release
 from tests.test_keeper import FakeCheck
 
 
-def runtime_folders(_folder: str, names: list[str]) -> tuple[str, ...]:
-    return tuple(name for name in names if name in (".runtime",))
+def staged(stage: Path, source: Mapping[str, bytes]) -> tuple[Config, dict[str, str]]:
+    """A stage's payload, manifest and configuration as staging writes them for checked source."""
+    with zipfile.ZipFile(stage / "source.zip", "x", zipfile.ZIP_DEFLATED) as archive:
+        for name, data in source.items():
+            archive.writestr("workspace/" + name, data)
+    wanted = zip_files(stage / "source.zip")
+    write(stage / "source.json", {"files": wanted})
+    config: Config = {
+        "kind": "workspace-source-only-v2",
+        "stage_id": stage.name,
+        "live_windows": "",
+        "archive_windows": "",
+        "profile_windows": "",
+        "helpers": {},
+        "source_manifest_sha256": sha(stage / "source.json"),
+        "payload_sha256": sha(stage / "source.zip"),
+        "check_sha256": "",
+        "pins": {name: wanted[name] for name in PINS},
+        "created_at_ns": 0,
+    }
+    return config, wanted
 
 
 class SourceChange(Enum):
@@ -93,7 +110,7 @@ class World:
     def is_ready(self, name: Component) -> bool:
         return read_marker(CATALOGUE[name].marker(self.root / "profile" / "keeper")) is not None
 
-    def start_check(self) -> FakeCheck:
+    def start_check(self, checked: str | None) -> FakeCheck:
         return FakeCheck()
 
     def install(self) -> None:
@@ -116,47 +133,26 @@ class ComponentRelease(Release):
         self.stage.mkdir()
         self.state.mkdir(parents=True)
         self.live.mkdir()
-        for directory in (".runtime",):
-            (self.live / directory).mkdir()
-            (self.live / directory / "preserved").write_bytes(b"pinned runtime")
+        (self.live / ".runtime").mkdir()
+        (self.live / ".runtime" / "preserved").write_bytes(b"pinned runtime")
+        for name in PINS:
+            (self.live / name).parent.mkdir(parents=True, exist_ok=True)
+            (self.live / name).write_text(name + " pin\n")
         for name in CATALOGUE:
             path = entry_source(self.live, name)
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text("version = 'before'\n")
-        old = files(self.live, skip_roots=(".runtime",))
-        source = self.stage / "source"
-        shutil.copytree(self.live, source, ignore=runtime_folders)
+        with zipfile.ZipFile(self.archive, "w") as archive:
+            for listed in files(self.live):
+                archive.write(self.live / listed, "workspace/" + listed)
+        source = {name: (self.live / name).read_bytes() for name in files(self.live, skip_roots=(".runtime",))}
         if change is SourceChange.ASSISTANT:
-            (source / "assistant" / "__main__.py").write_text("version = 'after'\n")
-            (source / "added.py").write_text("value = 'new source'\n")
-        self.wanted = files(source)
+            source |= {"assistant/__main__.py": b"version = 'after'\n", "added.py": b"value = 'new source'\n"}
+        self.config, self.wanted = staged(self.stage, source)
+        self._baseline = None
         cache = self.live / ".ruff_cache" / "CACHEDIR.TAG"
         cache.parent.mkdir()
         cache.write_bytes(b"unmanaged cache bytes")
-        unrelated = {cache.relative_to(self.live).as_posix(): sha(cache)}
-        with zipfile.ZipFile(self.archive, "w") as archive:
-            for listed in files(self.live):
-                if listed not in unrelated:
-                    archive.write(self.live / listed, "workspace/" + listed)
-        backup = self.stage / "backup"
-        shutil.copytree(self.live, backup / "source", ignore=runtime_folders)
-        shutil.copyfile(self.archive, backup / "previous-bundle.zip")
-        repack(self.archive, self.stage / "new-bundle.zip", source, self.wanted)
-        runtime = {name: value for name, value in files(self.live).items() if name.startswith((".runtime/",))}
-        self.baseline: Prepared = {
-            "stage_id": self.stage.name,
-            "manifest_sha256": "0" * 64,
-            "old_archive_sha256": sha(self.archive),
-            "new_archive_sha256": sha(self.stage / "new-bundle.zip"),
-            "runtime": runtime,
-            "runtime_fingerprint": self.runtime_fingerprint(runtime),
-            "runtime_audit_reused": False,
-            "old_source": old,
-            "source_before": old | unrelated,
-            "unrelated_source": unrelated,
-            "runtime_directory_ids": {},
-            "prepared_at_ns": 0,
-        }
         self.world = World(root)
         self.keeper = Keeper(self.world)
         self.control = Control(self.state)
@@ -189,15 +185,6 @@ class ComponentRelease(Release):
             if child.poll() is None:
                 child.stop()
         assert self.failure is None, self.failure
-
-    def prepared(self) -> Prepared:
-        return self.baseline
-
-    def prepare(self) -> None:
-        pass
-
-    def pins(self) -> None:
-        pass
 
     def inventory(self) -> tuple[Process, ...]:
         supervisor = Process(os.getpid(), 1, "keeper", sys.executable, 1)

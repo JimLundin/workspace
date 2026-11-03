@@ -14,18 +14,20 @@ import subprocess
 import time
 import traceback
 import zipfile
-from collections.abc import Generator, Mapping
+from collections.abc import Generator, Iterable, Mapping
 from ctypes import wintypes
 from pathlib import Path, PurePosixPath
 lazy import msvcrt
 
+from pydantic import ValidationError
+
 from components import ASSISTANT, BAR_WINDOW, CATALOGUE, LAYOUT, Writer, read_marker, shutdown_budget, unix_ms
 from keeper_control import CAPABILITY, STATUS, Pause, Paused, Refused, Resume, Resumed, submit
 from scripts.deploy_archive import repack
-from scripts.deploy_files import PINS, RUNTIME, file_at, files, no_link, read, sha, write, zip_files
-from scripts.deploy_policy import ComponentRestart, FullRestart, RestartPlan, restart_plan
+from scripts.deploy_files import PINS, RUNTIME, file_at, files, identities, identity, no_link, read, replacement, sha, write, zip_files
+from scripts.deploy_policy import ComponentRestart, FullRestart, RestartPlan, Version, restart_plan
 from scripts.deploy_processes import Process, inventory, same_processes
-from scripts.deploy_values import PREPARED, RELOADED, RUNTIME_AUDIT, STOPPED, Config, Exit, Prepared, Ready, Role, Stopped
+from scripts.deploy_values import PREPARED, RELOADED, RUNTIME_AUDIT, STOPPED, Config, Exit, Prepared, Ready, Role, RuntimeAudit, Stopped
 from scripts.development_paths import PYTHON
 lazy from winapi._core import fn
 
@@ -201,10 +203,11 @@ class Release:
         if self._baseline is None:
             self.pins()
             baseline = PREPARED.validate_json((self.stage / "prepared.json").read_bytes(), strict=True)
+            changed = replacement(self.wanted, baseline["source_before"], baseline["old_source"]).changed
             if (
                 baseline["stage_id"] != self.stage.name
                 or baseline["manifest_sha256"] != sha(self.stage / "source.json")
-                or files(self.stage / "source") != self.wanted
+                or files(self.stage / "source") != {name: self.wanted[name] for name in changed}
             ):
                 raise RuntimeError("The prepared source release changed.")
             self._baseline = baseline
@@ -261,30 +264,40 @@ class Release:
             raise RuntimeError("An originally stopped copy has conflicting process evidence.")
         return value
 
+    def runtime_audit(self) -> RuntimeAudit | None:
+        """The last verified release's runtime byte audit; an unreadable cache forces a fresh audit."""
+        path = self.profile / "deployment" / "runtime-audit.json"
+        if not path.exists():
+            return None
+        try:
+            return RUNTIME_AUDIT.validate_json(path.read_bytes(), strict=True)
+        except ValidationError:
+            return None
+
     def prepare(self) -> None:
         self.announce("prepare checked source, backups and compressed runtime records while running")
         self.pins()
         if (self.stage / "prepared.json").exists():
             raise RuntimeError("Use a fresh release stage; preparation is never resumed implicitly.")
         payload = self.stage / "source.zip"
-        if sha(payload) != self.config["payload_sha256"] or zip_files(payload) != self.wanted:
+        # Staging verified every payload record against the checked manifest
+        # before recording this hash.
+        if sha(payload) != self.config["payload_sha256"]:
             raise RuntimeError("The transferred source ZIP differs from the checked manifest.")
-        no_link(self.archive)
+        old_archive_identity = identity(self.archive)
         old_archive_sha = sha(self.archive)
-        cache_path = self.profile / "deployment" / "runtime-audit.json"
-        cache = RUNTIME_AUDIT.validate_json(cache_path.read_bytes(), strict=True) if cache_path.exists() else None
+        cache = self.runtime_audit()
         cached_runtime = cache["runtime"] if cache is not None else {}
         fingerprint = self.runtime_fingerprint(cached_runtime)
-        cached = (
+        if (
             cache is not None
             and cache["archive_sha256"] == old_archive_sha
             and bool(cached_runtime)
             and {name: values[-3:] for name, values in cache["fingerprint"].items()} == fingerprint
-        )
-        if cached:
-            runtime = cached_runtime
-            old_source = zip_files(self.archive, source_only=True)
+        ):
+            runtime, old_source = cached_runtime, dict(cache["source"])
         else:
+            cache = None
             old = zip_files(self.archive)
             runtime = {name: value for name, value in old.items() if PurePosixPath(name).parts[0] in RUNTIME}
             old_source = {name: value for name, value in old.items() if name not in runtime}
@@ -292,12 +305,10 @@ class Release:
             fingerprint = self.runtime_fingerprint(runtime)
         if any(old_source.get(name) != self.config["pins"][name] for name in PINS):
             raise RuntimeError("The installed archive runtime pins differ from the checked source.")
-        source = self.stage / "source"
-        source.mkdir()
-        extract_source(payload, source, self.wanted)
-        if files(source) != self.wanted:
-            raise RuntimeError("The extracted source differs from the checked manifest.")
+        source_identity = identities(self.live, RUNTIME)
         existing = files(self.live, skip_roots=RUNTIME, ignore_extra_bytecode=True)
+        if identities(self.live, RUNTIME) != source_identity or existing.keys() != source_identity.keys():
+            raise RuntimeError("Installed source changed while it was hashed.")
         # The retired private interpreter is managed removal, including locally
         # added files. Verified before-images allow the ordinary rollback path.
         old_source |= {name: value for name, value in existing.items() if name.startswith(".python/")}
@@ -305,26 +316,33 @@ class Release:
             if name in existing and existing[name] != self.wanted[name]:
                 raise RuntimeError("New source would overwrite an unrelated installed file.")
         unrelated = {name: value for name, value in existing.items() if name not in old_source and name not in self.wanted}
+        change = replacement(self.wanted, existing, old_source)
+        source = self.stage / "source"
+        source.mkdir()
+        extract_source(payload, source, sorted(change.changed))
         output = self.stage / "new-bundle.zip"
-        repack(self.archive, output, source, self.wanted)
-        if zip_files(output, source_only=True) != self.wanted or sha(self.archive) != old_archive_sha:
+        repack(self.archive, payload, output)
+        if zip_files(output, source_only=True) != self.wanted or identity(self.archive) != old_archive_identity:
             raise RuntimeError("The new ZIP source differs or the prior bundle changed during preparation.")
-        # Full verified before-images are built while the client remains available.
-        self.backup_source(existing, old_archive_sha)
-        if self.runtime_fingerprint(runtime) != fingerprint:
-            raise RuntimeError("The runtime changed during preparation.")
-        self.receipt("backup.json", {"source": existing, "zip_sha256": old_archive_sha, "verified_at_ns": time.time_ns()})
+        # Before-images of exactly the files installation replaces or removes are
+        # built while the client remains available. The ZIP is kept at publication.
+        backed_up = {name: existing[name] for name in change.touched if name in existing}
+        self.backup_source(backed_up)
+        self.receipt("backup.json", {"source": backed_up, "verified_at_ns": time.time_ns()})
         self.receipt(
             "prepared.json",
             {
                 "manifest_sha256": sha(self.stage / "source.json"),
                 "old_archive_sha256": old_archive_sha,
+                "old_archive_identity": old_archive_identity,
                 "new_archive_sha256": sha(output),
+                "new_archive_identity": identity(output),
                 "runtime": runtime,
                 "runtime_fingerprint": fingerprint,
-                "runtime_audit_reused": bool(cached),
+                "runtime_audit_reused": cache is not None,
                 "old_source": old_source,
                 "source_before": existing,
+                "source_identity": source_identity,
                 "unrelated_source": unrelated,
                 "runtime_directory_ids": {name: [os.stat(self.live / name).st_dev, os.stat(self.live / name).st_ino] for name in RUNTIME},
                 "prepared_at_ns": time.time_ns(),
@@ -332,17 +350,28 @@ class Release:
         )
         self.prepared()
 
-    def backup_source(self, existing: Mapping[str, str], old_archive_sha: str) -> None:
-        backup = self.stage / "backup"
-        source_backup = backup / "source"
+    def backup_source(self, backed_up: Mapping[str, str]) -> None:
+        source_backup = self.stage / "backup" / "source"
         source_backup.mkdir(parents=True)
-        for name in existing:
+        for name in backed_up:
             target = file_at(source_backup, name)
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(file_at(self.live, name), target)
-        shutil.copyfile(self.archive, backup / "previous-bundle.zip")
-        if files(source_backup) != existing or sha(backup / "previous-bundle.zip") != old_archive_sha:
-            raise RuntimeError("Source or ZIP before-images did not verify.")
+        if files(source_backup) != backed_up:
+            raise RuntimeError("Source before-images did not verify.")
+
+    def unchanged(self, expected: Mapping[str, str], written: frozenset[str], baseline: Prepared) -> bool:
+        """Whether the installed source is exactly `expected`, hashing only the `written` files.
+
+        Every other file must keep the identity it had when preparation hashed it.
+        """
+        observed = identities(self.live, RUNTIME)
+        before = baseline["source_identity"]
+        return (
+            observed.keys() == expected.keys()
+            and all(observed[name] == before.get(name) for name in expected if name not in written)
+            and all(sha(file_at(self.live, name)) == expected[name] for name in expected if name in written)
+        )
 
     def stop(self) -> None:
         self.prepared()
@@ -417,10 +446,17 @@ class Release:
 
     def plan(self, keeper_pid: int) -> RestartPlan:
         baseline = self.prepared()
+        # The old version is read from the installed tree, so it must still be
+        # the tree preparation hashed.
+        if not self.unchanged(baseline["source_before"], frozenset(), baseline):
+            raise RuntimeError("Installed source changed after release preparation.")
         # Unmanaged files are preserved, not removed by this release. Their
         # absence from the checked manifest cannot select a component restart.
         previous = frozendict((name, value) for name, value in baseline["source_before"].items() if name in baseline["old_source"])
-        plan = restart_plan(self.stage / "backup" / "source", self.stage / "source", (previous, self.wanted))
+        changed = replacement(self.wanted, baseline["source_before"], baseline["old_source"]).changed
+        plan = restart_plan(
+            (Version(previous, self.live, self.live, frozenset()), Version(frozendict(self.wanted), self.live, self.stage / "source", changed))
+        )
         capability = self.state / "component-capability.json"
         supported = capability.is_file() and CAPABILITY.validate_json(capability.read_bytes(), strict=True).keeper_pid == keeper_pid
         result = plan if supported else FullRestart.ALL
@@ -575,7 +611,7 @@ class Release:
             raise RuntimeError("An atomic source/ZIP copy changed bytes.")
         os.replace(temporary, destination)
 
-    def clear_bytecode(self, changed: set[str]) -> None:
+    def clear_bytecode(self, changed: Iterable[str]) -> None:
         for name in changed:
             path = file_at(self.live, name)
             if path.suffix.casefold() not in (".py", ".pyw"):
@@ -593,8 +629,8 @@ class Release:
                     compiled.unlink()
 
     def verify_files(self, baseline: Prepared) -> None:
-        actual = files(self.live, skip_roots=RUNTIME, ignore_extra_bytecode=True)
-        if actual != self.wanted | baseline["unrelated_source"]:
+        changed = replacement(self.wanted, baseline["source_before"], baseline["old_source"]).changed
+        if not self.unchanged(self.wanted | baseline["unrelated_source"], changed, baseline):
             raise RuntimeError("Installed source or preserved unrelated files differ from the checked release.")
         for name, expected in baseline["runtime_directory_ids"].items():
             observed = os.stat(self.live / name)
@@ -602,7 +638,8 @@ class Release:
                 raise RuntimeError("A preserved runtime directory was replaced.")
         if self.runtime_fingerprint(baseline["runtime"]) != baseline["runtime_fingerprint"]:
             raise RuntimeError("Preserved runtime membership or metadata changed after its byte audit.")
-        if sha(self.archive) != baseline["new_archive_sha256"] or zip_files(self.archive, source_only=True) != self.wanted:
+        # Preparation verified the new ZIP's source records; its hash binds the published file.
+        if sha(self.archive) != baseline["new_archive_sha256"]:
             raise RuntimeError("The Downloads ZIP differs from the checked source and preserved compressed runtime records.")
 
     def install(self) -> None:
@@ -614,22 +651,23 @@ class Release:
         with self.exclusive():
             self.pins()
             no_link(self.archive)
-            if files(self.live, skip_roots=RUNTIME, ignore_extra_bytecode=True) != baseline["source_before"]:
-                raise RuntimeError("Installed source or ZIP changed after release preparation.")
+            if not self.unchanged(baseline["source_before"], frozenset(), baseline):
+                raise RuntimeError("Installed source changed after release preparation.")
             if self.runtime_fingerprint(baseline["runtime"]) != baseline["runtime_fingerprint"]:
                 raise RuntimeError("The runtime changed after preparation.")
-            changed = {name for name, value in self.wanted.items() if baseline["source_before"].get(name) != value}
-            removed = baseline["old_source"].keys() - self.wanted.keys()
-            self.receipt("installation-started.json", {"started_at_ns": time.time_ns(), "changed": sorted(changed), "removed": sorted(removed)})
-            for name in removed:
+            change = replacement(self.wanted, baseline["source_before"], baseline["old_source"])
+            self.receipt(
+                "installation-started.json", {"started_at_ns": time.time_ns(), "changed": sorted(change.changed), "removed": sorted(change.removed)}
+            )
+            for name in change.removed:
                 file_at(self.live, name).unlink(missing_ok=True)
-            for name in changed:
+            for name in change.changed:
                 self.copy(self.stage / "source" / name, file_at(self.live, name))
-            self.clear_bytecode(changed | removed)
+            self.clear_bytecode(change.touched)
             retired = self.live / ".python"
             if retired.exists():
                 shutil.rmtree(retired)
-            if files(self.live, skip_roots=RUNTIME, ignore_extra_bytecode=True) != self.wanted | baseline["unrelated_source"]:
+            if not self.unchanged(self.wanted | baseline["unrelated_source"], change.changed, baseline):
                 raise RuntimeError("Installed source differs from the checked release.")
             self.receipt(
                 "installed.json",
@@ -642,43 +680,47 @@ class Release:
             )
 
     def publish_archive(self, baseline: Prepared) -> None:
-        observed = sha(self.archive)
-        if observed == baseline["new_archive_sha256"]:
+        observed = identity(self.archive)
+        if observed == baseline["new_archive_identity"]:
             return
-        if observed != baseline["old_archive_sha256"]:
+        if observed != baseline["old_archive_identity"]:
             raise RuntimeError("The Downloads ZIP changed outside this deployment; it will not be overwritten.")
         candidate = self.stage / "new-bundle.zip"
-        no_link(candidate)
-        no_link(self.archive)
-        if sha(candidate) != baseline["new_archive_sha256"]:
+        if identity(candidate) != baseline["new_archive_identity"]:
             raise RuntimeError("The prepared ZIP changed after verification.")
+        # A second link keeps the previous bundle's bytes in the backup without
+        # copying them, and the replacement leaves no moment without a ZIP.
+        previous = self.stage / "backup" / "previous-bundle.zip"
+        if not previous.exists():
+            os.link(self.archive, previous)
         os.replace(candidate, self.archive)
-        self.receipt("archive-published.json", {"published_at_ns": time.time_ns(), "zip_sha256": baseline["new_archive_sha256"]})
+        self.receipt(
+            "archive-published.json",
+            {"published_at_ns": time.time_ns(), "zip_sha256": baseline["new_archive_sha256"], "previous_zip_sha256": baseline["old_archive_sha256"]},
+        )
 
     def restore_before_launch(self) -> None:
         baseline = self.prepared()
         self.shutdown_receipt()
         if (self.stage / "launch.json").exists():
             raise RuntimeError("A launch was attempted; live failure recovery needs inspection.")
+        before = baseline["source_before"]
+        touched = replacement(self.wanted, before, baseline["old_source"]).touched
         source = self.stage / "backup" / "source"
-        archive = self.stage / "backup" / "previous-bundle.zip"
-        if files(source) != baseline["source_before"] or sha(archive) != baseline["old_archive_sha256"]:
+        if files(source) != {name: before[name] for name in touched if name in before}:
             raise RuntimeError("Rollback before-images changed.")
         with self.exclusive():
-            changed = {name for name, value in self.wanted.items() if value != baseline["source_before"].get(name)} | (
-                baseline["old_source"].keys() - self.wanted.keys()
-            )
-            for name in changed - baseline["source_before"].keys():
+            for name in touched - before.keys():
                 file_at(self.live, name).unlink(missing_ok=True)
-            for name in changed & baseline["source_before"].keys():
+            for name in touched & before.keys():
                 self.copy(file_at(source, name), file_at(self.live, name))
-            self.clear_bytecode(changed)
-            self.copy(archive, self.archive)
-            if files(self.live, skip_roots=RUNTIME, ignore_extra_bytecode=True) != baseline["source_before"]:
+            self.clear_bytecode(touched)
+            if not self.unchanged(before, touched, baseline):
                 raise RuntimeError("Restored source did not verify.")
-        self.receipt(
-            "rollback.json", {"restored_at_ns": time.time_ns(), "source": baseline["source_before"], "zip_sha256": baseline["old_archive_sha256"]}
-        )
+        # The ZIP is published only after a launch, so a rollback finds it untouched.
+        if identity(self.archive) != baseline["old_archive_identity"]:
+            raise RuntimeError("The Downloads ZIP changed outside this deployment.")
+        self.receipt("rollback.json", {"restored_at_ns": time.time_ns(), "source": before, "zip_sha256": baseline["old_archive_sha256"]})
         self.receipt("installed.json", {"rolled_back": True})
         self.reload()
 
@@ -788,6 +830,7 @@ class Release:
             cache_path,
             {
                 "runtime": baseline["runtime"],
+                "source": self.wanted,
                 "fingerprint": baseline["runtime_fingerprint"],
                 "archive_sha256": baseline["new_archive_sha256"],
                 "verified_stage": self.stage.name,
@@ -864,9 +907,9 @@ def run(action: str, stage: Path, config: Config, wanted: dict[str, str]) -> Non
     drive(Release(stage, config, wanted), action)
 
 
-def extract_source(payload: Path, source: Path, wanted: Mapping[str, str]) -> None:
+def extract_source(payload: Path, source: Path, chosen: Iterable[str]) -> None:
     with zipfile.ZipFile(payload) as archive:
-        for name in wanted:
+        for name in chosen:
             target = file_at(source, name)
             target.parent.mkdir(parents=True, exist_ok=True)
             with archive.open("workspace/" + name) as incoming, target.open("xb") as extracted:

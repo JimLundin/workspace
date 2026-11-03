@@ -13,7 +13,7 @@ import shutil
 import subprocess
 import time
 import zipfile
-from collections.abc import Callable, Mapping
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
@@ -78,7 +78,9 @@ def stage_source(receipt: Path, stage: Path | None = None) -> Path:
     with zipfile.ZipFile(stage / "source.zip", "x", zipfile.ZIP_DEFLATED, compresslevel=1) as archive:
         for name in wanted:
             archive.write(WORKSPACE / name, "workspace/" + name)
-    if zip_files(stage / "source.zip") != wanted or workspace_files() != wanted:
+    # The payload is checked against the receipt; the working tree is compared
+    # once more after deployment.
+    if zip_files(stage / "source.zip") != wanted:
         raise RuntimeError("Source changed while the release was staged.")
     shutil.copyfile(receipt, stage / "checked.json")
     write(stage / "source.json", {"files": wanted})
@@ -135,12 +137,14 @@ def arguments(parser: argparse.ArgumentParser) -> Options:
     return parser.error("Invalid deployment arguments.")
 
 
-def coordinate_native(stage: Path, operation: Callable[[], None], snapshot: Callable[[], Mapping[str, str]] | None = None) -> None:
-    """Own the native coordinator's working folder and checked source lifetime."""
-    before = snapshot() if snapshot is not None else None
+def coordinate_native(stage: Path, operation: Callable[[], None], unchanged: Callable[[], bool] | None = None) -> None:
+    """Own the native coordinator's working folder and checked source lifetime.
+
+    The caller has already compared the working tree with the checked source.
+    """
     with contextlib.chdir(stage):
         operation()
-    if snapshot is not None and snapshot() != before:
+    if unchanged is not None and not unchanged():
         raise RuntimeError("Source changed during deployment; the installed stage must be reconciled.")
 
 
@@ -154,12 +158,13 @@ def main() -> None:
     if stage is None:
         if args.check_receipt is None:
             parser.error("--check-receipt is required to create a source stage")
+        # Staging compares the working tree with the receipt.
         stage = stage_source(args.check_receipt)
     if args.action == "stage":
         return
     config, wanted = checked_config(stage)
     source_checkout = stage.resolve() != WORKSPACE
-    if source_checkout and workspace_files() != wanted:
+    if source_checkout and args.stage is not None and workspace_files() != wanted:
         raise RuntimeError("Source changed after staging; rerun checks.")
     if os.name == "nt":
         # The venv shares the installed interpreter. Keep one coordinator so
@@ -167,7 +172,10 @@ def main() -> None:
         def coordinate() -> None:
             run(args.action, stage, config, wanted)
 
-        coordinate_native(stage, coordinate, workspace_files if source_checkout else None)
+        def unchanged() -> bool:
+            return workspace_files() == wanted
+
+        coordinate_native(stage, coordinate, unchanged if source_checkout else None)
         return
     result = subprocess.run([str(PYTHON), "-B", "-m", "scripts.deploy", args.action, "--stage", win(stage)], cwd=stage, check=False)
     if result.returncode == 0 and workspace_files() != wanted:
