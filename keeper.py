@@ -217,7 +217,14 @@ class World(Protocol):
     def snapshot(self) -> str: ...
     def restore(self, version: str) -> None: ...
     def install(self) -> None: ...
-    def notify(self, text: str) -> None: ...
+    def notify(self, text: str) -> None:
+        """Interrupt the user: only when Workspace can't run without them."""
+        ...
+
+    def note(self, text: str) -> None:
+        """Record an outcome without interrupting the user."""
+        ...
+
     def record(self, result: InstallResult) -> None:
         """Publish the install outcome the requesting task waits for."""
         ...
@@ -383,8 +390,12 @@ class Keeper:
                 assert_never(request)
 
     def refuse(self, digest: str | None, reason: str) -> None:
-        """Tell the user, and the task that asked for this install, why it was not installed."""
-        self.world.notify(reason)
+        """Tell the task that asked for this install why it was not installed.
+
+        The keeper exists to install, try and undo changes without the user; a
+        pop-up for every refusal or undo made each self-change need attention.
+        """
+        self.world.note(reason)
         if digest is not None:
             self.world.record(InstallRefused(digest, reason))
 
@@ -564,7 +575,6 @@ class WindowsUser32:
 class Ui(Protocol):
     def approve(self, diff: str) -> bool: ...
     def notify(self, message: str) -> None: ...
-    def show_trial(self, summary: str | None, choose: Callable[[Keep | Undo], None]) -> None: ...
     def poll_components(self, supervisor: Keeper, now: float) -> None: ...
     def run(self, tick: Callable[[], bool]) -> None: ...
 
@@ -662,7 +672,6 @@ class _Check:
 
 def main(ui: Ui) -> None:
     user32 = WindowsUser32()
-    choices: list[Request] = []
 
     def approve(candidate: Path) -> bool:
         return ui.approve(source_diff(LIVE, candidate))
@@ -709,12 +718,16 @@ def main(ui: Ui) -> None:
             _log(text)
             ui.notify(text)
 
+        def note(self, text: str) -> None:
+            _log(text)
+
         def record(self, result: InstallResult) -> None:
             record_install(STATE, result)
 
         def show_trial(self, summary: str | None) -> None:
+            # The trial keeps the change after TRIAL_S and undoes it on a crash;
+            # nothing for the user to decide, so nothing is shown.
             _log(f"on trial: {summary}" if summary else "trial over")
-            ui.show_trial(summary, choices.append)
 
     keeper = Keeper(WinWorld(), Recovery(STATE / "recovery.json"))
     keeper.recover()
@@ -726,7 +739,7 @@ def main(ui: Ui) -> None:
             ui.poll_components(keeper, now)
         except OSError as error:
             _log(f"component control error: {error}")
-        for request in (*choices, *take(REQUESTS)):
+        for request in take(REQUESTS):
             _log(f"request {request}")
             try:
                 keeper.request(request, now)
@@ -737,7 +750,6 @@ def main(ui: Ui) -> None:
                         keeper.refuse(digest, f"Request failed: {error}")
                     case _:
                         keeper.world.notify(f"Request failed: {error}")
-        choices.clear()
         try:
             keeper.tick(now)
         except OSError as error:

@@ -11,7 +11,7 @@ from pathlib import Path
 
 from PySide6 import QtCore, QtGui, QtWidgets
 
-from keeper_control import Control, Keep, Supervisor, Undo
+from keeper_control import Control, Supervisor
 
 # Resolve Python 3.15's deferred executor export before Qt inspects imports.
 _executor = ThreadPoolExecutor
@@ -33,7 +33,6 @@ class KeeperUi:
         "app",
         "components",
         "timer",
-        "trial",
         "windows",
     )
 
@@ -43,7 +42,6 @@ class KeeperUi:
         self.app.setQuitOnLastWindowClosed(False)
         self.app.setStyleSheet(STYLE)
         self.windows: list[QtWidgets.QDialog] = []
-        self.trial: QtWidgets.QDialog | None = None
         self.timer = QtCore.QTimer()
 
     def poll_components(self, supervisor: Supervisor, now: float) -> None:
@@ -109,31 +107,6 @@ class KeeperUi:
         layout.addWidget(close, 0, QtCore.Qt.AlignmentFlag.AlignRight)
         self.corner(dialog)
         QtCore.QTimer.singleShot(20_000, dialog, dialog.accept)
-
-    def show_trial(self, summary: str | None, choose: Callable[[Keep | Undo], None]) -> None:
-        if self.trial is not None:
-            self.trial.hide()
-            self.trial.deleteLater()
-            if self.trial in self.windows:
-                self.windows.remove(self.trial)
-            self.trial = None
-        if summary is None:
-            return
-        dialog, layout = self.dialog("Workspace update", f"Updated: {summary}\n\nOn trial for ten minutes; it's undone if it crashes.")
-        dialog.setMinimumWidth(420)
-        controls = QtWidgets.QHBoxLayout()
-        controls.addStretch()
-        undo = QtWidgets.QPushButton("Undo")
-        keep = QtWidgets.QPushButton("Keep")
-        keep.setObjectName("primary")
-        undo.clicked.connect(lambda: choose(Undo()))
-        keep.clicked.connect(lambda: choose(Keep()))
-        dialog.rejected.connect(lambda: choose(Keep()))
-        controls.addWidget(undo)
-        controls.addWidget(keep)
-        layout.addLayout(controls)
-        self.trial = dialog
-        self.corner(dialog)
 
     def run(self, tick: Callable[[], bool]) -> None:
         def poll() -> None:

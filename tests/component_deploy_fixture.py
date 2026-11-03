@@ -122,6 +122,9 @@ class World:
     def notify(self, text: str) -> None:
         raise AssertionError(text)
 
+    def note(self, text: str) -> None:
+        pass
+
     def record(self, result: InstallResult) -> None:
         raise AssertionError(result)
 

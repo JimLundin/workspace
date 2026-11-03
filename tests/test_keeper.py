@@ -112,6 +112,9 @@ class World:
     def notify(self, text: str) -> None:
         self.log.append(f"notify {text.splitlines()[0]}")
 
+    def note(self, text: str) -> None:
+        self.log.append(f"note {text.splitlines()[0]}")
+
     def record(self, result: InstallResult) -> None:
         self.results.append(result)
 
@@ -351,7 +354,7 @@ def test_a_change_that_fails_its_checks_is_not_installed() -> None:
     keeper.request(Install("broken", "digest", None), now=10)
     world.check.outcome = (False, "FAILED tests.test_engine.test_plain_letters")
     keeper.tick(now=20)
-    assert world.take() == ["check", "notify Not installed: the change failed its checks."]
+    assert world.take() == ["check", "note Not installed: the change failed its checks."]
     assert not world.children["layout"].stopped
     assert keeper.stage is Stage.RUNNING
     # The requesting task reads why, instead of guessing from the running source.
@@ -385,7 +388,7 @@ def test_a_change_that_doesnt_come_up_is_undone() -> None:
         "start layout",
         "start assistant",
         "start automation",
-        "notify Update undone: it didn't start.",
+        "note Update undone: it didn't start.",
     ]
 
 
@@ -408,7 +411,7 @@ def test_update_is_undone_when_only_automation_never_becomes_ready() -> None:
         "start layout",
         "start assistant",
         "start automation",
-        "notify Update undone: it didn't start.",
+        "note Update undone: it didn't start.",
     ]
 
 
@@ -429,7 +432,7 @@ def test_update_is_undone_when_automation_exits_before_readiness() -> None:
         "start layout",
         "start assistant",
         "start automation",
-        "notify Update undone: it didn't start.",
+        "note Update undone: it didn't start.",
     ]
 
 
@@ -449,7 +452,7 @@ def test_a_change_that_exits_while_starting_is_undone_at_once() -> None:
         "start layout",
         "start assistant",
         "start automation",
-        "notify Update undone: it didn't start.",
+        "note Update undone: it didn't start.",
     ]
 
 
@@ -467,7 +470,7 @@ def test_a_crash_during_the_trial_undoes_the_change() -> None:
         "start layout",
         "start assistant",
         "start automation",
-        "notify Update undone: it crashed during its trial.",
+        "note Update undone: it crashed during its trial.",
         "trial over",
     ]
 
@@ -487,7 +490,7 @@ def test_automation_exit_during_trial_undoes_the_update_even_when_exit_code_is_z
             "start layout",
             "start assistant",
             "start automation",
-            "notify Update undone: it crashed during its trial.",
+            "note Update undone: it crashed during its trial.",
             "trial over",
         ]
 
@@ -529,7 +532,7 @@ def test_keep_ends_the_trial_and_undo_rolls_back() -> None:
         "start layout",
         "start assistant",
         "start automation",
-        "notify Update undone: you undid it.",
+        "note Update undone: you undid it.",
     ]
 
 
@@ -550,7 +553,7 @@ def test_one_thing_at_a_time() -> None:
     keeper = running(world)
     keeper.request(Install("first", "digest", None), now=10)
     keeper.request(Install("second", "digest", None), now=11)
-    assert world.take() == ["check", "notify Busy installing; try again in a moment."]
+    assert world.take() == ["check", "note Busy installing; try again in a moment."]
 
 
 # ---- files -----------------------------------------------------------------------------
