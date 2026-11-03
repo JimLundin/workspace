@@ -2,7 +2,6 @@
 
 import os
 import subprocess
-import sys
 import tempfile
 import uuid
 from collections.abc import Callable
@@ -10,7 +9,7 @@ from datetime import datetime
 from pathlib import Path
 
 from assistant.git_environment import isolated
-from keeper import copy_source, source_diff, source_digest, source_files
+from keeper import CHECK_S, CREATE_NO_WINDOW, console_python, copy_source, source_diff, source_digest, source_files
 
 DEFAULT_REMOTE = "https://github.com/JimLundin/workspace.git"
 
@@ -23,7 +22,15 @@ def git(folder: Path, *arguments: str) -> str:
     # The repository comes only from `folder`, never from an inherited location.
     env = isolated({**os.environ, "GIT_TERMINAL_PROMPT": "0", "GCM_INTERACTIVE": "Never"})
     try:
-        result = subprocess.run(["git", "-C", str(folder), *arguments], capture_output=True, text=True, timeout=120, env=env, check=False)
+        result = subprocess.run(
+            ["git", "-C", str(folder), *arguments],
+            capture_output=True,
+            text=True,
+            timeout=120,
+            env=env,
+            check=False,
+            creationflags=CREATE_NO_WINDOW if os.name == "nt" else 0,
+        )
     except FileNotFoundError as error:
         raise PublishError("Publishing needs Git for Windows on PATH and GitHub authentication.") from error
     except subprocess.TimeoutExpired as error:
@@ -76,7 +83,13 @@ def publish_source(
             if source_digest(candidate) != digest:
                 raise PublishError("Source changed during review; review it again.")
             try:
-                checked = subprocess.run([sys.executable, str(live / "selfcheck.py"), str(candidate)], capture_output=True, timeout=300, check=False)
+                checked = subprocess.run(
+                    [console_python(), str(live / "selfcheck.py"), str(candidate)],
+                    capture_output=True,
+                    timeout=CHECK_S,
+                    check=False,
+                    creationflags=CREATE_NO_WINDOW if os.name == "nt" else 0,
+                )
             except subprocess.TimeoutExpired as error:
                 raise PublishError("Runtime checks timed out; nothing was pushed.") from error
             if checked.returncode:

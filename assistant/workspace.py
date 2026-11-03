@@ -3,14 +3,13 @@ it does here touches the running workspace; the keeper installs the workspace, a
 checking it, when asked (see keeper.py)."""
 
 import difflib
-import sys
 import tempfile
 import threading
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 
 from assistant import commands
-from keeper import LIVE, PROTECTED, WORKSPACE, copy_source, source_digest, source_files
+from keeper import LIVE, PROTECTED, WORKSPACE, console_python, copy_source, source_digest, source_files
 from selfcheck import compile_all
 
 
@@ -140,7 +139,7 @@ class Workspace:
             candidate = Path(scratch) / "source"
             copy_source(self.root, candidate)
             digest = source_digest(candidate)
-            command = [sys.executable, str(self.live / "selfcheck.py"), str(candidate)]
+            command = [console_python(), str(self.live / "selfcheck.py"), str(candidate)]
             if fast:
                 command.append("--fast")
             code, report = commands.run(command, timeout_s=timeout_s, cancel=cancel)

@@ -186,7 +186,7 @@ class World(Protocol):
 
     def start(self, name: Component) -> Child: ...
     def is_ready(self, name: Component) -> bool: ...
-    def start_check(self) -> Check: ...
+    def start_check(self, checked: str | None) -> Check: ...
     def snapshot(self) -> str: ...
     def restore(self, version: str) -> None: ...
     def install(self) -> None: ...
@@ -302,14 +302,14 @@ class Keeper:
                 self.world.notify(f"Refused a request the keeper doesn't recognise ({file}).\n\n{reason}")
             case _ if self.stage is Stage.PAUSED:
                 self.world.notify("Source replacement is in progress; try again after the reload.")
-            case Install(summary=summary):
+            case Install(summary=summary, checked=checked):
                 if self.stage in (Stage.CHECKING, Stage.STARTING):
                     self.world.notify("Busy installing; try again in a moment.")
                     return
                 if self.stage is Stage.TRIAL:
                     self.persist(pending=False)
                     self.world.show_trial(None)
-                self.check, self.summary = self.world.start_check(), summary
+                self.check, self.summary = self.world.start_check(checked), summary
                 self.stage, self.deadline = Stage.CHECKING, now + CHECK_S
             case Keep():
                 if self.stage is Stage.TRIAL:
@@ -523,6 +523,21 @@ def _pythonw() -> str:
     return str(candidate) if candidate.exists() else sys.executable
 
 
+CREATE_NO_WINDOW: Final = 0x0800_0000
+
+
+def console_python() -> str:
+    """The console interpreter beside the running one, for checks started with CREATE_NO_WINDOW.
+
+    Workspace runs under pythonw, which has no console, and the flag does nothing for
+    it: every console program a check's tests started (git, PowerShell, Python) then
+    opened its own visible window, hundreds per check. A console interpreter started
+    with the flag owns one hidden console that all of those inherit instead.
+    """
+    candidate = Path(sys.executable).with_name("python.exe")
+    return str(candidate) if candidate.exists() else sys.executable
+
+
 class Process:
     """A program the keeper started. Stopping asks it to quit (so the layout lets go
     of held keys) and only then ends it."""
@@ -551,15 +566,22 @@ class Process:
 class _Check:
     __slots__ = ("candidate", "deadline", "digest", "output", "process")
 
-    def __init__(self, candidate: Path) -> None:
+    def __init__(self, candidate: Path, checked: str | None) -> None:
         self.candidate = candidate
         self.digest = source_digest(candidate)
         self.deadline = time.monotonic() + CHECK_S
         STATE.mkdir(parents=True, exist_ok=True)
         self.output = STATE / "check.txt"
+        # The agent's fast check already compiled, imported and ran every portable
+        # test on these exact bytes; repeating that doubled each install's checks.
+        profile: tuple[str, ...] = ("--native",) if checked == self.digest else ()
+        _log("checking the workspace" + (": native modules after its passing fast check" if profile else ""))
         with self.output.open("wb") as out:
             self.process = subprocess.Popen(
-                [_pythonw(), str(LIVE / "selfcheck.py"), str(candidate)], stdout=out, stderr=subprocess.STDOUT, creationflags=0x0800_0000
+                [console_python(), str(LIVE / "selfcheck.py"), str(candidate), *profile],
+                stdout=out,
+                stderr=subprocess.STDOUT,
+                creationflags=CREATE_NO_WINDOW,
             )
 
     def cancel(self) -> None:
@@ -607,12 +629,11 @@ def main(ui: Ui) -> None:
             # marker is this child's. A venv launcher's pid differs from its writer's.
             return read_marker(CATALOGUE[name].marker(STATE)) is not None
 
-        def start_check(self) -> Check:
-            _log("checking the workspace")
+        def start_check(self, checked: str | None) -> Check:
             review = approve if os.environ.get("WORKSPACE_AGENT_APPROVALS", "never").lower() == "ask" else None
             if not prepare_candidate(WORKSPACE, LIVE, self.candidate, review):
                 return RefusedCheck()
-            return _Check(self.candidate)
+            return _Check(self.candidate, checked)
 
         def snapshot(self) -> str:
             return snapshot(LIVE, VERSIONS)
