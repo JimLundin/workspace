@@ -1,9 +1,10 @@
 """The agent's workspace: a copy of the source it edits, checks, and asks to install."""
 
 import shutil
+import sys
 from pathlib import Path
 
-from assistant.workspace import SourceError, Workspace
+from assistant.workspace import CheckCompleted, SourceError, Workspace
 
 REPO = Path(__file__).resolve().parent.parent
 
@@ -141,3 +142,23 @@ def test_protected_file_aliases_are_refused(tmp_path: Path) -> None:
         except SourceError:
             continue
         raise AssertionError(f"accepted protected alias {name}")
+
+
+def test_editing_checks_fail_on_the_standards_report_after_tests_pass(tmp_path: Path) -> None:
+    # Defect: check_changes passes a draft the lint and type standards reject,
+    # or drops their findings from the report the agent repairs from.
+    live = live_tree(tmp_path / "live")
+    (live / "scripts").mkdir()
+    (live / "scripts/__init__.py").write_text("")
+    standard = "import sys\n\nif __name__ == '__main__':\n    print('config.py:1: F401 unused import', sys.argv[1:])\n    sys.exit(1)\n"
+    (live / "scripts/check_candidate.py").write_text(standard)
+    workspace = Workspace(live, tmp_path / "workspace", standards=Path(sys.executable))
+    workspace.ensure()
+    workspace.write("config.py", "GREETING = 'hello'\n")
+    result = workspace.inspect_check(affected=True)
+    assert isinstance(result, CheckCompleted) and not result.passed
+    assert "1 passed, 0 failed" in result.report and "config.py:1: F401 unused import" in result.report
+    assert "--changed-from" in result.report
+    unavailable = Workspace(live, tmp_path / "workspace", resume=True).inspect_check(affected=True)
+    assert isinstance(unavailable, CheckCompleted) and unavailable.passed
+    assert "Standards not run" in unavailable.report

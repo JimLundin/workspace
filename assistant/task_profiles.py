@@ -296,7 +296,7 @@ class Conversations:
         key = hashlib.sha256(name.encode("utf-8")).hexdigest()
         if key not in self._recent:
             draft = self.workspace.root.parent / "workspaces" / key
-            self._recent[key] = Conversation(History(), Workspace(self.workspace.live, draft, resume=True))
+            self._recent[key] = Conversation(History(), Workspace(self.workspace.live, draft, resume=True, standards=self.workspace.standards))
         self._recent.move_to_end(key)
         while len(self._recent) > 8:
             self._recent.popitem(last=False)

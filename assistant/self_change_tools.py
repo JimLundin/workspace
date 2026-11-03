@@ -259,7 +259,11 @@ class SelfChange:
             Tool(
                 argument_spec(
                     "check_changes",
-                    "Run the tests this change affects, including Windows integration tests; in approval mode, checks follow review.",
+                    (
+                        "Run the tests this change affects, including Windows integration tests, then Ruff, "
+                        "the architecture and interface reviews, and pyright and mypy on changed files; "
+                        "fix every reported failure. In approval mode, checks follow review."
+                    ),
                     NO_ARGUMENTS,
                 ),
                 typed_run(NO_ARGUMENTS, self.check_changes),

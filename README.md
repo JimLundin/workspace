@@ -599,7 +599,11 @@ edits stay available for follow-up requests in the same conversation, then:
    The agent imports changed modules and runs the tests its change affects,
    including Windows integration tests, on a fresh copy of its draft. It sees
    every failure the keeper would refuse, fixes it and checks again in the same
-   task.
+   task. When those tests pass, the development environment's Ruff, pyright and
+   mypy and the architecture and interface reviews check the draft as CI would,
+   so a self-change cannot push errors to main. The bundled runtime cannot
+   carry Ruff's executable; without the development `.venv` the check says the
+   standards were not run.
 2. **Submit**: the agent sends the checked change to the keeper. There is no
    approval step by default. With `WORKSPACE_AGENT_APPROVALS=ask`, the agent runs
    syntax checks first and the keeper shows the complete diff before running
