@@ -14,6 +14,11 @@ from automation.execution import Log
 from automation.self_review import ReviewingRunner, TaskRecord, describe_history
 from automation.store import TaskStore
 from automation.task import (
+    Action,
+    ActionPending,
+    ActionReturned,
+    ActionSpec,
+    ActionVerified,
     Blocked,
     Claim,
     Completed,
@@ -102,6 +107,30 @@ def test_history_shows_what_went_wrong_in_each_task(tmp_path: Path) -> None:
     text = describe_history((TaskRecord(task, store.actions(task.id), store.revisions(task.id), store.responses(task.id)),))
     assert "failed: The report could not be found." in text
     assert "Goal revision 1: Use the Finance folder." in text
+
+
+def test_history_preserves_install_evidence_and_unsettled_actions(tmp_path: Path) -> None:
+    # Defect: a stopped task hides its successful install and returned failures,
+    # making reviews confuse conversation status with the actual repair outcome.
+    store = TaskStore(tmp_path / "work.sqlite3")
+    settle(store, "stopped", Waiting(Blocked("Stopped.")))
+    task = store.get("stopped")
+    assert task is not None
+    outcomes = (
+        ActionVerified("Installed and pushed as abc123."),
+        ActionReturned("Command exited with code 1; effect not verified."),
+        ActionPending.RUNNING,
+    )
+    actions = tuple(
+        Action(f"action-{index}", task.id, "original-run", ActionSpec("apply_changes", "Install", "a" * 64), 1, 2, outcome)
+        for index, outcome in enumerate(outcomes)
+    )
+    text = describe_history((TaskRecord(task, actions, store.revisions(task.id), ()),))
+    assert "Installed and pushed as abc123." in text
+    assert "Command exited with code 1; effect not verified." in text
+    assert "No settled outcome recorded." in text
+    assert "action-0; run original-run" in text
+    assert "1 returned, 1 running, 1 verified" in text
 
 
 def test_saved_lessons_are_verified_and_user_preferences_stay_the_users(tmp_path: Path) -> None:

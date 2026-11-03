@@ -20,7 +20,10 @@ from automation.store import TaskStore
 from automation.task import (
     Action,
     ActionNotApplied,
+    ActionPending,
+    ActionReturned,
     ActionUncertain,
+    ActionVerified,
     Approval,
     Blocked,
     Claim,
@@ -184,8 +187,18 @@ def _record_lines(record: TaskRecord) -> Iterator[str]:
             case _:
                 assert_never(response.request)
     for action in record.actions:
-        if isinstance(action.outcome, (ActionUncertain, ActionNotApplied)):
-            yield f"Action {action.specification.tool} ({action.outcome.kind}): {action.outcome.reason[:400]}"
+        match action.outcome:
+            case ActionUncertain(reason=detail) | ActionNotApplied(reason=detail):
+                pass
+            case ActionReturned(summary=detail):
+                pass
+            case ActionVerified(evidence=detail):
+                pass
+            case ActionPending.RUNNING:
+                detail = "No settled outcome recorded."
+            case _:
+                assert_never(action.outcome)
+        yield f"Action {action.specification.tool} ({outcome_kind(action.outcome)}) [{action.id}; run {action.run_id}]: {detail[:800]}"
     if record.actions:
         kinds = Counter(outcome_kind(action.outcome) for action in record.actions)
         yield "Actions: " + ", ".join(f"{count} {kind}" for kind, count in sorted(kinds.items()))
