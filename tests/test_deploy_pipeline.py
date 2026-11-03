@@ -157,10 +157,13 @@ def test_staging_includes_nested_native_helpers_and_the_checked_source(tmp_path:
 
     for package in ("scripts", "winapi"):
         shutil.copytree(root / package, source / package, ignore=ignored_cache)
-    for name in ("runtime.py", "keeper.py", "keeper_control.py", "components.py", "protocol.py", *PINS):
-        target = source / name
-        target.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(root / name, target)
+    for name in ("runtime.py", "keeper.py", "keeper_control.py", "components.py", "protocol.py"):
+        shutil.copyfile(root / name, source / name)
+    # Staging requires the pins but not their contents. The keeper checks a copy
+    # without dotfiles, so the checkout's own pins are not always present.
+    for name in PINS:
+        (source / name).parent.mkdir(parents=True, exist_ok=True)
+        (source / name).write_text(f"{name} fixture\n", encoding="utf-8")
     wanted = files(source, skip_roots=(".git",))
     receipt = tmp_path / "checked.json"
     write_receipt(
