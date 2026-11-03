@@ -15,6 +15,7 @@ from automation.self_review import ReviewingRunner, TaskRecord, describe_history
 from automation.store import TaskStore
 from automation.task import (
     Action,
+    ActionOutcome,
     ActionPending,
     ActionReturned,
     ActionSpec,
@@ -116,7 +117,7 @@ def test_history_preserves_install_evidence_and_unsettled_actions(tmp_path: Path
     settle(store, "stopped", Waiting(Blocked("Stopped.")))
     task = store.get("stopped")
     assert task is not None
-    outcomes = (
+    outcomes: tuple[ActionOutcome, ...] = (
         ActionVerified("Installed and pushed as abc123."),
         ActionReturned("Command exited with code 1; effect not verified."),
         ActionPending.RUNNING,
