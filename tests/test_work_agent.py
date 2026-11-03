@@ -463,6 +463,27 @@ def test_a_blocked_task_yields_to_queued_work_and_can_be_resumed_later(tmp_path:
         assert rig.agent.running()
 
 
+def test_a_restart_does_not_replay_finished_work_but_shows_new_changes(tmp_path: Path) -> None:
+    # Detect startup presenting every old blocked task again as a fresh warning.
+    with work(tmp_path) as rig:
+        rig.agent.start("Old work")
+        rig.refresh()
+        old = rig.tasks.claim("worker-one", "old-run", at=rig.clock())
+        assert old is not None
+        rig.tasks.finish(old.run, Waiting(Blocked("The old blocker.")), at=rig.clock())
+        rig.refresh()
+    with work(tmp_path) as restarted:
+        restarted.refresh()
+        assert "The old blocker." not in restarted.panel.all_text()
+        restarted.agent.start("New work")
+        restarted.refresh()
+        new = restarted.tasks.claim("worker-one", "new-run", at=restarted.clock())
+        assert new is not None
+        restarted.tasks.finish(new.run, Waiting(Blocked("The new blocker.")), at=restarted.clock())
+        restarted.refresh()
+        assert "The new blocker." in restarted.panel.all_text()
+
+
 def test_redirect_fences_a_visible_old_question_and_keeps_the_new_goal(tmp_path: Path) -> None:
     with work(tmp_path) as rig:
         rig.agent.start("Original goal")

@@ -182,6 +182,7 @@ class WorkAgent:
         "_service",
         "_settled",
         "_snapshot",
+        "_started",
         "_thread",
         "_wake",
         "_watch_groups",
@@ -236,6 +237,8 @@ class WorkAgent:
         self._pending: dict[str, str | None] = {}
         self._queued: set[str] = set()
         self._settled: dict[str, int] = {}
+        self._started = False
+        """Whether this process has taken its first snapshot of existing work."""
         self._displayed: Task | None = None
         self._displayed_review: ApprovalReview | None = None
         self._rejected_input: tuple[str, str] | None = None
@@ -580,6 +583,12 @@ class WorkAgent:
             tasks = sorted((task for task in snapshot.tasks if in_conversation(task, self._conversation)), key=chronological)
             task_ids = {task.id for task in tasks}
             self._settled = {identity: revision for identity, revision in self._settled.items() if identity in task_ids}
+            if not self._started:
+                # Finished work is history at startup, not news: presenting it
+                # replayed every old blocked or failed task as a warning balloon
+                # and beep each time Workspace restarted.
+                self._started = True
+                self._settled.update((task.id, task.revision) for task in tasks if not active(task))
             if self._displayed is not None and self._displayed.id not in task_ids:
                 self._displayed = self._displayed_review = self._live = None
                 self._clear_input()
