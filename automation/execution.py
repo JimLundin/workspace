@@ -394,12 +394,16 @@ class WorkExecution:
         match report:
             case Reported(result):
                 evidence: list[str] = []
-                if self.store.unverified_actions(self.claim.task.id):
-                    return Waiting(Blocked("A completed operation still needs result verification. Resume to inspect and reconcile its result."))
+                # Uncertain and interrupted actions were refused above. A returned
+                # action ran to completion; blocking a finished task until the model
+                # reconciled every one, even a read-only command that exited 0, ended
+                # most command-using tasks unfinished. The result names them instead.
                 actions = self.store.actions(self.claim.task.id, limit=100)
                 for action in actions:
                     if isinstance(action.outcome, ActionVerified):
                         evidence.append(action.outcome.evidence)
+                if returned := sorted({action.specification.tool for action in self.store.unverified_actions(self.claim.task.id)}):
+                    evidence.append("Returned without independent verification: " + ", ".join(returned) + ".")
                 evidence.extend(f"Observed {item.tool}." for item in self.observations[-8:])
                 return Completed(result[:64_000] or "Done.", tuple(evidence[-64:]))
             case Incomplete(reason):

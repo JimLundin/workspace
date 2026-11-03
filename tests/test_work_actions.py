@@ -268,7 +268,8 @@ def test_script_result_requires_explicit_inspection_and_reconciliation(tmp_path:
     destination = tmp_path / "script-output.txt"
     attempt(agent, "run_powershell", {"command": "script writes requested output"})
     destination.write_text("complete", encoding="utf-8")
-    assert isinstance(work.outcome(Reported("Done"), threading.Event()), Waiting)
+    unreconciled = work.outcome(Reported("Done"), threading.Event())
+    assert isinstance(unreconciled, Completed) and unreconciled.evidence == ("Returned without independent verification: run_powershell.",)
     action = store.actions("task")[0]
     # Defect: a status listing or the time stands in for inspecting the script's actual result.
     for general in (observe(agent, Operation.of("get_current_time", {}), "Local time"), observe(agent, Operation.of("browser_tabs", {}), "{}")):
@@ -278,7 +279,8 @@ def test_script_result_requires_explicit_inspection_and_reconciliation(tmp_path:
     observed = observe(agent, Operation.of("read_file", {"path": str(destination)}), content)
     assert content == "complete"
     reconcile(agent, Reconciliation(action.id, observed, applied=True))
-    assert isinstance(work.outcome(Reported("The output was inspected."), threading.Event()), Completed)
+    inspected = work.outcome(Reported("The output was inspected."), threading.Event())
+    assert isinstance(inspected, Completed) and not any(item.startswith("Returned without") for item in inspected.evidence)
 
 
 def test_old_unverified_action_cannot_fall_off_the_completion_page(tmp_path: Path) -> None:
@@ -294,7 +296,9 @@ def test_old_unverified_action_cannot_fall_off_the_completion_page(tmp_path: Pat
     # Subsequent transitions happen after the fixture catalog's timestamps.
     clock.value = sample.updated_at + 2 * len(later)
     assert len(store.actions("task", limit=100)) == 100
-    assert isinstance(work.outcome(Reported("Everything is complete."), threading.Event()), Waiting)
+    outcome = work.outcome(Reported("Everything is complete."), threading.Event())
+    # A returned action completes the task but is named, even past the first page.
+    assert isinstance(outcome, Completed) and outcome.evidence[-1] == "Returned without independent verification: set_clipboard."
 
 
 def test_exact_approval_is_once_only_and_private_review_never_enters_storage(tmp_path: Path) -> None:
