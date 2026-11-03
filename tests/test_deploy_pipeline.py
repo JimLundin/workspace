@@ -34,7 +34,7 @@ from scripts.deploy_files import (
 from scripts.deploy_policy import ComponentRestart, FullRestart, Version, restart_plan
 from scripts.deploy_processes import Observation, Process, installed_processes, role_for
 from scripts.deploy_values import RUNTIME_AUDIT, Stopped
-from scripts.deploy_windows import Release, drive, group, launch_interpreter
+from scripts.deploy_windows import Release, drive, group, installed_drift, launch_interpreter
 from scripts.development_paths import PYTHON
 from tests.component_deploy_fixture import staged
 from tests.git_fixture import initialized
@@ -498,3 +498,13 @@ def test_runtime_metadata_detects_changed_members_and_bytes(tmp_path: Path) -> N
     (tmp_path / ".runtime/__pycache__").mkdir()
     (tmp_path / ".runtime/__pycache__/generated.pyc").write_bytes(b"generated")
     assert ".runtime/__pycache__/generated.pyc" not in release.runtime_fingerprint(expected)
+
+
+def test_a_deployment_refuses_to_erase_an_agent_install_the_checkout_lacks() -> None:
+    # Detect a deploy silently reverting a keeper-installed change, or refusing one the checkout already contains.
+    deployed = {"a.py": "1", "b.py": "1", "c.py": "1", "d.py": "1"}
+    installed = {"a.py": "agent", "b.py": "merged", "d.py": "1"}
+    wanted = {"a.py": "1", "b.py": "merged", "c.py": "1", "d.py": "2"}
+    assert installed_drift(deployed, installed, wanted) == ("a.py", "c.py")
+    assert installed_drift(deployed, deployed, wanted) == ()
+    assert installed_drift({}, installed, wanted) == ()
