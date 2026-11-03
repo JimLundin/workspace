@@ -38,11 +38,20 @@ def keys(views: tuple[CapsuleView, ...]) -> list[Key]:
     return [view.key for view in views]
 
 
-def test_rest_shows_only_the_island_with_time_and_battery() -> None:
-    # Defect: persistent controls or ambient extras come back beside the island.
+def test_rest_shows_time_and_battery_with_labelled_canvas_navigation() -> None:
+    # Defect: Canvas is missing, loses its visible label, or opens the controls instead of the canvas.
     assert island(RESTING) == (
         CapsuleView(Key.ISLAND, Zone.ISLAND, ((Text("10:22"), Text("73%")),), "10:22  ·  73% · Open Workspace controls", Action.OPEN_MENU),
+        CapsuleView(Key.CANVAS, Zone.TRAIL, ((Glyph("canvas"), Text("Canvas")),), "Canvas · Open your work canvas", Action.OPEN_CANVAS),
     )
+
+
+def test_canvas_stays_beside_dictation_questions_and_the_expanded_island() -> None:
+    # Defect: a moment or menu expansion hides the persistent canvas navigation.
+    canvas = island(RESTING)[-1]
+    for observed in (RESTING, replace(RESTING, dictating=True), replace(RESTING, agent=ASKING)):
+        for expanded in (False, True):
+            assert tuple(view for view in island(observed, expanded=expanded) if view.key is Key.CANVAS) == (canvas,)
 
 
 def test_alerts_charger_and_low_battery_read_in_the_resting_facts() -> None:
@@ -74,7 +83,7 @@ def test_concurrent_activities_share_the_island_at_rest_each_with_its_own_indica
     # Defects: one activity hides another, transcription borrows the agent's spinner, or a quick job offers Stop.
     busy = replace(RESTING, agent=WORKING, job=Job.TRANSCRIBING, recording=RECORDING)
     views = island(busy, hovered=Key.ISLAND)
-    assert keys(views) == [Key.ISLAND]
+    assert keys(views) == [Key.ISLAND, Key.CANVAS]
     agent, job, facts, recording = views[0].slots
     assert type(agent[0]) is Spinner and job == (Marker.DOTS,)
     assert facts == (Text("10:22"), Text("73%")) and recording[:2] == (Marker.DOT, Text("02:05"))
@@ -89,6 +98,7 @@ def test_dictation_takes_the_island_and_detaches_every_activity_beside_it() -> N
         (Key.JOB, Zone.LEAD),
         (Key.ISLAND, Zone.ISLAND),
         (Key.RECORDING, Zone.TRAIL),
+        (Key.CANVAS, Zone.TRAIL),
         (Key.INBOX, Zone.TRAIL),
     ]
     agent, job, voice = views[:3]

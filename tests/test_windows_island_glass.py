@@ -58,14 +58,15 @@ def test_the_bar_publishes_one_final_glass_frame_per_qt_turn_behind_its_window()
         scene = bar.window.scene
         if scene is None:
             raise unittest.SkipTest("Desktop composition is unavailable.")
-        assert [pane.key for pane in scene.published()] == ["ISLAND"]
         published, bounds = scene.published(), scene.bounds
+        baseline_keys = {pane.key for pane in published}
+        assert "ISLAND" in baseline_keys and "INBOX" not in baseline_keys
         bar.agent_changed(Agent("Comparing both sheets", waiting=False))
         bar.inbox_changed(3)
         bar.agent_changed(None)
         assert scene.published() == published, "Intermediate bar state reached Windows composition."
         app.processEvents()
-        assert sorted(pane.key for pane in scene.published()) == ["INBOX", "ISLAND"]
+        assert {pane.key for pane in scene.published()} == baseline_keys | {"INBOX"}
         assert scene.bounds == bounds, "A capsule change moved the glass window."
         assert GetWindow(int(bar.window.winId()), 2) == scene.handle
     finally:

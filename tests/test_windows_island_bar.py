@@ -113,16 +113,29 @@ def closed(app: QtWidgets.QApplication, bar: DesktopBar) -> None:
     app.processEvents()
 
 
-def test_the_island_rests_alone_and_each_capsule_acts_on_what_it_shows() -> None:
-    # Defects: persistent controls return beside the island, a capsule's press runs
-    # another function, a stoppable activity hides its Stop, or a finished
-    # activity leaves its capsule behind.
+def test_the_canvas_capsule_rests_beside_the_island_and_opens_the_canvas() -> None:
+    # Defects: Canvas navigation disappears, loses its label, or its press runs another function.
+    app = application()
+    invoked: list[str] = []
+    bar = DesktopBar(recorded(invoked), native_shell=False)
+    try:
+        assert shown(bar) == [Key.ISLAND, Key.CANVAS]
+        assert bar.window.capsules[Key.CANVAS].accessibleName() == "Canvas · Open your work canvas"
+        press(bar, Key.CANVAS)
+        assert invoked == ["canvas"]
+    finally:
+        closed(app, bar)
+
+
+def test_the_island_keeps_canvas_navigation_and_each_capsule_acts_on_what_it_shows() -> None:
+    # Defects: a capsule's press runs another function, a stoppable activity
+    # hides its Stop, or a finished activity leaves its capsule behind.
     app = application()
     invoked: list[str] = []
     observations = BarObservations(power=lambda: Battery(73, powered=False, charging=False), local_time=lambda: datetime(2026, 10, 30, 20, 59))
     bar = DesktopBar(recorded(invoked), native_shell=False, observations=observations)
     try:
-        assert shown(bar) == [Key.ISLAND]
+        assert shown(bar) == [Key.ISLAND, Key.CANVAS]
         island = bar.window.capsules[Key.ISLAND]
         assert "20:59" in island.accessibleName() and "73%" in island.accessibleName()
         press(bar, Key.ISLAND)
@@ -137,7 +150,7 @@ def test_the_island_rests_alone_and_each_capsule_acts_on_what_it_shows() -> None
         stop.click()
         bar.recording_changed(RecordingState(phase="recording", seconds=125))
         bar.dictation(active=True)
-        assert shown(bar) == [Key.AGENT, Key.ISLAND, Key.RECORDING]
+        assert shown(bar) == [Key.AGENT, Key.ISLAND, Key.RECORDING, Key.CANVAS]
         press(bar, Key.ISLAND)
         press(bar, Key.RECORDING)
         bar.hover(Key.RECORDING)
@@ -157,7 +170,7 @@ def test_the_island_rests_alone_and_each_capsule_acts_on_what_it_shows() -> None
         bar.layout(enabled=True)
         bar.inbox_changed(0)
         rest(bar)
-        assert shown(bar) == [Key.ISLAND]
+        assert shown(bar) == [Key.ISLAND, Key.CANVAS]
         bar.automatic_changed(AutomaticStatus.READY)
         press(bar, Key.ISLAND)
         menu_row(bar, "Auto-record Teams: On").click()
@@ -181,7 +194,9 @@ def test_capsules_float_below_the_edge_centred_and_one_gap_apart() -> None:
         # Edges snap to device pixels, so a logical edge can sit a pixel off at fractional scales.
         assert abs(island.left() + island.width() / 2 - area.width() / 2) <= 1
         assert island.top() == 0 and island.height() == TOP + 34
-        assert abs(inbox.left() - (island.left() + island.width()) - 6) <= 1
+        canvas = bar.window.capsules[Key.CANVAS].geometry()
+        assert abs(canvas.left() - (island.left() + island.width()) - 6) <= 1
+        assert abs(inbox.left() - (canvas.left() + canvas.width()) - 6) <= 1
         stop = stop_button(bar, Key.ISLAND).geometry()
         assert (stop.width(), stop.height(), stop.top() - TOP) == (28, 28, 3)
         assert abs(island.width() - (stop.left() + stop.width()) - 3) <= 1
@@ -267,10 +282,10 @@ def test_capsules_spring_between_views_and_the_frame_loop_stops_once_settled() -
         assert Key.INBOX in shown(bar) and bar.window.capsules[Key.INBOX].geometry().width() < 36
         now[0] += 2
         bar.paint_frames()
-        assert shown(bar) == [Key.ISLAND] and not bar.loop.timer.isActive()
+        assert shown(bar) == [Key.ISLAND, Key.CANVAS] and not bar.loop.timer.isActive()
         motion[0] = False
         bar.inbox_changed(5)
-        assert shown(bar) == [Key.ISLAND, Key.INBOX] and bar.window.capsules[Key.INBOX].geometry().width() == 36
+        assert shown(bar) == [Key.ISLAND, Key.CANVAS, Key.INBOX] and bar.window.capsules[Key.INBOX].geometry().width() == 36
         assert not bar.loop.timer.isActive()
     finally:
         closed(app, bar)

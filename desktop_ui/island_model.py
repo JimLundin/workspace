@@ -9,8 +9,8 @@ The bar's policy (docs/toolbar-design.md, "What the bar shows"):
   transcription (pulsing dots), and a meeting recording (a red dot and timer).
 - At rest the activities join the island's slots around the time and battery.
   During a moment they detach beside it as compact capsules, phase and all.
-- Only temporary or active things sit beside the island: the keyboard layer
-  before it, the inbox after it while items wait. Nothing persistent.
+- Canvas stays beside the island as a labelled navigation capsule. The keyboard
+  layer precedes it temporarily; the inbox follows while items wait.
 - Agent work keeps Stop visible; other stoppable activities reveal it under the pointer.
 """
 
@@ -32,6 +32,7 @@ class Key(Enum):
     JOB = auto()
     ISLAND = auto()
     RECORDING = auto()
+    CANVAS = auto()
     INBOX = auto()
 
 
@@ -239,7 +240,7 @@ def island(observed: Observed, *, hovered: Key | None = None, expanded: bool = F
     """The capsules to show, in left-to-right order, with their contents and press actions.
 
     While `expanded`, the island is the controls menu: ongoing activities move into
-    its live rows, so they leave the bar; the layer and the inbox stay.
+    its live rows, so they leave the bar; Canvas, the layer and the inbox stay.
     """
     agent, job, recorded = observed.agent, observed.job, capture(observed.recording)
     asking = agent is not None and agent.waiting
@@ -264,6 +265,7 @@ def island(observed: Observed, *, hovered: Key | None = None, expanded: bool = F
         tint = meaning.Tint.ATTENTION if recorded.attention else meaning.Tint.NONE
         slot = recording_slot(recorded, hovered=hovered is Key.RECORDING)
         trail += (CapsuleView(Key.RECORDING, Zone.TRAIL, (slot,), f"{recorded.title} · Open canvas", Action.OPEN_CANVAS, tint),)
+    trail += (CapsuleView(Key.CANVAS, Zone.TRAIL, ((Glyph("canvas"), Text("Canvas")),), "Canvas · Open your work canvas", Action.OPEN_CANVAS),)
     if observed.inbox > 0:
         trail += (
             CapsuleView(Key.INBOX, Zone.TRAIL, ((Glyph("bell"), Badge(inbox_text(observed.inbox))),), inbox_label(observed.inbox), Action.OPEN_INBOX),
