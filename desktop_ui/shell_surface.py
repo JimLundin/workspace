@@ -150,12 +150,67 @@ class Section(QtWidgets.QWidget):
                 assert_never(self.appearance)
 
 
+class TraySection(Section):
+    """Qt owns disclosure state independently of refreshed notification icons."""
+
+    def __init__(self, parent: QtWidgets.QWidget, changed: Callable[[], None]) -> None:
+        super().__init__(parent)
+        self.changed = changed
+        self.available: tuple[int, int] = (0, 0)
+        self.toggle = QtWidgets.QToolButton(self)
+        self.toggle.setFixedSize(32, 32)
+        self.toggle.setCheckable(True)
+        self.toggle.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+        self.toggle.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.toggle.toggled.connect(self.disclose)
+        self.describe()
+        self.overflow.hide()
+
+    def describe(self) -> None:
+        title = "Collapse system tray" if self.toggle.isChecked() else "Expand system tray"
+        self.toggle.setAccessibleName(title)
+        self.toggle.setToolTip(title)
+        ink = self.appearance.lettering.ink.color if self.appearance is not None else "#eeeeee"
+        self.toggle.setIcon(icon("chevron" if self.toggle.isChecked() else "down", ink, 16))
+
+    def disclose(self, expanded: bool) -> None:
+        # Qt's toggled signal supplies the required positional boolean.
+        if not expanded and any(button.hasFocus() for button in self.buttons):
+            self.toggle.setFocus()
+        self.describe()
+        self.place(*self.available)
+        self.changed()
+
+    def apply_look(self, appearance: Look) -> None:
+        super().apply_look(appearance)
+        lettering = appearance.lettering
+        self.toggle.setStyleSheet(
+            "QToolButton {border:0; border-radius:16px; background:transparent;}"
+            f"QToolButton:hover {{background:{lettering.hover.css};}}"
+            f"QToolButton:pressed {{background:{lettering.press.css};}}"
+            f"QToolButton:focus {{border:1px solid {lettering.ink.css};}}"
+        )
+        self.describe()
+
+    def desired_width(self) -> int:
+        return 36 + (self.body.width() + 2 if self.toggle.isChecked() and self.buttons else 0)
+
+    def place(self, left: int, right: int) -> None:
+        self.available = (left, right)
+        width = max(0, min(right - left, self.desired_width()))
+        self.setGeometry(right - width, 8, width, 34)
+        self.toggle.move(max(2, width - 34), 1)
+        self.overflow.setGeometry(2, 1, max(0, width - 38), 32)
+        self.overflow.setVisible(self.toggle.isChecked() and bool(self.buttons) and width > 38)
+        self.setVisible(right - left >= 36)
+
+
 class ShellSections:
     """The surface keeps native buttons only for the current immutable snapshot."""
 
-    def __init__(self, parent: QtWidgets.QWidget) -> None:
+    def __init__(self, parent: QtWidgets.QWidget, changed: Callable[[], None] | None = None) -> None:
         self.apps = Section(parent)
-        self.tray = Section(parent)
+        self.tray = TraySection(parent, changed if changed is not None else lambda: None)
         self.app_snapshot: tuple[tuple[Application, ...], int] | None = None
         self.tray_snapshot: tuple[Entry, ...] | None = None
 
@@ -193,11 +248,10 @@ class ShellSections:
     def place(self, bounds: tuple[int, int], width: int) -> None:
         left, right = bounds
         self.apps.place(12, max(12, left - 12))
-        tray_width = min(self.tray.body.width() + 4, max(0, width - right - 24))
-        self.tray.place(width - 12 - tray_width, width - 12)
+        self.tray.place(right + 12, width - 12)
 
     def locations(self, outer: Rect, scale: float) -> tuple[Located, ...]:
-        if self.tray_snapshot is None or not self.tray.isVisible():
+        if self.tray_snapshot is None or not self.tray.isVisible() or not self.tray.overflow.isVisible():
             return ()
         parent = self.tray.window()
 

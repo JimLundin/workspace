@@ -683,7 +683,7 @@ class BarWindow(QtWidgets.QWidget):
         self.presentation: tuple[Presented, tuple[int, int, int, int], float] | None = None
         self.scene: GlassScene | None = None
         self.panes: tuple[Pane, ...] = ()
-        self.shell_sections = ShellSections(self)
+        self.shell_sections = ShellSections(self, self.shell_changed)
         self.glass = False
         self.setWindowTitle(BAR_WINDOW)
         self.setWindowFlags(Qt.WindowType.Tool | Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint)
@@ -703,6 +703,13 @@ class BarWindow(QtWidgets.QWidget):
         self.deactivation_timer.setTimerType(QtCore.Qt.TimerType.PreciseTimer)
         self.deactivation_timer.setSingleShot(True)
         self.deactivation_timer.timeout.connect(self.dismiss_inactive)
+
+    def shell_changed(self) -> None:
+        """Disclosure invalidates the cached frame so layout and glass match the tray."""
+        if self.presentation is not None:
+            presented = self.presentation[0]
+            self.presentation = None
+            self.present(presented)
 
     def measure(self, view: CapsuleView) -> Content:
         def width(text: Text) -> float:

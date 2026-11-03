@@ -122,12 +122,13 @@ def test_tray_updates_respect_field_flags_and_version_changes_preserve_registrat
 
 
 def test_toolbar_shell_icons_route_actions_and_keep_overflow_reachable() -> None:
-    # Defect: buttons lose their app identity, tray right-click becomes left-click,
-    # or excess icons disappear instead of remaining scrollable.
+    # Defect: refreshing icons resets disclosure, collapsed icons retain native
+    # locations, or excess application icons disappear instead of scrolling.
     app = application()
     parent = QtWidgets.QWidget()
     parent.resize(600, 50)
-    sections = ShellSections(parent)
+    changes: list[bool] = []
+    sections = ShellSections(parent, lambda: changes.append(sections.tray.toggle.isChecked()))
     invoked: list[tuple[str, Click]] = []
     apps = tuple(Application(str(index), (Window(index + 1, "Window", "app.exe", minimized=False),)) for index in range(12))
     tray = Entry(1, 1, b"", 0x8001, None, "Fixture tray")
@@ -137,10 +138,26 @@ def test_toolbar_shell_icons_route_actions_and_keep_overflow_reachable() -> None
     parent.show()
     app.processEvents()
     try:
+        outer = Rect(0, 0, 600, 50)
+        assert not sections.tray.toggle.isChecked()
+        assert sections.tray.toggle.accessibleName() == "Expand system tray"
+        assert not sections.tray.overflow.isVisible()
+        assert sections.locations(outer, 1.0) == () and changes == []
+        QTest.mouseClick(sections.tray.toggle, QtCore.Qt.MouseButton.LeftButton)
+        app.processEvents()
+        assert sections.tray.overflow.isVisible() and changes == [True]
+        assert len(sections.locations(outer, 1.0)) == 1
+        refreshed = replace(tray, tip="Refreshed tray")
+        sections.notifications((refreshed,), lambda item, click: invoked.append((item.tip, click)))
+        sections.place((250, 350), 600)
+        app.processEvents()
+        assert sections.tray.toggle.isChecked() and sections.tray.overflow.isVisible()
+        assert changes == [True]
+        assert sections.locations(outer, 1.0)[0].entry == refreshed
         QTest.mouseClick(sections.apps.buttons[0], QtCore.Qt.MouseButton.LeftButton)
         QTest.mouseClick(sections.tray.buttons[0], QtCore.Qt.MouseButton.RightButton)
-        assert invoked == [("0", Click.LEFT), ("Fixture tray", Click.RIGHT)]
-        assert sections.tray.buttons[0].accessibleName() == "Fixture tray"
+        assert invoked == [("0", Click.LEFT), ("Refreshed tray", Click.RIGHT)]
+        assert sections.tray.buttons[0].accessibleName() == "Refreshed tray"
         assert sections.apps.overflow.horizontalScrollBar().maximum() > 0
         sections.apps.overflow.horizontalScrollBar().setValue(sections.apps.overflow.horizontalScrollBar().maximum())
         app.processEvents()
@@ -149,6 +166,15 @@ def test_toolbar_shell_icons_route_actions_and_keep_overflow_reachable() -> None
             < sections.apps.overflow.viewport().width()
         )
         assert sections.apps.geometry().right() < 250 and sections.tray.geometry().left() > 350
+        QTest.mouseClick(sections.tray.toggle, QtCore.Qt.MouseButton.LeftButton)
+        app.processEvents()
+        assert not sections.tray.overflow.isVisible()
+        assert sections.locations(outer, 1.0) == () and changes == [True, False]
+        sections.notifications((tray,), lambda item, click: invoked.append((item.tip, click)))
+        sections.place((250, 350), 600)
+        app.processEvents()
+        assert not sections.tray.toggle.isChecked() and not sections.tray.overflow.isVisible()
+        assert sections.locations(outer, 1.0) == () and changes == [True, False]
     finally:
         parent.close()
         parent.deleteLater()
