@@ -33,7 +33,9 @@ class Standard:
 LINT = Standard("ruff check", (sys.executable, "-m", "ruff", "check", "--no-fix", "."))
 FORMAT = Standard("ruff format", (sys.executable, "-m", "ruff", "format", "--check", "."))
 # The same invocation as `Dev.cmd typecheck`: the development venv's dependencies.
-PYRIGHT = Standard("pyright", (sys.executable, "-m", "pyright", "--pythonpath", sys.executable))
+# Pyright keeps no state between CLI runs, so every check is a cold whole-tree run;
+# its own worker threads use the otherwise idle cores while tests run.
+PYRIGHT = Standard("pyright", (sys.executable, "-m", "pyright", "--threads", "--pythonpath", sys.executable))
 # CI's `mypy .`; the development venv supplies the installed dependencies' types.
 MYPY = Standard("mypy", (sys.executable, "-m", "mypy", "."))
 # Both type checkers, overlapped with each other and with the tests.
@@ -85,8 +87,7 @@ def started(standard: Standard, root: Path) -> Generator[Callable[[], tuple[Fail
             try:
                 status = process.wait(timeout=TIMEOUT)
             except subprocess.TimeoutExpired:
-                process.kill()
-                process.wait()
+                stop(process)
                 return (Failure(standard.node, f"{standard.node} timed out", f"{standard.node} did not finish within {TIMEOUT} s."),)
             output.seek(0)
             return outcome(standard, status, output.read().decode("utf-8", errors="replace"))
@@ -95,8 +96,20 @@ def started(standard: Standard, root: Path) -> Generator[Callable[[], tuple[Fail
             yield collect
         finally:
             if process.poll() is None:
-                process.kill()
-                process.wait()
+                stop(process)
+
+
+def stop(process: subprocess.Popen[bytes]) -> None:
+    """End a checker and its children.
+
+    The Windows venv launcher runs the real interpreter as a child, so killing
+    only the launcher left mypy and pyright running, holding their caches, after
+    an early policy failure.
+    """
+    if sys.platform == "win32":
+        subprocess.run(["taskkill", "/PID", str(process.pid), "/T", "/F"], capture_output=True, timeout=10, check=False)
+    process.kill()
+    process.wait()
 
 
 def unchecked() -> tuple[Failure, ...]:
