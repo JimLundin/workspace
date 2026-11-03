@@ -149,8 +149,12 @@ def verified_installation(store: TaskStore, claim: Claim, installed: InstalledCo
         match install_result(installed.state):
             case InstallRefused(digest=digest, reason=reason) if digest == requested:
                 # The request was delivered; what is verified is the keeper's refusal.
-                store.finish_action(action.id, ActionVerified(f"The keeper refused the install. {reason}"[:8_000]), at=now)
-                return Waiting(Blocked(f"The keeper did not install the change. {reason}"[:8_000]))
+                if store.finish_action(action.id, ActionVerified(f"The keeper refused the install. {reason}"[:8_000]), at=now) is None:
+                    return Waiting(Blocked("The keeper refused the install, but its result could not be recorded. Resume to inspect it again."))
+                # A known rejection is repairable, not an uncertain installation.
+                # The durable action evidence reaches the next model turn through
+                # WorkExecution.instructions, including after another restart.
+                continue
             case InstallStarted(digest=digest, summary=summary, version=version) if digest == requested:
                 location = target("installed-root", str(installed.live.absolute()))
                 if source_digest(installed.live) != requested or location not in action.specification.resources:

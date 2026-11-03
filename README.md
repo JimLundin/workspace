@@ -99,7 +99,11 @@ or keeper.
   motion uses an immediate transition.
   It expands for dictation, transcription or agent work, and shows Stop only while
   the agent is running. Active recording has its own microphone/timer capsule.
-  Keyboard layers and Colemak appear only when relevant. Work, recording-start,
+  The centre is exclusively dynamic activity and is empty at idle. Clock,
+  battery and persistent status sit on the right, followed by the icon-only
+  keyboard control when relevant, tray disclosure, and icon-only Canvas at the
+  far right. Disclosure expands left; tooltips and accessible names retain
+  control meanings and keyboard state. Work, recording-start,
   keyboard controls and other tools are available from the menu. The surface uses
   the same translucent material as agent messages.
   See [toolbar design](docs/toolbar-design.md) for the states and references.

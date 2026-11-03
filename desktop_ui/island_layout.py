@@ -1,7 +1,10 @@
 """Where the island bar's capsules sit: a pure frame from measured sizes and presence.
 
-The island stays centred on the screen; lead capsules grow leftwards from it and
-trail capsules rightwards. The gap between two neighbours belongs to the pair: the
+Activity stays centred where space permits; lead capsules grow leftwards from it
+and trail capsules rightwards. Permanent controls anchor on the right, reserving
+tray disclosure/overflow before Canvas. Narrow screens bound activity to the
+remaining space instead of overlapping permanent controls. The gap between two
+neighbours belongs to the pair: the
 full gap scaled by the less present of the two, so a capsule entering or leaving
 opens and closes the space beside it smoothly. Each capsule also owns an edge strip
 from the top of the screen down to its glass, so a pointer thrown against the edge
@@ -195,6 +198,7 @@ class Metrics:
     width: float
     top: float = 8
     gap: float = 6
+    tray_width: float = 36
 
 
 def present(value: float) -> float:
@@ -218,9 +222,35 @@ def frame(placed: Sequence[Placed], metrics: Metrics) -> tuple[Framed, ...]:
     def zone(name: Zone) -> tuple[Placed, ...]:
         return tuple(sorted((c for c in placed if c.zone is name and c.presence > 0), key=position))
 
+    # Reserve tray space immediately before Canvas. Status and keyboard move
+    # left with disclosure; activity never participates in this right anchor.
+    right: tuple[Framed, ...] = ()
+    edge = max(0.0, metrics.width - 12)
+    for key in (Key.CANVAS, Key.LAYER, Key.STATUS):
+        capsule = next((c for c in zone(Zone.RIGHT) if c.key is key), None)
+        if capsule is None:
+            continue
+        width = shown(capsule)
+        if width > edge:
+            continue  # Canvas and disclosure take priority on very small screens.
+        edge -= width
+        right = (boxed(capsule, edge), *right)
+        edge -= metrics.gap
+        if key is Key.CANVAS:
+            edge -= min(metrics.tray_width, max(0.0, edge)) + metrics.gap
+    boundary = max(0.0, edge)
     islands = zone(Zone.ISLAND)
     if not islands:
-        return ()
+        # Pending clarifications remain dynamic even without another activity.
+        edge = min(metrics.width / 2, boundary)
+        dynamic: tuple[Framed, ...] = ()
+        for capsule in zone(Zone.TRAIL):
+            width = min(shown(capsule), max(0.0, boundary - edge))
+            if width > 0:
+                box = Box(edge, metrics.top, width, capsule.height)
+                dynamic += (Framed(capsule.key, box, Box(edge, 0, width, metrics.top), present(capsule.presence)),)
+                edge += width + metrics.gap
+        return (*dynamic, *right)
     island = islands[0]
     left = (metrics.width - shown(island)) / 2
     centre = boxed(island, left)
@@ -238,7 +268,21 @@ def frame(placed: Sequence[Placed], metrics: Metrics) -> tuple[Framed, ...]:
 
     lead = outward(tuple(reversed(zone(Zone.LEAD))), left, leading=True)
     trail = outward(zone(Zone.TRAIL), left + shown(island), leading=False)
-    return (*lead, centre, *trail)
+    dynamic = (*lead, centre, *trail)
+    start = min(each.box.x for each in dynamic)
+    end = max(each.box.x + each.box.width for each in dynamic)
+    shift = min(0.0, boundary - end) if right else 0.0
+    shift = max(-start, shift)
+    # Oversized activity is clipped only as a last resort; no hit region or
+    # glass pane may extend into the permanent controls or beyond the screen.
+    limit = boundary if right else metrics.width
+
+    def bounded(each: Framed) -> Framed:
+        x = max(0.0, each.box.x + shift)
+        width = max(0.0, min(each.box.width, limit - x))
+        return Framed(each.key, Box(x, each.box.y, width, each.box.height), Box(x, 0, width, metrics.top), each.presence)
+
+    return (*(bounded(each) for each in dynamic if each.box.x + shift < limit), *right)
 
 
 def snap(framed: Sequence[Framed], scale: float) -> tuple[Framed, ...]:

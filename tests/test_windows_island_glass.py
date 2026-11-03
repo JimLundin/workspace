@@ -50,7 +50,8 @@ def test_the_bar_publishes_one_final_glass_frame_per_qt_turn_behind_its_window()
     # Defects: intermediate states of one Qt turn reach composition, a capsule
     # change moves the glass window, or the glass sits above the bar's content.
     app = application()
-    bar = DesktopBar(inert(), native_shell=False, observations=BarObservations(material=lambda: appearance.Material.GLASS))
+    # This test owns publication batching, not animation timing (covered by the bar tests).
+    bar = DesktopBar(inert(), native_shell=False, observations=BarObservations(material=lambda: appearance.Material.GLASS, motion=lambda: False))
     try:
         bar.visible = True
         bar.render()
@@ -60,13 +61,18 @@ def test_the_bar_publishes_one_final_glass_frame_per_qt_turn_behind_its_window()
             raise unittest.SkipTest("Desktop composition is unavailable.")
         published, bounds = scene.published(), scene.bounds
         baseline_keys = {pane.key for pane in published}
-        assert "ISLAND" in baseline_keys and "INBOX" not in baseline_keys
+        assert {"STATUS", "CANVAS", "tray"} <= baseline_keys and "ISLAND" not in baseline_keys and "INBOX" not in baseline_keys, (
+            "The first visible frame omitted persistent glass or retained activity.", baseline_keys, bar.window.panes
+        )
         bar.agent_changed(Agent("Comparing both sheets", waiting=False))
         bar.inbox_changed(3)
         bar.agent_changed(None)
         assert scene.published() == published, "Intermediate bar state reached Windows composition."
         app.processEvents()
-        assert {pane.key for pane in scene.published()} == baseline_keys | {"INBOX"}
+        final_keys = {pane.key for pane in scene.published()}
+        assert final_keys == baseline_keys | {"INBOX"}, (
+            "The batched glass frame differs from the final bar state.", baseline_keys, final_keys, bar.window.panes
+        )
         assert scene.bounds == bounds, "A capsule change moved the glass window."
         assert GetWindow(int(bar.window.winId()), 2) == scene.handle
     finally:

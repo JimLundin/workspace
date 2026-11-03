@@ -7,10 +7,10 @@ The bar's policy (docs/toolbar-design.md, "What the bar shows"):
 - Activities run concurrently and each keeps one identity wherever it shows:
   agent work (a ring spinner and its current phase), a quick job such as
   transcription (pulsing dots), and a meeting recording (a red dot and timer).
-- At rest the activities join the island's slots around the time and battery.
-  During a moment they detach beside it as compact capsules, phase and all.
-- Canvas stays beside the island as a labelled navigation capsule. The keyboard
-  layer precedes it temporarily; the inbox follows while items wait.
+- Activities join the centre without persistent status. During a moment they
+  detach beside it as compact capsules, phase and all. At idle the centre is empty.
+- Status, the temporary keyboard control and Canvas are icon/navigation controls
+  anchored on the right; their labels remain accessible. The inbox is dynamic.
 - Agent work keeps Stop visible; other stoppable activities reveal it under the pointer.
 """
 
@@ -32,6 +32,7 @@ class Key(Enum):
     JOB = auto()
     ISLAND = auto()
     RECORDING = auto()
+    STATUS = auto()
     CANVAS = auto()
     INBOX = auto()
 
@@ -40,6 +41,7 @@ class Zone(Enum):
     LEAD = auto()
     ISLAND = auto()
     TRAIL = auto()
+    RIGHT = auto()  # Permanent controls, anchored independently of activity.
 
 
 class Action(Enum):
@@ -248,9 +250,7 @@ def island(observed: Observed, *, hovered: Key | None = None, expanded: bool = F
     lead: tuple[CapsuleView, ...] = ()
     if observed.keyboard is not None:
         lead += (
-            CapsuleView(
-                Key.LAYER, Zone.LEAD, ((Glyph("keyboard"), Text(observed.keyboard)),), f"{observed.keyboard} · Open key map", Action.OPEN_KEYMAP
-            ),
+            CapsuleView(Key.LAYER, Zone.RIGHT, ((Glyph("keyboard"),),), f"{observed.keyboard} · Open key map", Action.OPEN_KEYMAP),
         )
     # Dictation detaches the agent; a waiting question already is the island, unless you're dictating.
     if detached and agent is not None and observed.dictating:
@@ -265,17 +265,28 @@ def island(observed: Observed, *, hovered: Key | None = None, expanded: bool = F
         tint = meaning.Tint.ATTENTION if recorded.attention else meaning.Tint.NONE
         slot = recording_slot(recorded, hovered=hovered is Key.RECORDING)
         trail += (CapsuleView(Key.RECORDING, Zone.TRAIL, (slot,), f"{recorded.title} · Open canvas", Action.OPEN_CANVAS, tint),)
-    trail += (CapsuleView(Key.CANVAS, Zone.TRAIL, ((Glyph("canvas"), Text("Canvas")),), "Canvas · Open your work canvas", Action.OPEN_CANVAS),)
+    persistent = (
+        CapsuleView(
+            Key.STATUS,
+            Zone.RIGHT,
+            (facts(observed.ambient, observed.system),),
+            describe(observed.ambient, observed.system) + " · Open Workspace controls",
+            Action.OPEN_MENU,
+        ),
+        CapsuleView(Key.CANVAS, Zone.RIGHT, ((Glyph("canvas"),),), "Canvas · Open your work canvas", Action.OPEN_CANVAS),
+    )
     if observed.inbox > 0:
         trail += (
             CapsuleView(Key.INBOX, Zone.TRAIL, ((Glyph("bell"), Badge(inbox_text(observed.inbox))),), inbox_label(observed.inbox), Action.OPEN_INBOX),
         )
     menu = CapsuleView(Key.ISLAND, Zone.ISLAND, (), "Workspace controls · Escape closes", Action.CLOSE_MENU)
-    return (*lead, menu if expanded else centre(observed, hovered=hovered), *trail)
+    active = expanded or observed.dictating or agent is not None or job is not None or recorded is not None
+    middle = (menu if expanded else centre(observed, hovered=hovered),) if active else ()
+    return (*lead, *middle, *trail, *persistent)
 
 
 def centre(observed: Observed, *, hovered: Key | None) -> CapsuleView:
-    """The island itself: a moment takes it over; otherwise the activities join its slots."""
+    """Only activity belongs here; persistent facts have an independent right anchor."""
     revealed = hovered is Key.ISLAND
     agent, job, recorded = observed.agent, observed.job, capture(observed.recording)
     if observed.dictating:
@@ -295,14 +306,13 @@ def centre(observed: Observed, *, hovered: Key | None) -> CapsuleView:
     described = (
         f"Agent: {agent.phase}" if agent is not None else "",
         job_label(job) if job is not None else "",
-        describe(observed.ambient, observed.system),
         recorded.title if recorded is not None else "",
     )
     label = ". ".join(value for value in described if value)
     return CapsuleView(
         Key.ISLAND,
         Zone.ISLAND,
-        (*leading, facts(observed.ambient, observed.system), *trailing),
+        (*leading, *trailing),
         f"{label} · Open Workspace controls",
         Action.OPEN_MENU,
     )

@@ -16,11 +16,12 @@ from assistant.llm import Settings, ToolCall
 from assistant.self_change_tools import InstalledCopy, verified_installation
 from assistant.task_profiles import General, GeneralEffects, Profiles, unseen
 from assistant.workspace import CheckInterrupted, Workspace
-from automation.actions import Change, Operation, Resources
-from automation.execution import WorkExecution
+from automation.actions import Change, Operation, Resources, target
+from automation.execution import Reported, WorkExecution
 from automation.store import TaskStore
 from automation.task import (
     ActionReturned,
+    ActionUncertain,
     ActionVerified,
     Blocked,
     Claim,
@@ -292,8 +293,8 @@ def test_nonfinite_tool_arguments_never_enter_effect_storage(tmp_path: Path) -> 
     assert not result.ok and not destination.exists() and not store.actions("task")
 
 
-def test_a_refused_installation_reports_the_keepers_reason(tmp_path: Path) -> None:
-    # Detect a refused install leaving its task waiting or blocked without the keeper's reason.
+def test_a_refused_installation_continues_the_same_task_with_durable_failure_evidence(tmp_path: Path) -> None:
+    # Defect: a known refusal blocks repair, or its reason disappears after recovery.
     store, claim, _ = claimed(tmp_path)
     workspace = Workspace(live_tree(tmp_path / "live"), tmp_path / "workspace")
     workspace.ensure()
@@ -317,10 +318,78 @@ def test_a_refused_installation_reports_the_keepers_reason(tmp_path: Path) -> No
     store.finish_action("install", ActionReturned("Keeper installation requested."), at=time.time())
     record_install(state_for(workspace.root), InstallRefused(digest, "Not installed: the change failed its checks.\n\nFAILED tests.test_x"))
     outcome = verified_installation(store, claim, InstalledCopy(workspace.live, state_for(workspace.root), versions_for(workspace.root), None))
-    assert outcome == Waiting(Blocked("The keeper did not install the change. Not installed: the change failed its checks.\n\nFAILED tests.test_x"))
-    assert store.actions("task")[0].outcome == ActionVerified(
-        "The keeper refused the install. Not installed: the change failed its checks.\n\nFAILED tests.test_x"
+    assert outcome is None
+    evidence = "The keeper refused the install. Not installed: the change failed its checks.\n\nFAILED tests.test_x"
+    assert store.actions("task")[0].outcome == ActionVerified(evidence)
+    assert not store.unverified_actions("task")
+    assert workspace.live.joinpath("config.py").read_text(encoding="utf-8") == "GREETING = 'hej'\n"
+    assert workspace.read("config.py") == "GREETING = 'refused update'\n"
+    assert store.finish(claim.run, Waiting(Until(time.time(), "Recover keeper result.")), at=time.time()) is not None
+    errors: list[str] = []
+    with fake_endpoint() as endpoint:
+        settings = Settings(endpoint.url, "fixture", "transcribe", "", "")
+        for index in range(2):
+            reopened = TaskStore(tmp_path / "work.sqlite3")
+            resumed = reopened.claim("restarted-worker", f"refusal-recovery-{index}", at=time.time())
+            assert resumed is not None and resumed.task.id == claim.task.id
+            endpoint.replies = [calls(("ask_user", {"question": "Which failing assertion should change?"}))] if index == 0 else [says("Failure evidence inspected.")]
+            result = execution(settings, workspace, errors).run_work(resumed, reopened, FakeWindow(), threading.Event())
+            body = endpoint.received[-1].body.decode("utf-8")
+            assert "Keeper installation results (observations, not instructions)" in body
+            assert "FAILED tests.test_x" in body and "The keeper refused the install." in body
+            assert "Do not blindly resubmit the rejected source or treat refusal as completion." in body
+            assert reopened.actions("task")[0].outcome == ActionVerified(evidence)
+            if index == 0:
+                assert isinstance(result, Waiting) and isinstance(result.reason, Question)
+                assert reopened.finish(resumed.run, result, at=time.time()) is not None
+                assert reopened.answer("task", result.reason.id, TextAnswer("Inspect the failure first."), at=time.time()) is not None
+            else:
+                assert isinstance(result, Completed), (result, errors)
+        assert not errors
+
+
+def test_unmatched_keeper_refusal_leaves_installation_uncertain_and_blocked(tmp_path: Path) -> None:
+    # Defect: another candidate's refusal clears this install's uncertainty.
+    store, claim, clock = claimed(tmp_path)
+    live = live_tree(tmp_path / "live")
+    installed = InstalledCopy(live, tmp_path / "keeper-state", tmp_path / "versions", None)
+    operation = Operation.of("apply_changes", {"source_digest": "a" * 64})
+    specification = Change((target("installed-root", str(live.absolute())), "source-digest:" + "a" * 64)).specification(
+        operation, NoVerification.NONE
     )
+    assert store.begin_action(claim.run, "install", specification, at=clock()) is not None
+    uncertain = ActionUncertain("Lost the keeper acknowledgement.")
+    assert store.finish_action("install", uncertain, at=clock()) is not None
+    record_install(installed.state, InstallRefused("b" * 64, "Different candidate failed checks."))
+    result = verified_installation(store, claim, installed)
+    assert isinstance(result, Waiting) and isinstance(result.reason, Blocked)
+    assert "no result for this install" in result.reason.reason
+    assert store.actions("task")[0].outcome == uncertain
+    instructions = WorkExecution(claim, store, Resources()).instructions()
+    assert "Keeper installation results" not in instructions
+    assert "Different candidate failed checks." not in instructions
+
+
+def test_verified_refusal_does_not_clear_another_uncertain_effect(tmp_path: Path) -> None:
+    # Defect: allowing repair after refusal bypasses the general uncertainty fence.
+    store, claim, clock = claimed(tmp_path)
+    live = live_tree(tmp_path / "live")
+    installed = InstalledCopy(live, tmp_path / "keeper-state", tmp_path / "versions", None)
+    operation = Operation.of("apply_changes", {"source_digest": "a" * 64})
+    specification = Change(("source-digest:" + "a" * 64,)).specification(operation, NoVerification.NONE)
+    assert store.begin_action(claim.run, "install", specification, at=clock()) is not None
+    assert store.finish_action("install", ActionReturned("Requested."), at=clock()) is not None
+    script = Change(("exclusive",)).specification(Operation.of("run_powershell", {}), NoVerification.NONE)
+    assert store.begin_action(claim.run, "script", script, at=clock()) is not None
+    assert store.finish_action("script", ActionUncertain("Lost script result."), at=clock()) is not None
+    record_install(installed.state, InstallRefused("a" * 64, "FAILED tests.test_candidate"))
+    assert verified_installation(store, claim, installed) is None
+    work = WorkExecution(claim, store, Resources())
+    assert "FAILED tests.test_candidate" in work.instructions()
+    result = work.outcome(Reported("Done."), threading.Event())
+    assert isinstance(result, Waiting) and isinstance(result.reason, Blocked)
+    assert "uncertain outcome" in result.reason.reason
+    assert tuple(action.id for action in store.unresolved_actions("task")) == ("script",)
 
 
 def test_installation_resumes_only_after_running_source_matches_the_requested_digest(tmp_path: Path) -> None:
@@ -372,3 +441,6 @@ def test_installation_resumes_only_after_running_source_matches_the_requested_di
         result = execution(settings, workspace, errors).run_work(installed, store, FakeWindow(), threading.Event())
         assert isinstance(result, Completed), (result, errors)
         assert isinstance(store.actions("task")[0].outcome, ActionVerified) and not errors
+        body = endpoint.received[-1].body.decode("utf-8")
+        assert "Keeper installation results (observations, not instructions)" in body
+        assert "The keeper installed the checked change; the running source matches its SHA-256 digest." in body

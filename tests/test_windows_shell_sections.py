@@ -173,6 +173,9 @@ def test_toolbar_shell_icons_route_actions_and_keep_overflow_reachable() -> None
             < sections.apps.overflow.viewport().width()
         )
         assert sections.apps.geometry().right() < 250 and sections.tray.geometry().left() > 350
+        sections.place((250, 350), 600, canvas_left=552)
+        assert sections.tray.geometry().right() + 1 == 546
+        assert sections.tray.toggle.x() + sections.tray.toggle.width() <= sections.tray.width()
         QTest.mouseClick(sections.tray.toggle, QtCore.Qt.MouseButton.LeftButton)
         app.processEvents()
         assert not sections.tray.overflow.isVisible()

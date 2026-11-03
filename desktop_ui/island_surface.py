@@ -764,6 +764,7 @@ class BarWindow(QtWidgets.QWidget):
                 math.ceil(max((each.framed.box.x + each.framed.box.width for each in presented.drawn), default=area.width() / 2)),
             ),
             area.width(),
+            canvas_left=next((round(each.framed.box.x) for each in presented.drawn if each.view.key is Key.CANVAS), None),
         )
         self.shell_sections.apps.apply_look(presented.shell_look)
         self.shell_sections.tray.apply_look(presented.shell_look)
@@ -787,7 +788,9 @@ class BarWindow(QtWidgets.QWidget):
                             _veil(shell_look, presented.frost),
                         )
                         for name, section in (("applications", self.shell_sections.apps), ("tray", self.shell_sections.tray))
-                        if section.isVisible()
+                        # The cached frame can be built before the bar is shown.
+                        # Parent visibility must not omit a section's glass from it.
+                        if section.isVisibleTo(self)
                     ),
                 )
             case SolidLook():

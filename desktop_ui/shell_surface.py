@@ -245,10 +245,20 @@ class ShellSections:
         self.tray.finish(tuple(button(entry) for entry in entries))
         self.tray_snapshot = entries
 
-    def place(self, bounds: tuple[int, int], width: int) -> None:
+    def place(self, bounds: tuple[int, int], width: int, *, canvas_left: int | None = None) -> None:
+        """Bounds/width describe available space; Canvas supplies the right anchor.
+
+        The optional anchor is a distinct composition dependency: standalone shell
+        fixtures have no Canvas, while the toolbar reserves its disclosure slot.
+        Running applications stay in the left third even when activity is absent.
+        """
         left, right = bounds
-        self.apps.place(12, max(12, left - 12))
-        self.tray.place(right + 12, width - 12)
+        self.apps.place(12, max(12, min(left - 12, width // 3)))
+        if canvas_left is None:
+            self.tray.place(right + 12, width - 12)
+        else:
+            end = max(0, canvas_left - 6)
+            self.tray.place(max(0, end - min(self.tray.desired_width(), max(36, width // 3))), end)
 
     def locations(self, outer: Rect, scale: float) -> tuple[Located, ...]:
         if self.tray_snapshot is None or not self.tray.isVisible() or not self.tray.overflow.isVisible():

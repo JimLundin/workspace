@@ -47,6 +47,31 @@ def test_snapping_puts_every_edge_on_a_device_pixel() -> None:
     assert all(abs(edge * 1.25 - round(edge * 1.25)) < 1e-9 for edge in edges)
 
 
+def test_right_cluster_reserves_tray_and_activity_cannot_overlap_on_narrow_screens() -> None:
+    # Defects: Canvas drifts with activity, disclosure overlaps keyboard, or a
+    # growing menu paints/hit-tests over permanent controls on a narrow display.
+    for screen in (240, 480, 1000):
+        for tray in (36, 120):
+            placed = (
+                Placed(Key.ISLAND, Zone.ISLAND, 272, 320),
+                Placed(Key.STATUS, Zone.RIGHT, 112, 34),
+                Placed(Key.LAYER, Zone.RIGHT, 36, 34),
+                Placed(Key.CANVAS, Zone.RIGHT, 36, 34),
+            )
+            framed = frame(placed, Metrics(screen, tray_width=tray))
+            canvas = next(each.box for each in framed if each.key is Key.CANVAS)
+            assert canvas.x + canvas.width == screen - 12
+            boxes = tuple(each.box for each in framed)
+            assert all(0 <= box.x <= box.x + box.width <= screen for box in boxes)
+            assert all(left.x + left.width <= right.x for left, right in zip(boxes, boxes[1:]))
+            layer = next((each.box for each in framed if each.key is Key.LAYER), None)
+            if layer is not None:
+                assert canvas.x - (layer.x + layer.width) == tray + 12
+    idle = frame((Placed(Key.STATUS, Zone.RIGHT, 112, 34), Placed(Key.CANVAS, Zone.RIGHT, 36, 34)), Metrics(1000))
+    assert tuple(each.key for each in idle) == (Key.STATUS, Key.CANVAS)
+    assert idle[-1].box.x == 952
+
+
 def width_of(text: Text) -> float:
     return len(text.text) * 7
 

@@ -188,7 +188,9 @@ def test_preview_uses_real_views_without_starting_native_services_and_closes_cle
         island = preview.bar.window.capsules[Key.ISLAND]
         preview.selector.setCurrentIndex(2)
         preview.root.processEvents()
-        assert "02:05" in island.accessibleName() and preview.bar.ambient.text in island.accessibleName()
+        assert "02:05" in island.accessibleName()
+        assert preview.bar.ambient.text in preview.bar.window.capsules[Key.STATUS].accessibleName()
+        assert preview.bar.ambient.text not in island.accessibleName()
         preview.selector.setCurrentIndex(5)
         preview.root.processEvents()
         assert "Transcribing" in island.accessibleName()

@@ -1,7 +1,7 @@
 """The island bar: Workspace's floating capsules at the top of the primary screen.
 
-The island stays centred and acts on what it shows; temporary capsules sit beside
-it. `island_model` decides the views, `island_layout` where they sit, and
+Activity stays centred and acts on what it shows; temporary activity capsules sit
+beside it, while persistent status and navigation anchor on the right. `island_model` decides the views, `island_layout` where they sit, and
 `ui_components.appearance` how they read. This owner observes the desktop and
 publishes each result to the one bar window and its glass.
 """
@@ -517,7 +517,8 @@ class DesktopBar:
 
     def draw(self) -> None:
         width = QtGui.QGuiApplication.primaryScreen().geometry().width()
-        framed = frozendict((each.key, each) for each in snap(frame(placed(self.motion), Metrics(width, top=TOP)), self.window.devicePixelRatioF()))
+        metrics = Metrics(width, top=TOP, tray_width=min(self.window.shell_sections.tray.desired_width(), max(36, width // 3)))
+        framed = frozendict((each.key, each) for each in snap(frame(placed(self.motion), metrics), self.window.devicePixelRatioF()))
         match self.preference:
             case appearance.Contrast():
                 contrast = True
@@ -610,7 +611,7 @@ class DesktopBar:
             with suppress(queue.Empty):
                 self.system = self.status_service.results.get_nowait()
         self.ambient = Ambient(self.observations.local_time().strftime("%H:%M"), self.power)
-        self.sample_bounds = self.window.bounds(Key.ISLAND)
+        self.sample_bounds = self.window.bounds(Key.ISLAND) or self.window.bounds(Key.STATUS)
         # Small glass takes its scheme from the desktop beside the island.
         for sample in self.materials.read():
             if sample.bounds == self.sample_bounds:
