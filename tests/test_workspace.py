@@ -112,6 +112,27 @@ def test_validation_does_not_import_candidate_modules(tmp_path: Path) -> None:
     assert not marker.exists()
 
 
+def test_stale_protected_baseline_is_rejected_before_running_tests(tmp_path: Path) -> None:
+    w = workspace(tmp_path)
+    marker = tmp_path / "executed"
+    w.write("candidate.py", f"from pathlib import Path\nPath({str(marker)!r}).touch()\n")
+    # A deployment after the draft was created can change the protected baseline.
+    (w.live / "selfcheck.py").write_text("raise RuntimeError('must not run')\n", encoding="utf-8")
+    ok, report = w.validate()
+    assert not ok and "protected file selfcheck.py" in report
+    ok, report = w.check()
+    assert not ok and "refresh the source copy" in report
+    assert not marker.exists()
+    assert "RuntimeError" not in w.read("selfcheck.py")
+
+
+def test_missing_protected_source_is_not_a_valid_draft(tmp_path: Path) -> None:
+    w = workspace(tmp_path)
+    (w.root / "keeper.py").unlink()
+    assert "protected file keeper.py" in w.protected_problem()
+    assert not w.validate()[0]
+
+
 def test_protected_file_aliases_are_refused(tmp_path: Path) -> None:
     w = workspace(tmp_path)
     for name in ("KEEPER.PY", "keeper.py.", "keeper.py ", "SELFcheck.PY"):

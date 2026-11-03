@@ -119,8 +119,22 @@ class Workspace:
             parts.append("".join(difflib.unified_diff(before, after, f"running/{name}", f"changed/{name}")))
         return "\n".join(parts)
 
+    def protected_problem(self) -> str:
+        """Detect stale or altered protected source before executing or submitting a draft."""
+        for name in sorted(PROTECTED):
+            draft, live = self.root / name, self.live / name
+            if draft.is_file() != live.is_file() or (draft.is_file() and draft.read_bytes() != live.read_bytes()):
+                return (
+                    f"The protected file {name} differs from the running version. "
+                    "Preserve your intended edits, refresh the source copy from the running version, "
+                    "and reapply only those edits before checking again."
+                )
+        return ""
+
     def validate(self) -> tuple[bool, str]:
-        """Check syntax before spending time on runtime checks."""
+        """Reject an un-installable baseline before spending time on syntax or runtime checks."""
+        if problem := self.protected_problem():
+            return False, problem
         problems: list[str] = []
         compile_all(self.root, problems)
         return not problems, "\n".join(problems) or "Syntax checks pass."
@@ -137,6 +151,8 @@ class Workspace:
         cancel: threading.Event | None = None,
     ) -> CheckResult:
         """Run the stable selfcheck on a fresh copy so tests cannot leave stale bytecode in the draft."""
+        if problem := self.protected_problem():
+            return CheckCompleted(passed=False, report=problem)
         with tempfile.TemporaryDirectory(prefix="workspace-check-") as scratch:
             candidate = Path(scratch) / "source"
             copy_source(self.root, candidate)

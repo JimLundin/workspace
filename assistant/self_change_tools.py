@@ -375,6 +375,8 @@ class SelfChange:
 
     def apply_changes(self, args: Args, request: SummaryArguments) -> Output:
         summary, diff = request.summary, self.source().diff()
+        if problem := self.source().protected_problem():
+            raise SourceError(problem)
         if not diff:
             raise ArgumentError("there are no changes to install.")
         if self.checked is None:
@@ -399,6 +401,8 @@ class SelfChange:
         def execute() -> Output:
             if source_digest(self.source().root) != digest:
                 raise SourceError("The source changed after review; check and review it again.")
+            if problem := self.source().protected_problem():
+                raise SourceError(problem)
             if install_root is not None and self.source().root != install_root:
                 copy_source(self.source().root, install_root)
             self.session.machine.install(summary, digest, checked)
