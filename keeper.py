@@ -731,7 +731,12 @@ def main(ui: Ui) -> None:
             try:
                 keeper.request(request, now)
             except OSError as error:
-                keeper.world.notify(f"Request failed: {error}")
+                match request:
+                    case Install(digest=digest):
+                        # The task waiting on this install learns why instead of timing out.
+                        keeper.refuse(digest, f"Request failed: {error}")
+                    case _:
+                        keeper.world.notify(f"Request failed: {error}")
         choices.clear()
         try:
             keeper.tick(now)

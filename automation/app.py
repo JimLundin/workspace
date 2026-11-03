@@ -298,10 +298,13 @@ class WorkEvents:
         self.failed = threading.Event()
 
     def problem(self, reason: str) -> None:
-        # Caller details may include exception payloads; retain only an
-        # operational marker here and expose durable task state separately.
+        # Caller details may include exception payloads; retain only the
+        # exception type, the first line's name before its message. Without it,
+        # a crash loop left nothing but "stopping for recovery" to trace.
         self.failed.set()
-        report("The work process encountered an error and is stopping for recovery.", folder=self.folder)
+        name = reason.partition(":")[0].strip()
+        kind = name[:80] if name.isidentifier() else "unknown"
+        report(f"The work process encountered an error ({kind}) and is stopping for recovery.", folder=self.folder)
         system.post_message(self.hwnd, system.WM_CLOSE, 0, 0)
 
     def changed(self, snapshot: ControllerSnapshot) -> None:
