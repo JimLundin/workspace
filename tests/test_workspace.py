@@ -56,6 +56,8 @@ def test_edits_show_as_changes_and_a_diff(tmp_path: Path) -> None:
     assert "+GREETING = 'hello'" in diff
     assert "+X = 1" in diff
     assert (tmp_path / "live" / "config.py").read_text(encoding="utf-8") == "GREETING = 'hej'\n"  # live untouched
+    # Agent edits keep LF on Windows; CRLF rewrote whole files in commits.
+    assert (w.root / "snippets.py").read_bytes() == b"X = 1\n" and b"\r" not in (w.root / "config.py").read_bytes()
 
 
 def test_replace_needs_exactly_one_match(tmp_path: Path) -> None:

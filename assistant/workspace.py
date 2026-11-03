@@ -81,7 +81,9 @@ class Workspace:
     def write(self, name: str, text: str) -> None:
         path = self._writable(name)
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(text, encoding="utf-8")
+        # Source is LF everywhere. Windows text mode wrote CRLF, so every agent edit
+        # rewrote whole files' line endings in diffs and commits.
+        path.write_text(text, encoding="utf-8", newline="\n")
 
     def replace(self, name: str, old: str, new: str) -> None:
         """Replaces text that appears exactly once."""
