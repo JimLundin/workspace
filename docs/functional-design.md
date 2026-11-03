@@ -641,7 +641,9 @@ readers poll and treat an empty or unreadable marker as not yet ready. Renaming
 a finished temporary file over the name is avoided: on Windows a reader that
 opens the name while the rename still holds it gets a sharing violation. Failed
 replacement restores only changed source before resuming. The protected full
-selfcheck and trial-based agent update path keep their full checks and rollback.
+selfcheck and trial-based agent update path keep their checks and rollback: an
+agent install whose exact source digest passed the fast check runs only the
+deferred native modules, and any other install runs the full selfcheck.
 Assistant unavailability produces shortcut feedback without disabling the keyboard
 engine or replaying missed actions. Dictation still belongs to the assistant.
 

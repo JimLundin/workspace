@@ -25,6 +25,9 @@ class Install:
     """Check and install the agent's workspace; the summary titles its trial."""
 
     summary: str
+    checked: str | None
+    """The source digest whose fast selfcheck passed, or None. When the keeper's frozen
+    candidate has exactly this digest, only the deferred native modules run."""
     action: Literal["install"] = "install"
 
 

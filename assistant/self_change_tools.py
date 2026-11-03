@@ -148,6 +148,15 @@ class Delivery:
     branch: str
 
 
+@dataclass(frozen=True, slots=True)
+class Checked:
+    """A draft that passed the fast checks: its diff against the running version
+    and the digest of the frozen source those checks ran on."""
+
+    diff: str
+    digest: str
+
+
 class SelfChange:
     """The agent's draft of Workspace and what its checks established.
 
@@ -159,8 +168,8 @@ class SelfChange:
 
     def __init__(self, session: Installer, workspace: Workspace, delivery: Delivery) -> None:
         self.session, self.workspace, self.delivery = session, workspace, delivery
-        self.checked: str | None = None
-        """The diff that last passed its checks."""
+        self.checked: Checked | None = None
+        """The draft that last passed its checks."""
         self.check_failed = False
 
     def tools(self) -> tuple[Tool, ...]:
@@ -290,8 +299,8 @@ class SelfChange:
         source = self.source()
         diff = source.diff()
         passed, report = source.validate()
+        digest = source_digest(source.root)
         if passed:
-            digest = source_digest(source.root)
             operation = Operation.of(args.tool, {"source_digest": digest, "profile": "fast"})
             if not self.session.approve(operation, "Run Workspace's checks?", "Run this frozen source and its tests?\n\n" + diff):
                 return Output(DECLINED, ok=False)
@@ -315,7 +324,7 @@ class SelfChange:
             passed, report = checked.ok, checked.text
         if passed and source.diff() != diff:
             passed, report = False, "The workspace changed during its checks; run check_changes again."
-        self.checked = diff if passed else None
+        self.checked = Checked(diff, digest) if passed else None
         self.check_failed = not passed
         if self.session.stop.is_set():
             self.checked = None
@@ -332,9 +341,11 @@ class SelfChange:
                 if self.check_failed
                 else "run check_changes first; only checked changes can be installed."
             )
-        if diff != self.checked:
+        if diff != self.checked.diff:
             raise ArgumentError("the changes have changed since they were checked; run check_changes again.")
         digest = source_digest(self.source().root)
+        # The keeper then runs only the native modules the fast check deferred.
+        checked = digest if digest == self.checked.digest else None
         install = InstallOperation(summary, digest, str(self.source().live.absolute()), hashlib.sha256(diff.encode("utf-8")).hexdigest())
         operation = described(args.tool, _INSTALL_OPERATION, install)
         if not self.session.approve(operation, "Install workspace changes?", summary + "\n\n" + diff):
@@ -348,7 +359,7 @@ class SelfChange:
                 raise SourceError("The source changed after review; check and review it again.")
             if install_root is not None and self.source().root != install_root:
                 copy_source(self.source().root, install_root)
-            self.session.machine.install(summary)
+            self.session.machine.install(summary, checked)
             self.session.installation_requested(summary)
             return Output("Asked the keeper to install it.")
 

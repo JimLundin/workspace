@@ -109,6 +109,9 @@ def test_fast_checks_defer_native_tests_but_the_default_install_gate_runs_them(t
     assert "2 passed" in report and "1 native module deferred" in report
     code, report = selfcheck(root)
     assert code == 1 and "FAILED tests.test_windows_native.test_native" in report
+    # The keeper's remainder after a passing fast check: native modules only.
+    code, report = selfcheck(root, "--native")
+    assert code == 1 and "0 passed, 1 failed" in report, report
 
 
 def test_fast_checks_still_compile_native_tests_and_import_production_modules(tmp_path: Path) -> None:

@@ -72,8 +72,8 @@ class World:
     def is_ready(self, name: str) -> bool:
         return name in self.ready
 
-    def start_check(self) -> FakeCheck:
-        self.log.append("check")
+    def start_check(self, checked: str | None) -> FakeCheck:
+        self.log.append("check" if checked is None else f"check after fast check {checked}")
         self.check = FakeCheck()
         return self.check
 
@@ -114,7 +114,7 @@ def running(world: World) -> Keeper:
 
 def installed(world: World, keeper: Keeper) -> None:
     """An install that passes its checks and comes up: now on trial."""
-    keeper.request(Install("a new snippet"), now=10)
+    keeper.request(Install("a new snippet", None), now=10)
     world.check.outcome = (True, "ok")
     keeper.tick(now=20)
     world.come_up()
@@ -231,7 +231,7 @@ def test_pause_refuses_update_and_duplicate_selections_and_allows_no_restart() -
     world = World()
     keeper = running(world)
     assert not keeper.suspend(("assistant", "assistant"))
-    keeper.request(Install(""), now=5)
+    keeper.request(Install("", None), now=5)
     assert not keeper.suspend(("assistant",))
     other = World()
     paused = running(other)
@@ -323,7 +323,7 @@ def test_an_install_is_checked_snapshotted_installed_and_tried() -> None:
 def test_a_change_that_fails_its_checks_is_not_installed() -> None:
     world = World()
     keeper = running(world)
-    keeper.request(Install("broken"), now=10)
+    keeper.request(Install("broken", None), now=10)
     world.check.outcome = (False, "FAILED tests.test_engine.test_plain_letters")
     keeper.tick(now=20)
     assert world.take() == ["check", "notify Not installed: the change failed its checks."]
@@ -331,10 +331,18 @@ def test_a_change_that_fails_its_checks_is_not_installed() -> None:
     assert keeper.stage is Stage.RUNNING
 
 
+def test_an_install_after_a_fast_check_hands_that_digest_to_its_check() -> None:
+    # Detect the keeper dropping the agent's checked digest, which repeats the portable tests.
+    world = World()
+    keeper = running(world)
+    keeper.request(Install("checked", "abc123"), now=10)
+    assert world.take() == ["check after fast check abc123"]
+
+
 def test_a_change_that_doesnt_come_up_is_undone() -> None:
     world = World()
     keeper = running(world)
-    keeper.request(Install("slow"), now=10)
+    keeper.request(Install("slow", None), now=10)
     world.check.outcome = (True, "ok")
     keeper.tick(now=20)
     world.take()
@@ -354,7 +362,7 @@ def test_a_change_that_doesnt_come_up_is_undone() -> None:
 def test_update_is_undone_when_only_automation_never_becomes_ready() -> None:
     world = World()
     keeper = running(world)
-    keeper.request(Install("missing worker readiness"), now=10)
+    keeper.request(Install("missing worker readiness", None), now=10)
     world.check.outcome = (True, "ok")
     keeper.tick(now=20)
     world.take()
@@ -377,7 +385,7 @@ def test_update_is_undone_when_only_automation_never_becomes_ready() -> None:
 def test_update_is_undone_when_automation_exits_before_readiness() -> None:
     world = World()
     keeper = running(world)
-    keeper.request(Install("worker exits early"), now=10)
+    keeper.request(Install("worker exits early", None), now=10)
     world.check.outcome = (True, "ok")
     keeper.tick(now=20)
     world.take()
@@ -398,7 +406,7 @@ def test_update_is_undone_when_automation_exits_before_readiness() -> None:
 def test_a_change_that_exits_while_starting_is_undone_at_once() -> None:
     world = World()
     keeper = running(world)
-    keeper.request(Install("crashy"), now=10)
+    keeper.request(Install("crashy", None), now=10)
     world.check.outcome = (True, "ok")
     keeper.tick(now=20)
     world.take()
@@ -510,8 +518,8 @@ def test_crashing_over_and_over_after_an_update_undoes_it() -> None:
 def test_one_thing_at_a_time() -> None:
     world = World()
     keeper = running(world)
-    keeper.request(Install("first"), now=10)
-    keeper.request(Install("second"), now=11)
+    keeper.request(Install("first", None), now=10)
+    keeper.request(Install("second", None), now=11)
     assert world.take() == ["check", "notify Busy installing; try again in a moment."]
 
 
@@ -579,7 +587,7 @@ def test_inbox_requests_reach_the_keeper_once_and_in_order(tmp_path: Path) -> No
     # slipping in while the install it followed is being checked.
     world = World()
     keeper = running(world)
-    ask(tmp_path, Install("first"))
+    ask(tmp_path, Install("first", None))
     ask(tmp_path, Restart("layout"))
     for request in take(tmp_path):
         keeper.request(request, now=5)
@@ -617,7 +625,7 @@ def test_install_failure_restores_and_restarts() -> None:
 
     world = FailingWorld()
     keeper = running(world)
-    keeper.request(Install("change"), now=10)
+    keeper.request(Install("change", None), now=10)
     world.check.outcome = (True, "ok")
     keeper.tick(20)
     assert "restore v1" in world.log
@@ -728,7 +736,7 @@ def test_failed_second_update_keeps_first_update_undoable_after_restart(tmp_path
     world.come_up()
     keeper.tick(1)
     installed(world, keeper)
-    keeper.request(Install("broken second update"), now=30)
+    keeper.request(Install("broken second update", None), now=30)
     world.check.outcome = (False, "broken")
     keeper.tick(31)
     assert recovery.read() == Rollback(version="v1", pending=False)

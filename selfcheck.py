@@ -1,6 +1,6 @@
 """selfcheck: is this copy of the workspace sound? Uses installed or bundled SDK dependencies.
 
-    python selfcheck.py [FOLDER] [--fast] [--durations N]
+    python selfcheck.py [FOLDER] [--fast | --native] [--durations N]
 
 1. Every .py file compiles.
 2. Every module imports (off Windows, the ones that need Windows are skipped).
@@ -9,8 +9,10 @@
 
 Prints a report; exits 0 if sound, 1 if not. The keeper runs this on every change
 before installing it, so the agent can't change it (see keeper.py).
-The optional fast editing profile defers tests/test_windows_*.py. The keeper
-always uses the default full profile. Both profiles compile and import all source.
+The fast editing profile defers tests/test_windows_*.py. The native profile runs
+only those modules: the keeper uses it when the agent's fast check already passed
+for exactly the same source digest, so compiling, importing and the portable
+tests are not repeated back to back. Any other install gets the full profile.
 
 Discovered member values remain objects; the runner validates origin and the
 supported keyword arguments before invoking a test.
@@ -28,6 +30,7 @@ import traceback
 import unittest
 from collections.abc import Iterator
 from concurrent.futures import ProcessPoolExecutor
+from enum import Enum
 from pathlib import Path
 from typing import Protocol
 
@@ -38,6 +41,27 @@ _WINDOWS_ONLY = ("WinDLL", "WINFUNCTYPE", "windll", "winreg", "msvcrt", "_winapi
 
 
 _ON_WINDOWS: bool = sys.platform == "win32"
+
+
+class Profile(Enum):
+    FULL = "full"
+    """Compile and import all source, then run every test module."""
+    FAST = "fast"
+    """Compile and import all source, then run every module except tests/test_windows_*.py."""
+    NATIVE = "native"
+    """Only tests/test_windows_*.py: the rest of a source digest the fast profile passed."""
+
+
+def _selected(path: Path, profile: Profile) -> bool:
+    native = path.name.startswith("test_windows_")
+    match profile:
+        case Profile.FULL:
+            return True
+        case Profile.FAST:
+            return not native
+        case Profile.NATIVE:
+            return native
+
 
 WORKERS = 4
 # Reviewed effect owners: fake desktop adapters, private localhost endpoints,
@@ -197,13 +221,13 @@ def _progress(path: Path, outcome: Outcome, seconds: float) -> None:
     sys.stdout.flush()
 
 
-def run_tests(root: Path, problems: list[str], *, fast: bool = False, timings: list[tuple[float, str]] | None = None) -> tuple[int, int]:
-    """Passed tests, and skipped test modules.
+def run_tests(root: Path, problems: list[str], profile: Profile) -> tuple[int, int, tuple[tuple[float, str], ...]]:
+    """Passed tests, skipped test modules and per-test timings.
 
     Reviewed portable modules run on worker processes while the other non-native
     modules run here; native modules run after the workers exit, one at a time.
     """
-    paths = [path for path in sorted((root / "tests").glob("test_*.py")) if not (fast and path.name.startswith("test_windows_"))]
+    paths = [path for path in sorted((root / "tests").glob("test_*.py")) if _selected(path, profile)]
     relative = {path: path.relative_to(root).as_posix() for path in paths}
     portable = [path for name in PORTABLE for path in paths if relative[path] == name]
     following = [path for path in paths if path.name.startswith("test_windows_") or relative[path] in AFTER_WORKERS]
@@ -234,14 +258,13 @@ def run_tests(root: Path, problems: list[str], *, fast: bool = False, timings: l
                 _progress(path, outcome, time.perf_counter() - started)
                 outcomes.append(outcome)
         sequential(following)
-    for _, _, found, measured in outcomes:
+    for _, _, found, _ in outcomes:
         problems.extend(found)
-        if timings is not None:
-            timings.extend(measured)
-    return sum(outcome[0] for outcome in outcomes), sum(outcome[1] for outcome in outcomes)
+    measured = tuple(timing for outcome in outcomes for timing in outcome[3])
+    return sum(outcome[0] for outcome in outcomes), sum(outcome[1] for outcome in outcomes), measured
 
 
-def check(root: Path, *, fast: bool = False, durations: int = 0) -> tuple[bool, str]:
+def check(root: Path, profile: Profile = Profile.FULL, durations: int = 0) -> tuple[bool, str]:
     """Whether the copy at `root` is sound, and a report. Imports from `root`, so run
     it in a process of its own (as `main` does)."""
     os.environ.pop("WORKSPACE_E2E", None)  # never the end-to-end tests: they'd start a second workspace
@@ -255,16 +278,18 @@ def check(root: Path, *, fast: bool = False, durations: int = 0) -> tuple[bool, 
         sys.modules.pop("runtime", None)
     problems: list[str] = []
     timings: list[tuple[float, str]] = []
-    started = time.perf_counter()
-    compile_all(root, problems)
-    timings.append((time.perf_counter() - started, "compile all source"))
-    if not problems:
+    if profile is not Profile.NATIVE:
         started = time.perf_counter()
-        import_all(root, problems)
-        timings.append((time.perf_counter() - started, "import all modules"))
-    passed, skipped = run_tests(root, problems, fast=fast, timings=timings if durations else None) if not problems else (0, 0)
+        compile_all(root, problems)
+        timings.append((time.perf_counter() - started, "compile all source"))
+        if not problems:
+            started = time.perf_counter()
+            import_all(root, problems)
+            timings.append((time.perf_counter() - started, "import all modules"))
+    passed, skipped, measured = run_tests(root, problems, profile) if not problems else (0, 0, ())
+    timings.extend(measured)
     summary = f"{passed} passed, {len([p for p in problems if p.startswith('FAILED')])} failed, {skipped} module{'' if skipped == 1 else 's'} skipped"
-    if fast:
+    if profile is Profile.FAST:
         deferred = len(list((root / "tests").glob("test_windows_*.py")))
         summary += f", {deferred} native module{'' if deferred == 1 else 's'} deferred (full checks run before install)"
     if durations:
@@ -275,16 +300,19 @@ def check(root: Path, *, fast: bool = False, durations: int = 0) -> tuple[bool, 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("folder", nargs="?", type=Path, default=Path(__file__).parent)
-    parser.add_argument("--fast", action="store_true", help="editing checks; defer Windows integration modules")
+    profiles = parser.add_mutually_exclusive_group()
+    profiles.add_argument("--fast", action="store_true", help="editing checks; defer Windows integration modules")
+    profiles.add_argument("--native", action="store_true", help="only the Windows integration modules a passing fast check deferred")
     parser.add_argument("--durations", type=int, default=0, metavar="N", help="report the N slowest checks")
     match dict(inspect.getmembers(parser.parse_args())):
-        case {"folder": Path() as folder, "fast": bool() as fast, "durations": int() as durations}:
+        case {"folder": Path() as folder, "fast": bool() as fast, "native": bool() as native, "durations": int() as durations}:
             pass
         case _:
             parser.error("Invalid selfcheck arguments.")
     if durations < 0:
         parser.error("durations must be nonnegative")
-    ok, report = check(folder.resolve(), fast=fast, durations=durations)
+    profile = Profile.FAST if fast else Profile.NATIVE if native else Profile.FULL
+    ok, report = check(folder.resolve(), profile, durations)
     sys.stdout.write(report)
     sys.exit(0 if ok else 1)
 

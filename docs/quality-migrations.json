@@ -798,15 +798,6 @@
     {
       "key": {
         "rule": "PLR0913",
-        "path": "scripts/deploy_archive.py",
-        "scope": "repack",
-        "signature": "a50db121137dd56077c03092feea561986d900329d834eb9a4e6df483e12596c"
-      },
-      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
-    },
-    {
-      "key": {
-        "rule": "PLR0913",
         "path": "scripts/deploy_files.py",
         "scope": "files",
         "signature": "e4c6cf3cbcbd0da7aa2aa53f70a9f5380f69c16c5c28d11c7c8b4c8fc9c583d2"
@@ -819,15 +810,6 @@
         "path": "scripts/deploy_windows.py",
         "scope": "run",
         "signature": "c3bc4d34329f365852dea535f254ed24f21b7e0f59250b8cce2c9a12519515d3"
-      },
-      "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
-    },
-    {
-      "key": {
-        "rule": "PLR0913",
-        "path": "selfcheck.py",
-        "scope": "run_tests",
-        "signature": "1ef13c1a58f37dff6915d441b04e83263784579b34f031bbe8a61f42ee24d153"
       },
       "reason": "Existing interface over three inputs; review its domain seam when changing the signature."
     },

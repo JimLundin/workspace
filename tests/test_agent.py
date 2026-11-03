@@ -204,8 +204,8 @@ class FakeMachine:
     def open(self, target: str) -> None:
         self.log.append(f"open {target}")
 
-    def install(self, summary: str) -> None:
-        self.log.append(f"install {summary}")
+    def install(self, summary: str, checked: str | None) -> None:
+        self.log.append(f"install {summary}" + (" after its fast check" if checked is not None else ""))
 
 
 class FakeWindow:
@@ -779,7 +779,7 @@ def test_the_agent_edits_checks_and_applies_a_change(tmp_path: Path) -> None:
         apply = ("apply_changes", {"summary": "Say hello"})
         rig = Rig(endpoint, calls(EDIT), calls(("check_changes", {})), calls(apply), says("never asked"), workspace=workspace, work=durable(tmp_path))
         rig.run("greet in English")
-        assert rig.machine.log == ["install Say hello"]
+        assert rig.machine.log == ["install Say hello after its fast check"]
         assert "1 passed, 0 failed" in rig.results(2)[0]
         assert rig.window.log[-1] == "done Installing: Say hello. Workspace restarts in a moment."
         assert len(endpoint.received) == 3  # the task ends with the install
@@ -939,4 +939,4 @@ def test_runtime_failure_returns_to_the_agent_to_fix_before_installing(tmp_path:
         assert "FAILED tests.test_config.test_greeting" in rig.results(2)[0]
         assert "the last check failed" in rig.results(3)[0]
         assert "1 passed, 0 failed" in rig.results(5)[0]
-        assert rig.machine.log == ["install Fix greeting"]
+        assert rig.machine.log == ["install Fix greeting after its fast check"]

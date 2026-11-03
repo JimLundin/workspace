@@ -73,8 +73,8 @@ class Machine(Protocol):
     def open(self, target: str) -> None:
         """A file, folder or web address, as double-clicking it would."""
 
-    def install(self, summary: str) -> None:
-        """Asks the keeper to install the workspace."""
+    def install(self, summary: str, checked: str | None) -> None:
+        """Asks the keeper to install the workspace; `checked` is the digest a fast check passed."""
 
 
 @dataclass(frozen=True, slots=True)
