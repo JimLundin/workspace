@@ -203,9 +203,7 @@ def test_factual_connections_follow_shared_evidence_through_collapsed_containers
     assert not connections(data, project(data, document, CanvasScope()))
     assert data.works[1].links[0] == Association(source.id, "Shared approval")
     relation = CanvasRelation("work:two", "work:one", "Explicit dependency")
-    assert connections(data, project(data, document, CanvasScope()), (relation,)) == (
-        RelationConnection("work:two", "work:one", relation),
-    )
+    assert connections(data, project(data, document, CanvasScope()), (relation,)) == (RelationConnection("work:two", "work:one", relation),)
     expanded = toggle_expansion(document, None, "work:one", expanded=True)
     assert connections(data, project(data, expanded, CanvasScope())) == (CanvasConnection("work:two", source.id, "Shared approval"),)
     assert not connections(data, project(data, document, CanvasScope(("work:two",))))

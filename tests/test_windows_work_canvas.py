@@ -925,6 +925,8 @@ def test_agent_canvas_owner_commits_without_qt_dispatch_and_refreshes_without_re
     # Defect: worker edits race with Qt, return success before persistence,
     # overwrite a user draft, bypass durable verification or reveal a window.
     ui = InboxUi()
+    # Windows an earlier test in this process left open are not this test's reveal.
+    shown_before = {id(widget) for widget in ui.root.topLevelWidgets() if widget.isVisible()}
     store = local_canvas(tmp_path, ui.publish_canvas)
     ui.configure_canvas(store, lambda _title, _target: None, observe_session=store.observe_session)
     store.observe_catalog(nested_bubbles()[0])
@@ -964,7 +966,7 @@ def test_agent_canvas_owner_commits_without_qt_dispatch_and_refreshes_without_re
             assert isinstance(tasks.actions(claim.task.id)[-1].outcome, ActionNotApplied)
             assert store.read() == persisted
         # No window had to be created for any read, edit or conflict.
-        assert not any(widget.isVisible() for widget in ui.root.topLevelWidgets())
+        assert not any(widget.isVisible() and id(widget) not in shown_before for widget in ui.root.topLevelWidgets())
         assert not rig.machine.log
     finally:
         ui.dispose()
