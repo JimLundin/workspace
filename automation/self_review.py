@@ -105,7 +105,7 @@ _METHOD: Final = (
     "A behavior that a short rule would fix becomes a lesson: call save_lesson with one specific, actionable rule. "
     "Call list_lessons first; update or remove a lesson that is wrong, duplicated or superseded instead of adding another. "
     "A cause in Workspace itself is fixed in its source with the self-change tools: edit, check_changes, then "
-    "publish_changes so the change is kept in Git, then apply_changes. "
+    "apply_changes; a verified install is committed to main and pushed. "
     "You are authorized to make and install such changes without asking. Keep each change focused on evidence you found. "
     "Do not redo or continue the reviewed work, do not contact anyone, and do not save a lesson that only restates one task. "
     "When nothing generalizes, change nothing. Finish with what you learned and what you changed."

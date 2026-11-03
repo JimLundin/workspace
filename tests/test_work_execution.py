@@ -35,7 +35,7 @@ from automation.task import (
     Until,
     Waiting,
 )
-from keeper import copy_source, source_digest, state_for
+from keeper import copy_source, source_digest, state_for, versions_for
 from keeper_control import InstallRefused, InstallStarted, record_install
 from tests.fake_endpoint import Reply, fake_endpoint
 from tests.test_agent import FakeMachine, FakeWindow, calls, no_feed, says
@@ -316,7 +316,7 @@ def test_a_refused_installation_reports_the_keepers_reason(tmp_path: Path) -> No
     assert store.begin_action(claim.run, "install", classified.specification(installation, NoVerification.NONE), at=time.time()) is not None
     store.finish_action("install", ActionReturned("Keeper installation requested."), at=time.time())
     record_install(state_for(workspace.root), InstallRefused(digest, "Not installed: the change failed its checks.\n\nFAILED tests.test_x"))
-    outcome = verified_installation(store, claim, InstalledCopy(workspace.live, state_for(workspace.root)))
+    outcome = verified_installation(store, claim, InstalledCopy(workspace.live, state_for(workspace.root), versions_for(workspace.root), None))
     assert outcome == Waiting(Blocked("The keeper did not install the change. Not installed: the change failed its checks.\n\nFAILED tests.test_x"))
     assert store.actions("task")[0].outcome == ActionVerified(
         "The keeper refused the install. Not installed: the change failed its checks.\n\nFAILED tests.test_x"
@@ -364,7 +364,7 @@ def test_installation_resumes_only_after_running_source_matches_the_requested_di
         assert isinstance(outcome, Waiting) and isinstance(outcome.reason, Until) and not endpoint.received
         store.finish(pending.run, outcome, at=time.time())
         copy_source(workspace.root, workspace.live)
-        record_install(state_for(workspace.root), InstallStarted(source_digest(workspace.root)))
+        record_install(state_for(workspace.root), InstallStarted(source_digest(workspace.root), "Updated greeting", "00001"))
         store.control("task", Control.RESUME, at=time.time())
         installed = store.claim("restarted-worker", "installed-run", at=time.time())
         assert installed is not None

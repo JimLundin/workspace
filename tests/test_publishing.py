@@ -11,7 +11,7 @@ from contextlib import closing
 from pathlib import Path
 from unittest import TestCase
 
-from assistant.publishing import PublishError, git, publish_source
+from assistant.publishing import Installed, Landing, PublishError, git, land_installed, publish_source
 from automation.actions import Change, Operation, Resources
 from automation.execution import ApprovalReview, WorkExecution
 from automation.task import ActionVerified, ApprovalDecision, NoVerification, Waiting
@@ -47,6 +47,29 @@ def test_reviewed_change_is_pushed_to_new_branch(tmp_path: Path) -> None:
     assert git(remote, "rev-parse", "refs/heads/main") == main
     assert "'hej'" in (live / "config.py").read_text(encoding="utf-8")
     assert "Published" in result
+
+
+def test_an_installed_change_lands_on_main_once_and_never_over_newer_work(tmp_path: Path) -> None:
+    # Detect a verified install never reaching main, landing twice, or overwriting a change pushed meanwhile.
+    live, workspace, remote = repository(tmp_path)
+    landing = Landing(str(remote), "main")
+    base = tmp_path / "base"
+    copy_source(live, base)
+    installed = Installed(workspace, base, "English greeting")
+    result = land_installed(installed, landing)
+    head = git(remote, "rev-parse", "refs/heads/main")
+    assert result == f"Merged into main and pushed as {head}."
+    assert git(remote, "show", "main:config.py") == "GREETING = 'hello'"
+    assert git(remote, "log", "-1", "--format=%s", "main") == "English greeting"
+    assert land_installed(installed, landing) == f"main already contains the installed change ({head})."
+    (workspace / "config.py").write_text("GREETING = 'hi'\n", encoding="utf-8")
+    try:
+        land_installed(installed, landing)
+    except PublishError as error:
+        assert "changed since this update was built" in str(error)
+    else:
+        raise AssertionError("a moved branch must not be overwritten")
+    assert git(remote, "rev-parse", "refs/heads/main") == head
 
 
 def test_declined_review_failed_checks_and_diverged_base_refuse_publication(tmp_path: Path) -> None:

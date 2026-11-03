@@ -25,6 +25,7 @@ from assistant.feed_agent_tools import Feed
 from assistant.meeting_execution import MeetingRun, MeetingWork
 from assistant.meeting_tools import MeetingCapture
 from assistant.personal_work_tools import PersonalWork
+from assistant.publishing import Landing
 from assistant.self_change_tools import Delivery, InstalledCopy, SelfChange, verified_installation
 from assistant.self_review_tools import SelfReviewTools
 from assistant.task_tools import TaskTools
@@ -47,7 +48,7 @@ from automation.task import (
     Waiting,
     task_profile,
 )
-from keeper import state_for
+from keeper import state_for, versions_for
 
 
 @dataclass(frozen=True, slots=True)
@@ -86,6 +87,8 @@ class GeneralEffects:
     context: Callable[[Task], RequestContext]
     feed_request: Callable[[BridgeCommand], str]
     lessons: ContextStore | None = None
+    landing: Landing | None = None
+    """Where verified self-changes are merged and pushed; None leaves them unmerged."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -95,6 +98,7 @@ class GeneralTools:
     install_root: Path
     feed_request: Callable[[BridgeCommand], str]
     lessons: ContextStore | None
+    landing: Landing | None
 
 
 class ProfileRun(Protocol):
@@ -225,8 +229,9 @@ class GeneralRun:
 
     def recover(self, work: WorkExecution, stop: threading.Event) -> Waiting | None:
         """A requested installation finishes when the running source matches its checked digest."""
-        workspace = self.conversation.workspace
-        return verified_installation(work.store, work.claim, InstalledCopy(workspace.live, state_for(self.tools.install_root)))
+        root = self.tools.install_root
+        installed = InstalledCopy(self.conversation.workspace.live, state_for(root), versions_for(root), self.tools.landing)
+        return verified_installation(work.store, work.claim, installed)
 
     def completed(self, outcome: Outcome) -> Outcome:
         return outcome
@@ -306,7 +311,7 @@ class Profiles:
     def __init__(self, workspace: Workspace, general: GeneralEffects, meeting: MeetingWork | None) -> None:
         self.conversations = Conversations(workspace)
         self.general, self.meeting = general, meeting
-        self.tools = GeneralTools(workspace.root, general.feed_request, general.lessons)
+        self.tools = GeneralTools(workspace.root, general.feed_request, general.lessons, general.landing)
 
     def run(self, claim: Claim) -> ProfileRun:
         """Select the run, refusing missing or changed meeting preparations."""

@@ -66,9 +66,14 @@ def state_for(workspace: Path) -> Path:
     return workspace.parent / "keeper"
 
 
+def versions_for(workspace: Path) -> Path:
+    """The keeper's snapshots of replaced versions, beside the install root."""
+    return workspace.parent / "versions"
+
+
 STATE: Final = state_for(WORKSPACE)
 REQUESTS: Final = STATE / "requests"
-VERSIONS: Final = DIRECTORY / "versions"
+VERSIONS: Final = versions_for(WORKSPACE)
 """A copy of each version replaced by an install, newest last."""
 KEPT_VERSIONS: Final = 20
 
@@ -458,7 +463,7 @@ class Keeper:
             self.fresh = True
             self.start(now)
             if self.digest is not None:
-                self.world.record(InstallStarted(self.digest))
+                self.world.record(InstallStarted(self.digest, self.summary, version))
         except OSError as error:
             self.rollback(f"installation failed: {error}", now)
 

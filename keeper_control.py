@@ -116,6 +116,9 @@ class InstallStarted:
     """The checked candidate is installed and its programs were started on trial."""
 
     digest: str
+    summary: str
+    version: str
+    """The snapshot of the source this install replaced, under the keeper's versions folder."""
     stage: Literal["installed"] = "installed"
 
 

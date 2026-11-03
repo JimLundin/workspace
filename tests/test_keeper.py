@@ -342,7 +342,7 @@ def test_an_install_is_checked_snapshotted_installed_and_tried() -> None:
         "trial a new snippet",
     ]
     assert keeper.stage is Stage.TRIAL
-    assert world.results == [InstallChecking("digest"), InstallStarted("digest")]
+    assert world.results == [InstallChecking("digest"), InstallStarted("digest", "a new snippet", "v1")]
 
 
 def test_a_change_that_fails_its_checks_is_not_installed() -> None:

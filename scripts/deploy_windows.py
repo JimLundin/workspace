@@ -334,9 +334,9 @@ class Release:
         old_source |= {name: value for name, value in existing.items() if name.startswith(".python/")}
         if drifted := installed_drift(self.deployed(), existing, self.wanted):
             raise RuntimeError(
-                "The installed copy has changes this checkout does not contain, most likely an agent install "
-                "(see %LOCALAPPDATA%\\workspace\\keeper.log and the workspace/agent-* branches). "
-                "Deploying would erase them. Bring them into the checkout, check again and redeploy: " + ", ".join(drifted)
+                "The installed copy has changes this checkout does not contain, most likely an agent install that "
+                "was merged into origin/main (see %LOCALAPPDATA%\\workspace\\keeper.log). Deploying would erase them. "
+                "Pull or merge them into this checkout, check again and redeploy: " + ", ".join(drifted)
             )
         for name in self.wanted.keys() - old_source.keys():
             if name in existing and existing[name] != self.wanted[name]:

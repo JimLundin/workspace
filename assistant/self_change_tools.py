@@ -26,7 +26,7 @@ from assistant.agent_tools import (
     typed_classification,
     typed_run,
 )
-from assistant.publishing import DEFAULT_REMOTE, publish_source
+from assistant.publishing import DEFAULT_REMOTE, Installed, Landing, PublishError, land_installed, publish_source
 from assistant.workspace import CheckCompleted, CheckInterrupted, CheckResult, SourceError, Workspace
 from automation.actions import Change, Classification, Observation, Operation, target
 from automation.json_value import Json
@@ -48,10 +48,11 @@ INSTRUCTIONS: Final = (
     "source, prompts, model settings and tests, run checks, install and reload the result. Complete that workflow unless "
     "the user explicitly asks for a draft or advice only. Keep changes focused and preserve unrelated work. "
     "Run check_changes, inspect any failures, fix them and check again; then call apply_changes with a one-line summary. "
-    "The keeper tests a frozen copy, installs it, restarts Workspace and undoes failures. "
+    "The keeper tests a frozen copy, installs it, restarts Workspace and undoes failures; once it reports the install, "
+    "the task commits the installed source to main and pushes it, so the change is kept in the repository. "
+    "Run focused tests with run_powershell while iterating if useful; check_changes is the required gate. "
     "keeper.py, selfcheck.py, runtime.py, workspace.pyw and bundled dependencies are protected; edit through the source tools. "
-    "Only publish when the user requests it; call publish_changes before apply_changes ends the task. "
-    "Publishing tests a frozen copy and pushes a new branch; it does not install or merge into main."
+    "publish_changes is only for a review branch the user asks for; it does not install or merge into main."
 )
 
 _INSTALLATION: Final = "apply_changes"
@@ -118,10 +119,15 @@ def _installation(operation: InstallOperation) -> tuple[str, ...]:
 
 @dataclass(frozen=True, slots=True)
 class InstalledCopy:
-    """The running source and the keeper's state folder, where it reports each install."""
+    """The running source, the keeper's folders and where verified installs land in Git."""
 
     live: Path
     state: Path
+    """Where the keeper reports each install."""
+    versions: Path
+    """The keeper's snapshots of replaced versions."""
+    landing: Landing | None
+    """None leaves installs unmerged: only for configurations without a repository."""
 
 
 INSTALL_WAIT_S: Final = CHECK_S + START_S + 60
@@ -145,11 +151,20 @@ def verified_installation(store: TaskStore, claim: Claim, installed: InstalledCo
                 # The request was delivered; what is verified is the keeper's refusal.
                 store.finish_action(action.id, ActionVerified(f"The keeper refused the install. {reason}"[:8_000]), at=now)
                 return Waiting(Blocked(f"The keeper did not install the change. {reason}"[:8_000]))
-            case InstallStarted(digest=digest) if digest == requested:
+            case InstallStarted(digest=digest, summary=summary, version=version) if digest == requested:
                 location = target("installed-root", str(installed.live.absolute()))
                 if source_digest(installed.live) != requested or location not in action.specification.resources:
                     return Waiting(Blocked("The keeper reported this install, but the running source differs from it. Inspect the installation."))
-                verified = ActionVerified("The keeper installed the checked change; the running source matches its SHA-256 digest.")
+                merged = ""
+                if installed.landing is not None:
+                    # An install that never reaches the repository is lost at the next
+                    # deployment. The action stays unverified until it lands; landing
+                    # again after a success finds it already merged.
+                    try:
+                        merged = " " + land_installed(Installed(installed.live, installed.versions / version, summary), installed.landing)
+                    except PublishError as error:
+                        return Waiting(Blocked(f"The change is installed but was not merged into the repository: {error}"[:8_000]))
+                verified = ActionVerified("The keeper installed the checked change; the running source matches its SHA-256 digest." + merged)
                 if store.finish_action(action.id, verified, at=now) is None:
                     return Waiting(Blocked("The installed source matched, but verification could not be recorded. Resume to inspect it again."))
             case _ if now < action.started_at + INSTALL_WAIT_S:
@@ -250,8 +265,8 @@ class SelfChange:
             Tool(
                 argument_spec(
                     "apply_changes",
-                    "Submit checked changes to the keeper: it tests a frozen copy and installs if they pass. "
-                    "If they fail to start or crash, they're undone automatically.",
+                    "Submit checked changes to the keeper: it tests a frozen copy and installs if they pass, "
+                    "then the change is committed to main and pushed. If they fail to start or crash, they're undone automatically.",
                     _SUMMARY,
                 ),
                 typed_run(_SUMMARY, self.apply_changes),

@@ -31,6 +31,7 @@ lazy from assistant.meeting_execution import MeetingWork
 lazy from assistant.meeting_followup_store import FollowupStore
 lazy from assistant.meeting_preparation import Preparations
 lazy from assistant.outlook import OutlookDrafts
+lazy from assistant.publishing import DEFAULT_REMOTE, Landing
 lazy from assistant.task_profiles import GeneralEffects, Profiles, RequestContext
 lazy from assistant.work_bridge_contracts import BRIDGE_COMMAND, BRIDGE_RESPONSE, BridgeCommand
 lazy from assistant.workspace import Workspace
@@ -183,7 +184,12 @@ def _native_execution(settings: Settings | Missing, bridge: BridgeServer, hwnd: 
             machine,
             Profiles(
                 Workspace(),
-                GeneralEffects(context.request, calls.desktop, contexts),
+                GeneralEffects(
+                    context.request,
+                    calls.desktop,
+                    contexts,
+                    Landing(os.environ.get("WORKSPACE_GIT_REMOTE", DEFAULT_REMOTE), os.environ.get("WORKSPACE_GIT_BASE", "main")),
+                ),
                 MeetingWork(Preparations(followups / "preparations"), FollowupStore(followups / "packages"), OutlookDrafts(followups / "mail")),
             ),
             record=lambda details: usage.record("automation", "agent", details),
