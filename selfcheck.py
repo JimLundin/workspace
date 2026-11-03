@@ -1,6 +1,6 @@
 """selfcheck: is this copy of the workspace sound? Uses installed or bundled SDK dependencies.
 
-    python selfcheck.py [FOLDER] [--fast | --native] [--durations N]
+    python selfcheck.py [FOLDER] [--fast | --native] [--changed-from BASE] [--durations N]
 
 1. Every .py file compiles.
 2. Every module imports (off Windows, the ones that need Windows are skipped).
@@ -13,12 +13,16 @@ The fast editing profile defers tests/test_windows_*.py. The native profile runs
 only those modules: the keeper uses it when the agent's fast check already passed
 for exactly the same source digest, so compiling, importing and the portable
 tests are not repeated back to back. Any other install gets the full profile.
+With --changed-from, a check runs only the test modules that import a file changed
+from BASE, directly or through test helpers, and compiles and imports only changed
+source; a changed asset runs the whole profile. The full suite runs in CI.
 
 Discovered member values remain objects; the runner validates origin and the
 supported keyword arguments before invoking a test.
 """
 
 import argparse
+import ast
 import importlib
 import inspect
 import os
@@ -28,8 +32,9 @@ import tempfile
 import time
 import traceback
 import unittest
-from collections.abc import Iterator
+from collections.abc import Iterable, Iterator
 from concurrent.futures import ProcessPoolExecutor
+from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
 from typing import Protocol
@@ -50,6 +55,90 @@ class Profile(Enum):
     """Compile and import all source, then run every module except tests/test_windows_*.py."""
     NATIVE = "native"
     """Only tests/test_windows_*.py: the rest of a source digest the fast profile passed."""
+
+
+@dataclass(frozen=True, slots=True)
+class Scope:
+    """Which tests a check runs: a profile, optionally narrowed to a change from `base`."""
+
+    profile: Profile
+    base: Path | None = None
+    """The running source the candidate changes; None runs the profile's whole suite."""
+
+
+FULL_SCOPE = Scope(Profile.FULL)
+"""The keeper's default gate: every test module."""
+
+_DOCUMENTS = ("docs/", ".github/")
+_TEXT = frozenset({"AGENTS.md", "README.md", "GLOSSARY.md"})
+
+
+def _files(root: Path) -> dict[str, bytes]:
+    found: dict[str, bytes] = {}
+    for folder, directories, files in os.walk(root):
+        directories[:] = [name for name in directories if not name.startswith(".") and name != "__pycache__"]
+        for name in files:
+            path = Path(folder) / name
+            if not name.startswith(".") and path.suffix != ".pyc":
+                found[path.relative_to(root).as_posix()] = path.read_bytes()
+    return found
+
+
+def changed_files(root: Path, base: Path) -> frozenset[str]:
+    """Source files that differ between the candidate and the source it changes."""
+    candidate, running = _files(root), _files(base)
+    return frozenset(name for name in candidate.keys() | running.keys() if candidate.get(name) != running.get(name))
+
+
+def _module(name: str) -> str:
+    parts = name.removesuffix(".pyw").removesuffix(".py").split("/")
+    return ".".join(parts[:-1] if parts[-1] == "__init__" else parts)
+
+
+def imports(name: str, text: str) -> frozenset[str]:
+    """Modules a source file imports, with their packages; relative imports resolved."""
+    package = _module(name).split(".")
+    if not name.endswith("__init__.py"):
+        package = package[:-1]
+    found: set[str] = set()
+    for node in ast.walk(ast.parse(text, filename=name)):
+        match node:
+            case ast.Import(names=aliases):
+                found.update(alias.name for alias in aliases)
+            case ast.ImportFrom(module=module, names=aliases, level=level):
+                prefix = ".".join(package[: len(package) - level + 1]) if level else ""
+                origin = ".".join(part for part in (prefix, module or "") if part)
+                found.add(origin)
+                found.update(f"{origin}.{alias.name}" for alias in aliases)
+            case _:
+                pass
+    return frozenset(module for name in found for module in _ancestors(name))
+
+
+def _ancestors(module: str) -> Iterator[str]:
+    parts = module.split(".")
+    for end in range(1, len(parts) + 1):
+        yield ".".join(parts[:end])
+
+
+def affected_tests(root: Path, changed: Iterable[str]) -> frozenset[str] | None:
+    """Test modules that import a changed module, directly or through test helpers.
+
+    None means every test: a changed asset or configuration has implicit readers.
+    Production imports are not followed further; the full suite runs in CI.
+    """
+    names = frozenset(changed)
+    if any(not name.endswith((".py", ".pyw")) and not name.startswith(_DOCUMENTS) and name not in _TEXT for name in names):
+        return None
+    reached = {_module(name) for name in names if name.endswith((".py", ".pyw"))}
+    tests = {
+        path.relative_to(root).as_posix(): imports(path.relative_to(root).as_posix(), path.read_text(encoding="utf-8"))
+        for path in (root / "tests").glob("*.py")
+    }
+    # This selection owner grows its reached set locally; only the frozen selection leaves.
+    while extra := {_module(name) for name, found in tests.items() if not Path(name).name.startswith("test_") and found & reached} - reached:
+        reached |= extra
+    return frozenset(name for name, found in tests.items() if Path(name).name.startswith("test_") and (found & reached or _module(name) in reached))
 
 
 def _selected(path: Path, profile: Profile) -> bool:
@@ -221,13 +310,38 @@ def _progress(path: Path, outcome: Outcome, seconds: float) -> None:
     sys.stdout.flush()
 
 
-def run_tests(root: Path, problems: list[str], profile: Profile) -> tuple[int, int, tuple[tuple[float, str], ...]]:
+def test_paths(root: Path, profile: Profile, changed: frozenset[str] | None) -> list[Path]:
+    """The profile's test modules, in name order, narrowed to those `changed` affects."""
+    paths = [path for path in sorted((root / "tests").glob("test_*.py")) if _selected(path, profile)]
+    affected = affected_tests(root, changed) if changed is not None else None
+    return paths if affected is None else [path for path in paths if path.relative_to(root).as_posix() in affected]
+
+
+def import_changed(root: Path, changed: frozenset[str], problems: list[str]) -> None:
+    """Compile every changed Python file and import the changed production modules."""
+    for name in sorted(changed):
+        if not name.endswith((".py", ".pyw")) or not (root / name).is_file():
+            continue
+        try:
+            compile((root / name).read_text(encoding="utf-8"), name, "exec")
+        except SyntaxError as error:
+            problems.append(f"doesn't compile: {name}\n{error}")
+            continue
+        module = _module(name)
+        if name.endswith(".py") and not name.startswith("tests/") and name != "selfcheck.py":
+            try:
+                importlib.import_module(module)
+            except Exception as error:
+                if not _windows_only(error):
+                    problems.append(f"doesn't import: {module}\n{''.join(traceback.format_exception(error))}")
+
+
+def run_tests(root: Path, problems: list[str], paths: list[Path]) -> tuple[int, int, tuple[tuple[float, str], ...]]:
     """Passed tests, skipped test modules and per-test timings.
 
     Reviewed portable modules run on worker processes while the other non-native
     modules run here; native modules run after the workers exit, one at a time.
     """
-    paths = [path for path in sorted((root / "tests").glob("test_*.py")) if _selected(path, profile)]
     relative = {path: path.relative_to(root).as_posix() for path in paths}
     portable = [path for name in PORTABLE for path in paths if relative[path] == name]
     following = [path for path in paths if path.name.startswith("test_windows_") or relative[path] in AFTER_WORKERS]
@@ -264,7 +378,7 @@ def run_tests(root: Path, problems: list[str], profile: Profile) -> tuple[int, i
     return sum(outcome[0] for outcome in outcomes), sum(outcome[1] for outcome in outcomes), measured
 
 
-def check(root: Path, profile: Profile = Profile.FULL, durations: int = 0) -> tuple[bool, str]:
+def check(root: Path, scope: Scope = FULL_SCOPE, durations: int = 0) -> tuple[bool, str]:
     """Whether the copy at `root` is sound, and a report. Imports from `root`, so run
     it in a process of its own (as `main` does)."""
     os.environ.pop("WORKSPACE_E2E", None)  # never the end-to-end tests: they'd start a second workspace
@@ -278,7 +392,13 @@ def check(root: Path, profile: Profile = Profile.FULL, durations: int = 0) -> tu
         sys.modules.pop("runtime", None)
     problems: list[str] = []
     timings: list[tuple[float, str]] = []
-    if profile is not Profile.NATIVE:
+    profile = scope.profile
+    changed = changed_files(root, scope.base) if scope.base is not None else None
+    if profile is not Profile.NATIVE and changed is not None:
+        started = time.perf_counter()
+        import_changed(root, changed, problems)
+        timings.append((time.perf_counter() - started, "compile and import changed source"))
+    elif profile is not Profile.NATIVE:
         started = time.perf_counter()
         compile_all(root, problems)
         timings.append((time.perf_counter() - started, "compile all source"))
@@ -286,9 +406,12 @@ def check(root: Path, profile: Profile = Profile.FULL, durations: int = 0) -> tu
             started = time.perf_counter()
             import_all(root, problems)
             timings.append((time.perf_counter() - started, "import all modules"))
-    passed, skipped, measured = run_tests(root, problems, profile) if not problems else (0, 0, ())
+    paths = test_paths(root, profile, changed)
+    passed, skipped, measured = run_tests(root, problems, paths) if not problems else (0, 0, ())
     timings.extend(measured)
     summary = f"{passed} passed, {len([p for p in problems if p.startswith('FAILED')])} failed, {skipped} module{'' if skipped == 1 else 's'} skipped"
+    if scope.base is not None:
+        summary += f", {len(paths)} affected test module{'' if len(paths) == 1 else 's'} (the full suite runs in CI)"
     if profile is Profile.FAST:
         deferred = len(list((root / "tests").glob("test_windows_*.py")))
         summary += f", {deferred} native module{'' if deferred == 1 else 's'} deferred (full checks run before install)"
@@ -304,15 +427,22 @@ def main() -> None:
     profiles.add_argument("--fast", action="store_true", help="editing checks; defer Windows integration modules")
     profiles.add_argument("--native", action="store_true", help="only the Windows integration modules a passing fast check deferred")
     parser.add_argument("--durations", type=int, default=0, metavar="N", help="report the N slowest checks")
+    parser.add_argument("--changed-from", type=Path, metavar="BASE", help="run only tests affected by changes from BASE")
     match dict(inspect.getmembers(parser.parse_args())):
-        case {"folder": Path() as folder, "fast": bool() as fast, "native": bool() as native, "durations": int() as durations}:
+        case {
+            "folder": Path() as folder,
+            "fast": bool() as fast,
+            "native": bool() as native,
+            "durations": int() as durations,
+            "changed_from": (Path() | None) as base,
+        }:
             pass
         case _:
             parser.error("Invalid selfcheck arguments.")
     if durations < 0:
         parser.error("durations must be nonnegative")
     profile = Profile.FAST if fast else Profile.NATIVE if native else Profile.FULL
-    ok, report = check(folder.resolve(), profile, durations)
+    ok, report = check(folder.resolve(), Scope(profile, base.resolve() if base is not None else None), durations)
     sys.stdout.write(report)
     sys.exit(0 if ok else 1)
 

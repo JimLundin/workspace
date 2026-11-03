@@ -143,7 +143,7 @@ class Workspace:
             digest = source_digest(candidate)
             command = [console_python(), str(self.live / "selfcheck.py"), str(candidate)]
             if fast:
-                command.append("--fast")
+                command.extend(("--fast", "--changed-from", str(self.live)))
             code, report = commands.run(command, timeout_s=timeout_s, cancel=cancel)
             if code == -1:
                 return CheckInterrupted(report)

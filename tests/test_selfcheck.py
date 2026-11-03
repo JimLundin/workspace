@@ -66,6 +66,26 @@ def test_worker_modules_report_their_passes_and_failures(tmp_path: Path) -> None
     assert "3 passed, 1 failed" in report
 
 
+def test_a_change_runs_only_the_tests_that_import_it(tmp_path: Path) -> None:
+    # Detect the scoped check running unaffected tests, missing a test that
+    # reaches the change through a helper, or missing an asset's implicit readers.
+    files = {
+        **SOUND,
+        "tools/other.py": "VALUE = 1\n",
+        "tests/helper.py": "from tools.maths import double\n",
+        "tests/test_through_helper.py": "from tests.helper import double\ndef test_helper() -> None:\n    assert double(1) == 2\n",
+        "tests/test_other.py": "from tools.other import VALUE\ndef test_other() -> None:\n    assert VALUE == 1\n",
+    }
+    base = tree(tmp_path / "base", files)
+    candidate = tree(tmp_path / "candidate", {**files, "tools/maths.py": "def double(x: int) -> int:\n    return x + x\n"})
+    code, report = selfcheck(candidate, "--fast", "--changed-from", str(base))
+    assert code == 0, report
+    assert "3 passed" in report and "2 affected test modules" in report
+    tree(candidate, {"tools/data.json": "{}"})
+    code, report = selfcheck(candidate, "--fast", "--changed-from", str(base))
+    assert code == 0 and "4 passed" in report, report
+
+
 def test_a_syntax_error_fails(tmp_path: Path) -> None:
     code, report = selfcheck(tree(tmp_path, {**SOUND, "tools/broken.py": "def oops(:\n"}))
     assert code == 1

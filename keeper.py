@@ -632,7 +632,8 @@ class _Check:
         self.output = STATE / "check.txt"
         # The agent's fast check already compiled, imported and ran every portable
         # test on these exact bytes; repeating that doubled each install's checks.
-        profile: tuple[str, ...] = ("--native",) if checked == self.digest else ()
+        # Only the tests the change affects; the full suite runs in CI.
+        profile: tuple[str, ...] = ("--native", "--changed-from", str(LIVE)) if checked == self.digest else ("--changed-from", str(LIVE))
         _log("checking the workspace" + (": native modules after its passing fast check" if profile else ""))
         with self.output.open("wb") as out:
             self.process = subprocess.Popen(
