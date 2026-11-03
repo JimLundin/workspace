@@ -47,16 +47,33 @@ def release(root: Path = ROOT) -> PythonRelease:
     return data
 
 
+# The one executable a dependency may install: Ruff ships only a binary, signed by
+# its publisher. Ruff's own finder looks in `bin/` beside the package, the layout
+# `pip install --target` produces. Every other executable is omitted.
+TOOLS = frozenset({"ruff.exe"})
+
+
+def placed(member: str) -> Path | None:
+    """Where a wheel member goes in the runtime, or None when it is omitted."""
+    path = Path(member)
+    match path.parts:
+        case (data, "scripts", name) if data.endswith(".data") and name in TOOLS:
+            return Path("bin", name)
+        case _ if path.suffix.lower() in {".exe", ".pyc"} or any(part.endswith(".data") for part in path.parts):
+            return None
+        case _:
+            return path
+
+
 def extract(archive_path: Path, folder: Path) -> None:
     with zipfile.ZipFile(archive_path) as archive:
         for info in archive.infolist():
             path = Path(info.filename)
-            executable = path.suffix.lower() == ".exe"
-            if info.is_dir() or (executable or path.suffix.lower() == ".pyc" or any(p.endswith(".data") for p in path.parts)):
+            if info.is_dir() or (destination := placed(info.filename)) is None:
                 continue
             if path.is_absolute() or ".." in path.parts:
                 raise ValueError(f"Invalid archive member: {info.filename}")
-            target = folder / path
+            target = folder / destination
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_bytes(archive.read(info))
 
@@ -121,7 +138,7 @@ def build(output: Path) -> None:
         with zipfile.ZipFile(output, "w", zipfile.ZIP_DEFLATED) as archive:
             for path in sorted(bundle.rglob("*")):
                 if path.is_file():
-                    if path.suffix.lower() == ".exe":
+                    if path.suffix.lower() == ".exe" and path not in {runtime / "bin" / tool for tool in TOOLS}:
                         raise ValueError(f"Dependency bundles cannot contain EXEs: {path}")
                     archive.write(path, path.relative_to(root))
         print(f"Built {output}: installed Python {python.version} with Qt, {len(packages)} dependency wheels", flush=True)

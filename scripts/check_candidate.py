@@ -2,8 +2,8 @@
 
     python -m scripts.check_candidate CANDIDATE --changed-from BASE
 
-check_changes runs this with the development environment's interpreter after the
-protected selfcheck passes, so a self-change fails here instead of reaching main
+check_changes runs this from the running version with its bundled interpreter after
+the protected selfcheck passes, so a self-change fails here instead of reaching main
 with errors CI's standards job rejects. Ruff and the architecture and quality
 reviews cover the whole candidate; pyright and mypy cover only the Python files
 changed from BASE, as `Dev.cmd check` does while editing. Prints only failures
@@ -17,8 +17,11 @@ import shutil
 import sys
 from pathlib import Path
 
-from keeper import source_files
-from scripts import architecture, check_standards, quality
+import runtime
+
+# The tools and Pydantic come from the bundled runtime, activated in main.
+lazy from keeper import source_files
+lazy from scripts import architecture, check_standards, quality
 
 
 def changed(candidate: Path, base: Path) -> tuple[str, ...]:
@@ -51,6 +54,7 @@ def failures(candidate: Path, base: Path) -> tuple[str, ...]:
 
 
 def main() -> None:
+    runtime.activate(root=Path(__file__).resolve().parent.parent)
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("candidate", type=Path)
     parser.add_argument("--changed-from", type=Path, required=True, metavar="BASE")

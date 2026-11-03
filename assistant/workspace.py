@@ -3,7 +3,6 @@ it does here touches the running workspace; the keeper installs the workspace, a
 checking it, when asked (see keeper.py)."""
 
 import difflib
-import os
 import tempfile
 import threading
 from dataclasses import dataclass, field
@@ -32,21 +31,13 @@ class CheckInterrupted:
 type CheckResult = CheckCompleted | CheckInterrupted
 
 
-def development_python() -> Path | None:
-    """The development environment's interpreter, which has the Ruff, pyright and
-    mypy CI uses; the bundled runtime cannot carry Ruff's executable."""
-    configured = os.environ.get("WORKSPACE_STANDARDS_PYTHON")
-    python = Path(configured) if configured else Path.home() / "Projects" / "workspace" / ".venv" / "Scripts" / "python.exe"
-    return python if python.is_file() else None
-
-
 class Workspace:
     __slots__ = ("live", "prepared", "root", "standards")
 
-    # Four parameters: the draft, the running version it is checked against, and
-    # the standards interpreter are one installation's fixed facts; resume selects
-    # whether an existing draft is kept.
-    def __init__(self, live: Path = LIVE, root: Path = WORKSPACE, *, resume: bool = False, standards: Path | None = None) -> None:
+    # Four parameters: the draft and the running version it is checked against,
+    # plus two independent choices: keep an existing draft, and apply CI's
+    # standards after the tests (the running version's scripts.check_candidate).
+    def __init__(self, live: Path = LIVE, root: Path = WORKSPACE, *, resume: bool = False, standards: bool = False) -> None:
         self.live = live
         self.root = root
         self.standards = standards
@@ -180,14 +171,10 @@ class Workspace:
                 return CheckInterrupted(report)
             if source_digest(candidate) != digest:
                 return CheckCompleted(passed=False, report="Runtime checks changed the candidate source; fix the tests and check again.")
-            if code != 0 or not affected:
+            if code != 0 or not affected or not self.standards:
                 return CheckCompleted(passed=code == 0, report=report)
-            if self.standards is None:
-                return CheckCompleted(
-                    passed=True, report=report + "\nStandards not run: no development environment; CI applies them after the push.\n"
-                )
             # After the digest comparison: the tools leave caches in the scratch copy.
-            standards = [str(self.standards), "-m", "scripts.check_candidate", str(candidate), "--changed-from", str(self.live)]
+            standards = [console_python(), "-m", "scripts.check_candidate", str(candidate), "--changed-from", str(self.live)]
             code, findings = commands.run(standards, cwd=str(self.live), timeout_s=timeout_s, cancel=cancel)
             if code == -1:
                 return CheckInterrupted(findings)

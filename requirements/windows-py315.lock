@@ -50,3 +50,14 @@ shiboken6==6.12.0 --hash=sha256:a1906cb8116869178c64b6bab52623bbc8b4ceed7b30bfc3
 win32more-core==0.8.7 --hash=sha256:7420eeb98bcd99a67943c046a24d02accf19a3241571ce691108adc4676ca7d7
 win32more-Microsoft.Windows.SDK.Contracts==0.8.10.0.28000.2705 --hash=sha256:3e5d0373719a41c0a1e19dbe78f2110c7d50f718419f13872febfb9f3d171d73
 win32more-Microsoft.Windows.SDK.Win32Metadata==0.8.71.0.26 --hash=sha256:e08d06c31630e85b0df3cccb35ad9b3c80e69ac6b2d1b708a4d66289b9769baf
+
+# CI's standards for the agent's check_changes (scripts/check_candidate.py). Ruff's
+# signed binary is the bundle's one executable; pyright runs on the installed Node.
+ast-serialize==0.13.1 --hash=sha256:032b09d86c785c3984e975378b7861f2a68ac44e22ba7b07b93a536b2524eeb8
+librt==0.16.0 --hash=sha256:bc02954b1295de798bbdb0b4e2d8a28c2117de8b5c73dcbeb27dc32572dfb971
+mypy==2.4.0 --hash=sha256:970b221ed5842213d98e3c480c08f795ace4b1f81fb21e1b126bd0476bce1c34
+mypy_extensions==1.1.0 --hash=sha256:1be4cccdb0f2482337c4743e60421de3a356cd97508abadd57d47403e94f5505
+nodeenv==1.11.0 --hash=sha256:edaa16e6c14d7cf395d75d4bbd5a26390f4dc06501a33b4e76282b02cc688a25
+pathspec==1.1.1 --hash=sha256:a00ce642f577bf7f473932318056212bc4f8bfdf53128c78bbd5af0b9b20b189
+pyright==1.1.414 --hash=sha256:2a6b4b3298c9eec174c5ed83bd338de6eee82df2992f3e1930e6199d381be36f
+ruff==0.17.3 --hash=sha256:56b8ffb3f3b3cbccb8b76b71b38261b7ed982ef5d20f5b447b1b61a7f4949b24

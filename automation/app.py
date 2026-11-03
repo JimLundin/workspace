@@ -34,7 +34,7 @@ lazy from assistant.outlook import OutlookDrafts
 lazy from assistant.publishing import DEFAULT_REMOTE, Landing
 lazy from assistant.task_profiles import GeneralEffects, Profiles, RequestContext
 lazy from assistant.work_bridge_contracts import BRIDGE_COMMAND, BRIDGE_RESPONSE, BridgeCommand
-lazy from assistant.workspace import Workspace, development_python
+lazy from assistant.workspace import Workspace
 lazy from automation import ipc
 lazy from automation.activity import ContextSnapshot, Observation, Sample, observed
 lazy from automation.bridge import BridgeServer
@@ -183,7 +183,7 @@ def _native_execution(settings: Settings | Missing, bridge: BridgeServer, hwnd: 
             usable,
             machine,
             Profiles(
-                Workspace(standards=development_python()),
+                Workspace(standards=True),
                 GeneralEffects(
                     context.request,
                     calls.desktop,
