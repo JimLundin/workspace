@@ -173,9 +173,8 @@ class TraySection(Section):
         ink = self.appearance.lettering.ink.color if self.appearance is not None else "#eeeeee"
         self.toggle.setIcon(icon("chevron" if self.toggle.isChecked() else "chevron-left", ink, 16))
 
-    def disclose(self, expanded: bool) -> None:
-        # Qt's toggled signal supplies the required positional boolean.
-        if not expanded and any(button.hasFocus() for button in self.buttons):
+    def disclose(self) -> None:
+        if not self.toggle.isChecked() and any(button.hasFocus() for button in self.buttons):
             self.toggle.setFocus()
         self.describe()
         self.place(*self.available)

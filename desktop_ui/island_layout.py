@@ -205,16 +205,56 @@ def present(value: float) -> float:
     return min(1.0, max(0.0, value))
 
 
+def _shown(capsule: Placed) -> float:
+    return capsule.width * present(capsule.presence)
+
+
+def _boxed(capsule: Placed, x: float, metrics: Metrics) -> Framed:
+    box = Box(x, metrics.top, _shown(capsule), capsule.height)
+    return Framed(capsule.key, box, Box(x, 0, box.width, metrics.top), present(capsule.presence))
+
+
+def _anchored(capsules: Sequence[Placed], metrics: Metrics) -> tuple[tuple[Framed, ...], float]:
+    """Right-anchored controls and the left boundary they leave for activity.
+
+    Tray space is reserved immediately before Canvas. Status and keyboard move
+    left with disclosure; activity never participates in this right anchor."""
+    right: tuple[Framed, ...] = ()
+    edge = max(0.0, metrics.width - 12)
+    for key in (Key.CANVAS, Key.LAYER, Key.STATUS):
+        capsule = next((c for c in capsules if c.key is key), None)
+        if capsule is None:
+            continue
+        width = _shown(capsule)
+        if width > edge:
+            continue  # Canvas and disclosure take priority on very small screens.
+        edge -= width
+        right = (_boxed(capsule, edge, metrics), *right)
+        edge -= metrics.gap
+        if key is Key.CANVAS:
+            edge -= min(metrics.tray_width, max(0.0, edge)) + metrics.gap
+    return right, max(0.0, edge)
+
+
+def _unanchored_trail(capsules: Sequence[Placed], boundary: float, metrics: Metrics) -> tuple[Framed, ...]:
+    """Pending clarifications remain dynamic even without another activity."""
+    edge = min(metrics.width / 2, boundary)
+    dynamic: tuple[Framed, ...] = ()
+    for capsule in capsules:
+        width = min(_shown(capsule), max(0.0, boundary - edge))
+        if width > 0:
+            box = Box(edge, metrics.top, width, capsule.height)
+            dynamic += (Framed(capsule.key, box, Box(edge, 0, width, metrics.top), present(capsule.presence)),)
+            edge += width + metrics.gap
+    return dynamic
+
+
 def frame(placed: Sequence[Placed], metrics: Metrics) -> tuple[Framed, ...]:
     """Capsules in left-to-right order; absent ones (presence 0) take no space."""
     order: tuple[Key, ...] = tuple(Key)
 
-    def shown(capsule: Placed) -> float:
-        return capsule.width * present(capsule.presence)
-
     def boxed(capsule: Placed, x: float) -> Framed:
-        box = Box(x, metrics.top, shown(capsule), capsule.height)
-        return Framed(capsule.key, box, Box(x, 0, box.width, metrics.top), present(capsule.presence))
+        return _boxed(capsule, x, metrics)
 
     def position(capsule: Placed) -> int:
         return order.index(capsule.key)
@@ -222,37 +262,12 @@ def frame(placed: Sequence[Placed], metrics: Metrics) -> tuple[Framed, ...]:
     def zone(name: Zone) -> tuple[Placed, ...]:
         return tuple(sorted((c for c in placed if c.zone is name and c.presence > 0), key=position))
 
-    # Reserve tray space immediately before Canvas. Status and keyboard move
-    # left with disclosure; activity never participates in this right anchor.
-    right: tuple[Framed, ...] = ()
-    edge = max(0.0, metrics.width - 12)
-    for key in (Key.CANVAS, Key.LAYER, Key.STATUS):
-        capsule = next((c for c in zone(Zone.RIGHT) if c.key is key), None)
-        if capsule is None:
-            continue
-        width = shown(capsule)
-        if width > edge:
-            continue  # Canvas and disclosure take priority on very small screens.
-        edge -= width
-        right = (boxed(capsule, edge), *right)
-        edge -= metrics.gap
-        if key is Key.CANVAS:
-            edge -= min(metrics.tray_width, max(0.0, edge)) + metrics.gap
-    boundary = max(0.0, edge)
+    right, boundary = _anchored(zone(Zone.RIGHT), metrics)
     islands = zone(Zone.ISLAND)
     if not islands:
-        # Pending clarifications remain dynamic even without another activity.
-        edge = min(metrics.width / 2, boundary)
-        dynamic: tuple[Framed, ...] = ()
-        for capsule in zone(Zone.TRAIL):
-            width = min(shown(capsule), max(0.0, boundary - edge))
-            if width > 0:
-                box = Box(edge, metrics.top, width, capsule.height)
-                dynamic += (Framed(capsule.key, box, Box(edge, 0, width, metrics.top), present(capsule.presence)),)
-                edge += width + metrics.gap
-        return (*dynamic, *right)
+        return (*_unanchored_trail(zone(Zone.TRAIL), boundary, metrics), *right)
     island = islands[0]
-    left = (metrics.width - shown(island)) / 2
+    left = (metrics.width - _shown(island)) / 2
     centre = boxed(island, left)
 
     def outward(capsules: tuple[Placed, ...], edge: float, *, leading: bool) -> tuple[Framed, ...]:
@@ -260,14 +275,14 @@ def frame(placed: Sequence[Placed], metrics: Metrics) -> tuple[Framed, ...]:
         before = present(island.presence)
         for capsule in capsules:
             space = metrics.gap * min(before, present(capsule.presence))
-            x = edge - space - shown(capsule) if leading else edge + space
+            x = edge - space - _shown(capsule) if leading else edge + space
             framed = (boxed(capsule, x), *framed) if leading else (*framed, boxed(capsule, x))
-            edge = x if leading else x + shown(capsule)
+            edge = x if leading else x + _shown(capsule)
             before = present(capsule.presence)
         return framed
 
     lead = outward(tuple(reversed(zone(Zone.LEAD))), left, leading=True)
-    trail = outward(zone(Zone.TRAIL), left + shown(island), leading=False)
+    trail = outward(zone(Zone.TRAIL), left + _shown(island), leading=False)
     dynamic = (*lead, centre, *trail)
     start = min(each.box.x for each in dynamic)
     end = max(each.box.x + each.box.width for each in dynamic)

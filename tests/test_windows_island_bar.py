@@ -139,11 +139,6 @@ def test_the_island_keeps_canvas_navigation_and_each_capsule_acts_on_what_it_sho
     bar = DesktopBar(recorded(invoked), native_shell=False, observations=observations)
     try:
         assert shown(bar) == [Key.CANVAS]
-        status = bar.window.capsules[Key.STATUS]
-        assert "20:59" in status.accessibleName() and "73%" in status.accessibleName()
-        press(bar, Key.STATUS)
-        assert bar.expanded is not None and bar.window.capsules[Key.ISLAND].rows[0].accessibleName() == "Your work canvas"
-        QTest.keyClick(bar.window, QtCore.Qt.Key.Key_Escape)
         bar.agent_changed(WORKING)
         island = bar.window.capsules[Key.ISLAND]
         assert "Comparing both sheets" in island.accessibleName()
@@ -163,25 +158,43 @@ def test_the_island_keeps_canvas_navigation_and_each_capsule_acts_on_what_it_sho
         bar.dictation(active=False)
         bar.agent_changed(Agent("Which sheet?", waiting=True))
         press(bar, Key.ISLAND)
+        bar.inbox_changed(120)
+        assert "120 clarifications" in bar.window.capsules[Key.INBOX].accessibleName()
+        press(bar, Key.INBOX)
+        assert invoked == ["stop", "stop", "canvas", "record-stop", "inbox", "inbox"]
+        bar.recording_changed(RecordingState(phase="saved"))
+        bar.inbox_changed(0)
+        rest(bar)
+        assert shown(bar) == [Key.CANVAS]
+    finally:
+        closed(app, bar)
+
+
+def test_the_status_and_keyboard_capsules_act_on_what_they_show() -> None:
+    # Defects: the status capsule loses its time, battery or menu, or the
+    # keyboard capsule runs another function or overlaps the tray.
+    app = application()
+    invoked: list[str] = []
+    observations = BarObservations(power=lambda: Battery(73, powered=False, charging=False), local_time=lambda: datetime(2026, 10, 30, 20, 59))
+    bar = DesktopBar(recorded(invoked), native_shell=False, observations=observations)
+    try:
+        status = bar.window.capsules[Key.STATUS]
+        assert "20:59" in status.accessibleName() and "73%" in status.accessibleName()
+        press(bar, Key.STATUS)
+        assert bar.expanded is not None and bar.window.capsules[Key.ISLAND].rows[0].accessibleName() == "Your work canvas"
+        QTest.keyClick(bar.window, QtCore.Qt.Key.Key_Escape)
+        bar.automatic_changed(AutomaticStatus.READY)
+        press(bar, Key.STATUS)
+        menu_row(bar, "Auto-record Teams: On").click()
+        assert invoked == ["record-automatic"]
+        rest(bar)
         bar.layout(enabled=False)
         keyboard = bar.window.capsules[Key.LAYER]
         assert "Colemak" in keyboard.accessibleName()
         assert keyboard.toolTip() == keyboard.accessibleName() and keyboard.width() == 36
         assert keyboard.geometry().right() < bar.window.shell_sections.tray.geometry().left()
         press(bar, Key.LAYER)
-        bar.inbox_changed(120)
-        assert "120 clarifications" in bar.window.capsules[Key.INBOX].accessibleName()
-        press(bar, Key.INBOX)
-        assert invoked == ["stop", "stop", "canvas", "record-stop", "inbox", "keymap", "inbox"]
-        bar.recording_changed(RecordingState(phase="saved"))
-        bar.layout(enabled=True)
-        bar.inbox_changed(0)
-        rest(bar)
-        assert shown(bar) == [Key.CANVAS]
-        bar.automatic_changed(AutomaticStatus.READY)
-        press(bar, Key.STATUS)
-        menu_row(bar, "Auto-record Teams: On").click()
-        assert invoked[-1] == "record-automatic"
+        assert invoked == ["record-automatic", "keymap"]
     finally:
         closed(app, bar)
 

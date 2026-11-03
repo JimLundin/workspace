@@ -1,5 +1,7 @@
 """Where the island bar's capsules sit, and where parts sit inside them."""
 
+import itertools
+
 from desktop_ui.island_layout import Box, Framed, Metrics, Placed, Spot, arrange, frame, snap
 from desktop_ui.island_model import Action, Badge, Control, Glyph, Key, Marker, Spinner, Text, Zone
 
@@ -63,7 +65,7 @@ def test_right_cluster_reserves_tray_and_activity_cannot_overlap_on_narrow_scree
             assert canvas.x + canvas.width == screen - 12
             boxes = tuple(each.box for each in framed)
             assert all(0 <= box.x <= box.x + box.width <= screen for box in boxes)
-            assert all(left.x + left.width <= right.x for left, right in zip(boxes, boxes[1:]))
+            assert all(left.x + left.width <= right.x for left, right in itertools.pairwise(boxes))
             layer = next((each.box for each in framed if each.key is Key.LAYER), None)
             if layer is not None:
                 assert canvas.x - (layer.x + layer.width) == tray + 12
