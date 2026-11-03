@@ -5,7 +5,7 @@ and changes to the supervisor require a full stop. No code is imported from the
 running application to make this decision.
 """
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from enum import Enum, auto
 from pathlib import Path
@@ -27,23 +27,38 @@ class ComponentRestart:
 type RestartPlan = FullRestart | ComponentRestart
 
 
-def closure(root: str, imports: Mapping[str, frozenset[str]]) -> frozenset[str]:
+def closure(root: str, imports: Callable[[str], frozenset[str]]) -> frozenset[str]:
     # This source-analysis owner retains a traversal worklist locally; only an
     # immutable module observation leaves it.
     reached = {root, root.split(".", maxsplit=1)[0]}
     pending = list(reached)
     while pending:
-        for dependency in imports.get(pending.pop(), frozenset()):
+        for dependency in imports(pending.pop()):
             if dependency not in reached:
                 reached.add(dependency)
                 pending.append(dependency)
     return frozenset(reached)
 
 
-def source_imports(root: Path, names: Mapping[str, str]) -> frozendict[str, frozenset[str]]:
-    return frozendict(
-        (module_name(name), dependencies(name, (root / name).read_text(encoding="utf-8"))) for name in names if name.endswith((".py", ".pyw"))
-    )
+def source_imports(root: Path, manifest: Mapping[str, str], parsed: dict[tuple[str, str], frozenset[str]]) -> Callable[[str], frozenset[str]]:
+    """A module's imports, parsed on first use: only modules a supervised process reaches.
+
+    `parsed` is restart_plan's local memo keyed by file name and content hash, so a
+    file unchanged between versions is parsed once. Parsing every file of both
+    trees took 6-8 s per tree on Windows, inside the deployment outage path.
+    """
+    files = frozendict((module_name(name), name) for name in manifest if name.endswith((".py", ".pyw")))
+
+    def imports(module: str) -> frozenset[str]:
+        name = files.get(module)
+        if name is None:
+            return frozenset()
+        key = (name, manifest[name])
+        if key not in parsed:
+            parsed[key] = dependencies(name, (root / name).read_text(encoding="utf-8"))
+        return parsed[key]
+
+    return imports
 
 
 def restart_plan(before: Path, after: Path, manifests: tuple[Mapping[str, str], Mapping[str, str]]) -> RestartPlan:
@@ -59,7 +74,8 @@ def restart_plan(before: Path, after: Path, manifests: tuple[Mapping[str, str], 
         return FullRestart.ALL
     if changed & PROTECTED:
         return FullRestart.ALL
-    graphs = source_imports(before, old), source_imports(after, new)
+    parsed: dict[tuple[str, str], frozenset[str]] = {}
+    graphs = source_imports(before, old, parsed), source_imports(after, new, parsed)
     affected = frozenset(module_name(name) for name in changed if name.endswith((".py", ".pyw")))
     if any(affected & closure("keeper", graph) for graph in graphs):
         return FullRestart.ALL
