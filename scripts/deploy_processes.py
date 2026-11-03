@@ -161,6 +161,7 @@ class ProcessReader:
     __slots__ = (
         "argument_pointer",
         "close",
+        "exit_code",
         "first",
         "free",
         "image_name",
@@ -183,6 +184,7 @@ class ProcessReader:
         self.image_name = fn(
             kernel, "QueryFullProcessImageNameW", wintypes.BOOL, wintypes.HANDLE, wintypes.DWORD, wintypes.LPWSTR, ctypes.POINTER(wintypes.DWORD)
         )
+        self.exit_code = fn(kernel, "GetExitCodeProcess", wintypes.BOOL, wintypes.HANDLE, ctypes.POINTER(wintypes.DWORD))
         self.process_times = fn(kernel, "GetProcessTimes", wintypes.BOOL, wintypes.HANDLE, *([ctypes.POINTER(wintypes.FILETIME)] * 4))
         self.information = fn(
             nt,
@@ -196,6 +198,15 @@ class ProcessReader:
         )
         self.argument_pointer = fn(shell, "CommandLineToArgvW", ctypes.c_void_p, wintypes.LPCWSTR, ctypes.POINTER(ctypes.c_int))
         self.free = fn(kernel, "LocalFree", ctypes.c_void_p, ctypes.c_void_p)
+
+    def exited(self, handle: int) -> bool:
+        """A process that exits while it is inspected has no command line left to read.
+
+        A deployment polling for paused children's exits otherwise failed on the
+        child it was waiting for, leaving the paused components stopped.
+        """
+        code = wintypes.DWORD()
+        return bool(self.exit_code(handle, ctypes.byref(code))) and code.value != 259  # STILL_ACTIVE
 
     def read(self, entry: Entry, live: Path) -> Observation | None:
         pid = entry.th32ProcessID
@@ -211,10 +222,14 @@ class ProcessReader:
                     needed = wintypes.ULONG()
                     self.information(handle, 60, None, 0, ctypes.byref(needed))
                     if not ctypes.sizeof(UnicodeString) <= needed.value <= 1_000_000:
+                        if self.exited(handle):
+                            return None
                         raise RuntimeError("Cannot inspect an installed process command line.")
                     buffer = ctypes.create_string_buffer(needed.value)
                     status = self.information(handle, 60, buffer, len(buffer), ctypes.byref(needed))
                     if status < 0:
+                        if self.exited(handle):
+                            return None
                         raise OSError("Cannot inspect installed process identity.")
                     value = UnicodeString.from_buffer(buffer)
                     address = value.Buffer or 0
