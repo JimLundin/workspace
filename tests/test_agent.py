@@ -204,7 +204,7 @@ class FakeMachine:
     def open(self, target: str) -> None:
         self.log.append(f"open {target}")
 
-    def install(self, summary: str, checked: str | None) -> None:
+    def install(self, summary: str, digest: str, checked: str | None) -> None:
         self.log.append(f"install {summary}" + (" after its fast check" if checked is not None else ""))
 
 

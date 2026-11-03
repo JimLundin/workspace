@@ -32,7 +32,7 @@ def change(live: Path, home: Path, summary: str, edit: str, old: str, *, new: st
     workspace = Workspace(live, home / "workspace" / "workspace")
     workspace.reset()
     workspace.replace(edit, old, new)
-    ask(home / "workspace" / "keeper" / "requests", Install(summary, None))
+    ask(home / "workspace" / "keeper" / "requests", Install(summary, "digest", None))
 
 
 def no_review() -> None:

@@ -31,8 +31,9 @@ from assistant.workspace import CheckCompleted, CheckInterrupted, CheckResult, S
 from automation.actions import Change, Classification, Observation, Operation, target
 from automation.json_value import Json
 from automation.store import TaskStore
-from automation.task import ActionUncertain, ActionVerified, Blocked, Claim, Waiting
-from keeper import copy_source, source_digest
+from automation.task import ActionUncertain, ActionVerified, Blocked, Claim, Until, Waiting
+from keeper import CHECK_S, START_S, copy_source, source_digest
+from keeper_control import InstallRefused, InstallStarted, install_result
 
 MAX_SOURCE_CHARS: Final = 60_000
 """Most of one source file the model reads at once."""
@@ -115,20 +116,46 @@ def _installation(operation: InstallOperation) -> tuple[str, ...]:
     return ("source", target("installed-root", operation.destination), "source-digest:" + operation.source_digest)
 
 
-def verified_installation(store: TaskStore, claim: Claim, live: Path) -> Waiting | None:
-    """Finish a requested installation when the running source matches its checked digest."""
+@dataclass(frozen=True, slots=True)
+class InstalledCopy:
+    """The running source and the keeper's state folder, where it reports each install."""
+
+    live: Path
+    state: Path
+
+
+INSTALL_WAIT_S: Final = CHECK_S + START_S + 60
+"""How long a requested install may go unreported before the task stops waiting for it."""
+
+
+def verified_installation(store: TaskStore, claim: Claim, installed: InstalledCopy) -> Waiting | None:
+    """Finish a requested installation from the keeper's reported result for its exact digest.
+
+    The keeper's checks and restart take minutes. Comparing the running source once,
+    two minutes after the request, blocked installs that were still being checked
+    and hid the keeper's reason when it refused one.
+    """
     for action in store.unverified_actions(claim.task.id):
         if action.specification.tool != _INSTALLATION:
             continue
-        expected = "source-digest:" + source_digest(live)
-        location = target("installed-root", str(live.absolute()))
-        if expected not in action.specification.resources or location not in action.specification.resources:
-            return Waiting(
-                Blocked("The keeper's installed source does not match the requested update. Inspect its installation result before retrying.")
-            )
-        verified = ActionVerified("The running source matches the checked installation's SHA-256 digest.")
-        if store.finish_action(action.id, verified, at=time.time()) is None:
-            return Waiting(Blocked("The installed source matched, but verification could not be recorded. Resume to inspect it again."))
+        requested = next((name.removeprefix("source-digest:") for name in action.specification.resources if name.startswith("source-digest:")), "")
+        now = time.time()
+        match install_result(installed.state):
+            case InstallRefused(digest=digest, reason=reason) if digest == requested:
+                # The request was delivered; what is verified is the keeper's refusal.
+                store.finish_action(action.id, ActionVerified(f"The keeper refused the install. {reason}"[:8_000]), at=now)
+                return Waiting(Blocked(f"The keeper did not install the change. {reason}"[:8_000]))
+            case InstallStarted(digest=digest) if digest == requested:
+                location = target("installed-root", str(installed.live.absolute()))
+                if source_digest(installed.live) != requested or location not in action.specification.resources:
+                    return Waiting(Blocked("The keeper reported this install, but the running source differs from it. Inspect the installation."))
+                verified = ActionVerified("The keeper installed the checked change; the running source matches its SHA-256 digest.")
+                if store.finish_action(action.id, verified, at=now) is None:
+                    return Waiting(Blocked("The installed source matched, but verification could not be recorded. Resume to inspect it again."))
+            case _ if now < action.started_at + INSTALL_WAIT_S:
+                return Waiting(Until(now + 15, "Waiting for the keeper to check and install the change."))
+            case _:
+                return Waiting(Blocked(f"The keeper reported no result for this install within {INSTALL_WAIT_S / 60:.0f} minutes. See keeper.log."))
     return None
 
 
@@ -359,7 +386,7 @@ class SelfChange:
                 raise SourceError("The source changed after review; check and review it again.")
             if install_root is not None and self.source().root != install_root:
                 copy_source(self.source().root, install_root)
-            self.session.machine.install(summary, checked)
+            self.session.machine.install(summary, digest, checked)
             self.session.installation_requested(summary)
             return Output("Asked the keeper to install it.")
 

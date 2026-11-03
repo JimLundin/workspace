@@ -327,5 +327,5 @@ class WinMachine:
     def open(self, target: str) -> None:
         self.open_target(target)
 
-    def install(self, summary: str, checked: str | None) -> None:
-        keeper_control.ask(keeper.REQUESTS, keeper_control.Install(summary, checked))
+    def install(self, summary: str, digest: str, checked: str | None) -> None:
+        keeper_control.ask(keeper.REQUESTS, keeper_control.Install(summary, digest, checked))

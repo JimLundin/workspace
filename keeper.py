@@ -37,15 +37,37 @@ from typing import Final, Protocol, assert_never
 from components import CATALOGUE, Component, Entry, read_marker
 
 # Bundled dependencies load only after `keeper.py` activates the runtime.
-lazy from keeper_control import ROLLBACK, Install, Keep, Malformed, Request, Restart, Rollback, Undo, take
+lazy from keeper_control import (
+    ROLLBACK,
+    Install,
+    InstallChecking,
+    InstallRefused,
+    InstallResult,
+    InstallStarted,
+    Keep,
+    Malformed,
+    Request,
+    Restart,
+    Rollback,
+    Undo,
+    record_install,
+    take,
+)
 
 LIVE: Final = Path(__file__).resolve().parent
 """Workspace's own folder: the version that runs."""
 DIRECTORY: Final = Path(os.environ.get("LOCALAPPDATA") or tempfile.gettempdir()) / "workspace"
-STATE: Final = DIRECTORY / "keeper"
-REQUESTS: Final = STATE / "requests"
 WORKSPACE: Final = DIRECTORY / "workspace"
 """Where the agent edits a copy of the source; installed from here."""
+
+
+def state_for(workspace: Path) -> Path:
+    """The keeper's state folder beside the install root it installs from."""
+    return workspace.parent / "keeper"
+
+
+STATE: Final = state_for(WORKSPACE)
+REQUESTS: Final = STATE / "requests"
 VERSIONS: Final = DIRECTORY / "versions"
 """A copy of each version replaced by an install, newest last."""
 KEPT_VERSIONS: Final = 20
@@ -191,6 +213,10 @@ class World(Protocol):
     def restore(self, version: str) -> None: ...
     def install(self) -> None: ...
     def notify(self, text: str) -> None: ...
+    def record(self, result: InstallResult) -> None:
+        """Publish the install outcome the requesting task waits for."""
+        ...
+
     def show_trial(self, summary: str | None) -> None:
         """Shows the trial window for this change; None hides it."""
 
@@ -248,7 +274,21 @@ class Recovery:
 class Keeper:
     """Everything the keeper decides, driven by `request` and a regular `tick`."""
 
-    __slots__ = ("check", "children", "crashes", "deadline", "done", "fresh", "recovery", "stage", "summary", "suspended", "undoable", "world")
+    __slots__ = (
+        "check",
+        "children",
+        "crashes",
+        "deadline",
+        "digest",
+        "done",
+        "fresh",
+        "recovery",
+        "stage",
+        "summary",
+        "suspended",
+        "undoable",
+        "world",
+    )
 
     def __init__(self, world: World, recovery: Recovery | None = None) -> None:
         self.recovery = recovery
@@ -258,6 +298,8 @@ class Keeper:
         self.deadline = 0.0
         self.check: Check | None = None
         self.summary = ""
+        self.digest: str | None = None
+        """The source digest of the install being checked, started or on trial."""
         self.undoable: str | None = None
         """The version the last install replaced."""
         self.fresh = False
@@ -300,16 +342,19 @@ class Keeper:
         match request:
             case Malformed(file=file, reason=reason):
                 self.world.notify(f"Refused a request the keeper doesn't recognise ({file}).\n\n{reason}")
+            case Install(digest=digest) if self.stage is Stage.PAUSED:
+                self.refuse(digest, "Source replacement is in progress; try again after the reload.")
             case _ if self.stage is Stage.PAUSED:
                 self.world.notify("Source replacement is in progress; try again after the reload.")
-            case Install(summary=summary, checked=checked):
+            case Install(summary=summary, digest=digest, checked=checked):
                 if self.stage in (Stage.CHECKING, Stage.STARTING):
-                    self.world.notify("Busy installing; try again in a moment.")
+                    self.refuse(digest, "Busy installing; try again in a moment.")
                     return
                 if self.stage is Stage.TRIAL:
                     self.persist(pending=False)
                     self.world.show_trial(None)
-                self.check, self.summary = self.world.start_check(checked), summary
+                self.world.record(InstallChecking(digest))
+                self.check, self.summary, self.digest = self.world.start_check(checked), summary, digest
                 self.stage, self.deadline = Stage.CHECKING, now + CHECK_S
             case Keep():
                 if self.stage is Stage.TRIAL:
@@ -331,6 +376,12 @@ class Keeper:
                 self.stage, self.deadline = Stage.STARTING, now + START_S
             case _:
                 assert_never(request)
+
+    def refuse(self, digest: str | None, reason: str) -> None:
+        """Tell the user, and the task that asked for this install, why it was not installed."""
+        self.world.notify(reason)
+        if digest is not None:
+            self.world.record(InstallRefused(digest, reason))
 
     def suspend(self, components: tuple[Component, ...]) -> bool:
         """Stop only selected children; retain supervision ownership during IO."""
@@ -383,12 +434,12 @@ class Keeper:
             if now > self.deadline:
                 if self.check is not None:
                     self.check.cancel()
-                self.world.notify("Not installed: the checks took too long.")
+                self.refuse(self.digest, "Not installed: the checks took too long.")
                 self.stage = Stage.RUNNING
             return
         passed, report = result
         if not passed:
-            self.world.notify(f"Not installed: the change failed its checks.\n\n{report[-3000:]}")
+            self.refuse(self.digest, f"Not installed: the change failed its checks.\n\n{report[-3000:]}")
             self.stage = Stage.RUNNING
             return
         previous = self.undoable
@@ -398,7 +449,7 @@ class Keeper:
             self.persist(pending=True)  # write before stopping or changing any live file
         except OSError as error:
             self.undoable = previous
-            self.world.notify(f"Not installed: couldn't save the rollback version. {error}")
+            self.refuse(self.digest, f"Not installed: couldn't save the rollback version. {error}")
             self.stage = Stage.RUNNING
             return
         try:
@@ -406,6 +457,8 @@ class Keeper:
             self.world.install()
             self.fresh = True
             self.start(now)
+            if self.digest is not None:
+                self.world.record(InstallStarted(self.digest))
         except OSError as error:
             self.rollback(f"installation failed: {error}", now)
 
@@ -462,7 +515,7 @@ class Keeper:
         self.fresh = False
         self.start(now)
         self.crashes = []
-        self.world.notify(f"Update undone: {why}.")
+        self.refuse(self.digest, f"Update undone: {why}.")
         if on_trial:
             self.world.show_trial(None)
 
@@ -649,6 +702,9 @@ def main(ui: Ui) -> None:
         def notify(self, text: str) -> None:
             _log(text)
             ui.notify(text)
+
+        def record(self, result: InstallResult) -> None:
+            record_install(STATE, result)
 
         def show_trial(self, summary: str | None) -> None:
             _log(f"on trial: {summary}" if summary else "trial over")

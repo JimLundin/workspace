@@ -13,6 +13,7 @@ from typing import cast
 from assistant.agent import Agent
 from assistant.agent_execution import AgentExecution
 from assistant.llm import Settings, ToolCall
+from assistant.self_change_tools import InstalledCopy, verified_installation
 from assistant.task_profiles import General, GeneralEffects, Profiles, unseen
 from assistant.workspace import CheckInterrupted, Workspace
 from automation.actions import Change, Operation, Resources
@@ -31,9 +32,11 @@ from automation.task import (
     RoutineSource,
     Source,
     TextAnswer,
+    Until,
     Waiting,
 )
-from keeper import copy_source, source_digest
+from keeper import copy_source, source_digest, state_for
+from keeper_control import InstallRefused, InstallStarted, record_install
 from tests.fake_endpoint import Reply, fake_endpoint
 from tests.test_agent import FakeMachine, FakeWindow, calls, no_feed, says
 from tests.test_work_actions import claimed
@@ -289,6 +292,37 @@ def test_nonfinite_tool_arguments_never_enter_effect_storage(tmp_path: Path) -> 
     assert not result.ok and not destination.exists() and not store.actions("task")
 
 
+def test_a_refused_installation_reports_the_keepers_reason(tmp_path: Path) -> None:
+    # Detect a refused install leaving its task waiting or blocked without the keeper's reason.
+    store, claim, _ = claimed(tmp_path)
+    workspace = Workspace(live_tree(tmp_path / "live"), tmp_path / "workspace")
+    workspace.ensure()
+    workspace.write("config.py", "GREETING = 'refused update'\n")
+    digest = source_digest(workspace.root)
+    installation = Operation.of(
+        "apply_changes",
+        {"summary": "Refused", "source_digest": digest, "destination": str(workspace.live.absolute()), "diff_sha256": "0" * 64},
+    )
+    agent = Agent(
+        Settings("", "", "", "", ""),
+        FakeMachine(),
+        FakeWindow(),
+        threading.Event(),
+        work=WorkExecution(claim, store, Resources()),
+        toolset=lambda agent: General(agent, workspace=workspace, feed_request=no_feed),
+    )
+    classified = agent.tools["apply_changes"].classify(installation.arguments)
+    assert isinstance(classified, Change)
+    assert store.begin_action(claim.run, "install", classified.specification(installation, NoVerification.NONE), at=time.time()) is not None
+    store.finish_action("install", ActionReturned("Keeper installation requested."), at=time.time())
+    record_install(state_for(workspace.root), InstallRefused(digest, "Not installed: the change failed its checks.\n\nFAILED tests.test_x"))
+    outcome = verified_installation(store, claim, InstalledCopy(workspace.live, state_for(workspace.root)))
+    assert outcome == Waiting(Blocked("The keeper did not install the change. Not installed: the change failed its checks.\n\nFAILED tests.test_x"))
+    assert store.actions("task")[0].outcome == ActionVerified(
+        "The keeper refused the install. Not installed: the change failed its checks.\n\nFAILED tests.test_x"
+    )
+
+
 def test_installation_resumes_only_after_running_source_matches_the_requested_digest(tmp_path: Path) -> None:
     store, claim, clock = claimed(tmp_path)
     workspace = Workspace(live_tree(tmp_path / "live"), tmp_path / "workspace")
@@ -314,8 +348,9 @@ def test_installation_resumes_only_after_running_source_matches_the_requested_di
     classified = agent.tools["apply_changes"].classify(installation.arguments)
     assert isinstance(classified, Change)
     specification = classified.specification(installation, NoVerification.NONE)
-    assert store.begin_action(claim.run, "install", specification, at=clock()) is not None
-    store.finish_action("install", ActionReturned("Keeper installation requested."), at=clock())
+    # The install wait is measured on the wall clock, from when the request was made.
+    assert store.begin_action(claim.run, "install", specification, at=time.time()) is not None
+    store.finish_action("install", ActionReturned("Keeper installation requested."), at=time.time())
     store.finish(claim.run, Waiting(Blocked("Waiting for keeper.")), at=clock())
     store.control("task", Control.RESUME, at=clock())
     pending = store.claim("worker", "uninstalled-run", at=clock())
@@ -325,9 +360,11 @@ def test_installation_resumes_only_after_running_source_matches_the_requested_di
         settings = Settings(endpoint.url, "fixture", "transcribe", "", "")
         adapter = execution(settings, workspace, errors)
         outcome = adapter.run_work(pending, store, FakeWindow(), threading.Event())
-        assert isinstance(outcome, Waiting) and not endpoint.received
+        # The keeper is still checking: the task waits instead of blocking.
+        assert isinstance(outcome, Waiting) and isinstance(outcome.reason, Until) and not endpoint.received
         store.finish(pending.run, outcome, at=time.time())
         copy_source(workspace.root, workspace.live)
+        record_install(state_for(workspace.root), InstallStarted(source_digest(workspace.root)))
         store.control("task", Control.RESUME, at=time.time())
         installed = store.claim("restarted-worker", "installed-run", at=time.time())
         assert installed is not None

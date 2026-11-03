@@ -13,7 +13,7 @@ import time
 from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal, Protocol
+from typing import Final, Literal, Protocol
 
 from pydantic import TypeAdapter, ValidationError
 
@@ -25,6 +25,8 @@ class Install:
     """Check and install the agent's workspace; the summary titles its trial."""
 
     summary: str
+    digest: str
+    """The requested source digest; the keeper's install result names it."""
     checked: str | None
     """The source digest whose fast selfcheck passed, or None. When the keeper's frozen
     candidate has exactly this digest, only the deferred native modules run."""
@@ -102,6 +104,35 @@ class Refused:
 
 
 @dataclass(frozen=True, slots=True)
+class InstallChecking:
+    """The keeper accepted the install request and is checking its candidate."""
+
+    digest: str
+    stage: Literal["checking"] = "checking"
+
+
+@dataclass(frozen=True, slots=True)
+class InstallStarted:
+    """The checked candidate is installed and its programs were started on trial."""
+
+    digest: str
+    stage: Literal["installed"] = "installed"
+
+
+@dataclass(frozen=True, slots=True)
+class InstallRefused:
+    """The keeper did not install the request, or undid it; `reason` is what it showed the user."""
+
+    digest: str
+    reason: str
+    stage: Literal["refused"] = "refused"
+
+
+type InstallResult = InstallChecking | InstallStarted | InstallRefused
+"""The keeper's latest install outcome, so the requesting task waits for it instead of guessing."""
+
+
+@dataclass(frozen=True, slots=True)
 class Capability:
     keeper_pid: int
     version: Literal[1] = 1
@@ -112,6 +143,24 @@ ROLLBACK = TypeAdapter[Rollback](Rollback)
 COMMAND = TypeAdapter[Pause | Resume](Pause | Resume)
 STATUS = TypeAdapter[Paused | Resumed | Refused](Paused | Resumed | Refused)
 CAPABILITY = TypeAdapter[Capability](Capability)
+INSTALL_RESULT = TypeAdapter[InstallResult](InstallChecking | InstallStarted | InstallRefused)
+INSTALL_RESULT_FILE: Final = "install-result.json"
+
+
+def record_install(folder: Path, result: InstallResult) -> None:
+    """Replace the keeper's install result whole; a reader never sees half of it."""
+    folder.mkdir(parents=True, exist_ok=True)
+    temporary = folder / f"{INSTALL_RESULT_FILE}.{time.time_ns()}.tmp"
+    temporary.write_bytes(INSTALL_RESULT.dump_json(result))
+    temporary.replace(folder / INSTALL_RESULT_FILE)
+
+
+def install_result(folder: Path) -> InstallResult | None:
+    """The latest install result, or None while there is none or it can't be read yet."""
+    try:
+        return INSTALL_RESULT.validate_json((folder / INSTALL_RESULT_FILE).read_bytes(), strict=True)
+    except OSError, ValidationError:
+        return None
 
 
 class Supervisor(Protocol):

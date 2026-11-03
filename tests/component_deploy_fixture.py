@@ -17,7 +17,7 @@ from pathlib import Path
 
 from components import CATALOGUE, Component, read_marker, started_ms
 from keeper import Keeper, Stage
-from keeper_control import Control
+from keeper_control import Control, InstallResult
 from scripts.deploy_files import PINS, files, sha, write, zip_files
 from scripts.deploy_processes import Process, process_id
 from scripts.deploy_values import Config
@@ -121,6 +121,9 @@ class World:
 
     def notify(self, text: str) -> None:
         raise AssertionError(text)
+
+    def record(self, result: InstallResult) -> None:
+        raise AssertionError(result)
 
     def show_trial(self, summary: str | None) -> None:
         raise AssertionError("The deployment does not enter an agent update trial")

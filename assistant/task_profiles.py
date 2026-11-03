@@ -25,7 +25,7 @@ from assistant.feed_agent_tools import Feed
 from assistant.meeting_execution import MeetingRun, MeetingWork
 from assistant.meeting_tools import MeetingCapture
 from assistant.personal_work_tools import PersonalWork
-from assistant.self_change_tools import Delivery, SelfChange, verified_installation
+from assistant.self_change_tools import Delivery, InstalledCopy, SelfChange, verified_installation
 from assistant.self_review_tools import SelfReviewTools
 from assistant.task_tools import TaskTools
 from assistant.work_bridge_contracts import BridgeCommand
@@ -47,6 +47,7 @@ from automation.task import (
     Waiting,
     task_profile,
 )
+from keeper import state_for
 
 
 @dataclass(frozen=True, slots=True)
@@ -224,7 +225,8 @@ class GeneralRun:
 
     def recover(self, work: WorkExecution, stop: threading.Event) -> Waiting | None:
         """A requested installation finishes when the running source matches its checked digest."""
-        return verified_installation(work.store, work.claim, self.conversation.workspace.live)
+        workspace = self.conversation.workspace
+        return verified_installation(work.store, work.claim, InstalledCopy(workspace.live, state_for(self.tools.install_root)))
 
     def completed(self, outcome: Outcome) -> Outcome:
         return outcome
