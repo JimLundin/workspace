@@ -5,21 +5,11 @@ can select any test that `Dev.cmd check` runs, including SDK and pywin32 tests.
 """
 
 import sys
-from collections.abc import Generator
-from pathlib import Path
 
-import pytest
+lazy import pytest
 
-from scripts.check import NATIVE_SOURCE_RUNTIME, scratch_directory
-
-
-class CheckFixtures:
-    """Replace pytest's tmp_path with the edit check's shallow scratch folder."""
-
-    @pytest.fixture
-    def tmp_path(self) -> Generator[Path]:
-        with scratch_directory() as scratch:
-            yield scratch
+from scripts.check import NATIVE_SOURCE_RUNTIME
+lazy from tests.mutation_plugin import CheckFixtures
 
 
 def main() -> None:
