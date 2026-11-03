@@ -5,6 +5,7 @@ python -m scripts.check [--full] [--native] [--standards] [--tests tests/test_x.
 """
 
 import argparse
+import contextlib
 import importlib
 import inspect
 import json
@@ -18,7 +19,7 @@ from collections.abc import Callable, Generator, Iterator, Mapping
 from contextlib import contextmanager, nullcontext
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal, Protocol, runtime_checkable
+from typing import Final, Literal, Protocol, runtime_checkable
 lazy from concurrent.futures import ProcessPoolExecutor
 
 from pydantic import TypeAdapter, ValidationError
@@ -35,7 +36,14 @@ lazy from scripts.check_native import execute_native
 lazy from scripts.native_desktop import current_name
 
 ROOT = Path(__file__).resolve().parent.parent
-BROAD = frozenset({"keeper.py", "components.py", "selfcheck.py", "runtime.py", "workspace.pyw", "config.py", "protocol.py", "pyproject.toml"})
+DIRECT = "direct Python imports"
+POLICY_FILES: Final = frozendict(
+    {
+        "pyproject.toml": ("tests/test_architecture.py", "tests/test_quality.py"),
+        "docs/quality-migrations.json": ("tests/test_quality.py",),
+    }
+)
+"""Configuration whose only readers are the policy reviews and their tests."""
 TEST_NAMES = TypeAdapter[list[str]](list[str])
 WINDOWS_IMPORTS = ("WinDLL", "WINFUNCTYPE", "windll", "winreg", "msvcrt", "_winapi", "PySide6", "shiboken6", "win32more")
 
@@ -58,10 +66,23 @@ class Test(Protocol):
     def __call__(self, **arguments: Path) -> object: ...
 
 
-def source_files(root: Path = ROOT) -> dict[str, str]:
+def source_paths(root: Path = ROOT) -> tuple[str, ...]:
     result = subprocess.run(["git", "ls-files", "--cached", "--others", "--exclude-standard", "-z"], cwd=root, capture_output=True, check=True)
-    paths = sorted(set(os.fsdecode(result.stdout).split("\0")) - {""})
-    return {name: sha(path) for name in paths if (path := file_at(root, name)).is_file()}
+    return tuple(sorted(set(os.fsdecode(result.stdout).split("\0")) - {""}))
+
+
+def source_files(root: Path = ROOT) -> dict[str, str]:
+    return {name: sha(path) for name in source_paths(root) if (path := file_at(root, name)).is_file()}
+
+
+def source_stamps(root: Path = ROOT) -> frozendict[str, tuple[int, int]]:
+    """Each source file's size and modification time: a cheap identity for the final binding."""
+    stamps: dict[str, tuple[int, int]] = {}
+    for name in source_paths(root):
+        with contextlib.suppress(FileNotFoundError):
+            observed = os.stat(file_at(root, name))
+            stamps[name] = (observed.st_size, observed.st_mtime_ns)
+    return frozendict(stamps)
 
 
 def select(root: Path, current: Mapping[str, str], previous: Mapping[str, str], *, full: bool = False, native: bool = False) -> Selection:
@@ -74,30 +95,40 @@ def select(root: Path, current: Mapping[str, str], previous: Mapping[str, str], 
         and name.endswith(".py")
         and (native or not Path(name).name.startswith("test_windows_"))
     )
-    if full or not previous or any(name in BROAD or name.startswith("requirements/") for name in changed):
-        return Selection(all_tests, changed, "full source checks" if full else "bootstrap/configuration or missing baseline")
-    # Non-Python application assets have implicit users: run the whole source suite.
-    if any(
-        not name.endswith((".py", ".pyw")) and not name.startswith(("docs/", ".github/")) and name not in ("AGENTS.md", "README.md", "GLOSSARY.md")
+    if full or not previous or any(name.startswith("requirements/") for name in changed):
+        return Selection(all_tests, changed, "full source checks" if full else "dependency pins or missing baseline")
+    implicit = [
+        name
         for name in changed
-    ):
+        if not name.endswith((".py", ".pyw"))
+        and not name.startswith(("docs/", ".github/"))
+        and name not in ("AGENTS.md", "README.md", "GLOSSARY.md", *POLICY_FILES)
+    ]
+    # Non-Python application assets have implicit users: run the whole source suite.
+    if implicit:
         return Selection(all_tests, changed, "application asset has implicit dependencies")
     affected = {module_name(name) for name in changed if name.endswith((".py", ".pyw"))}
-    if not affected:
-        return Selection((), changed, "transitive Python import dependencies")
+    policy = {test for name in changed for test in POLICY_FILES.get(name, ())}
+    if not affected and not policy:
+        return Selection((), changed, DIRECT)
     # Cache ownership stays inside source selection; callers only choose
     # coverage. Minimal source fixtures need no project/cache configuration.
     cache = Cache(root) if (root / "pyproject.toml").is_file() else None
-    python = {
-        name: dependencies(name, file_at(root, name).read_text(encoding="utf-8"), cache=cache) for name in current if name.endswith((".py", ".pyw"))
+    # Tests that import a changed module, themselves or through test helpers.
+    # Following production imports transitively selected most of the suite for
+    # any core edit (56 modules, 250 s for a two-file change); the full suite
+    # runs with --full and in CI.
+    tests = {
+        name: dependencies(name, file_at(root, name).read_text(encoding="utf-8"), cache=cache)
+        for name in current
+        if name.startswith("tests/") and name.endswith(".py") and (root / name).is_file()
     }
-    while True:
-        extra = {module_name(name) for name, imports in python.items() if imports & affected} - affected
-        if not extra:
-            break
-        affected.update(extra)
-    selected = tuple(name for name in all_tests if module_name(name) in affected)
-    return Selection(selected, changed, "transitive Python import dependencies")
+    # This selection owner grows its reached set locally; only the immutable selection leaves.
+    reached = set(affected)
+    while extra := {module_name(name) for name, imports in tests.items() if not Path(name).name.startswith("test_") and imports & reached} - reached:
+        reached |= extra
+    selected = tuple(name for name in all_tests if name in policy or module_name(name) in reached or tests.get(name, frozenset()) & reached)
+    return Selection(selected, changed, DIRECT)
 
 
 def windows_only(error: BaseException) -> bool:
@@ -213,7 +244,7 @@ def execute(selection: Selection, root: Path, runtime: SourceRuntime = NATIVE_SO
     with timed("phase:runtime activation", phases):
         runtime.activate()
     failures: list[Failure] = []
-    broad = selection.reason not in ("transitive Python import dependencies", "explicit iteration scope")
+    broad = selection.reason not in (DIRECT, "explicit iteration scope")
     if broad:
         with timed("phase:compile all source", phases):
             failures.extend(step_failures("compile all source", runtime.compile, root))
@@ -540,16 +571,21 @@ def main() -> None:
     # contains only scalar durations, source identities and immutable results.
     overhead: list[tuple[float, str]] = []
     with timed("phase:initial source manifest", overhead):
+        stamps = source_stamps()
         current = source_files()
     cache = Cache(ROOT)
     if args.standards:
         with timed("phase:lint standards", overhead):
             check_lint(ROOT)
-    # Type checking the whole tree takes minutes and sets the floor for narrow
-    # checks, so both checkers start right after the quick lint, overlapping the
-    # policy reviews and test execution. Their failures block the receipt like
-    # test failures; an earlier policy failure ends their process trees on exit.
-    types = check_standards.background(check_standards.TYPES, ROOT) if args.standards else nullcontext(check_standards.unchecked)
+    # Selection parses source without importing it, so it may precede the reviews.
+    with timed("phase:baseline and test selection", overhead):
+        selection = choose(args, current, parser)
+    # The type checkers overlap the policy reviews and test execution. Their
+    # failures block the receipt like test failures; an earlier policy failure
+    # ends their process trees on exit. Editing checks type only changed files.
+    present = tuple(name for name in selection.changed if name in current)
+    standards = check_standards.TYPES if args.full else check_standards.changed_types(present)
+    types = check_standards.background(standards, ROOT) if args.standards else nullcontext(check_standards.unchecked)
     with types as typed:
         # Mandatory even for explicit --tests scopes; no application imports or
         # native effects before ownership and source policies have passed.
@@ -557,8 +593,6 @@ def main() -> None:
             architecture = check_architecture(ROOT, current, cache)
         with timed("phase:quality review", overhead):
             check_quality(ROOT, current, cache)
-        with timed("phase:baseline and test selection", overhead):
-            selection = choose(args, current, parser)
         scope: dict[str, str | int] = {"profile": selection.reason, "test_modules": len(selection.tests), "changed_files": len(selection.changed)}
         print(json.dumps(scope), flush=True)
         # Desktop isolation may relaunch the executor. Keep policy review, source
@@ -572,7 +606,9 @@ def main() -> None:
         with timed("phase:type standards", overhead):
             results = combined_results((results, Results(0, 0, typed(), ())))
     with timed("phase:final source manifest", overhead):
-        final = source_files()
+        # Stamps taken before hashing: unchanged stamps mean unchanged bytes. Re-hashing
+        # every file after the tests cost up to 15 s under post-run file contention.
+        final = current if source_stamps() == stamps else source_files()
     if final != current:
         changed = tuple(name for name in sorted(final.keys() | current.keys()) if final.get(name) != current.get(name))
         message = "Working source changed during checks; no receipt written."

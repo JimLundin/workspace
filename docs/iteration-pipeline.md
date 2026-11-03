@@ -140,15 +140,15 @@ imports and direct forwarding exports.
 Read [code-quality-policies.md](code-quality-policies.md) when changing a
 signature or its exact migration entry. Architecture migration exceptions
 are printed as cleanup debt. A policy failure stops before tests or a receipt.
-`Dev.cmd check` also passes `--standards`, which applies the same whole-tree
-`ruff check`, `ruff format --check` and pyright runs as `Dev.cmd lint`,
-`format --check` and `typecheck`, plus CI's `mypy .`, whatever the test
-selection. Ruff runs before tests and stops the check on failure. Pyright keeps
-no state between runs and checks the whole tree each time, so pyright (with its
-worker threads) and mypy start right after Ruff, before the policy reviews, and run concurrently
-with them and the tests; errors from either fail the check and block the receipt.
-A narrow one-module check measured 82.7 s with this ordering, against 273.7 s
-when pyright started single-threaded after the reviews.
+`Dev.cmd check` also passes `--standards`, which applies whole-tree
+`ruff check` and `ruff format --check`, and pyright and mypy over the changed
+Python files; `--full` and CI's standards job type the whole tree. Ruff runs
+before tests and stops the check on failure. The type checkers run concurrently
+with the policy reviews and the tests; errors from either fail the check and
+block the receipt. Whole-tree pyright set an 80 s floor under every editing
+check; a type error a change causes in an unchanged file is caught by `--full`
+and CI instead. The final source binding compares file sizes and modification
+times taken before hashing, and re-hashes only when one changed.
 Before this, the editing quality review ran only Ruff's signature rules, so type
 and lint errors outside those rules still produced deployable receipts. Plain
 `python -m scripts.check`, the watcher and CI's property run omit the flag;
@@ -232,10 +232,14 @@ Failure and timing accumulators stay private to the execution owner; published
 check results are tuples, including the validated native handoff.
 
 1. Run `Dev.cmd check`. It compares source with the last
-   deployed manifest and selects test modules through transitive Python imports,
-   including relative imports, package initialization, static dynamic imports,
-   test fixtures and deleted modules. Bootstrap/configuration/pin changes,
-   application assets and a missing baseline fall back to the full source suite.
+   deployed manifest and selects the test modules that import a changed module,
+   directly or through test helpers, including relative imports, package
+   initialization, static dynamic imports and deleted modules. Production
+   imports are not followed further: transitive selection ran most of the suite
+   for any core edit (56 modules, 250 s for a two-file change; the same kind of
+   change now checks in about 35 s). `pyproject.toml` and the quality baseline
+   select their policy tests. Pin changes, application assets and a missing
+   baseline fall back to the full source suite. `--full` and CI run everything.
 2. During implementation, narrow further with `--tests tests/test_feed_triage.py`
    (or multiple files). A specific check can be selected with
    `tests/test_windows_runtime.py::test_shutdown_resolves_pending_and_late_ui_requests`.

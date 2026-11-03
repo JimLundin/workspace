@@ -48,29 +48,34 @@ def test_selection_follows_relative_imports_and_test_fixtures(tmp_path: Path) ->
     path.parent.mkdir()
     path.write_text("from tests.fixture import api\n")
     previous = previous | {nested: "before"}
-    current = previous | {"app/value.py": "after"}
+    current = previous | {"app/api.py": "after"}
     result = select(tmp_path, current, previous)
     assert set(result.tests) == {"tests/test_api.py", nested}
     result = select(tmp_path, current, previous, native=True)
     assert set(result.tests) == {"tests/test_api.py", "tests/test_windows_api.py", nested}
+    # Production imports are not followed: value.py reaches tests only through api.py.
+    assert select(tmp_path, previous | {"app/value.py": "after"}, previous).tests == ()
     assert set(select(tmp_path, current, previous, full=True).tests) == {"tests/test_api.py", "tests/test_other.py", nested}
 
 
 def test_package_initializer_and_deleted_source_select_consumers(tmp_path: Path) -> None:
     previous = tree(tmp_path)
     assert select(tmp_path, previous | {"app/__init__.py": "after"}, previous).tests == ("tests/test_api.py",)
-    current = {name: digest for name, digest in previous.items() if name != "app/value.py"}
-    (tmp_path / "app/value.py").unlink()
+    current = {name: digest for name, digest in previous.items() if name != "app/api.py"}
+    (tmp_path / "app/api.py").unlink()
     assert select(tmp_path, current, previous).tests == ("tests/test_api.py",)
 
 
-def test_broad_changes_fall_back_to_full_suite(tmp_path: Path) -> None:
+def test_pins_and_assets_fall_back_to_full_suite_but_policy_files_select_their_reviews(tmp_path: Path) -> None:
     previous = tree(tmp_path)
-    for name in ("runtime.py", "requirements/windows-py315.lock", "app/assets.js"):
+    for name in ("requirements/windows-py315.lock", "app/assets.js"):
         result = select(tmp_path, previous | {name: "after"}, previous)
         assert set(result.tests) == {"tests/test_api.py", "tests/test_other.py"}
+    (tmp_path / "tests/test_quality.py").write_text("")
+    previous = previous | {"tests/test_quality.py": "before"}
+    assert select(tmp_path, previous | {"docs/quality-migrations.json": "after"}, previous).tests == ("tests/test_quality.py",)
     assert select(tmp_path, previous, previous).tests == ()
-    assert set(select(tmp_path, previous, previous, full=True).tests) == {"tests/test_api.py", "tests/test_other.py"}
+    assert set(select(tmp_path, previous, previous, full=True).tests) == {"tests/test_api.py", "tests/test_other.py", "tests/test_quality.py"}
 
 
 def test_static_dynamic_imports_and_ancestors_are_dependencies() -> None:

@@ -42,6 +42,19 @@ MYPY = Standard("mypy", (sys.executable, "-m", "mypy", "."))
 TYPES = (PYRIGHT, MYPY)
 
 
+def changed_types(names: Iterable[str]) -> tuple[Standard, ...]:
+    """Both checkers over only the changed Python files: the editing gate.
+
+    Whole-tree pyright set an 80 s floor under every check, even one whose tests
+    ran in milliseconds. A type error a change causes elsewhere is caught by
+    --full and CI's standards job instead.
+    """
+    files = tuple(sorted(name for name in names if name.endswith((".py", ".pyw"))))
+    if not files:
+        return ()
+    return (Standard(PYRIGHT.node, (*PYRIGHT.command, *files)), Standard(MYPY.node, (*MYPY.command[:-1], *files)))
+
+
 def outcome(standard: Standard, status: int, output: str) -> tuple[Failure, ...]:
     if status == 0:
         return ()
