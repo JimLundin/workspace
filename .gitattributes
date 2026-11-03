@@ -1,0 +1,3 @@
+# Source is LF everywhere; CI Windows checkouts otherwise convert it to CRLF
+# and the format check reports every file.
+* text=auto eol=lf

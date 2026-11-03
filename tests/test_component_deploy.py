@@ -2,12 +2,17 @@
 
 import contextlib
 import io
+import sys
+import unittest
 from pathlib import Path
 
 from components import ASSISTANT, Component, Writer, write_marker
 from scripts.deploy_files import read, sha
 from scripts.deploy_windows import drive
 from tests.component_deploy_fixture import ComponentRelease, SourceChange
+
+if sys.platform != "win32":
+    raise unittest.SkipTest("Component deployment drives Windows child processes.")
 
 
 def test_selective_deployment_and_rollback_preserve_keyboard_and_supervisor(tmp_path: Path) -> None:

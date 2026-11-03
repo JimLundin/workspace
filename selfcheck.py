@@ -34,6 +34,7 @@ import traceback
 import unittest
 from collections.abc import Iterable, Iterator
 from concurrent.futures import ProcessPoolExecutor
+from concurrent.futures.process import BrokenProcessPool
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
@@ -367,6 +368,10 @@ def run_tests(root: Path, problems: list[str], paths: list[Path]) -> tuple[int, 
             for path, future in pending:
                 try:
                     outcome = future.result()
+                except BrokenProcessPool:
+                    # Some hosts refuse worker processes (CI's Windows runner denies the
+                    # handle duplication spawning needs); those modules run here instead.
+                    outcome = run_module(path)
                 except Exception as error:
                     outcome = 0, 0, (f"FAILED tests.{path.stem} (in a worker)\n{''.join(traceback.format_exception(error))}",), ()
                 _progress(path, outcome, time.perf_counter() - started)

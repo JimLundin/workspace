@@ -150,6 +150,8 @@ def test_native_development_tools_can_coexist_with_deployment_only_from_the_revi
 
 def test_staging_includes_nested_native_helpers_and_the_checked_source(tmp_path: Path) -> None:
     # Adding a native helper must not leave the release unable to create its stage.
+    if sys.platform != "win32":
+        raise unittest.SkipTest("Staging requires Windows deployment paths on the C drive.")
     if shutil.which("git") is None:
         raise unittest.SkipTest("Source deployment tooling requires Git")
     source = tmp_path / "checkout"

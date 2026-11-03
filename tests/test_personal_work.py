@@ -1,6 +1,8 @@
 """Workspace association, correction, review and tool ownership through real IO."""
 
+import sys
 import threading
+import unittest
 from collections.abc import Mapping
 from dataclasses import replace
 from pathlib import Path
@@ -555,6 +557,8 @@ def test_correlation_model_receives_bounded_evidence_and_has_no_action_tools(tmp
 def test_document_registration_is_durable_and_does_not_modify_the_file(tmp_path: Path) -> None:
     # Defect: adding a document only creates a transient card, duplicates it on
     # re-registration, edits its file, or partially commits an invalid work link.
+    if sys.platform != "win32":
+        raise unittest.SkipTest("Local documents are absolute Windows paths.")
     file = tmp_path / "Runbook.md"
     file.write_text("Original runbook", encoding="utf-8")
     store = PersonalStore(tmp_path / "work.sqlite3")
