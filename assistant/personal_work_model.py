@@ -28,7 +28,9 @@ Retain distinct source identities and explain each contribution. A completed sup
 work while another step remains open. If the boundary is ambiguous, leave the uncertain connection for the canvas agent
 to investigate and, when necessary, clarify with the user rather than inventing a new work boundary.
 Connect sources only when their observed content supports the same concrete outcome, decision, deliverable or dependency.
-Shared participants, a broad project name or similar vocabulary alone do not establish a connection. Omit unrelated mail,
+Shared participants, a broad project name or similar vocabulary alone do not establish a connection.
+A chat can contain independent work: shared conversation identity or a category such as recruitment does not connect those outcomes.
+Group by actual work content across applications, never by chat buckets. Omit unrelated mail,
 newsletters, generic notices and title-only locators. When evidence is weak, leave it unconnected. Never invent source identities.
 Each association needs a concise factual reason that the user can inspect. Cite the relevant actual detail, not generic similarity.
 Respect rejected associations; never restore them or evade a correction by creating duplicate work.

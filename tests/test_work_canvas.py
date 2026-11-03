@@ -193,14 +193,21 @@ def test_dismissal_preserves_shared_conversation_context_and_routes_to_active_wo
 
 
 def test_factual_connections_follow_shared_evidence_through_collapsed_containers() -> None:
-    # Defect: a shared reference disappears when its containing work collapses,
+    # Defect: shared evidence masquerades as a work relationship on collapse,
     # produces a redundant containment line, or retains a removed association.
     data = catalog()
     document = CanvasDocument()
     source = data.sources[0]
     assert connections(data, project(data, document, CanvasScope())) == (CanvasConnection("work:two", source.id, "Shared approval"),)
     document = toggle_expansion(document, None, "work:one", expanded=False)
-    assert connections(data, project(data, document, CanvasScope())) == (CanvasConnection("work:two", "work:one", "Shared approval"),)
+    assert not connections(data, project(data, document, CanvasScope()))
+    assert data.works[1].links[0] == Association(source.id, "Shared approval")
+    relation = CanvasRelation("work:two", "work:one", "Explicit dependency")
+    assert connections(data, project(data, document, CanvasScope()), (relation,)) == (
+        RelationConnection("work:two", "work:one", relation),
+    )
+    expanded = toggle_expansion(document, None, "work:one", expanded=True)
+    assert connections(data, project(data, expanded, CanvasScope())) == (CanvasConnection("work:two", source.id, "Shared approval"),)
     assert not connections(data, project(data, document, CanvasScope(("work:two",))))
     corrected = replace(data, works=(data.works[0], replace(data.works[1], links=())))
     assert not connections(corrected, project(corrected, document, CanvasScope()))

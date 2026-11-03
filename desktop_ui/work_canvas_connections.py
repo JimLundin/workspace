@@ -46,6 +46,7 @@ def representatives(scene: CanvasScene) -> frozendict[str, str]:
 
 def connections(catalog: Catalog, scene: CanvasScene, relations: tuple[CanvasRelation, ...] = ()) -> tuple[CanvasLink, ...]:
     visible = representatives(scene)
+    work_ids = frozenset(work.id for work in catalog.works)
     # Containment already expresses references within the same work. Lines earn
     # their space when shared evidence belongs to a different visible context.
     contained = frozendict(
@@ -61,6 +62,11 @@ def connections(catalog: Catalog, scene: CanvasScene, relations: tuple[CanvasRel
         for link in work.links:
             end = visible.get(link.source_id)
             if end is None or end == start or link.source_id in contained.get(work.id, frozenset()):
+                continue
+            # A hidden source is not a relationship to the work containing it.
+            # Keep the factual association in the catalog; only explicit relations
+            # may draw work-to-work lines through collapsed representatives.
+            if start in work_ids and end in work_ids:
                 continue
             result = (*result, CanvasConnection(start, end, link.reason))
     for relation in relations:
