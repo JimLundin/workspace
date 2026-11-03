@@ -15,6 +15,7 @@ from scripts import deploy
 from scripts.architecture import Report
 from scripts.check import CheckRun, Options, publish_check
 from scripts.check_results import Results, Selection
+from scripts.deploy import installed_drift
 from scripts.deploy_archive import repack
 from scripts.deploy_files import (
     HELPERS,
@@ -34,7 +35,7 @@ from scripts.deploy_files import (
 from scripts.deploy_policy import ComponentRestart, FullRestart, Version, restart_plan
 from scripts.deploy_processes import Observation, Process, installed_processes, role_for
 from scripts.deploy_values import RUNTIME_AUDIT, Stopped
-from scripts.deploy_windows import Release, drive, group, installed_drift, launch_interpreter
+from scripts.deploy_windows import Release, drive, group, launch_interpreter
 from scripts.development_paths import PYTHON
 from tests.component_deploy_fixture import staged
 from tests.git_fixture import initialized

@@ -24,7 +24,7 @@ from pydantic import ValidationError
 from components import ASSISTANT, BAR_WINDOW, CATALOGUE, LAYOUT, Writer, read_marker, shutdown_budget, unix_ms
 from keeper_control import CAPABILITY, STATUS, Pause, Paused, Refused, Resume, Resumed, submit
 from scripts.deploy_archive import repack
-from scripts.deploy_files import PINS, RUNTIME, file_at, files, identities, identity, no_link, read, replacement, sha, source_map, write, zip_files
+from scripts.deploy_files import PINS, RUNTIME, file_at, files, identities, identity, no_link, read, replacement, sha, write, zip_files
 from scripts.deploy_policy import ComponentRestart, FullRestart, RestartPlan, Version, restart_plan
 from scripts.deploy_processes import Process, inventory, same_processes
 from scripts.deploy_values import PREPARED, RELOADED, RUNTIME_AUDIT, STOPPED, Config, Exit, Prepared, Ready, Role, RuntimeAudit, Stopped
@@ -62,21 +62,6 @@ def group(rows: tuple[Process, ...]) -> dict[Role, Process]:
         owners.update(row.pid for row in attached)
         pending = [row for row in pending if row not in attached]
     return core
-
-
-def installed_drift(deployed: Mapping[str, str], installed: Mapping[str, str], wanted: Mapping[str, str]) -> tuple[str, ...]:
-    """Installed files something other than a deployment changed and this release would replace.
-
-    The keeper installs agent changes straight into the installed copy. A deployment
-    from a checkout without them silently reverted those installs.
-    """
-    return tuple(
-        sorted(
-            name
-            for name in deployed
-            if installed.get(name) != deployed[name] and installed.get(name) != wanted.get(name) and (name in installed or name in wanted)
-        )
-    )
 
 
 class Release:
@@ -279,11 +264,6 @@ class Release:
             raise RuntimeError("An originally stopped copy has conflicting process evidence.")
         return value
 
-    def deployed(self) -> Mapping[str, str]:
-        """The source the last verified deployment installed; empty before the first one."""
-        path = self.profile / "deployment" / "source.json"
-        return source_map(read(path)) if path.exists() else {}
-
     def runtime_audit(self) -> RuntimeAudit | None:
         """The last verified release's runtime byte audit; an unreadable cache forces a fresh audit."""
         path = self.profile / "deployment" / "runtime-audit.json"
@@ -332,12 +312,6 @@ class Release:
         # The retired private interpreter is managed removal, including locally
         # added files. Verified before-images allow the ordinary rollback path.
         old_source |= {name: value for name, value in existing.items() if name.startswith(".python/")}
-        if drifted := installed_drift(self.deployed(), existing, self.wanted):
-            raise RuntimeError(
-                "The installed copy has changes this checkout does not contain, most likely an agent install that "
-                "was merged into origin/main (see %LOCALAPPDATA%\\workspace\\keeper.log). Deploying would erase them. "
-                "Pull or merge them into this checkout, check again and redeploy: " + ", ".join(drifted)
-            )
         for name in self.wanted.keys() - old_source.keys():
             if name in existing and existing[name] != self.wanted[name]:
                 raise RuntimeError("New source would overwrite an unrelated installed file.")

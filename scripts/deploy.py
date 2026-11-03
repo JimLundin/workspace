@@ -13,12 +13,12 @@ import shutil
 import subprocess
 import time
 import zipfile
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
-from scripts.deploy_files import HELPERS, PINS, CheckReceipt, checked_sources, read, read_receipt, sha, source_map, write, zip_files
+from scripts.deploy_files import HELPERS, PINS, RUNTIME, CheckReceipt, checked_sources, files, read, read_receipt, sha, source_map, write, zip_files
 from scripts.deploy_values import CONFIG, Config
 from scripts.development_paths import LIVE, PROFILE, PYTHON, TEMP
 lazy from scripts.check import source_files
@@ -148,6 +148,46 @@ def coordinate_native(stage: Path, operation: Callable[[], None], unchanged: Cal
         raise RuntimeError("Source changed during deployment; the installed stage must be reconciled.")
 
 
+def installed_drift(deployed: Mapping[str, str], installed: Mapping[str, str], wanted: Mapping[str, str]) -> tuple[str, ...]:
+    """Installed files something other than a deployment changed and this release would replace.
+
+    The keeper installs agent changes straight into the installed copy. A deployment
+    from a checkout without them silently reverted those installs.
+    """
+    return tuple(
+        sorted(
+            name
+            for name in deployed
+            if installed.get(name) != deployed[name] and installed.get(name) != wanted.get(name) and (name in installed or name in wanted)
+        )
+    )
+
+
+def unmerged_installs(live: Path, wanted: Mapping[str, str]) -> tuple[str, ...]:
+    """Installed files an agent changed that this checkout's history has never contained.
+
+    A version that appears anywhere in the file's Git history was merged; the
+    checkout's later edits to it are intentional. Only unseen versions would be lost.
+    """
+    deployed = PROFILE / "deployment" / "source.json"
+    if not deployed.is_file():
+        return ()
+    installed = files(live, skip_roots=RUNTIME, ignore_extra_bytecode=True)
+    return tuple(name for name in installed_drift(source_map(read(deployed)), installed, wanted) if not merged(live, name))
+
+
+def merged(live: Path, name: str) -> bool:
+    if not (live / name).is_file():
+        return False
+    blob = git("hash-object", "--no-filters", str(live / name))
+    history = git("log", "--all", "--no-abbrev", "--format=", "--raw", "--", name)
+    return any(line.split()[3] == blob for line in history.splitlines() if line.startswith(":") and len(line.split()) > 3)
+
+
+def git(*arguments: str) -> str:
+    return subprocess.run(["git", *arguments], cwd=WORKSPACE, capture_output=True, text=True, check=True).stdout.strip()
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("action", choices=("stage", "verify", "deploy"))
@@ -163,6 +203,11 @@ def main() -> None:
     if args.action == "stage":
         return
     config, wanted = checked_config(stage)
+    if os.name == "nt" and args.action == "deploy" and (unmerged := unmerged_installs(Path(config["live_windows"]), wanted)):
+        raise SystemExit(
+            "The installed copy has agent changes this checkout has never contained. Deploying would erase them. "
+            "Pull or merge them, check again and redeploy: " + ", ".join(unmerged)
+        )
     source_checkout = stage.resolve() != WORKSPACE
     if source_checkout and args.stage is not None and workspace_files() != wanted:
         raise RuntimeError("Source changed after staging; rerun checks.")
