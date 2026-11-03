@@ -12,16 +12,60 @@ class SystemStatus:
     wifi: Wifi = Wifi.UNKNOWN
 
     @property
-    def alerts(self) -> tuple[str, ...]:
-        return (*(("speaker-on",) if self.speakers is Speakers.AUDIBLE else ()), *(("wifi-off",) if self.wifi is Wifi.DISCONNECTED else ()))
+    def speaker_icon(self) -> str:
+        match self.speakers:
+            case Speakers.AUDIBLE:
+                return "speaker-on"
+            case Speakers.MUTED:
+                return "speaker-muted"
+            case Speakers.UNKNOWN:
+                return "speaker-unknown"
+            case _:
+                assert_never(self.speakers)
+
+    @property
+    def speaker_description(self) -> str:
+        match self.speakers:
+            case Speakers.AUDIBLE:
+                return "Speakers unmuted"
+            case Speakers.MUTED:
+                return "Speakers muted"
+            case Speakers.UNKNOWN:
+                return "Speaker status unavailable"
+            case _:
+                assert_never(self.speakers)
+
+    @property
+    def wifi_icon(self) -> str:
+        match self.wifi:
+            case Wifi.CONNECTED:
+                return "wifi"
+            case Wifi.DISCONNECTED:
+                return "wifi-off"
+            case Wifi.NO_ADAPTER:
+                return "wifi-absent"
+            case Wifi.UNKNOWN:
+                return "wifi-unknown"
+            case _:
+                assert_never(self.wifi)
+
+    @property
+    def wifi_description(self) -> str:
+        match self.wifi:
+            case Wifi.CONNECTED:
+                return "Wi-Fi connected"
+            case Wifi.DISCONNECTED:
+                return "Wi-Fi disconnected"
+            case Wifi.NO_ADAPTER:
+                return "No Wi-Fi adapter"
+            case Wifi.UNKNOWN:
+                return "Wi-Fi status unavailable"
+            case _:
+                assert_never(self.wifi)
 
     @property
     def description(self) -> str:
-        observations = (
-            "Speakers unmuted" if self.speakers is Speakers.AUDIBLE else "",
-            "Wi-Fi disconnected" if self.wifi is Wifi.DISCONNECTED else "",
-        )
-        return ". ".join(value for value in observations if value)
+        return self.speaker_description + ". " + self.wifi_description
 
 
 @dataclass(frozen=True, slots=True)

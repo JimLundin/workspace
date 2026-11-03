@@ -7,10 +7,10 @@ The bar's policy (docs/toolbar-design.md, "What the bar shows"):
 - Activities run concurrently and each keeps one identity wherever it shows:
   agent work (a ring spinner and its current phase), a quick job such as
   transcription (pulsing dots), and a meeting recording (a red dot and timer).
-- Activities join the centre without persistent status. During a moment they
-  detach beside it as compact capsules, phase and all. At idle the centre is empty.
-- Status, the temporary keyboard control and Canvas are icon/navigation controls
-  anchored on the right; their labels remain accessible. The inbox is dynamic.
+- Activities alone join the centre; at idle it is empty. During a moment
+  they detach beside it as compact capsules, phase and all.
+- Fixed Canvas, temporary keyboard, volume, Wi-Fi and clock/power anchor right.
+  The shell tray toggle is immediately before Canvas and expands left.
 - Agent work keeps Stop visible; other stoppable activities reveal it under the pointer.
 """
 
@@ -25,23 +25,25 @@ from winapi.machine_status import Battery
 
 
 class Key(Enum):
-    """Capsules, in their left-to-right order."""
+    """Stable capsule identities; the layout owns each zone's ordering."""
 
     LAYER = auto()
     AGENT = auto()
     JOB = auto()
     ISLAND = auto()
     RECORDING = auto()
-    STATUS = auto()
-    CANVAS = auto()
     INBOX = auto()
+    CANVAS = auto()
+    VOLUME = auto()
+    WIFI = auto()
+    STATUS = auto()
 
 
 class Zone(Enum):
     LEAD = auto()
     ISLAND = auto()
     TRAIL = auto()
-    RIGHT = auto()  # Permanent controls, anchored independently of activity.
+    RIGHT = auto()  # Fixed navigation and readings, independent of activity.
 
 
 class Action(Enum):
@@ -198,8 +200,8 @@ def agent_slot(agent: Agent, *, compact: bool) -> Slot:
     return (Spinner("Agent: " + agent.phase), *phase, *stop)
 
 
-def facts(ambient: Ambient, system: SystemStatus) -> Slot:
-    """Alerts, the clock, the charger while plugged in, and the battery level when it's worth reading."""
+def facts(ambient: Ambient) -> Slot:
+    """Clock and power stay far right; device indicators have independent fixed slots."""
     match ambient.power:
         case Battery(powered=True):
             charger: Slot = (Glyph("charger"),)
@@ -212,16 +214,16 @@ def facts(ambient: Ambient, system: SystemStatus) -> Slot:
             battery = (Text(ambient.battery_text, meaning.Tone.LOW),)
         case _:
             battery = (Text(ambient.battery_text),)
-    return (*(Glyph(alert) for alert in system.alerts), Text(ambient.clock), *charger, *battery)
+    return (Text(ambient.clock), *charger, *battery)
 
 
-def describe(ambient: Ambient, system: SystemStatus) -> str:
+def describe(ambient: Ambient) -> str:
     match ambient.power:
         case Battery(powered=True):
             charger = "Charger connected"
         case _:
             charger = ""
-    return ". ".join(value for value in (ambient.text, charger, system.description) if value)
+    return ". ".join(value for value in (ambient.text, charger) if value)
 
 
 def inbox_text(count: int) -> str:
@@ -247,9 +249,10 @@ def island(observed: Observed, *, hovered: Key | None = None, expanded: bool = F
     agent, job, recorded = observed.agent, observed.job, capture(observed.recording)
     asking = agent is not None and agent.waiting
     detached = (observed.dictating or asking) and not expanded
-    lead: tuple[CapsuleView, ...] = ()
+    layer: tuple[CapsuleView, ...] = ()
     if observed.keyboard is not None:
-        lead += (CapsuleView(Key.LAYER, Zone.RIGHT, ((Glyph("keyboard"),),), f"{observed.keyboard} · Open key map", Action.OPEN_KEYMAP),)
+        layer = (CapsuleView(Key.LAYER, Zone.RIGHT, ((Glyph("keyboard"),),), f"{observed.keyboard} · Open key map", Action.OPEN_KEYMAP),)
+    lead: tuple[CapsuleView, ...] = ()
     # Dictation detaches the agent; a waiting question already is the island, unless you're dictating.
     if detached and agent is not None and observed.dictating:
         tint = meaning.Tint.ATTENTION if agent.waiting else meaning.Tint.NONE
@@ -264,14 +267,29 @@ def island(observed: Observed, *, hovered: Key | None = None, expanded: bool = F
         slot = recording_slot(recorded, hovered=hovered is Key.RECORDING)
         trail += (CapsuleView(Key.RECORDING, Zone.TRAIL, (slot,), f"{recorded.title} · Open canvas", Action.OPEN_CANVAS, tint),)
     persistent = (
+        CapsuleView(Key.CANVAS, Zone.RIGHT, ((Glyph("canvas"),),), "Canvas · Open your work canvas", Action.OPEN_CANVAS),
+        *layer,
+        CapsuleView(
+            Key.VOLUME,
+            Zone.RIGHT,
+            ((Glyph(observed.system.speaker_icon),),),
+            observed.system.speaker_description + " · Open Workspace controls",
+            Action.OPEN_MENU,
+        ),
+        CapsuleView(
+            Key.WIFI,
+            Zone.RIGHT,
+            ((Glyph(observed.system.wifi_icon),),),
+            observed.system.wifi_description + " · Open Workspace controls",
+            Action.OPEN_MENU,
+        ),
         CapsuleView(
             Key.STATUS,
             Zone.RIGHT,
-            (facts(observed.ambient, observed.system),),
-            describe(observed.ambient, observed.system) + " · Open Workspace controls",
+            (facts(observed.ambient),),
+            describe(observed.ambient) + " · Open Workspace controls",
             Action.OPEN_MENU,
         ),
-        CapsuleView(Key.CANVAS, Zone.RIGHT, ((Glyph("canvas"),),), "Canvas · Open your work canvas", Action.OPEN_CANVAS),
     )
     if observed.inbox > 0:
         trail += (
@@ -284,7 +302,7 @@ def island(observed: Observed, *, hovered: Key | None = None, expanded: bool = F
 
 
 def centre(observed: Observed, *, hovered: Key | None) -> CapsuleView:
-    """Only activity belongs here; persistent facts have an independent right anchor."""
+    """Only live activity belongs here; persistent readings have fixed right anchors."""
     revealed = hovered is Key.ISLAND
     agent, job, recorded = observed.agent, observed.job, capture(observed.recording)
     if observed.dictating:

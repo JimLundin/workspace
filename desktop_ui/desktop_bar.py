@@ -1,7 +1,7 @@
 """The island bar: Workspace's floating capsules at the top of the primary screen.
 
-Activity stays centred and acts on what it shows; temporary activity capsules sit
-beside it, while persistent status and navigation anchor on the right. `island_model` decides the views, `island_layout` where they sit, and
+Activity stays centred and acts on what it shows; persistent navigation and
+status anchor right independently of tray disclosure. `island_model` decides the views, `island_layout` where they sit, and
 `ui_components.appearance` how they read. This owner observes the desktop and
 publishes each result to the one bar window and its glass.
 """

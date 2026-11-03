@@ -92,17 +92,17 @@ or keeper.
   and weather when Windows location is available. Click anywhere on the capsule
   to open its menu. Holding Spacebar shows Listening with a real microphone
   waveform; stopping capture shows Transcribing until the request finishes.
-  The 28-pixel bar joins the top screen edge. Unmuted speakers and disconnected
-  Wi-Fi add small status icons; muted speakers are the quiet default.
+  The capsules sit 8 pixels below the top screen edge. Volume and Wi-Fi have
+  fixed status icons that change with their observed state, including unknown readings.
   Outer corners curve into the screen edge. Active segments join across their
   upper edge and slide in from above, returning upward when hidden. Reduced
   motion uses an immediate transition.
   It expands for dictation, transcription or agent work, and shows Stop only while
   the agent is running. Active recording has its own microphone/timer capsule.
-  The centre is exclusively dynamic activity and is empty at idle. Clock,
-  battery and persistent status sit on the right, followed by the icon-only
-  keyboard control when relevant, tray disclosure, and icon-only Canvas at the
-  far right. Disclosure expands left; tooltips and accessible names retain
+  The centre is exclusively dynamic activity and is empty at idle. The fixed
+  right cluster reads tray disclosure, icon-only Canvas, keyboard when relevant,
+  volume, Wi-Fi, then clock and power at the far right. Tray icons expand left
+  without moving the fixed controls. Tooltips and accessible names retain
   control meanings and keyboard state. Work, recording-start,
   keyboard controls and other tools are available from the menu. The surface uses
   the same translucent material as agent messages.

@@ -27,10 +27,20 @@ def test_invalid_battery_is_not_presented_as_a_real_observation() -> None:
             Battery(percent, powered=False, charging=False)
 
 
-def test_only_unmuted_speakers_and_disconnected_wifi_create_status_icons() -> None:
-    assert SystemStatus(Speakers.MUTED, Wifi.CONNECTED).alerts == ()
-    assert SystemStatus(Speakers.UNKNOWN, Wifi.UNKNOWN).alerts == ()
-    assert SystemStatus(Speakers.MUTED, Wifi.NO_ADAPTER).alerts == ()
-    status = SystemStatus(Speakers.AUDIBLE, Wifi.DISCONNECTED)
-    assert status.alerts == ("speaker-on", "wifi-off")
-    assert status.description == "Speakers unmuted. Wi-Fi disconnected"
+def test_status_icons_and_labels_distinguish_every_observed_state() -> None:
+    # Defect: muted/connected icons disappear, or unknown is shown as a fault.
+    for state, icon, label in (
+        (Speakers.AUDIBLE, "speaker-on", "Speakers unmuted"),
+        (Speakers.MUTED, "speaker-muted", "Speakers muted"),
+        (Speakers.UNKNOWN, "speaker-unknown", "Speaker status unavailable"),
+    ):
+        status = SystemStatus(speakers=state)
+        assert (status.speaker_icon, status.speaker_description) == (icon, label)
+    for wifi_state, icon, label in (
+        (Wifi.CONNECTED, "wifi", "Wi-Fi connected"),
+        (Wifi.DISCONNECTED, "wifi-off", "Wi-Fi disconnected"),
+        (Wifi.UNKNOWN, "wifi-unknown", "Wi-Fi status unavailable"),
+        (Wifi.NO_ADAPTER, "wifi-absent", "No Wi-Fi adapter"),
+    ):
+        status = SystemStatus(wifi=wifi_state)
+        assert (status.wifi_icon, status.wifi_description) == (icon, label)

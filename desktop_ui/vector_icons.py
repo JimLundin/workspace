@@ -24,6 +24,16 @@ def symbol(name: str) -> str:
         return _STOP
     if name == "chevron-left":
         return '<g transform="translate(16 0) scale(-1 1)">' + REGULAR["chevron"] + "</g>"
+    # Unavailable is not muted or disconnected: a question badge retains the
+    # device identity without asserting a state Windows could not observe.
+    if name in ("speaker-unknown", "wifi-unknown", "wifi-absent"):
+        base_icon = "speaker-on" if name == "speaker-unknown" else "wifi"
+        badge = (
+            '<path d="M11 11h4v1h-4z"/>'
+            if name == "wifi-absent"
+            else '<path d="M11 10a2 2 0 0 1 4 0c0 1-1.5 1.2-1.5 2h-1c0-1.4 1.5-1.5 1.5-2a1 1 0 0 0-2 0z"/><circle cx="13" cy="14" r=".6"/>'
+        )
+        return '<g transform="scale(.7)">' + REGULAR[base_icon] + "</g>" + badge
     base, filled = name.removesuffix(".fill"), name.endswith(".fill")
     return (FILLED.get(base) if filled else None) or REGULAR.get(base) or REGULAR["doc"]
 

@@ -4,15 +4,15 @@ Workspace's desktop control surface is a floating island at the top of the
 primary screen, in the Liquid Glass design
 ([design note](design/liquid-glass.md), kit at
 [JimLundin/liquid-glass](https://github.com/JimLundin/liquid-glass)). The island
-stays centred 8 px below the screen edge where space permits. The centre contains
-only dynamic activity and is empty at idle. Running apps occupy the left end.
-The right cluster reads status, keyboard (when relevant), tray, Canvas. Canvas
-is far right and icon-only; keyboard is icon-only too, retaining the layer or
-Colemak state in its tooltip and accessible name. Tray disclosure is immediately
-left of Canvas: left arrow when collapsed, right arrow when expanded, with icons
-expanding left. Status and keyboard shift left to make room. Activity is bounded
-to the remaining space on narrow screens; Canvas and disclosure take priority
-if status cannot fit. Tray and application overflow remain horizontally scrollable.
+stays centred 8 px below the screen edge where space permits. Its centre contains
+only live activity and is empty at idle. Running apps occupy the left end.
+The fixed right cluster reads tray disclosure, icon-only Canvas, icon-only
+keyboard when relevant, volume, Wi-Fi, then clock/power at the far right.
+The disclosure is the leftmost fixed control: a left arrow expands tray icons
+leftwards and a right arrow contracts them. Neither disclosure nor activity
+moves the fixed controls. Tooltips and accessible names preserve their meanings.
+Activity is bounded to the remaining space on narrow screens; unfit capsules
+are omitted rather than overlapping hit targets. Tray/app overflow scrolls.
 
 ## What the bar shows
 
@@ -27,13 +27,13 @@ is doing for you. Its policy decides what may change it.
    pulsing dots: transcription after dictation, or a rewrite or question about
    the selection or screen. A meeting recording is a red dot with its timer.
    They never stand in for each other, and any combination can run at once.
-3. **Activities join the island.** The agent's spinner and phase lead, then a
-   job's dots and the recording last. No clock, battery or idle status enters
-   these slots. During a moment activities detach beside the island as compact
-   capsules; a detached agent keeps its phase in its label.
-4. **Pending clarifications are dynamic:** the bell appears beside activity,
-   or near the centre by itself. Persistent facts and navigation stay in the
-   right cluster independently of activity, menu expansion and tray disclosure.
+3. **Activities alone join the island.** The agent's spinner and phase lead,
+   then a job's dots, and the recording last. During a moment they detach beside
+   it as compact capsules; a detached agent keeps its phase in its label.
+   Clock, power and device status never enter the activity centre.
+4. **Pending clarifications are dynamic:** their bell sits beside activity,
+   or near the centre by itself. Keyboard state is temporary but belongs to
+   the fixed right cluster, with its layer/Colemak reading in the icon's label.
 5. **Agent work keeps Stop visible**, so hovering does not change its width.
    Other stoppable activities reveal Stop under the pointer. A quick job has no Stop.
 6. **Each fact has one owner, and only that owner changes it.** Dictation and
@@ -44,20 +44,20 @@ is doing for you. Its policy decides what may change it.
 
 | Situation | Island | Beside it |
 | --- | --- | --- |
-| Rest | Empty | Status and permanent navigation on the right |
+| Rest | Empty | Fixed navigation, volume, Wi-Fi and clock/power on the right |
 | Agent working | Spinner, phase and Stop | — |
 | Quick job | Pulsing dots | — |
 | Meeting recording | Red dot and timer last; hovering reveals Stop | — |
 | Dictating | The live microphone and its trace; no text | Agent, job and recording, detached |
 | A question waits | "Needs you", tinted orange | Job and recording, detached |
 | Items wait in the inbox | — | A bell with a count badge, last |
-| Temporary layer or layout off | — | Keyboard icon on the right; layer/Colemak in accessible name and tooltip |
+| Temporary layer or layout off | — | Keyboard icon in the right cluster; layer/Colemak in tooltip and accessible name |
 
 "Starting…", "Stopping…" and "Saving…" replace the recording's timer; "Check
 recording" turns it red and the detached capsule orange.
 
-Pressing the right-hand status capsule (or an activity's controls route) expands
-the centre into the controls menu: 272 px wide with a
+Pressing the right-hand clock/power or device-status capsule expands the centre
+into the controls menu: 272 px wide with a
 21 px radius, its rows concentric inside it. Running activities lead as live rows
 with their own Stop, the agent's with its phase; the detached agent and recording
 capsules leave the bar while the menu is open. The canvas comes first, then the feed and recording, the
@@ -200,8 +200,13 @@ power. Unknown readings show a dash; machines without a battery show AC. A batte
 above 95% while plugged in hides its percentage and keeps the charger symbol.
 Power refreshes every fifteen seconds; the clock follows the local minute.
 
-The speaker and Wi-Fi alerts show an unmuted default playback endpoint and Wi-Fi
-adapters with none associated. Unknown readings and absent adapters imply no fault.
+Volume and Wi-Fi indicators are always visible in independent fixed slots.
+The volume icon shows the observed default playback endpoint as unmuted or muted;
+unavailable observations use a speaker with a question badge, never a mute icon.
+Wi-Fi shows connected or disconnected association. Unavailable readings use a
+Wi-Fi question badge; no adapter uses a Wi-Fi minus badge. Each has a truthful
+accessible name and tooltip; these are status indicators, not volume sliders or
+connection toggles. Connected Wi-Fi does not claim Internet reachability.
 A background worker refreshes them once per second without opening an audio
 stream or scanning for networks.
 

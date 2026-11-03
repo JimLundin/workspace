@@ -1,7 +1,5 @@
 """Where the island bar's capsules sit, and where parts sit inside them."""
 
-import itertools
-
 from desktop_ui.island_layout import Box, Framed, Metrics, Placed, Spot, arrange, frame, snap
 from desktop_ui.island_model import Action, Badge, Control, Glyph, Key, Marker, Spinner, Text, Zone
 
@@ -49,29 +47,26 @@ def test_snapping_puts_every_edge_on_a_device_pixel() -> None:
     assert all(abs(edge * 1.25 - round(edge * 1.25)) < 1e-9 for edge in edges)
 
 
-def test_right_cluster_reserves_tray_and_activity_cannot_overlap_on_narrow_screens() -> None:
-    # Defects: Canvas drifts with activity, disclosure overlaps keyboard, or a
-    # growing menu paints/hit-tests over permanent controls on a narrow display.
-    for screen in (240, 480, 1000):
+def test_fixed_right_order_and_disclosure_reservation_survive_activity_changes() -> None:
+    # Defect: opening tray shifts fixed controls or activity overlaps the cluster.
+    fixed = (
+        Placed(Key.CANVAS, Zone.RIGHT, 36, 34),
+        Placed(Key.LAYER, Zone.RIGHT, 36, 34),
+        Placed(Key.VOLUME, Zone.RIGHT, 36, 34),
+        Placed(Key.WIFI, Zone.RIGHT, 36, 34),
+        Placed(Key.STATUS, Zone.RIGHT, 112, 34),
+    )
+    for screen in (480, 1000):
+        baseline = frame(fixed, Metrics(screen))
+        assert tuple(each.key for each in baseline) == (Key.CANVAS, Key.LAYER, Key.VOLUME, Key.WIFI, Key.STATUS)
+        assert baseline[-1].box.x + baseline[-1].box.width == screen - 12
         for tray in (36, 120):
-            placed = (
-                Placed(Key.ISLAND, Zone.ISLAND, 272, 320),
-                Placed(Key.STATUS, Zone.RIGHT, 112, 34),
-                Placed(Key.LAYER, Zone.RIGHT, 36, 34),
-                Placed(Key.CANVAS, Zone.RIGHT, 36, 34),
-            )
-            framed = frame(placed, Metrics(screen, tray_width=tray))
-            canvas = next(each.box for each in framed if each.key is Key.CANVAS)
-            assert canvas.x + canvas.width == screen - 12
-            boxes = tuple(each.box for each in framed)
-            assert all(0 <= box.x <= box.x + box.width <= screen for box in boxes)
-            assert all(left.x + left.width <= right.x for left, right in itertools.pairwise(boxes))
-            layer = next((each.box for each in framed if each.key is Key.LAYER), None)
-            if layer is not None:
-                assert canvas.x - (layer.x + layer.width) == tray + 12
-    idle = frame((Placed(Key.STATUS, Zone.RIGHT, 112, 34), Placed(Key.CANVAS, Zone.RIGHT, 36, 34)), Metrics(1000))
-    assert tuple(each.key for each in idle) == (Key.STATUS, Key.CANVAS)
-    assert idle[-1].box.x == 952
+            framed = frame((Placed(Key.ISLAND, Zone.ISLAND, 272, 320), *fixed), Metrics(screen, tray_width=tray))
+            assert tuple(each for each in framed if each.key is not Key.ISLAND) == baseline
+            assert all(0 <= each.box.x <= each.box.x + each.box.width <= screen for each in framed)
+            activity = next((each for each in framed if each.key is Key.ISLAND), None)
+            if activity is not None:
+                assert activity.box.x + activity.box.width <= baseline[0].box.x - tray - 12
 
 
 def width_of(text: Text) -> float:

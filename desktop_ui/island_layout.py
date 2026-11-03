@@ -1,11 +1,10 @@
 """Where the island bar's capsules sit: a pure frame from measured sizes and presence.
 
-Activity stays centred where space permits; lead capsules grow leftwards from it
-and trail capsules rightwards. Permanent controls anchor on the right, reserving
-tray disclosure/overflow before Canvas. Narrow screens bound activity to the
-remaining space instead of overlapping permanent controls. The gap between two
-neighbours belongs to the pair: the
-full gap scaled by the less present of the two, so a capsule entering or leaving
+Activity stays centred where space permits; permanent controls anchor right.
+Tray overflow grows left of fixed disclosure without shifting navigation.
+Lead capsules grow leftwards from activity and trail capsules rightwards.
+The gap between two neighbours belongs to the pair: the full gap scaled by
+the less present of the two, so a capsule entering or leaving
 opens and closes the space beside it smoothly. Each capsule also owns an edge strip
 from the top of the screen down to its glass, so a pointer thrown against the edge
 still lands on it.
@@ -205,56 +204,16 @@ def present(value: float) -> float:
     return min(1.0, max(0.0, value))
 
 
-def _shown(capsule: Placed) -> float:
-    return capsule.width * present(capsule.presence)
-
-
-def _boxed(capsule: Placed, x: float, metrics: Metrics) -> Framed:
-    box = Box(x, metrics.top, _shown(capsule), capsule.height)
-    return Framed(capsule.key, box, Box(x, 0, box.width, metrics.top), present(capsule.presence))
-
-
-def _anchored(capsules: Sequence[Placed], metrics: Metrics) -> tuple[tuple[Framed, ...], float]:
-    """Right-anchored controls and the left boundary they leave for activity.
-
-    Tray space is reserved immediately before Canvas. Status and keyboard move
-    left with disclosure; activity never participates in this right anchor."""
-    right: tuple[Framed, ...] = ()
-    edge = max(0.0, metrics.width - 12)
-    for key in (Key.CANVAS, Key.LAYER, Key.STATUS):
-        capsule = next((c for c in capsules if c.key is key), None)
-        if capsule is None:
-            continue
-        width = _shown(capsule)
-        if width > edge:
-            continue  # Canvas and disclosure take priority on very small screens.
-        edge -= width
-        right = (_boxed(capsule, edge, metrics), *right)
-        edge -= metrics.gap
-        if key is Key.CANVAS:
-            edge -= min(metrics.tray_width, max(0.0, edge)) + metrics.gap
-    return right, max(0.0, edge)
-
-
-def _unanchored_trail(capsules: Sequence[Placed], boundary: float, metrics: Metrics) -> tuple[Framed, ...]:
-    """Pending clarifications remain dynamic even without another activity."""
-    edge = min(metrics.width / 2, boundary)
-    dynamic: tuple[Framed, ...] = ()
-    for capsule in capsules:
-        width = min(_shown(capsule), max(0.0, boundary - edge))
-        if width > 0:
-            box = Box(edge, metrics.top, width, capsule.height)
-            dynamic += (Framed(capsule.key, box, Box(edge, 0, width, metrics.top), present(capsule.presence)),)
-            edge += width + metrics.gap
-    return dynamic
-
-
 def frame(placed: Sequence[Placed], metrics: Metrics) -> tuple[Framed, ...]:
     """Capsules in left-to-right order; absent ones (presence 0) take no space."""
     order: tuple[Key, ...] = tuple(Key)
 
+    def shown(capsule: Placed) -> float:
+        return capsule.width * present(capsule.presence)
+
     def boxed(capsule: Placed, x: float) -> Framed:
-        return _boxed(capsule, x, metrics)
+        box = Box(x, metrics.top, shown(capsule), capsule.height)
+        return Framed(capsule.key, box, Box(x, 0, box.width, metrics.top), present(capsule.presence))
 
     def position(capsule: Placed) -> int:
         return order.index(capsule.key)
@@ -262,12 +221,34 @@ def frame(placed: Sequence[Placed], metrics: Metrics) -> tuple[Framed, ...]:
     def zone(name: Zone) -> tuple[Placed, ...]:
         return tuple(sorted((c for c in placed if c.zone is name and c.presence > 0), key=position))
 
-    right, boundary = _anchored(zone(Zone.RIGHT), metrics)
+    # Fixed controls never move for tray disclosure. Its icon overflow grows
+    # left of the reserved 36 px toggle, rather than shifting navigation.
+    right: tuple[Framed, ...] = ()
+    edge = max(0.0, metrics.width - 12)
+    for key in (Key.STATUS, Key.WIFI, Key.VOLUME, Key.LAYER, Key.CANVAS):
+        capsule = next((c for c in zone(Zone.RIGHT) if c.key is key), None)
+        if capsule is None:
+            continue
+        width = shown(capsule)
+        if width > edge:
+            continue  # Omit an unfit capsule rather than overlap another hit target.
+        edge -= width
+        right = (boxed(capsule, edge), *right)
+        edge = max(0.0, edge - metrics.gap)
+    boundary = max(0.0, edge - metrics.tray_width - metrics.gap) if right else metrics.width
     islands = zone(Zone.ISLAND)
     if not islands:
-        return (*_unanchored_trail(zone(Zone.TRAIL), boundary, metrics), *right)
+        dynamic: tuple[Framed, ...] = ()
+        edge = min(metrics.width / 2, boundary)
+        for capsule in zone(Zone.TRAIL):
+            width = min(shown(capsule), max(0.0, boundary - edge))
+            if width > 0:
+                box = Box(edge, metrics.top, width, capsule.height)
+                dynamic += (Framed(capsule.key, box, Box(edge, 0, width, metrics.top), present(capsule.presence)),)
+                edge += width + metrics.gap
+        return (*dynamic, *right)
     island = islands[0]
-    left = (metrics.width - _shown(island)) / 2
+    left = (metrics.width - shown(island)) / 2
     centre = boxed(island, left)
 
     def outward(capsules: tuple[Placed, ...], edge: float, *, leading: bool) -> tuple[Framed, ...]:
@@ -275,29 +256,25 @@ def frame(placed: Sequence[Placed], metrics: Metrics) -> tuple[Framed, ...]:
         before = present(island.presence)
         for capsule in capsules:
             space = metrics.gap * min(before, present(capsule.presence))
-            x = edge - space - _shown(capsule) if leading else edge + space
+            x = edge - space - shown(capsule) if leading else edge + space
             framed = (boxed(capsule, x), *framed) if leading else (*framed, boxed(capsule, x))
-            edge = x if leading else x + _shown(capsule)
+            edge = x if leading else x + shown(capsule)
             before = present(capsule.presence)
         return framed
 
     lead = outward(tuple(reversed(zone(Zone.LEAD))), left, leading=True)
-    trail = outward(zone(Zone.TRAIL), left + _shown(island), leading=False)
+    trail = outward(zone(Zone.TRAIL), left + shown(island), leading=False)
     dynamic = (*lead, centre, *trail)
     start = min(each.box.x for each in dynamic)
     end = max(each.box.x + each.box.width for each in dynamic)
-    shift = min(0.0, boundary - end) if right else 0.0
-    shift = max(-start, shift)
-    # Oversized activity is clipped only as a last resort; no hit region or
-    # glass pane may extend into the permanent controls or beyond the screen.
-    limit = boundary if right else metrics.width
+    shift = max(-start, min(0.0, boundary - end))
 
     def bounded(each: Framed) -> Framed:
         x = max(0.0, each.box.x + shift)
-        width = max(0.0, min(each.box.width, limit - x))
+        width = max(0.0, min(each.box.width, boundary - x))
         return Framed(each.key, Box(x, each.box.y, width, each.box.height), Box(x, 0, width, metrics.top), each.presence)
 
-    return (*(bounded(each) for each in dynamic if each.box.x + shift < limit), *right)
+    return (*(bounded(each) for each in dynamic if each.box.x + shift < boundary), *right)
 
 
 def snap(framed: Sequence[Framed], scale: float) -> tuple[Framed, ...]:

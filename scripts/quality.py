@@ -167,7 +167,7 @@ def scan(root: Path, names: Iterable[str] | None = None, *, cache: Cache | None 
         encoding="utf-8",
         check=False,
     )
-    if result.returncode not in (0, 1):
+    if result.returncode not in (0, 1) or not result.stdout.strip():
         raise RuntimeError("Signature lint did not complete: " + result.stderr.strip())
     diagnostics = DIAGNOSTICS.validate_json(result.stdout)
     # Group once instead of comparing every diagnostic's Windows path to every

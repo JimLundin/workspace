@@ -56,7 +56,8 @@ def write_watch_source(root: Path, output: Path) -> None:
     )
     (root / ".gitignore").write_text("__pycache__/\n.ruff_cache/\n")
     (root / "requirements").mkdir()
-    shutil.copyfile(ROOT / ".python-version", root / ".python-version")
+    # Source-only keeper snapshots omit dotfiles; the fixture targets this runtime.
+    (root / ".python-version").write_text(f"{sys.version_info.major}.{sys.version_info.minor}\n")
     for name in ("windows-py315.lock",):
         shutil.copyfile(ROOT / "requirements" / name, root / "requirements" / name)
     migrations(root)
@@ -155,7 +156,8 @@ def test_native_check_reviews_source_once_across_desktop_handoff(tmp_path: Path)
     checked = subprocess.run(
         (sys.executable, "-B", "-m", "scripts.check", "--full", "--native", "--receipt", str(receipt)),
         cwd=root,
-        env=dict(os.environ, PYTHONPATH=str(ROOT), WORKSPACE_TEST_DESKTOP="workspace-tests-" + uuid.uuid4().hex),
+        # Preserve the activated bundle's tools for nested check subprocesses.
+        env=dict(os.environ, PYTHONPATH=os.pathsep.join((str(ROOT), *sys.path)), WORKSPACE_TEST_DESKTOP="workspace-tests-" + uuid.uuid4().hex),
         capture_output=True,
         text=True,
         encoding="utf-8",

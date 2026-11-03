@@ -91,6 +91,7 @@ class Owner(Protocol):
     def key(self, press: island_menu.Press) -> None: ...
     def deactivated(self) -> None: ...
     def request_actions(self) -> RequestActions | None: ...
+    def render(self) -> None: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -705,11 +706,9 @@ class BarWindow(QtWidgets.QWidget):
         self.deactivation_timer.timeout.connect(self.dismiss_inactive)
 
     def shell_changed(self) -> None:
-        """Disclosure invalidates the cached frame so layout and glass match the tray."""
-        if self.presentation is not None:
-            presented = self.presentation[0]
-            self.presentation = None
-            self.present(presented)
+        """Disclosure republishes layout and glass through the owning bar."""
+        self.presentation = None
+        self.owner.render()
 
     def measure(self, view: CapsuleView) -> Content:
         def width(text: Text) -> float:
@@ -788,8 +787,6 @@ class BarWindow(QtWidgets.QWidget):
                             _veil(shell_look, presented.frost),
                         )
                         for name, section in (("applications", self.shell_sections.apps), ("tray", self.shell_sections.tray))
-                        # The cached frame can be built before the bar is shown.
-                        # Parent visibility must not omit a section's glass from it.
                         if section.isVisibleTo(self)
                     ),
                 )

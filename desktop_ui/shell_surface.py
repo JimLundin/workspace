@@ -151,7 +151,7 @@ class Section(QtWidgets.QWidget):
 
 
 class TraySection(Section):
-    """Qt owns disclosure state independently of refreshed notification icons."""
+    """Qt owns disclosure; the toggle stays fixed while overflow grows left."""
 
     def __init__(self, parent: QtWidgets.QWidget, changed: Callable[[], None]) -> None:
         super().__init__(parent)
@@ -245,19 +245,11 @@ class ShellSections:
         self.tray_snapshot = entries
 
     def place(self, bounds: tuple[int, int], width: int, *, canvas_left: int | None = None) -> None:
-        """Bounds/width describe available space; Canvas supplies the right anchor.
-
-        The optional anchor is a distinct composition dependency: standalone shell
-        fixtures have no Canvas, while the toolbar reserves its disclosure slot.
-        Running applications stay in the left third even when activity is absent.
-        """
-        left, right = bounds
+        """The tray toggle anchors before Canvas; standalone fixtures use the right edge."""
+        left, _ = bounds
         self.apps.place(12, max(12, min(left - 12, width // 3)))
-        if canvas_left is None:
-            self.tray.place(right + 12, width - 12)
-        else:
-            end = max(0, canvas_left - 6)
-            self.tray.place(max(0, end - min(self.tray.desired_width(), max(36, width // 3))), end)
+        end = width - 12 if canvas_left is None else max(0, canvas_left - 6)
+        self.tray.place(max(0, end - min(self.tray.desired_width(), max(36, width // 3))), end)
 
     def locations(self, outer: Rect, scale: float) -> tuple[Located, ...]:
         if self.tray_snapshot is None or not self.tray.isVisible() or not self.tray.overflow.isVisible():

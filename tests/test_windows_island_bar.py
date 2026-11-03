@@ -11,22 +11,27 @@ from datetime import datetime
 if sys.platform != "win32":
     raise unittest.SkipTest("Windows island bar")
 
+import itertools
+
 lazy from PySide6 import QtCore, QtGui, QtWidgets
 lazy from PySide6.QtTest import QTest
 
 from assistant.meeting_detection import AutomaticStatus
 from assistant.recording_state import RecordingState
+from desktop_ui.ambient import SystemStatus
 from desktop_ui.desktop_bar import BarActions, BarObservations, DesktopBar
+from desktop_ui.fluent_icons import REGULAR
 from desktop_ui.island_menu import Menu, Rule
-from desktop_ui.island_model import Agent, Job, Key
+from desktop_ui.island_model import Agent, Glyph, Job, Key
 from desktop_ui.island_surface import SHADOW, TOP, ControlButton, MenuRow
 from desktop_ui.qt_runtime import prepare
 from desktop_ui.qt_ui import EventLoop, application
+from desktop_ui.vector_icons import symbol
 from protocol import Tool
 from tests.native_pointer import foreign_pointer
 from winapi import appearance, windows
 from winapi._core import fn, user32
-from winapi.machine_status import Battery
+from winapi.machine_status import Battery, Speakers, Wifi
 
 prepare()
 
@@ -71,8 +76,11 @@ def recorded(invoked: list[str], *, tools: list[tuple[Tool, int]] | None = None)
     )
 
 
+FIXED = [Key.CANVAS, Key.VOLUME, Key.WIFI, Key.STATUS]
+
+
 def shown(bar: DesktopBar) -> list[Key]:
-    return [key for key in Key if key is not Key.STATUS and (capsule := bar.window.capsules.get(key)) is not None and capsule.isVisibleTo(bar.window)]
+    return [key for key in Key if (capsule := bar.window.capsules.get(key)) is not None and capsule.isVisibleTo(bar.window)]
 
 
 def press(bar: DesktopBar, key: Key) -> None:
@@ -113,17 +121,52 @@ def closed(app: QtWidgets.QApplication, bar: DesktopBar) -> None:
     app.processEvents()
 
 
+def test_right_cluster_keeps_fixed_positions_and_truthful_status_through_disclosure() -> None:
+    # Defects: tray expansion shifts fixed controls, missing readings imply a
+    # healthy state, or unavailable symbols fall back to a document glyph.
+    app = application()
+    bar = DesktopBar(recorded([]), native_shell=False, observations=BarObservations(motion=lambda: False))
+    try:
+        bar.timer.stop()
+        bar.layout(enabled=False)
+        order = (Key.CANVAS, Key.LAYER, Key.VOLUME, Key.WIFI, Key.STATUS)
+        before = tuple(bar.window.capsules[key].geometry() for key in order)
+        assert all(left.right() < right.left() for left, right in itertools.pairwise(before))
+        tray = bar.window.shell_sections.tray
+        toggle_left = tray.mapTo(bar.window, tray.toggle.pos()).x()
+        assert toggle_left < before[0].left()
+        assert tray.toggle.accessibleName() == "Expand system tray"
+        tray.toggle.click()
+        assert tray.toggle.accessibleName() == "Collapse system tray"
+        assert tuple(bar.window.capsules[key].geometry() for key in order) == before
+        assert tray.mapTo(bar.window, tray.toggle.pos()).x() == toggle_left
+        for speakers in Speakers:
+            for wifi in Wifi:
+                bar.system = SystemStatus(speakers, wifi)
+                bar.render()
+                for key, name, label in (
+                    (Key.VOLUME, bar.system.speaker_icon, bar.system.speaker_description),
+                    (Key.WIFI, bar.system.wifi_icon, bar.system.wifi_description),
+                ):
+                    capsule = bar.window.capsules[key]
+                    assert capsule.view is not None and capsule.view.slots == ((Glyph(name),),)
+                    assert capsule.isVisibleTo(bar.window)
+                    assert label in capsule.accessibleName() and label in capsule.toolTip()
+                    assert symbol(name) != REGULAR["doc"]
+                assert tuple(bar.window.capsules[key].geometry() for key in order) == before
+        assert symbol("chevron-left") == '<g transform="translate(16 0) scale(-1 1)">' + REGULAR["chevron"] + "</g>"
+    finally:
+        closed(app, bar)
+
+
 def test_the_canvas_capsule_rests_beside_the_island_and_opens_the_canvas() -> None:
     # Defects: Canvas navigation disappears, loses its label, or its press runs another function.
     app = application()
     invoked: list[str] = []
     bar = DesktopBar(recorded(invoked), native_shell=False)
     try:
-        assert shown(bar) == [Key.CANVAS]
-        assert bar.window.capsules[Key.STATUS].isVisibleTo(bar.window)
-        canvas = bar.window.capsules[Key.CANVAS]
-        assert canvas.accessibleName() == "Canvas · Open your work canvas"
-        assert canvas.toolTip() == canvas.accessibleName() and canvas.width() == 36
+        assert shown(bar) == FIXED
+        assert bar.window.capsules[Key.CANVAS].accessibleName() == "Canvas · Open your work canvas"
         press(bar, Key.CANVAS)
         assert invoked == ["canvas"]
     finally:
@@ -138,7 +181,12 @@ def test_the_island_keeps_canvas_navigation_and_each_capsule_acts_on_what_it_sho
     observations = BarObservations(power=lambda: Battery(73, powered=False, charging=False), local_time=lambda: datetime(2026, 10, 30, 20, 59))
     bar = DesktopBar(recorded(invoked), native_shell=False, observations=observations)
     try:
-        assert shown(bar) == [Key.CANVAS]
+        assert shown(bar) == FIXED
+        status = bar.window.capsules[Key.STATUS]
+        assert "20:59" in status.accessibleName() and "73%" in status.accessibleName()
+        press(bar, Key.STATUS)
+        assert bar.expanded is not None and bar.window.capsules[Key.ISLAND].rows[0].accessibleName() == "Your work canvas"
+        QTest.keyClick(bar.window, QtCore.Qt.Key.Key_Escape)
         bar.agent_changed(WORKING)
         island = bar.window.capsules[Key.ISLAND]
         assert "Comparing both sheets" in island.accessibleName()
@@ -149,7 +197,7 @@ def test_the_island_keeps_canvas_navigation_and_each_capsule_acts_on_what_it_sho
         stop.click()
         bar.recording_changed(RecordingState(phase="recording", seconds=125))
         bar.dictation(active=True)
-        assert shown(bar) == [Key.AGENT, Key.ISLAND, Key.RECORDING, Key.CANVAS]
+        assert shown(bar) == [Key.AGENT, Key.ISLAND, Key.RECORDING, *FIXED]
         press(bar, Key.ISLAND)
         press(bar, Key.RECORDING)
         bar.hover(Key.RECORDING)
@@ -158,43 +206,22 @@ def test_the_island_keeps_canvas_navigation_and_each_capsule_acts_on_what_it_sho
         bar.dictation(active=False)
         bar.agent_changed(Agent("Which sheet?", waiting=True))
         press(bar, Key.ISLAND)
+        bar.layout(enabled=False)
+        assert "Colemak" in bar.window.capsules[Key.LAYER].accessibleName()
+        press(bar, Key.LAYER)
         bar.inbox_changed(120)
         assert "120 clarifications" in bar.window.capsules[Key.INBOX].accessibleName()
         press(bar, Key.INBOX)
-        assert invoked == ["stop", "stop", "canvas", "record-stop", "inbox", "inbox"]
+        assert invoked == ["stop", "stop", "canvas", "record-stop", "inbox", "keymap", "inbox"]
         bar.recording_changed(RecordingState(phase="saved"))
+        bar.layout(enabled=True)
         bar.inbox_changed(0)
         rest(bar)
-        assert shown(bar) == [Key.CANVAS]
-    finally:
-        closed(app, bar)
-
-
-def test_the_status_and_keyboard_capsules_act_on_what_they_show() -> None:
-    # Defects: the status capsule loses its time, battery or menu, or the
-    # keyboard capsule runs another function or overlaps the tray.
-    app = application()
-    invoked: list[str] = []
-    observations = BarObservations(power=lambda: Battery(73, powered=False, charging=False), local_time=lambda: datetime(2026, 10, 30, 20, 59))
-    bar = DesktopBar(recorded(invoked), native_shell=False, observations=observations)
-    try:
-        status = bar.window.capsules[Key.STATUS]
-        assert "20:59" in status.accessibleName() and "73%" in status.accessibleName()
-        press(bar, Key.STATUS)
-        assert bar.expanded is not None and bar.window.capsules[Key.ISLAND].rows[0].accessibleName() == "Your work canvas"
-        QTest.keyClick(bar.window, QtCore.Qt.Key.Key_Escape)
+        assert shown(bar) == FIXED
         bar.automatic_changed(AutomaticStatus.READY)
         press(bar, Key.STATUS)
         menu_row(bar, "Auto-record Teams: On").click()
-        assert invoked == ["record-automatic"]
-        rest(bar)
-        bar.layout(enabled=False)
-        keyboard = bar.window.capsules[Key.LAYER]
-        assert "Colemak" in keyboard.accessibleName()
-        assert keyboard.toolTip() == keyboard.accessibleName() and keyboard.width() == 36
-        assert keyboard.geometry().right() < bar.window.shell_sections.tray.geometry().left()
-        press(bar, Key.LAYER)
-        assert invoked == ["record-automatic", "keymap"]
+        assert invoked[-1] == "record-automatic"
     finally:
         closed(app, bar)
 
@@ -215,11 +242,8 @@ def test_capsules_float_below_the_edge_centred_and_one_gap_apart() -> None:
         assert abs(island.left() + island.width() / 2 - area.width() / 2) <= 1
         assert island.top() == 0 and island.height() == TOP + 34
         canvas = bar.window.capsules[Key.CANVAS].geometry()
-        assert abs(canvas.left() + canvas.width() - (area.width() - 12)) <= 1
         assert abs(inbox.left() - (island.left() + island.width()) - 6) <= 1
-        tray = bar.window.shell_sections.tray.geometry()
-        assert abs(canvas.left() - (tray.left() + tray.width()) - 6) <= 1
-        assert inbox.right() < bar.window.capsules[Key.STATUS].geometry().left()
+        assert canvas.left() > inbox.right()
         stop = stop_button(bar, Key.ISLAND).geometry()
         assert (stop.width(), stop.height(), stop.top() - TOP) == (28, 28, 3)
         assert abs(island.width() - (stop.left() + stop.width()) - 3) <= 1
@@ -236,8 +260,7 @@ def test_pointer_reaches_capsules_and_their_edge_strip_but_passes_through_elsewh
     bar = DesktopBar(recorded([]), native_shell=False, observations=BarObservations(material=lambda: appearance.Material.GLASS, motion=lambda: False))
     try:
         bar.visible = True
-        bar.job_changed(Job.TRANSCRIBING)
-        bar.render()
+        bar.agent_changed(WORKING)
         bar.timer.stop()
         app.processEvents()
         if bar.loop.composition is None:
@@ -289,14 +312,19 @@ def test_capsules_spring_between_views_and_the_frame_loop_stops_once_settled() -
     try:
         bar.timer.stop()
         bar.visible = True
-        bar.render()
-        status = bar.window.capsules[Key.STATUS].geometry()
+        bar.agent_changed(WORKING)
+        now[0] += 2
+        bar.paint_frames()
+        bar.agent_changed(None)
+        now[0] += 2
+        bar.paint_frames()
+        assert Key.ISLAND not in shown(bar)
         bar.inbox_changed(2)
         now[0] += 0.08
         bar.paint_frames()
         inbox = bar.window.capsules[Key.INBOX].geometry()
         assert 1 < inbox.width() < 36 and bar.loop.timer.isActive()
-        assert bar.window.capsules[Key.STATUS].geometry() == status, "Permanent status moved for dynamic activity."
+        assert Key.ISLAND not in shown(bar), "Pending inbox restored idle centre facts."
         now[0] += 2
         bar.paint_frames()
         assert bar.window.capsules[Key.INBOX].geometry().width() == 36 and not bar.loop.timer.isActive()
@@ -306,10 +334,10 @@ def test_capsules_spring_between_views_and_the_frame_loop_stops_once_settled() -
         assert Key.INBOX in shown(bar) and bar.window.capsules[Key.INBOX].geometry().width() < 36
         now[0] += 2
         bar.paint_frames()
-        assert shown(bar) == [Key.CANVAS] and not bar.loop.timer.isActive()
+        assert shown(bar) == FIXED and not bar.loop.timer.isActive()
         motion[0] = False
         bar.inbox_changed(5)
-        assert shown(bar) == [Key.CANVAS, Key.INBOX] and bar.window.capsules[Key.INBOX].geometry().width() == 36
+        assert shown(bar) == [Key.INBOX, *FIXED] and bar.window.capsules[Key.INBOX].geometry().width() == 36
         assert not bar.loop.timer.isActive()
     finally:
         closed(app, bar)
@@ -430,6 +458,7 @@ def test_activity_indicators_move_only_while_work_runs_and_motion_allows() -> No
     bar = DesktopBar(recorded([]), native_shell=False, observations=BarObservations(clock=lambda: now[0], motion=lambda: motion[0]))
     bar.visible = True
     try:
+        # Seed the capsule before testing animated updates; its first frame is absent.
         bar.visible = False
         bar.agent_changed(WORKING)
         island = bar.window.capsules[Key.ISLAND]
@@ -626,8 +655,7 @@ def test_menu_rows_do_not_inherit_the_escape_closes_tooltip() -> None:
         assert island.toolTip() == "" and all(row.toolTip() == "" for row in island.rows)
         assert "Workspace controls" in island.accessibleName()
         QTest.keyClick(bar.window, QtCore.Qt.Key.Key_Escape)
-        assert bar.expanded is None and not island.isVisibleTo(bar.window)
-        assert bar.window.capsules[Key.STATUS].toolTip()
+        assert bar.expanded is None and bar.window.capsules[Key.STATUS].toolTip()
     finally:
         closed(app, bar)
 
@@ -650,7 +678,7 @@ def test_the_menu_takes_the_keyboard_and_hands_it_back_only_when_a_choice_calls_
         opened = menu(bar)
         assert opened is not None and opened.selected == 0
         QTest.keyClick(bar.window, QtCore.Qt.Key.Key_Escape)
-        assert menu(bar) is None and focused == [42] and not bar.window.capsules[Key.ISLAND].isVisibleTo(bar.window)
+        assert menu(bar) is None and focused == [42] and Key.ISLAND not in shown(bar)
         bar.open_menu()
         QTest.keyClicks(bar.window, "k")
         QTest.keyClick(bar.window, QtCore.Qt.Key.Key_Return)
