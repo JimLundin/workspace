@@ -171,7 +171,7 @@ class TraySection(Section):
         self.toggle.setAccessibleName(title)
         self.toggle.setToolTip(title)
         ink = self.appearance.lettering.ink.color if self.appearance is not None else "#eeeeee"
-        self.toggle.setIcon(icon("chevron" if self.toggle.isChecked() else "down", ink, 16))
+        self.toggle.setIcon(icon("chevron" if self.toggle.isChecked() else "chevron-left", ink, 16))
 
     def disclose(self, expanded: bool) -> None:
         # Qt's toggled signal supplies the required positional boolean.

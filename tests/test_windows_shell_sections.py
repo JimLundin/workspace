@@ -17,6 +17,7 @@ from desktop_ui.qt_runtime import prepare
 from desktop_ui.qt_ui import application
 from desktop_ui.shell_items import Application, applications, next_window
 from desktop_ui.shell_surface import ShellSections
+from desktop_ui.vector_icons import icon, symbol
 from winapi import appearance, desktop_shell, shell, windows
 from winapi.icon_pixels import pixels
 from winapi.shapes import Rect, Window
@@ -141,11 +142,17 @@ def test_toolbar_shell_icons_route_actions_and_keep_overflow_reachable() -> None
         outer = Rect(0, 0, 600, 50)
         assert not sections.tray.toggle.isChecked()
         assert sections.tray.toggle.accessibleName() == "Expand system tray"
+        # Disclosure points along the horizontal expansion, not down.
+        collapsed_icon = sections.tray.toggle.icon().pixmap(16, 16).toImage()
+        right_icon = icon("chevron", "#eeeeee", 16).pixmap(16, 16).toImage()
+        assert collapsed_icon == icon("chevron-left", "#eeeeee", 16).pixmap(16, 16).toImage()
+        assert symbol("chevron-left") == '<g transform="translate(16 0) scale(-1 1)">' + symbol("chevron") + "</g>"
         assert not sections.tray.overflow.isVisible()
         assert sections.locations(outer, 1.0) == () and changes == []
         QTest.mouseClick(sections.tray.toggle, QtCore.Qt.MouseButton.LeftButton)
         app.processEvents()
         assert sections.tray.overflow.isVisible() and changes == [True]
+        assert sections.tray.toggle.icon().pixmap(16, 16).toImage() == right_icon
         assert len(sections.locations(outer, 1.0)) == 1
         refreshed = replace(tray, tip="Refreshed tray")
         sections.notifications((refreshed,), lambda item, click: invoked.append((item.tip, click)))

@@ -22,6 +22,8 @@ def symbol(name: str) -> str:
     """The SVG body for a symbol name; unknown names fall back to the document symbol."""
     if name in ("stop", "stop.fill"):
         return _STOP
+    if name == "chevron-left":
+        return '<g transform="translate(16 0) scale(-1 1)">' + REGULAR["chevron"] + "</g>"
     base, filled = name.removesuffix(".fill"), name.endswith(".fill")
     return (FILLED.get(base) if filled else None) or REGULAR.get(base) or REGULAR["doc"]
 
