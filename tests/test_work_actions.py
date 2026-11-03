@@ -299,6 +299,8 @@ def test_old_unverified_action_cannot_fall_off_the_completion_page(tmp_path: Pat
     outcome = work.outcome(Reported("Everything is complete."), threading.Event())
     # A returned action completes the task but is named, even past the first page.
     assert isinstance(outcome, Completed) and outcome.evidence[-1] == "Returned without independent verification: set_clipboard."
+    # The store must accept the completion execution produced; refusing it stopped the work controller.
+    assert store.finish(claim.run, outcome, at=clock()) is not None
 
 
 def test_exact_approval_is_once_only_and_private_review_never_enters_storage(tmp_path: Path) -> None:

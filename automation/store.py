@@ -468,7 +468,10 @@ class TaskStore:
             if (
                 isinstance(outcome, Completed)
                 and connection.execute(
-                    "SELECT id FROM actions WHERE task_id=? AND outcome_kind IN ('running','uncertain','returned') LIMIT 1",
+                    # A returned action ran to completion; the outcome names it. Refusing
+                    # it here, after execution allowed completion, stopped the work
+                    # controller and restarted the work process for every such task.
+                    "SELECT id FROM actions WHERE task_id=? AND outcome_kind IN ('running','uncertain') LIMIT 1",
                     (task.id,),
                 ).fetchone()
                 is not None

@@ -560,7 +560,8 @@ def test_approval_consumption_query_does_not_depend_on_action_pagination(tmp_pat
     store.begin_action(run.run, "first", first, at=3)
     store.finish_action("first", ActionNotApplied("The application rejected it before applying a change."), at=4)
     store.begin_action(run.run, "later-000", specification("later-000"), at=10)
-    store.finish_action("later-000", ActionReturned("The adapter returned."), at=11)
+    # Uncertain still blocks completion; a returned action alone no longer does.
+    store.finish_action("later-000", ActionUncertain("The adapter lost its acknowledgement."), at=11)
     store.begin_action(run.run, "later-001", specification("later-001"), at=12)
     sample = store.finish_action("later-001", ActionVerified("The result was inspected."), at=13)
     assert sample is not None
