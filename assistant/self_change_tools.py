@@ -196,7 +196,7 @@ class Delivery:
 
 @dataclass(frozen=True, slots=True)
 class Checked:
-    """A draft that passed the fast checks: its diff against the running version
+    """A draft that passed its affected checks: its diff against the running version
     and the digest of the frozen source those checks ran on."""
 
     diff: str
@@ -259,7 +259,7 @@ class SelfChange:
             Tool(
                 argument_spec(
                     "check_changes",
-                    "Run fast editing checks. The keeper runs full Windows checks before install; in approval mode, checks follow review.",
+                    "Run the tests this change affects, including Windows integration tests; in approval mode, checks follow review.",
                     NO_ARGUMENTS,
                 ),
                 typed_run(NO_ARGUMENTS, self.check_changes),
@@ -347,7 +347,7 @@ class SelfChange:
         passed, report = source.validate()
         digest = source_digest(source.root)
         if passed:
-            operation = Operation.of(args.tool, {"source_digest": digest, "profile": "fast"})
+            operation = Operation.of(args.tool, {"source_digest": digest, "profile": "affected"})
             if not self.session.approve(operation, "Run Workspace's checks?", "Run this frozen source and its tests?\n\n" + diff):
                 return Output(DECLINED, ok=False)
             result: CheckResult = CheckInterrupted("Runtime checks did not complete.")
@@ -356,8 +356,8 @@ class SelfChange:
                 nonlocal result
                 if source_digest(source.root) != digest:
                     raise SourceError("The source changed after review; check it again.")
-                self.session.step("Running Workspace's fast editing checks...")
-                result = source.inspect_check(fast=True, cancel=self.session.stop)
+                self.session.step("Running the tests this change affects...")
+                result = source.inspect_check(affected=True, cancel=self.session.stop)
                 return Output(result.report, ok=result.passed) if isinstance(result, CheckCompleted) else Output(result.reason, ok=False)
 
             def verify(_: Output) -> ActionVerified | ActionUncertain:
@@ -392,7 +392,7 @@ class SelfChange:
         if diff != self.checked.diff:
             raise ArgumentError("the changes have changed since they were checked; run check_changes again.")
         digest = source_digest(self.source().root)
-        # The keeper then runs only the native modules the fast check deferred.
+        # The keeper then repeats only the native modules for this checked digest.
         checked = digest if digest == self.checked.digest else None
         install = InstallOperation(summary, digest, str(self.source().live.absolute()), hashlib.sha256(diff.encode("utf-8")).hexdigest())
         operation = described(args.tool, _INSTALL_OPERATION, install)

@@ -9,7 +9,7 @@ from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 
 from assistant import commands
-from keeper import LIVE, PROTECTED, WORKSPACE, console_python, copy_source, source_digest, source_files
+from keeper import CHECK_S, LIVE, PROTECTED, WORKSPACE, console_python, copy_source, source_digest, source_files
 from selfcheck import compile_all
 
 
@@ -139,15 +139,15 @@ class Workspace:
         compile_all(self.root, problems)
         return not problems, "\n".join(problems) or "Syntax checks pass."
 
-    def check(self, timeout_s: float = 300, *, fast: bool = False) -> tuple[bool, str]:
-        result = self.inspect_check(timeout_s, fast=fast)
+    def check(self, timeout_s: float = CHECK_S) -> tuple[bool, str]:
+        result = self.inspect_check(timeout_s)
         return (result.passed, result.report) if isinstance(result, CheckCompleted) else (False, result.reason)
 
     def inspect_check(
         self,
-        timeout_s: float = 300,
+        timeout_s: float = CHECK_S,
         *,
-        fast: bool = False,
+        affected: bool = False,
         cancel: threading.Event | None = None,
     ) -> CheckResult:
         """Run the stable selfcheck on a fresh copy so tests cannot leave stale bytecode in the draft."""
@@ -158,8 +158,10 @@ class Workspace:
             copy_source(self.root, candidate)
             digest = source_digest(candidate)
             command = [console_python(), str(self.live / "selfcheck.py"), str(candidate)]
-            if fast:
-                command.extend(("--fast", "--changed-from", str(self.live)))
+            if affected:
+                # Native modules included: an install refusal costs the agent a
+                # keeper round trip, so it sees every failure the keeper would.
+                command.extend(("--changed-from", str(self.live)))
             code, report = commands.run(command, timeout_s=timeout_s, cancel=cancel)
             if code == -1:
                 return CheckInterrupted(report)

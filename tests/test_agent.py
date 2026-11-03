@@ -923,15 +923,15 @@ def test_approval_mode_runs_no_candidate_code_before_approval(tmp_path: Path) ->
     assert not marker.exists(), "unapproved code executed during checks"
 
 
-def test_fast_editing_checks_leave_native_failures_for_the_full_install_gate(tmp_path: Path) -> None:
+def test_editing_checks_report_affected_native_failures_before_install(tmp_path: Path) -> None:
+    # Defect: check_changes defers native modules, so their failures surface only as keeper refusals.
     workspace = source(tmp_path)
-    (workspace.live / "tests/test_windows_native.py").write_text("def test_native():\n    assert False, 'native failure'\n")
+    native = "import config\n\n\ndef test_native():\n    assert config.GREETING == 'hej', 'native failure'\n"
+    (workspace.live / "tests/test_windows_native.py").write_text(native)
     rig = ToolRig(workspace=workspace, work=durable(tmp_path))
     assert rig.call("edit_source", path="config.py", old="'hej'", new="'hello'").ok
     checked = rig.call("check_changes")
-    assert checked.ok and "1 native module deferred" in checked.text
-    passed, report = workspace.check()
-    assert not passed and "FAILED tests.test_windows_native.test_native" in report
+    assert not checked.ok and "FAILED tests.test_windows_native.test_native" in checked.text
 
 
 def test_runtime_failure_returns_to_the_agent_to_fix_before_installing(tmp_path: Path) -> None:

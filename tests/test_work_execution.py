@@ -258,7 +258,7 @@ def test_cancelling_a_check_terminates_its_candidate_process(tmp_path: Path) -> 
             "waiting_candidate.py", (f"import socket\nwith socket.create_connection(('127.0.0.1', {port})) as connection:\n    connection.recv(1)\n")
         )
         with ThreadPoolExecutor(max_workers=1) as pool:
-            pending = pool.submit(workspace.inspect_check, fast=True, cancel=stopped)
+            pending = pool.submit(workspace.inspect_check, affected=True, cancel=stopped)
             try:
                 connection, _ = listener.accept()
                 with connection:

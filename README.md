@@ -596,9 +596,10 @@ of the source in its own folder under `%LOCALAPPDATA%\workspace\workspaces`. Dra
 edits stay available for follow-up requests in the same conversation, then:
 
 1. **Check and fix**: every Python file, including the `.pyw` launchers, compiles.
-   The agent imports production modules and runs fast tests on a fresh copy of
-   its draft. Windows integration tests are deferred until submission, so it can
-   fix failures and check again quickly while editing.
+   The agent imports changed modules and runs the tests its change affects,
+   including Windows integration tests, on a fresh copy of its draft. It sees
+   every failure the keeper would refuse, fixes it and checks again in the same
+   task.
 2. **Submit**: the agent sends the checked change to the keeper. There is no
    approval step by default. With `WORKSPACE_AGENT_APPROVALS=ask`, the agent runs
    syntax checks first and the keeper shows the complete diff before running
