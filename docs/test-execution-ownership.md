@@ -2,7 +2,7 @@
 
 The editing runner keeps native UI tests in one sequential desktop lane. Four
 standard-library process workers own the explicitly reviewed portable modules
-in `scripts/check.py`. Each worker initializes the SDK once and reuses that
+in `selfcheck.py`, shared by the editing runner and the protected selfcheck. Each worker initializes the SDK once and reuses that
 interpreter across complete modules. Tests within a module remain sequential;
 each function retains its own files, stores, adapters and cleanup. New modules
 remain sequential until their effects are reviewed.

@@ -27,6 +27,7 @@ import time
 import traceback
 import unittest
 from collections.abc import Iterator
+from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 from typing import Protocol
 
@@ -37,6 +38,49 @@ _WINDOWS_ONLY = ("WinDLL", "WINFUNCTYPE", "windll", "winreg", "msvcrt", "_winapi
 
 
 _ON_WINDOWS: bool = sys.platform == "win32"
+
+WORKERS = 4
+# Reviewed effect owners: fake desktop adapters, private localhost endpoints,
+# and per-function temporary stores. These modules never use the shared desktop
+# or installed source, so they run in worker processes alongside the remaining
+# portable modules. An explicit inventory, rather than filename inference, keeps
+# new/native tests sequential until their effects have been reviewed; it lives
+# in this protected file so a change cannot widen it for its own install check.
+# Heavier modules lead the queue. docs/test-execution-ownership.md records the
+# reviewed resource owners. The full sequential suite outgrew the keeper's
+# check limit, so installs failed before any test could fail.
+PORTABLE = (
+    "tests/test_agent.py",
+    "tests/test_meeting_followup.py",
+    "tests/test_publishing.py",
+    "tests/test_meeting_execution.py",
+    "tests/test_architecture.py",
+    "tests/test_meeting_workflow.py",
+    "tests/test_quality.py",
+    "tests/test_work_store.py",
+    "tests/test_work_actions.py",
+    "tests/test_outlook.py",
+    "tests/test_meetings.py",
+    "tests/test_selfcheck.py",
+    "tests/test_computer_tools.py",
+    "tests/test_work_execution.py",
+    "tests/test_feed_triage_service.py",
+    "tests/test_commands.py",
+    "tests/test_meeting_events.py",
+    "tests/test_project_context.py",
+    "tests/test_llm.py",
+    "tests/test_routines.py",
+    "tests/test_background_agent.py",
+    "tests/test_keeper.py",
+    "tests/test_source_analysis.py",
+    "tests/test_workspace.py",
+    "tests/test_work_agent.py",
+    "tests/test_features.py",
+    "tests/test_work_submissions.py",
+)
+# Strict elapsed deadlines suffer under competing SDK/source work. These and all
+# native modules run after the workers exit, keeping their fixture costs stable.
+AFTER_WORKERS = frozenset({"tests/test_agent_streaming.py"})
 
 
 def _windows_only(error: BaseException) -> bool:
@@ -98,43 +142,103 @@ def _call(test: Test) -> None:
     test(**arguments)
 
 
-def run_tests(root: Path, problems: list[str], *, fast: bool = False, timings: list[tuple[float, str]] | None = None) -> tuple[int, int]:
-    """Passed tests, and skipped test modules."""
+type Outcome = tuple[int, int, tuple[str, ...], tuple[tuple[float, str], ...]]
+"""Passed tests, skipped modules, problems and per-test timings of one module run."""
+
+
+def run_module(path: Path) -> Outcome:
+    """Load one test module from the current tree and run its tests."""
     passed = skipped = 0
-    for path in sorted((root / "tests").glob("test_*.py")):
-        if fast and path.name.startswith("test_windows_"):
-            continue
-        name = f"tests.{path.stem}"
-        try:
-            module = importlib.import_module(name)
-        except unittest.SkipTest:
-            skipped += 1
-            continue
-        except Exception as error:
-            if _windows_only(error):
-                skipped += 1
-            else:
-                problems.append(f"FAILED {name} (while loading)\n{''.join(traceback.format_exception(error))}")
-            continue
-        members: dict[str, object] = vars(module)
-        for attribute, test in sorted(members.items()):
-            if attribute.startswith("test_") and callable(test):
-                origin: object = getattr(test, "__module__", None)
-                if origin != name:
-                    continue
-                invoke: Test = test
-                started = time.perf_counter()
+    problems: list[str] = []
+    timings: list[tuple[float, str]] = []
+    name = f"tests.{path.stem}"
+    try:
+        module = importlib.import_module(name)
+    except unittest.SkipTest:
+        return 0, 1, (), ()
+    except Exception as error:
+        if _windows_only(error):
+            return 0, 1, (), ()
+        return 0, 0, (f"FAILED {name} (while loading)\n{''.join(traceback.format_exception(error))}",), ()
+    members: dict[str, object] = vars(module)
+    for attribute, test in sorted(members.items()):
+        if attribute.startswith("test_") and callable(test):
+            origin: object = getattr(test, "__module__", None)
+            if origin != name:
+                continue
+            invoke: Test = test
+            started = time.perf_counter()
+            try:
+                _call(invoke)
+                passed += 1
+            except unittest.SkipTest:
+                pass
+            except Exception as error:
+                problems.append(f"FAILED {name}.{attribute}\n{''.join(traceback.format_exception(error))}")
+            finally:
+                timings.append((time.perf_counter() - started, f"{name}.{attribute}"))
+    return passed, skipped, tuple(problems), tuple(timings)
+
+
+def _prepare_worker(root: str) -> None:
+    sys.path.insert(0, root)
+    os.chdir(root)
+    os.environ.pop("WORKSPACE_E2E", None)
+    runtime.activate(root=Path(root))
+    sys.modules.pop("runtime", None)
+    if (Path(root) / "assistant" / "sdk.py").is_file():
+        # Resolve the SDK graph before Qt installs its per-module source inspection.
+        importlib.import_module("assistant.sdk")
+
+
+def _progress(path: Path, outcome: Outcome, seconds: float) -> None:
+    """One line per module as it finishes, so a timed-out install shows where it stopped."""
+    sys.stdout.write(f"{seconds:7.1f}s {path.name}: {outcome[0]} passed, {len(outcome[2])} failed\n")
+    sys.stdout.flush()
+
+
+def run_tests(root: Path, problems: list[str], *, fast: bool = False, timings: list[tuple[float, str]] | None = None) -> tuple[int, int]:
+    """Passed tests, and skipped test modules.
+
+    Reviewed portable modules run on worker processes while the other non-native
+    modules run here; native modules run after the workers exit, one at a time.
+    """
+    paths = [path for path in sorted((root / "tests").glob("test_*.py")) if not (fast and path.name.startswith("test_windows_"))]
+    relative = {path: path.relative_to(root).as_posix() for path in paths}
+    portable = [path for name in PORTABLE for path in paths if relative[path] == name]
+    following = [path for path in paths if path.name.startswith("test_windows_") or relative[path] in AFTER_WORKERS]
+    alongside = [path for path in paths if path not in portable and path not in following]
+    # This coordinator owns the run's counters and ledgers; workers return
+    # immutable outcomes only.
+    outcomes: list[Outcome] = []
+
+    def sequential(group: list[Path]) -> None:
+        for path in group:
+            started = time.perf_counter()
+            outcome = run_module(path)
+            _progress(path, outcome, time.perf_counter() - started)
+            outcomes.append(outcome)
+
+    if len(portable) < 2:
+        sequential([*portable, *alongside, *following])
+    else:
+        started = time.perf_counter()
+        with ProcessPoolExecutor(max_workers=WORKERS, initializer=_prepare_worker, initargs=(str(root),)) as pool:
+            pending = [(path, pool.submit(run_module, path)) for path in portable]
+            sequential(alongside)
+            for path, future in pending:
                 try:
-                    _call(invoke)
-                    passed += 1
-                except unittest.SkipTest:
-                    pass
+                    outcome = future.result()
                 except Exception as error:
-                    problems.append(f"FAILED {name}.{attribute}\n{''.join(traceback.format_exception(error))}")
-                finally:
-                    if timings is not None:
-                        timings.append((time.perf_counter() - started, f"{name}.{attribute}"))
-    return passed, skipped
+                    outcome = 0, 0, (f"FAILED tests.{path.stem} (in a worker)\n{''.join(traceback.format_exception(error))}",), ()
+                _progress(path, outcome, time.perf_counter() - started)
+                outcomes.append(outcome)
+        sequential(following)
+    for _, _, found, measured in outcomes:
+        problems.extend(found)
+        if timings is not None:
+            timings.extend(measured)
+    return sum(outcome[0] for outcome in outcomes), sum(outcome[1] for outcome in outcomes)
 
 
 def check(root: Path, *, fast: bool = False, durations: int = 0) -> tuple[bool, str]:

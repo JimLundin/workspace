@@ -56,7 +56,9 @@ PROTECTED: Final = frozenset({"keeper.py", "selfcheck.py", "workspace.pyw", "run
 START_S: Final = 30.0
 """How long a program gets to say it's ready."""
 TRIAL_S: Final = 600.0
-CHECK_S: Final = 300.0
+CHECK_S: Final = 600.0
+"""A hang guard, not a budget: the full parallel selfcheck measured 266 s against 437 s
+sequentially, which had outgrown the former 300 s limit and failed every install."""
 CRASH_WINDOW_S: Final = 600.0
 MAX_CRASHES: Final = 3
 """Restarts allowed within `CRASH_WINDOW_S`; one more crash and the keeper stops trying."""

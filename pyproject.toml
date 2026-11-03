@@ -358,7 +358,7 @@ reason = "Read the optional native OSError code for bounded publication retry af
 [[tool.workspace.architecture.exceptions]]
 rule = "explicit-attributes"
 module = "selfcheck"
-declaration = "run_tests"
+declaration = "run_module"
 expression = "getattr(test, '__module__', None)"
 reason = "The protected runner inspects discovered test callables to verify their defining module."
 

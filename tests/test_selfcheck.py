@@ -53,6 +53,19 @@ def test_a_failing_test_fails(tmp_path: Path) -> None:
     assert "AssertionError" in report
 
 
+def test_worker_modules_report_their_passes_and_failures(tmp_path: Path) -> None:
+    # Detect a worker outcome that is dropped from the counts, the report or the exit code.
+    files = {
+        **SOUND,
+        "tests/test_llm.py": "def test_worker_passes() -> None:\n    assert True\n",
+        "tests/test_agent.py": "def test_worker_fails() -> None:\n    assert 1 == 2\n",
+    }
+    code, report = selfcheck(tree(tmp_path, files))
+    assert code == 1, report
+    assert "FAILED tests.test_agent.test_worker_fails" in report
+    assert "3 passed, 1 failed" in report
+
+
 def test_a_syntax_error_fails(tmp_path: Path) -> None:
     code, report = selfcheck(tree(tmp_path, {**SOUND, "tools/broken.py": "def oops(:\n"}))
     assert code == 1
