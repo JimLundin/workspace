@@ -27,6 +27,35 @@ Observed at home on 2026-11-04: the laptop panel is `\\.\DISPLAY1`,
 3840×2160 at 144 DPI, at (1920, −269). Both work areas equal their monitors
 because Workspace hides the taskbar.
 
+## Dark external screens while locked
+
+The home 4K screen is an OLED, so the Windows lock screen must not stay on it.
+`DARK_WHEN_LOCKED` in `desktop_ui/window_layout.py` declares which roles of a
+setup go dark while the session is locked: Home's MAIN. Work's screens and any
+unrecognized set stay lit. Only the laptop panel shows the lock screen.
+
+The bar's hidden shell-controls window registers for session notifications.
+On `WTS_SESSION_LOCK`, `desktop_ui/locked_screens.py` sets DDC/CI power mode
+(VCP D6) to 4 on the protected screens; on `WTS_SESSION_UNLOCK` it sets 1 again,
+only on the screens it turned off. A screen that refuses to come back on stays
+recorded and is tried again at the next unlock or when Workspace closes.
+Closing Workspace turns its darkened screens back on. If Workspace starts behind
+the lock screen, such as after a crash, it darkens the protected screens then.
+
+`winapi/monitor_power.py` opens physical-monitor handles when it acts. When
+those don't answer, it uses handles opened while unlocked, reopened after each
+display change. Each usage record says how many requests needed the kept ones.
+
+Decision: DDC/CI instead of a display topology change. Measured on this machine:
+`SetDisplayConfig` from the locked user session returns `ERROR_ACCESS_DENIED`.
+D6=4 turned the 4K screen dark and D6=1 brought it back, while
+`SM_CMONITORS` stayed 2: Windows still counts the screen as connected, so
+placement keeps its windows there. Each request took about 65 ms and
+runs on the bar's thread. The laptop panel doesn't answer DDC/CI.
+
+Turn it off or on with **Dark when locked** in the controls menu. It starts on
+with each Workspace launch.
+
 ## Layouts
 
 Each app has one position per setup: a desktop, a role and a region of that

@@ -70,7 +70,7 @@ pattern; tray icons take one column and other tiles span pairs:
 | Section | Cells |
 | --- | --- |
 | Activities | One full-width card per running activity, with its reading and Stop |
-| Settings and views | Auto-record, keyboard overlay, Windows taskbar and window placement toggles beside Canvas and Feed tiles |
+| Settings and views | Auto-record, keyboard overlay, Windows taskbar, window placement and dark-when-locked toggles beside Canvas and Feed tiles |
 | Recording | Record a meeting, absent while one runs |
 | Sound | The speaker level as a slider; its symbol shows mute |
 | Tools | Switch windows, transcript and key map as small tiles |
