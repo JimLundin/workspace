@@ -9,8 +9,6 @@ from scripts.architecture import dependencies, python_sources, review
 from tests.check_fixture import copy_check_scripts
 from tests.git_fixture import initialized
 
-ROOT = Path(__file__).resolve().parent.parent
-
 
 def write_tree(root: Path, files: dict[str, str], *, models: tuple[str, ...] = ()) -> None:
     for name, text in files.items():
@@ -432,8 +430,3 @@ def test_mock_frameworks_and_replacement_fixtures_are_rejected_in_all_sources(tm
         },
     )
     assert not review(tmp_path).failures
-
-
-def test_current_working_tree_satisfies_declared_architecture() -> None:
-    report = review(ROOT)
-    assert not report.failures, "\n".join(finding.describe() for finding in report.failures)

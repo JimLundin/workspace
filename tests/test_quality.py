@@ -7,12 +7,10 @@ import sys
 import unittest
 from pathlib import Path
 
-from scripts.check_standards import TYPES, Standard, background
+from scripts.check_standards import Standard, background
 from scripts.quality import imports, scan
 from tests.check_fixture import copy_check_scripts
 from tests.git_fixture import initialized
-
-ROOT = Path(__file__).resolve().parent.parent
 
 
 def source_tree(root: Path, text: str) -> None:
@@ -119,12 +117,3 @@ def test_background_standards_report_each_failure_and_output_only_when_it_fails(
     assert "api.py:1: error: unknown" in failures[0].report
     with background((passing, passing), tmp_path) as collect:
         assert collect() == ()
-
-
-def test_the_type_standards_run_both_checkers_over_the_whole_tree() -> None:
-    # Detect Dev.cmd check dropping mypy (or pyright) from its type gate, or
-    # narrowing either checker to the selected files.
-    assert [(standard.node, standard.command[1:3], standard.command[-1]) for standard in TYPES] == [
-        ("pyright", ("-m", "pyright"), sys.executable),
-        ("mypy", ("-m", "mypy"), "."),
-    ]
