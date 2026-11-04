@@ -259,16 +259,16 @@ accessibility-menu **T** and **H**.
 
 | chord | does |
 |---|---|
-| ⌃⌥⇧ **M** | Focus ← |
-| ⌃⌥⇧ **N** | Focus ↓ |
-| ⌃⌥⇧ **E** | Focus ↑ |
-| ⌃⌥⇧ **I** | Focus → |
+| ⌃⌥⇧ **N** | Focus ← |
+| ⌃⌥⇧ **E** | Focus ↓ |
+| ⌃⌥⇧ **I** | Focus ↑ |
+| ⌃⌥⇧ **O** | Focus → |
 | ⌃⌥⇧ **L** | Desk 1 |
 | ⌃⌥⇧ **U** | Desk 2 |
 | ⌃⌥⇧ **Y** | Desk 3 |
 | ⌃⌥⇧ **K** | Desk ← |
 | ⌃⌥⇧ **H** | Desk → |
-| ⌃⌥⇧ **O** | Zoom |
+| ⌃⌥⇧ **M** | Zoom |
 | ⌃⌥⇧ **J** | Pause place |
 | ⌃⌥⇧ **Q** | Terminal |
 | ⌃⌥⇧ **W** | Browser |
