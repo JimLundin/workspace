@@ -304,11 +304,15 @@ class Engine:
         return verdict
 
     def refresh(self, host: Host) -> None:
-        """Tells the indicator if what it should show has changed."""
-        now = Indicator(self.layer(), locked=self.locked is not None, caps_word=self.caps_word, chord=self.chording())
-        if now != self.shown:
-            self.shown = now
-            host.indicate(now)
+        """Tells the indicator if what it should show has changed.
+
+        Every key event refreshes, so the measured keyboard path compares the
+        fields and builds a frozen record only for a change.
+        """
+        layer, locked, chord, shown = self.layer(), self.locked is not None, self.chording(), self.shown
+        if layer is not shown.layer or locked is not shown.locked or self.caps_word is not shown.caps_word or chord is not shown.chord:
+            self.shown = Indicator(layer, locked=locked, caps_word=self.caps_word, chord=chord)
+            host.indicate(self.shown)
 
     def toggle(self, host: Host) -> None:
         """Switch the layout on/off, releasing held input and clearing its indicator."""
