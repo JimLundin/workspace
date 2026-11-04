@@ -34,6 +34,7 @@ _KillTimer = fn(user32, "KillTimer", wintypes.BOOL, wintypes.HWND, ULONG_PTR)
 _MessageBeep = fn(user32, "MessageBeep", wintypes.BOOL, wintypes.UINT)
 _MessageBoxW = fn(user32, "MessageBoxW", ctypes.c_int, wintypes.HWND, wintypes.LPCWSTR, wintypes.LPCWSTR, wintypes.UINT)
 _GetCurrentThreadId = fn(kernel32, "GetCurrentThreadId", wintypes.DWORD)
+_GetTickCount = fn(kernel32, "GetTickCount", wintypes.DWORD)
 _CreateMutexW = fn(kernel32, "CreateMutexW", wintypes.HANDLE, ctypes.c_void_p, wintypes.BOOL, wintypes.LPCWSTR)
 _CloseHandle = fn(kernel32, "CloseHandle", wintypes.BOOL, wintypes.HANDLE)
 _CreateEventW = fn(kernel32, "CreateEventW", wintypes.HANDLE, ctypes.c_void_p, wintypes.BOOL, wintypes.BOOL, wintypes.LPCWSTR)
@@ -51,6 +52,8 @@ class Message:
     message: int
     wparam: int
     lparam: int
+    time: int
+    """When Windows posted it, in `tick_count` milliseconds."""
 
 
 def messages() -> Iterator[Message]:
@@ -58,7 +61,7 @@ def messages() -> Iterator[Message]:
     window procedure), until a quit message arrives."""
     msg = wintypes.MSG()
     while _GetMessageW(ctypes.byref(msg), None, 0, 0) > 0:
-        yield Message(int(msg.hWnd or 0), int(msg.message), int(msg.wParam), int(msg.lParam))
+        yield Message(int(msg.hWnd or 0), int(msg.message), int(msg.wParam), int(msg.lParam), int(msg.time))
 
 
 def run_message_loop() -> None:
@@ -84,6 +87,11 @@ def post_thread_message(thread: int, message: int, wparam: int, lparam: int) -> 
 
 def thread_id() -> int:
     return int(_GetCurrentThreadId())
+
+
+def tick_count() -> int:
+    """Milliseconds since boot, wrapping at 2**32: the clock of message and key times."""
+    return int(_GetTickCount())
 
 
 def set_timer(ms: int) -> int:
