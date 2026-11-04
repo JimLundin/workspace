@@ -4,8 +4,8 @@ It runs the layout, assistant, and automation worker, and installs changes to
 them: when the agent asks, it checks the change (selfcheck.py), keeps a copy of
 the current version, installs, and restarts them. A failed check prevents an
 installation. A change that doesn't start, crashes during its ten-minute trial,
-or keeps crashing later is undone, back to the copy. During the trial a small window offers Keep and Undo,
-usable with the mouse alone in case the change broke the keyboard.
+or keeps crashing later is undone, back to the copy. Undo in the tray menu rolls
+back the last installed change at any time.
 
 So that a change can never break what undoes it, the agent can't edit this file,
 selfcheck.py or workspace.pyw (`PROTECTED`), and the keeper uses a protected Qt dialog module. What it runs is listed in the
@@ -44,7 +44,6 @@ lazy from keeper_control import (
     InstallRefused,
     InstallResult,
     InstallStarted,
-    Keep,
     Malformed,
     Request,
     Restart,
@@ -229,9 +228,6 @@ class World(Protocol):
         """Publish the install outcome the requesting task waits for."""
         ...
 
-    def show_trial(self, summary: str | None) -> None:
-        """Shows the trial window for this change; None hides it."""
-
 
 class Stage(Enum):
     STARTING = auto()
@@ -364,15 +360,9 @@ class Keeper:
                     return
                 if self.stage is Stage.TRIAL:
                     self.persist(pending=False)
-                    self.world.show_trial(None)
                 self.world.record(InstallChecking(digest))
                 self.check, self.summary, self.digest = self.world.start_check(checked), summary, digest
                 self.stage, self.deadline = Stage.CHECKING, now + CHECK_S
-            case Keep():
-                if self.stage is Stage.TRIAL:
-                    self.persist(pending=False)
-                    self.stage = Stage.RUNNING
-                    self.world.show_trial(None)
             case Undo():
                 if self.undoable is None:
                     self.world.notify("There's no update to undo.")
@@ -440,7 +430,6 @@ class Keeper:
                 if now > self.deadline and not self.done:
                     self.persist(pending=False)
                     self.stage = Stage.RUNNING
-                    self.world.show_trial(None)
             case Stage.RUNNING:
                 self.running(now)
 
@@ -488,7 +477,6 @@ class Keeper:
         elif all(self.world.is_ready(name) for name in self.children):
             if self.fresh:
                 self.stage, self.deadline = Stage.TRIAL, now + TRIAL_S
-                self.world.show_trial(self.summary)
             else:
                 self.stage = Stage.RUNNING
             self.fresh = False
@@ -515,7 +503,6 @@ class Keeper:
             self.children[name] = self.world.start(name)
 
     def rollback(self, why: str, now: float) -> None:
-        on_trial = self.stage is Stage.TRIAL
         version = self.undoable
         self.persist(pending=True)
         self.stop_all()
@@ -532,8 +519,6 @@ class Keeper:
         self.start(now)
         self.crashes = []
         self.refuse(self.digest, f"Update undone: {why}.")
-        if on_trial:
-            self.world.show_trial(None)
 
 
 # ---- on Windows ------------------------------------------------------------------------
@@ -723,11 +708,6 @@ def main(ui: Ui) -> None:
 
         def record(self, result: InstallResult) -> None:
             record_install(STATE, result)
-
-        def show_trial(self, summary: str | None) -> None:
-            # The trial keeps the change after TRIAL_S and undoes it on a crash;
-            # nothing for the user to decide, so nothing is shown.
-            _log(f"on trial: {summary}" if summary else "trial over")
 
     keeper = Keeper(WinWorld(), Recovery(STATE / "recovery.json"))
     keeper.recover()

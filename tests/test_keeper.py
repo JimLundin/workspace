@@ -23,7 +23,6 @@ from keeper_control import (
     InstallRefused,
     InstallResult,
     InstallStarted,
-    Keep,
     Pause,
     Paused,
     Refused,
@@ -117,9 +116,6 @@ class World:
 
     def record(self, result: InstallResult) -> None:
         self.results.append(result)
-
-    def show_trial(self, summary: str | None) -> None:
-        self.log.append(f"trial {summary}" if summary else "trial over")
 
     def come_up(self) -> None:
         self.ready |= {"layout", "assistant", "automation"}
@@ -342,7 +338,6 @@ def test_an_install_is_checked_snapshotted_installed_and_tried() -> None:
         "start layout",
         "start assistant",
         "start automation",
-        "trial a new snippet",
     ]
     assert keeper.stage is Stage.TRIAL
     assert world.results == [InstallChecking("digest"), InstallStarted("digest", "a new snippet", "v1")]
@@ -471,7 +466,6 @@ def test_a_crash_during_the_trial_undoes_the_change() -> None:
         "start assistant",
         "start automation",
         "note Update undone: it crashed during its trial.",
-        "trial over",
     ]
 
 
@@ -491,7 +485,6 @@ def test_automation_exit_during_trial_undoes_the_update_even_when_exit_code_is_z
             "start assistant",
             "start automation",
             "note Update undone: it crashed during its trial.",
-            "trial over",
         ]
 
 
@@ -512,18 +505,18 @@ def test_the_trial_ends_after_ten_minutes_and_the_change_stays() -> None:
     installed(world, keeper)
     world.take()
     keeper.tick(now=21 + 601)
-    assert world.take() == ["trial over"]
+    assert world.take() == []
     assert keeper.stage is Stage.RUNNING
 
 
-def test_keep_ends_the_trial_and_undo_rolls_back() -> None:
+def test_undo_rolls_back_after_the_trial() -> None:
     world = World()
     keeper = running(world)
     installed(world, keeper)
-    keeper.request(Keep(), now=30)
+    keeper.tick(now=21 + 601)
     assert keeper.stage is Stage.RUNNING
     world.take()
-    keeper.request(Undo(), now=40)  # undo works after the trial too
+    keeper.request(Undo(), now=640)  # undo works after the trial too
     assert world.take() == [
         "stop automation",
         "stop assistant",
@@ -540,11 +533,11 @@ def test_crashing_over_and_over_after_an_update_undoes_it() -> None:
     world = World()
     keeper = running(world)
     installed(world, keeper)
-    keeper.request(Keep(), now=30)
+    keeper.tick(now=21 + 601)
     world.take()
     for t in range(4):
         world.children["assistant"].code = 1
-        keeper.tick(now=40 + t)
+        keeper.tick(now=640 + t)
     assert "restore v1" in world.take()
 
 
@@ -673,7 +666,7 @@ def test_undo_survives_keeper_restart(tmp_path: Path) -> None:
     world.come_up()
     keeper.tick(1)
     installed(world, keeper)
-    keeper.request(Keep(), now=30)
+    keeper.tick(now=21 + 601)
     world.take()
     restarted = Keeper(world, recovery)
     restarted.recover()

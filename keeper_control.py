@@ -1,6 +1,6 @@
 """The keeper's typed files: its inbox, its rollback target and the deployment pause.
 
-Other programs ask the keeper for installs, undo, keep and restarts through its
+Other programs ask the keeper for installs, undo and restarts through its
 inbox folder; a request it can't read is refused, never silently dropped. The
 keeper owns a deployment pause until an explicit matching resume, so a failed
 coordinator never starts children against a partly replaced tree. It runs
@@ -39,19 +39,12 @@ class Undo:
 
 
 @dataclass(frozen=True, slots=True)
-class Keep:
-    """End the current trial and keep the change."""
-
-    action: Literal["keep"] = "keep"
-
-
-@dataclass(frozen=True, slots=True)
 class Restart:
     component: Component
     action: Literal["restart"] = "restart"
 
 
-type Request = Install | Undo | Keep | Restart
+type Request = Install | Undo | Restart
 
 
 @dataclass(frozen=True, slots=True)
@@ -141,7 +134,7 @@ class Capability:
     version: Literal[1] = 1
 
 
-REQUEST = TypeAdapter[Request](Install | Undo | Keep | Restart)
+REQUEST = TypeAdapter[Request](Install | Undo | Restart)
 ROLLBACK = TypeAdapter[Rollback](Rollback)
 COMMAND = TypeAdapter[Pause | Resume](Pause | Resume)
 STATUS = TypeAdapter[Paused | Resumed | Refused](Paused | Resumed | Refused)
