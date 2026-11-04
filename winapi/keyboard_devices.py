@@ -2,8 +2,13 @@
 
 import ctypes
 from ctypes import wintypes
+from typing import Final
 
 from winapi._core import fn, last_error, user32
+
+WM_INPUT: Final = 0x00FF
+_KEYBOARD_USAGE: Final = (0x01, 0x06)  # HID generic desktop page, keyboard
+_RIDEV_REMOVE, _RIDEV_INPUTSINK = 0x0001, 0x0100
 
 
 class RawInputDevice(ctypes.Structure):
@@ -12,6 +17,13 @@ class RawInputDevice(ctypes.Structure):
     _fields_ = (("handle", wintypes.HANDLE), ("kind", wintypes.DWORD))
 
 
+class RawInputRegistration(ctypes.Structure):
+    """RAWINPUTDEVICE."""
+
+    _fields_ = (("usUsagePage", wintypes.USHORT), ("usUsage", wintypes.USHORT), ("dwFlags", wintypes.DWORD), ("hwndTarget", wintypes.HWND))
+
+
+_RegisterRawInputDevices = fn(user32, "RegisterRawInputDevices", wintypes.BOOL, ctypes.POINTER(RawInputRegistration), wintypes.UINT, wintypes.UINT)
 _GetRawInputDeviceList = fn(
     user32, "GetRawInputDeviceList", wintypes.UINT, ctypes.POINTER(RawInputDevice), ctypes.POINTER(wintypes.UINT), wintypes.UINT
 )
@@ -48,3 +60,23 @@ def _name(handle: int) -> str:
     if _GetRawInputDeviceInfo(handle, 0x20000007, buffer, ctypes.byref(size)) == 0xFFFFFFFF:
         return ""
     return str(buffer.value)
+
+
+def watch_input(hwnd: int) -> None:
+    """Post WM_INPUT to `hwnd` for every keyboard event, even in the background.
+
+    Raw input arrives whether or not a keyboard hook still runs. The window is
+    never foreground, so each message is RIM_INPUTSINK and needs no cleanup.
+    """
+    if not _register(_RIDEV_INPUTSINK, hwnd):
+        raise last_error()
+
+
+def stop_watching_input() -> None:
+    _register(_RIDEV_REMOVE, None)
+
+
+def _register(flags: int, hwnd: int | None) -> bool:
+    page, usage = _KEYBOARD_USAGE
+    device = RawInputRegistration(page, usage, flags, hwnd)
+    return bool(_RegisterRawInputDevices(ctypes.byref(device), 1, ctypes.sizeof(RawInputRegistration)))
