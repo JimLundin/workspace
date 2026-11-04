@@ -238,7 +238,7 @@ ban-relative-imports = "all"
 # Win32 functions keep their Windows names, one prototype per line.
 "winapi/*.py" = ["E501", "N816", "PLR0917"]
 # Dependency stubs preserve the pinned SDK's actual method names.
-"typings/win32more/**/*.pyi" = ["N801", "N802"]
+"typings/win32more/**/*.pyi" = ["N801", "N802", "N815"]
 
 [tool.setuptools]
 py-modules = ["components", "config", "diagnostics", "keeper", "keeper_control", "keeper_ui", "protocol", "runtime", "selfcheck", "usage"]

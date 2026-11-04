@@ -1,0 +1,1 @@
+VT_LPWSTR: int
