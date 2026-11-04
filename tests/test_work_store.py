@@ -21,12 +21,10 @@ from automation.task import (
     Completed,
     Control,
     Failed,
-    FeedHandoff,
     FileDigest,
     Interrupted,
     MeetingFollowup,
     Question,
-    RequestKind,
     RequestSource,
     RoutineSource,
     Running,
@@ -317,100 +315,6 @@ def test_refresh_approval_requires_exact_pending_approval_and_never_approves(tmp
     reopened.finish(fresh.run, Waiting(Question("question", "Which project?", "")), at=10)
     assert reopened.refresh_approval("task", "question", at=11) is None
     assert reopened.answer("task", "question", TextAnswer("Project A"), at=12) is not None
-
-
-def test_version_two_journals_reopen_with_blocked_approvals_and_recorded_profiles(tmp_path: Path) -> None:
-    # Defect: a journal whose approvals packed their operation into the ID crashes
-    # recovery, keeps a pending approval or grant without a recorded fingerprint,
-    # or lets a saved meeting follow-up run with the general toolset.
-    path = tmp_path / "work.sqlite3"
-    store = TaskStore(path)
-    for task in ("granted", "pending"):
-        store.submit(task, "Task", "Apply the change.", RequestSource("chat"), at=1)
-        claim = store.claim("worker", task + "-run", at=2)
-        assert claim is not None
-        store.finish(claim.run, Waiting(Approval(task + "-request", "Apply?", "Preview.", "a" * 64)), at=3)
-    assert store.answer("granted", "granted-request", ApprovalDecision.APPROVED, at=4) is not None
-    store.submit("meeting-followup-" + "c" * 64, "Meeting", "Prepare notes.", RequestSource("chat"), at=1)
-    legacy = '{"kind":"approval","id":"approval:0:' + "a" * 64 + ':nonce","title":"Apply?","detail":"Preview."}'
-    with closing(sqlite3.connect(path)) as database, database:
-        database.execute("UPDATE tasks SET state=json_object('kind','waiting','reason',json(?)) WHERE id='pending'", (legacy,))
-        database.execute("UPDATE requests SET request=?", (legacy,))
-        database.execute("UPDATE responses SET request=?", (legacy,))
-        database.execute("UPDATE tasks SET source=json_remove(source,'$.profile')")
-        database.execute("PRAGMA user_version=2")
-    reopened = TaskStore(path)
-    pending = reopened.get("pending")
-    assert pending is not None and isinstance(pending.state, Waiting) and isinstance(pending.state.reason, Blocked)
-    assert reopened.responses("granted") == () and reopened.request_run("pending", "pending-request") is None
-    assert reopened.control("pending", Control.RESUME, at=5) is not None
-    assert [task.source.profile for task in TaskStore(path).list_tasks() if isinstance(task.source, RequestSource)] == [
-        RequestKind.GENERAL,
-        RequestKind.GENERAL,
-    ]
-
-
-def test_version_three_journals_drop_meeting_followups_that_name_no_saved_recordings(tmp_path: Path) -> None:
-    # Defect: a version 3 journal does not open, its legacy meeting follow-up
-    # breaks every task listing, or that task's journal rows prevent dropping it.
-    path = tmp_path / "work.sqlite3"
-    store = TaskStore(path)
-    legacy = "meeting-followup-" + "c" * 64
-    store.submit(legacy, "Meeting", "Prepare notes.", RequestSource("chat"), at=1)
-    claim = store.claim("worker", "meeting-run", at=2)
-    assert claim is not None and store.begin_action(claim.run, "mail-save", specification(), at=3) is not None
-    assert store.finish(claim.run, Waiting(Question("owner", "Who owns the release?", "")), at=4) is not None
-    store.submit("kept", "Chat", "Keep this request.", RequestSource("chat"), at=5)
-    with closing(sqlite3.connect(path)) as database, database:
-        database.execute("UPDATE tasks SET source=json_set(source,'$.profile','meeting_followup') WHERE id=?", (legacy,))
-        database.execute("PRAGMA user_version=3")
-    reopened = TaskStore(path)
-    assert [task.id for task in reopened.list_tasks()] == ["kept"]
-    assert reopened.get(legacy) is None and reopened.actions(legacy) == ()
-
-
-def test_version_four_journals_keep_every_task_reply_and_action_in_their_new_shapes(tmp_path: Path) -> None:
-    # Defect: converting a version 4 journal loses or changes a person's tasks,
-    # replies or actions, or no longer lists its meeting follow-ups.
-    path = tmp_path / "work.sqlite3"
-    store = TaskStore(path)
-    store.submit("approved", "Task", "Apply the change.", RequestSource("chat"), at=1)
-    claim = store.claim("worker", "first-run", at=2)
-    assert claim is not None
-    store.finish(claim.run, Waiting(Approval("grant", "Apply?", "Preview.", "a" * 64)), at=3)
-    assert store.answer("approved", "grant", ApprovalDecision.APPROVED, at=4) is not None
-    store.submit("meeting", "Meeting", "Prepare notes.", RequestSource("chat", MeetingFollowup("c" * 64)), at=5)
-    store.submit("feed", "Feed", "Reply to Ada.", RequestSource("chat", FeedHandoff("item", "Ada's question")), at=6)
-    store.submit("paused", "Paused", "Wait for review.", RequestSource("chat"), at=7)
-    assert store.control("paused", Control.PAUSE, at=8) is not None
-    running = store.claim("worker", "second-run", at=9)
-    assert running is not None and running.task.id == "approved"
-    assert store.begin_action(running.run, "action", specification(), at=10) is not None
-    before = (store.list_tasks(), store.responses("approved"), store.actions("approved"))
-    with closing(sqlite3.connect(path)) as database, database:
-        for table, column in (("tasks", "state"), ("runs", "previous_state")):
-            database.execute(f"UPDATE {table} SET {column}=json_object('kind',json_extract({column},'$')) WHERE json_type({column})='text'")
-            database.execute(
-                f"UPDATE {table} SET {column}=json_set(json_remove({column},'$.run'),'$.run_id',json_extract({column},'$.run.run_id')) "
-                f"WHERE json_extract({column},'$.kind')='running'"
-            )
-        database.execute(
-            "UPDATE tasks SET source=json_set(json_remove(source,'$.profile'),'$.profile','meeting_followup','$.bundle',"
-            "json_extract(source,'$.profile.bundle')) WHERE json_extract(source,'$.profile.kind')='meeting_followup'"
-        )
-        database.execute(
-            "UPDATE tasks SET source=json_set(json_remove(source,'$.profile'),'$.profile','feed','$.item',json_extract(source,'$.profile.item'),"
-            "'$.title',json_extract(source,'$.profile.title')) WHERE json_extract(source,'$.profile.kind')='feed'"
-        )
-        database.execute("UPDATE responses SET reply=json_object('kind',json_extract(reply,'$')) WHERE json_type(reply)='text'")
-        database.execute("UPDATE actions SET outcome=json_object('kind',json_extract(outcome,'$')) WHERE json_type(outcome)='text'")
-        database.execute("UPDATE actions SET specification=json_set(specification,'$.verification',json_object('kind','none'))")
-        database.execute("DROP INDEX request_profile")
-        database.execute("CREATE INDEX request_profile ON tasks(json_extract(source,'$.profile'),created_at,id)")
-        database.execute("PRAGMA user_version=4")
-    reopened = TaskStore(path)
-    assert (reopened.list_tasks(), reopened.responses("approved"), reopened.actions("approved")) == before
-    assert [task.id for task in reopened.meeting_followups(10)] == ["meeting"]
 
 
 def test_meeting_followups_are_listed_newest_first_regardless_of_other_work(tmp_path: Path) -> None:

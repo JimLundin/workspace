@@ -16,7 +16,6 @@ from automation.task import (
     ActionVerified,
     Approval,
     ApprovalDecision,
-    Blocked,
     Checkpoint,
     Claim,
     Completed,
@@ -62,7 +61,6 @@ from automation.task import (
 )
 
 SCHEMA_VERSION = 5
-_UNBOUND_APPROVAL = "This approval was saved before approvals recorded their operation. Resume the task to review it again."
 MAX_PAGE = 1_000
 _TASK_COLUMNS: tuple[str, ...] = (
     "id",
@@ -180,86 +178,6 @@ def _action(row: tuple[object, ...]) -> Action:
     return action
 
 
-def _migrate_from_version_2(connection: journal.Connection) -> None:
-    """Version 2 packed an approval's operation into its identity and recorded no request profiles.
-
-    Its pending approvals become blocked and its grants are dropped, so each
-    operation is reviewed again; nothing is approved without its fingerprint.
-    Feed handoffs become general requests: only their feed label is lost.
-    """
-    blocked = _stored(_STATE, Waiting(Blocked(_UNBOUND_APPROVAL)))
-    connection.execute(
-        "UPDATE requests SET closed_at=(SELECT updated_at FROM tasks WHERE tasks.id=requests.task_id) "
-        "WHERE closed_at IS NULL AND json_extract(request,'$.kind')='approval'"
-    )
-    connection.execute(
-        "UPDATE tasks SET revision=revision+1, state=? WHERE phase='waiting' AND json_extract(state,'$.reason.kind')='approval'",
-        (blocked,),
-    )
-    connection.execute("DELETE FROM responses WHERE json_extract(request,'$.kind')='approval'")
-    # Before profiles, the meeting workflow reserved this task identity namespace.
-    connection.execute(
-        "UPDATE tasks SET source=json_set(source,'$.profile','meeting_followup') "
-        "WHERE json_extract(source,'$.kind')='request' AND id LIKE 'meeting-followup-%'"
-    )
-    connection.execute(
-        "UPDATE tasks SET source=json_set(source,'$.profile','general') "
-        "WHERE json_extract(source,'$.kind')='request' AND json_extract(source,'$.profile') IS NULL"
-    )
-
-
-def _migrate_from_version_3(connection: journal.Connection) -> None:
-    """Version 3 meeting follow-ups bound their recordings in a separate preparation store.
-
-    Their profiles name no bundle, so those tasks and their journal rows are
-    dropped. Published packages and mail files stay on disk, unlisted.
-    """
-    legacy = "SELECT id FROM tasks WHERE json_extract(source,'$.profile')='meeting_followup'"
-    for table in ("actions", "requests", "responses", "goals", "runs"):
-        connection.execute(f"DELETE FROM {table} WHERE task_id IN ({legacy})")
-    connection.execute(f"DELETE FROM tasks WHERE id IN ({legacy})")
-
-
-def _migrate_from_version_4(connection: journal.Connection) -> None:
-    """Version 4 hand-built its records; version 5 stores the domain records themselves.
-
-    The conversion is mechanical, so every task, request, reply and action is
-    kept: a payload-free variant's `{"kind": ...}` object becomes its value, a
-    request's profile fields move into a tagged profile record, and a run
-    named by its identity becomes a run reference with its task.
-    """
-    for table, column, task in (("tasks", "state", "id"), ("runs", "previous_state", "task_id")):
-        connection.execute(
-            f"UPDATE {table} SET {column}=json_quote(json_extract({column},'$.kind')) "
-            f"WHERE json_extract({column},'$.kind') IN ('ready','paused','cancelled')"
-        )
-        connection.execute(
-            f"UPDATE {table} SET {column}=json_set(json_remove({column},'$.run_id'),'$.run',"
-            f"json_object('task_id',{task},'run_id',json_extract({column},'$.run_id'))) "
-            f"WHERE json_extract({column},'$.kind') IN ('running','interrupted') AND json_extract({column},'$.run_id') IS NOT NULL"
-        )
-    connection.execute(
-        "UPDATE tasks SET source=json_set(json_remove(source,'$.bundle'),'$.profile',"
-        "json_object('bundle',json_extract(source,'$.bundle'),'kind','meeting_followup')) "
-        "WHERE json_extract(source,'$.kind')='request' AND json_extract(source,'$.profile')='meeting_followup'"
-    )
-    connection.execute(
-        "UPDATE tasks SET source=json_set(json_remove(source,'$.item','$.title'),'$.profile',"
-        "json_object('item',json_extract(source,'$.item'),'title',json_extract(source,'$.title'),'kind','feed')) "
-        "WHERE json_extract(source,'$.kind')='request' AND json_extract(source,'$.profile')='feed'"
-    )
-    connection.execute(
-        "UPDATE responses SET reply=json_quote(json_extract(reply,'$.kind')) WHERE json_extract(reply,'$.kind') IN ('approved','declined')"
-    )
-    connection.execute("UPDATE actions SET outcome=json_quote('running') WHERE json_extract(outcome,'$.kind')='running'")
-    connection.execute(
-        "UPDATE actions SET specification=json_set(specification,'$.verification','none') "
-        "WHERE json_extract(specification,'$.verification.kind')='none'"
-    )
-    connection.execute("DROP INDEX IF EXISTS request_profile")
-    connection.execute(_PROFILE_INDEX)
-
-
 _SCHEMA = journal.Schema(
     SCHEMA_VERSION,
     (
@@ -284,7 +202,6 @@ _SCHEMA = journal.Schema(
         "CREATE INDEX action_identity ON actions(task_id,fingerprint,started_at)",
         "CREATE INDEX unresolved_work ON actions(task_id,outcome_kind,started_at)",
     ),
-    {2: _migrate_from_version_2, 3: _migrate_from_version_3, 4: _migrate_from_version_4},
 )
 
 

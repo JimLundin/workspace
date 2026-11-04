@@ -282,10 +282,6 @@ def _next_due(routine: Routine, last_slot: int, now: float) -> float | None:
 # A saved trigger is its domain record as strict JSON: a variant's `kind` or the
 # event trigger's value identifies it, and unknown fields are refused.
 _TRIGGER = TypeAdapter(Trigger, config=ConfigDict(strict=True, extra="forbid", allow_inf_nan=False))
-# Before triggers were stored through the adapter, the event trigger was the object {"kind":"transcript"}.
-_TRANSCRIPT_TRIGGER_MIGRATION = (
-    "UPDATE routines SET trigger=json_quote('transcript') WHERE json_valid(trigger) AND json_extract(trigger,'$.kind')='transcript'"
-)
 
 
 def _encode_trigger(trigger: Trigger) -> str:
@@ -410,7 +406,6 @@ class RoutineStore:
                 "CREATE TABLE IF NOT EXISTS routine_files (routine_id TEXT PRIMARY KEY, revision INTEGER NOT NULL, fingerprint TEXT NOT NULL, "
                 "observed_at REAL NOT NULL, sequence INTEGER NOT NULL)",
                 "CREATE TABLE IF NOT EXISTS routine_meta (name TEXT PRIMARY KEY, value INTEGER NOT NULL)",
-                _TRANSCRIPT_TRIGGER_MIGRATION,
             ):
                 connection.execute(statement)
 

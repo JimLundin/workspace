@@ -9,7 +9,7 @@ the transaction back. Stores keep their schemas and domain codecs.
 """
 
 import sqlite3
-from collections.abc import Callable, Generator, Iterator, Mapping, Sequence
+from collections.abc import Callable, Generator, Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
 from enum import Enum
@@ -51,7 +51,7 @@ class Absent(Enum):
 
 
 class SchemaVersionError(ValueError):
-    """The journal was written by a schema this Workspace cannot open or migrate."""
+    """The journal was written by a schema version this Workspace does not read."""
 
 
 @contextmanager
@@ -101,20 +101,16 @@ def reading_existing(path: Path, connect: Connect = open_journal) -> Generator[C
         yield Absent.JOURNAL if empty else connection
 
 
-type Migration = Callable[[Connection], None]
-
-
 @dataclass(frozen=True, slots=True)
 class Schema:
-    """A versioned journal: statements that create it, and each step from an older version to the next."""
+    """A versioned journal and the statements that create it."""
 
     version: int
     create: tuple[str, ...]
-    migrations: Mapping[int, Migration]
 
 
 def prepare(connection: Connection, schema: Schema) -> None:
-    """Create an empty journal or migrate an older one inside the caller's write; refuse anything else."""
+    """Create an empty journal inside the caller's write; refuse any other version."""
     match connection.execute("PRAGMA user_version").fetchone():
         case (int() as observed,):
             pass
@@ -127,9 +123,8 @@ def prepare(connection: Connection, schema: Schema) -> None:
             raise SchemaVersionError("The unversioned journal already contains tables.")
         for statement in schema.create:
             connection.execute(statement)
-    elif observed > schema.version or any(version not in schema.migrations for version in range(observed, schema.version)):
-        raise SchemaVersionError("This journal requires a different Workspace schema version.")
     else:
-        for version in range(observed, schema.version):
-            schema.migrations[version](connection)
+        raise SchemaVersionError(
+            f"The journal has schema version {observed}; this Workspace reads only version {schema.version} and does not migrate."
+        )
     connection.execute(f"PRAGMA user_version={schema.version}")
