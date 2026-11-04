@@ -445,9 +445,7 @@ An uncertain reply is never resent automatically: inspect the chat, then choose
 **I checked this in Teams** to allow another reply while retaining the evidence.
 Starting **New chat** resets agent context and keeps the Teams projection.
 
-The history window can still be moved, resized, snapped to either screen edge,
-or given a transparent background from its menu. Notifications use its remembered
-monitor and always stack in the right corner. Each bubble fits its content up to
+Notifications stack in the right corner of the foreground window's monitor. Each bubble fits its content up to
 360 logical pixels wide (280 for your requests), keeping its right edge anchored as it grows. Longer
 entries share the available height, with space reserved for the
 voice-reply hint. A small scroll marker shows progress through overflowing text.

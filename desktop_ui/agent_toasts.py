@@ -4,11 +4,9 @@ import time
 import webbrowser
 from collections.abc import Callable
 from dataclasses import replace
-from pathlib import Path
-from typing import Annotated, Final, TypedDict, assert_never
+from typing import assert_never
 from urllib.parse import urlsplit
 
-from pydantic import Field, StrictInt, TypeAdapter
 lazy from PySide6 import QtCore
 lazy from PySide6.QtCore import Qt
 lazy from PySide6.QtWidgets import QApplication
@@ -17,7 +15,6 @@ from desktop_ui import toast_stack
 from desktop_ui.agent_progress import Progress, advance_progress, compact, retain_lifetimes, visible
 from desktop_ui.qt_runtime import prepare
 from desktop_ui.toast_stack import Active, Column, Frame, Measured, Retiring, Stacking, Viewport, fit, frames, reservable
-from usage import DIRECTORY
 from winapi import appearance, windows
 from winapi.shapes import Rect
 lazy from assistant.agent_session import AgentRequest, Message, Session, Snapshot, pending
@@ -55,27 +52,6 @@ lazy from winapi.composition import DesktopComposition
 lazy from winapi.notification_input import Region, WheelRouter
 
 prepare()
-
-MONITOR: Final = DIRECTORY / "agent-panel.json"
-
-
-class SavedBounds(TypedDict):
-    x: StrictInt
-    y: StrictInt
-    width: Annotated[StrictInt, Field(gt=0)]
-    height: Annotated[StrictInt, Field(gt=0)]
-
-
-_BOUNDS = TypeAdapter(SavedBounds)
-
-
-def saved_monitor(path: Path = MONITOR) -> Rect | None:
-    """The stack's monitor hint, in physical screen pixels; invalid data uses the default monitor."""
-    try:
-        values = _BOUNDS.validate_json(path.read_bytes())
-    except OSError, ValueError:
-        return None
-    return Rect(values["x"], values["y"], values["x"] + values["width"], values["y"] + values["height"])
 
 
 class AgentToasts:
@@ -132,7 +108,7 @@ class AgentToasts:
         self.environment: appearance.Environment = appearance.Environment() if environment is None else environment
         self.desktop: Desktop = NativeDesktop() if desktop is None else desktop
         self.create_card: Callable[[CardOwner, Toast, int], Card] = Card if create_card is None else create_card
-        self.monitor = monitor if monitor is not None else saved_monitor()
+        self.monitor = monitor
         self.session = Session()
         self.stack = Stack()
         self.progress = Progress()
