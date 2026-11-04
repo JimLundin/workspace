@@ -953,6 +953,15 @@ def test_tray_agent_advertises_the_layout_shortcut_in_readme_notation() -> None:
     assert agent.text == "Agent session\tHold V + L"
 
 
+def test_tray_keeps_saved_meeting_transcripts_reachable_while_recording_or_idle() -> None:
+    # Defect: the transcripts entry is dropped or disabled during capture. It is the
+    # only way to browse saved meetings that are not on the canvas.
+    for capturing in (False, True):
+        state = MenuState(layout=LayoutState.ON, overlay_enabled=True, agent_running=False, capturing=capturing)
+        item = next(item for item in menu_items(state) if item.id == Menu.TRANSCRIPTS.value)
+        assert (item.text, item.enabled) == ("Open meeting transcripts", True)
+
+
 def test_tray_overlay_toggle_updates_and_remembers_the_preference(tmp_path: Path) -> None:
     effects = OverlayFixture(OverlayState(layout_on=True), tmp_path / "overlay.json")
     for enabled in (False, True):
@@ -1001,7 +1010,7 @@ def test_meeting_file_handoff_keeps_canonical_path_and_reports_shell_failure(tmp
     assert not opened and not problems
     jobs.get_nowait()()
     assert opened == [path]
-    assert problems == ["Windows could not open this file. You can still review it in Meetings."]
+    assert problems == ["Windows could not open this file. Choose Open meeting transcripts in All Workspace controls to find it."]
 
 
 def test_control_event_preserves_voice_release_and_rejects_unknown_requests() -> None:

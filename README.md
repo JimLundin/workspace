@@ -336,8 +336,9 @@ the microphone. Speaker names are not inferred.
 
 Timestamped text appears in the existing timeline in roughly 20–30 second
 chunks, as requests finish. The timeline keeps a short recent preview; click the
-recording bar or **Open** for the complete Markdown transcript. **Transcripts**
-opens `%LOCALAPPDATA%\workspace\meetings`; each meeting has its own dated folder.
+recording bar or **Open** for the complete Markdown transcript. **Open meeting
+transcripts** in **All Workspace controls…** opens
+`%LOCALAPPDATA%\workspace\meetings`; each meeting has its own dated folder.
 There is no five-minute limit or fixed meeting duration.
 Brief microphone dropouts leave a gap at their original time; recording and
 computer-audio capture continue from the next valid packet.

@@ -64,7 +64,7 @@ def menu_items(state: MenuState) -> tuple[MenuItem, ...]:
         MenuItem(Menu.TASKBAR.value, "Toggle Windows taskbar\tWindows key"),
         MenuItem(Menu.STOP_AGENT.value, "Stop agent\t" + shortcut_hint(shortcut(Tool.STOP)), enabled=state.agent_running),
         MenuItem(Menu.MEETING.value, "Stop recording" if state.capturing else "Record a meeting"),
-        MenuItem(Menu.TRANSCRIPTS.value, "Transcripts"),
+        MenuItem(Menu.TRANSCRIPTS.value, "Open meeting transcripts"),
         MenuItem(0),
         MenuItem(Menu.UNDO.value, "Undo the last update"),
         MenuItem(Menu.USAGE.value, "Usage report"),
@@ -109,7 +109,7 @@ def meeting_file_job(path: Path, open_file: Callable[[Path], None], report_error
         try:
             open_file(path)
         except OSError:
-            report_error("Windows could not open this file. You can still review it in Meetings.")
+            report_error("Windows could not open this file. Choose Open meeting transcripts in All Workspace controls to find it.")
 
     return open_saved_file
 

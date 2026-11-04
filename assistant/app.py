@@ -488,7 +488,9 @@ class AssistantApp:
         prior, self._recording_phase = self._recording_phase, state.phase
         failed_capture = prior in ("starting", "recording", "stopping") and state.phase == "finishing" and bool(state.detail)
         if (prior != state.phase and state.phase in ("paused", "interrupted")) or failed_capture:
-            self.tray.notify("Meeting transcript", state.detail or "Recording was interrupted. Open Transcripts for the saved part.", warning=True)
+            self.tray.notify(
+                "Meeting transcript", state.detail or "Recording was interrupted. Choose Open meeting transcripts for the saved part.", warning=True
+            )
         self.show(State.LISTENING if self.assistant.listening is not None else State.READY if self.assistant.layout_on else State.LAYOUT_OFF)
 
     def recording_action(self, action: RecordingAction) -> None:
