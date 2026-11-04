@@ -7,7 +7,7 @@ from ctypes import wintypes
 from pathlib import PureWindowsPath
 from typing import Final
 
-from winapi._core import LRESULT, ULONG_PTR, comctl32, dwmapi, fn, kernel32, rect, user32
+from winapi._core import LRESULT, ULONG_PTR, comctl32, dwmapi, fn, gdi32, kernel32, rect, user32
 from winapi.shapes import Rect, Window
 
 WNDENUMPROC = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
@@ -23,6 +23,10 @@ _GetWindowLongW = fn(user32, "GetWindowLongW", wintypes.LONG, wintypes.HWND, cty
 _SetWindowLongW = fn(user32, "SetWindowLongW", wintypes.LONG, wintypes.HWND, ctypes.c_int, wintypes.LONG)
 _GetWindow = fn(user32, "GetWindow", wintypes.HWND, wintypes.HWND, wintypes.UINT)
 _GetWindowRect = fn(user32, "GetWindowRect", wintypes.BOOL, wintypes.HWND, ctypes.POINTER(wintypes.RECT))
+_SetWindowRgn = fn(user32, "SetWindowRgn", ctypes.c_int, wintypes.HWND, wintypes.HRGN, wintypes.BOOL)
+_GetWindowRgnBox = fn(user32, "GetWindowRgnBox", ctypes.c_int, wintypes.HWND, ctypes.POINTER(wintypes.RECT))
+_CreateRectRgn = fn(gdi32, "CreateRectRgn", wintypes.HRGN, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int)
+_DeleteObject = fn(gdi32, "DeleteObject", wintypes.BOOL, wintypes.HGDIOBJ)
 _GetDpiForWindow = fn(user32, "GetDpiForWindow", wintypes.UINT, wintypes.HWND)
 _GetForegroundWindow = fn(user32, "GetForegroundWindow", wintypes.HWND)
 _SetForegroundWindow = fn(user32, "SetForegroundWindow", wintypes.BOOL, wintypes.HWND)
@@ -71,7 +75,7 @@ _WS_POPUP: Final = 0x8000_0000
 _WS_EX_TRANSPARENT, _WS_EX_LAYERED, _WS_EX_NOACTIVATE = 0x0000_0020, 0x0008_0000, 0x0800_0000
 _GW_OWNER: Final = 4
 _PROCESS_QUERY_LIMITED_INFORMATION: Final = 0x1000
-_DWMWA_EXTENDED_FRAME_BOUNDS, _DWMWA_CLOAKED = 9, 14
+_DWMWA_CAPTION_BUTTON_BOUNDS, _DWMWA_EXTENDED_FRAME_BOUNDS, _DWMWA_CLOAKED = 5, 9, 14
 _SWP_NOSIZE, _SWP_NOMOVE, _SWP_NOZORDER, _SWP_NOACTIVATE = 0x0001, 0x0002, 0x0004, 0x0010
 _SW_HIDE, _SW_SHOWNA = 0, 8
 _HWND_TOPMOST: Final = -1
@@ -227,6 +231,28 @@ def visible_rect(hwnd: int) -> Rect:
     if _DwmGetWindowAttribute(hwnd, _DWMWA_EXTENDED_FRAME_BOUNDS, ctypes.byref(r), ctypes.sizeof(r)) != 0:
         return outer_rect(hwnd)
     return rect(r)
+
+
+def caption_buttons(hwnd: int) -> Rect | None:
+    """The caption buttons' bounds in window coordinates; their bottom is where a custom-drawn caption ends."""
+    r = wintypes.RECT()
+    if _DwmGetWindowAttribute(hwnd, _DWMWA_CAPTION_BUTTON_BOUNDS, ctypes.byref(r), ctypes.sizeof(r)) != 0:
+        return None
+    return rect(r)
+
+
+def region(hwnd: int) -> Rect | None:
+    """The bounding box of the window's region in window coordinates; None when it has none."""
+    r = wintypes.RECT()
+    return rect(r) if _GetWindowRgnBox(hwnd, ctypes.byref(r)) > 0 else None
+
+
+def set_region(hwnd: int, box: Rect | None) -> None:
+    """Show only `box` of the window, in window coordinates; None restores the whole window."""
+    shape = _CreateRectRgn(box.left, box.top, box.right, box.bottom) if box is not None else None
+    # On success Windows owns the region; it remains ours to delete only on failure.
+    if not _SetWindowRgn(hwnd, shape, True) and shape:
+        _DeleteObject(shape)
 
 
 def move(hwnd: int, to: Rect) -> None:

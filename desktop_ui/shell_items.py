@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from enum import Enum
 
 from winapi.icon_pixels import Pixels
-from winapi.shapes import Window
+from winapi.shapes import Rect, Window
 
 
 class PinnedApp(Enum):
@@ -111,6 +111,13 @@ def launch(pending: Launches, app: PinnedApp, now: float) -> Launches | None:
 def outstanding(pending: Launches, current: Shelf) -> Launches:
     """A launch whose window has appeared is no longer pending, so reopening after closing it launches again."""
     return frozendict((app, due) for app, due in pending.items() if all(slot.app is not app or not slot.windows for slot in current.pinned))
+
+
+def caption_clip(outer: Rect, caption: Rect, region: Rect | None) -> Rect | None:
+    """The window region hiding a slot window's caption, which Edge paints inside its client
+    area; None when the current region already does. Regions don't follow resizing."""
+    wanted = Rect(0, caption.bottom, outer.width, outer.height)
+    return None if wanted == region else wanted
 
 
 def next_window(windows: Sequence[Window], foreground: int) -> int:

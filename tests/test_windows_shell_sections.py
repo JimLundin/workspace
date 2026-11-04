@@ -24,6 +24,7 @@ from desktop_ui.shell_items import (
     PinnedApp,
     Shelf,
     applications,
+    caption_clip,
     launch,
     next_window,
     outstanding,
@@ -102,6 +103,16 @@ def test_a_pinned_launch_waits_for_its_window_before_launching_again() -> None:
     opened = Shelf((Pinned(PinnedApp.OUTLOOK, (Window(1, "Mail", "msedge.exe", minimized=False),)), Pinned(PinnedApp.TEAMS, ())), ())
     assert outstanding(pending, opened) == none
     assert outstanding(pending, EMPTY_SHELF) == pending
+
+
+def test_slot_windows_hide_their_caption_once_and_follow_resizing() -> None:
+    # Defect: the region is rewritten every poll, or a region kept from the restored
+    # size crops a maximized window (Edge keeps an applied region across resizes).
+    restored, maximized, caption = Rect(632, 0, 1288, 1208), Rect(-9, -9, 1929, 1209), Rect(463, 0, 648, 37)
+    clipped = caption_clip(restored, caption, None)
+    assert clipped == Rect(0, 37, 656, 1208)
+    assert caption_clip(restored, caption, clipped) is None
+    assert caption_clip(maximized, caption, clipped) == Rect(0, 37, 1938, 1218)
 
 
 def test_tray_host_captures_real_icon_updates_routes_clicks_and_restores_explorer() -> None:

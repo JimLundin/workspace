@@ -118,6 +118,13 @@ Fluent mail and chat symbols in the bar's ink, filled while a window is open.
 With windows, a slot behaves as an application below. Without one, clicking it
 launches the app window; further clicks wait up to 15 seconds for that window
 rather than opening another. A missing Edge is reported as a problem.
+Slot windows lose Edge's caption so they read as part of Workspace. Edge paints
+it inside the client area, so removing `WS_CAPTION` changes nothing; instead the
+observer gives each window a region starting below the DWM caption-button bounds.
+Each poll compares that region with the window's current one and rewrites it only
+when the size or caption changed, since an applied region survives maximizing.
+Workspace never moves slot windows. Windows that stop being slots, and all of
+them when Workspace exits, get their whole region back.
 
 Running applications have one icon per executable. Clicking switches to that
 app; further clicks cycle its windows in a stable order. Right-click lists its
