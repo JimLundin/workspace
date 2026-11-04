@@ -8,7 +8,7 @@ stays centred 8 px below the screen edge where space permits. Its centre contain
 only live activity and is empty at idle. The icon-only Canvas button is the
 furthest-left toolbar control, before the running applications.
 The fixed right cluster reads tray disclosure, icon-only keyboard when relevant,
-then clock/power at the far right.
+volume, Wi-Fi, then clock/power at the far right.
 The disclosure is the leftmost fixed control: a left arrow expands tray icons
 leftwards and a right arrow contracts them. Neither disclosure nor activity
 moves the fixed controls. Tooltips and accessible names preserve their meanings.
@@ -45,7 +45,7 @@ is doing for you. Its policy decides what may change it.
 
 | Situation | Island | Beside it |
 | --- | --- | --- |
-| Rest | Empty | Fixed navigation and clock/power on the right |
+| Rest | Empty | Fixed navigation, volume, Wi-Fi and clock/power on the right |
 | Agent working | Spinner, phase and Stop | — |
 | Quick job | Pulsing dots | — |
 | Meeting recording | Red dot and timer last; hovering reveals Stop | — |
@@ -219,13 +219,20 @@ menu's entries and navigation, `island_layout` arranges parts, rows and capsules
 Windows `GetSystemPowerStatus` supplies battery percentage, charging and external
 power. Unknown readings show a dash; machines without a battery show AC. A battery
 keeps its percentage visible even when full or plugged in, alongside the charger
-symbol when powered. Reserved clock and battery widths keep the
-clock/power capsule stable across readings.
+symbol when powered. Reserved clock and battery widths keep the combined
+speaker/Wi-Fi/clock/power capsule stable across readings.
 Power refreshes every fifteen seconds; the clock follows the local minute.
 
-The menu's sound slider reads the default playback endpoint's master level and
-mute state. A background worker refreshes them once per second without opening
-an audio stream.
+Volume and Wi-Fi indicators are always visible in independent fixed slots.
+The volume icon shows the observed default playback endpoint as unmuted or muted;
+unavailable observations use a speaker with a question badge, never a mute icon.
+Wi-Fi shows connected or disconnected association. Unavailable readings use a
+Wi-Fi question badge; no adapter uses a Wi-Fi minus badge. They are indicators,
+not buttons: the capsule's accessible name and tooltip carry both states, and
+pressing anywhere on it opens the controls menu, whose sound slider sets the
+volume. Connected Wi-Fi does not claim Internet reachability.
+A background worker refreshes them once per second without opening an audio
+stream or scanning for networks.
 
 The microphone trace is 18 bars of real RMS levels, read every 50 ms only while
 dictating, off Qt's thread. `waveInGetPosition` marks recorded data in the same

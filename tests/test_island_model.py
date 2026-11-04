@@ -3,7 +3,7 @@
 from dataclasses import replace
 
 from assistant.recording_state import RecordingState
-from desktop_ui.ambient import Ambient
+from desktop_ui.ambient import Ambient, SystemStatus
 from desktop_ui.components.meaning import Tint, Tone
 from desktop_ui.island_model import (
     Action,
@@ -25,9 +25,11 @@ from desktop_ui.island_model import (
     island,
     keyboard,
 )
-from winapi.machine_status import Battery
+from winapi.machine_status import Battery, Speakers, Wifi
 
-RESTING = Observed(None, None, RecordingState(), Ambient("10:22", Battery(73, powered=False, charging=False)), 0, None, dictating=False)
+RESTING = Observed(
+    None, None, RecordingState(), Ambient("10:22", Battery(73, powered=False, charging=False)), SystemStatus(), 0, None, dictating=False
+)
 WORKING = Agent("Comparing both sheets", waiting=False)
 ASKING = Agent("Which sheet should the reply cover?", waiting=True)
 RECORDING = RecordingState(phase="recording", seconds=125)
@@ -44,25 +46,37 @@ def test_idle_has_only_icon_navigation_device_status_and_clock_power_on_right() 
     assert tuple(each.key for each in views) == (Key.CANVAS, Key.STATUS)
     assert tuple(each.zone for each in views) == (Zone.LEFT, Zone.RIGHT)
     assert views[0] == CapsuleView(Key.CANVAS, Zone.LEFT, ((Glyph("canvas"),),), "Canvas · Open your work canvas", Action.OPEN_CANVAS)
-    assert views[-1].slots == ((Text("10:22", reserve="00:00"), Glyph("battery"), Text("73%", reserve="100%")),)
+    assert views[-1].slots == (
+        (
+            Glyph("speaker-unknown"),
+            Glyph("wifi-unknown"),
+        ),
+        (Text("10:22", reserve="00:00"), Glyph("battery"), Text("73%", reserve="100%")),
+    )
 
 
-def test_fixed_controls_survive_all_activity_and_menu_states() -> None:
+def test_fixed_controls_survive_all_activity_menu_and_device_states() -> None:
     # Defect: moments hide status, or status becomes a central activity.
-    baseline = replace(RESTING, keyboard="NAV")
-    for observed in (
-        baseline,
-        replace(baseline, dictating=True),
-        replace(baseline, agent=ASKING),
-        replace(baseline, agent=WORKING, job=Job.TRANSCRIBING, recording=RECORDING),
-    ):
-        for expanded in (None, Expansion.MENU, Expansion.REQUEST):
-            # The open menu is the status capsule itself; the other fixed controls stay.
-            for key in (Key.CANVAS, Key.LAYER) if expanded is Expansion.MENU else (Key.CANVAS, Key.LAYER, Key.STATUS):
-                assert view(observed, key, expanded=expanded) == view(baseline, key)
-            activity = (each for each in island(observed, expanded=expanded) if each.zone not in (Zone.LEFT, Zone.RIGHT))
-            assert all(Text("10:22") not in slot for each in activity for slot in each.slots)
-    assert view(baseline, Key.STATUS).action is Action.OPEN_MENU
+    for speakers in Speakers:
+        for wifi in Wifi:
+            baseline = replace(RESTING, system=SystemStatus(speakers, wifi), keyboard="NAV")
+            for observed in (
+                baseline,
+                replace(baseline, dictating=True),
+                replace(baseline, agent=ASKING),
+                replace(baseline, agent=WORKING, job=Job.TRANSCRIBING, recording=RECORDING),
+            ):
+                for expanded in (None, Expansion.MENU, Expansion.REQUEST):
+                    # The open menu is the status capsule itself; the other fixed controls stay.
+                    for key in (Key.CANVAS, Key.LAYER) if expanded is Expansion.MENU else (Key.CANVAS, Key.LAYER, Key.STATUS):
+                        assert view(observed, key, expanded=expanded) == view(baseline, key)
+                    activity = (each for each in island(observed, expanded=expanded) if each.zone not in (Zone.LEFT, Zone.RIGHT))
+                    assert all(Text("10:22") not in slot for each in activity for slot in each.slots)
+            status = view(baseline, Key.STATUS)
+            assert status.slots[0] == (Glyph(baseline.system.speaker_icon), Glyph(baseline.system.wifi_icon))
+            assert status.action is Action.OPEN_MENU
+            assert baseline.system.speaker_description in status.label
+            assert baseline.system.wifi_description in status.label
 
 
 def test_charger_and_low_battery_stay_in_far_right_readings() -> None:

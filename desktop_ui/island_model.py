@@ -9,8 +9,8 @@ The bar's policy (docs/toolbar-design.md, "What the bar shows"):
   transcription (pulsing dots), and a meeting recording (a red dot and timer).
 - Activities alone join the centre; at idle it is empty. During a moment
   they detach beside it as compact capsules, phase and all.
-- Canvas anchors at the far left before apps; temporary keyboard and the
-  clock/power capsule anchor right. The tray toggle precedes them and expands left.
+- Canvas anchors at the far left before apps; temporary keyboard and the combined
+  volume/Wi-Fi/clock/power capsule anchor right. The tray toggle precedes them and expands left.
 - That capsule expands into the controls menu; a question expands the centre island.
 - Agent work keeps Stop visible; other stoppable activities reveal it under the pointer.
 """
@@ -20,7 +20,7 @@ from enum import Enum, auto
 from typing import Final, assert_never
 
 from assistant.recording_state import RecordingState
-from desktop_ui.ambient import Ambient
+from desktop_ui.ambient import Ambient, SystemStatus
 from desktop_ui.components import meaning
 from winapi.machine_status import Battery, PowerUnavailable
 
@@ -143,6 +143,7 @@ class Observed:
     job: Job | None
     recording: RecordingState
     ambient: Ambient
+    system: SystemStatus
     inbox: int
     keyboard: str | None
     dictating: bool = field(kw_only=True)
@@ -273,13 +274,22 @@ def island(observed: Observed, *, hovered: Key | None = None, expanded: Expansio
         slot = recording_slot(recorded, hovered=hovered is Key.RECORDING)
         trail += (CapsuleView(Key.RECORDING, Zone.TRAIL, (slot,), f"{recorded.title} · Open canvas", Action.OPEN_CANVAS, tint),)
     # The readings stay the top row while their capsule expands into the menu.
-    readings: tuple[Slot, ...] = (facts(observed.ambient),)
+    readings: tuple[Slot, ...] = (
+        (Glyph(observed.system.speaker_icon), Glyph(observed.system.wifi_icon)),
+        facts(observed.ambient),
+    )
     persistent = (
         CapsuleView(Key.CANVAS, Zone.LEFT, ((Glyph("canvas"),),), "Canvas · Open your work canvas", Action.OPEN_CANVAS),
         *layer,
         CapsuleView(Key.STATUS, Zone.RIGHT, readings, "Workspace controls · Escape closes", Action.CLOSE_MENU)
         if expanded is Expansion.MENU
-        else CapsuleView(Key.STATUS, Zone.RIGHT, readings, describe(observed.ambient) + " · Open Workspace controls", Action.OPEN_MENU),
+        else CapsuleView(
+            Key.STATUS,
+            Zone.RIGHT,
+            readings,
+            observed.system.description + ". " + describe(observed.ambient) + " · Open Workspace controls",
+            Action.OPEN_MENU,
+        ),
     )
     if observed.inbox > 0:
         trail += (

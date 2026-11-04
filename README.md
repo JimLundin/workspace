@@ -93,7 +93,8 @@ or keeper.
   to open its menu.
   Holding Spacebar shows Listening with a real microphone
   waveform; stopping capture shows Transcribing until the request finishes.
-  The capsules sit 8 pixels below the top screen edge.
+  The capsules sit 8 pixels below the top screen edge. Volume and Wi-Fi have
+  fixed status icons that change with their observed state, including unknown readings.
   Outer corners curve into the screen edge. Active segments join across their
   upper edge and slide in from above, returning upward when hidden. Reduced
   motion uses an immediate transition.
@@ -102,7 +103,7 @@ or keeper.
   The centre is exclusively dynamic activity and is empty at idle. The fixed
   Canvas button sits at the far left, before running applications. The fixed
   right cluster reads tray disclosure, keyboard when relevant,
-  then a clock/power capsule at the far right. Battery percentage
+  a combined speaker/Wi-Fi/clock/power capsule at the far right. Battery percentage
   stays visible even when plugged in or full, with reserved reading widths to
   keep the status cluster stationary. Tray icons expand left
   without moving the fixed controls. Tooltips and accessible names retain

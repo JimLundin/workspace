@@ -3,11 +3,11 @@
 import threading
 import time
 
+from desktop_ui.ambient import SystemStatus
 from desktop_ui.bar_status import StatusObserver
-from winapi.machine_status import Audio, Speakers
 
 
-class Endpoint:
+class Speakers:
     """A concrete level owner that records where and what the worker applied."""
 
     def __init__(self) -> None:
@@ -15,10 +15,10 @@ class Endpoint:
         self.release = threading.Event()
         self.applied: list[tuple[float, str]] = []
 
-    def observe(self) -> Audio:
+    def observe(self) -> SystemStatus:
         self.held.set()
         self.release.wait(2)
-        return Audio(Speakers.UNKNOWN, None)
+        return SystemStatus()
 
     def apply(self, level: float) -> bool:
         self.applied.append((level, threading.current_thread().name))
@@ -28,7 +28,7 @@ class Endpoint:
 def test_a_drag_applies_only_its_latest_level_on_the_status_worker() -> None:
     # Defects: every intermediate level of a drag queues a native write, the write
     # runs on the caller's thread, or a request waits for the next polling second.
-    speakers = Endpoint()
+    speakers = Speakers()
     observer = StatusObserver(speakers.observe, speakers.apply)
     try:
         assert speakers.held.wait(2), "The worker did not start observing."

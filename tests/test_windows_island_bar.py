@@ -18,11 +18,11 @@ lazy from PySide6.QtTest import QTest
 
 from assistant.meeting_detection import AutomaticStatus
 from assistant.recording_state import RecordingState
-from desktop_ui.ambient import Ambient
+from desktop_ui.ambient import Ambient, SystemStatus
 from desktop_ui.desktop_bar import BarActions, BarObservations, DesktopBar
 from desktop_ui.fluent_icons import REGULAR
 from desktop_ui.island_menu import Menu
-from desktop_ui.island_model import Agent, Job, Key
+from desktop_ui.island_model import Agent, Glyph, Job, Key
 from desktop_ui.island_surface import SHADOW, TOP, ControlButton, MenuCell
 from desktop_ui.qt_runtime import prepare
 from desktop_ui.qt_ui import EventLoop, application
@@ -31,7 +31,7 @@ from protocol import Tool
 from tests.native_pointer import foreign_pointer
 from winapi import appearance, windows
 from winapi._core import fn, user32
-from winapi.machine_status import Battery, PowerUnavailable
+from winapi.machine_status import Battery, PowerUnavailable, Speakers, Wifi
 from winapi.shapes import Rect
 from winapi.tray_host import Entry
 
@@ -123,9 +123,9 @@ def closed(app: QtWidgets.QApplication, bar: DesktopBar) -> None:
     app.processEvents()
 
 
-def test_right_cluster_keeps_fixed_positions_and_truthful_power_through_disclosure() -> None:
-    # Defects: tray expansion or a power reading shifts fixed controls, or the
-    # mirrored chevron falls back to a document glyph.
+def test_right_cluster_keeps_fixed_positions_and_truthful_status_through_disclosure() -> None:
+    # Defects: tray expansion shifts fixed controls, missing readings imply a
+    # healthy state, or unavailable symbols fall back to a document glyph.
     app = application()
     bar = DesktopBar(recorded([]), native_shell=False, observations=BarObservations(motion=lambda: False))
     try:
@@ -144,6 +144,22 @@ def test_right_cluster_keeps_fixed_positions_and_truthful_power_through_disclosu
         assert tray.toggle.accessibleName() == "Collapse system tray"
         assert tuple(bar.window.capsules[key].geometry() for key in order) == before
         assert tray.mapTo(bar.window, tray.toggle.pos()).x() == toggle_left
+        for speakers in Speakers:
+            for wifi in Wifi:
+                bar.system = SystemStatus(speakers, wifi)
+                bar.render()
+                capsule = bar.window.capsules[Key.STATUS]
+                assert capsule.view is not None
+                assert capsule.view.slots[0] == (Glyph(bar.system.speaker_icon), Glyph(bar.system.wifi_icon))
+                assert capsule.controls == ()
+                assert capsule.isVisibleTo(bar.window)
+                for name, label in (
+                    (bar.system.speaker_icon, bar.system.speaker_description),
+                    (bar.system.wifi_icon, bar.system.wifi_description),
+                ):
+                    assert label in capsule.accessibleName() and label in capsule.toolTip()
+                    assert symbol(name) != REGULAR["doc"]
+                assert tuple(bar.window.capsules[key].geometry() for key in order) == before
         for power in (
             Battery(9, powered=False, charging=False),
             Battery(100, powered=True, charging=False),
@@ -159,6 +175,19 @@ def test_right_cluster_keeps_fixed_positions_and_truthful_power_through_disclosu
             assert status.view is not None
             assert abs(bar.window.measure(status.view).width - status.width()) <= 1
         assert symbol("chevron-left") == '<g transform="translate(16 0) scale(-1 1)">' + REGULAR["chevron"] + "</g>"
+    finally:
+        closed(app, bar)
+
+
+def test_status_icons_open_the_controls_menu_like_the_rest_of_the_capsule() -> None:
+    # Defect: pressing an indicator does nothing or launches something other than the menu.
+    app = application()
+    bar = DesktopBar(recorded([]), native_shell=False, observations=BarObservations(motion=lambda: False))
+    try:
+        bar.timer.stop()
+        capsule = bar.window.capsules[Key.STATUS]
+        QTest.mouseClick(capsule, QtCore.Qt.MouseButton.LeftButton, pos=QtCore.QPoint(14, TOP + 17))
+        assert bar.expanded is not None
     finally:
         closed(app, bar)
 

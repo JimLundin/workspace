@@ -2,8 +2,8 @@
 
 import unittest
 
-from desktop_ui.ambient import Ambient
-from winapi.machine_status import Battery, PowerUnavailable
+from desktop_ui.ambient import Ambient, SystemStatus
+from winapi.machine_status import Battery, PowerUnavailable, Speakers, Wifi
 
 
 def test_idle_facts_have_time_and_real_battery_or_explicit_unavailability() -> None:
@@ -25,3 +25,22 @@ def test_invalid_battery_is_not_presented_as_a_real_observation() -> None:
     for percent in (-1, 101, 255):
         with unittest.TestCase().assertRaises(ValueError):
             Battery(percent, powered=False, charging=False)
+
+
+def test_status_icons_and_labels_distinguish_every_observed_state() -> None:
+    # Defect: muted/connected icons disappear, or unknown is shown as a fault.
+    for state, icon, label in (
+        (Speakers.AUDIBLE, "speaker-on", "Speakers unmuted"),
+        (Speakers.MUTED, "speaker-muted", "Speakers muted"),
+        (Speakers.UNKNOWN, "speaker-unknown", "Speaker status unavailable"),
+    ):
+        status = SystemStatus(speakers=state)
+        assert (status.speaker_icon, status.speaker_description) == (icon, label)
+    for wifi_state, icon, label in (
+        (Wifi.CONNECTED, "wifi", "Wi-Fi connected"),
+        (Wifi.DISCONNECTED, "wifi-off", "Wi-Fi disconnected"),
+        (Wifi.UNKNOWN, "wifi-unknown", "Wi-Fi status unavailable"),
+        (Wifi.NO_ADAPTER, "wifi-absent", "No Wi-Fi adapter"),
+    ):
+        status = SystemStatus(wifi=wifi_state)
+        assert (status.wifi_icon, status.wifi_description) == (icon, label)
