@@ -237,17 +237,22 @@ def _monitor(handle: int, built_in: frozenset[str]) -> Monitor:
     return Monitor(rect(info.rcMonitor), rect(info.rcWork), primary=primary, internal=internal)
 
 
-def monitors() -> list[Monitor]:
-    """All monitors, left to right."""
-    found: list[Monitor] = []
+def attached() -> tuple[tuple[int, Monitor], ...]:
+    """Each monitor's HMONITOR and what Windows reports of it, in enumeration order."""
+    found: list[tuple[int, Monitor]] = []
     built_in = built_in_devices()
 
     def each(handle: int, _dc: int, _rect: object, _data: int) -> bool:
-        found.append(_monitor(handle, built_in))
+        found.append((handle, _monitor(handle, built_in)))
         return True
 
     _EnumDisplayMonitors(None, None, MONITORENUMPROC(each), 0)
-    return sorted(found, key=monitor_position)
+    return tuple(found)
+
+
+def monitors() -> list[Monitor]:
+    """All monitors, left to right."""
+    return sorted((monitor for _handle, monitor in attached()), key=monitor_position)
 
 
 def monitor_of(hwnd: int) -> Monitor:

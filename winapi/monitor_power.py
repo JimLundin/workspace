@@ -1,0 +1,133 @@
+"""Monitor power over DDC/CI: reading and setting VCP feature D6 (power mode).
+
+Windows still drives a monitor that DDC/CI turns off, so the display
+configuration, the monitor count and the work areas don't change: only the
+panel goes dark. Monitors that don't answer DDC/CI, like most laptop panels,
+report `Unanswered`.
+"""
+
+import ctypes
+from ctypes import wintypes
+from dataclasses import dataclass
+from enum import Enum
+from typing import Final
+
+from winapi._core import dxva2, fn
+from winapi.screen import Monitor, attached
+
+
+class PhysicalMonitor(ctypes.Structure):
+    """PhysicalMonitor."""
+
+    handle: int | None
+    _fields_ = (("handle", wintypes.HANDLE), ("description", wintypes.WCHAR * 128))
+
+
+_GetNumberOfPhysicalMonitorsFromHMONITOR = fn(
+    dxva2, "GetNumberOfPhysicalMonitorsFromHMONITOR", wintypes.BOOL, wintypes.HMONITOR, ctypes.POINTER(wintypes.DWORD)
+)
+_GetPhysicalMonitorsFromHMONITOR = fn(
+    dxva2, "GetPhysicalMonitorsFromHMONITOR", wintypes.BOOL, wintypes.HMONITOR, wintypes.DWORD, ctypes.POINTER(PhysicalMonitor)
+)
+_DestroyPhysicalMonitors = fn(dxva2, "DestroyPhysicalMonitors", wintypes.BOOL, wintypes.DWORD, ctypes.POINTER(PhysicalMonitor))
+_GetVCPFeatureAndVCPFeatureReply = fn(
+    dxva2,
+    "GetVCPFeatureAndVCPFeatureReply",
+    wintypes.BOOL,
+    wintypes.HANDLE,
+    wintypes.BYTE,
+    ctypes.c_void_p,
+    ctypes.POINTER(wintypes.DWORD),
+    ctypes.POINTER(wintypes.DWORD),
+)
+_SetVCPFeature = fn(dxva2, "SetVCPFeature", wintypes.BOOL, wintypes.HANDLE, wintypes.BYTE, wintypes.DWORD)
+
+_POWER_MODE: Final = 0xD6
+
+
+class Power(Enum):
+    """MCCS power modes, by their D6 value."""
+
+    ON = 1
+    STANDBY = 2
+    SUSPEND = 3
+    OFF = 4
+    """Display power management off: the panel is dark while the signal stays connected."""
+    OFF_BY_BUTTON = 5
+
+
+@dataclass(frozen=True, slots=True)
+class Unanswered:
+    """The monitor refused or didn't answer a DDC/CI request; `error` is Windows' code."""
+
+    error: int
+
+
+@dataclass(frozen=True, slots=True)
+class Unrecognized:
+    """The monitor answered with a power mode outside MCCS's table."""
+
+    value: int
+
+
+@dataclass(frozen=True, slots=True)
+class Detached:
+    """No open physical monitor for this monitor: it isn't attached, or Windows gave none."""
+
+
+type Reading = Power | Unanswered | Unrecognized | Detached
+type Applied = Power | Unanswered | Detached
+
+
+class PhysicalMonitors:
+    """Physical-monitor handles for every attached monitor, opened together and destroyed by `close`.
+
+    Native ownership: the handle arrays stay allocated, and open, until `close`."""
+
+    __slots__ = ("_arrays", "_handles")
+
+    def __init__(self) -> None:
+        arrays: list[ctypes.Array[PhysicalMonitor]] = []
+        handles: dict[Monitor, tuple[int, ...]] = {}
+        for hmonitor, monitor in attached():
+            count = wintypes.DWORD()
+            if not _GetNumberOfPhysicalMonitorsFromHMONITOR(hmonitor, ctypes.byref(count)) or count.value == 0:
+                continue
+            array = (PhysicalMonitor * count.value)()
+            if not _GetPhysicalMonitorsFromHMONITOR(hmonitor, count.value, array):
+                continue
+            arrays.append(array)
+            handles[monitor] = tuple(int(physical.handle or 0) for physical in array)
+        self._arrays: tuple[ctypes.Array[PhysicalMonitor], ...] = tuple(arrays)
+        self._handles: frozendict[Monitor, tuple[int, ...]] = frozendict(handles)
+
+    @property
+    def monitors(self) -> frozenset[Monitor]:
+        return frozenset(self._handles)
+
+    def power(self, monitor: Monitor) -> Reading:
+        """The first physical monitor's power mode."""
+        handles = self._handles.get(monitor, ())
+        if not handles:
+            return Detached()
+        current, maximum = wintypes.DWORD(), wintypes.DWORD()
+        if not _GetVCPFeatureAndVCPFeatureReply(handles[0], _POWER_MODE, None, ctypes.byref(current), ctypes.byref(maximum)):
+            return Unanswered(ctypes.get_last_error())
+        match current.value:
+            case 1 | 2 | 3 | 4 | 5 as value:
+                return Power(value)
+            case value:
+                return Unrecognized(value)
+
+    def set_power(self, monitor: Monitor, power: Power) -> Applied:
+        """Every physical monitor behind `monitor` takes `power`; the first refusal is reported."""
+        handles = self._handles.get(monitor, ())
+        if not handles:
+            return Detached()
+        refused = tuple(ctypes.get_last_error() for handle in handles if not _SetVCPFeature(handle, _POWER_MODE, power.value))
+        return Unanswered(refused[0]) if refused else power
+
+    def close(self) -> None:
+        for array in self._arrays:
+            _DestroyPhysicalMonitors(len(array), array)
+        self._arrays, self._handles = (), frozendict()
