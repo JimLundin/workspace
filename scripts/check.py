@@ -8,6 +8,7 @@ import argparse
 import contextlib
 import importlib
 import inspect
+import io
 import json
 import os
 import subprocess
@@ -354,17 +355,21 @@ def execute_tests(tests: tuple[str, ...], root: Path, load: Callable[[str], obje
         for label, test in selected_tests(module, loaded, requested_function if separator else ""):
             matched = True
             started = time.perf_counter()
+            # Expected diagnostics from passing tests, such as SDK warnings for a
+            # deliberately broken stream, would bury real failures in the console.
+            # This executor owns the buffer; only failing tests publish it.
+            output = io.StringIO()
             try:
                 parameters = inspect.signature(test).parameters
                 if set(parameters) - {"tmp_path"}:
                     raise TypeError("Only tmp_path fixtures are supported, as in selfcheck.")
-                with scratch_directory() as scratch:
+                with contextlib.redirect_stderr(output), scratch_directory() as scratch:
                     test(**({"tmp_path": scratch} if parameters else {}))
                 passed += 1
             except unittest.SkipTest:
                 skipped += 1
             except Exception as error:
-                failures.append(raised(f"{name}::{label}", error))
+                failures.append(raised(f"{name}::{label}", error, output.getvalue()))
             finally:
                 timings.append((time.perf_counter() - started, module + "." + label))
         if separator and not matched:

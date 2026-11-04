@@ -38,10 +38,12 @@ class Results:
     durations: tuple[tuple[float, str], ...]
 
 
-def raised(node: str, error: BaseException) -> Failure:
+def raised(node: str, error: BaseException, output: str = "") -> Failure:
+    """Report an exception with the stderr its step wrote before failing."""
     name = type(error).__qualname__
     message = str(error)
-    return Failure(node, f"{name}: {message}" if message else name, f"{node}\n{''.join(traceback.format_exception(error))}")
+    captured = f"\nCaptured stderr:\n{output}" if output else ""
+    return Failure(node, f"{name}: {message}" if message else name, f"{node}\n{''.join(traceback.format_exception(error))}{captured}")
 
 
 def reported(node: str, report: str) -> Failure:

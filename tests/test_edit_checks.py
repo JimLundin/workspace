@@ -119,17 +119,23 @@ class SourceFixture:
 
     def test_requested(self) -> None:
         self.order.append("generated")
+        print("expected warning from a passing case", file=sys.stderr)
         assert "sdk" not in self.order and "imports" not in self.order
 
     def test_rejected(self) -> None:
+        print("diagnostic before the rejection", file=sys.stderr)
         raise AssertionError(REJECTION)
 
 
 def test_function_selection_runs_the_requested_case_and_rejects_typos(tmp_path: Path) -> None:
+    # Defect: a passing case's expected stderr still reached the check console.
     runtime = SourceFixture()
     name = __name__.replace(".", "/") + ".py"
-    result = execute(Selection((name + "::test_requested",), (), "explicit iteration scope"), tmp_path, runtime)
+    console = io.StringIO()
+    with contextlib.redirect_stderr(console):
+        result = execute(Selection((name + "::test_requested",), (), "explicit iteration scope"), tmp_path, runtime)
     assert (result.passed, result.skipped, result.failures) == (1, 0, ()) and runtime.order == ["generated"]
+    assert console.getvalue() == ""
     missing = name + "::test_missing"
     result = execute(Selection((missing,), (), "explicit iteration scope"), tmp_path, runtime)
     assert result.passed == 0 and result.failures == (Failure(missing, "No test function matched", "No test function matched " + missing),)
@@ -173,8 +179,9 @@ def test_generated_checks_precede_broad_dependency_imports_and_keep_import_gate(
 
 
 def test_failed_checks_keep_cost_evidence_naming_each_failure_without_a_receipt(tmp_path: Path) -> None:
-    # Defects: a failed check discarded its durations, or its retained record
-    # could not say which test failed or why once console output was lost.
+    # Defects: a failed check discarded its durations, its retained record
+    # could not say which test failed or why once console output was lost,
+    # or capturing stderr hid what the failing test wrote before it failed.
     report, receipt = tmp_path / "timings.json", tmp_path / "receipt.json"
     name = __name__.replace(".", "/") + ".py"
     selected = Selection((name + "::test_rejected",), (), "explicit iteration scope")
@@ -190,6 +197,7 @@ def test_failed_checks_keep_cost_evidence_naming_each_failure_without_a_receipt(
     assert record.failures == (RecordedFailure(name + "::test_rejected", f"AssertionError: {REJECTION}"[:SUMMARY_LIMIT]),)
     assert (record.passed, record.failed, record.files, record.durations, record.worker_seconds) == (0, 1, current, durations, 50.0)
     assert "Traceback" in console.getvalue() and not receipt.exists()
+    assert "Captured stderr:\ndiagnostic before the rejection\n" in console.getvalue()
 
 
 def test_broad_workers_keep_desktop_ownership_exact_selection_and_failures() -> None:
