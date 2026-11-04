@@ -6,8 +6,8 @@ primary screen, in the Liquid Glass design
 [JimLundin/liquid-glass](https://github.com/JimLundin/liquid-glass)). The island
 stays centred 8 px below the screen edge where space permits. Its centre contains
 only live activity and is empty at idle. The icon-only Canvas button is the
-furthest-left toolbar control, then the pinned Outlook and Teams slots, then the
-running applications.
+furthest-left toolbar control, then the pinned Outlook and Teams slots, the
+desktop pager and the running applications.
 The fixed right cluster reads icon-only keyboard when relevant, then volume,
 Wi-Fi and clock/power at the far right. The system tray's icons live in the
 controls menu. Activity never moves the fixed controls. Tooltips and accessible
@@ -70,7 +70,7 @@ pattern; tray icons take one column and other tiles span pairs:
 | Section | Cells |
 | --- | --- |
 | Activities | One full-width card per running activity, with its reading and Stop |
-| Settings and views | Auto-record, keyboard overlay and Windows taskbar toggles beside Canvas and Feed tiles |
+| Settings and views | Auto-record, keyboard overlay, Windows taskbar and window placement toggles beside Canvas and Feed tiles |
 | Recording | Record a meeting, absent while one runs |
 | Sound | The speaker level as a slider; its symbol shows mute |
 | Tools | Switch windows, transcript and key map as small tiles |
@@ -121,12 +121,26 @@ it inside the client area, so removing `WS_CAPTION` changes nothing; instead the
 observer gives each window a region starting below the DWM caption-button bounds.
 Each poll compares that region with the window's current one and rewrites it only
 when the size or caption changed, since an applied region survives maximizing.
-Workspace never moves slot windows. Windows that stop being slots, and all of
+Slot windows are placed like every other managed window, measured by the part
+their region leaves visible (see [window placement](window-placement.md)), and
+keep their region on every desktop. Windows that stop being slots, and all of
 them when Workspace exits, get their whole region back.
 
-Running applications have one icon per executable. Clicking switches to that
-app; further clicks cycle its windows in a stable order. Right-click lists its
-current windows. A background observer refreshes windows once per second and
+The desktop pager follows the slots in its own capsule: a previous chevron, one
+number per desktop and a next chevron. The current desktop has the quiet
+selection fill. Each number's tooltip and accessible name read the desktop and
+the apps placed on it, such as "Desktop 1 (current) · windowsterminal, code,
+Teams". While the Apps layer is held or locked, every target shows the physical
+keycap that reaches it instead, read from the layout. A pager of one desktop is
+hidden. A horizontal scroll over any capsule (tilt wheel, Shift+wheel or a
+touchpad) steps one desktop per gesture; a gesture ends after 0.35 s without
+wheel events. A switch made elsewhere, such as Win+Ctrl+arrow, shows within a
+poll.
+
+Running applications have one icon per executable, gathered from every desktop.
+Clicking switches to that app, first switching to its desktop; further clicks
+cycle its windows in a stable order. Right-click lists its current windows. A
+background observer refreshes windows once per second and
 copies newly seen icons away from Qt's animation and audio thread. The current
 app has a quiet selection fill. The running section scrolls horizontally when crowded; the slots sit in their
 own capsule and never scroll.

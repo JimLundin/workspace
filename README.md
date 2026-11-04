@@ -243,6 +243,16 @@ you press it again or focus another window. The desktop keys don't wrap.
 `,,week` `,,shrug` `,,thx` `,,mvh` `,,br`. Add your own in `config.py`. Physical navigation, window changes, pointer movement
 and injected workspace text reset a partially typed trigger.
 
+## Window placement
+
+Workspace puts each app's windows in a declared place for the connected
+monitors: the laptop alone, home (the laptop and a 4K screen) or work (the
+laptop with a landscape and a portrait 2560×1440 screen). Windows never
+overlap; apps that don't fit go on further Windows virtual desktops, which
+Workspace creates when needed. Dragging a window away snaps it back once you
+let go. The bar's pager and the Apps layer's keys switch between desktops. See
+[window placement](docs/window-placement.md) for the layouts and rules.
+
 ## Windows notifications
 
 Workspace reads Notification Center locally as context for the agent. Teams,
