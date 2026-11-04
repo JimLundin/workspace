@@ -193,7 +193,7 @@ type Effect = Focus | Switch | Launch | ZoomIn | ZoomOut | None
 
 @dataclass(frozen=True, slots=True)
 class Navigated:
-    """What a navigation did, for a later navigation log."""
+    """What a navigation did, for the navigation log."""
 
     navigation: Navigation
     from_desktop: int
