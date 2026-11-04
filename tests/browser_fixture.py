@@ -1,5 +1,6 @@
 """A local web app for automation tests; no user accounts or external services."""
 
+import contextlib
 import threading
 from collections.abc import Generator, Mapping
 from contextlib import contextmanager
@@ -55,12 +56,15 @@ def fixture(page: str = PAGE, *, pages: Mapping[str, str | Attachment] | None = 
                     status = 200 if cookie in self.headers.get("Cookie", "") else 401
                 case str() as text:
                     data, content_type, status = text.encode("utf-8"), "text/html; charset=utf-8", 200
-            self.send_response(status)
-            self.send_header("Content-Type", content_type)
-            self.send_header("Content-Length", str(len(data)))
-            self.send_header("Content-Security-Policy", "require-trusted-types-for 'script'")
-            self.end_headers()
-            self.wfile.write(data)
+            # A browser abandons responses it no longer needs, such as a superseded
+            # navigation; that is not a fixture failure worth a traceback.
+            with contextlib.suppress(ConnectionError):
+                self.send_response(status)
+                self.send_header("Content-Type", content_type)
+                self.send_header("Content-Length", str(len(data)))
+                self.send_header("Content-Security-Policy", "require-trusted-types-for 'script'")
+                self.end_headers()
+                self.wfile.write(data)
 
         def log_message(self, format: str, *args: object) -> None:
             pass
