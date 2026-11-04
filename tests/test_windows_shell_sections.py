@@ -35,7 +35,7 @@ from desktop_ui.shell_surface import ShellSections, page_font
 from desktop_ui.ui import Ui
 from desktop_ui.vector_icons import icon
 from winapi import appearance, desktop_shell, shell, windows
-from winapi.icon_pixels import pixels
+from winapi.icon_pixels import Pixels, pixels
 from winapi.shapes import Rect, Window
 from winapi.tray_host import Click, Entry, Located, Registration, TrayHost, callbacks, registration, update
 
@@ -259,22 +259,32 @@ def ink(image: QtGui.QImage) -> tuple[int, int]:
     return (max(columns) - min(columns) + 1, max(rows) - min(rows) + 1) if inked else (0, 0)
 
 
-def test_pager_faces_keep_their_declared_size_inside_the_workspace_process() -> None:
-    # Defect: the process-wide control stylesheet pads and re-fonts the bar's
-    # buttons, squeezing each pager digit and chevron into a 2 px content box.
+def face(button: QtWidgets.QWidget) -> QtGui.QImage:
+    """What the window shows under the button, without the default background a lone widget grab paints."""
+    return button.window().grab(QtCore.QRect(button.mapTo(button.window(), QtCore.QPoint(0, 0)), button.size())).toImage()
+
+
+def test_shell_faces_keep_the_bar_symbol_size_and_sit_concentric_inside_the_workspace_process() -> None:
+    # Defects: a stylesheet squeezes a pager digit or chevron, an application's
+    # bitmap or a slot symbol paints larger than the bar's 16 px symbols, or the
+    # first control loses its concentric 3 px inset.
     ui = Ui()
     parent = QtWidgets.QWidget()
     parent.setAttribute(QtCore.Qt.WidgetAttribute.WA_TranslucentBackground)
-    parent.resize(600, 50)
+    parent.resize(1200, 50)
     sections = ShellSections(parent)
     chosen = look(appearance.Material.GLASS, Capsule(appearance.Frost.SMOKED), Tint.NONE)
+    editor = Application("editor.exe", (Window(1, "Editor", "editor.exe", minimized=False),), image=Pixels(40, bytes((80, 160, 240, 255)) * 1600))
+    sections.applications((Shelf(EMPTY_SHELF.pinned, (editor,)), 0), lambda item, click: None)
     sections.desktops(pager(((), (), ()), 0, None), lambda _: None)
-    sections.place(12, 600)
-    sections.pager.apply_look(chosen)
+    sections.place(800, 1200)
+    for section in sections.sections():
+        section.apply_look(chosen)
     parent.show()
     application().processEvents()
     try:
         scale = parent.devicePixelRatioF()
+        side = round(16 * scale)
         ink_colour = QtGui.QColor(chosen.lettering.ink.color)
         digit = QtGui.QImage(round(32 * scale), round(32 * scale), QtGui.QImage.Format.Format_ARGB32_Premultiplied)
         digit.setDevicePixelRatio(scale)
@@ -287,10 +297,13 @@ def test_pager_faces_keep_their_declared_size_inside_the_workspace_process() -> 
         chevron = icon("chevron", chosen.lettering.ink.color, 16).pixmap(QtCore.QSize(16, 16), scale).toImage()
         three, following = sections.pager.buttons[3], sections.pager.buttons[4]
         for (width, height), (expected_width, expected_height) in (
-            (ink(three.grab().toImage()), ink(digit)),
-            (ink(following.grab().toImage()), ink(chevron)),
+            (ink(face(three)), ink(digit)),
+            (ink(face(following)), ink(chevron)),
+            (ink(face(sections.apps.buttons[0])), (side, side)),
         ):
             assert abs(width - expected_width) <= 1 and abs(height - expected_height) <= 1, (width, height, expected_width, expected_height)
+        assert max(ink(face(sections.pinned.buttons[0]))) <= side + 1
+        assert [section.buttons[0].mapTo(section, QtCore.QPoint(0, 0)) for section in sections.sections()] == [QtCore.QPoint(3, 3)] * 3
     finally:
         parent.close()
         parent.deleteLater()
