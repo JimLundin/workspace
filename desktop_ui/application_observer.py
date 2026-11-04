@@ -161,7 +161,7 @@ class Desktop:
 
 @dataclass(frozen=True, slots=True)
 class Arrangement:
-    """What the bar shows: the applications, the desktops and whether placement is paused."""
+    """What the bar shows: the applications, the desktops, whether placement is paused and the navigation world."""
 
     shelf: Shelf
     desktops: int
@@ -169,6 +169,8 @@ class Arrangement:
     placed: tuple[tuple[App, ...], ...] = ()
     """Each desktop's placed applications, in shelf order."""
     paused: bool = field(default=False, kw_only=True)
+    world: World | None = field(default=None, kw_only=True)
+    """What navigation is decided against, so the bar's key hints name what each chord reaches."""
 
 
 EMPTY_ARRANGEMENT = Arrangement(EMPTY_SHELF, 0, 0)
@@ -290,7 +292,7 @@ class Worker:
             for app in grouped.running
         )
         desktops, current = (len(state.ids), state.ids.index(state.current)) if state is not None else (0, 0)
-        snapshot = Arrangement(replace(grouped, running=running), desktops, current, self.placed(desktops), paused=self.paused)
+        snapshot = Arrangement(replace(grouped, running=running), desktops, current, self.placed(desktops), paused=self.paused, world=self.world)
         if snapshot != self.previous:
             with suppress(queue.Empty):
                 self.observer.results.get_nowait()
