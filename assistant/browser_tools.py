@@ -25,45 +25,11 @@ from assistant.browser_requests import (
     web_url,
 )
 from assistant.browser_session import Separate, source_of
-from assistant.browser_values import (
-    BrowserError,
-    BrowserStatus,
-    ChangeTab,
-    CloseGroup,
-    ClosePage,
-    CloseTabs,
-    Closure,
-    Color,
-    CreateGroup,
-    Disconnect,
-    EditGroup,
-    Flag,
-    GroupChanges,
-    GroupRequest,
-    GroupSelector,
-    Identifier,
-    InGroup,
-    Move,
-    MoveTab,
-    NewGroup,
-    Offset,
-    PageList,
-    Position,
-    StripPage,
-    StripQuery,
-    TabAction,
-    TabRequest,
-    Ungrouped,
-    UngroupTabs,
-    destination,
-)
+from assistant.browser_values import BrowserError, BrowserStatus, ClosePage, Closure, Disconnect, Offset, PageList
 from assistant.llm import ToolSpec, tool_spec
 from automation.actions import Change, Evidence, Observation, target
 from automation.execution import Readback, Targets
 from automation.json_value import Json
-
-type TabIds = Annotated[tuple[Identifier, ...], Field(min_length=1, max_length=200)]
-type Title = Annotated[str, Field(strict=True, max_length=300)]
 
 
 @dataclass(frozen=True, slots=True)
@@ -71,56 +37,23 @@ class OpenArguments:
     url: Annotated[str, Field(strict=True, max_length=4000)]
     target_id: Annotated[str, Field(strict=True, max_length=128)] = ""
     browser: Literal["edge", "chrome", "separate"] | None = None
-    group_id: GroupSelector | None = None
-    window_id: Identifier | None = None
     visibility: Literal["hidden", "tab"] | None = None
 
 
 @dataclass(frozen=True, slots=True)
-class TabsArguments:
-    view: Literal["pages", "strip"] = "pages"
+class PagesArguments:
     offset: Offset = 0
     limit: Annotated[int, Field(strict=True, ge=1, le=40)] = 20
-    window_id: Identifier | None = None
-    group_id: GroupSelector | None = None
-
-
-@dataclass(frozen=True, slots=True)
-class GroupArguments:
-    tab_ids: Annotated[tuple[Identifier, ...], Field(max_length=200)] = ()
-    group_id: Identifier | None = None
-    title: Title | None = None
-    color: Color | None = None
-    collapsed: Flag | None = None
-    index: Position | None = None
-    window_id: Identifier | None = None
-
-
-@dataclass(frozen=True, slots=True)
-class UngroupArguments:
-    tab_ids: TabIds
-
-
-@dataclass(frozen=True, slots=True)
-class TabArguments:
-    tab_id: Identifier
-    action: Literal["activate", "pin", "unpin", "move", "reload"]
-    index: Position | None = None
-    window_id: Identifier | None = None
+    __pydantic_config__ = ConfigDict(extra="forbid")
 
 
 @dataclass(frozen=True, slots=True)
 class CloseArguments:
     target_id: Annotated[str, Field(strict=True, max_length=128)] = ""
-    tab_ids: TabIds | None = None
-    group_id: Identifier | None = None
+    __pydantic_config__ = ConfigDict(extra="forbid")
 
 
-TABS_ARGUMENTS = TypeAdapter(TabsArguments)
-
-
-def _unique(identities: tuple[int, ...]) -> tuple[int, ...]:
-    return tuple(dict.fromkeys(identities, True))
+PAGES_ARGUMENTS = TypeAdapter(PagesArguments)
 
 
 def open_request(arguments: OpenArguments) -> Open | OpenHidden:
@@ -129,77 +62,18 @@ def open_request(arguments: OpenArguments) -> Open | OpenHidden:
     if arguments.target_id:
         if arguments.visibility is not None:
             raise BrowserError("visibility applies to new pages; an exact target_id retains its existing visibility.")
-        return Open(url, arguments.target_id, source, destination(arguments.group_id), arguments.window_id)
-    placed = arguments.group_id is not None or arguments.window_id is not None
+        return Open(url, arguments.target_id, source)
     if arguments.visibility == "hidden":
-        if placed:
-            raise BrowserError("Hidden pages have no tab group or browser window.")
         return OpenHidden(url, source)
-    return Open(url, source=source, placement=destination(arguments.group_id), window_id=arguments.window_id)
+    return Open(url, source=source)
 
 
-def tabs_request(arguments: TabsArguments) -> PageList | StripQuery:
-    match arguments.view, arguments.group_id:
-        case "pages", None if arguments.window_id is None:
-            return PageList(arguments.offset, arguments.limit)
-        case "pages", _:
-            raise BrowserError("Tab and window filters require view=strip.")
-        case "strip", None:
-            return StripQuery(arguments.offset, arguments.limit, arguments.window_id, None)
-        case "strip", -1:
-            return StripQuery(arguments.offset, arguments.limit, arguments.window_id, Ungrouped.TABS)
-        case "strip", identity:
-            return StripQuery(arguments.offset, arguments.limit, arguments.window_id, InGroup(identity))
-
-
-def group_request(arguments: GroupArguments) -> GroupRequest:
-    identities = _unique(arguments.tab_ids)
-    match arguments.group_id:
-        case None:
-            if not identities:
-                raise BrowserError("tab_ids must contain 1 to 200 integer tab IDs from browser_tabs with view=strip.")
-            move = None if arguments.index is None else Move(arguments.index, None)
-            style = NewGroup(
-                "Workspace" if arguments.title is None else arguments.title,
-                arguments.color or "blue",
-                collapsed=True if arguments.collapsed is None else arguments.collapsed,
-            )
-            return CreateGroup(identities, style, arguments.window_id, move)
-        case identity:
-            moved = arguments.index is not None or arguments.window_id is not None
-            move = Move(-1 if arguments.index is None else arguments.index, arguments.window_id) if moved else None
-            changes = GroupChanges(arguments.title, arguments.color, collapsed=arguments.collapsed)
-            return EditGroup(identity, identities, changes, move)
-
-
-def ungroup_request(arguments: UngroupArguments) -> UngroupTabs:
-    return UngroupTabs(_unique(arguments.tab_ids))
-
-
-def tab_request(arguments: TabArguments) -> TabRequest:
-    match arguments.action:
-        case "move":
-            if arguments.index is None:
-                raise BrowserError("Moving a tab requires index; use -1 for the end of its window.")
-            return MoveTab(arguments.tab_id, Move(arguments.index, arguments.window_id))
-        case action:
-            if arguments.index is not None or arguments.window_id is not None:
-                raise BrowserError("index and window_id only apply to the move action.")
-            return ChangeTab(arguments.tab_id, TabAction(action))
+def page_list(arguments: PagesArguments) -> PageList:
+    return PageList(arguments.offset, arguments.limit)
 
 
 def close_request(arguments: CloseArguments) -> Closure:
-    match arguments.target_id, arguments.tab_ids, arguments.group_id:
-        case "", None, None:
-            return Disconnect.BROWSER
-        case str() as page, None, None:
-            return ClosePage(page)
-        case "", tuple() as identities, None:
-            return CloseTabs(_unique(identities))
-        case "", None, int() as identity:
-            return CloseGroup(identity)
-        case _:
-            raise BrowserError("Choose target_id, tab_ids or group_id for closure, not more than one.")
+    return ClosePage(arguments.target_id) if arguments.target_id else Disconnect.BROWSER
 
 
 @dataclass(frozen=True, slots=True)
@@ -251,8 +125,6 @@ TOOLS: Final = (
         "headless profile with its own sign-ins. visibility=hidden creates an invisible page using the personal browser's sign-in, "
         "owned by this connection and closed on disconnect. Hidden pages support DOM tools but no screenshots; "
         "some app workflows that require rendering can remain loading. Default visibility=tab supports those workflows. "
-        "New Edge tabs join the Workspace group, created collapsed; an existing group's expanded state is preserved. "
-        "For new tabs, group_id chooses another group or -1 for ungrouped; window_id chooses a normal browser window. "
         "Omit browser to keep the connection. Existing tab state requires its explicit target_id. Does not select the tab.",
         Parser(TypeAdapter(OpenArguments), open_request),
     ),
@@ -260,31 +132,8 @@ TOOLS: Final = (
         "browser_tabs",
         "Check connection/setup status without connecting or requesting consent. List connected page ids, titles and URLs. "
         "Default view=pages supplies target IDs for DOM tools; hidden marks this connection's invisible pages and "
-        "created_in_session marks pages opened by this connection. Hidden pages have no native tab_id. "
-        "In Edge, view=strip supplies native tab_id, window_id, group_id, active/pinned/muted state and the listed tabs' groups. "
-        "Use native IDs for tab/group management; never guess them from duplicate URLs. Strip view can filter window_id or group_id "
-        "(-1 means ungrouped). Follow next_offset for more; limit is 1-40.",
-        Parser(TABS_ARGUMENTS, tabs_request),
-    ),
-    browser_tool(
-        "browser_group",
-        "Create, extend or edit an Edge tab group using native IDs from browser_tabs view=strip. "
-        "Omit group_id to create a group from tab_ids (defaults: Workspace, blue, collapsed). Supply group_id to add tab_ids or edit "
-        "title, color or collapsed without changing unspecified properties. collapsed=false expands it. "
-        "index moves the whole group within its window; window_id moves it to another normal window. Use index=-1 for the end.",
-        Parser(TypeAdapter(GroupArguments), group_request),
-    ),
-    browser_tool(
-        "browser_ungroup",
-        "Remove the specified native Edge tab_ids from their groups, keeping the tabs open.",
-        Parser(TypeAdapter(UngroupArguments), ungroup_request),
-    ),
-    browser_tool(
-        "browser_tab",
-        "Manage any Edge tab by native tab_id from browser_tabs view=strip: pin, unpin, reload or move. "
-        "move requires index (-1 for the end), with optional window_id. activate selects the tab and brings its window forward; "
-        "use it when the user wants to see a page. Other actions do not activate the tab.",
-        Parser(TypeAdapter(TabArguments), tab_request),
+        "created_in_session marks pages opened by this connection. Follow next_offset for more; limit is 1-40.",
+        Parser(PAGES_ARGUMENTS, page_list),
     ),
     browser_tool(
         "browser_snapshot",
@@ -320,10 +169,10 @@ TOOLS: Final = (
     ),
     browser_tool(
         "browser_close",
-        "Close a page by target_id, native Edge tab_ids, or all tabs in an Edge group_id. Choose one selector. "
+        "Close a page by target_id. "
         "A page result reports state=closed once it disappears, or requested if it is still open; inspect it without repeating the close. "
         "Any explicitly selected page can be closed. With no selector, close this client's hidden pages and detach from a personal browser, "
-        "preserving all ordinary tabs and groups, "
+        "preserving all ordinary tabs, "
         "or close Workspace's separate browser, retaining its sign-ins. Closing a tab does not require page scripting access.",
         Parser(TypeAdapter(CloseArguments), close_request),
     ),
@@ -335,19 +184,6 @@ class AgentOpen:
     """The agent always navigates its exclusive Edge profile."""
 
     url: Annotated[str, Field(strict=True, max_length=4000)]
-    target_id: Annotated[str, Field(strict=True, max_length=128)] = ""
-    __pydantic_config__ = ConfigDict(extra="forbid")
-
-
-@dataclass(frozen=True, slots=True)
-class AgentPages:
-    offset: Offset = 0
-    limit: Annotated[int, Field(strict=True, ge=1, le=40)] = 20
-    __pydantic_config__ = ConfigDict(extra="forbid")
-
-
-@dataclass(frozen=True, slots=True)
-class AgentClose:
     target_id: Annotated[str, Field(strict=True, max_length=128)] = ""
     __pydantic_config__ = ConfigDict(extra="forbid")
 
@@ -370,7 +206,7 @@ AGENT_TOOLS: Final = (
         "browser_tabs",
         "Inspect the agent's current Edge pages, IDs, titles and URLs without launching it. "
         "Follow next_offset for more. Use these exact IDs to reuse pages or clean up saved context.",
-        Parser(TypeAdapter(AgentPages), lambda args: PageList(args.offset, args.limit)),
+        Parser(PAGES_ARGUMENTS, page_list),
     ),
     *(
         tool
@@ -382,20 +218,17 @@ AGENT_TOOLS: Final = (
         "Close an agent page by target_id after saving its useful context. "
         "With no target_id, close the exclusive agent browser, retaining its profile and sign-ins. "
         "A page reports state=closed or requested; inspect a requested close before repeating it.",
-        Parser(
-            TypeAdapter(AgentClose),
-            lambda args: ClosePage(args.target_id) if args.target_id else Disconnect.BROWSER,
-        ),
+        Parser(TypeAdapter(CloseArguments), close_request),
     ),
 )
 SPECS: Final = tuple(tool.spec for tool in AGENT_TOOLS)
-_LISTING = TypeAdapter[BrowserStatus | StripPage](Annotated[BrowserStatus | StripPage, Field(discriminator="view")])
+_LISTING = TypeAdapter(BrowserStatus)
 
 
 def _resources(request: BrowserRequest | None) -> tuple[str, ...]:
-    """Locks, then the exact page, tab, group, strip or connection the operation targets."""
+    """Locks, then the exact page or connection the operation targets."""
     match request:
-        case SignIn() | ChangeTab(action=TabAction.ACTIVATE):
+        case SignIn():
             locks: tuple[str, ...] = ("browser", "foreground")
         case _:
             locks = ("browser",)
@@ -404,30 +237,18 @@ def _resources(request: BrowserRequest | None) -> tuple[str, ...]:
             return (*locks, target("browser-page", page))
         case PageSnapshot(target_id=page) | PageAction(target_id=page) | Evaluate(target_id=page) | Screenshot(target_id=page) | ClosePage(page):
             return (*locks, target("browser-page", page))
-        case ChangeTab(tab_id=tab) | MoveTab(tab_id=tab):
-            return (*locks, target("browser-tab", tab))
-        case EditGroup(group_id=group):
-            return (*locks, target("browser-group", group))
-        case CreateGroup() | UngroupTabs() | CloseTabs() | CloseGroup() | Disconnect.BROWSER:
-            return (*locks, target("browser-strip", "tabs"))
-        case Attach() | Open() | OpenHidden() | SignIn() | PageList() | StripQuery() | Activate() | None:
+        case Attach() | Open() | OpenHidden() | SignIn() | PageList() | Activate() | Disconnect.BROWSER | None:
             return (*locks, target("browser-session", "connection"))
 
 
 def _tabs_readback(arguments: Mapping[str, Json], result: str) -> Readback:
-    """A complete, unfiltered listing establishes every tab it omits as closed."""
+    """A complete listing establishes every page it omits as closed."""
     try:
         listing = _LISTING.validate_json(result)
-        query = TABS_ARGUMENTS.validate_python(arguments)
+        query = PAGES_ARGUMENTS.validate_python(arguments)
     except ValidationError:
         return Readback()
-    unfiltered = query.offset == 0 and query.window_id is None and query.group_id is None
-    match listing:
-        case StripPage(tabs=tabs, groups=groups, next_offset=following):
-            markers = (*(target("browser-tab", tab.tab_id) for tab in tabs), *(target("browser-group", group.group_id) for group in groups))
-            return Readback((*markers, target("browser-strip", "tabs")) if unfiltered and following is None else markers)
-        case BrowserStatus(next_offset=following):
-            return Readback(("all:browser-page",) if unfiltered and following is None else ())
+    return Readback(("all:browser-page",) if query.offset == 0 and listing.next_offset is None else ())
 
 
 def _classify(tool: BrowserTool) -> Callable[[Mapping[str, Json]], Change | Observation]:

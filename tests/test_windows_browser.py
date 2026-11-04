@@ -21,15 +21,14 @@ lazy from PySide6.QtGui import QImage
 
 from assistant.browser import MAX_OUTPUT, Browser
 from assistant.browser_session import read_endpoint
-from assistant.browser_values import BrowserError, Group, InterruptedError, Snapshot, Tab, TargetList
+from assistant.browser_values import BrowserError, InterruptedError, Snapshot, TargetList
 from automation.json_value import Json
 from desktop_ui.qt_runtime import prepare
 from tests.browser_fixture import fixture
 from tests.native_browser_fixture import borrowed, disposable, dispose, hosted, request
-from tests.native_browser_tabs import verify_native_tabs
 from tests.native_business_apps import verify_business_apps
 from tests.native_communications_browser import NativeTrace, verify_communications
-from tests.test_browser import command, decoded, group_of, tab_of
+from tests.test_browser import command, decoded
 
 prepare()
 
@@ -246,21 +245,8 @@ def test_exclusive_browser_releases_all_research_pages_but_keeps_process_and_sig
         assert request(personal, "snapshot", target_id=original["target_id"])["url"] == url
 
 
-def verify_inactive_screenshots(browser: Browser, target: str, identity: int) -> None:
-    """Check real repaint and native selection/group restoration on an attached tab."""
-
-    def state() -> tuple[frozenset[int], Tab, Group]:
-        view = request(browser, "tabs", view="strip", limit=40)
-        rows, groups = view["tabs"], view["groups"]
-        assert isinstance(rows, list) and isinstance(groups, list)
-        tabs = tuple(tab_of(row) for row in rows)
-        current = next(tab for tab in tabs if tab.id == identity)
-        native_groups = tuple(group_of(row) for row in groups)
-        group = next(group for group in native_groups if group.id == current.group_id)
-        return frozenset(tab.id for tab in tabs if tab.active), current, group
-
-    active, before, group = state()
-    assert active and not before.active and group.collapsed
+def verify_inactive_screenshots(browser: Browser, target: str) -> None:
+    """Check real repaint and visibility restoration on an attached tab."""
     for color in ((255, 0, 0), (0, 0, 255)):
         css = f"rgb({color[0]}, {color[1]}, {color[2]})"
         expression = """(() => {
@@ -282,9 +268,6 @@ def verify_inactive_screenshots(browser: Browser, target: str, identity: int) ->
         for x, y in ((1, 1), (3, 1), (2, 2), (1, 3), (3, 3)):
             pixel = image.pixelColor(image.width() * x // 4, image.height() * y // 4).getRgb()
             assert pixel == (*color, 255), (color, x, y, pixel)
-        current_active, current, current_group = state()
-        assert current_active == active and not current.active
-        assert current.group_id == before.group_id and current_group == group
 
 
 def verify_attached_dom(personal: Browser, attached: Browser, url: str) -> None:
@@ -306,11 +289,8 @@ def verify_attached_dom(personal: Browser, attached: Browser, url: str) -> None:
     assert "Attached fixture" in cast(str, request(attached, "snapshot", target_id=target)["text"])
     shot = attached.request(command("screenshot", **{"target_id": target}), threading.Event()).image
     assert shot is not None and shot.startswith(b"\x89PNG")
-    # Repaint the same attached, inactive tab without changing user selection.
-    inactive_target, identity = page["target_id"], page["tab_id"]
-    assert isinstance(inactive_target, str) and isinstance(identity, int)
-
-    verify_inactive_screenshots(attached, inactive_target, identity)
+    # Repaint the same attached, inactive tab without changing its visibility.
+    verify_inactive_screenshots(attached, target)
 
     assert "remain open" in attached.request(command("close"), threading.Event()).text
     rows = request(personal, "tabs")["tabs"]
@@ -320,8 +300,7 @@ def verify_attached_dom(personal: Browser, attached: Browser, url: str) -> None:
     assert next(tab for tab in tabs if tab["id"] == blank["target_id"])["url"] == "about:blank"
     assert personal.process is not None and personal.process.poll() is None
     assert not attached.profile.exists()
-    # Detach preserves the created tab; explicitly remove it before the next
-    # scenario so native tab/group baselines contain only the two personal tabs.
+    # Detach preserves the created tab; remove it before the next scenario.
     request(personal, "close", target_id=target)
 
 
@@ -332,7 +311,7 @@ def test_background_actions_deliver_clicks_in_a_headed_personal_browser(tmp_path
     with disposable(Browser(tmp_path / "headed-personal")) as personal, fixture() as url:
         personal.connect(cancel, visible=True)
         with borrowed(personal) as attached:
-            page = request(attached, "open", url=url, group_id=-1)
+            page = request(attached, "open", url=url)
             target = TypeAdapter(str).validate_python(page["target_id"])
             connection = attached.connection
             assert connection is not None
@@ -370,15 +349,12 @@ def verify_hidden_dom(personal: Browser, attached: Browser, url: str) -> None:
     # as non-pages, sign-in context is lost, or release leaves hidden work alive.
     cancel = threading.Event()
     request(attached, "attach")
-    connection = attached.connection
-    assert connection is not None
-    before = attached.strip.snapshot(connection.call, cancel)
+    before = request(personal, "tabs")
     page = request(attached, "open", url=url, visibility="hidden")
     target = page["target_id"]
     assert isinstance(target, str)
-    assert "tab_id" not in page
     observation = TypeAdapter(Snapshot).validate_python(page)
-    assert observation.target_id == target and observation.tab_id is None
+    assert observation.target_id == target
     rows = request(attached, "tabs")["tabs"]
     assert isinstance(rows, list)
     assert any(isinstance(row, dict) and row["id"] == target and row["hidden"] is True for row in rows)
@@ -393,7 +369,7 @@ def verify_hidden_dom(personal: Browser, attached: Browser, url: str) -> None:
     # stalls the shared browser host, rather than failing before capture.
     with TestCase().assertRaisesRegex(BrowserError, "no capturable viewport"):
         attached.request(command("screenshot", target_id=target), cancel)
-    assert attached.strip.snapshot(connection.call, cancel) == before
+    assert request(personal, "tabs") == before
     assert request(attached, "close", target_id=target)["state"] == "closed"
     leftover = request(attached, "open", url=url, visibility="hidden")["target_id"]
     attached.close()
@@ -411,8 +387,5 @@ def test_attached_browser_dom_tabs_and_cancellation_share_a_personal_browser(tmp
             verify_hidden_dom(personal, attached, url)
         process = personal.process
         assert process is not None and process.poll() is None
-        with borrowed(personal) as attached:
-            verify_native_tabs(personal, attached, url)
-        assert personal.process is process and process.poll() is None
         with borrowed(personal) as attached:
             verify_attached_cancellation(personal, attached)

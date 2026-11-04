@@ -15,12 +15,11 @@ from unittest import TestCase
 from pydantic import TypeAdapter
 from websockets.sync.server import ServerConnection, serve
 
-from assistant import browser_tools, browser_values
+from assistant import browser_tools
 from assistant.browser import MAX_OUTPUT, Browser, task_pages
 from assistant.browser_requests import BrowserRequest, web_url
 from assistant.browser_session import MAX_RESPONSE, Attached, BrowserSession, Cdp, Managed, Product, Separate, Source
-from assistant.browser_tabs import TabStrip
-from assistant.browser_values import GROUP, TAB, BrowserError, Group, InterruptedError, NavigationContextError, Page, Tab, evaluated
+from assistant.browser_values import BrowserError, InterruptedError, NavigationContextError, Page, evaluated
 from automation.json_value import Json
 
 VIEWPORT_PNG = base64.b64decode(
@@ -47,15 +46,6 @@ def command(operation: str, **arguments: Json) -> BrowserRequest:
     """A browser request validated through the model's tool seam, as the agent sends it."""
     tool = next(tool for tool in browser_tools.TOOLS if tool.spec.name == "browser_" + operation)
     return tool.parse(WIRE.dump_json(arguments))
-
-
-def tab_of(row: Json) -> Tab:
-    """A tab row of a browser tool result, read with Edge's tab-reply contract."""
-    return browser_values.decoded(TAB, row, "invalid tab").tab()
-
-
-def group_of(row: Json) -> Group:
-    return browser_values.decoded(GROUP, row, "invalid group").group()
 
 
 def decoded(value: str) -> dict[str, Json]:
@@ -111,12 +101,11 @@ def connected_browser(
     channel: Channel,
     *,
     owner: Attached | Managed | None = None,
-    strip: TabStrip | None = None,
     clock: Callable[[], float] = time.monotonic,
 ) -> Browser:
     owner = owner if owner is not None else Attached(Product.EDGE)
     source = owner.product if isinstance(owner, Attached) else Separate.PROFILE
-    browser = Browser(path, source=source, opener=ScriptedSessions(BrowserSession(Cdp(channel, clock=clock), owner)), strip=strip)
+    browser = Browser(path, source=source, opener=ScriptedSessions(BrowserSession(Cdp(channel, clock=clock), owner)))
     browser.connect(threading.Event(), visible=isinstance(owner, Managed) and owner.visible)
     return browser
 

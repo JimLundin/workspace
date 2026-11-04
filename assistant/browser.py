@@ -27,7 +27,6 @@ from assistant.browser_requests import (
     PageSnapshot,
     Screenshot,
     SignIn,
-    Status,
     web_url,
 )
 from assistant.browser_session import (
@@ -45,36 +44,23 @@ from assistant.browser_session import (
     Stopped,
     setup_message,
 )
-from assistant.browser_tabs import TabStrip
 from assistant.browser_values import (
     CREATED_TARGET,
-    STRIP_PAGE,
     TARGET_SESSION,
     ActionOptions,
     BrowserError,
     BrowserStatus,
     Capture,
-    ChangeTab,
-    ClosedTabs,
     ClosedTarget,
-    CloseGroup,
     ClosePage,
     CloseState,
-    CloseTabs,
     Closure,
-    CreateGroup,
-    DefaultGroup,
-    Destination,
     Disconnect,
     DisconnectedError,
-    EditGroup,
     Frame,
     FrameTree,
     FrameTreeReply,
-    GroupRow,
-    InGroup,
     InterruptedError,
-    MoveTab,
     Navigated,
     NavigationLoadingError,
     Page,
@@ -86,18 +72,10 @@ from assistant.browser_values import (
     SignInPage,
     Snapshot,
     SnapshotOptions,
-    StripQuery,
-    TabEdit,
-    TabRow,
-    Ungrouped,
-    UngroupResult,
-    UngroupTabs,
     World,
     decoded,
     evaluated,
-    opening,
     pages_of,
-    strip_page,
 )
 from automation.json_value import Json
 lazy from assistant.web_apps import Located, WebAppOperation, WebApps
@@ -117,10 +95,6 @@ _POINT = TypeAdapter(Point)
 _SNAPSHOT = TypeAdapter(Snapshot)
 _SIGN_IN = TypeAdapter(SignInPage)
 _STATUS = TypeAdapter(BrowserStatus)
-_GROUP_ROW = TypeAdapter(GroupRow)
-_TAB_ROW = TypeAdapter(TabRow)
-_UNGROUPED = TypeAdapter(UngroupResult)
-_CLOSED_TABS = TypeAdapter(ClosedTabs)
 _CLOSED_PAGE = TypeAdapter(PageClosure)
 # Resolves after a visible page renders a new frame. Hidden pages never run
 # animation frames, and focus emulation can report a visible document whose
@@ -176,7 +150,7 @@ def task_pages(pages: Iterable[Page]) -> Iterator[Page]:
 class Browser:
     """Own launched processes; borrow a personal browser through its opt-in CDP."""
 
-    __slots__ = ("_live", "_opener", "created", "hidden", "lock", "native_targets", "profile", "sessions", "source", "strip")
+    __slots__ = ("_live", "_opener", "created", "hidden", "lock", "profile", "sessions", "source")
 
     def __init__(
         self,
@@ -185,7 +159,6 @@ class Browser:
         source: Source = Separate.PROFILE,
         executable: Path | None = None,
         opener: SessionOpener | None = None,
-        strip: TabStrip | None = None,
     ) -> None:
         self.profile = profile
         self._opener = opener if opener is not None else NativeSessions(profile, executable=executable, persistent=sys.platform == "win32")
@@ -194,8 +167,6 @@ class Browser:
         self.sessions: dict[str, str] = {}
         self.created: set[str] = set()
         self.hidden: frozenset[str] = frozenset()
-        self.native_targets: dict[str, int] = {}
-        self.strip = strip if strip is not None else TabStrip()
         self.lock = threading.RLock()
 
     @property
@@ -283,9 +254,7 @@ class Browser:
             live, self._live = self._live, None
             try:
                 if live is not None:
-                    control = self.strip.control
-                    owned = self.hidden if control is None else self.hidden.union((control.target,))
-                    for target in owned:
+                    for target in self.hidden:
                         with suppress(OSError):
                             live.connection.call("Target.closeTarget", {"targetId": target}, threading.Event(), timeout=1)
                     live.close()
@@ -293,8 +262,6 @@ class Browser:
                 self.sessions.clear()
                 self.created.clear()
                 self.hidden = frozenset()
-                self.native_targets.clear()
-                self.strip.control = None
 
     def _clear_pages(self) -> None:
         """Release exclusive research pages, including script-opened tabs."""
@@ -302,8 +269,7 @@ class Browser:
         pages = tuple(task_pages(self._tabs(cancel)))
         reply = self._call("Target.createTarget", {"url": "about:blank", "background": True}, cancel)
         blank = decoded(CREATED_TARGET, reply, "The browser did not create its idle page.").target_id
-        control = self.strip.control
-        targets = frozenset(page.id for page in pages).union(self.hidden, () if control is None else (control.target,)).difference((blank,))
+        targets = frozenset(page.id for page in pages).union(self.hidden).difference((blank,))
         for target in targets:
             result = decoded(_CLOSED_TARGET, self._call("Target.closeTarget", {"targetId": target}, cancel), "The browser did not answer cleanup.")
             if not result.success:
@@ -316,8 +282,6 @@ class Browser:
         self.sessions.clear()
         self.created.clear()
         self.hidden = frozenset()
-        self.native_targets.clear()
-        self.strip.control = None
 
     def _tabs(self, cancel: threading.Event) -> tuple[Page, ...]:
         if self.connection is None:
@@ -427,7 +391,6 @@ class Browser:
             frame_offset,
             len(frames),
             frame_offset + 8 if frame_offset + 8 < len(frames) else None,
-            tab_id=self.native_targets.get(target),
             more_controls=rendered.more_controls,
             scan_limited=rendered.scan_limited,
         )
@@ -445,30 +408,8 @@ class Browser:
         )
         return BrowserResult(_dumped(_SNAPSHOT, snapshot))
 
-    def _native_target(self, placement: Destination, window: int | None, cancel: threading.Event) -> str:
-        self._require_strip()
-        plan = opening(self.strip.snapshot(self._call, cancel), placement, window)
-        marker = "about:blank#workspace-" + uuid.uuid4().hex
-        native = self.strip.open(self._call, marker, plan, cancel)
-        deadline = time.monotonic() + 5
-        while True:
-            target = next((tab.id for tab in self._tabs(cancel) if tab.url == marker), "")
-            if target:
-                self.native_targets[target] = native.id
-                self.created.add(target)
-                return target
-            if time.monotonic() >= deadline:
-                raise BrowserError(
-                    f"Created tab {native.id}, but its page is not available yet. Inspect browser_tabs with view=strip before opening another tab."
-                )
-            if cancel.wait(0.05):
-                raise InterruptedError(f"Stopped after creating tab {native.id}. The tab remains in its group.")
-
     def _open(self, request: Open, cancel: threading.Event, *, visible: bool) -> BrowserResult:
         url = web_url(request.url)
-        placement, window = request.placement, request.window_id
-        if request.target_id and (placement is not DefaultGroup.WORKSPACE or window is not None):
-            raise BrowserError("group_id and window_id apply to new tabs. Use browser_group or browser_tab to move an existing tab.")
         previous_source = self.source
         if visible:
             self.select(Separate.PROFILE)
@@ -480,14 +421,7 @@ class Browser:
         tabs = self._tabs(cancel)
         self.created.intersection_update(tab.id for tab in tabs)
         if not target:
-            match placement:
-                case InGroup():
-                    in_strip = True
-                case _:
-                    in_strip = self.owner == Attached(Product.EDGE) and placement is not Ungrouped.TABS
-            if not visible and (in_strip or window is not None):
-                target = self._native_target(placement, window, cancel)
-            elif self.process is not None:
+            if self.process is not None:
                 target = next((tab.id for tab in tabs if tab.url == "about:blank"), "")
             if not target:
                 created = self._call("Target.createTarget", {"url": "about:blank", "background": not visible}, cancel)
@@ -509,7 +443,7 @@ class Browser:
         self.connect(cancel)
         if not self.attached:
             # Workspace's separate profile is already an owned headless process.
-            return self._open(Open(url, placement=Ungrouped.TABS), cancel, visible=False)
+            return self._open(Open(url), cancel, visible=False)
         created = self._call("Target.createTarget", {"url": "about:blank", "background": True, "hidden": True}, cancel)
         target = decoded(CREATED_TARGET, created, "The browser did not create a hidden page.").target_id
         self.hidden = self.hidden.union((target,))
@@ -583,17 +517,11 @@ class Browser:
             return download(request, cancel, transport)
 
     def activate_page(self, target: str, cancel: threading.Event) -> None:
-        """Bring forward an exact CDP page without requiring session-local native tab metadata."""
+        """Bring forward an exact CDP page."""
         self.request(Activate(target), cancel)
 
-    def _status(self, request: Status, cancel: threading.Event) -> BrowserResult:
-        match request:
-            case StripQuery() if self.connection is not None:
-                return self._strip_status(request, cancel)
-            case StripQuery(offset, limit) | PageList(offset, limit):
-                pass
-            case _:
-                assert_never(request)
+    def _status(self, request: PageList, cancel: threading.Event) -> BrowserResult:
+        offset, limit = request.offset, request.limit
         tabs = self._tabs(cancel)
         attached = self.attached
         rows = tuple(
@@ -601,7 +529,6 @@ class Browser:
                 tab.id,
                 tab.title,
                 tab.url,
-                self.native_targets.get(tab.id),
                 created_in_session=tab.id in self.created if attached else None,
                 hidden=True if tab.id in self.hidden else None,
             )
@@ -623,49 +550,10 @@ class Browser:
             state = replace(state, next_offset=offset + len(state.tabs))
         return BrowserResult(_dumped(_STATUS, state))
 
-    def _require_strip(self) -> None:
-        if self.connection is None:
-            raise BrowserError("Connect with browser_attach before managing tabs and groups.")
-        if self.source is Product.CHROME:
-            raise BrowserError("Native tab/group controls currently require Edge. Chrome supports the page tools and closing by target_id.")
-
-    def _strip_status(self, query: StripQuery, cancel: threading.Event) -> BrowserResult:
-        self._require_strip()
-        state = self.strip.snapshot(self._call, cancel)
-        result = strip_page(
-            state,
-            query,
-            "attached" if self.attached else "sign_in" if self.visible else "background",
-            self.native_targets,
-            maximum=MAX_OUTPUT,
-        )
-        return BrowserResult(_dumped(STRIP_PAGE, result))
-
-    def _tab_operation(self, request: TabEdit, cancel: threading.Event) -> BrowserResult:
-        self._require_strip()
-        match request:
-            case CreateGroup() | EditGroup():
-                return BrowserResult(_dumped(_GROUP_ROW, self.strip.group(self._call, request, cancel).row()))
-            case ChangeTab() | MoveTab():
-                return BrowserResult(_dumped(_TAB_ROW, self.strip.tab(self._call, request, cancel).row()))
-            case UngroupTabs(identities):
-                return BrowserResult(_dumped(_UNGROUPED, self.strip.ungroup(self._call, identities, cancel)))
-            case _:
-                assert_never(request)
-
     def _close(self, request: Closure, cancel: threading.Event) -> BrowserResult:
         match request:
             case ClosePage():
                 return self._close_page(request, cancel)
-            case CloseTabs() | CloseGroup():
-                self._require_strip()
-                closed = self.strip.close(self._call, request, cancel)
-                for target, identity in tuple(self.native_targets.items()):
-                    if identity in closed.tab_ids:
-                        self.native_targets.pop(target)
-                        self.sessions.pop(target, None)
-                        self.created.discard(target)
-                return BrowserResult(_dumped(_CLOSED_TABS, closed.row()))
             case Disconnect.BROWSER:
                 attached = self.attached
                 self.close()
@@ -691,7 +579,6 @@ class Browser:
         self.sessions.pop(target, None)
         self.created.discard(target)
         self.hidden = self.hidden.difference((target,))
-        self.native_targets.pop(target, None)
         return BrowserResult(_dumped(_CLOSED_PAGE, PageClosure(target, CloseState.CLOSED)))
 
     def _attach_request(self, request: Attach, cancel: threading.Event) -> BrowserResult:
@@ -782,13 +669,11 @@ class Browser:
                 return self._open(Open(url), cancel, visible=True)
             case Attach():
                 return self._attach_request(request, cancel)
-            case PageList() | StripQuery():
+            case PageList():
                 return self._status(request, cancel)
             case Activate():
                 return self._activate(request, cancel)
-            case CreateGroup() | EditGroup() | ChangeTab() | MoveTab() | UngroupTabs():
-                return self._tab_operation(request, cancel)
-            case ClosePage() | CloseTabs() | CloseGroup() | Disconnect.BROWSER:
+            case ClosePage() | Disconnect.BROWSER:
                 return self._close(request, cancel)
             case PageSnapshot():
                 return self._snapshot(request, cancel)

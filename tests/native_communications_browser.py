@@ -255,7 +255,6 @@ def verify_saved_activity_activation(browser: Browser, web: TeamsWeb, trace: Nat
     cancel = threading.Event()
     assert browser.connection is not None
     extra = browser.connection.call("Target.createTarget", {"url": "about:blank"}, cancel)
-    browser.native_targets.clear()
     earlier = len(trace.commands)
     web.open_activity("123", cancel)
     assert ("Target.activateTarget", {"targetId": web.target}) in trace.commands[earlier:]

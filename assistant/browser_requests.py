@@ -12,17 +12,7 @@ from urllib.parse import urlsplit
 from pydantic import Field
 
 from assistant.browser_session import Product, Source
-from assistant.browser_values import (
-    BrowserError,
-    Closure,
-    DefaultGroup,
-    Destination,
-    Flag,
-    Offset,
-    PageList,
-    StripQuery,
-    TabEdit,
-)
+from assistant.browser_values import BrowserError, Closure, Flag, Offset, PageList
 
 type PageId = Annotated[str, Field(strict=True, min_length=1, max_length=128)]
 type FrameId = Annotated[str, Field(strict=True, max_length=128)]
@@ -49,13 +39,11 @@ class Attach:
 
 @dataclass(frozen=True, slots=True)
 class Open:
-    """Navigate an exact page, or a new background tab placed in a group and window."""
+    """Navigate an exact page, or a new background tab."""
 
     url: str
     target_id: str = ""
     source: Source | None = None
-    placement: Destination = DefaultGroup.WORKSPACE
-    window_id: int | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -110,10 +98,9 @@ class Screenshot:
 
 @dataclass(frozen=True, slots=True)
 class Activate:
-    """Bring an exact page forward, without session-local native tab metadata."""
+    """Bring an exact page forward."""
 
     target_id: str
 
 
-type Status = PageList | StripQuery
-type BrowserRequest = Attach | Open | OpenHidden | SignIn | Status | TabEdit | Closure | PageSnapshot | PageAction | Evaluate | Screenshot | Activate
+type BrowserRequest = Attach | Open | OpenHidden | SignIn | PageList | Closure | PageSnapshot | PageAction | Evaluate | Screenshot | Activate

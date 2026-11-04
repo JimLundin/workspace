@@ -79,7 +79,7 @@ def test_background_tools_are_exposed_to_the_model_and_run_directly(tmp_path: Pa
 
 def test_agent_cannot_attach_to_or_manage_the_personal_browser(tmp_path: Path) -> None:
     # Defect: a model can select the user's browser instead of its exclusive
-    # instance, or reach native personal-tab operations through old arguments.
+    # instance through its arguments.
     machine = FakeMachine()
     agent = Agent(
         Settings("", "", "", "", ""),
@@ -93,18 +93,11 @@ def test_agent_cannot_attach_to_or_manage_the_personal_browser(tmp_path: Path) -
         ("browser_attach", {"browser": "edge"}),
         ("browser_open", {"url": "about:blank", "browser": "edge"}),
         ("browser_open", {"url": "about:blank", "browser": "chrome"}),
-        ("browser_tabs", {"view": "strip"}),
-        ("browser_open", {"url": "about:blank", "group_id": 23}),
-        ("browser_group", {"tab_ids": [7, 8], "title": "Workspace", "collapsed": True}),
-        ("browser_group", {"group_id": 23, "title": "Research", "index": -1}),
-        ("browser_ungroup", {"tab_ids": [8]}),
-        ("browser_tab", {"tab_id": 7, "action": "pin"}),
-        ("browser_close", {"group_id": 23}),
     ):
         result = agent.call(ToolCall("tabs", name, json.dumps(arguments)))
         assert not result.ok, (name, result.text)
     assert not machine.log
-    assert not {"browser_attach", "browser_group", "browser_ungroup", "browser_tab"} & {spec.name for spec in browser_tools.SPECS}
+    assert "browser_attach" not in {spec.name for spec in browser_tools.SPECS}
 
 
 def test_stopped_agent_does_not_start_background_tools_or_show_their_arguments(tmp_path: Path) -> None:
