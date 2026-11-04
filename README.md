@@ -860,18 +860,6 @@ Both check profiles compile every Python source and import production modules.
 There is no pytest dependency in the installed bundle. CI runs the suite once
 through selfcheck for each platform and checks the extracted Windows bundle too.
 
-For focused mutation testing, install pytest in your development environment:
-
-```
-python scripts/mutate.py assistant/recording_state.py --tests tests/test_recording_state.py --limit 0 --workers 2 --output dist/recording-mutations.json
-```
-
-The runner freezes the source, makes one change per disposable copy, and records
-which tests detect it. Timeouts and collection failures are reported separately.
-Use `--function NAME` to narrow the scope and `--replace BEFORE AFTER` to seed a
-specific regression. Native desktop tests require `--workers 1`. Mutation runs
-are an explicit audit command; they do not slow editing checks or installation.
-
 Inside an extracted Windows bundle, use `py -3.15 selfcheck.py` to run
 checks with the installed interpreter. The bundle builder runs on Windows or
 Linux and packages dependencies without downloading or embedding Python.

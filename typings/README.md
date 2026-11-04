@@ -28,10 +28,6 @@ bundled typeshed for the native `frozendict` constructor, subprocess stream type
 ctypes payloads, and registry and URL observations. `scripts/typecheck.py`
 builds the patched typeshed before each Pyright run; runtime uses the builtins directly.
 
-The pytest stub covers the mutation session's plugin: the bare `fixture`
-decorator on a method taking only its instance, and `main`, whose `ExitCode`
-result is an int. Upstream's overloads carry `Any` in their parameters.
-
 The jsonschema stub exposes only `validate`, which raises for an instance the
 schema rejects. A meeting test uses it to check the tool schema offered to the
 model against payloads the follow-up validator accepts; schema evaluation

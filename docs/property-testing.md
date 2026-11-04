@@ -115,9 +115,3 @@ On native Windows Python 3.15.1, 75 focused checks pass, including both generate
 properties and runner, architecture, bundle, source-release and protected-gate
 contracts. The changed tooling and generated tests pass strict Pyright;
 repository Ruff passes. Broader pre-existing typing debt is outside this result.
-
-Each property detects a deliberately seeded Workspace fault: dropping the carried
-audio sample, and ignoring request identity during reply resolution. Both
-campaigns have a passing baseline and one detected fault, with no survivors,
-timeouts or collection errors. These establish focused test sensitivity, not a
-whole-codebase mutation score. Campaign evidence stays in Windows Temp.

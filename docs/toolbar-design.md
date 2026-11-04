@@ -161,10 +161,7 @@ Registry history is not used to invent live icons.
 
 Native fixtures cover real registration/update/removal, callback delivery,
 popup position, restoration, legacy icon masks and scroll overflow. Pure checks
-cover stable app/window order and tray field/version policy. The app/tray mutation
-campaigns detected all five seeded defects, with passing baselines and no
-survivors, timeouts or collection errors. Reports are in Windows Temp as
-`workspace-app-mutations.json` and `workspace-tray-mutations.json`. A separate
+cover stable app/window order and tray field/version policy. A separate
 live Windows probe observed three running-app groups and eight registered tray
 icons; all eight tray images copied successfully. Python and Qt primitives,
 Windows enumeration and icon painting remain trusted dependencies.
