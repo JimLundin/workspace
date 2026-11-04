@@ -52,7 +52,7 @@ def test_new_parts_fade_over_the_old_but_a_changing_reading_updates_in_place() -
     resting = retarget(IslandMotion(), (ISLAND,), animate=False)
     ticked = retarget(resting, (shown(Key.ISLAND, Zone.ISLAND, 112, Text("10:23")),), animate=True)
     assert ticked.capsules[0].previous is None and ticked.capsules[0].fade.value == 1
-    alerted = retarget(resting, (shown(Key.ISLAND, Zone.ISLAND, 140, Glyph("wifi-off"), Text("10:22")),), animate=True)
+    alerted = retarget(resting, (shown(Key.ISLAND, Zone.ISLAND, 140, Glyph("bell"), Text("10:22")),), animate=True)
     assert alerted.capsules[0].previous == ISLAND.content and alerted.capsules[0].fade.value == 0
     assert run(alerted, 1).capsules[0].previous is None
 
@@ -61,7 +61,7 @@ def test_reduced_motion_finishes_every_capsule_at_once() -> None:
     # Defects: turning motion off mid-flight leaves capsules half-shown with the
     # loop running, or the menu opens collapsed.
     both = retarget(IslandMotion(), (ISLAND, INBOX), animate=False)
-    flight = run(retarget(both, (shown(Key.ISLAND, Zone.ISLAND, 160, Glyph("wifi-off"), Text("10:22")),), animate=True), 0.05)
+    flight = run(retarget(both, (shown(Key.ISLAND, Zone.ISLAND, 160, Glyph("bell"), Text("10:22")),), animate=True), 0.05)
     done = finish(flight)
     assert settled(done) and [(each.key, each.width, each.presence) for each in placed(done)] == [(Key.ISLAND, 160, 1)]
     menu = Shown(ISLAND.view, Content(272, (), 300))

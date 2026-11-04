@@ -1,4 +1,4 @@
-"""Default speaker mute and level, and Wi-Fi association. The speaker level is the one write; no scans or connection changes."""
+"""Default speaker mute and level. The speaker level is the one write."""
 
 import ctypes
 import math
@@ -12,51 +12,7 @@ lazy from win32more.Windows.Win32.Media.Audio import IMMDevice, IMMDeviceEnumera
 lazy from win32more.Windows.Win32.Media.Audio.Endpoints import IAudioEndpointVolume
 lazy from win32more.Windows.Win32.System.Com import CLSCTX_ALL, COINIT_MULTITHREADED, CoCreateInstance, CoInitializeEx, CoUninitialize
 
-from winapi._core import fn
-from winapi.machine_status import Audio, Speakers, Wifi
-
-_wlan = ctypes.WinDLL("wlanapi", use_last_error=True)
-_WlanOpenHandle = fn(
-    _wlan, "WlanOpenHandle", wintypes.DWORD, wintypes.DWORD, ctypes.c_void_p, ctypes.POINTER(wintypes.DWORD), ctypes.POINTER(wintypes.HANDLE)
-)
-_WlanEnumInterfaces = fn(_wlan, "WlanEnumInterfaces", wintypes.DWORD, wintypes.HANDLE, ctypes.c_void_p, ctypes.POINTER(ctypes.c_void_p))
-_WlanFreeMemory = fn(_wlan, "WlanFreeMemory", None, ctypes.c_void_p)
-_WlanCloseHandle = fn(_wlan, "WlanCloseHandle", wintypes.DWORD, wintypes.HANDLE, ctypes.c_void_p)
-
-
-class WlanInterface(ctypes.Structure):
-    guid: ctypes.Array[ctypes.c_byte]
-    description: str
-    state: int
-    _fields_ = (("guid", ctypes.c_byte * 16), ("description", ctypes.c_wchar * 256), ("state", wintypes.DWORD))
-
-
-def wifi_state(states: tuple[int, ...]) -> Wifi:
-    """One associated interface suffices; absent adapters and invalid observations aren't disconnect alerts."""
-    if not states:
-        return Wifi.NO_ADAPTER
-    if any(state not in range(8) for state in states):
-        return Wifi.UNKNOWN
-    return Wifi.CONNECTED if any(state in (1, 2) for state in states) else Wifi.DISCONNECTED
-
-
-def wifi() -> Wifi:
-    handle, version, data = wintypes.HANDLE(), wintypes.DWORD(), ctypes.c_void_p()
-    if _WlanOpenHandle(2, None, ctypes.byref(version), ctypes.byref(handle)):
-        return Wifi.UNKNOWN
-    try:
-        if _WlanEnumInterfaces(handle, None, ctypes.byref(data)) or not data.value:
-            return Wifi.UNKNOWN
-        count = int(ctypes.cast(data, ctypes.POINTER(wintypes.DWORD)).contents.value)
-        if not 0 <= count <= 64:
-            return Wifi.UNKNOWN
-        address = data.value + 8  # count and current-index DWORDs precede the variable interface array.
-        interfaces = (WlanInterface * count).from_address(address)
-        return wifi_state(tuple(int(item.state) for item in interfaces))
-    finally:
-        if data.value:
-            _WlanFreeMemory(data)
-        _WlanCloseHandle(handle, None)
+from winapi.machine_status import Audio, Speakers
 
 
 @contextmanager

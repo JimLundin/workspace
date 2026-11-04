@@ -61,7 +61,6 @@ def test_the_bar_publishes_one_final_glass_frame_per_qt_turn_behind_its_window()
         published, bounds = scene.published(), scene.bounds
         baseline_keys = {pane.key for pane in published}
         assert {"CANVAS", "STATUS", "tray"} <= baseline_keys
-        assert not {"VOLUME", "WIFI"} & baseline_keys, "Status controls must share one glass capsule."
         assert "ISLAND" not in baseline_keys and "INBOX" not in baseline_keys
         bar.agent_changed(Agent("Comparing both sheets", waiting=False))
         bar.inbox_changed(3)

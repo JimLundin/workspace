@@ -6,7 +6,6 @@ import time
 import unittest
 from collections.abc import Callable
 from ctypes import wintypes
-from dataclasses import replace
 from datetime import datetime
 
 if sys.platform != "win32":
@@ -19,11 +18,11 @@ lazy from PySide6.QtTest import QTest
 
 from assistant.meeting_detection import AutomaticStatus
 from assistant.recording_state import RecordingState
-from desktop_ui.ambient import Ambient, SystemStatus
-from desktop_ui.desktop_bar import BarActions, BarObservations, DesktopBar, SettingsUri
+from desktop_ui.ambient import Ambient
+from desktop_ui.desktop_bar import BarActions, BarObservations, DesktopBar
 from desktop_ui.fluent_icons import REGULAR
 from desktop_ui.island_menu import Menu
-from desktop_ui.island_model import Action, Agent, Control, Job, Key
+from desktop_ui.island_model import Agent, Job, Key
 from desktop_ui.island_surface import SHADOW, TOP, ControlButton, MenuCell
 from desktop_ui.qt_runtime import prepare
 from desktop_ui.qt_ui import EventLoop, application
@@ -32,7 +31,7 @@ from protocol import Tool
 from tests.native_pointer import foreign_pointer
 from winapi import appearance, windows
 from winapi._core import fn, user32
-from winapi.machine_status import Battery, PowerUnavailable, Speakers, Wifi
+from winapi.machine_status import Battery, PowerUnavailable
 from winapi.shapes import Rect
 from winapi.tray_host import Entry
 
@@ -76,7 +75,6 @@ def recorded(invoked: list[str], *, tools: list[tuple[Tool, int]] | None = None)
         lambda message: invoked.append("problem: " + message),
         (lambda tool, hwnd: tools.append((tool, hwnd))) if tools is not None else (lambda tool, hwnd: None),
         inbox=lambda: invoked.append("inbox"),
-        open_settings=invoked.append,
     )
 
 
@@ -125,9 +123,9 @@ def closed(app: QtWidgets.QApplication, bar: DesktopBar) -> None:
     app.processEvents()
 
 
-def test_right_cluster_keeps_fixed_positions_and_truthful_status_through_disclosure() -> None:
-    # Defects: tray expansion shifts fixed controls, missing readings imply a
-    # healthy state, or unavailable symbols fall back to a document glyph.
+def test_right_cluster_keeps_fixed_positions_and_truthful_power_through_disclosure() -> None:
+    # Defects: tray expansion or a power reading shifts fixed controls, or the
+    # mirrored chevron falls back to a document glyph.
     app = application()
     bar = DesktopBar(recorded([]), native_shell=False, observations=BarObservations(motion=lambda: False))
     try:
@@ -146,28 +144,6 @@ def test_right_cluster_keeps_fixed_positions_and_truthful_status_through_disclos
         assert tray.toggle.accessibleName() == "Collapse system tray"
         assert tuple(bar.window.capsules[key].geometry() for key in order) == before
         assert tray.mapTo(bar.window, tray.toggle.pos()).x() == toggle_left
-        for speakers in Speakers:
-            for wifi in Wifi:
-                bar.system = SystemStatus(speakers, wifi)
-                bar.render()
-                capsule = bar.window.capsules[Key.STATUS]
-                assert capsule.view is not None
-                assert capsule.view.slots[0] == (
-                    Control(bar.system.speaker_icon, bar.system.speaker_description + " · Open sound settings", Action.OPEN_SOUND_SETTINGS),
-                    Control(bar.system.wifi_icon, bar.system.wifi_description + " · Open Wi-Fi settings", Action.OPEN_WIFI_SETTINGS),
-                )
-                assert all(button.focusPolicy() is QtCore.Qt.FocusPolicy.StrongFocus for button in capsule.controls)
-                assert tuple(button.size() for button in capsule.controls) == (QtCore.QSize(28, 28),) * 2
-                assert tuple(button.accessibleName() for button in capsule.controls) == tuple(button.control.label for button in capsule.controls)
-                assert tuple(button.toolTip() for button in capsule.controls) == tuple(button.control.label for button in capsule.controls)
-                assert capsule.isVisibleTo(bar.window)
-                for name, label in (
-                    (bar.system.speaker_icon, bar.system.speaker_description),
-                    (bar.system.wifi_icon, bar.system.wifi_description),
-                ):
-                    assert label in capsule.accessibleName() and label in capsule.toolTip()
-                    assert symbol(name) != REGULAR["doc"]
-                assert tuple(bar.window.capsules[key].geometry() for key in order) == before
         for power in (
             Battery(9, powered=False, charging=False),
             Battery(100, powered=True, charging=False),
@@ -183,75 +159,6 @@ def test_right_cluster_keeps_fixed_positions_and_truthful_status_through_disclos
             assert status.view is not None
             assert abs(bar.window.measure(status.view).width - status.width()) <= 1
         assert symbol("chevron-left") == '<g transform="translate(16 0) scale(-1 1)">' + REGULAR["chevron"] + "</g>"
-    finally:
-        closed(app, bar)
-
-
-def test_status_children_open_settings_without_parent_menu_or_focus_restore() -> None:
-    # Defects: child presses bubble to the menu, swap destinations or restore old focus.
-    app = application()
-    invoked: list[str] = []
-    focused: list[int] = []
-    bar = DesktopBar(
-        recorded(invoked),
-        native_shell=False,
-        observations=BarObservations(motion=lambda: False, foreground=lambda: 42, focus=lambda hwnd: remember(focused, hwnd)),
-    )
-    try:
-        bar.timer.stop()
-        capsule = bar.window.capsules[Key.STATUS]
-        buttons = capsule.controls
-        assert tuple(button.control.action for button in buttons) == (Action.OPEN_SOUND_SETTINGS, Action.OPEN_WIFI_SETTINGS)
-        for button, destination in zip(buttons, ("ms-settings:sound", "ms-settings:network-wifi"), strict=True):
-            QTest.mouseClick(button, QtCore.Qt.MouseButton.LeftButton)
-            assert invoked[-1] == destination and bar.expanded is None
-            bar.open_menu()
-            QTest.mouseClick(button, QtCore.Qt.MouseButton.LeftButton)
-            assert invoked[-1] == destination and bar.expanded is None and focused == []
-        assert invoked == ["ms-settings:sound", "ms-settings:sound", "ms-settings:network-wifi", "ms-settings:network-wifi"]
-        before = capsule.geometry()
-        button = buttons[0]
-        app.sendEvent(button, QtGui.QFocusEvent(QtCore.QEvent.Type.FocusIn, QtCore.Qt.FocusReason.TabFocusReason))
-        assert button.ringed
-        bar.system = SystemStatus(Speakers.MUTED, Wifi.DISCONNECTED)
-        bar.render()
-        assert capsule.controls == buttons and capsule.geometry() == before and button.ringed
-        assert button.accessibleName() == "Speakers muted · Open sound settings"
-        assert buttons[1].toolTip() == "Wi-Fi disconnected · Open Wi-Fi settings"
-        QTest.keyClick(buttons[1], QtCore.Qt.Key.Key_Space)
-        assert invoked[-1] == "ms-settings:network-wifi" and bar.expanded is None
-        # The reading region still opens Workspace controls.
-        QTest.mouseClick(capsule, QtCore.Qt.MouseButton.LeftButton, pos=QtCore.QPoint(capsule.width() - 10, TOP + 17))
-        assert bar.expanded is not None
-    finally:
-        closed(app, bar)
-
-
-def unavailable_settings(uri: str) -> None:
-    """An explicit failing launch adapter detects swallowed Windows errors."""
-    raise OSError("Cannot open " + uri)
-
-
-def test_settings_launch_failure_reports_problem_and_leaves_menu_closed() -> None:
-    # Defect: Windows launch failure escapes Qt or leaves focus-restoring menu state.
-    app = application()
-    invoked: list[str] = []
-    focused: list[int] = []
-    bar = DesktopBar(
-        replace(recorded(invoked), open_settings=unavailable_settings),
-        native_shell=False,
-        observations=BarObservations(motion=lambda: False, foreground=lambda: 42, focus=lambda hwnd: remember(focused, hwnd)),
-    )
-    try:
-        destinations: tuple[tuple[Action, SettingsUri], ...] = (
-            (Action.OPEN_SOUND_SETTINGS, "ms-settings:sound"),
-            (Action.OPEN_WIFI_SETTINGS, "ms-settings:network-wifi"),
-        )
-        for action, uri in destinations:
-            bar.open_menu()
-            bar.press(action)
-            assert invoked[-1] == "problem: Cannot open " + uri
-            assert bar.expanded is None and focused == []
     finally:
         closed(app, bar)
 
@@ -801,11 +708,11 @@ def test_the_status_capsule_expands_into_the_menu_at_its_right_hand_anchor() -> 
     try:
         status = bar.window.capsules[Key.STATUS]
         right = status.geometry().x() + status.geometry().width()
-        speaker = status.controls[0].mapTo(bar.window, QtCore.QPoint())
+        readings = status.x() + status.shift(status.content) + status.content.spots[0].x
         bar.open_menu()
         assert status.height() > TOP + 34 and status.cells and Key.ISLAND not in shown(bar)
         assert status.geometry().x() + status.geometry().width() == right
-        assert status.controls[0].mapTo(bar.window, QtCore.QPoint()) == speaker
+        assert status.x() + status.shift(status.content) + status.content.spots[0].x == readings
         assert right == app.primaryScreen().geometry().width() - 12
     finally:
         closed(app, bar)

@@ -14,7 +14,7 @@ from collections.abc import Callable
 from contextlib import suppress
 from dataclasses import dataclass, field, replace
 from datetime import datetime
-from typing import Literal, assert_never
+from typing import assert_never
 lazy import os
 
 lazy from PySide6 import QtCore, QtGui
@@ -26,7 +26,7 @@ lazy from assistant.meeting_detection import AutomaticStatus
 lazy from assistant.recording_state import RecordingAction, RecordingState
 lazy from desktop_ui import island_menu
 lazy from desktop_ui.agent_progress import Phase, coalesced, stable_phases
-lazy from desktop_ui.ambient import Ambient, SystemStatus
+lazy from desktop_ui.ambient import Ambient
 lazy from desktop_ui.application_observer import ApplicationObserver
 lazy from desktop_ui.audio_meter import AudioMeter
 lazy from desktop_ui.bar_status import StatusObserver
@@ -57,20 +57,12 @@ lazy from desktop_ui.shell_controls import TASKBAR_TOGGLE, TaskbarControl, Windo
 lazy from desktop_ui.shell_items import Application, next_window
 lazy from protocol import Tool
 lazy from winapi import appearance, inputs, shell, system_notices, windows
-lazy from winapi.machine_status import Power, PowerUnavailable, Speakers
+lazy from winapi.machine_status import Audio, Power, PowerUnavailable, Speakers
 lazy from winapi.notifications import NotificationObserver
 lazy from winapi.shapes import Rect
 lazy from winapi.tray_host import Click, Entry, TrayHost
 
 prepare()
-
-
-type SettingsUri = Literal["ms-settings:sound", "ms-settings:network-wifi"]
-
-
-def launch_settings(uri: SettingsUri) -> None:
-    """Resolve the Windows launcher only when a settings control is activated."""
-    os.startfile(uri)
 
 
 @dataclass(frozen=True, slots=True)
@@ -87,7 +79,6 @@ class BarActions:
     tool: Callable[[Tool, int], None] = lambda tool, hwnd: None
     notices: Callable[[system_notices.Observed], None] = lambda _: None
     requests: RequestActions | None = field(default=None, kw_only=True)
-    open_settings: Callable[[SettingsUri], None] = field(default=launch_settings, kw_only=True)
 
 
 @dataclass(frozen=True, slots=True)
@@ -115,6 +106,7 @@ class DesktopBar:
         "ambient",
         "application_service",
         "applications",
+        "audio",
         "audio_meter",
         "audio_timer",
         "automatic_recording",
@@ -150,7 +142,6 @@ class DesktopBar:
         "sample_bounds",
         "sampled_at",
         "status_service",
-        "system",
         "taskbar",
         "timer",
         "tray_host",
@@ -205,7 +196,7 @@ class DesktopBar:
         self.materials = appearance.FrostSampler()
         self.next_material, self.next_power = 0.0, 0.0
         self.power: Power = PowerUnavailable.UNKNOWN
-        self.system = SystemStatus()
+        self.audio = Audio(Speakers.UNKNOWN, None)
         self.status_service: StatusObserver | None = None
         self.ambient = Ambient(self.observations.local_time().strftime("%H:%M"), self.power)
         self.audio_meter: AudioMeter | None = None
@@ -316,20 +307,8 @@ class DesktopBar:
                 self.actions.keyboard()
             case Action.STOP_RECORDING:
                 self.actions.record("stop")
-            case Action.OPEN_SOUND_SETTINGS:
-                self.open_settings("ms-settings:sound")
-            case Action.OPEN_WIFI_SETTINGS:
-                self.open_settings("ms-settings:network-wifi")
             case _:
                 assert_never(action)
-
-    def open_settings(self, uri: SettingsUri) -> None:
-        """Let Windows take focus, reporting launch failures through the bar's owner."""
-        self.close_menu(restore=False)
-        try:
-            self.actions.open_settings(uri)
-        except OSError as error:
-            self.actions.problem(str(error))
 
     def hover(self, key: Key | None) -> None:
         if self.hovered is not key:
@@ -340,7 +319,7 @@ class DesktopBar:
         """The menu for what's happening now, keeping the current selection and disclosure."""
         recorded = capture(self.recording) if self.recording.capturing else None
         working = self.agent if self.agent is not None and not self.agent.waiting else None
-        sound = Slider("Sound", self.system.volume, muted=self.system.speakers is Speakers.MUTED)
+        sound = Slider("Sound", self.audio.volume, muted=self.audio.speakers is Speakers.MUTED)
         menu = Menu(
             entries(
                 Controls(
@@ -482,7 +461,7 @@ class DesktopBar:
         if self.status_service is None:
             return
         self.status_service.set_volume(level)
-        self.system = replace(self.system, volume=level)
+        self.audio = replace(self.audio, volume=level)
         self.render()
 
     def overlay_changed(self, *, enabled: bool) -> None:
@@ -534,7 +513,6 @@ class DesktopBar:
             self.job,
             self.recording,
             self.ambient,
-            self.system,
             self.inbox,
             keyboard(enabled=self.layout_enabled, layer=self.current_layer),
             dictating=self.dictating,
@@ -676,7 +654,7 @@ class DesktopBar:
             self.power = self.observations.power()
         if self.status_service is not None:
             with suppress(queue.Empty):
-                self.system = self.status_service.results.get_nowait()
+                self.audio = self.status_service.results.get_nowait()
         self.ambient = Ambient(self.observations.local_time().strftime("%H:%M"), self.power)
         self.sample_bounds = self.window.bounds(Key.ISLAND) or self.window.bounds(Key.STATUS)
         # Small glass takes its scheme from the desktop beside the island.

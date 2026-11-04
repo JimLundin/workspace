@@ -1,4 +1,4 @@
-"""Plain observations of the machine's speakers, Wi-Fi and power. No ctypes: importable anywhere."""
+"""Plain observations of the machine's speakers and power. No ctypes: importable anywhere."""
 
 from dataclasses import dataclass, field
 from enum import Enum, auto
@@ -16,13 +16,6 @@ class Audio:
 
     speakers: Speakers
     volume: float | None
-
-
-class Wifi(Enum):
-    UNKNOWN = auto()
-    CONNECTED = auto()
-    DISCONNECTED = auto()
-    NO_ADAPTER = auto()
 
 
 class PowerUnavailable(Enum):

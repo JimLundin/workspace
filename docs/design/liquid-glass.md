@@ -113,7 +113,7 @@ SF Symbols match their weight to the adjacent text and switch to filled
 variants for active states. No open set does both.
 
 **Decision: Fluent** (MIT), Microsoft's Windows 11 symbols, using the 16 px
-artwork drawn for toolbar size; only battery, cloud and Wi-Fi off fall back to
+artwork drawn for toolbar size; only battery and cloud fall back to
 the 20 px grid. It looked thin at first because the 20 px artwork was being
 scaled to 16 px. Fluent has true filled variants, used for active states such
 as the dictation microphone. Stop is a small rounded square, as `stop.fill`
@@ -217,8 +217,8 @@ Workspace's bar today (`assistant/bar_model.py`, `desktop_ui/ambient.py`,
 | Clock | Resting readout | Island at rest |
 | Battery | Resting readout; hidden above 95% on power | Island at rest, same rule |
 | Weather | Resting readout | Removed. macOS keeps weather in widgets, and the bar's own rule is "Only active work earns space in the desktop toolbar." |
-| Speakers unmuted | Alert glyph in the readout | Island at rest, as an exception glyph |
-| Wi-Fi disconnected | Alert glyph in the readout | Island at rest, as an exception glyph |
+| Speakers unmuted | Alert glyph in the readout | Removed. The controls menu's sound slider shows mute |
+| Wi-Fi disconnected | Alert glyph in the readout | Removed. Windows' own tray reports connectivity |
 | Inbox | Bell with count, hidden at zero | Trailing pill with count while items wait; hidden at zero |
 | Listening | Microphone, waveform, Stop | Island moment: orange microphone (Apple's microphone-in-use colour) and waveform; Stop on hover or by clicking the island |
 | Transcribing | Spinner | Spinner in the island's leading slot, shared with agent work |
