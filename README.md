@@ -51,15 +51,8 @@ and our typed Win32 bindings (`winapi/`), independently of the assistant.
    |---|---|
    | `OPENAI_BASE_URL` | your endpoint, ending in `/v1` |
    | `OPENAI_API_KEY` | its key |
-   | `WORKSPACE_CHAT_CLASS` | optional; default `small` (tidied dictation and dictated commands) |
-   | `WORKSPACE_AGENT_CLASS` | optional; default `extra_large` (main agent, canvas investigation and self-modification) |
-   | `WORKSPACE_NOTIFICATION_SCREEN_CLASS` | optional; default `small` (quick notification relevance screening) |
-   | `WORKSPACE_NOTIFICATION_RESEARCH_CLASS` | optional; default `medium` (focused inbox research, including public lookups) |
-   | `WORKSPACE_PERSONAL_WORK_CLASS` | optional; default `medium` (matching sources to ongoing work) |
-   | `WORKSPACE_MODEL_SMALL` | optional; default `gpt-6-luna` |
-   | `WORKSPACE_MODEL_MEDIUM` | optional; default `gpt-6.1-terra` |
-   | `WORKSPACE_MODEL_LARGE` | optional; default `gpt-6.1-sol` |
-   | `WORKSPACE_MODEL_EXTRA_LARGE` | optional; default `gpt-6-astra` |
+   | `WORKSPACE_FAST_MODEL` | optional; default `gpt-6-luna` (tidied dictation, dictated commands and notification screening) |
+   | `WORKSPACE_AGENT_MODEL` | optional; default `gpt-6-astra` (the agent and every other model job) |
    | `WORKSPACE_AGENT_REASONING_EFFORT` | optional; default `low` for quicker replies; use an effort supported by your selected model |
    | `WORKSPACE_AGENT_CONTEXT` | optional; default `recent`; set `off` to disable idle activity tracking and automatic request context |
    | `WORKSPACE_TRANSCRIBE_MODEL` | optional; default `gpt-4o-transcribe` |
@@ -69,10 +62,7 @@ and our typed Win32 bindings (`winapi/`), independently of the assistant.
    Without the first two the layout, snippets, apps and window keys still work;
    the AI keys tell you what's missing.
 
-   Every `*_CLASS` accepts `small`, `medium`, `large` or `extra_large`. Roles and
-   delegated subtasks share the same four model mappings. Choose a size for a
-   role; change its `WORKSPACE_MODEL_*` value to select a different provider model
-   for every use of that size. Restart Workspace after changing environment settings.
+   Restart Workspace after changing environment settings.
 3. Turn on Settings → Privacy & security → Microphone → **Let desktop apps access
    your microphone**.
 4. Double-click **`StartWorkspace.cmd`**. A dot appears in the tray. To start it at login,
@@ -442,9 +432,9 @@ existing UI thread after Workspace starts. History widgets are created when you
 open it. The source workspace is prepared only when a source tool is used.
 Failed requests show the reason in a bubble and the timeline;
 they also notify you and are recorded in
-`assistant.log`. Agent tasks use the **extra-large size with low reasoning effort**
-by default, mapped to GPT-6 Astra. `WORKSPACE_AGENT_CLASS` selects another size,
-independently of dictation cleanup and background screening/research. The endpoint must
+`assistant.log`. Agent tasks use **GPT-6 Astra with low reasoning effort**
+by default. `WORKSPACE_AGENT_MODEL` selects another model for the agent, inbox
+research and work correlation, independently of dictation cleanup and notification screening. The endpoint must
 support the selected model through the Responses API.
 
 File writes, commands, opening files, desktop control and self-updates run
@@ -511,19 +501,6 @@ It stops after 80 steps (`AGENT_MAX_STEPS`). The task journal records each
 consequential action and its outcome. Browser and Teams arguments and results stay
 out of persistent journals and activity details, including form values and
 sign-in codes.
-
-The main agent can delegate independent work to **small**, **medium**, **large**
-or **extra large** subagents, choosing the smallest suitable model for each task.
-Their model IDs are configurable above; these are workload classes, not published
-parameter counts. Up to four subagents run in parallel per delegation, each with
-at most twelve model turns and the current task's tools.
-They inherit the configured reasoning effort, so choose an effort supported by
-all selected models. Child conversations are separate; the main agent supplies
-their context, collects named results and owns the final answer and verification.
-The timeline shows each child's class and status. Stop covers every child.
-Computer actions remain serialized; work on the same desktop, tab, source draft
-or document belongs to one agent because multi-call sequences are not exclusive.
-Subagents cannot spawn further agents.
 
 ## Durable work
 
@@ -661,14 +638,8 @@ assembles content parts; immutable timeline entries replace each live row.
 Publishers belong to one request, so late events cannot enter another turn.
 Tools run
 one at a time, enforced locally so endpoints that reject `parallel_tool_calls`
-still work. `delegate_subtasks` is an SDK orchestration tool: it validates named
-tasks and class choices, then starts independent `Runner` loops using the selected
-configured models. All loops share the same effect gate and durable claim; child
-loops receive only the profile's existing tools. Only the main conversation is
-checkpointed, with the collected child results retained for follow-ups. Child
-response text stays with the manager rather than appearing as its final answer.
-The installed SDK owns loop execution, HTTP recovery and stream parsing;
-Workspace owns class routing, bounds, cancellation and effect ownership.
+still work. The installed SDK owns loop execution, HTTP recovery and stream parsing;
+Workspace owns bounds, cancellation and effect ownership.
 Automatic request images and screenshot tool results share a limit
 of two retained images.
 Response storage and tracing are disabled. Quick chat and transcription still

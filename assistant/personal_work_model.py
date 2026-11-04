@@ -63,7 +63,7 @@ class Correlator:
             agent: Agent[None] = Agent(
                 name="Workspace personal work",
                 instructions=INSTRUCTIONS,
-                model=OpenAIResponsesModel(model=self.settings.models.model(self.settings.personal_work_class), openai_client=client),
+                model=OpenAIResponsesModel(model=self.settings.agent_model, openai_client=client),
                 output_type=WorkPlan,
                 model_settings=ModelSettings(reasoning=reasoning, store=False),
             )

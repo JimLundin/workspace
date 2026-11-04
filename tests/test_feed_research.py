@@ -18,7 +18,7 @@ from assistant.feed_sources import Excerpt, PendingFeed, triage_evidence
 from assistant.feed_triage import INSTRUCTIONS, Board, decode, proposal_revision, restored, saved, unassessed
 from assistant.feed_triage_service import classify
 from assistant.feed_work import FeedWork
-from assistant.llm import Models, Settings, settings_from
+from assistant.llm import Settings, settings_from
 from automation.activity import ContextSnapshot
 from automation.context import ContextStore, ProjectNote
 from automation.json_value import Json
@@ -39,11 +39,10 @@ def test_quick_screening_keeps_routine_notices_out_of_deep_research() -> None:
     quiet = captured("fyi", Excerpt("Status", "Routine FYI, no action.", 1))
     action = captured("review", Excerpt("Approval", "Please review the budget.", 2))
     batch = (quiet, action)
-    # Configured screening/research sizes must reach their own SDK requests,
-    # independently of quick chat and the main agent.
+    # Screening uses the fast model and research the agent model, defaults and overrides alike.
     for overrides, screening_model, research_model in (
-        ({}, "gpt-6-luna", "gpt-6.1-terra"),
-        ({"WORKSPACE_NOTIFICATION_SCREEN_CLASS": "large", "WORKSPACE_NOTIFICATION_RESEARCH_CLASS": "extra_large"}, "screen", "research"),
+        ({}, "gpt-6-luna", "gpt-6-astra"),
+        ({"WORKSPACE_FAST_MODEL": "screen", "WORKSPACE_AGENT_MODEL": "research"}, "screen", "research"),
     ):
         with fake_endpoint() as endpoint:
             endpoint.replies = [
@@ -54,8 +53,6 @@ def test_quick_screening_keeps_routine_notices_out_of_deep_research() -> None:
                 {
                     "OPENAI_BASE_URL": endpoint.url,
                     "OPENAI_API_KEY": "fixture",
-                    "WORKSPACE_MODEL_LARGE": "screen",
-                    "WORKSPACE_MODEL_EXTRA_LARGE": "research",
                     **overrides,
                 }
             )
@@ -91,7 +88,7 @@ def test_screening_rejects_missing_duplicate_and_unknown_sources_before_research
 
 def test_background_research_reads_topic_memory_full_thread_and_file_before_publishing(tmp_path: Path) -> None:
     # Defect: the reviewer cannot retrieve sources, drops observations between
-    # tool turns, uses quick chat, or exposes write/desktop/approval tools.
+    # tool turns, uses the fast model, or exposes write/desktop/approval tools.
     path = tmp_path / "atlas.txt"
     path.write_text("The approved Atlas budget is 100; the current forecast is 112.", encoding="utf-8")
     tasks = TaskStore(tmp_path / "work.sqlite3")
@@ -133,7 +130,7 @@ def test_background_research_reads_topic_memory_full_thread_and_file_before_publ
             requests = tuple(_OBJECT.validate_json(item.body) for item in endpoint.received[1:])
         assert len(decode(review, batch)) == 1 and len(requests) == 3
         for request in requests:
-            assert request["model"] == "gpt-6.1-terra" and request["reasoning"] == {"effort": "high", "summary": "auto"}
+            assert request["model"] == "gpt-6-astra" and request["reasoning"] == {"effort": "high", "summary": "auto"}
             assert request["store"] is False
         match requests[0]["tools"]:
             case list() as tools:
@@ -221,7 +218,7 @@ def test_public_research_supplies_findings_or_an_explicit_access_gap_without_los
                 return endpoint.replies.pop(0)
 
             endpoint.respond = respond
-            settings = Settings(endpoint.url, "fixture", "transcribe", "", "", models=Models(small="quick", medium="agent"))
+            settings = Settings(endpoint.url, "fixture", "transcribe", "", "", fast_model="quick", agent_model="agent")
             review = classify(settings, batch, ())
             assert len(decode(review, batch)) == 1 and len(endpoint.received) == 4
             evidence = endpoint.last.body.decode()

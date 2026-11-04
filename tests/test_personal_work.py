@@ -9,7 +9,7 @@ from pathlib import Path
 from unittest import TestCase
 
 from assistant.browser_values import BrowserError, BrowserStatus, PageRow
-from assistant.llm import AgentClass, Models, Settings
+from assistant.llm import Settings
 from assistant.personal_work_model import Correlator
 from assistant.personal_work_service import PersonalWork, correlation_input
 from assistant.personal_work_sources import BrowserSources, Tab, outlook_sources
@@ -508,7 +508,7 @@ def test_agent_tools_use_the_desktop_owner_and_record_confirmed_edits(tmp_path: 
 
 
 def test_correlation_model_receives_bounded_evidence_and_has_no_action_tools(tmp_path: Path) -> None:
-    # Defect: the connector uses another role's size, omits saved work or
+    # Defect: the connector uses the wrong model, omits saved work or
     # corrections or the shared-outcome policy, or grants the background
     # correlation model action tools.
     store = PersonalStore(tmp_path / "work.sqlite3")
@@ -530,28 +530,17 @@ def test_correlation_model_receives_bounded_evidence_and_has_no_action_tools(tmp
             "output": [message(WIRE.dump_json({"response": WIRE.validate_json(WORK_PLAN.dump_json(plan))}).decode())],
             "usage": {"input_tokens": 10, "output_tokens": 10, "total_tokens": 20},
         }
-        endpoint.replies = [Reply(WIRE.dump_json(output)), Reply(WIRE.dump_json(output))]
-        for personal_work_class, model_id in ((AgentClass.MEDIUM, "work-model"), (AgentClass.LARGE, "selected-model")):
-            model = Correlator(
-                Settings(
-                    endpoint.url,
-                    "key",
-                    "transcribe",
-                    "",
-                    "",
-                    personal_work_class=personal_work_class,
-                    models=Models(medium="work-model", large="selected-model"),
-                )
-            )
-            assert model(captured, threading.Event()) == plan
-            wire = WIRE.validate_json(endpoint.last.body)
-            assert wire["model"] == model_id and wire["store"] is False and not wire.get("tools")
-            assert state.sources[0].id in str(wire["input"])
-            assert existing.work.id in str(wire["input"]) and "Deploy only after supplier approval" in str(wire["input"])
-            assert "rejected" in str(wire["input"])
-            assert "untrusted evidence" in str(wire)
-            assert "overall outcome" in str(wire) and "boundary is ambiguous" in str(wire)
-            assert "WorkPlan" in str(wire["text"])
+        endpoint.replies = [Reply(WIRE.dump_json(output))]
+        model = Correlator(Settings(endpoint.url, "key", "transcribe", "", "", agent_model="work-model"))
+        assert model(captured, threading.Event()) == plan
+        wire = WIRE.validate_json(endpoint.last.body)
+        assert wire["model"] == "work-model" and wire["store"] is False and not wire.get("tools")
+        assert state.sources[0].id in str(wire["input"])
+        assert existing.work.id in str(wire["input"]) and "Deploy only after supplier approval" in str(wire["input"])
+        assert "rejected" in str(wire["input"])
+        assert "untrusted evidence" in str(wire)
+        assert "overall outcome" in str(wire) and "boundary is ambiguous" in str(wire)
+        assert "WorkPlan" in str(wire["text"])
 
 
 def test_document_registration_is_durable_and_does_not_modify_the_file(tmp_path: Path) -> None:

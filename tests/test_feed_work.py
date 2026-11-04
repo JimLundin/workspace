@@ -34,7 +34,7 @@ _OBJECT = TypeAdapter(dict[str, Json])
 
 
 def test_model_gets_project_facts_prior_decisions_task_results_and_recorded_answers(tmp_path: Path) -> None:
-    # Defect: reviewing notifications alone, using the quick chat model, or
+    # Defect: reviewing notifications alone, using the fast model, or
     # omitting durable answers/results loses the context needed for useful suggestions.
     tasks = TaskStore(tmp_path / "work.sqlite3")
     context = ContextStore(tasks.path)
@@ -98,7 +98,7 @@ def test_model_gets_project_facts_prior_decisions_task_results_and_recorded_answ
         endpoint.replies = [screening_reply(((source.identity, "action"),)), says(output(([source.identity], "action")))]
         classify(Settings(endpoint.url, "fixture", "transcribe", "", ""), (source,), (), working_context=working, clock=lambda: 50)
         payload = _OBJECT.validate_json(endpoint.last.body)
-    assert payload["model"] == "gpt-6.1-terra"
+    assert payload["model"] == "gpt-6-astra"
     match payload:
         case {"instructions": str() as instructions, "input": [{"content": str() as evidence}]}:
             review = REVIEW_INPUT.validate_json(evidence)

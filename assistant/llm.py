@@ -10,7 +10,6 @@ import uuid
 import wave
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from enum import Enum
 from http.client import HTTPException, HTTPResponse
 from typing import Final, Literal, NotRequired, TypedDict, assert_never
 
@@ -30,39 +29,8 @@ _SCHEMA = TypeAdapter(dict[str, Json], config=ConfigDict(allow_inf_nan=False))
 
 # ---- Settings --------------------------------------------------------------------------
 
-
-class AgentClass(Enum):
-    SMALL = "small"
-    MEDIUM = "medium"
-    LARGE = "large"
-    EXTRA_LARGE = "extra_large"
-
-
-@dataclass(frozen=True, slots=True)
-class Models:
-    """One model per workload size, shared by background roles and delegated work."""
-
-    small: str = "gpt-6-luna"
-    medium: str = "gpt-6.1-terra"
-    large: str = "gpt-6.1-sol"
-    extra_large: str = "gpt-6-astra"
-
-    def __post_init__(self) -> None:
-        if any(not model.strip() for model in (self.small, self.medium, self.large, self.extra_large)):
-            raise ValueError("Model IDs must not be empty.")
-
-    def model(self, agent_class: AgentClass) -> str:
-        match agent_class:
-            case AgentClass.SMALL:
-                return self.small
-            case AgentClass.MEDIUM:
-                return self.medium
-            case AgentClass.LARGE:
-                return self.large
-            case AgentClass.EXTRA_LARGE:
-                return self.extra_large
-            case _:
-                assert_never(agent_class)
+FAST_MODEL: Final = "gpt-6-luna"
+AGENT_MODEL: Final = "gpt-6-astra"
 
 
 @dataclass(frozen=True, slots=True)
@@ -75,18 +43,16 @@ class Settings:
     """Names and terms to expect when transcribing; helps with jargon. Empty: none."""
     language: str
     """An ISO code such as `sv` or `en` for transcription. Empty: detected."""
-    chat_class: AgentClass = AgentClass.SMALL
-    """Quick jobs: tidying dictation, rewrites, questions and screenshots."""
-    agent_class: AgentClass = AgentClass.EXTRA_LARGE
-    notification_screen_class: AgentClass = AgentClass.SMALL
-    notification_research_class: AgentClass = AgentClass.MEDIUM
-    personal_work_class: AgentClass = AgentClass.MEDIUM
+    fast_model: str = FAST_MODEL
+    """Quick jobs: tidying dictation and screening notifications."""
+    agent_model: str = AGENT_MODEL
+    """The agent and every other model job."""
     agent_reasoning_effort: str = "low"
-    """Reasoning effort for agent tasks; independent of quick chat."""
-    models: Models = Models()
+    """Reasoning effort for agent tasks; independent of the fast model."""
 
-
-_CLASS = TypeAdapter(AgentClass)
+    def __post_init__(self) -> None:
+        if not self.fast_model.strip() or not self.agent_model.strip():
+            raise ValueError("Model IDs must not be empty.")
 
 
 @dataclass(frozen=True, slots=True)
@@ -101,25 +67,15 @@ def settings_from(env: Mapping[str, str]) -> Settings | Missing:
     required = ("OPENAI_BASE_URL", "OPENAI_API_KEY")
     if missing := tuple(name for name in required if not env.get(name)):
         return Missing(missing)
-    models = Models()
     return Settings(
         base_url=env["OPENAI_BASE_URL"].rstrip("/"),
         api_key=env["OPENAI_API_KEY"],
         transcribe_model=env.get("WORKSPACE_TRANSCRIBE_MODEL", "gpt-4o-transcribe"),
         vocabulary=env.get("WORKSPACE_VOCABULARY", ""),
         language=env.get("WORKSPACE_LANGUAGE", ""),
-        chat_class=_CLASS.validate_python(env.get("WORKSPACE_CHAT_CLASS", "small")),
-        agent_class=_CLASS.validate_python(env.get("WORKSPACE_AGENT_CLASS", "extra_large")),
-        notification_screen_class=_CLASS.validate_python(env.get("WORKSPACE_NOTIFICATION_SCREEN_CLASS", "small")),
-        notification_research_class=_CLASS.validate_python(env.get("WORKSPACE_NOTIFICATION_RESEARCH_CLASS", "medium")),
-        personal_work_class=_CLASS.validate_python(env.get("WORKSPACE_PERSONAL_WORK_CLASS", "medium")),
+        fast_model=env.get("WORKSPACE_FAST_MODEL", FAST_MODEL),
+        agent_model=env.get("WORKSPACE_AGENT_MODEL", AGENT_MODEL),
         agent_reasoning_effort=env.get("WORKSPACE_AGENT_REASONING_EFFORT", "low"),
-        models=Models(
-            small=env.get("WORKSPACE_MODEL_SMALL", models.small),
-            medium=env.get("WORKSPACE_MODEL_MEDIUM", models.medium),
-            large=env.get("WORKSPACE_MODEL_LARGE", models.large),
-            extra_large=env.get("WORKSPACE_MODEL_EXTRA_LARGE", models.extra_large),
-        ),
     )
 
 
@@ -424,7 +380,7 @@ def transcribe(settings: Settings, audio: bytes, *, timeout_s: float = 60, conte
 
 def _chat_body(settings: Settings, request: CompletionRequest) -> bytes:
     body: WireCompletion = {
-        "model": request.model or settings.models.model(settings.chat_class),
+        "model": request.model or settings.fast_model,
         "messages": tuple(_message(message) for message in request.messages),
     }
     if request.tools:

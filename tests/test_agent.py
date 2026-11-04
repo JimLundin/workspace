@@ -375,8 +375,8 @@ def test_tool_replay_omits_absent_namespace_and_retains_reasoning_across_follow_
             assert [observed(output) for output in outputs] == ["clipped"]
 
 
-def test_default_agent_uses_extra_large_with_low_reasoning_across_tool_turns(tmp_path: Path) -> None:
-    # Defect: the default main-agent size fails to reach the SDK on every turn.
+def test_default_agent_model_with_low_reasoning_reaches_every_tool_turn(tmp_path: Path) -> None:
+    # Defect: the default agent model fails to reach the SDK on every turn.
     with fake_endpoint() as endpoint:
         rig = Rig(endpoint, calls(("get_clipboard", {})), says("Read it."), work=durable(tmp_path))
         settings = settings_from({"OPENAI_BASE_URL": endpoint.url, "OPENAI_API_KEY": "k"})
