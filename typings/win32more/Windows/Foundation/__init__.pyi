@@ -1,5 +1,3 @@
-import ctypes
-
 from win32more._win32 import ComPtr
 
 class AsyncStatus:
@@ -18,7 +16,3 @@ class IAsyncAction(ComPtr): ...
 
 class IAsyncOperation[T](ComPtr):
     def GetResults(self) -> T: ...
-
-class TimeSpan(ctypes.Structure):
-    def __init__(self, duration: int) -> None: ...
-    Duration: int
