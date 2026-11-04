@@ -11,7 +11,7 @@ from assistant.agent_tools import NO_ARGUMENTS, Args, ArgumentError, Display, No
 from automation.actions import Change, Evidence, Observation
 from automation.context import ContextStore, Preference
 from automation.execution import WorkExecution
-from automation.self_review import TaskRecord, agent_lesson, describe_history, lesson, worked_on
+from automation.self_review import TaskRecord, agent_lesson, describe_history, describe_history_page, lesson, worked_on
 from automation.store import TaskStore
 from automation.task import ActionUncertain, ActionVerified, Task
 
@@ -29,7 +29,8 @@ type Text = Annotated[str, Field(strict=True, min_length=1)]
 class HistoryArguments:
     task_id: Annotated[str, Field(strict=True)] = ""
     day: Annotated[str, Field(strict=True, description="A local date, YYYY-MM-DD.")] = ""
-    recent: Annotated[int, Field(strict=True, ge=1, le=100)] = 20
+    recent: Annotated[int, Field(strict=True, ge=1, le=100, description="Summary page size, capped at 20 whole tasks.")] = 20
+    offset: Annotated[int, Field(strict=True, ge=0, le=1_000, description="Use next_offset to continue the same day/recent selection.")] = 0
 
 
 @dataclass(frozen=True, slots=True)
@@ -65,9 +66,9 @@ class SelfReviewTools:
             Tool(
                 argument_spec(
                     "work_history",
-                    "Read your own recorded work: tasks with their results, goal revisions the user made, questions you asked, "
-                    "and actions that were uncertain or not applied. Give task_id for one task, day for a local date, or neither "
-                    "for the most recent tasks.",
+                    "Enumerate bounded task outcome summaries with explicit next_offset; repeat the same day/recent selection "
+                    "with that offset until exhausted. Day filters the newest 1000 journal tasks; scan coverage is reported. "
+                    "Give task_id to drill into existing action diagnostics, goal revisions and answers (offset must be zero).",
                     _HISTORY,
                 ),
                 typed_run(_HISTORY, self.work_history),
@@ -98,26 +99,32 @@ class SelfReviewTools:
             ),
         )
 
-    def _records(self, request: HistoryArguments) -> tuple[TaskRecord, ...]:
+    def _history(self, request: HistoryArguments) -> str:
+        """Enumeration reads task outcomes only; explicit identity retains diagnostics."""
         if request.task_id:
+            if request.day or request.offset:
+                raise ArgumentError("task_id detail cannot be combined with day or offset.")
             found = self.store.get(request.task_id)
             if found is None:
                 raise ArgumentError(f"there's no task {request.task_id}.")
-            tasks: tuple[Task, ...] = (found,)
-        elif request.day:
+            record = TaskRecord(found, self.store.actions(found.id, limit=100), self.store.revisions(found.id), self.store.responses(found.id))
+            return describe_history((record,)) + "\nDetail coverage: newest 100 actions and 100 goal revisions; current-goal answers."
+        tasks: tuple[Task, ...] = self.store.list_tasks(limit=1_000)
+        coverage = (
+            "Scan coverage: newest 1000 journal tasks; older tasks may exist outside this scan."
+            if len(tasks) == 1_000
+            else f"Scan coverage: all {len(tasks)} journal tasks."
+        )
+        if request.day:
             try:
                 day = date.fromisoformat(request.day)
             except ValueError as error:
                 raise ArgumentError("day must be a date in the form YYYY-MM-DD.") from error
-            tasks = worked_on(self.store.list_tasks(limit=500), day)
-        else:
-            tasks = self.store.list_tasks(limit=request.recent)
-        return tuple(
-            TaskRecord(task, self.store.actions(task.id, limit=100), self.store.revisions(task.id), self.store.responses(task.id)) for task in tasks
-        )
+            tasks = worked_on(tasks, day)
+        return describe_history_page(tasks, request.offset, request.recent) + "\n" + coverage
 
     def work_history(self, args: Args, request: HistoryArguments) -> Output:
-        return self.session.effect(args.operation, lambda: Output(describe_history(self._records(request))))
+        return self.session.effect(args.operation, lambda: Output(self._history(request)))
 
     def list_lessons(self, args: Args, _request: NoArguments) -> Output:
         def read() -> Output:

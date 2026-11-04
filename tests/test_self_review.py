@@ -11,7 +11,7 @@ from assistant.task_profiles import GeneralEffects, Profiles, unseen
 from assistant.workspace import Workspace
 from automation.context import ContextStore, Preference
 from automation.execution import Log
-from automation.self_review import ReviewingRunner, TaskRecord, describe_history
+from automation.self_review import ReviewingRunner, TaskRecord, describe_history, describe_history_page
 from automation.store import TaskStore
 from automation.task import (
     Action,
@@ -132,6 +132,62 @@ def test_history_preserves_install_evidence_and_unsettled_actions(tmp_path: Path
     assert "No settled outcome recorded." in text
     assert "action-0; run original-run" in text
     assert "1 returned, 1 running, 1 verified" in text
+
+
+def test_summary_pages_keep_whole_outcomes_and_explicit_continuation(tmp_path: Path) -> None:
+    # Defect: long results truncate later identities, recent is ignored, or paging
+    # skips an outcome. Summary enumeration must not load verbose action records.
+    store = TaskStore(tmp_path / "work.sqlite3")
+    for index in range(23):
+        store.submit(f"task-{index:02}", "Requested work", "Do it.", RequestSource("chat"), at=NOW.timestamp() + index)
+    tasks = store.list_tasks()
+    first = describe_history_page(tasks, 0, 100)
+    second = describe_history_page(tasks, 20, 100)
+    assert first.count("## ") == 20 and "next_offset: 20" in first
+    assert second.count("## ") == 3 and "next_offset: none" in second
+    assert "task-03:" in first and "task-02:" not in first
+    assert "task-02:" in second and "task-03:" not in second
+    assert describe_history_page(tasks, 0, 2).count("## ") == 2
+    assert "No tasks match." in describe_history_page(tasks, 23, 2)
+
+
+def test_history_tool_pages_day_and_recent_then_drills_into_diagnostics(tmp_path: Path) -> None:
+    # Defect: tool wiring ignores day page size/offset or replaces task diagnostics
+    # with summaries, leaving daily reviews without a route to their evidence.
+    store = TaskStore(tmp_path / "work.sqlite3")
+    settle(store, "failed", Failed("Missing report."), revised="Use Finance.")
+    store.submit("older", "Old work", "Old goal.", RequestSource("chat"), at=(NOW - timedelta(days=2)).timestamp())
+    machine, errors = FakeMachine(), list[str]()
+    with fake_endpoint() as endpoint:
+        execution = AgentExecution(
+            Settings(endpoint.url, "fixture", "transcribe", "", ""),
+            machine,
+            Profiles(
+                Workspace(live_tree(tmp_path / "live"), tmp_path / "workspace"), GeneralEffects(unseen, no_feed, ContextStore(store.path)), None
+            ),
+            record=lambda _record: None,
+            report_error=errors.append,
+            close_background=machine.close_background,
+        )
+        endpoint.replies = [
+            calls(("work_history", {"day": "2026-11-03", "recent": 1})),
+            calls(("work_history", {"day": "2026-11-03", "recent": 1, "offset": 1})),
+            calls(("work_history", {"recent": 1})),
+            calls(("work_history", {"task_id": "failed"})),
+            says("Reviewed."),
+        ]
+        store.submit("inspection", "Inspection", "Read history.", RequestSource("self-review", SelfReview("day")), at=NOW.timestamp(), priority=10)
+        claim = store.claim("worker", "inspection-run", at=NOW.timestamp())
+        assert claim is not None and claim.task.id == "inspection"
+        outcome = execution.run_work(claim, store, FakeWindow(), threading.Event())
+    assert isinstance(outcome, Completed), (outcome, errors)
+    bodies = tuple(request.body.decode("utf-8") for request in endpoint.received)
+    assert "failed: Missing report." in bodies[1] and "next_offset: none" in bodies[1]
+    assert "Goal revision 1: Use Finance." not in bodies[1]
+    assert "No tasks match." in bodies[2]
+    assert "next_offset: 1" in bodies[3]
+    assert "Goal revision 1: Use Finance." in bodies[4]
+    assert "Detail coverage: newest 100 actions" in bodies[4]
 
 
 def test_saved_lessons_are_verified_and_user_preferences_stay_the_users(tmp_path: Path) -> None:

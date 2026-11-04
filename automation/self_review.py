@@ -129,7 +129,8 @@ def daily_review(day: date) -> Submission:
     """The day's identity makes its review idempotent however many runs request it."""
     subject = day.isoformat()
     prompt = (
-        f"Review your own work on {subject}. Read it with work_history (day {subject}). Look for patterns across tasks: "
+        f"Review your own work on {subject}. Read it with work_history (day {subject}), follow every next_offset, "
+        "and inspect relevant task_id details before drawing conclusions. Look for patterns across tasks: "
         "repeated failures, repeated questions, goals the user had to correct, and slow or roundabout methods. " + _METHOD
     )
     return Submission("self-review:day:" + subject, f"Daily review: {subject}", prompt, RequestSource(REVIEW_CONVERSATION, SelfReview(subject)))
@@ -210,6 +211,24 @@ def describe_history(records: Iterable[TaskRecord], *, limit: int = 40_000) -> s
     if not text:
         return "No tasks match."
     return text if len(text) <= limit else text[:limit] + f"\n[cut: showing {limit} of {len(text)} characters]"
+
+
+def describe_history_page(tasks: Sequence[Task], offset: int, recent: int) -> str:
+    """Whole task summaries keep verbose diagnostics from hiding later outcomes.
+
+    Twenty summaries fit the model's output budget even with long results.
+    Offsets refer to the same newest-first selection; task_id drills into evidence.
+    """
+    page = tasks[offset : offset + min(recent, 20)]
+    lines = tuple(
+        f"## {task.id}: {task.title}\n"
+        f"Updated {datetime.fromtimestamp(task.updated_at).astimezone():%Y-%m-%d %H:%M}; {_state_text(task)}\n"
+        f"Goal revisions: {task.goal_revision}; detail: work_history(task_id='{task.id}')."
+        for task in page
+    )
+    end = offset + len(page)
+    continuation = f"next_offset: {end}" if end < len(tasks) else "next_offset: none"
+    return ("\n\n".join(lines) or "No tasks match.") + f"\n\n{continuation}; matched tasks in scan: {len(tasks)}."
 
 
 def lesson(name: str, rule: str, task_id: str, at: float) -> Preference:
