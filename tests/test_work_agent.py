@@ -53,12 +53,12 @@ from automation.task import (
     Blocked,
     Completed,
     Control,
-    MeetingFollowup,
     Question,
     RequestKind,
     RequestSource,
     Running,
     RunRef,
+    SelfReview,
     Task,
     TaskStatus,
     TextAnswer,
@@ -312,7 +312,7 @@ def pending_approval(rig: WorkRig, prompt: str = "Send the reviewed draft") -> t
 def test_queued_requests_persist_with_their_invocation_context_without_reopening_the_panel(tmp_path: Path) -> None:
     # Defect: an agent voice request is dropped while another task is running,
     # or queues under stale invocation context instead of preserving both tasks;
-    # or a meeting follow-up captures desktop context its agent must not see.
+    # or a self-review captures desktop context its agent must not see.
     current = invocation("First workbook")
     rig = WorkRig(tmp_path, context=lambda: current)
     try:
@@ -334,10 +334,10 @@ def test_queued_requests_persist_with_their_invocation_context_without_reopening
         assert {task.prompt for task in TaskStore(rig.tasks.path).list_tasks()} == {"Summarize this", "And this one"}
         assert b"First workbook" not in rig.tasks.path.read_bytes(), "Activity snapshots must remain volatile."
         assert rig.agent.running() and rig.started == [True]
-        rig.agent.submit_identified("meeting-task", "Prepare the meeting follow-up", MeetingFollowup("d" * 64))
+        rig.agent.submit_identified("review-task", "Review the previous task", SelfReview("previous-task"))
         rig.agent.submit_identified("routine-task", "Run the standing instruction", RequestKind.GENERAL)
         rig.refresh()
-        assert rig.bridge.registrations[-2:] == [("meeting-task", None, 1234), ("routine-task", invocation("Second workbook"), 1234)]
+        assert rig.bridge.registrations[-2:] == [("review-task", None, 1234), ("routine-task", invocation("Second workbook"), 1234)]
     finally:
         rig.close()
 
@@ -648,10 +648,10 @@ def test_routine_and_context_commands_persist_without_implicit_enablement(tmp_pa
 
 
 def test_follow_up_retains_related_context_and_user_controls_survive_reopening(tmp_path: Path) -> None:
-    # Defect: a follow-up inherits a meeting follow-up's constrained profile,
-    # so it cannot open a preparation of its own.
+    # Defect: a follow-up inherits a self-review's constrained profile,
+    # so it runs without the general desktop context.
     with work(tmp_path) as rig:
-        rig.agent.submit_identified("original-report", "Prepare the original report", MeetingFollowup("d" * 64))
+        rig.agent.submit_identified("original-report", "Prepare the original report", SelfReview("previous-task"))
         rig.refresh()
         claim = rig.tasks.claim("worker-one", "report-run", at=rig.clock())
         assert claim is not None
@@ -659,7 +659,7 @@ def test_follow_up_retains_related_context_and_user_controls_survive_reopening(t
         rig.agent.command(FollowUp(claim.task.id, "Add a one-page summary"))
         rig.refresh()
         follow_up = next(task for task in rig.tasks.list_tasks() if task.id != claim.task.id)
-        assert isinstance(claim.task.source, RequestSource) and claim.task.source.profile == MeetingFollowup("d" * 64)
+        assert isinstance(claim.task.source, RequestSource) and claim.task.source.profile == SelfReview("previous-task")
         assert follow_up.source == RequestSource(claim.task.source.conversation_id) and "output/report.md" in follow_up.prompt
         assert "Add a one-page summary" in follow_up.prompt
         rig.agent.command(ControlTask(follow_up.id, Control.PAUSE))

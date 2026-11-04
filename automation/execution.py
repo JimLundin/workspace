@@ -367,8 +367,7 @@ class WorkExecution:
             "observation ID to record whether the intended effect was applied. A successful tool return alone never completes a task. "
             "Inspections must be later than the attempt and cover the same file, tab, chat or window. "
             "An arbitrary script requires explicit inspection of its actual intended result. "
-            "File writes and meeting publication provide digest verification automatically; meeting mail saves verify their exact "
-            "draft contents automatically. Uncertain meeting mail saves require the draft adapter's readback on resume. "
+            "File writes provide digest verification automatically. "
             "If a human question or approval is pending, this run will suspend. "
             "The next run must use exactly the approved operation; a changed operation requires a fresh review.",
             "Task identity: " + self.claim.task.id,

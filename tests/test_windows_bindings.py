@@ -1018,7 +1018,7 @@ def test_assistant_queries_a_layout_that_started_before_it() -> None:
 
 
 def test_meeting_file_handoff_keeps_canonical_path_and_reports_shell_failure(tmp_path: Path) -> None:
-    path = tmp_path / "saved-follow-up.eml"
+    path = tmp_path / "transcript.md"
     opened: list[Path] = []
     problems: list[str] = []
 

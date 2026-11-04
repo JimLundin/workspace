@@ -101,7 +101,7 @@ def test_finished_meeting_produces_one_verified_notes_file_and_survives_restart(
         execution = AgentExecution(
             settings,
             machine,
-            Profiles(Workspace(live_tree(tmp_path / "source"), tmp_path / "workspace"), GeneralEffects(unseen, no_feed), None),
+            Profiles(Workspace(live_tree(tmp_path / "source"), tmp_path / "workspace"), GeneralEffects(unseen, no_feed)),
             record=lambda record: None,
             report_error=errors.append,
             close_background=machine.close_background,

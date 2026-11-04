@@ -23,7 +23,6 @@ from automation.task import (
     Failed,
     FileDigest,
     Interrupted,
-    MeetingFollowup,
     Question,
     RequestSource,
     RoutineSource,
@@ -315,17 +314,6 @@ def test_refresh_approval_requires_exact_pending_approval_and_never_approves(tmp
     reopened.finish(fresh.run, Waiting(Question("question", "Which project?", "")), at=10)
     assert reopened.refresh_approval("task", "question", at=11) is None
     assert reopened.answer("task", "question", TextAnswer("Project A"), at=12) is not None
-
-
-def test_meeting_followups_are_listed_newest_first_regardless_of_other_work(tmp_path: Path) -> None:
-    # Defect: the query returns other profiles or drops older follow-ups behind recently updated work.
-    store = TaskStore(tmp_path / "work.sqlite3")
-    for index, bundle in enumerate("abc"):
-        store.submit(f"meeting-{bundle}", "Meeting", "Prepare notes.", RequestSource("chat", MeetingFollowup(bundle * 64)), at=index)
-    for index in range(3):
-        store.submit(f"chat-{index}", "Chat", "A later request.", RequestSource("chat"), at=10 + index)
-    assert [task.id for task in store.meeting_followups(2)] == ["meeting-c", "meeting-b"]
-    assert [task.id for task in store.meeting_followups(10)] == ["meeting-c", "meeting-b", "meeting-a"]
 
 
 def test_timed_waits_wake_at_the_deadline_and_blocked_work_requires_explicit_resume(tmp_path: Path) -> None:

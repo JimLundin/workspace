@@ -87,17 +87,6 @@ class FeedHandoff:
 
 
 @dataclass(frozen=True, slots=True)
-class MeetingFollowup:
-    """A prepared meeting follow-up: `bundle` is the content digest of its saved recordings."""
-
-    bundle: str
-    kind: Literal["meeting_followup"] = "meeting_followup"
-
-    def __post_init__(self) -> None:
-        digest(self.bundle, "meeting bundle digest")
-
-
-@dataclass(frozen=True, slots=True)
 class SelfReview:
     """The agent's review of its own work: one task's run (`subject` is that task) or a day (`subject` is its date)."""
 
@@ -108,7 +97,7 @@ class SelfReview:
         identifier(self.subject, "review subject")
 
 
-type Profile = RequestKind | FeedHandoff | MeetingFollowup | SelfReview
+type Profile = RequestKind | FeedHandoff | SelfReview
 """What a requested task is for: it selects the agent's tools, instructions and completion check."""
 
 
@@ -120,7 +109,7 @@ class RequestSource:
 
     def __post_init__(self) -> None:
         identifier(self.conversation_id, "conversation identity")
-        variant(self.profile, (RequestKind, FeedHandoff, MeetingFollowup, SelfReview), "request profile")
+        variant(self.profile, (RequestKind, FeedHandoff, SelfReview), "request profile")
 
 
 @dataclass(frozen=True, slots=True)
@@ -421,24 +410,7 @@ class FileDigest:
         digest(self.sha256, "file digest")
 
 
-@dataclass(frozen=True, slots=True)
-class MailTarget:
-    """The exact meeting draft revision a mail save wrote; only its adapter's readback verifies it."""
-
-    version: str
-    draft_id: str
-    revision: int
-    fingerprint: str
-    kind: Literal["mail_target"] = "mail_target"
-
-    def __post_init__(self) -> None:
-        digest(self.version, "meeting package version")
-        identifier(self.draft_id, "meeting draft identity")
-        integer(self.revision, "meeting draft revision")
-        digest(self.fingerprint, "mail content fingerprint")
-
-
-type Verification = NoVerification | FileDigest | MailTarget
+type Verification = NoVerification | FileDigest
 
 
 @dataclass(frozen=True, slots=True)
@@ -454,7 +426,7 @@ class ActionSpec:
         text(self.label, "action label", maximum=1_024)
         digest(self.fingerprint)
         strings(self.resources, "action resource", maximum=1_024, count=32)
-        variant(self.verification, (NoVerification, FileDigest, MailTarget), "action verification")
+        variant(self.verification, (NoVerification, FileDigest), "action verification")
 
 
 class ActionPending(Enum):

@@ -162,9 +162,7 @@ def test_history_tool_pages_day_and_recent_then_drills_into_diagnostics(tmp_path
         execution = AgentExecution(
             Settings(endpoint.url, "fixture", "transcribe", "", ""),
             machine,
-            Profiles(
-                Workspace(live_tree(tmp_path / "live"), tmp_path / "workspace"), GeneralEffects(unseen, no_feed, ContextStore(store.path)), None
-            ),
+            Profiles(Workspace(live_tree(tmp_path / "live"), tmp_path / "workspace"), GeneralEffects(unseen, no_feed, ContextStore(store.path))),
             record=lambda _record: None,
             report_error=errors.append,
             close_background=machine.close_background,
@@ -201,7 +199,7 @@ def test_saved_lessons_are_verified_and_user_preferences_stay_the_users(tmp_path
         execution = AgentExecution(
             Settings(endpoint.url, "fixture", "transcribe", "", ""),
             machine,
-            Profiles(Workspace(live_tree(tmp_path / "live"), tmp_path / "workspace"), GeneralEffects(unseen, no_feed, lessons), None),
+            Profiles(Workspace(live_tree(tmp_path / "live"), tmp_path / "workspace"), GeneralEffects(unseen, no_feed, lessons)),
             record=lambda _record: None,
             report_error=errors.append,
             close_background=machine.close_background,

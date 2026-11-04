@@ -121,9 +121,7 @@ IDs. Pagination covers rendered rows only. Scroll the list with generic browser
 tools to load more, then read it again. Search scope is reported instead of silently
 changed. Existing open drafts block search, selection and reply preparation.
 The tools never click Send. Inspect the open editor and Outlook's autosave status
-before closing a draft, and inspect an uncertain result before retrying. The
-existing local classic-Outlook/file draft workflow remains available for prepared
-meeting packages.
+before closing a draft, and inspect an uncertain result before retrying.
 
 `teams_web_read` returns rendered chat identities,
 selected messages, authors and reactions in an explicit signed-in Teams page.

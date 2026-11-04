@@ -35,7 +35,6 @@ class Menu(Enum):
     TRANSCRIPTS = 13
     WORK = 14
     TASKBAR = 15
-    FOLLOWUPS = 17
     RESTART_ASSISTANT = 18
     RESTART_AUTOMATION = 19
 
@@ -68,7 +67,6 @@ def menu_items(state: MenuState) -> tuple[MenuItem, ...]:
         MenuItem(Menu.STOP_AGENT.value, "Stop agent\t" + shortcut_hint(shortcut(Tool.STOP)), enabled=state.agent_running),
         MenuItem(Menu.MEETING.value, "Stop recording" if state.capturing else "Record a meeting"),
         MenuItem(Menu.TRANSCRIPTS.value, "Transcripts"),
-        MenuItem(Menu.FOLLOWUPS.value, "Meeting follow-up…"),
         MenuItem(0),
         MenuItem(Menu.UNDO.value, "Undo the last update"),
         MenuItem(Menu.USAGE.value, "Usage report"),

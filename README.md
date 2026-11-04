@@ -377,12 +377,7 @@ This uses Windows WASAPI and the existing configured transcription endpoint;
 there are no new dependencies. Chunk sizing and previous-chunk context follow
 the [official OpenAI speech-to-text documentation](https://developers.openai.com/api/docs/guides/speech-to-text).
 
-Choose **Meeting follow-up…** from the tray, or **Meetings** in Work, to select
-completed recording segments and prepare sourced notes, actions and email drafts.
-The Qt editors retain unfinished writing across background updates, link claims
-to the exact saved transcript lines, and open the saved notes in their own application.
-See [meeting follow-through](docs/meeting-followup.md) for source selection,
-saved versions, editing and Outlook handoff.
+Open **Meetings** in Work to browse saved recordings and read their transcripts.
 
 ## The agent
 
@@ -676,9 +671,7 @@ through `assistant/sdk.py`. Its `Runner` owns model turns and tool execution;
 (`assistant/*_tools.py`) owns its tools' schemas, permissions and evidence.
 A task's profile owns its execution and toolset in `assistant/task_profiles.py`:
 a general request continues its conversation with the request's desktop context
-and offers the whole desktop,
-and a prepared meeting follow-up runs in its own conversation without desktop
-context and offers only its selected recordings, notes and unsent drafts. The supervised
+and offers the whole desktop. The supervised
 automation process owns execution, browser sessions, and the durable action
 journal; the assistant owns views, human input, and audio capture. The SDK
 uses your configured OpenAI-compatible

@@ -216,16 +216,16 @@ def test_watching_a_missing_id_distinguishes_an_observed_absence_from_a_failed_r
         rig.close()
 
 
-def test_caller_and_meeting_watches_retain_each_others_tasks(tmp_path: Path) -> None:
+def test_caller_and_canvas_watches_retain_each_others_tasks(tmp_path: Path) -> None:
     rig = WorkRig(tmp_path)
     try:
         rig.agent.watch(("caller-result",))
-        rig.agent.watch(("meeting-followup",), owner="meetings")
-        assert {problem.task_id for problem in rig.refresh().submission_problems} == {"caller-result", "meeting-followup"}
+        rig.agent.watch(("canvas-run",), owner="canvas")
+        assert {problem.task_id for problem in rig.refresh().submission_problems} == {"caller-result", "canvas-run"}
         rig.agent.watch(())
-        assert {problem.task_id for problem in rig.refresh().submission_problems} == {"meeting-followup"}
+        assert {problem.task_id for problem in rig.refresh().submission_problems} == {"canvas-run"}
         rig.agent.watch(("caller-result",))
-        rig.agent.watch((), owner="meetings")
+        rig.agent.watch((), owner="canvas")
         assert {problem.task_id for problem in rig.refresh().submission_problems} == {"caller-result"}
     finally:
         rig.close()
@@ -237,12 +237,12 @@ def test_watch_capacity_rejection_preserves_both_views_interests(tmp_path: Path)
     meetings = tuple(f"meeting-{index}" for index in range(256))
     try:
         rig.agent.watch(caller)
-        rig.agent.watch(meetings, owner="meetings")
+        rig.agent.watch(meetings, owner="canvas")
         with TestCase().assertRaisesRegex(ValueError, "512"):
-            rig.agent.watch((*meetings, "one-too-many"), owner="meetings")
+            rig.agent.watch((*meetings, "one-too-many"), owner="canvas")
         assert {problem.task_id for problem in rig.refresh().submission_problems} == {*caller, *meetings}
-        rig.agent.watch((), owner="meetings")
-        rig.agent.watch(("replacement",), owner="meetings")
+        rig.agent.watch((), owner="canvas")
+        rig.agent.watch(("replacement",), owner="canvas")
         assert {problem.task_id for problem in rig.refresh().submission_problems} == {*caller, "replacement"}
     finally:
         rig.close()

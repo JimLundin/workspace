@@ -165,15 +165,11 @@ WORKERS = 4
 # check limit, so installs failed before any test could fail.
 PORTABLE = (
     "tests/test_agent.py",
-    "tests/test_meeting_followup.py",
     "tests/test_publishing.py",
-    "tests/test_meeting_execution.py",
     "tests/test_architecture.py",
-    "tests/test_meeting_workflow.py",
     "tests/test_quality.py",
     "tests/test_work_store.py",
     "tests/test_work_actions.py",
-    "tests/test_outlook.py",
     "tests/test_meetings.py",
     "tests/test_selfcheck.py",
     "tests/test_computer_tools.py",

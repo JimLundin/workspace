@@ -19,7 +19,7 @@ from assistant.llm import ToolSpec, tool_spec
 from automation.actions import Classification, Operation
 from automation.execution import Proof, Readback, Targets
 from automation.json_value import Json
-from automation.task import ActionNotApplied, ActionReturned, ActionUncertain, ActionVerified, FileDigest, MailTarget, NoVerification
+from automation.task import ActionNotApplied, ActionReturned, ActionUncertain, ActionVerified, FileDigest, NoVerification
 from winapi.shapes import Rect, Window
 lazy from assistant.browser_requests import BrowserRequest
 lazy from assistant.uia import UiRequest
@@ -178,15 +178,7 @@ def typed_classification[A](
 type Verifier = Callable[[Output], ActionVerified | ActionReturned | ActionUncertain | ActionNotApplied]
 
 
-@dataclass(frozen=True, slots=True)
-class AdapterReadback:
-    """The adapter confirms its own result; a later run verifies the attempt by reading back `target` again."""
-
-    target: MailTarget
-    confirm: Verifier
-
-
-type Verify = NoVerification | FileDigest | Verifier | AdapterReadback
+type Verify = NoVerification | FileDigest | Verifier
 """A durable digest the journal checks, or the adapter's own confirmation of its result."""
 
 

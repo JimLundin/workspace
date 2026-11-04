@@ -1,7 +1,6 @@
-"""Each task profile's execution: its conversation, context, toolset, instructions, recovery and completion check.
+"""Each task profile's execution: its conversation, context, toolset, instructions and recovery.
 
-Profiles selects one run and owns its dependencies and conversations. Execution
-runs whatever that profile supplies without branching on the profile.
+Profiles selects one run and owns its dependencies and conversations.
 """
 
 import hashlib
@@ -12,9 +11,9 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Final, Protocol, assert_never
+from typing import Final, assert_never
 
-from assistant import feed_agent_tools, meeting_tools, personal_work_tools, self_change_tools, self_review_tools, work_canvas_tools
+from assistant import feed_agent_tools, personal_work_tools, self_change_tools, self_review_tools, work_canvas_tools
 from assistant.agent import Agent, Toolset
 from assistant.agent_history import History
 from assistant.agent_tools import Display, Tool
@@ -22,7 +21,6 @@ from assistant.browser_tools import Browser
 from assistant.business_tools import Business
 from assistant.desktop_tools import Desktop
 from assistant.feed_agent_tools import Feed
-from assistant.meeting_execution import MeetingRun, MeetingWork
 from assistant.meeting_tools import MeetingCapture
 from assistant.personal_work_tools import PersonalWork
 from assistant.publishing import Landing
@@ -38,8 +36,6 @@ from automation.execution import WorkExecution
 from automation.task import (
     Claim,
     FeedHandoff,
-    MeetingFollowup,
-    Outcome,
     RequestKind,
     RequestSource,
     RoutineSource,
@@ -76,10 +72,6 @@ def unseen(_task: Task) -> RequestContext:
     return UNSEEN
 
 
-class ProfileError(Exception):
-    """The task's profile cannot run: the reason is shown and the task waits."""
-
-
 @dataclass(frozen=True, slots=True)
 class GeneralEffects:
     """What a general request uses beyond its conversation: desktop context, the feed bridge and saved lessons."""
@@ -99,26 +91,6 @@ class GeneralTools:
     feed_request: Callable[[BridgeCommand], str]
     lessons: ContextStore | None
     landing: Landing | None
-
-
-class ProfileRun(Protocol):
-    """One claim's execution under its task profile."""
-
-    @property
-    def conversation(self) -> Conversation: ...
-    @property
-    def context(self) -> RequestContext:
-        """The desktop context this profile admits."""
-        ...
-
-    def toolset(self, agent: Agent) -> Toolset: ...
-    def recover(self, work: WorkExecution, stop: threading.Event) -> Waiting | None:
-        """Settle what earlier runs left uncertain before the agent starts; a disposition ends this run."""
-        ...
-
-    def completed(self, outcome: Outcome) -> Outcome:
-        """The profile's completion check over the work's outcome."""
-        ...
 
 
 def instructions() -> str:
@@ -233,50 +205,6 @@ class GeneralRun:
         installed = InstalledCopy(self.conversation.workspace.live, state_for(root), versions_for(root), self.tools.landing)
         return verified_installation(work.store, work.claim, installed)
 
-    def completed(self, outcome: Outcome) -> Outcome:
-        return outcome
-
-
-class MeetingFollowupTools:
-    """A prepared meeting follow-up's toolset: its selected recordings, notes and unsent drafts, and the task's private records."""
-
-    __slots__ = ("tools",)
-
-    def __init__(self, agent: Agent, run: MeetingRun) -> None:
-        self.tools: tuple[Tool, ...] = (
-            *meeting_tools.MeetingFollowup(agent, run).tools(),
-            *TaskTools(agent, agent.work, datetime.now).tools(agent.proof, Display.PRIVATE),
-        )
-
-    def instructions(self) -> str:
-        return meeting_tools.INSTRUCTIONS
-
-
-class MeetingFollowupRun:
-    """A prepared meeting follow-up sees only its selected recordings in a conversation of its own."""
-
-    __slots__ = ("conversation", "run")
-
-    def __init__(self, conversation: Conversation, run: MeetingRun) -> None:
-        # The assistant captures no desktop context for these submissions either (`WorkAgent.submit_identified`).
-        self.conversation, self.run = conversation, run
-
-    @property
-    def context(self) -> RequestContext:
-        return UNSEEN
-
-    def toolset(self, agent: Agent) -> Toolset:
-        return MeetingFollowupTools(agent, self.run)
-
-    def recover(self, work: WorkExecution, stop: threading.Event) -> Waiting | None:
-        """An uncertain draft save is resolved by its exact readback, or the run fails without a verified result."""
-        self.run.recover(work, stop)
-        return None
-
-    def completed(self, outcome: Outcome) -> Outcome:
-        """Complete only after the package is published and each draft's save is verified."""
-        return self.run.completed(outcome)
-
 
 class Conversations:
     """SDK history and source drafts per conversation, retaining the eight most recent.
@@ -306,25 +234,15 @@ class Conversations:
 class Profiles:
     """Select one claim's profile run and own its profile-specific dependencies."""
 
-    __slots__ = ("conversations", "general", "meeting", "tools")
+    __slots__ = ("conversations", "general", "tools")
 
-    def __init__(self, workspace: Workspace, general: GeneralEffects, meeting: MeetingWork | None) -> None:
+    def __init__(self, workspace: Workspace, general: GeneralEffects) -> None:
         self.conversations = Conversations(workspace)
-        self.general, self.meeting = general, meeting
+        self.general = general
         self.tools = GeneralTools(workspace.root, general.feed_request, general.lessons, general.landing)
 
-    def run(self, claim: Claim) -> ProfileRun:
-        """Select the run, refusing missing or changed meeting preparations."""
+    def run(self, claim: Claim) -> GeneralRun:
         match profile := task_profile(claim.task.source):
-            case MeetingFollowup():
-                # A missing or changed preparation must not silently gain the general profile.
-                if self.meeting is None:
-                    raise ProfileError("Meeting follow-up is not configured for this work process.")
-                try:
-                    run = self.meeting.session(claim.task.id, profile)
-                except (OSError, ValueError) as error:
-                    raise ProfileError(f"Meeting preparation could not be opened: {error}"[:4000]) from error
-                return MeetingFollowupRun(self.conversations.named("task:" + claim.task.id), run)
             case SelfReview():
                 # Each review starts fresh rather than inheriting earlier reviews' history.
                 return GeneralRun(self.conversations.named("task:" + claim.task.id), UNSEEN, self.tools)

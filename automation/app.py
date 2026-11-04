@@ -27,10 +27,6 @@ lazy from assistant.browser import Browser
 lazy from assistant.browser_session import Product
 lazy from assistant.llm import Missing, Settings
 lazy from assistant.machine import NativeDesktop, WinMachine
-lazy from assistant.meeting_execution import MeetingWork
-lazy from assistant.meeting_followup_store import FollowupStore
-lazy from assistant.meeting_preparation import Preparations
-lazy from assistant.outlook import OutlookDrafts
 lazy from assistant.publishing import DEFAULT_REMOTE, Landing
 lazy from assistant.task_profiles import GeneralEffects, Profiles, RequestContext
 lazy from assistant.work_bridge_contracts import BRIDGE_COMMAND, BRIDGE_RESPONSE, BridgeCommand
@@ -177,7 +173,6 @@ def _native_execution(settings: Settings | Missing, bridge: BridgeServer, hwnd: 
     machine = WinMachine(NativeDesktop(hwnd), meetings=calls, browser=browser)
     context = DesktopContext(bridge, contexts, enabled=os.environ.get("WORKSPACE_AGENT_CONTEXT", "recent").lower() != "off")
     usable = settings if isinstance(settings, Settings) else Settings("", "", "", "", "")
-    followups = WorkFolder(bridge.folder).followups
     try:
         execution = AgentExecution(
             usable,
@@ -190,7 +185,6 @@ def _native_execution(settings: Settings | Missing, bridge: BridgeServer, hwnd: 
                     contexts,
                     Landing(os.environ.get("WORKSPACE_GIT_REMOTE", DEFAULT_REMOTE), os.environ.get("WORKSPACE_GIT_BASE", "main")),
                 ),
-                MeetingWork(Preparations(followups / "preparations"), FollowupStore(followups / "packages"), OutlookDrafts(followups / "mail")),
             ),
             record=lambda details: usage.record("automation", "agent", details),
             report_error=lambda detail: report(detail, folder=bridge.folder),

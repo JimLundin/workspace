@@ -44,10 +44,7 @@ lazy from assistant.llm import MAX_SECONDS, Missing, Settings
 lazy from assistant.meeting_browser import TeamsCalls
 lazy from assistant.meeting_detection import PREFERENCE, AutomaticStatus
 lazy from assistant.meeting_events import TranscriptEvents
-lazy from assistant.meeting_followup_store import FollowupStore
-lazy from assistant.meeting_preparation import Preparations
 lazy from assistant.meeting_store import MeetingArchive
-lazy from assistant.meeting_workflow import MeetingWorkflow
 lazy from assistant.meetings import Meetings
 lazy from assistant.notification_sources import NOTIFICATION_STATE
 lazy from assistant.personal_work_model import Correlator
@@ -190,7 +187,6 @@ class AssistantApp:
         "capture_timer",
         "communications",
         "desktop",
-        "followups",
         "jobs",
         "layout",
         "meetings",
@@ -283,18 +279,7 @@ class AssistantApp:
         self.ui.configure_feed(windows_store(DIRECTORY / "notifications.bin", NOTIFICATION_STATE), self.triage.observe)
         self.timings.mark("communications and desktop owners")
         archive = MeetingArchive(DIRECTORY / "meetings")
-        followup_folder = WORK.followups
-        self.followups = MeetingWorkflow(
-            archive,
-            Preparations(followup_folder / "preparations"),
-            FollowupStore(followup_folder / "packages"),
-            submit_identified=self.agent.submit_identified,
-            read_work=self.agent.snapshot,
-            journal=tasks.meeting_followups,
-            publish=self.ui.meetings_changed,
-            report_error=log,
-        )
-        self.ui.configure_meetings(self.followups, self.open_meeting_file)
+        self.ui.configure_meetings(archive, self.open_meeting_file)
         events = TranscriptEvents(archive, routines, on_error=log, on_change=self.refresh_work, on_meeting=self.personal.observe_meeting)
         self.meetings = Meetings(
             self.settings,
@@ -331,7 +316,6 @@ class AssistantApp:
                 self.agent.start_worker,
                 self.personal.start,
                 self.communications.start,
-                self.followups.start,
                 self.meetings.start_worker,
                 self.automatic_meetings.start,
             )
@@ -435,8 +419,6 @@ class AssistantApp:
             self.meetings.close()
         except OSError as error:
             log(str(error))
-        self.followups.close()
-        self.followups.wait_closed()
         timings.mark("meetings and work frontend")
         self.activity.close()
         self.ui.close_windows()
@@ -544,7 +526,6 @@ class AssistantApp:
 
     def refresh_work(self) -> None:
         self.agent.refresh()
-        self.followups.refresh()
 
     def review_feed(self, batch: tuple[Candidate, ...], rules: tuple[str, ...]) -> str:
         research = Research(self.settings, self.triage.research_context, self.triage.research_conversation, stop=self.triage.closed)
@@ -587,11 +568,6 @@ class AssistantApp:
     def show_work(self) -> None:
         self.ui.work_window().show()
         self.agent.refresh()
-
-    def show_meetings(self) -> None:
-        self.show_work()
-        self.ui.show_meetings()
-        self.followups.refresh()
 
     def open_meeting_file(self, path: Path) -> None:
         self.jobs.put(control_policy.meeting_file_job(path, os.startfile, self.problem))
@@ -752,8 +728,6 @@ class AssistantApp:
                 self.assistant.handle(Tool.MEETING_TOGGLE, down=True)
             case control_policy.Menu.TRANSCRIPTS.value:
                 self.recording_action("folder")
-            case control_policy.Menu.FOLLOWUPS.value:
-                self.show_meetings()
             case control_policy.Menu.UNDO.value:
                 keeper_control.ask(keeper.REQUESTS, keeper_control.Undo())
             case control_policy.Menu.USAGE.value:

@@ -21,7 +21,7 @@ from desktop_ui.components.widgets import column, show_window
 from desktop_ui.desktop_attention import CanvasFocus
 from desktop_ui.work_canvas_panel import CanvasPanel, rounded
 from desktop_ui.work_window import WorkWindow
-lazy from assistant.meeting_workflow import MeetingSnapshot, MeetingWorkflow
+lazy from assistant.meeting_store import MeetingArchive
 lazy from desktop_ui.meeting_panel import MeetingPanel
 lazy from desktop_ui.work_panel import WorkPanel
 
@@ -82,14 +82,10 @@ class CanvasWindow:
     def voice_pressed(self, *, pressed: bool) -> None:
         self.panel.voice_hint.set_pressed(pressed=pressed)
 
-    def configure_meetings(self, workflow: MeetingWorkflow, open_file: Callable[[Path], None]) -> None:
+    def configure_meetings(self, archive: MeetingArchive, open_file: Callable[[Path], None]) -> None:
         """Create and retain the view's meeting widgets once, on Qt's thread."""
         if self.meetings is None:
-            self.attach_meetings(MeetingPanel(workflow, open_file=open_file))
-
-    def render_meetings(self, snapshot: MeetingSnapshot) -> None:
-        if self.meetings is not None:
-            self.meetings.render_snapshot(snapshot)
+            self.attach_meetings(MeetingPanel(archive, open_file=open_file))
 
     def maximize(self) -> None:
         if self.window.isMaximized():

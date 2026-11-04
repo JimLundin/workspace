@@ -131,21 +131,12 @@ lifetime independent of the conversation in which it was requested.
 _Avoid_: Chat turn, command
 
 **Task profile**:
-What a requested task is for: a general request, a feed handoff or a meeting
-follow-up. It owns the task's execution: the conversation its agent continues,
+What a requested task is for: a general request, a feed handoff or a
+self-review. It owns the task's execution: the conversation its agent continues,
 whether the agent sees the request's desktop context, its tools and
-instructions, what it recovers before a run, and its completion check. Work for
-a standing instruction runs as a general request.
+instructions, and what it recovers before a run. Work for a standing
+instruction runs as a general request.
 _Avoid_: Task kind, agent mode
-
-**Meeting follow-up**:
-Notes, decisions, actions and unsent email drafts prepared from recordings the
-person selected. Their transcripts are frozen when it is prepared, and its
-task names that saved selection by content digest. Its agent sees only those
-sources and the follow-up's tools, and it completes only after its package is
-published and each draft's save is verified by reading back the exact draft
-revision it wrote. The person reviews and edits the resulting actions and drafts.
-_Avoid_: Meeting-notes routine, meeting summary
 
 **Meeting**:
 A conversation recorded as one event, with its own identity, start and observed
@@ -157,22 +148,15 @@ The ordered text of a meeting's captured conversation, with time spans within
 its captured audio. Transcription batches do not imply individual speaker turns.
 _Avoid_: Meeting summary, attributed conversation
 
-**Follow-up claims**:
-What a meeting follow-up's agent proposes: statements, actions and drafts, each
-with literal quotes from the selected recordings. Claims carry no offsets; they
-become a follow-up only after every quote, owner, due date and address resolves
-against the frozen transcripts. A package stores the claims that resolve to it.
-_Avoid_: Model response, follow-up data
-
 **Meeting-notes routine**:
 A standing instruction, installed disabled, that writes notes for each
 transcript completed after it is enabled. It responds to one transcript per
-trigger occurrence and does not prepare a meeting follow-up.
-_Avoid_: Meeting follow-up, follow-up drafts
+trigger occurrence.
+_Avoid_: Meeting summary
 
 **Journal**:
 A local SQLite file that one owner keeps durably: the work database, each
-recording's journal and a meeting follow-up's edit history. A write is all or
+recording's journal. A write is all or
 nothing and a read sees one moment. Reading a journal that does not exist
 reports it absent instead of creating it.
 _Avoid_: Database (for the owner's records), log

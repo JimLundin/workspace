@@ -9,7 +9,7 @@ from typing import Protocol
 from assistant.agent import Agent
 from assistant.agent_tools import Machine
 from assistant.llm import Settings
-from assistant.task_profiles import ProfileError, Profiles
+from assistant.task_profiles import Profiles
 from automation.actions import ActionError, Resources
 from automation.execution import ApprovalReview, Incomplete, Log, WorkExecution
 from automation.store import TaskStore
@@ -66,11 +66,7 @@ class AgentExecution:
         contract; `review` is the work process's per-claim approval channel.
         """
         started = time.monotonic()
-        try:
-            profile = self.profiles.run(claim)
-        except ProfileError as error:
-            log.problem(str(error))
-            return Waiting(Blocked(str(error)))
+        profile = self.profiles.run(claim)
         work = WorkExecution(claim, store, self.resources, context_text=profile.context.saved, review=review)
         agent = Agent(
             self.settings,
@@ -90,7 +86,7 @@ class AgentExecution:
             if (recovered := profile.recover(work, stop)) is not None:
                 return recovered
             agent.run(claim.task.prompt)
-            return profile.completed(work.outcome(agent.report, stop))
+            return work.outcome(agent.report, stop)
         except (ActionError, OSError, ValueError) as error:
             fault = failure_info(error)
             self.report_error(f"Agent execution failed: {fault.kind}; {' > '.join(fault.locations)}")

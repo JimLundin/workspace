@@ -262,13 +262,6 @@ desktop_only = [
 
 [[tool.workspace.architecture.exceptions]]
 rule = "explicit-attributes"
-module = "assistant.meeting_followup_store"
-declaration = "FollowupStore._publish"
-expression = "getattr(error, 'winerror', None)"
-reason = "Read the optional native OSError code for bounded publication retry after Windows sharing/access errors."
-
-[[tool.workspace.architecture.exceptions]]
-rule = "explicit-attributes"
 module = "selfcheck"
 declaration = "run_module"
 expression = "getattr(test, '__module__', None)"

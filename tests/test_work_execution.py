@@ -56,7 +56,7 @@ def execution(settings: Settings, workspace: Workspace, errors: list[str]) -> Ag
     return AgentExecution(
         settings,
         machine,
-        Profiles(workspace, GeneralEffects(unseen, no_feed), None),
+        Profiles(workspace, GeneralEffects(unseen, no_feed)),
         record=lambda record: None,
         report_error=errors.append,
         close_background=machine.close_background,
@@ -84,7 +84,7 @@ def test_every_execution_releases_research_pages_and_stop_releases_the_browser(t
         adapter = AgentExecution(
             Settings(endpoint.url, "fixture", "transcribe", "", ""),
             FakeMachine(),
-            Profiles(source, GeneralEffects(unseen, no_feed), None),
+            Profiles(source, GeneralEffects(unseen, no_feed)),
             record=lambda record: None,
             report_error=errors.append,
             close_background=cleanup,

@@ -52,7 +52,7 @@ process, such as the browser host. Effect ownership stays in the last column.
 | `assistant/agent.py`, `task_profiles.py`, `agent_execution.py` | work | Tool dispatch, approval and observation recording for one durable work claim; each task profile's toolset and execution (conversation, admitted desktop context, recovery and completion check) | `Profiles` selects the profile run and owns its dependencies, per-conversation SDK history and source drafts; `AgentExecution` owns metrics, error reporting and run cleanup; `WorkExecution` owns the claim's effects |
 | `assistant/agent_tools.py`, `desktop_tools.py`, `browser_tools.py`, `business_tools.py`, `self_change_tools.py`, `meeting_tools.py`, `feed_agent_tools.py`, `work_canvas_tools.py`, `personal_work_tools.py`, `task_tools.py` | shared: `agent_tools.py`, `business_tools.py`, `personal_work_tools.py`; work: other listed tools | Tool families: each `Tool` declares its schema, handler, read/change classification with resources, reconciliation proof, readback evidence and visible display; handlers describe each exact `Operation` to approval and effect | The agent composes the families over its `Session`; `Screen` and `SelfChange` own the latest screenshot and the source draft's check/install state |
 | `automation/task.py`, `store.py` | shared | Durable task, request profile, agent request, reply, action, and run variants, each tagged by its `kind` or enum value; controls and stale-run decisions | `TaskStore` owns the task journal's queries and stores those records through strict Pydantic adapters; schema version 5 converts version 4 journals in place |
-| `automation/journal.py` | shared | Schema versions: creation, ordered migration steps and refusal of unknown or unversioned journals | Every SQLite owner (task, routine, context, personal-work, canvas, meeting and edit journals) opens its file through one connection interface: write transactions, single read snapshots, rollback on any exception, one busy wait and durability policy, and reads that report an absent journal without creating it |
+| `automation/journal.py` | shared | Schema versions: creation, ordered migration steps and refusal of unknown or unversioned journals | Every SQLite owner (task, routine, context, personal-work, canvas and meeting journals) opens its file through one connection interface: write transactions, single read snapshots, rollback on any exception, one busy wait and durability policy, and reads that report an absent journal without creating it |
 | `automation/controller.py`, `execution.py`, `actions.py` | work: controller; shared: execution/actions | Work outcomes, recovery context, exact operations, observation evidence, reconciliation proof and verification decisions | `WorkController` owns execution lifetime; `Actions` owns cancellable effect coordination |
 | `automation/routines.py`, `context.py` | shared | Trigger occurrences, accepted handoffs, context relevance and freshness | The routine/context stores own persistence; `meeting_events.py` owns transcript delivery and startup scanning |
 | `assistant/work_commands.py`, `work_snapshot.py`, `work_text.py`, `work_agent.py`, `work_service.py`, `owner_calls.py` | desktop | Work commands, the published work snapshot, readable task labels, conversation/task selection and volatile owner-call admission/result identities | `WorkAgent` owns frontend observation and asynchronous UI delivery; `WorkService` composes journal/transport calls; `OwnerDispatcher` owns one handler thread, bounded mailboxes and immutable pending/cache snapshots, rechecking the journal before each effect; the frontend observer alone sends replies; `WorkWindow` schedules its native view |
@@ -64,9 +64,6 @@ process, such as the browser host. Effect ownership stays in the last column.
 | `assistant/browser_requests.py`, `browser_values.py`, `browser_session.py`, `browser.py` | shared | Browser requests (one typed variant per operation, validated once at the browser tool seam), immutable page/tab/group observations, validated DevTools and tab-API replies, group selection, typed paginated projections | `Browser`, `NativeSessions`, `Cdp`, `browser_tabs.TabStrip`, the `browser_host` exchange of typed flat requests, and a cancellable connection wait |
 | `assistant/recording_state.py` | shared | Audio batches, stored observations, completion rules, retry policy, stale-update rejection, and recording controls | `meetings.py` and `meeting_store.py` |
 | `assistant/meeting_detection.py` | desktop | Immutable joined-call observations, saved opt-in, departure debounce, continuous thirty-second failure/recovery warning policy and manual-stop suppression | `meeting_browser.py` reads the existing approved Edge tabs without focus/navigation; `automatic_meetings.py` owns five-second polling, the encrypted preference and command serialization over the existing recorder; `App` routes manual starts/stops through it and `Ui` retains its toolbar-menu status. This uses the existing browser and recording dependencies: lifecycle decisions are Workspace policy, not a general-purpose polling library. |
-| `assistant/meeting_followup.py`, `meeting_preparation.py` | shared | Frozen transcript bundles, exact citations, sourced actions and drafts, preparation identity | `meeting_followup_store.py` owns verified publications and revision-checked edits; `Preparations` owns content-addressed bundle files |
-| `assistant/meeting_workflow.py` | desktop | Catalog, work and package observations; identified edit commands and receipts | `MeetingWorkflow` owns background I/O; `meeting_panel.py` owns Qt selection, local edits and explicit handoff |
-| `assistant/meeting_execution.py`, `meeting_tools.py`, `outlook.py` | work | Constrained meeting execution, bounded source reads and verified draft outcomes | The work process owns generation; `outlook.ps1` owns Outlook COM observation and draft operations |
 | `assistant/web_apps.py`, `business_tools.py` | shared | Web-app operations, each declared once with its typed query, page script, application and typed result; exact task/chat/mail conversation identities and expected-value checks. The business family is the only model-tool adapter: private schemas, JSON text and typed readback confirmation | `WebApps` runs an operation through the browser's wake/evaluate lifecycle and the applications' own controls; `Browser.web_app` serializes it with other page work; native browser fixtures decode every script's real output with its result type |
 | `runtime.py` | shared | Dependency ABI validation | `activate` |
 | `assistant/hotkeys.py` | desktop | Every Tool's exhaustive behavior route and AI-settings gate, shared with the key map | `features.Assistant` dispatches every route through its desktop and assistant-control ports; requests arrive on the control thread and slow work is submitted |
@@ -140,7 +137,7 @@ thirty seconds of uninterrupted ready observations rearm the next warning.
 `meeting_detection.py` owns those pure transitions, while
 `automatic_meetings.AutomaticAttention` owns callback delivery from poll heartbeats.
 
-Meetings have three paths:
+Meetings have two paths:
 
 Native meeting intake is shared with the work canvas: `automation/meetings.py`
 owns immutable event periods and conversation batches; `meeting_store.py` owns
@@ -155,9 +152,8 @@ trusted; checks cover Workspace's timing, identity, page selection and wiring.
 
 1. Capture: `meeting_tools.py` → `MeetingOperation` in `automation/ipc.py` → `automation/app.py` `OwnerCalls.request` → `AssistantApp.meeting_command` in `assistant/app.py` → `meetings.py`, `meeting_store.py` and `recording_state.py`. `automation/capture.py` names the audio source.
 2. Meeting-notes routine: `meeting_events.py` records published transcript trigger occurrences; `automation/routines.py` `RoutineStore.dispatch` submits enabled routine work.
-3. Meeting follow-up: `meeting_panel.py` / `meeting_workflow.py` selection → `meeting_preparation.py` frozen bundle → `meeting_execution.py`, `meeting_tools.py` and `meeting_followup.py` claims → `meeting_followup_store.py` package → `outlook.py` unsent drafts.
 
-The Meeting-notes routine and Meeting follow-up share the publication rule on `recording_state.StoredState.complete`.
+The Meeting-notes routine uses the publication rule on `recording_state.StoredState.complete`.
 
 Moving these modules into packages remains follow-up work to the process-ownership
 decision in [#54](https://github.com/JimLundin/workspace/issues/54).
@@ -349,19 +345,8 @@ across assistant views without tying the application lifetime to a view.
 `keeper_ui.py` owns the keeper's separate protected Qt event loop. The bundled
 UI uses Qt; no GUI objects cross the keyboard process boundary.
 
-Meeting follow-through shares the work journal and selected saved transcript
-versions. A follow-up task's profile carries the content digest of its saved
-bundle, so the journal alone lists follow-ups and each run opens exactly its
-recordings. The Meetings view lists the 100 newest by task title and says when
-older ones exist; only the follow-up it opens loads its recordings and packages,
-so listing holds no transcript content. Its owner queues catalog reads,
-preparation, opening and revision-checked edits off the UI thread, and closes
-before WorkAgent. The Meetings view retains raw
-editor buffers by task, package version and artifact. Only the matching save
-receipt clears a submitted edit; newer typing remains against the acknowledged
-revision. Multiple saved packages require an explicit choice when no selection
-is retained. Opening an email uses the saved draft file, after local edits have
-been saved or explicitly reloaded.
+The Meetings view reads the recording archive when it is shown and lists saved
+recordings with their transcripts.
 
 The owner animates at most five cards. Retargeting keeps current geometry and
 velocity. Each notification fits its rendered content up to 360 logical pixels

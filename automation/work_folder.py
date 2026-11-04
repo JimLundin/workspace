@@ -15,10 +15,6 @@ class WorkFolder:
     def journal(self) -> Path:
         return self.root / "work.sqlite3"
 
-    @property
-    def followups(self) -> Path:
-        return self.root / "meeting-followups"
-
 
 WORK: Final = WorkFolder(DIRECTORY / "work")
 BROWSER_PROFILE: Final = DIRECTORY / "browser-profile"

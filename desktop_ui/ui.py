@@ -29,7 +29,7 @@ lazy from assistant.attention import selected_question
 lazy from assistant.card_actions import AnswerApproval, CardAction, OpenCanvas
 lazy from assistant.feed_sources import FeedUpdate, NoticesObserved, PendingFeed, TeamsObserved, observe
 lazy from assistant.meeting_detection import AutomaticStatus
-lazy from assistant.meeting_workflow import MeetingSnapshot, MeetingWorkflow
+lazy from assistant.meeting_store import MeetingArchive
 lazy from assistant.notification_sources import NotificationSources, NotificationState
 lazy from assistant.recording_state import RecordingAction, RecordingState
 lazy from assistant.state_store import SavedState
@@ -68,7 +68,7 @@ class _Answer[T]:
 
 @dataclass(frozen=True, slots=True)
 class MeetingConnection:
-    workflow: MeetingWorkflow
+    archive: MeetingArchive
     open_file: Callable[[Path], None]
 
 
@@ -693,28 +693,14 @@ class Ui:
     def _attach_meetings(self) -> None:
         connection, view = self._meetings, self._work_view
         if connection is not None and view is not None:
-            view.configure_meetings(connection.workflow, connection.open_file)
+            view.configure_meetings(connection.archive, connection.open_file)
 
-    def configure_meetings(self, workflow: MeetingWorkflow, open_file: Callable[[Path], None]) -> None:
+    def configure_meetings(self, archive: MeetingArchive, open_file: Callable[[Path], None]) -> None:
         def configure(_: QtWidgets.QApplication) -> None:
-            self._meetings = MeetingConnection(workflow, open_file)
+            self._meetings = MeetingConnection(archive, open_file)
             self._attach_meetings()
 
         self.post(configure)
-
-    def meetings_changed(self, snapshot: MeetingSnapshot) -> None:
-        def render(_: QtWidgets.QApplication) -> None:
-            if self._work_view is not None:
-                self._work_view.render_meetings(snapshot)
-
-        self.post(render)
-
-    def show_meetings(self) -> None:
-        def reveal(_: QtWidgets.QApplication) -> None:
-            if self._work_view is not None:
-                self._work_view.show_meetings()
-
-        self.post(reveal)
 
     def open_inbox(self) -> None:
         """Bell and keyboard requests share Qt-owned initialization and inbox focus."""
