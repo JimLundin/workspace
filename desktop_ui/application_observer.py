@@ -14,7 +14,7 @@ import threading
 import time
 from collections.abc import Callable
 from contextlib import suppress
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from typing import assert_never
 
 import protocol
@@ -22,7 +22,7 @@ from assistant.browser_session import edge_path
 from assistant.geometry import framed
 from desktop_ui.navigation import Effect, Focus, Launch, Navigated, Order, Placing, Switch, World, ZoomIn, ZoomOut, decide, zoom_after
 from desktop_ui.shell_items import EMPTY_SHELF, WEB_APPS, Launches, PinnedApp, Shelf, caption_clip, launch, outstanding, shelf
-from desktop_ui.window_layout import NOWHERE, Placement, Target, groups, managed, place, screens
+from desktop_ui.window_layout import NOWHERE, App, Placement, Target, groups, managed, place, screens
 from winapi import app_user_model, screen, windows
 from winapi.icon_pixels import window_pixels
 from winapi.shapes import Window
@@ -166,7 +166,9 @@ class Arrangement:
     shelf: Shelf
     desktops: int
     current: int
-    paused: bool = False
+    placed: tuple[tuple[App, ...], ...] = ()
+    """Each desktop's placed applications, in shelf order."""
+    paused: bool = field(default=False, kw_only=True)
 
 
 EMPTY_ARRANGEMENT = Arrangement(EMPTY_SHELF, 0, 0)
@@ -272,6 +274,13 @@ class Worker:
         )
         self.publish(grouped, state)
 
+    def placed(self, desktops: int) -> tuple[tuple[App, ...], ...]:
+        world = self.world
+        if world is None:
+            return tuple(() for _ in range(desktops))
+        apps = tuple((app, frozenset(self.placement[h].desktop for h in handles if h in self.placement)) for app, handles in world.windows.items())
+        return tuple(tuple(app for app, on in apps if index in on) for index in range(desktops))
+
     def publish(self, grouped: Shelf, state: Desktops | None) -> None:
         stop = self.observer.stop
         running = tuple(
@@ -281,7 +290,7 @@ class Worker:
             for app in grouped.running
         )
         desktops, current = (len(state.ids), state.ids.index(state.current)) if state is not None else (0, 0)
-        snapshot = Arrangement(replace(grouped, running=running), desktops, current, paused=self.paused)
+        snapshot = Arrangement(replace(grouped, running=running), desktops, current, self.placed(desktops), paused=self.paused)
         if snapshot != self.previous:
             with suppress(queue.Empty):
                 self.observer.results.get_nowait()

@@ -32,6 +32,7 @@ lazy from desktop_ui.audio_meter import AudioMeter
 lazy from desktop_ui.bar_status import StatusObserver
 lazy from desktop_ui.components.appearance import Look, look
 lazy from desktop_ui.components.meaning import Tint
+lazy from desktop_ui.desktop_pager import Swipe, pager, swipe
 lazy from desktop_ui.island_layout import HEIGHT, Metrics, expansion, frame, snap
 lazy from desktop_ui.island_menu import (
     Applied,
@@ -50,7 +51,7 @@ lazy from desktop_ui.island_menu import (
 lazy from desktop_ui.island_model import Action, Agent, CapsuleView, Expansion, Job, Key, Marker, Observed, Spinner, capture, island, keyboard
 lazy from desktop_ui.island_motion import IslandMotion, Shown, advance, finish, placed, retarget, settled
 lazy from desktop_ui.island_surface import TOP, BarWindow, Drawn, Presented
-lazy from desktop_ui.navigation import CycleApp, Order, Placing, ShowWindow, Source
+lazy from desktop_ui.navigation import BarScroll, CycleApp, Order, Placing, ShowWindow, Source
 lazy from desktop_ui.qt_ui import EventLoop, application
 lazy from desktop_ui.request_panel import RequestActions
 lazy from desktop_ui.shell_controls import TASKBAR_TOGGLE, TaskbarControl, WindowsKeyObserver
@@ -143,6 +144,7 @@ class DesktopBar:
         "sample_bounds",
         "sampled_at",
         "status_service",
+        "swipe",
         "system",
         "taskbar",
         "timer",
@@ -166,6 +168,7 @@ class DesktopBar:
         self.actions = actions
         self.applications: Shelf = EMPTY_SHELF
         self.arrangement: Arrangement = EMPTY_ARRANGEMENT
+        self.swipe: Swipe | None = None
         self.application_service: ApplicationObserver | None = None
         self.tray_host: TrayHost | None = None
         self.observations = BarObservations() if observations is None else observations
@@ -277,6 +280,8 @@ class DesktopBar:
                 self.arrangement = self.application_service.results.get_nowait()
                 self.applications = self.arrangement.shelf
         self.window.shell_sections.applications((self.applications, self.observations.foreground()), self.application_click)
+        arrangement = self.arrangement
+        self.window.shell_sections.desktops(pager(arrangement.placed, arrangement.current, self.current_layer), self.navigate)
         # A changed snapshot must also publish section geometry when the island is still.
         if previous != self.window.shell_sections.app_snapshot:
             self.window.presentation = None
@@ -292,6 +297,11 @@ class DesktopBar:
                 self.navigate(CycleApp(app, Source.TOOLBAR))
             case Application(identity=identity):
                 self.navigate(CycleApp(Program(identity), Source.TOOLBAR))
+
+    def scroll(self, delta: int) -> None:
+        self.swipe, step = swipe(self.swipe, delta, self.observations.clock())
+        if step:
+            self.navigate(BarScroll(step, Source.SCROLL))
 
     def navigate(self, order: Order) -> None:
         """The application observer owns windows and desktops; it carries out every navigation."""

@@ -20,13 +20,16 @@ from assistant.meeting_detection import AutomaticStatus
 from assistant.recording_state import RecordingState
 from desktop_ui.ambient import Ambient, SystemStatus
 from desktop_ui.desktop_bar import BarActions, BarObservations, DesktopBar
+from desktop_ui.desktop_pager import pager
 from desktop_ui.fluent_icons import REGULAR
 from desktop_ui.island_menu import Menu
 from desktop_ui.island_model import Agent, Glyph, Job, Key
 from desktop_ui.island_surface import SHADOW, TOP, ControlButton, MenuCell
+from desktop_ui.navigation import Navigation, PagerClick, Source, StepDesktop
 from desktop_ui.qt_runtime import prepare
 from desktop_ui.qt_ui import EventLoop, application
 from desktop_ui.vector_icons import symbol
+from desktop_ui.window_layout import EDGE, TERMINAL
 from protocol import Tool
 from tests.native_pointer import foreign_pointer
 from winapi import appearance, windows
@@ -663,6 +666,43 @@ def test_first_menu_open_survives_native_activation_settling() -> None:
     finally:
         target.close()
         target.deleteLater()
+        closed(app, bar)
+
+
+def test_pager_offers_each_desktop_and_a_horizontal_scroll_over_the_bar_swipes() -> None:
+    # Defects: the pager loses a desktop or its accessible names, a click goes
+    # to another desktop, or the bar window drops a horizontal scroll.
+    app = application()
+    bar = DesktopBar(recorded([]), native_shell=False, observations=BarObservations(motion=lambda: False))
+    chosen: list[Navigation] = []
+    try:
+        bar.window.shell_sections.desktops(pager(((TERMINAL,), (EDGE,)), 0, None), chosen.append)
+        buttons = bar.window.shell_sections.pager.buttons
+        assert [button.accessibleName() for button in buttons] == [
+            "Previous desktop",
+            "Desktop 1 (current) · windowsterminal",
+            "Desktop 2 · msedge",
+            "Next desktop",
+        ]
+        QTest.mouseClick(buttons[2], QtCore.Qt.MouseButton.LeftButton)
+        QTest.mouseClick(buttons[3], QtCore.Qt.MouseButton.LeftButton)
+        assert chosen == [PagerClick(1, Source.PAGER), StepDesktop(1, Source.PAGER)]
+        status = bar.window.capsules[Key.STATUS].geometry()
+        point = QtCore.QPointF(status.x() + 14, TOP + 17)
+        wheel = QtGui.QWheelEvent(
+            point,
+            QtCore.QPointF(bar.window.mapToGlobal(point.toPoint())),
+            QtCore.QPoint(),
+            QtCore.QPoint(-120, 0),
+            QtCore.Qt.MouseButton.NoButton,
+            QtCore.Qt.KeyboardModifier.NoModifier,
+            QtCore.Qt.ScrollPhase.NoScrollPhase,
+            False,
+        )
+        # Spontaneous wheel events propagate from a capsule to the bar window, which owns the swipe.
+        QtWidgets.QApplication.sendEvent(bar.window, wheel)
+        assert bar.swipe is not None and bar.swipe.stepped
+    finally:
         closed(app, bar)
 
 

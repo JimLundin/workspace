@@ -90,6 +90,9 @@ class Owner(Protocol):
     def pick(self, index: int) -> None: ...
     def volume(self, level: float) -> None: ...
     def tray(self, slot: int, click: Click) -> None: ...
+    def scroll(self, delta: int) -> None:
+        """A horizontal wheel event over the bar, in eighths of a degree."""
+
     def key(self, press: island_menu.Press) -> None: ...
     def deactivated(self) -> None: ...
     def request_actions(self) -> RequestActions | None: ...
@@ -897,6 +900,15 @@ class BarWindow(QtWidgets.QWidget):
         self.capsules = frozendict({**self.capsules, key: created})
         return created
 
+    @override
+    def wheelEvent(self, event: QtGui.QWheelEvent) -> None:
+        """A horizontal scroll over any capsule swipes between desktops; Shift turns the vertical wheel sideways."""
+        delta = event.angleDelta()
+        sideways = delta.x() or (delta.y() if event.modifiers() & Qt.KeyboardModifier.ShiftModifier else 0)
+        if sideways:
+            self.owner.scroll(sideways)
+        event.accept()
+
     def present(self, presented: Presented) -> None:
         """Show exactly these capsules where their frames put them; other pooled capsules hide."""
         area = QtGui.QGuiApplication.primaryScreen().geometry()
@@ -948,7 +960,11 @@ class BarWindow(QtWidgets.QWidget):
                             1,
                             _veil(shell_look, presented.frost),
                         )
-                        for key, section in (("pinned applications", self.shell_sections.pinned), ("applications", self.shell_sections.apps))
+                        for key, section in (
+                            ("pinned applications", self.shell_sections.pinned),
+                            ("desktops", self.shell_sections.pager),
+                            ("applications", self.shell_sections.apps),
+                        )
                         if section.isVisibleTo(self)
                     ),
                 )
