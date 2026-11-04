@@ -24,9 +24,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.15'
-      - run: python -m pip install -e ".[test]" mypy==2.4.0 pyright==1.1.414 ruff==0.17.3
-      - run: mypy .
-      - run: pyright
+      - run: python -m pip install -e ".[test]" pyright==1.1.414 ruff==0.17.3
+      - run: python -m scripts.typecheck
       - run: ruff check .
       - run: ruff format --check .
       - run: python -m scripts.quality

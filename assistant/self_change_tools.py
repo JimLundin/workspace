@@ -261,7 +261,7 @@ class SelfChange:
                     "check_changes",
                     (
                         "Run the tests this change affects, including Windows integration tests, then Ruff, "
-                        "the architecture and interface reviews, and pyright and mypy on changed files; "
+                        "the architecture and interface reviews, and pyright on changed files; "
                         "fix every reported failure. In approval mode, checks follow review."
                     ),
                     NO_ARGUMENTS,

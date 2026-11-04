@@ -113,7 +113,7 @@ results, not new tests of audioop's documented behavior.
 
 On native Windows Python 3.15.1, 75 focused checks pass, including both generated
 properties and runner, architecture, bundle, source-release and protected-gate
-contracts. The changed tooling and generated tests pass strict Mypy and Pyright;
+contracts. The changed tooling and generated tests pass strict Pyright;
 repository Ruff passes. Broader pre-existing typing debt is outside this result.
 
 Each property detects a deliberately seeded Workspace fault: dropping the carried

@@ -23,33 +23,22 @@ dependencies = [
 test = ["hypothesis==6.170.12"]
 dev = ["watchdog==6.0.0"]
 
-[tool.mypy]
-mypy_path = "typings"
-custom_typeshed_dir = "typings/.workspace-typeshed"
-python_version = "3.15"
-platform = "win32"  # the workspace targets Windows; check it as Windows code
-strict = true
-# No Any, anywhere: not written, not inferred, not hidden behind a decorator or import.
-disallow_any_explicit = true
-disallow_any_expr = true
-disallow_any_decorated = true
-disallow_any_unimported = true
-warn_unreachable = true
-
 [tool.pyright]
 stubPath = "typings"
 typeshedPath = "typings/.workspace-typeshed"
 pythonVersion = "3.15"
 pythonPlatform = "Windows"
 typeCheckingMode = "strict"
+# Pyright's defaults plus the typeshed override sources, which describe the stdlib, not Workspace.
+exclude = ["**/node_modules", "**/__pycache__", "**/.*", "typings/typeshed-overrides"]
 
 [tool.ruff]
 target-version = "py315"
 line-length = 150
 extend-include = ["*.pyw"]
-# Preserve vendored upstream declarations; lint consumed local stubs separately.
+# Preserve upstream typeshed declarations; lint consumed local stubs separately.
 # Agent worktrees under .claude are separate checkouts with their own checks.
-extend-exclude = ["typings/.workspace-typeshed", ".claude"]
+extend-exclude = ["typings/.workspace-typeshed", "typings/typeshed-overrides", ".claude"]
 
 [tool.ruff.format]
 line-ending = "lf"

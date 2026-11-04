@@ -107,13 +107,13 @@ def test_standards_fail_on_a_lint_error_outside_the_selected_tests_before_tests_
 
 
 def test_background_standards_report_each_failure_and_output_only_when_it_fails(tmp_path: Path) -> None:
-    # Detect an overlapped type checker losing its exit status or report,
-    # including the second checker when the first passes.
+    # Detect an overlapped standard losing its exit status or report,
+    # including the second one when the first passes.
     passing = Standard("pyright", (sys.executable, "-c", "print('0 errors')"))
-    failing = Standard("mypy", (sys.executable, "-c", "print('api.py:1: error: unknown'); raise SystemExit(1)"))
+    failing = Standard("lint", (sys.executable, "-c", "print('api.py:1: error: unknown'); raise SystemExit(1)"))
     with background((passing, failing), tmp_path) as collect:
         failures = collect()
-    assert [(failure.node, failure.summary) for failure in failures] == [("mypy", "mypy exited with status 1")]
+    assert [(failure.node, failure.summary) for failure in failures] == [("lint", "lint exited with status 1")]
     assert "api.py:1: error: unknown" in failures[0].report
     with background((passing, passing), tmp_path) as collect:
         assert collect() == ()

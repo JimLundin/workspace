@@ -1,10 +1,10 @@
 __pycache__/
 .pytest_cache/
 .hypothesis/
-.mypy_cache/
 .ruff_cache/
 uv.lock
 .pyright/
+typings/.workspace-typeshed/
 .venv/
 .env
 .env.*

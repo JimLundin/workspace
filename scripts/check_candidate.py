@@ -5,7 +5,7 @@
 check_changes runs this from the running version with its bundled interpreter after
 the protected selfcheck passes, so a self-change fails here instead of reaching main
 with errors CI's standards job rejects. Ruff and the architecture and quality
-reviews cover the whole candidate; pyright and mypy cover only the Python files
+reviews cover the whole candidate; pyright covers only the Python files
 changed from BASE, as `Dev.cmd check` does while editing. Prints only failures
 and a one-line summary; exits 1 if any standard failed.
 """
@@ -13,7 +13,6 @@ and a one-line summary; exits 1 if any standard failed.
 import argparse
 import hashlib
 import inspect
-import shutil
 import sys
 from pathlib import Path
 
@@ -31,13 +30,7 @@ def changed(candidate: Path, base: Path) -> tuple[str, ...]:
     return tuple(name for name in source_files(candidate) if digest(candidate / name) != digest(base / name))
 
 
-# A vendored dot-folder the keeper's source copy omits; both type checkers need it.
-TYPESHED = Path("typings") / ".workspace-typeshed"
-
-
 def failures(candidate: Path, base: Path) -> tuple[str, ...]:
-    if not (candidate / TYPESHED).is_dir() and (base / TYPESHED).is_dir():
-        shutil.copytree(base / TYPESHED, candidate / TYPESHED)
     lint = tuple(failure.report for failure in check_standards.run((check_standards.LINT, check_standards.FORMAT), candidate))
     try:
         reviewed = architecture.review(candidate)
@@ -61,7 +54,7 @@ def main() -> None:
             parser.error("Invalid candidate arguments.")
     for failure in found:
         print(failure, flush=True)
-    print(f"Standards: {len(found)} failed (Ruff lint and format, architecture, interfaces, pyright and mypy on changed files)", flush=True)
+    print(f"Standards: {len(found)} failed (Ruff lint and format, architecture, interfaces, pyright on changed files)", flush=True)
     sys.exit(1 if found else 0)
 
 

@@ -1,6 +1,6 @@
 # Consumed dependency interfaces
 
-These stubs describe only calls made by Workspace. Both type checkers use this
+These stubs describe only calls made by Workspace. Pyright uses this
 directory; runtime imports continue to use the installed packages.
 
 Hypothesis's `given` and `composite` stubs describe our single-argument,
@@ -23,15 +23,10 @@ Extend a stub only when consuming another API. Check its signature against the
 pinned dependency's source and exercise our integration; stubs must not assert
 that external data already satisfies a domain schema.
 
-The [Python 3.15 typeshed override](.workspace-typeshed/README.md) retains Pyright 1.1.414's
-standard-library contracts and corrects its native `frozendict` constructor and
-the binary/text types of subprocess streams.
-It also preserves native ctypes result/pointer payloads, keeps registry and URL
-observations unknown until validation, and corrects asynchronous context-manager
-overload selection. The override README records each correction.
-Both checkers select it through their supported typeshed-directory settings;
-runtime uses the builtin directly. Python's frozen mapping implementation is
-trusted, without library tests.
+The [standard-library overrides](typeshed-overrides/README.md) correct Pyright's
+bundled typeshed for the native `frozendict` constructor, subprocess stream types,
+ctypes payloads, and registry and URL observations. `scripts/typecheck.py`
+builds the patched typeshed before each Pyright run; runtime uses the builtins directly.
 
 The pytest stub covers the mutation session's plugin: the bare `fixture`
 decorator on a method taking only its instance, and `main`, whose `ExitCode`
@@ -66,4 +61,4 @@ Workspace validates nullable pointers and unknown external values before use.
 
 Project-owned stubs use native `type` declarations and contain no checker or
 lint suppression comments. Native dependency spellings are documented in Ruff's
-naming configuration. Vendored typeshed retains its upstream declarations.
+naming configuration. Typeshed overrides retain their upstream declarations.

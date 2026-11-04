@@ -21,7 +21,7 @@ try {
         'mutate' { & $python -m scripts.mutate @Arguments }
         'lint' { & $python -m ruff check @Arguments }
         'format' { & $python -m ruff format @Arguments }
-        'typecheck' { & $python -m pyright --pythonpath $python @Arguments }
+        'typecheck' { & $python -m scripts.typecheck --pythonpath $python @Arguments }
     }
     exit $LASTEXITCODE
 } finally { Pop-Location }

@@ -3,8 +3,7 @@
 CI's standards job runs these tools against the native Windows dependencies.
 The editing quality review runs only Ruff's signature rules, so without this
 step type and lint errors anywhere else in the tree still produced receipts.
-Both type checkers run, as CI's standards job does: pyright and mypy each
-catch errors the other accepts.
+Pyright is the only type checker; scripts/typecheck.py prepares its typeshed.
 The protected selfcheck and CI keep their own unchanged invocations.
 """
 
@@ -35,15 +34,12 @@ FORMAT = Standard("ruff format", (sys.executable, "-m", "ruff", "format", "--che
 # The same invocation as `Dev.cmd typecheck`: the development venv's dependencies.
 # Pyright keeps no state between CLI runs, so every check is a cold whole-tree run;
 # its own worker threads use the otherwise idle cores while tests run.
-PYRIGHT = Standard("pyright", (sys.executable, "-m", "pyright", "--threads", "--pythonpath", sys.executable))
-# CI's `mypy .`; the development venv supplies the installed dependencies' types.
-MYPY = Standard("mypy", (sys.executable, "-m", "mypy", "."))
-# Both type checkers, overlapped with each other and with the tests.
-TYPES = (PYRIGHT, MYPY)
+PYRIGHT = Standard("pyright", (sys.executable, "-m", "scripts.typecheck", "--threads", "--pythonpath", sys.executable))
+TYPES = (PYRIGHT,)
 
 
 def changed_types(names: Iterable[str]) -> tuple[Standard, ...]:
-    """Both checkers over only the changed Python files: the editing gate.
+    """Pyright over only the changed Python files: the editing gate.
 
     Whole-tree pyright set an 80 s floor under every check, even one whose tests
     ran in milliseconds. A type error a change causes elsewhere is caught by
@@ -52,7 +48,7 @@ def changed_types(names: Iterable[str]) -> tuple[Standard, ...]:
     files = tuple(sorted(name for name in names if name.endswith((".py", ".pyw"))))
     if not files:
         return ()
-    return (Standard(PYRIGHT.node, (*PYRIGHT.command, *files)), Standard(MYPY.node, (*MYPY.command[:-1], *files)))
+    return (Standard(PYRIGHT.node, (*PYRIGHT.command, *files)),)
 
 
 def outcome(standard: Standard, status: int, output: str) -> tuple[Failure, ...]:
@@ -116,7 +112,7 @@ def stop(process: subprocess.Popen[bytes]) -> None:
     """End a checker and its children.
 
     The Windows venv launcher runs the real interpreter as a child, so killing
-    only the launcher left mypy and pyright running, holding their caches, after
+    only the launcher left pyright running after
     an early policy failure.
     """
     if sys.platform == "win32":

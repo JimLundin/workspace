@@ -137,10 +137,10 @@ Read [code-quality-policies.md](code-quality-policies.md) when changing a
 signature or its exact migration entry. Architecture migration exceptions
 are printed as cleanup debt. A policy failure stops before tests or a receipt.
 `Dev.cmd check` also passes `--standards`, which applies whole-tree
-`ruff check` and `ruff format --check`, and pyright and mypy over the changed
+`ruff check` and `ruff format --check`, and pyright over the changed
 Python files; `--full` and CI's standards job type the whole tree. Ruff runs
-before tests and stops the check on failure. The type checkers run concurrently
-with the policy reviews and the tests; errors from either fail the check and
+before tests and stops the check on failure. Pyright runs concurrently
+with the policy reviews and the tests; its errors fail the check and
 block the receipt. Whole-tree pyright set an 80 s floor under every editing
 check; a type error a change causes in an unchanged file is caught by `--full`
 and CI instead. The final source binding compares file sizes and modification
@@ -213,8 +213,8 @@ Read [property-testing.md](property-testing.md) for the underlying-library
 decision and property scope. Focus a campaign with, for example,
 `Dev.cmd check --tests tests/properties/test_pcm.py`.
 
-Consumed dependency declarations live in `typings/` and are loaded by both type
-checkers. The editing runner validates native result schemas, and the release
+Consumed dependency declarations live in `typings/` and are loaded by
+pyright. The editing runner validates native result schemas, and the release
 file boundary validates record and hash schemas through the existing Pydantic
 dependency. Bundle pins are validated as a frozen release record. These changes
 replace casts in those boundaries; no custom type-assertion predicates are used.

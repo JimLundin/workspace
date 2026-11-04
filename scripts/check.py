@@ -561,7 +561,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--full", action="store_true")
     parser.add_argument("--native", action="store_true", help="include affected native modules; Windows only, one runner")
-    parser.add_argument("--standards", action="store_true", help="also apply the whole-tree Ruff, pyright and mypy standards; Dev.cmd check does")
+    parser.add_argument("--standards", action="store_true", help="also apply the whole-tree Ruff and pyright standards; Dev.cmd check does")
     parser.add_argument("--tests", nargs="+", help="explicit test modules for an in-progress iteration")
     parser.add_argument("--receipt", type=Path)
     parser.add_argument("--timings", type=Path, help="diagnostic cost report, retained on test/import failure")

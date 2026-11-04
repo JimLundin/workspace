@@ -610,7 +610,7 @@ edits stay available for follow-up requests in the same conversation, then:
    The agent imports changed modules and runs the tests its change affects,
    including Windows integration tests, on a fresh copy of its draft. It sees
    every failure the keeper would refuse, fixes it and checks again in the same
-   task. When those tests pass, the bundled Ruff, pyright and mypy and the
+   task. When those tests pass, the bundled Ruff and pyright and the
    architecture and interface reviews check the draft as CI would, so a
    self-change cannot push errors to main. Ruff's signed binary is the bundle's
    only executable; pyright runs on the installed Node.js.
@@ -835,7 +835,7 @@ laptop, Windows `python`, `py` and double-clicked `.pyw` files use the user-inst
 Python 3.15.1; the development `.venv` uses that installation and shares only
 application dependencies with the Downloads bundle.
 
-GitHub Actions checks Python 3.15 on Windows and Linux, plus Mypy,
+GitHub Actions checks Python 3.15 on Windows and Linux, plus
 Pyright and Ruff on Windows with the native UI dependencies. Desktop end-to-end tests are available through the manual
 **Windows desktop tests** workflow on a dedicated self-hosted Windows runner
 labelled `workspace-desktop`; they take control of its keyboard and mouse.
@@ -850,7 +850,7 @@ to re-enable the layout when you return to a normal application.
 python selfcheck.py --fast --durations 10 # editing: defer Windows integration modules
 python selfcheck.py --durations 10        # full gate, required before install
 python -m pytest -q tests/test_pcm.py     # one area, with optional pytest installed
-mypy . && pyright && ruff check . && ruff format --check .
+python -m scripts.typecheck && ruff check . && ruff format --check .
 WORKSPACE_E2E=1 pytest tests/test_windows_*e2e.py
 python scripts/bundle.py dist/workspace-sdk-python315-win64.zip
 ```
