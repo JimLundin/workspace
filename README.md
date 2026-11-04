@@ -760,6 +760,7 @@ All in `%LOCALAPPDATA%\workspace` (tray menu → Open logs folder):
 | File | |
 |---|---|
 | `usage.jsonl` | which features were used, how long they took, whether they failed. Voice uses include held/audio durations, transcription/submission timing, and transcript/requested/submitted character counts; agent uses include preparation, first response and first tool timings. Never what you typed or said. Tray menu → **Usage report** lists every feature by use, and the ones never used, so they can go. |
+| `navigation.jsonl` | every change of the focused window: the setup, the app and desktop you came from and went to, what caused it (a Workspace key, the pager, scrolling, the toolbar, Alt+Tab, a click or something else) and how long the previous window was in front. Apps are named by program or pinned web app, never by window title or content. It's on by default and never leaves the laptop. At 16 MB it becomes `navigation.1.jsonl`. See [the navigation log](docs/window-placement.md#navigation-log). |
 | `work/work.sqlite3` | saved tasks, checkpoints, questions, action fingerprints and outcomes, standing instructions, and explicit context |
 | `assistant.log`, `automation.log`, `layout.log` | problems and crashes |
 | `work/worker.log` | bounded work-process diagnostics; automation failures point here |
