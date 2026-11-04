@@ -31,6 +31,7 @@ class Command(Enum):
     OVERLAY = auto()
     TASKBAR = auto()
     PLACEMENT = auto()
+    DARK_WHEN_LOCKED = auto()
     NOTIFICATIONS = auto()
     ALL_CONTROLS = auto()
 
@@ -166,6 +167,7 @@ class Controls:
     overlay: bool = field(default=False, kw_only=True)
     taskbar: bool = field(default=False, kw_only=True)
     placement_paused: bool = field(default=False, kw_only=True)
+    dark_when_locked: bool = field(default=True, kw_only=True)
     sound: Slider = Slider("Sound", None, muted=False)
     tray: tuple[str, ...] = ()  # Each tray icon's label, in the bar's snapshot order.
 
@@ -183,16 +185,24 @@ def entries(controls: Controls) -> tuple[Cell, ...]:
         Toggle("Keyboard overlay", "On" if controls.overlay else "Off", "layers", Command.OVERLAY, on=controls.overlay),
         Toggle("Windows taskbar", "Shown" if controls.taskbar else "Hidden", "table", Command.TASKBAR, on=controls.taskbar),
         Toggle("Window placement", "Paused" if controls.placement_paused else "On", "grid", Command.PLACEMENT, on=not controls.placement_paused),
+        Toggle(
+            "Dark when locked",
+            "External screens" if controls.dark_when_locked else "Off",
+            "lock",
+            Command.DARK_WHEN_LOCKED,
+            on=controls.dark_when_locked,
+        ),
     )
     modules = (
         Cell(toggles[0], Face.TOGGLE, 0, 4, top, 4),
-        Cell(Item("Your work canvas", "canvas", Command.CANVAS), Face.TILE, 4, 4, top, 8, "Canvas"),
+        Cell(Item("Your work canvas", "canvas", Command.CANVAS), Face.TILE, 4, 4, top, 10, "Canvas"),
         Cell(toggles[1], Face.TOGGLE, 0, 4, top + 4, 4),
         Cell(toggles[2], Face.TOGGLE, 0, 4, top + 8, 4),
-        Cell(Item("Your work feed", "chat", Command.FEED), Face.TILE, 4, 4, top + 8, 8, "Feed"),
+        Cell(Item("Your work feed", "chat", Command.FEED), Face.TILE, 4, 4, top + 10, 10, "Feed"),
         Cell(toggles[3], Face.TOGGLE, 0, 4, top + 12, 4),
+        Cell(toggles[4], Face.TOGGLE, 0, 4, top + 16, 4),
     )
-    top += 16
+    top += 20
     record = () if controls.recording is not None else (Cell(Item("Record a meeting", "mic", Command.RECORD), Face.WIDE, 0, COLUMNS, top, 5),)
     top += 5 * len(record)
     sound = Cell(controls.sound, Face.SLIDER, 0, COLUMNS, top, 6)
@@ -378,6 +388,7 @@ def restores_focus(choice: Choice) -> bool:
             Command.OVERLAY
             | Command.TASKBAR
             | Command.PLACEMENT
+            | Command.DARK_WHEN_LOCKED
             | Command.RECORD
             | Command.STOP_RECORDING
             | Command.STOP_AGENT

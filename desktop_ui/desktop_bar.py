@@ -10,7 +10,7 @@ import math
 import queue
 import threading
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from contextlib import suppress
 from dataclasses import dataclass, field, replace
 from datetime import datetime
@@ -21,6 +21,7 @@ lazy from PySide6 import QtCore, QtGui
 
 from desktop_ui.qt_runtime import prepare
 lazy import desktop_ui.components.appearance
+lazy import usage
 lazy import winapi.ambient
 lazy from assistant.meeting_detection import AutomaticStatus
 lazy from assistant.recording_state import RecordingAction, RecordingState
@@ -51,6 +52,7 @@ lazy from desktop_ui.island_menu import (
 lazy from desktop_ui.island_model import Action, Agent, CapsuleView, Expansion, Job, Key, Marker, Observed, Spinner, capture, island, keyboard
 lazy from desktop_ui.island_motion import IslandMotion, Shown, advance, finish, placed, retarget, settled
 lazy from desktop_ui.island_surface import TOP, BarWindow, Drawn, Presented
+lazy from desktop_ui.locked_screens import LockedScreens
 lazy from desktop_ui.navigation import BarScroll, CycleApp, Order, Placing, ShowWindow, Source
 lazy from desktop_ui.qt_ui import EventLoop, application
 lazy from desktop_ui.request_panel import RequestActions
@@ -58,7 +60,8 @@ lazy from desktop_ui.shell_controls import TASKBAR_TOGGLE, TaskbarControl, Windo
 lazy from desktop_ui.shell_items import EMPTY_SHELF, Application, Item, Pinned, Shelf
 lazy from desktop_ui.window_layout import Program
 lazy from protocol import Tool
-lazy from winapi import appearance, inputs, shell, system_notices, windows
+lazy from usage import Detail
+lazy from winapi import appearance, inputs, session, shell, system_notices, windows
 lazy from winapi.machine_status import Power, PowerUnavailable, Speakers
 lazy from winapi.notifications import NotificationObserver
 lazy from winapi.shapes import Rect
@@ -125,6 +128,7 @@ class DesktopBar:
         "keys",
         "last_frame",
         "layout_enabled",
+        "locked_screens",
         "loop",
         "materials",
         "menu_target",
@@ -196,6 +200,7 @@ class DesktopBar:
         self.errors: queue.Queue[str] = queue.Queue()
         self.taskbar = TaskbarControl()
         self.controls: shell.AppWindow | None = None
+        self.locked_screens: LockedScreens | None = None
         self.keys: WindowsKeyObserver | None = None
         self.worker: threading.Thread | None = None
         self.loop = EventLoop(application(), self.paint_frames)
@@ -246,6 +251,11 @@ class DesktopBar:
         self.notification_service = NotificationObserver()
         self.status_service = StatusObserver()
         self.controls = shell.AppWindow("workspace shell controls", self.message)
+        self.locked_screens = LockedScreens(self.record_usage)
+        try:
+            session.subscribe(self.controls.handle)
+        except OSError as error:
+            self.errors.put(f"Screens can't go dark when locked: {error}")
         self.tray_host = TrayHost()
         self.application_service = ApplicationObserver(self.errors.put)
         self.keys = WindowsKeyObserver(self.controls.handle)
@@ -262,7 +272,13 @@ class DesktopBar:
         if message == TASKBAR_TOGGLE:
             self.toggle_taskbar()
             return 0
+        if self.locked_screens is not None:
+            self.locked_screens.message(message, wparam)
         return None
+
+    def record_usage(self, feature: str, details: Mapping[str, Detail]) -> None:
+        with suppress(OSError):
+            usage.record("assistant", feature, details)
 
     def toggle_taskbar(self) -> None:
         try:
@@ -353,6 +369,7 @@ class DesktopBar:
                     overlay=self.overlay_enabled,
                     taskbar=self.taskbar.revealed,
                     placement_paused=self.arrangement.paused,
+                    dark_when_locked=self.locked_screens is not None and self.locked_screens.enabled,
                     sound=sound,
                     tray=tuple(entry.tip or "Tray application" for entry in self.window.tray),
                 )
@@ -475,6 +492,9 @@ class DesktopBar:
                 self.toggle_taskbar()
             case Command.PLACEMENT:
                 self.navigate(Placing.TOGGLE_PAUSE)
+            case Command.DARK_WHEN_LOCKED:
+                if self.locked_screens is not None:
+                    self.locked_screens.toggle()
             case Command.NOTIFICATIONS:
                 self.notification_settings()
             case Command.ALL_CONTROLS:
@@ -746,7 +766,10 @@ class DesktopBar:
             if self.worker is not None:
                 self.worker.join(timeout=6)
         finally:
+            if self.locked_screens is not None:
+                self.locked_screens.close()
             if self.controls is not None:
+                session.unsubscribe(self.controls.handle)
                 self.controls.destroy()
             self.resolution.update(active=False)
             self.window.dispose()
