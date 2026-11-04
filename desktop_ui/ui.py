@@ -131,6 +131,7 @@ class Ui:
         "_keymap",
         "_meetings",
         "_notifications",
+        "_overlay_enabled",
         "_pending_inputs",
         "_poll_timer",
         "_recording",
@@ -168,6 +169,7 @@ class Ui:
         self._notifications: NotificationSources | None = None
         self._desktop: DesktopBar | None = None
         self._automatic_recording = AutomaticStatus.OFF
+        self._overlay_enabled = False
         self._switcher: WindowSwitcher | None = None
         self._agent_lock = threading.Lock()
         self._work: WorkWindow | None = None
@@ -828,6 +830,7 @@ class Ui:
                 )
                 self._desktop = self._views.desktop(actions, audio_level=audio_level)
                 self._desktop.automatic_changed(self._automatic_recording)
+                self._desktop.overlay_changed(enabled=self._overlay_enabled)
                 if self._canvas_published is not None:
                     self._publish_canvas(self._canvas_published, replay=True)
                 self.refresh_inbox()
@@ -860,6 +863,14 @@ class Ui:
             self._automatic_recording = status
             if self._desktop is not None:
                 self._desktop.automatic_changed(status)
+
+        self.post(display)
+
+    def desktop_overlay(self, *, enabled: bool) -> None:
+        def display(_: QtWidgets.QApplication) -> None:
+            self._overlay_enabled = enabled
+            if self._desktop is not None:
+                self._desktop.overlay_changed(enabled=enabled)
 
         self.post(display)
 

@@ -35,13 +35,12 @@ from desktop_ui.island_layout import (
     WAVE_BARS,
     Content,
     Framed,
-    Line,
     Spot,
+    Tile,
     arrange,
-    lines,
-    live,
+    tiles,
 )
-from desktop_ui.island_menu import Disclosure, Item, Live, Menu, Rule, selectable, within
+from desktop_ui.island_menu import Disclosure, Face, Item, Live, Menu, Slider, Toggle
 from desktop_ui.island_model import Action, Badge, CapsuleView, Control, Glyph, Key, Marker, Part, Spinner, Text
 from desktop_ui.qt_runtime import prepare
 from desktop_ui.qt_ui import EventLoop
@@ -88,6 +87,7 @@ class Owner(Protocol):
     def hover(self, key: Key | None) -> None: ...
     def select(self, index: int) -> None: ...
     def pick(self, index: int) -> None: ...
+    def volume(self, level: float) -> None: ...
     def key(self, press: island_menu.Press) -> None: ...
     def deactivated(self) -> None: ...
     def request_actions(self) -> RequestActions | None: ...
@@ -188,6 +188,14 @@ def font(*, strong: bool) -> QtGui.QFont:
 
 
 @lru_cache(maxsize=1)
+def caption_font() -> QtGui.QFont:
+    value = QtGui.QFont(typeface.FAMILY)
+    value.setPixelSize(11)
+    value.setWeight(QtGui.QFont.Weight.Normal)
+    return value
+
+
+@lru_cache(maxsize=1)
 def heading_font() -> QtGui.QFont:
     value = QtGui.QFont(typeface.FAMILY)
     value.setPixelSize(14)
@@ -245,61 +253,90 @@ class ControlButton(KeyboardFocus):
         icon(self.control.icon, ink.color).paint(painter, QtCore.QRect(6, 6, 16, 16))
 
 
-class MenuRow(QtWidgets.QAbstractButton):
-    """One menu row inside the expanded island. A live row stops its activity only from its Stop circle."""
+def track(bounds: QtCore.QRectF) -> QtCore.QRectF:
+    """The sound slider's bar: beside its speaker symbol, under its label."""
+    return QtCore.QRectF(38, bounds.height() - 20, bounds.width() - 52, 6)
 
-    def __init__(self, capsule: Capsule, line: Line) -> None:
+
+def sound_reading(slider: Slider) -> str:
+    if slider.level is None:
+        return "unavailable"
+    return f"{round(slider.level * 100)}%" + (", muted" if slider.muted else "")
+
+
+class MenuCell(QtWidgets.QAbstractButton):
+    """One tile of the expanded capsule. An activity card stops only from its Stop circle;
+    the sound slider sets the volume where it is pressed or dragged."""
+
+    def __init__(self, capsule: Capsule, tile: Tile) -> None:
         super().__init__(capsule)
         self.capsule = capsule
-        self.line = line
-        self.setCursor(Qt.CursorShape.PointingHandCursor if selectable(line.row) else Qt.CursorShape.ArrowCursor)
-        self.setFocusPolicy(Qt.FocusPolicy.NoFocus)  # The window navigates; rows show its selection.
+        self.tile = tile
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setFocusPolicy(Qt.FocusPolicy.NoFocus)  # The window navigates; cells show its selection.
         self.clicked.connect(self.picked)
         self.describe()
 
     def describe(self) -> None:
-        match self.line.row:
+        match self.tile.cell.entry:
             case Live(label=label, detail=detail, stop=stop):
                 action = "Stop recording" if stop is island_menu.Command.STOP_RECORDING else "Stop agent work"
                 name = " · ".join(part for part in (label, detail, action) if part)
             case Item(label=label, key=key):
                 name = f"{label} · {key}" if key else label
+            case Toggle(label=label, detail=detail):
+                name = f"{label}: {detail}"
+            case Slider(label=label) as slider:
+                name = f"{label}: {sound_reading(slider)}"
             case Disclosure(label=label):
                 name = label
-            case Rule.SEPARATOR:
-                name = ""
             case _:
-                assert_never(self.line.row)
+                assert_never(self.tile.cell.entry)
         if self.accessibleName() != name:
             self.setAccessibleName(name)
 
-    def update_line(self, line: Line) -> None:
-        if line != self.line:
-            self.line = line
+    def update_tile(self, tile: Tile) -> None:
+        if tile != self.tile:
+            self.tile = tile
             self.describe()
             self.update()
 
     def picked(self) -> None:
-        self.capsule.window_.owner.pick(self.line.index)
+        self.capsule.window_.owner.pick(self.tile.index)
 
     def stop_circle(self) -> QtCore.QRectF:
-        return QtCore.QRectF(self.width() - 31, (self.height() - 28) / 2, 28, 28)
+        return QtCore.QRectF(self.width() - 34, (self.height() - 28) / 2, 28, 28)
 
     @override
     def hitButton(self, pos: QtCore.QPoint) -> bool:
-        match self.line.row:
+        match self.tile.cell.entry:
             case Live():
                 return self.stop_circle().contains(QtCore.QPointF(pos))
-            case Rule.SEPARATOR:
-                return False
-            case Item() | Disclosure():
+            case Slider():
+                return False  # The slider takes the pointer itself rather than clicking.
+            case Item() | Toggle() | Disclosure():
                 return super().hitButton(pos)
             case _:
-                assert_never(self.line.row)
+                assert_never(self.tile.cell.entry)
+
+    def slide(self, pos: QtCore.QPointF) -> None:
+        match self.tile.cell.entry:
+            case Slider(level=float()):
+                bar = track(QtCore.QRectF(self.rect()))
+                self.capsule.window_.owner.volume(round(min(1.0, max(0.0, (pos.x() - bar.left()) / bar.width())), 2))
+            case _:
+                pass
 
     def mousePressEvent(self, event: QtGui.QMouseEvent) -> None:
         super().mousePressEvent(event)
-        event.accept()  # A miss on a row stays in the menu, rather than reaching the island beneath it.
+        self.slide(event.position())
+        event.accept()  # A miss on a cell stays in the menu, rather than reaching the capsule beneath it.
+
+    def mouseMoveEvent(self, event: QtGui.QMouseEvent) -> None:
+        super().mouseMoveEvent(event)
+        if event.buttons() & Qt.MouseButton.LeftButton:
+            self.slide(event.position())
+        event.accept()
 
     def mouseReleaseEvent(self, event: QtGui.QMouseEvent) -> None:
         super().mouseReleaseEvent(event)
@@ -307,76 +344,137 @@ class MenuRow(QtWidgets.QAbstractButton):
 
     def enterEvent(self, event: QtGui.QEnterEvent) -> None:
         super().enterEvent(event)
-        if selectable(self.line.row):
-            self.capsule.window_.owner.select(self.line.index)
+        self.capsule.window_.owner.select(self.tile.index)
 
     def paintEvent(self, event: QtGui.QPaintEvent) -> None:
         painter = QtGui.QPainter(self)
         painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
-        lettering, row = self.capsule.look.lettering, self.line.row
+        lettering, cell = self.capsule.look.lettering, self.tile.cell
         menu = self.capsule.window_.menu
-        chosen = menu is not None and menu.selected == self.line.index
+        chosen = menu is not None and menu.selected == self.tile.index
         bounds = QtCore.QRectF(self.rect())
+        corner = bounds.height() / 2 if cell.face is Face.LINK else 12.0
         painter.setPen(Qt.PenStyle.NoPen)
-        ink = color(lettering.ink)
-        quiet = color(lettering.quiet)
-        if chosen and not live(row):
-            painter.setBrush(QtGui.QColor(GLASS_ACCENT) if not self.capsule.contrast else color(lettering.ink))
-            painter.drawRoundedRect(bounds, bounds.height() / 2, bounds.height() / 2)
-            ink = quiet = QtGui.QColor("#ffffff") if not self.capsule.contrast else color(lettering.press)
-        painter.setFont(font(strong=False))
-        indent = 12 if within(row) else 0
-        match row:
-            case Rule.SEPARATOR:
-                painter.setBrush(color(Shade(lettering.ink.color, 0.12)))
-                painter.drawRect(QtCore.QRectF(10, bounds.height() / 2, bounds.width() - 20, 1))
+        if cell.face is not Face.LINK:
+            painter.setBrush(color(Shade(lettering.ink.color, 0.07)))
+            painter.drawRoundedRect(bounds, corner, corner)
+        if chosen or (self.underMouse() and cell.face is not Face.CARD):
+            painter.setBrush(color(lettering.press if chosen else lettering.hover))
+            painter.drawRoundedRect(bounds, corner, corner)
+        ink, quiet = color(lettering.ink), color(lettering.quiet)
+        match cell.entry:
+            case Live() as activity:
+                self.paint_live(painter, activity)
+            case Toggle() as toggle:
+                self.paint_toggle(painter, toggle)
+            case Slider() as slider:
+                self.paint_slider(painter, slider)
+            case Item(icon=name) | Disclosure(icon=name) if cell.face is Face.TILE:
+                self.paint_symbol(painter, name, on=False)
+                painter.setPen(ink)
+                painter.setFont(font(strong=True))
+                painter.drawText(bounds.adjusted(48, 0, -8, 0), Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, cell.caption)
+            case Item(icon=name) | Disclosure(icon=name) if cell.face is Face.TOOL:
+                self.paint_icon(painter, name, ink, QtCore.QPointF(bounds.width() / 2 - 8, 12))
+                painter.setPen(quiet)
+                painter.setFont(caption_font())
+                painter.drawText(bounds.adjusted(2, 0, -2, -9), Qt.AlignmentFlag.AlignBottom | Qt.AlignmentFlag.AlignHCenter, cell.caption)
             case Item(label=label, icon=name, key=key):
                 if name:
-                    self.paint_icon(painter, name, quiet, 10)
-                painter.setPen(ink)
-                painter.drawText(bounds.adjusted(36 + indent, 0, -10, 0), Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, label)
-                if key:
-                    painter.setPen(quiet)
-                    painter.drawText(bounds.adjusted(0, 0, -10, 0), Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignRight, key)
-            case Disclosure(label=label, icon=name):
-                self.paint_icon(painter, name, quiet, 10)
+                    self.paint_icon(painter, name, quiet, QtCore.QPointF(12, (bounds.height() - 16) / 2))
+                painter.setFont(font(strong=False))
                 painter.setPen(ink)
                 painter.drawText(bounds.adjusted(36, 0, -10, 0), Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, label)
-                self.paint_icon(painter, "down" if menu is not None and menu.disclosed else "chevron", quiet, round(bounds.width()) - 26)
-            case Live() as activity:
-                self.paint_live(painter, activity, chosen=chosen)
+                if key:
+                    painter.setPen(quiet)
+                    painter.drawText(bounds.adjusted(0, 0, -12, 0), Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignRight, key)
+            case Disclosure(label=label):
+                # On its own page, tiling's cell leads back to the grid.
+                self.paint_icon(painter, "chevron-left", quiet, QtCore.QPointF(12, (bounds.height() - 16) / 2))
+                painter.setFont(font(strong=True))
+                painter.setPen(ink)
+                painter.drawText(bounds.adjusted(36, 0, -10, 0), Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, label)
             case _:
-                assert_never(row)
+                assert_never(cell.entry)
 
-    def paint_live(self, painter: QtGui.QPainter, activity: Live, *, chosen: bool) -> None:
-        """An activity on its own quiet fill: its glyph, its reading, and its Stop circle."""
+    def paint_symbol(self, painter: QtGui.QPainter, name: str, *, on: bool) -> None:
+        """A symbol in its own circle at the cell's leading edge, filled with the accent while its setting is on."""
+        lettering = self.capsule.look.lettering
+        at = QtCore.QPointF(12 if self.tile.cell.face is Face.TILE else 4, (self.height() - 28) / 2)
+        painter.setPen(Qt.PenStyle.NoPen)
+        if on:
+            painter.setBrush(QtGui.QColor(GLASS_ACCENT) if not self.capsule.contrast else color(lettering.ink))
+        else:
+            painter.setBrush(color(Shade(lettering.ink.color, 0.12)))
+        painter.drawEllipse(QtCore.QRectF(at.x(), at.y(), 28, 28))
+        ink = (QtGui.QColor("#ffffff") if not self.capsule.contrast else color(lettering.press)) if on else color(lettering.ink)
+        self.paint_icon(painter, name, ink, QtCore.QPointF(at.x() + 6, at.y() + 6))
+
+    def paint_toggle(self, painter: QtGui.QPainter, toggle: Toggle) -> None:
+        lettering, bounds = self.capsule.look.lettering, QtCore.QRectF(self.rect())
+        self.paint_symbol(painter, toggle.icon, on=toggle.on)
+        middle = bounds.height() / 2
+        painter.setFont(font(strong=False))
+        painter.setPen(color(lettering.ink))
+        text = QtCore.QRectF(38, 0, bounds.width() - 42, middle + 1)
+        painter.drawText(text, Qt.AlignmentFlag.AlignBottom | Qt.AlignmentFlag.AlignLeft, toggle.label)
+        painter.setFont(caption_font())
+        painter.setPen(color(lettering.quiet))
+        painter.drawText(
+            QtCore.QRectF(38, middle, bounds.width() - 42, middle), Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft, toggle.detail
+        )
+
+    def paint_slider(self, painter: QtGui.QPainter, slider: Slider) -> None:
+        lettering, bounds = self.capsule.look.lettering, QtCore.QRectF(self.rect())
+        painter.setFont(font(strong=True))
+        painter.setPen(color(lettering.ink))
+        painter.drawText(QtCore.QRectF(12, 8, bounds.width() - 24, 16), Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, slider.label)
+        bar = track(bounds)
+        symbol = "speaker-muted" if slider.muted else "speaker-on"
+        self.paint_icon(painter, symbol, color(lettering.quiet), QtCore.QPointF(12, bar.center().y() - 8))
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(color(Shade(lettering.ink.color, 0.16)))
+        painter.drawRoundedRect(bar, 3, 3)
+        if slider.level is None:
+            return
+        filled = QtCore.QRectF(bar.left(), bar.top(), bar.width() * slider.level, bar.height())
+        painter.setBrush(
+            color(lettering.quiet) if slider.muted else QtGui.QColor(GLASS_ACCENT) if not self.capsule.contrast else color(lettering.ink)
+        )
+        painter.drawRoundedRect(filled, 3, 3)
+        painter.setBrush(QtGui.QColor("#ffffff") if not self.capsule.contrast else color(lettering.ink))
+        painter.drawEllipse(QtCore.QPointF(filled.right(), bar.center().y()), 7, 7)
+
+    def paint_live(self, painter: QtGui.QPainter, activity: Live) -> None:
+        """An activity card: its glyph, its reading, and its Stop circle."""
         lettering, bounds = self.capsule.look.lettering, QtCore.QRectF(self.rect())
         ink, quiet = color(lettering.ink), color(lettering.quiet)
-        painter.setBrush(color(lettering.press if chosen else lettering.hover))
-        painter.drawRoundedRect(bounds, 15, 15)
         middle = bounds.height() / 2
         if activity.stop is island_menu.Command.STOP_RECORDING:
             painter.setBrush(QtGui.QColor(RED) if not self.capsule.contrast else ink)
-            painter.drawEllipse(QtCore.QPointF(14, middle), 4, 4)
+            painter.drawEllipse(QtCore.QPointF(20, middle), 5, 5)
         else:
-            self.capsule.paint_spinner(painter, Spot(Spinner(activity.label), 7, 14), middle)
+            self.capsule.paint_spinner(painter, Spot(Spinner(activity.label), 13, 14), middle)
+        painter.setFont(font(strong=True))
         painter.setPen(ink)
-        width = QtGui.QFontMetricsF(font(strong=False)).horizontalAdvance(activity.label)
-        painter.drawText(QtCore.QRectF(36, 0, width + 1, bounds.height()), Qt.AlignmentFlag.AlignVCenter, activity.label)
+        painter.drawText(
+            QtCore.QRectF(40, 0, bounds.width() - 80, middle + 1), Qt.AlignmentFlag.AlignBottom | Qt.AlignmentFlag.AlignLeft, activity.label
+        )
+        painter.setFont(caption_font())
         painter.setPen(quiet)
-        painter.drawText(QtCore.QRectF(44 + width, 0, bounds.width() - 80 - width, bounds.height()), Qt.AlignmentFlag.AlignVCenter, activity.detail)
+        detail = QtGui.QFontMetricsF(caption_font()).elidedText(activity.detail, Qt.TextElideMode.ElideRight, bounds.width() - 84)
+        painter.drawText(QtCore.QRectF(40, middle, bounds.width() - 80, middle), Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft, detail)
         circle = self.stop_circle()
         painter.setPen(Qt.PenStyle.NoPen)
-        if self.underMouse():
-            painter.setBrush(color(lettering.press if self.isDown() else lettering.hover))
-            painter.drawEllipse(circle)
+        painter.setBrush(color(lettering.press if self.isDown() else lettering.hover))
+        painter.drawEllipse(circle)
         painter.setOpacity(lettering.ink.opacity)
         icon("stop", lettering.ink.color).paint(painter, circle.adjusted(6, 6, -6, -6).toRect())
 
-    def paint_icon(self, painter: QtGui.QPainter, name: str, ink: QtGui.QColor, x: int) -> None:
+    def paint_icon(self, painter: QtGui.QPainter, name: str, ink: QtGui.QColor, at: QtCore.QPointF) -> None:
         painter.save()
         painter.setOpacity(ink.alphaF())
-        icon(name, ink.name()).paint(painter, QtCore.QRect(x, (self.height() - 16) // 2, 16, 16))
+        icon(name, ink.name()).paint(painter, QtCore.QRect(round(at.x()), round(at.y()), 16, 16))
         painter.restore()
 
 
@@ -398,9 +496,9 @@ class Capsule(KeyboardFocus):
         self.look: Look = window.look
         self.contrast = False
         self.controls: tuple[ControlButton, ...] = ()
-        self.rows: tuple[MenuRow, ...] = ()
+        self.cells: tuple[MenuCell, ...] = ()
         self.request: RequestPanel | None = None
-        self.placed: tuple[QtCore.QRect, float, float, Content, tuple[Line, ...]] | None = None
+        self.placed: tuple[QtCore.QRect, float, float, Content, tuple[Tile, ...]] | None = None
         self.stills: frozendict[tuple[Content, Look, bool, float], QtGui.QPixmap] = frozendict()
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
@@ -434,16 +532,16 @@ class Capsule(KeyboardFocus):
         self.update()
 
     def show_menu(self, menu: Menu | None) -> None:
-        """The expanded island's rows, pooled for as long as the menu stays open."""
-        shown = lines(menu) if menu is not None else ()
-        if len(shown) != len(self.rows) or any(row.line.row != line.row for row, line in zip(self.rows, shown, strict=False)):
-            for row in self.rows:
-                row.hide()
-                row.deleteLater()
-            self.rows = tuple(MenuRow(self, line) for line in shown)
-        for row, line in zip(self.rows, shown, strict=True):
-            row.update_line(line)
-            row.update()
+        """The expanded capsule's cells, pooled for as long as the menu shows the same grid."""
+        laid = tiles(menu) if menu is not None else ()
+        if len(laid) != len(self.cells) or any(cell.tile.cell.entry != tile.cell.entry for cell, tile in zip(self.cells, laid, strict=False)):
+            for cell in self.cells:
+                cell.hide()
+                cell.deleteLater()
+            self.cells = tuple(MenuCell(self, tile) for tile in laid)
+        for cell, tile in zip(self.cells, laid, strict=True):
+            cell.update_tile(tile)
+            cell.update()
 
     def show_request(self, phase: Phase | None) -> None:
         if phase is None:
@@ -458,11 +556,12 @@ class Capsule(KeyboardFocus):
         self.request.present(phase, self.look)
         self.request.show()
 
-    def place_rows(self) -> None:
-        left = (self.width() - MENU_WIDTH) / 2 + MENU_PAD
-        for row in self.rows:
-            row.setGeometry(round(left), TOP + round(row.line.y), MENU_WIDTH - 2 * MENU_PAD, round(row.line.height))
-            row.setVisible(TOP + row.line.y + row.line.height <= self.height())
+    def place_cells(self) -> None:
+        left = (self.width() - MENU_WIDTH) / 2
+        for cell in self.cells:
+            tile = cell.tile
+            cell.setGeometry(round(left + tile.x), TOP + round(tile.y), round(tile.width), round(tile.height))
+            cell.setVisible(TOP + tile.y + tile.height <= self.height())
 
     def place_controls(self) -> None:
         shift = self.shift(self.content)
@@ -477,13 +576,13 @@ class Capsule(KeyboardFocus):
     def frame(self, framed: Framed) -> None:
         """The widget spans the edge strip and the capsule below it."""
         geometry = QtCore.QRect(round(framed.box.x), 0, max(1, round(framed.box.width)), TOP + round(framed.box.height))
-        placed = (geometry, self.fade, self.presence, self.content, tuple(row.line for row in self.rows))
+        placed = (geometry, self.fade, self.presence, self.content, tuple(cell.tile for cell in self.cells))
         if placed == self.placed:
             return
         self.placed = placed
         self.setGeometry(geometry)
         self.place_controls()
-        self.place_rows()
+        self.place_cells()
         if self.request is not None and self.request.isVisible():
             self.request.setGeometry(
                 round((self.width() - desktop_ui.request_panel.WIDTH) / 2),
@@ -503,10 +602,10 @@ class Capsule(KeyboardFocus):
         for spot in self.content.spots:
             if animated(spot.part):
                 self.update(QtCore.QRect(math.floor(shift + spot.x) - 2, TOP, math.ceil(spot.width) + 4, HEIGHT))
-        for row in self.rows:
-            match row.line.row:
+        for cell in self.cells:
+            match cell.tile.cell.entry:
                 case Live(stop=island_menu.Command.STOP_AGENT):
-                    row.update(QtCore.QRect(5, row.height() // 2 - 9, 18, 18))
+                    cell.update(QtCore.QRect(11, cell.height() // 2 - 9, 18, 18))
                 case _:
                     pass
 
@@ -593,15 +692,10 @@ class Capsule(KeyboardFocus):
         return image
 
     def paint_heading(self, painter: QtGui.QPainter) -> None:
-        menu = self.window_.menu
         heading = QtCore.QRectF(MENU_PAD + 10, TOP + MENU_PAD, MENU_WIDTH - 2 * MENU_PAD - 20, MENU_HEAD)
         painter.setFont(heading_font())
         painter.setPen(color(self.look.lettering.ink))
         painter.drawText(heading, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, "Workspace")
-        if menu is not None:
-            painter.setFont(font(strong=False))
-            painter.setPen(color(self.look.lettering.quiet))
-            painter.drawText(heading, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignRight, menu.detail)
 
     def paint_part(self, painter: QtGui.QPainter, spot: Spot, previous: Spot | None, middle: float) -> None:
         lettering = self.look.lettering

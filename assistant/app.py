@@ -223,6 +223,7 @@ class AssistantApp:
             on_show_agent=self.show_agent,
         )
         self.overlay = OverlayState(enabled=load_enabled())
+        self.ui.desktop_overlay(enabled=self.overlay.enabled)
         self.jobs: queue.Queue[Callable[[], None] | None] = queue.Queue()
         self.window = shell.AppWindow(components.ASSISTANT.window.title, self.on_message)
         self.tray = Tray(self.window.handle, WM_TRAY)
@@ -668,6 +669,7 @@ class AssistantApp:
     def display_overlay(self, change: control_policy.OverlayChange) -> None:
         self.overlay = replace(self.overlay, enabled=change.enabled)
         self.show_overlay(indicator_area())
+        self.ui.desktop_overlay(enabled=change.enabled)
 
     def persist_overlay(self, change: control_policy.OverlayChange) -> None:
         save_enabled(enabled=change.enabled)

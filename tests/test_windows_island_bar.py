@@ -22,9 +22,9 @@ from assistant.recording_state import RecordingState
 from desktop_ui.ambient import Ambient, SystemStatus
 from desktop_ui.desktop_bar import BarActions, BarObservations, DesktopBar, SettingsUri
 from desktop_ui.fluent_icons import REGULAR
-from desktop_ui.island_menu import Menu, Rule
+from desktop_ui.island_menu import Menu
 from desktop_ui.island_model import Action, Agent, Control, Job, Key
-from desktop_ui.island_surface import SHADOW, TOP, ControlButton, MenuRow
+from desktop_ui.island_surface import SHADOW, TOP, ControlButton, MenuCell
 from desktop_ui.qt_runtime import prepare
 from desktop_ui.qt_ui import EventLoop, application
 from desktop_ui.vector_icons import symbol
@@ -115,8 +115,8 @@ def menu(bar: DesktopBar) -> Menu | None:
     return bar.expanded
 
 
-def menu_row(bar: DesktopBar, label: str) -> MenuRow:
-    return next(row for row in bar.window.capsules[Key.STATUS].rows if row.accessibleName().split(" · ")[0] == label)
+def menu_row(bar: DesktopBar, label: str) -> MenuCell:
+    return next(cell for cell in bar.window.capsules[Key.STATUS].cells if label in (cell.accessibleName(), cell.accessibleName().split(" · ")[0]))
 
 
 def closed(app: QtWidgets.QApplication, bar: DesktopBar) -> None:
@@ -282,7 +282,7 @@ def test_the_island_keeps_canvas_navigation_and_each_capsule_acts_on_what_it_sho
         status = bar.window.capsules[Key.STATUS]
         assert "20:59" in status.accessibleName() and "73%" in status.accessibleName()
         press(bar, Key.STATUS)
-        assert bar.expanded is not None and status.rows[0].accessibleName() == "Your work canvas"
+        assert bar.expanded is not None and menu_row(bar, "Your work canvas").accessibleName() == "Your work canvas"
         QTest.keyClick(bar.window, QtCore.Qt.Key.Key_Escape)
         bar.agent_changed(WORKING)
         island = bar.window.capsules[Key.ISLAND]
@@ -317,7 +317,7 @@ def test_the_island_keeps_canvas_navigation_and_each_capsule_acts_on_what_it_sho
         assert shown(bar) == FIXED
         bar.automatic_changed(AutomaticStatus.READY)
         press(bar, Key.STATUS)
-        menu_row(bar, "Auto-record Teams: On").click()
+        menu_row(bar, "Auto-record: Teams · On").click()
         assert invoked[-1] == "record-automatic"
     finally:
         closed(app, bar)
@@ -377,7 +377,7 @@ def test_pointer_reaches_capsules_and_their_edge_strip_but_passes_through_elsewh
                     bar.render()
                     app.processEvents()
                     assert windows.outer_rect(handle).height > rest_height
-                    assert any(row.isVisibleTo(bar.window) for row in bar.window.capsules[Key.STATUS].rows)
+                    assert any(row.isVisibleTo(bar.window) for row in bar.window.capsules[Key.STATUS].cells)
                 outer, scale = windows.outer_rect(handle), bar.window.devicePixelRatioF()
                 island = bar.window.capsules[Key.STATUS if expanded else Key.ISLAND].geometry()
                 assert scene.bounds is not None
@@ -793,32 +793,6 @@ def test_tool_choice_acts_on_the_window_captured_before_the_menu_opened() -> Non
         closed(app, bar)
 
 
-def test_menu_dividers_never_take_the_pointer_selection_or_highlight() -> None:
-    # Defect: entering a divider selects its row and paints the action highlight
-    # behind the line, even though keyboard navigation and clicks skip it.
-    app = application()
-    invoked: list[str] = []
-    bar = DesktopBar(recorded(invoked), native_shell=False, observations=BarObservations(motion=lambda: False))
-    try:
-        bar.open_menu()
-        island = bar.window.capsules[Key.STATUS]
-        for divider in (row for row in island.rows if row.line.row is Rule.SEPARATOR):
-            action = island.rows[divider.line.index - 1]
-            point = QtCore.QPointF(action.rect().center())
-            app.sendEvent(action, QtGui.QEnterEvent(point, point, QtCore.QPointF(action.mapToGlobal(point.toPoint()))))
-            before = divider.grab().toImage()
-            point = QtCore.QPointF(divider.rect().center())
-            app.sendEvent(divider, QtGui.QEnterEvent(point, point, QtCore.QPointF(divider.mapToGlobal(point.toPoint()))))
-            opened = menu(bar)
-            assert opened is not None and opened.selected == action.line.index, "Hover selected a menu divider."
-            assert divider.grab().toImage() == before, "Hover painted a highlight behind a menu divider."
-            assert divider.cursor().shape() == QtCore.Qt.CursorShape.ArrowCursor
-            QTest.mouseClick(divider, QtCore.Qt.MouseButton.LeftButton)
-            assert menu(bar) is not None and not invoked, "Clicking a divider acted on the menu."
-    finally:
-        closed(app, bar)
-
-
 def test_the_status_capsule_expands_into_the_menu_at_its_right_hand_anchor() -> None:
     # Defects: the menu opens somewhere other than the capsule that opened it,
     # that capsule leaves the right edge, or its readings move as it expands.
@@ -829,7 +803,7 @@ def test_the_status_capsule_expands_into_the_menu_at_its_right_hand_anchor() -> 
         right = status.geometry().x() + status.geometry().width()
         speaker = status.controls[0].mapTo(bar.window, QtCore.QPoint())
         bar.open_menu()
-        assert status.height() > TOP + 34 and status.rows and Key.ISLAND not in shown(bar)
+        assert status.height() > TOP + 34 and status.cells and Key.ISLAND not in shown(bar)
         assert status.geometry().x() + status.geometry().width() == right
         assert status.controls[0].mapTo(bar.window, QtCore.QPoint()) == speaker
         assert right == app.primaryScreen().geometry().width() - 12
@@ -845,7 +819,7 @@ def test_menu_rows_do_not_inherit_the_escape_closes_tooltip() -> None:
         assert bar.window.capsules[Key.STATUS].toolTip()
         bar.open_menu()
         island = bar.window.capsules[Key.STATUS]
-        assert island.toolTip() == "" and all(row.toolTip() == "" for row in island.rows)
+        assert island.toolTip() == "" and all(cell.toolTip() == "" for cell in island.cells)
         assert "Workspace controls" in island.accessibleName()
         QTest.keyClick(bar.window, QtCore.Qt.Key.Key_Escape)
         assert bar.expanded is None and bar.window.capsules[Key.STATUS].toolTip()
@@ -873,7 +847,7 @@ def test_the_menu_takes_the_keyboard_and_hands_it_back_only_when_a_choice_calls_
         QTest.keyClick(bar.window, QtCore.Qt.Key.Key_Escape)
         assert menu(bar) is None and focused == [42] and Key.ISLAND not in shown(bar)
         bar.open_menu()
-        QTest.keyClicks(bar.window, "k")
+        QTest.keyClicks(bar.window, "kk")  # Keyboard overlay, then Keyboard map.
         QTest.keyClick(bar.window, QtCore.Qt.Key.Key_Return)
         assert invoked == ["keymap"] and focused == [42]
         bar.open_menu()

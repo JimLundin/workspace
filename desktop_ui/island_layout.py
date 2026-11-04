@@ -14,7 +14,7 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import Final, assert_never
 
-from desktop_ui.island_menu import Disclosure, Entry, Item, Live, Menu, Rule, rows
+from desktop_ui.island_menu import COLUMNS, Cell, Menu, shown
 from desktop_ui.island_model import Badge, Control, Glyph, Key, Marker, Part, Slot, Spinner, Text, Zone
 
 # A 34 px capsule with a 3 px inset holds concentric 28 px controls.
@@ -30,14 +30,15 @@ PART_GAP: Final = 6
 SLOT_GAP: Final = 12
 TEXT_PAD: Final = 12
 ICON_PAD: Final = 10
-# The island expanded into its menu: concentric rows inside a larger radius.
-MENU_WIDTH: Final = 272
+# A capsule expanded into the menu: a grid of tiles inside a larger radius, below
+# its own row. Tracks include the gutter, which each cell splits around itself.
+MENU_WIDTH: Final = 320
 MENU_RADIUS: Final = 21
 MENU_PAD: Final = 6
 MENU_HEAD: Final = 34
-MENU_ITEM: Final = 30
-MENU_LIVE: Final = 34
-MENU_RULE: Final = 11
+TRACK: Final = 10
+GUTTER: Final = 8
+COLUMN: Final = (MENU_WIDTH - 2 * MENU_PAD) / COLUMNS
 
 
 @dataclass(frozen=True, slots=True)
@@ -57,52 +58,37 @@ class Content:
 
 
 @dataclass(frozen=True, slots=True)
-class Line:
-    """A menu row's place, below the menu's heading."""
+class Tile:
+    """A menu cell's place inside its expanded capsule, below the capsule's own row."""
 
     index: int
-    row: Entry
+    cell: Cell
+    x: float
     y: float
+    width: float
     height: float
 
 
-def row_height(row: Entry) -> float:
-    match row:
-        case Item() | Disclosure():
-            return MENU_ITEM
-        case Live():
-            return MENU_LIVE
-        case Rule.SEPARATOR:
-            return MENU_RULE
-        case _:
-            assert_never(row)
-
-
-def live(row: Entry) -> bool:
-    match row:
-        case Live():
-            return True
-        case _:
-            return False
-
-
-def lines(menu: Menu) -> tuple[Line, ...]:
-    placed: list[Line] = []
-    y: float = MENU_PAD + MENU_HEAD
-    for index, row in enumerate(rows(menu)):
-        if placed and live(placed[-1].row) and live(row):
-            y += 4  # Live rows read as separate activities.
-        placed.append(Line(index, row, y, row_height(row)))
-        y += row_height(row)
-    return tuple(placed)
+def tiles(menu: Menu) -> tuple[Tile, ...]:
+    return tuple(
+        Tile(
+            index,
+            cell,
+            MENU_PAD + cell.column * COLUMN + GUTTER / 2,
+            MENU_PAD + MENU_HEAD + cell.track * TRACK + GUTTER / 2,
+            cell.span * COLUMN - GUTTER,
+            cell.tracks * TRACK - GUTTER,
+        )
+        for index, cell in enumerate(shown(menu))
+    )
 
 
 def expansion(menu: Menu, row: Content) -> Content:
     """A capsule expanded into the menu: its own row on top, right-aligned so it stays put as the capsule widens."""
-    shown = lines(menu)
+    bottom = max((tile.y + tile.height + GUTTER / 2 for tile in tiles(menu)), default=MENU_PAD + MENU_HEAD)
     width = max(float(MENU_WIDTH), row.width)
     spots = tuple(Spot(spot.part, spot.x + width - row.width, spot.width) for spot in row.spots)
-    return Content(width, spots, (shown[-1].y + shown[-1].height if shown else MENU_PAD + MENU_HEAD) + MENU_PAD)
+    return Content(width, spots, bottom + MENU_PAD)
 
 
 def extent(part: Part, measure: Callable[[Text], float]) -> float:

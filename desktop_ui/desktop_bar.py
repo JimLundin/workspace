@@ -33,7 +33,20 @@ lazy from desktop_ui.bar_status import StatusObserver
 lazy from desktop_ui.components.appearance import Look, look
 lazy from desktop_ui.components.meaning import Tint
 lazy from desktop_ui.island_layout import HEIGHT, Metrics, expansion, frame, snap
-lazy from desktop_ui.island_menu import Chosen, Command, Dismissed, Menu, ToolChoice, entries, restores_focus, rows
+lazy from desktop_ui.island_menu import (
+    Applied,
+    Chosen,
+    Command,
+    Controls,
+    Dismissed,
+    Menu,
+    Slider,
+    ToolChoice,
+    Volume,
+    entries,
+    restores_focus,
+    shown,
+)
 lazy from desktop_ui.island_model import Action, Agent, CapsuleView, Expansion, Job, Key, Marker, Observed, Spinner, capture, island, keyboard
 lazy from desktop_ui.island_motion import IslandMotion, Shown, advance, finish, placed, retarget, settled
 lazy from desktop_ui.island_surface import TOP, BarWindow, Drawn, Presented
@@ -44,7 +57,7 @@ lazy from desktop_ui.shell_controls import TASKBAR_TOGGLE, TaskbarControl, Windo
 lazy from desktop_ui.shell_items import Application, next_window
 lazy from protocol import Tool
 lazy from winapi import appearance, inputs, shell, system_notices, windows
-lazy from winapi.machine_status import Power, PowerUnavailable
+lazy from winapi.machine_status import Power, PowerUnavailable, Speakers
 lazy from winapi.notifications import NotificationObserver
 lazy from winapi.shapes import Rect
 lazy from winapi.tray_host import Click, Entry, TrayHost
@@ -128,6 +141,7 @@ class DesktopBar:
         "notification_observation",
         "notification_service",
         "observations",
+        "overlay_enabled",
         "power",
         "preference",
         "recording",
@@ -165,6 +179,7 @@ class DesktopBar:
         # Each activity comes from its own owner: dictation and quick jobs from the
         # voice controller, the agent from its session.
         self.dictating, self.automatic_recording = False, AutomaticStatus.OFF
+        self.overlay_enabled = False
         self.job: Job | None = None
         self.agent: Agent | None = None
         self.recording = RecordingState()
@@ -325,13 +340,18 @@ class DesktopBar:
         """The menu for what's happening now, keeping the current selection and disclosure."""
         recorded = capture(self.recording) if self.recording.capturing else None
         working = self.agent if self.agent is not None and not self.agent.waiting else None
+        sound = Slider("Sound", self.system.volume, muted=self.system.speakers is Speakers.MUTED)
         menu = Menu(
             entries(
-                recording=recorded.title if recorded is not None else None,
-                agent=working.phase if working is not None else None,
-                automatic=self.automatic_recording,
-            ),
-            "Layout on" if self.layout_enabled else "Layout off",
+                Controls(
+                    recorded.title if recorded is not None else None,
+                    working.phase if working is not None else None,
+                    self.automatic_recording,
+                    overlay=self.overlay_enabled,
+                    taskbar=self.taskbar.revealed,
+                    sound=sound,
+                )
+            )
         )
         if self.expanded is None:
             return menu
@@ -400,7 +420,7 @@ class DesktopBar:
 
     def pick(self, index: int) -> None:
         if self.expanded is not None:
-            self.settle_menu(island_menu.choose(self.expanded, rows(self.expanded)[index]))
+            self.settle_menu(island_menu.choose(self.expanded, shown(self.expanded)[index].entry))
 
     def key(self, press: island_menu.Press) -> None:
         if self.expanded is not None:
@@ -418,6 +438,9 @@ class DesktopBar:
             case Chosen(choice=choice):
                 self.close_menu(restore=restores_focus(choice))
                 self.run(choice)
+            case Applied(choice=choice):
+                self.run(choice)
+                self.render()
             case Dismissed.ESCAPE:
                 self.close_menu(restore=True)
             case _:
@@ -449,8 +472,23 @@ class DesktopBar:
                 self.notification_settings()
             case Command.ALL_CONTROLS:
                 self.actions.menu()
+            case Volume(level=level):
+                self.volume(level)
             case _:
                 assert_never(choice)
+
+    def volume(self, level: float) -> None:
+        """The status observer's worker applies it; the slider follows at once rather than at the next reading."""
+        if self.status_service is None:
+            return
+        self.status_service.set_volume(level)
+        self.system = replace(self.system, volume=level)
+        self.render()
+
+    def overlay_changed(self, *, enabled: bool) -> None:
+        if self.overlay_enabled != enabled:
+            self.overlay_enabled = enabled
+            self.render()
 
     def dictation(self, *, active: bool) -> None:
         if self.dictating != active:

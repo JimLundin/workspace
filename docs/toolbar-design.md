@@ -58,18 +58,35 @@ is doing for you. Its policy decides what may change it.
 recording" turns it red and the detached capsule orange.
 
 Pressing the right-hand clock/power readings expands that capsule into the
-controls menu, still anchored 12 px from the right edge: 272 px wide with a
-21 px radius, its rows concentric inside it. Its readings stay in place as its
-top row, in place of a heading, and volume and Wi-Fi stay pressable. The keyboard
-icon and tray move left with its widening edge. Dynamic elements keep the centre; a question still
-expands the centre island. Running activities lead as live rows
-with their own Stop, the agent's with its phase; the detached agent and recording
-capsules leave the bar while the menu is open. The canvas comes first, then the feed and recording, the
-keyboard, and the desktop tools. Window tiling discloses its items in place.
-Arrows wrap and skip separators, Right and Left open and close tiling, Enter
-chooses, a letter jumps to the next row starting with it, and Escape closes.
-Menu rows do not inherit an Escape tooltip from the island.
-Opening the menu takes the keyboard; a window tool, a quiet toggle or Escape hands
+controls menu, still anchored 12 px from the right edge: 320 px wide with a
+21 px radius. Its readings stay in place as its top row, in place of a heading,
+and volume and Wi-Fi stay pressable. The keyboard icon and tray move left with
+its widening edge. Dynamic elements keep the centre; a question still expands
+the centre island.
+
+The menu is a grid of tiles on four columns, after the Control Center pattern:
+
+| Section | Cells |
+| --- | --- |
+| Activities | One full-width card per running activity, with its reading and Stop |
+| Settings and views | Auto-record, keyboard overlay and Windows taskbar toggles beside Canvas and Feed tiles |
+| Recording | Record a meeting, absent while one runs |
+| Sound | The speaker level as a slider; its symbol shows mute |
+| Tools | Switch windows, transcript, window tiling and key map as small tiles |
+| Links | Windows notification settings and all Workspace controls |
+
+The detached agent and recording capsules leave the bar while the menu is open.
+Toggles show their state in an accent circle and words, and apply in place: the
+menu stays open. Dragging or pressing the slider sets the volume; the toolbar's
+status worker applies the latest level, because Windows' audio interfaces need
+a multithreaded COM apartment that Qt's thread cannot join. Window tiling opens
+its own page with a row back to the grid.
+Arrows move to the nearest cell in their direction; Up and Down wrap. On the
+slider, Left and Right step the volume by 5%. Right on tiling opens its page,
+and Left or Escape closes it. Enter chooses, a letter jumps to the next cell
+starting with it, and Escape closes the menu.
+Menu cells do not inherit an Escape tooltip from the island.
+Opening the menu takes the keyboard; a window tool, a quiet action or Escape hands
 it back to the window that had it, a Workspace view keeps it, and clicking
 elsewhere closes the menu without taking it back. Window tools act on the window
 captured as the menu opened. Large glass is thicker than the capsules, so the

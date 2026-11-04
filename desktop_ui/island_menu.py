@@ -1,11 +1,14 @@
-"""The island's controls menu: its entries, and keyboard navigation as pure transitions.
+"""The controls menu: a grid of tiles, and keyboard navigation as pure transitions.
 
-The menu is the island expanded. Ongoing activities come first as live rows with
-their Stop; then Workspace's places, keyboard and desktop tools. Window tiling
-discloses its items in place. Arrows wrap and skip separators; Right or Enter
-opens tiling and Left or Escape closes it; a letter jumps to the next entry
-starting with it. Choosing a window tool or leaving with Escape returns the
-keyboard to the window that had it; opening a Workspace view keeps it there.
+The status capsule expands into the menu. Ongoing activities lead as cards with
+their Stop; toggles sit beside Workspace's views; then recording, sound, the
+desktop tools and links. Arrows move to the nearest cell in their direction, and
+Up and Down wrap. On the sound slider, Left and Right change the volume. Toggles
+and the slider apply in place and keep the menu open; a choice that opens a view
+or acts on a window closes it. Window tiling opens its own page, which Left or
+Escape closes back onto tiling. A letter jumps to the next cell starting with it.
+Choosing a window tool or leaving with Escape returns the keyboard to the window
+that had it; opening a Workspace view keeps it there.
 """
 
 from dataclasses import dataclass, field, replace
@@ -38,19 +41,26 @@ class ToolChoice:
     tool: Tool
 
 
-type Choice = Command | ToolChoice
+@dataclass(frozen=True, slots=True)
+class Volume:
+    """A requested speaker level, from 0 to 1."""
+
+    level: float
+
+
+type Choice = Command | ToolChoice | Volume
 
 
 @dataclass(frozen=True, slots=True)
 class Item:
     label: str
-    icon: str  # Empty for a disclosed item: it reads under its group's symbol.
+    icon: str  # Empty for a tiling item: it reads under tiling's own symbol.
     choice: Choice
     key: str = ""  # A shortcut hint, shown quietly at the trailing edge.
 
 
 def tool_item(label: str, icon: str, tool: Tool) -> Item:
-    """Top-level Tool rows advertise the physical keys from the layout that triggers them."""
+    """Tool cells advertise the physical keys from the layout that triggers them."""
     return Item(label, icon, ToolChoice(tool), shortcut_hint(shortcut(tool), compact=True))
 
 
@@ -63,8 +73,24 @@ class Live:
     stop: Command
 
 
-class Rule(Enum):
-    SEPARATOR = auto()
+@dataclass(frozen=True, slots=True)
+class Toggle:
+    """A setting that flips in place; `detail` says its state in words."""
+
+    label: str
+    detail: str
+    icon: str
+    choice: Command
+    on: bool = field(kw_only=True)
+
+
+@dataclass(frozen=True, slots=True)
+class Slider:
+    """The speaker level; None while Windows hasn't reported one."""
+
+    label: str
+    level: float | None
+    muted: bool = field(kw_only=True)
 
 
 @dataclass(frozen=True, slots=True)
@@ -74,14 +100,41 @@ class Disclosure:
     items: tuple[Item, ...]
 
 
-type Entry = Item | Live | Rule | Disclosure
+type Entry = Item | Live | Toggle | Slider | Disclosure
+
+
+class Face(Enum):
+    """How a cell presents its entry."""
+
+    CARD = auto()  # An ongoing activity across the grid, with its Stop.
+    TOGGLE = auto()  # A round switch with the setting and its state.
+    TILE = auto()  # A large square with its symbol above its label.
+    WIDE = auto()  # A full-width tile with its symbol beside its label.
+    SLIDER = auto()
+    TOOL = auto()  # A small square with its symbol above a caption.
+    LINK = auto()  # A quiet line of text.
+
+
+COLUMNS: Final = 4
+
+
+@dataclass(frozen=True, slots=True)
+class Cell:
+    """An entry's place in the grid: columns from the left, tracks from the top."""
+
+    entry: Entry
+    face: Face
+    column: int
+    span: int
+    track: int
+    tracks: int
+    caption: str = ""  # A tile's short name; its entry's label stays its accessible name.
+
 
 TILING: Final = Disclosure(
     "Window tiling",
     "grid",
     (
-        # Disclosed labels fill the fixed menu width; the longest tiling label
-        # overlaps its derived hint in the native preview, so hints stay above.
         Item("Spread windows across screens", "", ToolChoice(Tool.TILE_BALANCE)),
         Item("Focus left", "", ToolChoice(Tool.TILE_FOCUS_LEFT)),
         Item("Focus right", "", ToolChoice(Tool.TILE_FOCUS_RIGHT)),
@@ -94,109 +147,98 @@ TILING: Final = Disclosure(
 )
 
 
-def automatic_label(status: AutomaticStatus) -> str:
+def automatic_toggle(status: AutomaticStatus) -> Toggle:
     match status:
         case AutomaticStatus.OFF:
-            return "Auto-record Teams: Off"
+            return Toggle("Auto-record", "Teams · Off", "mic", Command.AUTOMATIC_RECORDING, on=False)
         case AutomaticStatus.CHECKING:
-            return "Auto-record Teams: Connecting…"
+            return Toggle("Auto-record", "Teams · Connecting…", "mic", Command.AUTOMATIC_RECORDING, on=True)
         case AutomaticStatus.READY:
-            return "Auto-record Teams: On"
+            return Toggle("Auto-record", "Teams · On", "mic", Command.AUTOMATIC_RECORDING, on=True)
         case AutomaticStatus.UNAVAILABLE:
-            return "Auto-record Teams: Check connection"
+            return Toggle("Auto-record", "Teams · Check connection", "mic", Command.AUTOMATIC_RECORDING, on=True)
         case _:
             assert_never(status)
 
 
-def entries(*, recording: str | None, agent: str | None, automatic: AutomaticStatus = AutomaticStatus.OFF) -> tuple[Entry, ...]:
-    """The menu for what's happening now: `recording` and `agent` are their readings while they run."""
+@dataclass(frozen=True, slots=True)
+class Controls:
+    """What the menu reads: running activities' readings, each toggle's state and the speaker's."""
+
+    recording: str | None
+    agent: str | None
+    automatic: AutomaticStatus = AutomaticStatus.OFF
+    overlay: bool = field(default=False, kw_only=True)
+    taskbar: bool = field(default=False, kw_only=True)
+    sound: Slider = Slider("Sound", None, muted=False)
+
+
+def entries(controls: Controls) -> tuple[Cell, ...]:
+    """The grid for what's happening now; each cell's tracks include its share of the gutters."""
     live: tuple[Live, ...] = (
-        *((Live("Agent working", agent, Command.STOP_AGENT),) if agent is not None else ()),
-        *((Live("Recording", recording, Command.STOP_RECORDING),) if recording is not None else ()),
+        *((Live("Agent working", controls.agent, Command.STOP_AGENT),) if controls.agent is not None else ()),
+        *((Live("Recording", controls.recording, Command.STOP_RECORDING),) if controls.recording is not None else ()),
     )
-    return (
-        *live,
-        *((Rule.SEPARATOR,) if live else ()),
-        Item("Your work canvas", "canvas", Command.CANVAS),
-        Item("Your work feed", "chat", Command.FEED),
-        *(() if recording is not None else (Item("Record a meeting", "mic", Command.RECORD),)),
-        Item(automatic_label(automatic), "mic", Command.AUTOMATIC_RECORDING),
-        Rule.SEPARATOR,
-        Item("Keyboard map", "keyboard", Command.KEYMAP),
-        Item("Keyboard overlay", "layers", Command.OVERLAY),
-        Item("Windows taskbar", "table", Command.TASKBAR),
-        Rule.SEPARATOR,
-        tool_item("Switch windows", "search", Tool.WINDOW_SWITCHER),
-        tool_item("Copy latest transcript", "doc", Tool.COPY_TRANSCRIPT),
-        TILING,
-        Item("Windows notification settings", "bell", Command.NOTIFICATIONS),
-        Rule.SEPARATOR,
-        Item("All Workspace controls…", "more", Command.ALL_CONTROLS),
+    cards = tuple(Cell(activity, Face.CARD, 0, COLUMNS, 5 * index, 5) for index, activity in enumerate(live))
+    top = 5 * len(cards)
+    toggles = (
+        automatic_toggle(controls.automatic),
+        Toggle("Keyboard overlay", "On" if controls.overlay else "Off", "layers", Command.OVERLAY, on=controls.overlay),
+        Toggle("Windows taskbar", "Shown" if controls.taskbar else "Hidden", "table", Command.TASKBAR, on=controls.taskbar),
     )
+    modules = (
+        Cell(toggles[0], Face.TOGGLE, 0, 2, top, 4),
+        Cell(Item("Your work canvas", "canvas", Command.CANVAS), Face.TILE, 2, 2, top, 6, "Canvas"),
+        Cell(toggles[1], Face.TOGGLE, 0, 2, top + 4, 4),
+        Cell(toggles[2], Face.TOGGLE, 0, 2, top + 8, 4),
+        Cell(Item("Your work feed", "chat", Command.FEED), Face.TILE, 2, 2, top + 6, 6, "Feed"),
+    )
+    top += 12
+    record = () if controls.recording is not None else (Cell(Item("Record a meeting", "mic", Command.RECORD), Face.WIDE, 0, COLUMNS, top, 5),)
+    top += 5 * len(record)
+    sound = Cell(controls.sound, Face.SLIDER, 0, COLUMNS, top, 6)
+    top += 6
+    captioned: tuple[tuple[Entry, str], ...] = (
+        (tool_item("Switch windows", "search", Tool.WINDOW_SWITCHER), "Switch"),
+        (tool_item("Copy latest transcript", "doc", Tool.COPY_TRANSCRIPT), "Transcript"),
+        (TILING, "Tiling"),
+        (Item("Keyboard map", "keyboard", Command.KEYMAP), "Key map"),
+    )
+    tools = tuple(Cell(entry, Face.TOOL, column, 1, top, 7, caption) for column, (entry, caption) in enumerate(captioned))
+    top += 7
+    links = (
+        Cell(Item("Windows notification settings", "bell", Command.NOTIFICATIONS), Face.LINK, 0, COLUMNS, top, 3),
+        Cell(Item("All Workspace controls…", "more", Command.ALL_CONTROLS), Face.LINK, 0, COLUMNS, top + 3, 3),
+    )
+    return (*cards, *modules, *record, sound, *tools, *links)
+
+
+def page(disclosure: Disclosure) -> tuple[Cell, ...]:
+    """A disclosure's own page: a row back to it, then its items."""
+    back = Cell(disclosure, Face.LINK, 0, COLUMNS, 0, 3)
+    return (back, *(Cell(item, Face.LINK, 0, COLUMNS, 3 * (index + 1), 3) for index, item in enumerate(disclosure.items)))
 
 
 @dataclass(frozen=True, slots=True)
 class Menu:
-    """The open menu: its entries, a reading beside its heading, the row under the keyboard
-    or pointer, and whether tiling is open."""
+    """The open menu: its grid, the cell under the keyboard or pointer, and whether tiling's page is open."""
 
-    entries: tuple[Entry, ...]
-    detail: str
+    cells: tuple[Cell, ...]
     selected: int | None = None
     disclosed: bool = field(default=False, kw_only=True)
 
 
-def opened(entry: Entry, *, disclosed: bool) -> tuple[Entry, ...]:
+def shown(menu: Menu) -> tuple[Cell, ...]:
+    """The cells on screen: tiling's page while it's open."""
+    return page(TILING) if menu.disclosed else menu.cells
+
+
+def label(entry: Entry) -> str:
     match entry:
-        case Disclosure(items=items) if disclosed:
-            return (entry, *items)
-        case Item() | Live() | Rule() | Disclosure():
-            return (entry,)
+        case Item(label=text) | Live(label=text) | Toggle(label=text) | Slider(label=text) | Disclosure(label=text):
+            return text
         case _:
             assert_never(entry)
-
-
-def rows(menu: Menu) -> tuple[Entry, ...]:
-    """The rows on screen: tiling's items follow it while it's open."""
-    return tuple(row for entry in menu.entries for row in opened(entry, disclosed=menu.disclosed))
-
-
-def selectable(row: Entry) -> bool:
-    match row:
-        case Rule.SEPARATOR:
-            return False
-        case Item() | Live() | Disclosure():
-            return True
-        case _:
-            assert_never(row)
-
-
-def label(row: Entry) -> str:
-    match row:
-        case Item(label=text) | Live(label=text) | Disclosure(label=text):
-            return text
-        case Rule.SEPARATOR:
-            return ""
-        case _:
-            assert_never(row)
-
-
-def heads(row: Entry | None) -> bool:
-    """Whether a row is tiling's own row."""
-    match row:
-        case Disclosure():
-            return True
-        case _:
-            return False
-
-
-def within(row: Entry | None) -> bool:
-    """Whether a row is one of tiling's items."""
-    match row:
-        case Item() if row in TILING.items:
-            return True
-        case _:
-            return False
 
 
 class Key(Enum):
@@ -218,6 +260,15 @@ type Press = Key | Letter
 
 @dataclass(frozen=True, slots=True)
 class Chosen:
+    """A choice that closes the menu."""
+
+    choice: Choice
+
+
+@dataclass(frozen=True, slots=True)
+class Applied:
+    """A choice applied in place: the menu stays open to show its new state."""
+
     choice: Choice
 
 
@@ -225,85 +276,128 @@ class Dismissed(Enum):
     ESCAPE = auto()
 
 
-type Outcome = Menu | Chosen | Dismissed
+type Outcome = Menu | Chosen | Applied | Dismissed
+
+VOLUME_STEP: Final = 0.05
 
 
-def current(menu: Menu) -> Entry | None:
-    shown = rows(menu)
-    return shown[menu.selected] if menu.selected is not None and menu.selected < len(shown) else None
+def current(menu: Menu) -> Cell | None:
+    cells = shown(menu)
+    return cells[menu.selected] if menu.selected is not None and menu.selected < len(cells) else None
 
 
-def step(menu: Menu, offset: int) -> Menu:
-    candidates = tuple(index for index, row in enumerate(rows(menu)) if selectable(row))
-    if not candidates:
+def towards(cells: tuple[Cell, ...], index: int, key: Key) -> int | None:
+    """The nearest cell in an arrow's direction that shares the selected cell's row or column."""
+    here = cells[index]
+
+    def gap(cell: Cell) -> int | None:
+        across = cell.column < here.column + here.span and here.column < cell.column + cell.span
+        along = cell.track < here.track + here.tracks and here.track < cell.track + cell.tracks
+        match key:
+            case Key.DOWN if across and cell.track >= here.track + here.tracks:
+                return cell.track - here.track - here.tracks
+            case Key.UP if across and cell.track + cell.tracks <= here.track:
+                return here.track - cell.track - cell.tracks
+            case Key.RIGHT if along and cell.column >= here.column + here.span:
+                return cell.column - here.column - here.span
+            case Key.LEFT if along and cell.column + cell.span <= here.column:
+                return here.column - cell.column - cell.span
+            case _:
+                return None
+
+    def offset(cell: Cell) -> int:
+        # Centres in half units, so odd spans compare exactly.
+        if key in (Key.UP, Key.DOWN):
+            return abs(2 * cell.column + cell.span - 2 * here.column - here.span)
+        return abs(2 * cell.track + cell.tracks - 2 * here.track - here.tracks)
+
+    ranked = sorted((distance, offset(cell), position) for position, cell in enumerate(cells) if (distance := gap(cell)) is not None)
+    return ranked[0][2] if ranked else None
+
+
+def move(menu: Menu, key: Key) -> Menu:
+    cells = shown(menu)
+    if not cells:
         return menu
-    if menu.selected not in candidates:
-        return replace(menu, selected=candidates[0 if offset > 0 else -1])
-    return replace(menu, selected=candidates[(candidates.index(menu.selected) + offset) % len(candidates)])
+    if menu.selected is None or menu.selected >= len(cells):
+        return replace(menu, selected=0 if key in (Key.DOWN, Key.RIGHT) else len(cells) - 1)
+    target = towards(cells, menu.selected, key)
+    if target is None and key in (Key.DOWN, Key.UP):
+        target = 0 if key is Key.DOWN else len(cells) - 1  # Up and Down wrap; Left and Right stop at the edge.
+    return menu if target is None else replace(menu, selected=target)
 
 
 def disclose(menu: Menu, *, open_: bool) -> Menu:
-    """Open tiling with its first item selected, or close it back onto its own row."""
-    row, after = current(menu), rows(replace(menu, disclosed=open_))
-    head = next(index for index, entry in enumerate(after) if heads(entry))
-    if open_ and heads(row):
-        selected: int | None = head + 1
-    elif not open_ and within(row):
-        selected = head
-    else:
-        selected = next((index for index, entry in enumerate(after) if entry == row), None)
-    return replace(menu, disclosed=open_, selected=selected)
+    """Open tiling's page with its first item selected, or close it back onto tiling's cell."""
+    if open_:
+        return replace(menu, disclosed=True, selected=1)
+    return replace(menu, disclosed=False, selected=next((index for index, cell in enumerate(menu.cells) if cell.entry is TILING), None))
+
+
+def sideways(menu: Menu, entry: Entry | None, key: Key) -> Outcome:
+    """Left and Right change the volume on the slider, open and close tiling's page, and otherwise move."""
+    match entry:
+        case Slider(level=float() as level):
+            step = VOLUME_STEP if key is Key.RIGHT else -VOLUME_STEP
+            return Applied(Volume(min(1.0, max(0.0, round(level + step, 2)))))
+        case Slider(level=None):
+            return menu
+        case Disclosure() if key is Key.RIGHT and not menu.disclosed:
+            return disclose(menu, open_=True)
+        case _ if key is Key.LEFT and menu.disclosed:
+            return disclose(menu, open_=False)
+        case _:
+            return move(menu, key)
 
 
 def press(menu: Menu, key: Press) -> Outcome:
-    row = current(menu)
+    cell = current(menu)
+    entry = cell.entry if cell is not None else None
     match key:
-        case Key.DOWN:
-            return step(menu, 1)
-        case Key.UP:
-            return step(menu, -1)
-        case Key.RIGHT if heads(row):
-            return disclose(menu, open_=True)
-        case Key.LEFT | Key.ESCAPE if menu.disclosed:
+        case Key.LEFT | Key.RIGHT:
+            return sideways(menu, entry, key)
+        case Key.UP | Key.DOWN:
+            return move(menu, key)
+        case Key.ESCAPE if menu.disclosed:
             return disclose(menu, open_=False)
         case Key.ESCAPE:
             return Dismissed.ESCAPE
         case Key.ENTER:
-            return choose(menu, row)
+            return choose(menu, entry)
         case Letter(character=character):
             return jump(menu, character)
-        case Key.LEFT | Key.RIGHT:
-            return menu
         case _:
             assert_never(key)
 
 
-def choose(menu: Menu, row: Entry | None) -> Outcome:
-    match row:
+def choose(menu: Menu, entry: Entry | None) -> Outcome:
+    match entry:
         case Item(choice=choice):
             return Chosen(choice)
         case Live(stop=stop):
             return Chosen(stop)
+        case Toggle(choice=choice):
+            return Applied(choice)
         case Disclosure():
             return disclose(menu, open_=not menu.disclosed)
-        case Rule.SEPARATOR | None:
+        case Slider() | None:
             return menu
         case _:
-            assert_never(row)
+            assert_never(entry)
 
 
 def jump(menu: Menu, character: str) -> Menu:
-    shown = rows(menu)
+    cells = shown(menu)
     start = menu.selected if menu.selected is not None else -1
-    order = tuple((start + offset) % len(shown) for offset in range(1, len(shown) + 1))
-    target = next((index for index in order if selectable(shown[index]) and label(shown[index]).casefold().startswith(character.casefold())), None)
+    order = tuple((start + offset) % len(cells) for offset in range(1, len(cells) + 1))
+    target = next((index for index in order if label(cells[index].entry).casefold().startswith(character.casefold())), None)
     return menu if target is None else replace(menu, selected=target)
 
 
 def restores_focus(choice: Choice) -> bool:
     """Window tools and quiet toggles hand the keyboard back; Workspace's own views keep it."""
     match choice:
-        case ToolChoice():
+        case ToolChoice() | Volume():
             return True
         case Command.OVERLAY | Command.TASKBAR | Command.RECORD | Command.STOP_RECORDING | Command.STOP_AGENT | Command.AUTOMATIC_RECORDING:
             return True
