@@ -9,6 +9,7 @@ from enum import Enum, auto
 from typing import Final, Protocol, assert_never
 
 from config import SNIPPETS
+from miryoku.firmware import CHORD_KEYS
 from miryoku.layout import (
     CELLS,
     ESCAPE,
@@ -136,9 +137,11 @@ class Indicator:
     layer: Layer | None
     locked: bool = field(kw_only=True)
     caps_word: bool = field(kw_only=True)
+    chord: bool = field(kw_only=True)
+    """Ctrl+Alt+Shift are held, so a letter makes its firmware chord's request."""
 
 
-QUIET: Final = Indicator(None, locked=False, caps_word=False)
+QUIET: Final = Indicator(None, locked=False, caps_word=False, chord=False)
 
 
 @dataclass(frozen=True, slots=True)
@@ -303,7 +306,7 @@ class Engine:
 
     def refresh(self, host: Host) -> None:
         """Tells the indicator if what it should show has changed."""
-        now = Indicator(self.layer(), locked=self.locked is not None, caps_word=self.caps_word)
+        now = Indicator(self.layer(), locked=self.locked is not None, caps_word=self.caps_word, chord=self.chording())
         if now != self.shown:
             self.shown = now
             host.indicate(now)
@@ -394,6 +397,19 @@ class Engine:
     def quick_tap(self, cell: int, now: int) -> bool:
         return self.last_tap is not None and self.last_tap.cell == cell and elapsed(now, self.last_tap.at) < self.configuration.quick_tap_ms
 
+    def chording(self) -> bool:
+        """Exactly Ctrl+Alt+Shift: Win never takes part, because Ctrl+Alt+Shift+Win is the Office key."""
+        counts = self.mods.counts
+        return len(counts) == 3 and Mod.GUI not in counts
+
+    def chorded(self, a: Action) -> Action:
+        """A letter tapped while chording asks for its firmware chord's request, as on the firmware keyboard."""
+        match a:
+            case Key() if self.chording() and (request := CHORD_KEYS.get(a.vk)) is not None:
+                return request
+            case _:
+                return a
+
     def layer(self) -> Layer | None:
         """The layer keys are read from: the top held layer, else a locked one, else
         None for the base layer."""
@@ -427,6 +443,7 @@ class Engine:
                         return
                     case other:
                         a = other
+                a = self.chorded(a)
                 if layer is not None and a is not Command.NOTHING:
                     host.used(f"{layer.name.lower()}:{describe(a)}")
                 self.pressed[cell] = a
@@ -504,8 +521,9 @@ class Engine:
                 self.pressed[p.cell] = p.hold
                 self.press(host, p.hold, p.pressed_at)
             case Decision.TAP:
-                self.press(host, p.tap, p.pressed_at)
-                self.release(host, p.tap)
+                tap = self.chorded(p.tap)
+                self.press(host, tap, p.pressed_at)
+                self.release(host, tap)
                 self.last_tap = LastTap(p.cell, now)
             case _:
                 assert_never(decision)
@@ -626,6 +644,11 @@ class Engine:
                     host.used("layer_lock")
             case Tool() | App():
                 self.typed = ""
+                if Mod.ALT in self.mods.counts:
+                    # Applications see Alt pressed alone; tapping an unassigned key
+                    # keeps its release from opening a menu.
+                    host.send(Key.MENU_MASK, down=True)
+                    host.send(Key.MENU_MASK, down=False)
                 host.request(a, down=True)
             case Command.NOTHING | TapHold():
                 pass

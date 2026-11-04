@@ -651,6 +651,25 @@ def test_firmware_chord_reaches_navigation_and_swallows_the_letter_press_and_rel
     assert keyboard.swallow(app, down=False)
 
 
+def test_laptop_home_row_chord_reaches_navigation_and_publishes_the_chord_like_firmware() -> None:
+    """Detect a layout chord that types its letter, leaves a modifier held, or never shows the pager's chord hints."""
+    driver = KeyboardFixture()
+    with observed_keyboard(platform=driver) as (keyboard, messages):
+        mods = [inputs.KeyEvent(vk, scan, 0, 10, 0) for vk, scan in ((0x57, 0x11), (0x45, 0x12), (0x52, 0x13))]  # R S T
+        letter = inputs.KeyEvent(0x38, 0x09, 0, 20, 0)  # J
+        for key in mods:
+            assert keyboard.swallow(key, down=True)
+        assert keyboard.swallow(letter, down=True)
+        assert keyboard.swallow(letter, down=False)
+        for key in reversed(mods):
+            assert keyboard.swallow(key, down=False)
+        requests = [control_event(WindowInput(*message), APPS) for message in messages if message[0] == WM_REQUEST]
+        assert requests == [FeatureRequest(Tool.DESKTOP_1, down=True), FeatureRequest(Tool.DESKTOP_1, down=False)]
+        assert [message for message in messages if message[0] == WM_CHORD] == [(WM_CHORD, 1, 0), (WM_CHORD, 0, 0)]
+        assert [key for key, _down in driver.output if isinstance(key, Key)] == [Key.MENU_MASK, Key.MENU_MASK]
+        assert not keyboard.host.owned
+
+
 def test_escape_toggle_clears_highlights_with_other_keys_still_held() -> None:
     with observed_keyboard() as (keyboard, messages):
         keyboard.swallow(inputs.KeyEvent(0, 0x32, 0, 10, 0), down=True)
@@ -856,7 +875,7 @@ def test_failed_key_release_during_tray_toggle_still_turns_the_layout_off() -> N
 def test_layout_query_includes_the_current_locked_layer_for_a_new_overlay() -> None:
     driver = KeyboardFixture()
     keyboard = Keyboard(driver)
-    keyboard.engine.shown = Indicator(Layer.SYM, locked=True, caps_word=True)
+    keyboard.engine.shown = Indicator(Layer.SYM, locked=True, caps_word=True, chord=False)
     keyboard.on_message(WM_QUERY_LAYOUT_STATE)
     layers = [decode_indicator(wparam) for message, wparam, _ in driver.messages if message == WM_INDICATOR]
     assert layers == [(Layer.SYM.value, True, True)]

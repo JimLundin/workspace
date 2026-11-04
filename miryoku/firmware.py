@@ -25,9 +25,10 @@ _CHORD_LETTERS: Final[tuple[tuple[Request, str], ...]] = (
 CHORDS: Final[frozendict[Request, str]] = frozendict(_CHORD_LETTERS)
 """Ctrl+Alt+Shift + the letter, on the firmware keyboard, asks Workspace for the request."""
 
-_CHORD_KEYS: Final = frozendict({ord(letter): request for request, letter in CHORDS.items()})
+CHORD_KEYS: Final = frozendict({ord(letter): request for request, letter in CHORDS.items()})
+"""Each chord's request by its letter's virtual key, which both keyboards share."""
 _VOICE_KEYS: Final[frozendict[int, Request]] = frozendict({0x44: Tool.DICTATE, 0x47: Tool.AGENT_VOICE})
-if len(_CHORD_KEYS) != len(_CHORD_LETTERS) or not all("A" <= letter <= "Z" for letter in CHORDS.values()):
+if len(CHORD_KEYS) != len(_CHORD_LETTERS) or not all("A" <= letter <= "Z" for letter in CHORDS.values()):
     raise ImportError("every firmware chord needs its own request and letter")
 
 
@@ -89,7 +90,7 @@ def shortcut(vk: int, held: Collection[int]) -> Request | None:
         case Modifiers.VOICE:
             return _VOICE_KEYS.get(vk)
         case Modifiers.CHORD:
-            return _CHORD_KEYS.get(vk)
+            return CHORD_KEYS.get(vk)
         case None:
             return None
 

@@ -85,7 +85,7 @@ class FakeHost:
 
     def indicate(self, indicator: Indicator) -> None:
         parts = [indicator.layer.name.lower()] if indicator.layer else []
-        parts += ["locked"] * indicator.locked + ["caps"] * indicator.caps_word
+        parts += ["locked"] * indicator.locked + ["caps"] * indicator.caps_word + ["chord"] * indicator.chord
         self.indicated.append(" ".join(parts) or "-")
 
 
@@ -862,6 +862,49 @@ def test_physical_arrows_compose_with_pending_apps_and_pair_release_after_layer_
     t.e.toggle(t.h)
     assert t.take() == "?focus_down+ ?focus_down- !OFF"
     assert not t.e.desktop_held
+
+
+# ---- firmware chords -------------------------------------------------------------------
+
+
+def test_left_home_row_chord_and_a_right_letter_make_the_firmware_request() -> None:
+    # Defects: the letter is typed (an AltGr character on a Swedish host), the
+    # request isn't paired, Alt's lone release opens a menu, or a modifier sticks.
+    t = Harness()
+    for mod in ("w", "e", "r"):  # R S T: Alt, Ctrl, Shift
+        t.d(mod)
+    t.tap("8")  # J
+    for mod in ("r", "e", "w"):
+        t.u(mod)
+    assert t.take() == "+ALT +CTL +SFT +0xe8 -0xe8 ?desktop_1+ ?desktop_1- -SFT -CTL -ALT"
+    assert not t.e.mods.counts
+    assert t.h.indicated == ["chord", "-"], "the pager's chord hints follow the held modifiers"
+
+
+def test_right_home_row_chord_reaches_apps_from_a_left_home_row_letter() -> None:
+    # Defect: a tapped home row mod letter skips the chord, typing r with Ctrl+Alt+Shift.
+    t = Harness()
+    for mod in ("o", "p", "["):  # N E I: Shift, Ctrl, Alt
+        t.d(mod)
+    t.tap("w")  # R
+    for mod in ("[", "p", "o"):
+        t.u(mod)
+    assert t.take() == "+SFT +CTL +ALT +0xe8 -0xe8 ?app:notepad+ ?app:notepad- -ALT -CTL -SFT"
+
+
+def test_chords_need_exactly_ctrl_alt_shift_and_a_chord_letter() -> None:
+    # Defects: a letter outside the chord table is swallowed, or Win+Ctrl+Alt+Shift
+    # (the Office key) is taken for a chord.
+    t = Harness()
+    for mod in ("o", "p", "["):
+        t.d(mod)
+    t.tap("caps")  # Z
+    assert t.take() == "+SFT +CTL +ALT +z -z"
+    t = Harness()
+    for mod in ("q", "w", "e", "r"):  # A R S T: Win, Alt, Ctrl, Shift
+        t.d(mod)
+    t.tap("8")
+    assert t.take() == "+0x5b +ALT +CTL +SFT +j -j"
 
 
 # ---- tools and apps layers ---------------------------------------------------------------
