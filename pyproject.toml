@@ -220,6 +220,12 @@ extend-ignore-names = [
     "hThread",
     "dwProcessId",
     "dwThreadId",
+    "adapterId",
+    "outputTechnology",
+    "sourceInfo",
+    "szDevice",
+    "targetInfo",
+    "viewGdiDeviceName",
 ]
 
 [tool.ruff.lint.pylint]

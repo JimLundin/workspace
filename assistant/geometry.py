@@ -12,6 +12,12 @@ def half(work: Rect, side: Literal["left", "right"], outer: Rect, visible: Rect)
     has invisible borders around what's drawn; they're added back on."""
     middle = work.left + work.width // 2
     target = Rect(work.left, work.top, middle, work.bottom) if side == "left" else Rect(middle, work.top, work.right, work.bottom)
+    return framed(target, outer, visible)
+
+
+def framed(target: Rect, outer: Rect, visible: Rect) -> Rect:
+    """The outer rectangle that draws a window exactly over `target`, given where its
+    outer and drawn rectangles are now: the invisible borders between them are added back on."""
     return Rect(
         target.left - (visible.left - outer.left),
         target.top - (visible.top - outer.top),

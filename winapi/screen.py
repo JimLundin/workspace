@@ -9,12 +9,69 @@ from winapi._core import fn, gdi32, last_error, optional_fn, rect, user32
 from winapi.shapes import Rect
 
 
-class MONITORINFO(ctypes.Structure):
+class MONITORINFOEXW(ctypes.Structure):
     cbSize: int
     rcMonitor: wintypes.RECT
     rcWork: wintypes.RECT
     dwFlags: int
-    _fields_ = (("cbSize", wintypes.DWORD), ("rcMonitor", wintypes.RECT), ("rcWork", wintypes.RECT), ("dwFlags", wintypes.DWORD))
+    szDevice: str
+    _fields_ = (
+        ("cbSize", wintypes.DWORD),
+        ("rcMonitor", wintypes.RECT),
+        ("rcWork", wintypes.RECT),
+        ("dwFlags", wintypes.DWORD),
+        ("szDevice", wintypes.WCHAR * 32),
+    )
+
+
+class LUID(ctypes.Structure):
+    _fields_ = (("LowPart", wintypes.DWORD), ("HighPart", wintypes.LONG))
+
+
+class DisplayPathSource(ctypes.Structure):
+    adapterId: LUID
+    id: int
+    _fields_ = (("adapterId", LUID), ("id", ctypes.c_uint32), ("modeInfoIdx", ctypes.c_uint32), ("statusFlags", ctypes.c_uint32))
+
+
+class DisplayPathTarget(ctypes.Structure):
+    outputTechnology: int
+    _fields_ = (
+        ("adapterId", LUID),
+        ("id", ctypes.c_uint32),
+        ("modeInfoIdx", ctypes.c_uint32),
+        ("outputTechnology", ctypes.c_uint32),
+        ("rotation", ctypes.c_uint32),
+        ("scaling", ctypes.c_uint32),
+        ("refreshRate", ctypes.c_uint32 * 2),
+        ("scanLineOrdering", ctypes.c_uint32),
+        ("targetAvailable", wintypes.BOOL),
+        ("statusFlags", ctypes.c_uint32),
+    )
+
+
+class DisplayPath(ctypes.Structure):
+    sourceInfo: DisplayPathSource
+    targetInfo: DisplayPathTarget
+    _fields_ = (("sourceInfo", DisplayPathSource), ("targetInfo", DisplayPathTarget), ("flags", ctypes.c_uint32))
+
+
+class DisplayMode(ctypes.Structure):
+    _fields_ = (("infoType", ctypes.c_uint32), ("id", ctypes.c_uint32), ("adapterId", LUID), ("mode", ctypes.c_byte * 48))
+
+
+class DisplayInfoHeader(ctypes.Structure):
+    type: int
+    size: int
+    adapterId: LUID
+    id: int
+    _fields_ = (("type", ctypes.c_uint32), ("size", ctypes.c_uint32), ("adapterId", LUID), ("id", ctypes.c_uint32))
+
+
+class DisplaySourceName(ctypes.Structure):
+    header: DisplayInfoHeader
+    viewGdiDeviceName: str
+    _fields_ = (("header", DisplayInfoHeader), ("viewGdiDeviceName", wintypes.WCHAR * 32))
 
 
 class BITMAPINFOHEADER(ctypes.Structure):
@@ -52,7 +109,22 @@ class BITMAPINFO(ctypes.Structure):
 
 MONITORENUMPROC = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HMONITOR, wintypes.HDC, ctypes.POINTER(wintypes.RECT), wintypes.LPARAM)
 _EnumDisplayMonitors = fn(user32, "EnumDisplayMonitors", wintypes.BOOL, wintypes.HDC, ctypes.c_void_p, MONITORENUMPROC, wintypes.LPARAM)
-_GetMonitorInfoW = fn(user32, "GetMonitorInfoW", wintypes.BOOL, wintypes.HMONITOR, ctypes.POINTER(MONITORINFO))
+_GetMonitorInfoW = fn(user32, "GetMonitorInfoW", wintypes.BOOL, wintypes.HMONITOR, ctypes.POINTER(MONITORINFOEXW))
+_GetDisplayConfigBufferSizes = fn(
+    user32, "GetDisplayConfigBufferSizes", ctypes.c_long, ctypes.c_uint32, ctypes.POINTER(ctypes.c_uint32), ctypes.POINTER(ctypes.c_uint32)
+)
+_QueryDisplayConfig = fn(
+    user32,
+    "QueryDisplayConfig",
+    ctypes.c_long,
+    ctypes.c_uint32,
+    ctypes.POINTER(ctypes.c_uint32),
+    ctypes.POINTER(DisplayPath),
+    ctypes.POINTER(ctypes.c_uint32),
+    ctypes.POINTER(DisplayMode),
+    ctypes.c_void_p,
+)
+_DisplayConfigGetDeviceInfo = fn(user32, "DisplayConfigGetDeviceInfo", ctypes.c_long, ctypes.POINTER(DisplaySourceName))
 _MonitorFromWindow = fn(user32, "MonitorFromWindow", wintypes.HMONITOR, wintypes.HWND, wintypes.DWORD)
 _GetSystemMetrics = fn(user32, "GetSystemMetrics", ctypes.c_int, ctypes.c_int)
 _SetProcessDpiAwarenessContext = optional_fn(user32, "SetProcessDpiAwarenessContext", wintypes.BOOL, ctypes.c_ssize_t)
@@ -95,6 +167,11 @@ _StretchBlt = fn(
 
 _SM_XVIRTUALSCREEN, _SM_YVIRTUALSCREEN, _SM_CXVIRTUALSCREEN, _SM_CYVIRTUALSCREEN = 76, 77, 78, 79
 _MONITORINFOF_PRIMARY: Final = 1
+_QDC_ONLY_ACTIVE_PATHS: Final = 2
+_DISPLAYCONFIG_DEVICE_INFO_GET_SOURCE_NAME: Final = 1
+_ERROR_INSUFFICIENT_BUFFER: Final = 122
+# Built-in panels: DISPLAYCONFIG_OUTPUT_TECHNOLOGY_INTERNAL, DISPLAYPORT_EMBEDDED and UDI_EMBEDDED.
+_BUILT_IN: Final = frozenset({0x8000_0000, 11, 13})
 _MONITOR_DEFAULTTONEAREST: Final = 2
 _PER_MONITOR_AWARE_V2: Final = -4
 _DIB_RGB_COLORS, _HALFTONE = 0, 4
@@ -107,6 +184,8 @@ class Monitor:
     work: Rect
     """The area windows are placed in: without the taskbar."""
     primary: bool = field(kw_only=True)
+    internal: bool = field(kw_only=True)
+    """The laptop's own panel, as the display configuration reports its connection."""
 
 
 def use_physical_pixels() -> None:
@@ -122,19 +201,49 @@ def virtual_screen() -> Rect:
     return Rect(left, top, left + int(_GetSystemMetrics(_SM_CXVIRTUALSCREEN)), top + int(_GetSystemMetrics(_SM_CYVIRTUALSCREEN)))
 
 
-def _monitor(handle: int) -> Monitor:
-    info = MONITORINFO()
-    info.cbSize = ctypes.sizeof(MONITORINFO)
+def built_in_devices() -> frozenset[str]:
+    """The GDI device names of the active displays driven by a built-in panel connection."""
+    for _attempt in range(3):  # The configuration can change between sizing and querying.
+        paths, modes = ctypes.c_uint32(), ctypes.c_uint32()
+        if _GetDisplayConfigBufferSizes(_QDC_ONLY_ACTIVE_PATHS, ctypes.byref(paths), ctypes.byref(modes)):
+            return frozenset()
+        path_info = (DisplayPath * paths.value)()
+        mode_info = (DisplayMode * modes.value)()
+        result = _QueryDisplayConfig(_QDC_ONLY_ACTIVE_PATHS, ctypes.byref(paths), path_info, ctypes.byref(modes), mode_info, None)
+        if result == _ERROR_INSUFFICIENT_BUFFER:
+            continue
+        if result:
+            return frozenset()
+        return frozenset(name for path in path_info[: paths.value] if (name := _source_name(path)) is not None)
+    return frozenset()
+
+
+def _source_name(path: DisplayPath) -> str | None:
+    if path.targetInfo.outputTechnology not in _BUILT_IN:
+        return None
+    name = DisplaySourceName()
+    name.header.type = _DISPLAYCONFIG_DEVICE_INFO_GET_SOURCE_NAME
+    name.header.size = ctypes.sizeof(DisplaySourceName)
+    name.header.adapterId = path.sourceInfo.adapterId
+    name.header.id = path.sourceInfo.id
+    return str(name.viewGdiDeviceName) if _DisplayConfigGetDeviceInfo(ctypes.byref(name)) == 0 else None
+
+
+def _monitor(handle: int, built_in: frozenset[str]) -> Monitor:
+    info = MONITORINFOEXW()
+    info.cbSize = ctypes.sizeof(MONITORINFOEXW)
     _GetMonitorInfoW(handle, ctypes.byref(info))
-    return Monitor(rect(info.rcMonitor), rect(info.rcWork), primary=bool(info.dwFlags & _MONITORINFOF_PRIMARY))
+    primary, internal = bool(info.dwFlags & _MONITORINFOF_PRIMARY), str(info.szDevice) in built_in
+    return Monitor(rect(info.rcMonitor), rect(info.rcWork), primary=primary, internal=internal)
 
 
 def monitors() -> list[Monitor]:
     """All monitors, left to right."""
     found: list[Monitor] = []
+    built_in = built_in_devices()
 
     def each(handle: int, _dc: int, _rect: object, _data: int) -> bool:
-        found.append(_monitor(handle))
+        found.append(_monitor(handle, built_in))
         return True
 
     _EnumDisplayMonitors(None, None, MONITORENUMPROC(each), 0)
@@ -145,7 +254,7 @@ def monitor_of(hwnd: int) -> Monitor:
     handle = _MonitorFromWindow(hwnd, _MONITOR_DEFAULTTONEAREST)
     if handle is None:
         raise last_error()
-    return _monitor(handle)
+    return _monitor(handle, built_in_devices())
 
 
 def capture(area: Rect, width: int, height: int) -> bytes:
