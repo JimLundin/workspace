@@ -74,8 +74,6 @@ def arguments(name: str, text: str, *, limit: int = 0) -> str:
         case "inspect_ui":
             query = fields.get("query")
             description = f"Find controls matching “{query}”" if isinstance(query, str) and query else "Inspect the selected window."
-        case "focus_window":
-            description = "Bring the selected window forward."
         case "ui_action" | "manage_window":
             action = fields.get("action")
             target = "control" if name == "ui_action" else "window"

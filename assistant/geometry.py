@@ -39,7 +39,3 @@ class Shot:
     area: Rect
     width: int
     height: int
-
-    def to_screen(self, x: int, y: int) -> tuple[int, int]:
-        """A point in the image as a point on the screen."""
-        return self.area.left + round(x * self.area.width / self.width), self.area.top + round(y * self.area.height / self.height)

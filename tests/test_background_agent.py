@@ -8,7 +8,6 @@ from typing import cast
 from assistant import browser_tools, business_tools, meeting_tools
 from assistant.agent import Agent
 from assistant.agent_session import activity_text, message_body
-from assistant.geometry import Shot
 from assistant.llm import Settings, ToolCall
 from assistant.task_profiles import General
 from automation.ipc import MeetingCommand, StartMeeting
@@ -16,7 +15,6 @@ from automation.json_value import Json
 from automation.presentation import ToolActivity
 from tests.fake_endpoint import fake_endpoint
 from tests.test_agent import FakeMachine, FakeWindow, Rig, calls, durable, no_feed, says
-from winapi.shapes import Rect
 
 
 def test_meeting_voice_commands_use_the_recording_service_directly(tmp_path: Path) -> None:
@@ -77,24 +75,6 @@ def test_background_tools_are_exposed_to_the_model_and_run_directly(tmp_path: Pa
         activities = [item for item in rig.window.live if isinstance(item, ToolActivity)]
         assert activities and all(item.detail == "" for item in activities)
         assert all("fixture-private" not in activity_text(item) for item in activities)
-
-
-def test_browser_images_invalidate_desktop_coordinates(tmp_path: Path) -> None:
-    machine = FakeMachine()
-    agent = Agent(
-        Settings("", "", "", "", ""),
-        machine,
-        FakeWindow(),
-        threading.Event(),
-        work=durable(tmp_path),
-        toolset=lambda agent: General(agent, feed_request=no_feed),
-    )
-    agent.screen.shot = Shot(Rect(0, 0, 1920, 1080), 960, 540)
-    result = agent.call(ToolCall("browser", "browser_screenshot", '{"target_id":"page"}'))
-    assert result.image is not None
-    click = agent.call(ToolCall("desktop", "click", '{"x":10,"y":10}'))
-    assert not click.ok and "screenshot first" in click.text
-    assert not any(line.startswith("click ") for line in machine.log)
 
 
 def test_agent_cannot_attach_to_or_manage_the_personal_browser(tmp_path: Path) -> None:

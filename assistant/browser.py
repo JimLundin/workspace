@@ -724,7 +724,7 @@ class Browser:
                 raise ValueError("Oversized PNG")
         except (binascii.Error, ValueError) as error:
             raise BrowserError("Edge returned an invalid or oversized viewport image.") from error
-        return BrowserResult("Browser viewport screenshot. Use browser controls; these are not desktop mouse coordinates.", image)
+        return BrowserResult("Browser viewport screenshot. Use browser controls to act on it.", image)
 
     def _action(self, request: PageAction, cancel: threading.Event) -> BrowserResult:
         # Minimized personal browsers ignore trusted input without wake

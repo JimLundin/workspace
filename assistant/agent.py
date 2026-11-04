@@ -21,7 +21,6 @@ from pydantic import ConfigDict, TypeAdapter
 from assistant import action_text
 from assistant.agent_history import History
 from assistant.agent_tools import Args, ArgumentError, Display, Machine, Output, Tool, Verify
-from assistant.desktop_tools import Screen
 from assistant.llm import Settings, ToolCall
 from assistant.publishing import PublishError
 from assistant.workspace import SourceError
@@ -112,7 +111,6 @@ class Agent:
         self.after_step = after_step
         self.history = history if history is not None else History()
         """Execution-owned volatile session IO; the SDK publishes immutable item bytes."""
-        self.screen = Screen()
         self.started = 0.0
         self.timings: dict[str, float] = {}
         self.context, self.context_reader = context, context_reader
@@ -140,7 +138,6 @@ class Agent:
             if work := self.context.window:
                 try:
                     self.context_image, shot = self.machine.screenshot(handle=work.handle)
-                    self.screen.capture(self.context_image, shot)
                     self.context_text += f"\nScreenshot captured now: {shot.width}x{shot.height}. {shot.area}"
                 except OSError as error:
                     self.context_text += f"\nScreen context unavailable: {error}"

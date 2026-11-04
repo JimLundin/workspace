@@ -26,17 +26,13 @@ from winapi.shapes import Rect
 
 
 class Desktop:
-    __slots__ = ("owner", "pasted")
+    __slots__ = ("owner",)
 
     def __init__(self) -> None:
         self.owner = 0
-        self.pasted: list[str] = []
 
     def capture(self, area: Rect, longest: int) -> tuple[bytes, Shot]:
         return b"capture", Shot(area, area.width, area.height)
-
-    def paste(self, text: str) -> None:
-        self.pasted.append(text)
 
 
 class Recording:
@@ -80,8 +76,6 @@ def test_machine_uses_explicit_desktop_and_meeting_owners() -> None:
     # response, or fails to report an absent recording owner.
     desktop, recording = Desktop(), Recording()
     machine: Machine = WinMachine(desktop, browser=Browser(), meetings=recording)
-    machine.paste_text("A prepared note")
-    assert desktop.pasted == ["A prepared note"]
     start = StartMeeting("microphone", "Planning")
     assert machine.meeting(start) == "Recording owner status"
     assert recording.calls[0] is start

@@ -32,62 +32,16 @@ def test_new_computer_tools_are_available_to_the_model_and_run_directly(tmp_path
             calls(("inspect_ui", {"handle": 7})),
             calls(("ui_action", {"handle": 7, "id": "1.2.3", "action": "invoke"})),
             calls(("screenshot", {})),
-            calls(("move_mouse", {"x": 10, "y": 20}), ("scroll", {"x": 30, "y": 40, "clicks": 2, "horizontal": True})),
-            calls(("paste_text", {"text": "A complete block of text"}), ("press_keys", {"keys": "win", "repeat": 2})),
             calls(("manage_window", {"handle": 7, "action": "maximize"})),
             says("Done."),
             work=durable(tmp_path),
         )
         rig.run()
-        assert "move 20,40" in rig.machine.log
-        assert "scroll 2 at 60,80 horizontal" in rig.machine.log
-        assert "paste A complete block of text" in rig.machine.log
         assert "window 7 maximize None" in rig.machine.log
-        assert sum(entry.startswith("keys ") for entry in rig.machine.log) == 2
         assert not any(entry.startswith("confirm ") for entry in rig.machine.log)
 
 
-class StoppingMouse(FakeMachine):
-    __slots__ = ("stop",)
-
-    def __init__(self, stop: threading.Event) -> None:
-        super().__init__()
-        self.stop = stop
-
-    def mouse_button(self, button: str, *, down: bool) -> None:
-        super().mouse_button(button, down=down)
-        if down:
-            self.stop.set()
-
-
-def test_stopping_a_drag_releases_its_button_and_modifiers(tmp_path: Path) -> None:
-    stop = threading.Event()
-    machine = StoppingMouse(stop)
-    agent = Agent(
-        Settings("", "", "", "", ""),
-        machine,
-        FakeWindow(),
-        stop,
-        work=durable(tmp_path),
-        toolset=lambda agent: General(agent, feed_request=no_feed),
-    )
-    agent.screen.shot = Shot(Rect(-1920, 0, 0, 1080), 960, 540)
-    arguments: dict[str, object] = {
-        "x": 10,
-        "y": 20,
-        "to_x": 300,
-        "to_y": 200,
-        "modifiers": "ctrl+shift",
-    }
-    result = agent.call(ToolCall("drag", "drag", json.dumps(arguments)))
-    assert not result.ok and "Stopped" in result.text
-    assert machine.log[0] == "move -1900,40"
-    assert "button left True" in machine.log and "button left False" in machine.log
-    assert machine.log[-1] == "keys [(160, False), (162, False)]"
-    assert sum(entry.startswith("move ") for entry in machine.log) == 1
-
-
-def test_bad_coordinates_and_action_arguments_do_not_produce_input(tmp_path: Path) -> None:
+def test_bad_action_arguments_do_not_reach_the_machine(tmp_path: Path) -> None:
     machine = FakeMachine()
     agent = Agent(
         Settings("", "", "", "", ""),
@@ -97,12 +51,7 @@ def test_bad_coordinates_and_action_arguments_do_not_produce_input(tmp_path: Pat
         work=durable(tmp_path),
         toolset=lambda agent: General(agent, feed_request=no_feed),
     )
-    agent.screen.shot = Shot(Rect(0, 0, 100, 100), 100, 100)
     for name, arguments in (
-        ("click", {"x": -1, "y": 10}),
-        ("move_mouse", {"x": 100, "y": 10}),
-        ("scroll", {"x": 10, "y": 10, "clicks": 1000}),
-        ("press_keys", {"keys": "enter", "repeat": -1}),
         ("ui_action", {"handle": 7, "id": "1.2.3", "action": "unrecognized"}),
         ("screenshot", {"handle": 7, "desktop": True}),
     ):
@@ -136,7 +85,6 @@ def test_request_context_includes_the_work_window_and_one_current_screenshot(tmp
         body = json.dumps(request["content"])
         assert "Summarize this" in body and "Budget.xlsx - Excel" in body and "input_image" in body
         assert "not instructions" in body and rig.machine.log == ["screenshot"]
-        assert agent.screen.shot is not None
 
 
 def test_automatic_and_explicit_screenshots_share_the_same_history_limit(tmp_path: Path) -> None:
@@ -197,7 +145,7 @@ def test_unavailable_screen_context_keeps_the_request_and_activity_usable(tmp_pa
         assert agent.run("Find this workbook")
         body = json.dumps(rig.sent(0)[0])
         assert "Find this workbook" in body and "Budget.xlsx" in body and "desktop is locked" in body
-        assert "input_image" not in body and agent.screen.shot is None
+        assert "input_image" not in body
 
 
 def test_context_tool_refreshes_the_current_app_without_taking_a_screenshot(tmp_path: Path) -> None:
@@ -227,11 +175,10 @@ def test_invalid_desktop_arguments_never_reach_the_journal(tmp_path: Path) -> No
         ("write_file", {"path": "note.txt"}),
         ("manage_window", {"handle": 7, "action": "explode"}),
         ("manage_window", {"handle": 7, "action": "move", "x": 0, "y": 0}),
-        ("press_keys", {"keys": "enter", "repeat": 51}),
         ("ui_action", {"handle": 7, "id": "1.2", "action": "set_value"}),
         ("run_powershell", {"command": "dir", "timeout_seconds": "60"}),
         ("screenshot", {"handle": 7, "monitor": 1}),
-        ("type_text", {"text": 5}),
+        ("set_clipboard", {"text": 5}),
     )
     for name, arguments in invalid:
         result = rig.call(name, **arguments)
@@ -251,7 +198,6 @@ def test_desktop_targets_reads_and_regions_follow_the_validated_arguments(tmp_pa
     )
     assert isinstance(read, Observation) and isinstance(invoke, Change)
     assert read.resources == invoke.resources == ("foreground", target("window", 7))
-    assert tools["focus_window"].classify({"handle": 0}).resources == ("foreground",)
     assert rig.call("manage_window", handle=7, action="move", x=10, y=20, width=100, height=200).ok
     assert rig.machine.log[-1] == f"window 7 move {Rect(10, 20, 110, 220)}"
     assert rig.call("screenshot", handle=7).ok

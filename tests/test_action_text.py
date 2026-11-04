@@ -44,7 +44,6 @@ def test_control_and_window_commands_name_the_operation_and_target() -> None:
         ("manage_window", '{"action":"minimize","handle":42}', "Minimize the selected window."),
         ("manage_window", '{"action":"snap_left","handle":42}', "Snap the selected window to the left."),
         ("manage_window", '{"action":"snap_right","handle":42}', "Snap the selected window to the right."),
-        ("focus_window", '{"handle":42}', "Bring the selected window forward."),
     ):
         message = ToolActivity("action", name, detail, 1)
         assert body(Entry(0, message)) == expected

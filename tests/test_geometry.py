@@ -1,6 +1,6 @@
 """Window placement and screenshot coordinates."""
 
-from assistant.geometry import Shot, fit, half
+from assistant.geometry import fit, half
 from winapi.shapes import Rect
 
 WORK = Rect(0, 0, 1920, 1040)  # a 1080p monitor, minus the taskbar
@@ -16,9 +16,3 @@ def test_half_fills_one_side_of_the_work_area_counting_invisible_borders() -> No
 def test_fit_shrinks_to_a_maximum_and_keeps_the_shape() -> None:
     assert fit(2560, 1440, 1280) == (1280, 720)
     assert fit(800, 600, 1280) == (800, 600)
-
-
-def test_shot_maps_image_points_back_to_the_screen() -> None:
-    shot = Shot(Rect(1920, 0, 1920 + 2560, 1440), 1280, 720)
-    assert shot.to_screen(0, 0) == (1920, 0)
-    assert shot.to_screen(640, 360) == (1920 + 1280, 720)

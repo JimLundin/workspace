@@ -1,8 +1,8 @@
 # Background automation
 
 Workspace prefers an application API, then background browser DOM operations,
-then accessibility, and finally foreground mouse and keyboard input. All tools
-use the same agent conversation and Stop control.
+then accessibility. The agent sends no synthetic mouse or keyboard input. All
+tools use the same agent conversation and Stop control.
 
 ## Browser sessions
 
@@ -29,7 +29,7 @@ preserved; closing it would make Edge create it again.
 | `browser_snapshot` | Read text and controls. Follow next offsets for more text, controls or frames. |
 | `browser_action` | Click, fill, select an option, or check a native checkbox/radio. |
 | `browser_evaluate` | Evaluate JavaScript in an isolated world; await promises and return bounded output. |
-| `browser_screenshot` | Capture the agent viewport, independently of desktop coordinates. |
+| `browser_screenshot` | Capture the agent viewport. |
 | `browser_sign_in` | Open the dedicated profile visibly for credentials/MFA, then resume headless work with `browser_open`. |
 | `browser_close` | Close an exact page after saving evidence; with no `target_id`, close the exclusive browser and retain its profile. |
 
@@ -55,7 +55,7 @@ wake/restore lifecycle as web-app operations, so inactive pages receive trusted
 input without activating the native window. A disposable minimized Edge fixture
 verifies the saved effect and unchanged window state. Open shadow roots are included. Sites
 with closed shadow roots, inaccessible frames or canvas interfaces may require
-custom JavaScript, screenshots or foreground automation.
+custom JavaScript or screenshots.
 
 The exclusive browser is started suspended, assigned to an owned Windows job
 and then resumed. Normal closure waits for children; the job also terminates

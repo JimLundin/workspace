@@ -15,7 +15,6 @@ from assistant.agent_session import activity_text
 from assistant.agent_tools import Output
 from assistant.browser_requests import BrowserRequest, Screenshot
 from assistant.browser_values import BrowserError
-from assistant.desktop_tools import key_strokes
 from assistant.geometry import Shot
 from assistant.llm import Settings, ToolCall, settings_from
 from assistant.task_profiles import General
@@ -32,7 +31,7 @@ from automation.store import TaskStore
 from automation.task import RequestSource
 from tests.fake_endpoint import FakeEndpoint, Received, Reply, fake_endpoint, sse
 from tests.test_workspace import live_tree
-from winapi.shapes import Rect, Window
+from winapi.shapes import Rect
 
 
 def no_feed(_command: BridgeCommand) -> str:
@@ -137,9 +136,6 @@ class FakeMachine:
         self.log.append("screenshot")
         return b"\x89PNG", Shot(Rect(0, 0, 2560, 1440), 1280, 720)
 
-    def click(self, x: int, y: int, button: str, count: int) -> None:
-        self.log.append(f"click {button} x{count} at {x},{y}")
-
     def desktop_state(self) -> str:
         return '{"foreground":7,"coordinates":"physical screen pixels"}'
 
@@ -169,31 +165,6 @@ class FakeMachine:
     def meeting(self, operation: MeetingOperation) -> str:
         self.meetings.append(operation)
         return "Meeting state supplied."
-
-    def move_mouse(self, x: int, y: int) -> None:
-        self.log.append(f"move {x},{y}")
-
-    def mouse_button(self, button: str, *, down: bool) -> None:
-        self.log.append(f"button {button} {down}")
-
-    def type_text(self, text: str) -> None:
-        self.log.append(f"type {text}")
-
-    def paste_text(self, text: str) -> None:
-        self.log.append(f"paste {text}")
-
-    def press_keys(self, strokes: list[tuple[int, bool]]) -> None:
-        self.log.append(f"keys {strokes}")
-
-    def scroll(self, x: int, y: int, clicks: int, *, horizontal: bool = False) -> None:
-        self.log.append(f"scroll {clicks} at {x},{y}" + (" horizontal" if horizontal else ""))
-
-    def windows(self) -> list[Window]:
-        return [Window(7, "Inbox - Outlook", "olk.exe", minimized=False)]
-
-    def focus(self, handle: int) -> bool:
-        self.log.append(f"focus {handle}")
-        return True
 
     def get_clipboard(self) -> str | None:
         return "clipped"
@@ -507,7 +478,7 @@ def test_stopped_turn_keeps_completed_actions_and_accepts_a_follow_up(tmp_path: 
 def test_desktop_requests_do_not_prepare_a_source_workspace(tmp_path: Path) -> None:
     workspace = source(tmp_path)
     with fake_endpoint() as endpoint:
-        rig = Rig(endpoint, calls(("list_windows", {})), says("Outlook is open."), workspace=workspace, work=durable(tmp_path))
+        rig = Rig(endpoint, calls(("desktop_state", {})), says("Outlook is open."), workspace=workspace, work=durable(tmp_path))
         rig.run("What is open?")
         assert rig.window.log[-1] == "done Outlook is open."
     assert not workspace.root.exists()
@@ -627,13 +598,6 @@ def test_commands_run_only_within_their_timeout_bounds(tmp_path: Path) -> None:
     assert len(rig.machine.executed) == 2
 
 
-def test_clicks_before_any_screenshot_are_refused(tmp_path: Path) -> None:
-    rig = ToolRig(work=durable(tmp_path))
-    result = rig.call("click", x=1, y=1)
-    assert not result.ok and result.text == "Error: take a screenshot first; coordinates are in the latest screenshot."
-    assert not rig.machine.log
-
-
 # ---- screenshots -----------------------------------------------------------------------
 
 
@@ -693,7 +657,7 @@ def test_find_files_matches_names_under_a_folder(tmp_path: Path) -> None:
     assert len(lines) == 3 and len(set(lines)) == 3
 
 
-def test_default_tools_write_run_and_control_the_desktop_directly(tmp_path: Path) -> None:
+def test_default_tools_write_run_and_capture_the_desktop_directly(tmp_path: Path) -> None:
     target = tmp_path / "notes.txt"
     command = "Get-Location; Write-Output done"
     with fake_endpoint() as endpoint:
@@ -701,16 +665,13 @@ def test_default_tools_write_run_and_control_the_desktop_directly(tmp_path: Path
             endpoint,
             calls(("write_file", {"path": str(target), "content": "Done"}), ("run_powershell", {"command": command})),
             calls(("screenshot", {})),
-            calls(("click", {"x": 10, "y": 20}), ("type_text", {"text": "hello"}), ("press_keys", {"keys": "enter"})),
             says("Done."),
             work=durable(tmp_path),
         )
         rig.run()
         assert target.read_text(encoding="utf-8") == "Done"
         assert f"ran {command}" in rig.machine.log
-        assert "click left x1 at 20,40" in rig.machine.log
-        assert "type hello" in rig.machine.log
-        assert any(entry.startswith("keys ") for entry in rig.machine.log)
+        assert "screenshot" in rig.machine.log
 
 
 def test_stop_prevents_actions(tmp_path: Path) -> None:
@@ -730,24 +691,12 @@ def test_stop_prevents_actions(tmp_path: Path) -> None:
         ("write_file", {"path": str(target), "content": "no"}),
         ("run_powershell", {"command": "Get-Date"}),
         ("open", {"target": str(target)}),
-        ("type_text", {"text": "no"}),
         ("set_clipboard", {"text": "no"}),
     ):
         result = agent.call(ToolCall("stopped", name, json.dumps(args)))
         assert not result.ok and result.text == "Stopped by the user."
     assert not target.exists()
     assert not machine.log
-
-
-# ---- keys ------------------------------------------------------------------------------
-
-
-def test_key_combinations() -> None:
-    ctrl, shift, s = 0xA2, 0xA0, 0x53
-    assert key_strokes("ctrl+shift+s") == [(ctrl, True), (shift, True), (s, True), (s, False), (shift, False), (ctrl, False)]
-    assert key_strokes("Enter") == [(0x0D, True), (0x0D, False)]
-    assert key_strokes("alt+f4") == [(0xA4, True), (0x73, True), (0x73, False), (0xA4, False)]
-    assert key_strokes("ctrl+banana") is None
 
 
 # ---- changing Workspace itself -------------------------------------------------------

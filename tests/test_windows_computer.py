@@ -146,7 +146,6 @@ def test_screenshot_sources_use_physical_bounds_and_scale_only_the_image() -> No
     machine = WinMachine(CaptureDesktop(), browser=Browser(), capture_sources=sources)
     _, shot = machine.screenshot(handle=7, longest=400)
     assert shot.area == work and (shot.width, shot.height) == (400, 300)
-    assert shot.to_screen(200, 150) == (-1300, 400)
     assert machine.screenshot(monitor=0)[1].area == left
     assert machine.screenshot(monitor=-2)[1].area == desktop
     assert machine.screenshot(area=Rect(-2000, -100, -1000, 500))[1].area == Rect(-1920, 0, -1000, 500)

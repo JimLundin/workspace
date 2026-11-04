@@ -455,10 +455,9 @@ The **×** stop button remains available throughout the task.
 
 The agent can work across desktop applications: inspect accessible controls,
 read their text, fill fields, invoke buttons, select list items, toggle options,
-expand menus and set sliders. It can also hover, click, drag with modifiers,
-scroll in either direction, paste text, use keyboard shortcuts, and move,
-resize, snap, minimize, maximize or close windows. Screenshots can cover a
-window, monitor, region or the whole desktop. PowerShell supports working
+expand menus and set sliders. It can also move, resize, snap, minimize,
+maximize or close windows. Screenshots can cover a window, monitor, region or
+the whole desktop. PowerShell supports working
 directories and timeouts; Stop terminates its running command and child
 processes. The agent can use installed applications' APIs and COM interfaces
 through PowerShell when those suit the task.
@@ -503,9 +502,9 @@ are retained. The idle activity buffer expires separately. Set
 `WORKSPACE_AGENT_CONTEXT=off` and restart to turn off this automatic context.
 
 Desktop automation uses the permissions of your Windows account. A locked
-desktop or an elevated application can block screen capture and input. Some
-applications expose few accessibility controls; the agent can use screenshots,
-input or an application API instead. It checks results and reports an actual
+desktop or an elevated application can block screen capture and accessibility.
+Some applications expose few accessibility controls; the agent can use
+screenshots or an application API instead. It checks results and reports an actual
 blocker when Windows refuses access.
 
 It stops after 80 steps (`AGENT_MAX_STEPS`). The task journal records each

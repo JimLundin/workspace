@@ -57,7 +57,6 @@ from assistant.browser_values import (
     UngroupTabs,
     destination,
 )
-from assistant.desktop_tools import Screen
 from assistant.llm import ToolSpec, tool_spec
 from automation.actions import Change, Evidence, Observation, target
 from automation.execution import Readback, Targets
@@ -310,7 +309,7 @@ TOOLS: Final = (
     browser_tool(
         "browser_screenshot",
         "Capture an ordinary tab or Workspace's separate headless viewport. Invisible visibility=hidden pages have no capturable surface; "
-        "open their URL with visibility=tab first. Its coordinates are not desktop mouse coordinates.",
+        "open their URL with visibility=tab first.",
         direct(Screenshot),
     ),
     browser_tool(
@@ -450,10 +449,10 @@ def _classify(tool: BrowserTool) -> Callable[[Mapping[str, Json]], Change | Obse
 
 
 class Browser:
-    __slots__ = ("screen", "session")
+    __slots__ = ("session",)
 
-    def __init__(self, session: Session, screen: Screen) -> None:
-        self.session, self.screen = session, screen
+    def __init__(self, session: Session) -> None:
+        self.session = session
 
     def tools(self) -> tuple[Tool, ...]:
         return tuple(self._tool(declared) for declared in AGENT_TOOLS)
@@ -476,8 +475,6 @@ class Browser:
 
         def execute() -> Output:
             result, image = self.session.machine.browse(request, self.session.stop)
-            if image is not None:
-                self.screen.forget()  # A browser image must never redirect later desktop clicks.
             return Output(result, image=image)
 
         return self.session.effect(args.operation, execute)

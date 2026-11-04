@@ -1,4 +1,4 @@
-"""Native agent capabilities with explicit desktop, human-input, and meeting owners.
+"""Native agent capabilities with explicit desktop and meeting owners.
 
 Importing or constructing this module does not create the assistant UI, open a
 microphone, or start a meeting. A worker supplies its own clipboard window and
@@ -7,32 +7,26 @@ bridges only the interactions whose owner remains in the assistant process.
 
 import os
 import threading
-import time
 from collections.abc import Callable
 from dataclasses import dataclass, field, replace
-from typing import Final, Literal, Protocol
+from typing import Literal, Protocol
 
 from pydantic import TypeAdapter
 
 import keeper
 import keeper_control
 from automation.work_folder import BROWSER_PROFILE
-from protocol import MAGIC
-from winapi.shapes import Rect, Window
+from winapi.shapes import Rect
 lazy from assistant import commands, uia
 lazy from assistant.browser import Browser, BrowserResult
 lazy from assistant.browser_requests import BrowserRequest
 lazy from assistant.browser_session import Separate
 lazy from assistant.geometry import Shot, fit, half
 lazy from assistant.png import encode_png
-lazy from assistant.textio import paste_text
 lazy from assistant.uia import UiRequest
 lazy from assistant.web_apps import Located, WebAppOperation
 lazy from automation.ipc import MeetingOperation
-lazy from winapi import clipboard, inputs, screen, system, windows
-
-_EXTENDED_VKS: Final = frozenset({0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27, 0x28, 0x2C, 0x2D, 0x2E, 0x5B, 0x5D, 0x90})
-_PASTE_WAIT_S: Final = 0.4
+lazy from winapi import clipboard, screen, system, windows
 
 
 class DesktopAccess(Protocol):
@@ -41,7 +35,6 @@ class DesktopAccess(Protocol):
     @property
     def owner(self) -> int: ...
     def capture(self, area: Rect, longest: int) -> tuple[bytes, Shot]: ...
-    def paste(self, text: str) -> None: ...
 
 
 class MeetingControl(Protocol):
@@ -57,7 +50,7 @@ class BrowserControl(Protocol):
 
 
 class NativeDesktop:
-    """Capture and paste for a worker's existing clipboard window, without a UI."""
+    """Capture for a worker's existing clipboard window, without a UI."""
 
     __slots__ = ("owner",)
 
@@ -67,20 +60,6 @@ class NativeDesktop:
     def capture(self, area: Rect, longest: int) -> tuple[bytes, Shot]:
         width, height = fit(area.width, area.height, longest)
         return encode_png(width, height, screen.capture(area, width, height)), Shot(area, width, height)
-
-    def paste(self, text: str) -> None:
-        def shortcut() -> None:
-            inputs.send_keys(
-                [
-                    inputs.KeyStroke(0xA2, down=True),
-                    inputs.KeyStroke(0x56, down=True),
-                    inputs.KeyStroke(0x56, down=False),
-                    inputs.KeyStroke(0xA2, down=False),
-                ],
-                MAGIC,
-            )
-
-        paste_text(self.owner, text, clipboard, shortcut, lambda: time.sleep(_PASTE_WAIT_S))
 
 
 @dataclass(frozen=True, slots=True)
@@ -93,12 +72,6 @@ class Bounds:
 
 def bounds_of(area: Rect) -> Bounds:
     return Bounds(area.left, area.top, area.width, area.height)
-
-
-@dataclass(frozen=True, slots=True)
-class Cursor:
-    x: int
-    y: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -123,7 +96,6 @@ class DesktopState:
     """The desktop tool's observation, in physical screen pixels."""
 
     foreground: int
-    cursor: Cursor
     monitors: tuple[MonitorRow, ...]
     windows: tuple[WindowRow, ...]
     coordinates: Literal["physical screen pixels"] = "physical screen pixels"
@@ -242,10 +214,8 @@ class WinMachine:
         return self.desktop.capture(area, longest)
 
     def desktop_state(self) -> str:
-        x, y = inputs.cursor_position()
         state = DesktopState(
             windows.foreground(),
-            Cursor(x, y),
             tuple(
                 MonitorRow(index, bounds_of(monitor.area), bounds_of(monitor.work), primary=monitor.primary)
                 for index, monitor in enumerate(screen.monitors())
@@ -289,34 +259,6 @@ class WinMachine:
         if not windows.exists(handle):
             return 1, "No accessible window is available; list windows again or unlock the desktop."
         return commands.powershell(uia.script(replace(request, handle=handle)), timeout_s=20, cancel=cancel)
-
-    def move_mouse(self, x: int, y: int) -> None:
-        inputs.move_mouse(x, y, screen.virtual_screen(), MAGIC)
-
-    def mouse_button(self, button: str, *, down: bool) -> None:
-        inputs.mouse_button(button, MAGIC, down=down)
-
-    def click(self, x: int, y: int, button: str, count: int) -> None:
-        inputs.click(x, y, button, count, screen.virtual_screen(), MAGIC)
-
-    def type_text(self, text: str) -> None:
-        inputs.type_text(text, MAGIC)
-
-    def paste_text(self, text: str) -> None:
-        self.desktop.paste(text)
-
-    def press_keys(self, strokes: list[tuple[int, bool]]) -> None:
-        inputs.send_keys([inputs.KeyStroke(vk, down=down, extended=vk in _EXTENDED_VKS) for vk, down in strokes], MAGIC)
-
-    def scroll(self, x: int, y: int, clicks: int, *, horizontal: bool = False) -> None:
-        inputs.move_mouse(x, y, screen.virtual_screen(), MAGIC)
-        inputs.scroll(clicks, MAGIC, horizontal=horizontal)
-
-    def windows(self) -> list[Window]:
-        return windows.windows()
-
-    def focus(self, handle: int) -> bool:
-        return windows.focus(handle)
 
     def get_clipboard(self) -> str | None:
         return clipboard.get_text(self.desktop.owner)
