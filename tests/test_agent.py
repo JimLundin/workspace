@@ -15,7 +15,7 @@ from assistant.agent_session import activity_text
 from assistant.agent_tools import Output
 from assistant.browser_requests import BrowserRequest, Screenshot
 from assistant.browser_values import BrowserError
-from assistant.desktop_tools import allowed, key_strokes
+from assistant.desktop_tools import key_strokes
 from assistant.geometry import Shot
 from assistant.llm import Settings, ToolCall, settings_from
 from assistant.task_profiles import General
@@ -24,7 +24,7 @@ from assistant.web_apps import Located, WebAppOperation
 from assistant.work_bridge_contracts import BridgeCommand
 from assistant.workspace import Workspace
 from automation.actions import Resources
-from automation.execution import ApprovalReview, WorkExecution
+from automation.execution import WorkExecution
 from automation.ipc import MeetingOperation
 from automation.json_value import Json
 from automation.presentation import LiveMessage, Succeeded, ToolActivity, ToolStatus
@@ -94,14 +94,14 @@ def says(text: str) -> Reply:
     return response(message(text))
 
 
-def durable(folder: Path, *, review: Callable[[ApprovalReview], bool] | None = None) -> WorkExecution:
+def durable(folder: Path) -> WorkExecution:
     """Every agent run executes one claimed durable task."""
     identity = uuid.uuid4().hex
     store = TaskStore(folder / "agent-work" / identity / "work.sqlite3")
     store.submit(identity, "Agent fixture", "do it", RequestSource("chat"), at=1)
     claim = store.claim("worker", identity, at=2)
     assert claim is not None
-    return WorkExecution(claim, store, Resources(), review=review)
+    return WorkExecution(claim, store, Resources())
 
 
 def observed(output: object) -> str:
@@ -262,7 +262,6 @@ class Rig:
         max_steps: int = 10,
         *,
         after_step: Callable[[], None] | None = None,
-        approvals: bool = False,
         effort: str = "max",
     ) -> None:
         settings = Settings(
@@ -272,7 +271,6 @@ class Rig:
             "",
             "",
             agent_reasoning_effort=effort,
-            agent_approvals=approvals,
         )
         agent = Agent(
             settings,
@@ -304,11 +302,10 @@ class ToolRig:
 
     __slots__ = ("agent", "machine", "window")
 
-    def __init__(  # noqa: PLR0913 - fixture options
+    def __init__(
         self,
         *,
         work: WorkExecution,
-        approvals: bool = False,
         workspace: Workspace | None = None,
         machine: FakeMachine | None = None,
         clock: Callable[[], datetime] = datetime.now,
@@ -317,7 +314,7 @@ class ToolRig:
         self.machine = machine if machine is not None else FakeMachine()
         self.window = FakeWindow()
         self.agent = Agent(
-            Settings("", "", "", "", "", agent_approvals=approvals),
+            Settings("", "", "", "", ""),
             self.machine,
             self.window,
             threading.Event(),
@@ -426,7 +423,7 @@ def test_default_agent_uses_extra_large_with_low_reasoning_across_tool_turns(tmp
         assert rig.window.log[-1] == "done Read it."
 
 
-def test_agent_uses_responses_with_max_reasoning_and_opens_without_approval(tmp_path: Path) -> None:
+def test_agent_uses_responses_with_max_reasoning_and_opens_directly(tmp_path: Path) -> None:
     """Astra needs Responses for tools; compatible endpoints reject extra parameters."""
     target = r"C:\Users\Jim\Downloads\budget.xlsx"
     with fake_endpoint() as endpoint:
@@ -595,13 +592,6 @@ def test_tool_publishes_readable_previews_without_changing_the_model_result(tmp_
 # ---- what needs permission -------------------------------------------------------------
 
 
-def test_commands_need_confirmation(tmp_path: Path) -> None:
-    rig = ToolRig(approvals=True, work=durable(tmp_path))
-    result = rig.call("run_powershell", command="Remove-Item C:\\temp\\x")
-    assert not result.ok and result.text == "The user declined: don't run this. Ask them, or try something else."
-    assert not rig.machine.executed
-
-
 def test_commands_run_and_report_their_output(tmp_path: Path) -> None:
     rig = ToolRig(work=durable(tmp_path))
     rig.machine.commands = {"Stop-Process -Name notepad": (1, "no such process")}
@@ -625,8 +615,8 @@ def test_a_failing_command_finishes_but_an_interrupted_one_waits_for_reconciliat
     assert [entry[0] for entry in rig.machine.executed] == ["pytest", "git status", "sleep"]
 
 
-def test_allowed_commands_run_without_asking(tmp_path: Path) -> None:
-    rig = ToolRig(approvals=True, work=durable(tmp_path))
+def test_commands_run_only_within_their_timeout_bounds(tmp_path: Path) -> None:
+    rig = ToolRig(work=durable(tmp_path))
     for timeout in (1, 600):
         result = rig.call("run_powershell", command="git status", timeout_seconds=timeout, cwd="work folder")
         assert result.ok and result.text == "Exit code 0.\nok"
@@ -635,15 +625,6 @@ def test_allowed_commands_run_without_asking(tmp_path: Path) -> None:
     for timeout in (0, 601):
         assert not rig.call("run_powershell", command="git status", timeout_seconds=timeout).ok
     assert len(rig.machine.executed) == 2
-
-
-def test_allowed_means_nothing_can_be_chained_on() -> None:
-    assert allowed("Get-ChildItem C:\\Users -Recurse")
-    assert allowed("git log --oneline -5")
-    for sneaky in ("git status; Remove-Item x", "Get-Content a | Set-Content b", "git log && del x", "Get-Date $(rm x)", "git log > out.txt"):
-        assert not allowed(sneaky), sneaky
-    assert not allowed("Get-ChildItemX")
-    assert not allowed("Remove-Item x")
 
 
 def test_clicks_before_any_screenshot_are_refused(tmp_path: Path) -> None:
@@ -712,16 +693,7 @@ def test_find_files_matches_names_under_a_folder(tmp_path: Path) -> None:
     assert len(lines) == 3 and len(set(lines)) == 3
 
 
-def test_approval_mode_writes_no_file_before_a_durable_approval(tmp_path: Path) -> None:
-    # Defect: write_file performs its effect without consulting the approval gate.
-    target = tmp_path / "out" / "reports" / "summary.md"
-    rig = ToolRig(approvals=True, work=durable(tmp_path))
-    declined = rig.call("write_file", path=str(target), content="not approved")
-    assert not declined.ok and not target.exists()
-    assert rig.agent.work.disposition is not None
-
-
-def test_default_tools_write_run_and_control_the_desktop_without_approval(tmp_path: Path) -> None:
+def test_default_tools_write_run_and_control_the_desktop_directly(tmp_path: Path) -> None:
     target = tmp_path / "notes.txt"
     command = "Get-Location; Write-Output done"
     with fake_endpoint() as endpoint:
@@ -741,7 +713,7 @@ def test_default_tools_write_run_and_control_the_desktop_without_approval(tmp_pa
         assert any(entry.startswith("keys ") for entry in rig.machine.log)
 
 
-def test_stop_prevents_actions_even_with_approvals_disabled(tmp_path: Path) -> None:
+def test_stop_prevents_actions(tmp_path: Path) -> None:
     stopped = threading.Event()
     stopped.set()
     machine = FakeMachine()
@@ -874,11 +846,11 @@ def test_source_edits_survive_follow_up_requests(tmp_path: Path) -> None:
 
 
 def test_invalid_task_and_source_arguments_never_reach_the_journal_or_source(tmp_path: Path) -> None:
-    # Defect: a malformed self-change or task call reaches approval, an action
-    # record or the workspace before its arguments are validated at the seam.
+    # Defect: a malformed self-change or task call reaches an action record or
+    # the workspace before its arguments are validated at the seam.
     work = durable(tmp_path)
     workspace = source(tmp_path)
-    rig = ToolRig(approvals=True, workspace=workspace, work=work)
+    rig = ToolRig(workspace=workspace, work=work)
     invalid: tuple[tuple[str, dict[str, Json]], ...] = (
         ("write_source", {"path": "draft.py"}),
         ("edit_source", {"path": "config.py", "old": "'hej'"}),
@@ -906,21 +878,6 @@ def test_without_a_workspace_there_are_no_source_tools(tmp_path: Path) -> None:
         rig = Rig(endpoint, says("ok"), work=durable(tmp_path))
         rig.run()
         assert b"read_source" not in endpoint.last.body
-
-
-def test_git_external_execution_options_require_confirmation() -> None:
-    for command in ("git diff --ext-diff", "git log --textconv", "git diff --output=out.txt", "git diff --o=out.txt"):
-        assert not allowed(command), command
-
-
-def test_approval_mode_runs_no_candidate_code_before_approval(tmp_path: Path) -> None:
-    workspace = source(tmp_path)
-    marker = tmp_path / "outside-workspace"
-    content = f'from pathlib import Path\nPath({str(marker)!r}).write_text("executed")\n'
-    rig = ToolRig(approvals=True, workspace=workspace, work=durable(tmp_path))
-    assert rig.call("write_source", path="candidate.py", content=content).ok
-    assert not rig.call("check_changes").ok
-    assert not marker.exists(), "unapproved code executed during checks"
 
 
 def test_editing_checks_report_affected_native_failures_before_install(tmp_path: Path) -> None:

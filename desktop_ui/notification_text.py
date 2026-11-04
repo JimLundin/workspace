@@ -5,9 +5,9 @@ from functools import lru_cache
 
 from assistant.action_text import readable
 from assistant.agent_session import AgentRequest, ChatMessage, pending
-from assistant.card_actions import AnswerApproval, OpenCanvas, encode, parse
+from assistant.card_actions import OpenCanvas, parse
 from automation.presentation import Answer, ToolActivity
-from automation.task import Approval, ApprovalDecision, Question
+from automation.task import Question
 from desktop_ui import tool_text
 from desktop_ui.notifications import Content, Entry, Response, Turn, body, heading, plain, results, steps
 from desktop_ui.rich_text import Span, formatted
@@ -44,13 +44,9 @@ def expandable(content: Content) -> bool:
     match content:
         case Turn():
             return bool(steps(content)) or any(
-                isinstance(entry, Entry)
-                and isinstance(entry.message, AgentRequest)
-                and isinstance(entry.message.request, Question)
-                and pending(entry.message)
-                for entry in results(content)
+                isinstance(entry, Entry) and isinstance(entry.message, AgentRequest) and pending(entry.message) for entry in results(content)
             )
-        case Entry(message=AgentRequest(request=Question()) as message):
+        case Entry(message=AgentRequest() as message):
             return pending(message)
         case _:
             return False
@@ -159,26 +155,6 @@ def block_spans(block: Step) -> tuple[Span, ...]:
             return tuple(tool_text.call_spans(block))
         case HistoryStep(spans=values):
             return values
-
-
-def options(content: Content) -> tuple[Span, ...]:
-    match content:
-        case Turn():
-            entries = results(content)
-        case Entry():
-            entries = (content,)
-        case _:
-            return ()
-    for entry in entries:
-        match entry:
-            case Entry(message=AgentRequest(request=Approval()) as message) if pending(message):
-                return (
-                    Span("Approve", ("link",), encode(AnswerApproval(message.id, ApprovalDecision.APPROVED))),
-                    Span("Decline", ("link",), encode(AnswerApproval(message.id, ApprovalDecision.DECLINED))),
-                )
-            case _:
-                pass
-    return ()
 
 
 def title_text(content: Content) -> str:

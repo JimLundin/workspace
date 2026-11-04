@@ -25,7 +25,6 @@ lazy from assistant.work_snapshot import WorkSnapshot
 lazy from automation import ipc
 lazy from automation.activity import ContextSnapshot
 lazy from automation.context import ContextStore
-lazy from automation.execution import ApprovalReview, current_review, review_matches
 lazy from automation.ipc import (
     Envelope,
     LogEvent,
@@ -33,8 +32,6 @@ lazy from automation.ipc import (
 )
 lazy from automation.store import TaskStore
 lazy from automation.task import (
-    Approval,
-    ApprovalDecision,
     Blocked,
     Completed,
     Failed,
@@ -42,17 +39,16 @@ lazy from automation.task import (
     Interrupted,
     Profile,
     Question,
-    Reply,
     RequestKind,
     RequestSource,
     Running,
     SelfReview,
     Task,
     TaskStatus,
+    TextAnswer,
     Until,
     Waiting,
     WaitReason,
-    answers,
     identifier,
     owns,
     requested,
@@ -99,7 +95,7 @@ def new_turn(previous: Task, task: Task) -> bool:
     match previous.state, task.state:
         case Waiting(), Waiting():
             return False
-        case Waiting(Question() | Approval()), _:
+        case Waiting(Question()), _:
             return False
         case Waiting(), _:
             return True
@@ -115,7 +111,7 @@ def turn_ended(task: Task) -> bool:
             match reason:
                 case Blocked() | Until():
                     return True
-                case Question() | Approval():
+                case Question():
                     return False
                 case _:
                     assert_never(reason)
@@ -131,19 +127,6 @@ def chronological(task: Task) -> tuple[float, str]:
     return task.created_at, task.id
 
 
-def input_message(task: Task, review: ApprovalReview | None) -> agent_session.AgentRequest | None:
-    """A redacted journal record cannot become an approvable conversation row."""
-    match task.state:
-        case Waiting(Question() as question):
-            return agent_session.AgentRequest(question, question.detail, task.updated_at)
-        case Waiting(Approval()):
-            if review is not None and review_matches(task, review):
-                return agent_session.AgentRequest(review.request, review.detail, task.updated_at)
-            return None
-        case _:
-            return None
-
-
 class WorkAgent:
     __slots__ = (
         "_closed",
@@ -151,7 +134,6 @@ class WorkAgent:
         "_conversation",
         "_create_window",
         "_displayed",
-        "_displayed_review",
         "_jobs",
         "_last_stop",
         "_last_submission_source",
@@ -224,7 +206,6 @@ class WorkAgent:
         self._started = False
         """Whether this process has taken its first snapshot of existing work."""
         self._displayed: Task | None = None
-        self._displayed_review: ApprovalReview | None = None
         self._rejected_input: tuple[str, str] | None = None
         self._watch_groups: dict[str, frozenset[str]] = {}
         self._watched: frozenset[str] = frozenset()
@@ -401,7 +382,7 @@ class WorkAgent:
                 return False
             was_running, self._reported_running = self._reported_running, False
             self._conversation = self.identity()
-            self._displayed = self._displayed_review = self._live = None
+            self._displayed = self._live = None
             self._rejected_input = None
             self._settled.clear()
             self._queued.clear()
@@ -436,13 +417,11 @@ class WorkAgent:
     def wait_closed(self, timeout: float | None = None) -> bool:
         return self._closed.wait(timeout)
 
-    def _reply(self, task_id: str, request_id: str, reply: Reply) -> bool:
+    def _reply(self, task_id: str, request_id: str, reply: TextAnswer) -> bool:
         with self._lock:
             task = next((task for task in self._snapshot.tasks if task.id == task_id), None)
             request = requested(task) if task is not None else None
-            if task is None or request is None or request.id != request_id or not answers(request, reply):
-                return False
-            if reply is ApprovalDecision.APPROVED and current_review(task, self._snapshot.reviews) is None:
+            if request is None or request.id != request_id:
                 return False
             return self._enqueue(Issued(AnswerTask(task_id, request_id, reply), self.identity(), self._source(), None))
 
@@ -453,7 +432,7 @@ class WorkAgent:
         if self.window is not None:
             self.window.withdraw_input()
 
-    def _display(self, task: Task, review: ApprovalReview | None) -> None:
+    def _display(self, task: Task) -> None:
         match task.source.profile:
             case FeedHandoff(item, title):
                 initiation = Initiation.AUTOMATIC if source_is_automatic(task) else Initiation.REQUESTED
@@ -461,7 +440,7 @@ class WorkAgent:
             case _:
                 source = None
         previous = self._displayed
-        if task == previous and review == self._displayed_review:
+        if task == previous:
             return
         window = self._panel()
         if previous is None or previous.id != task.id:
@@ -475,12 +454,12 @@ class WorkAgent:
                 window.finish()
                 window.begin(f"Continue: {task.title}", source=source)
                 self._live = window.updates()
-        self._displayed, self._displayed_review = task, review
+        self._displayed = task
         if task.checkpoint is not None and (previous is None or previous.checkpoint != task.checkpoint):
             window.step(task.checkpoint.summary)
-        self._display_status(task, review)
+        self._display_status(task)
 
-    def _display_status(self, task: Task, review: ApprovalReview | None) -> None:
+    def _display_status(self, task: Task) -> None:
         window = self._panel()
         if requested(task) is None:
             self._clear_input()
@@ -492,7 +471,7 @@ class WorkAgent:
             case Interrupted(_, reason):
                 window.step(f"Recovering interrupted work: {reason}")
             case Waiting(reason):
-                self._display_waiting(task, reason, review)
+                self._display_waiting(task, reason)
             case Completed(result, _):
                 window.done(result)
             case Failed(reason):
@@ -510,15 +489,10 @@ class WorkAgent:
             window.finish()
             self._queued.clear()
 
-    def _display_waiting(self, task: Task, reason: WaitReason, review: ApprovalReview | None) -> None:
+    def _display_waiting(self, task: Task, reason: WaitReason) -> None:
         match reason:
-            case Question() | Approval():
-                message = input_message(task, review)
-                if message is not None:
-                    self._request(task, message)
-                else:
-                    self._clear_input()
-                    self._panel().say("An approval needs a fresh preview. Open Work to request it.")
+            case Question() as question:
+                self._request(task, agent_session.AgentRequest(question, question.detail, task.updated_at))
             case Blocked(explanation):
                 if source_is_automatic(task):
                     self._panel().say(explanation)
@@ -553,7 +527,7 @@ class WorkAgent:
             # A failed view must not change journal/transport availability or
             # prevent canvas intake. Retry presentation on the next observation.
             with self._lock:
-                self._displayed = self._displayed_review = self._live = None
+                self._displayed = self._live = None
             self.report_error(traceback.format_exc())
 
     def _present(self, snapshot: WorkSnapshot) -> None:
@@ -571,7 +545,7 @@ class WorkAgent:
                 self._started = True
                 self._settled.update((task.id, task.revision) for task in tasks if not active(task))
             if self._displayed is not None and self._displayed.id not in task_ids:
-                self._displayed = self._displayed_review = self._live = None
+                self._displayed = self._live = None
                 self._clear_input()
                 if self.window is not None:
                     self.window.finish()
@@ -580,8 +554,7 @@ class WorkAgent:
             candidates = [task for task in tasks if self._settled.get(task.id) != task.revision]
             while selected is not None or candidates:
                 selected = selected if selected is not None else candidates[0]
-                review = current_review(selected, snapshot.reviews)
-                self._display(selected, review)
+                self._display(selected)
                 if active(selected):
                     break
                 self._settled[selected.id] = selected.revision
@@ -607,12 +580,9 @@ class WorkAgent:
         request = requested(task) if task is not None else None
         # A failure is only recorded for the displayed task, and publishing restores it before redisplaying.
         if self.window is not None and task is not None and request is not None and request.id == request_id:
-            review = current_review(task, snapshot.reviews)
             self.window.withdraw_input()
-            message = input_message(task, review)
-            if message is not None:
-                self.window.problem("That reply could not be saved. Please answer the current request again.")
-                self._request(task, message)
+            self.window.problem("That reply could not be saved. Please answer the current request again.")
+            self._request(task, agent_session.AgentRequest(request, request.detail, task.updated_at))
 
     def _observed_ids(self) -> tuple[frozenset[str], frozenset[str]]:
         with self._lock:

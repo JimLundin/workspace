@@ -1,4 +1,4 @@
-"""The thread-safe connection to the work view: publication, commands and approval acknowledgement."""
+"""The thread-safe connection to the work view: publication and commands."""
 
 import threading
 import traceback
@@ -8,8 +8,7 @@ from typing import Protocol
 
 from assistant.work_commands import AnswerTask, WorkViewCommand
 from assistant.work_snapshot import WorkSnapshot
-from automation.execution import ApprovalReview, current_review
-from automation.task import ApprovalDecision, answers, requested
+from automation.task import requested
 from desktop_ui.view_publication import Post, Unavailable, ViewPublication, log_view
 
 
@@ -36,7 +35,6 @@ class WorkWindow:
         "_loading",
         "_lock",
         "_opening",
-        "_presented",
         "_shown",
         "on_command",
         "on_problem",
@@ -61,7 +59,6 @@ class WorkWindow:
         self._opening: bool = False
         self._shown: bool = False
         self._loading: WorkOpening | None = None
-        self._presented: ApprovalReview | None = None
         self.state = WorkSnapshot()
         self.publication: ViewPublication[WorkView] = ViewPublication(post, lambda: create_view(self), self._render)
 
@@ -70,8 +67,6 @@ class WorkWindow:
             if self.publication.closed or snapshot == self.state:
                 return
             self.state = snapshot
-            if self._presented is not None and not any(current_review(task, snapshot.reviews) == self._presented for task in snapshot.tasks):
-                self._presented = None
         self.publication.changed()
 
     def _render(self, view: WorkView | None) -> None:
@@ -146,18 +141,6 @@ class WorkWindow:
             with self._lock:
                 self._opening = False
 
-    def approval_presented(self, task_id: str, request_id: str) -> bool:
-        """The native view acknowledges the exact live preview in its viewport."""
-        with self._lock:
-            if self.publication.closed:
-                return False
-            task = next((task for task in self.state.tasks if task.id == task_id), None)
-            review = current_review(task, self.state.reviews) if task is not None else None
-            if review is None or review.request.id != request_id:
-                return False
-            self._presented = review
-            return True
-
     def problem(self, message: str) -> None:
         with self._lock:
             if self.publication.closed:
@@ -172,13 +155,10 @@ class WorkWindow:
             if self.publication.closed:
                 return False
             match command:
-                case AnswerTask(task_id=task_id, request_id=request_id, answer=answer):
+                case AnswerTask(task_id=task_id, request_id=request_id):
                     task = next((task for task in self.state.tasks if task.id == task_id), None)
                     request = requested(task) if task is not None else None
-                    if task is None or request is None or request.id != request_id or not answers(request, answer):
-                        return False
-                    review = current_review(task, self.state.reviews)
-                    if answer is ApprovalDecision.APPROVED and (review is None or review != self._presented):
+                    if request is None or request.id != request_id:
                         return False
                 case _:
                     pass

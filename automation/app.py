@@ -36,7 +36,7 @@ lazy from automation.activity import ContextSnapshot, Observation, Sample, obser
 lazy from automation.bridge import BridgeServer
 lazy from automation.context import ContextStore, select_context
 lazy from automation.controller import ControllerSnapshot, Fault, Idle, Runner, Stopping, WorkController, Working
-lazy from automation.execution import ApprovalReview, Log
+lazy from automation.execution import Log
 lazy from automation.presentation import LiveMessage, Problem, Progress, Said
 lazy from automation.profile_lease import ProfileLease
 lazy from automation.self_review import ReviewingRunner
@@ -153,15 +153,8 @@ class NativeExecution:
 
     def run_work(self, claim: Claim, store: TaskStore, log: Log, stop: threading.Event) -> Outcome:
         self.calls.current = CallOwner(claim.run, stop)
-
-        def review(preview: ApprovalReview) -> bool:
-            try:
-                return self.bridge.publish(ipc.ReviewEvent(claim.run, preview))
-            except ValueError:
-                return False
-
         try:
-            return self.execution.run_work(claim, store, log, stop, review=review)
+            return self.execution.run_work(claim, store, log, stop)
         finally:
             self.calls.current = None
 

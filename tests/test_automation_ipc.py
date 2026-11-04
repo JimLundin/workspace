@@ -17,10 +17,9 @@ from unittest import TestCase
 from automation import ipc
 from automation.activity import Activity, ContextSnapshot
 from automation.bridge import BridgeClient, BridgeServer, Channel, LocalChannel, read_discovery
-from automation.execution import ApprovalReview
 from automation.presentation import Answer, Progress, Said, StreamState
 from automation.profile_lease import ProfileLease
-from automation.task import Approval, RunRef
+from automation.task import RunRef
 from winapi.shapes import Window
 
 RUN = RunRef("notes", "first-run")
@@ -165,25 +164,6 @@ def test_overflow_resets_live_history_and_releases_pending_owner_request(tmp_pat
         assert isinstance(events[0].payload, ipc.Resync)
         assert events[-1].payload == ipc.LogEvent(RUN, Said(f"Result {ipc.MAX_EVENTS}", ipc.MAX_EVENTS))
         assert len(events) <= ipc.MAX_EVENTS
-
-
-def test_review_requires_a_connected_assistant_and_remains_volatile(tmp_path: Path) -> None:
-    review = ApprovalReview("notes", 3, Approval("nonce", "Save notes", "Redacted operation", "a" * 64), "Save notes", "Full private preview")
-    with ProfileLease(tmp_path):
-        server = BridgeServer(tmp_path, epoch="a" * 32, wake=lambda: None, owns=lambda run: True)
-        server.start()
-        client = BridgeClient(tmp_path)
-        try:
-            assert not server.publish(ipc.ReviewEvent(RUN, review))
-            client.connect()
-            client.poll()
-            assert server.publish(ipc.ReviewEvent(RUN, review))
-            assert [item.payload for item in client.poll()] == [ipc.ReviewEvent(RUN, review)]
-            assert b"Full private preview" not in (tmp_path / "worker.json").read_bytes()
-        finally:
-            client.close()
-            server.close()
-    assert all(b"Full private preview" not in path.read_bytes() for path in tmp_path.iterdir() if path.is_file())
 
 
 def test_owner_response_must_match_worker_run_and_request(tmp_path: Path) -> None:

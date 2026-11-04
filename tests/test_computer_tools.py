@@ -25,7 +25,7 @@ def call(agent: Agent, name: str, arguments: dict[str, object]) -> str:
     return result.text
 
 
-def test_new_computer_tools_are_available_to_the_model_without_default_approvals(tmp_path: Path) -> None:
+def test_new_computer_tools_are_available_to_the_model_and_run_directly(tmp_path: Path) -> None:
     with fake_endpoint() as endpoint:
         rig = Rig(
             endpoint,
@@ -218,11 +218,11 @@ def test_context_tool_refreshes_the_current_app_without_taking_a_screenshot(tmp_
     assert not machine.log
 
 
-def test_invalid_desktop_arguments_never_reach_approval_or_the_journal(tmp_path: Path) -> None:
-    # Defect: a malformed call is approved, recorded as an attempted change, or
-    # reaches the machine before its arguments are validated at the tool seam.
+def test_invalid_desktop_arguments_never_reach_the_journal(tmp_path: Path) -> None:
+    # Defect: a malformed call is recorded as an attempted change, or reaches
+    # the machine before its arguments are validated at the tool seam.
     store, claim, clock = claimed(tmp_path)
-    rig = ToolRig(approvals=True, work=WorkExecution(claim, store, Resources(), clock=clock))
+    rig = ToolRig(work=WorkExecution(claim, store, Resources(), clock=clock))
     invalid: tuple[tuple[str, dict[str, Json]], ...] = (
         ("write_file", {"path": "note.txt"}),
         ("manage_window", {"handle": 7, "action": "explode"}),
@@ -235,7 +235,6 @@ def test_invalid_desktop_arguments_never_reach_approval_or_the_journal(tmp_path:
     )
     for name, arguments in invalid:
         result = rig.call(name, **arguments)
-        # Approval mode would suspend the task on any reviewed operation.
         assert not result.ok and result.text.startswith("Error:") and rig.agent.work.disposition is None, (name, result.text)
     assert not store.actions(claim.task.id) and not rig.machine.log
 
@@ -259,12 +258,11 @@ def test_desktop_targets_reads_and_regions_follow_the_validated_arguments(tmp_pa
     assert not rig.call("screenshot", handle=7, desktop=True).ok
 
 
-def test_inspection_defaults_to_the_work_window_and_only_ui_changes_need_approval(tmp_path: Path) -> None:
-    # Defect: an inspection without a handle reads another window, or approval
-    # mode interrupts a control read while letting a control change through.
+def test_inspection_defaults_to_the_work_window(tmp_path: Path) -> None:
+    # Defect: an inspection without a handle reads another window.
     machine = FakeMachine()
     agent = Agent(
-        Settings("", "", "", "", "", agent_approvals=True),
+        Settings("", "", "", "", ""),
         machine,
         FakeWindow(),
         threading.Event(),
@@ -277,17 +275,11 @@ def test_inspection_defaults_to_the_work_window_and_only_ui_changes_need_approva
     assert machine.log[-1].startswith("ui Inspect(handle=7,")
     call(agent, "ui_action", {"handle": 7, "id": "1.2", "action": "read"})
     assert machine.log[-1].startswith("ui Act(handle=7, id='1.2', action='read'")
-    before = tuple(machine.log)
-    invoke: dict[str, object] = {"handle": 7, "id": "1.2", "action": "invoke"}
-    assert not agent.call(ToolCall("fixture", "ui_action", json.dumps(invoke))).ok
-    assert tuple(machine.log) == before and agent.work.disposition is not None
 
 
-def test_declined_window_changes_fail_and_inspection_without_context_reads_the_foreground(tmp_path: Path) -> None:
-    # Defect: a declined window change reports success, or an inspection with
-    # no work window invents a handle instead of letting the machine use the foreground.
-    rig = ToolRig(approvals=True, work=durable(tmp_path))
-    assert not rig.call("manage_window", handle=7, action="minimize").ok
+def test_inspection_without_context_reads_the_foreground(tmp_path: Path) -> None:
+    # Defect: an inspection with no work window invents a handle instead of
+    # letting the machine use the foreground.
     unattended = ToolRig(work=durable(tmp_path))
     assert unattended.call("inspect_ui").ok
     assert unattended.machine.log[-1].startswith("ui Inspect(handle=0,")

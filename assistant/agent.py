@@ -1,9 +1,8 @@
 """The agent: a model working on a task with tools, step by step, until it's done,
 stopped, or out of steps.
 
-Every run executes one durable work claim. Requested work runs without approval
-prompts by default, including self-updates; WORKSPACE_AGENT_APPROVALS=ask
-requests a durable approval for each consequential action. The task profile's
+Every run executes one durable work claim; requested work, including
+self-updates, runs without confirmation prompts. The task profile's
 toolset supplies the tool families and instructions; tool families own each
 tool's facts, and the agent dispatches through `assistant.agent_tools`.
 """
@@ -146,11 +145,7 @@ class Agent:
                 except OSError as error:
                     self.context_text += f"\nScreen context unavailable: {error}"
         prompt = self.toolset.instructions()
-        prompt += (
-            "\nApproval mode is enabled: tools handle the configured prompts; do not ask for the same approval in chat."
-            if self.settings.agent_approvals
-            else "\nApproval prompts are disabled. Execute authorized work directly; do not invent a confirmation step."
-        )
+        prompt += "\nExecute authorized work directly; do not invent a confirmation step."
         prompt += "\n\n" + self.work.instructions()
         return asyncio.run(sdk.run(self, task, prompt, tuple(tool.spec for tool in self.tools.values())))
 
@@ -198,7 +193,7 @@ class Agent:
         return replace(output, text=output.text + f"\n[observation_id: {output.observation}]") if output.observation else output
 
     def invoke(self, tool: Tool, args: Args) -> Output:
-        """Run a validated tool; its family describes each operation to approval and the durable boundary."""
+        """Run a validated tool; its family describes each operation to the durable boundary."""
         try:
             return tool.run(args)
         except (ArgumentError, SourceError, PublishError, ValueError) as error:
@@ -219,7 +214,7 @@ class Agent:
             return Output(f"Error: {error}", ok=False)
 
     def effect(self, operation: Operation, perform: Callable[[], Output], verify: Verify = NoVerification.NONE) -> Output:
-        """Its family classifies the exact operation; validation and approval happened before this."""
+        """Its family classifies the exact operation; validation happened before this."""
         tool = self.tools[operation.tool]
         match tool.classify(operation.arguments):
             case Observation() as observation:
@@ -235,13 +230,6 @@ class Agent:
                     case _:
                         specification = change.specification(operation, NoVerification.NONE)
                         return self.work.actions.execute(specification, perform, lambda result: result.ok, self.stop, verify=verify)
-
-    def approve(self, operation: Operation, title: str, detail: str) -> bool:
-        """Prompt only in the user's opt-in approval mode; Stop always wins."""
-        if self.stop.is_set():
-            return False
-        accepted = not self.settings.agent_approvals or self.work.approve(operation, title, detail)
-        return accepted and not self.stop.is_set()
 
     def step(self, text: str, /) -> None:
         self.log.step(text)

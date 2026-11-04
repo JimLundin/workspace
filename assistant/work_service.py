@@ -12,7 +12,6 @@ from assistant.work_commands import (
     ControlTask,
     FollowUp,
     Redirect,
-    RefreshApproval,
     RemoveContext,
     Submit,
     UpdatePreference,
@@ -23,27 +22,21 @@ from assistant.work_snapshot import ReplyProblem, SubmissionProblem, WorkSnapsho
 from automation import ipc
 from automation.activity import ContextSnapshot
 from automation.context import ContextStore, Preference, ProjectNote
-from automation.execution import ApprovalReview, review_matches
 from automation.ipc import (
     Envelope,
     LogEvent,
     OwnerRequest,
     Resync,
-    ReviewEvent,
 )
 from automation.store import TaskStore
 from automation.task import (
-    Approval,
-    ApprovalDecision,
     Completed,
     Control,
     Profile,
     Question,
     RequestSource,
-    Running,
     Task,
     Waiting,
-    owns,
     text,
 )
 
@@ -88,7 +81,7 @@ class UnconfirmedSubmission:
     problem: SubmissionProblem
 
 
-type TaskCommand = Submit | FollowUp | Redirect | ControlTask | AnswerTask | RefreshApproval
+type TaskCommand = Submit | FollowUp | Redirect | ControlTask | AnswerTask
 type ContextCommand = AddPreference | UpdatePreference | AddProjectNote | UpdateProjectNote | RemoveContext
 
 
@@ -110,7 +103,6 @@ class WorkService:
         "_epoch",
         "_pending_inputs",
         "_replies",
-        "_reviews",
         "_sequence",
         "_submissions",
         "assistant_pid",
@@ -133,7 +125,6 @@ class WorkService:
         self.assistant_pid = assistant_pid
         self._epoch: str | None = None
         self._sequence = 0
-        self._reviews: dict[str, ReviewEvent] = {}
         self._submissions: dict[str, UnconfirmedSubmission] = {}
         self._replies: dict[tuple[str, str], ReplyProblem] = {}
         self._pending_inputs: frozenset[tuple[str, str]] = frozenset()
@@ -147,7 +138,6 @@ class WorkService:
 
     def _disconnected(self) -> None:
         self._epoch = None
-        self._reviews.clear()
         self.connection_status = "Work is saved. Waiting for the work process to reconnect."
 
     def register(self, identity: str, context: ContextSnapshot | None) -> None:
@@ -229,7 +219,7 @@ class WorkService:
             issued = request
         command = issued.command
         match command:
-            case Submit() | FollowUp() | Redirect() | ControlTask() | AnswerTask() | RefreshApproval():
+            case Submit() | FollowUp() | Redirect() | ControlTask() | AnswerTask():
                 self._task_command(issued, command, at=at)
             case AddPreference() | UpdatePreference() | AddProjectNote() | UpdateProjectNote() | RemoveContext():
                 self._context_command(issued.identity, command, at=at)
@@ -256,32 +246,13 @@ class WorkService:
                 self.register(task_id, issued.context)
                 if self.tasks.revise(task_id, prompt, at=at) is None:
                     raise ValueError("The task to redirect no longer exists.")
-                self._reviews.pop(task_id, None)
             case ControlTask(task_id, control):
                 if self.tasks.control(task_id, control, at=at) is None:
                     raise ValueError("That task control is no longer available.")
-                self._reviews.pop(task_id, None)
             case AnswerTask(task_id, request_id, answer):
-                if answer is ApprovalDecision.APPROVED:
-                    # A previously painted preview becomes invalid as soon as
-                    # the worker epoch changes, even before the next UI poll.
-                    try:
-                        if self.bridge.connect() != self._epoch:
-                            self._disconnected()
-                    except OSError, ValueError:
-                        self._disconnected()
-                task = self.tasks.get(task_id)
-                review = self._reviews.get(task_id)
-                if answer is ApprovalDecision.APPROVED and (task is None or review is None or not review_matches(task, review.review)):
-                    raise ValueError("Request a fresh preview before approving this operation.")
                 if self.tasks.answer(task_id, request_id, answer, at=at) is None:
-                    raise ValueError("This question or approval is no longer waiting for that reply.")
+                    raise ValueError("This question is no longer waiting for that reply.")
                 self._replies.pop((task_id, request_id), None)
-                self._reviews.pop(task_id, None)
-            case RefreshApproval(task_id, request_id):
-                if self.tasks.refresh_approval(task_id, request_id, at=at) is None:
-                    raise ValueError("That approval has changed. Read its current request before refreshing.")
-                self._reviews.pop(task_id, None)
             case _:
                 assert_never(command)
 
@@ -313,7 +284,6 @@ class WorkService:
             epoch = self.bridge.connect()
             if epoch != self._epoch:
                 self._epoch, self._sequence = epoch, 0
-                self._reviews.clear()
             messages = self.bridge.poll()
         except OSError, ValueError:
             self._disconnected()
@@ -326,18 +296,7 @@ class WorkService:
             self._sequence = message.sequence
             match message.payload:
                 case Resync():
-                    self._reviews.clear()
-                case ReviewEvent(run, review):
-                    task = self.tasks.get(run.task_id)
-                    if (
-                        task is not None
-                        and task.id == review.task_id
-                        and task.goal_revision == review.goal_revision
-                        and (owns(task, run) or (review_matches(task, review) and self.tasks.request_run(task.id, review.request.id) == run))
-                    ):
-                        if len(self._reviews) >= 1_000:
-                            self._reviews.pop(next(iter(self._reviews)))
-                        self._reviews[task.id] = message.payload
+                    pass
                 case LogEvent() | OwnerRequest():
                     accepted.append(message)
                 case _:
@@ -369,14 +328,12 @@ class WorkService:
 
     def unavailable(self, previous: WorkSnapshot, watched: frozenset[str], pending: frozenset[str]) -> WorkSnapshot:
         """Keep known state; failed reads cannot prove that a commit did not happen."""
-        self._reviews.clear()
         self._limit_submissions(watched)
         self._limit_replies(watched)
         current = {task.id: task for task in previous.tasks}
         return replace(
             previous,
             status=self.problem or "The work journal is unavailable.",
-            reviews=(),
             submission_problems=self._submission_problems(current, watched, pending, confirmed=False),
             reply_problems=(),
         )
@@ -385,7 +342,7 @@ class WorkService:
         self._pending_inputs = frozenset(
             (task.id, task.state.reason.id)
             for task in current.values()
-            if isinstance(task.state, Waiting) and isinstance(task.state.reason, (Question, Approval))
+            if isinstance(task.state, Waiting) and isinstance(task.state.reason, Question)
         )
         for key in tuple(self._replies):
             if (key[0] in current or key[0] in watched) and key not in self._pending_inputs:
@@ -401,17 +358,12 @@ class WorkService:
         for retained in self.tasks.get_many(tuple(sorted(watched | self._submissions.keys()))):
             current[retained.id] = retained
         tasks = tuple(current.values())
-        reviews: list[ApprovalReview] = []
-        for identity, event in tuple(self._reviews.items()):
-            task = current.get(identity)
-            if task is not None and review_matches(task, event.review):
-                reviews.append(event.review)
-            elif task is None or not isinstance(task.state, Running) or not owns(task, event.run) or task.goal_revision != event.review.goal_revision:
-                self._reviews.pop(identity)
         context = self.context.list()
         problems = self._submission_problems(current, watched, pending, confirmed=True)
         reply_problems = self._confirmed_reply_problems(current, watched)
         # Only watched tasks need an action timeline. Bound journal reads and
         # publication size; the task journal retains the complete ledger.
         actions = tuple(islice((action for task in tasks if task.id in watched for action in self.tasks.actions(task.id, limit=16)), 256))
-        return WorkSnapshot(tasks, context, self.problem or self.connection_status, tuple(reviews), problems, reply_problems, actions=actions)
+        return WorkSnapshot(
+            tasks, context, self.problem or self.connection_status, submission_problems=problems, reply_problems=reply_problems, actions=actions
+        )

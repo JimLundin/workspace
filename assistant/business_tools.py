@@ -11,7 +11,7 @@ from typing import Final
 
 from pydantic import TypeAdapter, ValidationError
 
-from assistant.agent_tools import DECLINED, Args, Display, Output, Session, Tool, rejected, typed_classification
+from assistant.agent_tools import Args, Display, Output, Session, Tool, rejected, typed_classification
 from assistant.browser_values import BrowserError
 from assistant.llm import ToolSpec, tool_spec
 from assistant.web_apps import (
@@ -151,16 +151,8 @@ class Read[Q: Located, R]:
 
 
 @dataclass(frozen=True, slots=True)
-class Selection[Q: Located, R]:
-    """A change of what the page shows, which investigation needs without approval."""
-
-    operation: WebAppOperation[Q, R]
-    confirm: Callable[[Q, R], Outcome]
-
-
-@dataclass(frozen=True, slots=True)
-class Edit[Q: Located, R]:
-    """A saved edit or prepared reply, which approval mode reviews."""
+class Interaction[Q: Located, R]:
+    """A change made through the page: a selection, a saved edit or a prepared reply."""
 
     operation: WebAppOperation[Q, R]
     confirm: Callable[[Q, R], Outcome]
@@ -174,7 +166,7 @@ class Collection[Q: Located, R]:
     confirm: Callable[[Q, R], Outcome]
 
 
-type Effect[Q: Located, R] = Read[Q, R] | Selection[Q, R] | Edit[Q, R] | Collection[Q, R]
+type Effect[Q: Located, R] = Read[Q, R] | Interaction[Q, R] | Collection[Q, R]
 
 
 def _markers(query: object) -> tuple[str, ...]:
@@ -194,17 +186,6 @@ def _markers(query: object) -> tuple[str, ...]:
             return ()
 
 
-def _review_subject(query: object) -> str:
-    """The exact task or chat an approval review names; mail replies are named by the tool alone."""
-    match query:
-        case TaskEdit(task_id=task) | TaskMove(task_id=task) | TaskComment(task_id=task):
-            return task
-        case ChatDraft(chat_id=chat):
-            return chat
-        case _:
-            return ""
-
-
 @dataclass(frozen=True, slots=True)
 class AppTool[Q: Located, R]:
     """One web-app operation offered to the model, with its effect's facts."""
@@ -220,11 +201,6 @@ class AppTool[Q: Located, R]:
                 query = operation.query.validate_json(args.payload)
             except ValidationError as error:
                 raise rejected(args.tool, error) from error
-            match effect:
-                case Edit() if not session.approve(args.operation, "Use the application?", args.tool + "\n" + _review_subject(query)):
-                    return Output(DECLINED, ok=False)
-                case _:
-                    pass
 
             def perform() -> Output:
                 return Output(operation.result.dump_json(session.machine.web_app(operation, query, session.stop)).decode())
@@ -232,7 +208,7 @@ class AppTool[Q: Located, R]:
             match effect:
                 case Read():
                     return session.effect(args.operation, perform)
-                case Selection(confirm=confirm) | Edit(confirm=confirm) | Collection(confirm=confirm):
+                case Interaction(confirm=confirm) | Collection(confirm=confirm):
 
                     def verify(output: Output) -> Outcome:
                         try:
@@ -246,7 +222,7 @@ class AppTool[Q: Located, R]:
             case Read():
                 classify = typed_classification(operation.query, lambda query: Observation(("browser", *_markers(query))), Observation(("browser",)))
                 return Tool(self.spec, run, classify, Display.PRIVATE)
-            case Selection() | Edit():
+            case Interaction():
                 classify = typed_classification(operation.query, lambda query: Change(("browser", *_markers(query))), Change(("browser",)))
                 return Tool(self.spec, run, classify, Display.PRIVATE)
             case Collection():
@@ -270,7 +246,7 @@ WEB_TOOLS: Final = (
         "outlook_web_open_document",
         "Open the exact attachment preview from outlook_web_documents, preserving drafts. Inspect browser_snapshot for its content "
         "and version evidence. For a direct link returns its URL for browser_open instead of clicking it. Does not send or publish anything.",
-        Selection(OUTLOOK_OPEN_DOCUMENT, _document_opened),
+        Interaction(OUTLOOK_OPEN_DOCUMENT, _document_opened),
     ),
     app_tool(
         "outlook_web_download_document",
@@ -298,14 +274,14 @@ WEB_TOOLS: Final = (
         "outlook_web_open_mail",
         "Select an exact conversation_id from outlook_web_read/search and read its confirmed pane. IDs identify Outlook "
         "conversations, which can group messages; opening may mark them read under Outlook's settings. Refuses an open draft. ",
-        Selection(OUTLOOK_OPEN_MAIL, _mail_opened),
+        Interaction(OUTLOOK_OPEN_MAIL, _mail_opened),
     ),
     app_tool(
         "outlook_web_draft_reply",
         "Prepare an unsent reply to the exact selected Outlook conversation. Read/open the conversation first; Outlook chooses "
         "the reply recipients. Preserves its signature and refuses any existing open draft. Never clicks Send. The reply remains "
         "open for review; inspect Outlook's autosave status before closing. Do not retry an uncertain result without inspection. ",
-        Edit(OUTLOOK_DRAFT_REPLY, _mail_drafted),
+        Interaction(OUTLOOK_DRAFT_REPLY, _mail_drafted),
     ),
     app_tool(
         "kanban_board",
@@ -326,20 +302,20 @@ WEB_TOOLS: Final = (
         "Edit one field of an exact Kanban task through the app's validated save. Supply its exact expected_value from "
         "kanban_read_task; changed fields are rejected. Readback confirms the saved value. Do not retry an uncertain save "
         "without inspection. ",
-        Edit(KANBAN_UPDATE_TASK, _task_edited),
+        Interaction(KANBAN_UPDATE_TASK, _task_edited),
     ),
     app_tool(
         "kanban_move_task",
         "Move an exact task through the board's own drag/drop handler. Supply expected_column from kanban_board and an "
         "observed destination column name. The app enforces WIP and testing rules. Confirm the fresh board after any failure "
         "before retrying. ",
-        Edit(KANBAN_MOVE_TASK, _task_moved),
+        Interaction(KANBAN_MOVE_TASK, _task_moved),
     ),
     app_tool(
         "kanban_comment",
         "Post one comment to an exact Kanban task using its own comment editor; verify the visible result. Refuses an "
         "existing comment draft. Never automatically repeat an uncertain post. ",
-        Edit(KANBAN_COMMENT, _comment_posted),
+        Interaction(KANBAN_COMMENT, _comment_posted),
     ),
     app_tool(
         "teams_web_read",
@@ -352,13 +328,13 @@ WEB_TOOLS: Final = (
         "teams_web_open_chat",
         "Select a rendered Teams chat by its exact chat_id from teams_web_read, including when titles collide. Preserves an "
         "existing editor draft. Read teams_web_read afterward to inspect messages; does not select the native browser tab. ",
-        Selection(TEAMS_OPEN_CHAT, _chat_opened),
+        Interaction(TEAMS_OPEN_CHAT, _chat_opened),
     ),
     app_tool(
         "teams_web_draft_reply",
         "Prepare an unsent plain-text reply in the exact selected Teams chat. The editor must be empty; existing text is "
         "preserved. Does not click Send. Read the conversation to verify the destination, then review the draft in Teams. ",
-        Edit(TEAMS_DRAFT_REPLY, _chat_drafted),
+        Interaction(TEAMS_DRAFT_REPLY, _chat_drafted),
     ),
 )
 

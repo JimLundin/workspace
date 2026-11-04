@@ -6,7 +6,6 @@ text. Glass cards are functional UI such as the agent feed.
 """
 
 import math
-from collections.abc import Sequence
 from dataclasses import dataclass
 from enum import Enum, auto
 from typing import Final, assert_never
@@ -38,8 +37,6 @@ TEXT_LEFT: Final = LEFT + BADGE + 10  # body, steps and actions align with the t
 CONTROL: Final = 28  # the kit's control height; icon controls are circles
 CONTROL_GAP: Final = 4
 ACTION: Final = 28  # capsule actions with 14 px ends
-ACTION_GAP: Final = 6
-ACTIONS_TOP: Final = 12
 
 
 @dataclass(frozen=True, slots=True)
@@ -298,24 +295,6 @@ def title_width(width: int, controls: int) -> int:
 
 def action_face(*, primary: bool) -> QFont:
     return face(BODY, 600 if primary else 500)
-
-
-def action_geometry(labels: Sequence[str], width: int) -> tuple[tuple[int, int, int], ...]:
-    """The kit's actions share one row equally; labels too long for that wrap at their own width."""
-    if not labels:
-        return ()
-    natural = tuple(math.ceil(QFontMetricsF(action_face(primary=not index)).horizontalAdvance(label)) + 24 for index, label in enumerate(labels))
-    share = (width - ACTION_GAP * (len(labels) - 1)) // len(labels)
-    if max(natural) <= share:
-        return tuple((index * (share + ACTION_GAP), 0, share) for index in range(len(labels)))
-    x = y = 0
-    placed: tuple[tuple[int, int, int], ...] = ()
-    for wide in (min(width, each) for each in natural):
-        if x and x + wide > width:
-            x, y = 0, y + ACTION + ACTION_GAP
-        placed = (*placed, (x, y, wide))
-        x += wide + ACTION_GAP
-    return placed
 
 
 def action_style(controls: Controls, *, primary: bool) -> str:

@@ -1,9 +1,8 @@
-"""The work service's immutable published observation: tasks, reviews, context and problems."""
+"""The work service's immutable published observation: tasks, context and problems."""
 
 from dataclasses import dataclass, field
 
 from automation.context import ContextRecord
-from automation.execution import ApprovalReview
 from automation.personal_work import PersonalView
 from automation.task import Action, Task, identifier, text
 
@@ -37,7 +36,6 @@ class WorkSnapshot:
     tasks: tuple[Task, ...] = ()
     context: tuple[ContextRecord, ...] = ()
     status: str = ""
-    reviews: tuple[ApprovalReview, ...] = ()
     submission_problems: tuple[SubmissionProblem, ...] = ()
     reply_problems: tuple[ReplyProblem, ...] = ()
     personal: PersonalView = field(default_factory=PersonalView)

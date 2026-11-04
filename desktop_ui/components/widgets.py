@@ -124,7 +124,6 @@ def show_window(window: QtWidgets.QWidget, *, focus: bool, target: QtWidgets.QWi
 
 class Editor(QtWidgets.QPlainTextEdit):
     submitted = QtCore.Signal()
-    painted = QtCore.Signal()
 
     def __init__(self, parent: QtWidgets.QWidget | None = None, *, readonly: bool = False, enter_sends: bool = False) -> None:
         super().__init__(parent)
@@ -145,18 +144,6 @@ class Editor(QtWidgets.QPlainTextEdit):
             event.accept()
         else:
             super().keyPressEvent(event)
-
-    def paintEvent(self, event: QtGui.QPaintEvent) -> None:
-        super().paintEvent(event)
-        self.painted.emit()
-
-
-class Browser(QtWidgets.QTextBrowser):
-    painted = QtCore.Signal()
-
-    def paintEvent(self, event: QtGui.QPaintEvent) -> None:
-        super().paintEvent(event)
-        self.painted.emit()
 
 
 def replace_text(widget: QtWidgets.QPlainTextEdit, value: str) -> None:

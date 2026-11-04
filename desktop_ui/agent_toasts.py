@@ -17,9 +17,8 @@ from desktop_ui.qt_runtime import prepare
 from desktop_ui.toast_stack import Active, Column, Frame, Measured, Retiring, Stacking, Viewport, fit, frames, reservable
 from winapi import appearance, windows
 from winapi.shapes import Rect
-lazy from assistant.agent_session import AgentRequest, Message, Session, Snapshot, pending
-lazy from assistant.card_actions import AnswerApproval, OpenCanvas, parse
-lazy from automation.task import Approval
+lazy from assistant.agent_session import Session, Snapshot
+lazy from assistant.card_actions import OpenCanvas, parse
 lazy from desktop_ui import notification_reading
 lazy from desktop_ui.agent_window import AgentWindow
 lazy from desktop_ui.components.appearance import scheme
@@ -27,11 +26,9 @@ lazy from desktop_ui.components.text import BODY, face, line_height
 lazy from desktop_ui.notifications import (
     MAX_VISIBLE,
     Content,
-    Entry,
     Key,
     PhaseKey,
     Recording,
-    Response,
     Stack,
     Toast,
     Turn,
@@ -42,7 +39,6 @@ lazy from desktop_ui.notifications import (
     order_of,
     priority,
     reading_hold,
-    results,
     spinning,
 )
 lazy from desktop_ui.qt_ui import EventLoop, cancel, later
@@ -286,28 +282,6 @@ class AgentToasts:
                 if card.tail_pending:
                     card.text.verticalScrollBar().setValue(card.text.verticalScrollBar().maximum())
                     card.tail_pending = False
-        for message in self.session.messages:
-            identity = _pending_approval(message)
-            if identity is not None and self.approval_visible(identity):
-                self.agent.input_presented(identity)
-
-    def approval_visible(self, request_id: str) -> bool:
-        """A painted, opaque card or visible history entry contains this review."""
-        if self.closed:
-            return False
-        for card in self.cards.values():
-            if card.closed or card.retiring or card.alpha < 0.99 or not card.window.isVisible() or not card.text.isVisible():
-                continue
-            match card.content:
-                case Turn() as turn:
-                    entries = results(turn)
-                case Entry() as entry:
-                    entries = (entry,)
-                case _:
-                    entries = ()
-            if any(_entry_approval(entry) == request_id for entry in entries):
-                return True
-        return False
 
     def release(self, card: Card) -> None:
         del self.cards[card.key]
@@ -495,8 +469,6 @@ class AgentToasts:
         match action:
             case OpenCanvas(target=target):
                 self.canvas_open(target)
-            case AnswerApproval(request=request, decision=decision):
-                self.agent.respond(request, decision)
             case None:
                 pass
             case _:
@@ -656,23 +628,6 @@ def _phase(key: Key) -> PhaseKey | None:
         case PhaseKey():
             return key
         case _:
-            return None
-
-
-def _pending_approval(message: Message) -> str | None:
-    """The identity of an approval still waiting for the person's decision."""
-    match message:
-        case AgentRequest(request=Approval()) if pending(message):
-            return message.id
-        case _:
-            return None
-
-
-def _entry_approval(entry: Entry | Response) -> str | None:
-    match entry:
-        case Entry(message=message):
-            return _pending_approval(message)
-        case Response():
             return None
 
 

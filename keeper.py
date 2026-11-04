@@ -129,17 +129,12 @@ def source_diff(before: Path, after: Path) -> str:
     return "".join(parts)
 
 
-def prepare_candidate(workspace: Path, live: Path, candidate: Path, approve: Callable[[Path], bool] | None = None) -> bool:
-    """Freeze source for checks, with an optional review when approval mode is enabled."""
+def prepare_candidate(workspace: Path, live: Path, candidate: Path) -> None:
+    """Freeze source for checks."""
     copy_source(workspace, candidate)
     for name in PROTECTED:
         if (candidate / name).read_bytes() != (live / name).read_bytes():
             raise OSError(f"The protected file {name} was changed")
-    digest = source_digest(candidate)
-    accepted = approve(candidate) if approve is not None else True
-    if source_digest(candidate) != digest:
-        raise OSError("The candidate changed during review; review it again")
-    return accepted
 
 
 def _mirror(source: Path, target: Path, *, protect: bool) -> None:
@@ -240,16 +235,6 @@ class Stage(Enum):
 def unexpected_exit(name: str, code: int | None) -> bool:
     """Only the layout and assistant have a user-requested normal exit."""
     return code is not None and (code != 0 or name == "automation")
-
-
-class RefusedCheck:
-    __slots__ = ()
-
-    def result(self) -> tuple[bool, str]:
-        return False, "The user cancelled the review."
-
-    def cancel(self) -> None:
-        pass
 
 
 class Recovery:
@@ -558,7 +543,6 @@ class WindowsUser32:
 
 
 class Ui(Protocol):
-    def approve(self, diff: str) -> bool: ...
     def notify(self, message: str) -> None: ...
     def poll_components(self, supervisor: Keeper, now: float) -> None: ...
     def run(self, tick: Callable[[], bool]) -> None: ...
@@ -658,9 +642,6 @@ class _Check:
 def main(ui: Ui) -> None:
     user32 = WindowsUser32()
 
-    def approve(candidate: Path) -> bool:
-        return ui.approve(source_diff(LIVE, candidate))
-
     class WinWorld:
         __slots__ = ("candidate",)
 
@@ -683,9 +664,7 @@ def main(ui: Ui) -> None:
             return read_marker(CATALOGUE[name].marker(STATE)) is not None
 
         def start_check(self, checked: str | None) -> Check:
-            review = approve if os.environ.get("WORKSPACE_AGENT_APPROVALS", "never").lower() == "ask" else None
-            if not prepare_candidate(WORKSPACE, LIVE, self.candidate, review):
-                return RefusedCheck()
+            prepare_candidate(WORKSPACE, LIVE, self.candidate)
             return _Check(self.candidate, checked)
 
         def snapshot(self) -> str:

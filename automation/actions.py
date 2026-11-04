@@ -59,15 +59,14 @@ class ActionJournal(Protocol):
     def actions(self, task_id: str, *, limit: int = 100) -> tuple[Action, ...]: ...
     def unresolved_actions(self, task_id: str) -> tuple[Action, ...]: ...
     def unverified_actions(self, task_id: str) -> tuple[Action, ...]: ...
-    def action_since(self, task_id: str, fingerprint: str, *, after: float) -> bool: ...
 
 
 @dataclass(frozen=True, slots=True)
 class Operation:
-    """One exact tool operation: an approval reviews it and its effect records it.
+    """One exact tool operation, as its effect records it.
 
     Tools describe the operation they will perform, including targets they
-    resolved, so a grant can never cover arguments other than those executed.
+    resolved, so the record names the arguments actually executed.
     """
 
     tool: str

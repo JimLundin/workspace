@@ -7,7 +7,7 @@ from collections.abc import Callable
 from assistant.agent_session import Snapshot, message_body, pending
 from assistant.recording_state import RecordingAction
 from automation.presentation import Answer, StreamState
-from automation.task import Reply, TextAnswer
+from automation.task import TextAnswer
 from desktop_ui.agent_window import AgentWindow, View
 from tests.agent_requests import asked
 
@@ -152,7 +152,7 @@ def test_captured_session_replies_cannot_enter_a_reprojected_request_with_the_sa
     # conversation that reused the same durable request id.
     delivered: list[TextAnswer] = []
 
-    def accept(reply: Reply) -> bool:
+    def accept(reply: TextAnswer) -> bool:
         match reply:
             case TextAnswer():
                 delivered.append(reply)

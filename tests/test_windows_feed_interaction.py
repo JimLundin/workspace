@@ -10,7 +10,7 @@ lazy from PySide6.QtCore import Qt
 lazy from PySide6.QtTest import QTest
 
 from automation.presentation import Succeeded, ToolActivity
-from automation.task import Reply, TextAnswer
+from automation.task import TextAnswer
 from desktop_ui.agent_toasts import card_order
 from desktop_ui.components.bubble import title_height
 from desktop_ui.qt_runtime import prepare
@@ -58,9 +58,9 @@ def test_expanded_turn_keeps_its_heading_compact_beside_its_disclosure() -> None
 def test_pending_question_points_to_agent_voice_without_an_editor() -> None:
     # Defects: creating an editable reply widget, or losing the voice handoff hint.
     with notifications() as panel:
-        replies: list[Reply] = []
+        replies: list[TextAnswer] = []
 
-        def record_reply(answer: Reply) -> bool:
+        def record_reply(answer: TextAnswer) -> bool:
             replies.append(answer)
             return True
 

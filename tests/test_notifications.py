@@ -5,7 +5,7 @@ from dataclasses import replace
 from assistant.agent_session import Begin, ChatMessage, Enqueued, RecordingUpdated, Resolution, Result, Session, StopRequested, transition
 from assistant.recording_state import RecordingState
 from automation.presentation import Answer, Failed, Finished, Progress, ReasoningSummary, Said, StreamState, Succeeded, ToolActivity
-from automation.task import ApprovalDecision, TextAnswer
+from automation.task import TextAnswer
 from desktop_ui.notification_text import details, spans
 from desktop_ui.notifications import (
     MAX_VISIBLE,
@@ -36,7 +36,7 @@ from desktop_ui.notifications import (
     steps,
     tone,
 )
-from tests.agent_requests import asked, reviewed
+from tests.agent_requests import asked
 
 
 def bubble(stack: Stack, request: int = 0) -> Turn:
@@ -263,17 +263,6 @@ def test_standalone_question_keeps_its_answer_in_the_same_bubble() -> None:
     stack = advance(stack, session, 101)
     assert [toast.key for toast in stack.toasts] == [TurnKey(-1)]
     assert body(bubble(stack, -1)) == "Open the workbook?\n\nbudget.xlsx\n\nYes"
-
-
-def test_approval_decision_stays_with_the_original_request() -> None:
-    session = transition(Session(identity="one"), Begin("Open it", 1))
-    session = transition(session, reviewed("approval", "Open this?", "budget.xlsx", 2))
-    stack = advance(Stack(), session, 100)
-    original = body(bubble(stack))
-    session = transition(session, Resolution("approval", ApprovalDecision.APPROVED))
-    turn = bubble(advance(stack, session, 101))
-    assert body(turn) == original + "\n\nApproved" and not hint(turn)
-    assert isinstance(turn.entries[-1], Response) and turn.entries[-1].index == 1
 
 
 def test_stopping_keeps_a_partial_reply_and_the_interrupted_steps() -> None:

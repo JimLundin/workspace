@@ -12,7 +12,7 @@ from automation.personal_work import (
     SaveWork,
     UnlinkWork,
 )
-from automation.task import Control, Reply
+from automation.task import Control, TextAnswer
 
 
 @dataclass(frozen=True, slots=True)
@@ -42,13 +42,7 @@ class ControlTask:
 class AnswerTask:
     task_id: str
     request_id: str
-    answer: Reply
-
-
-@dataclass(frozen=True, slots=True)
-class RefreshApproval:
-    task_id: str
-    request_id: str
+    answer: TextAnswer
 
 
 @dataclass(frozen=True, slots=True)
@@ -89,17 +83,7 @@ class RemoveContext:
 
 
 type WorkCommand = (
-    Submit
-    | FollowUp
-    | Redirect
-    | ControlTask
-    | AnswerTask
-    | RefreshApproval
-    | AddPreference
-    | UpdatePreference
-    | AddProjectNote
-    | UpdateProjectNote
-    | RemoveContext
+    Submit | FollowUp | Redirect | ControlTask | AnswerTask | AddPreference | UpdatePreference | AddProjectNote | UpdateProjectNote | RemoveContext
 )
 
 type WorkViewCommand = (

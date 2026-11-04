@@ -6,10 +6,9 @@ from dataclasses import dataclass
 from enum import Enum, auto
 from typing import assert_never
 
-lazy from PySide6 import QtGui, QtWidgets
+lazy from PySide6 import QtWidgets
 
 from desktop_ui.qt_runtime import prepare
-from winapi import windows
 lazy from assistant.work_commands import (
     AddPreference,
     AddProjectNote,
@@ -17,7 +16,6 @@ lazy from assistant.work_commands import (
     ControlTask,
     FollowUp,
     Redirect,
-    RefreshApproval,
     RemoveContext,
     Submit,
     UpdatePreference,
@@ -25,10 +23,7 @@ lazy from assistant.work_commands import (
 )
 lazy from assistant.work_snapshot import WorkSnapshot
 lazy from automation.context import ContextRecord, Preference, ProjectNote
-lazy from automation.execution import current_review
 lazy from automation.task import (
-    Approval,
-    ApprovalDecision,
     Completed,
     Control,
     Question,
@@ -42,7 +37,6 @@ lazy from desktop_ui import work_tree
 lazy from desktop_ui.components.appearance import control_style, scheme, tokens
 lazy from desktop_ui.components.controls import button, label
 lazy from desktop_ui.components.paint_ready import PaintReady
-lazy from desktop_ui.components.text import units
 lazy from desktop_ui.components.widgets import Editor, Window, column, replace_text, row, show_window
 lazy from desktop_ui.meeting_panel import MeetingPanel
 lazy from desktop_ui.work_text import task_detail, task_label, when
@@ -101,11 +95,8 @@ class WorkPanel:
     __slots__ = (
         "__weakref__",
         "answer",
-        "approval_position",
-        "approve",
         "cancel",
         "context",
-        "decline",
         "detail",
         "detail_scroll",
         "draft",
@@ -116,7 +107,6 @@ class WorkPanel:
         "notebook",
         "pause",
         "presentation",
-        "preview_painted",
         "prompt",
         "prompt_frame",
         "prompt_label",
@@ -124,7 +114,6 @@ class WorkPanel:
         "question_frame",
         "question_key",
         "redirect",
-        "refresh",
         "reply",
         "resume",
         "snapshot",
@@ -141,8 +130,6 @@ class WorkPanel:
         self.draft: Draft = NewDraft.NEW
         self.drafts: dict[Draft, str] = {}
         self.question_key: tuple[str, str] | None = None
-        self.approval_position: int | None = None
-        self.preview_painted = False
         self.window, self.status, self.notebook = panel_frame(self)
         self.presentation: PaintReady | None = None
         tasks = QtWidgets.QWidget()
@@ -155,7 +142,7 @@ class WorkPanel:
         content.setContentsMargins(12, 10, 0, 0)
         task_layout.addWidget(right, 3)
         self.detail = Editor(readonly=True)
-        self.detail.setAccessibleName("Task details and action preview")
+        self.detail.setAccessibleName("Task details")
         content.addWidget(self.detail, 1)
         self.detail_scroll = self.detail.verticalScrollBar()
         controls = row()
@@ -168,7 +155,7 @@ class WorkPanel:
             controls.addWidget(control)
         controls.addStretch()
         content.addLayout(controls)
-        self.question_frame, self.question, self.reply, self.answer, self.approve, self.decline, self.refresh = question_widgets(self)
+        self.question_frame, self.question, self.reply, self.answer = question_widgets(self)
         content.addWidget(self.question_frame)
         self.prompt_frame, self.prompt_label, self.prompt = composer_widgets(self)
         content.addWidget(self.prompt_frame)
@@ -178,9 +165,6 @@ class WorkPanel:
         self.tasks.itemActivated.connect(task_activation(self))
         self.prompt.submitted.connect(self.submit)
         self.reply.submitted.connect(self.answer_question)
-        self.detail.painted.connect(self.preview_paint)
-        self.detail_scroll.valueChanged.connect(self.invalidate_preview)
-        self.notebook.currentChanged.connect(self.invalidate_preview)
         self.notebook.currentChanged.connect(self.meeting_changed)
         self.handle = int(self.window.winId())
         self.render(self.snapshot)
@@ -198,61 +182,20 @@ class WorkPanel:
 
     def render_task(self) -> None:
         task = self.selected_task()
-        detail = task_detail(task, self.snapshot.reviews) if task is not None else "Start a task."
-        self.preview_painted = False
-        replace_text(self.detail, detail)
-        review = current_review(task, self.snapshot.reviews) if task is not None else None
-        self.approval_position = units(detail[: -len(f"Approval\n{review.title}\n\n{review.detail}")]) if review is not None else None
+        replace_text(self.detail, task_detail(task) if task is not None else "Start a task.")
         allowed = allowed_controls(task.state) if task is not None else ()
         for widget, control in ((self.pause, Control.PAUSE), (self.resume, Control.RESUME), (self.cancel, Control.CANCEL)):
             widget.setEnabled(control in allowed)
         self.follow.setEnabled(task is not None)
         self.redirect.setEnabled(task is not None and not isinstance(task.state, Completed) and task.state is not TaskStatus.CANCELLED)
         request = task.state.reason if task is not None and isinstance(task.state, Waiting) else None
-        key = (task.id, request.id) if task is not None and isinstance(request, (Question, Approval)) else None
+        key = (task.id, request.id) if task is not None and isinstance(request, Question) else None
         if key != self.question_key:
             self.reply.clear()
             self.question_key = key
-        asking = isinstance(request, Question)
-        approving = isinstance(request, Approval)
-        self.question_frame.setVisible(asking or approving)
-        self.reply.setVisible(asking)
-        self.answer.setVisible(asking)
-        self.approve.setVisible(approving)
-        self.decline.setVisible(approving)
-        self.refresh.setVisible(approving)
-        self.approve.setEnabled(False)
+        self.question_frame.setVisible(isinstance(request, Question))
         if isinstance(request, Question):
             self.question.setText(request.text)
-        elif isinstance(request, Approval):
-            self.question.setText(review.title if review is not None else "A fresh action preview is required.")
-            self.refresh.setText("Read action preview" if review is not None else "Request fresh preview")
-        self.acknowledge_approval()
-
-    def invalidate_preview(self) -> None:
-        self.preview_painted = False
-        self.detail.viewport().update()
-
-    def preview_paint(self) -> None:
-        self.preview_painted = True
-        self.acknowledge_approval()
-
-    def acknowledge_approval(self) -> None:
-        task = self.selected_task()
-        review = current_review(task, self.snapshot.reviews) if task is not None else None
-        if (
-            not self.preview_painted
-            or review is None
-            or self.approval_position is None
-            or not self.detail.isVisible()
-            or not windows.is_visible(self.handle)
-        ):
-            return
-        cursor = QtGui.QTextCursor(self.detail.document())
-        cursor.setPosition(min(self.approval_position, self.detail.document().characterCount() - 1))
-        visible = self.detail.viewport().rect().intersects(self.detail.cursorRect(cursor))
-        if visible and self.work.approval_presented(review.task_id, review.request.id):
-            self.approve.setEnabled(True)
 
     def control(self, control: Control) -> None:
         task = self.selected_task()
@@ -316,23 +259,6 @@ class WorkPanel:
         task_id, request_id = self.question_key
         if self.work.send(AnswerTask(task_id, request_id, answer)):
             self.reply.clear()
-
-    def answer_approval(self, decision: ApprovalDecision) -> None:
-        if self.question_key is not None:
-            task_id, request_id = self.question_key
-            self.work.send(AnswerTask(task_id, request_id, decision))
-
-    def review_action(self) -> None:
-        task = self.selected_task()
-        if task is not None and isinstance(task.state, Waiting) and isinstance(task.state.reason, Approval):
-            if current_review(task, self.snapshot.reviews) is None:
-                self.work.send(RefreshApproval(task.id, task.state.reason.id))
-            elif self.approval_position is not None:
-                cursor = self.detail.textCursor()
-                cursor.setPosition(self.approval_position)
-                self.detail.setTextCursor(cursor)
-                self.detail.ensureCursorVisible()
-                self.detail.viewport().update()
 
     def show(self, *, focus: bool = True, on_presented: Callable[[], None] | None = None) -> None:
         if self.presentation is not None:
@@ -549,9 +475,6 @@ def question_widgets(
     QtWidgets.QLabel,
     Editor,
     QtWidgets.QToolButton,
-    QtWidgets.QToolButton,
-    QtWidgets.QToolButton,
-    QtWidgets.QToolButton,
 ]:
     question_frame = QtWidgets.QFrame()
     question_layout = column(question_frame)
@@ -564,14 +487,10 @@ def question_widgets(
     question_layout.addWidget(reply)
     answers = row()
     answer = button("Send answer", owner.answer_question, name="primary")
-    approve = button("Approve", lambda: owner.answer_approval(ApprovalDecision.APPROVED), name="primary")
-    decline = button("Decline", lambda: owner.answer_approval(ApprovalDecision.DECLINED))
-    refresh = button("Read action preview", owner.review_action)
-    for control in (answer, approve, decline, refresh):
-        answers.addWidget(control)
+    answers.addWidget(answer)
     answers.addStretch()
     question_layout.addLayout(answers)
-    return question_frame, question, reply, answer, approve, decline, refresh
+    return question_frame, question, reply, answer
 
 
 def composer_widgets(owner: WorkPanel) -> tuple[QtWidgets.QFrame, QtWidgets.QLabel, Editor]:

@@ -9,7 +9,7 @@ from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
-from PySide6 import QtCore, QtGui, QtWidgets
+from PySide6 import QtCore, QtWidgets
 
 from keeper_control import Control, Supervisor
 
@@ -22,8 +22,6 @@ QLabel { background: transparent; }
 QPushButton { border: 1px solid #586271; border-radius: 6px; padding: 8px 14px; background: #303a46; }
 QPushButton:hover { background: #415063; }
 QPushButton:focus { border: 1px solid #b8d2ff; }
-QPushButton#primary { background: #d9c8f3; color: #282431; border: 1px solid #dfd0f4; }
-QPlainTextEdit { border: 1px solid #43505e; border-radius: 8px; background: #1e252d; padding: 12px; }
 """
 
 
@@ -60,31 +58,6 @@ class KeeperUi:
         message.setTextFormat(QtCore.Qt.TextFormat.PlainText)
         layout.addWidget(message)
         return dialog, layout
-
-    def approve(self, diff: str) -> bool:
-        dialog, layout = self.dialog(
-            "Workspace update review",
-            "Run checks and install this change?\n\nThese checks execute the proposed code with your Windows account.",
-        )
-        dialog.resize(900, 640)
-        text = QtWidgets.QPlainTextEdit(diff)
-        text.setReadOnly(True)
-        text.setLineWrapMode(QtWidgets.QPlainTextEdit.LineWrapMode.NoWrap)
-        text.setFont(QtGui.QFont("Consolas", 10))
-        layout.addWidget(text, 1)
-        controls = QtWidgets.QHBoxLayout()
-        controls.addStretch()
-        cancel = QtWidgets.QPushButton("Cancel")
-        cancel.clicked.connect(dialog.reject)
-        controls.addWidget(cancel)
-        approve = QtWidgets.QPushButton("Run checks and install")
-        approve.setObjectName("primary")
-        approve.clicked.connect(dialog.accept)
-        controls.addWidget(approve)
-        layout.addLayout(controls)
-        result = dialog.exec() == QtWidgets.QDialog.DialogCode.Accepted
-        dialog.deleteLater()
-        return result
 
     def corner(self, dialog: QtWidgets.QDialog) -> None:
         dialog.adjustSize()

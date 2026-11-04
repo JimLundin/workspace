@@ -7,7 +7,7 @@ from typing import Literal, cast
 
 from pydantic import TypeAdapter
 
-from assistant.business_tools import WEB_TOOLS, AppTool, Collection, Edit, Read, Selection
+from assistant.business_tools import WEB_TOOLS, AppTool, Collection, Interaction, Read
 from assistant.web_apps import (
     KANBAN_BOARD,
     KANBAN_COMMENT,
@@ -42,7 +42,7 @@ from assistant.web_apps import (
     WebAppOperation,
 )
 from automation.actions import Change, Observation, Resources, target
-from automation.execution import ApprovalReview, WorkExecution
+from automation.execution import WorkExecution
 from automation.json_value import Json
 from automation.task import ActionUncertain, ActionVerified
 from tests.test_agent import FakeMachine, ToolRig, durable
@@ -188,24 +188,6 @@ def test_business_reads_and_mutations_have_exact_resource_markers(tmp_path: Path
     )
 
 
-def test_approval_mode_declines_business_writes_before_the_machine(tmp_path: Path) -> None:
-    # Defect: expanded tools bypass the existing optional approval policy.
-    rig = ToolRig(approvals=True, work=durable(tmp_path))
-    for name in ("kanban_update_task", "kanban_move_task", "kanban_comment", "teams_web_draft_reply", "outlook_web_draft_reply"):
-        assert not rig.call(name, **arguments(name)).ok
-    assert not any(item.startswith("web_app ") for item in rig.machine.log)
-
-
-def test_agent_reads_and_document_collection_do_not_request_application_clarification(tmp_path: Path) -> None:
-    # Defect: the agent interrupts autonomous investigation to approve routine
-    # reads or collection of an exact attachment into a new local file.
-    for name in ("outlook_web_documents", "outlook_web_open_document", "outlook_web_download_document", "teams_web_open_chat"):
-        machine = AppMachine()
-        rig = ToolRig(approvals=True, work=durable(tmp_path), machine=machine)
-        assert rig.call(name, **arguments(name)).ok
-        assert machine.requests[-1][0] is declared(name).effect.operation
-
-
 def test_invalid_business_commands_do_not_start_durable_effects(tmp_path: Path) -> None:
     # Defect: input validation happens inside an attempted effect, leaving a
     # harmless invalid request recorded as an uncertain external change.
@@ -256,7 +238,7 @@ def test_conflicting_app_receipts_cannot_verify_an_effect() -> None:
         tool = declared(name)
         query = tool.effect.operation.query.validate_python(arguments(name))
         match tool.effect:
-            case Selection(operation, confirm) | Edit(operation, confirm) | Collection(operation, confirm):
+            case Interaction(operation, confirm) | Collection(operation, confirm):
                 receipt = operation.result.validate_python(RECEIPTS[operation])
                 assert isinstance(confirm(query, receipt), ActionVerified), name
                 fields = _WIRE.validate_json(operation.result.dump_json(receipt))
@@ -265,22 +247,6 @@ def test_conflicting_app_receipts_cannot_verify_an_effect() -> None:
                     assert isinstance(confirm(query, conflict), ActionUncertain), (name, field)
             case Read():
                 raise AssertionError(f"{name} changes application state.")
-
-
-def test_approval_reviews_name_the_exact_card_or_chat(tmp_path: Path) -> None:
-    # Defect: approval mode asks the user to approve an edit or reply without
-    # naming the card or chat it changes.
-    reviews: list[ApprovalReview] = []
-
-    def review(item: ApprovalReview) -> bool:
-        reviews.append(item)
-        return False
-
-    for name in ("kanban_comment", "teams_web_draft_reply"):
-        rig = ToolRig(approvals=True, work=durable(tmp_path, review=review))
-        assert not rig.call(name, **arguments(name)).ok
-    # The journal appends the exact operation after the family's own summary.
-    assert [item.detail.split("\n\nExact operation:")[0] for item in reviews] == ["kanban_comment\ntask-1", "teams_web_draft_reply\nchat-1"]
 
 
 def test_personal_work_changes_target_the_exact_work(tmp_path: Path) -> None:

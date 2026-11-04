@@ -34,7 +34,7 @@ from assistant.canvas_activity import CanvasRequest
 from assistant.feed_origin import FeedRequest
 from assistant.recording_state import RecordingAction, RecordingState
 from automation.presentation import Answer, Done, Finished, LiveMessage, Problem, Progress, ReasoningSummary, Said
-from automation.task import Approval, ApprovalDecision, Question, Reply, TextAnswer
+from automation.task import TextAnswer
 from desktop_ui.notification_text import prepared_answer
 from desktop_ui.view_publication import Post, Unavailable, ViewPublication, log_view
 
@@ -49,8 +49,6 @@ class View(Protocol):
 
 class InputState(Enum):
     SHOWN = auto()
-    # A native view acknowledged that this exact approval preview is visible.
-    PRESENTED = auto()
     # A reply was accepted; work owns it until it withdraws or restores the request.
     SUBMITTED = auto()
 
@@ -60,19 +58,8 @@ class _Projected:
     """The one durable request this view projects, and where its parsed reply goes."""
 
     message: AgentRequest
-    reply: Callable[[Reply], bool]
+    reply: Callable[[TextAnswer], bool]
     state: InputState
-
-
-def spoken_decision(text: str) -> ApprovalDecision | None:
-    """Only the complete utterance "approve" or "decline" decides an approval."""
-    match text.strip().casefold().rstrip(".!?").strip():
-        case "approve":
-            return ApprovalDecision.APPROVED
-        case "decline":
-            return ApprovalDecision.DECLINED
-        case _:
-            return None
 
 
 @dataclass(frozen=True, slots=True)
@@ -189,11 +176,8 @@ class AgentWindow:
             if self.publication.closed or self.state.stopping:
                 return False
             request = self.state.request
-        match request:
-            case AgentRequest(request=Question(id=identity)):
-                return self.respond(identity, TextAnswer(text))
-            case _:
-                pass
+        if request is not None:
+            return self.respond(request.id, TextAnswer(text))
         if self._callbacks.submit is None:
             return False
         self._callbacks.submit(text)
@@ -210,19 +194,11 @@ class AgentWindow:
             request = self.state.request
         if request is None:
             return False
-        match request.request:
-            case Question(id=identity):
-                with contextlib.suppress(ValueError):
-                    self.respond(identity, TextAnswer(text.strip()))
-            case Approval(id=identity):
-                decision = spoken_decision(text)
-                if decision is not None:
-                    self.respond(identity, decision)
-                else:
-                    self.say("Approval is still waiting. Hold N and say just “approve” or “decline”, then release to send.")
+        with contextlib.suppress(ValueError):
+            self.respond(request.id, TextAnswer(text.strip()))
         return True
 
-    def request_input(self, message: AgentRequest, reply: Callable[[Reply], bool]) -> None:
+    def request_input(self, message: AgentRequest, reply: Callable[[TextAnswer], bool]) -> None:
         """Project an exact durable request without starting a waiting thread."""
         with self.lock:
             if self.publication.closed:
@@ -254,16 +230,7 @@ class AgentWindow:
             self.publication.changed()
         self._waiting_changed(before=was_waiting, after=waiting)
 
-    def input_presented(self, request_id: str) -> None:
-        """A native view acknowledges that this exact approval preview is visible."""
-        with self.lock:
-            match self._input:
-                case _Projected(message=AgentRequest(request=Approval(id=identity)), state=InputState.SHOWN) as request if identity == request_id:
-                    self._input = replace(request, state=InputState.PRESENTED)
-                case _:
-                    pass
-
-    def respond(self, identity: str, reply: Reply, *, expected_session: str | None = None) -> bool:
+    def respond(self, identity: str, reply: TextAnswer, *, expected_session: str | None = None) -> bool:
         """Admit a reply to this request, optionally fenced to a captured session.
 
         Current-view actions identify the current request alone; delayed canvas
@@ -275,9 +242,6 @@ class AgentWindow:
                 return False
             request = self._input
             if self.publication.closed or request is None or request.message.id != identity or request.state is InputState.SUBMITTED:
-                return False
-            if reply is ApprovalDecision.APPROVED and request.state is not InputState.PRESENTED:
-                self.say("Open the current action preview before approving it.")
                 return False
             submitted = self._input = replace(request, state=InputState.SUBMITTED)
         accepted = False

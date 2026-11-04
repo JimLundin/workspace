@@ -59,7 +59,7 @@ def enqueue(state: Outbox, epoch: str, payload: ipc.BridgeEvent) -> tuple[Outbox
     )
     lost = len(entries) >= ipc.MAX_EVENTS or sum(item.size for item in entries) + size > MAX_BUFFER_BYTES
     if lost:
-        resync = ipc.Envelope(epoch, state.sequence + 1, ipc.Resync("Live updates were discarded; reload work and request fresh approval previews."))
+        resync = ipc.Envelope(epoch, state.sequence + 1, ipc.Resync("Live updates were discarded; reload durable work."))
         entries = (Queued(resync, len(ipc.encode_event(resync))),)
         message = replace(message, sequence=state.sequence + 2)
     return Outbox(message.sequence, state.acknowledged, (*entries, Queued(message, size))), lost

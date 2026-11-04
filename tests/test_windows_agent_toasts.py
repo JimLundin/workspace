@@ -25,7 +25,7 @@ lazy from PySide6.QtWidgets import QWidget
 from assistant.agent_session import Begin, Session, transition
 from assistant.recording_state import RecordingAction, RecordingState
 from automation.presentation import Answer, Failed, ReasoningSummary, Said, StreamState, Succeeded, ToolActivity
-from automation.task import Reply, TextAnswer
+from automation.task import TextAnswer
 from desktop_ui import toast_stack
 from desktop_ui.agent_toasts import AgentToasts
 from desktop_ui.agent_window import AgentWindow
@@ -38,7 +38,7 @@ from desktop_ui.qt_ui import application
 from desktop_ui.rich_text import formatted
 from desktop_ui.toast_card import Card, CardOwner, Finish
 from desktop_ui.toast_desktop import NativeDesktop
-from tests.agent_requests import asked, reviewed
+from tests.agent_requests import asked
 from winapi import appearance, screen, system, windows
 from winapi.composition import DesktopComposition, Glass
 from winapi.shapes import Rect
@@ -942,12 +942,12 @@ def test_live_request_keeps_one_card_with_manual_disclosure_and_reading_expiry()
         panel.settle()
         assert view.cards[first.key] is first and first.expanded and first.alpha == 1
         assert len(tuple(card for card in view.cards.values() if not card.retiring)) == 1
-        publish(Answer("result", "The newer plan has the approved dates.", 5, StreamState.COMPLETE))
+        publish(Answer("result", "The newer plan has the agreed dates.", 5, StreamState.COMPLETE))
         panel.pump()
         panel.settle()
         cards = tuple(card for card in view.cards.values() if not card.retiring)
         assert cards == (first,) and first.alpha == 1
-        assert "The newer plan has the approved dates." in first.text.toPlainText()
+        assert "The newer plan has the agreed dates." in first.text.toPlainText()
         assert len(view.cards) + len(view.spares) <= MAX_VISIBLE
         panel.agent.finish()
         panel.pump()
@@ -1003,7 +1003,7 @@ def test_stack_is_bounded_during_bursts_and_retains_retired_native_layers() -> N
     with notifications(animated=True) as panel:
         old_handles: list[int] = []
         for index in range(12):
-            panel.agent.say(f"Reply {index} with **Markdown**.")
+            panel.agent.say(f"TextAnswer {index} with **Markdown**.")
             panel.pump()
             old_handles.extend(card.layer.handle for card in panel.view.cards.values() if card.layer is not None)
             assert len(panel.view.cards) <= MAX_VISIBLE
@@ -1033,7 +1033,7 @@ def test_repeating_a_frame_keeps_native_geometry_stable_after_dpi_rounding() -> 
         return Card(owner, toast, width, move=move)
 
     with notifications(animated=True, create_card=create) as panel:
-        panel.agent.say("Reply with **Markdown**.")
+        panel.agent.say("TextAnswer with **Markdown**.")
         panel.pump()
         card = panel.view.cards[MessageKey(0)]
         bounds = windows.outer_rect(card.handle)
@@ -1044,10 +1044,10 @@ def test_repeating_a_frame_keeps_native_geometry_stable_after_dpi_rounding() -> 
         assert not moves and windows.outer_rect(card.handle) == bounds
 
 
-def recording(replies: list[Reply]) -> Callable[[Reply], bool]:
+def recording(replies: list[TextAnswer]) -> Callable[[TextAnswer], bool]:
     """Accept every reply to a projected durable request, in order."""
 
-    def accept(reply: Reply) -> bool:
+    def accept(reply: TextAnswer) -> bool:
         replies.append(reply)
         return True
 
@@ -1069,7 +1069,7 @@ def test_spinner_reuses_widgets_and_stops_timers_for_reduced_motion_and_input() 
         panel.view.tick()
         assert not panel.view.animation_timer.isActive()
         panel.animated = True
-        replies: list[Reply] = []
+        replies: list[TextAnswer] = []
         panel.agent.request_input(asked("open", "Open this?", "budget.xlsx", panel.now), recording(replies))
         assert panel.requested.wait(timeout=2)
         panel.pump()
@@ -1152,7 +1152,7 @@ def test_hovering_glass_pauses_expiry_and_close_cancels_all_observation() -> Non
 def test_questions_can_be_answered_or_stopped_by_voice_without_history() -> None:
     with notifications() as panel:
         panel.agent.begin("Open the workbook")
-        replies: list[Reply] = []
+        replies: list[TextAnswer] = []
         panel.agent.request_input(asked("open", "Open this?", "budget.xlsx", panel.now), recording(replies))
         assert panel.requested.wait(timeout=2)
         panel.pump()
@@ -1166,15 +1166,14 @@ def test_questions_can_be_answered_or_stopped_by_voice_without_history() -> None
         assert panel.view.cards[TurnKey(0)] is question
         assert "The revenue sheet." in question.text.toPlainText() and "Open this?" in question.text.toPlainText()
         panel.requested.clear()
-        panel.agent.request_input(reviewed("write", "Open this?", "budget.xlsx", panel.now), recording(replies))
+        panel.agent.request_input(asked("write", "Write this?", "budget.xlsx", panel.now), recording(replies))
         assert panel.requested.wait(timeout=2)
         panel.pump()
-        approval = panel.view.cards[TurnKey(0)]
-        assert [button.text() for button in approval.choices] == ["Approve", "Decline"]
-        approval.stop.click()
+        pending = panel.view.cards[TurnKey(0)]
+        pending.stop.click()
         assert not panel.agent.waiting and replies == [TextAnswer("The revenue sheet.")]
         panel.pump()
-        assert not approval.stop.isEnabled()
+        assert not pending.stop.isEnabled()
 
 
 def test_history_uses_the_existing_feed_and_returns_to_current_work() -> None:

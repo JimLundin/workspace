@@ -1,7 +1,7 @@
 """Dedicated desktop canvas; agent administration is created only when requested.
 
 Qt owns the mutable widget lifetimes. Both windows share the same immutable work
-observations and command owner, keeping approvals and saved drafts on one path.
+observations and command owner, keeping answers and saved drafts on one path.
 """
 
 from collections.abc import Callable

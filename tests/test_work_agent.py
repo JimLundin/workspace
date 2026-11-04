@@ -19,7 +19,6 @@ from assistant.work_commands import (
     ControlTask,
     FollowUp,
     Redirect,
-    RefreshApproval,
     RemoveContext,
     UpdatePreference,
     UpdateProjectNote,
@@ -29,22 +28,18 @@ from automation import ipc
 from automation.activity import Activity, ContextSnapshot
 from automation.bridge import BridgeClient, BridgeServer
 from automation.context import ContextStore, Preference, ProjectNote
-from automation.execution import ApprovalReview
 from automation.ipc import (
     BridgeEvent,
     Envelope,
     LogEvent,
     MeetingCommand,
     Resync,
-    ReviewEvent,
     StartMeeting,
 )
 from automation.personal_work import Catalog, SourceKind
 from automation.presentation import Answer, Said, StreamState, Succeeded, ToolActivity
 from automation.store import TaskStore
 from automation.task import (
-    Approval,
-    ApprovalDecision,
     Blocked,
     Completed,
     Control,
@@ -283,24 +278,6 @@ def test_canvas_intake_and_questions_continue_when_presentation_is_unavailable(t
         assert agent.wait_closed(5)
 
 
-def pending_approval(rig: WorkRig, prompt: str = "Send the reviewed draft") -> tuple[Task, RunRef, ApprovalReview]:
-    rig.agent.start(prompt)
-    rig.refresh()
-    claim = rig.tasks.claim("worker-one", "approval-run", at=rig.clock())
-    assert claim is not None
-    request = Approval("once", "Review the operation", "Sensitive operation; request its live preview.", "a" * 64)
-    review = ApprovalReview(
-        claim.task.id,
-        0,
-        request,
-        "Send the reviewed draft",
-        "Exact recipient and complete draft: private preview text.",
-    )
-    task = rig.tasks.finish(claim.run, Waiting(request), at=rig.clock())
-    assert task is not None
-    return task, claim.run, review
-
-
 def test_queued_requests_persist_with_their_invocation_context_without_reopening_the_panel(tmp_path: Path) -> None:
     # Defect: an agent voice request is dropped while another task is running,
     # or queues under stale invocation context instead of preserving both tasks;
@@ -422,8 +399,6 @@ def test_questions_resume_only_the_exact_waiting_task_and_voice_uses_the_same_ro
         rig.tasks.finish(claim.run, Waiting(Question("which-sheet", "Which sheet?", "Choose a sheet in this workbook.")), at=rig.clock())
         rig.refresh()
         assert rig.panel.waiting
-        # Defect: work accepts an approval decision for a question, since the window does not check the kind.
-        assert not rig.panel.respond("which-sheet", ApprovalDecision.DECLINED) and rig.panel.waiting
         rig.agent.voice("Use revenue")
         rig.refresh()
         task = rig.tasks.get(claim.task.id)
@@ -494,47 +469,6 @@ def test_redirect_fences_a_visible_old_question_and_keeps_the_new_goal(tmp_path:
         assert not rig.panel.respond("old-question", TextAnswer("Late UI answer"))
 
 
-def test_approvals_require_the_exact_live_preview_and_expire_on_worker_restart(tmp_path: Path) -> None:
-    with work(tmp_path) as rig:
-        task, run, review = pending_approval(rig)
-        rig.refresh()
-        assert not rig.panel.waiting and not rig.snapshots[-1].reviews
-        rig.agent.command(AnswerTask(task.id, review.request.id, ApprovalDecision.APPROVED))
-        assert "fresh preview" in rig.refresh().status
-        assert rig.tasks.responses(task.id) == ()
-        rig.bridge.publish(ReviewEvent(run, review))
-        snapshot = rig.refresh()
-        assert snapshot.reviews == (review,)
-        assert review.detail in rig.panel.all_text()
-        # This command arrives before another observer poll can update the UI.
-        # The committing boundary must still discover the new worker epoch.
-        rig.bridge.restart("worker-two")
-        rig.agent.command(AnswerTask(task.id, review.request.id, ApprovalDecision.APPROVED))
-        snapshot = rig.refresh()
-        assert snapshot.reviews == () and rig.tasks.responses(task.id) == ()
-        rig.agent.command(RefreshApproval(task.id, review.request.id))
-        rig.refresh()
-        refreshed = rig.tasks.get(task.id)
-        assert refreshed is not None and refreshed.state is TaskStatus.READY
-        assert rig.tasks.responses(task.id) == ()
-
-
-def test_wrong_run_and_old_epoch_previews_cannot_authorize_a_waiting_operation(tmp_path: Path) -> None:
-    with work(tmp_path) as rig:
-        task, run, review = pending_approval(rig)
-        rig.bridge.publish(ReviewEvent(RunRef(task.id, "wrong-run"), review))
-        rig.bridge.publish(ReviewEvent(run, review), epoch="old-worker")
-        assert rig.refresh().reviews == ()
-        rig.bridge.publish(ReviewEvent(run, review))
-        assert rig.refresh().reviews == (review,)
-        assert not rig.panel.respond(review.request.id, ApprovalDecision.APPROVED)
-        rig.panel.input_presented(review.request.id)
-        rig.agent.voice("Approve.")
-        rig.refresh()
-        assert [response.reply for response in rig.tasks.responses(task.id)] == [ApprovalDecision.APPROVED]
-        assert rig.snapshots[-1].reviews == ()
-
-
 def test_streaming_rejects_superseded_runs_and_completion_comes_from_the_journal(tmp_path: Path) -> None:
     # Defect: publishing an accepted reply leaves Markdown preparation to Qt,
     # freezing unrelated animations on both streaming and durable completion.
@@ -569,8 +503,8 @@ def test_streaming_rejects_superseded_runs_and_completion_comes_from_the_journal
         assert count == 1 and not rig.agent.running() and rig.finished == [False]
 
 
-def test_approval_and_resumed_action_keep_one_notification_card(tmp_path: Path) -> None:
-    # Defect: ending the UI turn at each approval cancels its running action row,
+def test_question_and_resumed_action_keep_one_notification_card(tmp_path: Path) -> None:
+    # Defect: ending the UI turn at each question cancels its running action row,
     # then resuming creates a second card alongside the falsely stopped card.
     with work(tmp_path) as rig:
         rig.agent.start("Open the workbook")
@@ -580,17 +514,14 @@ def test_approval_and_resumed_action_keep_one_notification_card(tmp_path: Path) 
         rig.bridge.publish(LogEvent(claim.run, ToolActivity("open", "open_file", "budget.xlsx", rig.clock())))
         rig.refresh()
         stack = advance(Stack(), rig.panel.snapshot(), 100)
-        request = Approval("open-approval", "Open this workbook?", "budget.xlsx", "a" * 64)
-        review = ApprovalReview(claim.task.id, 0, request, "Open the workbook", "budget.xlsx")
+        request = Question("open-question", "Open which workbook?", "")
         rig.tasks.finish(claim.run, Waiting(request), at=rig.clock())
-        rig.bridge.publish(ReviewEvent(claim.run, review))
         rig.refresh()
         stack = advance(stack, rig.panel.snapshot(), 101)
         assert len(stack.toasts) == 1
         waiting = stack.toasts[0].content
         assert isinstance(waiting, Turn) and isinstance(waiting.state, Working) and waiting.state.phase is Busy.WAITING
-        rig.panel.input_presented(request.id)
-        assert rig.panel.respond(request.id, ApprovalDecision.APPROVED)
+        assert rig.panel.respond(request.id, TextAnswer("budget.xlsx"))
         rig.refresh()
         stack = advance(stack, rig.panel.snapshot(), 102)
         resumed = rig.tasks.claim("worker-one", "resumed-run", at=rig.clock())

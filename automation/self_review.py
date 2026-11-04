@@ -24,7 +24,6 @@ from automation.task import (
     ActionReturned,
     ActionUncertain,
     ActionVerified,
-    Approval,
     Blocked,
     Claim,
     Completed,
@@ -36,7 +35,6 @@ from automation.task import (
     Response,
     SelfReview,
     Task,
-    TextAnswer,
     Waiting,
     outcome_kind,
     phase,
@@ -61,7 +59,7 @@ LESSON_SOURCE: Final = "Workspace agent lesson, task "
 """Marks preferences the agent wrote, so it may retire its own lessons but never the user's."""
 
 
-def signals(outcome: Outcome, actions: Iterable[Action], revisions: Sequence[GoalRevision], responses: Iterable[Response]) -> tuple[Signal, ...]:
+def signals(outcome: Outcome, actions: Iterable[Action], revisions: Sequence[GoalRevision], responses: Sequence[Response]) -> tuple[Signal, ...]:
     """What a settled run shows; a run still waiting on the user or the keeper is not settled."""
     found: list[Signal] = []
     match outcome:
@@ -70,7 +68,7 @@ def signals(outcome: Outcome, actions: Iterable[Action], revisions: Sequence[Goa
         case Waiting(reason=Blocked()):
             found.append(Signal.BLOCKED)
         case Waiting():
-            # Waiting on the user's answer, an approval or the keeper: the run is not settled.
+            # Waiting on the user's answer or the keeper: the run is not settled.
             return ()
         case Completed():
             pass
@@ -83,7 +81,7 @@ def signals(outcome: Outcome, actions: Iterable[Action], revisions: Sequence[Goa
         found.append(Signal.NOT_APPLIED)
     if len(revisions) > 1:
         found.append(Signal.REDIRECTED)
-    if any(isinstance(response.request, Question) for response in responses):
+    if responses:
         found.append(Signal.ASKED)
     return tuple(found)
 
@@ -178,14 +176,7 @@ def _record_lines(record: TaskRecord) -> Iterator[str]:
     for revision in record.revisions:
         yield f"Goal revision {revision.revision}: {revision.prompt[:800]}"
     for response in record.responses:
-        reply = response.reply.text[:400] if isinstance(response.reply, TextAnswer) else response.reply.value
-        match response.request:
-            case Question(text=question):
-                yield f"Asked: {question[:400]}; answered: {reply}"
-            case Approval(title=title):
-                yield f"Approval '{title[:200]}': {reply}"
-            case _:
-                assert_never(response.request)
+        yield f"Asked: {response.request.text[:400]}; answered: {response.reply.text[:400]}"
     for action in record.actions:
         match action.outcome:
             case ActionUncertain(reason=detail) | ActionNotApplied(reason=detail):

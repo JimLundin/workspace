@@ -2,13 +2,11 @@
 
 import contextlib
 import threading
-from collections import deque
-from collections.abc import Callable
 
-from assistant.agent_session import AgentRequest, pending
-from automation.task import ApprovalDecision, Reply, TextAnswer
-from desktop_ui.agent_window import AgentWindow, View
-from tests.agent_requests import asked, reviewed
+from assistant.agent_session import AgentRequest
+from automation.task import TextAnswer
+from desktop_ui.agent_window import AgentWindow
+from tests.agent_requests import asked
 from tests.test_agent_window import RecordingWindow
 
 
@@ -17,11 +15,11 @@ def has_pending_input(panel: AgentWindow) -> bool:
 
 
 def test_durable_questions_share_typed_voice_and_button_routing_without_waiting_threads() -> None:
-    replies: list[Reply] = []
+    replies: list[TextAnswer] = []
     submitted: list[str] = []
     waiting: list[bool] = []
 
-    def accept(answer: Reply) -> bool:
+    def accept(answer: TextAnswer) -> bool:
         replies.append(answer)
         return True
 
@@ -55,15 +53,15 @@ def test_durable_questions_share_typed_voice_and_button_routing_without_waiting_
 
 
 def test_a_new_request_during_reply_submission_remains_pending() -> None:
-    replies: list[tuple[str, Reply]] = []
+    replies: list[tuple[str, TextAnswer]] = []
     panel = RecordingWindow(lambda: None)
     latest = asked("new", "Which year?", "", 2.0)
 
-    def answer_new(answer: Reply) -> bool:
+    def answer_new(answer: TextAnswer) -> bool:
         replies.append(("new", answer))
         return True
 
-    def answer_old(answer: Reply) -> bool:
+    def answer_old(answer: TextAnswer) -> bool:
         replies.append(("old", answer))
         panel.request_input(latest, answer_new)
         return True
@@ -79,15 +77,15 @@ def test_a_new_request_during_reply_submission_remains_pending() -> None:
 
 
 def test_a_restored_request_stays_pending_when_the_prior_submission_returns() -> None:
-    replies: list[Reply] = []
+    replies: list[TextAnswer] = []
     panel = RecordingWindow(lambda: None)
     question = asked("retry", "Which workbook?", "The previous answer could not be saved.", 1.0)
 
-    def retry(answer: Reply) -> bool:
+    def retry(answer: TextAnswer) -> bool:
         replies.append(answer)
         return True
 
-    def failed_commit(answer: Reply) -> bool:
+    def failed_commit(answer: TextAnswer) -> bool:
         replies.append(answer)
         panel.withdraw_input()
         panel.request_input(question, retry)
@@ -104,12 +102,12 @@ def test_a_restored_request_stays_pending_when_the_prior_submission_returns() ->
 
 def test_duplicate_polling_and_simultaneous_replies_cannot_submit_twice() -> None:
     entered, release = threading.Event(), threading.Event()
-    replies: list[Reply] = []
+    replies: list[TextAnswer] = []
     accepted: list[bool] = []
     panel = RecordingWindow(lambda: None)
     question = asked("one", "Which workbook?", "", 1.0)
 
-    def accept(answer: Reply) -> bool:
+    def accept(answer: TextAnswer) -> bool:
         replies.append(answer)
         entered.set()
         assert release.wait(timeout=3)
@@ -134,83 +132,24 @@ def test_duplicate_polling_and_simultaneous_replies_cannot_submit_twice() -> Non
 
 
 def test_rejected_replies_can_retry_without_resolving_or_reopening_the_request() -> None:
-    replies: list[Reply] = []
+    replies: list[TextAnswer] = []
     panel = RecordingWindow(lambda: None)
-    request = reviewed("approval", "Write the workbook", "The full reviewed content.", 1.0)
+    request = asked("sheet", "Which sheet?", "", 1.0)
 
-    def accept(answer: Reply) -> bool:
+    def accept(answer: TextAnswer) -> bool:
         replies.append(answer)
         if len(replies) == 1:
             raise RuntimeError("Fixture: the work queue refused the reply.")
         return len(replies) > 2
 
     panel.request_input(request, accept)
-    panel.input_presented(request.id)
     # Defect: a reply sink that raises leaves the request submitted and unanswerable.
     with contextlib.suppress(RuntimeError):
-        panel.respond(request.id, ApprovalDecision.APPROVED)
-    assert not panel.respond(request.id, ApprovalDecision.APPROVED) and has_pending_input(panel)
-    assert panel.respond(request.id, ApprovalDecision.APPROVED) and not has_pending_input(panel)
-    assert replies == [ApprovalDecision.APPROVED] * 3
+        panel.respond(request.id, TextAnswer("Revenue"))
+    assert not panel.respond(request.id, TextAnswer("Revenue")) and has_pending_input(panel)
+    assert panel.respond(request.id, TextAnswer("Revenue")) and not has_pending_input(panel)
+    assert replies == [TextAnswer("Revenue")] * 3
     panel.request_input(request, accept)
     assert not has_pending_input(panel)
     panel.close()
     panel.paint()
-
-
-def test_approval_requires_its_exact_native_display_and_never_accepts_partial_voice_matches() -> None:
-    replies: list[Reply] = []
-
-    def accept(answer: Reply) -> bool:
-        replies.append(answer)
-        return True
-
-    panel = RecordingWindow(lambda: None)
-    first = reviewed("first", "Write the workbook", "The first preview.", 1.0)
-    panel.request_input(first, accept)
-    assert panel.reply_by_voice("Approve!") and not replies
-    panel.paint()
-    assert not panel.respond("first", ApprovalDecision.APPROVED), "An enqueued render does not establish visible native content."
-    panel.input_presented("stale")
-    assert not panel.respond("first", ApprovalDecision.APPROVED)
-    panel.input_presented("first")
-    assert panel.reply_by_voice("Do not approve this") and not replies
-    assert panel.reply_by_voice("  APPROVE. ") and replies == [ApprovalDecision.APPROVED]
-    panel.request_input(reviewed("second", "Send the draft", "Another complete preview.", 2.0), accept)
-    panel.input_presented("first")
-    assert not panel.respond("second", ApprovalDecision.APPROVED)
-    assert panel.reply_by_voice("Decline!") and replies == [ApprovalDecision.APPROVED, ApprovalDecision.DECLINED]
-    panel.request_input(reviewed("third", "Write again", "Fresh preview.", 3.0), accept)
-    panel.reset()
-    panel.input_presented("third")
-    assert not panel.respond("third", ApprovalDecision.APPROVED)
-    panel.request_input(reviewed("fourth", "Write again", "Fresh preview.", 4.0), accept)
-    assert not panel.respond("fourth", ApprovalDecision.APPROVED)
-    panel.close()
-    panel.input_presented("fourth")
-    assert not panel.respond("fourth", ApprovalDecision.APPROVED) and replies == [ApprovalDecision.APPROVED, ApprovalDecision.DECLINED]
-    panel.paint()
-
-
-def test_failed_native_creation_never_authorizes_a_projected_approval() -> None:
-    jobs: deque[Callable[[], None]] = deque()
-    replies: list[Reply] = []
-    errors: list[str] = []
-
-    def create(_agent: AgentWindow) -> View:
-        raise RuntimeError("Fixture native view unavailable")
-
-    def accept(answer: Reply) -> bool:
-        replies.append(answer)
-        return True
-
-    panel = AgentWindow(lambda: None, post=jobs.append, create_view=create, on_problem=errors.append)
-    panel.request_input(reviewed("approval", "Write the workbook", "Complete preview.", 1.0), accept)
-    while jobs:
-        jobs.popleft()()
-    assert errors and not panel.publication.ready.is_set()
-    assert not panel.respond("approval", ApprovalDecision.APPROVED) and not replies
-    assert any(isinstance(message, AgentRequest) and pending(message) for message in panel.state.messages)
-    panel.close()
-    while jobs:
-        jobs.popleft()()

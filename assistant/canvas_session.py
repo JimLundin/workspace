@@ -12,7 +12,7 @@ def canvas_reply(reply: assistant.agent_session.RequestReply) -> CanvasReply:
     match reply:
         case assistant.agent_session.Pending():
             return Attention.WAITING
-        case assistant.agent_session.Cancelled() | automation.task.ApprovalDecision():
+        case assistant.agent_session.Cancelled():
             return Attention.CLOSED
         case automation.task.TextAnswer():
             return reply

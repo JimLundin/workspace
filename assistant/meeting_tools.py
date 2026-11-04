@@ -2,11 +2,11 @@
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Final, assert_never
+from typing import Final
 
 from pydantic import ConfigDict, TypeAdapter
 
-from assistant.agent_tools import DECLINED, NO_ARGUMENTS, Args, Display, Output, Session, Tool, argument_spec, fixed, typed_run
+from assistant.agent_tools import NO_ARGUMENTS, Args, Display, Output, Session, Tool, argument_spec, fixed, typed_run
 from assistant.llm import ToolSpec
 from automation.actions import Change, Evidence, Observation
 from automation.capture import AudioSource
@@ -86,12 +86,4 @@ class MeetingCapture:
 
     def capture(self, args: Args, request: CaptureArguments) -> Output:
         operation = _operation(args.tool, request)
-        match operation:
-            case StartMeeting():
-                if not self.session.approve(args.operation, "Record this meeting?", "Microphone and selected computer audio until Stop."):
-                    return Output(DECLINED, ok=False)
-            case MeetingCommand():
-                pass
-            case _:
-                assert_never(operation)
         return self.session.effect(args.operation, lambda: Output(self.session.machine.meeting(operation)))

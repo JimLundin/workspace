@@ -8,7 +8,7 @@ from html import escape
 from typing import Protocol
 
 lazy import shiboken6
-lazy from PySide6 import QtCore, QtWidgets
+lazy from PySide6 import QtCore
 lazy from PySide6.QtCore import QPoint, QPointF, QRect, QRectF, Qt
 lazy from PySide6.QtGui import (
     QContextMenuEvent,
@@ -30,7 +30,6 @@ from desktop_ui.components import bubble
 from desktop_ui.components.appearance import GlassLook, Scheme, Shade
 from desktop_ui.components.bubble import (
     ACTION,
-    ACTIONS_TOP,
     BADGE,
     BOTTOM,
     CONTROL,
@@ -44,9 +43,6 @@ from desktop_ui.components.bubble import (
     FeedTitle,
     Look,
     Spinning,
-    action_face,
-    action_geometry,
-    action_style,
     meta_face,
     paint_badge,
     paint_card,
@@ -180,7 +176,6 @@ class Measure:
         if user:
             body_width = self.body.intrinsic_width(spans, max(1, maximum_width - body_padding))
             width = min(maximum_width, max(120, body_width + body_padding))
-        labels = tuple(span.text for span in notification_text.options(content))
         logical = round(math.ceil(width * scale) / scale)
         text_width = max(1, logical - body_padding)
         body_height = self.body.load(spans, text_width) + SECTION * 2 if spans else 0
@@ -188,10 +183,6 @@ class Measure:
         title = title_height()
         header = TOP + max(BADGE, title + _meta_height(meta))
         footer_height = _text_height(footer, text_width) + SECTION * 2 if footer else 0
-        if labels:
-            geometry = action_geometry(labels, text_width)
-            footer_height = ACTIONS_TOP + geometry[-1][1] + ACTION
-            footer = ""
         footer_height += CANVAS_ROW * len(presentation.canvas_actions)
         return Prepared(
             math.ceil(width * scale),
@@ -405,8 +396,6 @@ class Card:
         "bounds",
         "canvas_actions",
         "caption",
-        "choice_options",
-        "choices",
         "closed",
         "content",
         "create_glass",
@@ -512,8 +501,6 @@ class Card:
         self.dismiss = IconButton(self.window, Icon.DISMISS, lambda: self.owner.dismiss_card(self.key))
         self.dismiss.clicked.connect(lambda: self.owner.dismiss_card(self.key))
         self.canvas_actions: tuple[tuple[Span, CanvasJumpButton], ...] = ()
-        self.choices: tuple[QtWidgets.QPushButton, ...] = ()
-        self.choice_options: tuple[Span, ...] = ()
         self.handle = int(self.window.winId())
         windows.make_overlay(self.handle, click_through=False)
 
@@ -547,10 +534,6 @@ class Card:
         self.text.setExtraSelections([])
         self.text.update_spans((), 1)
         self.details.clear()
-        for button in self.choices:
-            shiboken6.delete(button)
-        self.choices = ()
-        self.choice_options = ()
 
     def bind(self, toast: Toast, width: int) -> None:
         """Assign new logical content to a parked native resource."""
@@ -594,26 +577,6 @@ class Card:
             case _:
                 pass
 
-    def update_choices(self, content: Content) -> None:
-        options = notification_text.options(content)
-        if options == self.choice_options:
-            return
-        for button in self.choices:
-            shiboken6.delete(button)
-        self.choice_options = options
-
-        def create(index: int, option: Span) -> QtWidgets.QPushButton:
-            button = QtWidgets.QPushButton(option.text, self.window)
-            button.setFont(action_face(primary=not index))
-            button.setCursor(Qt.CursorShape.PointingHandCursor)
-            button.setAccessibleName(option.text)
-            button.clicked.connect(self.link_action(option.link))
-            return button
-
-        # The card owns the native buttons; the first option is the primary action.
-        self.choices = tuple(create(index, option) for index, option in enumerate(options))
-        self.style_choices()
-
     def update_canvas_actions(self, actions: tuple[Span, ...]) -> None:
         if actions == tuple(span for span, _button in self.canvas_actions):
             return
@@ -634,10 +597,6 @@ class Card:
             self.owner.action_link(url)
 
         return clicked
-
-    def style_choices(self) -> None:
-        for index, button in enumerate(self.choices):
-            button.setStyleSheet(action_style(self.style.controls, primary=not index))
 
     def toggle(self, *, animate: bool = True) -> None:
         if self.closed or self.retiring or self.content is None or not notification_text.expandable(self.content):
@@ -716,7 +675,6 @@ class Card:
         for button in (self.stop, self.disclosure, self.dismiss):
             button.controls = self.style.controls
             button.update()
-        self.style_choices()
         for _span, canvas_button in self.canvas_actions:
             canvas_button.recolor(self.style.controls)
         self.text.recolor(ink)
@@ -753,7 +711,6 @@ class Card:
         user = tone(content) is Tone.USER
         self.render_heading(content, prepared)
         self.badge.source(content)
-        self.update_choices(content)
         self.update_canvas_actions(prepared.canvas_actions)
         self.hint.setTextFormat(Qt.TextFormat.PlainText)
         self.hint.setText(self.layout.hint)
@@ -859,14 +816,7 @@ class Card:
         layout, prepared = self.layout, self.prepared[2]
         footer_top = top
         canvas = len(prepared.canvas_actions) * CANVAS_ROW
-        if self.choices:
-            self.hint.hide()
-            geometry = action_geometry(tuple(button.text() for button in self.choices), width)
-            for button, (x, y, button_width) in zip(self.choices, geometry, strict=True):
-                button.setGeometry(TEXT_LEFT + x, footer_top + ACTIONS_TOP + y, button_width, ACTION)
-                button.show()
-            footer_top += ACTIONS_TOP + geometry[-1][1] + ACTION
-        elif layout.hint_height > canvas * scale:
+        if layout.hint_height > canvas * scale:
             hint_height = round(layout.hint_height / scale) - canvas
             self.hint.setGeometry(TEXT_LEFT, footer_top + SECTION, width, max(1, hint_height - SECTION * 2))
             self.hint.show()

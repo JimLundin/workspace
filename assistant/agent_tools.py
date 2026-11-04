@@ -144,7 +144,7 @@ def argument_spec[A](name: str, description: str, arguments: TypeAdapter[A]) -> 
 
 
 def typed_run[A](arguments: TypeAdapter[A], handler: Callable[[Args, A], Output]) -> Callable[[Args], Output]:
-    """Validate a call's arguments into their record before the handler approves or acts."""
+    """Validate a call's arguments into their record before the handler acts."""
 
     def run(args: Args) -> Output:
         try:
@@ -183,7 +183,7 @@ type Verify = NoVerification | FileDigest | Verifier
 
 
 class Session(Protocol):
-    """What every tool family acts through: the computer, Stop, approval and durable effects."""
+    """What every tool family acts through: the computer, Stop and durable effects."""
 
     @property
     def machine(self) -> Machine: ...
@@ -191,10 +191,6 @@ class Session(Protocol):
     def stop(self) -> threading.Event: ...
     def step(self, text: str, /) -> None:
         """Show the user a progress line."""
-        ...
-
-    def approve(self, operation: Operation, title: str, detail: str) -> bool:
-        """Prompt only in the user's opt-in approval mode; Stop always wins."""
         ...
 
     def effect(self, operation: Operation, perform: Callable[[], Output], verify: Verify = NoVerification.NONE) -> Output:

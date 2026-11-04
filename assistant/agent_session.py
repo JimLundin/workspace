@@ -28,7 +28,7 @@ from automation.presentation import (
     ToolActivity,
     ToolStatus,
 )
-from automation.task import Approval, ApprovalDecision, Question, Reply, TextAnswer, answers
+from automation.task import Question, TextAnswer
 
 type Result = Literal["Ready", "Stopped", "Needs attention"]
 
@@ -44,7 +44,7 @@ class Cancelled:
 
 
 # The timeline row reuses the task's reply; a withdrawn request is cancelled.
-type Resolved = Reply | Cancelled
+type Resolved = TextAnswer | Cancelled
 type RequestReply = Pending | Resolved
 
 
@@ -65,13 +65,9 @@ class MeetingMessage:
 
 @dataclass(frozen=True, slots=True)
 class AgentRequest:
-    """A durable question or approval in the timeline, with the person's reply.
+    """A durable question in the timeline, with the person's reply."""
 
-    `detail` is what the person reviews: a question's detail, or the full live
-    review of an approval's exact operation.
-    """
-
-    request: Question | Approval
+    request: Question
     detail: str
     created_at: float
     reply: RequestReply = Pending()
@@ -82,11 +78,7 @@ class AgentRequest:
 
     @property
     def text(self) -> str:
-        match self.request:
-            case Question(text=text) | Approval(title=text):
-                return text
-            case _:
-                assert_never(self.request)
+        return self.request.text
 
 
 type Message = ChatMessage | MeetingMessage | AgentRequest | LiveMessage
@@ -197,7 +189,7 @@ class Session:
 
     @property
     def request(self) -> AgentRequest | None:
-        """The pending question or approval the person can answer now."""
+        """The pending question the person can answer now."""
         for message in self.messages:
             match message:
                 case AgentRequest(reply=Pending()):
@@ -289,13 +281,8 @@ def transition(state: Session, event: Event) -> Session:
             return replace(state, phase="idle", queued=(), status=state.result, messages=tuple(interrupt(message) for message in state.messages))
         case StopRequested():
             return replace(state, queued=(), phase="stopping" if state.busy else state.phase, status="Stopping…" if state.busy else state.status)
-        case AgentRequest(request=request):
-            match request:
-                case Question():
-                    status = "Waiting for your reply"
-                case Approval():
-                    status = "Needs your approval"
-            return replace(state, messages=(*state.messages, event), status=status)
+        case AgentRequest():
+            return replace(state, messages=(*state.messages, event), status="Waiting for your reply")
         case Resolution():
             return resolve(state, event)
         case RecordingUpdated(recording, at):
@@ -368,22 +355,10 @@ def _live_row(message: Message, event: LiveMessage) -> LiveMessage | None:
             return None
 
 
-def resolves(request: Question | Approval, reply: Resolved) -> bool:
-    match reply:
-        case Cancelled():
-            return True
-        case TextAnswer() | ApprovalDecision():
-            return answers(request, reply)
-        case _:
-            assert_never(reply)
-
-
 def resolve(state: Session, event: Resolution) -> Session:
     for index, message in enumerate(state.messages):
         match message:
             case AgentRequest(reply=Pending()) if message.id == event.request_id:
-                if not resolves(message.request, event.reply):
-                    return state  # a response for another kind of input cannot resolve this one
                 updated = replace(message, reply=event.reply)
                 return replace(
                     state,
@@ -429,10 +404,6 @@ def reply_text(reply: RequestReply) -> str:
             return "pending"
         case TextAnswer(text):
             return text
-        case ApprovalDecision.APPROVED:
-            return "approved"
-        case ApprovalDecision.DECLINED:
-            return "declined"
         case Cancelled():
             return "cancelled"
         case _:
@@ -486,11 +457,6 @@ def message_text(message: Message) -> str:
 
 
 @dataclass(frozen=True, slots=True)
-class ApprovalControls:
-    identity: str
-
-
-@dataclass(frozen=True, slots=True)
 class ResponseText:
     text: str
 
@@ -500,7 +466,7 @@ class Presentation:
     role: str
     style: Literal["plain", "error", "markdown"] = "markdown"
     detail: str = ""
-    response: ApprovalControls | ResponseText | None = None
+    response: ResponseText | None = None
     muted: bool = field(default=False, kw_only=True)
 
 
@@ -532,18 +498,11 @@ def presentation(message: Message) -> Presentation:
             return Presentation(f"{action_text.title(name)} · {status}", "plain", muted=True)
         case MeetingMessage():
             return Presentation("Meeting")
-        case AgentRequest(request=Question(), detail=detail, reply=Pending()):
+        case AgentRequest(detail=detail, reply=Pending()):
             return Presentation("Question", detail=detail)
-        case AgentRequest(request=Approval(id=identity), detail=detail, reply=Pending()):
-            return Presentation("Approval", detail=detail, response=ApprovalControls(identity))
-        case AgentRequest(request=Question(), detail=detail, reply=TextAnswer(text)):
+        case AgentRequest(detail=detail, reply=TextAnswer(text)):
             return Presentation("Question", detail=detail, response=ResponseText(text))
-        case AgentRequest(request=request, detail=detail, reply=reply):
-            match request:
-                case Question():
-                    role = "Question"
-                case Approval():
-                    role = "Approval"
-            return Presentation(role, detail=detail, response=ResponseText(reply_text(reply).capitalize()))
+        case AgentRequest(detail=detail, reply=reply):
+            return Presentation("Question", detail=detail, response=ResponseText(reply_text(reply).capitalize()))
         case _:
             assert_never(message)

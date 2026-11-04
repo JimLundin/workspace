@@ -1,4 +1,4 @@
-"""Publish reviewed source to a new Git branch, independently of local installation."""
+"""Publish checked source to a new Git branch, independently of local installation."""
 
 import os
 import subprocess
@@ -129,7 +129,6 @@ def publish_source(  # noqa: PLR0913 - git publication options and test seams
     live: Path,
     workspace: Path,
     summary: str,
-    approve: Callable[[str, str], bool],
     stopped: Callable[[], bool],
     *,
     remote: str = DEFAULT_REMOTE,
@@ -137,7 +136,7 @@ def publish_source(  # noqa: PLR0913 - git publication options and test seams
     branch: str | None = None,
     execute: Callable[[Callable[[], str]], str] | None = None,
 ) -> str:
-    """Freeze, review, test, commit and push. No force push and no edits to live source."""
+    """Freeze, test, commit and push. No force push and no edits to live source."""
     if not summary.strip():
         raise PublishError("A commit summary is required.")
     with tempfile.TemporaryDirectory(prefix="workspace-publish-") as scratch:
@@ -149,12 +148,6 @@ def publish_source(  # noqa: PLR0913 - git publication options and test seams
         if not diff:
             raise PublishError("There are no source changes to publish.")
         destination = branch or f"workspace/agent-{datetime.now():%Y%m%d-%H%M%S}-{uuid.uuid4().hex[:8]}"
-        detail = (
-            f"Push to {remote}\nBase: {base}\nNew branch: {destination}\nCommit: {summary}\nSource SHA-256: {digest}"
-            f"\n\nRun this code and its tests before publishing?\n\n{diff}"
-        )
-        if not approve("Publish workspace changes?", detail):
-            raise PublishError("Publishing cancelled; nothing was pushed.")
         if stopped():
             raise PublishError("Publishing stopped; nothing was pushed.")
 
@@ -163,7 +156,7 @@ def publish_source(  # noqa: PLR0913 - git publication options and test seams
             if not same_source(checkout, live):
                 raise PublishError("The remote base differs from the running source. Update your local workspace before publishing.")
             if source_digest(candidate) != digest:
-                raise PublishError("Source changed during review; review it again.")
+                raise PublishError("Source changed while publishing; publish it again.")
             try:
                 checked = subprocess.run(
                     [console_python(), str(live / "selfcheck.py"), str(candidate)],
@@ -178,7 +171,7 @@ def publish_source(  # noqa: PLR0913 - git publication options and test seams
                 report = (checked.stdout + checked.stderr).decode(errors="replace")[-3000:]
                 raise PublishError("Runtime checks failed; nothing was pushed.\n" + report)
             if source_digest(candidate) != digest:
-                raise PublishError("Runtime checks changed the source; review it again.")
+                raise PublishError("Runtime checks changed the source; publish it again.")
             names = sorted(set(source_files(checkout)) | set(source_files(candidate)))
             git(checkout, "checkout", "-b", destination)
             copy_source(candidate, checkout)

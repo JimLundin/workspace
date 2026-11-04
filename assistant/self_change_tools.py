@@ -11,7 +11,6 @@ from typing import Annotated, Final, Protocol
 from pydantic import Field, TypeAdapter
 
 from assistant.agent_tools import (
-    DECLINED,
     NO_ARGUMENTS,
     Args,
     ArgumentError,
@@ -101,7 +100,7 @@ def _source_change[A: PathArguments | WriteArguments | EditArguments](arguments:
 
 @dataclass(frozen=True, slots=True)
 class InstallOperation:
-    """The install apply_changes requests: its summary, the reviewed digest and the destination."""
+    """The install apply_changes requests: its summary, the checked digest and the destination."""
 
     summary: str
     source_digest: Annotated[str, Field(min_length=64, max_length=64)]
@@ -113,7 +112,7 @@ _INSTALL_OPERATION: Final = TypeAdapter(InstallOperation)
 
 
 def _installation(operation: InstallOperation) -> tuple[str, ...]:
-    """The reviewed digest and destination let a later run verify what the keeper installed."""
+    """The checked digest and destination let a later run verify what the keeper installed."""
     return ("source", target("installed-root", operation.destination), "source-digest:" + operation.source_digest)
 
 
@@ -262,7 +261,7 @@ class SelfChange:
                     (
                         "Run the tests this change affects, including Windows integration tests, then Ruff, "
                         "the architecture and interface reviews, and pyright on changed files; "
-                        "fix every reported failure. In approval mode, checks follow review."
+                        "fix every reported failure."
                     ),
                     NO_ARGUMENTS,
                 ),
@@ -352,14 +351,12 @@ class SelfChange:
         digest = source_digest(source.root)
         if passed:
             operation = Operation.of(args.tool, {"source_digest": digest, "profile": "affected"})
-            if not self.session.approve(operation, "Run Workspace's checks?", "Run this frozen source and its tests?\n\n" + diff):
-                return Output(DECLINED, ok=False)
             result: CheckResult = CheckInterrupted("Runtime checks did not complete.")
 
             def execute() -> Output:
                 nonlocal result
                 if source_digest(source.root) != digest:
-                    raise SourceError("The source changed after review; check it again.")
+                    raise SourceError("The source changed before its checks ran; check it again.")
                 self.session.step("Running the tests this change affects...")
                 result = source.inspect_check(affected=True, cancel=self.session.stop)
                 return Output(result.report, ok=result.passed) if isinstance(result, CheckCompleted) else Output(result.reason, ok=False)
@@ -400,15 +397,13 @@ class SelfChange:
         checked = digest if digest == self.checked.digest else None
         install = InstallOperation(summary, digest, str(self.source().live.absolute()), hashlib.sha256(diff.encode("utf-8")).hexdigest())
         operation = described(args.tool, _INSTALL_OPERATION, install)
-        if not self.session.approve(operation, "Install workspace changes?", summary + "\n\n" + diff):
-            return Output(DECLINED, ok=False)
         if self.session.stop.is_set():
             return Output("Stopped by the user.", ok=False)
         install_root = self.delivery.install_root
 
         def execute() -> Output:
             if source_digest(self.source().root) != digest:
-                raise SourceError("The source changed after review; check and review it again.")
+                raise SourceError("The source changed after its checks; check it again.")
             if problem := self.source().protected_problem():
                 raise SourceError(problem)
             if install_root is not None and self.source().root != install_root:
@@ -424,17 +419,10 @@ class SelfChange:
         passed, report = source.validate()
         if not passed:
             return Output(report[-6000:], ok=False)
-        reviewed = args.operation
-
-        def approve(title: str, detail: str) -> bool:
-            # The publication review is part of the operation it approves and records.
-            nonlocal reviewed
-            reviewed = Operation.of(args.tool, {**args.values, "publication_review": detail})
-            return self.session.approve(reviewed, title, detail)
 
         def execute(perform: Callable[[], str]) -> str:
             return self.session.effect(
-                reviewed,
+                args.operation,
                 lambda: Output(perform()),
                 lambda _: ActionVerified("The tested candidate was published; remote branch readback matched its commit."),
             ).text
@@ -443,7 +431,6 @@ class SelfChange:
             source.live,
             source.root,
             request.summary,
-            approve,
             self.session.stop.is_set,
             remote=os.environ.get("WORKSPACE_GIT_REMOTE", DEFAULT_REMOTE),
             base=os.environ.get("WORKSPACE_GIT_BASE", "main"),

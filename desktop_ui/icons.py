@@ -18,7 +18,7 @@ class State(Enum):
     AGENT = (60, 120, 230)
     """The agent is working on a task."""
     NEEDS_INPUT = (230, 185, 75)
-    """An approval or question is waiting in the agent panel."""
+    """A question is waiting in the agent panel."""
 
 
 def dot(size: int, rgb: tuple[int, int, int]) -> bytes:

@@ -14,8 +14,6 @@ from automation.task import (
     ActionSpec,
     ActionUncertain,
     ActionVerified,
-    Approval,
-    ApprovalDecision,
     Checkpoint,
     Claim,
     Completed,
@@ -25,7 +23,6 @@ from automation.task import (
     Interrupted,
     Outcome,
     Question,
-    Reply,
     RequestSource,
     Response,
     Running,
@@ -39,10 +36,8 @@ from automation.task import (
     WaitReason,
     action_finished,
     answered,
-    approval_refreshed,
     changed,
     controlled,
-    digest,
     finished,
     identifier,
     integer,
@@ -85,7 +80,7 @@ _ACTION_COLUMNS = "id, task_id, run_id, specification, started_at, updated_at, o
 _STORED = ConfigDict(strict=True, extra="forbid")
 _STATE = TypeAdapter(State, config=_STORED)
 _WAIT = TypeAdapter(WaitReason, config=_STORED)
-_REPLY = TypeAdapter(Reply, config=_STORED)
+_ANSWER = TypeAdapter(TextAnswer | None, config=_STORED)
 _CHECKPOINT = TypeAdapter(Checkpoint | None, config=_STORED)
 # A dataclass adapter takes no config; the optional union carries it, and an absent record is refused.
 _SOURCE = TypeAdapter(RequestSource | None, config=_STORED)
@@ -107,6 +102,14 @@ def _source(value: object) -> RequestSource:
             return source
         case None:
             raise ValueError("Invalid stored task source.")
+
+
+def _answer(value: object) -> TextAnswer:
+    match _decoded(_ANSWER, value):
+        case TextAnswer() as answer:
+            return answer
+        case None:
+            raise ValueError("Invalid stored input reply.")
 
 
 def _specification(value: object) -> ActionSpec:
@@ -227,7 +230,7 @@ class TaskStore:
             owner, at = identifier(run[1], "worker owner"), timestamp(run[2], "run start")
             if isinstance(task.state, Running) and (task.state.owner != owner or task.state.started_at != at):
                 raise ValueError("The stored task disagrees with its execution.")
-        if isinstance(task.state, Waiting) and isinstance(task.state.reason, (Question, Approval)):
+        if isinstance(task.state, Waiting) and isinstance(task.state.reason, Question):
             request = connection.execute(
                 "SELECT goal_revision,request,at,closed_at,run_id FROM requests WHERE task_id=? AND id=?", (task.id, task.state.reason.id)
             ).fetchone()
@@ -253,7 +256,7 @@ class TaskStore:
             raise RuntimeError("The task changed during its write transaction.")
         if isinstance(previous.state, Running) and not owns(task, previous.state.run):
             connection.execute("UPDATE runs SET ended_at=?,disposition=? WHERE id=?", (task.updated_at, phase(task.state), previous.state.run.run_id))
-        if isinstance(previous.state, Waiting) and isinstance(previous.state.reason, (Question, Approval)) and task.state != previous.state:
+        if isinstance(previous.state, Waiting) and isinstance(previous.state.reason, Question) and task.state != previous.state:
             connection.execute("UPDATE requests SET closed_at=? WHERE task_id=? AND id=?", (task.updated_at, task.id, previous.state.reason.id))
 
     def submit(self, id: str, title: str, prompt: str, source: RequestSource, *, at: float, priority: int = 0) -> Task:  # noqa: PLR0913 - task fields plus submission time
@@ -363,7 +366,7 @@ class TaskStore:
                 is not None
             ):
                 return None
-            if isinstance(outcome, Waiting) and isinstance(outcome.reason, (Question, Approval)):
+            if isinstance(outcome, Waiting) and isinstance(outcome.reason, Question):
                 if connection.execute("SELECT id FROM requests WHERE task_id=? AND id=?", (task.id, outcome.reason.id)).fetchone() is not None:
                     raise ValueError("An input request identity cannot be reused.")
                 connection.execute(
@@ -433,11 +436,11 @@ class TaskStore:
             connection.execute("INSERT INTO goals(task_id,revision,prompt,at) VALUES (?,?,?,?)", (task.id, result.goal_revision, prompt, at))
             return result
 
-    def answer(self, id: str, request_id: str, reply: Reply, *, at: float) -> Task | None:
+    def answer(self, id: str, request_id: str, reply: TextAnswer, *, at: float) -> Task | None:
         identifier(id, "task identity")
         identifier(request_id, "request identity")
         timestamp(at)
-        variant(reply, (TextAnswer, ApprovalDecision), "input reply")
+        variant(reply, TextAnswer, "input reply")
         with journal.writing(self.path) as connection:
             task = self._get(connection, id)
             update = answered(task, request_id, reply, at=at) if task is not None else None
@@ -446,40 +449,13 @@ class TaskStore:
             result, response = update
             connection.execute(
                 "INSERT INTO responses(task_id,request_id,goal_revision,request,reply,at) VALUES (?,?,?,?,?,?)",
-                (task.id, request_id, task.goal_revision, _stored(_WAIT, response.request), _stored(_REPLY, reply), at),
+                (task.id, request_id, task.goal_revision, _stored(_WAIT, response.request), _stored(_ANSWER, reply), at),
             )
             self._put(connection, task, result)
             return result
 
-    def refresh_approval(self, task_id: str, request_id: str, *, at: float) -> Task | None:
-        """Request a fresh live preview without creating an approval response."""
-        identifier(task_id, "task identity")
-        identifier(request_id, "request identity")
-        timestamp(at)
-        with journal.writing(self.path) as connection:
-            task = self._get(connection, task_id)
-            result = approval_refreshed(task, request_id, at=at) if task is not None else None
-            if result is not None and task is not None:
-                self._put(connection, task, result)
-            return result
-
-    def request_run(self, task_id: str, request_id: str) -> RunRef | None:
-        """Identify the run that produced this exact, still-pending input."""
-        identifier(task_id, "task identity")
-        identifier(request_id, "request identity")
-        with journal.reading(self.path) as connection:
-            task = self._get(connection, task_id)
-            if task is None or not isinstance(task.state, Waiting) or not isinstance(task.state.reason, (Question, Approval)):
-                return None
-            if task.state.reason.id != request_id:
-                return None
-            row = connection.execute("SELECT run_id FROM requests WHERE task_id=? AND id=?", (task_id, request_id)).fetchone()
-            if row is None or len(row) != 1:
-                raise ValueError("The pending input has no originating execution.")
-            return RunRef(task_id, identifier(row[0], "run identity"))
-
     def responses(self, task_id: str) -> tuple[Response, ...]:
-        """Current-goal replies only; a redirection cannot inherit old approvals."""
+        """Current-goal replies only; a redirection cannot inherit old answers."""
         identifier(task_id, "task identity")
         with journal.reading(self.path) as connection:
             task = self._get(connection, task_id)
@@ -496,9 +472,9 @@ class TaskStore:
             if len(row) != 4:
                 raise ValueError("Incomplete stored input response.")
             request = _decoded(_WAIT, row[0])
-            if not isinstance(request, (Question, Approval)) or request.id != identifier(row[3], "request identity"):
+            if not isinstance(request, Question) or request.id != identifier(row[3], "request identity"):
                 raise ValueError("Invalid stored input request.")
-            replies.append(Response(request, _decoded(_REPLY, row[1]), timestamp(row[2])))
+            replies.append(Response(request, _answer(row[1]), timestamp(row[2])))
         return tuple(replies)
 
     def revisions(self, task_id: str, *, limit: int = 100) -> tuple[GoalRevision, ...]:
@@ -623,18 +599,3 @@ class TaskStore:
             if len(rows) > MAX_PAGE:
                 raise ValueError("Too many unverified actions to complete this task.")
             return tuple(self._read_action(connection, row) for row in rows)
-
-    def action_since(self, task_id: str, fingerprint: str, *, after: float) -> bool:
-        """Any attempted action consumes an approval, independently of UI pages."""
-        identifier(task_id, "task identity")
-        digest(fingerprint)
-        timestamp(after)
-        with journal.reading(self.path) as connection:
-            row = connection.execute(
-                f"SELECT {_ACTION_COLUMNS} FROM actions WHERE task_id=? AND fingerprint=? AND started_at>=? ORDER BY started_at,id LIMIT 1",
-                (task_id, fingerprint, after),
-            ).fetchone()
-            if row is None:
-                return False
-            self._read_action(connection, row)
-            return True

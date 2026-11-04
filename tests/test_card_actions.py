@@ -1,14 +1,13 @@
 """A card link acts only when it is exactly one card action; anything else does nothing."""
 
-from assistant.card_actions import AnswerApproval, encode, parse
-from automation.task import ApprovalDecision
+from assistant.card_actions import OpenCanvas, encode, parse
 
 
 def test_partial_or_altered_links_are_refused_instead_of_acting_on_defaults() -> None:
-    # Defect: a missing field falls back to an empty target or answer, or an
-    # unknown action or decision still reaches the agent.
-    decline = encode(AnswerApproval("request", ApprovalDecision.DECLINED))
-    assert parse(decline) == AnswerApproval("request", ApprovalDecision.DECLINED)
+    # Defect: a missing field falls back to an empty target, or an unknown
+    # action still opens the canvas.
+    canvas = encode(OpenCanvas("request"))
+    assert parse(canvas) == OpenCanvas("request")
     refused = (
         "workspace://canvas",
         "workspace://canvas?target=",
@@ -18,10 +17,8 @@ def test_partial_or_altered_links_are_refused_instead_of_acting_on_defaults() ->
         "workspace://canvas/path?target=one",
         "https://canvas?target=one",
         "workspace://install?target=one",
-        "workspace://agent-option?request=one&answer=maybe",
-        "workspace://agent-option?answer=approve",
         "workspace://done?source=chat&item=one",
-        decline + "&request=other",
+        canvas + "&target=other",
         "not a link",
     )
     assert [link for link in refused if parse(link) is not None] == []

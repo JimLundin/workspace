@@ -1,7 +1,6 @@
 """Durable effects through real SQLite, files, and cancellable ownership."""
 
 import hashlib
-import json
 import sqlite3
 import threading
 from collections.abc import Mapping
@@ -16,7 +15,7 @@ from assistant.agent_tools import Output
 from assistant.llm import Settings
 from assistant.task_profiles import General
 from automation.actions import ActionCancelledError, Actions, Change, LostRunError, Operation, Resources, UncertainEffectError
-from automation.execution import ApprovalReview, Reconciliation, Reported, WorkExecution
+from automation.execution import Reconciliation, Reported, WorkExecution
 from automation.json_value import Json
 from automation.store import TaskStore
 from automation.task import (
@@ -25,9 +24,6 @@ from automation.task import (
     ActionPending,
     ActionSpec,
     ActionVerified,
-    Approval,
-    ApprovalDecision,
-    Blocked,
     Claim,
     Completed,
     Control,
@@ -35,7 +31,6 @@ from automation.task import (
     NoVerification,
     RequestSource,
     RunRef,
-    Waiting,
 )
 from tests.test_agent import FakeMachine, FakeWindow, no_feed
 from tests.work_fixture import seed_verified_actions
@@ -301,71 +296,3 @@ def test_old_unverified_action_cannot_fall_off_the_completion_page(tmp_path: Pat
     assert isinstance(outcome, Completed) and outcome.evidence[-1] == "Returned without independent verification: set_clipboard."
     # The store must accept the completion execution produced; refusing it stopped the work controller.
     assert store.finish(claim.run, outcome, at=clock()) is not None
-
-
-def test_exact_approval_is_once_only_and_private_review_never_enters_storage(tmp_path: Path) -> None:
-    store, claim, clock = claimed(tmp_path)
-    reviews: list[ApprovalReview] = []
-
-    def display(review: ApprovalReview) -> bool:
-        reviews.append(review)
-        return True
-
-    original = WorkExecution(claim, store, Resources(), review=display, clock=clock)
-    arguments: dict[str, Json] = {"target_id": "secret-tab", "id": "control", "action": "fill", "value": "private-message-content"}
-    operation = Operation.of("browser_action", arguments)
-    assert not original.approve(operation, "Fill this control?", "private-full-browser-review")
-    waiting = original.outcome(Reported("Waiting."), threading.Event())
-    assert isinstance(waiting, Waiting) and isinstance(waiting.reason, Approval)
-    assert "private-message-content" in reviews[0].detail
-    assert store.finish(claim.run, waiting, at=clock()) is not None
-    assert store.answer("task", waiting.reason.id, ApprovalDecision.APPROVED, at=clock()) is not None
-    resumed = store.claim("worker", "approved-run", at=clock())
-    assert resumed is not None
-    work = WorkExecution(resumed, store, Resources(), review=display, clock=clock)
-    assert work.approve(operation, "Fill this control?", "private-full-browser-review")
-    attempt(families(work), "browser_action", arguments)
-    assert not work.approve(operation, "Fill this control?", "private-full-browser-review")
-    assert len(reviews) == 2 and reviews[0].request.id != reviews[1].request.id
-    work.checkpoint(
-        [
-            {"type": "reasoning", "encrypted_content": "private-reasoning"},
-            {"type": "function_call", "name": "browser_action", "arguments": json.dumps(arguments)},
-        ]
-    )
-    with closing(sqlite3.connect(tmp_path / "work.sqlite3")) as database, database:
-        persisted = "\n".join(database.iterdump())
-    assert all(secret not in persisted for secret in ("secret-tab", "private-message-content", "private-full-browser-review", "private-reasoning"))
-
-
-def test_approval_needs_live_preview_and_cannot_authorize_changed_arguments_or_goal(tmp_path: Path) -> None:
-    store, claim, clock = claimed(tmp_path)
-    work = WorkExecution(claim, store, Resources(), clock=clock)
-    draft = Operation.of("teams_web_draft_reply", {"target_id": "page", "chat_id": "recipient-one", "text": "first draft"})
-    assert not work.approve(draft, "Prepare reply?", "Review the draft")
-    assert isinstance(work.disposition, Waiting) and isinstance(work.disposition.reason, Blocked)
-    reviews: list[ApprovalReview] = []
-
-    def display(review: ApprovalReview) -> bool:
-        reviews.append(review)
-        return True
-
-    original = WorkExecution(claim, store, Resources(), review=display, clock=clock)
-    assert not original.approve(draft, "Prepare reply?", "Review the draft")
-    assert original.disposition is not None
-    assert store.finish(claim.run, original.disposition, at=clock()) is not None
-    assert store.answer("task", reviews[0].request.id, ApprovalDecision.APPROVED, at=clock()) is not None
-    resumed = store.claim("worker", "changed-arguments", at=clock())
-    assert resumed is not None
-    changed = WorkExecution(resumed, store, Resources(), review=display, clock=clock)
-    assert not changed.approve(
-        Operation.of("teams_web_draft_reply", {"target_id": "page", "chat_id": "recipient-two", "text": "first draft"}),
-        "Prepare reply?",
-        "Review the draft",
-    )
-    assert store.revise("task", "Only prepare a draft; do not send it.", at=clock()) is not None
-    redirected = store.claim("worker", "changed-goal", at=clock())
-    assert redirected is not None
-    new_goal = WorkExecution(redirected, store, Resources(), review=display, clock=clock)
-    assert not new_goal.approve(draft, "Prepare reply?", "Review the draft")
-    assert not store.actions("task")

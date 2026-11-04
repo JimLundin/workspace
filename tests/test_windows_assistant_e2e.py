@@ -79,7 +79,6 @@ def workspace(endpoint: FakeEndpoint, home: Path, live: Path = ROOT) -> Generato
         "OPENAI_BASE_URL": endpoint.url,
         "OPENAI_API_KEY": "k",
         "WORKSPACE_MODEL_SMALL": "chat",
-        "WORKSPACE_AGENT_APPROVALS": "never",
         "LOCALAPPDATA": str(home),
     }
     process = subprocess.Popen([sys.executable, str(live / "keeper.py")], cwd=live, env=env)

@@ -11,8 +11,6 @@ from automation.activity import ContextSnapshot
 from automation.context import ContextSelection, ContextStore, ProjectNote, select_context
 from automation.store import TaskStore
 from automation.task import (
-    Approval,
-    ApprovalDecision,
     Blocked,
     Completed,
     Failed,
@@ -22,7 +20,6 @@ from automation.task import (
     Running,
     Task,
     TaskStatus,
-    TextAnswer,
     Until,
     Waiting,
     phase,
@@ -59,8 +56,6 @@ class TaskEvidence:
                 match reason:
                     case Question(_, question, _):
                         detail = question
-                    case Approval(_, title, _):
-                        detail = title
                     case Blocked(explanation) | Until(_, explanation):
                         detail = explanation
                     case _ as unreachable:
@@ -71,15 +66,9 @@ class TaskEvidence:
                 detail = task.checkpoint.summary[:2000] if task.checkpoint is not None else ""
             case _ as unreachable:
                 assert_never(unreachable)
-        replies: list[str] = []
-        for response in self.responses[-8:]:
-            match response.request, response.reply:
-                case Question(text=question), TextAnswer(answer):
-                    replies.append(f"Question: {question[:600]}\nUser answer at {response.at}: {answer[:1200]}")
-                case Approval(title=title), ApprovalDecision() as decision:
-                    replies.append(f"Approval: {title}\nDecision at {response.at}: {decision.name.lower()}")
-                case _:
-                    raise ValueError("The saved reply does not match its request.")
+        replies = [
+            f"Question: {response.request.text[:600]}\nUser answer at {response.at}: {response.reply.text[:1200]}" for response in self.responses[-8:]
+        ]
         return (
             f"Task {task.id}: {task.title}\nState: {phase(task.state)}; updated at {task.updated_at}"
             f"\nGoal: {task.prompt[:1200]}\nProgress or result: {detail[:2000]}\n" + "\n".join(replies)

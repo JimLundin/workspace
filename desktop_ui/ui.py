@@ -26,7 +26,7 @@ lazy import desktop_ui.desktop_attention
 lazy import winapi.system_notices
 lazy from assistant.agent_session import AgentRequest, ChatMessage, Session, Snapshot, notice_text, pending
 lazy from assistant.attention import selected_question
-lazy from assistant.card_actions import AnswerApproval, CardAction, OpenCanvas
+lazy from assistant.card_actions import OpenCanvas
 lazy from assistant.feed_sources import FeedUpdate, NoticesObserved, PendingFeed, TeamsObserved, observe
 lazy from assistant.meeting_detection import AutomaticStatus
 lazy from assistant.meeting_store import MeetingArchive
@@ -648,25 +648,14 @@ class Ui:
 
         self.post(reveal)
 
-    def request_action(self, action: CardAction) -> None:
-        match action:
-            case OpenCanvas(target=target):
-                if self._desktop is not None:
-                    self._desktop.close_menu(restore=False)
-                self.open_canvas_at(target)
-            case AnswerApproval(request=request, decision=decision):
-                if self._agent is not None:
-                    self._agent.respond(request, decision)
-            case _:
-                assert_never(action)
+    def request_action(self, action: OpenCanvas) -> None:
+        if self._desktop is not None:
+            self._desktop.close_menu(restore=False)
+        self.open_canvas_at(action.target)
 
     def select_request(self, request: CanvasRequest | None) -> None:
         if self._agent is not None:
             self._agent.select_attention(request)
-
-    def request_presented(self, identity: str) -> None:
-        if self._agent is not None:
-            self._agent.input_presented(identity)
 
     # View navigation, stop, overlay, menu dispatch and error reporting remain
     # distinct effect ports; audio observation and tool dispatch complete bar composition.
@@ -703,7 +692,7 @@ class Ui:
                     tool or (lambda _tool, _hwnd: None),
                     self.system_notices,
                     inbox=self.open_inbox,
-                    requests=RequestActions(self.request_action, self.select_request, self.request_presented),
+                    requests=RequestActions(self.request_action, self.select_request),
                 )
                 self._desktop = self._views.desktop(actions, audio_level=audio_level)
                 self._desktop.automatic_changed(self._automatic_recording)

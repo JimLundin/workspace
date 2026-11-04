@@ -27,9 +27,8 @@ from automation.json_value import Json
 from automation.personal_work import Catalog, SourceKind, WorkDefinition, WorkState, WorkThread
 from automation.task import ActionReturned, ActionSpec, ActionUncertain, ActionVerified, Completed, NoVerification, RequestSource, TextAnswer, Waiting
 from desktop_ui.agent_progress import Progress, advance_progress
-from desktop_ui.notification_text import options
 from desktop_ui.notifications import Tone, active, body, tone
-from tests.agent_requests import asked, reviewed
+from tests.agent_requests import asked
 from tests.personal_work_fixture import source
 from tests.test_work_agent import WorkRig
 from tests.test_work_canvas import local_canvas, seeded
@@ -101,18 +100,16 @@ def test_new_session_closes_old_questions_without_closing_live_durable_questions
     assert old.reply is Attention.CLOSED and durable.reply is Attention.WAITING
 
 
-def test_floating_attention_retains_complete_requests_and_guarded_approval_choices() -> None:
-    # Defect: questions become navigation-only cards, lose their review content,
-    # or approval choices are dropped when attention joins the request card.
+def test_floating_attention_retains_complete_requests() -> None:
+    # Defect: questions become navigation-only cards or lose their detail when
+    # attention joins the request card.
     question = asked("question with spaces", "Which supplier?", "Background context", 10)
-    approval = reviewed("approval", "Publish reply?", "Exact reply preview", 11)
-    session = Session(messages=(ChatMessage("Workspace", "Fetched the next mail", 9), question, approval), phase="running")
+    session = Session(messages=(ChatMessage("Workspace", "Fetched the next mail", 9), question), phase="running")
     projected = advance_progress(Progress(), session, 12)
     assert len(projected.toasts) == 1
     content = projected.toasts[0].content
     assert active(content) and tone(content) is Tone.QUESTION
-    assert "Background context" in body(content) and "Exact reply preview" in body(content)
-    assert [span.text for span in options(content)] == ["Approve", "Decline"]
+    assert "Background context" in body(content)
 
 
 def test_classification_stays_quiet_and_state_transitions_redirect_to_the_context() -> None:

@@ -3,7 +3,6 @@
 import contextlib
 import hashlib
 import os
-import shlex
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -12,7 +11,6 @@ from typing import Annotated, Final, Literal
 from pydantic import Field, TypeAdapter
 
 from assistant.agent_tools import (
-    DECLINED,
     NO_ARGUMENTS,
     Args,
     ArgumentError,
@@ -33,36 +31,11 @@ from automation.activity import ContextSnapshot
 from automation.execution import ProofRule, Readback, Targets
 from automation.json_value import Json
 from automation.task import ActionReturned, ActionUncertain, FileDigest
-from config import ALLOWED_COMMANDS
 from winapi.shapes import Rect
 
 MAX_CHARS: Final = 20_000
 """Most text one tool result gives the model (a file, a command's output)."""
 MAX_FILES: Final = 200
-_UNSAFE: Final = frozenset(";|&<>`$(){}\n\r")
-_CONTROL_DECLINED: Final = "The user declined to let you use the mouse and keyboard for this task."
-
-
-def allowed(command: str) -> bool:
-    """A command on the allowed list, with nothing that could run another after it."""
-    command = command.strip()
-    if any(c in _UNSAFE for c in command) or "--output" in command:
-        return False
-    lower = command.lower()
-    if not any(lower == p.lower() or lower.startswith(p.lower() + " ") for p in ALLOWED_COMMANDS):
-        return False
-    if lower.startswith("git "):
-        try:
-            words = shlex.split(lower)
-        except ValueError:
-            return False
-        safe = {
-            "status": {"--short", "--branch", "--porcelain", "-s", "-b"},
-            "log": {"--oneline", "--stat", "--name-only", "--no-decorate"},
-            "diff": {"--stat", "--name-only", "--name-status", "--cached", "--staged", "--no-ext-diff", "--no-textconv"},
-        }
-        return words[1] in safe and all(w in safe[words[1]] or (w.startswith("-") and w[1:].isdigit()) for w in words[2:])
-    return True
 
 
 _MODIFIERS: Final = {"ctrl": 0xA2, "control": 0xA2, "shift": 0xA0, "alt": 0xA4, "win": 0x5B, "windows": 0x5B}
@@ -100,7 +73,7 @@ type Flag = Annotated[bool, Field(strict=True)]
 type Extent = Annotated[int, Field(strict=True, ge=1, le=100_000)]
 
 
-# Each tool's arguments, validated once at the seam before approval or any
+# Each tool's arguments, validated once at the seam before any
 # effect. Field names, defaults and bounds are the model's tool contract.
 
 
@@ -514,9 +487,6 @@ class Desktop:
             ),
         )
 
-    def may_control(self, operation: Operation) -> bool:
-        return self.session.approve(operation, "Allow this desktop action?", "Review the exact operation below. Stop cancels the running task.")
-
     def change(self, operation: Operation, perform: Callable[[], None], result: str) -> Output:
         def execute() -> Output:
             perform()
@@ -525,7 +495,7 @@ class Desktop:
         return self.session.effect(operation, execute)
 
     def pointed(self, args: Args) -> tuple[Operation, Shot] | Output:
-        """Input at screenshot coordinates is approved together with the image they refer to."""
+        """Input at screenshot coordinates is recorded together with the image they refer to."""
         shot = self.screen.shot
         if shot is None:
             return Output("Error: take a screenshot first; coordinates are in the latest screenshot.", ok=False)
@@ -539,8 +509,6 @@ class Desktop:
                 "image_size": [shot.width, shot.height],
             },
         )
-        if not self.may_control(operation):
-            return Output(_CONTROL_DECLINED, ok=False)
         return operation, shot
 
     @staticmethod
@@ -596,8 +564,6 @@ class Desktop:
 
     def write_file(self, args: Args, request: WriteArguments) -> Output:
         path, content = Path(request.path).expanduser(), request.content
-        if not self.session.approve(args.operation, "Write a file?", f"{path}\n\n{content}"):
-            return Output(DECLINED, ok=False)
         verification = FileDigest(str(path.absolute()), hashlib.sha256(content.replace("\n", os.linesep).encode("utf-8")).hexdigest())
 
         def execute() -> Output:
@@ -609,9 +575,6 @@ class Desktop:
 
     def run_powershell(self, args: Args, request: CommandArguments) -> Output:
         command, timeout, cwd = request.command, request.timeout_seconds, request.cwd or None
-        if (not allowed(command) and not self.session.approve(args.operation, "Run this command?", command)) or self.session.stop.is_set():
-            return Output(DECLINED, ok=False)
-
         exit_code: int | None = None
 
         def execute() -> Output:
@@ -632,8 +595,6 @@ class Desktop:
         return self.session.effect(args.operation, execute, finished)
 
     def open(self, args: Args, request: OpenArguments) -> Output:
-        if not self.session.approve(args.operation, "Open this?", request.target):
-            return Output(DECLINED, ok=False)
         return self.change(args.operation, lambda: self.session.machine.open(request.target), "Opened.")
 
     def get_clipboard(self, args: Args, _request: NoArguments) -> Output:
@@ -654,8 +615,6 @@ class Desktop:
         return self.session.effect(args.operation, read)
 
     def focus_window(self, args: Args, request: HandleArguments) -> Output:
-        if not self.may_control(args.operation):
-            return Output(DECLINED, ok=False)
 
         def execute() -> Output:
             ok = self.session.machine.focus(request.handle)
@@ -673,8 +632,6 @@ class Desktop:
     def manage_window(self, args: Args, request: WindowArguments) -> Output:
         action = request.action
         bounds = self.bounds(request.x, request.y, (request.width, request.height)) if action == "move" else None
-        if not self.may_control(args.operation):
-            return Output(DECLINED, ok=False)
 
         def execute() -> Output:
             result = self.session.machine.window_action(request.handle, action, bounds)
@@ -707,8 +664,6 @@ class Desktop:
                 pass
             case _:
                 value = ""
-        if action != "read" and not self.may_control(args.operation):
-            return Output(DECLINED, ok=False)
         act = Act(request.handle, request.id, action, value, request.horizontal, request.vertical)
 
         def execute() -> Output:
@@ -789,8 +744,6 @@ class Desktop:
 
     def type_text(self, args: Args, request: TextArguments) -> Output:
         text = request.text
-        if not self.may_control(args.operation):
-            return Output(_CONTROL_DECLINED, ok=False)
 
         def execute() -> Output:
             for offset in range(0, len(text), 128):
@@ -802,16 +755,12 @@ class Desktop:
         return self.session.effect(args.operation, execute)
 
     def paste_text(self, args: Args, request: TextArguments) -> Output:
-        if not self.may_control(args.operation):
-            return Output(DECLINED, ok=False)
         return self.change(args.operation, lambda: self.session.machine.paste_text(request.text), "Pasted.")
 
     def press_keys(self, args: Args, request: KeysArguments) -> Output:
         strokes = key_strokes(request.keys)
         if strokes is None:
             raise ArgumentError("press_keys knows modifiers (ctrl, shift, alt, win) and keys like a, 1, enter, tab, esc, f5, left.")
-        if not self.may_control(args.operation):
-            return Output(_CONTROL_DECLINED, ok=False)
 
         def execute() -> Output:
             for _ in range(request.repeat):

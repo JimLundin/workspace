@@ -12,7 +12,7 @@ from typing import Final, assert_never
 from assistant.agent_session import AgentRequest, Cancelled, ChatMessage, MeetingMessage, Snapshot, message_body, pending, presentation
 from assistant.recording_state import RecordingState, duration, phase_label
 from automation.presentation import Answer, Failed, ReasoningSummary, StreamState, Succeeded, ToolActivity, ToolStatus
-from automation.task import Approval, ApprovalDecision, Question, TextAnswer
+from automation.task import TextAnswer
 
 MAX_VISIBLE: Final = 5
 WIDTH: Final = 360  # maximum logical width, independent of the full history window
@@ -226,8 +226,6 @@ def observe(session: Snapshot) -> tuple[Content, ...]:
                 match message:
                     case AgentRequest(reply=TextAnswer(text)):
                         target.append(Response(index, text, message.created_at))
-                    case AgentRequest(reply=ApprovalDecision() as decision):
-                        target.append(Response(index, decision.name.capitalize(), message.created_at))
                     case _:
                         pass
             case MeetingMessage() | ReasoningSummary():
@@ -515,10 +513,8 @@ def hint(content: Content) -> str:
     match content:
         case Turn():
             return next((text for entry in results(content) if (text := hint(entry))), "")
-        case Entry(message=AgentRequest(request=Question()) as message) if pending(message):
+        case Entry(message=AgentRequest() as message) if pending(message):
             return "N toggles a spoken reply"
-        case Entry(message=AgentRequest(request=Approval()) as message) if pending(message):
-            return "N: say “approve” or “decline”"
         case Recording(state=RecordingState(phase="paused")):
             return "Transcription paused · Retry in Agent session"
         case _:

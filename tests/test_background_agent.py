@@ -19,7 +19,7 @@ from tests.test_agent import FakeMachine, FakeWindow, Rig, calls, durable, no_fe
 from winapi.shapes import Rect
 
 
-def test_meeting_voice_commands_use_the_recording_service_without_default_approvals(tmp_path: Path) -> None:
+def test_meeting_voice_commands_use_the_recording_service_directly(tmp_path: Path) -> None:
     # Defect: the capture seam drops the selected source/title, dispatches the
     # wrong command, or exposes private capture arguments in live activity.
     with fake_endpoint() as endpoint:
@@ -39,26 +39,24 @@ def test_meeting_voice_commands_use_the_recording_service_without_default_approv
         assert {spec.name for spec in meeting_tools.CAPTURE_SPECS} <= {spec["name"] for spec in specs if isinstance(spec["name"], str)}
 
 
-def test_stopped_agent_cannot_start_recording_and_explicit_approval_mode_is_preserved(tmp_path: Path) -> None:
-    # Defect: typed start dispatch bypasses approval or cancellation and reaches
-    # the recording owner after the user declined or stopped the work.
+def test_stopped_agent_cannot_start_recording(tmp_path: Path) -> None:
+    # Defect: typed start dispatch bypasses cancellation and reaches the
+    # recording owner after the user stopped the work.
     machine, cancel = FakeMachine(), threading.Event()
     agent = Agent(
-        Settings("", "", "", "", "", agent_approvals=True),
+        Settings("", "", "", "", ""),
         machine,
         FakeWindow(),
         cancel,
         work=durable(tmp_path),
         toolset=lambda agent: General(agent, feed_request=no_feed),
     )
-    assert not agent.call(ToolCall("record", "meeting_start", "{}")).ok
-    assert machine.meetings == []
     cancel.set()
     assert not agent.call(ToolCall("stopped", "meeting_start", "{}")).ok
     assert machine.meetings == []
 
 
-def test_background_tools_are_exposed_to_the_model_and_run_without_default_prompts(tmp_path: Path) -> None:
+def test_background_tools_are_exposed_to_the_model_and_run_directly(tmp_path: Path) -> None:
     with fake_endpoint() as endpoint:
         rig = Rig(
             endpoint,
@@ -79,29 +77,6 @@ def test_background_tools_are_exposed_to_the_model_and_run_without_default_promp
         activities = [item for item in rig.window.live if isinstance(item, ToolActivity)]
         assert activities and all(item.detail == "" for item in activities)
         assert all("fixture-private" not in activity_text(item) for item in activities)
-
-
-def test_explicit_approval_mode_can_decline_browser_changes(tmp_path: Path) -> None:
-    # Defect: a browser change skips the approval gate. Each tool
-    # gets its own task: the first unreviewed approval suspends a task.
-    machine = FakeMachine()
-    for name, arguments in (
-        ("browser_open", {"url": "https://example.com"}),
-        ("browser_action", {"target_id": "page", "id": "button", "action": "click"}),
-        ("browser_close", {"target_id": "page"}),
-    ):
-        work = durable(tmp_path)
-        agent = Agent(
-            Settings("", "", "", "", "", agent_approvals=True),
-            machine,
-            FakeWindow(),
-            threading.Event(),
-            work=work,
-            toolset=lambda agent: General(agent, feed_request=no_feed),
-        )
-        assert not agent.call(ToolCall("fixture", name, json.dumps(arguments))).ok
-        assert work.disposition is not None, name
-    assert not any(line.startswith("browser ") for line in machine.log)
 
 
 def test_browser_images_invalidate_desktop_coordinates(tmp_path: Path) -> None:

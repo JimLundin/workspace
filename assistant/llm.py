@@ -9,7 +9,7 @@ import urllib.request
 import uuid
 import wave
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum
 from http.client import HTTPException, HTTPResponse
 from typing import Final, Literal, NotRequired, TypedDict, assert_never
@@ -83,8 +83,6 @@ class Settings:
     personal_work_class: AgentClass = AgentClass.MEDIUM
     agent_reasoning_effort: str = "low"
     """Reasoning effort for agent tasks; independent of quick chat."""
-    agent_approvals: bool = field(default=False, kw_only=True)
-    """Opt in to tool and self-update approval prompts."""
     models: Models = Models()
 
 
@@ -116,7 +114,6 @@ def settings_from(env: Mapping[str, str]) -> Settings | Missing:
         notification_research_class=_CLASS.validate_python(env.get("WORKSPACE_NOTIFICATION_RESEARCH_CLASS", "medium")),
         personal_work_class=_CLASS.validate_python(env.get("WORKSPACE_PERSONAL_WORK_CLASS", "medium")),
         agent_reasoning_effort=env.get("WORKSPACE_AGENT_REASONING_EFFORT", "low"),
-        agent_approvals=env.get("WORKSPACE_AGENT_APPROVALS", "never").lower() == "ask",
         models=Models(
             small=env.get("WORKSPACE_MODEL_SMALL", models.small),
             medium=env.get("WORKSPACE_MODEL_MEDIUM", models.medium),

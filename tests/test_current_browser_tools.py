@@ -5,8 +5,7 @@ from pathlib import Path
 from typing import cast
 
 from automation.actions import Resources
-from automation.execution import ApprovalReview, WorkExecution
-from automation.json_value import Json
+from automation.execution import WorkExecution
 from tests.fake_endpoint import fake_endpoint
 from tests.test_agent import Rig, ToolRig, calls, durable, says
 from tests.test_work_actions import claimed
@@ -40,24 +39,3 @@ def test_model_receives_only_current_browser_capabilities(tmp_path: Path) -> Non
         assert "source=<Separate.PROFILE:" in rig.machine.log[-1]
         assert not any(name.startswith("browser_app_") for name in names)
         assert rig.machine.log[0] == "browser PageList(offset=0, limit=20)"
-
-
-def test_browser_approval_reviews_name_the_address_or_exact_page(tmp_path: Path) -> None:
-    # Defect: approval mode asks to approve a navigation or page script without
-    # naming the address or page it acts on.
-    reviews: list[ApprovalReview] = []
-
-    def review(item: ApprovalReview) -> bool:
-        reviews.append(item)
-        return False
-
-    cases: tuple[tuple[str, dict[str, Json]], ...] = (
-        ("browser_open", {"url": "https://example.com/"}),
-        ("browser_evaluate", {"target_id": "page-1", "expression": "1"}),
-        ("browser_close", {"target_id": "page-1"}),
-    )
-    for name, arguments in cases:
-        rig = ToolRig(approvals=True, work=durable(tmp_path, review=review))
-        assert not rig.call(name, **arguments).ok
-    summaries = [item.detail.split("\n\nExact operation:")[0] for item in reviews]
-    assert summaries == ["open: https://example.com/", "evaluate: page-1", "close: page-1"]

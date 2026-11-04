@@ -1,4 +1,4 @@
-"""Native work controls, drafts, reading position, and exact approval previews."""
+"""Native work controls, drafts and reading position."""
 
 import sys
 import threading
@@ -22,7 +22,6 @@ from assistant.work_commands import (
     ControlTask,
     FollowUp,
     Redirect,
-    RefreshApproval,
     RemoveContext,
     Submit,
     UpdatePreference,
@@ -30,12 +29,12 @@ from assistant.work_commands import (
 )
 from assistant.work_snapshot import WorkSnapshot
 from automation.context import Preference, ProjectNote
-from automation.task import ApprovalDecision, Completed, Control, Question, TaskStatus, TextAnswer, Waiting
+from automation.task import Completed, Control, Question, TaskStatus, TextAnswer, Waiting
 from desktop_ui.qt_runtime import prepare
 from desktop_ui.qt_ui import application
 from desktop_ui.work_panel import WorkPanel
 from desktop_ui.work_window import WorkWindow
-from tests.test_work_window import approval_task, work_task
+from tests.test_work_window import work_task
 from winapi import windows
 
 prepare()
@@ -278,36 +277,6 @@ def test_context_editor_preserves_source_and_explicit_project_refresh_time() -> 
         panel.pump()
         button(view.frame, "Remove").click()
         assert panel.last_command() == RemoveContext(note.id)
-
-
-def test_approval_is_disabled_until_its_live_preview_is_actually_visible() -> None:
-    with native_work() as panel:
-        view = panel.view
-        task, review = approval_task(detail="The full reviewed file content. Åäö.")
-        task = replace(task, prompt="A long instruction before the preview.\n" * 80)
-        panel.publish(WorkSnapshot(tasks=(task,), reviews=(review,)))
-        approve = AnswerTask(task.id, review.request.id, ApprovalDecision.APPROVED)
-        assert review.detail in view.detail.toPlainText()
-        assert not panel.work.send(approve)
-        view.approve.click()
-        assert not panel.commands and not view.approve.isEnabled()
-        view.refresh.click()
-        panel.pump()
-        assert view.approve.isEnabled()
-        view.approve.click()
-        assert panel.commands == [approve]
-        view.hide()
-        fresh, fresh_review = approval_task(nonce="fresh")
-        panel.publish(WorkSnapshot(tasks=(fresh,), reviews=(fresh_review,)))
-        assert not panel.work.send(AnswerTask(fresh.id, fresh_review.request.id, ApprovalDecision.APPROVED))
-        assert not windows.is_visible(view.handle)
-        panel.publish(WorkSnapshot(tasks=(fresh,)))
-        assert "fresh preview" in view.detail.toPlainText()
-        assert fresh_review.request.detail not in view.detail.toPlainText()
-        view.refresh.click()
-        assert panel.last_command() == RefreshApproval(fresh.id, fresh_review.request.id)
-        view.decline.click()
-        assert panel.last_command() == AnswerTask(fresh.id, fresh_review.request.id, ApprovalDecision.DECLINED)
 
 
 def test_question_drafts_survive_refresh_and_clear_only_for_a_different_request() -> None:

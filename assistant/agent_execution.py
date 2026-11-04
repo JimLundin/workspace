@@ -11,7 +11,7 @@ from assistant.agent_tools import Machine
 from assistant.llm import Settings
 from assistant.task_profiles import Profiles
 from automation.actions import ActionError, Resources
-from automation.execution import ApprovalReview, Incomplete, Log, WorkExecution
+from automation.execution import Incomplete, Log, WorkExecution
 from automation.store import TaskStore
 from automation.task import Blocked, Claim, Outcome, Waiting
 from diagnostics import failure_info
@@ -51,23 +51,11 @@ class AgentExecution:
         self.record, self.report_error, self.close_background = record, report_error, close_background
         self.resources = Resources()
 
-    def run_work(
-        self,
-        claim: Claim,
-        store: TaskStore,
-        log: Log,
-        stop: threading.Event,
-        *,
-        review: Callable[[ApprovalReview], bool] | None = None,
-    ) -> Outcome:
-        """Execute one durable claim; the controller commits the returned disposition.
-
-        The four positional inputs are the controller's `Runner.run_work`
-        contract; `review` is the work process's per-claim approval channel.
-        """
+    def run_work(self, claim: Claim, store: TaskStore, log: Log, stop: threading.Event) -> Outcome:
+        """Execute one durable claim; the controller commits the returned disposition."""
         started = time.monotonic()
         profile = self.profiles.run(claim)
-        work = WorkExecution(claim, store, self.resources, context_text=profile.context.saved, review=review)
+        work = WorkExecution(claim, store, self.resources, context_text=profile.context.saved)
         agent = Agent(
             self.settings,
             self.machine,

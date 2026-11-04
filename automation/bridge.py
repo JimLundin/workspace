@@ -352,7 +352,7 @@ class BridgeServer:
                 if request.client != self._client:
                     self._discard_pending("The assistant connection changed. Inspect the result before trying again.")
                     self._outbox = Outbox(self._outbox.sequence, self._outbox.sequence)
-                    self._publish(ipc.Resync("The assistant connected; reload durable work and refresh any missing approval preview."))
+                    self._publish(ipc.Resync("The assistant connected; reload durable work."))
                     self._client = request.client
                 self._assistant_pid = operation.assistant_pid
                 self._last_poll = time.monotonic()
@@ -407,11 +407,9 @@ class BridgeServer:
         return ipc.Batch(self.discovery.epoch, tuple(messages))
 
     def publish(self, payload: ipc.BridgeEvent) -> bool:
-        """Nonblocking publication; False means no live preview can be offered."""
+        """Nonblocking publication; False means the bridge is closed."""
         with self._lock:
             if self._closed.is_set():
-                return False
-            if isinstance(payload, ipc.ReviewEvent) and (not self._client or time.monotonic() - self._last_poll > CLIENT_FRESH_SECONDS):
                 return False
             self._publish(payload)
             return True

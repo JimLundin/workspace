@@ -64,7 +64,7 @@ from automation.personal_work import (
     source_id,
 )
 from automation.store import TaskStore
-from automation.task import ActionNotApplied, ActionVerified, Reply, TextAnswer
+from automation.task import ActionNotApplied, ActionVerified, TextAnswer
 from automation.work_documents import WebDocument
 from desktop_ui.components.canvas_loading import CanvasLoading
 from desktop_ui.components.canvas_look import surface_fill
@@ -1044,9 +1044,9 @@ def test_canvas_clarification_redirect_submits_context_to_the_waiting_agent(tmp_
     ui.pump()
     agent.show(focus=False)
     ui.pump()
-    resumed: list[Reply] = []
+    resumed: list[TextAnswer] = []
 
-    def resume(answer: Reply) -> bool:
+    def resume(answer: TextAnswer) -> bool:
         resumed.append(answer)
         return True
 

@@ -714,44 +714,14 @@ def test_completed_trial_persists_undo_target(tmp_path: Path) -> None:
     assert recovery.read() == Rollback(version="v1", pending=False)
 
 
-def test_candidate_review_does_not_execute_code_and_is_frozen(tmp_path: Path) -> None:
-    live, workspace, candidate = (tmp_path / name for name in ("live", "workspace", "candidate"))
-    marker = tmp_path / "executed"
-    protected = dict.fromkeys(PROTECTED, "# protected\n")
-    write(live, {**protected, "config.py": "OLD"})
-    write(workspace, {**protected, "candidate.py": f"from pathlib import Path\nPath({str(marker)!r}).touch()\n"})
-    assert not prepare_candidate(workspace, live, candidate, lambda _: False)
-    assert not marker.exists()
-    write(workspace, {"candidate.py": "NEW"})
-    assert "Path(" in (candidate / "candidate.py").read_text(encoding="utf-8")
-
-
-def test_candidate_is_prepared_without_review_by_default(tmp_path: Path) -> None:
+def test_candidate_is_prepared_without_changing_live_source(tmp_path: Path) -> None:
     live, workspace, candidate = (tmp_path / name for name in ("live", "workspace", "candidate"))
     protected = dict.fromkeys(PROTECTED, "# protected\n")
     write(live, {**protected, "config.py": "OLD"})
     write(workspace, {**protected, "config.py": "NEW"})
-    assert prepare_candidate(workspace, live, candidate)
+    prepare_candidate(workspace, live, candidate)
     assert (candidate / "config.py").read_text(encoding="utf-8") == "NEW"
     assert (live / "config.py").read_text(encoding="utf-8") == "OLD"
-
-
-def test_changed_candidate_during_review_is_refused(tmp_path: Path) -> None:
-    live, workspace, candidate = (tmp_path / name for name in ("live", "workspace", "candidate"))
-    protected = dict.fromkeys(PROTECTED, "# protected\n")
-    write(live, protected)
-    write(workspace, protected)
-
-    def mutate(root: Path) -> bool:
-        write(root, {"new.py": "X = 1"})
-        return True
-
-    try:
-        prepare_candidate(workspace, live, candidate, mutate)
-    except OSError:
-        pass
-    else:
-        raise AssertionError("changed source must be reviewed again")
 
 
 def test_failed_second_update_keeps_first_update_undoable_after_restart(tmp_path: Path) -> None:

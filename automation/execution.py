@@ -1,16 +1,16 @@
-"""Task execution dispositions, bounded recovery context, and transient human reviews."""
+"""Task execution dispositions and bounded recovery context."""
 
 import threading
 import time
 import uuid
-from collections.abc import Callable, Iterable
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import Enum, auto
 from typing import Annotated, Protocol, assert_never
 
 from pydantic import Field, TypeAdapter
 
-from automation.actions import Actions, Evidence, Observation, Operation, Resources
+from automation.actions import Actions, Evidence, Observation, Resources
 from automation.json_value import Json
 from automation.presentation import LiveMessage
 from automation.store import TaskStore
@@ -21,8 +21,6 @@ from automation.task import (
     ActionSpec,
     ActionUncertain,
     ActionVerified,
-    Approval,
-    ApprovalDecision,
     Blocked,
     Claim,
     Completed,
@@ -32,12 +30,9 @@ from automation.task import (
     OutcomeKind,
     Question,
     Response,
-    Task,
-    TextAnswer,
     Until,
     Waiting,
     outcome_kind,
-    text,
 )
 
 
@@ -67,35 +62,6 @@ class InstallationRequested:
 
 
 type Report = ReportStatus | Reported | Incomplete | InvalidConfiguration | InstallationRequested
-
-
-@dataclass(frozen=True, slots=True)
-class ApprovalReview:
-    """Full content is delivered only through the volatile UI transport."""
-
-    task_id: str
-    goal_revision: int
-    request: Approval
-    title: str
-    detail: str
-
-    def __post_init__(self) -> None:
-        text(self.title, "live review title", maximum=240)
-        text(self.detail, "live review detail", maximum=128_000)
-
-
-def review_matches(task: Task, review: ApprovalReview) -> bool:
-    return (
-        task.id == review.task_id
-        and task.goal_revision == review.goal_revision
-        and isinstance(task.state, Waiting)
-        and task.state.reason == review.request
-    )
-
-
-def current_review(task: Task, reviews: Iterable[ApprovalReview]) -> ApprovalReview | None:
-    """The live review that still matches this task's waiting approval, if any."""
-    return next((review for review in reviews if review_matches(task, review)), None)
 
 
 class Log(Protocol):
@@ -162,7 +128,6 @@ class _LedgerEntry:
 
 
 _LEDGER = TypeAdapter(tuple[_LedgerEntry, ...])
-_REVIEWED = TypeAdapter(dict[str, Json])
 
 
 @dataclass(frozen=True, slots=True)
@@ -213,24 +178,21 @@ class WorkExecution:
         "context_text",
         "disposition",
         "observations",
-        "review",
         "store",
     )
 
-    def __init__(  # noqa: PLR0913 - injected collaborators and test seams
+    def __init__(
         self,
         claim: Claim,
         store: TaskStore,
         resources: Resources,
         *,
         context_text: str = "",
-        review: Callable[[ApprovalReview], bool] | None = None,
         clock: Callable[[], float] = time.time,
     ) -> None:
         self.claim, self.store, self.clock = claim, store, clock
         self.actions = Actions(store, claim.run, resources, clock=clock)
         self.context_text = context_text[:16_000]
-        self.review = review
         self.disposition: Waiting | None = None
         self.observations: list[Observed] = []
 
@@ -257,41 +219,9 @@ class WorkExecution:
     def _responses(self) -> tuple[Response, ...]:
         return self.store.responses(self.claim.task.id)
 
-    def approve(self, operation: Operation, title: str, detail: str) -> bool:
-        """Only a shown, identical, current-goal operation can consume a grant."""
-        fingerprint = operation.fingerprint
-        for response in reversed(self._responses()):
-            if not isinstance(response.request, Approval) or response.request.fingerprint != fingerprint:
-                continue
-            if response.reply is ApprovalDecision.DECLINED:
-                return False
-            if response.reply is ApprovalDecision.APPROVED and not self.store.action_since(
-                self.claim.task.id,
-                fingerprint,
-                after=response.at,
-            ):
-                return True
-            break
-        request = Approval(
-            uuid.uuid4().hex,
-            title[:240],
-            f"Approve the exact {operation.tool} operation shown in its live review. Its full content is kept only in memory.",
-            fingerprint,
-        )
-        exact = detail + "\n\nExact operation: " + operation.tool + "\n" + _REVIEWED.dump_json(operation.arguments, indent=2).decode()
-        if self.review is None or len(exact) > 128_000:
-            self.block("A live review is required for this operation. Open the work overview and resume to review its full content.")
-            return False
-        review = ApprovalReview(self.claim.task.id, self.claim.task.goal_revision, request, title[:240], exact)
-        if not self.review(review):
-            self.block("The live review could not be displayed. Resume this task when its review view is available.")
-            return False
-        self.disposition = Waiting(request)
-        return False
-
     def ask(self, question: str) -> str | None:
         for response in reversed(self._responses()):
-            if isinstance(response.request, Question) and response.request.text == question and isinstance(response.reply, TextAnswer):
+            if response.request.text == question:
                 return response.reply.text
         request = Question(uuid.uuid4().hex, question, "")
         self.disposition = Waiting(request)
@@ -355,10 +285,7 @@ class WorkExecution:
         return "Recorded the reconciliation. Continue from the observed state."
 
     def instructions(self) -> str:
-        responses: list[str] = []
-        for response in self._responses()[-12:]:
-            if isinstance(response.request, Question) and isinstance(response.reply, TextAnswer):
-                responses.append(f"Question: {response.request.text}\nAnswer: {response.reply.text}")
+        responses = [f"Question: {response.request.text}\nAnswer: {response.reply.text}" for response in self._responses()[-12:]]
         parts = [
             "This is a durable task. Preserve its goal and continue from observed progress. "
             "Never repeat an uncertain action before its outcome is established. "
@@ -368,8 +295,7 @@ class WorkExecution:
             "Inspections must be later than the attempt and cover the same file, tab, chat or window. "
             "An arbitrary script requires explicit inspection of its actual intended result. "
             "File writes provide digest verification automatically. "
-            "If a human question or approval is pending, this run will suspend. "
-            "The next run must use exactly the approved operation; a changed operation requires a fresh review.",
+            "If a human question is pending, this run will suspend.",
             "Task identity: " + self.claim.task.id,
         ]
         if self.claim.task.checkpoint is not None:

@@ -14,7 +14,6 @@ from pydantic import ConfigDict, Field, TypeAdapter
 
 from automation.activity import Activity, ContextSnapshot
 from automation.capture import AudioSource
-from automation.execution import ApprovalReview
 from automation.presentation import (
     Answer,
     LiveMessage,
@@ -56,17 +55,6 @@ class LogEvent:
 
     def __post_init__(self) -> None:
         _moment(self.event)
-
-
-@dataclass(frozen=True, slots=True)
-class ReviewEvent:
-    run: RunRef
-    review: ApprovalReview
-    kind: Literal["review"] = "review"
-
-    def __post_init__(self) -> None:
-        if self.run.task_id != self.review.task_id:
-            raise ValueError("Review does not belong to its run.")
 
 
 @dataclass(frozen=True, slots=True)
@@ -143,7 +131,7 @@ class Resync:
         text(self.reason, "resynchronization reason", maximum=1000)
 
 
-type BridgeEvent = LogEvent | ReviewEvent | OwnerRequest | Resync
+type BridgeEvent = LogEvent | OwnerRequest | Resync
 
 
 @dataclass(frozen=True, slots=True)

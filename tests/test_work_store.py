@@ -15,8 +15,6 @@ from automation.task import (
     ActionSpec,
     ActionUncertain,
     ActionVerified,
-    Approval,
-    ApprovalDecision,
     Blocked,
     Completed,
     Control,
@@ -32,7 +30,7 @@ from automation.task import (
     Until,
     Waiting,
 )
-from tests.work_fixture import seed_tasks, seed_verified_actions
+from tests.work_fixture import seed_tasks
 
 
 def specification(operation: str = "write notes") -> ActionSpec:
@@ -213,16 +211,12 @@ def test_waiting_questions_survive_restart_and_only_the_exact_reply_resumes(tmp_
     question = Question("choose-project", "Which project?", "Choose the project whose notes should change.")
     store.finish(run.run, Waiting(question), at=3)
     reopened = TaskStore(path)
-    assert reopened.request_run("task", question.id) == run.run
-    assert reopened.request_run("task", "another-question") is None
     assert reopened.recover("new-worker", at=4) == ()
     assert reopened.claim("new-worker", "too-early", at=5) is None
     assert reopened.control("task", Control.RESUME, at=5) is None
     assert reopened.control("task", Control.PAUSE, at=5) is None
     assert reopened.answer("task", "another-question", TextAnswer("Project A"), at=5) is None
-    assert reopened.answer("task", question.id, ApprovalDecision.APPROVED, at=5) is None
     assert reopened.answer("task", question.id, TextAnswer("Project A"), at=6) is not None
-    assert reopened.request_run("task", question.id) is None
     assert reopened.answer("task", question.id, TextAnswer("Project B"), at=7) is None
     responses = TaskStore(path).responses("task")
     assert len(responses) == 1 and responses[0].request == question and responses[0].reply == TextAnswer("Project A")
@@ -250,50 +244,6 @@ def test_answer_and_ready_state_commit_together(tmp_path: Path) -> None:
     assert store.answer("task", "format", TextAnswer("Markdown"), at=5) is not None
     assert len(TaskStore(path).responses("task")) == 1
     assert store.claim("worker", "new-run", at=6) is not None
-
-
-def test_approval_requires_explicit_matching_decision_and_redirection_drops_its_authority(tmp_path: Path) -> None:
-    store = TaskStore(tmp_path / "work.sqlite3")
-    store.submit("task", "Task", "Apply the requested change.", RequestSource("chat"), at=1)
-    run = store.claim("worker", "run", at=2)
-    assert run is not None
-    request = Approval("specific-action", "Apply this change?", "A redacted preview of this exact action.", "a" * 64)
-    store.finish(run.run, Waiting(request), at=3)
-    assert store.answer("task", request.id, TextAnswer("approve"), at=4) is None
-    assert store.answer("task", "another-action", ApprovalDecision.APPROVED, at=4) is None
-    assert store.answer("task", request.id, ApprovalDecision.DECLINED, at=5) is not None
-    assert store.responses("task")[0].reply is ApprovalDecision.DECLINED
-    store.revise("task", "Prepare a different change.", at=6)
-    assert store.responses("task") == (), "A changed goal must not inherit an old approval or decline."
-    resumed = store.claim("worker", "new-run", at=7)
-    assert resumed is not None
-    with TestCase().assertRaises(ValueError):
-        store.finish(resumed.run, Waiting(request), at=8)
-    assert store.finish(resumed.run, Waiting(Approval("new-action", "Apply the new change?", "A new live preview.", "b" * 64)), at=9) is not None
-
-
-def test_refresh_approval_requires_exact_pending_approval_and_never_approves(tmp_path: Path) -> None:
-    path = tmp_path / "work.sqlite3"
-    store = TaskStore(path)
-    store.submit("task", "Task", "Make a change.", RequestSource("chat"), at=1)
-    run = store.claim("worker", "run", at=2)
-    assert run is not None
-    assert store.refresh_approval("task", "old-preview", at=3) is None
-    store.finish(run.run, Waiting(Approval("old-preview", "Apply?", "Old preview.", "a" * 64)), at=4)
-    reopened = TaskStore(path)
-    assert reopened.request_run("task", "old-preview") == run.run
-    assert reopened.refresh_approval("task", "wrong-preview", at=5) is None
-    assert reopened.refresh_approval("task", "old-preview", at=6) is not None
-    assert reopened.request_run("task", "old-preview") is None
-    assert reopened.responses("task") == ()
-    assert reopened.answer("task", "old-preview", ApprovalDecision.APPROVED, at=7) is None
-    fresh = reopened.claim("new-worker", "fresh-run", at=8)
-    assert fresh is not None
-    with TestCase().assertRaises(ValueError):
-        reopened.finish(fresh.run, Waiting(Approval("old-preview", "Changed preview", "Cannot reuse this identity.", "b" * 64)), at=9)
-    reopened.finish(fresh.run, Waiting(Question("question", "Which project?", "")), at=10)
-    assert reopened.refresh_approval("task", "question", at=11) is None
-    assert reopened.answer("task", "question", TextAnswer("Project A"), at=12) is not None
 
 
 def test_timed_waits_wake_at_the_deadline_and_blocked_work_requires_explicit_resume(tmp_path: Path) -> None:
@@ -423,31 +373,6 @@ def test_uncertain_and_definitely_unapplied_actions_have_distinct_replay_rules(t
     assert store.finish(run.run, Completed("Notes saved.", ("Verified notes.",)), at=12) is not None
 
 
-def test_approval_consumption_query_does_not_depend_on_action_pagination(tmp_path: Path) -> None:
-    store = TaskStore(tmp_path / "work.sqlite3")
-    store.submit("task", "Task", "Process the records.", RequestSource("chat"), at=1)
-    run = store.claim("worker", "run", at=2)
-    assert run is not None
-    first = specification("first authorized action")
-    store.begin_action(run.run, "first", first, at=3)
-    store.finish_action("first", ActionNotApplied("The application rejected it before applying a change."), at=4)
-    store.begin_action(run.run, "later-000", specification("later-000"), at=10)
-    # Uncertain still blocks completion; a returned action alone no longer does.
-    store.finish_action("later-000", ActionUncertain("The adapter lost its acknowledgement."), at=11)
-    store.begin_action(run.run, "later-001", specification("later-001"), at=12)
-    sample = store.finish_action("later-001", ActionVerified("The result was inspected."), at=13)
-    assert sample is not None
-    seed_verified_actions(store, sample, tuple(f"later-{index:03d}" for index in range(2, 105)))
-    assert "first" not in {action.id for action in store.actions("task")}
-    assert store.action_since("task", first.fingerprint, after=3)
-    assert not store.action_since("task", first.fingerprint, after=4)
-    assert not store.action_since("task", specification("never attempted").fingerprint, after=0)
-    assert [action.id for action in store.unverified_actions("task")] == ["later-000"]
-    assert store.finish(run.run, Completed("Assumed complete.", ("An early effect was not verified.",)), at=230) is None
-    assert store.finish_action("later-000", ActionVerified("The earliest result was inspected."), at=231) is not None
-    assert store.finish(run.run, Completed("All effects checked.", ("Every action was inspected.",)), at=232) is not None
-
-
 def test_conversation_stop_reaches_hidden_tasks_and_preserves_other_sources(tmp_path: Path) -> None:
     store = TaskStore(tmp_path / "work.sqlite3")
     seed_tasks(store, tuple(f"selected-{index:03d}" for index in range(105)), RequestSource("selected-chat"), at=0)
@@ -513,7 +438,7 @@ def test_invalid_action_and_reply_rows_do_not_enter_typed_interfaces(tmp_path: P
     store.finish(run.run, Waiting(Question("format", "Which format?", "")), at=4)
     store.answer("task", "format", TextAnswer("Markdown"), at=5)
     with closing(sqlite3.connect(path)) as database, database:
-        database.execute("UPDATE responses SET reply=? WHERE task_id='task'", ('{"kind":"approved"}',))
+        database.execute("UPDATE responses SET reply=? WHERE task_id='task'", ('{"kind":"answer","text":42}',))
     with TestCase().assertRaises(ValueError):
         store.responses("task")
 
@@ -528,8 +453,6 @@ def test_input_validation_rejects_invalid_limits_and_nonfinite_times_without_wri
         store.list_tasks(limit=0)
     with TestCase().assertRaises(ValueError):
         store.actions("missing", limit=1_001)
-    with TestCase().assertRaises(ValueError):
-        store.action_since("missing", "not-a-digest", after=1)
     assert store.list_tasks() == ()
 
 

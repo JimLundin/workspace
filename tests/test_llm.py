@@ -53,7 +53,6 @@ def test_settings_defaults() -> None:
     assert isinstance(result, Settings)
     assert result == Settings("https://ai.example/v1", "k", "gpt-4o-transcribe", "", "")
     assert result.agent_reasoning_effort == "low"
-    assert result.agent_approvals is False
     assert result.models == Models("gpt-6-luna", "gpt-6.1-terra", "gpt-6.1-sol", "gpt-6-astra")
 
 
@@ -72,7 +71,6 @@ def test_settings_overrides() -> None:
         "WORKSPACE_MODEL_LARGE": "smart",
         "WORKSPACE_MODEL_EXTRA_LARGE": "deep",
         "WORKSPACE_AGENT_REASONING_EFFORT": "high",
-        "WORKSPACE_AGENT_APPROVALS": "ask",
         "WORKSPACE_VOCABULARY": "Miryoku, Colemak",
         "WORKSPACE_LANGUAGE": "sv",
     }
@@ -88,7 +86,6 @@ def test_settings_overrides() -> None:
         notification_research_class=AgentClass.EXTRA_LARGE,
         personal_work_class=AgentClass.SMALL,
         agent_reasoning_effort="high",
-        agent_approvals=True,
         models=Models("extractor", "fast", "smart", "deep"),
     )
 

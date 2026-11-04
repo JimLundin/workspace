@@ -3,9 +3,7 @@
 from datetime import datetime
 from typing import assert_never
 
-from automation.execution import ApprovalReview, current_review
 from automation.task import (
-    Approval,
     Blocked,
     Completed,
     Failed,
@@ -33,15 +31,13 @@ def task_label(task: Task) -> str:
     match task.state:
         case Waiting(Question()):
             return "Your reply"
-        case Waiting(Approval()):
-            return "Approval"
         case Waiting(Blocked()):
             return "Needs attention"
         case _:
             return phase(task.state).capitalize()
 
 
-def task_detail(task: Task, reviews: tuple[ApprovalReview, ...] = ()) -> str:
+def task_detail(task: Task) -> str:
     sections = [
         task.title,
         f"{task_label(task)} · Your request\nCreated {when(task.created_at)} · Updated {when(task.updated_at)}",
@@ -62,11 +58,6 @@ def task_detail(task: Task, reviews: tuple[ApprovalReview, ...] = ()) -> str:
             match reason:
                 case Question(_, question, detail):
                     sections.append(f"Your reply\n{question}" + (f"\n\n{detail}" if detail else ""))
-                case Approval():
-                    if review := current_review(task, reviews):
-                        sections.append(f"Approval\n{review.title}\n\n{review.detail}")
-                    else:
-                        sections.append("Approval\nRequest a fresh preview of this action before deciding.")
                 case Until(at, explanation):
                     sections.append(f"Waiting until {when(at)}\n{explanation}")
                 case Blocked(explanation):

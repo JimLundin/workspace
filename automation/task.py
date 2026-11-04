@@ -148,27 +148,6 @@ class Question:
 
 
 @dataclass(frozen=True, slots=True)
-class Approval:
-    """An agent request to perform one exact operation; its identity is a fresh nonce.
-
-    `fingerprint` is the operation's: a grant covers only that operation, under
-    the goal revision its stored request and response rows record.
-    """
-
-    id: str
-    title: str
-    detail: str
-    fingerprint: str
-    kind: Literal["approval"] = "approval"
-
-    def __post_init__(self) -> None:
-        identifier(self.id, "approval identity")
-        text(self.title, "approval title", maximum=240)
-        text(self.detail, "approval detail", maximum=16_000, empty=True)
-        digest(self.fingerprint, "approved operation")
-
-
-@dataclass(frozen=True, slots=True)
 class Until:
     at: float
     reason: str
@@ -188,7 +167,7 @@ class Blocked:
         text(self.reason, "blocking reason", maximum=8_000)
 
 
-type WaitReason = Question | Approval | Until | Blocked
+type WaitReason = Question | Until | Blocked
 
 
 @dataclass(frozen=True, slots=True)
@@ -200,27 +179,10 @@ class TextAnswer:
         text(self.text, "answer", maximum=16_000)
 
 
-class ApprovalDecision(Enum):
-    APPROVED = "approved"
-    DECLINED = "declined"
-
-
-type Reply = TextAnswer | ApprovalDecision
-
-
-def answers(request: Question | Approval, reply: Reply) -> bool:
-    """A question takes text and an approval takes a decision; nothing else answers either."""
-    match request, reply:
-        case (Question(), TextAnswer()) | (Approval(), ApprovalDecision()):
-            return True
-        case _:
-            return False
-
-
-def requested(task: Task) -> Question | Approval | None:
-    """The question or approval a waiting task needs the person to answer."""
+def requested(task: Task) -> Question | None:
+    """The question a waiting task needs the person to answer."""
     match task.state:
-        case Waiting(Question() | Approval() as request):
+        case Waiting(Question() as request):
             return request
         case _:
             return None
@@ -228,14 +190,14 @@ def requested(task: Task) -> Question | Approval | None:
 
 @dataclass(frozen=True, slots=True)
 class Response:
-    request: Question | Approval
-    reply: Reply
+    request: Question
+    reply: TextAnswer
     at: float
 
     def __post_init__(self) -> None:
         timestamp(self.at)
-        if not answers(self.request, self.reply):
-            raise ValueError("The reply does not match the input request.")
+        variant(self.request, Question, "input request")
+        variant(self.reply, TextAnswer, "input reply")
 
 
 class TaskStatus(Enum):
@@ -269,7 +231,7 @@ class Waiting:
     kind: Literal["waiting"] = "waiting"
 
     def __post_init__(self) -> None:
-        variant(self.reason, (Question, Approval, Until, Blocked), "waiting reason")
+        variant(self.reason, (Question, Until, Blocked), "waiting reason")
 
 
 @dataclass(frozen=True, slots=True)
@@ -562,7 +524,7 @@ def allowed_controls(state: State) -> tuple[Control, ...]:
             match reason:
                 case Until() | Blocked():
                     return Control.RESUME, Control.PAUSE, Control.CANCEL
-                case Question() | Approval():
+                case Question():
                     return (Control.CANCEL,)
                 case _:
                     assert_never(reason)
@@ -578,21 +540,10 @@ def redirected(task: Task, prompt: str, *, at: float) -> Task:
     return replace(changed(task, TaskStatus.READY, at=at), prompt=prompt, goal_revision=task.goal_revision + 1)
 
 
-def answered(task: Task, request_id: str, reply: Reply, *, at: float) -> tuple[Task, Response] | None:
+def answered(task: Task, request_id: str, reply: TextAnswer, *, at: float) -> tuple[Task, Response] | None:
     match task.state:
-        case Waiting(reason=Question(id=identity) as request) if identity == request_id and isinstance(reply, TextAnswer):
-            response = Response(request, reply, at)
-        case Waiting(reason=Approval(id=identity) as request) if identity == request_id and isinstance(reply, ApprovalDecision):
-            response = Response(request, reply, at)
-        case _:
-            return None
-    return changed(task, TaskStatus.READY, at=at), response
-
-
-def approval_refreshed(task: Task, request_id: str, *, at: float) -> Task | None:
-    match task.state:
-        case Waiting(reason=Approval(id=identity)) if identity == request_id:
-            return changed(task, TaskStatus.READY, at=at)
+        case Waiting(reason=Question(id=identity) as request) if identity == request_id:
+            return changed(task, TaskStatus.READY, at=at), Response(request, reply, at)
         case _:
             return None
 

@@ -7,10 +7,7 @@ from dataclasses import replace
 
 from assistant.work_commands import AnswerTask, Submit, WorkViewCommand
 from assistant.work_snapshot import WorkSnapshot
-from automation.execution import ApprovalReview
 from automation.task import (
-    Approval,
-    ApprovalDecision,
     Checkpoint,
     Completed,
     Interrupted,
@@ -31,12 +28,6 @@ def work_task(state: State = TaskStatus.READY, *, identity: str = "task-one") ->
     return Task(
         identity, "Prepare the workbook", "Read every sheet and explain the total.", RequestSource("conversation"), 0, 100.0, 200.0, 0, state, None
     )
-
-
-def approval_task(*, nonce: str = "one", detail: str = "Write the complete reviewed workbook.") -> tuple[Task, ApprovalReview]:
-    request = Approval(nonce, "Review the operation", "Persisted summary cannot authorize execution.", "a" * 64)
-    task = work_task(Waiting(request))
-    return task, ApprovalReview(task.id, 0, request, "Write the workbook", detail)
 
 
 class RecordingWorkView:
@@ -257,13 +248,12 @@ def test_startup_preparation_reuses_the_hidden_view_and_latest_snapshot() -> Non
     assert ui.view.closed and not ui.work.send(Submit("Too late")) and not ui.commands
 
 
-def test_question_answers_require_the_exact_current_task_request_and_answer_kind() -> None:
+def test_question_answers_require_the_exact_current_task_request() -> None:
     ui = WorkUi()
     task = work_task(Waiting(Question("question-one", "Which sheet?", "Choose the source.")))
     ui.work.publish(WorkSnapshot(tasks=(task,)))
     assert not ui.work.send(AnswerTask("another-task", "question-one", TextAnswer("Revenue")))
     assert not ui.work.send(AnswerTask(task.id, "question-two", TextAnswer("Revenue")))
-    assert not ui.work.send(AnswerTask(task.id, "question-one", ApprovalDecision.APPROVED))
     answer = AnswerTask(task.id, "question-one", TextAnswer("Revenue\nwith the complete ending. Åäö."))
     assert ui.work.send(answer) and ui.commands == [answer]
     replacement = replace(task, state=Waiting(Question("question-two", "Which year?", "")), revision=1)
@@ -273,38 +263,6 @@ def test_question_answers_require_the_exact_current_task_request_and_answer_kind
     assert ui.work.send(latest) and ui.commands == [answer, latest]
     ui.work.publish(WorkSnapshot(tasks=(replace(replacement, state=TaskStatus.READY),)))
     assert not ui.work.send(latest)
-    ui.close()
-
-
-def test_approval_requires_a_matching_live_preview_and_its_own_display_acknowledgment() -> None:
-    ui = WorkUi()
-    task, review = approval_task()
-    approve = AnswerTask(task.id, review.request.id, ApprovalDecision.APPROVED)
-    ui.work.publish(WorkSnapshot(tasks=(task,)))
-    assert not ui.work.send(approve)
-    assert not ui.work.approval_presented(task.id, review.request.id)
-    assert ui.work.send(AnswerTask(task.id, review.request.id, ApprovalDecision.DECLINED))
-    assert not ui.work.send(AnswerTask(task.id, review.request.id, TextAnswer("approve")))
-    ui.work.publish(WorkSnapshot(tasks=(task,), reviews=(review,)))
-    assert not ui.work.send(approve), "Receiving a review is not native display."
-    assert not ui.work.approval_presented("another-task", review.request.id)
-    assert not ui.work.approval_presented(task.id, "another-request")
-    assert ui.work.approval_presented(task.id, review.request.id)
-    assert ui.work.send(approve)
-    ui.work.publish(WorkSnapshot(tasks=(task,)))
-    ui.work.publish(WorkSnapshot(tasks=(task,), reviews=(review,)))
-    assert not ui.work.send(approve), "A lost live preview must retire its display acknowledgment."
-    assert ui.work.approval_presented(task.id, review.request.id)
-    ui.work.publish(WorkSnapshot(tasks=(task,), reviews=(replace(review, detail="A changed preview"),)))
-    assert not ui.work.send(approve), "An old display cannot authorize changed review content."
-    replacement, replacement_review = approval_task(nonce="two")
-    ui.work.publish(WorkSnapshot(tasks=(replacement,), reviews=(review, replacement_review)))
-    assert not ui.work.approval_presented(task.id, review.request.id) and not ui.work.send(approve)
-    assert ui.work.approval_presented(task.id, replacement_review.request.id)
-    latest = AnswerTask(task.id, replacement_review.request.id, ApprovalDecision.APPROVED)
-    assert ui.work.send(latest)
-    ui.work.publish(WorkSnapshot(tasks=(replace(replacement, revision=1, goal_revision=1),), reviews=(replacement_review,)))
-    assert not ui.work.approval_presented(task.id, replacement_review.request.id) and not ui.work.send(latest)
     ui.close()
 
 
@@ -319,10 +277,6 @@ def test_work_details_preserve_complete_results_evidence_and_recovery_instructio
     interrupted = replace(task, state=Interrupted(RunRef(task.id, "run-one"), "The worker stopped after writing the file."))
     recovery = task_detail(interrupted)
     assert "The worker stopped after writing the file." in recovery and "checks the interrupted work" in recovery
-    waiting, review = approval_task(detail="Full reviewed content\n" * 500 + "The actual ending.")
-    without_review = task_detail(waiting)
-    assert "fresh preview" in without_review and review.request.detail not in without_review
-    assert review.detail in task_detail(waiting, (review,))
 
 
 def test_command_failure_reports_a_problem_without_discarding_current_tasks() -> None:
