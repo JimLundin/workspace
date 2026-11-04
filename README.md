@@ -361,7 +361,8 @@ This uses Windows WASAPI and the existing configured transcription endpoint;
 there are no new dependencies. Chunk sizing and previous-chunk context follow
 the [official OpenAI speech-to-text documentation](https://developers.openai.com/api/docs/guides/speech-to-text).
 
-Open **Meetings** in Work to browse saved recordings and read their transcripts.
+Each recorded meeting also appears on the canvas as a source. Its detail pages
+through the conversation, and **Open transcript** opens the Markdown file.
 
 ## The agent
 
@@ -528,17 +529,8 @@ bounded reviews using the configured personal-work size (medium by default).
 **Refresh sources** requests a fresh review. Canvas edits update the personal representation; source controls
 open the corresponding resource in Edge.
 
-Choose **Agent tasks and settings** in the canvas’s **+** menu to open a separate
-window for execution and supporting context:
-
-- **Agent tasks** shows instructions, progress, questions, results, and verification
-  evidence. Pause, resume, cancel, redirect a task, or create a follow-up.
-- **Context** stores preferences and project notes you choose to save. Notes
-  retain their source and expiry; expired text is excluded from fresh context.
-
 Closing a view or choosing **New chat** keeps saved work. **Stop agent** cancels
-the current conversation's active and queued tasks; individual tasks have their
-own controls in Work. On restart, interrupted tasks recover from saved progress.
+the current conversation's active and queued tasks. On restart, interrupted tasks recover from saved progress.
 A task with an unknown action outcome checks what happened before repeating an
 effect. Endpoint failures and other blockers wait for an explicit resume.
 
@@ -735,7 +727,6 @@ desktop_ui/     ui.py and qt_ui.py (Qt dispatch and event-loop ownership),
                 agent_session.py and agent_window.py (conversation presentation),
                 agent_toasts.py and toast_card.py (floating feed and history),
                 work_canvas.py and work_canvas_*.py (desktop canvas owner/views),
-                work_panel.py and meeting_panel.py (work and meeting views),
                 components/ and fonts/ (shared controls, appearance and typography)
 ```
 

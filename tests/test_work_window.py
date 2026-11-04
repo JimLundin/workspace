@@ -8,19 +8,14 @@ from dataclasses import replace
 from assistant.work_commands import AnswerTask, Submit, WorkViewCommand
 from assistant.work_snapshot import WorkSnapshot
 from automation.task import (
-    Checkpoint,
-    Completed,
-    Interrupted,
     Question,
     RequestSource,
-    RunRef,
     State,
     Task,
     TaskStatus,
     TextAnswer,
     Waiting,
 )
-from desktop_ui.work_text import task_detail
 from desktop_ui.work_window import WorkOpening, WorkView, WorkWindow
 
 
@@ -264,19 +259,6 @@ def test_question_answers_require_the_exact_current_task_request() -> None:
     ui.work.publish(WorkSnapshot(tasks=(replace(replacement, state=TaskStatus.READY),)))
     assert not ui.work.send(latest)
     ui.close()
-
-
-def test_work_details_preserve_complete_results_evidence_and_recovery_instructions() -> None:
-    result = "Workbook analysis\n" * 300 + "Complete ending. Åäö."
-    task = replace(
-        work_task(Completed(result, ("Total independently verified", "C:\\work\\results.xlsx"))), checkpoint=Checkpoint("All sheets read", 150.0)
-    )
-    detail = task_detail(task)
-    assert result in detail and "Total independently verified" in detail and "C:\\work\\results.xlsx" in detail
-    assert task.prompt in detail and "All sheets read" in detail
-    interrupted = replace(task, state=Interrupted(RunRef(task.id, "run-one"), "The worker stopped after writing the file."))
-    recovery = task_detail(interrupted)
-    assert "The worker stopped after writing the file." in recovery and "checks the interrupted work" in recovery
 
 
 def test_command_failure_reports_a_problem_without_discarding_current_tasks() -> None:

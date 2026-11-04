@@ -19,7 +19,7 @@ lazy import automation.presentation
 lazy from assistant import agent_session
 lazy from assistant.feed_origin import FeedRequest, Initiation
 lazy from assistant.owner_calls import OwnerDispatcher, OwnerReply
-lazy from assistant.work_commands import AnswerTask, FollowUp, Redirect, Submit, WorkCommand
+lazy from assistant.work_commands import AnswerTask, Submit, WorkCommand
 lazy from assistant.work_service import IdentifiedSubmission, Issued, WorkBridge, WorkService
 lazy from assistant.work_snapshot import WorkSnapshot
 lazy from automation import ipc
@@ -237,7 +237,7 @@ class WorkAgent:
             self._ordinary_pending += 1
             self._sequence += 1
             match job:
-                case IdentifiedSubmission() | Issued(command=Submit() | FollowUp()):
+                case IdentifiedSubmission() | Issued(command=Submit()):
                     self._pending[job.identity] = job.source.conversation_id
                     self._last_submission_source = job.source.conversation_id
                 case _:
@@ -251,7 +251,7 @@ class WorkAgent:
             case AnswerTask(task_id=task_id, request_id=request_id):
                 identifier(task_id, "reply task identity")
                 identifier(request_id, "reply request identity")
-            case Submit() | FollowUp() | Redirect() if self.context is not None:
+            case Submit() if self.context is not None:
                 captured = self.context()
             case _:
                 pass

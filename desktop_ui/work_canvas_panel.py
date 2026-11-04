@@ -896,7 +896,7 @@ class CanvasPanel:
             case ResumeTask(task_id=task):
                 self.work.send(ControlTask(task, Control.RESUME))
             case Investigating.ALREADY:
-                self.status.setText("This work already has an investigation; open Agent tasks to inspect its progress or required input.")
+                self.status.setText("This work already has an investigation in progress.")
             case Queued(document=document):
                 self.document = document
             case NotQueued(document=document, reason=reason):

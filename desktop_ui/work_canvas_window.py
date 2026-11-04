@@ -1,11 +1,6 @@
-"""Dedicated desktop canvas; agent administration is created only when requested.
-
-Qt owns the mutable widget lifetimes. Both windows share the same immutable work
-observations and command owner, keeping answers and saved drafts on one path.
-"""
+"""Dedicated desktop canvas window. Qt owns the mutable widget lifetimes."""
 
 from collections.abc import Callable
-from pathlib import Path
 
 lazy from PySide6 import QtCore, QtGui, QtWidgets
 lazy from PySide6.QtCore import Qt
@@ -21,20 +16,14 @@ from desktop_ui.components.widgets import column, show_window
 from desktop_ui.desktop_attention import CanvasFocus
 from desktop_ui.work_canvas_panel import CanvasPanel, rounded
 from desktop_ui.work_window import WorkWindow
-lazy from assistant.meeting_store import MeetingArchive
-lazy from desktop_ui.meeting_panel import MeetingPanel
-lazy from desktop_ui.work_panel import WorkPanel
 
 
 class CanvasWindow:
     def __init__(self, root: QtWidgets.QApplication, work: WorkWindow, canvas: CanvasEdits) -> None:
         self.root: QtWidgets.QApplication = root
         self.work: WorkWindow = work
-        self.snapshot: WorkSnapshot = WorkSnapshot()
         self.preview_prepared: bool = False
         self.presentation: PaintReady | None = None
-        self.administration: WorkPanel | None = None
-        self.meetings: MeetingPanel | None = None
         self.window: CanvasFrame = CanvasFrame(self.hide, self.escape, tokens(scheme()))
         # Qt resolves native fonts once during desktop preparation. The first
         # visible source preview must not pay that setup cost on a user click.
@@ -47,9 +36,6 @@ class CanvasWindow:
         layout.setSpacing(0)
         layout.addWidget(self.panel.frame)
         self.grip: QtWidgets.QSizeGrip = QtWidgets.QSizeGrip(self.panel.frame)
-        self.panel.menu.addSeparator()
-        self.panel.menu.addAction("Agent tasks and settings").triggered.connect(self.show_administration)
-        self.panel.menu.addAction("Meetings").triggered.connect(self.show_meetings)
         self.panel.menu.addSeparator()
         # Window controls live in the options menu; the island carries no duplicate Close.
         window_menu = rounded(self.panel.menu.addMenu("Window"))
@@ -82,11 +68,6 @@ class CanvasWindow:
     def voice_pressed(self, *, pressed: bool) -> None:
         self.panel.voice_hint.set_pressed(pressed=pressed)
 
-    def configure_meetings(self, archive: MeetingArchive, open_file: Callable[[Path], None]) -> None:
-        """Create and retain the view's meeting widgets once, on Qt's thread."""
-        if self.meetings is None:
-            self.attach_meetings(MeetingPanel(archive, open_file=open_file))
-
     def maximize(self) -> None:
         if self.window.isMaximized():
             self.window.showNormal()
@@ -94,7 +75,6 @@ class CanvasWindow:
             self.window.showMaximized()
 
     def render(self, snapshot: WorkSnapshot) -> None:
-        self.snapshot = snapshot
         self.panel.render(snapshot.personal)
         if not self.preview_prepared and self.panel.visible_cards:
             # Warm the initial visible viewport while the startup view is hidden.
@@ -115,8 +95,6 @@ class CanvasWindow:
             finally:
                 painter.end()
             self.preview_prepared = True
-        if self.administration is not None:
-            self.administration.render(snapshot)
 
     def show(self, *, focus: bool = True, on_presented: Callable[[], None] | None = None) -> None:
         if self.presentation is not None:
@@ -130,30 +108,6 @@ class CanvasWindow:
         finally:
             self.window.setUpdatesEnabled(True)
 
-    def task_panel(self) -> WorkPanel:
-        if self.administration is None:
-            self.administration = WorkPanel(self.root, self.work)
-            if self.meetings is not None:
-                self.administration.attach_meetings(self.meetings)
-            self.administration.render(self.snapshot)
-        return self.administration
-
-    def show_administration(self) -> None:
-        self.task_panel().show()
-
-    def attach_meetings(self, meetings: MeetingPanel) -> None:
-        if self.meetings is None:
-            self.meetings = meetings
-            meetings.hide()
-            if self.administration is not None:
-                self.administration.attach_meetings(meetings)
-
-    def show_meetings(self) -> None:
-        if self.meetings is not None:
-            panel = self.task_panel()
-            panel.show_meetings()
-            panel.show()
-
     def hide(self) -> None:
         if self.presentation is not None:
             self.presentation.cancel()
@@ -165,9 +119,5 @@ class CanvasWindow:
             self.hide()
 
     def close(self) -> None:
-        if self.administration is not None:
-            self.administration.close()
-        elif self.meetings is not None:
-            self.meetings.deleteLater()
         self.hide()
         self.window.deleteLater()

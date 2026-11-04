@@ -12,22 +12,12 @@ from assistant.canvas_activity import CanvasRun, TaskRequest
 from assistant.conversation_output import ConversationOutput
 from assistant.work_agent import WorkAgent
 from assistant.work_canvas import WorkCanvas, run_prompt
-from assistant.work_commands import (
-    AddPreference,
-    AddProjectNote,
-    AnswerTask,
-    ControlTask,
-    FollowUp,
-    Redirect,
-    RemoveContext,
-    UpdatePreference,
-    UpdateProjectNote,
-)
+from assistant.work_commands import AnswerTask, ControlTask
 from assistant.work_snapshot import WorkSnapshot
 from automation import ipc
 from automation.activity import Activity, ContextSnapshot
 from automation.bridge import BridgeClient, BridgeServer
-from automation.context import ContextStore, Preference, ProjectNote
+from automation.context import ContextStore
 from automation.ipc import (
     BridgeEvent,
     Envelope,
@@ -451,24 +441,6 @@ def test_a_restart_does_not_replay_finished_work_but_shows_new_changes(tmp_path:
         assert "The new blocker." in restarted.panel.all_text()
 
 
-def test_redirect_fences_a_visible_old_question_and_keeps_the_new_goal(tmp_path: Path) -> None:
-    with work(tmp_path) as rig:
-        rig.agent.start("Original goal")
-        rig.refresh()
-        claim = rig.tasks.claim("worker-one", "question-run", at=rig.clock())
-        assert claim is not None
-        rig.tasks.finish(claim.run, Waiting(Question("old-question", "Which file?", "")), at=rig.clock())
-        rig.refresh()
-        rig.agent.command(Redirect(claim.task.id, "Changed goal"))
-        rig.agent.command(AnswerTask(claim.task.id, "old-question", TextAnswer("An obsolete file")))
-        snapshot = rig.refresh()
-        task = rig.tasks.get(claim.task.id)
-        assert task is not None and task.prompt == "Changed goal" and task.state is TaskStatus.READY
-        assert rig.tasks.responses(task.id) == ()
-        assert "no longer waiting" in snapshot.status
-        assert not rig.panel.respond("old-question", TextAnswer("Late UI answer"))
-
-
 def test_streaming_rejects_superseded_runs_and_completion_comes_from_the_journal(tmp_path: Path) -> None:
     # Defect: publishing an accepted reply leaves Markdown preparation to Qt,
     # freezing unrelated animations on both streaming and durable completion.
@@ -541,49 +513,16 @@ def test_question_and_resumed_action_keep_one_notification_card(tmp_path: Path) 
         assert "stopped" not in rig.panel.all_text().lower()
 
 
-def test_context_commands_persist(tmp_path: Path) -> None:
-    # Defect: a context edit is acknowledged but never reaches the durable context journal.
+def test_cancelling_a_task_survives_reopening_the_journal(tmp_path: Path) -> None:
+    # Defect: a cancelled canvas run is acknowledged in memory but never reaches the durable journal.
     with work(tmp_path) as rig:
-        rig.agent.command(AddPreference("Tone", "Concise", "User"))
-        rig.agent.command(AddProjectNote("Workspace", "Use the shared journal", "User", 3600))
-        snapshot = rig.refresh()
-        preference = next(record for record in snapshot.context if isinstance(record, Preference))
-        note = next(record for record in snapshot.context if isinstance(record, ProjectNote))
-        rig.agent.command(UpdatePreference(preference.id, "Tone", "Detailed", "User correction"))
-        rig.agent.command(UpdateProjectNote(note.id, "Workspace", "Use the durable journal", "User correction", 7200))
-        snapshot = rig.refresh()
-        assert rig.saved_context.get(preference.id) == next(record for record in snapshot.context if isinstance(record, Preference))
-        assert any(isinstance(record, Preference) and record.value == "Detailed" for record in snapshot.context)
-        assert any(isinstance(record, ProjectNote) and record.text == "Use the durable journal" for record in snapshot.context)
-        rig.agent.command(RemoveContext(note.id))
+        rig.agent.start("Prepare the report")
         rig.refresh()
-        assert ContextStore(tmp_path / "context.sqlite3").get(note.id) is None
-        assert not rig.errors
-
-
-def test_follow_up_retains_related_context_and_user_controls_survive_reopening(tmp_path: Path) -> None:
-    # Defect: a follow-up inherits a self-review's constrained profile,
-    # so it runs without the general desktop context.
-    with work(tmp_path) as rig:
-        rig.agent.submit_identified("original-report", "Prepare the original report", SelfReview("previous-task"))
+        task = rig.tasks.list_tasks()[0]
+        rig.agent.command(ControlTask(task.id, Control.CANCEL))
         rig.refresh()
-        claim = rig.tasks.claim("worker-one", "report-run", at=rig.clock())
-        assert claim is not None
-        rig.tasks.finish(claim.run, Completed("Report is saved at output/report.md", ()), at=rig.clock())
-        rig.agent.command(FollowUp(claim.task.id, "Add a one-page summary"))
-        rig.refresh()
-        follow_up = next(task for task in rig.tasks.list_tasks() if task.id != claim.task.id)
-        assert claim.task.source.profile == SelfReview("previous-task")
-        assert follow_up.source == RequestSource(claim.task.source.conversation_id) and "output/report.md" in follow_up.prompt
-        assert "Add a one-page summary" in follow_up.prompt
-        rig.agent.command(ControlTask(follow_up.id, Control.PAUSE))
-        rig.refresh()
-        paused = TaskStore(tmp_path / "tasks.sqlite3").get(follow_up.id)
-        assert paused is not None and paused.state is TaskStatus.PAUSED
-        rig.agent.command(ControlTask(follow_up.id, Control.RESUME))
-        rig.refresh()
-        resumed = rig.tasks.get(follow_up.id)
-        assert resumed is not None and resumed.state is TaskStatus.READY
+        cancelled = TaskStore(tmp_path / "tasks.sqlite3").get(task.id)
+        assert cancelled is not None and cancelled.state is TaskStatus.CANCELLED
 
 
 def test_reconnecting_reprojects_a_durable_question_without_showing_a_hidden_view(tmp_path: Path) -> None:

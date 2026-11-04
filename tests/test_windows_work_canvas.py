@@ -212,7 +212,6 @@ def test_my_work_sources_corrections_and_editing_survive_background_publication(
     with native_canvas(canvas_store) as panel:
         view = panel.view.panel
         assert not panel.view.window.findChildren(QtWidgets.QTabWidget)
-        assert panel.view.administration is None
         panel.publish(WorkSnapshot(personal=PersonalView(store.read(), "Automatically connected")))
         assert len(view.cards) == 1 and len(view.group_frames) == 1
         view.inspect(saved.work.id)
@@ -595,9 +594,6 @@ def test_long_bubbles_resize_without_overlapping_text_or_controls(tmp_path: Path
         assert card.rect().contains(card.detail_proxy.mapRectToParent(card.detail_proxy.boundingRect()))
         assert panel.view.window.size() == QtCore.QSize(800, 560)
         assert panel.view.panel.frame.rect().contains(panel.view.panel.toolbar.geometry())
-        panel.view.show_administration()
-        assert panel.view.administration is not None
-        assert panel.view.administration.window is not panel.view.window
         panel.view.hide()
         panel.view.show(focus=False)
         panel.pump()

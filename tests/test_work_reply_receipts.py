@@ -5,9 +5,8 @@ from collections.abc import Callable, Generator
 from contextlib import contextmanager
 from pathlib import Path
 
-from assistant.work_commands import AnswerTask, RemoveContext
+from assistant.work_commands import AnswerTask
 from assistant.work_snapshot import WorkSnapshot
-from automation.context import Preference
 from automation.task import Question, RequestSource, TaskStatus, TextAnswer, Waiting
 from tests.test_external_input import has_pending_input
 from tests.test_work_agent import RecordingBridge, WorkRig
@@ -55,26 +54,22 @@ def journal_outage(rig: WorkRig, gate: PollHold, feed: SnapshotFeed, watched: tu
         rig.agent.watch(watched)
 
 
-def check_replaced_request(rig: WorkRig, feed: SnapshotFeed, command_finished: threading.Event) -> None:
+def check_replaced_request(rig: WorkRig, feed: SnapshotFeed) -> None:
     claim = rig.tasks.claim("worker", "replacement-run", at=rig.clock())
     assert claim is not None and claim.task.id == "caller-task"
     rig.tasks.finish(claim.run, Waiting(Question("new-format", "Which new format?", "")), at=rig.clock())
-    marker = "stale-reply-marker"
-    rig.saved_context.save(Preference(marker, "Test marker", "Present", "Fixture", rig.clock()))
-    feed.until(lambda snapshot: any(record.id == marker for record in snapshot.context))
-    command_finished.clear()
     rig.agent.command(AnswerTask("caller-task", "format", TextAnswer("A reply to the replaced request")))
-    rig.agent.command(RemoveContext(marker))
-    assert command_finished.wait(5) and rig.saved_context.get(marker) is None
-    snapshot = feed.until(lambda state: all(record.id != marker for record in state.context))
+    # The command queue is ordered, so this observation completes only after the answer was processed.
+    assert rig.agent.refresh().wait(5)
+    snapshot = feed.latest
     task = next(task for task in snapshot.tasks if task.id == "caller-task")
     assert isinstance(task.state, Waiting) and isinstance(task.state.reason, Question) and task.state.reason.id == "new-format"
     assert not snapshot.reply_problems, "A failed reply to the replaced request cannot reopen it."
 
 
 def test_watched_caller_reply_failures_have_distinct_exact_receipts_after_confirmed_reads(tmp_path: Path) -> None:
-    gate, feed, command_finished = PollHold(), SnapshotFeed(), threading.Event()
-    bridge = RecordingBridge(on_poll=gate.poll, on_wake=command_finished.set)
+    gate, feed = PollHold(), SnapshotFeed()
+    bridge = RecordingBridge(on_poll=gate.poll)
     rig = WorkRig(tmp_path, bridge=bridge, on_snapshot=feed.publish, start=False)
     watched = ("caller-task", "another-task")
     try:
@@ -91,18 +86,12 @@ def test_watched_caller_reply_failures_have_distinct_exact_receipts_after_confir
 
         previous_receipt = ""
         previous_reason = ""
-        for attempt in range(2):
+        for _ in range(2):
             with journal_outage(rig, gate, feed, watched):
-                marker = f"command-marker-{attempt}"
-                rig.saved_context.save(Preference(marker, "Test marker", "Present", "Fixture", rig.clock()))
-                command_finished.clear()
                 rig.agent.command(AnswerTask("caller-task", "format", TextAnswer("Markdown")))
-                rig.agent.command(RemoveContext(marker))
-                # This separate journal mutation occurs after the AnswerTask
-                # in the same command queue. Its wake and missing record prove
-                # the failed answer was processed before the outage ends.
-                assert command_finished.wait(5)
-                assert rig.saved_context.get(marker) is None
+                # The command queue is ordered, so this observation proves the
+                # failed answer was processed before the outage ends.
+                assert rig.agent.refresh().wait(5)
                 assert rig.agent.snapshot().reply_problems == ()
 
             def another_attempt(state: WorkSnapshot, receipt: str = previous_receipt) -> bool:
@@ -129,7 +118,7 @@ def test_watched_caller_reply_failures_have_distinct_exact_receipts_after_confir
         other = next(task for task in snapshot.tasks if task.id == "another-task")
         assert isinstance(other.state, Waiting) and isinstance(other.state.reason, Question) and other.state.reason.id == "format"
         assert rig.tasks.responses("another-task") == ()
-        check_replaced_request(rig, feed, command_finished)
+        check_replaced_request(rig, feed)
     finally:
         gate.release.set()
         rig.close()

@@ -5,23 +5,11 @@ from dataclasses import dataclass, replace
 from itertools import islice
 from typing import Protocol, assert_never
 
-from assistant.work_commands import (
-    AddPreference,
-    AddProjectNote,
-    AnswerTask,
-    ControlTask,
-    FollowUp,
-    Redirect,
-    RemoveContext,
-    Submit,
-    UpdatePreference,
-    UpdateProjectNote,
-    WorkCommand,
-)
+from assistant.work_commands import AnswerTask, ControlTask, Submit, WorkCommand
 from assistant.work_snapshot import ReplyProblem, SubmissionProblem, WorkSnapshot
 from automation import ipc
 from automation.activity import ContextSnapshot
-from automation.context import ContextStore, Preference, ProjectNote
+from automation.context import ContextStore
 from automation.ipc import (
     Envelope,
     LogEvent,
@@ -30,7 +18,6 @@ from automation.ipc import (
 )
 from automation.store import TaskStore
 from automation.task import (
-    Completed,
     Control,
     Profile,
     Question,
@@ -81,21 +68,10 @@ class UnconfirmedSubmission:
     problem: SubmissionProblem
 
 
-type TaskCommand = Submit | FollowUp | Redirect | ControlTask | AnswerTask
-type ContextCommand = AddPreference | UpdatePreference | AddProjectNote | UpdateProjectNote | RemoveContext
-
-
 def submission_matches(task: Task, submission: UnconfirmedSubmission) -> bool:
     """The caller resolved this task by ID; verify its remaining submission constraints."""
     conversation = submission.conversation_id is None or task.source.conversation_id == submission.conversation_id
     return task.prompt == submission.prompt and task.source.profile == submission.profile and conversation
-
-
-def follow_up_prompt(task: Task, prompt: str) -> str:
-    """Keep the referenced outcome useful even after volatile history is lost."""
-    text(prompt, "follow-up request")
-    previous = task.state.result if isinstance(task.state, Completed) else task.checkpoint.summary if task.checkpoint else task.prompt
-    return text(f"Follow-up to {task.title} (task {task.id}).\nPrevious work:\n{previous[:8_000]}\n\nNew request:\n{prompt}", "task prompt")
 
 
 class WorkService:
@@ -217,35 +193,9 @@ class WorkService:
             issued = Issued(Submit(request.prompt), request.identity, source, request.context)
         else:
             issued = request
-        command = issued.command
-        match command:
-            case Submit() | FollowUp() | Redirect() | ControlTask() | AnswerTask():
-                self._task_command(issued, command, at=at)
-            case AddPreference() | UpdatePreference() | AddProjectNote() | UpdateProjectNote() | RemoveContext():
-                self._context_command(issued.identity, command, at=at)
-            case _:
-                assert_never(command)
-        self.problem = ""
-        self._transport(self.bridge.wake)
-
-    def _task_command(self, issued: Issued, command: TaskCommand, *, at: float) -> None:
-        match command:
+        match issued.command:
             case Submit(prompt):
                 self._submit(issued.identity, prompt, issued.source, issued.context, at=at)
-            case FollowUp(task_id, prompt):
-                original = self.tasks.get(task_id)
-                if original is None:
-                    raise ValueError("The task for this follow-up no longer exists.")
-                # A follow-up is the person's own request in the original conversation, whatever the original's profile.
-                source = RequestSource(original.source.conversation_id)
-                self._submit(issued.identity, follow_up_prompt(original, prompt), source, issued.context, at=at)
-            case Redirect(task_id, prompt):
-                original = self.tasks.get(task_id)
-                if original is None:
-                    raise ValueError("The task to redirect no longer exists.")
-                self.register(task_id, issued.context)
-                if self.tasks.revise(task_id, prompt, at=at) is None:
-                    raise ValueError("The task to redirect no longer exists.")
             case ControlTask(task_id, control):
                 if self.tasks.control(task_id, control, at=at) is None:
                     raise ValueError("That task control is no longer available.")
@@ -254,26 +204,9 @@ class WorkService:
                     raise ValueError("This question is no longer waiting for that reply.")
                 self._replies.pop((task_id, request_id), None)
             case _:
-                assert_never(command)
-
-    def _context_command(self, identity: str, command: ContextCommand, *, at: float) -> None:
-        match command:
-            case AddPreference(name, value, source):
-                self.context.save(Preference(identity, name, value, source, at))
-            case UpdatePreference(identity, name, value, source):
-                if not isinstance(self.context.get(identity), Preference):
-                    raise ValueError("The preference being edited no longer exists.")
-                self.context.save(Preference(identity, name, value, source, at))
-            case AddProjectNote(project, content, source, valid_for):
-                self.context.save(ProjectNote(identity, project, content, source, at, at + valid_for))
-            case UpdateProjectNote(identity, project, content, source, valid_for):
-                if not isinstance(self.context.get(identity), ProjectNote):
-                    raise ValueError("The project note being edited no longer exists.")
-                self.context.save(ProjectNote(identity, project, content, source, at, at + valid_for))
-            case RemoveContext(identity):
-                self.context.remove(identity)
-            case _:
-                assert_never(command)
+                assert_never(issued.command)
+        self.problem = ""
+        self._transport(self.bridge.wake)
 
     def stop_conversation(self, conversation_id: str, *, at: float) -> None:
         self.tasks.control_conversation(conversation_id, Control.CANCEL, at=at)

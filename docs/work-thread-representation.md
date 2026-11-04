@@ -131,8 +131,7 @@ connection, select its work bubble, choose Connect source to this work in the
 options menu's Connections submenu, then select a source.
 New work, notes and documents are available in Add; arrangement and source refresh
 are also available in options. Search locates
-bubbles by title. Agent tasks, settings and meetings open in a separate window
-from the same menu; they do not occupy canvas tabs.
+bubbles by title.
 
 ## Agent interaction
 
@@ -251,8 +250,7 @@ the latest document, so an agent's update committed since the last render surviv
 A measured layout is dropped when its view changed since that render; the next
 render measures again. `work_canvas_view.py` owns native
 spatial interaction, and `work_canvas_detail.py` owns in-place drafts and controls.
-`work_canvas_window.py` owns the dedicated frame and optional administration
-window. `work_canvas_panel.py` composes these with the existing immutable
+`work_canvas_window.py` owns the dedicated frame. `work_canvas_panel.py` composes these with the existing immutable
 catalog and saved-work command interface.
 
 The first implementation collects the information observed by the existing

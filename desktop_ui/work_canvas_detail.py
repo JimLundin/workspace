@@ -3,6 +3,7 @@
 import sqlite3
 from collections.abc import Callable
 from dataclasses import replace
+from datetime import datetime
 from pathlib import Path
 
 lazy from PySide6 import QtCore, QtGui, QtWidgets
@@ -32,9 +33,17 @@ from automation.task import TextAnswer
 from desktop_ui.components.controls import button, label
 from desktop_ui.components.widgets import Editor, column, replace_text, row
 from desktop_ui.keymap import PHYSICAL_NAMES
-from desktop_ui.work_text import when
 from desktop_ui.work_window import WorkWindow
 from miryoku.layout import AGENT
+
+
+def when(at: float | None) -> str:
+    if at is None:
+        return "—"
+    try:
+        return datetime.fromtimestamp(at).strftime("%Y-%m-%d %H:%M")
+    except OverflowError, OSError, ValueError:
+        return "Outside the local calendar"
 
 
 def detail_frame(height: int, style: str) -> QtWidgets.QWidget:

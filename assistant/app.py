@@ -275,7 +275,6 @@ class AssistantApp:
         self.ui.configure_feed(windows_store(DIRECTORY / "notifications.bin", NOTIFICATION_STATE), self.triage.observe)
         self.timings.mark("communications and desktop owners")
         archive = MeetingArchive(DIRECTORY / "meetings")
-        self.ui.configure_meetings(archive, self.open_meeting_file)
         self.meetings = Meetings(
             self.settings,
             lambda source: recording.MeetingAudio(computer_audio=source == "both"),

@@ -9,7 +9,6 @@ import time
 import traceback
 from collections.abc import Callable
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Protocol, assert_never
 
 lazy import shiboken6
@@ -29,7 +28,6 @@ lazy from assistant.attention import selected_question
 lazy from assistant.card_actions import OpenCanvas
 lazy from assistant.feed_sources import FeedUpdate, NoticesObserved, PendingFeed, TeamsObserved, observe
 lazy from assistant.meeting_detection import AutomaticStatus
-lazy from assistant.meeting_store import MeetingArchive
 lazy from assistant.notification_sources import NotificationSources, NotificationState
 lazy from assistant.recording_state import RecordingAction, RecordingState
 lazy from assistant.state_store import SavedState
@@ -57,12 +55,6 @@ lazy from miryoku.layout import Layer, Scancode
 lazy from protocol import Tool
 
 prepare()
-
-
-@dataclass(frozen=True, slots=True)
-class MeetingConnection:
-    archive: MeetingArchive
-    open_file: Callable[[Path], None]
 
 
 @dataclass(frozen=True, slots=True)
@@ -135,7 +127,6 @@ class Ui:
         "_jobs",
         "_keyboard_overlay",
         "_keymap",
-        "_meetings",
         "_notifications",
         "_overlay_enabled",
         "_poll_timer",
@@ -177,7 +168,6 @@ class Ui:
         self._canvas_session: Callable[[Snapshot], bool] | None = None
         self._canvas_notice: Callable[[str, str], None] | None = None
         self._canvas_published: CanvasPublication | None = None
-        self._meetings: MeetingConnection | None = None
         self._work_lock = threading.Lock()
         # The controller that owns these effects is created after Ui, on its own
         # thread, so it connects them through configure_controls.
@@ -452,7 +442,6 @@ class Ui:
             raise RuntimeError("The canvas opens after its owner is configured.")
         self._work_view = self._views.canvas(self._root, work, self._canvas)
         self._work_view.voice_pressed(pressed=self._agent_speaking)
-        self._attach_meetings()
         return self._work_view
 
     def _compose_feed(self, agent: AgentWindow) -> AgentToasts:
@@ -577,18 +566,6 @@ class Ui:
                 return False
             case _:
                 assert_never(target)
-
-    def _attach_meetings(self) -> None:
-        connection, view = self._meetings, self._work_view
-        if connection is not None and view is not None:
-            view.configure_meetings(connection.archive, connection.open_file)
-
-    def configure_meetings(self, archive: MeetingArchive, open_file: Callable[[Path], None]) -> None:
-        def configure(_: QtWidgets.QApplication) -> None:
-            self._meetings = MeetingConnection(archive, open_file)
-            self._attach_meetings()
-
-        self.post(configure)
 
     def open_inbox(self) -> None:
         """Bell and keyboard requests share Qt-owned initialization and inbox focus."""
