@@ -289,9 +289,16 @@ class DesktopBar:
             case Pinned(windows=windows) | Application(windows=windows) if click is Click.RIGHT:
                 chosen = shell.show_menu(int(self.window.winId()), tuple(shell.MenuItem(window.handle, window.title) for window in windows))
                 if chosen:
-                    self.observations.focus(chosen)
+                    self.show_window(chosen)
             case Pinned(windows=windows) | Application(windows=windows):
-                self.observations.focus(next_window(windows, self.observations.foreground()))
+                self.show_window(next_window(windows, self.observations.foreground()))
+
+    def show_window(self, handle: int) -> None:
+        """The observer owns the desktops: it switches to a window's desktop before focusing it."""
+        if self.application_service is not None:
+            self.application_service.show(handle)
+        else:
+            self.observations.focus(handle)
 
     def open_web_app(self, app: PinnedApp) -> None:
         """Edge opens the slot's app window in the user's own profile; a repeated click waits for it."""

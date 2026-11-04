@@ -10,6 +10,23 @@ from typing import Final
 from winapi._core import LRESULT, ULONG_PTR, comctl32, dwmapi, fn, gdi32, kernel32, rect, user32
 from winapi.shapes import Rect, Window
 
+
+class GUITHREADINFO(ctypes.Structure):
+    cbSize: int
+    flags: int
+    _fields_ = (
+        ("cbSize", wintypes.DWORD),
+        ("flags", wintypes.DWORD),
+        ("hwndActive", wintypes.HWND),
+        ("hwndFocus", wintypes.HWND),
+        ("hwndCapture", wintypes.HWND),
+        ("hwndMenuOwner", wintypes.HWND),
+        ("hwndMoveSize", wintypes.HWND),
+        ("hwndCaret", wintypes.HWND),
+        ("rcCaret", wintypes.RECT),
+    )
+
+
 WNDENUMPROC = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
 _EnumWindows = fn(user32, "EnumWindows", wintypes.BOOL, WNDENUMPROC, wintypes.LPARAM)
 _IsWindowVisible = fn(user32, "IsWindowVisible", wintypes.BOOL, wintypes.HWND)
@@ -33,6 +50,8 @@ _SetForegroundWindow = fn(user32, "SetForegroundWindow", wintypes.BOOL, wintypes
 _BringWindowToTop = fn(user32, "BringWindowToTop", wintypes.BOOL, wintypes.HWND)
 _AttachThreadInput = fn(user32, "AttachThreadInput", wintypes.BOOL, wintypes.DWORD, wintypes.DWORD, wintypes.BOOL)
 _ShowWindow = fn(user32, "ShowWindow", wintypes.BOOL, wintypes.HWND, ctypes.c_int)
+_GetAsyncKeyState = fn(user32, "GetAsyncKeyState", ctypes.c_short, ctypes.c_int)
+_GetGUIThreadInfo = fn(user32, "GetGUIThreadInfo", wintypes.BOOL, wintypes.DWORD, ctypes.POINTER(GUITHREADINFO))
 _SetWindowPos = fn(
     user32, "SetWindowPos", wintypes.BOOL, wintypes.HWND, wintypes.HWND, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int, wintypes.UINT
 )
@@ -68,8 +87,11 @@ _SetWindowSubclass = fn(comctl32, "SetWindowSubclass", wintypes.BOOL, wintypes.H
 _RemoveWindowSubclass = fn(comctl32, "RemoveWindowSubclass", wintypes.BOOL, wintypes.HWND, _SUBCLASSPROC, ULONG_PTR)
 _DefSubclassProc = fn(comctl32, "DefSubclassProc", LRESULT, wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM)
 
-SW_MAXIMIZE, SW_MINIMIZE, SW_RESTORE = 3, 6, 9
-_GWL_EXSTYLE: Final = -20
+SW_MAXIMIZE, SW_SHOWNOACTIVATE, SW_MINIMIZE, SW_RESTORE = 3, 4, 6, 9
+_VK_LBUTTON: Final = 0x01
+_GUI_INMOVESIZE: Final = 0x0002
+_GWL_STYLE, _GWL_EXSTYLE = -16, -20
+_WS_THICKFRAME: Final = 0x0004_0000
 _WS_EX_TOOLWINDOW: Final = 0x0000_0080
 _WS_POPUP: Final = 0x8000_0000
 _WS_EX_TRANSPARENT, _WS_EX_LAYERED, _WS_EX_NOACTIVATE = 0x0000_0020, 0x0008_0000, 0x0800_0000
@@ -208,6 +230,23 @@ def is_maximized(hwnd: int) -> bool:
 
 def is_minimized(hwnd: int) -> bool:
     return bool(_IsIconic(hwnd))
+
+
+def dragging() -> bool:
+    """The user is holding the left button or the foreground window is in a move or size loop."""
+    info = GUITHREADINFO()
+    info.cbSize = ctypes.sizeof(GUITHREADINFO)
+    in_loop = bool(_GetGUIThreadInfo(0, ctypes.byref(info))) and bool(info.flags & _GUI_INMOVESIZE)
+    return in_loop or bool(_GetAsyncKeyState(_VK_LBUTTON) & 0x8000)
+
+
+def cloaked(hwnd: int) -> bool:
+    return _cloaked(hwnd)
+
+
+def resizable(hwnd: int) -> bool:
+    """The window has a sizing border (WS_THICKFRAME): it is meant to be resized."""
+    return bool(int(_GetWindowLongW(hwnd, _GWL_STYLE)) & _WS_THICKFRAME)
 
 
 def is_visible(hwnd: int) -> bool:
