@@ -63,7 +63,7 @@ def test_tray_host_captures_real_icon_updates_routes_clicks_and_restores_explore
         return None
 
     owner = shell.AppWindow("workspace test tray owner", message)
-    image = shell.Icon(32, bytes((80, 160, 240, 255)) * 1024)
+    image = shell.Icon(16, bytes((80, 160, 240, 255)) * 256)
     host = TrayHost()
     tray = shell.TrayIcon(owner.handle, 0x8123, image, "Workspace fixture")
     try:
@@ -72,7 +72,8 @@ def test_tray_host_captures_real_icon_updates_routes_clicks_and_restores_explore
             app.processEvents()
         entry = next(entry for entry in host.poll() if entry.window == owner.handle)
         assert entry.tip == "Workspace fixture" and entry.callback == 0x8123
-        assert entry.image is not None and any(entry.image.bgra[3::4])
+        # A 16 px registration stays 16 px: stretching it on copy blocks its edges.
+        assert entry.image is not None and entry.image.size == 16 and any(entry.image.bgra[3::4])
         assert host.window.handle not in desktop_shell.taskbars()
         host.locate((Located(entry, Rect(42, 50, 64, 72)),))
         observed_bounds = tray.bounds()

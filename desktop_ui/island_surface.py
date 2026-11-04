@@ -489,15 +489,23 @@ class MenuCell(QtWidgets.QAbstractButton):
         icon("stop", lettering.ink.color).paint(painter, circle.adjusted(6, 6, -6, -6).toRect())
 
     def paint_tray(self, painter: QtGui.QPainter, slot: int, bounds: QtCore.QRectF) -> None:
-        """The application's own image at 22 px; one without an image reads as a window."""
+        """The application's own image, one image pixel per screen pixel up to 22 px, on whole device pixels.
+
+        Windows asks applications for tray icons at its small-icon size for the
+        screen's scale, so drawing them unscaled keeps them as sharp as the taskbar.
+        One without an image reads as a window.
+        """
         images = self.capsule.window_.tray_images
         image = images[slot] if slot < len(images) else None
         if image is None:
             self.paint_icon(painter, "window", color(self.capsule.look.lettering.ink), bounds.center() - QtCore.QPointF(8, 8))
             return
-        target = QtCore.QRectF(0, 0, 22, 22)
-        target.moveCenter(bounds.center())
-        painter.drawPixmap(target.toRect(), image)
+        scale = self.devicePixelRatioF()
+        side = min(22.0, image.width() / scale)
+        left = round((bounds.center().x() - side / 2) * scale) / scale
+        top = round((bounds.center().y() - side / 2) * scale) / scale
+        painter.setRenderHint(QtGui.QPainter.RenderHint.SmoothPixmapTransform)
+        painter.drawPixmap(QtCore.QRectF(left, top, side, side), image, QtCore.QRectF(image.rect()))
 
     def paint_icon(self, painter: QtGui.QPainter, name: str, ink: QtGui.QColor, at: QtCore.QPointF) -> None:
         painter.save()

@@ -127,6 +127,7 @@ extend-ignore-names = [
     "biWidth",
     "biXPelsPerMeter",
     "biYPelsPerMeter",
+    "bmWidth",
     "bmiColors",
     "bmiHeader",
     "cbClsExtra",

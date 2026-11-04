@@ -5,7 +5,7 @@ from ctypes import wintypes
 from dataclasses import dataclass
 
 from winapi._core import ULONG_PTR, fn, gdi32, user32
-from winapi.shell import BITMAPINFOHEADER
+from winapi.shell import BITMAPINFOHEADER, ICONINFO
 
 _CreateDIBSection = fn(
     gdi32,
@@ -49,6 +49,21 @@ _SendMessageTimeout = fn(
     ctypes.POINTER(ULONG_PTR),
 )
 _GetClassLongPtr = fn(user32, "GetClassLongPtrW", ULONG_PTR, wintypes.HWND, ctypes.c_int)
+_GetIconInfo = fn(user32, "GetIconInfo", wintypes.BOOL, wintypes.HICON, ctypes.POINTER(ICONINFO))
+_GetObject = fn(gdi32, "GetObjectW", ctypes.c_int, wintypes.HGDIOBJ, ctypes.c_int, ctypes.c_void_p)
+
+
+class BITMAP(ctypes.Structure):
+    bmWidth: int  # The one field read; the rest give Windows its layout.
+    _fields_ = (
+        ("bmType", wintypes.LONG),
+        ("bmWidth", wintypes.LONG),
+        ("bmHeight", wintypes.LONG),
+        ("bmWidthBytes", wintypes.LONG),
+        ("bmPlanes", wintypes.WORD),
+        ("bmBitsPixel", wintypes.WORD),
+        ("bmBits", ctypes.c_void_p),
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -100,6 +115,29 @@ def pixels(handle: int, size: int = 32) -> Pixels | None:
         if bitmap:
             _DeleteObject(bitmap)
         _DeleteDC(dc)
+
+
+def icon_size(handle: int) -> int | None:
+    """An icon handle holds one image: its width in pixels, or None when Windows can't say."""
+    info = ICONINFO()
+    if not handle or not _GetIconInfo(handle, ctypes.byref(info)):
+        return None
+    try:
+        bitmap = BITMAP()
+        source = info.hbmColor or info.hbmMask
+        if not source or not _GetObject(source, ctypes.sizeof(BITMAP), ctypes.byref(bitmap)):
+            return None
+        return bitmap.bmWidth if 1 <= bitmap.bmWidth <= 256 else None
+    finally:
+        # GetIconInfo hands the caller copies of both bitmaps.
+        for owned in (info.hbmColor, info.hbmMask):
+            if owned:
+                _DeleteObject(owned)
+
+
+def native_pixels(handle: int) -> Pixels | None:
+    """A copy at the icon's own size, so no stretching blurs or blocks its edges."""
+    return pixels(handle, icon_size(handle) or 32)
 
 
 def window_pixels(hwnd: int) -> Pixels | None:

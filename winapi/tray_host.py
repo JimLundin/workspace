@@ -12,7 +12,7 @@ from enum import Enum
 
 from winapi import desktop_shell, windows
 from winapi._core import LRESULT, ULONG_PTR, fn, user32
-from winapi.icon_pixels import Pixels, pixels
+from winapi.icon_pixels import Pixels, native_pixels
 from winapi.shapes import Rect
 from winapi.shell import TASKBAR_CREATED, AppWindow
 
@@ -201,7 +201,7 @@ class TrayHost:
                 observed = registration(ctypes.string_at(copy.data, copy.size))
                 if observed is not None:
                     self.entries = update(
-                        self.entries, observed, pixels(observed.icon) if observed.flags & 2 and observed.operation in (0, 1) else None
+                        self.entries, observed, native_pixels(observed.icon) if observed.flags & 2 and observed.operation in (0, 1) else None
                     )
         if message == self.created:
             return 0
