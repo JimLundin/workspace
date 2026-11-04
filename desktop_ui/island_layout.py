@@ -1,6 +1,7 @@
 """Where the island bar's capsules sit: a pure frame from measured sizes and presence.
 
 Activity stays centred where space permits; permanent controls anchor right.
+The controls menu opens from them, beside the tray, and activity keeps the rest.
 Tray overflow grows left of fixed disclosure without shifting navigation.
 Lead capsules grow leftwards from activity and trail capsules rightwards.
 The gap between two neighbours belongs to the pair: the full gap scaled by
@@ -204,16 +205,42 @@ def present(value: float) -> float:
     return min(1.0, max(0.0, value))
 
 
+def shown(capsule: Placed) -> float:
+    return capsule.width * present(capsule.presence)
+
+
+def boxed(capsule: Placed, x: float, top: float) -> Framed:
+    box = Box(x, top, shown(capsule), capsule.height)
+    return Framed(capsule.key, box, Box(x, 0, box.width, top), present(capsule.presence))
+
+
+def anchored(capsules: Sequence[Placed], metrics: Metrics, minimum: float) -> tuple[tuple[Framed, ...], float]:
+    """The fixed right controls and the menu opened beside them, and where the space left of them ends.
+
+    Fixed controls never move for tray disclosure. Its icon overflow grows
+    left of the reserved toggle, rather than shifting navigation. The menu
+    opens left of the tray, so it never covers the controls that open it.
+    """
+    right: tuple[Framed, ...] = ()
+    edge = max(0.0, metrics.width - 12)
+    for key in (Key.STATUS, Key.LAYER):
+        capsule = next((c for c in capsules if c.zone is Zone.RIGHT and c.key is key and c.presence > 0), None)
+        if capsule is None or shown(capsule) > edge:
+            continue  # Omit an unfit capsule rather than overlap another hit target.
+        edge -= shown(capsule)
+        right = (boxed(capsule, edge, metrics.top), *right)
+        edge = max(0.0, edge - metrics.gap)
+    boundary = max(0.0, edge - metrics.tray_width - metrics.gap) if right else metrics.width
+    menu = next((c for c in capsules if c.zone is Zone.MENU and c.presence > 0), None)
+    x = min(boundary, metrics.width - 12) - (shown(menu) if menu is not None else 0)
+    if menu is None or x < minimum:
+        return right, boundary
+    return (boxed(menu, x, metrics.top), *right), max(minimum, x - metrics.gap * present(menu.presence))
+
+
 def frame(placed: Sequence[Placed], metrics: Metrics) -> tuple[Framed, ...]:
     """Capsules in left-to-right order; absent ones (presence 0) take no space."""
     order: tuple[Key, ...] = tuple(Key)
-
-    def shown(capsule: Placed) -> float:
-        return capsule.width * present(capsule.presence)
-
-    def boxed(capsule: Placed, x: float) -> Framed:
-        box = Box(x, metrics.top, shown(capsule), capsule.height)
-        return Framed(capsule.key, box, Box(x, 0, box.width, metrics.top), present(capsule.presence))
 
     def position(capsule: Placed) -> int:
         return order.index(capsule.key)
@@ -221,23 +248,9 @@ def frame(placed: Sequence[Placed], metrics: Metrics) -> tuple[Framed, ...]:
     def zone(name: Zone) -> tuple[Placed, ...]:
         return tuple(sorted((c for c in placed if c.zone is name and c.presence > 0), key=position))
 
-    # Fixed controls never move for tray disclosure. Its icon overflow grows
-    # left of the reserved 36 px toggle, rather than shifting navigation.
-    right: tuple[Framed, ...] = ()
-    edge = max(0.0, metrics.width - 12)
-    left_fixed = tuple(boxed(capsule, 12) for capsule in zone(Zone.LEFT) if shown(capsule) <= max(0.0, metrics.width - 24))
+    left_fixed = tuple(boxed(capsule, 12, metrics.top) for capsule in zone(Zone.LEFT) if shown(capsule) <= max(0.0, metrics.width - 24))
     minimum = max((each.box.x + each.box.width + metrics.gap for each in left_fixed), default=0.0)
-    for key in (Key.STATUS, Key.LAYER):
-        capsule = next((c for c in zone(Zone.RIGHT) if c.key is key), None)
-        if capsule is None:
-            continue
-        width = shown(capsule)
-        if width > edge:
-            continue  # Omit an unfit capsule rather than overlap another hit target.
-        edge -= width
-        right = (boxed(capsule, edge), *right)
-        edge = max(0.0, edge - metrics.gap)
-    boundary = max(0.0, edge - metrics.tray_width - metrics.gap) if right else metrics.width
+    right, boundary = anchored(placed, metrics, minimum)
     islands = zone(Zone.ISLAND)
     if not islands:
         dynamic: tuple[Framed, ...] = ()
@@ -251,7 +264,7 @@ def frame(placed: Sequence[Placed], metrics: Metrics) -> tuple[Framed, ...]:
         return (*left_fixed, *dynamic, *right)
     island = islands[0]
     left = (metrics.width - shown(island)) / 2
-    centre = boxed(island, left)
+    centre = boxed(island, left, metrics.top)
 
     def outward(capsules: tuple[Placed, ...], edge: float, *, leading: bool) -> tuple[Framed, ...]:
         framed: tuple[Framed, ...] = ()
@@ -259,7 +272,7 @@ def frame(placed: Sequence[Placed], metrics: Metrics) -> tuple[Framed, ...]:
         for capsule in capsules:
             space = metrics.gap * min(before, present(capsule.presence))
             x = edge - space - shown(capsule) if leading else edge + space
-            framed = (boxed(capsule, x), *framed) if leading else (*framed, boxed(capsule, x))
+            framed = (boxed(capsule, x, metrics.top), *framed) if leading else (*framed, boxed(capsule, x, metrics.top))
             edge = x if leading else x + shown(capsule)
             before = present(capsule.presence)
         return framed

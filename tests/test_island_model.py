@@ -12,6 +12,7 @@ from desktop_ui.island_model import (
     CapsuleView,
     Capture,
     Control,
+    Expansion,
     Glyph,
     Job,
     Key,
@@ -34,7 +35,7 @@ ASKING = Agent("Which sheet should the reply cover?", waiting=True)
 RECORDING = RecordingState(phase="recording", seconds=125)
 
 
-def view(observed: Observed, key: Key, *, expanded: bool = False, hovered: Key | None = None) -> CapsuleView:
+def view(observed: Observed, key: Key, *, expanded: Expansion | None = None, hovered: Key | None = None) -> CapsuleView:
     """Read one identity without depending on other capsules' inventory positions."""
     return next(each for each in island(observed, expanded=expanded, hovered=hovered) if each.key is key)
 
@@ -65,7 +66,7 @@ def test_fixed_controls_survive_all_activity_menu_and_device_states() -> None:
                 replace(baseline, agent=ASKING),
                 replace(baseline, agent=WORKING, job=Job.TRANSCRIBING, recording=RECORDING),
             ):
-                for expanded in (False, True):
+                for expanded in (None, Expansion.MENU, Expansion.REQUEST):
                     for key in (Key.CANVAS, Key.LAYER, Key.STATUS):
                         assert view(observed, key, expanded=expanded) == view(baseline, key)
                     activity = (each for each in island(observed, expanded=expanded) if each.zone not in (Zone.LEFT, Zone.RIGHT))
@@ -116,6 +117,18 @@ def test_waiting_question_wins_except_during_dictation() -> None:
     assert question.slots == ((Text("Needs you", strong=True), Glyph("down")),)
     beside = view(replace(RESTING, agent=ASKING, dictating=True), Key.AGENT)
     assert (beside.tint, beside.action) == (Tint.ATTENTION, Action.OPEN_QUESTION)
+
+
+def test_the_menu_opens_from_the_right_controls_and_a_question_from_the_centre() -> None:
+    # Defects: the menu opens as the centre island, a question follows the menu to
+    # the right, or activity stays in the centre while the menu lists it.
+    busy = replace(RESTING, agent=WORKING, job=Job.ANSWERING, recording=RECORDING, inbox=2)
+    dynamic = tuple((each.key, each.zone) for each in island(busy, expanded=Expansion.MENU) if each.zone not in (Zone.LEFT, Zone.RIGHT))
+    assert dynamic == ((Key.MENU, Zone.MENU), (Key.INBOX, Zone.TRAIL))
+    question = tuple(
+        (each.key, each.zone) for each in island(replace(busy, agent=ASKING), expanded=Expansion.REQUEST) if each.zone not in (Zone.LEFT, Zone.RIGHT)
+    )
+    assert question == ((Key.ISLAND, Zone.ISLAND), (Key.INBOX, Zone.TRAIL))
 
 
 def test_inbox_only_exists_while_pending_and_keeps_exact_count_in_label() -> None:

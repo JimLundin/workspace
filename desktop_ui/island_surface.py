@@ -759,8 +759,9 @@ class BarWindow(QtWidgets.QWidget):
         for each in presented.drawn:
             capsule = self.capsule(each.view.key)
             capsule.show_view(each, contrast=presented.contrast)
-            if each.view.key is Key.ISLAND:
+            if each.view.key is Key.MENU:
                 capsule.show_menu(presented.menu if each.content.height > HEIGHT else None)
+            if each.view.key is Key.ISLAND:
                 capsule.show_request(presented.request if each.content.height > HEIGHT else None)
             capsule.frame(each.framed)
             capsule.show()

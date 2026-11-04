@@ -34,7 +34,7 @@ lazy from desktop_ui.components.appearance import Look, look
 lazy from desktop_ui.components.meaning import Tint
 lazy from desktop_ui.island_layout import HEIGHT, Metrics, expansion, frame, snap
 lazy from desktop_ui.island_menu import Chosen, Command, Dismissed, Menu, ToolChoice, entries, restores_focus, rows
-lazy from desktop_ui.island_model import Action, Agent, CapsuleView, Job, Key, Marker, Observed, Spinner, capture, island, keyboard
+lazy from desktop_ui.island_model import Action, Agent, CapsuleView, Expansion, Job, Key, Marker, Observed, Spinner, capture, island, keyboard
 lazy from desktop_ui.island_motion import IslandMotion, Shown, advance, finish, placed, retarget, settled
 lazy from desktop_ui.island_surface import TOP, BarWindow, Drawn, Presented
 lazy from desktop_ui.motion import resting
@@ -510,14 +510,15 @@ class DesktopBar:
             self.expanded = self.menu()
         menu = self.expanded
         request = self.request
-        self.views = island(self.observed(), hovered=self.hovered, expanded=menu is not None or request is not None)
+        opened = Expansion.MENU if menu is not None else Expansion.REQUEST if request is not None else None
+        self.views = island(self.observed(), hovered=self.hovered, expanded=opened)
         shown = tuple(
             Shown(
                 view,
                 self.window.measure_request(request)
                 if request is not None and view.key is Key.ISLAND
                 else expansion(menu)
-                if menu is not None and view.key is Key.ISLAND
+                if menu is not None and view.key is Key.MENU
                 else self.window.measure(view),
             )
             for view in self.views
@@ -613,7 +614,7 @@ class DesktopBar:
         moving = not settled(self.motion) or not resting(tray.width_motion)
         if self.spinning() or waving:
             for key, capsule in self.window.capsules.items():
-                if key in (Key.ISLAND, Key.AGENT, Key.JOB):
+                if key in (Key.ISLAND, Key.MENU, Key.AGENT, Key.JOB):
                     capsule.update_indicators()
         running = moving or spinning or waving
         self.last_frame = now if running else None

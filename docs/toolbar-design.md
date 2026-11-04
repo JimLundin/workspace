@@ -57,9 +57,10 @@ is doing for you. Its policy decides what may change it.
 "Starting…", "Stopping…" and "Saving…" replace the recording's timer; "Check
 recording" turns it red and the detached capsule orange.
 
-Pressing the right-hand clock/power readings expands the centre
-into the controls menu: 272 px wide with a
-21 px radius, its rows concentric inside it. Running activities lead as live rows
+Pressing the right-hand clock/power readings opens the controls menu beside
+them, right-aligned just left of the tray and fixed controls: 272 px wide with a
+21 px radius, its rows concentric inside it. Dynamic elements keep the centre of
+the remaining space; a question still expands the centre island. Running activities lead as live rows
 with their own Stop, the agent's with its phase; the detached agent and recording
 capsules leave the bar while the menu is open. The canvas comes first, then the feed and recording, the
 keyboard, and the desktop tools. Window tiling discloses its items in place.

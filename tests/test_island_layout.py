@@ -69,6 +69,21 @@ def test_fixed_right_order_and_disclosure_reservation_survive_activity_changes()
                 assert activity.box.x + activity.box.width <= baseline[1].box.x - tray - 12
 
 
+def test_the_menu_opens_beside_the_right_controls_while_activity_keeps_the_centre() -> None:
+    # Defects: the menu opens in the middle, away from the controls that open it,
+    # covers the tray or fixed controls, or pulls the inbox off the centre.
+    fixed = (Placed(Key.CANVAS, Zone.LEFT, 36, 34), Placed(Key.STATUS, Zone.RIGHT, 180, 34))
+    inbox = Placed(Key.INBOX, Zone.TRAIL, 34, 34)
+    framed = frame((Placed(Key.MENU, Zone.MENU, 272, 320), inbox, *fixed), Metrics(1600, tray_width=120))
+    assert [(each.key, each.box.x, each.box.width) for each in framed] == [
+        (Key.CANVAS, 12, 36),
+        (Key.INBOX, 800, 34),
+        (Key.MENU, 1004, 272),
+        (Key.STATUS, 1408, 180),
+    ]
+    assert tuple(each for each in framed if each.key is not Key.MENU) == frame((inbox, *fixed), Metrics(1600, tray_width=120))
+
+
 def width_of(text: Text) -> float:
     return len(text.text) * 7
 
