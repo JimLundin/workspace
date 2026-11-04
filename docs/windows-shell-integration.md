@@ -35,7 +35,7 @@ Banner suppression uses Windows notification settings, separately from mirroring
 
 The initial duplicate window-controls segment and tabbed-window prototype were
 removed after workflow regressions. Workspace preserves each application's title
-bar, apart from the pinned web-app slots. Apps + Esc opens the window switcher.
+bar, apart from the pinned web-app slots. The **⌃⌥⇧ C** chord opens the window switcher.
 
 ## Notification access
 

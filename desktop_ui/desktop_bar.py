@@ -35,7 +35,7 @@ lazy from desktop_ui.away_screens import AwayScreens
 lazy from desktop_ui.bar_status import StatusObserver
 lazy from desktop_ui.components.appearance import Look, look
 lazy from desktop_ui.components.meaning import Tint
-lazy from desktop_ui.desktop_pager import Swipe, pager, reach, swipe
+lazy from desktop_ui.desktop_pager import Swipe, pager, swipe
 lazy from desktop_ui.island_layout import HEIGHT, Metrics, expansion, frame, snap
 lazy from desktop_ui.island_menu import (
     Applied,
@@ -301,9 +301,7 @@ class DesktopBar:
                 self.applications = self.arrangement.shelf
         self.window.shell_sections.applications((self.applications, self.observations.foreground()), self.application_click)
         arrangement = self.arrangement
-        self.window.shell_sections.desktops(
-            pager(arrangement.placed, arrangement.current, reach(self.current_layer, chord=self.chord_held)), self.navigate
-        )
+        self.window.shell_sections.desktops(pager(arrangement.placed, arrangement.current, chord=self.chord_held), self.navigate)
         # Changed apps or pager targets must also publish section geometry when the island is still,
         # or a pager that loses its hints keeps its wider capsule.
         if previous != (sections.app_snapshot, sections.pager_view):

@@ -1,6 +1,7 @@
 """The key map: what each physical key does, per layer; and the indicator's words."""
 
 from desktop_ui.keymap import ROWS, Kind, Shortcut, indicator_text, keymap, shortcut, shortcut_hint
+from miryoku.firmware import CHORDS
 from miryoku.layout import Layer
 from protocol import Tool
 lazy from desktop_ui.keymap import TOOL_NAMES
@@ -17,12 +18,15 @@ def test_rows_are_the_nordic_iso_keyboard() -> None:
 
 
 def test_shortcuts_use_physical_keys_the_right_thumb_and_dedicated_voice_first() -> None:
-    # Defects: using BASE outputs as keycaps, selecting another layer's thumb, or
-    # advertising the Tools-layer dictation copy instead of its dedicated key.
+    # Defects: using BASE outputs as keycaps, selecting another layer's thumb,
+    # advertising the Tools-layer dictation copy instead of its dedicated key, or
+    # dropping the hint of a tool only a chord reaches.
     assert shortcut(Tool.ASK) == Shortcut("P", "V")
     assert shortcut(Tool.OPEN_INBOX) == Shortcut("T", "V")
-    assert shortcut(Tool.WINDOW_SWITCHER) == Shortcut("X", ".")
+    assert shortcut(Tool.COPY_TRANSCRIPT) == Shortcut("C", ".")
     assert shortcut(Tool.DICTATE) == Shortcut("Space", None)
+    assert shortcut(Tool.WINDOW_SWITCHER) == Shortcut("C", "⌃⌥⇧")
+    assert shortcut_hint(shortcut(Tool.WINDOW_SWITCHER), compact=True) == "⌃⌥⇧ C"
 
 
 def test_shortcut_hints_share_keycap_notation_and_omit_absent_bindings() -> None:
@@ -79,16 +83,16 @@ def test_tools_and_apps_layers() -> None:
     assert tools["V"][2] is Kind.HELD
     assert tools["M"] == ("Talk", "hold", Kind.TOOL)
     apps = caps(Layer.APPS)
-    assert apps["2"] == ("Terminal", "", Kind.APP)
-    assert apps["Caps"] == ("Desk 1", "", Kind.TOOL)
+    assert apps["C"] == ("Copy speech", "", Kind.TOOL)
     assert apps["."][2] is Kind.HELD
 
 
-def test_every_tool_has_a_label() -> None:
+def test_every_tool_is_on_the_key_map_or_a_chord() -> None:
+    # Defect: removing a binding leaves a tool no key reaches.
     layers: list[Layer | None] = [None, *list(Layer)]
     labels = {cap.label for layer in layers for row in keymap(layer) for cap in row if cap.kind is Kind.TOOL}
-    assert len(labels) == len(set(Tool))
-    assert set(TOOL_NAMES) == set(Tool)
+    labels |= {TOOL_NAMES[request] for request in CHORDS if isinstance(request, Tool)}
+    assert labels == {TOOL_NAMES[tool] for tool in Tool}
 
 
 def test_indicator_text() -> None:

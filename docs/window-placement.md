@@ -131,8 +131,8 @@ Edge window that isn't Outlook's or Teams' app window.
 - Display changes re-run placement on the next poll.
 - Workspace creates missing desktops. It never removes one.
 
-Pause or resume placement from the controls menu or with **Hold . + Ä**.
-**Hold . + ,** puts every window back now and ends a zoom.
+Pause or resume placement from the controls menu or with the **⌃⌥⇧ X** chord.
+The **⌃⌥⇧ D** chord puts every window back now and ends a zoom.
 
 ## Navigation
 
@@ -143,28 +143,29 @@ desktop and app it came from and went to and whether it launched. The
 application observer carries the effect out and hands the record to a callback,
 ready for a navigation log.
 
-- **App keys** (Apps layer, left hand) go to the app's placed desktop and focus
+Key navigation is the Ctrl+Alt+Shift chords, the same on both keyboards:
+`miryoku/firmware.py`'s `CHORDS` table maps each request to its letter, and the
+README lists them. On the laptop the layout's home row mods hold Ctrl+Alt+Shift.
+The letters below are the chord letters.
+
+- **App chords** (left-hand letters) go to the app's placed desktop and focus
   its window. Repeated taps cycle its windows; an app that isn't running is
   started. Outlook and Teams are the pinned web apps, launched like their
   toolbar slots.
-- **Spatial focus** (**8 9 0 +**, or Apps with the physical arrows) moves to the
+- **Spatial focus** (**N E I O**) moves to the
   placed window on the current desktop that shares the most edge with the
   focused one in that direction, then the closest. It crosses monitors and
   doesn't wrap.
-- **Desktop keys**: **K** and **L** step to the previous and next desktop and
-  stop at the ends. **Caps**, **S** and **D** jump to desktops 1 to 3. Arriving
+- **Desktop chords**: **K** and **H** step to the previous and next desktop and
+  stop at the ends. **J**, **L**, **U** and **Y** jump to desktops 1 to 4. Arriving
   focuses the window last used there.
-- **Zoom** (**A**) fills the focused window's monitor. Placement leaves it alone
+- **Zoom** (**M**) fills the focused window's monitor. Placement leaves it alone
   until the key is pressed again or focus leaves the window.
 - **The pager** after the toolbar's pinned slots shows each desktop and marks the
-  current one. Its names list the apps placed there. While the Apps layer is up,
-  each target shows its keycap; while the firmware keyboard holds Ctrl+Alt+Shift,
-  each shows its chord's letter, such as **L**, since the held Ctrl+Alt+Shift completes it. A horizontal scroll over the bar steps one
-  desktop per gesture.
-- **Firmware chords**: with the Charybdis Nano connected there is no Apps
-  layer. Ctrl+Alt+Shift plus a letter sends the same tool or app request
-  instead, so it arrives as a key navigation. `miryoku/firmware.py`'s `CHORDS`
-  table maps each request to its letter; the README lists them.
+  current one. Its names list the apps placed there. While either keyboard
+  holds Ctrl+Alt+Shift, each target shows its chord's letter, such as **L**,
+  since the held Ctrl+Alt+Shift completes it. A horizontal scroll over the bar
+  steps one desktop per gesture.
 - **The toolbar** shows apps from every desktop. Clicking one on another
   desktop switches there before focusing it.
 

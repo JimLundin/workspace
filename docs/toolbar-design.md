@@ -131,8 +131,8 @@ The desktop pager follows the slots in its own capsule: a previous chevron, one
 number per desktop and a next chevron. The current desktop has the quiet
 selection fill. Each number's tooltip and accessible name read the desktop and
 the apps placed on it, such as "Desktop 1 (current) · windowsterminal, code,
-Teams". While the Apps layer is held or locked, every target shows the physical
-keycap that reaches it instead, read from the layout. A pager of one desktop is
+Teams". While either keyboard holds Ctrl+Alt+Shift, every target shows the
+chord letter that reaches it instead, read from the chord table. A pager of one desktop is
 hidden. A horizontal scroll over any capsule (tilt wheel, Shift+wheel or a
 touchpad) steps one desktop per gesture; a gesture ends after 0.35 s without
 wheel events. A switch made elsewhere, such as Win+Ctrl+arrow, shows within a

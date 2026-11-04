@@ -110,7 +110,7 @@ class NativeKeyboardSystem:
 class WinHost:
     """What the engine needs, done with Windows calls."""
 
-    __slots__ = ("assistant", "counts", "owned", "platform")
+    __slots__ = ("assistant", "chord", "counts", "owned", "platform")
 
     def __init__(self, platform: KeyboardSystem | None = None) -> None:
         self.platform: KeyboardSystem = platform if platform is not None else NativeKeyboardSystem()
@@ -120,6 +120,8 @@ class WinHost:
         self.owned: set[Key | Mod] = set()
         """Attempted Workspace output, retained until Windows accepts its key-up."""
         """Feature uses since the last flush."""
+        self.chord = False
+        """The layout's home row chord, last published like the firmware keyboard's."""
 
     def send(self, key: Key | Mod, *, down: bool) -> None:
         if down:
@@ -166,6 +168,9 @@ class WinHost:
     def indicate(self, indicator: Indicator) -> None:
         layer: int = indicator.layer.value if indicator.layer else 0
         self.tell_assistant(WM_INDICATOR, encode_indicator(layer, locked=indicator.locked, caps_word=indicator.caps_word), 0)
+        if indicator.chord != self.chord:
+            self.chord = indicator.chord
+            self.tell_assistant(WM_CHORD, int(indicator.chord), 0)
 
     def tell_assistant(self, message: int, wparam: int, lparam: int) -> bool:
         """Posts to the assistant's window; nothing happens if it isn't running."""
@@ -252,7 +257,7 @@ class Keyboard:
             self.host.tell_assistant(WM_KEY_STATE, 0, 0)
             for scancode in sorted(self.pressed):
                 self.host.tell_assistant(WM_KEY_STATE, scancode, 1)
-            self.host.tell_assistant(WM_CHORD, int(self.chord_held), 0)
+            self.host.tell_assistant(WM_CHORD, int(self.chord_held or self.engine.shown.chord), 0)
         if message != WM_TOGGLE_LAYOUT or self.firmware is not None:
             return
         self.busy = True
@@ -449,13 +454,6 @@ class Keyboard:
         with contextlib.suppress(OSError):
             self.platform.record_recovery({"phase": "hook_reinstall", "ok": True, "outage_ms": hook_watch.offset(now, outage.since), **silent})
 
-    def desktop_direction(self, key: inputs.KeyEvent, *, down: bool) -> bool:
-        self.busy = True
-        try:
-            return self.engine.native_direction(self.host, Key(key.vk), down=down, now=key.time)
-        finally:
-            self.busy = False
-
     def firmware_key(self, key: inputs.KeyEvent, *, down: bool) -> None:
         identity = key.scancode | (0x100 if key.flags & inputs.LLKHF_EXTENDED else 0)
         if down:
@@ -547,8 +545,6 @@ class Keyboard:
             if down and not key.flags & inputs.LLKHF_INJECTED:
                 self.native_releases.add(key.scancode | (0x100 if key.flags & inputs.LLKHF_EXTENDED else 0))
             return False
-        if 0x25 <= key.vk <= 0x28 and not key.flags & inputs.LLKHF_INJECTED and self.desktop_direction(key, down=down):
-            return True
         if native_control(key.vk):
             self.engine.typed = ""
             return False

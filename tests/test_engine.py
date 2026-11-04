@@ -85,7 +85,7 @@ class FakeHost:
 
     def indicate(self, indicator: Indicator) -> None:
         parts = [indicator.layer.name.lower()] if indicator.layer else []
-        parts += ["locked"] * indicator.locked + ["caps"] * indicator.caps_word
+        parts += ["locked"] * indicator.locked + ["caps"] * indicator.caps_word + ["chord"] * indicator.chord
         self.indicated.append(" ".join(parts) or "-")
 
 
@@ -604,6 +604,29 @@ def test_same_hand_shortcut_works_after_holding() -> None:
     assert t.take() == "+CTL +z -z -CTL"
 
 
+def test_same_hand_home_row_mods_combine_for_the_other_hand() -> None:
+    # Defect: a second same-hand mod settles the first as a tap, so a quick
+    # Ctrl+Shift needs each mod held past the tapping term.
+    t = Harness()
+    t.d("e")
+    t.d("r")  # s/CTL then t/SFT, same hand
+    t.tap("8")
+    t.u("r")
+    t.u("e")
+    assert t.take() == "+CTL +SFT +j -j -SFT -CTL"
+
+
+def test_same_hand_home_row_mods_without_the_other_hand_are_letters() -> None:
+    # Defect: deferring same-hand mods turns a rolled or nested pair into a shortcut.
+    for releases in (("e", "r"), ("r", "e")):
+        t = Harness()
+        t.d("e")
+        t.d("r")
+        for name in releases:
+            t.u(name)
+        assert t.take() == "+s -s +t -t"
+
+
 def test_layer_thumbs_are_not_affected() -> None:
     t = Harness()
     t.d("c")
@@ -800,48 +823,50 @@ def test_f6_remains_a_native_laptop_function() -> None:
     assert t.take() == ""
 
 
-def test_apps_directions_keep_spatial_focus_with_modifiers() -> None:
-    for modifier in ("p", "o"):
-        for direction, tool in (("8", Tool.FOCUS_LEFT), ("9", Tool.FOCUS_DOWN), ("0", Tool.FOCUS_UP), ("-", Tool.FOCUS_RIGHT)):
-            t = Harness()
-            t.d(".")
-            t.timeout_last()
-            t.d(modifier)
-            t.tap(direction)
-            t.u(modifier)
-            t.u(".")
-            requests = [line for line in t.h.log if line.startswith("?")]
-            assert requests == [f"?{tool.name.lower()}+", f"?{tool.name.lower()}-"]
-            assert t.e.layer() is None and not t.e.mods.counts
+# ---- firmware chords -------------------------------------------------------------------
 
 
-def test_apps_search_is_available_without_the_function_row() -> None:
+def test_left_home_row_chord_and_a_right_letter_make_the_firmware_request() -> None:
+    # Defects: the letter is typed (an AltGr character on a Swedish host), the
+    # request isn't paired, Alt's lone release opens a menu, or a modifier sticks.
     t = Harness()
-    t.d(".")
-    t.timeout_last()
-    t.tap("x")
-    t.u(".")
-    assert t.take() == "?window_switcher+ ?window_switcher-"
+    for mod in ("w", "e", "r"):  # R S T: Alt, Ctrl, Shift
+        t.d(mod)
+    t.tap("8")  # J
+    for mod in ("r", "e", "w"):
+        t.u(mod)
+    assert t.take() == "+ALT +CTL +SFT +0xe8 -0xe8 ?desktop_1+ ?desktop_1- -SFT -CTL -ALT"
+    assert not t.e.mods.counts
+    assert t.h.indicated == ["chord", "-"], "the pager's chord hints follow the held modifiers"
 
 
-def test_physical_arrows_compose_with_pending_apps_and_pair_release_after_layer_exit() -> None:
+def test_right_home_row_chord_reaches_apps_from_a_left_home_row_letter() -> None:
+    # Defect: a tapped home row mod letter skips the chord, typing r with Ctrl+Alt+Shift.
     t = Harness()
-    assert not t.e.native_direction(t.h, Key.LEFT, down=True, now=0)
-    t.d(".")
-    assert t.e.native_direction(t.h, Key.RIGHT, down=True, now=10)
-    assert t.e.native_direction(t.h, Key.RIGHT, down=True, now=20)
-    t.u(".")
-    assert t.e.native_direction(t.h, Key.RIGHT, down=False, now=30)
-    assert t.take() == "?focus_right+ ?focus_right-"
-    assert not t.e.desktop_held and t.e.layer() is None
-    t.d(".")
-    assert t.e.native_direction(t.h, Key.DOWN, down=True, now=40)
-    t.e.toggle(t.h)
-    assert t.take() == "?focus_down+ ?focus_down- !OFF"
-    assert not t.e.desktop_held
+    for mod in ("o", "p", "["):  # N E I: Shift, Ctrl, Alt
+        t.d(mod)
+    t.tap("w")  # R
+    for mod in ("[", "p", "o"):
+        t.u(mod)
+    assert t.take() == "+SFT +CTL +ALT +0xe8 -0xe8 ?app:notepad+ ?app:notepad- -ALT -CTL -SFT"
 
 
-# ---- tools and apps layers ---------------------------------------------------------------
+def test_chords_need_exactly_ctrl_alt_shift_and_a_chord_letter() -> None:
+    # Defects: a letter outside the chord table is swallowed, or Win+Ctrl+Alt+Shift
+    # (the Office key) is taken for a chord.
+    t = Harness()
+    for mod in ("o", "p", "["):
+        t.d(mod)
+    t.tap("caps")  # Z
+    assert t.take() == "+SFT +CTL +ALT +z -z"
+    t = Harness()
+    for mod in ("q", "w", "e", "r"):  # A R S T: Win, Alt, Ctrl, Shift
+        t.d(mod)
+    t.tap("8")
+    assert t.take() == "+0x5b +ALT +CTL +SFT +j -j"
+
+
+# ---- tools layer ---------------------------------------------------------------------
 
 
 def test_tools_layer_key_requests_its_tool() -> None:
@@ -866,22 +891,6 @@ def test_tab_still_taps() -> None:
     t = Harness()
     t.tap("v")
     assert t.take() == "+0x9 -0x9"
-
-
-def test_apps_layer_key_requests_its_app() -> None:
-    t = Harness()
-    t.d(".")  # Delete thumb: Apps while held
-    t.tap("2")  # the first app (left hand, top row)
-    t.u(".")
-    assert t.take() == "?app:terminal+ ?app:terminal-"
-
-
-def test_desktop_keys_are_on_the_apps_layer() -> None:
-    t = Harness()
-    t.d(".")
-    t.tap("caps")  # bottom row, left: the first desktop
-    t.u(".")
-    assert t.take() == "?desktop_1+ ?desktop_1-"
 
 
 # ---- snippets --------------------------------------------------------------------------

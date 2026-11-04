@@ -343,7 +343,7 @@ class KeymapWindow:
         layout.addWidget(self.canvas)
         layout.addWidget(
             label(
-                "Space: hold · B: dictate toggle · N: agent toggle · Apps + Esc: windows",
+                "Space: hold · B: dictate toggle · N: agent toggle · ⌃⌥⇧ + C: windows",
                 "muted",
             )
         )

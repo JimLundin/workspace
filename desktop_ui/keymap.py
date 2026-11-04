@@ -6,6 +6,7 @@ from enum import Enum, auto
 from typing import Final
 
 from assistant.hotkeys import Route, route
+from miryoku.firmware import CHORDS
 from miryoku.layout import (
     BASE,
     COPY,
@@ -57,8 +58,12 @@ class Shortcut:
     hold: str | None
 
 
+CHORD_HOLD: Final = "⌃⌥⇧"
+"""Ctrl+Alt+Shift, held for a chord letter, in the README's notation."""
+
+
 def shortcut(tool: Tool) -> Shortcut | None:
-    """Prefer a dedicated voice key, otherwise the first binding in Layer order."""
+    """Prefer a dedicated voice key, then the first binding in Layer order, then the tool's chord."""
     for scancode, voice in VOICE_KEYS.items():
         if voice is tool:
             return Shortcut(PHYSICAL_NAMES[scancode], None)
@@ -70,7 +75,8 @@ def shortcut(tool: Tool) -> Shortcut | None:
         for cell, binding in enumerate(TABLE[layer]):
             if binding is tool:
                 return Shortcut(PHYSICAL_NAMES[physical[cell]], PHYSICAL_NAMES[physical[held]])
-    return None
+    letter = CHORDS.get(tool)
+    return Shortcut(letter, CHORD_HOLD) if letter is not None else None
 
 
 def shortcut_hint(binding: Shortcut | None, *, compact: bool = False) -> str:

@@ -9,6 +9,7 @@ from enum import Enum, auto
 from typing import Final, Protocol, assert_never
 
 from config import SNIPPETS
+from miryoku.firmware import CHORD_KEYS
 from miryoku.layout import (
     CELLS,
     ESCAPE,
@@ -136,9 +137,11 @@ class Indicator:
     layer: Layer | None
     locked: bool = field(kw_only=True)
     caps_word: bool = field(kw_only=True)
+    chord: bool = field(kw_only=True)
+    """Ctrl+Alt+Shift are held, so a letter makes its firmware chord's request."""
 
 
-QUIET: Final = Indicator(None, locked=False, caps_word=False)
+QUIET: Final = Indicator(None, locked=False, caps_word=False, chord=False)
 
 
 @dataclass(frozen=True, slots=True)
@@ -283,7 +286,6 @@ class Engine:
     locked: Layer | None = None
     mods: Modifiers = field(default_factory=Modifiers)
     voice_held: dict[Scancode, Tool] = field(default_factory=dict[Scancode, Tool])
-    desktop_held: dict[Key, Tool] = field(default_factory=dict[Key, Tool])
     """Dedicated voice keys currently held, independent of the layout's layers."""
     typed: str = ""
     """The last characters typed, for snippets. Anything that moves the cursor, or a
@@ -302,11 +304,15 @@ class Engine:
         return verdict
 
     def refresh(self, host: Host) -> None:
-        """Tells the indicator if what it should show has changed."""
-        now = Indicator(self.layer(), locked=self.locked is not None, caps_word=self.caps_word)
-        if now != self.shown:
-            self.shown = now
-            host.indicate(now)
+        """Tells the indicator if what it should show has changed.
+
+        Every key event refreshes, so the measured keyboard path compares the
+        fields and builds a frozen record only for a change.
+        """
+        layer, locked, chord, shown = self.layer(), self.locked is not None, self.chording(), self.shown
+        if layer is not shown.layer or locked is not shown.locked or self.caps_word is not shown.caps_word or chord is not shown.chord:
+            self.shown = Indicator(layer, locked=locked, caps_word=self.caps_word, chord=chord)
+            host.indicate(self.shown)
 
     def toggle(self, host: Host) -> None:
         """Switch the layout on/off, releasing held input and clearing its indicator."""
@@ -355,44 +361,24 @@ class Engine:
                 self.event(host, KeyDown(cell, now) if down else KeyUp(cell, now))
                 return Verdict.SWALLOW
 
-    def native_direction(self, host: Host, key: Key, *, down: bool, now: int) -> bool:
-        """Physical arrows compose with Apps; their release stays paired after leaving the layer.
-
-        The native key fields and output owner preserve this measured callback's
-        allocation scope; the timestamp also resolves a pending Apps hold.
-        """
-        if key in self.desktop_held:
-            if not down:
-                host.request(self.desktop_held.pop(key), down=False)
-            return True
-        if not self.enabled or not down:
-            return False
-        if self.pending is not None and self.pending.hold is Layer.APPS:
-            self.resolve(host, Decision.HOLD, now=now)
-            self.refresh(host)
-        if self.layer() is not Layer.APPS:
-            return False
-        match key:
-            case Key.LEFT:
-                action = Tool.FOCUS_LEFT
-            case Key.DOWN:
-                action = Tool.FOCUS_DOWN
-            case Key.UP:
-                action = Tool.FOCUS_UP
-            case Key.RIGHT:
-                action = Tool.FOCUS_RIGHT
-            case _:
-                return False
-        self.desktop_held[key] = action
-        self.typed = ""
-        host.request(action, down=True)
-        return True
-
     def in_streak(self, now: int) -> bool:
         return self.configuration.streak_ms > 0 and self.last_typed_at is not None and elapsed(now, self.last_typed_at) < self.configuration.streak_ms
 
     def quick_tap(self, cell: int, now: int) -> bool:
         return self.last_tap is not None and self.last_tap.cell == cell and elapsed(now, self.last_tap.at) < self.configuration.quick_tap_ms
+
+    def chording(self) -> bool:
+        """Exactly Ctrl+Alt+Shift: Win never takes part, because Ctrl+Alt+Shift+Win is the Office key."""
+        counts = self.mods.counts
+        return len(counts) == 3 and Mod.GUI not in counts
+
+    def chorded(self, a: Action) -> Action:
+        """A letter tapped while chording asks for its firmware chord's request, as on the firmware keyboard."""
+        match a:
+            case Key() if self.chording() and (request := CHORD_KEYS.get(a.vk)) is not None:
+                return request
+            case _:
+                return a
 
     def layer(self) -> Layer | None:
         """The layer keys are read from: the top held layer, else a locked one, else
@@ -427,6 +413,7 @@ class Engine:
                         return
                     case other:
                         a = other
+                a = self.chorded(a)
                 if layer is not None and a is not Command.NOTHING:
                     host.used(f"{layer.name.lower()}:{describe(a)}")
                 self.pressed[cell] = a
@@ -459,12 +446,17 @@ class Engine:
                             if isinstance(waiting, KeyDown):
                                 return
                             break
-                # The first press on the modifier's own hand is a roll.
+                # The first press on the modifier's own hand is a roll, unless it is
+                # another home row mod: same-hand mods combine, as QMK's Chordal Hold.
                 first_press = not any(isinstance(waiting, KeyDown) for waiting in self.buffer)
                 if first_press and isinstance(p.hold, Mod) and is_left_hand(cell) == is_left_hand(p.cell):
-                    self.resolve(host, Decision.TAP, now=now)
-                    self.event(host, e)
-                    return
+                    match self.configuration.actions[self.layer()][cell]:
+                        case TapHold(hold=Mod()):
+                            pass
+                        case _:
+                            self.resolve(host, Decision.TAP, now=now)
+                            self.event(host, e)
+                            return
             case KeyUp():
                 pass
             case _:
@@ -476,7 +468,11 @@ class Engine:
             return
         self.buffer.append(e)
         if isinstance(e, KeyUp) and any(isinstance(waiting, KeyDown) and waiting.cell == e.cell for waiting in self.buffer):
-            self.resolve(host, Decision.HOLD, now=e.at)
+            # A home row mod holds only for a key on the other hand; a same-hand tap inside it is a roll.
+            across = isinstance(p.hold, Layer) or any(
+                isinstance(waiting, KeyDown) and is_left_hand(waiting.cell) != is_left_hand(p.cell) for waiting in self.buffer
+            )
+            self.resolve(host, Decision.HOLD if across else Decision.TAP, now=e.at)
 
     def timeout(self, host: Host, timer: int) -> None:
         if self.pending is not None and self.pending.timer == timer:
@@ -495,8 +491,9 @@ class Engine:
                 self.pressed[p.cell] = p.hold
                 self.press(host, p.hold, p.pressed_at)
             case Decision.TAP:
-                self.press(host, p.tap, p.pressed_at)
-                self.release(host, p.tap)
+                tap = self.chorded(p.tap)
+                self.press(host, tap, p.pressed_at)
+                self.release(host, tap)
                 self.last_tap = LastTap(p.cell, now)
             case _:
                 assert_never(decision)
@@ -510,7 +507,6 @@ class Engine:
         self.buffer = []
         held_down, self.pressed = self.pressed, no_keys()
         held_voice, self.voice_held = self.voice_held, {}
-        held_desktop, self.desktop_held = self.desktop_held, {}
         failures = 0
         if pending is not None:
             try:
@@ -534,11 +530,6 @@ class Engine:
             failures += 1
         self.typed = ""
         for tool in held_voice.values():
-            try:
-                host.request(tool, down=False)
-            except Exception:
-                failures += 1
-        for tool in held_desktop.values():
             try:
                 host.request(tool, down=False)
             except Exception:
@@ -617,6 +608,11 @@ class Engine:
                     host.used("layer_lock")
             case Tool() | App():
                 self.typed = ""
+                if Mod.ALT in self.mods.counts:
+                    # Applications see Alt pressed alone; tapping an unassigned key
+                    # keeps its release from opening a menu.
+                    host.send(Key.MENU_MASK, down=True)
+                    host.send(Key.MENU_MASK, down=False)
                 host.request(a, down=True)
             case Command.NOTHING | TapHold():
                 pass

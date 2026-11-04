@@ -11,7 +11,6 @@ from dataclasses import dataclass
 from enum import Enum, auto
 from typing import Final, NewType
 
-from config import APPS
 from protocol import App, Tool
 
 # ---- Settings ------------------------------------------------------------------
@@ -317,10 +316,6 @@ def ctl(key: Key) -> Chord:
 
 UNDO, REDO, COPY, PASTE, CUT = ctl(Z), ctl(Y), ctl(C), ctl(V), ctl(X)
 
-# The apps from config, ten slots in key order; slots past the end do nothing.
-_APP: Final[tuple[Action, ...]] = (*APPS[:10], *[XX] * (10 - len(APPS[:10])))
-
-
 # ---- The layout ----------------------------------------------------------------
 # Rows read across the keyboard: left hand, then right hand. Kept in columns by
 # hand, so the formatter is told to leave this section alone.
@@ -384,13 +379,11 @@ TOOLS_LAYER: Final[Board[Action]] = Board(
 )
 
 APPS_LAYER: Final[Board[Action]] = Board(
-    # Hold the Delete thumb. Left hand: apps (from config.APPS), then desktops and zoom; right hand: focus and desktops.
-    top=      Row((_APP[0],          _APP[1],   _APP[2],          _APP[3],          _APP[4]      ), (Tool.FOCUS_LEFT, Tool.FOCUS_DOWN, Tool.FOCUS_UP, Tool.FOCUS_RIGHT, LOCK)),
-    home=     Row((_APP[5],          _APP[6],   _APP[7],          _APP[8],          _APP[9]      ), (Tool.DESKTOP_4, SFT, CTL, ALT, GUI )),
-    bottom=   Row((Tool.DESKTOP_1,   Tool.ZOOM, Tool.DESKTOP_2,   Tool.DESKTOP_3,   Tool.MINIMIZE),
-                  (Tool.DESKTOP_PREVIOUS, Tool.DESKTOP_NEXT, XX, Tool.PLACEMENT_PAUSE, Tool.DICTATE_TOGGLE)),
-    thumbs=Thumbs((Tool.WINDOW_SWITCHER, Tool.COPY_TRANSCRIPT, Tool.MEETING_TOGGLE),
-                  (Tool.AGENT_VOICE_TOGGLE, Tool.PLACE_NOW, XX)),
+    # Hold the Delete thumb. Speech toggles; navigation and apps are the Ctrl+Alt+Shift chords (`miryoku.firmware.CHORDS`).
+    top=      Row((XX, XX, XX, XX, XX), (XX, XX,  XX,  XX,  LOCK)),
+    home=     Row((XX, XX, XX, XX, XX), (XX, SFT, CTL, ALT, GUI )),
+    bottom=   Row((XX, XX, XX, XX, XX), (XX, XX,  XX,  XX,  Tool.DICTATE_TOGGLE)),
+    thumbs=Thumbs((    XX, Tool.COPY_TRANSCRIPT, Tool.MEETING_TOGGLE), (Tool.AGENT_VOICE_TOGGLE, XX, XX)),
 )
 # fmt: on
 

@@ -1,4 +1,4 @@
-"""Your settings: the apps on the Apps layer, text snippets, what each rewrite key
+"""Your settings: the apps the chords reach, text snippets, what each rewrite key
 asks for, and which commands skip prompts in optional approval mode. Edit freely; it's
 checked when Workspace starts. (Secrets and the AI endpoint are environment
 variables instead; see the README.)
@@ -10,8 +10,8 @@ from typing import Final
 
 from protocol import App, Installed, PinnedWeb, Tool
 
-# ---- Apps layer ------------------------------------------------------------------------
-# Up to ten, in key order: the top row of the left hand, then the home row.
+# ---- Apps ------------------------------------------------------------------------------
+# Up to ten, in chord-letter order: Q W F P B, then A R S T G (see `miryoku.firmware.CHORDS`).
 
 APPS: Final[tuple[App, ...]] = (
     App("terminal", Installed("windowsterminal.exe", "wt.exe")),

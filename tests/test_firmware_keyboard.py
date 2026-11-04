@@ -5,6 +5,7 @@ from pathlib import Path
 from config import APPS
 from desktop_ui.keymap import describe
 from miryoku.firmware import CHORDS, connected, shortcut
+from miryoku.layout import TABLE
 from protocol import Tool
 
 CTRL, ALT, SHIFT, WIN = 0x1D, 0x38, 0x2A, 0x15B
@@ -19,8 +20,8 @@ def test_only_the_configured_firmware_keyboard_suspends_remapping() -> None:
     assert not connected((r"\\?\HID#VID_A8F8&PID_1833&MI_00#other-product",))
 
 
-def test_ctrl_alt_shift_letters_reach_navigation_and_the_apps_layer_app_positions() -> None:
-    # Defects: a letter reaches the wrong tool, app keys lose the Apps layer's
+def test_ctrl_alt_shift_letters_reach_navigation_and_the_configured_apps() -> None:
+    # Defects: a letter reaches the wrong tool, app letters lose config's
     # order, one side's modifiers are missed, or voice and chord letters collide.
     for held in ({CTRL, ALT, SHIFT}, {RIGHT_CTRL, RIGHT_ALT, RIGHT_SHIFT}):
         assert [shortcut(ord(letter), held) for letter in "NEIO"] == [Tool.FOCUS_LEFT, Tool.FOCUS_DOWN, Tool.FOCUS_UP, Tool.FOCUS_RIGHT]
@@ -59,3 +60,9 @@ def test_readme_lists_every_chord_by_its_key_map_name() -> None:
     readme = (Path(__file__).resolve().parent.parent / "README.md").read_text(encoding="utf-8")
     rows = [line for line in readme.splitlines() if line.startswith("| ⌃⌥⇧ ")]
     assert rows == [f"| ⌃⌥⇧ **{letter}** | {describe(request)[0]} |" for request, letter in CHORDS.items()]
+
+
+def test_chords_are_the_only_binding_for_their_requests() -> None:
+    # Defect: a layer binds a chord's request again, giving the laptop a second scheme.
+    bound = {binding for row in TABLE.values() for binding in row}
+    assert bound.isdisjoint(CHORDS)
