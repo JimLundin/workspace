@@ -30,3 +30,21 @@ def test_wifi_association_uses_all_interfaces_without_claiming_unknown_or_absent
     assert system_status.wifi_state((4, 1)) is Wifi.CONNECTED
     assert system_status.wifi_state((2,)) is Wifi.CONNECTED
     assert system_status.wifi_state((99,)) is Wifi.UNKNOWN
+
+
+def test_speaker_level_round_trips_through_the_default_endpoint_without_changing_it() -> None:
+    # Defects: the level binding reads or writes the wrong native value, or the
+    # write accepts a level outside 0 to 1. Writing back the current level leaves
+    # the user's volume as it was.
+    before = system_status.audio()
+    if before.volume is None:
+        raise unittest.SkipTest("No default playback endpoint reports a level.")
+    assert system_status.set_volume(before.volume)
+    after = system_status.audio()
+    assert after.volume is not None and abs(after.volume - before.volume) < 0.01 and after.speakers is before.speakers
+    for invalid in (-0.1, 1.1, float("nan")):
+        try:
+            system_status.set_volume(invalid)
+        except ValueError:
+            continue
+        raise AssertionError(f"An out-of-range speaker level was written: {invalid}")

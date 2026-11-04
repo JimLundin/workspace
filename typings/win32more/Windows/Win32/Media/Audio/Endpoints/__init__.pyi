@@ -1,8 +1,12 @@
-# The consumed mute observation writes a native BOOL through ctypes.byref and
-# reports success or failure as the SDK's signed integer HRESULT.
+# The consumed mute and master-level calls write native values through ctypes.byref
+# and report success or failure as the SDK's signed integer HRESULT. The level is a
+# scalar from 0 to 1; Workspace passes no event context.
+import ctypes
 from ctypes import wintypes
 
 from win32more._win32 import ByReference, ComPtr
 
 class IAudioEndpointVolume(ComPtr):
     def GetMute(self, muted: ByReference[wintypes.BOOL]) -> int: ...
+    def GetMasterVolumeLevelScalar(self, level: ByReference[ctypes.c_float]) -> int: ...
+    def SetMasterVolumeLevelScalar(self, level: float, context: None) -> int: ...

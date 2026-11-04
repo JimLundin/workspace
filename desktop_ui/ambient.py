@@ -10,6 +10,7 @@ from winapi.machine_status import Battery, Power, PowerUnavailable, Speakers, Wi
 class SystemStatus:
     speakers: Speakers = Speakers.UNKNOWN
     wifi: Wifi = Wifi.UNKNOWN
+    volume: float | None = None  # The speakers' master level, from 0 to 1.
 
     @property
     def speaker_icon(self) -> str:

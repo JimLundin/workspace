@@ -10,6 +10,14 @@ class Speakers(Enum):
     MUTED = auto()
 
 
+@dataclass(frozen=True, slots=True)
+class Audio:
+    """The default speakers: their mute state and master level from 0 to 1, None when Windows reports none."""
+
+    speakers: Speakers
+    volume: float | None
+
+
 class Wifi(Enum):
     UNKNOWN = auto()
     CONNECTED = auto()
