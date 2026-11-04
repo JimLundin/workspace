@@ -61,7 +61,7 @@ process, such as the browser host. Effect ownership stays in the last column.
 | `automation/ipc.py`, `outbox.py`, `bridge.py`, `profile_lease.py` | shared: IPC/outbox/bridge; work: profile lease | Validated process messages, typed meeting operations and bounded desktop-call text, plus immutable event retention/coalescing with explicit history loss | Bridge client/server own the one authenticated pipe and replace outbox snapshots under the server lock; `ProfileLease` owns the OS-released exclusive work-folder lock; `automation/app.py` composes the worker and its `OwnerCalls` adapter, binding calls to the current execution run and cancellation handle |
 | `assistant/action_text.py` | shared | Readable action targets and results, formatted before preview limits | `agent.py` publishes previews; session presentation handles raw payloads too |
 | `desktop_ui/agent_progress.py`, `notifications.py`, `notification_text.py`, `notification_reading.py`, `toast_stack.py`, `request_panel.py` | desktop | One stable desktop card per requested outcome/work context, complete inline requests in cards and the toolbar, optional canvas actions and agent turns; reading states and lifetimes; measured stack placement and synchronized frame springs | `AgentToasts` owns the card pool, shared measurement, frame clock, timers and history; `toast_card.Card` owns each native window and glass through `CardOwner` |
-| `assistant/browser_requests.py`, `browser_values.py`, `browser_session.py`, `browser.py` | shared | Browser requests (one typed variant per operation, validated once at the browser tool seam), immutable page/tab/group observations, validated DevTools and tab-API replies, group selection, typed paginated projections | `Browser`, `NativeSessions`, `Cdp`, `browser_tabs.TabStrip`, the `browser_host` exchange of typed flat requests, and a cancellable connection wait |
+| `assistant/browser_requests.py`, `browser_values.py`, `browser_session.py`, `browser.py` | shared | Browser requests (one typed variant per operation, validated once at the browser tool seam), immutable page observations, validated DevTools replies, typed paginated projections | `Browser`, `NativeSessions`, `Cdp`, the `browser_host` exchange of typed flat requests, and a cancellable connection wait |
 | `assistant/recording_state.py` | shared | Audio batches, stored observations, completion rules, retry policy, stale-update rejection, and recording controls | `meetings.py` and `meeting_store.py` |
 | `assistant/meeting_detection.py` | desktop | Immutable joined-call observations, saved opt-in, departure debounce, continuous thirty-second failure/recovery warning policy and manual-stop suppression | `meeting_browser.py` reads the existing approved Edge tabs without focus/navigation; `automatic_meetings.py` owns five-second polling, the encrypted preference and command serialization over the existing recorder; `App` routes manual starts/stops through it and `Ui` retains its toolbar-menu status. This uses the existing browser and recording dependencies: lifecycle decisions are Workspace policy, not a general-purpose polling library. |
 | `assistant/web_apps.py`, `business_tools.py` | shared | Web-app operations, each declared once with its typed query, page script, application and typed result; exact task/chat/mail conversation identities and expected-value checks. The business family is the only model-tool adapter: private schemas, JSON text and typed readback confirmation | `WebApps` runs an operation through the browser's wake/evaluate lifecycle and the applications' own controls; `Browser.web_app` serializes it with other page work; native browser fixtures decode every script's real output with its result type |
@@ -463,23 +463,17 @@ blank pages, while retaining its process, connection and cookies. It creates a
 fresh idle page and preserves Edge's mandatory profile sign-in screen. A visible
 sign-in handoff survives suspended work; Stop and shutdown reap the process.
 The independent collection adapters still borrow the personal browser.
-Tab mutation waits use the clock supplied to `TabStrip`.
 
-Browser page, tab and group state uses frozen, slotted dataclasses. Tab edits,
-group creation/changes, placement and closure use payload variants; required
-data lives on its variant. `TypedDict` defines structured tool responses and
-native command wire shapes, with `Literal` values for fixed protocol fields.
-Raw JSON is decoded and validated at the transport boundary. Tool and future UI
-projections can share the concrete state and response types. Group selection
-and pagination are pure functions of observations and arguments. The Edge tab
-controller owns one hidden Favorites page, whose API calls remain separate from
-ordinary page DOM evaluation. `OpenHidden` creates an explicitly requested
+Browser page state uses frozen, slotted dataclasses. Requests and closure use
+payload variants; required data lives on its variant. Structured tool responses
+are typed records, with `Literal` values for fixed protocol fields. Raw JSON is
+decoded and validated at the transport boundary. Pagination is a pure function
+of observations and arguments. `OpenHidden` creates an explicitly requested
 invisible page in the personal browser's existing context; `Browser` publishes
 its immutable owned-ID set and closes those exact pages on release. Hidden pages
 receive an explicit layout viewport but have no capture surface in Windows Edge;
 screenshot requests fail before starting a stalled CDP copy. Only explicit
-activation brings an ordinary tab forward; default opens reuse Workspace's group
-without changing its expanded state.
+activation brings an ordinary tab forward.
 
 Recording state is a projection for the UI. The journal can still be absent
 while a capture starts. Publication decisions use immutable observations read

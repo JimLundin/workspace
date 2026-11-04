@@ -10,7 +10,7 @@ The agent owns a separate headless Edge instance and dedicated profile at
 `%LOCALAPPDATA%\workspace\browser-profile`. It uses the existing `websockets`
 dependency and CDP implementation; no browser bundle, Node.js, Playwright,
 Selenium or extension is added. The agent tools cannot attach to the user's
-personal Edge or Chrome, or manage their native tabs and groups.
+personal Edge or Chrome.
 
 The exclusive instance stays running between tasks. The agent inspects its page
 list, reuses exact page IDs and closes pages once useful context is saved. Every
@@ -40,10 +40,9 @@ new profiles, so this instance disables sync and extensions to keep its pages
 exclusive to the agent. Showing a source to the user uses the desktop open tool.
 
 The independent Teams/activity collectors still borrow the user's approved
-signed-in Edge connection. Their browser attachment and native tab infrastructure
-remain separate from the agent toolset. Enable remote debugging at
-`edge://inspect/#remote-debugging` and approve the browser-owned connection for
-those collectors. They preserve personal tabs when disconnecting. See
+signed-in Edge connection. Their browser attachment remains separate from the
+agent toolset. Enable remote debugging at `edge://inspect/#remote-debugging` and
+approve the browser-owned connection for those collectors. They preserve personal tabs when disconnecting. See
 [browser session reuse](browser-session-reuse.md) for that connection's contract.
 
 Use control IDs from the latest snapshot of the selected page and frame. A new

@@ -187,7 +187,7 @@ _Avoid_: App command, operation name
 
 **Browser request**:
 One typed operation on the automation browser: open, list, snapshot, act,
-evaluate, capture, or edit and close tabs and groups. The browser tool family
+evaluate, capture, or close a page. The browser tool family
 validates the model's arguments into one before any effect; in-process readers
 construct them directly. A model's call of one is an operation.
 _Avoid_: Browser command string, operation name
