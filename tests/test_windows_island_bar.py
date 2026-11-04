@@ -138,7 +138,9 @@ def test_right_cluster_keeps_fixed_positions_and_truthful_status_through_disclos
         assert all(left.right() < right.left() for left, right in itertools.pairwise(before))
         tray = bar.window.shell_sections.tray
         toggle_left = tray.mapTo(bar.window, tray.toggle.pos()).x()
-        assert toggle_left < before[0].left()
+        assert before[0].left() == 12
+        assert before[0].right() < toggle_left < before[1].left()
+        assert bar.window.shell_sections.apps.x() >= before[0].right() + 6
         assert tray.toggle.accessibleName() == "Expand system tray"
         tray.toggle.click()
         assert tray.toggle.accessibleName() == "Collapse system tray"
@@ -254,7 +256,7 @@ def test_settings_launch_failure_reports_problem_and_leaves_menu_closed() -> Non
         closed(app, bar)
 
 
-def test_the_canvas_capsule_rests_beside_the_island_and_opens_the_canvas() -> None:
+def test_the_leftmost_canvas_capsule_keeps_its_label_and_opens_the_canvas() -> None:
     # Defects: Canvas navigation disappears, loses its label, or its press runs another function.
     app = application()
     invoked: list[str] = []
@@ -338,7 +340,7 @@ def test_capsules_float_below_the_edge_centred_and_one_gap_apart() -> None:
         assert island.top() == 0 and island.height() == TOP + 34
         canvas = bar.window.capsules[Key.CANVAS].geometry()
         assert abs(inbox.left() - (island.left() + island.width()) - 6) <= 1
-        assert canvas.left() > inbox.right()
+        assert canvas.left() == 12 and canvas.right() < island.left()
         stop = stop_button(bar, Key.ISLAND).geometry()
         assert (stop.width(), stop.height(), stop.top() - TOP) == (28, 28, 3)
         assert abs(island.width() - (stop.left() + stop.width()) - 3) <= 1

@@ -43,8 +43,8 @@ def test_idle_has_only_icon_navigation_device_status_and_clock_power_on_right() 
     # Defect: idle readings reappear in the centre or navigation acquires text.
     views = island(RESTING)
     assert tuple(each.key for each in views) == (Key.CANVAS, Key.STATUS)
-    assert all(each.zone is Zone.RIGHT for each in views)
-    assert views[0] == CapsuleView(Key.CANVAS, Zone.RIGHT, ((Glyph("canvas"),),), "Canvas · Open your work canvas", Action.OPEN_CANVAS)
+    assert tuple(each.zone for each in views) == (Zone.LEFT, Zone.RIGHT)
+    assert views[0] == CapsuleView(Key.CANVAS, Zone.LEFT, ((Glyph("canvas"),),), "Canvas · Open your work canvas", Action.OPEN_CANVAS)
     assert views[-1].slots == (
         (
             Control("speaker-unknown", "Speaker status unavailable · Open sound settings", Action.OPEN_SOUND_SETTINGS),
@@ -68,7 +68,7 @@ def test_fixed_controls_survive_all_activity_menu_and_device_states() -> None:
                 for expanded in (False, True):
                     for key in (Key.CANVAS, Key.LAYER, Key.STATUS):
                         assert view(observed, key, expanded=expanded) == view(baseline, key)
-                    activity = (each for each in island(observed, expanded=expanded) if each.zone is not Zone.RIGHT)
+                    activity = (each for each in island(observed, expanded=expanded) if each.zone not in (Zone.LEFT, Zone.RIGHT))
                     assert all(Text("10:22") not in slot for each in activity for slot in each.slots)
             status = view(baseline, Key.STATUS)
             assert status.slots[0] == (
@@ -102,7 +102,7 @@ def test_concurrent_activity_has_distinct_indicators_and_stable_agent_stop() -> 
 
 def test_dictation_detaches_every_other_activity_without_persistent_facts() -> None:
     observed = replace(RESTING, dictating=True, agent=WORKING, job=Job.ANSWERING, recording=RECORDING, inbox=2)
-    dynamic = tuple(each for each in island(observed) if each.zone is not Zone.RIGHT)
+    dynamic = tuple(each for each in island(observed) if each.zone not in (Zone.LEFT, Zone.RIGHT))
     assert tuple(each.key for each in dynamic) == (Key.AGENT, Key.JOB, Key.ISLAND, Key.RECORDING, Key.INBOX)
     assert dynamic[0].slots == ((Spinner("Agent: Comparing both sheets"), Control("stop", "Stop agent work", Action.STOP_AGENT)),)
     assert dynamic[1].slots == ((Marker.DOTS,),)

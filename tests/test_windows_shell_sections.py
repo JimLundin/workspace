@@ -159,7 +159,7 @@ def test_toolbar_shell_icons_route_actions_and_keep_overflow_reachable() -> None
         app.processEvents()
 
 
-def test_tray_overflow_grows_left_of_a_stationary_disclosure_and_canvas_anchor() -> None:
+def test_tray_overflow_grows_left_of_a_stationary_disclosure_and_right_cluster_anchor() -> None:
     # Defect: disclosure shifts fixed controls, or refreshed icons reset expansion.
     app = application()
     parent = QtWidgets.QWidget()
@@ -167,7 +167,7 @@ def test_tray_overflow_grows_left_of_a_stationary_disclosure_and_canvas_anchor()
     sections = ShellSections(parent)
     entries = tuple(Entry(1, index, b"", 0x8001, None, str(index)) for index in range(12))
     sections.notifications(entries, lambda item, click: None)
-    sections.place((300, 760), 800, canvas_left=500)
+    sections.place((300, 760), 800, navigation=(54, 500))
     parent.show()
     app.processEvents()
     try:
@@ -175,12 +175,12 @@ def test_tray_overflow_grows_left_of_a_stationary_disclosure_and_canvas_anchor()
         before = tray.mapTo(parent, tray.toggle.pos()).x()
         assert not tray.overflow.isVisible()
         tray.toggle.click()
-        sections.place((300, 760), 800, canvas_left=500)
+        sections.place((300, 760), 800, navigation=(54, 500))
         app.processEvents()
         assert tray.mapTo(parent, tray.toggle.pos()).x() == before
         assert tray.overflow.isVisible() and tray.overflow.horizontalScrollBar().maximum() > 0
         sections.notifications(entries[:-1], lambda item, click: None)
-        sections.place((300, 760), 800, canvas_left=500)
+        sections.place((300, 760), 800, navigation=(54, 500))
         assert tray.toggle.isChecked() and tray.mapTo(parent, tray.toggle.pos()).x() == before
         assert sections.locations(Rect(0, 0, 800, 50), 1)
         tray.toggle.click()

@@ -5,9 +5,10 @@ primary screen, in the Liquid Glass design
 ([design note](design/liquid-glass.md), kit at
 [JimLundin/liquid-glass](https://github.com/JimLundin/liquid-glass)). The island
 stays centred 8 px below the screen edge where space permits. Its centre contains
-only live activity and is empty at idle. Running apps occupy the left end.
-The fixed right cluster reads tray disclosure, icon-only Canvas, icon-only
-keyboard when relevant, volume, Wi-Fi, then clock/power at the far right.
+only live activity and is empty at idle. The icon-only Canvas button is the
+furthest-left toolbar control, before the running applications.
+The fixed right cluster reads tray disclosure, icon-only keyboard when relevant,
+volume, Wi-Fi, then clock/power at the far right.
 The disclosure is the leftmost fixed control: a left arrow expands tray icons
 leftwards and a right arrow contracts them. Neither disclosure nor activity
 moves the fixed controls. Tooltips and accessible names preserve their meanings.

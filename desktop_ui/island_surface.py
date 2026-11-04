@@ -769,11 +769,14 @@ class BarWindow(QtWidgets.QWidget):
                 capsule.hide()
         self.shell_sections.place(
             (
-                math.floor(min((each.framed.box.x for each in presented.drawn), default=area.width() / 2)),
+                math.floor(min((each.framed.box.x for each in presented.drawn if each.view.key is not Key.CANVAS), default=area.width() / 2)),
                 math.ceil(max((each.framed.box.x + each.framed.box.width for each in presented.drawn), default=area.width() / 2)),
             ),
             area.width(),
-            canvas_left=next((round(each.framed.box.x) for each in presented.drawn if each.view.key is Key.CANVAS), None),
+            navigation=(
+                next((round(each.framed.box.x + each.framed.box.width) + 6 for each in presented.drawn if each.view.key is Key.CANVAS), 12),
+                min((round(each.framed.box.x) for each in presented.drawn if each.view.key in (Key.LAYER, Key.STATUS)), default=area.width() - 6),
+            ),
         )
         self.shell_sections.apps.apply_look(presented.shell_look)
         self.shell_sections.tray.apply_look(presented.shell_look)

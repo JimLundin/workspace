@@ -101,7 +101,8 @@ or keeper.
   It expands for dictation, transcription or agent work, and shows Stop only while
   the agent is running. Active recording has its own microphone/timer capsule.
   The centre is exclusively dynamic activity and is empty at idle. The fixed
-  right cluster reads tray disclosure, icon-only Canvas, keyboard when relevant,
+  Canvas button sits at the far left, before running applications. The fixed
+  right cluster reads tray disclosure, keyboard when relevant,
   a combined speaker/Wi-Fi/clock/power capsule at the far right. Battery percentage
   stays visible even when plugged in or full, with reserved reading widths to
   keep the status cluster stationary. Tray icons expand left

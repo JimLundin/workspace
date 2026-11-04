@@ -50,7 +50,7 @@ def test_snapping_puts_every_edge_on_a_device_pixel() -> None:
 def test_fixed_right_order_and_disclosure_reservation_survive_activity_changes() -> None:
     # Defect: opening tray shifts fixed controls or activity overlaps the cluster.
     fixed = (
-        Placed(Key.CANVAS, Zone.RIGHT, 36, 34),
+        Placed(Key.CANVAS, Zone.LEFT, 36, 34),
         Placed(Key.LAYER, Zone.RIGHT, 36, 34),
         Placed(Key.STATUS, Zone.RIGHT, 180, 34),
     )
@@ -61,10 +61,12 @@ def test_fixed_right_order_and_disclosure_reservation_survive_activity_changes()
         for tray in (36, 120):
             framed = frame((Placed(Key.ISLAND, Zone.ISLAND, 272, 320), *fixed), Metrics(screen, tray_width=tray))
             assert tuple(each for each in framed if each.key is not Key.ISLAND) == baseline
+            assert baseline[0].box.x == 12
             assert all(0 <= each.box.x <= each.box.x + each.box.width <= screen for each in framed)
             activity = next((each for each in framed if each.key is Key.ISLAND), None)
             if activity is not None:
-                assert activity.box.x + activity.box.width <= baseline[0].box.x - tray - 12
+                assert activity.box.x >= baseline[0].box.x + baseline[0].box.width + 6
+                assert activity.box.x + activity.box.width <= baseline[1].box.x - tray - 12
 
 
 def width_of(text: Text) -> float:

@@ -259,12 +259,13 @@ class ShellSections:
         self.tray.finish(tuple(button(entry) for entry in entries))
         self.tray_snapshot = entries
 
-    def place(self, bounds: tuple[int, int], width: int, *, canvas_left: int | None = None) -> None:
-        """The tray toggle anchors before Canvas; standalone fixtures use the right edge."""
+    def place(self, bounds: tuple[int, int], width: int, *, navigation: tuple[int, int] | None = None) -> None:
+        """Apps follow Canvas; the tray anchors before the fixed right cluster."""
         left, _ = bounds
-        self.apps.place(12, max(12, min(left - 12, width // 3)))
-        end = width - 12 if canvas_left is None else max(0, canvas_left - 6)
-        self.tray.place(max(0, end - max(36, width // 3)), end)
+        start, fixed_left = (12, width - 6) if navigation is None else navigation
+        self.apps.place(start, max(start, min(left - 12, width // 3)))
+        end = max(0, fixed_left - 6)
+        self.tray.place(max(start, end - max(36, width // 3)), end)
 
     def locations(self, outer: Rect, scale: float) -> tuple[Located, ...]:
         if self.tray_snapshot is None or not self.tray.isVisible() or not self.tray.overflow.isVisible() or not self.tray.toggle.isChecked():

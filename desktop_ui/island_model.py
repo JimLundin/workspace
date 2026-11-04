@@ -9,8 +9,8 @@ The bar's policy (docs/toolbar-design.md, "What the bar shows"):
   transcription (pulsing dots), and a meeting recording (a red dot and timer).
 - Activities alone join the centre; at idle it is empty. During a moment
   they detach beside it as compact capsules, phase and all.
-- Fixed Canvas, temporary keyboard and a combined volume/Wi-Fi/clock/power capsule anchor right.
-  The shell tray toggle is immediately before Canvas and expands left.
+- Canvas anchors at the far left before apps; temporary keyboard and the combined
+  volume/Wi-Fi/clock/power capsule anchor right. The tray toggle precedes them and expands left.
 - Agent work keeps Stop visible; other stoppable activities reveal it under the pointer.
 """
 
@@ -41,7 +41,8 @@ class Zone(Enum):
     LEAD = auto()
     ISLAND = auto()
     TRAIL = auto()
-    RIGHT = auto()  # Fixed navigation and readings, independent of activity.
+    LEFT = auto()  # Canvas precedes the application strip at the screen's left edge.
+    RIGHT = auto()  # Fixed keyboard and readings, independent of activity.
 
 
 class Action(Enum):
@@ -266,7 +267,7 @@ def island(observed: Observed, *, hovered: Key | None = None, expanded: bool = F
         slot = recording_slot(recorded, hovered=hovered is Key.RECORDING)
         trail += (CapsuleView(Key.RECORDING, Zone.TRAIL, (slot,), f"{recorded.title} · Open canvas", Action.OPEN_CANVAS, tint),)
     persistent = (
-        CapsuleView(Key.CANVAS, Zone.RIGHT, ((Glyph("canvas"),),), "Canvas · Open your work canvas", Action.OPEN_CANVAS),
+        CapsuleView(Key.CANVAS, Zone.LEFT, ((Glyph("canvas"),),), "Canvas · Open your work canvas", Action.OPEN_CANVAS),
         *layer,
         CapsuleView(
             Key.STATUS,
