@@ -31,7 +31,7 @@ class Command(Enum):
     OVERLAY = auto()
     TASKBAR = auto()
     PLACEMENT = auto()
-    DARK_WHEN_LOCKED = auto()
+    DARK_WHEN_AWAY = auto()
     NOTIFICATIONS = auto()
     ALL_CONTROLS = auto()
 
@@ -167,7 +167,8 @@ class Controls:
     overlay: bool = field(default=False, kw_only=True)
     taskbar: bool = field(default=False, kw_only=True)
     placement_paused: bool = field(default=False, kw_only=True)
-    dark_when_locked: bool = field(default=True, kw_only=True)
+    dark_when_away: int | None = field(default=None, kw_only=True)
+    """Dark when away's idle delay in minutes while it's on; None while it's off."""
     sound: Slider = Slider("Sound", None, muted=False)
     tray: tuple[str, ...] = ()  # Each tray icon's label, in the bar's snapshot order.
 
@@ -186,11 +187,11 @@ def entries(controls: Controls) -> tuple[Cell, ...]:
         Toggle("Windows taskbar", "Shown" if controls.taskbar else "Hidden", "table", Command.TASKBAR, on=controls.taskbar),
         Toggle("Window placement", "Paused" if controls.placement_paused else "On", "grid", Command.PLACEMENT, on=not controls.placement_paused),
         Toggle(
-            "Dark when locked",
-            "External screens" if controls.dark_when_locked else "Off",
+            "Dark when away",
+            "Off" if controls.dark_when_away is None else f"External · {controls.dark_when_away} min idle",
             "lock",
-            Command.DARK_WHEN_LOCKED,
-            on=controls.dark_when_locked,
+            Command.DARK_WHEN_AWAY,
+            on=controls.dark_when_away is not None,
         ),
     )
     modules = (
@@ -388,7 +389,7 @@ def restores_focus(choice: Choice) -> bool:
             Command.OVERLAY
             | Command.TASKBAR
             | Command.PLACEMENT
-            | Command.DARK_WHEN_LOCKED
+            | Command.DARK_WHEN_AWAY
             | Command.RECORD
             | Command.STOP_RECORDING
             | Command.STOP_AGENT

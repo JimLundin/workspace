@@ -19,6 +19,7 @@ dwmapi = ctypes.WinDLL("dwmapi", use_last_error=True)
 comctl32 = ctypes.WinDLL("comctl32", use_last_error=True)
 dxva2 = ctypes.WinDLL("dxva2", use_last_error=True)
 wtsapi32 = ctypes.WinDLL("wtsapi32", use_last_error=True)
+powrprof = ctypes.WinDLL("powrprof", use_last_error=True)
 
 
 class Scalar[T](Protocol):

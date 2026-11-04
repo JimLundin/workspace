@@ -82,3 +82,9 @@ ALLOWED_COMMANDS: Final[tuple[str, ...]] = (
 
 AGENT_MAX_STEPS: Final = 80
 """The agent stops after this many actions, finished or not."""
+
+# ---- Screens ---------------------------------------------------------------------------
+# With Dark when away on, the home 4K screen goes dark after this many minutes without
+# keyboard or mouse input, and wakes at the next touch. Whole minutes from 1 to 60.
+
+DARK_WHEN_IDLE_MINUTES: Final = 2

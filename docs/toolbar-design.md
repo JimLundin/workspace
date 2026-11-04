@@ -70,7 +70,7 @@ pattern; tray icons take one column and other tiles span pairs:
 | Section | Cells |
 | --- | --- |
 | Activities | One full-width card per running activity, with its reading and Stop |
-| Settings and views | Auto-record, keyboard overlay, Windows taskbar, window placement and dark-when-locked toggles beside Canvas and Feed tiles |
+| Settings and views | Auto-record, keyboard overlay, Windows taskbar, window placement and dark-when-away toggles beside Canvas and Feed tiles |
 | Recording | Record a meeting, absent while one runs |
 | Sound | The speaker level as a slider; its symbol shows mute |
 | Tools | Switch windows, transcript and key map as small tiles |
@@ -79,7 +79,8 @@ pattern; tray icons take one column and other tiles span pairs:
 
 The detached agent and recording capsules leave the bar while the menu is open.
 Toggles show their state in an accent circle and words, and apply in place: the
-menu stays open. Dragging or pressing the slider sets the volume; the toolbar's
+menu stays open. Dark when away reads its idle delay, such as "External · 2 min
+idle", while it's on. Dragging or pressing the slider sets the volume; the toolbar's
 status worker applies the latest level, because Windows' audio interfaces need
 a multithreaded COM apartment that Qt's thread cannot join.
 Arrows move to the nearest cell in their direction; Up and Down wrap. On the
