@@ -21,7 +21,6 @@ def test_shortcuts_use_physical_keys_the_right_thumb_and_dedicated_voice_first()
     # Defects: using BASE outputs as keycaps, selecting another layer's thumb,
     # advertising the Tools-layer dictation copy instead of its dedicated key, or
     # dropping the hint of a tool only a chord reaches.
-    assert shortcut(Tool.ASK) == Shortcut("P", "V")
     assert shortcut(Tool.OPEN_INBOX) == Shortcut("T", "V")
     assert shortcut(Tool.COPY_TRANSCRIPT) == Shortcut("C", ".")
     assert shortcut(Tool.DICTATE) == Shortcut("Space", None)
@@ -77,7 +76,7 @@ def test_layers_show_their_keys_and_the_thumb_holding_them() -> None:
 
 def test_tools_and_apps_layers() -> None:
     tools = caps(Layer.TOOLS)
-    assert tools["9"] == ("Fix", "", Kind.TOOL)
+    assert tools["L"] == ("Agent", "", Kind.TOOL)
     assert tools["T"] == ("Inbox", "", Kind.TOOL)
     assert tools["I"] == ("Talk tidy", "hold", Kind.TOOL)
     assert tools["V"][2] is Kind.HELD

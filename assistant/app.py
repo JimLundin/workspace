@@ -714,8 +714,6 @@ class AssistantApp:
                 self.toggle_overlay()
             case control_policy.Menu.KEYMAP.value:
                 self.ui.show_keymap()
-            case control_policy.Menu.ASK.value:
-                self.assistant.handle(Tool.ASK, down=True)
             case control_policy.Menu.AGENT.value:
                 self.assistant.handle(Tool.AGENT_TYPED, down=True)
             case control_policy.Menu.WORK.value:

@@ -23,7 +23,6 @@ class Menu(Enum):
     KEYMAP = 9
     TOGGLE_LAYOUT = 1
     RESTART_LAYOUT = 2
-    ASK = 3
     AGENT = 4
     STOP_AGENT = 5
     USAGE = 6
@@ -60,7 +59,6 @@ def menu_items(state: MenuState) -> tuple[MenuItem, ...]:
         MenuItem(Menu.OVERLAY.value, "Keyboard overlay", checked=state.overlay_enabled),
         MenuItem(Menu.KEYMAP.value, "Key map"),
         MenuItem(0),
-        MenuItem(Menu.ASK.value, "Ask…\t" + shortcut_hint(shortcut(Tool.ASK))),
         MenuItem(Menu.AGENT.value, "Agent session\t" + shortcut_hint(shortcut(Tool.AGENT_TYPED))),
         MenuItem(Menu.WORK.value, "Work…"),
         MenuItem(Menu.TASKBAR.value, "Toggle Windows taskbar\tWindows key"),

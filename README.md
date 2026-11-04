@@ -7,9 +7,8 @@ It undoes the update by itself if it fails. Four main processes:
 
 - **the layout** (`miryoku/`): Colemak Mod-DH in the Miryoku style on the
   laptop's own ISO keyboard: home row mods, layers, caps word, snippets;
-- **the assistant** (`assistant/`): dictation, rewriting, questions, screen
-  reading, app switching, window placement, and an agent, all through your
-  company's OpenAI-style endpoint, with a floating control bar and tray controls;
+- **the assistant** (`assistant/`): dictation, app switching, window
+  placement, and an agent, all through your company's OpenAI-style endpoint, with a floating control bar and tray controls;
 - **the automation worker** (`automation/`): runs durable tasks, standing
   instructions, and recovery independently of the conversation window;
 - **the keeper** (`keeper.py`): runs the other three, restarts them if they crash,
@@ -52,7 +51,7 @@ and our typed Win32 bindings (`winapi/`), independently of the assistant.
    |---|---|
    | `OPENAI_BASE_URL` | your endpoint, ending in `/v1` |
    | `OPENAI_API_KEY` | its key |
-   | `WORKSPACE_CHAT_CLASS` | optional; default `small` (dictation cleanup, rewrites, questions and screenshots) |
+   | `WORKSPACE_CHAT_CLASS` | optional; default `small` (tidied dictation and dictated commands) |
    | `WORKSPACE_AGENT_CLASS` | optional; default `extra_large` (main agent, canvas investigation and self-modification) |
    | `WORKSPACE_NOTIFICATION_SCREEN_CLASS` | optional; default `small` (quick notification relevance screening) |
    | `WORKSPACE_NOTIFICATION_RESEARCH_CLASS` | optional; default `medium` (focused inbox research, including public lookups) |
@@ -126,7 +125,7 @@ embedded browser are paused; Workspace retains its Windows desktop runtime.
 - **The tray dot**: green: running, layout on · grey: layout off or not running ·
   red: listening · amber: working or waiting for your reply · blue: the agent is on a task. Hover for words;
   click for the menu. Actions with hotkeys show them alongside their names, using
-  physical keycaps: **Hold V + P** means hold V (Tools), then tap P to ask.
+  physical keycaps: **Hold V + L** means hold V (Tools), then tap L to open the agent.
   (Windows 11 may tuck it behind the ^ at first: drag it out.)
 - **Layout: on/off** (tray menu): the status is also a toggle. Click it or tap
   **§** to switch; a checkmark means the layout is on. If the layout has quit,
@@ -210,15 +209,11 @@ the toolbar bell. Its canvas icon opens the exact question. Without a pending
 question the shortcut opens the canvas. It uses the physical keycaps with
 Workspace's layout enabled.
 
-| | | | | | |
-|---|---|---|---|---|---|
-| top **8 9 0 + ´** | rewrite by voice (hold, say how) | fix spelling | translate sv↔en | shorter | more formal |
-| home **I O P Å ¨** | dictate, tidied (hold) | dictate a command (hold) | ask… | copy text on screen | ask about the screen |
-| bottom **K L Ö** | agent, by voice (hold) | agent, typed | stop the agent | | |
-| thumb **M** | dictate (hold); B uses a toggle | | | | |
-
-Rewrites replace the selected text. In terminals they don't press Ctrl+C (it
-would stop the running program), so they don't work there.
+| | | | |
+|---|---|---|---|
+| home **I O** | dictate, tidied (hold) | dictate a command (hold) | |
+| bottom **K L Ö** | agent, by voice (hold) | agent, typed | stop the agent |
+| thumb **M** | dictate (hold); B uses a toggle | | |
 
 **Apps** (hold the Delete thumb, physical **.**):
 
@@ -452,7 +447,7 @@ Failed requests show the reason in a bubble and the timeline;
 they also notify you and are recorded in
 `assistant.log`. Agent tasks use the **extra-large size with low reasoning effort**
 by default, mapped to GPT-6 Astra. `WORKSPACE_AGENT_CLASS` selects another size,
-independently of quick jobs and background screening/research. The endpoint must
+independently of dictation cleanup and background screening/research. The endpoint must
 support the selected model through the Responses API.
 
 By default, file writes, commands, opening files, desktop control and self-updates
@@ -754,8 +749,8 @@ All in `%LOCALAPPDATA%\workspace` (tray menu → Open logs folder):
 | `agent-ui.log` | desktop view startup timing and errors |
 | `keeper.log` | starts, installs, trials, undos |
 
-What leaves the laptop: recordings (for transcription), the text, selection
-or screen area you used a tool on, and the recent app/window context and request
+What leaves the laptop: recordings (for transcription), dictated text you have
+tidied or turned into a command, and the recent app/window context and request
 screenshot when automatic context is enabled. These go to your configured
 endpoint. The idle activity buffer is not written to disk.
 Optional toolbar weather sends Windows coordinates rounded to a tenth of a degree
@@ -770,7 +765,7 @@ payloads, screenshots, credentials, encrypted reasoning, or raw SDK history.
 keeper.py       runs the programs; installs, tries and undoes changes (protected)
 selfcheck.py    compile, import, test: the gate every change passes (protected)
 protocol.py     what the layout and the assistant say to each other (window messages)
-config.py       your settings: apps, snippets, rewrite prompts, allowed commands
+config.py       your settings: apps, snippets, allowed commands
 usage.py        the usage log
 winapi/         typed Win32 bindings: the only ctypes code
 miryoku/        the layout: layout.py (the tables), engine.py (the logic), win.py

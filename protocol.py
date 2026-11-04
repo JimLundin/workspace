@@ -56,22 +56,6 @@ class Tool(Enum):
     """Hold and speak: typed tidied up (no filler words, proper punctuation)."""
     DICTATE_COMMAND = 3
     """Hold and describe a command: the PowerShell command is typed, not run."""
-    REWRITE_VOICE = 10
-    """Hold and say how to change the selected text."""
-    FIX = 11
-    """Fix spelling and grammar in the selected text."""
-    TRANSLATE = 12
-    """Translate the selected text between Swedish and English."""
-    SHORTER = 13
-    """Make the selected text shorter."""
-    FORMAL = 14
-    """Make the selected text more formal."""
-    ASK = 20
-    """Ask a question in a box (with the selected text, if any); the answer is shown."""
-    SCREEN_TEXT = 21
-    """Drag over part of the screen: its text is copied."""
-    SCREEN_ASK = 22
-    """Drag over part of the screen, then ask about it."""
     AGENT_VOICE = 30
     """Hold and say a task for the agent."""
     AGENT_TYPED = 31

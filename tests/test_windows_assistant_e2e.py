@@ -1,12 +1,11 @@
 """End to end on Windows: the real assistant (which starts the real layout), real
-key presses and mouse drags, real windows; a fake AI endpoint plays the model.
+key presses, real windows; a fake AI endpoint plays the model.
 
-It takes over the keyboard and mouse for half a minute, so it only runs when
+It takes over the keyboard for half a minute, so it only runs when
 asked: `WORKSPACE_E2E=1 pytest tests/test_windows_assistant_e2e.py`. The microphone
 isn't tested (test machines rarely have one).
 """
 
-import json
 import os
 import subprocess
 import sys
@@ -17,8 +16,7 @@ from collections.abc import Callable, Generator
 from contextlib import contextmanager
 from pathlib import Path
 
-from automation.json_value import Json
-from tests.fake_endpoint import FakeEndpoint, Reply, fake_endpoint, sse
+from tests.fake_endpoint import FakeEndpoint, fake_endpoint
 from tests.test_agent import calls, says
 
 if sys.platform != "win32" or os.environ.get("WORKSPACE_E2E") != "1":
@@ -30,25 +28,14 @@ from components import ASSISTANT, CATALOGUE, read_marker
 from desktop_ui.qt_runtime import prepare
 from desktop_ui.qt_ui import application
 from protocol import MAGIC
-from winapi import clipboard, inputs, screen, system, windows
+from winapi import inputs, screen, system, windows
 from winapi.shapes import Rect
 
 prepare()
 
 ROOT = Path(__file__).resolve().parent.parent
 TAB, DELETE, SPACE = 0x2F, 0x34, 0x2E  # the Tools, Apps and Nav thumbs (physical V, . and C)
-FIX, ASK, SCREEN_TEXT, AGENT_TYPED, MINIMIZE = 0x0A, 0x19, 0x1A, 0x26, 0x21  # physical 9, P, \u00c5, L, F
-
-
-def dumps(value: Json) -> bytes:
-    return json.dumps(value).encode()
-
-
-def answered(text: str, calls: list[Json] | None = None) -> Reply:
-    message: dict[str, Json] = {"role": "assistant", "content": text}
-    if calls:
-        message["tool_calls"] = calls
-    return Reply(dumps({"choices": [{"message": message}]}))
+AGENT_TYPED, MINIMIZE = 0x26, 0x21  # physical L, F
 
 
 def wait_for(condition: Callable[[], bool], pump: Callable[[], None], seconds: float = 10) -> bool:
@@ -152,25 +139,15 @@ def test_the_workspace_end_to_end() -> None:
 def run_everything(home: Path) -> None:
     keeper = application()  # This process keeps answering native window messages.
     with fake_endpoint() as endpoint, workspace(endpoint, home):
-        in_a_text_box(endpoint)
-        screen_text(endpoint, keeper.processEvents)
-        ask(endpoint, keeper.processEvents)
+        in_a_text_box()
         agent(endpoint, home, keeper.processEvents)
     used = (home / "workspace" / "usage.jsonl").read_text(encoding="utf-8")
-    for feature in ('"fix"', '"snap_left"', '"screen_text"', '"ask"', '"agent_typed"'):
+    for feature in ('"minimize"', '"agent_typed"'):
         assert feature in used, feature
 
 
-def in_a_text_box(endpoint: FakeEndpoint) -> None:
-    with text_box("helo wrld") as (root, entry):
-        # Rewrite: the selection is copied, sent, and replaced by the answer.
-        endpoint.replies = [answered("Hello, world.")]
-        entry.selectAll()
-        QtWidgets.QApplication.processEvents()
-        chord(TAB, FIX)
-        assert wait_for(lambda: entry.text() == "Hello, world.", QtWidgets.QApplication.processEvents), entry.text()
-        assert b"helo wrld" in endpoint.last.body
-
+def in_a_text_box() -> None:
+    with text_box("hello") as (root, _entry):
         # The layer indicator: shown while Nav is held, without taking the keyboard.
         frame = int(root.winId())
         work = next(m.work for m in screen.monitors() if m.primary)
@@ -186,33 +163,6 @@ def in_a_text_box(endpoint: FakeEndpoint) -> None:
         chord(DELETE, MINIMIZE)
         assert wait_for(lambda: windows.is_minimized(frame), QtWidgets.QApplication.processEvents), root.geometry()
         windows.show(frame, windows.SW_RESTORE)
-
-
-def screen_text(endpoint: FakeEndpoint, pump: Callable[[], None]) -> None:
-    """Drag over an area; its text ends up on the clipboard."""
-    endpoint.replies = [answered("Text on screen")]
-    chord(TAB, SCREEN_TEXT)
-    wait_for(lambda: False, pump, 1.5)
-    area = screen.virtual_screen()
-    inputs.move_mouse(100, 100, area, MAGIC)
-    inputs.mouse_button("left", MAGIC, down=True)
-    for step in range(1, 11):
-        inputs.move_mouse(100 + step * 30, 100 + step * 20, area, MAGIC)
-        time.sleep(0.03)
-    inputs.mouse_button("left", MAGIC, down=False)
-    hwnd = windows.create_hidden("e2e clipboard reader")
-    assert wait_for(lambda: clipboard.get_text(hwnd) == "Text on screen", pump), clipboard.get_text(hwnd)
-    assert b"data:image/png;base64," in endpoint.last.body
-
-
-def ask(endpoint: FakeEndpoint, pump: Callable[[], None]) -> None:
-    """A box for the question, then an answer window, streamed."""
-    endpoint.replies = [sse('{"choices": [{"delta": {"content": "Yes"}}]}')]
-    chord(TAB, ASK)
-    wait_for(lambda: False, pump, 1.5)
-    type_ascii("is it friday")
-    assert wait_for(lambda: any(w.title == "is it friday" for w in windows.windows()), pump), [w.title for w in windows.windows()]
-    assert wait_for(lambda: b"is it friday" in endpoint.last.body, pump)
 
 
 def agent(endpoint: FakeEndpoint, home: Path, pump: Callable[[], None]) -> None:

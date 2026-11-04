@@ -125,8 +125,6 @@ _CHORD_NAMES: Final = {UNDO: "Undo", REDO: "Redo", COPY: "Copy", PASTE: "Paste",
 _MOD_NAMES: Final = {Mod.GUI: "Win", Mod.ALT: "Alt", Mod.CTRL: "Ctrl", Mod.SHIFT: "Shift"}
 TOOL_NAMES: Final = {
     Tool.DICTATE: "Talk", Tool.DICTATE_CLEAN: "Talk tidy", Tool.DICTATE_COMMAND: "Talk cmd",
-    Tool.REWRITE_VOICE: "Rewrite", Tool.FIX: "Fix", Tool.TRANSLATE: "Translate", Tool.SHORTER: "Shorter", Tool.FORMAL: "Formal",
-    Tool.ASK: "Ask", Tool.SCREEN_TEXT: "Screen text", Tool.SCREEN_ASK: "Screen ask",
     Tool.AGENT_VOICE: "Agent talk", Tool.AGENT_TYPED: "Agent", Tool.STOP: "Stop",
     Tool.ZOOM: "Zoom", Tool.MINIMIZE: "Min",
     Tool.FOCUS_LEFT: "Focus ←", Tool.FOCUS_DOWN: "Focus ↓", Tool.FOCUS_UP: "Focus ↑", Tool.FOCUS_RIGHT: "Focus →",

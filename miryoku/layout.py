@@ -372,10 +372,10 @@ SYM_LAYER: Final[Board[Action]] = Board(
 
 TOOLS_LAYER: Final[Board[Action]] = Board(
     # Hold the Tab thumb. Right hand: assistant tools; left T: inbox.
-    top=      Row((LOCK, XX,  XX,  XX,  XX), (Tool.REWRITE_VOICE, Tool.FIX,             Tool.TRANSLATE, Tool.SHORTER,     Tool.FORMAL    )),
-    home=     Row((GUI,  ALT, CTL, SFT, Tool.OPEN_INBOX), (Tool.DICTATE_CLEAN, Tool.DICTATE_COMMAND, Tool.ASK,       Tool.SCREEN_TEXT, Tool.SCREEN_ASK)),
-    bottom=   Row((XX,   XX,  XX,  XX,  XX), (Tool.AGENT_VOICE,   Tool.AGENT_TYPED,     Tool.STOP,      XX,               XX             )),
-    thumbs=Thumbs((           XX,  XX,  XX), (Tool.DICTATE,       XX,                   XX             )),
+    top=      Row((LOCK, XX,  XX,  XX,  XX), (XX,                 XX,                   XX,        XX, XX)),
+    home=     Row((GUI,  ALT, CTL, SFT, Tool.OPEN_INBOX), (Tool.DICTATE_CLEAN, Tool.DICTATE_COMMAND, XX,        XX, XX)),
+    bottom=   Row((XX,   XX,  XX,  XX,  XX), (Tool.AGENT_VOICE,   Tool.AGENT_TYPED,     Tool.STOP, XX, XX)),
+    thumbs=Thumbs((           XX,  XX,  XX), (Tool.DICTATE,       XX,                   XX       )),
 )
 
 APPS_LAYER: Final[Board[Action]] = Board(

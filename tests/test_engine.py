@@ -872,9 +872,9 @@ def test_chords_need_exactly_ctrl_alt_shift_and_a_chord_letter() -> None:
 def test_tools_layer_key_requests_its_tool() -> None:
     t = Harness()
     t.d("v")  # Tab thumb: Tools while held
-    t.tap("9")  # Fix (right hand, top row)
+    t.tap("l")  # Agent, typed (right hand, bottom row)
     t.u("v")
-    assert t.take() == "?fix+ ?fix-"
+    assert t.take() == "?agent_typed+ ?agent_typed-"
 
 
 def test_hold_to_talk_tools_keep_going_while_held() -> None:

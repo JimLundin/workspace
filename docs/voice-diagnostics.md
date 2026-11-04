@@ -13,7 +13,7 @@ Each completed use in `%LOCALAPPDATA%\workspace\usage.jsonl` records:
 | Field | Meaning |
 | --- | --- |
 | `capture_id`, `source`, `stop_reason` | Correlate capture start and completion within one assistant process; identify the initiating request and why capture stopped. |
-| `phase` | Last phase reached: starting, recording, stopping, transcribing, cleaning, formatting, rewriting, or submitting. |
+| `phase` | Last phase reached: starting, recording, stopping, transcribing, cleaning, formatting, or submitting. |
 | `error_type`, `locations` | Exception class and up to eight file/line/function locations, with no exception message or source lines. |
 | `input_accepted`, `input_expected` | Native input events accepted/requested when Windows rejects a batch. |
 | `held_seconds`, `audio_seconds` | How long the capture ran and the size of the returned PCM in seconds. |

@@ -25,8 +25,7 @@ is doing for you. Its policy decides what may change it.
    wins over a question; the question then waits beside it, tinted.
 2. **Activities run concurrently, each with one identity wherever it shows.**
    Agent work is a ring spinner with its current phase. A quick job is three
-   pulsing dots: transcription after dictation, or a rewrite or question about
-   the selection or screen. A meeting recording is a red dot with its timer.
+   pulsing dots: transcription after dictation. A meeting recording is a red dot with its timer.
    They never stand in for each other, and any combination can run at once.
 3. **Activities alone join the island.** The agent's spinner and phase lead,
    then a job's dots, and the recording last. During a moment they detach beside

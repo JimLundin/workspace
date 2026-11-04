@@ -1,14 +1,13 @@
-"""Your settings: the apps the chords reach, text snippets, what each rewrite key
-asks for, and which commands skip prompts in optional approval mode. Edit freely; it's
-checked when Workspace starts. (Secrets and the AI endpoint are environment
-variables instead; see the README.)
+"""Your settings: the apps the chords reach, text snippets, and which commands skip
+prompts in optional approval mode. Edit freely; it's checked when Workspace starts.
+(Secrets and the AI endpoint are environment variables instead; see the README.)
 """
 
 from collections.abc import Callable
 from datetime import datetime
 from typing import Final
 
-from protocol import App, Installed, PinnedWeb, Tool
+from protocol import App, Installed, PinnedWeb
 
 # ---- Apps ------------------------------------------------------------------------------
 # Up to ten, in chord-letter order: Q W F P B, then A R S T G (see `miryoku.firmware.CHORDS`).
@@ -45,24 +44,6 @@ SNIPPETS: Final[dict[str, str | Callable[[], str]]] = {
     ",,mvh": "Med vänliga hälsningar",
     ",,br": "Best regards",
 }
-
-# ---- Rewrite keys ----------------------------------------------------------------------
-# What each key asks the model to do with the selected text.
-
-REWRITES: Final[dict[Tool, str]] = {
-    Tool.FIX: "Fix spelling, grammar and punctuation. Keep the language, wording, tone and formatting otherwise unchanged.",
-    Tool.TRANSLATE: "Translate it: Swedish to English, or anything else to Swedish. Keep the tone and formatting.",
-    Tool.SHORTER: "Make it shorter and clearer without losing any information. Keep the language and tone.",
-    Tool.FORMAL: "Make it more formal and professional, suitable for work email. Keep the language and meaning.",
-}
-
-# ---- Terminals -------------------------------------------------------------------------
-# Programs where Ctrl+C stops what's running, so the rewrite keys never press it there.
-
-TERMINALS: Final = frozenset({
-    "windowsterminal.exe", "openconsole.exe", "conhost.exe", "cmd.exe", "powershell.exe", "pwsh.exe",
-    "wezterm-gui.exe", "alacritty.exe", "mintty.exe",
-})  # fmt: skip
 
 # ---- Agent -----------------------------------------------------------------------------
 # With WORKSPACE_AGENT_APPROVALS=ask, these commands skip the prompt only when

@@ -6,17 +6,16 @@ from typing import cast
 lazy from dataclasses import replace
 
 from assistant.features import Assistant
-from assistant.geometry import Shot
 from assistant.llm import MAX_SECONDS, Missing, Settings
 from automation.json_value import Json
 from desktop_ui.icons import State
 from desktop_ui.island_model import Job
 from desktop_ui.navigation import AppKey, Direction, JumpDesktop, Order, Placing, Source, SpatialFocus, StepDesktop, Zoom
 from protocol import App, Installed, Tool
-from tests.fake_endpoint import FakeEndpoint, Reply, fake_endpoint, sse
+from tests.fake_endpoint import FakeEndpoint, Reply, fake_endpoint
 from usage import Detail
 from winapi.pcm import RATE
-from winapi.shapes import InputRejectedError, Rect
+from winapi.shapes import InputRejectedError
 
 SPEECH = bytes(2 * RATE)  # a second of silence: long enough to send
 
@@ -33,39 +32,15 @@ def answered(text: str) -> Reply:
     return Reply(dumps({"choices": [{"message": {"role": "assistant", "content": text}}]}).encode())
 
 
-def streamed(*pieces: str) -> Reply:
-    return sse(*(dumps({"choices": [{"delta": {"content": p}}]}) for p in pieces))
-
-
-class FakeAnswer:
-    __slots__ = ("desktop",)
-
-    def __init__(self, desktop: FakeDesktop) -> None:
-        self.desktop = desktop
-
-    def write(self, text: str) -> None:
-        self.desktop.log.append(f"write {text}")
-
-    def finish(self) -> None:
-        self.desktop.log.append("finish")
-
-    def fail(self, message: str) -> None:
-        self.desktop.log.append(f"fail {message}")
-
-
 class FakeDesktop:
-    __slots__ = ("follow_up", "input_error", "jobs", "log", "orders", "prompts", "recording_error", "region", "selection", "speech")
+    __slots__ = ("input_error", "jobs", "log", "orders", "recording_error", "speech")
 
     def __init__(self, *, input_error: OSError | None = None, recording_error: OSError | None = None) -> None:
         self.input_error, self.recording_error = input_error, recording_error
         self.log: list[str] = []
         self.jobs: list[Job | None] = []
         self.speech = SPEECH
-        self.selection: str | None = None
-        self.prompts: list[str | None] = []
-        self.region: Rect | None = Rect(0, 0, 100, 50)
         self.orders: list[Order] = []
-        self.follow_up: Callable[[str], None] | None = None
 
     def start_listening(self) -> str | None:
         self.log.append("listen")
@@ -77,12 +52,6 @@ class FakeDesktop:
         self.log.append("stop listening")
         return self.speech
 
-    def copy_selection(self) -> str | None:
-        return self.selection
-
-    def paste(self, text: str) -> None:
-        self.log.append(f"paste {text}")
-
     def type_text(self, text: str) -> None:
         if self.input_error is not None:
             raise self.input_error
@@ -90,21 +59,6 @@ class FakeDesktop:
 
     def set_clipboard(self, text: str) -> None:
         self.log.append(f"clipboard {text}")
-
-    def choose_region(self) -> Rect | None:
-        return self.region
-
-    def capture(self, area: Rect, longest: int) -> tuple[bytes, Shot]:
-        return b"\x89PNG", Shot(area, area.width, area.height)
-
-    def prompt(self, title: str) -> str | None:
-        self.log.append(f"prompt {title}")
-        return self.prompts.pop(0) if self.prompts else None
-
-    def answer(self, title: str, follow_up: Callable[[str], None]) -> FakeAnswer:
-        self.log.append(f"answer window {title}")
-        self.follow_up = follow_up
-        return FakeAnswer(self)
 
     def show_state(self, state: State) -> None:
         self.log.append(f"state {state.name}")
@@ -220,17 +174,13 @@ def test_dictate_types_what_was_said() -> None:
         assert rig.ok("dictate")
 
 
-def test_quick_jobs_announce_what_they_are_and_end_when_finished() -> None:
-    # Defects: transcription and a quick request read the same on the bar, or a job never ends.
+def test_transcription_shows_on_the_bar_and_ends_when_finished() -> None:
+    # Defect: the bar never shows transcription, or the job never ends.
     with fake_endpoint() as endpoint:
         endpoint.replies = [said("hej")]
         rig = Rig(endpoint)
         rig.hold(Tool.DICTATE)
         assert rig.desktop.jobs[-2:] == [Job.TRANSCRIBING, None]
-        rig.desktop.prompts = ["Is it Friday?"]
-        endpoint.replies = [streamed("Ja")]
-        rig.press(Tool.ASK)
-        assert Job.ANSWERING in rig.desktop.jobs and rig.desktop.jobs[-1] is None
 
 
 def test_clipboard_failure_keeps_a_recoverable_transcript_and_still_types() -> None:
@@ -499,106 +449,6 @@ def test_the_tray_shows_listening_then_working_then_ready() -> None:
         assert states == ["state LISTENING", "state WORKING", "state READY"]
 
 
-# ---- rewriting -------------------------------------------------------------------------
-
-
-def test_rewrite_keys_replace_the_selection() -> None:
-    with fake_endpoint() as endpoint:
-        endpoint.replies = [answered('"Hello, world."')]
-        rig = Rig(endpoint)
-        rig.desktop.selection = "helo wrld"
-        rig.press(Tool.FIX)
-        assert rig.take() == ["paste Hello, world."]
-        messages = rig.sent()["messages"]
-        assert isinstance(messages, list)
-        assert cast("list[dict[str, object]]", messages)[1] == {"role": "user", "content": "helo wrld"}
-        assert "spelling" in str(cast("list[dict[str, object]]", messages)[0]["content"])
-
-
-def test_rewrite_without_a_selection_says_so() -> None:
-    with fake_endpoint() as endpoint:
-        rig = Rig(endpoint)
-        rig.press(Tool.TRANSLATE)
-        assert rig.take() == ["problem Select some text first."]
-        assert endpoint.received == []
-
-
-def test_rewrite_by_voice_follows_the_spoken_instruction() -> None:
-    with fake_endpoint() as endpoint:
-        endpoint.replies = [said("make it sound less annoyed"), answered("Could you take a look?")]
-        rig = Rig(endpoint)
-        rig.desktop.selection = "Fix this NOW."
-        rig.hold(Tool.REWRITE_VOICE)
-        assert rig.take()[-1] == "paste Could you take a look?"
-        assert "make it sound less annoyed" in json.dumps(rig.sent())
-
-
-# ---- asking ----------------------------------------------------------------------------
-
-
-def test_ask_streams_the_answer_and_takes_follow_ups() -> None:
-    with fake_endpoint() as endpoint:
-        endpoint.replies = [streamed("Ja", "!"), streamed("Nej.")]
-        rig = Rig(endpoint)
-        rig.desktop.prompts = ["Is it Friday?"]
-        rig.press(Tool.ASK)
-        assert rig.take() == ["prompt Ask", "answer window Is it Friday?", "write Ja", "write !", "finish"]
-        follow_up = rig.desktop.follow_up
-        assert follow_up is not None
-        follow_up("Tomorrow?")
-        assert rig.take() == ["write Nej.", "finish"]
-        roles = [m["role"] for m in cast("list[dict[str, object]]", rig.sent()["messages"])]
-        assert roles == ["system", "user", "assistant", "user"]
-
-
-def test_ask_includes_the_selection() -> None:
-    with fake_endpoint() as endpoint:
-        endpoint.replies = [streamed("ok")]
-        rig = Rig(endpoint)
-        rig.desktop.prompts = ["What does this mean?"]
-        rig.desktop.selection = "ERROR 0x80070005"
-        rig.press(Tool.ASK)
-        assert "ERROR 0x80070005" in json.dumps(rig.sent())
-
-
-def test_cancelled_prompts_do_nothing() -> None:
-    with fake_endpoint() as endpoint:
-        rig = Rig(endpoint)
-        rig.press(Tool.ASK)
-        assert rig.take() == ["prompt Ask"]
-        assert dict(rig.used)["ask"]["cancelled"] is True
-
-
-# ---- the screen ------------------------------------------------------------------------
-
-
-def test_screen_text_copies_the_text_in_the_area() -> None:
-    with fake_endpoint() as endpoint:
-        endpoint.replies = [answered("Line one\nLine two")]
-        rig = Rig(endpoint)
-        rig.press(Tool.SCREEN_TEXT)
-        assert rig.take() == ["clipboard Line one\nLine two", "notify Text copied: Line one Line two"]
-        assert "data:image/png;base64," in json.dumps(rig.sent())
-
-
-def test_screen_ask_answers_about_the_area() -> None:
-    with fake_endpoint() as endpoint:
-        endpoint.replies = [streamed("It's a chart.")]
-        rig = Rig(endpoint)
-        rig.desktop.prompts = [""]  # Enter on an empty box: the default question
-        rig.press(Tool.SCREEN_ASK)
-        assert rig.take()[-2:] == ["write It's a chart.", "finish"]
-        assert "data:image/png;base64," in json.dumps(rig.sent())
-
-
-def test_screen_tools_do_nothing_when_no_area_is_chosen() -> None:
-    with fake_endpoint() as endpoint:
-        rig = Rig(endpoint)
-        rig.desktop.region = None
-        rig.press(Tool.SCREEN_TEXT)
-        assert rig.take() == []
-
-
 # ---- the agent -------------------------------------------------------------------------
 
 
@@ -610,7 +460,6 @@ def test_voice_sends_a_task_and_typed_opens_the_agent_session() -> None:
         rig.press(Tool.AGENT_TYPED)
         rig.press(Tool.STOP)
         assert rig.agent == ["tidy my downloads", "SHOW", "STOP"]
-        assert not any(action.startswith("prompt ") for action in rig.desktop.log)
 
 
 # ---- apps and windows ------------------------------------------------------------------
@@ -670,7 +519,7 @@ def test_without_ai_settings_ai_tools_say_what_is_missing_and_the_rest_works() -
     with fake_endpoint() as endpoint:
         rig = Rig(endpoint, missing=Missing(("OPENAI_API_KEY",)))
         rig.hold(Tool.DICTATE)
-        rig.press(Tool.FIX)
+        rig.press(Tool.AGENT_TYPED)
         rig.press(TERMINAL)
         rig.press(Tool.MINIMIZE)
         rig.press(Tool.OPEN_INBOX)

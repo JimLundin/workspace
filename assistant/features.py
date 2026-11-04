@@ -9,34 +9,15 @@ handed to the worker thread (`submit`), which does one job at a time, in order.
 """
 
 import time
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from enum import Enum, auto
-from typing import Final, Literal, Protocol, assert_never
+from typing import Literal, Protocol, assert_never
 
 from assistant import prompts
-from assistant.geometry import Shot
 from assistant.hotkeys import Route, needs_settings, route
-from assistant.llm import (
-    MAX_SECONDS,
-    Failure,
-    Image,
-    Message,
-    Missing,
-    Part,
-    Settings,
-    Text,
-    ask,
-    assistant_message,
-    long_enough,
-    stream,
-    system_message,
-    transcribe,
-    user_message,
-    wav,
-)
-from assistant.text import one_line_command, typed_text, unwrap
-from config import REWRITES
+from assistant.llm import MAX_SECONDS, Failure, Missing, Settings, ask, long_enough, transcribe, wav
+from assistant.text import one_line_command, typed_text
 from desktop_ui.icons import State
 from desktop_ui.island_model import Job
 from desktop_ui.navigation import AppKey, Order, Source, keyed
@@ -44,17 +25,6 @@ from diagnostics import failure_info
 from protocol import App, Request, Tool
 from usage import Detail
 from winapi.pcm import RATE
-from winapi.shapes import Rect
-
-
-class Answer(Protocol):
-    """A window showing an answer as it's written, with a box for follow-up questions."""
-
-    def write(self, text: str) -> None: ...
-    def finish(self) -> None:
-        """The answer is complete; follow-up questions can be asked."""
-
-    def fail(self, message: str) -> None: ...
 
 
 class Desktop(Protocol):
@@ -67,25 +37,8 @@ class Desktop(Protocol):
         """Stops recording; 16-bit mono PCM at `RATE`."""
         ...
 
-    def copy_selection(self) -> str | None:
-        """The selected text, if any. Leaves the clipboard as it was."""
-
-    def paste(self, text: str) -> None:
-        """Replaces the selection (or types at the cursor), then restores the clipboard."""
-
     def type_text(self, text: str) -> None: ...
     def set_clipboard(self, text: str) -> None: ...
-    def choose_region(self) -> Rect | None:
-        """Lets the user drag over part of the screen; None if they press Escape."""
-
-    def capture(self, area: Rect, longest: int) -> tuple[bytes, Shot]:
-        """A PNG of the area, no bigger than `longest` pixels on its longer side."""
-        ...
-
-    def prompt(self, title: str) -> str | None:
-        """A text box; what was typed, or None if cancelled."""
-
-    def answer(self, title: str, follow_up: Callable[[str], None]) -> Answer: ...
     def show_state(self, state: State) -> None: ...
     def busy(self, job: Job | None) -> None:
         """The quick job now running, for the bar; None once it has finished."""
@@ -118,12 +71,6 @@ class Controls(Protocol):
 
 class Outcome(Enum):
     DONE = auto()
-    CANCELLED = auto()
-    """The user backed out (Escape in a box, no area chosen)."""
-
-
-SCREENSHOT_SIZE: Final = 2048
-"""Longest side of screenshots sent to the model, in pixels."""
 
 
 def submit_voice_text(text: str, send: Callable[[str], None], details: dict[str, Detail]) -> None:
@@ -156,30 +103,6 @@ def listening_tool(source: Tool) -> Tool:
             return Tool.AGENT_VOICE
         case _:
             return source
-
-
-class Conversation:
-    """A question and its follow-ups, answered in one window."""
-
-    __slots__ = ("messages", "settings", "window")
-
-    def __init__(self, settings: Settings, first: Sequence[Part], title: str, desktop: Desktop, submit: Callable[[Callable[[], None]], None]) -> None:
-        self.settings = settings
-        self.messages: tuple[Message, ...] = (system_message(prompts.ASK), user_message(first))
-        self.window = desktop.answer(title, lambda question: submit(lambda: self.follow_up(question)))
-
-    def run(self) -> Failure | Outcome:
-        result = stream(self.settings, self.messages, self.window.write)
-        if isinstance(result, Failure):
-            self.window.fail(result.message)
-            return result
-        self.messages = (*self.messages, assistant_message(result))
-        self.window.finish()
-        return Outcome.DONE
-
-    def follow_up(self, question: str) -> None:
-        self.messages = (*self.messages, user_message(question))
-        self.run()
 
 
 class Assistant:
@@ -264,14 +187,6 @@ class Assistant:
                 self.submit(lambda: self.timed(request.name.lower(), lambda: self.arrange(request, target=target)))
             case Route.NAVIGATE:
                 self.timed(request.name.lower(), lambda: self.order(keyed(request)))
-            case Route.REWRITE:
-                self.submit(lambda: self.timed(request.name.lower(), lambda: self.rewrite(REWRITES[request])))
-            case Route.ASK:
-                self.submit(lambda: self.timed(request.name.lower(), self.ask))
-            case Route.SCREEN_TEXT:
-                self.submit(lambda: self.timed(request.name.lower(), self.screen_text))
-            case Route.SCREEN_ASK:
-                self.submit(lambda: self.timed(request.name.lower(), self.screen_ask))
             case Route.AGENT_SESSION:
                 self.submit(lambda: self.timed(request.name.lower(), self.agent_session))
             case Route.INBOX:
@@ -318,8 +233,6 @@ class Assistant:
             if isinstance(outcome, Failure):
                 details["error"] = outcome.message[:120]
                 self.desktop.problem(outcome.message)
-            elif outcome is Outcome.CANCELLED:
-                details["cancelled"] = True
             self.record(feature, details)
             if self.listening is None:
                 self.idle()
@@ -437,9 +350,6 @@ class Assistant:
                     return command
                 self.remember_transcript(one_line_command(command))
                 submit_voice_text(one_line_command(command), self.desktop.type_text, details)
-            case Tool.REWRITE_VOICE:
-                details["phase"] = "rewriting"
-                return self.rewrite(transcript)
             case Tool.AGENT_VOICE:
                 submit_voice_text(transcript, self.controls.run_agent, details)
             case _:
@@ -475,47 +385,6 @@ class Assistant:
     def agent_session(self) -> Outcome:
         self.controls.show_agent()
         return Outcome.DONE
-
-    def rewrite(self, instruction: str) -> Failure | Outcome:
-        self.working(Job.ANSWERING)
-        if not (text := self.desktop.copy_selection()):
-            return Failure("Select some text first.")
-        if isinstance(result := ask(self.settings, prompts.rewrite(instruction), text), Failure):
-            return result
-        self.desktop.paste(unwrap(result))
-        return Outcome.DONE
-
-    def ask(self) -> Failure | Outcome:
-        selection = self.desktop.copy_selection()
-        if not (question := self.desktop.prompt("Ask")):
-            return Outcome.CANCELLED
-        self.working(Job.ANSWERING)
-        content = f"{question}\n\nSelected text:\n{selection}" if selection else question
-        return Conversation(self.settings, [Text(content)], question, self.desktop, self.submit).run()
-
-    def screenshot(self) -> bytes | None:
-        area = self.desktop.choose_region()
-        return None if area is None else self.desktop.capture(area, SCREENSHOT_SIZE)[0]
-
-    def screen_text(self) -> Failure | Outcome:
-        if (png := self.screenshot()) is None:
-            return Outcome.CANCELLED
-        self.working(Job.ANSWERING)
-        if isinstance(result := ask(self.settings, prompts.SCREEN_TEXT, [Image(png)]), Failure):
-            return result
-        text = unwrap(result)
-        self.desktop.set_clipboard(text)
-        self.desktop.notify("Text copied", " ".join(text.split())[:80])
-        return Outcome.DONE
-
-    def screen_ask(self) -> Failure | Outcome:
-        if (png := self.screenshot()) is None:
-            return Outcome.CANCELLED
-        if (question := self.desktop.prompt("Ask about this (Enter: explain it)")) is None:
-            return Outcome.CANCELLED
-        self.working(Job.ANSWERING)
-        question = question or prompts.SCREEN_QUESTION
-        return Conversation(self.settings, [Text(question), Image(png)], question, self.desktop, self.submit).run()
 
     def order(self, order: Order | None) -> Outcome:
         if order is not None:

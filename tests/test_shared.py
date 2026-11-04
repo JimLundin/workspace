@@ -58,17 +58,17 @@ def test_usage_is_summarized_per_feature(tmp_path: Path) -> None:
 def test_usage_ignores_broken_lines_and_old_entries(tmp_path: Path) -> None:
     lines = [
         "not json",
-        '{"t": "2020-01-01T00:00:00", "source": "assistant", "feature": "ask"}',
-        '{"t": "2026-10-01T00:00:00", "source": "assistant", "feature": "ask"}',
+        '{"t": "2020-01-01T00:00:00", "source": "assistant", "feature": "dictate"}',
+        '{"t": "2026-10-01T00:00:00", "source": "assistant", "feature": "dictate"}',
         '{"t": "2026-10-01T00:00:00", "source": "assistant"}',
     ]
     summary = summarize(lines, since=datetime(2026, 1, 1))
-    assert list(summary) == ["assistant/ask"]
-    assert summary["assistant/ask"].uses == 1
+    assert list(summary) == ["assistant/dictate"]
+    assert summary["assistant/dictate"].uses == 1
 
 
 def test_report_lists_features_never_used() -> None:
-    lines = ['{"t": "2026-10-01T12:00:00", "source": "assistant", "feature": "ask"}']
-    text = report(summarize(lines), known=["assistant/ask", "assistant/agent"])
-    assert "assistant/ask" in text
+    lines = ['{"t": "2026-10-01T12:00:00", "source": "assistant", "feature": "dictate"}']
+    text = report(summarize(lines), known=["assistant/dictate", "assistant/agent"])
+    assert "assistant/dictate" in text
     assert text.index("Never used") < text.index("assistant/agent")
