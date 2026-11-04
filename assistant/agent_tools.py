@@ -28,8 +28,6 @@ lazy from automation.ipc import MeetingOperation
 
 _ARGUMENTS = TypeAdapter(dict[str, Json], config=ConfigDict(allow_inf_nan=False))
 
-DECLINED: Final = "The user declined: don't run this. Ask them, or try something else."
-
 
 class Machine(Protocol):
     """What the agent's tools act on: the computer."""

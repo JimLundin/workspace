@@ -2,7 +2,7 @@
 
 Live requested agent activity appears in a bounded lower-right trail. One
 requested outcome owns one card: public updates, actions and the final reply
-stay together. Questions and approvals resume that same turn. Headings stay on
+stay together. Questions resume that same turn. Headings stay on
 one elided line even when steps are opened. Completed cards expire oldest first.
 Older cards pushed into the upper eight-line edge band begin their ordinary exit;
 hover, expansion, pending input and recording protect them from that exit.
@@ -48,9 +48,9 @@ process, such as the browser host. Effect ownership stays in the last column.
 | `assistant/llm.py` | shared | System, user, assistant, and tool-result message variants; request serialization; four immutable workload sizes with one shared model mapping and independently configured sizes for quick jobs, the main agent, notification screening/research and source correlation | HTTP client functions and validated environment configuration entry |
 | `assistant/sdk.py` | work | Validated named delegation batches, class choices, immutable child results and bounded child turns | The SDK owns each model/tool loop; the adapter owns one shared native-effect gate, independent stream cancellation, content-free child lifecycle updates and collection into the manager's conversation. Child loops reuse the task profile's tools and durable claim, without checkpointing or recursive delegation |
 | `automation/presentation.py` | shared | Shared progress, result and live-row values | `automation/app.py` publishes live updates through `ipc.py`; the assistant synthesizes completion from durable outcomes and renders the timeline |
-| `assistant/agent_session.py` | desktop | Typed events, messages, agent request rows over the durable questions and approvals, session transitions, and presentation | `agent_window.py`, `agent_toasts.py`, `toast_card.py` |
-| `assistant/agent.py`, `task_profiles.py`, `agent_execution.py` | work | Tool dispatch, approval and observation recording for one durable work claim; each task profile's toolset and execution (conversation, admitted desktop context, recovery and completion check) | `Profiles` selects the profile run and owns its dependencies, per-conversation SDK history and source drafts; `AgentExecution` owns metrics, error reporting and run cleanup; `WorkExecution` owns the claim's effects |
-| `assistant/agent_tools.py`, `desktop_tools.py`, `browser_tools.py`, `business_tools.py`, `self_change_tools.py`, `meeting_tools.py`, `feed_agent_tools.py`, `work_canvas_tools.py`, `personal_work_tools.py`, `task_tools.py` | shared: `agent_tools.py`, `business_tools.py`, `personal_work_tools.py`; work: other listed tools | Tool families: each `Tool` declares its schema, handler, read/change classification with resources, reconciliation proof, readback evidence and visible display; handlers describe each exact `Operation` to approval and effect | The agent composes the families over its `Session`; `Screen` and `SelfChange` own the latest screenshot and the source draft's check/install state |
+| `assistant/agent_session.py` | desktop | Typed events, messages, agent request rows over the durable questions, session transitions, and presentation | `agent_window.py`, `agent_toasts.py`, `toast_card.py` |
+| `assistant/agent.py`, `task_profiles.py`, `agent_execution.py` | work | Tool dispatch and observation recording for one durable work claim; each task profile's toolset and execution (conversation, admitted desktop context, recovery and completion check) | `Profiles` selects the profile run and owns its dependencies, per-conversation SDK history and source drafts; `AgentExecution` owns metrics, error reporting and run cleanup; `WorkExecution` owns the claim's effects |
+| `assistant/agent_tools.py`, `desktop_tools.py`, `browser_tools.py`, `business_tools.py`, `self_change_tools.py`, `meeting_tools.py`, `feed_agent_tools.py`, `work_canvas_tools.py`, `personal_work_tools.py`, `task_tools.py` | shared: `agent_tools.py`, `business_tools.py`, `personal_work_tools.py`; work: other listed tools | Tool families: each `Tool` declares its schema, handler, read/change classification with resources, reconciliation proof, readback evidence and visible display; handlers describe each exact `Operation` to its effect | The agent composes the families over its `Session`; `Screen` and `SelfChange` own the latest screenshot and the source draft's check/install state |
 | `automation/task.py`, `store.py` | shared | Durable task, request profile, agent request, reply, action, and run variants, each tagged by its `kind` or enum value; controls and stale-run decisions | `TaskStore` owns the task journal's queries and stores those records through strict Pydantic adapters; schema version 5 converts version 4 journals in place |
 | `automation/journal.py` | shared | Schema versions: creation, ordered migration steps and refusal of unknown or unversioned journals | Every SQLite owner (task, context, personal-work, canvas and meeting journals) opens its file through one connection interface: write transactions, single read snapshots, rollback on any exception, one busy wait and durability policy, and reads that report an absent journal without creating it |
 | `automation/controller.py`, `execution.py`, `actions.py` | work: controller; shared: execution/actions | Work outcomes, recovery context, exact operations, observation evidence, reconciliation proof and verification decisions | `WorkController` owns execution lifetime; `Actions` owns cancellable effect coordination |
@@ -60,7 +60,7 @@ process, such as the browser host. Effect ownership stays in the last column.
 | `desktop_ui/view_publication.py` | desktop | One view per owner: coalesced renders, lazy creation with retry, a single confirmed close | `AgentWindow` and `WorkWindow` keep their immutable state and post through it; `Ui.close_windows` closes both and waits for each confirmation |
 | `automation/ipc.py`, `outbox.py`, `bridge.py`, `profile_lease.py` | shared: IPC/outbox/bridge; work: profile lease | Validated process messages, typed meeting operations and bounded desktop-call text, plus immutable event retention/coalescing with explicit history loss | Bridge client/server own the one authenticated pipe and replace outbox snapshots under the server lock; `ProfileLease` owns the OS-released exclusive work-folder lock; `automation/app.py` composes the worker and its `OwnerCalls` adapter, binding calls to the current execution run and cancellation handle |
 | `assistant/action_text.py` | shared | Readable action targets and results, formatted before preview limits | `agent.py` publishes previews; session presentation handles raw payloads too |
-| `desktop_ui/agent_progress.py`, `notifications.py`, `notification_text.py`, `notification_reading.py`, `toast_stack.py`, `request_panel.py` | desktop | One stable desktop card per requested outcome/work context, complete inline requests in cards and the toolbar, optional canvas actions, approvals and agent turns; reading states and lifetimes; measured stack placement and synchronized frame springs | `AgentToasts` owns the card pool, shared measurement, frame clock, timers and history; `toast_card.Card` owns each native window and glass through `CardOwner` |
+| `desktop_ui/agent_progress.py`, `notifications.py`, `notification_text.py`, `notification_reading.py`, `toast_stack.py`, `request_panel.py` | desktop | One stable desktop card per requested outcome/work context, complete inline requests in cards and the toolbar, optional canvas actions and agent turns; reading states and lifetimes; measured stack placement and synchronized frame springs | `AgentToasts` owns the card pool, shared measurement, frame clock, timers and history; `toast_card.Card` owns each native window and glass through `CardOwner` |
 | `assistant/browser_requests.py`, `browser_values.py`, `browser_session.py`, `browser.py` | shared | Browser requests (one typed variant per operation, validated once at the browser tool seam), immutable page/tab/group observations, validated DevTools and tab-API replies, group selection, typed paginated projections | `Browser`, `NativeSessions`, `Cdp`, `browser_tabs.TabStrip`, the `browser_host` exchange of typed flat requests, and a cancellable connection wait |
 | `assistant/recording_state.py` | shared | Audio batches, stored observations, completion rules, retry policy, stale-update rejection, and recording controls | `meetings.py` and `meeting_store.py` |
 | `assistant/meeting_detection.py` | desktop | Immutable joined-call observations, saved opt-in, departure debounce, continuous thirty-second failure/recovery warning policy and manual-stop suppression | `meeting_browser.py` reads the existing approved Edge tabs without focus/navigation; `automatic_meetings.py` owns five-second polling, the encrypted preference and command serialization over the existing recorder; `App` routes manual starts/stops through it and `Ui` retains its toolbar-menu status. This uses the existing browser and recording dependencies: lifecycle decisions are Workspace policy, not a general-purpose polling library. |
@@ -75,7 +75,7 @@ process, such as the browser host. Effect ownership stays in the last column.
 | `assistant/feed_origin.py` | shared | Source application identity and assessment provenance | `desktop_ui/vector_icons.py` owns native vector marks; canvas bubbles and the Workspace badge on floating bubbles paint them; the triage board keeps reaction counts quiet |
 | `assistant/notification_sources.py` | desktop | Windows notice updates, loaded handling marks and the `NotificationFilter` definition | `NotificationSources` loads stored attention choices and retains notice observations on Qt's thread, apart from the Teams worker; routine observations preserve those choices and expose revised notices as pending |
 | `assistant/notification_agent.py` | desktop | Reviewed actionable notification evidence, current source-revision/date selection, exact task IDs and stable prompts | `NotificationAgent` owns a separate admission thread for reviewed ACTION sources from Windows notices, Teams activities and unseen messages. Only current eligible revisions and dates enter quick tool-free screening; refused admissions retry on worker ticks. `WorkAgent.submit_identified` owns durable admission, replay and execution with the existing general tools. The agent investigates and executes actions covered by existing user authorization, recording useful findings in their canvas context. |
-| `assistant/card_actions.py` | desktop | Card action variants (open the canvas, decide an approval) and their one `workspace://` encoding; a link that is not exactly one variant parses to nothing | `notification_text.py` and `agent_session.notice_text` build variants; `rich_text.py` keeps only canvas redirects clickable in Markdown; `agent_toasts.py` matches the parsed variant |
+| `assistant/card_actions.py` | desktop | The open-canvas card action and its one `workspace://` encoding; any other link parses to nothing | `notification_text.py` and `agent_session.notice_text` build it; `rich_text.py` keeps only canvas redirects clickable in Markdown; `agent_toasts.py` follows the parsed action |
 | `winapi/system_notices.py` | desktop | Native notification identities, quiet history baselines, banner coverage and validated timestamps | `winapi/notifications.py` owns native observations; `notification_banners.py` owns the recoverable banner-setting lease; `desktop_bar.py` forwards observations through `Ui.system_notices` to `NotificationSources` and the joined feed; the island has no individual-notice dismissal control |
 | `desktop_ui/shell_state.py` | desktop | Windows-key tap decisions | `shell_controls.py` owns taskbar recovery and a dedicated Windows-key message thread; keyboard callbacks post toggles and pass other input through |
 | `desktop_ui/shell_items.py`; `winapi/tray_host.py` | desktop | Pinned Outlook/Teams web-app slots claimed by Edge AppUserModelID, launch dedupe, stable running-app/window grouping, live tray registration updates, callback/version routing and popup geometry | `application_observer.py` reads Edge windows' AppUserModelIDs (`winapi/app_user_model.py`) and copies window icons off Qt; `shell_surface.py` owns scrollable icon sections; `TrayHost` forwards shell traffic to Explorer and owns its hidden proxy; the desktop bar composes their lifetimes and excludes the proxy from taskbar recovery |
@@ -163,7 +163,7 @@ public snapshots and handoff receipts from stored retry prompts;
 serializes their immutable values at encrypted IO.
 
 Routine arrivals stay quiet: the floating bubbles only direct the person to the
-canvas, report important changes and carry guarded approvals. The triage plan
+canvas and report important changes. The triage plan
 belongs to the voice agent, which reads, dismisses, chooses solutions and
 answers through `feed_agent_tools.py`. Dismissal saves the exact observed
 revisions without completing work or replying to its source. Polls, restart and
@@ -225,9 +225,8 @@ preserved when other bubbles arrive.
 Session events include their timestamps. IDs and clocks are supplied by the
 work controller, so a sequence of events can be replayed or branched
 without changing its source state. Views receive the immutable session itself.
-An agent request row projects the durable question or approval itself, with
-the detail the person reviews and their reply: pending, answered, an approval
-decision, or cancelled. A reply for the wrong request kind or an already
+An agent request row projects the durable question itself, with its detail
+and the person's reply: pending, answered or cancelled. A reply for an already
 resolved request leaves the session unchanged.
 
 The legacy task controller accepts an execution adapter and a window factory. Its
@@ -261,18 +260,15 @@ immediately; the controller waits for that execution's cleanup before starting
 another. Shutdown parks work as interrupted. Live endpoint failures wait for
 explicit resume so one unavailable task cannot spin or hold up unrelated work.
 
-Consequential tools record an attempt after validation and any required
-approval, immediately before their effect. The journal retains fingerprints
+Consequential tools record an attempt after validation, immediately before
+their effect. The journal retains fingerprints
 and bounded outcomes, without raw tool arguments or SDK histories. File writes
 can be checked by destination and expected digest. Other unknown effects require
 fresh observations before reconciliation. Completion checks the full action
 record, independently of the UI's display page. A late callback cannot revive a
 cancelled task or replace an already verified action with a weaker outcome.
 
-Questions and redacted approval requests are durable. Full approval previews
-remain volatile, tied to their run, goal revision, exact operation, and request
-identity. A view must display the matching preview before approval is accepted.
-After a lost preview, refreshing creates a new request identity. Local IPC uses
+Questions are durable. Local IPC uses
 authenticated, bounded JSON byte frames with worker epochs and event cursors;
 it never deserializes Python objects. Meeting and desktop owner calls use this same
 pipe. Desktop text is bounded to 64,000 UTF-8 bytes and validated through the

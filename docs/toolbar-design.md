@@ -97,7 +97,7 @@ restores the idle policy.
 
 Pressing the island while dictating stops dictation; pressing "Needs you"
 expands the island to present the complete request. The bell and Hold V + T use
-the same expansion. The request has voice guidance or explicit approval controls,
+the same expansion. The request has voice guidance,
 plus an optional canvas icon that opens the exact contribution. Reviewing a
 request does not open the canvas. Escape or clicking elsewhere closes it.
 The recording opens the canvas and the layer opens the key map.

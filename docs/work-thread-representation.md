@@ -209,8 +209,7 @@ Other speech on the visible canvas creates an instruction in the selected contex
 or on the whole canvas. With no expanded desktop request and the canvas hidden,
 speech uses the main conversation.
 Restarted sessions close orphaned questions; durable task requests retain their
-route and work connection across reopening. Approvals retain their existing
-preview, identity and explicit-decision guards.
+route and work connection across reopening.
 
 Dictation capture and transcription remain independent of background agent work.
 Hold Space to dictate into the focused application, or Hold N to speak to the

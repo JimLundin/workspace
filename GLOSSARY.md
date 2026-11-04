@@ -30,9 +30,9 @@ shows every source that is not resolved.
 _Avoid_: Source string, identity prefix
 
 **Card action**:
-What a floating bubble's link or button does: open the canvas at a target or
-decide the agent's pending approval. Bubbles direct the person; app arrivals
-never become cards. A link that is not exactly one card action does nothing.
+What a floating bubble's link does: open the canvas at a target. Bubbles
+direct the person; app arrivals never become cards. A link that is not exactly
+one card action does nothing.
 _Avoid_: Action URL, link string, feed card
 
 **Work thread**:
@@ -105,12 +105,10 @@ One source can contribute to several work threads.
 _Avoid_: Duplicate task, copied conversation
 
 **Agent request**:
-A question or approval that an agent needs the person to answer before work can
-continue. An approval covers one exact operation. Its answer belongs to the
-originating task and its current goal; the conversation shows that same request.
-A reply is text for a question, or approve or decline for an approval; typed,
-spoken and clicked replies become that one reply at the input edge. Approving
-needs the exact preview to be visible first.
+A question that an agent needs the person to answer before work can continue.
+Its answer belongs to the originating task and its current goal; the
+conversation shows that same request. Typed and spoken replies become one text
+answer at the input edge.
 _Avoid_: Notification, task, chat message
 
 **Notification filter**:
@@ -170,9 +168,9 @@ does not establish that the intended effect occurred.
 _Avoid_: Completed action
 
 **Operation**:
-One exact tool call with the arguments and targets it will act on. An approval
-covers exactly one operation, and an action attempt records one.
-_Avoid_: Tool name, approved tool
+One exact tool call with the arguments and targets it will act on. An action
+attempt records one.
+_Avoid_: Tool name
 
 **Tool family**:
 The owner of a group of agent tools and each tool's facts: what the model is
@@ -190,7 +188,7 @@ _Avoid_: App command, operation name
 **Browser request**:
 One typed operation on the automation browser: open, list, snapshot, act,
 evaluate, capture, or edit and close tabs and groups. The browser tool family
-validates the model's arguments into one before approval; in-process readers
+validates the model's arguments into one before any effect; in-process readers
 construct them directly. A model's call of one is an operation.
 _Avoid_: Browser command string, operation name
 

@@ -2,7 +2,7 @@
 
 A personal work environment for a Windows laptop: extract and run with installed
 Python 3.15 and no admin installation. It changes itself: ask its agent for a new feature or a fix,
-and it edits, tests, installs and reloads the change without another approval.
+and it edits, tests, installs and reloads the change without asking again.
 It undoes the update by itself if it fails. Four main processes:
 
 - **the layout** (`miryoku/`): Colemak Mod-DH in the Miryoku style on the
@@ -61,7 +61,6 @@ and our typed Win32 bindings (`winapi/`), independently of the assistant.
    | `WORKSPACE_MODEL_LARGE` | optional; default `gpt-6.1-sol` |
    | `WORKSPACE_MODEL_EXTRA_LARGE` | optional; default `gpt-6-astra` |
    | `WORKSPACE_AGENT_REASONING_EFFORT` | optional; default `low` for quicker replies; use an effort supported by your selected model |
-   | `WORKSPACE_AGENT_APPROVALS` | optional; default `never`; set `ask` to opt in to action and update approvals |
    | `WORKSPACE_AGENT_CONTEXT` | optional; default `recent`; set `off` to disable idle activity tracking and automatic request context |
    | `WORKSPACE_TRANSCRIBE_MODEL` | optional; default `gpt-4o-transcribe` |
    | `WORKSPACE_VOCABULARY` | optional; names and jargon to expect in dictation |
@@ -391,14 +390,12 @@ pending clarifications. Answered questions retain your context, and a rejected
 submission keeps your reply available for retry.
 
 Floating bubbles use the existing Windows glass, contrast and motion treatment.
-They present questions, useful canvas findings or state changes, and guarded
-action approvals. Routine app arrivals stay quiet after quick relevance screening.
+They present questions and useful canvas findings or state changes. Routine app arrivals stay quiet after quick relevance screening.
 One requested outcome keeps its updates, tools and final reply in one card.
 Related notification work shares that card through its work context even when
 the canvas arranges contributions separately. The trail holds at most three
 cards, and completed cards expire after a reading delay. Questions remain until
-answered or closed. If approval mode is enabled, the existing exact-preview and explicit
-approve/decline rules still apply. Meeting recording retains its own control.
+answered or closed. Meeting recording retains its own control.
 **Hold V + L** or **Agent session** opens explicit conversation history.
 
 Workspace reuses one existing Teams tab on the approved Edge connection for
@@ -450,8 +447,8 @@ by default, mapped to GPT-6 Astra. `WORKSPACE_AGENT_CLASS` selects another size,
 independently of dictation cleanup and background screening/research. The endpoint must
 support the selected model through the Responses API.
 
-By default, file writes, commands, opening files, desktop control and self-updates
-run without approval prompts. Requests to change Workspace authorize the agent to
+File writes, commands, opening files, desktop control and self-updates run
+without confirmation prompts. Requests to change Workspace authorize the agent to
 edit its source and model settings, test the result, install it and reload.
 The agent is instructed to publish or send messages only when you request that.
 The **×** stop button remains available throughout the task.
@@ -511,11 +508,6 @@ applications expose few accessibility controls; the agent can use screenshots,
 input or an application API instead. It checks results and reports an actual
 blocker when Windows refuses access.
 
-With `WORKSPACE_AGENT_APPROVALS=ask`, writes, opens and desktop actions each wait
-for a durable approval in the work overview, and commands do too unless they match
-`ALLOWED_COMMANDS` in `config.py`. The keeper also reviews self-updates in that
-optional mode.
-
 It stops after 80 steps (`AGENT_MAX_STEPS`). The task journal records each
 consequential action and its outcome. Browser and Teams arguments and results stay
 out of persistent journals and activity details, including form values and
@@ -525,7 +517,7 @@ The main agent can delegate independent work to **small**, **medium**, **large**
 or **extra large** subagents, choosing the smallest suitable model for each task.
 Their model IDs are configurable above; these are workload classes, not published
 parameter counts. Up to four subagents run in parallel per delegation, each with
-at most twelve model turns and the current task's tools and approval policy.
+at most twelve model turns and the current task's tools.
 They inherit the configured reasoning effort, so choose an effort supported by
 all selected models. Child conversations are separate; the main agent supplies
 their context, collects named results and owns the final answer and verification.
@@ -575,9 +567,7 @@ A task with an unknown action outcome checks what happened before repeating an
 effect. Endpoint failures and other blockers wait for an explicit resume.
 
 The worker executes one task at a time, and a task waiting for a reply releases
-its execution slot. Questions survive restarts. In optional approval mode,
-approvals identify an exact operation and require its visible preview; use
-**Request fresh preview** if that preview was lost during a restart.
+its execution slot. Questions survive restarts.
 
 Completed transcripts trigger only after their final text has been saved.
 Duplicate delivery creates one task, missed intervals coalesce, and disabling
@@ -600,10 +590,8 @@ edits stay available for follow-up requests in the same conversation, then:
    architecture and interface reviews check the draft as CI would, so a
    self-change cannot push errors to main. Ruff's signed binary is the bundle's
    only executable; pyright runs on the installed Node.js.
-2. **Submit**: the agent sends the checked change to the keeper. There is no
-   approval step by default. With `WORKSPACE_AGENT_APPROVALS=ask`, the agent runs
-   syntax checks first and the keeper shows the complete diff before running
-   the proposed code and tests.
+2. **Submit**: the agent sends the checked change to the keeper without a
+   confirmation step.
 3. **Verify**: the keeper checks its own frozen copy of the source: every module
    imports and the full suite, including Windows integrations, passes. Failed
    checks or changes to the candidate during checks prevent installation.
@@ -633,8 +621,7 @@ Installed self-changes land on `main` automatically (step 6 above). For a change
 you want to review first, ask the agent to "publish it to GitHub for review". Its
 `publish_changes` tool freezes the workspace, runs the runtime checks, commits,
 and pushes a new `workspace/agent-*` branch without installing it. That path never
-force-pushes or updates `main`. In optional approval mode it asks you to approve
-the diff and destination first. Merge the branch on GitHub after review.
+force-pushes or updates `main`. Merge the branch on GitHub after review.
 
 Publishing requires **Git for Windows on PATH** and credentials already set up
 for the repository (for example through Git Credential Manager). The Windows bundle includes the SDK dependencies for the other features. A missing Git installation,
@@ -761,7 +748,7 @@ payloads, screenshots, credentials, encrypted reasoning, or raw SDK history.
 keeper.py       runs the programs; installs, tries and undoes changes (protected)
 selfcheck.py    compile, import, test: the gate every change passes (protected)
 protocol.py     what the layout and the assistant say to each other (window messages)
-config.py       your settings: apps, snippets, allowed commands
+config.py       your settings: apps, snippets, agent limits
 usage.py        the usage log
 winapi/         typed Win32 bindings: the only ctypes code
 miryoku/        the layout: layout.py (the tables), engine.py (the logic), win.py

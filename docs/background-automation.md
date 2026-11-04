@@ -2,8 +2,7 @@
 
 Workspace prefers an application API, then background browser DOM operations,
 then accessibility, and finally foreground mouse and keyboard input. All tools
-use the same agent conversation and Stop control. The existing approval setting
-applies; its default is `never`.
+use the same agent conversation and Stop control.
 
 ## Browser sessions
 
@@ -155,8 +154,7 @@ not create or delete tasks, attach files, or change assignees/reviewers.
 
 New tool arguments/results remain in the agent's in-memory conversation; persistent
 journals retain only redacted integration status and hashed target identities.
-The same optional approval setting and durable effect coordinator apply to these
-tools. HTTP, OAuth, Pydantic validation and DOM/event implementations are trusted
+The same durable effect coordinator applies to these tools. HTTP, OAuth, Pydantic validation and DOM/event implementations are trusted
 dependency/platform behavior; tests cover Workspace routing, selection, stale
 state, draft preservation, output limits, cancellation and effect ownership.
 
