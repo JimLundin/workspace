@@ -91,6 +91,12 @@ def scheme() -> Scheme:
     return Scheme.LIGHT if appearance.light_apps() else Scheme.DARK
 
 
+def tooltip_style(theme: Tokens) -> str:
+    """Tooltips, the one rule the process shares: every other control takes its look from the window that owns it."""
+    line = theme.separator.css
+    return f"QToolTip {{ background: {theme.solid}; color: {theme.ink.css}; border: 1px solid {line}; border-radius: 8px; padding: 5px 8px; }}\n"
+
+
 def control_style(theme: Tokens) -> str:
     """Workspace's dialogs and controls: Inter, capsule buttons, quiet wells and overlay scroll bars."""
     ink, ink2, ink3 = theme.ink.css, theme.ink2.css, theme.ink3.css
@@ -136,8 +142,7 @@ QScrollBar::handle:vertical {{ background: {theme.thumb.css}; border-radius: 3px
 QScrollBar:horizontal {{ background: transparent; height: 8px; margin: 2px 4px; }}
 QScrollBar::handle:horizontal {{ background: {theme.thumb.css}; border-radius: 3px; min-width: 24px; }}
 QScrollBar::add-line, QScrollBar::sub-line, QScrollBar::add-page, QScrollBar::sub-page {{ width: 0; height: 0; background: transparent; }}
-QToolTip {{ background: {theme.solid}; color: {ink}; border: 1px solid {line}; border-radius: 8px; padding: 5px 8px; }}
-"""
+""" + tooltip_style(theme)
 
 
 def canvas_style(theme: Tokens) -> str:
@@ -170,8 +175,7 @@ QMenu::item:selected {{ background: {GLASS_ACCENT}; color: #ffffff; }}
 QScrollBar:vertical {{ background: transparent; width: 8px; margin: 4px 2px; }}
 QScrollBar::handle:vertical {{ background: {theme.thumb.css}; border-radius: 3px; min-height: 20px; }}
 QScrollBar::add-line, QScrollBar::sub-line, QScrollBar::add-page, QScrollBar::sub-page {{ height: 0; width: 0; background: transparent; }}
-QToolTip {{ background: {theme.solid}; color: {theme.ink.css}; border: 1px solid {line}; border-radius: 8px; padding: 5px 8px; }}
-"""
+""" + tooltip_style(theme)
 
 
 def brand(app: App) -> str:

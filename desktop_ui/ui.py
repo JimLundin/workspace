@@ -39,7 +39,7 @@ lazy from desktop_ui import island_agent, island_model
 lazy from desktop_ui.agent_progress import canvas_phases, phases
 lazy from desktop_ui.agent_toasts import AgentToasts
 lazy from desktop_ui.agent_window import AgentWindow
-lazy from desktop_ui.components.appearance import scheme, tokens
+lazy from desktop_ui.components.appearance import scheme, tokens, tooltip_style
 lazy from desktop_ui.components.canvas_loading import CanvasLoading
 lazy from desktop_ui.components.widgets import show_window, window_style
 lazy from desktop_ui.desktop_bar import BarActions, DesktopBar
@@ -201,7 +201,7 @@ class Ui:
         self._dialogs: list[QtWidgets.QWidget] = []
         self._thread = threading.current_thread()
         self._root = application()
-        self._root.setStyleSheet(window_style(tokens(scheme())))
+        self._root.setStyleSheet(tooltip_style(tokens(scheme())))
         self._poll_timer = QtCore.QTimer(self._root)
         self._poll_timer.setInterval(20)
         self._poll_timer.timeout.connect(self.drain)
