@@ -15,7 +15,20 @@ from desktop_ui.components.appearance import Capsule, look
 from desktop_ui.components.meaning import Tint
 from desktop_ui.qt_runtime import prepare
 from desktop_ui.qt_ui import application
-from desktop_ui.shell_items import Application, applications, next_window
+from desktop_ui.shell_items import (
+    EMPTY_SHELF,
+    Application,
+    Item,
+    Launches,
+    Pinned,
+    PinnedApp,
+    Shelf,
+    applications,
+    launch,
+    next_window,
+    outstanding,
+    shelf,
+)
 from desktop_ui.shell_surface import ShellSections
 from winapi import appearance, desktop_shell, shell, windows
 from winapi.icon_pixels import pixels
@@ -44,9 +57,51 @@ def test_application_grouping_preserves_icon_order_and_cycles_current_windows() 
     reordered = applications((other, second, first), apps)
     assert tuple(app.identity for app in reordered) == ("editor.exe", "browser.exe")
     assert tuple(window.handle for window in reordered[0].windows) == (11, 12)
-    assert next_window(apps[0], 11) == 12 and next_window(apps[0], 12) == 11
-    assert next_window(apps[0], 99) == 11
+    assert next_window(apps[0].windows, 11) == 12 and next_window(apps[0].windows, 12) == 11
+    assert next_window(apps[0].windows, 99) == 11
     assert applications((other,), reordered) == (Application("browser.exe", (other,)),)
+
+
+def test_pinned_web_app_windows_fill_their_slots_and_leave_the_edge_group() -> None:
+    # Defect: an app window also shows in Edge's group, the ordinary browser or a
+    # lookalike id fills a slot, another profile's window is missed, or slot order shuffles.
+    mail = Window(1, "Mail", "msedge.exe", minimized=False)
+    calendar = Window(2, "Calendar", "msedge.exe", minimized=False)
+    chat = Window(3, "Chat", "msedge.exe", minimized=False)
+    browser = Window(4, "Browser", "msedge.exe", minimized=False)
+    lookalike = Window(5, "Other", "msedge.exe", minimized=False)
+    editor = Window(6, "Editor", "editor.exe", minimized=False)
+    app_ids = {
+        1: "MSEdge.outlook.cloud.microsoft_/mail/",
+        2: "MSEdge.outlook.cloud.microsoft_/mail/",
+        3: "MSEdge.teams.cloud.microsoft_/.Profile 1",
+        4: "MSEdge",
+        5: "MSEdge.outlook.cloud.microsoft_/mail/calendar",
+    }
+    first = shelf((mail, browser, chat, calendar, lookalike, editor), app_ids, EMPTY_SHELF)
+    assert first == Shelf(
+        (Pinned(PinnedApp.OUTLOOK, (mail, calendar)), Pinned(PinnedApp.TEAMS, (chat,))),
+        (Application("msedge.exe", (browser, lookalike)), Application("editor.exe", (editor,))),
+    )
+    again = shelf((calendar, editor, mail), app_ids, first)
+    assert again == Shelf(
+        (Pinned(PinnedApp.OUTLOOK, (mail, calendar)), Pinned(PinnedApp.TEAMS, ())),
+        (Application("editor.exe", (editor,)),),
+    )
+
+
+def test_a_pinned_launch_waits_for_its_window_before_launching_again() -> None:
+    # Defect: repeated clicks open several app windows, one slot's launch blocks
+    # the other, or a closed window can no longer be reopened.
+    none: Launches = frozendict()
+    pending: Launches = frozendict({PinnedApp.OUTLOOK: 115.0})
+    assert launch(none, PinnedApp.OUTLOOK, 100.0) == pending
+    assert launch(pending, PinnedApp.OUTLOOK, 114.0) is None
+    assert launch(pending, PinnedApp.OUTLOOK, 115.0) == frozendict({PinnedApp.OUTLOOK: 130.0})
+    assert launch(pending, PinnedApp.TEAMS, 101.0) == frozendict({PinnedApp.OUTLOOK: 115.0, PinnedApp.TEAMS: 116.0})
+    opened = Shelf((Pinned(PinnedApp.OUTLOOK, (Window(1, "Mail", "msedge.exe", minimized=False),)), Pinned(PinnedApp.TEAMS, ())), ())
+    assert outstanding(pending, opened) == none
+    assert outstanding(pending, EMPTY_SHELF) == pending
 
 
 def test_tray_host_captures_real_icon_updates_routes_clicks_and_restores_explorer() -> None:
@@ -129,16 +184,19 @@ def test_toolbar_shell_icons_route_actions_and_keep_overflow_reachable() -> None
     parent = QtWidgets.QWidget()
     parent.resize(600, 50)
     sections = ShellSections(parent)
-    invoked: list[tuple[str, Click]] = []
+    invoked: list[tuple[Item, Click]] = []
     apps = tuple(Application(str(index), (Window(index + 1, "Window", "app.exe", minimized=False),)) for index in range(12))
-    sections.applications((apps, 1), lambda item, click: invoked.append((item.identity, click)))
+    sections.applications((Shelf(EMPTY_SHELF.pinned, apps), 1), lambda item, click: invoked.append((item, click)))
     sections.place(250, 600)
     parent.show()
     app.processEvents()
     try:
         QTest.mouseClick(sections.apps.buttons[0], QtCore.Qt.MouseButton.LeftButton)
         QTest.mouseClick(sections.apps.buttons[1], QtCore.Qt.MouseButton.RightButton)
-        assert invoked == [("0", Click.LEFT), ("1", Click.RIGHT)]
+        QTest.mouseClick(sections.pinned.buttons[1], QtCore.Qt.MouseButton.LeftButton)
+        assert invoked == [(apps[0], Click.LEFT), (apps[1], Click.RIGHT), (EMPTY_SHELF.pinned[1], Click.LEFT)]
+        assert sections.pinned.buttons[1].accessibleName() == "Teams · Open Teams on the web"
+        assert sections.pinned.geometry().right() < sections.apps.geometry().left()
         assert sections.apps.overflow.horizontalScrollBar().maximum() > 0
         sections.apps.overflow.horizontalScrollBar().setValue(sections.apps.overflow.horizontalScrollBar().maximum())
         app.processEvents()
@@ -162,7 +220,7 @@ def test_shell_sections_leave_glass_transparent_and_use_the_shared_solid_surface
     parent.resize(600, 50)
     sections = ShellSections(parent)
     item = Application("editor.exe", (Window(1, "Editor", "editor.exe", minimized=False),))
-    sections.applications(((item,), 0), lambda item, click: None)
+    sections.applications((Shelf(EMPTY_SHELF.pinned, (item,)), 0), lambda item, click: None)
     sections.place(250, 600)
     sections.apps.apply_look(look(appearance.Material.GLASS, Capsule(appearance.Frost.SMOKED), Tint.NONE))
     parent.show()

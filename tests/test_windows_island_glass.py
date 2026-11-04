@@ -14,7 +14,7 @@ from desktop_ui.desktop_bar import BarActions, BarObservations, DesktopBar
 from desktop_ui.island_model import Agent
 from desktop_ui.qt_runtime import prepare
 from desktop_ui.qt_ui import EventLoop, application
-from desktop_ui.shell_items import Application
+from desktop_ui.shell_items import EMPTY_SHELF, Application, Shelf
 from winapi import appearance
 from winapi.composition import Glass, GlassScene, stack_behind
 from winapi.shapes import Pane, Rect, Stop, Veil, Window
@@ -83,18 +83,18 @@ def test_first_visible_frame_retains_application_glass_prepared_while_parent_hid
     bar = DesktopBar(inert(), native_shell=False, observations=BarObservations(material=lambda: appearance.Material.GLASS, motion=lambda: False))
     try:
         editor = Application("editor.exe", (Window(1, "Editor", "editor.exe", minimized=False),))
-        bar.window.shell_sections.applications(((editor,), 0), lambda item, click: None)
+        bar.window.shell_sections.applications((Shelf(EMPTY_SHELF.pinned, (editor,)), 0), lambda item, click: None)
         bar.window.presentation = None
         bar.render()
         assert not bar.window.isVisible()
-        assert "applications" in {pane.key for pane in bar.window.panes}
+        assert {"pinned applications", "applications"} <= {pane.key for pane in bar.window.panes}
         bar.visible = True
         bar.render()
         app.processEvents()
         scene = bar.window.scene
         if scene is None:
             raise unittest.SkipTest("Desktop composition is unavailable.")
-        assert "applications" in {pane.key for pane in scene.published()}
+        assert {"pinned applications", "applications"} <= {pane.key for pane in scene.published()}
     finally:
         bar.close()
         app.processEvents()

@@ -6,7 +6,8 @@ primary screen, in the Liquid Glass design
 [JimLundin/liquid-glass](https://github.com/JimLundin/liquid-glass)). The island
 stays centred 8 px below the screen edge where space permits. Its centre contains
 only live activity and is empty at idle. The icon-only Canvas button is the
-furthest-left toolbar control, before the running applications.
+furthest-left toolbar control, then the pinned Outlook and Teams slots, then the
+running applications.
 The fixed right cluster reads icon-only keyboard when relevant, then volume,
 Wi-Fi and clock/power at the far right. The system tray's icons live in the
 controls menu. Activity never moves the fixed controls. Tooltips and accessible
@@ -107,11 +108,23 @@ and accessible name keep the exact count and the **Hold V + T** shortcut. Hold
 V + T opens the same inbox while the layout is on, including when no bell shows.
 Space holds dictation; B toggles dictation; N toggles agent speech.
 
+Outlook and Teams on the web have fixed slots of their own, shown whether or
+not they run. Each is a chromeless Edge app window (`msedge --app=<url>`) in the
+user's own signed-in profile, not the desktop app and not the agent's background
+tabs. A slot claims a window by Edge's AppUserModelID for that app, exactly or
+followed by `.<profile>`; the ordinary Edge window reads `MSEdge` and stays with
+the running applications, which never also show a slot's windows. Slots use the
+Fluent mail and chat symbols in the bar's ink, filled while a window is open.
+With windows, a slot behaves as an application below. Without one, clicking it
+launches the app window; further clicks wait up to 15 seconds for that window
+rather than opening another. A missing Edge is reported as a problem.
+
 Running applications have one icon per executable. Clicking switches to that
 app; further clicks cycle its windows in a stable order. Right-click lists its
 current windows. A background observer refreshes windows once per second and
 copies newly seen icons away from Qt's animation and audio thread. The current
-app has a quiet selection fill. The section scrolls horizontally when crowded.
+app has a quiet selection fill. The running section scrolls horizontally when crowded; the slots sit in their
+own capsule and never scroll.
 Its foreground stays transparent over the same native glass and rim as the
 island; solid and high-contrast modes use the island's shared surface colours.
 

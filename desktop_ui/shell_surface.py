@@ -8,7 +8,7 @@ lazy from PySide6.QtCore import Qt
 
 from desktop_ui.components.appearance import GlassLook, Lettering, Look, SolidLook
 from desktop_ui.components.text import color
-from desktop_ui.shell_items import Application
+from desktop_ui.shell_items import WEB_APPS, Application, Item, Pinned, Shelf
 from desktop_ui.vector_icons import icon
 from winapi.icon_pixels import Pixels
 from winapi.tray_host import Click
@@ -29,26 +29,29 @@ class IconButton(QtWidgets.QToolButton):
         super().__init__(parent)
         self.invoke = invoke
         self.active: bool = False
-        self.fallback: bool = False
+        self.glyph: str | None = None
         self.setFixedSize(32, 32)
         self.setIconSize(QtCore.QSize(22, 22))
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self.clicked.connect(lambda: self.invoke(Click.LEFT))
 
-    def display(self, title: str, image: Pixels | None, *, active: bool) -> None:
+    def display(self, title: str, face: Pixels | str, *, active: bool) -> None:
+        """`face` is the application's own icon, or a symbol painted in the bar's ink."""
         self.active = active
-        self.fallback = image is None
         self.setToolTip(title)
         self.setAccessibleName(title)
-        if image is not None:
-            self.setIcon(QtGui.QIcon(pixmap(image)))
-        else:
-            self.setIcon(icon("window", "#eeeeee", 22))
+        match face:
+            case Pixels():
+                self.glyph = None
+                self.setIcon(QtGui.QIcon(pixmap(face)))
+            case str():
+                self.glyph = face
+                self.setIcon(icon(face, "#eeeeee", 22))
 
     def apply_look(self, lettering: Lettering) -> None:
-        if self.fallback:
-            self.setIcon(icon("window", lettering.ink.color, 22))
+        if self.glyph is not None:
+            self.setIcon(icon(self.glyph, lettering.ink.color, 22))
         background = lettering.press.css if self.active else "transparent"
         self.setStyleSheet(
             f"QToolButton {{border:0; border-radius:8px; background:{background};}}"
@@ -154,31 +157,51 @@ class Section(QtWidgets.QWidget):
                 assert_never(self.appearance)
 
 
+def windows_label(count: int) -> str:
+    return f"{count} window" if count == 1 else f"{count} windows"
+
+
 class ShellSections:
     """The surface keeps native buttons only for the current immutable snapshot."""
 
     def __init__(self, parent: QtWidgets.QWidget) -> None:
+        self.pinned = Section(parent)
         self.apps = Section(parent)
-        self.app_snapshot: tuple[tuple[Application, ...], int] | None = None
+        self.app_snapshot: tuple[Shelf, int] | None = None
 
-    def applications(self, snapshot: tuple[tuple[Application, ...], int], invoke: Callable[[Application, Click], None]) -> None:
+    def sections(self) -> tuple[Section, Section]:
+        return self.pinned, self.apps
+
+    def applications(self, snapshot: tuple[Shelf, int], invoke: Callable[[Item, Click], None]) -> None:
         if snapshot == self.app_snapshot:
             return
-        self.apps.reset()
-        apps, foreground = snapshot
+        current, foreground = snapshot
 
-        def button(app: Application) -> IconButton:
-            created = IconButton(self.apps.body, lambda click: invoke(app, click))
-            created.display(
-                app.identity.removesuffix(".exe") + " · " + str(len(app.windows)) + " windows",
-                app.image,
-                active=any(window.handle == foreground for window in app.windows),
-            )
+        def button(section: Section, item: Item) -> IconButton:
+            created = IconButton(section.body, lambda click: invoke(item, click))
+            active = any(window.handle == foreground for window in item.windows)
+            match item:
+                case Pinned(app=app, windows=()):
+                    web = WEB_APPS[app]
+                    created.display(f"{web.label} · Open {web.label} on the web", web.glyph, active=active)
+                case Pinned(app=app, windows=windows):
+                    # The filled symbol marks a running slot, as active states fill elsewhere.
+                    web = WEB_APPS[app]
+                    created.display(f"{web.label} · {windows_label(len(windows))}", web.glyph + ".fill", active=active)
+                case Application(identity=identity, windows=windows, image=image):
+                    face = "window" if image is None else image
+                    created.display(f"{identity.removesuffix('.exe')} · {windows_label(len(windows))}", face, active=active)
+                case _:
+                    assert_never(item)
             return created
 
-        self.apps.finish(tuple(button(app) for app in apps))
+        for section, items in ((self.pinned, current.pinned), (self.apps, current.running)):
+            section.reset()
+            section.finish(tuple(button(section, item) for item in items))
         self.app_snapshot = snapshot
 
     def place(self, left: int, width: int, *, start: int = 12) -> None:
-        """Apps follow Canvas from `start`, stopping before the leftmost capsule at `left`."""
-        self.apps.place(start, max(start, min(left - 12, width // 3)))
+        """Pinned slots follow Canvas from `start`, then running apps, stopping before the leftmost capsule at `left`."""
+        self.pinned.place(start, left - 12)
+        after = start if self.pinned.isHidden() else start + self.pinned.width() + 6
+        self.apps.place(after, max(after, min(left - 12, width // 3)))

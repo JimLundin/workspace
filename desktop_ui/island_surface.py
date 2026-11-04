@@ -934,7 +934,8 @@ class BarWindow(QtWidgets.QWidget):
             area.width(),
             start=next((round(each.framed.box.x + each.framed.box.width) + 6 for each in presented.drawn if each.view.key is Key.CANVAS), 12),
         )
-        self.shell_sections.apps.apply_look(presented.shell_look)
+        for section in self.shell_sections.sections():
+            section.apply_look(presented.shell_look)
         self.glass = presented.glass
         self.panes = tuple(found for each in presented.drawn if (found := pane(each, presented.frost, scale)) is not None)
         match presented.shell_look:
@@ -943,7 +944,7 @@ class BarWindow(QtWidgets.QWidget):
                     *self.panes,
                     *(
                         Pane(
-                            "applications",
+                            key,
                             Rect(
                                 round(section.x() * scale),
                                 round(section.y() * scale),
@@ -954,7 +955,7 @@ class BarWindow(QtWidgets.QWidget):
                             1,
                             _veil(shell_look, presented.frost),
                         )
-                        for section in (self.shell_sections.apps,)
+                        for key, section in (("pinned applications", self.shell_sections.pinned), ("applications", self.shell_sections.apps))
                         if section.isVisibleTo(self)
                     ),
                 )

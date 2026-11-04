@@ -22,6 +22,7 @@ lazy from PySide6 import QtCore, QtGui
 from desktop_ui.qt_runtime import prepare
 lazy import desktop_ui.components.appearance
 lazy import winapi.ambient
+lazy from assistant.browser_session import edge_path
 lazy from assistant.meeting_detection import AutomaticStatus
 lazy from assistant.recording_state import RecordingAction, RecordingState
 lazy from desktop_ui import island_menu
@@ -54,7 +55,7 @@ lazy from desktop_ui.island_surface import TOP, BarWindow, Drawn, Presented
 lazy from desktop_ui.qt_ui import EventLoop, application
 lazy from desktop_ui.request_panel import RequestActions
 lazy from desktop_ui.shell_controls import TASKBAR_TOGGLE, TaskbarControl, WindowsKeyObserver
-lazy from desktop_ui.shell_items import Application, next_window
+lazy from desktop_ui.shell_items import EMPTY_SHELF, WEB_APPS, Application, Item, Launches, Pinned, PinnedApp, Shelf, launch, next_window, outstanding
 lazy from protocol import Tool
 lazy from winapi import appearance, inputs, shell, system_notices, windows
 lazy from winapi.machine_status import Power, PowerUnavailable, Speakers
@@ -121,6 +122,7 @@ class DesktopBar:
         "job",
         "keys",
         "last_frame",
+        "launches",
         "layout_enabled",
         "loop",
         "materials",
@@ -162,7 +164,9 @@ class DesktopBar:
         observations: BarObservations | None = None,
     ) -> None:
         self.actions = actions
-        self.applications: tuple[Application, ...] = ()
+        self.applications: Shelf = EMPTY_SHELF
+        # Pinned web apps launched but not yet showing a window, with their deadlines.
+        self.launches: Launches = frozendict()
         self.application_service: ApplicationObserver | None = None
         self.tray_host: TrayHost | None = None
         self.observations = BarObservations() if observations is None else observations
@@ -272,19 +276,39 @@ class DesktopBar:
         if self.application_service is not None:
             with suppress(queue.Empty):
                 self.applications = self.application_service.results.get_nowait()
+                self.launches = outstanding(self.launches, self.applications)
         self.window.shell_sections.applications((self.applications, self.observations.foreground()), self.application_click)
         # A changed snapshot must also publish section geometry when the island is still.
         if previous != self.window.shell_sections.app_snapshot:
             self.window.presentation = None
 
-    def application_click(self, app: Application, click: Click) -> None:
+    def application_click(self, item: Item, click: Click) -> None:
         self.close_menu(restore=False)
-        if click is Click.RIGHT:
-            chosen = shell.show_menu(int(self.window.winId()), tuple(shell.MenuItem(window.handle, window.title) for window in app.windows))
-            if chosen:
-                self.observations.focus(chosen)
-        else:
-            self.observations.focus(next_window(app, self.observations.foreground()))
+        match item:
+            case Pinned(app=app, windows=()):
+                self.open_web_app(app)
+            case Pinned(windows=windows) | Application(windows=windows) if click is Click.RIGHT:
+                chosen = shell.show_menu(int(self.window.winId()), tuple(shell.MenuItem(window.handle, window.title) for window in windows))
+                if chosen:
+                    self.observations.focus(chosen)
+            case Pinned(windows=windows) | Application(windows=windows):
+                self.observations.focus(next_window(windows, self.observations.foreground()))
+
+    def open_web_app(self, app: PinnedApp) -> None:
+        """Edge opens the slot's app window in the user's own profile; a repeated click waits for it."""
+        pending = launch(self.launches, app, time.monotonic())
+        if pending is None:
+            return
+        edge = edge_path()
+        if edge is None:
+            self.actions.problem(f"Microsoft Edge is needed to open {WEB_APPS[app].label}.")
+            return
+        try:
+            os.startfile(edge, arguments=f"--app={WEB_APPS[app].url}")
+        except OSError as error:
+            self.actions.problem(f"Could not open {WEB_APPS[app].label}: {error}")
+            return
+        self.launches = pending
 
     def tray(self, slot: int, click: Click) -> None:
         """The application gets the click and the keyboard; the menu closes without taking it back."""
