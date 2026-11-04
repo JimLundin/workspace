@@ -279,6 +279,78 @@ Limit: the order of the Alt+Tab switcher's close and its chosen window's
 foreground change hasn't been observed on this machine. Both orders give one
 `alt_tab` entry.
 
+### Navigation report
+
+The navigation report turns the log into proposed layout changes. It only reads
+the log and prints text; the user decides which change to make in `LAYOUTS`.
+
+```
+python -m scripts.navigation_report [--days N] [--setup home|work|laptop_only] [--log PATH]
+```
+
+It reads the last 7 days by default, from `navigation.1.jsonl` and then
+`navigation.jsonl`. `--log` names another log, such as the fixture in
+`tests/navigation_report_fixture.jsonl`. Each line is validated against the
+[schema](#schema) through the log's own `TypeAdapter`. A line that isn't one
+entry, or whose time has no UTC offset, is counted as malformed and skipped.
+`desktop_ui/navigation_report.py` decides everything with pure functions;
+`scripts/navigation_report.py` reads the files and prints.
+
+`EFFORT` and `DESKTOP_SWITCH` in `desktop_ui/navigation_report.py` hold the
+cost of one entry:
+
+| Cause | Cost | On another desktop |
+| --- | --- | --- |
+| `key` | 1 | 2 |
+| `alt_tab` | 3 | 4 |
+| `mouse`, `pager`, `toolbar`, `scroll` | 4 | 5 |
+| `other` | 0 | 0 |
+
+`other` is a program taking focus, not the user's effort, so it costs nothing
+and is listed separately. A key navigation that moved nothing, the same app on
+the same desktop, still costs 1 and counts as wasted. A zoom or a cycle between
+one app's windows keeps the app on purpose and isn't wasted.
+
+The report has four sections, one block per setup. Entries without a setup are
+shown as `unknown setup` and get no suggestions. Unknown apps are shown as
+`(unknown)`.
+
+1. **Totals.** Navigations and cost per hour in front, the share of each cause,
+   desktop switches and wasted chords. Hours are the summed `dwell_ms` of the
+   counted entries. An entry whose previous window was in front over 4 hours is
+   away time: the rates leave it out, and the report says how many.
+2. **App pairs.** The ten pairs with the highest round-trip cost, A to B and B to
+   A together, with their count and how many crossed desktops.
+3. **Reached without a chord.** The apps most often reached by mouse, Alt+Tab,
+   the pager, the toolbar or scrolling. Each is a hint or binding gap.
+4. **Suggestions.** The five single changes that would have cost least.
+
+A suggestion replays the setup's logged entries against a candidate layout. A
+declared app is on the candidate's desktop for it; any other app stays on the
+desktop it was logged on. Each entry's desktop switch is re-derived from its
+from and to apps' desktops. Each entry carries its own origin, so the replay
+needs no consecutive history and survives setup filtering and restarts. The
+replay assumes a chord for every target app that has one in `CHORDS` and keeps
+the logged cause otherwise, so its cost can be lower than the logged cost in
+the totals. Both costs of a suggestion come from the same replay, so a layout
+identical to the current one saves exactly 0.
+
+The candidates are single changes within the setup's `LAYOUTS` table:
+
+- **Move** one app to another declared desktop. It keeps its role and region
+  when they're free there, and otherwise fills the first monitor no app uses on
+  that desktop. Moving an app onto the desktop of the app it alternates with
+  most is one of these moves.
+- **Swap** two apps' desktops, each keeping its role and region.
+- **Exchange** two apps' whole positions, when swapping desktops alone would
+  overlap.
+
+A candidate that would overlap two apps on one desktop and monitor is skipped,
+by placement's rule. Each suggestion shows the replayed cost before and after,
+the saving per logged day, and the exact `LAYOUTS` lines to change, such as
+`LAYOUTS[Setup.HOME][PinnedApp.TEAMS]: Position(0, Role.LAPTOP, FULL) -> Position(1, Role.MAIN, LEFT_HALF)`.
+A saving per day is the saving divided by the calendar days that have entries.
+
 ## Virtual desktop adapter
 
 `winapi/virtual_desktops.py` lists, creates and switches desktops and reads or
