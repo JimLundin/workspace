@@ -169,6 +169,36 @@ The letters below are the chord letters.
 - **The toolbar** shows apps from every desktop. Clicking one on another
   desktop switches there before focusing it.
 
+## Key hints
+
+While either keyboard holds Ctrl+Alt+Shift, Workspace draws the chord letters on
+the desktop itself, so the chords can be learned without the mouse:
+
+- **A keycap badge** sits inside the top-left corner of each placed window on the
+  current desktop, on every monitor. It shows the app's chord letter. When an
+  app has several windows, the window the next press reaches takes the accent.
+- **Focus letters** appear on the windows next to the focused one, with their
+  arrow: **← N**, **↓ E**, **↑ I** or **→ O**.
+- **The focused window** adds Zoom (**M**) and Minimize (**V**) as quiet letters.
+- **The chord panel** appears near the bottom of the primary screen when the chord
+  stays held for 600 ms without a letter. It lists every chord in four groups:
+  Apps, Desktops, Focus and Window.
+
+Releasing the modifiers hides everything. Minimized windows and windows on other
+desktops get no badge; the pager's names list the apps on other desktops.
+
+`desktop_ui/key_hints.py` decides the hints as a pure function of the
+application observer's navigation world, the window in front and how long the
+chord has been held. Each letter's target comes from the same navigation
+decision that carries the chord out, so a hint can't name a window the chord
+skips. The panel is generated from `CHORDS` and the key map's descriptions, so a
+remapped letter updates it. The bar owns the hints and refreshes the window in
+front on each 100 ms tick while the chord is held; `desktop_ui/key_hint_overlay.py`
+paints them in the bar's material and shape: 26 px capsules with 20 px keycaps
+in Inter 12 medium, glass as the thicker Qt-painted veil, solid, or high
+contrast. Every surface is a click-through tool window that never activates.
+Badge windows are pooled, and nothing runs while the hints are hidden.
+
 ## Virtual desktop adapter
 
 `winapi/virtual_desktops.py` lists, creates and switches desktops and reads or
@@ -206,5 +236,7 @@ crashed with an access violation, so switching uses `SwitchDesktop`.
   process.
 - A window moved between monitors with different DPI settles on the next poll,
   after the app rescales itself.
+- Key hint badges sit at each window's placed rectangle. While placement is
+  paused, or for a zoomed window, that can differ from where the window is.
 - The work layout is checked only by tests with literal monitor geometry; it
   needs the two 2560×1440 screens connected to verify on the desktop.

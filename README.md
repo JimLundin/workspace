@@ -241,7 +241,10 @@ the same thing on either keyboard. On the laptop, home-row mods on one hand
 combine: press all three together and they wait for a letter from the other
 hand; released without one, they type their letters. The laptop's physical Ctrl
 and Shift keys don't count toward a chord. While the chord's modifiers are
-held, on either keyboard, the bar's pager shows each target's chord. Workspace
+held, on either keyboard, the bar's pager shows each target's chord, and each
+window shows a keycap badge with its app's letter and the focus letters that
+reach it. Held for 600 ms without a letter, a panel lists every chord (see
+[key hints](docs/window-placement.md#key-hints)). Workspace
 swallows the letter's press and release, so no character is typed. The
 modifiers themselves are released as usual, so none stays held. Other letters
 and other modifier sets keep their usual meaning. Win is never part of a chord,
