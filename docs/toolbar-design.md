@@ -177,6 +177,15 @@ slots and side-by-side readings sit 12 px apart; a symbol sits 6 px from its tex
 Icon-only content pads 10 px and is never narrower than a circle. Symbols are
 16 px Fluent UI System Icons.
 
+The slots, pager and running applications are capsules of such controls. The
+end controls sit 3 px inside, and neighbours sit 6 px apart, so each control is
+centred in a 34 px cell, as a lone control is in its own capsule. Their faces
+match the symbols beside them. An application's icon shows at 16 px, copied at
+the size the window supplies and drawn on whole device pixels. A desktop number
+or keycap uses the text style, and a keycap wider than a circle widens its
+control into a pill with the same 6 px inset as a symbol. The bar paints these
+controls itself, so no stylesheet can resize them.
+
 The bar owns the spacing between capsules: each neighbouring pair is 6 px apart,
 scaled by the less present of the two, so a capsule entering or leaving opens and
 closes the space beside it. Each capsule also owns a strip from the screen edge

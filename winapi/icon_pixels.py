@@ -141,9 +141,12 @@ def native_pixels(handle: int) -> Pixels | None:
 
 
 def window_pixels(hwnd: int) -> Pixels | None:
-    """Bounded icon requests cannot wait indefinitely for an unresponsive application."""
+    """The window's small icon at its own size, which Windows sizes for the screen's scale.
+
+    Bounded icon requests cannot wait indefinitely for an unresponsive application.
+    """
     for kind in (2, 0, 1):
         result = ULONG_PTR()
         if _SendMessageTimeout(hwnd, 0x007F, kind, 0, 2, 30, ctypes.byref(result)) and result.value:
-            return pixels(result.value)
-    return pixels(_GetClassLongPtr(hwnd, -34) or _GetClassLongPtr(hwnd, -14))
+            return native_pixels(result.value)
+    return native_pixels(_GetClassLongPtr(hwnd, -34) or _GetClassLongPtr(hwnd, -14))

@@ -1,21 +1,34 @@
-"""The desktop bar's compact sections: pinned slots, the desktop pager and the scrollable running applications."""
+"""The desktop bar's compact sections: pinned slots, the desktop pager and the scrollable running applications.
 
-from collections.abc import Callable
+Each target is a round control the bar paints itself, as the island's own
+controls are, so no stylesheet can pad, re-font or restyle it.
+"""
+
+import math
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
-from typing import assert_never, override
+from functools import lru_cache
+from typing import Final, assert_never, override
 
 lazy from PySide6 import QtCore, QtGui, QtWidgets
 lazy from PySide6.QtCore import Qt
 
+from desktop_ui.bar_control import KeyboardFocus
 from desktop_ui.components import typeface
-from desktop_ui.components.appearance import GlassLook, Lettering, Look, SolidLook
+from desktop_ui.components.appearance import GlassLook, Look, SolidLook
 from desktop_ui.components.text import color
 from desktop_ui.desktop_pager import PagerView
+from desktop_ui.island_layout import CONTROL, HEIGHT, ICON, PART_GAP
 from desktop_ui.navigation import Navigation, PagerClick, Source, StepDesktop
 from desktop_ui.shell_items import WEB_APPS, Application, Item, Pinned, Shelf
 from desktop_ui.vector_icons import icon
 from winapi.icon_pixels import Pixels
 from winapi.tray_host import Click
+
+INSET: Final = (HEIGHT - CONTROL) // 2
+"""Each end control sits concentric, this far inside its capsule."""
+FACE_INSET: Final = (CONTROL - ICON) // 2
+"""A symbol's inset inside its circle; text keeps the same inset, so a wide keycap widens its control into a pill."""
 
 
 def pixmap(image: Pixels) -> QtGui.QPixmap:
@@ -26,61 +39,7 @@ def pixmap(image: Pixels) -> QtGui.QPixmap:
     return converted
 
 
-class IconButton(QtWidgets.QToolButton):
-    """One accessible shell item; Qt owns its icon and pointer state."""
-
-    def __init__(self, parent: QtWidgets.QWidget, invoke: Callable[[Click], None]) -> None:
-        super().__init__(parent)
-        self.invoke = invoke
-        self.active: bool = False
-        self.glyph: str | None = None
-        self.setFixedSize(32, 32)
-        self.setIconSize(QtCore.QSize(22, 22))
-        self.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
-        self.clicked.connect(lambda: self.invoke(Click.LEFT))
-
-    def display(self, title: str, face: Pixels | str, *, active: bool) -> None:
-        """`face` is the application's own icon, or a symbol painted in the bar's ink."""
-        self.active = active
-        self.setToolTip(title)
-        self.setAccessibleName(title)
-        match face:
-            case Pixels():
-                self.glyph = None
-                self.setIcon(QtGui.QIcon(pixmap(face)))
-            case str():
-                self.glyph = face
-                self.setIcon(icon(face, "#eeeeee", 22))
-
-    def apply_look(self, lettering: Lettering) -> None:
-        if self.glyph is not None:
-            self.setIcon(icon(self.glyph, lettering.ink.color, 22))
-        background = lettering.press.css if self.active else "transparent"
-        self.setStyleSheet(
-            f"QToolButton {{border:0; border-radius:8px; background:{background};}}"
-            f"QToolButton:hover {{background:{lettering.hover.css};}}"
-            f"QToolButton:pressed {{background:{lettering.press.css};}}"
-            f"QToolButton:focus {{border:1px solid {lettering.ink.css};}}"
-        )
-
-    @override
-    def mouseReleaseEvent(self, event: QtGui.QMouseEvent) -> None:
-        if event.button() is Qt.MouseButton.RightButton:
-            self.invoke(Click.RIGHT)
-            event.accept()
-        else:
-            super().mouseReleaseEvent(event)
-
-    @override
-    def mouseDoubleClickEvent(self, event: QtGui.QMouseEvent) -> None:
-        if event.button() is Qt.MouseButton.LeftButton:
-            self.invoke(Click.DOUBLE)
-            event.accept()
-        else:
-            super().mouseDoubleClickEvent(event)
-
-
+@lru_cache(maxsize=1)
 def page_font() -> QtGui.QFont:
     value = QtGui.QFont(typeface.FAMILY)
     value.setPixelSize(12)
@@ -94,54 +53,95 @@ class Glyph:
     name: str
 
 
+type Face = Glyph | Pixels | str
+"""A Fluent symbol in the bar's ink, an application's own icon, or text such as a desktop number or keycap."""
+
+
 @dataclass(frozen=True, slots=True)
-class Page:
-    """One pager target as shown: its accessible name, its face (a symbol or text) and whether it's current."""
+class Target:
+    """One shell control as shown: its accessible name, its face, what a click does and whether it is the current selection."""
 
     name: str
-    face: Glyph | str
+    face: Face
+    invoke: Callable[[Click], None]
     active: bool = field(default=False, kw_only=True)
 
 
-class PageButton(QtWidgets.QToolButton):
-    """One pager target: a desktop's number, an end's chevron, or the keycap reaching it while the Apps layer is up."""
+class ShellButton(KeyboardFocus):
+    """One accessible target: a 28 px circle, or a pill for text wider than one, painting its face at 16 px."""
 
-    def __init__(self, parent: QtWidgets.QWidget, invoke: Callable[[], None]) -> None:
-        super().__init__(parent)
-        self.active = False
-        self.glyph: str | None = None
-        self.setFont(page_font())
-        self.setIconSize(QtCore.QSize(16, 16))
+    def __init__(self, section: Section, target: Target) -> None:
+        super().__init__(section.body)
+        self.section = section
+        self.target = target
+        self.picture: QtGui.QPixmap | None = None
+        width = CONTROL
+        match target.face:
+            case Glyph():
+                pass
+            case Pixels() as image:
+                self.picture = pixmap(image)
+            case str() as text:
+                width = max(CONTROL, math.ceil(QtGui.QFontMetricsF(page_font()).horizontalAdvance(text)) + 2 * FACE_INSET)
+            case _:
+                assert_never(target.face)
+        self.setFixedSize(width, CONTROL)
+        self.setToolTip(target.name)
+        self.setAccessibleName(target.name)
+        self.setAttribute(Qt.WidgetAttribute.WA_Hover)  # Qt repaints it as the pointer enters and leaves.
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
-        self.clicked.connect(invoke)
+        self.clicked.connect(lambda: self.target.invoke(Click.LEFT))
 
-    def display(self, page: Page) -> None:
-        self.active = page.active
-        self.setToolTip(page.name)
-        self.setAccessibleName(page.name)
-        match page.face:
+    @override
+    def mouseReleaseEvent(self, event: QtGui.QMouseEvent) -> None:
+        if event.button() is Qt.MouseButton.RightButton:
+            self.target.invoke(Click.RIGHT)
+            event.accept()
+        else:
+            super().mouseReleaseEvent(event)
+
+    @override
+    def mouseDoubleClickEvent(self, event: QtGui.QMouseEvent) -> None:
+        if event.button() is Qt.MouseButton.LeftButton:
+            self.target.invoke(Click.DOUBLE)
+            event.accept()
+        else:
+            super().mouseDoubleClickEvent(event)
+
+    def snapped(self) -> QtCore.QPointF:
+        """The 16 px face's corner on whole device pixels of the window, so a bitmap or symbol keeps its pixel edges."""
+        scale = self.devicePixelRatioF()
+        origin = QtCore.QPointF(self.mapTo(self.window(), QtCore.QPoint(0, 0)))
+        corner = origin + QtCore.QPointF((self.width() - ICON) / 2, FACE_INSET)
+        return QtCore.QPointF(round(corner.x() * scale) / scale, round(corner.y() * scale) / scale) - origin
+
+    @override
+    def paintEvent(self, event: QtGui.QPaintEvent) -> None:
+        appearance = self.section.appearance
+        if appearance is None:
+            return
+        lettering = appearance.lettering
+        painter = QtGui.QPainter(self)
+        painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
+        self.paint_feedback(painter, lettering, selected=self.target.active)
+        ink = lettering.ink
+        face = QtCore.QRectF(self.snapped(), QtCore.QSizeF(ICON, ICON))
+        match self.target.face:
             case Glyph(name=name):
-                self.glyph = name
-                self.setText("")
-                self.setIcon(icon(name, "#eeeeee", 16))
-                self.setFixedSize(24, 32)
+                painter.setOpacity(ink.opacity)
+                symbol = icon(name, ink.color).pixmap(QtCore.QSize(ICON, ICON), self.devicePixelRatioF())
+                painter.drawPixmap(face, symbol, QtCore.QRectF(symbol.rect()))
+            case Pixels():
+                if self.picture is not None:
+                    painter.setRenderHint(QtGui.QPainter.RenderHint.SmoothPixmapTransform)
+                    painter.drawPixmap(face, self.picture, QtCore.QRectF(self.picture.rect()))
             case str() as text:
-                self.glyph = None
-                self.setText(text)
-                self.setIcon(QtGui.QIcon())
-                self.setFixedSize(max(24, self.fontMetrics().horizontalAdvance(text) + 14), 32)
-
-    def apply_look(self, lettering: Lettering) -> None:
-        if self.glyph is not None:
-            self.setIcon(icon(self.glyph, lettering.ink.color, 16))
-        background = lettering.press.css if self.active else "transparent"
-        self.setStyleSheet(
-            f"QToolButton {{border:0; border-radius:8px; background:{background}; color:{lettering.ink.css};}}"
-            f"QToolButton:hover {{background:{lettering.hover.css};}}"
-            f"QToolButton:pressed {{background:{lettering.press.css};}}"
-            f"QToolButton:focus {{border:1px solid {lettering.ink.css};}}"
-        )
+                painter.setFont(page_font())
+                painter.setPen(color(ink))
+                painter.drawText(QtCore.QRectF(self.rect()), Qt.AlignmentFlag.AlignCenter, text)
+            case _:
+                assert_never(self.target.face)
 
 
 class HorizontalScroll(QtWidgets.QScrollArea):
@@ -158,16 +158,16 @@ class HorizontalScroll(QtWidgets.QScrollArea):
 
 
 class Section(QtWidgets.QWidget):
-    """Overflow stays reachable by scrolling horizontally; no icons are silently dropped."""
+    """A 34 px capsule of round controls, 3 px inside its ends and one part gap apart.
+
+    Overflow stays reachable by scrolling horizontally; no icons are silently dropped.
+    """
 
     def __init__(self, parent: QtWidgets.QWidget) -> None:
         super().__init__(parent)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.overflow = HorizontalScroll(self)
         self.body = QtWidgets.QWidget()
-        self.row = QtWidgets.QHBoxLayout(self.body)
-        self.row.setContentsMargins(6, 0, 6, 0)
-        self.row.setSpacing(2)
         self.overflow.setWidget(self.body)
         self.overflow.setWidgetResizable(False)
         self.overflow.setFrameShape(QtWidgets.QFrame.Shape.NoFrame)
@@ -176,44 +176,42 @@ class Section(QtWidgets.QWidget):
         for widget in (self.overflow, self.overflow.viewport(), self.body):
             widget.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
             widget.setAutoFillBackground(False)
-        self.buttons: tuple[IconButton | PageButton, ...] = ()
+        self.buttons: tuple[ShellButton, ...] = ()
         self.appearance: Look | None = None
         self.hide()
 
-    def reset(self) -> None:
+    def show_targets(self, targets: Sequence[Target]) -> None:
+        """Replace the controls; only this section builds them, so none outlives its snapshot."""
         for button in self.buttons:
-            self.row.removeWidget(button)
             button.hide()
             button.deleteLater()
-        self.buttons = ()
-
-    def finish(self, buttons: tuple[IconButton | PageButton, ...]) -> None:
-        self.buttons = buttons
-        for button in buttons:
-            self.row.addWidget(button)
-            if self.appearance is not None:
-                button.apply_look(self.appearance.lettering)
-        self.body.setFixedSize(max(12, sum(button.width() + 2 for button in buttons) + 10), 32)
+        self.buttons = tuple(ShellButton(self, target) for target in targets)
+        x = 0
+        for button in self.buttons:
+            button.move(x, INSET)
+            button.show()
+            x += button.width() + PART_GAP
+        self.body.setFixedSize(max(0, x - PART_GAP), HEIGHT)
 
     def apply_look(self, appearance: Look) -> None:
         if appearance == self.appearance:
             return
         self.appearance = appearance
         for button in self.buttons:
-            button.apply_look(appearance.lettering)
+            button.update()
         self.update()
 
     def place(self, left: int, right: int) -> None:
-        self.setGeometry(left, 8, max(0, min(right - left, self.body.width() + 4)), 34)
-        self.overflow.setGeometry(2, 1, max(0, self.width() - 4), 32)
-        self.setVisible(bool(self.buttons) and right - left >= 34)
+        self.setGeometry(left, 8, max(0, min(right - left, self.body.width() + 2 * INSET)), HEIGHT)
+        self.overflow.setGeometry(INSET, 0, max(0, self.width() - 2 * INSET), HEIGHT)
+        self.setVisible(bool(self.buttons) and right - left >= HEIGHT)
 
     @override
     def paintEvent(self, event: QtGui.QPaintEvent) -> None:
         painter = QtGui.QPainter(self)
         painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
         outline = QtGui.QPainterPath()
-        outline.addRoundedRect(QtCore.QRectF(self.rect()), 17, 17)
+        outline.addRoundedRect(QtCore.QRectF(self.rect()), HEIGHT / 2, HEIGHT / 2)
         match self.appearance:
             case GlassLook():
                 # GlassScene owns the material; this invisible fill keeps native hit testing.
@@ -230,6 +228,21 @@ class Section(QtWidgets.QWidget):
 
 def windows_label(count: int) -> str:
     return f"{count} window" if count == 1 else f"{count} windows"
+
+
+def pager_click(choose: Callable[[], None]) -> Callable[[Click], None]:
+    """A pager target acts on a left click or each click of a double-click; it has no menu."""
+
+    def invoke(click: Click) -> None:
+        match click:
+            case Click.LEFT | Click.DOUBLE:
+                choose()
+            case Click.RIGHT:
+                pass
+            case _:
+                assert_never(click)
+
+    return invoke
 
 
 class ShellSections:
@@ -249,28 +262,27 @@ class ShellSections:
         """Previous, each desktop, then next; a pager of one desktop stays hidden."""
         if view == self.pager_view:
             return
-        section = self.pager
         hints = view.hints
 
-        def button(page: Page, choose: Callable[[], None]) -> PageButton:
-            created = PageButton(section.body, choose)
-            created.display(page)
-            return created
+        def jump(index: int) -> Callable[[Click], None]:
+            return pager_click(lambda: invoke(PagerClick(index, Source.PAGER)))
 
-        def jump(index: int) -> Callable[[], None]:
-            return lambda: invoke(PagerClick(index, Source.PAGER))
-
-        previous = button(Page("Previous desktop", hints.previous or Glyph("chevron-left")), lambda: invoke(StepDesktop(-1, Source.PAGER)))
-        following = button(Page("Next desktop", hints.next or Glyph("chevron")), lambda: invoke(StepDesktop(1, Source.PAGER)))
-        pages = tuple(
-            button(
-                Page(desktop.name, (hints.desktops[index] if index < len(hints.desktops) else None) or desktop.label, active=desktop.current),
-                jump(index),
+        def pages() -> tuple[Target, ...]:
+            return (
+                Target("Previous desktop", hints.previous or Glyph("chevron-left"), pager_click(lambda: invoke(StepDesktop(-1, Source.PAGER)))),
+                *(
+                    Target(
+                        desktop.name,
+                        (hints.desktops[index] if index < len(hints.desktops) else None) or desktop.label,
+                        jump(index),
+                        active=desktop.current,
+                    )
+                    for index, desktop in enumerate(view.desktops)
+                ),
+                Target("Next desktop", hints.next or Glyph("chevron"), pager_click(lambda: invoke(StepDesktop(1, Source.PAGER)))),
             )
-            for index, desktop in enumerate(view.desktops)
-        )
-        section.reset()
-        section.finish((previous, *pages, following) if len(view.desktops) > 1 else ())
+
+        self.pager.show_targets(pages() if len(view.desktops) > 1 else ())
         self.pager_view = view
 
     def applications(self, snapshot: tuple[Shelf, int], invoke: Callable[[Item, Click], None]) -> None:
@@ -278,27 +290,28 @@ class ShellSections:
             return
         current, foreground = snapshot
 
-        def button(section: Section, item: Item) -> IconButton:
-            created = IconButton(section.body, lambda click: invoke(item, click))
+        def target(item: Item) -> Target:
             active = any(window.handle == foreground for window in item.windows)
+
+            def chosen(click: Click) -> None:
+                invoke(item, click)
+
             match item:
                 case Pinned(app=app, windows=()):
                     web = WEB_APPS[app]
-                    created.display(f"{web.label} · Open {web.label} on the web", web.glyph, active=active)
+                    return Target(f"{web.label} · Open {web.label} on the web", Glyph(web.glyph), chosen, active=active)
                 case Pinned(app=app, windows=windows):
                     # The filled symbol marks a running slot, as active states fill elsewhere.
                     web = WEB_APPS[app]
-                    created.display(f"{web.label} · {windows_label(len(windows))}", web.glyph + ".fill", active=active)
+                    return Target(f"{web.label} · {windows_label(len(windows))}", Glyph(web.glyph + ".fill"), chosen, active=active)
                 case Application(identity=identity, windows=windows, image=image):
-                    face = "window" if image is None else image
-                    created.display(f"{identity.removesuffix('.exe')} · {windows_label(len(windows))}", face, active=active)
+                    face = Glyph("window") if image is None else image
+                    return Target(f"{identity.removesuffix('.exe')} · {windows_label(len(windows))}", face, chosen, active=active)
                 case _:
                     assert_never(item)
-            return created
 
-        for section, items in ((self.pinned, current.pinned), (self.apps, current.running)):
-            section.reset()
-            section.finish(tuple(button(section, item) for item in items))
+        self.pinned.show_targets(tuple(target(item) for item in current.pinned))
+        self.apps.show_targets(tuple(target(item) for item in current.running))
         self.app_snapshot = snapshot
 
     def place(self, left: int, width: int, *, start: int = 12) -> None:
