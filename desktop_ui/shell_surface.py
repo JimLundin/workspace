@@ -8,6 +8,7 @@ lazy from PySide6.QtCore import Qt
 
 from desktop_ui.components.appearance import GlassLook, Lettering, Look, SolidLook
 from desktop_ui.components.text import color
+from desktop_ui.motion import CARD, jump, resting, settle, still, toward
 from desktop_ui.shell_items import Application
 from desktop_ui.vector_icons import icon
 from winapi.icon_pixels import Pixels
@@ -157,6 +158,8 @@ class TraySection(Section):
         super().__init__(parent)
         self.changed = changed
         self.available: tuple[int, int] = (0, 0)
+        self.width_motion = still(36.0, CARD)
+        self.animate = False
         self.toggle = QtWidgets.QToolButton(self)
         self.toggle.setFixedSize(32, 32)
         self.toggle.setCheckable(True)
@@ -194,13 +197,25 @@ class TraySection(Section):
     def desired_width(self) -> int:
         return 36 + (self.body.width() + 2 if self.toggle.isChecked() and self.buttons else 0)
 
+    def advance(self, seconds: float, *, animate: bool) -> bool:
+        """The bar's frame loop owns timing and reduced motion, including reversals."""
+        self.animate = animate
+        self.width_motion = settle(self.width_motion, seconds) if animate else jump(self.width_motion, self.width_motion.target)
+        return not resting(self.width_motion)
+
     def place(self, left: int, right: int) -> None:
         self.available = (left, right)
-        width = max(0, min(right - left, self.desired_width()))
+        target = max(0, min(right - left, self.desired_width()))
+        self.width_motion = toward(self.width_motion, float(target), CARD)
+        if not self.animate:
+            self.width_motion = jump(self.width_motion, float(target))
+        width = max(0, min(right - left, round(self.width_motion.value)))
         self.setGeometry(right - width, 8, width, 34)
         self.toggle.move(max(2, width - 34), 1)
         self.overflow.setGeometry(2, 1, max(0, width - 38), 32)
-        self.overflow.setVisible(self.toggle.isChecked() and bool(self.buttons) and width > 38)
+        self.overflow.setVisible(bool(self.buttons) and width > 38)
+        # Closing icons remain painted but cannot receive pointer or keyboard input.
+        self.overflow.setEnabled(self.toggle.isChecked())
         self.setVisible(right - left >= 36)
 
 
@@ -249,10 +264,10 @@ class ShellSections:
         left, _ = bounds
         self.apps.place(12, max(12, min(left - 12, width // 3)))
         end = width - 12 if canvas_left is None else max(0, canvas_left - 6)
-        self.tray.place(max(0, end - min(self.tray.desired_width(), max(36, width // 3))), end)
+        self.tray.place(max(0, end - max(36, width // 3)), end)
 
     def locations(self, outer: Rect, scale: float) -> tuple[Located, ...]:
-        if self.tray_snapshot is None or not self.tray.isVisible() or not self.tray.overflow.isVisible():
+        if self.tray_snapshot is None or not self.tray.isVisible() or not self.tray.overflow.isVisible() or not self.tray.toggle.isChecked():
             return ()
         parent = self.tray.window()
 
@@ -261,4 +276,9 @@ class ShellSections:
             left, top = outer.left + round(point.x() * scale), outer.top + round(point.y() * scale)
             return Located(entry, Rect(left, top, left + round(button.width() * scale), top + round(button.height() * scale)))
 
-        return tuple(located(entry, button) for entry, button in zip(self.tray_snapshot, self.tray.buttons, strict=True))
+        viewport = self.tray.overflow.viewport()
+        return tuple(
+            located(entry, button)
+            for entry, button in zip(self.tray_snapshot, self.tray.buttons, strict=True)
+            if viewport.rect().contains(QtCore.QRect(button.mapTo(viewport, QtCore.QPoint()), button.size()))
+        )

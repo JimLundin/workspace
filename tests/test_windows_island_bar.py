@@ -32,6 +32,8 @@ from tests.native_pointer import foreign_pointer
 from winapi import appearance, windows
 from winapi._core import fn, user32
 from winapi.machine_status import Battery, PowerUnavailable, Speakers, Wifi
+from winapi.shapes import Rect
+from winapi.tray_host import Entry
 
 prepare()
 
@@ -356,6 +358,82 @@ def test_capsules_spring_between_views_and_the_frame_loop_stops_once_settled() -
         assert not bar.loop.timer.isActive()
     finally:
         closed(app, bar)
+
+
+def test_tray_frames_reverse_without_jumping_keep_anchors_and_publish_only_visible_hitboxes() -> None:
+    # Defects: disclosure jumps, reversal restarts from an endpoint, tray-only
+    # motion loses its timer/glass publication, or clipped/closing icons are located.
+    app = application()
+    now, motion = [100.0], [True]
+    bar = DesktopBar(
+        recorded([]),
+        native_shell=False,
+        observations=BarObservations(clock=lambda: now[0], motion=lambda: motion[0], material=lambda: appearance.Material.GLASS),
+    )
+    try:
+        bar.timer.stop()
+        bar.visible = True
+        sections, tray = bar.window.shell_sections, bar.window.shell_sections.tray
+        entries = tuple(Entry(1, index, b"", 0x8001, None, str(index)) for index in range(12))
+        sections.notifications(entries, lambda item, click: None)
+        bar.window.presentation = None
+        bar.render()
+        app.processEvents()
+        fixed = tuple(bar.window.capsules[key].geometry() for key in FIXED)
+        anchor = tray.mapTo(bar.window, tray.toggle.pos()).x()
+        outer = Rect(0, 0, bar.window.width(), bar.window.height())
+        tray.toggle.click()
+        assert tray.width() == 36 and bar.loop.timer.isActive()
+        now[0] += 0.08
+        bar.paint_frames()
+        app.processEvents()
+        intermediate = tray.width()
+        assert 36 < intermediate < tray.desired_width()
+        assert tray.mapTo(bar.window, tray.toggle.pos()).x() == anchor
+        assert tuple(bar.window.capsules[key].geometry() for key in FIXED) == fixed
+        pane = next(pane for pane in bar.window.panes if pane.key == "tray")
+        assert pane.bounds.width == round(intermediate * bar.window.devicePixelRatioF())
+        located = sections.locations(outer, 1)
+        assert 0 < len(located) < len(entries)
+        viewport = tray.overflow.viewport()
+        assert all(
+            viewport.rect().contains(QtCore.QRect(button.mapTo(viewport, QtCore.QPoint()), button.size()))
+            for button in tray.buttons
+            if any(item.entry.tip == button.toolTip() for item in located)
+        )
+        tray.toggle.click()
+        assert tray.width() == intermediate and sections.locations(outer, 1) == ()
+        assert not tray.overflow.isEnabled()
+        now[0] += 0.12
+        bar.paint_frames()
+        assert 36 < tray.width() < intermediate
+        closing = tray.width()
+        tray.toggle.click()
+        assert tray.width() == closing and tray.overflow.isEnabled()
+        now[0] += 2
+        bar.paint_frames()
+        app.processEvents()
+        assert tray.width() == round(tray.width_motion.target)
+        assert tray.mapTo(bar.window, tray.toggle.pos()).x() == anchor
+        assert not bar.loop.timer.isActive() and not bar.resolution.active
+        motion[0] = False
+        assert_reduced_tray_motion(bar, fixed, anchor)
+    finally:
+        closed(app, bar)
+
+
+def assert_reduced_tray_motion(bar: DesktopBar, fixed: tuple[QtCore.QRect, ...], anchor: int) -> None:
+    """Verify that disabling motion settles disclosure without shifting fixed controls."""
+    tray = bar.window.shell_sections.tray
+    tray.toggle.click()
+    bar.paint_frames()
+    assert tray.width() == 36 and not tray.overflow.isVisible()
+    assert not bar.loop.timer.isActive()
+    tray.toggle.click()
+    assert tray.width() == round(tray.width_motion.target) and tray.width() > 36
+    assert tuple(bar.window.capsules[key].geometry() for key in FIXED) == fixed
+    assert tray.mapTo(bar.window, tray.toggle.pos()).x() == anchor
+    assert not bar.loop.timer.isActive()
 
 
 def test_contrast_paints_system_colours_and_releases_only_its_composition_owner() -> None:

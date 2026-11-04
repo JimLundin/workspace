@@ -37,6 +37,7 @@ lazy from desktop_ui.island_menu import Chosen, Command, Dismissed, Menu, ToolCh
 lazy from desktop_ui.island_model import Action, Agent, CapsuleView, Job, Key, Marker, Observed, Spinner, capture, island, keyboard
 lazy from desktop_ui.island_motion import IslandMotion, Shown, advance, finish, placed, retarget, settled
 lazy from desktop_ui.island_surface import TOP, BarWindow, Drawn, Presented
+lazy from desktop_ui.motion import resting
 lazy from desktop_ui.qt_ui import EventLoop, application
 lazy from desktop_ui.request_panel import RequestActions
 lazy from desktop_ui.shell_controls import TASKBAR_TOGGLE, TaskbarControl, WindowsKeyObserver
@@ -577,12 +578,18 @@ class DesktopBar:
         # A frame after the loop was idle starts the motion now, rather than from the last frame.
         elapsed = now - (self.last_frame if self.last_frame is not None else now)
         self.motion = advance(self.motion, elapsed) if animate else finish(self.motion)
-        moving = not settled(self.motion)
+        tray = self.window.shell_sections.tray
+        tray_moving = tray.advance(elapsed, animate=animate)
+        # Shell geometry and its glass pane must publish even with still capsules.
+        if tray_moving or (self.window.presentation is not None and tray.width() != round(tray.width_motion.value)):
+            self.window.presentation = None
         spinning = animate and self.spinning()
         waving = animate and self.dictating and self.expanded is None
         self.window.wave_progress = min(1.0, max(0.0, (now - self.sampled_at) / 0.05)) if waving and self.sampled_at is not None else 1.0
         self.window.spin_angle = (90 - now * 300) % 360 if spinning else 90.0
         self.draw()
+        # Placement can retarget the tray after a snapshot or available-space change.
+        moving = not settled(self.motion) or not resting(tray.width_motion)
         if self.spinning() or waving:
             for key, capsule in self.window.capsules.items():
                 if key in (Key.ISLAND, Key.AGENT, Key.JOB):
