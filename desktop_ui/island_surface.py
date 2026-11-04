@@ -22,6 +22,7 @@ import desktop_ui.request_panel
 from components import BAR_WINDOW
 from desktop_ui import island_menu
 from desktop_ui.agent_progress import Phase
+from desktop_ui.bar_control import KeyboardFocus
 from desktop_ui.components import appearance, typeface
 from desktop_ui.components.appearance import GLASS_ACCENT, RED, GlassLook, Look, Shade, SolidLook, look, reading, rim_stops
 from desktop_ui.components.meaning import Tint, Tone
@@ -59,26 +60,6 @@ prepare()
 TOP: Final = 8  # The island floats this far below the screen edge.
 RADIUS: Final = 17
 SHADOW: Final = 40  # Room below and beside the capsules for their composed shadow.
-
-
-class KeyboardFocus(QtWidgets.QAbstractButton):
-    """A button that rings itself only for keyboard focus, as `:focus-visible` does."""
-
-    def __init__(self, parent: QtWidgets.QWidget) -> None:
-        super().__init__(parent)
-        self.ringed = False  # Qt owns focus; the widget remembers only how focus arrived.
-
-    @override
-    def focusInEvent(self, event: QtGui.QFocusEvent) -> None:
-        super().focusInEvent(event)
-        self.ringed = event.reason() in (Qt.FocusReason.TabFocusReason, Qt.FocusReason.BacktabFocusReason)
-        self.update()
-
-    @override
-    def focusOutEvent(self, event: QtGui.QFocusEvent) -> None:
-        super().focusOutEvent(event)
-        self.ringed = False
-        self.update()
 
 
 class Owner(Protocol):
@@ -245,14 +226,7 @@ class ControlButton(KeyboardFocus):
         painter = QtGui.QPainter(self)
         painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
         lettering = self.capsule.look.lettering
-        if self.isDown() or self.underMouse():
-            painter.setPen(Qt.PenStyle.NoPen)
-            painter.setBrush(color(lettering.press if self.isDown() else lettering.hover))
-            painter.drawEllipse(QtCore.QRectF(self.rect()))
-        if self.hasFocus() and self.ringed:
-            painter.setBrush(Qt.BrushStyle.NoBrush)
-            painter.setPen(QtGui.QPen(color(lettering.ink), 1.5))
-            painter.drawEllipse(QtCore.QRectF(self.rect()).adjusted(1, 1, -1, -1))
+        self.paint_feedback(painter, lettering, selected=False)
         ink = lettering.ink
         painter.setOpacity(ink.opacity)
         icon(self.control.icon, ink.color).paint(painter, QtCore.QRect(6, 6, 16, 16))
