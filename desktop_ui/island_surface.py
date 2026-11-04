@@ -565,8 +565,8 @@ class Capsule(KeyboardFocus):
             for spot in content.spots:
                 if animated(spot.part):
                     self.paint_part(painter, spot, None, TOP + HEIGHT / 2)
-            if content.height > HEIGHT:
-                self.paint_heading(painter)
+            if content.height > HEIGHT and not content.spots:
+                self.paint_heading(painter)  # An expanded capsule's own row replaces the heading.
             painter.restore()
 
     def still(self, content: Content) -> QtGui.QPixmap:
@@ -759,7 +759,7 @@ class BarWindow(QtWidgets.QWidget):
         for each in presented.drawn:
             capsule = self.capsule(each.view.key)
             capsule.show_view(each, contrast=presented.contrast)
-            if each.view.key is Key.MENU:
+            if each.view.key is Key.STATUS:
                 capsule.show_menu(presented.menu if each.content.height > HEIGHT else None)
             if each.view.key is Key.ISLAND:
                 capsule.show_request(presented.request if each.content.height > HEIGHT else None)

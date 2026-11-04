@@ -116,7 +116,7 @@ def menu(bar: DesktopBar) -> Menu | None:
 
 
 def menu_row(bar: DesktopBar, label: str) -> MenuRow:
-    return next(row for row in bar.window.capsules[Key.MENU].rows if row.accessibleName().split(" · ")[0] == label)
+    return next(row for row in bar.window.capsules[Key.STATUS].rows if row.accessibleName().split(" · ")[0] == label)
 
 
 def closed(app: QtWidgets.QApplication, bar: DesktopBar) -> None:
@@ -282,8 +282,7 @@ def test_the_island_keeps_canvas_navigation_and_each_capsule_acts_on_what_it_sho
         status = bar.window.capsules[Key.STATUS]
         assert "20:59" in status.accessibleName() and "73%" in status.accessibleName()
         press(bar, Key.STATUS)
-        assert bar.expanded is not None and bar.window.capsules[Key.MENU].rows[0].accessibleName() == "Your work canvas"
-        assert bar.window.capsules[Key.MENU].geometry().right() < status.geometry().left(), "The menu did not open from the right-hand controls."
+        assert bar.expanded is not None and status.rows[0].accessibleName() == "Your work canvas"
         QTest.keyClick(bar.window, QtCore.Qt.Key.Key_Escape)
         bar.agent_changed(WORKING)
         island = bar.window.capsules[Key.ISLAND]
@@ -378,15 +377,17 @@ def test_pointer_reaches_capsules_and_their_edge_strip_but_passes_through_elsewh
                     bar.render()
                     app.processEvents()
                     assert windows.outer_rect(handle).height > rest_height
-                    assert any(row.isVisibleTo(bar.window) for row in bar.window.capsules[Key.MENU].rows)
+                    assert any(row.isVisibleTo(bar.window) for row in bar.window.capsules[Key.STATUS].rows)
                 outer, scale = windows.outer_rect(handle), bar.window.devicePixelRatioF()
-                island = bar.window.capsules[Key.MENU if expanded else Key.ISLAND].geometry()
+                island = bar.window.capsules[Key.STATUS if expanded else Key.ISLAND].geometry()
                 assert scene.bounds is not None
                 windows.move(target.window.handle, scene.bounds)
+                # Beside the menu's body: the tray and keyboard sit beside its top row.
+                beside = TOP + (100 if expanded else 17)
                 outside = (
-                    (outer.left + round((island.left() - 40) * scale), outer.top + round((TOP + 17) * scale)),
+                    (outer.left + round((island.left() - 40) * scale), outer.top + round(beside * scale)),
                     (outer.left + round(island.center().x() * scale), outer.bottom + round(SHADOW * scale / 2)),
-                    (outer.left + round((island.left() - 12) * scale), outer.top + round((TOP + 17) * scale)),
+                    (outer.left + round((island.left() - 12) * scale), outer.top + round(beside * scale)),
                 )
                 capsule = (
                     (outer.left + round(island.center().x() * scale), outer.top + round((TOP + 17) * scale)),
@@ -800,7 +801,7 @@ def test_menu_dividers_never_take_the_pointer_selection_or_highlight() -> None:
     bar = DesktopBar(recorded(invoked), native_shell=False, observations=BarObservations(motion=lambda: False))
     try:
         bar.open_menu()
-        island = bar.window.capsules[Key.MENU]
+        island = bar.window.capsules[Key.STATUS]
         for divider in (row for row in island.rows if row.line.row is Rule.SEPARATOR):
             action = island.rows[divider.line.index - 1]
             point = QtCore.QPointF(action.rect().center())
@@ -818,6 +819,24 @@ def test_menu_dividers_never_take_the_pointer_selection_or_highlight() -> None:
         closed(app, bar)
 
 
+def test_the_status_capsule_expands_into_the_menu_at_its_right_hand_anchor() -> None:
+    # Defects: the menu opens somewhere other than the capsule that opened it,
+    # that capsule leaves the right edge, or its readings move as it expands.
+    app = application()
+    bar = DesktopBar(recorded([]), native_shell=False, observations=BarObservations(motion=lambda: False))
+    try:
+        status = bar.window.capsules[Key.STATUS]
+        right = status.geometry().x() + status.geometry().width()
+        speaker = status.controls[0].mapTo(bar.window, QtCore.QPoint())
+        bar.open_menu()
+        assert status.height() > TOP + 34 and status.rows and Key.ISLAND not in shown(bar)
+        assert status.geometry().x() + status.geometry().width() == right
+        assert status.controls[0].mapTo(bar.window, QtCore.QPoint()) == speaker
+        assert right == app.primaryScreen().geometry().width() - 12
+    finally:
+        closed(app, bar)
+
+
 def test_menu_rows_do_not_inherit_the_escape_closes_tooltip() -> None:
     # Defect: the expanded capsule's tooltip propagates to every menu row.
     app = application()
@@ -825,7 +844,7 @@ def test_menu_rows_do_not_inherit_the_escape_closes_tooltip() -> None:
     try:
         assert bar.window.capsules[Key.STATUS].toolTip()
         bar.open_menu()
-        island = bar.window.capsules[Key.MENU]
+        island = bar.window.capsules[Key.STATUS]
         assert island.toolTip() == "" and all(row.toolTip() == "" for row in island.rows)
         assert "Workspace controls" in island.accessibleName()
         QTest.keyClick(bar.window, QtCore.Qt.Key.Key_Escape)
@@ -846,13 +865,13 @@ def test_the_menu_takes_the_keyboard_and_hands_it_back_only_when_a_choice_calls_
     bar = DesktopBar(recorded(invoked), native_shell=False, observations=observations)
     try:
         bar.open_menu()
-        island = bar.window.capsules[Key.MENU]
+        island = bar.window.capsules[Key.STATUS]
         assert island.height() > TOP + 34 and bar.window.height() >= island.height()
         QTest.keyClick(bar.window, QtCore.Qt.Key.Key_Down)
         opened = menu(bar)
         assert opened is not None and opened.selected == 0
         QTest.keyClick(bar.window, QtCore.Qt.Key.Key_Escape)
-        assert menu(bar) is None and focused == [42] and Key.MENU not in shown(bar)
+        assert menu(bar) is None and focused == [42] and Key.ISLAND not in shown(bar)
         bar.open_menu()
         QTest.keyClicks(bar.window, "k")
         QTest.keyClick(bar.window, QtCore.Qt.Key.Key_Return)

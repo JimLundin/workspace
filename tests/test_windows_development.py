@@ -203,7 +203,7 @@ def test_preview_uses_real_views_without_starting_native_services_and_closes_cle
         assert preview.bar.window.windowTitle().startswith("Workspace preview")
         for label in ("Windows taskbar", "Windows notification settings"):
             preview.bar.open_menu()
-            row = next(row for row in preview.bar.window.capsules[Key.MENU].rows if row.accessibleName() == label)
+            row = next(row for row in preview.bar.window.capsules[Key.STATUS].rows if row.accessibleName() == label)
             QTest.mouseClick(row, Qt.MouseButton.LeftButton)
             assert preview.status.text() == "Preview action: " + label
     finally:

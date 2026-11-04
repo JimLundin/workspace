@@ -11,7 +11,7 @@ The bar's policy (docs/toolbar-design.md, "What the bar shows"):
   they detach beside it as compact capsules, phase and all.
 - Canvas anchors at the far left before apps; temporary keyboard and the combined
   volume/Wi-Fi/clock/power capsule anchor right. The tray toggle precedes them and expands left.
-- The controls menu opens from those right-hand controls; a question opens from the centre.
+- That capsule expands into the controls menu; a question expands the centre island.
 - Agent work keeps Stop visible; other stoppable activities reveal it under the pointer.
 """
 
@@ -36,7 +36,6 @@ class Key(Enum):
     INBOX = auto()
     CANVAS = auto()
     STATUS = auto()
-    MENU = auto()
 
 
 class Zone(Enum):
@@ -45,7 +44,6 @@ class Zone(Enum):
     TRAIL = auto()
     LEFT = auto()  # Canvas precedes the application strip at the screen's left edge.
     RIGHT = auto()  # Fixed keyboard and readings, independent of activity.
-    MENU = auto()  # The controls menu, opened from the right-hand readings beside them.
 
 
 class Expansion(Enum):
@@ -253,9 +251,9 @@ def recording_slot(recorded: Capture, *, hovered: bool) -> Slot:
 def island(observed: Observed, *, hovered: Key | None = None, expanded: Expansion | None = None) -> tuple[CapsuleView, ...]:
     """The capsules to show, in left-to-right order, with their contents and press actions.
 
-    While the controls menu is open, ongoing activities move into its live rows,
-    so they leave the bar; Canvas, the layer and the inbox stay. A question
-    expands the island itself in the centre.
+    The right-hand readings expand into the controls menu, where ongoing activities
+    become live rows, so they leave the bar; Canvas, the layer and the inbox stay.
+    A question expands the centre island instead.
     """
     agent, job, recorded = observed.agent, observed.job, capture(observed.recording)
     asking = agent is not None and agent.waiting
@@ -277,19 +275,23 @@ def island(observed: Observed, *, hovered: Key | None = None, expanded: Expansio
         tint = meaning.Tint.ATTENTION if recorded.attention else meaning.Tint.NONE
         slot = recording_slot(recorded, hovered=hovered is Key.RECORDING)
         trail += (CapsuleView(Key.RECORDING, Zone.TRAIL, (slot,), f"{recorded.title} · Open canvas", Action.OPEN_CANVAS, tint),)
+    # The readings stay the top row while their capsule expands into the menu.
+    readings: tuple[Slot, ...] = (
+        (
+            Control(observed.system.speaker_icon, observed.system.speaker_description + " · Open sound settings", Action.OPEN_SOUND_SETTINGS),
+            Control(observed.system.wifi_icon, observed.system.wifi_description + " · Open Wi-Fi settings", Action.OPEN_WIFI_SETTINGS),
+        ),
+        facts(observed.ambient),
+    )
     persistent = (
         CapsuleView(Key.CANVAS, Zone.LEFT, ((Glyph("canvas"),),), "Canvas · Open your work canvas", Action.OPEN_CANVAS),
         *layer,
-        CapsuleView(
+        CapsuleView(Key.STATUS, Zone.RIGHT, readings, "Workspace controls · Escape closes", Action.CLOSE_MENU)
+        if expanded is Expansion.MENU
+        else CapsuleView(
             Key.STATUS,
             Zone.RIGHT,
-            (
-                (
-                    Control(observed.system.speaker_icon, observed.system.speaker_description + " · Open sound settings", Action.OPEN_SOUND_SETTINGS),
-                    Control(observed.system.wifi_icon, observed.system.wifi_description + " · Open Wi-Fi settings", Action.OPEN_WIFI_SETTINGS),
-                ),
-                facts(observed.ambient),
-            ),
+            readings,
             observed.system.description + ". " + describe(observed.ambient) + " · Open Workspace controls",
             Action.OPEN_MENU,
         ),
@@ -298,14 +300,14 @@ def island(observed: Observed, *, hovered: Key | None = None, expanded: Expansio
         trail += (
             CapsuleView(Key.INBOX, Zone.TRAIL, ((Glyph("bell"), Badge(inbox_text(observed.inbox))),), inbox_label(observed.inbox), Action.OPEN_INBOX),
         )
-    active = observed.dictating or agent is not None or job is not None or recorded is not None
     middle: tuple[CapsuleView, ...]
     match expanded:
         case Expansion.MENU:
-            middle = (CapsuleView(Key.MENU, Zone.MENU, (), "Workspace controls · Escape closes", Action.CLOSE_MENU),)
+            middle = ()
         case Expansion.REQUEST:
             middle = (CapsuleView(Key.ISLAND, Zone.ISLAND, (), "Workspace controls · Escape closes", Action.CLOSE_MENU),)
         case None:
+            active = observed.dictating or agent is not None or job is not None or recorded is not None
             middle = (centre(observed, hovered=hovered),) if active else ()
         case _:
             assert_never(expanded)

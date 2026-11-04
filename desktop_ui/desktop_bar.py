@@ -517,8 +517,8 @@ class DesktopBar:
                 view,
                 self.window.measure_request(request)
                 if request is not None and view.key is Key.ISLAND
-                else expansion(menu)
-                if menu is not None and view.key is Key.MENU
+                else expansion(menu, self.window.measure(view))
+                if menu is not None and view.key is Key.STATUS
                 else self.window.measure(view),
             )
             for view in self.views
@@ -614,7 +614,7 @@ class DesktopBar:
         moving = not settled(self.motion) or not resting(tray.width_motion)
         if self.spinning() or waving:
             for key, capsule in self.window.capsules.items():
-                if key in (Key.ISLAND, Key.MENU, Key.AGENT, Key.JOB):
+                if key in (Key.ISLAND, Key.STATUS, Key.AGENT, Key.JOB):
                     capsule.update_indicators()
         running = moving or spinning or waving
         self.last_frame = now if running else None

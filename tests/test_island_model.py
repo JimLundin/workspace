@@ -67,7 +67,8 @@ def test_fixed_controls_survive_all_activity_menu_and_device_states() -> None:
                 replace(baseline, agent=WORKING, job=Job.TRANSCRIBING, recording=RECORDING),
             ):
                 for expanded in (None, Expansion.MENU, Expansion.REQUEST):
-                    for key in (Key.CANVAS, Key.LAYER, Key.STATUS):
+                    # The open menu is the status capsule itself; the other fixed controls stay.
+                    for key in (Key.CANVAS, Key.LAYER) if expanded is Expansion.MENU else (Key.CANVAS, Key.LAYER, Key.STATUS):
                         assert view(observed, key, expanded=expanded) == view(baseline, key)
                     activity = (each for each in island(observed, expanded=expanded) if each.zone not in (Zone.LEFT, Zone.RIGHT))
                     assert all(Text("10:22") not in slot for each in activity for slot in each.slots)
@@ -119,16 +120,18 @@ def test_waiting_question_wins_except_during_dictation() -> None:
     assert (beside.tint, beside.action) == (Tint.ATTENTION, Action.OPEN_QUESTION)
 
 
-def test_the_menu_opens_from_the_right_controls_and_a_question_from_the_centre() -> None:
-    # Defects: the menu opens as the centre island, a question follows the menu to
-    # the right, or activity stays in the centre while the menu lists it.
+def test_the_status_capsule_expands_into_the_menu_and_a_question_into_the_island() -> None:
+    # Defects: the menu opens as the centre island instead of the capsule that
+    # opened it, that capsule loses its readings while open, a question expands
+    # the status capsule, or activity stays in the centre while the menu lists it.
     busy = replace(RESTING, agent=WORKING, job=Job.ANSWERING, recording=RECORDING, inbox=2)
-    dynamic = tuple((each.key, each.zone) for each in island(busy, expanded=Expansion.MENU) if each.zone not in (Zone.LEFT, Zone.RIGHT))
-    assert dynamic == ((Key.MENU, Zone.MENU), (Key.INBOX, Zone.TRAIL))
-    question = tuple(
-        (each.key, each.zone) for each in island(replace(busy, agent=ASKING), expanded=Expansion.REQUEST) if each.zone not in (Zone.LEFT, Zone.RIGHT)
-    )
-    assert question == ((Key.ISLAND, Zone.ISLAND), (Key.INBOX, Zone.TRAIL))
+    opened = island(busy, expanded=Expansion.MENU)
+    assert tuple(each.key for each in opened) == (Key.INBOX, Key.CANVAS, Key.STATUS)
+    readings = view(busy, Key.STATUS).slots
+    assert opened[-1] == CapsuleView(Key.STATUS, Zone.RIGHT, readings, "Workspace controls · Escape closes", Action.CLOSE_MENU)
+    asking = replace(busy, agent=ASKING)
+    assert tuple(each.key for each in island(asking, expanded=Expansion.REQUEST)) == (Key.ISLAND, Key.INBOX, Key.CANVAS, Key.STATUS)
+    assert view(asking, Key.STATUS, expanded=Expansion.REQUEST) == view(asking, Key.STATUS)
 
 
 def test_inbox_only_exists_while_pending_and_keeps_exact_count_in_label() -> None:
