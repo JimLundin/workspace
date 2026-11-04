@@ -1,6 +1,6 @@
 """The desktop pager's view and the bar's swipe."""
 
-from desktop_ui.desktop_pager import NO_HINTS, Hints, PagerDesktop, pager, swipe
+from desktop_ui.desktop_pager import NO_HINTS, Hints, PagerDesktop, Reach, pager, reach, swipe
 from desktop_ui.keymap import shortcut
 from desktop_ui.shell_items import PinnedApp
 from desktop_ui.window_layout import CODE, TERMINAL
@@ -17,17 +17,23 @@ def test_pager_names_each_desktops_apps_and_marks_the_current_one() -> None:
     assert view.hints == NO_HINTS
 
 
-def test_pager_hints_follow_the_layout_only_while_the_apps_layer_is_up() -> None:
+def test_pager_hints_follow_the_keyboard_that_reaches_its_targets() -> None:
     # Defects: hints show on another layer, a desktop past the direct keys gets
-    # one, or a hint is a literal that a remapped key wouldn't update.
+    # one, a hint is a literal that a remapped key wouldn't update, or the
+    # firmware chord shows laptop keycaps.
     keys = tuple(
         found.tap for tool in (Tool.DESKTOP_PREVIOUS, Tool.DESKTOP_NEXT, Tool.DESKTOP_1, Tool.DESKTOP_2, Tool.DESKTOP_3) if (found := shortcut(tool))
     )
     assert keys == ("K", "L", "Caps", "S", "D")
+    assert reach("APPS", chord=False) is Reach.APPS_LAYER
+    assert reach("APPS · locked", chord=False) is Reach.APPS_LAYER
+    assert reach("NAV", chord=False) is None
+    assert reach(None, chord=False) is None
+    assert reach(None, chord=True) is Reach.CHORD
     placed = ((), (), (), ())
-    assert pager(placed, 0, "APPS").hints == Hints("K", "L", ("Caps", "S", "D", None))
-    assert pager(placed, 0, "APPS · locked").hints == Hints("K", "L", ("Caps", "S", "D", None))
-    assert pager(placed, 0, "NAV").hints == NO_HINTS
+    assert pager(placed, 0, Reach.APPS_LAYER).hints == Hints("K", "L", ("Caps", "S", "D", None))
+    assert pager(placed, 0, Reach.CHORD).hints == Hints("⌃⌥⇧ K", "⌃⌥⇧ H", ("⌃⌥⇧ L", "⌃⌥⇧ U", "⌃⌥⇧ Y", None))
+    assert pager(placed, 0, None).hints == NO_HINTS
 
 
 def test_one_swipe_steps_one_desktop_however_many_wheel_events_it_sends() -> None:

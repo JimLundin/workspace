@@ -878,6 +878,9 @@ class Ui:
     def desktop_layout(self, *, enabled: bool) -> None:
         self.post(lambda _: self._desktop.layout(enabled=enabled) if self._desktop is not None else None)
 
+    def desktop_chord(self, *, held: bool) -> None:
+        self.post(lambda _: self._desktop.chord(held=held) if self._desktop is not None else None)
+
     def navigate(self, order: Order) -> None:
         self.post(lambda _: self._desktop.navigate(order) if self._desktop is not None else None)
 

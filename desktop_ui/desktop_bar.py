@@ -32,7 +32,7 @@ lazy from desktop_ui.audio_meter import AudioMeter
 lazy from desktop_ui.bar_status import StatusObserver
 lazy from desktop_ui.components.appearance import Look, look
 lazy from desktop_ui.components.meaning import Tint
-lazy from desktop_ui.desktop_pager import Swipe, pager, swipe
+lazy from desktop_ui.desktop_pager import Swipe, pager, reach, swipe
 lazy from desktop_ui.island_layout import HEIGHT, Metrics, expansion, frame, snap
 lazy from desktop_ui.island_menu import (
     Applied,
@@ -112,6 +112,7 @@ class DesktopBar:
         "audio_meter",
         "audio_timer",
         "automatic_recording",
+        "chord_held",
         "closed",
         "controls",
         "current_layer",
@@ -182,6 +183,7 @@ class DesktopBar:
         self.recording = RecordingState()
         self.layout_enabled = True
         self.current_layer: str | None = None
+        self.chord_held = False
         self.inbox = 0
         self.hovered: Key | None = None
         # The open menu, and the window that had the keyboard before it opened.
@@ -281,7 +283,9 @@ class DesktopBar:
                 self.applications = self.arrangement.shelf
         self.window.shell_sections.applications((self.applications, self.observations.foreground()), self.application_click)
         arrangement = self.arrangement
-        self.window.shell_sections.desktops(pager(arrangement.placed, arrangement.current, self.current_layer), self.navigate)
+        self.window.shell_sections.desktops(
+            pager(arrangement.placed, arrangement.current, reach(self.current_layer, chord=self.chord_held)), self.navigate
+        )
         # A changed snapshot must also publish section geometry when the island is still.
         if previous != self.window.shell_sections.app_snapshot:
             self.window.presentation = None
@@ -532,6 +536,9 @@ class DesktopBar:
     def layer(self, text: str | None) -> None:
         self.current_layer = text
         self.render()
+
+    def chord(self, *, held: bool) -> None:
+        self.chord_held = held
 
     def layout(self, *, enabled: bool) -> None:
         self.layout_enabled = enabled

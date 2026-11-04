@@ -3,7 +3,8 @@
 The pager shows one number per desktop with the current one marked, between
 previous and next ends. Its names list the applications placed on each desktop.
 While the Apps layer is held or locked, each target also carries the physical
-keycap that reaches it, read from the layout.
+keycap that reaches it, read from the layout. While the firmware keyboard holds
+Ctrl+Alt+Shift, each target carries its chord instead, read from the chord table.
 
 A horizontal scroll over the bar is a swipe: one gesture, however many wheel
 events it produces, steps one desktop.
@@ -11,9 +12,10 @@ events it produces, steps one desktop.
 
 from collections.abc import Sequence
 from dataclasses import dataclass, field
+from enum import Enum, auto
 from typing import Final, assert_never
 
-from desktop_ui.keymap import shortcut
+from desktop_ui.keymap import chord_hint, shortcut
 from desktop_ui.shell_items import WEB_APPS, PinnedApp
 from desktop_ui.window_layout import App, Program
 from miryoku.layout import Layer
@@ -24,7 +26,7 @@ JUMPS: Final = (Tool.DESKTOP_1, Tool.DESKTOP_2, Tool.DESKTOP_3)
 
 @dataclass(frozen=True, slots=True)
 class Hints:
-    """The physical keycap reaching each pager target; empty unless the Apps layer is up."""
+    """The keys reaching each pager target; empty unless a keyboard is ready to reach them."""
 
     previous: str | None
     next: str | None
@@ -58,17 +60,34 @@ def label(app: App) -> str:
             assert_never(app)
 
 
-def keycap(tool: Tool) -> str | None:
-    found = shortcut(tool)
-    return found.tap if found is not None else None
+class Reach(Enum):
+    """Which keys reach the pager's targets right now."""
+
+    APPS_LAYER = auto()
+    """The laptop's Apps layer is held or locked: its physical keycaps."""
+    CHORD = auto()
+    """The firmware keyboard holds Ctrl+Alt+Shift: each target's chord."""
 
 
-def apps_layer(layer: str | None) -> bool:
-    """The bar's layer reading names the layer first, then whether it's locked."""
-    return layer is not None and layer.split(" · ")[0] == Layer.APPS.name
+def reach(layer: str | None, *, chord: bool) -> Reach | None:
+    """The keys reaching the pager now. The bar's layer reading names the layer first, then whether it's locked."""
+    if chord:
+        return Reach.CHORD
+    return Reach.APPS_LAYER if layer is not None and layer.split(" · ")[0] == Layer.APPS.name else None
 
 
-def pager(placed: Sequence[Sequence[App]], current: int, layer: str | None) -> PagerView:
+def keycap(tool: Tool, keys: Reach) -> str | None:
+    match keys:
+        case Reach.APPS_LAYER:
+            found = shortcut(tool)
+            return found.tap if found is not None else None
+        case Reach.CHORD:
+            return chord_hint(tool)
+        case _:
+            assert_never(keys)
+
+
+def pager(placed: Sequence[Sequence[App]], current: int, keys: Reach | None) -> PagerView:
     """The pager for these desktops, each with the applications placed on it."""
 
     def desktop(index: int, apps: Sequence[App]) -> PagerDesktop:
@@ -77,10 +96,10 @@ def pager(placed: Sequence[Sequence[App]], current: int, layer: str | None) -> P
         return PagerDesktop(str(index + 1), f"Desktop {index + 1}{here} · {listed}", current=index == current)
 
     desktops = tuple(desktop(index, apps) for index, apps in enumerate(placed))
-    if not apps_layer(layer):
+    if keys is None:
         return PagerView(desktops, NO_HINTS)
-    jumps = tuple(keycap(JUMPS[index]) if index < len(JUMPS) else None for index in range(len(desktops)))
-    return PagerView(desktops, Hints(keycap(Tool.DESKTOP_PREVIOUS), keycap(Tool.DESKTOP_NEXT), jumps))
+    jumps = tuple(keycap(JUMPS[index], keys) if index < len(JUMPS) else None for index in range(len(desktops)))
+    return PagerView(desktops, Hints(keycap(Tool.DESKTOP_PREVIOUS, keys), keycap(Tool.DESKTOP_NEXT, keys), jumps))
 
 
 @dataclass(frozen=True, slots=True)
