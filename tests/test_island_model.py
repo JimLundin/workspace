@@ -46,7 +46,10 @@ def test_idle_has_only_icon_navigation_device_status_and_clock_power_on_right() 
     assert all(each.zone is Zone.RIGHT for each in views)
     assert views[0] == CapsuleView(Key.CANVAS, Zone.RIGHT, ((Glyph("canvas"),),), "Canvas · Open your work canvas", Action.OPEN_CANVAS)
     assert views[-1].slots == (
-        (Glyph("speaker-unknown"), Glyph("wifi-unknown")),
+        (
+            Control("speaker-unknown", "Speaker status unavailable · Open sound settings", Action.OPEN_SOUND_SETTINGS),
+            Control("wifi-unknown", "Wi-Fi status unavailable · Open Wi-Fi settings", Action.OPEN_WIFI_SETTINGS),
+        ),
         (Text("10:22", reserve="00:00"), Glyph("battery"), Text("73%", reserve="100%")),
     )
 
@@ -68,7 +71,11 @@ def test_fixed_controls_survive_all_activity_menu_and_device_states() -> None:
                     activity = (each for each in island(observed, expanded=expanded) if each.zone is not Zone.RIGHT)
                     assert all(Text("10:22") not in slot for each in activity for slot in each.slots)
             status = view(baseline, Key.STATUS)
-            assert status.slots[0] == (Glyph(baseline.system.speaker_icon), Glyph(baseline.system.wifi_icon))
+            assert status.slots[0] == (
+                Control(baseline.system.speaker_icon, baseline.system.speaker_description + " · Open sound settings", Action.OPEN_SOUND_SETTINGS),
+                Control(baseline.system.wifi_icon, baseline.system.wifi_description + " · Open Wi-Fi settings", Action.OPEN_WIFI_SETTINGS),
+            )
+            assert status.action is Action.OPEN_MENU
             assert baseline.system.speaker_description in status.label
             assert baseline.system.wifi_description in status.label
 

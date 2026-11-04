@@ -54,6 +54,8 @@ class Action(Enum):
     OPEN_INBOX = auto()
     OPEN_CANVAS = auto()
     OPEN_KEYMAP = auto()
+    OPEN_SOUND_SETTINGS = auto()
+    OPEN_WIFI_SETTINGS = auto()
     STOP_AGENT = auto()
     STOP_RECORDING = auto()
 
@@ -269,7 +271,13 @@ def island(observed: Observed, *, hovered: Key | None = None, expanded: bool = F
         CapsuleView(
             Key.STATUS,
             Zone.RIGHT,
-            ((Glyph(observed.system.speaker_icon), Glyph(observed.system.wifi_icon)), facts(observed.ambient)),
+            (
+                (
+                    Control(observed.system.speaker_icon, observed.system.speaker_description + " · Open sound settings", Action.OPEN_SOUND_SETTINGS),
+                    Control(observed.system.wifi_icon, observed.system.wifi_description + " · Open Wi-Fi settings", Action.OPEN_WIFI_SETTINGS),
+                ),
+                facts(observed.ambient),
+            ),
             observed.system.description + ". " + describe(observed.ambient) + " · Open Workspace controls",
             Action.OPEN_MENU,
         ),

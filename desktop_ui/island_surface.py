@@ -204,7 +204,7 @@ def badge_font() -> QtGui.QFont:
 
 
 class ControlButton(KeyboardFocus):
-    """A concentric 28 px circle inside its capsule, revealed while the pointer is over it."""
+    """A concentric 28 px circle; its model decides whether it is persistent or revealed."""
 
     def __init__(self, capsule: Capsule, control: Control) -> None:
         super().__init__(capsule)
@@ -216,6 +216,14 @@ class ControlButton(KeyboardFocus):
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self.clicked.connect(self.pressed_control)
+
+    def update_control(self, control: Control) -> None:
+        """Status changes retain the keyboard's current child instead of replacing it."""
+        if self.control != control:
+            self.control = control
+            self.setToolTip(control.label)
+            self.setAccessibleName(control.label)
+            self.update()
 
     def pressed_control(self) -> None:
         self.capsule.press(self.control.action)
@@ -415,12 +423,14 @@ class Capsule(KeyboardFocus):
             self.setAccessibleName(drawn.view.label)
         self.view, self.content, self.previous, self.fade, self.look, self.presence, self.contrast = state
         wanted = controls(drawn.content)
-        if tuple(button.control for button in self.controls) != tuple(control for control, _ in wanted):
+        if tuple(button.control.action for button in self.controls) != tuple(control.action for control, _ in wanted):
             for button in self.controls:
                 # Deletion waits for the event loop; the replaced control must leave this frame.
                 button.hide()
                 button.deleteLater()
             self.controls = tuple(ControlButton(self, control) for control, _ in wanted)
+        for button, (control, _) in zip(self.controls, wanted, strict=True):
+            button.update_control(control)
         self.update()
 
     def show_menu(self, menu: Menu | None) -> None:

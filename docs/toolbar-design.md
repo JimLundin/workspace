@@ -56,7 +56,7 @@ is doing for you. Its policy decides what may change it.
 "Starting…", "Stopping…" and "Saving…" replace the recording's timer; "Check
 recording" turns it red and the detached capsule orange.
 
-Pressing the right-hand clock/power or device-status capsule expands the centre
+Pressing the right-hand clock/power readings expands the centre
 into the controls menu: 272 px wide with a
 21 px radius, its rows concentric inside it. Running activities lead as live rows
 with their own Stop, the agent's with its phase; the detached agent and recording
@@ -197,7 +197,9 @@ menu's entries and navigation, `island_layout` arranges parts, rows and capsules
 
 Windows `GetSystemPowerStatus` supplies battery percentage, charging and external
 power. Unknown readings show a dash; machines without a battery show AC. A battery
-above 95% while plugged in hides its percentage and keeps the charger symbol.
+keeps its percentage visible even when full or plugged in, alongside the charger
+symbol when powered. Reserved clock and battery widths keep the combined
+speaker/Wi-Fi/clock/power capsule stable across readings.
 Power refreshes every fifteen seconds; the clock follows the local minute.
 
 Volume and Wi-Fi indicators are always visible in independent fixed slots.
@@ -205,8 +207,13 @@ The volume icon shows the observed default playback endpoint as unmuted or muted
 unavailable observations use a speaker with a question badge, never a mute icon.
 Wi-Fi shows connected or disconnected association. Unavailable readings use a
 Wi-Fi question badge; no adapter uses a Wi-Fi minus badge. Each has a truthful
-accessible name and tooltip; these are status indicators, not volume sliders or
-connection toggles. Connected Wi-Fi does not claim Internet reachability.
+accessible name and tooltip, including its current state and settings action.
+These persistent 28 px child buttons open Windows sound settings (`ms-settings:sound`)
+and Wi-Fi settings (`ms-settings:network-wifi`), respectively; they are not volume
+sliders or connection toggles. Their clicks do not open the parent menu. Any open
+menu closes without restoring its previous focus, allowing Windows Settings to
+receive it. Status updates retain each button and its keyboard focus. Connected
+Wi-Fi does not claim Internet reachability.
 A background worker refreshes them once per second without opening an audio
 stream or scanning for networks.
 

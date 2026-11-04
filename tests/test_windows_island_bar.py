@@ -6,6 +6,7 @@ import time
 import unittest
 from collections.abc import Callable
 from ctypes import wintypes
+from dataclasses import replace
 from datetime import datetime
 
 if sys.platform != "win32":
@@ -19,10 +20,10 @@ lazy from PySide6.QtTest import QTest
 from assistant.meeting_detection import AutomaticStatus
 from assistant.recording_state import RecordingState
 from desktop_ui.ambient import Ambient, SystemStatus
-from desktop_ui.desktop_bar import BarActions, BarObservations, DesktopBar
+from desktop_ui.desktop_bar import BarActions, BarObservations, DesktopBar, SettingsUri
 from desktop_ui.fluent_icons import REGULAR
 from desktop_ui.island_menu import Menu, Rule
-from desktop_ui.island_model import Agent, Glyph, Job, Key
+from desktop_ui.island_model import Action, Agent, Control, Job, Key
 from desktop_ui.island_surface import SHADOW, TOP, ControlButton, MenuRow
 from desktop_ui.qt_runtime import prepare
 from desktop_ui.qt_ui import EventLoop, application
@@ -75,6 +76,7 @@ def recorded(invoked: list[str], *, tools: list[tuple[Tool, int]] | None = None)
         lambda message: invoked.append("problem: " + message),
         (lambda tool, hwnd: tools.append((tool, hwnd))) if tools is not None else (lambda tool, hwnd: None),
         inbox=lambda: invoked.append("inbox"),
+        open_settings=invoked.append,
     )
 
 
@@ -148,7 +150,14 @@ def test_right_cluster_keeps_fixed_positions_and_truthful_status_through_disclos
                 bar.render()
                 capsule = bar.window.capsules[Key.STATUS]
                 assert capsule.view is not None
-                assert capsule.view.slots[0] == (Glyph(bar.system.speaker_icon), Glyph(bar.system.wifi_icon))
+                assert capsule.view.slots[0] == (
+                    Control(bar.system.speaker_icon, bar.system.speaker_description + " · Open sound settings", Action.OPEN_SOUND_SETTINGS),
+                    Control(bar.system.wifi_icon, bar.system.wifi_description + " · Open Wi-Fi settings", Action.OPEN_WIFI_SETTINGS),
+                )
+                assert all(button.focusPolicy() is QtCore.Qt.FocusPolicy.StrongFocus for button in capsule.controls)
+                assert tuple(button.size() for button in capsule.controls) == (QtCore.QSize(28, 28),) * 2
+                assert tuple(button.accessibleName() for button in capsule.controls) == tuple(button.control.label for button in capsule.controls)
+                assert tuple(button.toolTip() for button in capsule.controls) == tuple(button.control.label for button in capsule.controls)
                 assert capsule.isVisibleTo(bar.window)
                 for name, label in (
                     (bar.system.speaker_icon, bar.system.speaker_description),
@@ -172,6 +181,75 @@ def test_right_cluster_keeps_fixed_positions_and_truthful_status_through_disclos
             assert status.view is not None
             assert abs(bar.window.measure(status.view).width - status.width()) <= 1
         assert symbol("chevron-left") == '<g transform="translate(16 0) scale(-1 1)">' + REGULAR["chevron"] + "</g>"
+    finally:
+        closed(app, bar)
+
+
+def test_status_children_open_settings_without_parent_menu_or_focus_restore() -> None:
+    # Defects: child presses bubble to the menu, swap destinations or restore old focus.
+    app = application()
+    invoked: list[str] = []
+    focused: list[int] = []
+    bar = DesktopBar(
+        recorded(invoked),
+        native_shell=False,
+        observations=BarObservations(motion=lambda: False, foreground=lambda: 42, focus=lambda hwnd: remember(focused, hwnd)),
+    )
+    try:
+        bar.timer.stop()
+        capsule = bar.window.capsules[Key.STATUS]
+        buttons = capsule.controls
+        assert tuple(button.control.action for button in buttons) == (Action.OPEN_SOUND_SETTINGS, Action.OPEN_WIFI_SETTINGS)
+        for button, destination in zip(buttons, ("ms-settings:sound", "ms-settings:network-wifi"), strict=True):
+            QTest.mouseClick(button, QtCore.Qt.MouseButton.LeftButton)
+            assert invoked[-1] == destination and bar.expanded is None
+            bar.open_menu()
+            QTest.mouseClick(button, QtCore.Qt.MouseButton.LeftButton)
+            assert invoked[-1] == destination and bar.expanded is None and focused == []
+        assert invoked == ["ms-settings:sound", "ms-settings:sound", "ms-settings:network-wifi", "ms-settings:network-wifi"]
+        before = capsule.geometry()
+        button = buttons[0]
+        app.sendEvent(button, QtGui.QFocusEvent(QtCore.QEvent.Type.FocusIn, QtCore.Qt.FocusReason.TabFocusReason))
+        assert button.ringed
+        bar.system = SystemStatus(Speakers.MUTED, Wifi.DISCONNECTED)
+        bar.render()
+        assert capsule.controls == buttons and capsule.geometry() == before and button.ringed
+        assert button.accessibleName() == "Speakers muted · Open sound settings"
+        assert buttons[1].toolTip() == "Wi-Fi disconnected · Open Wi-Fi settings"
+        QTest.keyClick(buttons[1], QtCore.Qt.Key.Key_Space)
+        assert invoked[-1] == "ms-settings:network-wifi" and bar.expanded is None
+        # The reading region still opens Workspace controls.
+        QTest.mouseClick(capsule, QtCore.Qt.MouseButton.LeftButton, pos=QtCore.QPoint(capsule.width() - 10, TOP + 17))
+        assert bar.expanded is not None
+    finally:
+        closed(app, bar)
+
+
+def unavailable_settings(uri: str) -> None:
+    """An explicit failing launch adapter detects swallowed Windows errors."""
+    raise OSError("Cannot open " + uri)
+
+
+def test_settings_launch_failure_reports_problem_and_leaves_menu_closed() -> None:
+    # Defect: Windows launch failure escapes Qt or leaves focus-restoring menu state.
+    app = application()
+    invoked: list[str] = []
+    focused: list[int] = []
+    bar = DesktopBar(
+        replace(recorded(invoked), open_settings=unavailable_settings),
+        native_shell=False,
+        observations=BarObservations(motion=lambda: False, foreground=lambda: 42, focus=lambda hwnd: remember(focused, hwnd)),
+    )
+    try:
+        destinations: tuple[tuple[Action, SettingsUri], ...] = (
+            (Action.OPEN_SOUND_SETTINGS, "ms-settings:sound"),
+            (Action.OPEN_WIFI_SETTINGS, "ms-settings:network-wifi"),
+        )
+        for action, uri in destinations:
+            bar.open_menu()
+            bar.press(action)
+            assert invoked[-1] == "problem: Cannot open " + uri
+            assert bar.expanded is None and focused == []
     finally:
         closed(app, bar)
 

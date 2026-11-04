@@ -14,7 +14,7 @@ from collections.abc import Callable
 from contextlib import suppress
 from dataclasses import dataclass, field, replace
 from datetime import datetime
-from typing import assert_never
+from typing import Literal, assert_never
 lazy import os
 
 lazy from PySide6 import QtCore, QtGui
@@ -52,6 +52,14 @@ lazy from winapi.tray_host import Click, Entry, TrayHost
 prepare()
 
 
+type SettingsUri = Literal["ms-settings:sound", "ms-settings:network-wifi"]
+
+
+def launch_settings(uri: SettingsUri) -> None:
+    """Resolve the Windows launcher only when a settings control is activated."""
+    os.startfile(uri)
+
+
 @dataclass(frozen=True, slots=True)
 class BarActions:
     agent: Callable[[], None]
@@ -66,6 +74,7 @@ class BarActions:
     tool: Callable[[Tool, int], None] = lambda tool, hwnd: None
     notices: Callable[[system_notices.Observed], None] = lambda _: None
     requests: RequestActions | None = field(default=None, kw_only=True)
+    open_settings: Callable[[SettingsUri], None] = field(default=launch_settings, kw_only=True)
 
 
 @dataclass(frozen=True, slots=True)
@@ -292,8 +301,20 @@ class DesktopBar:
                 self.actions.keyboard()
             case Action.STOP_RECORDING:
                 self.actions.record("stop")
+            case Action.OPEN_SOUND_SETTINGS:
+                self.open_settings("ms-settings:sound")
+            case Action.OPEN_WIFI_SETTINGS:
+                self.open_settings("ms-settings:network-wifi")
             case _:
                 assert_never(action)
+
+    def open_settings(self, uri: SettingsUri) -> None:
+        """Let Windows take focus, reporting launch failures through the bar's owner."""
+        self.close_menu(restore=False)
+        try:
+            self.actions.open_settings(uri)
+        except OSError as error:
+            self.actions.problem(str(error))
 
     def hover(self, key: Key | None) -> None:
         if self.hovered is not key:

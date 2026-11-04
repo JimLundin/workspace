@@ -89,8 +89,9 @@ or keeper.
 ## What you see
 
 - **Floating Workspace controls**: a small glass capsule showing local time, battery
-  and weather when Windows location is available. Click anywhere on the capsule
-  to open its menu. Holding Spacebar shows Listening with a real microphone
+  and weather when Windows location is available. Click the clock or power readings
+  to open its menu; the speaker and Wi-Fi icons open Windows sound and Wi-Fi settings.
+  Holding Spacebar shows Listening with a real microphone
   waveform; stopping capture shows Transcribing until the request finishes.
   The capsules sit 8 pixels below the top screen edge. Volume and Wi-Fi have
   fixed status icons that change with their observed state, including unknown readings.
