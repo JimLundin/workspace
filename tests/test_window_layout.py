@@ -12,6 +12,7 @@ from desktop_ui.window_layout import (
     Screens,
     Setup,
     Target,
+    dark_when_locked,
     groups,
     managed,
     place,
@@ -49,6 +50,17 @@ def test_setups_match_their_screens_and_assign_work_roles_by_orientation() -> No
     docked = Monitor(FOUR_K.area, FOUR_K.work, primary=True, internal=False)
     assert screens((docked,)) == Screens(Setup.LAPTOP_ONLY, frozendict({Role.LAPTOP: docked.work}))
     assert screens(()) is None
+
+
+def test_only_the_home_4k_screen_goes_dark_when_locked() -> None:
+    # Defects: the laptop panel or an unprotected work screen is turned off, or
+    # an unrecognized screen of the same size as a protected one is.
+    assert dark_when_locked((LAPTOP, FOUR_K)) == frozenset({FOUR_K})
+    assert dark_when_locked((SIDE, ABOVE, LAPTOP)) == frozenset()
+    assert dark_when_locked((LAPTOP,)) == frozenset()
+    projector = Monitor(Rect(-1920, 0, 0, 1080), Rect(-1920, 0, 0, 1080), primary=False, internal=False)
+    assert dark_when_locked((LAPTOP, FOUR_K, projector)) == frozenset()
+    assert dark_when_locked(()) == frozenset()
 
 
 def test_home_places_terminals_and_code_across_the_4k_and_teams_on_the_laptop() -> None:

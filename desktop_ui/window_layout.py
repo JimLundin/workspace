@@ -50,6 +50,10 @@ EXTERNALS: frozendict[Setup, frozendict[tuple[int, int], Role]] = frozendict(
 """Each setup's external screens beside the laptop's own panel, by physical size."""
 
 
+DARK_WHEN_LOCKED: frozendict[Setup, frozenset[Role]] = frozendict({Setup.HOME: frozenset({Role.MAIN})})
+"""Each setup's external screens that turn dark while the session is locked: the home 4K screen is an OLED."""
+
+
 @dataclass(frozen=True, slots=True)
 class Screens:
     """The recognized setup and the work area of each of its roles' monitors."""
@@ -58,7 +62,7 @@ class Screens:
     roles: frozendict[Role, Rect]
 
 
-def screens(monitors: Sequence[Monitor]) -> Screens | None:
+def assigned(monitors: Sequence[Monitor]) -> tuple[Setup, frozendict[Role, Monitor]] | None:
     """Match the connected monitors to a setup; any other set is the laptop alone, on its panel or the primary monitor."""
     if not monitors:
         return None
@@ -66,14 +70,31 @@ def screens(monitors: Sequence[Monitor]) -> Screens | None:
     laptop = panels[0] if len(panels) == 1 else next((index for index, monitor in enumerate(monitors) if monitor.primary), 0)
     externals = tuple(monitor for index, monitor in enumerate(monitors) if index != laptop)
     sizes = tuple(sorted((monitor.area.width, monitor.area.height) for monitor in externals))
-    alone = Screens(Setup.LAPTOP_ONLY, frozendict({Role.LAPTOP: monitors[laptop].work}))
+    alone = (Setup.LAPTOP_ONLY, frozendict({Role.LAPTOP: monitors[laptop]}))
     if len(panels) != 1:
         return alone
     setup = next((setup for setup, wanted in EXTERNALS.items() if sizes == tuple(sorted(wanted))), None)
     if setup is None:
         return alone
-    roles = {EXTERNALS[setup][(monitor.area.width, monitor.area.height)]: monitor.work for monitor in externals}
-    return Screens(setup, frozendict({Role.LAPTOP: monitors[laptop].work, **roles}))
+    roles = {EXTERNALS[setup][(monitor.area.width, monitor.area.height)]: monitor for monitor in externals}
+    return setup, frozendict({Role.LAPTOP: monitors[laptop], **roles})
+
+
+def screens(monitors: Sequence[Monitor]) -> Screens | None:
+    match assigned(monitors):
+        case (setup, roles):
+            return Screens(setup, frozendict((role, monitor.work) for role, monitor in roles.items()))
+        case None:
+            return None
+
+
+def dark_when_locked(monitors: Sequence[Monitor]) -> frozenset[Monitor]:
+    """The recognized setup's protected external screens; an unrecognized set protects none."""
+    match assigned(monitors):
+        case (setup, roles):
+            return frozenset(monitor for role, monitor in roles.items() if role in DARK_WHEN_LOCKED.get(setup, frozenset()))
+        case None:
+            return frozenset()
 
 
 @dataclass(frozen=True, slots=True)
