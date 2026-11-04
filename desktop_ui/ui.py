@@ -40,7 +40,6 @@ lazy from desktop_ui.agent_progress import canvas_phases, phases
 lazy from desktop_ui.agent_toasts import AgentToasts
 lazy from desktop_ui.agent_window import AgentWindow
 lazy from desktop_ui.components.appearance import scheme, tokens, tooltip_style
-lazy from desktop_ui.components.canvas_loading import CanvasLoading
 lazy from desktop_ui.desktop_bar import BarActions, DesktopBar
 lazy from desktop_ui.dialogs import Job, bring_forward, near_pointer
 lazy from desktop_ui.icons import State
@@ -99,6 +98,19 @@ class Views:
 
 
 type Assess = Callable[[PendingFeed], None]
+
+
+class WaitCursor:
+    """The standard wait cursor from the canvas's first reveal until its first paint."""
+
+    def __init__(self, root: QtWidgets.QApplication) -> None:
+        self.root: QtWidgets.QApplication = root
+
+    def show(self) -> None:
+        self.root.setOverrideCursor(QtGui.QCursor(QtCore.Qt.CursorShape.WaitCursor))
+
+    def close(self) -> None:
+        self.root.restoreOverrideCursor()
 
 
 class Ui:
@@ -431,23 +443,9 @@ class Ui:
                     post=lambda job: self.post(lambda root: job()),
                     create_view=self._create_work,
                     on_problem=connection.on_problem,
-                    create_loading=self._create_canvas_loading,
+                    create_loading=lambda: WaitCursor(self._root),
                 )
             return self._work
-
-    def _create_canvas_loading(self) -> CanvasLoading:
-        return CanvasLoading(self._root, paint_frame=self._paint_canvas_loading)
-
-    def _paint_canvas_loading(self) -> None:
-        # Native exposure must run before blocking setup. Keep queued canvas
-        # redirects/publications on the outer dispatcher until its view exists.
-        active = self._poll_timer.isActive()
-        self._poll_timer.stop()
-        try:
-            self._root.processEvents(QtCore.QEventLoop.ProcessEventsFlag.ExcludeUserInputEvents)
-        finally:
-            if active:
-                self._poll_timer.start()
 
     def _create_work(self, work: WorkWindow) -> CanvasWindow:
         if self._canvas is None:

@@ -397,19 +397,12 @@ under its lock, so a reset between observation and delivery cannot redirect an
 old reply into a later session that reuses the request id. The captured request's
 reply callback runs outside the lock, preserving retry and effect ownership.
 
-First canvas reveal presents an 80-logical-pixel nonactivating indicator before
-creating or rendering the view. `ui_components/canvas_loading.py` owns its
-transient lifetime. `winapi/composition_spinner.py` uses a top-level
-NOREDIRECTIONBITMAP host; Windows supplies the rounded surface
-and rotates the wheel independently of Qt. Reduced motion retains a static mark;
-unavailable composition uses the native wait cursor. Ui pauses its job timer
-during initial native frame delivery, keeping redirects outside construction.
-WorkWindow retains loading after native show returns. `ui_components/paint_ready.py`
-acknowledges the viewport's actual first paint on the following event turn, after
-the backing store has flushed. Presentation, cancellation and failure release
-the native target before its dispatcher. Later reveals reuse the canvas without
-another indicator. Hidden preparation stays hidden. Wheel animation requires no
-timer-driven Qt painting or background thread.
+First canvas reveal sets the standard Qt wait cursor before creating or
+rendering the view. WorkWindow retains it after native show returns.
+`desktop_ui/components/paint_ready.py` acknowledges the viewport's actual first paint on
+the following event turn, after the backing store has flushed. Presentation,
+cancellation and failure restore the cursor. Later reveals reuse the canvas
+without a wait cursor. Hidden preparation stays hidden.
 
 Qt supplies a per-pixel transparent foreground. `winapi.composition` uses
 win32more bindings and one `glass_host` constructor for card and island glass.

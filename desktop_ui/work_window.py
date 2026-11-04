@@ -21,7 +21,7 @@ class WorkView(Protocol):
 
 
 class WorkOpening(Protocol):
-    """A native loading presentation, owned and released on the UI thread."""
+    """A transient first-open presentation (the wait cursor), owned and released on the UI thread."""
 
     def show(self) -> None: ...
     def close(self) -> None: ...

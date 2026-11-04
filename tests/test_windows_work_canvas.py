@@ -66,7 +66,6 @@ from automation.personal_work import (
 from automation.store import TaskStore
 from automation.task import ActionNotApplied, ActionVerified, TextAnswer
 from automation.work_documents import WebDocument
-from desktop_ui.components.canvas_loading import CanvasLoading
 from desktop_ui.components.canvas_look import surface_fill
 from desktop_ui.components.voice_legend import VoiceLegend
 from desktop_ui.icons import State
@@ -74,6 +73,7 @@ from desktop_ui.island_model import Key
 from desktop_ui.notifications import body
 from desktop_ui.qt_runtime import prepare
 from desktop_ui.qt_ui import application
+from desktop_ui.ui import WaitCursor
 from desktop_ui.work_canvas_detail import NoteDetail, QuestionDetail, SourceDetail, WorkDetail
 from desktop_ui.work_canvas_panel import CanvasPanel
 from desktop_ui.work_canvas_view import CanvasGroup
@@ -88,7 +88,6 @@ from tests.test_windows_inbox_attention import InboxUi, waiting
 from tests.test_work_actions import claimed
 from tests.test_work_canvas import local_canvas, nested_bubbles, queue_nothing, seeded
 from tests.test_work_window import work_task
-from winapi import windows
 
 prepare()
 
@@ -143,18 +142,19 @@ def native_canvas(store: WorkCanvas) -> Generator[NativeCanvas]:
         panel.close()
 
 
-class LoadingPaintObserver(QtCore.QObject):
-    """Observe the real viewport event and the owned native indicator's lifetime."""
+class FirstPaintCursor(QtCore.QObject):
+    """Record the application's override cursor when the viewport first paints."""
 
-    def __init__(self, root: QtCore.QObject, loading: CanvasLoading) -> None:
+    def __init__(self, root: QtCore.QObject) -> None:
         super().__init__(root)
-        self.loading = loading
-        self.first_paint: bool | None = None
+        self.shape: Qt.CursorShape | None = None
+        self.painted: bool = False
 
     def eventFilter(self, watched: QtCore.QObject, event: QtCore.QEvent) -> bool:
-        if event.type() == QtCore.QEvent.Type.Paint and self.first_paint is None:
-            indicator = self.loading.spinner
-            self.first_paint = indicator is not None and windows.is_visible(indicator.handle)
+        if event.type() == QtCore.QEvent.Type.Paint and not self.painted:
+            self.painted = True
+            cursor = QtWidgets.QApplication.overrideCursor()
+            self.shape = cursor.shape() if cursor is not None else None
         return False
 
 
@@ -384,31 +384,24 @@ def test_startup_prepared_canvas_remains_hidden_and_keeps_its_native_scene(tmp_p
         ui.dispose()
 
 
-def test_first_canvas_open_shows_native_loading_before_building_and_releases_it(tmp_path: Path) -> None:
-    # Defect: loading masquerades as a fullscreen canvas and is removed after
-    # native show, leaving a blank interval before the viewport's first paint.
+def test_first_canvas_open_shows_a_wait_cursor_until_its_first_paint(tmp_path: Path) -> None:
+    # Defect: the first open builds the canvas under the arrow cursor, or the
+    # wait cursor is released before the viewport paints or is never released.
     root = application()
     data, document = nested_bubbles()
     store = local_canvas(tmp_path)
     seeded(store, document)
     jobs: deque[Callable[[], None]] = deque()
-    loading = CanvasLoading(root)
-    openings: list[CanvasLoading] = []
+    building: list[Qt.CursorShape | None] = []
     views: list[CanvasWindow] = []
-    observer = LoadingPaintObserver(root, loading)
+    observer = FirstPaintCursor(root)
 
     def opening() -> WorkOpening:
-        openings.append(loading)
-        return loading
+        return WaitCursor(root)
 
     def create(work: WorkWindow) -> WorkView:
-        assert loading.loop is not None
-        if loading.loop.composition is not None:
-            assert loading.spinner is not None and not loading.spinner.closed
-            handle = loading.spinner.handle
-            assert windows.is_visible(handle) and windows.foreground() != handle
-            bounds = windows.outer_rect(handle)
-            assert bounds.width == bounds.height == round(80 * windows.scale(handle))
+        cursor = QtWidgets.QApplication.overrideCursor()
+        building.append(cursor.shape() if cursor is not None else None)
         view = CanvasWindow(root, work, store)
         view.panel.canvas.viewport().installEventFilter(observer)
         views.append(view)
@@ -420,19 +413,12 @@ def test_first_canvas_open_shows_native_loading_before_building_and_releases_it(
         work.show(focus=False)
         while jobs:
             jobs.popleft()()
-        assert not loading.closed
-        if loading.spinner is not None:
-            assert windows.is_visible(loading.spinner.handle)
         root.processEvents()
         QtTest.QTest.qWait(20)
         assert not work.state.status, work.state.status
-        view = views[0]
-        assert (view.window.isVisible(), loading.closed) == (True, True)
-        assert loading.loop is not None and loading.loop.closed
-        if loading.spinner is not None:
-            assert observer.first_paint is True
-            assert loading.spinner.closed and not loading.spinner.rotating
-            assert not windows.is_visible(loading.spinner.handle)
+        assert views[0].window.isVisible()
+        assert (building, observer.shape) == ([Qt.CursorShape.WaitCursor], Qt.CursorShape.WaitCursor)
+        assert QtWidgets.QApplication.overrideCursor() is None
     finally:
         work.close()
         while jobs:
