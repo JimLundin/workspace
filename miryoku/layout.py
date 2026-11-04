@@ -115,6 +115,8 @@ class Key(Enum):
     UP = 0x26
     RIGHT = 0x27
     DOWN = 0x28
+    MENU_MASK = 0xE8
+    """Unassigned, so applications ignore it."""
 
     @property
     def vk(self) -> int:

@@ -35,6 +35,8 @@ WM_QUERY_LAYOUT_STATE: Final = _WM_APP + 6
 WM_KEY_STATE: Final = _WM_APP + 7
 """Layout -> assistant: physical scancode in wparam, down/up in lparam (1/0).
 Scancode 0 clears the held keys, before a state replay or when the layout stops."""
+WM_CHORD: Final = _WM_APP + 8
+"""Layout -> assistant: wparam is 1 while the firmware keyboard holds Ctrl+Alt+Shift, else 0."""
 
 
 class LayoutState(Enum):

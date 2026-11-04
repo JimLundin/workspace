@@ -15,12 +15,13 @@ from components import ASSISTANT, LAYOUT, ready
 from config import APPS
 from diagnostics import FailureInfo, failure_info
 from miryoku.engine import QUIET, Engine, Indicator, Signal, Verdict
-from miryoku.firmware import CapturedKey, ConsumedKey, FirmwareKeyboard, VoiceShortcut, connected, voice_tool
+from miryoku.firmware import MODIFIER_KEYS, CapturedKey, ConsumedKey, FirmwareKeyboard, HeldShortcut, Modifiers, connected, modifiers, shortcut
 from miryoku.layout import ESCAPE, SLOTS, TAPPING_TERM_MS, VOICE_KEYS, Key, Mod, Scancode, Unmapped, native_control
 from protocol import (
     LAYOUT_MAGIC,
     MAGIC,
     SWITCHER_TITLE,
+    WM_CHORD,
     WM_INDICATOR,
     WM_KEY_STATE,
     WM_LAYOUT_STATE,
@@ -196,6 +197,7 @@ class Keyboard:
 
     __slots__ = (
         "busy",
+        "chord_held",
         "engine",
         "fault",
         "fault_phase",
@@ -209,7 +211,7 @@ class Keyboard:
         "pressed",
         "recovery_errors",
         "recovery_ticks",
-        "voice_shortcuts",
+        "shortcuts",
     )
 
     def __init__(self, platform: KeyboardSystem | None = None) -> None:
@@ -222,8 +224,10 @@ class Keyboard:
         self.pressed: set[Scancode] = set()
         """Physical keys for the overlay, independent of delayed tap/hold decisions."""
         self.native_releases: set[int] = set()
-        self.voice_shortcuts: tuple[CapturedKey, ...] = ()
-        """Immutable ownership of voice voice key presses, including ups after unplug."""
+        self.shortcuts: tuple[CapturedKey, ...] = ()
+        """Immutable ownership of firmware shortcut presses, including ups after unplug."""
+        self.chord_held = False
+        """The assistant was last told the firmware keyboard holds the chord modifiers."""
         self.busy = False
         self.fault: FailureInfo | None = None
         self.fault_phase = "key"
@@ -242,6 +246,7 @@ class Keyboard:
             self.host.tell_assistant(WM_KEY_STATE, 0, 0)
             for scancode in sorted(self.pressed):
                 self.host.tell_assistant(WM_KEY_STATE, scancode, 1)
+            self.host.tell_assistant(WM_CHORD, int(self.chord_held), 0)
         if message != WM_TOGGLE_LAYOUT or self.firmware is not None:
             return
         self.busy = True
@@ -274,23 +279,24 @@ class Keyboard:
         else:
             previous, self.firmware = self.firmware, None
             try:
-                self.release_voice_shortcuts()
+                self.observe_chord()
+                self.release_shortcuts()
             except Exception as error:
-                self.input_failed(error, phase="firmware_voice")
+                self.input_failed(error, phase="firmware_shortcut")
                 return
             if previous is not None and previous.resume_layout:
                 self.on_message(WM_TOGGLE_LAYOUT)
 
-    def release_voice_shortcuts(self) -> None:
+    def release_shortcuts(self) -> None:
         """End capture on unplug/failure/shutdown while retaining swallowed key-ups."""
-        held = self.voice_shortcuts
-        self.voice_shortcuts = tuple(ConsumedKey(key.identity) for key in held)
+        held = self.shortcuts
+        self.shortcuts = tuple(ConsumedKey(key.identity) for key in held)
         failures = 0
         for key in held:
             match key:
-                case VoiceShortcut(tool=tool):
+                case HeldShortcut(request=request):
                     try:
-                        self.host.request(tool, down=False)
+                        self.host.request(request, down=False)
                     except Exception:
                         failures += 1
                 case ConsumedKey():
@@ -298,7 +304,7 @@ class Keyboard:
                 case _:
                     assert_never(key)
         if failures:
-            raise OSError(f"Failed to finish {failures} external keyboard voice requests.")
+            raise OSError(f"Failed to finish {failures} external keyboard shortcut requests.")
 
     def prepare_enable(self) -> None:
         """Do not resume remapping while a rejected Workspace key-up is outstanding."""
@@ -320,7 +326,7 @@ class Keyboard:
         self.busy = True
         try:
             with contextlib.suppress(Exception):
-                self.release_voice_shortcuts()
+                self.release_shortcuts()
             try:
                 self.engine.release_all(self.host)
             except Exception:
@@ -399,31 +405,52 @@ class Keyboard:
         finally:
             self.busy = False
 
-    def firmware_voice(self, key: inputs.KeyEvent, *, down: bool) -> bool:
-        """Own only explicit voice key presses and their paired physical releases."""
+    def firmware_key(self, key: inputs.KeyEvent, *, down: bool) -> None:
         identity = key.scancode | (0x100 if key.flags & inputs.LLKHF_EXTENDED else 0)
-        for held in self.voice_shortcuts:
+        if down:
+            self.native_releases.add(identity)
+        else:
+            self.native_releases.discard(identity)
+        if identity in MODIFIER_KEYS:
+            self.observe_chord()
+
+    def observe_chord(self) -> None:
+        """Tell the assistant when the firmware keyboard starts or stops holding Ctrl+Alt+Shift."""
+        held = self.firmware is not None and modifiers(self.native_releases) is Modifiers.CHORD
+        if held != self.chord_held:
+            self.chord_held = held
+            self.host.tell_assistant(WM_CHORD, int(held), 0)
+
+    def firmware_shortcut(self, key: inputs.KeyEvent, *, down: bool) -> bool:
+        """Own only explicit shortcut presses and their paired physical releases."""
+        identity = key.scancode | (0x100 if key.flags & inputs.LLKHF_EXTENDED else 0)
+        for held in self.shortcuts:
             if held.identity == identity:
                 if not down:
-                    self.voice_shortcuts = tuple(item for item in self.voice_shortcuts if item.identity != identity)
+                    self.shortcuts = tuple(item for item in self.shortcuts if item.identity != identity)
                     match held:
-                        case VoiceShortcut(tool=tool):
-                            self.host.request(tool, down=False)
+                        case HeldShortcut(request=request):
+                            self.host.request(request, down=False)
                         case ConsumedKey():
                             pass
                         case _:
                             assert_never(held)
                 return True
-        # A native voice key already held stays native even if modifiers arrive
-        # during its repeat. Only a fresh configured voice chord starts capture.
+        # A native key already held stays native even if modifiers arrive
+        # during its repeat. Only a fresh configured shortcut starts capture.
         if (
             self.firmware is not None
             and down
             and identity not in self.native_releases
-            and (voice := voice_tool(key.vk, self.native_releases)) is not None
+            and (chosen := shortcut(key.vk, self.native_releases)) is not None
         ):
-            self.voice_shortcuts = (*self.voice_shortcuts, VoiceShortcut(identity, voice))
-            self.host.request(voice, down=True)
+            self.shortcuts = (*self.shortcuts, HeldShortcut(identity, chosen))
+            if modifiers(self.native_releases) is Modifiers.CHORD:
+                # Swallowing the letter leaves applications seeing Alt pressed alone;
+                # tapping an unassigned key keeps its release from opening a menu.
+                self.host.send(Key.MENU_MASK, down=True)
+                self.host.send(Key.MENU_MASK, down=False)
+            self.host.request(chosen, down=True)
             return True
         return False
 
@@ -433,22 +460,18 @@ class Keyboard:
         if self.busy or key.extra == LAYOUT_MAGIC:
             return False
         if (
-            (self.firmware is not None or self.voice_shortcuts)
+            (self.firmware is not None or self.shortcuts)
             and not key.flags & inputs.LLKHF_INJECTED
             and key.extra != MAGIC
-            and self.firmware_voice(key, down=down)
+            and self.firmware_shortcut(key, down=down)
         ):
             return True
         if self.firmware is not None:
-            # Firmware owns ordinary keys and the layout toggle. Only explicit
-            # Ctrl+Shift+D and Ctrl+Shift+G above reach Workspace's voice commands.
+            # Firmware owns ordinary keys and the layout toggle. Only the explicit
+            # voice and Ctrl+Alt+Shift shortcuts above reach Workspace's requests.
             # Remember native downs so their releases still pass after unplugging.
             if not key.flags & inputs.LLKHF_INJECTED and key.extra != MAGIC:
-                identity = key.scancode | (0x100 if key.flags & inputs.LLKHF_EXTENDED else 0)
-                if down:
-                    self.native_releases.add(identity)
-                else:
-                    self.native_releases.discard(identity)
+                self.firmware_key(key, down=down)
             return False
         foreground = self.platform.foreground()
         if foreground != self.foreground:
@@ -577,7 +600,7 @@ def show_error(message: str) -> None:
 def release_keyboard(keyboard: Keyboard) -> None:
     keyboard.clear_pressed()
     try:
-        keyboard.release_voice_shortcuts()
+        keyboard.release_shortcuts()
         keyboard.engine.release_all(keyboard.host)
     except Exception as error:
         keyboard.input_failed(error, phase="shutdown")

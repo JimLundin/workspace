@@ -2,12 +2,32 @@
 
 from collections.abc import Collection, Iterable
 from dataclasses import dataclass, field
+from enum import Enum, auto
 from typing import Final
 
-from protocol import Tool
+from config import APPS
+from protocol import Request, Tool
 
 # Charybdis Nano (3x5) Splinky: match its USB identity, independent of port.
 FIRMWARE_KEYBOARD: Final = ("VID_A8F8", "PID_1832")
+
+_CHORD_LETTERS: Final[tuple[tuple[Request, str], ...]] = (
+    # Right-hand letters, tapped while the left hand holds R S T, follow Miryoku's NAV positions.
+    (Tool.FOCUS_LEFT, "M"), (Tool.FOCUS_DOWN, "N"), (Tool.FOCUS_UP, "E"), (Tool.FOCUS_RIGHT, "I"),
+    (Tool.DESKTOP_1, "L"), (Tool.DESKTOP_2, "U"), (Tool.DESKTOP_3, "Y"),
+    (Tool.DESKTOP_PREVIOUS, "K"), (Tool.DESKTOP_NEXT, "H"),
+    (Tool.ZOOM, "O"), (Tool.PLACEMENT_PAUSE, "J"),
+    # Left-hand letters, tapped while the right hand holds N E I: the Apps layer's app positions.
+    *zip(APPS[:10], "QWFPBARSTG", strict=False),
+    (Tool.WINDOW_SWITCHER, "C"), (Tool.PLACE_NOW, "D"), (Tool.MINIMIZE, "V"),
+)  # fmt: skip
+CHORDS: Final[frozendict[Request, str]] = frozendict(_CHORD_LETTERS)
+"""Ctrl+Alt+Shift + the letter, on the firmware keyboard, asks Workspace for the request."""
+
+_CHORD_KEYS: Final = frozendict({ord(letter): request for request, letter in CHORDS.items()})
+_VOICE_KEYS: Final[frozendict[int, Request]] = frozendict({0x44: Tool.DICTATE, 0x47: Tool.AGENT_VOICE})
+if len(_CHORD_KEYS) != len(_CHORD_LETTERS) or not all("A" <= letter <= "Z" for letter in CHORDS.values()):
+    raise ImportError("every firmware chord needs its own request and letter")
 
 
 @dataclass(frozen=True, slots=True)
@@ -16,45 +36,60 @@ class FirmwareKeyboard:
 
 
 @dataclass(frozen=True, slots=True)
-class VoiceShortcut:
-    """A swallowed voice key press whose release must finish the voice request."""
+class HeldShortcut:
+    """A swallowed shortcut press whose release must finish its request."""
 
     identity: int
-    tool: Tool
+    request: Request
 
 
 @dataclass(frozen=True, slots=True)
 class ConsumedKey:
-    """Recording already ended; swallow repeats and the eventual physical up."""
+    """The request already ended; swallow repeats and the eventual physical up."""
 
     identity: int
 
 
-type CapturedKey = VoiceShortcut | ConsumedKey
+type CapturedKey = HeldShortcut | ConsumedKey
 
 
-def voice_tool(vk: int, held: Collection[int]) -> Tool | None:
-    """Ctrl+Shift+D holds dictation; Ctrl+Shift+G holds agent speech.
+MODIFIER_KEYS: Final = frozenset({0x1D, 0x11D, 0x38, 0x138, 0x2A, 0x36, 0x136, 0x15B, 0x15C})
+"""Native identities of the Ctrl, Alt, Shift and Win keys that `modifiers` reads."""
 
-    Native identities include the extended bit, so either side's modifiers work.
-    Other modifier combinations and plain letters retain their application meaning.
+
+class Modifiers(Enum):
+    """The held native modifiers that select one of Workspace's firmware shortcuts."""
+
+    VOICE = auto()
+    """Ctrl+Shift: D holds dictation, G holds agent speech."""
+    CHORD = auto()
+    """Ctrl+Alt+Shift: a letter from `CHORDS`."""
+
+
+def modifiers(held: Collection[int]) -> Modifiers | None:
+    """Native identities include the extended bit, so either side's modifiers work.
+
+    Win never takes part: Ctrl+Alt+Shift+Win is the Office key.
     """
-    match vk:
-        case 0x44 | 0x47:
-            pass
-        case _:
-            return None
-    if not (0x1D in held or 0x11D in held) or any(identity in held for identity in (0x15B, 0x15C)):
+    if not (0x1D in held or 0x11D in held) or 0x15B in held or 0x15C in held:
         return None
-    alt = 0x38 in held or 0x138 in held
     # The observed Charybdis right Shift includes Windows' extended-key flag.
-    shift = 0x2A in held or 0x36 in held or 0x136 in held
-    match vk, alt, shift:
-        case 0x44, False, True:
-            return Tool.DICTATE
-        case 0x47, False, True:
-            return Tool.AGENT_VOICE
-        case _:
+    if not (0x2A in held or 0x36 in held or 0x136 in held):
+        return None
+    return Modifiers.CHORD if 0x38 in held or 0x138 in held else Modifiers.VOICE
+
+
+def shortcut(vk: int, held: Collection[int]) -> Request | None:
+    """The request a fresh firmware key press makes; other keys keep their application meaning.
+
+    Letters are matched by virtual key, so the host layout can't move them.
+    """
+    match modifiers(held):
+        case Modifiers.VOICE:
+            return _VOICE_KEYS.get(vk)
+        case Modifiers.CHORD:
+            return _CHORD_KEYS.get(vk)
+        case None:
             return None
 
 

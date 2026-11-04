@@ -133,12 +133,14 @@ embedded browser are paused; Workspace retains its Windows desktop runtime.
   choose **Start layout** first.
   While the firmware keyboard is connected, the layout stays off and the toggle
   is ignored. Ordinary firmware output passes through; **Ctrl+Shift+D** holds
-  dictation and **Ctrl+Alt+G** holds agent speech. Hold the right hand's
+  dictation and **Ctrl+Shift+G** holds agent speech. Hold the right hand's
   home-row Ctrl+Shift modifiers, then hold D for dictation while speaking.
-  For agent speech, hold the right hand's home-row Ctrl+Alt modifiers and G.
+  For agent speech, hold the same modifiers and G.
   These are ordinary Miryoku keys; Space/Enter thumbs change layers when held.
   Releasing D or G finishes dictation or sends to the agent, even if the
-  modifiers were released first. No firmware update is needed.
+  modifiers were released first. **Ctrl+Alt+Shift** plus a letter reaches the
+  Apps layer's tools; see the firmware keyboard chords below. No firmware
+  update is needed.
 - **Restart assistant** keeps the keyboard layout and automation running while
   the assistant and floating bar reload. Dictation stops with the assistant;
   unavailable shortcuts give a warning sound, and ordinary typing continues.
@@ -238,6 +240,49 @@ Change the apps in `config.py`. The focus keys, and Apps with the physical
 arrow keys, move to the nearest placed window in that direction on the current
 desktop, across monitors. Zoom fills the monitor with the focused window until
 you press it again or focus another window. The desktop keys don't wrap.
+
+**Firmware keyboard chords.** While the Charybdis Nano is connected, the Apps
+layer doesn't exist, so Workspace takes **Ctrl+Alt+Shift** plus a letter
+instead. Hold the three home-row mods with one hand: **R S T** on the left or
+**I E N** on the right. Tap the letter with the other hand. The right-hand
+letters follow Miryoku's NAV positions. The left-hand letters take the Apps
+layer's app positions. Letters are the Colemak-DH legends the firmware sends.
+While the chord's modifiers are held, the bar's pager shows each target's chord.
+Workspace swallows the letter's press and release, so no character is typed.
+The modifiers themselves pass through, so none stays held. Other letters and
+other modifier sets keep their usual meaning. Win is never part of a chord,
+because Ctrl+Alt+Shift+Win is the Office key. Windows has no Ctrl+Alt+Shift
+letter shortcuts. From the firmware keyboard, these app shortcuts give way to a
+chord: Word's **S** (Styles pane), Teams' **R** (report a problem), the Teams web
+app's **C** and **B** (inline code and code block) and Excel for the web's
+accessibility-menu **T** and **H**.
+
+| chord | does |
+|---|---|
+| ⌃⌥⇧ **M** | Focus ← |
+| ⌃⌥⇧ **N** | Focus ↓ |
+| ⌃⌥⇧ **E** | Focus ↑ |
+| ⌃⌥⇧ **I** | Focus → |
+| ⌃⌥⇧ **L** | Desk 1 |
+| ⌃⌥⇧ **U** | Desk 2 |
+| ⌃⌥⇧ **Y** | Desk 3 |
+| ⌃⌥⇧ **K** | Desk ← |
+| ⌃⌥⇧ **H** | Desk → |
+| ⌃⌥⇧ **O** | Zoom |
+| ⌃⌥⇧ **J** | Pause place |
+| ⌃⌥⇧ **Q** | Terminal |
+| ⌃⌥⇧ **W** | Browser |
+| ⌃⌥⇧ **F** | Outlook |
+| ⌃⌥⇧ **P** | Teams |
+| ⌃⌥⇧ **B** | Files |
+| ⌃⌥⇧ **A** | Code |
+| ⌃⌥⇧ **R** | Notepad |
+| ⌃⌥⇧ **S** | Excel |
+| ⌃⌥⇧ **T** | Word |
+| ⌃⌥⇧ **G** | PowerPoint |
+| ⌃⌥⇧ **C** | Windows |
+| ⌃⌥⇧ **D** | Re-place |
+| ⌃⌥⇧ **V** | Min |
 
 **Snippets**: type the trigger and it's replaced: `,,date` `,,time` `,,now`
 `,,week` `,,shrug` `,,thx` `,,mvh` `,,br`. Add your own in `config.py`. Physical navigation, window changes, pointer movement

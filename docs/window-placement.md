@@ -124,8 +124,13 @@ ready for a navigation log.
   until the key is pressed again or focus leaves the window.
 - **The pager** after the toolbar's pinned slots shows each desktop and marks the
   current one. Its names list the apps placed there. While the Apps layer is up,
-  each target shows its keycap. A horizontal scroll over the bar steps one
+  each target shows its keycap; while the firmware keyboard holds Ctrl+Alt+Shift,
+  each shows its chord, such as **⌃⌥⇧ L**. A horizontal scroll over the bar steps one
   desktop per gesture.
+- **Firmware chords**: with the Charybdis Nano connected there is no Apps
+  layer. Ctrl+Alt+Shift plus a letter sends the same tool or app request
+  instead, so it arrives as a key navigation. `miryoku/firmware.py`'s `CHORDS`
+  table maps each request to its letter; the README lists them.
 - **The toolbar** shows apps from every desktop. Clicking one on another
   desktop switches there before focusing it.
 

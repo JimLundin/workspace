@@ -43,6 +43,7 @@ from protocol import (
     LAYOUT_MAGIC,
     MAGIC,
     SWITCHER_TITLE,
+    WM_CHORD,
     WM_INDICATOR,
     WM_KEY_STATE,
     WM_LAYOUT_STATE,
@@ -331,7 +332,7 @@ def test_layout_query_resets_then_replays_all_physically_held_keys() -> None:
         keyboard.on_message(WM_QUERY_LAYOUT_STATE)
         assert messages[0] == (WM_LAYOUT_STATE, LayoutState.ON.value, 0)
         assert messages[1][0] == WM_INDICATOR
-        assert messages[2:] == [(WM_KEY_STATE, 0, 0), (WM_KEY_STATE, 0x10, 1), (WM_KEY_STATE, 0x32, 1)]
+        assert messages[2:] == [(WM_KEY_STATE, 0, 0), (WM_KEY_STATE, 0x10, 1), (WM_KEY_STATE, 0x32, 1), (WM_CHORD, 0, 0)]
 
 
 def test_toggle_and_input_failure_clear_held_keys() -> None:
@@ -524,7 +525,7 @@ def test_firmware_voice_key_shortcuts_pair_each_voice_press_with_its_release() -
         assert driver.messages == [(WM_REQUEST, tool.value, 1)]
         assert keyboard.swallow(voice_key, down=False)
         assert driver.messages == [(WM_REQUEST, tool.value, 1), (WM_REQUEST, tool.value, 0)]
-        assert not keyboard.voice_shortcuts and not keyboard.native_releases
+        assert not keyboard.shortcuts and not keyboard.native_releases
         assert not driver.output and not keyboard.engine.enabled
 
 
@@ -545,8 +546,6 @@ def test_firmware_voice_does_not_capture_ordinary_or_already_held_voice_keys() -
         (agent, (shift,)),
         (dictate, (ctrl, alt)),
         (agent, (ctrl, alt)),
-        (dictate, (ctrl, alt, shift)),
-        (agent, (ctrl, alt, shift)),
         (dictate, (ctrl, shift, win)),
         (agent, (ctrl, shift, win)),
     ):
@@ -583,7 +582,7 @@ def test_firmware_voice_finishes_on_unplug_and_swallows_the_late_voice_key_relea
     ]
     assert keyboard.swallow(voice_key, down=True)
     assert keyboard.swallow(voice_key, down=False)
-    assert not keyboard.voice_shortcuts
+    assert not keyboard.shortcuts
     assert not keyboard.swallow(ctrl, down=False)
     assert not keyboard.swallow(shift, down=False)
     assert not keyboard.native_releases and not driver.output
@@ -619,6 +618,37 @@ def test_generated_input_neither_arms_nor_finishes_firmware_voice_shortcuts() ->
         assert driver.messages == [(WM_REQUEST, Tool.DICTATE.value, 1)]
         assert keyboard.swallow(inputs.KeyEvent(0x44, 0x20, 0, 10, 0), down=False)
         assert driver.messages == [(WM_REQUEST, Tool.DICTATE.value, 1), (WM_REQUEST, Tool.DICTATE.value, 0)]
+
+
+def test_firmware_chord_reaches_navigation_and_swallows_the_letter_press_and_release() -> None:
+    """Detect a typed AltGr character, a stuck modifier, an unpaired release or a chord outside navigation."""
+    keyboard, driver = firmware_keyboard()
+    alt, ctrl, shift = inputs.KeyEvent(0xA4, 0x38, 0, 10, 0), inputs.KeyEvent(0xA2, 0x1D, 0, 10, 0), inputs.KeyEvent(0xA0, 0x2A, 0, 10, 0)
+    for key in (ctrl, shift, alt):
+        assert not keyboard.swallow(key, down=True)
+    assert driver.messages == [(WM_CHORD, 1, 0)]
+    letter = inputs.KeyEvent(0x4C, 0x26, 0, 20, 0)  # L
+    assert keyboard.swallow(letter, down=True)
+    assert keyboard.swallow(letter, down=True)
+    assert driver.output == [(Key.MENU_MASK, True), (Key.MENU_MASK, False)]
+    for key in (ctrl, alt):
+        assert not keyboard.swallow(key, down=False)
+    assert keyboard.swallow(letter, down=False)
+    assert not keyboard.swallow(shift, down=False)
+    requests = [control_event(WindowInput(*message), APPS) for message in driver.messages if message[0] == WM_REQUEST]
+    assert requests == [FeatureRequest(Tool.DESKTOP_1, down=True), FeatureRequest(Tool.DESKTOP_1, down=False)]
+    assert [message for message in driver.messages if message[0] == WM_CHORD] == [(WM_CHORD, 1, 0), (WM_CHORD, 0, 0)]
+    assert not keyboard.shortcuts and not keyboard.native_releases
+    for key in (alt, inputs.KeyEvent(0xA3, 0x1D, inputs.LLKHF_EXTENDED, 30, 0), inputs.KeyEvent(0xA1, 0x36, inputs.LLKHF_EXTENDED, 30, 0)):
+        keyboard.swallow(key, down=True)
+    app = inputs.KeyEvent(0x51, 0x10, 0, 40, 0)  # Q
+    assert keyboard.swallow(app, down=True)
+    driver.devices = ()
+    keyboard.update_devices()
+    shortcuts = [message for message in driver.messages if message[0] in (WM_REQUEST, WM_CHORD)]
+    assert shortcuts[-3:] == [(WM_REQUEST, 1000, 1), (WM_CHORD, 0, 0), (WM_REQUEST, 1000, 0)]
+    assert control_event(WindowInput(*shortcuts[-3]), APPS) == FeatureRequest(APPS[0], down=True)
+    assert keyboard.swallow(app, down=False)
 
 
 def test_escape_toggle_clears_highlights_with_other_keys_still_held() -> None:
