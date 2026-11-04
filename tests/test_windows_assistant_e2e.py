@@ -64,10 +64,9 @@ def chord(thumb: int, key: int) -> None:
 
 def type_ascii(text: str) -> None:
     """Plain letters and spaces as virtual keys, tagged so the layout passes them through."""
-    for c in text:
-        vk = 0x20 if c == " " else ord(c.upper())
-        inputs.send_keys([inputs.KeyStroke(vk, down=True), inputs.KeyStroke(vk, down=False)], MAGIC)
-    inputs.send_keys([inputs.KeyStroke(0x0D, down=True), inputs.KeyStroke(0x0D, down=False)], MAGIC)
+    for vk in [0x20 if c == " " else ord(c.upper()) for c in text] + [0x0D]:
+        for flags in (0, inputs.KEYEVENTF_KEYUP):
+            inputs.send_key(vk, inputs.scancode_for(vk), flags, MAGIC)
 
 
 @contextmanager

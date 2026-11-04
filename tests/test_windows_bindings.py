@@ -6,7 +6,7 @@ import sys
 import threading
 import unittest
 import uuid
-from collections.abc import Callable, Generator, Mapping, Sequence
+from collections.abc import Callable, Generator, Mapping
 from contextlib import contextmanager, suppress
 from ctypes import wintypes
 from dataclasses import replace
@@ -836,36 +836,6 @@ def test_native_function_key_clears_a_partial_snippet_without_remapping() -> Non
         assert not keyboard.swallow(inputs.KeyEvent(0x70, 0x3B, 0, 0, 0), down=True)
         assert keyboard.engine.typed == ""
         assert messages == []
-
-
-def test_rejected_sendinput_is_reported_without_real_injection() -> None:
-    with unittest.TestCase().assertRaises(OSError):
-        inputs.send_keys([inputs.KeyStroke(0x41, down=True)], MAGIC, submit=lambda events: 0)
-
-
-def test_extra_mouse_buttons_and_horizontal_scroll_preserve_native_flags() -> None:
-    events: list[tuple[int, int, int]] = []
-
-    def send(batch: Sequence[inputs.INPUT]) -> int:
-        for event in batch:
-            mouse = event.u.mi
-            events.append((mouse.dwFlags, mouse.mouseData, mouse.dwExtraInfo))
-        return len(batch)
-
-    inputs.mouse_button("x1", MAGIC, down=True, submit=send)
-    inputs.mouse_button("x1", MAGIC, down=False, submit=send)
-    inputs.mouse_button("x2", MAGIC, down=True, submit=send)
-    inputs.mouse_button("x2", MAGIC, down=False, submit=send)
-    inputs.scroll(2, MAGIC, horizontal=True, submit=send)
-    inputs.scroll(-1, MAGIC, submit=send)
-    assert events == [
-        (0x80, 1, MAGIC),
-        (0x100, 1, MAGIC),
-        (0x80, 2, MAGIC),
-        (0x100, 2, MAGIC),
-        (0x1000, 240, MAGIC),
-        (0x800, 0xFFFF_FF88, MAGIC),
-    ]
 
 
 def test_snippets_still_expand_with_tagged_layout_output() -> None:

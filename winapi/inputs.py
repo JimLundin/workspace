@@ -1,13 +1,13 @@
-"""Keyboard and mouse: the low-level keyboard hook, and sending input as if typed."""
+"""The low-level keyboard hook, keyboard input sent as if typed, and the cursor position."""
 
 import ctypes
 from collections.abc import Callable, Sequence
 from ctypes import wintypes
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Final
 
 from winapi._core import LRESULT, ULONG_PTR, fn, kernel32, user32
-from winapi.shapes import Rect, require_input_count, utf16_units
+from winapi.shapes import require_input_count, utf16_units
 
 
 class KBDLLHOOKSTRUCT(ctypes.Structure):
@@ -85,20 +85,9 @@ _GetCursorPos = fn(user32, "GetCursorPos", wintypes.BOOL, ctypes.POINTER(wintype
 LLKHF_EXTENDED, LLKHF_INJECTED = 0x01, 0x10
 KEYEVENTF_EXTENDEDKEY, KEYEVENTF_KEYUP, KEYEVENTF_UNICODE, KEYEVENTF_SCANCODE = 0x0001, 0x0002, 0x0004, 0x0008
 _WH_KEYBOARD_LL: Final = 13
-_INPUT_MOUSE, _INPUT_KEYBOARD = 0, 1
+_INPUT_KEYBOARD: Final = 1
 _MAPVK_VK_TO_VSC: Final = 0
 _VK_RETURN: Final = 0x0D
-_MOUSEEVENTF_MOVE, _MOUSEEVENTF_ABSOLUTE, _MOUSEEVENTF_VIRTUALDESK = 0x0001, 0x8000, 0x4000
-_MOUSEEVENTF_WHEEL: Final = 0x0800
-_MOUSEEVENTF_HWHEEL: Final = 0x1000
-_BUTTON_FLAGS: Final = {
-    "left": (0x0002, 0x0004),
-    "right": (0x0008, 0x0010),
-    "middle": (0x0020, 0x0040),
-    "x1": (0x0080, 0x0100),
-    "x2": (0x0080, 0x0100),
-}
-_BUTTON_DATA: Final = {"x1": 1, "x2": 2}
 
 HookProc = Callable[[int, int, int], int]
 """(code, wparam, lparam) -> result, as Windows calls a low-level hook."""
@@ -121,15 +110,6 @@ class Hook:
 
     handle: int
     callback: object
-
-
-@dataclass(frozen=True, slots=True)
-class KeyStroke:
-    """One key going down or up, by virtual key."""
-
-    vk: int
-    down: bool = field(kw_only=True)
-    extended: bool = field(default=False, kw_only=True)
 
 
 def read_key_event(lparam: int) -> KeyEvent:
@@ -166,25 +146,14 @@ def _submit(events: Sequence[INPUT]) -> int:
     return int(_SendInput(len(events), array, ctypes.sizeof(INPUT)))
 
 
-type SubmitInput = Callable[[Sequence[INPUT]], int]
-
-
-def _send(events: Sequence[INPUT], submit: SubmitInput = _submit) -> int:
-    sent = submit(events)
+def _send(events: Sequence[INPUT]) -> int:
+    sent = _submit(events)
     require_input_count(sent, len(events))
     return sent
 
 
 def send_key(vk: int, scancode: int, flags: int, extra: int) -> None:
     _send([_key(vk, scancode, flags, extra)])
-
-
-def send_keys(strokes: Sequence[KeyStroke], extra: int, *, submit: SubmitInput = _submit) -> None:
-    """Virtual keys, with the scancodes Windows' layout gives them."""
-    _send(
-        [_key(s.vk, scancode_for(s.vk), (0 if s.down else KEYEVENTF_KEYUP) | (KEYEVENTF_EXTENDEDKEY if s.extended else 0), extra) for s in strokes],
-        submit,
-    )
 
 
 def send_scancodes(strokes: Sequence[tuple[int, bool]], extra: int) -> None:
@@ -208,38 +177,3 @@ def cursor_position() -> tuple[int, int]:
     point = wintypes.POINT()
     _GetCursorPos(ctypes.byref(point))
     return int(point.x), int(point.y)
-
-
-def _mouse(dx: int, dy: int, data: int, flags: int, extra: int) -> INPUT:
-    return INPUT(_INPUT_MOUSE, InputUnion(mi=MOUSEINPUT(dx, dy, data, flags, 0, extra)))
-
-
-def _absolute(x: int, y: int, screen: Rect) -> tuple[int, int]:
-    """Mouse coordinates are 0..65535 across the whole virtual screen."""
-    return (x - screen.left) * 65535 // max(screen.width - 1, 1), (y - screen.top) * 65535 // max(screen.height - 1, 1)
-
-
-def move_mouse(x: int, y: int, screen: Rect, extra: int) -> None:
-    dx, dy = _absolute(x, y, screen)
-    _send([_mouse(dx, dy, 0, _MOUSEEVENTF_MOVE | _MOUSEEVENTF_ABSOLUTE | _MOUSEEVENTF_VIRTUALDESK, extra)])
-
-
-def click(x: int, y: int, button: str, count: int, screen: Rect, extra: int) -> None:  # noqa: PLR0913 - one native click description
-    """Moves to (x, y) and clicks `count` times, including auxiliary buttons."""
-    down, up = _BUTTON_FLAGS[button]
-    dx, dy = _absolute(x, y, screen)
-    move = _mouse(dx, dy, 0, _MOUSEEVENTF_MOVE | _MOUSEEVENTF_ABSOLUTE | _MOUSEEVENTF_VIRTUALDESK, extra)
-    _send([move, *(_mouse(0, 0, _BUTTON_DATA.get(button, 0), flag, extra) for _ in range(count) for flag in (down, up))])
-
-
-# A button transition, output tag and sink form one native input contract.
-def mouse_button(button: str, extra: int, *, down: bool, submit: SubmitInput = _submit) -> None:
-    """Presses or releases a button where the mouse is (for dragging)."""
-    pressed, released = _BUTTON_FLAGS[button]
-    _send([_mouse(0, 0, _BUTTON_DATA.get(button, 0), pressed if down else released, extra)], submit)
-
-
-# Wheel direction and output tag travel through the same typed native sink.
-def scroll(clicks: int, extra: int, *, horizontal: bool = False, submit: SubmitInput = _submit) -> None:
-    """Positive is up, or right for a horizontal wheel."""
-    _send([_mouse(0, 0, (clicks * 120) & 0xFFFF_FFFF, _MOUSEEVENTF_HWHEEL if horizontal else _MOUSEEVENTF_WHEEL, extra)], submit)
