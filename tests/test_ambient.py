@@ -12,13 +12,13 @@ def test_idle_facts_have_time_and_real_battery_or_explicit_unavailability() -> N
     assert Ambient("09:41", PowerUnavailable.UNKNOWN).battery_text == "—"
 
 
-def test_only_plugged_in_batteries_above_95_hide_the_percentage() -> None:
-    # Defects: hiding at 95%, using charging instead of external power, or hiding
-    # a full battery after unplugging; empty facts must not leave a separator.
-    for percent, powered, charging, expected in ((95, True, True, "95%"), (96, True, True, ""), (100, True, False, ""), (100, False, False, "100%")):
-        ambient = Ambient("09:41", Battery(percent, powered=powered, charging=charging))
-        assert ambient.battery_text == expected
-        assert ambient.text == "09:41" + ("  ·  " + expected if expected else "")
+def test_battery_percentage_remains_visible_when_plugged_in_or_full() -> None:
+    # Defect: external power or a full battery hides the requested percentage.
+    for percent in (0, 73, 95, 96, 100):
+        for powered, charging in ((True, True), (True, False), (False, False)):
+            ambient = Ambient("09:41", Battery(percent, powered=powered, charging=charging))
+            assert ambient.battery_text == f"{percent}%"
+            assert ambient.text == f"09:41  ·  {percent}%"
 
 
 def test_invalid_battery_is_not_presented_as_a_real_observation() -> None:

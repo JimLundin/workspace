@@ -101,7 +101,9 @@ or keeper.
   the agent is running. Active recording has its own microphone/timer capsule.
   The centre is exclusively dynamic activity and is empty at idle. The fixed
   right cluster reads tray disclosure, icon-only Canvas, keyboard when relevant,
-  volume, Wi-Fi, then clock and power at the far right. Tray icons expand left
+  a combined speaker/Wi-Fi/clock/power capsule at the far right. Battery percentage
+  stays visible even when plugged in or full, with reserved reading widths to
+  keep the status cluster stationary. Tray icons expand left
   without moving the fixed controls. Tooltips and accessible names retain
   control meanings and keyboard state. Work, recording-start,
   keyboard controls and other tools are available from the menu. The surface uses

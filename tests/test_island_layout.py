@@ -1,6 +1,6 @@
 """Where the island bar's capsules sit, and where parts sit inside them."""
 
-from desktop_ui.island_layout import Box, Framed, Metrics, Placed, Spot, arrange, frame, snap
+from desktop_ui.island_layout import Box, Content, Framed, Metrics, Placed, Spot, arrange, frame, snap
 from desktop_ui.island_model import Action, Badge, Control, Glyph, Key, Marker, Spinner, Text, Zone
 
 
@@ -52,13 +52,11 @@ def test_fixed_right_order_and_disclosure_reservation_survive_activity_changes()
     fixed = (
         Placed(Key.CANVAS, Zone.RIGHT, 36, 34),
         Placed(Key.LAYER, Zone.RIGHT, 36, 34),
-        Placed(Key.VOLUME, Zone.RIGHT, 36, 34),
-        Placed(Key.WIFI, Zone.RIGHT, 36, 34),
-        Placed(Key.STATUS, Zone.RIGHT, 112, 34),
+        Placed(Key.STATUS, Zone.RIGHT, 180, 34),
     )
     for screen in (480, 1000):
         baseline = frame(fixed, Metrics(screen))
-        assert tuple(each.key for each in baseline) == (Key.CANVAS, Key.LAYER, Key.VOLUME, Key.WIFI, Key.STATUS)
+        assert tuple(each.key for each in baseline) == (Key.CANVAS, Key.LAYER, Key.STATUS)
         assert baseline[-1].box.x + baseline[-1].box.width == screen - 12
         for tray in (36, 120):
             framed = frame((Placed(Key.ISLAND, Zone.ISLAND, 272, 320), *fixed), Metrics(screen, tray_width=tray))
@@ -89,6 +87,20 @@ def test_a_control_at_the_edge_sits_concentric_and_a_badge_takes_no_width() -> N
     content = arrange(((Spinner("Agent working"), stop),), width_of)
     assert content.spots[-1] == Spot(stop, 30, 28) and content.width == 61
     assert arrange(((Glyph("bell"), Badge("99+")),), width_of).width == arrange(((Glyph("bell"),),), width_of).width == 36
+
+
+def test_reserved_readings_keep_following_parts_and_capsule_width_stable() -> None:
+    # Defect: a shorter reading moves the power glyph or resizes fixed controls;
+    # an unexpected wider reading must not clip to its representative reserve.
+    def measured(clock: str, battery: str) -> Content:
+        return arrange(((Text(clock, reserve="00:00"), Glyph("battery"), Text(battery, reserve="100%")),), width_of)
+
+    baseline = measured("00:00", "100%")
+    for clock, battery in (("11:11", "9%"), ("23:59", "—"), ("09:41", "AC")):
+        content = measured(clock, battery)
+        assert content.width == baseline.width
+        assert tuple((spot.x, spot.width) for spot in content.spots) == tuple((spot.x, spot.width) for spot in baseline.spots)
+    assert measured("00:00:00", "100%").width > baseline.width
 
 
 def test_content_narrower_than_a_circle_centres_in_one() -> None:

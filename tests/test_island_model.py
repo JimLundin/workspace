@@ -42,12 +42,13 @@ def view(observed: Observed, key: Key, *, expanded: bool = False, hovered: Key |
 def test_idle_has_only_icon_navigation_device_status_and_clock_power_on_right() -> None:
     # Defect: idle readings reappear in the centre or navigation acquires text.
     views = island(RESTING)
-    assert tuple(each.key for each in views) == (Key.CANVAS, Key.VOLUME, Key.WIFI, Key.STATUS)
+    assert tuple(each.key for each in views) == (Key.CANVAS, Key.STATUS)
     assert all(each.zone is Zone.RIGHT for each in views)
     assert views[0] == CapsuleView(Key.CANVAS, Zone.RIGHT, ((Glyph("canvas"),),), "Canvas · Open your work canvas", Action.OPEN_CANVAS)
-    assert views[-1].slots == ((Text("10:22"), Text("73%")),)
-    assert view(RESTING, Key.VOLUME).slots == ((Glyph("speaker-unknown"),),)
-    assert view(RESTING, Key.WIFI).slots == ((Glyph("wifi-unknown"),),)
+    assert views[-1].slots == (
+        (Glyph("speaker-unknown"), Glyph("wifi-unknown")),
+        (Text("10:22", reserve="00:00"), Glyph("battery"), Text("73%", reserve="100%")),
+    )
 
 
 def test_fixed_controls_survive_all_activity_menu_and_device_states() -> None:
@@ -62,19 +63,21 @@ def test_fixed_controls_survive_all_activity_menu_and_device_states() -> None:
                 replace(baseline, agent=WORKING, job=Job.TRANSCRIBING, recording=RECORDING),
             ):
                 for expanded in (False, True):
-                    for key in (Key.CANVAS, Key.LAYER, Key.VOLUME, Key.WIFI, Key.STATUS):
+                    for key in (Key.CANVAS, Key.LAYER, Key.STATUS):
                         assert view(observed, key, expanded=expanded) == view(baseline, key)
                     activity = (each for each in island(observed, expanded=expanded) if each.zone is not Zone.RIGHT)
                     assert all(Text("10:22") not in slot for each in activity for slot in each.slots)
-            assert baseline.system.speaker_description in view(baseline, Key.VOLUME).label
-            assert baseline.system.wifi_description in view(baseline, Key.WIFI).label
+            status = view(baseline, Key.STATUS)
+            assert status.slots[0] == (Glyph(baseline.system.speaker_icon), Glyph(baseline.system.wifi_icon))
+            assert baseline.system.speaker_description in status.label
+            assert baseline.system.wifi_description in status.label
 
 
 def test_charger_and_low_battery_stay_in_far_right_readings() -> None:
     low = replace(RESTING, ambient=Ambient("09:41", Battery(15, powered=False, charging=False)))
-    assert view(low, Key.STATUS).slots == ((Text("09:41"), Text("15%", Tone.LOW)),)
+    assert view(low, Key.STATUS).slots[-1] == (Text("09:41", reserve="00:00"), Glyph("battery"), Text("15%", Tone.LOW, reserve="100%"))
     full = replace(RESTING, ambient=Ambient("09:41", Battery(99, powered=True, charging=False)))
-    assert view(full, Key.STATUS).slots == ((Text("09:41"), Glyph("charger")),)
+    assert view(full, Key.STATUS).slots[-1] == (Text("09:41", reserve="00:00"), Glyph("charger"), Text("99%", reserve="100%"))
 
 
 def test_concurrent_activity_has_distinct_indicators_and_stable_agent_stop() -> None:

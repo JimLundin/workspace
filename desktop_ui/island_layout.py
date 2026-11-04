@@ -105,8 +105,8 @@ def expansion(menu: Menu) -> Content:
 
 def extent(part: Part, measure: Callable[[Text], float]) -> float:
     match part:
-        case Text():
-            return measure(part)
+        case Text(tone=tone, strong=strong, reserve=reserve):
+            return max(measure(part), measure(Text(reserve, tone, strong=strong))) if reserve else measure(part)
         case Glyph():
             return ICON
         case Spinner():
@@ -225,7 +225,7 @@ def frame(placed: Sequence[Placed], metrics: Metrics) -> tuple[Framed, ...]:
     # left of the reserved 36 px toggle, rather than shifting navigation.
     right: tuple[Framed, ...] = ()
     edge = max(0.0, metrics.width - 12)
-    for key in (Key.STATUS, Key.WIFI, Key.VOLUME, Key.LAYER, Key.CANVAS):
+    for key in (Key.STATUS, Key.LAYER, Key.CANVAS):
         capsule = next((c for c in zone(Zone.RIGHT) if c.key is key), None)
         if capsule is None:
             continue

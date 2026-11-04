@@ -9,7 +9,7 @@ The bar's policy (docs/toolbar-design.md, "What the bar shows"):
   transcription (pulsing dots), and a meeting recording (a red dot and timer).
 - Activities alone join the centre; at idle it is empty. During a moment
   they detach beside it as compact capsules, phase and all.
-- Fixed Canvas, temporary keyboard, volume, Wi-Fi and clock/power anchor right.
+- Fixed Canvas, temporary keyboard and a combined volume/Wi-Fi/clock/power capsule anchor right.
   The shell tray toggle is immediately before Canvas and expands left.
 - Agent work keeps Stop visible; other stoppable activities reveal it under the pointer.
 """
@@ -21,7 +21,7 @@ from typing import Final, assert_never
 from assistant.recording_state import RecordingState
 from desktop_ui.ambient import Ambient, SystemStatus
 from desktop_ui.components import meaning
-from winapi.machine_status import Battery
+from winapi.machine_status import Battery, PowerUnavailable
 
 
 class Key(Enum):
@@ -34,8 +34,6 @@ class Key(Enum):
     RECORDING = auto()
     INBOX = auto()
     CANVAS = auto()
-    VOLUME = auto()
-    WIFI = auto()
     STATUS = auto()
 
 
@@ -73,6 +71,7 @@ class Text:
     text: str
     tone: meaning.Tone = meaning.Tone.INK
     strong: bool = field(default=False, kw_only=True)
+    reserve: str = field(default="", kw_only=True)  # Representative widest reading; never painted.
 
 
 @dataclass(frozen=True, slots=True)
@@ -201,20 +200,18 @@ def agent_slot(agent: Agent, *, compact: bool) -> Slot:
 
 
 def facts(ambient: Ambient) -> Slot:
-    """Clock and power stay far right; device indicators have independent fixed slots."""
+    """Reserve the widest readings and one power glyph so the fixed cluster never shifts."""
     match ambient.power:
-        case Battery(powered=True):
-            charger: Slot = (Glyph("charger"),)
+        case Battery(powered=True) | PowerUnavailable.NO_BATTERY:
+            power = Glyph("charger")
         case _:
-            charger = ()
+            power = Glyph("battery")
     match ambient.power:
-        case _ if not ambient.battery_text:
-            battery: Slot = ()
         case Battery(percent=percent, powered=False) if percent <= 20:
-            battery = (Text(ambient.battery_text, meaning.Tone.LOW),)
+            battery = Text(ambient.battery_text, meaning.Tone.LOW, reserve="100%")
         case _:
-            battery = (Text(ambient.battery_text),)
-    return (Text(ambient.clock), *charger, *battery)
+            battery = Text(ambient.battery_text, reserve="100%")
+    return (Text(ambient.clock, reserve="00:00"), power, battery)
 
 
 def describe(ambient: Ambient) -> str:
@@ -270,24 +267,10 @@ def island(observed: Observed, *, hovered: Key | None = None, expanded: bool = F
         CapsuleView(Key.CANVAS, Zone.RIGHT, ((Glyph("canvas"),),), "Canvas · Open your work canvas", Action.OPEN_CANVAS),
         *layer,
         CapsuleView(
-            Key.VOLUME,
-            Zone.RIGHT,
-            ((Glyph(observed.system.speaker_icon),),),
-            observed.system.speaker_description + " · Open Workspace controls",
-            Action.OPEN_MENU,
-        ),
-        CapsuleView(
-            Key.WIFI,
-            Zone.RIGHT,
-            ((Glyph(observed.system.wifi_icon),),),
-            observed.system.wifi_description + " · Open Workspace controls",
-            Action.OPEN_MENU,
-        ),
-        CapsuleView(
             Key.STATUS,
             Zone.RIGHT,
-            (facts(observed.ambient),),
-            describe(observed.ambient) + " · Open Workspace controls",
+            ((Glyph(observed.system.speaker_icon), Glyph(observed.system.wifi_icon)), facts(observed.ambient)),
+            observed.system.description + ". " + describe(observed.ambient) + " · Open Workspace controls",
             Action.OPEN_MENU,
         ),
     )

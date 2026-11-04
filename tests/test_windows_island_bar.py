@@ -18,7 +18,7 @@ lazy from PySide6.QtTest import QTest
 
 from assistant.meeting_detection import AutomaticStatus
 from assistant.recording_state import RecordingState
-from desktop_ui.ambient import SystemStatus
+from desktop_ui.ambient import Ambient, SystemStatus
 from desktop_ui.desktop_bar import BarActions, BarObservations, DesktopBar
 from desktop_ui.fluent_icons import REGULAR
 from desktop_ui.island_menu import Menu, Rule
@@ -31,7 +31,7 @@ from protocol import Tool
 from tests.native_pointer import foreign_pointer
 from winapi import appearance, windows
 from winapi._core import fn, user32
-from winapi.machine_status import Battery, Speakers, Wifi
+from winapi.machine_status import Battery, PowerUnavailable, Speakers, Wifi
 
 prepare()
 
@@ -76,7 +76,7 @@ def recorded(invoked: list[str], *, tools: list[tuple[Tool, int]] | None = None)
     )
 
 
-FIXED = [Key.CANVAS, Key.VOLUME, Key.WIFI, Key.STATUS]
+FIXED = [Key.CANVAS, Key.STATUS]
 
 
 def shown(bar: DesktopBar) -> list[Key]:
@@ -129,7 +129,7 @@ def test_right_cluster_keeps_fixed_positions_and_truthful_status_through_disclos
     try:
         bar.timer.stop()
         bar.layout(enabled=False)
-        order = (Key.CANVAS, Key.LAYER, Key.VOLUME, Key.WIFI, Key.STATUS)
+        order = (Key.CANVAS, Key.LAYER, Key.STATUS)
         before = tuple(bar.window.capsules[key].geometry() for key in order)
         assert all(left.right() < right.left() for left, right in itertools.pairwise(before))
         tray = bar.window.shell_sections.tray
@@ -144,16 +144,31 @@ def test_right_cluster_keeps_fixed_positions_and_truthful_status_through_disclos
             for wifi in Wifi:
                 bar.system = SystemStatus(speakers, wifi)
                 bar.render()
-                for key, name, label in (
-                    (Key.VOLUME, bar.system.speaker_icon, bar.system.speaker_description),
-                    (Key.WIFI, bar.system.wifi_icon, bar.system.wifi_description),
+                capsule = bar.window.capsules[Key.STATUS]
+                assert capsule.view is not None
+                assert capsule.view.slots[0] == (Glyph(bar.system.speaker_icon), Glyph(bar.system.wifi_icon))
+                assert capsule.isVisibleTo(bar.window)
+                for name, label in (
+                    (bar.system.speaker_icon, bar.system.speaker_description),
+                    (bar.system.wifi_icon, bar.system.wifi_description),
                 ):
-                    capsule = bar.window.capsules[key]
-                    assert capsule.view is not None and capsule.view.slots == ((Glyph(name),),)
-                    assert capsule.isVisibleTo(bar.window)
                     assert label in capsule.accessibleName() and label in capsule.toolTip()
                     assert symbol(name) != REGULAR["doc"]
                 assert tuple(bar.window.capsules[key].geometry() for key in order) == before
+        for power in (
+            Battery(9, powered=False, charging=False),
+            Battery(100, powered=True, charging=False),
+            Battery(96, powered=True, charging=True),
+            PowerUnavailable.NO_BATTERY,
+            PowerUnavailable.UNKNOWN,
+        ):
+            bar.ambient = Ambient("11:11", power)
+            bar.render()
+            assert tuple(bar.window.capsules[key].geometry() for key in order) == before
+            status = bar.window.capsules[Key.STATUS]
+            assert bar.ambient.battery_text in status.accessibleName()
+            assert status.view is not None
+            assert abs(bar.window.measure(status.view).width - status.width()) <= 1
         assert symbol("chevron-left") == '<g transform="translate(16 0) scale(-1 1)">' + REGULAR["chevron"] + "</g>"
     finally:
         closed(app, bar)

@@ -76,8 +76,6 @@ class Ambient:
     @property
     def battery_text(self) -> str:
         match self.power:
-            case Battery(percent=percent, powered=True) if percent > 95:
-                return ""
             case Battery(percent=percent):
                 return f"{percent}%"
             case PowerUnavailable.NO_BATTERY:
