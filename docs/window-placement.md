@@ -140,8 +140,8 @@ Every navigation is one variant of `desktop_ui/navigation.py`'s union and
 carries its input source: key, pager, scroll or toolbar. A pure decision
 turns it and the observer's world into one effect, and into a record of the
 desktop and app it came from and went to and whether it launched. The
-application observer carries the effect out and hands the record to a callback,
-ready for a navigation log.
+application observer carries the effect out and writes the record to the
+[navigation log](#navigation-log).
 
 Key navigation is the Ctrl+Alt+Shift chords, the same on both keyboards:
 `miryoku/firmware.py`'s `CHORDS` table maps each request to its letter, and the
@@ -198,6 +198,86 @@ paints them in the bar's material and shape: 26 px capsules with 20 px keycaps
 in Inter 12 medium, glass as the thicker Qt-painted veil, solid, or high
 contrast. Every surface is a click-through tool window that never activates.
 Badge windows are pooled, and nothing runs while the hints are hidden.
+
+## Navigation log
+
+Navigation is time not spent working. The navigation log records each move
+between windows, so the declared layouts can be changed to need fewer of them.
+`desktop_ui/navigation_log.py` decides every entry with pure functions. The
+application observer's worker is the only writer.
+
+The log is `%LOCALAPPDATA%\workspace\navigation.jsonl`, next to `usage.jsonl`.
+Each line is one JSON object, written through a Pydantic `TypeAdapter`. Before an
+append, a file of 16 MB or more is renamed to `navigation.1.jsonl`, replacing
+the previous one. A report reads `navigation.1.jsonl` and then
+`navigation.jsonl`, oldest line first. The log is local only and always on.
+
+Apps are named by program or pinned web app. The log never contains window
+titles, window content or typed text.
+
+### When an entry is written
+
+- **A Workspace navigation.** Every navigation the dispatcher decides writes one
+  entry, including one that moved nothing, such as spatial focus with no
+  neighbour or a zoom. Its `to_*` fields are the dispatcher's target.
+- **An external change.** Any other change of the foreground window writes one
+  entry with `kind` `external`. Changes to Workspace's own windows, such as the
+  bar or the window switcher, aren't observed, so leaving the switcher counts
+  from the window before it.
+
+A Workspace navigation's own foreground change isn't logged a second time. For
+up to 2 seconds after a focus or desktop switch, and 15 seconds after a launch,
+the change it expects is absorbed: the target window, the first window on the
+target desktop when no window was remembered there, or the launched app's
+first window. A change in that time that is neither a click nor an Alt+Tab is
+the shell passing focus during the switch, and is absorbed too. Focusing the
+window already in front expects nothing.
+
+An external change gets the first `cause` that applies:
+
+1. `alt_tab`. The Alt+Tab switcher opened before the change and closed at most
+   0.5 seconds before it. Windows the switcher brings forward while it is open
+   aren't entries. When no change follows the close, the window in front at the
+   close is the choice. Returning to the starting window writes nothing. A
+   switcher open for 60 seconds without a close event counts as closed.
+2. `mouse`. A mouse button was down when the change was delivered, or a window
+   captured the mouse at most 0.5 seconds before it.
+3. `other`. Anything else, such as a program taking focus by itself, a new
+   window, a notification or another program's shortcut.
+
+### Schema
+
+Every field is present on every line, in this order. Times use the local
+clock. `null` means the value isn't known.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `time` | string | When Workspace decided the navigation or handled the change: ISO 8601 local time with microseconds and UTC offset, such as `2026-11-04T09:30:01.500000+01:00`. |
+| `setup` | `"laptop_only"`, `"home"`, `"work"` or `null` | The monitor setup at the last poll. `null` before the first poll that found a monitor. |
+| `kind` | string | The navigation: `app_key`, `cycle_app`, `show_window`, `switcher_pick`, `spatial_focus`, `step_desktop`, `jump_desktop`, `pager_click`, `bar_scroll` or `zoom` for a Workspace navigation; `external` for any other change. |
+| `cause` | string | For a Workspace navigation, its input: `key` (a chord, an app key or the window switcher), `pager`, `scroll` or `toolbar`. For `external`: `alt_tab`, `mouse` or `other`. |
+| `from_app` | string or `null` | The app in front before: a program's lowercase executable file name, such as `code.exe`, or a pinned web app, `outlook` or `teams`. A window outside the taskbar, such as a dialog or a shell surface, is named by its program. `null` when unknown. |
+| `to_app` | string or `null` | The app navigated to, named the same way. For a launch, the launched app. |
+| `from_desktop` | integer or `null` | The 0-based virtual desktop index of the window in front before; 0 is desktop 1. |
+| `to_desktop` | integer or `null` | The 0-based desktop index navigated to. An external change is on the desktop current at the next poll. |
+| `other_desktop` | boolean | `from_desktop` and `to_desktop` are both known and differ. |
+| `launched` | boolean | The navigation started an app that had no window. Always `false` for `external`. |
+| `dwell_ms` | integer or `null` | How long the window in front before had been in front, in milliseconds, from its own foreground change to this entry. For `alt_tab`, it includes the time the switcher was open. `null` when that window was already in front when Workspace started. |
+
+Decision: one hook thread, `winapi/win_events.py`, installs out-of-context
+WinEvent hooks for `EVENT_SYSTEM_FOREGROUND`, `EVENT_SYSTEM_CAPTURESTART` and
+`EVENT_SYSTEM_SWITCHSTART`/`SWITCHEND`, skipping Workspace's own process.
+Out-of-context events are delivered while the hooking thread waits for
+messages. The observer's worker waits on its order queue instead, so the hook
+thread does nothing but wait and queue each event for the worker. The worker
+owns the world the entries are built from. A foreground change makes the worker
+poll first, so a new window is identified and placed before its entry is
+decided. The bar's thread has a message loop, but would move window state across
+threads.
+
+Limit: the order of the Alt+Tab switcher's close and its chosen window's
+foreground change hasn't been observed on this machine. Both orders give one
+`alt_tab` entry.
 
 ## Virtual desktop adapter
 
