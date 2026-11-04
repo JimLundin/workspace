@@ -296,3 +296,25 @@ def test_pager_faces_keep_their_declared_size_inside_the_workspace_process() -> 
         parent.deleteLater()
         ui.close()
         ui.run()
+
+
+def test_a_pager_of_one_desktop_leaves_no_targets_behind() -> None:
+    # Defect: building a hidden pager's chevrons anyway leaves them in the
+    # section, unplaced, until it shows and they stack over its first target.
+    app = application()
+    parent = QtWidgets.QWidget()
+    parent.resize(600, 50)
+    sections = ShellSections(parent)
+    sections.desktops(pager(((),), 0, None), lambda _: None)
+    sections.desktops(pager(((), (), ()), 0, None), lambda _: None)
+    sections.place(12, 600)
+    parent.show()
+    app.processEvents()
+    try:
+        body = sections.pager.body
+        shown = [child for child in body.findChildren(QtWidgets.QAbstractButton) if child.isVisibleTo(body)]
+        assert len(shown) == len(sections.pager.buttons) and set(shown) == set(sections.pager.buttons)
+    finally:
+        parent.close()
+        parent.deleteLater()
+        app.processEvents()

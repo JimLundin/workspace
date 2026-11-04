@@ -251,6 +251,12 @@ class ShellSections:
             return
         section = self.pager
         hints = view.hints
+        if len(view.desktops) <= 1:
+            # Targets built here and left out of the section would show once it does, stacked at its origin.
+            section.reset()
+            section.finish(())
+            self.pager_view = view
+            return
 
         def button(page: Page, choose: Callable[[], None]) -> PageButton:
             created = PageButton(section.body, choose)
@@ -270,7 +276,7 @@ class ShellSections:
             for index, desktop in enumerate(view.desktops)
         )
         section.reset()
-        section.finish((previous, *pages, following) if len(view.desktops) > 1 else ())
+        section.finish((previous, *pages, following))
         self.pager_view = view
 
     def applications(self, snapshot: tuple[Shelf, int], invoke: Callable[[Item, Click], None]) -> None:
