@@ -27,24 +27,47 @@ Observed at home on 2026-11-04: the laptop panel is `\\.\DISPLAY1`,
 3840×2160 at 144 DPI, at (1920, −269). Both work areas equal their monitors
 because Workspace hides the taskbar.
 
-## Dark external screens while locked
+## Dark external screens while away
 
-The home 4K screen is an OLED, so the Windows lock screen must not stay on it.
-`DARK_WHEN_LOCKED` in `desktop_ui/window_layout.py` declares which roles of a
-setup go dark while the session is locked: Home's MAIN. Work's screens and any
-unrecognized set stay lit. Only the laptop panel shows the lock screen.
+The home 4K screen is an OLED, so neither the Windows lock screen nor a still
+desktop may stay on it while nobody is looking. `DARK_WHEN_AWAY` in
+`desktop_ui/window_layout.py` declares which roles of a setup go dark: Home's
+MAIN. Work's screens and any unrecognized set stay lit. Only the laptop panel
+shows the lock screen.
 
-The bar's hidden shell-controls window registers for session notifications.
-On `WTS_SESSION_LOCK`, `desktop_ui/locked_screens.py` sets DDC/CI power mode
-(VCP D6) to 4 on the protected screens; on `WTS_SESSION_UNLOCK` it sets 1 again,
-only on the screens it turned off. A screen that refuses to come back on stays
-recorded and is tried again at the next unlock or when Workspace closes.
-Closing Workspace turns its darkened screens back on. If Workspace starts behind
-the lock screen, such as after a crash, it darkens the protected screens then.
+`desktop_ui/away_screens.py` darkens the protected screens for either of two
+reasons, and restores them once neither holds:
+
+- **Locked.** The bar's hidden shell-controls window registers for session
+  notifications; `WTS_SESSION_LOCK` darkens at once and `WTS_SESSION_UNLOCK`
+  ends the reason. Input on the lock screen doesn't wake the screen.
+- **Idle.** No keyboard or mouse input for `DARK_WHEN_IDLE_MINUTES` in
+  `config.py` (2 by default, whole minutes from 1 to 60, checked at startup).
+  The next input wakes the screen. Unlocking while still idle past the delay
+  keeps it dark.
+
+A program asking Windows to keep the display on, such as a playing video or a
+call, holds off the idle reason, and so does a Workspace meeting recording. A
+display request that starts while the screen is idle-dark wakes it. The lock
+darkens regardless.
+
+A screen goes dark by DDC/CI power mode (VCP D6) 4 and comes back with 1, only
+on the screens this owner turned off. Requests are made only when the first
+reason begins or the last one ends, never on every poll: a screen that refuses
+to come back on stays recorded and is tried again at the next restore or when
+Workspace closes. Closing Workspace turns its darkened screens back on. If
+Workspace starts behind the lock screen, such as after a crash, it darkens the
+protected screens then.
 
 `winapi/monitor_power.py` opens physical-monitor handles when it acts. When
 those don't answer, it uses handles opened while unlocked, reopened after each
-display change. Each usage record says how many requests needed the kept ones.
+display change. Each `dark_when_away` usage record says the power mode, the
+reason (`locked`, `idle`, or `close`), the idle seconds, the screens and how
+many requests needed the kept handles.
+
+Workspace doesn't change Windows' lock, screen-saver or power settings, and
+doesn't simulate input. The machine's `InactivityTimeoutSecs` policy still
+locks the session on its own schedule.
 
 Decision: DDC/CI instead of a display topology change. Measured on this machine:
 `SetDisplayConfig` from the locked user session returns `ERROR_ACCESS_DENIED`.
@@ -53,8 +76,19 @@ D6=4 turned the 4K screen dark and D6=1 brought it back, while
 placement keeps its windows there. Each request took about 65 ms and
 runs on the bar's thread. The laptop panel doesn't answer DDC/CI.
 
-Turn it off or on with **Dark when locked** in the controls menu. It starts on
-with each Workspace launch.
+Decision: poll idleness on the bar's 100 ms observation tick, not its frame
+loop, with no thread of its own. `winapi/presence.py` reads `GetLastInputInfo`
+against `GetTickCount64`, modulo the 32-bit wrap of the last-input tick, and
+the system execution state's `ES_DISPLAY_REQUIRED` from
+`CallNtPowerInformation(SystemExecutionState)`. Measured on 2026-11-04: the two
+reads cost about 2 µs and 21 µs. The execution state showed `ES_DISPLAY_REQUIRED`
+while another process held `SetThreadExecutionState(ES_CONTINUOUS |
+ES_DISPLAY_REQUIRED)` or a `PowerSetRequest(PowerRequestDisplayRequired)`
+request, and cleared when it exited; a system-only request left it clear. The
+wake costs at most one tick plus one DDC/CI request per screen.
+
+Turn it off or on with **Dark when away** in the controls menu; its detail
+shows the delay. It starts on with each Workspace launch.
 
 ## Layouts
 
